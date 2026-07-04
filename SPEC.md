@@ -393,7 +393,7 @@ retrying. Fields (all optional):
 Fields:
 
 - `root` (path string or `$VAR`)
-  - Default: `<system-temp>/symphony_workspaces`
+  - Default: `~/code/workspaces`
   - `~` and strings containing path separators are expanded.
   - Bare strings without path separators are preserved as-is (relative roots are allowed but
     discouraged).
@@ -603,7 +603,7 @@ This section is intentionally redundant so a coding agent can implement the conf
 - `github.mutation_interval_ms`: integer, default `1000` (min spacing between mutative requests)
 - `github.max_retries`: integer, default `4` (attempts before a rate-limit error is surfaced)
 - `github.max_backoff_ms`: integer, default `60000` (cap on exponential backoff fallback)
-- `workspace.root`: path, default `<system-temp>/symphony_workspaces`
+- `workspace.root`: path, default `~/code/workspaces`
 - `hooks.after_create`: shell script or null
 - `hooks.before_run`: shell script or null
 - `hooks.after_run`: shell script or null
@@ -1597,7 +1597,7 @@ Minimum endpoints:
       "issue_id": "abc123",
       "status": "running",
       "workspace": {
-        "path": "/tmp/symphony_workspaces/MT-649"
+        "path": "/home/alice/code/workspaces/MT-649"
       },
       "attempts": {
         "restart_count": 1,

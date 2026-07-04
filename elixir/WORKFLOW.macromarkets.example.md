@@ -84,7 +84,7 @@ dev_server:
 #   base_domain: tracker.cods.dev
 #   # namespace: your-github-login   # defaults to the GitHub login
 workspace:
-  root: ~/code/macro-markets-workspaces
+  root: ~/code/workspaces
 hooks:
   after_create: |
     gh repo clone clouapp/front front -- --depth 1 -b homolog

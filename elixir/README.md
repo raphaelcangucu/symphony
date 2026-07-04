@@ -355,6 +355,7 @@ Edit from the tracker UI (**Settings** → workflow editor) or via `PUT /api/tra
 
 Each project stores one markdown document: YAML front matter between `---` fences, then the agent
 prompt body. Example files live in `WORKFLOW.*.example.md` (e.g. `WORKFLOW.macromarkets.example.md`).
+If `workspace.root` is omitted, Symphony defaults workspaces to `~/code/workspaces`.
 
 Minimal example (Linear + Codex):
 

@@ -11,7 +11,7 @@ defmodule SymphonyElixir.Config do
   @default_active_states ["Todo", "In Progress"]
   @default_terminal_states ["Closed", "Cancelled", "Canceled", "Duplicate", "Done"]
   @default_poll_interval_ms 60_000
-  @default_workspace_root Path.join(System.tmp_dir!(), "symphony_workspaces")
+  @default_workspace_root "~/code/workspaces"
   @default_hook_timeout_ms 60_000
   @default_max_concurrent_agents 10
   @default_agent_max_turns 30
@@ -718,7 +718,7 @@ defmodule SymphonyElixir.Config do
   def workspace_root do
     validated_workflow_options()
     |> get_in([:workspace, :root])
-    |> resolve_path_value(@default_workspace_root)
+    |> resolve_path_value(default_workspace_root())
   end
 
   @spec workspace_hooks() :: workspace_hooks()
@@ -1455,6 +1455,8 @@ defmodule SymphonyElixir.Config do
 
   defp normalize_key(value) when is_atom(value), do: Atom.to_string(value)
   defp normalize_key(value), do: to_string(value)
+
+  defp default_workspace_root, do: Path.expand(@default_workspace_root)
 
   defp resolve_path_value(:missing, default), do: default
   defp resolve_path_value(nil, default), do: default

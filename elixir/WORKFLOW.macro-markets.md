@@ -84,7 +84,7 @@ public_tunnel:
   base_domain: tracker.cods.dev
   # namespace: raphaelcangucu   # defaults to the GitHub login when unset
 workspace:
-  root: ~/code/macro-markets-workspaces
+  root: ~/code/workspaces
 hooks:
   after_create: |
     gh repo clone clouapp/front front -- --depth 1 -b homolog

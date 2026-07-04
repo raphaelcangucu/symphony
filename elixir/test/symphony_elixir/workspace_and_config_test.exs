@@ -692,6 +692,8 @@ defmodule SymphonyElixir.WorkspaceAndConfigTest do
     previous_linear_api_key = System.get_env("LINEAR_API_KEY")
     on_exit(fn -> restore_env("LINEAR_API_KEY", previous_linear_api_key) end)
     System.delete_env("LINEAR_API_KEY")
+    default_workspace_root = Path.expand("~/code/workspaces")
+    fixture_workspace_root = Path.expand(Path.join(System.tmp_dir!(), "symphony_workspaces"))
 
     write_workflow_file!(Workflow.workflow_file_path(),
       workspace_root: nil,
@@ -709,7 +711,7 @@ defmodule SymphonyElixir.WorkspaceAndConfigTest do
     assert LinearConfig.endpoint() == "https://api.linear.app/graphql"
     assert LinearConfig.api_key() == nil
     assert LinearConfig.project_slug() == nil
-    assert Config.workspace_root() == Path.join(System.tmp_dir!(), "symphony_workspaces")
+    assert Config.workspace_root() == default_workspace_root
     assert Config.max_concurrent_agents() == 10
     assert CodexConfig.command() == "codex app-server"
 
@@ -719,7 +721,7 @@ defmodule SymphonyElixir.WorkspaceAndConfigTest do
 
     assert CodexConfig.turn_sandbox_policy() == %{
              "type" => "workspaceWrite",
-             "writableRoots" => [Path.expand(Path.join(System.tmp_dir!(), "symphony_workspaces"))],
+             "writableRoots" => [default_workspace_root],
              "readOnlyAccess" => %{"type" => "fullAccess"},
              "networkAccess" => false,
              "excludeTmpdirEnvVar" => false,
@@ -763,7 +765,7 @@ defmodule SymphonyElixir.WorkspaceAndConfigTest do
 
     assert Config.active_states() == ["Todo", "In Progress"]
     assert Config.terminal_states() == ["Closed", "Cancelled", "Canceled", "Duplicate", "Done"]
-    assert Config.workspace_root() == Path.join(System.tmp_dir!(), "symphony_workspaces")
+    assert Config.workspace_root() == default_workspace_root
 
     write_workflow_file!(Workflow.workflow_file_path(), codex_approval_policy: "")
 
@@ -779,7 +781,7 @@ defmodule SymphonyElixir.WorkspaceAndConfigTest do
 
     assert CodexConfig.turn_sandbox_policy() == %{
              "type" => "workspaceWrite",
-             "writableRoots" => [Path.expand(Path.join(System.tmp_dir!(), "symphony_workspaces"))],
+             "writableRoots" => [fixture_workspace_root],
              "readOnlyAccess" => %{"type" => "fullAccess"},
              "networkAccess" => false,
              "excludeTmpdirEnvVar" => false,
