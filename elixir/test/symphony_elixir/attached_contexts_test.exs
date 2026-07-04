@@ -63,6 +63,28 @@ defmodule SymphonyElixir.AttachedContextsTest do
     assert AttachedContexts.list(scope) == []
   end
 
+  test "append_to_instructions accepts ephemeral draft context content", %{project: project, target_issue: target} do
+    scope = AttachedContexts.execution_scope(project.slug, target.identifier)
+
+    injected =
+      AttachedContexts.append_to_instructions(scope, "Use the agent context.",
+        context_refs: [
+          %{
+            "type" => "file",
+            "id" => "tracker/src/App.tsx",
+            "label" => "App.tsx",
+            "content" => "### Agent file context\n\n- Path: tracker/src/App.tsx"
+          }
+        ]
+      )
+
+    assert injected =~ "## Loaded Context"
+    assert injected =~ "### Agent file context"
+    assert injected =~ "tracker/src/App.tsx"
+    assert injected =~ "Use the agent context."
+    assert AttachedContexts.list(scope) == []
+  end
+
   test "hard reset does not clear attachments implicitly", %{project: project, target_issue: target, context_issue: context} do
     scope = AttachedContexts.execution_scope(project.slug, target.identifier)
     assert {:ok, _attached} = AttachedContexts.attach(scope, %{kind: "board_issue", ref_key: context.identifier})

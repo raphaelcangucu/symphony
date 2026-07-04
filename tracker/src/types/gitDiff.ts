@@ -21,3 +21,15 @@ export interface GitDiffResult {
   repos: GitDiffRepo[];
   workspace: GitDiffWorkspace;
 }
+
+export interface GitDiffCommitResult {
+  repo: string;
+  sha: string;
+  message: string;
+  files: string[];
+}
+
+export interface GitDiffCommitResponse {
+  commits: GitDiffCommitResult[];
+  workspace: GitDiffWorkspace;
+}

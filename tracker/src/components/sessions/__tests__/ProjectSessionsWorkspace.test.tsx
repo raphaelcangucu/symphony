@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -47,6 +47,20 @@ describe("ProjectSessionsWorkspace", () => {
       preview: null,
       updatedAt: "2026-07-03T00:00:00Z",
     });
+  });
+
+  it("renders a compact sessions header", () => {
+    renderWithI18n(
+      <MemoryRouter initialEntries={["/projects/demo/sessions"]}>
+        <ProjectSessionsWorkspace projectSlug="demo" />
+      </MemoryRouter>,
+    );
+
+    const header = screen.getByTestId("project-sessions-compact-header");
+    expect(header).toHaveClass("py-2");
+    expect(within(header).getByRole("heading", { name: "Sessions" })).toBeInTheDocument();
+    expect(screen.queryByText("Project sessions")).not.toBeInTheDocument();
+    expect(screen.queryByText("All assistant chats and agent runs related to this project.")).not.toBeInTheDocument();
   });
 
   it("opens a new assistant session in a tab", async () => {

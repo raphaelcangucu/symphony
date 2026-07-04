@@ -663,6 +663,22 @@
         "tree": "Árvore",
         "flat": "Lista"
       },
+      "repos": {
+        "all": "Todos os repos"
+      },
+      "commit": {
+        "button": "Commit",
+        "title": "Criar commit das alterações do workspace",
+        "dialogTitle": "Criar commit das alterações",
+        "dialogDescription": "Cria um commit git local em cada repositório com alterações pendentes.",
+        "messageLabel": "Mensagem do commit",
+        "messagePlaceholder": "feat: descreva a alteração",
+        "submit": "Commitar alterações",
+        "committing": "Commitando...",
+        "success_one": "{{count}} repo commitado.",
+        "success_other": "{{count}} repos commitados.",
+        "failed": "Não foi possível commitar as alterações do workspace."
+      },
       "files": "{{count}} arquivos",
       "filterPlaceholder": "Filtrar arquivos...",
       "workspaceUnavailable": "Workspace indisponível",
@@ -1888,6 +1904,14 @@
       "modelsFrom": " Modelos de `{{command}}`.",
       "openButton": "Assistente",
       "openAria": "Abrir assistente do projeto",
+      "openKnowledgeBase": "KB",
+      "openKnowledgeBaseShortcut": "Abrir base de conhecimento (⌘⇧K)",
+      "knowledgeBaseTitle": "Base de conhecimento",
+      "knowledgeBaseDescription": "Navegue pelos docs de `{{slug}}` sem sair do composer.",
+      "knowledgeBaseOpenPage": "Abrir",
+      "knowledgeBaseEmpty": "Nenhum repositório de base de conhecimento está configurado.",
+      "knowledgeBaseLoadFailed": "Falha ao carregar a base de conhecimento.",
+      "addToContext": "Adicionar ao contexto",
       "loadingModels": "Carregando modelos do assistente...",
       "catalogLoadFailed": "Falha ao carregar modelos do assistente.",
       "noConnectionTarget": "Assistente não tem thread ou projeto para conectar.",

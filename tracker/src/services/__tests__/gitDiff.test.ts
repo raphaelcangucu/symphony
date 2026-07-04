@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { getGitDiff, getThreadGitDiff } from "@/services/gitDiff";
+import { commitGitDiff, commitThreadGitDiff, getGitDiff, getThreadGitDiff } from "@/services/gitDiff";
 import { http } from "@/services/http";
 
 vi.mock("@/services/http", () => ({
-  http: { get: vi.fn() },
+  http: { get: vi.fn(), post: vi.fn() },
   trackerPath: (path: string) => `/api/tracker/v1${path}`,
 }));
 
@@ -52,5 +52,33 @@ describe("getGitDiff", () => {
       params: { type: "uncommitted" },
     });
     expect(result.workspace).toEqual({ path: "/tmp/thread", available: true });
+  });
+
+  it("commits issue workspace changes", async () => {
+    vi.mocked(http.post).mockResolvedValue({
+      data: {
+        data: [{ repo: "frontend", sha: "abc", message: "feat: save", files: ["src/App.tsx"] }],
+        workspace: { path: "/tmp/ws", available: true },
+      },
+    });
+
+    const result = await commitGitDiff("demo", "ABC-1", "feat: save");
+
+    expect(http.post).toHaveBeenCalledWith("/api/tracker/v1/projects/demo/issues/ABC-1/diff/commit", {
+      message: "feat: save",
+    });
+    expect(result.commits).toEqual([{ repo: "frontend", sha: "abc", message: "feat: save", files: ["src/App.tsx"] }]);
+  });
+
+  it("commits thread workspace changes", async () => {
+    vi.mocked(http.post).mockResolvedValue({
+      data: { data: [], workspace: { path: "/tmp/thread", available: true } },
+    });
+
+    await commitThreadGitDiff(42, "feat: save");
+
+    expect(http.post).toHaveBeenCalledWith("/api/tracker/v1/assistant/threads/42/diff/commit", {
+      message: "feat: save",
+    });
   });
 });

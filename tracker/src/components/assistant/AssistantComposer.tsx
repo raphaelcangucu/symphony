@@ -92,10 +92,10 @@ function eventHasFiles(event: DragEvent<HTMLElement>): boolean {
   return Array.from(event.dataTransfer?.types ?? []).includes("Files");
 }
 
-function addContextRef(current: ComposerContextChipRef[], mention: ResolvedMention): ComposerContextChipRef[] {
-  if (!mention.id) return current;
-  if (current.some((ref) => ref.type === mention.type && ref.id === mention.id)) return current;
-  return [...current, { ...mention, state: "draft" }];
+function addContextRef(current: ComposerContextChipRef[], ref: ComposerContextChipRef): ComposerContextChipRef[] {
+  if (!ref.id.trim()) return current;
+  if (current.some((currentRef) => currentRef.type === ref.type && currentRef.id === ref.id)) return current;
+  return [...current, { ...ref, state: ref.state ?? "draft" }];
 }
 
 function contextIconFor(type: ComposerContextChipRef["type"]) {
@@ -122,6 +122,11 @@ export interface AssistantComposerSubmit {
 export interface ComposerSnapshot {
   input: string;
   attachments: ReturnType<typeof serializeAttachments>;
+}
+
+export interface ComposerContextInsertRequest {
+  id: number;
+  ref: ComposerContextChipRef;
 }
 
 interface AssistantComposerProps {
@@ -161,6 +166,7 @@ interface AssistantComposerProps {
   toolbarAfterAttach?: ReactNode;
   submitActions?: ReactNode;
   footer?: ReactNode;
+  contextInsertRequest?: ComposerContextInsertRequest | null;
   onForceQueued?: () => void;
   /** Called when Enter is pressed with an empty input (no attachments). */
   onEmptySubmit?: () => void;
@@ -204,6 +210,7 @@ export function AssistantComposer({
   toolbarAfterAttach,
   submitActions,
   footer,
+  contextInsertRequest = null,
   onForceQueued,
   onEmptySubmit,
   onSubmit,
@@ -360,6 +367,12 @@ export function AssistantComposer({
   const orderedMentions = mentionsEnabled ? orderMentionOptions(mentionOptions ?? []) : [];
   const showMentions = mentionsEnabled && mentions.open && orderedMentions.length > 0;
 
+  useEffect(() => {
+    if (!contextInsertRequest) return;
+    setContextRefs((current) => addContextRef(current, contextInsertRequest.ref));
+    requestAnimationFrame(() => textareaRef.current?.focus());
+  }, [contextInsertRequest]);
+
   // Report the active query (or null when closed) so the parent can fetch options.
   useEffect(() => {
     if (!mentionsEnabled) return;
@@ -383,7 +396,7 @@ export function AssistantComposer({
     if (resolved) {
       const next = mentions.removeMentionText();
       if (next !== null) setInput(next);
-      setContextRefs((current) => addContextRef(current, resolved));
+      setContextRefs((current) => addContextRef(current, { ...resolved, state: "draft" }));
       onMentionSelect?.(resolved);
     } else {
       const next = mentions.selectMention(ref);

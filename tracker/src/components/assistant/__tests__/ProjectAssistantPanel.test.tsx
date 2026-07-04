@@ -1,12 +1,15 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import userEvent from "@testing-library/user-event";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ProjectAssistantPanel } from "@/components/assistant/ProjectAssistantPanel";
 import { fetchAssistantCatalogBundle } from "@/services/assistant";
+
+let ProjectAssistantPanel: typeof import("@/components/assistant/ProjectAssistantPanel").ProjectAssistantPanel;
 
 const channelHandlers: Record<string, (payload: unknown) => void> = {};
 type ReceiveCallbacks = Record<string, (response: unknown) => void>;
 const pushReceives: ReceiveCallbacks[] = [];
+const navigateMock = vi.hoisted(() => vi.fn());
 const push = vi.fn((event: string, payload?: unknown) => {
   void event;
   void payload;
@@ -42,6 +45,7 @@ vi.mock("@assistant-ui/react", () => ({
 vi.mock("react-router-dom", async (importOriginal) => ({
   ...(await importOriginal<typeof import("react-router-dom")>()),
   useLocation: () => ({ pathname: "/", search: "", hash: "", state: null, key: "test" }),
+  useNavigate: () => navigateMock,
 }));
 
 vi.mock("@/services/assistant", async () => {
@@ -87,6 +91,10 @@ vi.mock("@/hooks/useAssistantCommands", () => ({
 const listIssuesMock = vi.hoisted(() => vi.fn());
 const searchWorkspaceFilesMock = vi.hoisted(() => vi.fn());
 const listPullRequestsMock = vi.hoisted(() => vi.fn());
+const getThreadGitDiffMock = vi.hoisted(() => vi.fn());
+const getGitDiffMock = vi.hoisted(() => vi.fn());
+const getProjectOverviewMock = vi.hoisted(() => vi.fn());
+const getRepoTreeMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/services/issues", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/services/issues")>()),
@@ -102,14 +110,90 @@ vi.mock("@/services/pullRequests", async (importOriginal) => ({
   listPullRequests: (...args: unknown[]) => listPullRequestsMock(...args),
 }));
 
+vi.mock("@/services/gitDiff", () => ({
+  getThreadGitDiff: (...args: unknown[]) => getThreadGitDiffMock(...args),
+  getGitDiff: (...args: unknown[]) => getGitDiffMock(...args),
+}));
+
+vi.mock("@/services/knowledgeBase", () => ({
+  getProjectOverview: (...args: unknown[]) => getProjectOverviewMock(...args),
+  getRepoTree: (...args: unknown[]) => getRepoTreeMock(...args),
+}));
+
+beforeAll(async () => {
+  ({ ProjectAssistantPanel } = await import("@/components/assistant/ProjectAssistantPanel"));
+});
+
 describe("ProjectAssistantPanel", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    if (typeof CSSStyleSheet !== "undefined" && !CSSStyleSheet.prototype.replaceSync) {
+      Object.defineProperty(CSSStyleSheet.prototype, "replaceSync", {
+        configurable: true,
+        value: vi.fn(),
+      });
+    }
+    navigateMock.mockReset();
     listIssuesMock.mockResolvedValue([]);
     searchWorkspaceFilesMock.mockResolvedValue([]);
     listPullRequestsMock.mockResolvedValue({ data: [] });
+    getThreadGitDiffMock.mockResolvedValue({ repos: [], workspace: { path: "", available: false } });
+    getGitDiffMock.mockResolvedValue({ repos: [], workspace: { path: "", available: false } });
+    getProjectOverviewMock.mockResolvedValue({
+      project: { slug: "macro-markets", name: "Macro Markets" },
+      repositories: [
+        {
+          repoSlug: "front",
+          workspacePath: "front",
+          githubFullName: null,
+          role: null,
+          docsPresent: true,
+        },
+      ],
+    });
+    getRepoTreeMock.mockResolvedValue({
+      repository: {
+        repoSlug: "front",
+        workspacePath: "front",
+        githubFullName: null,
+        role: null,
+        docsPresent: true,
+      },
+      docsPresent: true,
+      tree: [
+        {
+          type: "folder",
+          name: "Guides",
+          title: "Guides",
+          path: "guides",
+          order: null,
+          favorite: false,
+          children: [
+            {
+              type: "page",
+              name: "Setup",
+              title: "Setup",
+              path: "guides/setup.md",
+              order: null,
+              favorite: false,
+              children: [],
+            },
+          ],
+        },
+      ],
+    });
     for (const key of Object.keys(channelHandlers)) delete channelHandlers[key];
     pushReceives.length = 0;
+  });
+
+  it("uses a compact page header for project assistants", () => {
+    render(<ProjectAssistantPanel projectSlug="macro-markets" view="board" mode="page" />);
+
+    const header = screen.getByTestId("project-assistant-compact-header");
+    expect(header).toHaveClass("py-2");
+    expect(within(header).getByRole("heading", { name: "Project assistant" })).toBeTruthy();
+    expect(within(header).getByText("macro-markets")).toBeTruthy();
+    expect(screen.queryByText(/AI coding assistant for/i)).not.toBeInTheDocument();
   });
 
   it("renders a routed project assistant page, loads history, streams a response, and sends through the channel", async () => {
@@ -216,6 +300,45 @@ describe("ProjectAssistantPanel", () => {
 
     fireEvent.keyDown(textarea, { key: "Enter", code: "Enter" });
     expect(push).not.toHaveBeenCalledWith("send_message", expect.anything());
+  });
+
+  it("opens the project knowledge base from the composer button and shortcut", async () => {
+    render(<ProjectAssistantPanel projectSlug="macro-markets" threadId={7990} view="board" mode="page" />);
+
+    const kbButton = await screen.findByRole("button", { name: /knowledge base/i });
+    await waitFor(() => expect(kbButton).not.toBeDisabled());
+    fireEvent.click(kbButton);
+    expect(await screen.findByRole("dialog", { name: "Knowledge Base" })).toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: "Escape", code: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Knowledge Base" })).not.toBeInTheDocument());
+    await userEvent.keyboard("{Control>}{Shift>}k{/Shift}{/Control}");
+    expect(await screen.findByRole("dialog", { name: "Knowledge Base" })).toBeInTheDocument();
+  });
+
+  it("shows uncommitted diff totals in the session header", async () => {
+    getThreadGitDiffMock.mockResolvedValue({
+      repos: [
+        {
+          repo: "front",
+          files: [
+            {
+              path: "src/App.tsx",
+              oldPath: null,
+              status: "modified",
+              patch: "diff --git a/src/App.tsx b/src/App.tsx\n-old\n+new\n+another\n",
+            },
+          ],
+        },
+      ],
+      workspace: { path: "/tmp/ws", available: true },
+    });
+
+    render(<ProjectAssistantPanel projectSlug="macro-markets" threadId={7990} view="board" mode="page" />);
+
+    await waitFor(() => expect(getThreadGitDiffMock).toHaveBeenCalledWith(7990, "uncommitted"));
+    expect(await screen.findByText("+2")).toBeInTheDocument();
+    expect(screen.getByText("-1")).toBeInTheDocument();
   });
 
   it("queues a message submitted while running and auto-sends it on completion", async () => {
@@ -729,6 +852,59 @@ describe("ProjectAssistantPanel", () => {
     );
   });
 
+  it("adds agent command approval details to composer context", async () => {
+    const user = userEvent.setup();
+    render(<ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="page" />);
+
+    await waitFor(() => expect(channelHandlers["approval_required"]).toEqual(expect.any(Function)));
+
+    channelHandlers["approval_required"]({
+      request_id: "cmd-1",
+      command: "npm test",
+      cwd: "/workspace/app",
+      reason: "unknown",
+    });
+
+    await user.click(await screen.findByRole("button", { name: "Add to context" }));
+
+    expect(screen.getByText("permission:cmd-1")).toBeInTheDocument();
+    expect(screen.getAllByText("Codex wants to run a command").length).toBeGreaterThan(1);
+
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+
+    await waitFor(() =>
+      expect(push).toHaveBeenCalledWith(
+        "send_message",
+        expect.objectContaining({
+          context_refs: [
+            expect.objectContaining({
+              type: "security",
+              id: "permission:cmd-1",
+              content: expect.stringContaining("npm test"),
+            }),
+          ],
+        }),
+      ),
+    );
+  });
+
+  it("opens a large knowledge base modal with a collapsible tree", async () => {
+    const user = userEvent.setup();
+    render(<ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="page" />);
+
+    const kbButton = await screen.findByRole("button", { name: "Knowledge Base" });
+    await waitFor(() => expect(kbButton).not.toBeDisabled());
+    await user.click(kbButton);
+
+    expect(await screen.findByRole("dialog", { name: "Knowledge Base" })).toBeInTheDocument();
+    expect(await screen.findByText("front")).toBeInTheDocument();
+    expect(await screen.findByText("Setup")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /Guides/i }));
+
+    expect(screen.queryByText("Setup")).not.toBeInTheDocument();
+  });
+
   it("renders an embedded assistant without viewport height", () => {
     render(<ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="embedded" />);
 
@@ -876,7 +1052,8 @@ describe("ProjectAssistantPanel", () => {
     const dialog = await screen.findByRole("dialog", { name: "Edited file diff" });
     expect(dialog).toBeInTheDocument();
     expect(within(dialog).getAllByText("tracker.json").length).toBeGreaterThan(0);
-    expect(within(dialog).getByText(/diff --git a\/tracker\.json b\/tracker\.json/)).toBeInTheDocument();
+    expect(within(dialog).getByText("+1")).toBeInTheDocument();
+    expect(within(dialog).getByText("-1")).toBeInTheDocument();
   });
 
   it("replaces the transcript when history_synced arrives after a terminal turn_status", async () => {

@@ -510,4 +510,46 @@ describe("AssistantComposer", () => {
       }),
     );
   });
+
+  it("adds externally requested context chips to the next submit", () => {
+    const onSubmit = vi.fn();
+
+    render(
+      <AssistantComposer
+        projectSlug="macro-markets"
+        bundle={mockBundle}
+        contextInsertRequest={{
+          id: 1,
+          ref: {
+            type: "file",
+            id: "tracker/src/App.tsx",
+            label: "App.tsx",
+            detail: "Edited by agent",
+            content: "### Agent edited file\n\n- Path: tracker/src/App.tsx",
+            state: "draft",
+          },
+        }}
+        onSubmit={onSubmit}
+      />,
+    );
+
+    expect(screen.getByText("tracker/src/App.tsx")).toBeInTheDocument();
+    expect(screen.getByText("App.tsx")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: "",
+        contextRefs: [
+          expect.objectContaining({
+            type: "file",
+            id: "tracker/src/App.tsx",
+            content: "### Agent edited file\n\n- Path: tracker/src/App.tsx",
+            state: "draft",
+          }),
+        ],
+      }),
+    );
+  });
 });

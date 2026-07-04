@@ -58,6 +58,16 @@ defmodule SymphonyElixirWeb.TrackerErrors do
   def render(conn, :invalid_diff_type),
     do: error(conn, 422, "invalid_diff_type", dgettext("errors", "Diff type must be branch or uncommitted."))
 
+  def render(conn, :invalid_commit_message),
+    do: error(conn, 422, "invalid_commit_message", dgettext("errors", "Commit message is required."))
+
+  def render(conn, {:commit_failed, repo, reason}) do
+    error(conn, 422, "commit_failed", dgettext("errors", "Failed to commit workspace changes."), %{
+      repo: repo,
+      reason: reason
+    })
+  end
+
   def render(conn, :dev_server_not_found),
     do: not_found(conn, "dev_server_not_found", dgettext("errors", "Dev server not found"))
 

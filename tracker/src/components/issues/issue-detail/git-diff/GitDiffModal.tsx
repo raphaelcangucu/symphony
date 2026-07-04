@@ -1,18 +1,21 @@
-import { Columns2, Rows3 } from "lucide-react";
+import { Columns2, GitBranch, GitCommitHorizontal, RefreshCw, Rows3, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 
 import { GitDiffFileTree } from "@/components/issues/issue-detail/git-diff/GitDiffFileTree";
 import { GitDiffViewer } from "@/components/issues/issue-detail/git-diff/GitDiffViewer";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
 import { useGitDiff } from "@/hooks/useGitDiff";
 import { useIssueCommitEvidence } from "@/hooks/useIssueCommitEvidence";
 import { combineDiffStats, diffStatsFromPatch } from "@/lib/diffStats";
 import { loadDiffViewMode, saveDiffViewMode, type DiffViewMode } from "@/lib/diffViewMode";
 import { cn } from "@/lib/utils";
 import { getCommitEvidence } from "@/services/commitEvidence";
+import { commitGitDiff, commitThreadGitDiff } from "@/services/gitDiff";
 import type { CommitEvidenceDetail, CommitEvidenceSummary } from "@/types/commitEvidence";
 import type { GitDiffFileChange, GitDiffRepo, GitDiffType } from "@/types/gitDiff";
 
@@ -30,10 +33,14 @@ export default function GitDiffModal({ open, onOpenChange, projectSlug = "", ide
   const [activeTab, setActiveTab] = useState<GitDiffType | "commits">("branch");
   const [viewMode, setViewMode] = useState<DiffViewMode>(() => loadDiffViewMode());
   const [flat, setFlat] = useState(false);
+  const [activeRepo, setActiveRepo] = useState("all");
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [selectedCommitKey, setSelectedCommitKey] = useState<string | null>(null);
   const [commitDetail, setCommitDetail] = useState<CommitEvidenceDetail | null>(null);
   const [commitLoading, setCommitLoading] = useState(false);
+  const [commitDialogOpen, setCommitDialogOpen] = useState(false);
+  const [commitMessage, setCommitMessage] = useState("");
+  const [commitPending, setCommitPending] = useState(false);
   const diffType: GitDiffType = activeTab === "uncommitted" ? "uncommitted" : "branch";
   const diff = useGitDiff({ projectSlug, identifier, threadId, type: diffType, enabled: open && activeTab !== "commits" });
   const commits = useIssueCommitEvidence({ projectSlug, identifier, enabled: open && activeTab === "commits" && supportsCommits });
@@ -41,11 +48,22 @@ export default function GitDiffModal({ open, onOpenChange, projectSlug = "", ide
     commits.commits.find((commit) => commitKey(commit) === selectedCommitKey) ?? commits.commits[0] ?? null;
 
   const commitFiles = useMemo(
-    () => (commitDetail ? commitDetail.files.map((file) => ({ key: fileKey(file), file })) : []),
-    [commitDetail],
+    () =>
+      commitDetail
+        ? commitDetail.files.map((file) => ({ key: fileKey(file), repo: selectedCommit?.repo ?? null, file }))
+        : [],
+    [commitDetail, selectedCommit?.repo],
   );
   const diffFiles = useMemo(() => flattenFiles(diff.repos), [diff.repos]);
-  const files = activeTab === "commits" ? commitFiles : diffFiles;
+  const repoNames = useMemo(
+    () => [...new Set(diffFiles.map((entry) => entry.repo).filter((repo): repo is string => Boolean(repo)))],
+    [diffFiles],
+  );
+  const repoScopedDiffFiles = useMemo(
+    () => (activeRepo === "all" ? diffFiles : diffFiles.filter((entry) => entry.repo === activeRepo)),
+    [activeRepo, diffFiles],
+  );
+  const files = activeTab === "commits" ? commitFiles : repoScopedDiffFiles;
   const selected = files.find((file) => file.key === selectedKey)?.file ?? files[0]?.file ?? null;
   const stats = combineDiffStats(files.map(({ file }) => diffStatsFromPatch(file.patch)));
 
@@ -54,9 +72,34 @@ export default function GitDiffModal({ open, onOpenChange, projectSlug = "", ide
     saveDiffViewMode(nextMode);
   }
 
+  function handleCommitClick() {
+    setCommitDialogOpen(true);
+  }
+
+  async function submitCommit() {
+    const message = commitMessage.trim();
+    if (!message) return;
+    setCommitPending(true);
+    try {
+      const result = threadId
+        ? await commitThreadGitDiff(threadId, message)
+        : await commitGitDiff(projectSlug, identifier ?? "", message);
+
+      toast.success(t("issue.diff.commit.success", { count: result.commits.length }));
+      setCommitDialogOpen(false);
+      setCommitMessage("");
+      await diff.refetch();
+      if (supportsCommits) await commits.refetch();
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : t("issue.diff.commit.failed"));
+    } finally {
+      setCommitPending(false);
+    }
+  }
+
   useEffect(() => {
     setSelectedKey(null);
-  }, [activeTab, identifier, selectedCommitKey]);
+  }, [activeRepo, activeTab, identifier, selectedCommitKey]);
 
   useEffect(() => {
     setSelectedCommitKey(null);
@@ -88,36 +131,65 @@ export default function GitDiffModal({ open, onOpenChange, projectSlug = "", ide
     if (activeTab === "commits" && !supportsCommits) setActiveTab("branch");
   }, [activeTab, supportsCommits]);
 
+  useEffect(() => {
+    if (activeRepo !== "all" && !repoNames.includes(activeRepo)) setActiveRepo("all");
+  }, [activeRepo, repoNames]);
+
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[min(84vh,760px)] max-w-6xl flex-col gap-0 p-0">
-        <DialogHeader className="border-b px-4 py-3">
-          <DialogTitle>{t("issue.diff.title")}</DialogTitle>
-          <DialogDescription>
+      <DialogContent className="flex h-[min(92vh,840px)] w-[calc(100vw-2rem)] max-w-[1200px] flex-col gap-0 overflow-hidden border-border/80 bg-background p-0 shadow-2xl">
+        <DialogHeader className="min-h-11 border-b bg-background px-3 py-2">
+          <DialogTitle className="text-sm font-semibold">{t("issue.diff.title")}</DialogTitle>
+          <DialogDescription className="truncate text-[11px]">
             {(identifier ?? (threadId ? `thread #${threadId}` : ""))} · {diff.workspace?.available ? diff.workspace.path : t("issue.diff.workspaceUnavailable")}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex items-center justify-between gap-3 border-b px-4 py-2">
+        <div className="flex h-10 items-center justify-between gap-3 border-b bg-muted/20 px-2">
           <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as GitDiffType | "commits")}>
-            <TabsList>
-              <TabsTrigger value="branch">{t("issue.diff.branch")}</TabsTrigger>
-              <TabsTrigger value="uncommitted">{t("issue.diff.uncommitted")}</TabsTrigger>
-              {supportsCommits ? <TabsTrigger value="commits">{t("issue.diff.commits")}</TabsTrigger> : null}
+            <TabsList className="h-7 rounded-md bg-background p-0.5">
+              <TabsTrigger value="branch" className="h-6 gap-1 px-2 text-[11px]">
+                <GitBranch className="h-3.5 w-3.5" />
+                {t("issue.diff.branch")}
+              </TabsTrigger>
+              <TabsTrigger value="uncommitted" className="h-6 gap-1 px-2 text-[11px]">
+                <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                {t("issue.diff.uncommitted")}
+              </TabsTrigger>
+              {supportsCommits ? (
+                <TabsTrigger value="commits" className="h-6 gap-1 px-2 text-[11px]">
+                  <GitCommitHorizontal className="h-3.5 w-3.5" />
+                  {t("issue.diff.commits")}
+                </TabsTrigger>
+              ) : null}
             </TabsList>
           </Tabs>
           <div className="flex items-center gap-2 text-xs tabular-nums">
-            <span>{t("issue.diff.files", { count: files.length })}</span>
-            <span className="text-emerald-600">+{stats.additions}</span>
-            <span className="text-rose-600">-{stats.deletions}</span>
+            <span className="text-[11px] text-muted-foreground">{t("issue.diff.files", { count: files.length })}</span>
+            <span className="text-[11px] text-emerald-600">+{stats.additions}</span>
+            <span className="text-[11px] text-rose-600">-{stats.deletions}</span>
             <ViewModeToggle viewMode={viewMode} onChange={handleViewModeChange} />
             <Button
               type="button"
               size="sm"
+              className="h-7 gap-1 rounded-md bg-slate-950 px-2 text-[11px] text-white hover:bg-slate-800"
+              title={t("issue.diff.commit.title")}
+              disabled={!threadId && (!projectSlug || !identifier)}
+              onClick={handleCommitClick}
+            >
+              <GitCommitHorizontal className="h-3.5 w-3.5" />
+              {t("issue.diff.commit.button")}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
               variant="outline"
+              className="h-7 gap-1 px-2 text-[11px]"
               onClick={() => (activeTab === "commits" ? void commits.refetch() : void diff.refetch())}
               disabled={activeTab === "commits" ? commits.loading : diff.loading}
             >
+              <RefreshCw className="h-3.5 w-3.5" />
               {t("issue.diff.refresh")}
             </Button>
           </div>
@@ -127,9 +199,12 @@ export default function GitDiffModal({ open, onOpenChange, projectSlug = "", ide
           <p className="border-b px-4 py-2 text-sm text-destructive">{commits.error}</p>
         ) : null}
         {activeTab !== "commits" && diff.error ? <p className="border-b px-4 py-2 text-sm text-destructive">{diff.error}</p> : null}
+        {activeTab !== "commits" && repoNames.length > 1 ? (
+          <RepoNav repos={repoNames} activeRepo={activeRepo} onChange={setActiveRepo} />
+        ) : null}
 
-        <div className="grid min-h-0 flex-1 grid-cols-[18rem_minmax(0,1fr)]">
-          <aside className="min-h-0 overflow-auto border-r">
+        <div className="grid min-h-0 flex-1 grid-cols-[20rem_minmax(0,1fr)] bg-background">
+          <aside className="min-h-0 overflow-hidden border-r">
             {activeTab === "commits" ? (
               <CommitList
                 commits={commits.commits}
@@ -149,7 +224,7 @@ export default function GitDiffModal({ open, onOpenChange, projectSlug = "", ide
               />
             )}
           </aside>
-          <section className="min-h-0">
+          <section className="min-h-0 overflow-hidden">
             {(activeTab === "commits" ? commits.loading || commitLoading : diff.loading) && files.length === 0 ? (
               <div className="flex h-full items-center justify-center text-sm text-muted-foreground">{t("issue.diff.loading")}</div>
             ) : (
@@ -159,6 +234,35 @@ export default function GitDiffModal({ open, onOpenChange, projectSlug = "", ide
         </div>
       </DialogContent>
     </Dialog>
+    <Dialog open={commitDialogOpen} onOpenChange={setCommitDialogOpen}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>{t("issue.diff.commit.dialogTitle")}</DialogTitle>
+          <DialogDescription>{t("issue.diff.commit.dialogDescription")}</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-2">
+          <label className="text-sm font-medium" htmlFor="workspace-commit-message">
+            {t("issue.diff.commit.messageLabel")}
+          </label>
+          <Textarea
+            id="workspace-commit-message"
+            value={commitMessage}
+            onChange={(event) => setCommitMessage(event.target.value)}
+            placeholder={t("issue.diff.commit.messagePlaceholder")}
+            className="min-h-24 font-mono text-xs"
+          />
+        </div>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => setCommitDialogOpen(false)} disabled={commitPending}>
+            {t("common.cancel")}
+          </Button>
+          <Button type="button" onClick={() => void submitCommit()} disabled={commitPending || !commitMessage.trim()}>
+            {commitPending ? t("issue.diff.commit.committing") : t("issue.diff.commit.submit")}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }
 
@@ -166,12 +270,12 @@ function ViewModeToggle({ viewMode, onChange }: { viewMode: DiffViewMode; onChan
   const { t } = useTranslation();
 
   return (
-    <div className="inline-flex overflow-hidden rounded-md border">
+    <div className="inline-flex overflow-hidden rounded-md border bg-background">
       <Button
         type="button"
         size="sm"
         variant="ghost"
-        className={cn("h-7 gap-1 rounded-r-none px-2 text-xs", viewMode === "split" && "bg-muted")}
+        className={cn("h-7 gap-1 rounded-r-none px-2 text-[11px]", viewMode === "split" && "bg-muted")}
         aria-pressed={viewMode === "split"}
         onClick={() => onChange("split")}
       >
@@ -182,13 +286,45 @@ function ViewModeToggle({ viewMode, onChange }: { viewMode: DiffViewMode; onChan
         type="button"
         size="sm"
         variant="ghost"
-        className={cn("h-7 gap-1 rounded-l-none px-2 text-xs", viewMode === "unified" && "bg-muted")}
+        className={cn("h-7 gap-1 rounded-l-none px-2 text-[11px]", viewMode === "unified" && "bg-muted")}
         aria-pressed={viewMode === "unified"}
         onClick={() => onChange("unified")}
       >
         <Rows3 className="h-3.5 w-3.5" />
         {t("issue.diff.viewMode.unified")}
       </Button>
+    </div>
+  );
+}
+
+function RepoNav({ repos, activeRepo, onChange }: { repos: string[]; activeRepo: string; onChange: (repo: string) => void }) {
+  const { t } = useTranslation();
+
+  return (
+    <div className="flex h-9 items-center gap-1 overflow-x-auto border-b bg-background px-2">
+      <button
+        type="button"
+        className={cn(
+          "inline-flex h-6 shrink-0 items-center rounded-full border px-2 text-[11px] text-muted-foreground hover:bg-muted",
+          activeRepo === "all" && "bg-muted text-foreground",
+        )}
+        onClick={() => onChange("all")}
+      >
+        {t("issue.diff.repos.all")}
+      </button>
+      {repos.map((repo) => (
+        <button
+          key={repo}
+          type="button"
+          className={cn(
+            "inline-flex h-6 shrink-0 items-center rounded-full border px-2 font-mono text-[11px] text-muted-foreground hover:bg-muted",
+            activeRepo === repo && "bg-muted text-foreground",
+          )}
+          onClick={() => onChange(repo)}
+        >
+          {repo}
+        </button>
+      ))}
     </div>
   );
 }
@@ -202,40 +338,70 @@ function CommitList({
   selected: CommitEvidenceSummary | null;
   onSelect: (commit: CommitEvidenceSummary) => void;
 }) {
-  if (commits.length === 0) {
-    return <p className="px-3 py-6 text-center text-xs text-muted-foreground">No commits.</p>;
-  }
+  const [query, setQuery] = useState("");
+  const normalizedQuery = query.trim().toLowerCase();
+  const filteredCommits = normalizedQuery
+    ? commits.filter((commit) =>
+        [commit.message, commit.repo, commit.sha, commit.shortSha].some((value) =>
+          value.toLowerCase().includes(normalizedQuery),
+        ),
+      )
+    : commits;
 
   return (
-    <div className="space-y-1 p-2">
-      {commits.map((commit) => {
-        const active = selected?.sha === commit.sha;
-        return (
-          <button
-            key={commitKey(commit)}
-            type="button"
-            onClick={() => onSelect(commit)}
-            className={`w-full rounded px-2 py-1.5 text-left text-xs hover:bg-muted/60 ${active ? "bg-muted" : ""}`}
-          >
-            <div className="truncate font-medium">{commit.message}</div>
-            <div className="mt-0.5 flex items-center gap-2 text-[11px] text-muted-foreground">
-              <span className="font-mono">{commit.shortSha}</span>
-              <span>{commit.repo}</span>
-              <span className="text-emerald-600">+{commit.insertions}</span>
-              <span className="text-rose-600">-{commit.deletions}</span>
-            </div>
-          </button>
-        );
-      })}
+    <div className="flex h-full min-h-0 flex-col bg-muted/15">
+      <div className="border-b px-2 py-1.5">
+        <div className="flex h-7 items-center gap-1.5 rounded-md border bg-background px-2 text-muted-foreground">
+          <Search className="h-3.5 w-3.5 shrink-0" />
+          <input
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Filter commits..."
+            className="min-w-0 flex-1 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground"
+          />
+        </div>
+      </div>
+      <div className="min-h-0 flex-1 space-y-1 overflow-auto p-1.5">
+        {filteredCommits.length === 0 ? (
+          <p className="px-3 py-6 text-center text-xs text-muted-foreground">No commits.</p>
+        ) : (
+          filteredCommits.map((commit) => {
+            const active = selected?.sha === commit.sha;
+            return (
+              <button
+                key={commitKey(commit)}
+                type="button"
+                onClick={() => onSelect(commit)}
+                className={cn(
+                  "flex w-full gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-background",
+                  active && "bg-background shadow-sm ring-1 ring-border",
+                )}
+              >
+                <GitCommitHorizontal className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[11px] font-medium">{commit.message}</span>
+                  <span className="mt-0.5 flex items-center gap-2 text-[10px] text-muted-foreground">
+                    <span className="font-mono">{commit.shortSha}</span>
+                    <span className="truncate">{commit.repo}</span>
+                    <span className="text-emerald-600">+{commit.insertions}</span>
+                    <span className="text-rose-600">-{commit.deletions}</span>
+                  </span>
+                </span>
+              </button>
+            );
+          })
+        )}
+      </div>
     </div>
   );
 }
 
-function flattenFiles(repos: GitDiffRepo[]): Array<{ key: string; file: GitDiffFileChange }> {
+function flattenFiles(repos: GitDiffRepo[]): Array<{ key: string; repo: string | null; file: GitDiffFileChange }> {
   return repos.flatMap((repo) =>
     repo.files.map((file) => {
       const prefixedFile = prefixFileWithRepo(repo.repo, file);
-      return { key: fileKey(prefixedFile), file: prefixedFile };
+      return { key: fileKey(prefixedFile), repo: repo.repo || null, file: prefixedFile };
     }),
   );
 }

@@ -8,11 +8,16 @@ import type { Channel } from "phoenix";
 import {
   AudioLines,
   Bot,
+  BookOpen,
   Check,
   ChevronDown,
+  ChevronRight,
   Clock,
   FileText,
+  Folder,
+  GitBranch,
   ImageIcon,
+  Plus,
   SendHorizontal,
   ShieldAlert,
   X,
@@ -22,11 +27,16 @@ import type { TFunction } from "i18next";
 import { i18n } from "@/i18n";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { useTranslation } from "react-i18next";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
-import { AssistantComposer, type AssistantComposerSubmit } from "@/components/assistant/AssistantComposer";
+import {
+  AssistantComposer,
+  type AssistantComposerSubmit,
+  type ComposerContextInsertRequest,
+} from "@/components/assistant/AssistantComposer";
 import { assistantCommandsToSlashDefs } from "@/components/assistant/assistantCommandDefs";
 import {
+  type ComposerContextChipRef,
   expandComposerMentions,
   parseMentionTokens,
   type ResolvedMention,
@@ -53,6 +63,7 @@ import { ExecutionModeMenu } from "@/components/issues/issue-detail/ExecutionMod
 import { GitDiffLauncher } from "@/components/issues/issue-detail/git-diff/GitDiffLauncher";
 import { GoalPill, type GoalPillPhase } from "@/components/shared/GoalPill";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Markdown } from "@/components/ui/markdown";
 import { normalizeAssistantDocumentHref } from "@/services/threadDocuments";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -60,7 +71,10 @@ import { deriveAgentTasksFromAssistantMessages } from "@/lib/agentTasks";
 import { extractKbDocumentReferencesFromMarkdown } from "@/lib/assistantKbReferences";
 import type { AgentTaskSnapshot } from "@/types/agentTasks";
 import { catalogFor, defaultComposerSettings, fallbackCatalogBundle, type AssistantCatalogBundle } from "@/lib/assistantSettings";
+import { combineDiffStats, diffStatsFromPatch, type DiffStats } from "@/lib/diffStats";
 import { DEFAULT_EXECUTION_MODE } from "@/lib/executionMode";
+import { kbPagePath as buildKbPagePath } from "@/lib/kbRoutes";
+import { useKbAllRepoTrees } from "@/hooks/useKbAllRepoTrees";
 import {
   fetchAssistantCatalogBundle,
   type AssistantChatMessage,
@@ -68,6 +82,8 @@ import {
   type UserQuestion,
   type UserQuestionsRequest,
 } from "@/services/assistant";
+import { getGitDiff, getThreadGitDiff } from "@/services/gitDiff";
+import { getProjectOverview } from "@/services/knowledgeBase";
 import { UserQuestionsCard } from "@/components/assistant/UserQuestionsCard";
 import {
   assistantExploreTopic,
@@ -102,6 +118,7 @@ import type { AgentKind, ExecutionMode } from "@/types/issue";
 import type { WorkspaceView } from "@/lib/workspaceRoutes";
 import { cn, SCROLLBAR_THIN } from "@/lib/utils";
 import { useAssistantCommands } from "@/hooks/useAssistantCommands";
+import type { KbProjectOverview, KbTreeNode as KbTreeNodeType } from "@/types/knowledgeBase";
 
 interface AuthoringGoalState {
   enabled: boolean;
@@ -296,6 +313,7 @@ export function ProjectAssistantPanel({
 }: ProjectAssistantPanelProps) {
   const { t } = useTranslation();
   const location = useLocation();
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [runningStartedAt, setRunningStartedAt] = useState<number | null>(null);
@@ -345,6 +363,9 @@ export function ProjectAssistantPanel({
     [location.search],
   );
   const [serverAgentSeed, setServerAgentSeed] = useState<AgentKind | null>(routeAgentSeed);
+  const contextInsertRequestIdRef = useRef(0);
+  const [contextInsertRequest, setContextInsertRequest] = useState<ComposerContextInsertRequest | null>(null);
+  const [knowledgeBaseOpen, setKnowledgeBaseOpen] = useState(false);
 
   useEffect(() => {
     if (!routeAgentSeed) return;
@@ -398,6 +419,7 @@ export function ProjectAssistantPanel({
   }, []);
 
   const [composerHeight, setComposerHeight] = useState(0);
+  const [workspaceDiffStats, setWorkspaceDiffStats] = useState<DiffStats | null>(null);
   const isPageMode = mode === "page";
   const isEmbeddedMode = mode === "embedded";
   const isPanelMode = isPageMode || isEmbeddedMode;
@@ -416,6 +438,35 @@ export function ProjectAssistantPanel({
   onEffectiveAgentResolvedRef.current = onEffectiveAgentResolved;
   onIssueCreatedRef.current = onIssueCreated;
   onIssueGoalModeChangedRef.current = onIssueGoalModeChanged;
+
+  useEffect(() => {
+    if (!active) return;
+    if (!threadId && (!projectSlug || !issueIdentifier)) {
+      setWorkspaceDiffStats(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadWorkspaceDiffStats() {
+      try {
+        const result = threadId
+          ? await getThreadGitDiff(threadId, "uncommitted")
+          : await getGitDiff(projectSlug ?? "", issueIdentifier ?? "", "uncommitted");
+        if (cancelled) return;
+        const stats = combineDiffStats(result.repos.flatMap((repo) => repo.files.map((file) => diffStatsFromPatch(file.patch))));
+        setWorkspaceDiffStats(stats.additions > 0 || stats.deletions > 0 ? stats : null);
+      } catch {
+        if (!cancelled) setWorkspaceDiffStats(null);
+      }
+    }
+
+    void loadWorkspaceDiffStats();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [active, issueIdentifier, projectSlug, threadId]);
 
   const setScrollContainerRef = useCallback((node: HTMLDivElement | null) => {
     if (!node && scrollRef.current && !stickToBottomRef.current) {
@@ -502,7 +553,7 @@ export function ProjectAssistantPanel({
     return () => {
       cancelled = true;
     };
-  }, [active, projectSlug]);
+  }, [active, projectSlug, t]);
 
   useEffect(() => {
     if (!active) return;
@@ -675,7 +726,7 @@ export function ProjectAssistantPanel({
       channel.leave();
       socket.disconnect();
     };
-  }, [active, isExploreMode, isKbMode, kbRepoSlug, kbPagePath, issueIdentifier, projectSlug, threadId]);
+  }, [active, isExploreMode, isKbMode, kbRepoSlug, kbPagePath, issueIdentifier, projectSlug, threadId, t]);
 
   useEffect(() => {
     if (!active || !channelReady || !issueIdentifier || typeof issueGoalMode !== "boolean") return;
@@ -704,7 +755,7 @@ export function ProjectAssistantPanel({
       pendingGoalModeRef.current = null;
       onIssueGoalModeError?.(t("assistant.panel.goalModeUpdateTimeout"));
     });
-  }, [active, channelReady, issueIdentifier, issueGoalMode, issueGoalModeRequestId, onIssueGoalModeChanged, onIssueGoalModeError]);
+  }, [active, channelReady, issueIdentifier, issueGoalMode, issueGoalModeRequestId, onIssueGoalModeChanged, onIssueGoalModeError, t]);
 
   useEffect(() => {
     if (!active || !channelReady || !issueIdentifier) return;
@@ -728,7 +779,7 @@ export function ProjectAssistantPanel({
     pushResult.receive("timeout", () => {
       onDispatchError?.(t("assistant.panel.dispatchTimeout", { agent: agentName }));
     });
-  }, [active, channelReady, issueIdentifier, dispatchRequestId, issueGoalMode, onDispatchSucceeded, onDispatchError]);
+  }, [active, channelReady, issueIdentifier, dispatchRequestId, issueGoalMode, onDispatchSucceeded, onDispatchError, t]);
 
   const dispatchApprovedPlan = useCallback(
     (messageId: string, mode: PlanApprovalMode) => {
@@ -931,7 +982,8 @@ export function ProjectAssistantPanel({
 
       const trimmed = submit.message.trim();
       const hasAttachments = submit.attachments.length > 0;
-      if (!trimmed && !hasAttachments) return;
+      const hasContextRefs = submit.contextRefs.length > 0;
+      if (!trimmed && !hasAttachments && !hasContextRefs) return;
 
       if (submit.kind === "infer") {
         if (isRunning) {
@@ -1105,6 +1157,20 @@ export function ProjectAssistantPanel({
     messages
       .find((message) => message.id === STREAMING_ASSISTANT_ID)
       ?.toolCalls.find((toolCall) => toolCall.status === "running")?.name ?? null;
+  const panelTitle = isExploreMode
+    ? t("assistant.panel.exploreTitle")
+    : projectSlug
+      ? t("assistant.panel.projectTitle")
+      : t("assistant.panel.freeformTitle");
+  const panelModelCommand = bundle ? catalogFor(bundle, bundle.defaultAgent).command : null;
+
+  const insertContextRef = useCallback((ref: ComposerContextChipRef) => {
+    contextInsertRequestIdRef.current += 1;
+    setContextInsertRequest({
+      id: contextInsertRequestIdRef.current,
+      ref: { ...ref, state: "draft" },
+    });
+  }, []);
 
   const messageItems = (
     <>
@@ -1114,7 +1180,10 @@ export function ProjectAssistantPanel({
           key={message.id}
           message={message}
           projectSlug={projectSlug}
+          issueIdentifier={issueIdentifier}
+          threadId={threadId}
           onOpenDocumentPath={onOpenDocumentPath}
+          onInsertContext={insertContextRef}
           taskSnapshot={taskSnapshot}
           planApprovalAction={
             issueIdentifier && !isRunning && message.id === planApprovalMessageId
@@ -1193,7 +1262,12 @@ export function ProjectAssistantPanel({
 
   const approvalNode = pendingApproval ? (
     <div className="px-4 pb-2">
-      <CommandApprovalCard request={pendingApproval} onSubmit={submitCommandApproval} disabled={!channelReady} />
+      <CommandApprovalCard
+        request={pendingApproval}
+        onSubmit={submitCommandApproval}
+        onInsertContext={insertContextRef}
+        disabled={!channelReady}
+      />
     </div>
   ) : null;
 
@@ -1237,6 +1311,27 @@ export function ProjectAssistantPanel({
       />
     ) : null;
 
+  const openKnowledgeBase = useCallback(() => {
+    if (!projectSlug) return;
+    setKnowledgeBaseOpen(true);
+  }, [projectSlug]);
+
+  useEffect(() => {
+    if (!projectSlug || catalogLoading) return;
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (!(event.metaKey || event.ctrlKey) || !event.shiftKey) return;
+      if (event.key.toLowerCase() !== "k") return;
+      if (isTextEntryTarget(event.target)) return;
+
+      event.preventDefault();
+      openKnowledgeBase();
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [catalogLoading, openKnowledgeBase, projectSlug]);
+
   const composerNode = (
     <AssistantComposer
       projectSlug={projectSlug ?? ""}
@@ -1249,6 +1344,7 @@ export function ProjectAssistantPanel({
       slashContext="authoring"
       slashCommandExtras={authoringSlashCommandExtras}
       header={authoringGoalPill}
+      contextInsertRequest={contextInsertRequest}
       hint={catalogLoading ? t("assistant.panel.loadingModels") : undefined}
       mentionsEnabled={mentionsEnabled}
       mentionOptions={mentionOptions}
@@ -1256,14 +1352,31 @@ export function ProjectAssistantPanel({
       onMentionSelect={rememberMention}
       agentSeed={serverAgentSeed}
       toolbarAfterAttach={
-        issueIdentifier || threadId ? (
+        projectSlug || issueIdentifier || threadId ? (
           <>
-            <GitDiffLauncher
-              projectSlug={projectSlug ?? undefined}
-              identifier={issueIdentifier ?? null}
-              threadId={threadId ?? null}
-              disabled={catalogLoading}
-            />
+            {issueIdentifier || threadId ? (
+              <GitDiffLauncher
+                projectSlug={projectSlug ?? undefined}
+                identifier={issueIdentifier ?? null}
+                threadId={threadId ?? null}
+                disabled={catalogLoading}
+              />
+            ) : null}
+            {projectSlug ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 gap-1 px-2 text-xs"
+                disabled={catalogLoading}
+                aria-label={t("layout.projectHeader.knowledgeBase")}
+                title={t("assistant.panel.openKnowledgeBaseShortcut")}
+                onClick={openKnowledgeBase}
+              >
+                <BookOpen className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">{t("assistant.panel.openKnowledgeBase")}</span>
+              </Button>
+            ) : null}
             {issueIdentifier ? (
               <ExecutionModeMenu
                 agent={composerAgent}
@@ -1281,6 +1394,18 @@ export function ProjectAssistantPanel({
       dropTargetRef={panelRef}
     />
   );
+
+  const knowledgeBaseDialog = projectSlug ? (
+    <ComposerKnowledgeBaseDialog
+      open={knowledgeBaseOpen}
+      projectSlug={projectSlug}
+      onOpenChange={setKnowledgeBaseOpen}
+      onOpenPage={(repoSlug, pagePath) => {
+        navigate(buildKbPagePath(projectSlug, repoSlug, pagePath));
+        setKnowledgeBaseOpen(false);
+      }}
+    />
+  ) : null;
 
   const scrollToBottomButton = !isAtBottom ? (
     <div
@@ -1317,25 +1442,39 @@ export function ProjectAssistantPanel({
         >
           {isEmbeddedMode ? null : (
             <div
-              className={cn("border-b", isPageMode ? "px-6 py-3.5" : "px-4 py-3")}
+              data-testid="project-assistant-compact-header"
+              className={cn(
+                "border-b bg-background/95",
+                isPageMode ? "px-4 py-2 lg:px-6" : "px-4 py-2",
+              )}
             >
-              <h2 className="text-base font-semibold leading-tight">
-                {isExploreMode
-                  ? t("assistant.panel.exploreTitle")
-                  : projectSlug
-                    ? t("assistant.panel.projectTitle")
-                    : t("assistant.panel.freeformTitle")}
-              </h2>
-              <p className="text-xs text-muted-foreground">
-                {isExploreMode
-                  ? t("assistant.panel.exploreDescription", { slug: projectSlug })
-                  : projectSlug
-                    ? t("assistant.panel.projectDescription", { slug: projectSlug })
-                    : t("assistant.panel.freeformDescription")}
-                {bundle
-                  ? t("assistant.panel.modelsFrom", { command: catalogFor(bundle, bundle.defaultAgent).command })
-                  : null}
-              </p>
+              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                    <Bot className="h-4 w-4" />
+                  </span>
+                  <h2 className="truncate text-sm font-semibold leading-tight">{panelTitle}</h2>
+                  {projectSlug ? (
+                    <span className="hidden max-w-[18rem] truncate rounded-full border border-border/70 bg-background px-2 py-0.5 text-[11px] font-medium text-muted-foreground sm:inline-flex">
+                      {projectSlug}
+                    </span>
+                  ) : null}
+                  {workspaceDiffStats ? (
+                    <span
+                      className="inline-flex items-center gap-1 rounded-full border border-border/70 bg-background px-2 py-0.5 font-mono text-[11px]"
+                      title={`+${workspaceDiffStats.additions}/-${workspaceDiffStats.deletions} lines`}
+                    >
+                      <span className="text-emerald-600">+{workspaceDiffStats.additions}</span>
+                      <span className="text-rose-600">-{workspaceDiffStats.deletions}</span>
+                    </span>
+                  ) : null}
+                </div>
+                {panelModelCommand ? (
+                  <span className="min-w-0 max-w-full truncate text-[11px] text-muted-foreground sm:max-w-[18rem]">
+                    {panelModelCommand}
+                  </span>
+                ) : null}
+              </div>
             </div>
           )}
 
@@ -1347,7 +1486,7 @@ export function ProjectAssistantPanel({
                   isPageMode
                     ? widePageContent
                       ? "mx-auto max-w-[min(100%,80rem)] gap-4 px-4 pt-4 lg:px-6"
-                      : "mx-auto max-w-4xl gap-6 px-4 pt-8"
+                      : "mx-auto max-w-4xl gap-4 px-4 pt-4"
                     : cn("gap-4 py-4", embeddedPanelInset),
                 )}
                 style={isFullPageProjectAssistant ? { paddingBottom: composerHeight + 16 } : undefined}
@@ -1422,6 +1561,7 @@ export function ProjectAssistantPanel({
         {btw ? (
           <BtwOverlay question={btw.question} answer={btw.answer} status={btw.status} onClose={() => setBtw(null)} />
         ) : null}
+        {knowledgeBaseDialog}
       </AssistantRuntimeProvider>
     );
   }
@@ -1463,7 +1603,208 @@ export function ProjectAssistantPanel({
       {btw ? (
         <BtwOverlay question={btw.question} answer={btw.answer} status={btw.status} onClose={() => setBtw(null)} />
       ) : null}
+      {knowledgeBaseDialog}
     </AssistantRuntimeProvider>
+  );
+}
+
+function ComposerKnowledgeBaseDialog({
+  open,
+  projectSlug,
+  onOpenChange,
+  onOpenPage,
+}: {
+  open: boolean;
+  projectSlug: string;
+  onOpenChange: (open: boolean) => void;
+  onOpenPage: (repoSlug: string, pagePath: string) => void;
+}) {
+  const { t } = useTranslation();
+  const [overview, setOverview] = useState<KbProjectOverview | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const repoSlugs = useMemo(() => overview?.repositories.map((repo) => repo.repoSlug) ?? [], [overview]);
+  const { treesByRepo, loading: treesLoading } = useKbAllRepoTrees(open ? projectSlug : "", repoSlugs);
+
+  useEffect(() => {
+    if (!open) return;
+
+    let cancelled = false;
+    setLoadError(null);
+
+    async function loadOverview() {
+      try {
+        const nextOverview = await getProjectOverview(projectSlug);
+        if (!cancelled) setOverview(nextOverview);
+      } catch (cause) {
+        if (cancelled) return;
+        setOverview(null);
+        setLoadError(cause instanceof Error ? cause.message : t("assistant.panel.knowledgeBaseLoadFailed"));
+      }
+    }
+
+    void loadOverview();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, projectSlug, t]);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="flex h-[min(88vh,900px)] max-w-6xl flex-col gap-0 overflow-hidden p-0">
+        <DialogHeader className="border-b px-5 py-4">
+          <DialogTitle>{t("assistant.panel.knowledgeBaseTitle")}</DialogTitle>
+          <DialogDescription>{t("assistant.panel.knowledgeBaseDescription", { slug: projectSlug })}</DialogDescription>
+        </DialogHeader>
+        <div className={cn("min-h-0 flex-1 overflow-y-auto p-3", SCROLLBAR_THIN)}>
+          {loadError ? (
+            <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+              {loadError}
+            </div>
+          ) : null}
+          {!overview && !loadError ? (
+            <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+              {t("common.loading")}
+            </div>
+          ) : null}
+          {overview ? (
+            <div className="space-y-3">
+              {overview.repositories.length === 0 ? (
+                <div className="rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground">
+                  {t("assistant.panel.knowledgeBaseEmpty")}
+                </div>
+              ) : null}
+              {overview.repositories.map((repo) => (
+                <ComposerKnowledgeBaseRepo
+                  key={repo.repoSlug}
+                  repoSlug={repo.repoSlug}
+                  title={repo.workspacePath}
+                  nodes={treesByRepo[repo.repoSlug] ?? []}
+                  loading={treesLoading && !treesByRepo[repo.repoSlug]}
+                  onOpenPage={onOpenPage}
+                />
+              ))}
+            </div>
+          ) : null}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ComposerKnowledgeBaseRepo({
+  repoSlug,
+  title,
+  nodes,
+  loading,
+  onOpenPage,
+}: {
+  repoSlug: string;
+  title: string;
+  nodes: KbTreeNodeType[];
+  loading: boolean;
+  onOpenPage: (repoSlug: string, pagePath: string) => void;
+}) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(true);
+
+  return (
+    <section className="rounded-xl border bg-card/60">
+      <button
+        type="button"
+        className="flex w-full min-w-0 items-center gap-2 rounded-t-xl px-3 py-2 text-left hover:bg-accent/50"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <ChevronRight className={cn("h-4 w-4 shrink-0 text-muted-foreground transition-transform", open && "rotate-90")} />
+        <GitBranch className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <span className="min-w-0 flex-1 truncate text-sm font-semibold">{title}</span>
+      </button>
+      {open ? (
+        <div className="border-t p-2">
+          {loading ? <p className="px-2 py-1 text-xs text-muted-foreground">{t("common.loading")}</p> : null}
+          {!loading && nodes.length === 0 ? (
+            <p className="px-2 py-1 text-xs text-muted-foreground">{t("kb.sidebar.noDocs")}</p>
+          ) : null}
+          {nodes.map((node) => (
+            <ComposerKnowledgeBaseTreeNode key={node.path} repoSlug={repoSlug} node={node} depth={0} onOpenPage={onOpenPage} />
+          ))}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function ComposerKnowledgeBaseTreeNode({
+  repoSlug,
+  node,
+  depth,
+  onOpenPage,
+}: {
+  repoSlug: string;
+  node: KbTreeNodeType;
+  depth: number;
+  onOpenPage: (repoSlug: string, pagePath: string) => void;
+}) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(true);
+  const paddingLeft = depth * 16 + 4;
+
+  if (node.type === "folder") {
+    return (
+      <div>
+        <button
+          type="button"
+          className="flex w-full min-w-0 items-center gap-1.5 rounded-md py-1 pr-2 text-left text-sm hover:bg-accent/50"
+          style={{ paddingLeft }}
+          aria-expanded={open}
+          onClick={() => setOpen((value) => !value)}
+        >
+          <ChevronRight className={cn("h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform", open && "rotate-90")} />
+          <Folder className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          <span className="min-w-0 truncate text-muted-foreground">{node.title || node.name}</span>
+        </button>
+        {open
+          ? node.children.map((child) => (
+              <ComposerKnowledgeBaseTreeNode
+                key={child.path}
+                repoSlug={repoSlug}
+                node={child}
+                depth={depth + 1}
+                onOpenPage={onOpenPage}
+              />
+            ))
+          : null}
+      </div>
+    );
+  }
+
+  const Icon = node.type === "asset" ? ImageIcon : FileText;
+
+  return (
+    <div
+      className="group/kb-modal-row flex min-w-0 items-center gap-1.5 rounded-md py-1 pr-2 hover:bg-accent/50"
+      style={{ paddingLeft: paddingLeft + 20 }}
+    >
+      <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+      <button
+        type="button"
+        className="min-w-0 flex-1 truncate text-left text-sm text-muted-foreground hover:text-foreground"
+        title={node.path}
+        onClick={() => onOpenPage(repoSlug, node.path)}
+      >
+        {node.title || node.name}
+      </button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="h-6 px-2 text-[11px] opacity-0 group-hover/kb-modal-row:opacity-100"
+        onClick={() => onOpenPage(repoSlug, node.path)}
+      >
+        {t("assistant.panel.knowledgeBaseOpenPage")}
+      </Button>
+    </div>
   );
 }
 
@@ -1491,13 +1832,19 @@ function authoringGoalPhase(goal: AuthoringGoalState, running: boolean): GoalPil
 function AssistantBubble({
   message,
   projectSlug,
+  issueIdentifier,
+  threadId,
   onOpenDocumentPath,
+  onInsertContext,
   taskSnapshot = null,
   planApprovalAction,
 }: {
   message: AssistantChatMessage;
   projectSlug?: string;
+  issueIdentifier?: string;
+  threadId?: number;
   onOpenDocumentPath?: (path: string) => void;
+  onInsertContext?: (ref: ComposerContextChipRef) => void;
   taskSnapshot?: AgentTaskSnapshot | null;
   planApprovalAction?: PlanApprovalAction;
 }) {
@@ -1538,7 +1885,15 @@ function AssistantBubble({
         {message.toolCalls.length ? (
           <div className={cn("mt-3 border-t pt-2", isUser && "border-white/20")}>
             <ToolActivityTimeline toolCalls={message.toolCalls} taskSnapshot={taskSnapshot} />
-            {!isUser ? <EditedFilesSummary toolCalls={message.toolCalls} /> : null}
+            {!isUser ? (
+              <EditedFilesSummary
+                toolCalls={message.toolCalls}
+                projectSlug={projectSlug}
+                issueIdentifier={issueIdentifier}
+                threadId={threadId}
+                onInsertContext={onInsertContext}
+              />
+            ) : null}
           </div>
         ) : null}
         {planApprovalAction ? <PlanApprovalButtons action={planApprovalAction} /> : null}
@@ -1583,10 +1938,12 @@ function CommandApprovalCard({
   request,
   disabled,
   onSubmit,
+  onInsertContext,
 }: {
   request: AssistantApprovalRequest;
   disabled?: boolean;
   onSubmit: (requestId: string | number, action: "approve" | "cancel") => void;
+  onInsertContext?: (ref: ComposerContextChipRef) => void;
 }) {
   const { t } = useTranslation();
 
@@ -1616,6 +1973,19 @@ function CommandApprovalCard({
         ) : null}
       </dl>
       <div className="flex flex-wrap gap-2">
+        {onInsertContext ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-8 gap-1.5 px-3 text-xs"
+            disabled={disabled}
+            onClick={() => onInsertContext(contextRefForApprovalRequest(request, t))}
+          >
+            <Plus className="h-3.5 w-3.5" />
+            {t("assistant.panel.addToContext")}
+          </Button>
+        ) : null}
         <Button
           type="button"
           size="sm"
@@ -1638,6 +2008,29 @@ function CommandApprovalCard({
       </div>
     </div>
   );
+}
+
+function contextRefForApprovalRequest(request: AssistantApprovalRequest, t: TFunction): ComposerContextChipRef {
+  const requestId = String(request.requestId);
+  const content = [
+    "### Agent permission request",
+    "",
+    request.command ? "#### Command" : null,
+    request.command ? ["```shell", request.command, "```"].join("\n") : null,
+    request.cwd ? `- Working directory: ${request.cwd}` : null,
+    request.reason ? `- Detected action: ${request.reason}` : null,
+  ]
+    .filter((value): value is string => typeof value === "string" && value.length > 0)
+    .join("\n");
+
+  return {
+    type: "security",
+    id: `permission:${requestId}`,
+    label: t("assistant.panel.commandApproval.title"),
+    detail: request.cwd ?? request.reason ?? requestId,
+    content,
+    state: "draft",
+  };
 }
 
 function isUserQuestionsMessage(message: AssistantChatMessage): boolean {
@@ -1871,6 +2264,12 @@ function safeJsonStringify(value: unknown): string | null {
   } catch {
     return null;
   }
+}
+
+function isTextEntryTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  const tagName = target.tagName.toLowerCase();
+  return tagName === "input" || tagName === "textarea" || tagName === "select" || target.isContentEditable;
 }
 
 function fallbackAttachmentMessage(

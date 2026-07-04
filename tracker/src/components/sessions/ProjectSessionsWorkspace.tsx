@@ -143,21 +143,28 @@ export function ProjectSessionsWorkspace({ projectSlug, activeThreadId = null }:
   return (
     <main className="box-border flex h-[calc(100vh-4rem)] min-h-0 flex-col overflow-hidden bg-gradient-to-br from-muted/40 via-background to-muted/20 p-3 sm:p-4">
       <section className="mx-auto flex h-full min-h-0 w-full max-w-[min(100%,96rem)] flex-col gap-2.5 overflow-hidden">
-        <header className="shrink-0 rounded-lg border border-border/60 bg-card/90 px-4 py-2.5 shadow-sm">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                {t("sessions.eyebrow")}
-              </p>
-              <h1 className="mt-1 text-xl font-semibold tracking-tight">{t("sessions.title")}</h1>
-              <p className="mt-1 text-sm text-muted-foreground">{t("sessions.description")}</p>
+        <header
+          data-testid="project-sessions-compact-header"
+          className="shrink-0 rounded-lg border border-border/60 bg-card/90 px-3 py-2 shadow-sm"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                <MessageSquare className="h-4 w-4" />
+              </span>
+              <h1 className="truncate text-base font-semibold tracking-tight">{t("sessions.title")}</h1>
+              {total > 0 ? (
+                <span className="rounded-full border border-border/70 bg-background px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                  {total}
+                </span>
+              ) : null}
             </div>
             <div className="flex shrink-0 items-center gap-2">
-              <Button type="button" variant="outline" size="sm" onClick={() => void refetch()} disabled={isLoading}>
+              <Button type="button" variant="outline" size="sm" className="h-8" onClick={() => void refetch()} disabled={isLoading}>
                 <RefreshCw className={isLoading ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
-                {t("sessions.refresh")}
+                <span className="hidden sm:inline">{t("sessions.refresh")}</span>
               </Button>
-              <Button type="button" size="sm" onClick={() => void handleCreateSession()} disabled={creating}>
+              <Button type="button" size="sm" className="h-8" onClick={() => void handleCreateSession()} disabled={creating}>
                 <Plus className="h-4 w-4" />
                 {creating ? t("sessions.creating") : t("sessions.newSession")}
               </Button>

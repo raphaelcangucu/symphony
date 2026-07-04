@@ -24,6 +24,7 @@ export interface ComposerContextChipRef {
   id: string;
   label?: string;
   detail?: string;
+  content?: string;
   state: ComposerContextChipState;
 }
 

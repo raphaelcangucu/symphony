@@ -111,6 +111,7 @@ defmodule SymphonyElixirWeb.Router do
     post("/assistant/threads/:thread_id/contexts", AttachedContextController, :create_assistant)
     delete("/assistant/threads/:thread_id/contexts/:id", AttachedContextController, :delete_assistant)
     get("/assistant/threads/:thread_id/diff", WorkspaceDiffController, :thread)
+    post("/assistant/threads/:thread_id/diff/commit", WorkspaceDiffController, :commit_thread)
     get("/assistant/threads/:thread_id/documents", AssistantThreadDocumentController, :index)
     get("/assistant/threads/:thread_id/documents/*path", AssistantThreadDocumentController, :show)
     get("/recents", RecentsController, :index)
@@ -158,6 +159,7 @@ defmodule SymphonyElixirWeb.Router do
     post("/projects/:project_slug/issues/:identifier/evidence/clear-failed", EvidenceController, :clear_failed)
     delete("/projects/:project_slug/issues/:identifier/evidence/:run_id", EvidenceController, :delete)
     get("/projects/:project_slug/issues/:identifier/diff", WorkspaceDiffController, :show)
+    post("/projects/:project_slug/issues/:identifier/diff/commit", WorkspaceDiffController, :commit)
     get("/projects/:project_slug/issues/:identifier/commit_evidence", CommitEvidenceController, :index)
 
     get(

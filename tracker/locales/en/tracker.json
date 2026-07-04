@@ -663,6 +663,22 @@
         "tree": "Tree",
         "flat": "Flat"
       },
+      "repos": {
+        "all": "All repos"
+      },
+      "commit": {
+        "button": "Commit",
+        "title": "Commit workspace changes",
+        "dialogTitle": "Commit workspace changes",
+        "dialogDescription": "Create a local git commit in each repository with pending changes.",
+        "messageLabel": "Commit message",
+        "messagePlaceholder": "feat: describe the change",
+        "submit": "Commit changes",
+        "committing": "Committing...",
+        "success_one": "Committed {{count}} repo.",
+        "success_other": "Committed {{count}} repos.",
+        "failed": "Could not commit workspace changes."
+      },
       "files": "{{count}} files",
       "filterPlaceholder": "Filter files...",
       "workspaceUnavailable": "Workspace unavailable",
@@ -1888,6 +1904,14 @@
       "modelsFrom": " Models from `{{command}}`.",
       "openButton": "Assistant",
       "openAria": "Open project assistant",
+      "openKnowledgeBase": "KB",
+      "openKnowledgeBaseShortcut": "Open knowledge base (⌘⇧K)",
+      "knowledgeBaseTitle": "Knowledge Base",
+      "knowledgeBaseDescription": "Browse docs for `{{slug}}` without leaving the composer.",
+      "knowledgeBaseOpenPage": "Open",
+      "knowledgeBaseEmpty": "No knowledge base repositories are configured.",
+      "knowledgeBaseLoadFailed": "Failed to load the knowledge base.",
+      "addToContext": "Add to context",
       "loadingModels": "Loading assistant models...",
       "catalogLoadFailed": "Failed to load assistant models.",
       "noConnectionTarget": "Assistant has no thread or project to connect to.",

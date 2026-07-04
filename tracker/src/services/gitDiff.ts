@@ -1,6 +1,13 @@
 import { normalizeIssueIdentifier } from "@/lib/issueIdentifiers";
 import { requireNonBlank, requireProjectSlug } from "@/lib/serviceValidation";
-import type { GitDiffFileChange, GitDiffResult, GitDiffType, GitDiffWorkspace } from "@/types/gitDiff";
+import type {
+  GitDiffCommitResponse,
+  GitDiffCommitResult,
+  GitDiffFileChange,
+  GitDiffResult,
+  GitDiffType,
+  GitDiffWorkspace,
+} from "@/types/gitDiff";
 
 import { http, trackerPath } from "./http";
 
@@ -19,6 +26,18 @@ interface BackendGitDiffRepoDto {
 
 interface BackendGitDiffEnvelope {
   data?: BackendGitDiffRepoDto[] | null;
+  workspace?: { path?: string | null; available?: boolean | null } | null;
+}
+
+interface BackendGitCommitDto {
+  repo?: string | null;
+  sha?: string | null;
+  message?: string | null;
+  files?: string[] | null;
+}
+
+interface BackendGitCommitEnvelope {
+  data?: BackendGitCommitDto[] | null;
   workspace?: { path?: string | null; available?: boolean | null } | null;
 }
 
@@ -56,6 +75,39 @@ export async function getThreadGitDiff(
   };
 }
 
+export async function commitGitDiff(
+  projectSlug: string,
+  identifier: string,
+  message: string,
+): Promise<GitDiffCommitResponse> {
+  const slug = requireProjectSlug(projectSlug);
+  const issueIdentifier = requireNonBlank(normalizeIssueIdentifier(identifier), "identifier");
+  const commitMessage = requireNonBlank(message, "message");
+
+  const response = await http.post<BackendGitCommitEnvelope>(
+    trackerPath(`/projects/${encodeURIComponent(slug)}/issues/${encodeURIComponent(issueIdentifier)}/diff/commit`),
+    { message: commitMessage },
+  );
+
+  return {
+    commits: (response.data?.data ?? []).map(normalizeCommit),
+    workspace: normalizeWorkspace(response.data?.workspace),
+  };
+}
+
+export async function commitThreadGitDiff(threadId: number, message: string): Promise<GitDiffCommitResponse> {
+  const commitMessage = requireNonBlank(message, "message");
+  const response = await http.post<BackendGitCommitEnvelope>(
+    trackerPath(`/assistant/threads/${encodeURIComponent(String(threadId))}/diff/commit`),
+    { message: commitMessage },
+  );
+
+  return {
+    commits: (response.data?.data ?? []).map(normalizeCommit),
+    workspace: normalizeWorkspace(response.data?.workspace),
+  };
+}
+
 function normalizeRepo(dto: BackendGitDiffRepoDto) {
   return {
     repo: dto.repo ?? "",
@@ -69,6 +121,15 @@ function normalizeFile(dto: BackendGitDiffFileDto): GitDiffFileChange {
     oldPath: dto.oldPath ?? dto.old_path ?? null,
     status: dto.status ?? "modified",
     patch: dto.patch ?? "",
+  };
+}
+
+function normalizeCommit(dto: BackendGitCommitDto): GitDiffCommitResult {
+  return {
+    repo: dto.repo ?? "",
+    sha: dto.sha ?? "",
+    message: dto.message ?? "",
+    files: dto.files ?? [],
   };
 }
 

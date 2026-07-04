@@ -103,16 +103,52 @@ defmodule SymphonyElixir.AttachedContexts do
   defp draft_contexts(_scope, _context_refs), do: []
 
   defp resolve_context_ref(project, ref) when is_map(ref) do
-    with {:ok, kind} <- context_ref_kind(ref),
-         {:ok, ref_key} <- context_ref_id(ref),
-         {:ok, resolved} <- ContextResolvers.resolve(project, kind, ref_key, %{}) do
-      [resolved]
-    else
-      _ -> []
+    case ephemeral_context_ref(ref) do
+      {:ok, resolved} ->
+        [resolved]
+
+      :error ->
+        with {:ok, kind} <- context_ref_kind(ref),
+             {:ok, ref_key} <- context_ref_id(ref),
+             {:ok, resolved} <- ContextResolvers.resolve(project, kind, ref_key, %{}) do
+          [resolved]
+        else
+          _ -> []
+        end
     end
   end
 
   defp resolve_context_ref(_project, _ref), do: []
+
+  defp ephemeral_context_ref(ref) do
+    with {:ok, content} <- context_ref_content(ref),
+         {:ok, ref_key} <- context_ref_id(ref) do
+      title = context_ref_title(ref, ref_key)
+      {:ok, %{title: title, content_md: content, metadata: %{"ref_key" => ref_key}}}
+    else
+      _ -> :error
+    end
+  end
+
+  defp context_ref_content(ref) do
+    case fetch_any(ref, [:content_md, :contentMd, :content]) do
+      {:ok, value} when is_binary(value) ->
+        case String.trim(value) do
+          "" -> :error
+          content -> {:ok, content}
+        end
+
+      _ ->
+        :error
+    end
+  end
+
+  defp context_ref_title(ref, ref_key) do
+    case fetch_any(ref, [:label, :title]) do
+      {:ok, value} when is_binary(value) and value != "" -> value
+      _ -> ref_key
+    end
+  end
 
   defp context_ref_kind(ref) do
     case fetch_any(ref, [:kind, :type]) do

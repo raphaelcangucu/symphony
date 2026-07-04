@@ -49,7 +49,7 @@ defmodule SymphonyElixirWeb.Tracker.WorkspaceDiffControllerTest do
     File.mkdir_p!(workspace)
     File.rename!(repo, Path.join(workspace, "advising"))
 
-    %{issue: issue}
+    %{issue: issue, workspace: workspace}
   end
 
   test "show returns uncommitted workspace patches", %{issue: issue} do
@@ -75,6 +75,35 @@ defmodule SymphonyElixirWeb.Tracker.WorkspaceDiffControllerTest do
       )
 
     assert %{"error" => %{"code" => "invalid_diff_type"}} = json_response(conn, 422)
+  end
+
+  test "commit creates commits for dirty workspace repos", %{issue: issue, workspace: workspace} do
+    conn =
+      post(
+        authorized_conn(),
+        "/api/tracker/v1/projects/advising/issues/#{issue.identifier}/diff/commit",
+        %{"message" => "feat: save tracker diff"}
+      )
+
+    assert %{"data" => [%{"repo" => "advising", "sha" => sha, "message" => "feat: save tracker diff"}]} =
+             json_response(conn, 200)
+
+    assert String.length(sha) == 40
+
+    repo = Path.join(workspace, "advising")
+    assert sh!(repo, "git status --porcelain") == ""
+    assert String.trim(sh!(repo, "git log -1 --format=%s")) == "feat: save tracker diff"
+  end
+
+  test "commit rejects blank messages", %{issue: issue} do
+    conn =
+      post(
+        authorized_conn(),
+        "/api/tracker/v1/projects/advising/issues/#{issue.identifier}/diff/commit",
+        %{"message" => " "}
+      )
+
+    assert %{"error" => %{"code" => "invalid_commit_message"}} = json_response(conn, 422)
   end
 
   defp authorized_conn do

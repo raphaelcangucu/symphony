@@ -21,7 +21,7 @@ export function GitDiffViewer({ file, viewMode }: GitDiffViewerProps) {
     } catch {
       return null;
     }
-  }, [file?.patch, file?.path]);
+  }, [file]);
 
   if (!file) {
     return (
