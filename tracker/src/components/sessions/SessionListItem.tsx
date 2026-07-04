@@ -1,10 +1,10 @@
-import { Clock, ExternalLink, GitBranch, Play } from "lucide-react";
+import { Clock, ExternalLink, GitBranch } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 
+import { ResumeSessionButton } from "@/components/shared/ResumeSessionButton";
 import { SessionAgentBadge, SessionTypeBadge } from "@/components/shared/SessionBadge";
 import { SessionStatusBadge } from "@/components/sessions/SessionStatusBadge";
-import { Button } from "@/components/ui/button";
 import { canResumeExecution } from "@/lib/agentExecutionDisplay";
 import { cn, formatDateTime } from "@/lib/utils";
 import type { AgentExecutionStatus } from "@/types/agent-execution";
@@ -77,17 +77,7 @@ export function SessionListItem({
           <ExternalLink className="h-4 w-4" />
         </Link>
         {canResume ? (
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={resumePending}
-            onClick={() => onResume(session)}
-            className="shrink-0 gap-1.5"
-          >
-            <Play className="h-3.5 w-3.5" />
-            {resumePending ? t("sessions.resuming") : t("sessions.resume")}
-          </Button>
+          <ResumeSessionButton pending={resumePending} onResume={() => onResume(session)} />
         ) : null}
       </div>
     </li>

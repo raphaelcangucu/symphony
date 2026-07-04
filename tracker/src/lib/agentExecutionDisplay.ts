@@ -51,6 +51,9 @@ export function longRunningBadgeText(
 
 /** Single display status for board cards and execution detail. */
 export function resolveDisplayStatus(execution: AgentExecution): AgentExecutionStatus {
+  // A deliberate operator pause is benign and resumable — never coerce it to
+  // the destructive "aborted" state, even though it shares a stopped run.
+  if (execution.status === "paused") return "paused";
   if (execution.status === "aborted" || execution.status === "error") return execution.status;
   if (hasInterruptedSignals(execution)) return "aborted";
   return execution.status;
@@ -100,6 +103,7 @@ export type AgentControlState =
   | "retrying"
   | "error"
   | "aborted"
+  | "paused"
   | "saved";
 
 /** Lifecycle action the primary control button performs in a given state. */

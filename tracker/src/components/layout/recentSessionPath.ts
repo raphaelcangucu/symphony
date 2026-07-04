@@ -1,7 +1,7 @@
 import type { TFunction } from "i18next";
 
 import { i18n } from "@/i18n";
-import { issueAssistantPath, issuePath, projectExploreAssistantPath, projectSessionPath, withAgentSection } from "@/lib/workspaceRoutes";
+import { issueAssistantPath, projectExecutionSessionPath, projectExploreAssistantPath, projectSessionPath } from "@/lib/workspaceRoutes";
 import type { RecentSession } from "@/types/recents";
 
 export function recentSessionSubtitle(
@@ -31,11 +31,7 @@ export function recentSessionSubtitle(
 export function recentSessionPath(session: RecentSession): string {
   if (session.kind === "codex") {
     if (session.projectSlug && session.identifier) {
-      return withAgentSection(
-        issuePath(session.projectSlug, "board", session.identifier, "agent"),
-        "",
-        "execution",
-      );
+      return projectExecutionSessionPath(session.projectSlug, session.identifier);
     }
     return session.projectSlug ? `/projects/${session.projectSlug}/board` : "/projects";
   }

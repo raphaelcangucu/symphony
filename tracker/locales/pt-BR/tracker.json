@@ -535,12 +535,7 @@
         "output": "Saída",
         "total": "Total",
         "assignment": "Atribuição",
-        "noAgentAssigned": "Nenhum agente atribuído",
-        "agentSection": "Agente",
-        "inherit": "Herdar",
-        "stopToChange": "Pare a execução ativa para trocar o agente.",
-        "retryPaused": "Retries ficam pausados ao escolher outro agente. Mova a issue para fora do estado ativo para parar o re-dispatch por completo.",
-        "updateFailed": "Falha ao atualizar agente"
+        "noAgentAssigned": "Nenhum agente atribuído"
       }
     },
     "drawer": {

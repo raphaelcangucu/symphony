@@ -1,7 +1,7 @@
 import { Archive } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-import { Button } from "@/components/ui/button";
+import { SessionRowActionButton } from "@/components/shared/SessionRowActionButton";
 import { cn } from "@/lib/utils";
 
 interface ArchiveChatButtonProps {
@@ -39,21 +39,13 @@ export function ArchiveChatButton({
   }
 
   return (
-    <Button
-      type="button"
-      variant="ghost"
-      size="icon"
+    <SessionRowActionButton
+      label={t("assistant.archive.ariaLabel")}
+      onClick={() => onArchive(threadId)}
       disabled={archiving}
-      aria-label={t("assistant.archive.ariaLabel")}
-      title={t("assistant.archive.title")}
-      className={cn("h-8 w-8 shrink-0 text-muted-foreground", className)}
-      onClick={(event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        onArchive(threadId);
-      }}
+      className={className}
     >
       <Archive className="h-4 w-4" />
-    </Button>
+    </SessionRowActionButton>
   );
 }

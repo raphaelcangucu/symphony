@@ -4,9 +4,13 @@ defmodule SymphonyElixir.AgentExecution do
 
   The orchestrator tracks active agents in its `running` and `retry_attempts`
   maps. This module projects that runtime state into a stable, UI-facing status
-  (`:live`, `:idle`, `:waiting`, `:retrying`, `:error`, `:aborted`) keyed by issue
-  identifier so the tracker board can show which agent is working an issue and what
-  it is doing.
+  (`:live`, `:idle`, `:waiting`, `:retrying`, `:error`, `:aborted`, `:paused`)
+  keyed by issue identifier so the tracker board can show which agent is working
+  an issue and what it is doing.
+
+  A `:paused` run is one the operator stopped on purpose (a `user_stop` session
+  event). It is resumable and benign, so it is kept distinct from `:aborted`,
+  which signals an unexpected interruption/failure that needs attention.
   """
 
   alias SymphonyElixir.AgentRouting
@@ -26,7 +30,12 @@ defmodule SymphonyElixir.AgentExecution do
   durable Codex goal thread (persisted `agent_session_id` + objective). The UI
   surfaces it as a dormant "goal not loaded" state that can be resumed.
   """
-  @type status :: :live | :idle | :waiting | :retrying | :error | :aborted | :saved
+  @type status :: :live | :idle | :waiting | :retrying | :error | :aborted | :paused | :saved
+
+  # UI-facing session-event / display copy for a deliberate operator pause.
+  @paused_last_event "turn_paused"
+  @paused_message "Paused — resume when ready"
+  @paused_label "Paused"
 
   @type t :: %{
           issue_id: String.t() | nil,
@@ -149,8 +158,9 @@ defmodule SymphonyElixir.AgentExecution do
   defp status_priority(:waiting), do: 3
   defp status_priority(:live), do: 4
   defp status_priority(:idle), do: 5
-  defp status_priority(:saved), do: 6
-  defp status_priority(_status), do: 7
+  defp status_priority(:paused), do: 6
+  defp status_priority(:saved), do: 7
+  defp status_priority(_status), do: 8
 
   @doc "Projects a raw orchestrator snapshot into agent execution views."
   @spec from_snapshot(map()) :: [t()]
@@ -173,26 +183,29 @@ defmodule SymphonyElixir.AgentExecution do
     last_event_at = Map.get(entry, :last_codex_timestamp)
     goal = execution_goal(entry)
     status = running_status(entry, last_event_at, now)
-    interrupted? = status == :idle and running_entry_interrupted?(entry)
+    interruption = if(status == :idle, do: running_entry_interruption(entry), else: nil)
+    aborted? = interruption == :aborted
 
     %{
       issue_id: issue_id(entry),
       issue_identifier: entry.identifier,
-      status: if(interrupted?, do: :aborted, else: status),
+      status: interruption || status,
       agent_kind: Map.get(entry, :agent_kind),
       session_id: Map.get(entry, :session_id),
-      last_event: running_last_event(entry, interrupted?),
-      last_message: running_last_message(entry, interrupted?),
+      last_event: running_last_event(entry, interruption),
+      last_message: running_last_message(entry, interruption),
       last_event_at: last_event_at,
       turn_count: Map.get(entry, :turn_count, 0),
       runtime_seconds: Map.get(entry, :runtime_seconds),
       started_at: Map.get(entry, :started_at),
       retry_attempt: 0,
-      error: if(interrupted?, do: interrupted_error_message(entry), else: nil),
+      # A deliberate pause is not an error; only a genuine abort carries one.
+      error: if(aborted?, do: interrupted_error_message(entry), else: nil),
       goal: goal,
-      long_running: not is_nil(goal) and not interrupted?,
-      long_running_kind: if(interrupted?, do: nil, else: long_running_kind(goal)),
-      long_running_label: if(interrupted?, do: nil, else: long_running_label(goal)),
+      # Paused runs stay resumable, so the parked goal is preserved; aborted runs drop it.
+      long_running: not is_nil(goal) and not aborted?,
+      long_running_kind: if(aborted?, do: nil, else: long_running_kind(goal)),
+      long_running_label: running_long_running_label(interruption, goal),
       parent_identifier: bundle_parent_identifier(entry),
       bundle_role: bundle_role(entry),
       unit_id: bundle_unit_id(entry),
@@ -206,13 +219,29 @@ defmodule SymphonyElixir.AgentExecution do
     }
   end
 
-  defp running_last_event(_entry, true), do: "turn_aborted"
-  defp running_last_event(entry, false), do: Map.get(entry, :last_codex_event)
+  defp running_last_event(_entry, :paused), do: @paused_last_event
+  defp running_last_event(_entry, :aborted), do: "turn_aborted"
+  defp running_last_event(entry, _interruption), do: Map.get(entry, :last_codex_event)
 
-  defp running_last_message(entry, true),
-    do: interrupted_session_message(entry)
+  defp running_last_message(_entry, :paused), do: @paused_message
+  defp running_last_message(entry, :aborted), do: interrupted_session_message(entry)
+  defp running_last_message(entry, _interruption), do: Map.get(entry, :last_codex_message)
 
-  defp running_last_message(entry, false), do: Map.get(entry, :last_codex_message)
+  defp running_long_running_label(:aborted, _goal), do: nil
+  defp running_long_running_label(:paused, goal), do: if(is_nil(goal), do: nil, else: @paused_label)
+  defp running_long_running_label(_interruption, goal), do: long_running_label(goal)
+
+  # Classifies an idle running entry whose session log shows an interruption:
+  # a deliberate operator pause (`user_stop`) is resumable and benign (`:paused`);
+  # anything else is an unexpected `:aborted` interruption. `nil` when not interrupted.
+  defp running_entry_interruption(entry) do
+    if running_entry_interrupted?(entry) do
+      interruption_kind(session_log_abort_info(entry))
+    end
+  end
+
+  defp interruption_kind(%{kind: :user_stop}), do: :paused
+  defp interruption_kind(_abort_info), do: :aborted
 
   defp interrupted_error_message(entry) do
     case session_log_abort_info(entry) do
@@ -475,12 +504,25 @@ defmodule SymphonyElixir.AgentExecution do
   defp abort_entry_info(_entry), do: nil
 
   defp build_abort_entry_info(title, entry) do
-    case abort_entry_body(entry) do
-      summary when is_binary(summary) and summary != "" ->
-        %{kind: abort_entry_kind(title), summary: summary}
+    case abort_entry_reason(entry) do
+      "user_stop" ->
+        %{kind: :user_stop, summary: @paused_message}
 
       _ ->
-        nil
+        case abort_entry_body(entry) do
+          summary when is_binary(summary) and summary != "" ->
+            %{kind: abort_entry_kind(title), summary: summary}
+
+          _ ->
+            nil
+        end
+    end
+  end
+
+  defp abort_entry_reason(entry) do
+    case Map.get(entry, "abort_reason") || Map.get(entry, :abort_reason) do
+      reason when is_binary(reason) -> String.trim(reason)
+      _ -> nil
     end
   end
 
@@ -539,10 +581,50 @@ defmodule SymphonyElixir.AgentExecution do
     issue = IssueMapper.to_issue(record)
     workspace = Workspace.path_for_issue(issue)
     {:ok, agent_kind, _path} = SessionLog.resolve_log_source(issue.agent_kind || "codex", workspace)
-    goal = build_goal(agent_kind, "interrupted", record.agent_goal, workspace)
 
     abort_info = session_log_abort_info(%{issue: issue, agent_kind: agent_kind, identifier: record.identifier})
 
+    case abort_info do
+      %{kind: :user_stop} ->
+        goal = build_goal(agent_kind, "paused", record.agent_goal, workspace)
+        paused_execution(record, agent_kind, goal)
+
+      _ ->
+        goal = build_goal(agent_kind, "interrupted", record.agent_goal, workspace)
+        aborted_execution(record, agent_kind, goal, abort_info)
+    end
+  end
+
+  # Operator paused the run on purpose: benign, resumable, keeps the parked goal.
+  defp paused_execution(record, agent_kind, goal) do
+    %{
+      issue_id: to_string(record.id),
+      issue_identifier: record.identifier,
+      status: :paused,
+      session_id: record.agent_session_id,
+      last_event: @paused_last_event,
+      last_message: @paused_message,
+      last_event_at: record.updated_at,
+      turn_count: 0,
+      runtime_seconds: nil,
+      started_at: nil,
+      retry_attempt: 0,
+      error: nil,
+      agent_kind: agent_kind,
+      goal: goal,
+      long_running: not is_nil(goal),
+      long_running_kind: long_running_kind(goal),
+      long_running_label: if(is_nil(goal), do: nil, else: @paused_label),
+      parent_identifier: nil,
+      bundle_role: :standalone,
+      unit_id: nil,
+      repo: nil,
+      child_identifiers: [],
+      tokens: nil
+    }
+  end
+
+  defp aborted_execution(record, agent_kind, goal, abort_info) do
     %{
       issue_id: to_string(record.id),
       issue_identifier: record.identifier,

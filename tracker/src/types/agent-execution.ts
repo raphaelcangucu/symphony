@@ -5,6 +5,7 @@ export type AgentExecutionStatus =
   | "retrying"
   | "error"
   | "aborted"
+  | "paused"
   | "saved";
 
 export interface AgentExecutionTokens {

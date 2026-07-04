@@ -34,6 +34,14 @@ vi.mock("@/components/issues/issue-detail/AgentTab", () => ({
   ),
 }));
 
+vi.mock("@/hooks/useIssueEditor", () => ({
+  useIssueEditor: () => ({
+    browser: { available: true, url: "https://code.example/?folder=/w", reason: null },
+    cursorDesktop: { available: true, url: "cursor://file/w", reason: null },
+    loading: false,
+  }),
+}));
+
 const issue: Issue = {
   assignee: null,
   blockedBy: [],
@@ -140,6 +148,38 @@ describe("AgentTabs documents drawer", () => {
     );
 
     expect(screen.queryByRole("button", { name: /run status/i })).not.toBeInTheDocument();
+  });
+
+  it("hides the view-issue link and code button without issueHref", () => {
+    render(
+      <MemoryRouter initialEntries={["/issues/DIS-6/agent?agent=execution"]}>
+        <AgentTabs issue={issue} projectSlug="distributionmachine" view="board" />
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByRole("link", { name: /open issue DIS-6/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /terminal for DIS-6/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /open in code/i })).not.toBeInTheDocument();
+  });
+
+  it("shows the view-issue, terminal, and code shortcuts when hrefs are provided", () => {
+    render(
+      <MemoryRouter initialEntries={["/issues/DIS-6/agent?agent=execution"]}>
+        <AgentTabs
+          issue={issue}
+          projectSlug="distributionmachine"
+          view="board"
+          issueHref="/projects/distributionmachine/board/issues/DIS-6"
+          issueTerminalHref="/projects/distributionmachine/board/issues/DIS-6/terminal"
+        />
+      </MemoryRouter>,
+    );
+
+    const issueLink = screen.getByRole("link", { name: /open issue DIS-6/i });
+    expect(issueLink).toHaveAttribute("href", "/projects/distributionmachine/board/issues/DIS-6");
+    const terminalLink = screen.getByRole("link", { name: /terminal for DIS-6/i });
+    expect(terminalLink).toHaveAttribute("href", "/projects/distributionmachine/board/issues/DIS-6/terminal");
+    expect(screen.getByRole("button", { name: /open in code/i })).toBeInTheDocument();
   });
 
   it("does not re-render the authoring panel when only execution status changes", () => {

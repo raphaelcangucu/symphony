@@ -1,16 +1,13 @@
-import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { toast } from "sonner";
 
 import { AssigneeAvatar } from "@/components/issues/AssigneeAvatar";
 import { AgentLongRunningBadge, AgentStatusBadge } from "@/components/issues/AgentStatusBadge";
 import { AgentResumeIconButton } from "@/components/issues/AgentResumeIconButton";
-import { AGENT_ICONS, AGENT_KINDS, agentKindLabel, AgentChip } from "@/components/shared/AgentChip";
-import { canResumeExecution, resolveDisplayStatus } from "@/lib/agentExecutionDisplay";
+import { agentKindLabel } from "@/components/shared/AgentChip";
+import { resolveDisplayStatus } from "@/lib/agentExecutionDisplay";
 import { formatDateTime } from "@/lib/utils";
-import { updateIssueAgent } from "@/services/issues";
 import type { AgentExecution } from "@/types/agent-execution";
-import type { AgentKind, Issue } from "@/types/issue";
+import type { Issue } from "@/types/issue";
 
 interface ExecutionStatusHeaderProps {
   projectSlug: string;
@@ -35,9 +32,9 @@ function formatTokens(value: number): string {
 
 /**
  * Compact chat header for the execution conversation: the live status row is
- * always visible, while detailed run metadata, token accounting, assignment and
- * agent selection live behind a collapsible section so the transcript stays the
- * focus of the panel.
+ * always visible, while detailed run metadata, token accounting and assignment
+ * live behind a collapsible section so the transcript stays the focus of the
+ * panel. Agent selection is handled by the composer's agent menu.
  */
 export function ExecutionStatusHeader({
   projectSlug,
@@ -46,21 +43,7 @@ export function ExecutionStatusHeader({
   onIssueUpdated,
 }: ExecutionStatusHeaderProps) {
   const { t } = useTranslation();
-  const [agentPending, setAgentPending] = useState(false);
   const displayStatus = execution ? resolveDisplayStatus(execution) : undefined;
-  const agentRunActive = execution ? !canResumeExecution(execution) : false;
-
-  async function changeAgent(agent: AgentKind | null) {
-    setAgentPending(true);
-    try {
-      const updated = await updateIssueAgent(projectSlug, issue.identifier, agent);
-      onIssueUpdated?.(updated);
-    } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : t("issue.agent.tab.updateFailed"));
-    } finally {
-      setAgentPending(false);
-    }
-  }
 
   return (
     <section className="rounded-xl border border-border/70 bg-card/40 px-4 py-3 text-sm">
@@ -177,38 +160,6 @@ export function ExecutionStatusHeader({
               <AssigneeAvatar login={issue.assignee} />
               <span>{issue.assignee || t("issue.agent.tab.noAgentAssigned")}</span>
             </div>
-          </div>
-
-          <div className="mt-4">
-            <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-              {t("issue.agent.tab.agentSection")}
-            </div>
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              <AgentChip
-                label={t("issue.agent.tab.inherit")}
-                active={!issue.agentKind}
-                disabled={agentRunActive || agentPending}
-                onClick={() => void changeAgent(null)}
-              />
-              {AGENT_KINDS.map((kind) => {
-                const Icon = AGENT_ICONS[kind];
-                return (
-                  <AgentChip
-                    key={kind}
-                    label={agentKindLabel(kind, t)}
-                    icon={Icon ? <Icon className="h-3.5 w-3.5" /> : undefined}
-                    active={issue.agentKind === kind}
-                    disabled={agentRunActive || agentPending}
-                    onClick={() => void changeAgent(kind)}
-                  />
-                );
-              })}
-            </div>
-            {agentRunActive ? (
-              <p className="mt-1 text-xs text-muted-foreground">{t("issue.agent.tab.stopToChange")}</p>
-            ) : execution.status === "retrying" ? (
-              <p className="mt-1 text-xs text-muted-foreground">{t("issue.agent.tab.retryPaused")}</p>
-            ) : null}
           </div>
         </details>
       ) : (

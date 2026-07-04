@@ -1,4 +1,4 @@
-import { Clock, ListFilter, Play, Plus, Search } from "lucide-react";
+import { Clock, ExternalLink, ListFilter, Plus, Search } from "lucide-react";
 import type { TFunction } from "i18next";
 import type { ReactNode } from "react";
 import { useCallback, useMemo, useState } from "react";
@@ -10,7 +10,14 @@ import { ArchiveChatButton } from "@/components/assistant/ArchiveChatButton";
 import { FreeformAssistantPanel } from "@/components/assistant/FreeformAssistantPanel";
 import { RecentStatusDot } from "@/components/layout/RecentStatusDot";
 import { recentSessionPath, recentSessionSubtitle } from "@/components/layout/recentSessionPath";
-import { SessionAgentBadge, SessionTypeBadge, type SessionBadgeKind } from "@/components/shared/SessionBadge";
+import { ResumeSessionButton } from "@/components/shared/ResumeSessionButton";
+import {
+  SessionAgentBadge,
+  SessionBadgeShell,
+  SessionStatusKindBadge,
+  SessionTypeBadge,
+  type SessionBadgeKind,
+} from "@/components/shared/SessionBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetClose, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -20,6 +27,7 @@ import { useCreateFreeformChat } from "@/hooks/useCreateFreeformChat";
 import { useRecents } from "@/hooks/useRecents";
 import { toggleListParam } from "@/lib/issueFilters";
 import { cn, formatDateTime } from "@/lib/utils";
+import { issuePath } from "@/lib/workspaceRoutes";
 import { dispatchIssueAgent } from "@/services/issueDispatch";
 import type { AgentKind } from "@/types/issue";
 import type { RecentSession, RecentStatusKind } from "@/types/recents";
@@ -178,12 +186,24 @@ function sessionAgentKind(session: RecentSession): AgentKind | null {
   return session.agentKind ?? (session.kind === "codex" ? "codex" : null);
 }
 
-function isAbortedExecutionSession(session: RecentSession): boolean {
-  if (session.kind !== "codex") return false;
-  if (!session.projectSlug || !session.identifier) return false;
+/** Live run states where a resume action would be meaningless. Mirrors the
+ * sessions list, which hides resume while `canResumeExecution` is false. */
+const ACTIVE_EXECUTION_STATUS_KINDS = new Set<RecentStatusKind>(["running", "waiting", "idle", "retrying"]);
 
-  const normalizedStatus = session.status.trim().toLowerCase();
-  return session.statusKind === "aborted" || normalizedStatus === "aborted";
+function isExecutionSession(
+  session: RecentSession,
+): session is RecentSession & { projectSlug: string; identifier: string } {
+  return session.kind === "codex" && Boolean(session.projectSlug) && Boolean(session.identifier);
+}
+
+function isResumableExecutionSession(session: RecentSession): boolean {
+  if (!isExecutionSession(session)) return false;
+  return !ACTIVE_EXECUTION_STATUS_KINDS.has(session.statusKind);
+}
+
+function executionIssueHref(session: RecentSession): string | null {
+  if (!isExecutionSession(session)) return null;
+  return issuePath(session.projectSlug, "board", session.identifier);
 }
 
 function SessionAgentBadgeForSession({ session }: { session: RecentSession }) {
@@ -299,49 +319,56 @@ function SessionsView({
         ) : null}
 
         <ul className="space-y-1">
-          {filtered.map((session) => (
-            <li key={session.id} className="group flex items-start gap-1 rounded-md hover:bg-accent">
-              <Link
-                to={recentSessionPath(session)}
-                className="flex min-w-0 flex-1 items-start gap-3 px-3 py-2.5"
-              >
-                <RecentStatusDot statusKind={session.statusKind} className="mt-1.5" />
-                <span className="min-w-0 flex-1">
-                  <span className="flex min-w-0 items-center gap-2">
-                    <span className="truncate text-sm font-medium">{session.title}</span>
-                    <SessionTypeBadge kind={sessionBadgeKind(session)} />
-                    <SessionAgentBadgeForSession session={session} />
-                  </span>
-                  <span className="block truncate text-xs text-muted-foreground">{recentSessionSubtitle(session, t)}</span>
-                  <span className="mt-1 inline-flex items-center gap-1 text-xs text-muted-foreground">
-                    <Clock className="h-3.5 w-3.5" />
-                    {formatDateTime(session.updatedAt)}
-                  </span>
-                </span>
-              </Link>
-              {session.threadId != null ? (
-                <ArchiveChatButton
-                  threadId={session.threadId}
-                  archiving={archiving}
-                  onArchive={onArchive}
-                  className="mr-1 mt-1.5 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
-                />
-              ) : null}
-              {isAbortedExecutionSession(session) ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  disabled={resumePending === session.id}
-                  onClick={() => onResume(session)}
-                  className="mr-1 mt-1.5 shrink-0 gap-1.5"
+          {filtered.map((session) => {
+            const issueHref = executionIssueHref(session);
+            return (
+              <li key={session.id} className="group flex items-start gap-1 rounded-md hover:bg-accent">
+                <Link
+                  to={recentSessionPath(session)}
+                  className="flex min-w-0 flex-1 items-start gap-3 px-3 py-2.5"
                 >
-                  <Play className="h-3.5 w-3.5" />
-                  {resumePending === session.id ? t("sessions.resuming") : t("sessions.resume")}
-                </Button>
-              ) : null}
-            </li>
-          ))}
+                  <RecentStatusDot statusKind={session.statusKind} className="mt-1.5" />
+                  <span className="min-w-0 flex-1">
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span className="truncate text-sm font-medium">{session.title}</span>
+                      <SessionTypeBadge kind={sessionBadgeKind(session)} />
+                      <SessionAgentBadgeForSession session={session} />
+                    </span>
+                    <span className="block truncate text-xs text-muted-foreground">{recentSessionSubtitle(session, t)}</span>
+                    <span className="mt-1 inline-flex items-center gap-1 text-xs text-muted-foreground">
+                      <Clock className="h-3.5 w-3.5" />
+                      {formatDateTime(session.updatedAt)}
+                    </span>
+                  </span>
+                </Link>
+                {session.threadId != null ? (
+                  <ArchiveChatButton
+                    threadId={session.threadId}
+                    archiving={archiving}
+                    onArchive={onArchive}
+                    className="mr-1 mt-1.5 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+                  />
+                ) : null}
+                {issueHref ? (
+                  <Link
+                    to={issueHref}
+                    aria-label={t("sessions.openIssueAria", { identifier: session.identifier })}
+                    title={t("sessions.openIssueAria", { identifier: session.identifier })}
+                    className="mr-1 mt-1.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                  </Link>
+                ) : null}
+                {isResumableExecutionSession(session) ? (
+                  <ResumeSessionButton
+                    pending={resumePending === session.id}
+                    onResume={() => onResume(session)}
+                    className="mr-1 mt-1.5"
+                  />
+                ) : null}
+              </li>
+            );
+          })}
         </ul>
       </div>
     </section>
@@ -386,24 +413,28 @@ function AssistantFiltersDrawer({
         <div className="space-y-5 overflow-y-auto pr-1">
           <FilterSection title={t("assistant.page.filters.type")}>
             {typeOptions.map((option) => (
-              <FilterPill
+              <FilterOptionButton
                 key={option.value}
                 label={option.label}
                 selected={filters.types.includes(option.value as AssistantSessionType)}
                 onClick={() => onToggle(TYPE_PARAM, option.value)}
-              />
+              >
+                <SessionTypeBadge kind={option.value as SessionBadgeKind} />
+              </FilterOptionButton>
             ))}
           </FilterSection>
 
           <FilterSection title={t("assistant.page.filters.status")}>
             {statusOptions.length > 0 ? (
               statusOptions.map((option) => (
-                <FilterPill
+                <FilterOptionButton
                   key={option.value}
                   label={option.label}
                   selected={filters.statuses.includes(option.value as RecentStatusKind)}
                   onClick={() => onToggle(STATUS_PARAM, option.value)}
-                />
+                >
+                  <SessionStatusKindBadge statusKind={option.value as RecentStatusKind} label={option.label} />
+                </FilterOptionButton>
               ))
             ) : (
               <p className="text-sm text-muted-foreground">{t("assistant.page.filters.noOptions")}</p>
@@ -413,12 +444,14 @@ function AssistantFiltersDrawer({
           <FilterSection title={t("assistant.page.filters.project")}>
             {projectOptions.length > 0 ? (
               projectOptions.map((option) => (
-                <FilterPill
+                <FilterOptionButton
                   key={option.value}
                   label={option.label}
                   selected={filters.projects.includes(option.value)}
                   onClick={() => onToggle(PROJECT_PARAM, option.value)}
-                />
+                >
+                  <SessionBadgeShell label={option.label} />
+                </FilterOptionButton>
               ))
             ) : (
               <p className="text-sm text-muted-foreground">{t("assistant.page.filters.noOptions")}</p>
@@ -448,20 +481,31 @@ function FilterSection({ title, children }: { title: string; children: ReactNode
   );
 }
 
-function FilterPill({ label, selected, onClick }: { label: string; selected: boolean; onClick: () => void }) {
+function FilterOptionButton({
+  label,
+  selected,
+  onClick,
+  children,
+}: {
+  label: string;
+  selected: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
   return (
     <button
       type="button"
+      aria-label={label}
       aria-pressed={selected}
       onClick={onClick}
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+        "rounded-full transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
         selected
-          ? "border-primary/40 bg-primary/10 text-primary"
-          : "border-border bg-background text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+          ? "ring-2 ring-primary/35 ring-offset-1 ring-offset-background"
+          : "opacity-80 hover:opacity-100",
       )}
     >
-      {label}
+      {children}
     </button>
   );
 }
@@ -492,12 +536,12 @@ export function AssistantPage() {
 
   const handleResume = useCallback(
     (session: RecentSession) => {
-      if (!isAbortedExecutionSession(session) || !session.projectSlug || !session.identifier) return;
+      if (!isExecutionSession(session)) return;
 
       setResumePending(session.id);
       void (async () => {
         try {
-          const result = await dispatchIssueAgent(session.projectSlug!, session.identifier!, { action: "resume" });
+          const result = await dispatchIssueAgent(session.projectSlug, session.identifier, { action: "resume" });
           toast.success(result.message || t("sessions.resumeStarted", { identifier: session.identifier }));
           await refetch();
         } catch (cause) {

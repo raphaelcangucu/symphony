@@ -1,4 +1,4 @@
-import { AlertCircle, Ban, Clock, Moon, RotateCcw, Target, Zap, type LucideIcon } from "lucide-react";
+import { AlertCircle, Ban, Clock, Moon, Pause, RotateCcw, Target, Zap, type LucideIcon } from "lucide-react";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 
@@ -79,6 +79,15 @@ const AGENT_STATUS_META: Record<AgentExecutionStatus, AgentStatusMeta> = {
     dotClass: "bg-violet-400",
     textClass: "text-violet-600 dark:text-violet-300",
     chipClass: "border-violet-400/30 bg-violet-400/10 text-violet-600 dark:text-violet-300",
+    pulse: false,
+    spin: false,
+  },
+  paused: {
+    labelKey: "issue.agent.executionStatus.paused",
+    Icon: Pause,
+    dotClass: "bg-sky-400",
+    textClass: "text-sky-600 dark:text-sky-300",
+    chipClass: "border-sky-400/30 bg-sky-400/10 text-sky-600 dark:text-sky-300",
     pulse: false,
     spin: false,
   },

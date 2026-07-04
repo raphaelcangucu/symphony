@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -95,7 +95,11 @@ describe("AssistantPage", () => {
     );
     expect(screen.getByRole("link", { name: /Fix login/ })).toHaveAttribute(
       "href",
-      "/projects/app/board/issues/ABC-12/agent?agent=execution",
+      "/projects/app/sessions?exec=ABC-12&agent=execution",
+    );
+    expect(screen.getByRole("link", { name: "Open issue ABC-12" })).toHaveAttribute(
+      "href",
+      "/projects/app/board/issues/ABC-12",
     );
     expect(screen.getByRole("img", { name: "Chat" })).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "Execution" })).toBeInTheDocument();
@@ -104,6 +108,45 @@ describe("AssistantPage", () => {
     expect(screen.queryByText("Cursor Agent")).not.toBeInTheDocument();
     expect(screen.getByText(formatDateTime(chatUpdatedAt))).toBeInTheDocument();
     expect(screen.getByText(formatDateTime(executionUpdatedAt))).toBeInTheDocument();
+  });
+
+  it("shows resume only for stopped executions and open-issue for every execution", async () => {
+    mockRecents([
+      makeSession({
+        id: "codex:ERR-1",
+        kind: "codex",
+        scope: null,
+        threadId: null,
+        identifier: "ERR-1",
+        title: "Broken run",
+        projectSlug: "app",
+        status: "Error",
+        statusKind: "error",
+      }),
+      makeSession({
+        id: "codex:RUN-2",
+        kind: "codex",
+        scope: null,
+        threadId: null,
+        identifier: "RUN-2",
+        title: "Live run",
+        projectSlug: "app",
+        status: "Running",
+        statusKind: "running",
+      }),
+    ]);
+    renderAt("/assistant");
+
+    await screen.findByRole("link", { name: /Broken run/ });
+    expect(screen.getByRole("link", { name: "Open issue ERR-1" })).toHaveAttribute(
+      "href",
+      "/projects/app/board/issues/ERR-1",
+    );
+    expect(screen.getByRole("link", { name: "Open issue RUN-2" })).toHaveAttribute(
+      "href",
+      "/projects/app/board/issues/RUN-2",
+    );
+    expect(screen.getAllByRole("button", { name: /resume/i })).toHaveLength(1);
   });
 
   it("resumes aborted execution sessions", async () => {
@@ -182,8 +225,13 @@ describe("AssistantPage", () => {
     renderAt("/assistant");
 
     await userEvent.click(await screen.findByRole("button", { name: "Filters" }));
-    await userEvent.click(screen.getByRole("button", { name: "Execution" }));
-    await userEvent.click(screen.getByRole("button", { name: "Aborted" }));
+    const executionFilter = screen.getByRole("button", { name: "Execution" });
+    const abortedFilter = screen.getByRole("button", { name: "Aborted" });
+    expect(within(executionFilter).getByRole("img", { name: "Execution" })).toBeInTheDocument();
+    expect(within(abortedFilter).getByRole("img", { name: "Aborted" })).toBeInTheDocument();
+
+    await userEvent.click(executionFilter);
+    await userEvent.click(abortedFilter);
     await userEvent.click(screen.getByRole("button", { name: "App" }));
     await userEvent.click(screen.getByRole("button", { name: "Done" }));
 

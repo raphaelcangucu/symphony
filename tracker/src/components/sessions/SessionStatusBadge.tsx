@@ -9,6 +9,7 @@ const STATUS_CLASS: Record<AgentExecutionStatus, string> = {
   waiting: "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
   idle: "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
   saved: "border-slate-500/30 bg-slate-500/10 text-slate-700 dark:text-slate-300",
+  paused: "border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300",
   error: "border-destructive/40 bg-destructive/10 text-destructive",
   aborted: "border-destructive/40 bg-destructive/10 text-destructive",
 };

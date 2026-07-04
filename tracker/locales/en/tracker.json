@@ -51,6 +51,7 @@
       "waiting": "Waiting for review",
       "idle": "Idle",
       "saved": "Saved (resumable)",
+      "paused": "Paused",
       "error": "Error",
       "aborted": "Aborted"
     },
@@ -483,6 +484,7 @@
         "retrying": "Retrying",
         "error": "Error",
         "aborted": "Aborted",
+        "paused": "Paused",
         "saved": "Goal saved"
       },
       "goalStatus": {
@@ -535,12 +537,7 @@
         "output": "Output",
         "total": "Total",
         "assignment": "Assignment",
-        "noAgentAssigned": "No agent assigned",
-        "agentSection": "Agent",
-        "inherit": "Inherit",
-        "stopToChange": "Stop the active run to change the agent.",
-        "retryPaused": "Retries are paused when you pick a different agent. Move the issue out of its active state to stop re-dispatch entirely.",
-        "updateFailed": "Failed to update agent"
+        "noAgentAssigned": "No agent assigned"
       }
     },
     "drawer": {
@@ -2374,6 +2371,7 @@
       "waiting": "Waiting",
       "idle": "Idle",
       "saved": "Saved",
+      "paused": "Paused",
       "error": "Error",
       "aborted": "Aborted"
     }

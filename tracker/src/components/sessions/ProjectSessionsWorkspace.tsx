@@ -12,7 +12,7 @@ import { useWorkspace } from "@/components/layout/WorkspaceContext";
 import { ProjectAssistantPanel } from "@/components/assistant/ProjectAssistantPanel";
 import { AgentTabs } from "@/components/issues/issue-detail/AgentTabs";
 import { SessionListItem } from "@/components/sessions/SessionListItem";
-import { SessionAgentBadge, SessionTypeBadge, type SessionBadgeKind } from "@/components/shared/SessionBadge";
+import { RecentSessionBadges } from "@/components/shared/SessionBadge";
 import { WorkspaceTabBar } from "@/components/workspace/WorkspaceTabBar";
 import { useArchiveChat } from "@/hooks/useArchiveChat";
 import { useProjectSessions } from "@/hooks/useProjectSessions";
@@ -36,7 +36,7 @@ import {
 import { dispatchIssueAgent } from "@/services/issueDispatch";
 import { createProjectSessionThread } from "@/services/assistantThreads";
 import type { AgentExecution } from "@/types/agent-execution";
-import type { AgentKind, Issue } from "@/types/issue";
+import type { Issue } from "@/types/issue";
 import type { RecentSession } from "@/types/recents";
 
 type UnifiedSessionItem =
@@ -340,6 +340,8 @@ function ExecutionSessionTabContent({
         execution={execution}
         executions={allExecutions}
         view={view}
+        issueHref={issuePath(projectSlug, view, issue.identifier)}
+        issueTerminalHref={issuePath(projectSlug, view, issue.identifier, "terminal")}
         onIssueUpdated={onIssueUpdated}
       />
     </section>
@@ -477,22 +479,7 @@ function RelatedSessionCard({
 }
 
 function SessionKindBadge({ session }: { session: RecentSession }) {
-  const agentKind = relatedSessionAgentKind(session);
-
-  return (
-    <>
-      <SessionTypeBadge kind={relatedSessionBadgeKind(session)} />
-      {agentKind ? <SessionAgentBadge kind={agentKind} /> : null}
-    </>
-  );
-}
-
-function relatedSessionBadgeKind(session: RecentSession): SessionBadgeKind {
-  return session.kind === "codex" ? "execution" : "chat";
-}
-
-function relatedSessionAgentKind(session: RecentSession): AgentKind | null {
-  return session.agentKind ?? (session.kind === "codex" ? "codex" : null);
+  return <RecentSessionBadges session={session} />;
 }
 
 function timestampValue(value: string | null | undefined): number {

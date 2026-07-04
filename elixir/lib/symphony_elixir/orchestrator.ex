@@ -66,6 +66,10 @@ defmodule SymphonyElixir.Orchestrator do
       running: %{},
       completed: MapSet.new(),
       claimed: MapSet.new(),
+      # Issue ids the operator paused (`stop_issue`). Gated out of autonomous
+      # dispatch/retry until an explicit resume/dispatch clears them, so a paused
+      # run is not silently re-picked by the poll loop.
+      paused: MapSet.new(),
       retry_attempts: %{},
       agent_totals: nil,
       agent_totals_by_project: %{},
@@ -451,6 +455,7 @@ defmodule SymphonyElixir.Orchestrator do
           state
           | running: Map.delete(state.running, issue_id),
             claimed: MapSet.delete(state.claimed, issue_id),
+            paused: MapSet.delete(state.paused, issue_id),
             retry_attempts: Map.delete(state.retry_attempts, issue_id)
         }
 
@@ -816,13 +821,14 @@ defmodule SymphonyElixir.Orchestrator do
 
   defp should_dispatch_issue?(
          %Issue{} = issue,
-         %State{running: running, claimed: claimed} = state,
+         %State{running: running, claimed: claimed, paused: paused} = state,
          active_states,
          terminal_states
        ) do
     candidate_issue?(issue, active_states, terminal_states) and
       !issue_blocked_by_non_terminal?(issue, terminal_states) and
       !MapSet.member?(claimed, issue.id) and
+      !MapSet.member?(paused, issue.id) and
       !Map.has_key?(running, issue.id) and
       available_slots(state) > 0 and
       state_slots_available?(issue, running)
@@ -1024,7 +1030,13 @@ defmodule SymphonyElixir.Orchestrator do
 
         claimed = MapSet.put(state.claimed, issue.id)
 
-        %{state | running: running, claimed: claimed, retry_attempts: Map.delete(state.retry_attempts, issue.id)}
+        %{
+          state
+          | running: running,
+            claimed: claimed,
+            paused: MapSet.delete(state.paused, issue.id),
+            retry_attempts: Map.delete(state.retry_attempts, issue.id)
+        }
 
       {:error, reason} ->
         Logger.error("Unable to spawn agent for #{issue_context(issue)}: #{inspect(reason)}")
@@ -1608,6 +1620,7 @@ defmodule SymphonyElixir.Orchestrator do
     %{
       state
       | completed: MapSet.put(state.completed, issue_id),
+        paused: MapSet.delete(state.paused, issue_id),
         retry_attempts: Map.delete(state.retry_attempts, issue_id)
     }
   end
@@ -2355,6 +2368,11 @@ defmodule SymphonyElixir.Orchestrator do
     terminal_states = terminal_set(project_state_sets(issue))
 
     cond do
+      MapSet.member?(state.paused, issue_id) ->
+        Logger.info("Skipping retry for paused issue_id=#{issue_id} issue_identifier=#{issue.identifier}; awaiting explicit resume")
+
+        {:noreply, release_issue_claim(state, issue_id)}
+
       terminal_issue_state?(issue.state, terminal_states) ->
         Logger.info("Issue state is terminal: issue_id=#{issue_id} issue_identifier=#{issue.identifier} state=#{issue.state}; removing associated workspace")
 
@@ -2426,6 +2444,14 @@ defmodule SymphonyElixir.Orchestrator do
 
   defp release_issue_claim(%State{} = state, issue_id) do
     %{state | claimed: MapSet.delete(state.claimed, issue_id)}
+  end
+
+  defp unmark_issue_paused(%State{} = state, issue_id) do
+    %{state | paused: MapSet.delete(state.paused, issue_id)}
+  end
+
+  defp mark_issue_paused(%State{} = state, issue_id) do
+    %{state | paused: MapSet.put(state.paused, issue_id)}
   end
 
   defp retry_delay(attempt, metadata) when is_integer(attempt) and attempt > 0 and is_map(metadata) do
@@ -2709,12 +2735,18 @@ defmodule SymphonyElixir.Orchestrator do
         {:reply, :not_found, state}
 
       issue_id ->
-        Logger.info("Stopping agent run for issue_identifier=#{String.trim(identifier)} issue_id=#{issue_id} (hard reset)")
+        Logger.info("Stopping agent run for issue_identifier=#{String.trim(identifier)} issue_id=#{issue_id} (paused by operator)")
 
         running_entry = Map.get(state.running, issue_id)
         record_session_abort(running_entry, "user_stop", "Stopped manually via hard reset")
 
-        state = terminate_running_issue(state, issue_id, false)
+        # Terminate clears the paused flag, so mark AFTER so the poll loop won't
+        # silently re-dispatch this issue until an explicit resume/dispatch.
+        state =
+          state
+          |> terminate_running_issue(issue_id, false)
+          |> mark_issue_paused(issue_id)
+
         notify_dashboard()
         {:reply, :ok, state}
     end
@@ -2753,6 +2785,7 @@ defmodule SymphonyElixir.Orchestrator do
               state
               |> cancel_retry_in_state(normalized)
               |> release_issue_claim(issue.id)
+              |> unmark_issue_paused(issue.id)
 
             if dispatch_slots_available?(issue, state) do
               state = dispatch_issue_for_manual_resume(state, issue)

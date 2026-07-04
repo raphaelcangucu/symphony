@@ -22,9 +22,9 @@ describe("recentSessionPath", () => {
       "/projects/demo/assistant/explore",
     );
   });
-  it("codex → issue agent execution tab", () => {
+  it("codex → sessions page inline execution tab", () => {
     expect(recentSessionPath({ ...base, kind: "codex", scope: null, projectSlug: "demo", identifier: "ABC-1" })).toBe(
-      "/projects/demo/board/issues/ABC-1/agent?agent=execution",
+      "/projects/demo/sessions?exec=ABC-1&agent=execution",
     );
   });
   it("issue chat → /projects/:slug/assistant/issue/:identifier", () => {

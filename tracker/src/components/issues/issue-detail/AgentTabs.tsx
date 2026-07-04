@@ -1,10 +1,11 @@
-import { ChevronDown, PenLine, Play } from "lucide-react";
+import { ChevronDown, ExternalLink, PenLine, Play, TerminalSquare } from "lucide-react";
 import { memo, useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import { IssueAuthoringPanel } from "@/components/assistant/IssueAuthoringPanel";
 import { IssueDocumentsDrawer } from "@/components/assistant/IssueDocumentsDrawer";
+import { IssueEditorMenu } from "@/components/issues/IssueEditorMenu";
 import { Button } from "@/components/ui/button";
 import { AgentStatusBadge } from "@/components/issues/AgentStatusBadge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -51,6 +52,14 @@ interface AgentTabsProps {
   view: WorkspaceView;
   workflowMarkdown?: string | null;
   evidenceRecords?: import("@/types/evidence").EvidenceRecord[];
+  /**
+   * When set, the header exposes issue-scoped shortcuts (open the full issue
+   * page, a terminal, and the "Code" editor menu). Provided only when these tabs
+   * render standalone (e.g. a session tab), since the issue drawer already
+   * offers them.
+   */
+  issueHref?: string | null;
+  issueTerminalHref?: string | null;
   onIssueUpdated?: (updated: Issue) => void;
 }
 
@@ -62,6 +71,8 @@ export function AgentTabs({
   view,
   workflowMarkdown = null,
   evidenceRecords = [],
+  issueHref = null,
+  issueTerminalHref = null,
   onIssueUpdated,
 }: AgentTabsProps) {
   const { t } = useTranslation();
@@ -131,6 +142,29 @@ export function AgentTabs({
           ) : null}
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          {issueHref ? (
+            <>
+              <Link
+                to={issueHref}
+                aria-label={t("sessions.openIssueAria", { identifier: issue.identifier })}
+                title={t("sessions.openIssueAria", { identifier: issue.identifier })}
+                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              >
+                <ExternalLink className="h-4 w-4" />
+              </Link>
+              {issueTerminalHref ? (
+                <Link
+                  to={issueTerminalHref}
+                  aria-label={t("issue.terminal.ariaLabel", { identifier: issue.identifier })}
+                  title={t("issue.terminal.ariaLabel", { identifier: issue.identifier })}
+                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                >
+                  <TerminalSquare className="h-4 w-4" />
+                </Link>
+              ) : null}
+              <IssueEditorMenu projectSlug={projectSlug} identifier={issue.identifier} />
+            </>
+          ) : null}
           <IssueDocumentsDrawer projectSlug={projectSlug} identifier={issue.identifier} />
           <TabsList
             aria-label={t("issue.agentTabs.sectionsAria")}

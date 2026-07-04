@@ -307,6 +307,12 @@ export interface RecentSession {
   - chat, project scope → `assistantPath(projectSlug)`
   - chat, freeform scope → `/assistant/${threadId}`
   - codex → `issuePath(projectSlug, "board", identifier, "agent")`
+- Session-related filters in the global `/assistant` area must reuse the same
+  shared badge vocabulary as the session lists: `SessionTypeBadge` for
+  chat/execution, `SessionAgentBadge` for agents, and the shared session badge
+  shell/status palette for status/project filter options. Do not introduce a
+  separate plain-pill style for session filters; the drawer should read as the
+  same visual system as the rows it filters.
 - Shared `RecentStatusDot` maps `RecentStatusKind` → color/label, reusing the
   `AgentStatusBadge` palette for `running`/`waiting`/`retrying`/`idle` and adding
   `active`(blue), `done`(emerald+check), `closed`(slate), `error`(red),
