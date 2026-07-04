@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { IssueTerminal } from "@/components/terminal/IssueTerminal";
+import { IssueTerminal, ProjectTerminal } from "@/components/terminal/IssueTerminal";
 import { openTerminalSession } from "@/services/terminal";
 
 const channelHandlers: Record<string, (payload: unknown) => void> = {};
@@ -75,6 +75,7 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string, params?: Record<string, string>) => {
       if (key === "issue.terminal.ariaLabel") return `Terminal for ${params?.identifier ?? ""}`;
+      if (key === "issue.terminal.projectAriaLabel") return `Project terminal for ${params?.projectSlug ?? ""}`;
       return key;
     },
   }),
@@ -117,5 +118,15 @@ describe("IssueTerminal", () => {
 
     expect(push).toHaveBeenCalledWith("input", { data: "ls\n" });
     expect(push).toHaveBeenCalledWith("resize", { cols: 100, rows: 30 });
+  });
+
+  it("opens a project terminal session through the project channel", async () => {
+    render(<ProjectTerminal projectSlug="macro-markets" />);
+
+    expect(openTerminalSession).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(channel).toHaveBeenCalledWith("terminal:devenv:macro-markets", {}),
+    );
+    expect(screen.getByLabelText("Project terminal for macro-markets")).toBeTruthy();
   });
 });

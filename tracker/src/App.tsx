@@ -13,6 +13,7 @@ import { IssueDetailRoute } from "@/components/workspace/IssueDetailRoute";
 import { NewIssueRoute } from "@/components/workspace/NewIssueRoute";
 import { ProjectAssistantRoute } from "@/components/workspace/ProjectAssistantRoute";
 import { ProjectExploreAssistantRoute } from "@/components/workspace/ProjectExploreAssistantRoute";
+import { ProjectTerminalRoute } from "@/components/workspace/ProjectTerminalRoute";
 import { WorkspaceFiltersRoute } from "@/components/workspace/WorkspaceFiltersRoute";
 import { getTrackerToken } from "@/config";
 import { AssistantPage } from "@/pages/AssistantPage";
@@ -90,6 +91,7 @@ export function App() {
                 </Route>
                 <Route path="assistant" element={<ProjectAssistantRoute />} />
                 <Route path="assistant/explore" element={<ProjectExploreAssistantRoute />} />
+                <Route path="assistant/terminal" element={<ProjectTerminalRoute />} />
                 <Route path="assistant/new-issue" element={<IssueAssistantRoute />} />
                 <Route path="assistant/issue/:issueId" element={<IssueAssistantRoute />} />
                 <Route path="sessions" element={<ProjectSessionsPage />} />

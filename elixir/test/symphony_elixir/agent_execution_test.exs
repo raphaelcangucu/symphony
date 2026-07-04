@@ -250,7 +250,8 @@ defmodule SymphonyElixir.AgentExecutionTest do
         slug_resolver: fn _ -> "macro-markets" end,
         terminal_resolver: fn _ -> false end,
         state_resolver: fn _ -> "In Progress" end,
-        issue_id_resolver: fn id -> "id-" <> id end
+        issue_id_resolver: fn id -> "id-" <> id end,
+        lab_bundle_child_orchestration: true
       ]
     end
 

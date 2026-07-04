@@ -846,7 +846,7 @@ defmodule SymphonyElixir.LocalTracker.Context do
   """
   @spec reconcile_parent_statuses(String.t()) ::
           {:ok, [{String.t(), String.t()}]} | {:error, missing_error()}
-  # credo:disable-for-lines:20 Credo.Check.Refactor.Nesting
+  # credo:disable-for-lines:20
   def reconcile_parent_statuses(project_slug) when is_binary(project_slug) do
     with {:ok, project} <- fetch_project(project_slug) do
       changed =

@@ -7,6 +7,11 @@ interface IssueTerminalProps {
   issueIdentifier: string;
 }
 
+interface ProjectTerminalProps {
+  projectSlug: string;
+  className?: string;
+}
+
 export function IssueTerminal({ projectSlug, issueIdentifier }: IssueTerminalProps) {
   const { t } = useTranslation();
 
@@ -17,6 +22,19 @@ export function IssueTerminal({ projectSlug, issueIdentifier }: IssueTerminalPro
       issueIdentifier={issueIdentifier}
       ariaLabel={t("issue.terminal.ariaLabel", { identifier: issueIdentifier })}
       className="h-[480px]"
+    />
+  );
+}
+
+export function ProjectTerminal({ projectSlug, className }: ProjectTerminalProps) {
+  const { t } = useTranslation();
+
+  return (
+    <TerminalView
+      kind="project-devenv"
+      projectSlug={projectSlug}
+      ariaLabel={t("issue.terminal.projectAriaLabel", { projectSlug })}
+      className={className}
     />
   );
 }

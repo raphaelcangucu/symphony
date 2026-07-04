@@ -105,7 +105,7 @@ defmodule SymphonyElixir.RunContract.Finalizer do
     String.contains?(output, ["rejected", "fetch first", "non-fast-forward"])
   end
 
-  # credo:disable-for-lines:25 Credo.Check.Refactor.Nesting
+  # credo:disable-for-lines:25
   defp recover_push_after_rejection(%RepoState{} = repo, issue, runner) do
     path = repo.path
     branch = current_branch(repo, runner)

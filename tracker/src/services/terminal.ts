@@ -24,6 +24,8 @@ export function devenvTerminalTopic(projectSlug: string): string {
   return `terminal:devenv:${slug}`;
 }
 
+export const projectTerminalTopic = devenvTerminalTopic;
+
 export async function openTerminalSession(projectSlug: string, issueIdentifier: string): Promise<TerminalSession> {
   const slug = requireProjectSlug(projectSlug);
   const identifier = requireNonBlank(issueIdentifier, "issueIdentifier");

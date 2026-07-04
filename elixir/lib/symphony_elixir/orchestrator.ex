@@ -126,7 +126,7 @@ defmodule SymphonyElixir.Orchestrator do
     {:noreply, state}
   end
 
-  # credo:disable-for-lines:50 Credo.Check.Refactor.Nesting
+  # credo:disable-for-lines:50
   def handle_info(
         {:DOWN, ref, :process, _pid, reason},
         %{running: running} = state
@@ -611,7 +611,7 @@ defmodule SymphonyElixir.Orchestrator do
   # tracker only); remote-only parents cannot be resolved here and are left
   # un-gated (the coordinator prompt still orders them). Liveness: a candidate
   # whose bundle/units cannot be resolved is never added to the held set.
-  # credo:disable-for-lines:60 Credo.Check.Refactor.Nesting
+  # credo:disable-for-lines:80
   defp held_child_issue_ids(candidates, opts \\ []) do
     bundle_loader = Keyword.get(opts, :bundle_loader, &load_parent_bundle/1)
     # Dependents release once their predecessor reaches human review (its PR is
@@ -1144,7 +1144,7 @@ defmodule SymphonyElixir.Orchestrator do
   # is injected and it acts as a lightweight coordinator (creates the per-repo
   # integration branch, merges green child PRs, opens the final PR) — it must NEVER
   # be dispatched as a `:standalone` implementer that re-does the children's work.
-  # credo:disable-for-lines:30 Credo.Check.Refactor.Nesting
+  # credo:disable-for-lines:35
   def bundle_run_context(%Issue{identifier: identifier} = _issue, opts)
       when is_binary(identifier) and identifier != "" do
     bundle_resolver = Keyword.get(opts, :bundle_resolver, &safe_load_parent_bundle/1)
@@ -1208,7 +1208,7 @@ defmodule SymphonyElixir.Orchestrator do
     end
   end
 
-  # credo:disable-for-lines:15 Credo.Check.Refactor.Nesting
+  # credo:disable-for-lines:18
   defp default_sub_issues(slug, parent_identifier) do
     case Context.list_subtask_children(slug, parent_identifier) do
       {:ok, child_ids} ->
@@ -1837,7 +1837,7 @@ defmodule SymphonyElixir.Orchestrator do
 
   defp pr_base_for_issue(_issue), do: nil
 
-  # credo:disable-for-lines:25 Credo.Check.Refactor.Nesting
+  # credo:disable-for-lines:30
   defp project_repo_default_branches(slug) when is_binary(slug) and slug != "" do
     import Ecto.Query
 
@@ -2738,7 +2738,7 @@ defmodule SymphonyElixir.Orchestrator do
      }, state}
   end
 
-  # credo:disable-for-lines:35 Credo.Check.Refactor.Nesting
+  # credo:disable-for-lines:40
   def handle_call({:request_dispatch, identifier}, _from, state) do
     normalized = String.trim(identifier)
 
@@ -2860,7 +2860,7 @@ defmodule SymphonyElixir.Orchestrator do
     end
   end
 
-  # credo:disable-for-lines:12 Credo.Check.Refactor.Nesting
+  # credo:disable-for-lines:15
   defp find_retry_issue_id(retry_attempts, normalized) when is_map(retry_attempts) and is_binary(normalized) do
     Enum.find_value(retry_attempts, fn {issue_id, entry} ->
       case Map.get(entry, :identifier) do

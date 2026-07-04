@@ -1214,7 +1214,7 @@ defmodule SymphonyElixir.Config do
   defp strict_section_issues(section, value, _fields) when not is_map(value),
     do: ["#{section} must be a mapping"]
 
-  # credo:disable-for-lines:15 Credo.Check.Refactor.Nesting
+  # credo:disable-for-lines:15
   defp strict_section_issues(section, section_map, fields) do
     Enum.flat_map(fields, fn {field, type} ->
       case Map.get(section_map, field) do

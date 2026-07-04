@@ -969,7 +969,10 @@
       "joinTimeout": "Timed out joining terminal channel",
       "openFailed": "Failed to open terminal session",
       "joinFailed": "Failed to join terminal channel: {{reason}}",
-      "ariaLabel": "Terminal for {{identifier}}"
+      "ariaLabel": "Terminal for {{identifier}}",
+      "projectTitle": "Project Terminal",
+      "projectDescription": "Runs in the project base workspace through tmux.",
+      "projectAriaLabel": "Project terminal for {{projectSlug}}"
     },
     "blockers": {
       "addTitle": "Add blocker",

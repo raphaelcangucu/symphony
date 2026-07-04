@@ -16,7 +16,14 @@ defmodule SymphonyElixir.AgentRunnerValidateGateTest do
     run_turn = fn _prompt -> raise "must not run corrective turn while scope is incomplete" end
 
     assert :completed =
-             AgentRunner.apply_validate_gate(:completed, "/tmp/ws", evaluator, run_turn, 2, execution_contract: incomplete_contract())
+             AgentRunner.apply_validate_gate(
+               :completed,
+               "/tmp/ws",
+               evaluator,
+               run_turn,
+               2,
+               execution_contract: incomplete_contract()
+             )
   end
 
   test "complete execution contract allows final validate corrective turns" do
@@ -35,7 +42,14 @@ defmodule SymphonyElixir.AgentRunnerValidateGateTest do
     end
 
     assert :completed =
-             AgentRunner.apply_validate_gate(:completed, "/tmp/ws", evaluator, run_turn, 2, execution_contract: complete_contract())
+             AgentRunner.apply_validate_gate(
+               :completed,
+               "/tmp/ws",
+               evaluator,
+               run_turn,
+               2,
+               execution_contract: complete_contract()
+             )
   end
 
   test "violation triggers corrective turns until satisfied" do
@@ -135,7 +149,14 @@ defmodule SymphonyElixir.AgentRunnerValidateGateTest do
     run_turn = fn _prompt -> raise "must not run publish corrective turn while scope is incomplete" end
 
     assert :completed =
-             AgentRunner.apply_publish_gate(:completed, "/tmp/ws", evaluator, run_turn, 2, execution_contract: incomplete_contract())
+             AgentRunner.apply_publish_gate(
+               :completed,
+               "/tmp/ws",
+               evaluator,
+               run_turn,
+               2,
+               execution_contract: incomplete_contract()
+             )
   end
 
   defp incomplete_contract do

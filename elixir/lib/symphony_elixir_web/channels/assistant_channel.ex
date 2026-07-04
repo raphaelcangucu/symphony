@@ -50,7 +50,12 @@ defmodule SymphonyElixirWeb.AssistantChannel do
         effective_agent: thread_effective_agent(thread)
       }
 
-      socket = socket |> assign(:thread, thread) |> assign(:project_slug, thread.project_slug)
+      socket =
+        socket
+        |> assign(:thread, thread)
+        |> assign(:project_slug, thread.project_slug)
+        |> assign(:issue_identifier, thread.issue_identifier)
+
       send(self(), {:assistant_history_loaded, payload})
       {:ok, payload, socket}
     else
@@ -374,7 +379,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   def handle_in("submit_approval", _payload, socket),
     do: {:reply, {:error, %{reason: "approval action is required"}}, socket}
 
-  # credo:disable-for-lines:25 Credo.Check.Refactor.Nesting
+  # credo:disable-for-lines:25
   def handle_in("btw", %{"message" => message}, socket) when is_binary(message) do
     case String.trim(message) do
       "" ->
@@ -1268,7 +1273,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
 
   # Fetches the native goal off the channel process (a Codex port round-trip can
   # take seconds) and pushes the authoritative status to the client.
-  # credo:disable-for-lines:20 Credo.Check.Refactor.Nesting
+  # credo:disable-for-lines:20
   defp push_goal_status_async(%Socket{assigns: %{thread: %{scope: "issue", id: id} = thread}} = socket, running) do
     if History.thread_goal_mode(thread) do
       elapsed = GoalRun.elapsed_seconds(id)
@@ -1292,7 +1297,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   # process, then pushes the authoritative status. Skipped while a turn runs: a
   # competing `thread/goal/set` would block on (or clobber) the in-flight turn's
   # thread, and the metadata is already saved + echoed by the reply.
-  # credo:disable-for-lines:20 Credo.Check.Refactor.Nesting
+  # credo:disable-for-lines:20
   defp sync_native_objective_async(%Socket{assigns: %{thread: %{scope: "issue", id: id} = thread}} = socket) do
     if History.thread_goal_mode(thread) and not goal_running?(socket) do
       Task.Supervisor.start_child(SymphonyElixir.TaskSupervisor, fn ->

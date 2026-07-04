@@ -904,7 +904,7 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     end
   end
 
-  # credo:disable-for-lines:120 Credo.Check.Refactor.Nesting
+  # credo:disable-for-lines:120
   # credo:disable-for-next-line Credo.Check.Refactor.CyclomaticComplexity
   defp relay_codex_event(message, collector, opts) when is_map(message) do
     payload = event_payload(message)

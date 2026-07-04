@@ -18,6 +18,8 @@ import {
   newIssueAssistantPath,
   projectExploreAssistantPath,
   projectSettingsPath,
+  projectSessionPath,
+  projectSessionsPath,
   projectTerminalPath,
   newIssuePath,
   projectsFiltersPath,
@@ -124,6 +126,11 @@ describe("workspaceRoutes", () => {
 
   it("builds the project terminal path", () => {
     expect(projectTerminalPath("acme")).toBe("/projects/acme/terminal");
+  });
+
+  it("builds project session paths", () => {
+    expect(projectSessionsPath("acme")).toBe("/projects/acme/sessions");
+    expect(projectSessionPath("acme", "thread/1")).toBe("/projects/acme/sessions/thread%2F1");
   });
 
   it("derives the workspace section from a pathname", () => {
