@@ -2,9 +2,10 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { LabOrchestrationCard } from "@/components/settings/LabOrchestrationCard";
+import { SettingsPageHeader } from "@/components/settings/SettingsPageHeader";
 import { type LabSettings, fetchSettings } from "@/services/settings";
 
-export function LabSettingsPage() {
+export function ExperimentalSettingsPage() {
   const { t } = useTranslation();
   const [lab, setLab] = useState<LabSettings | null>(null);
   const [loadError, setLoadError] = useState(false);
@@ -25,10 +26,10 @@ export function LabSettingsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="min-w-0">
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t("settings.sections.lab.label")}</h1>
-        <p className="text-sm text-muted-foreground sm:text-base">{t("settings.lab.pageDescription")}</p>
-      </div>
+      <SettingsPageHeader
+        title={t("settings.sections.experimental.label")}
+        description={t("settings.experimental.pageDescription")}
+      />
 
       <LabOrchestrationCard initial={lab} loadError={loadError} />
     </div>

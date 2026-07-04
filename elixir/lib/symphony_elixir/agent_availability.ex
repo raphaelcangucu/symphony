@@ -10,7 +10,12 @@ defmodule SymphonyElixir.AgentAvailability do
   @cache_key {__MODULE__, :cache}
   @cache_ttl_ms 60_000
 
-  @type result :: %{available: boolean(), version: String.t() | nil, command: String.t()}
+  @type result :: %{
+          available: boolean(),
+          version: String.t() | nil,
+          command: String.t(),
+          path: String.t() | nil
+        }
 
   @spec probe() :: %{codex: result(), claude: result(), cursor: result()}
   def probe do
@@ -36,10 +41,10 @@ defmodule SymphonyElixir.AgentAvailability do
 
     case System.find_executable(binary) do
       nil ->
-        %{available: false, version: nil, command: binary}
+        %{available: false, version: nil, command: binary, path: nil}
 
       path ->
-        %{available: true, version: read_version(path), command: binary}
+        %{available: true, version: read_version(path), command: binary, path: path}
     end
   end
 

@@ -8,6 +8,7 @@ defmodule SymphonyElixirWeb.Tracker.SettingsController do
   alias SymphonyElixir.AgentUsage
   alias SymphonyElixir.Claude.Usage, as: ClaudeUsage
   alias SymphonyElixir.Settings
+  alias SymphonyElixir.Settings.AgentTools
   alias SymphonyElixir.Tracker.Identity
   alias SymphonyElixirWeb.TrackerErrors
 
@@ -42,6 +43,11 @@ defmodule SymphonyElixirWeb.Tracker.SettingsController do
   @spec availability(Conn.t(), map()) :: Conn.t()
   def availability(conn, _params) do
     json(conn, %{data: AgentAvailability.probe()})
+  end
+
+  @spec agent_tools(Conn.t(), map()) :: Conn.t()
+  def agent_tools(conn, _params) do
+    json(conn, %{data: %{tools: AgentTools.list()}})
   end
 
   @spec usage(Conn.t(), map()) :: Conn.t()

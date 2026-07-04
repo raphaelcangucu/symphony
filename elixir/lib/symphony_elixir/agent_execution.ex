@@ -215,8 +215,11 @@ defmodule SymphonyElixir.AgentExecution do
   defp running_last_message(entry, false), do: Map.get(entry, :last_codex_message)
 
   defp interrupted_error_message(entry) do
-    case session_log_abort_summary(entry) do
-      summary when is_binary(summary) and summary != "" ->
+    case session_log_abort_info(entry) do
+      %{kind: :run_failed, summary: summary} when is_binary(summary) and summary != "" ->
+        "#{summary}. Use Resume in the execution panel."
+
+      %{summary: summary} when is_binary(summary) and summary != "" ->
         "Turn aborted — #{summary}. Use Resume in the execution panel."
 
       _ ->
@@ -225,8 +228,11 @@ defmodule SymphonyElixir.AgentExecution do
   end
 
   defp interrupted_session_message(entry) do
-    case session_log_abort_summary(entry) do
-      summary when is_binary(summary) and summary != "" ->
+    case session_log_abort_info(entry) do
+      %{kind: :run_failed, summary: summary} when is_binary(summary) and summary != "" ->
+        summary
+
+      %{summary: summary} when is_binary(summary) and summary != "" ->
         "Turn aborted — #{summary}"
 
       _ ->
@@ -442,7 +448,7 @@ defmodule SymphonyElixir.AgentExecution do
     end
   end
 
-  defp session_log_abort_summary(entry) do
+  defp session_log_abort_info(entry) do
     subject = Map.get(entry, :issue) || identifier(entry)
     agent_kind = Map.get(entry, :agent_kind) || issue_agent_kind(subject)
 
@@ -452,21 +458,31 @@ defmodule SymphonyElixir.AgentExecution do
          {:ok, entries} <- session_log_entries(kind, path, workspace) do
       entries
       |> Enum.reverse()
-      |> Enum.find_value(&abort_entry_summary/1)
+      |> Enum.find_value(&abort_entry_info/1)
     else
       _ -> nil
     end
   end
 
-  defp abort_entry_summary(%{"title" => title} = entry) when is_binary(title) do
-    if aborted_title?(title), do: abort_entry_body(entry)
+  defp abort_entry_info(%{"title" => title} = entry) when is_binary(title) do
+    if aborted_title?(title), do: build_abort_entry_info(title, entry)
   end
 
-  defp abort_entry_summary(%{title: title} = entry) when is_binary(title) do
-    if aborted_title?(title), do: abort_entry_body(entry)
+  defp abort_entry_info(%{title: title} = entry) when is_binary(title) do
+    if aborted_title?(title), do: build_abort_entry_info(title, entry)
   end
 
-  defp abort_entry_summary(_entry), do: nil
+  defp abort_entry_info(_entry), do: nil
+
+  defp build_abort_entry_info(title, entry) do
+    case abort_entry_body(entry) do
+      summary when is_binary(summary) and summary != "" ->
+        %{kind: abort_entry_kind(title), summary: summary}
+
+      _ ->
+        nil
+    end
+  end
 
   # credo:disable-for-next-line Credo.Check.Refactor.CyclomaticComplexity
   defp abort_entry_body(entry) do
@@ -475,6 +491,9 @@ defmodule SymphonyElixir.AgentExecution do
     title = Map.get(entry, "title") || Map.get(entry, :title)
 
     cond do
+      title == "Agent run failed" and is_binary(body) and body != "" ->
+        format_failure(body)
+
       title == "Worker crashed" and is_binary(body) and body != "" ->
         body |> String.split("\n", parts: 2) |> List.first() |> String.trim()
 
@@ -500,6 +519,10 @@ defmodule SymphonyElixir.AgentExecution do
 
   defp aborted_title?(_title), do: false
 
+  defp abort_entry_kind("Agent run failed"), do: :run_failed
+  defp abort_entry_kind("Worker crashed"), do: :worker_crashed
+  defp abort_entry_kind(_title), do: :turn_aborted
+
   defp recent_activity?(titles) when is_list(titles), do: titles != []
   defp recent_activity?(_titles), do: false
 
@@ -518,7 +541,7 @@ defmodule SymphonyElixir.AgentExecution do
     {:ok, agent_kind, _path} = SessionLog.resolve_log_source(issue.agent_kind || "codex", workspace)
     goal = build_goal(agent_kind, "interrupted", record.agent_goal, workspace)
 
-    abort_summary = session_log_abort_summary(%{issue: issue, agent_kind: agent_kind, identifier: record.identifier})
+    abort_info = session_log_abort_info(%{issue: issue, agent_kind: agent_kind, identifier: record.identifier})
 
     %{
       issue_id: to_string(record.id),
@@ -527,8 +550,9 @@ defmodule SymphonyElixir.AgentExecution do
       session_id: record.agent_session_id,
       last_event: "turn_aborted",
       last_message:
-        case abort_summary do
-          summary when is_binary(summary) and summary != "" -> "Turn aborted — #{summary}"
+        case abort_info do
+          %{kind: :run_failed, summary: summary} when is_binary(summary) and summary != "" -> summary
+          %{summary: summary} when is_binary(summary) and summary != "" -> "Turn aborted — #{summary}"
           _ -> "Agent run interrupted — resume from the session log"
         end,
       last_event_at: record.updated_at,
@@ -537,8 +561,11 @@ defmodule SymphonyElixir.AgentExecution do
       started_at: nil,
       retry_attempt: 0,
       error:
-        case abort_summary do
-          summary when is_binary(summary) and summary != "" ->
+        case abort_info do
+          %{kind: :run_failed, summary: summary} when is_binary(summary) and summary != "" ->
+            "#{summary}. Use Resume in the execution panel."
+
+          %{summary: summary} when is_binary(summary) and summary != "" ->
             "Turn aborted — #{summary}. Use Resume in the execution panel."
 
           _ ->
@@ -688,8 +715,15 @@ defmodule SymphonyElixir.AgentExecution do
     format_failure(message)
   end
 
-  def format_failure({:turn_failed, message}) when is_binary(message), do: message
+  def format_failure({:turn_failed, message}), do: format_failure(message)
   def format_failure({:error, reason}), do: format_failure(reason)
+
+  def format_failure(%{} = reason) do
+    case failure_message_from_map(reason) do
+      message when is_binary(message) and message != "" -> truncate_failure(message)
+      _ -> truncate_failure(inspect(reason, limit: 8))
+    end
+  end
 
   def format_failure("agent exited: " <> rest) do
     format_failure(rest)
@@ -708,6 +742,9 @@ defmodule SymphonyElixir.AgentExecution do
           [_, reason] -> format_failure(parse_inspected_reason(reason))
           _ -> truncate_failure(message)
         end
+
+      String.starts_with?(message, "{:turn_failed") ->
+        format_failure(parse_inspected_reason(message))
 
       String.starts_with?(message, "{%RuntimeError") ->
         format_failure(parse_inspected_reason(message))
@@ -734,6 +771,33 @@ defmodule SymphonyElixir.AgentExecution do
         reason
     end
   end
+
+  defp failure_message_from_map(reason) when is_map(reason) do
+    [
+      ["error", "message"],
+      [:error, :message],
+      ["params", "error", "message"],
+      [:params, :error, :message],
+      ["message"],
+      [:message]
+    ]
+    |> Enum.find_value(fn path ->
+      case get_in_path(reason, path) do
+        value when is_binary(value) and value != "" -> value
+        _ -> nil
+      end
+    end)
+  end
+
+  defp get_in_path(value, []), do: value
+
+  defp get_in_path(%{} = map, [key | rest]) do
+    map
+    |> Map.get(key)
+    |> get_in_path(rest)
+  end
+
+  defp get_in_path(_value, _path), do: nil
 
   defp truncate_failure(message) when is_binary(message) do
     message

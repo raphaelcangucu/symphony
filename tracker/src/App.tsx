@@ -27,8 +27,13 @@ import { SettingsLayout } from "@/components/settings/SettingsLayout";
 import { ProjectListPage } from "@/pages/ProjectListPage";
 import { ProjectSettingsPage } from "@/pages/ProjectSettingsPage";
 import { SettingsPage } from "@/pages/SettingsPage";
+import { AgentToolSettingsPage } from "@/pages/AgentToolSettingsPage";
+import { AppearanceSettingsPage } from "@/pages/AppearanceSettingsPage";
+import { ExperimentalSettingsPage } from "@/pages/ExperimentalSettingsPage";
+import { ProvidersSettingsPage } from "@/pages/ProvidersSettingsPage";
+import { SettingsPlaceholderRoute } from "@/pages/SettingsPlaceholderRoute";
+import { UsageSettingsPage } from "@/pages/UsageSettingsPage";
 import { GatewaysSettingsPage } from "@/pages/GatewaysSettingsPage";
-import { LabSettingsPage } from "@/pages/LabSettingsPage";
 import { TemplateListPage } from "@/pages/TemplateListPage";
 import { TemplateEditPage } from "@/pages/TemplateEditPage";
 import { TokenGatePage } from "@/pages/TokenGatePage";
@@ -101,11 +106,21 @@ export function App() {
               <Route path="backups" element={<Navigate to="/settings/backups" replace />} />
               <Route path="settings" element={<SettingsLayout />}>
                 <Route index element={<SettingsPage />} />
+                <Route path="appearance" element={<AppearanceSettingsPage />} />
+                <Route path="keybindings" element={<SettingsPlaceholderRoute section="keybindings" />} />
+                <Route path="agents/:agent" element={<AgentToolSettingsPage />} />
+                <Route path="tools/:tool" element={<SettingsPlaceholderRoute />} />
+                <Route path="providers" element={<ProvidersSettingsPage />} />
+                <Route path="web-access" element={<SettingsPlaceholderRoute section="web-access" />} />
+                <Route path="mcp" element={<SettingsPlaceholderRoute section="mcp" />} />
+                <Route path="integrations" element={<SettingsPlaceholderRoute section="integrations" />} />
+                <Route path="usage" element={<UsageSettingsPage />} />
+                <Route path="experimental" element={<ExperimentalSettingsPage />} />
                 <Route path="templates" element={<TemplateListPage />} />
                 <Route path="templates/:slug" element={<TemplateEditPage />} />
                 <Route path="backups" element={<BackupPage />} />
                 <Route path="gateways" element={<GatewaysSettingsPage />} />
-                <Route path="lab" element={<LabSettingsPage />} />
+                <Route path="lab" element={<Navigate to="/settings/experimental" replace />} />
               </Route>
               <Route path="assistant" element={<AssistantPage />} />
               <Route path="assistant/:threadId" element={<AssistantPage />} />

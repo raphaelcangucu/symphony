@@ -1,9 +1,23 @@
 defmodule SymphonyElixir.AgentExecutionTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   alias SymphonyElixir.AgentExecution
   alias SymphonyElixir.Codex.Session, as: CodexSession
+  alias SymphonyElixir.SessionEvents
   alias SymphonyElixir.Workspace
+
+  setup do
+    previous_sessions_dir = Application.get_env(:symphony_elixir, :codex_sessions_dir)
+
+    on_exit(fn ->
+      case previous_sessions_dir do
+        nil -> Application.delete_env(:symphony_elixir, :codex_sessions_dir)
+        value -> Application.put_env(:symphony_elixir, :codex_sessions_dir, value)
+      end
+    end)
+
+    :ok
+  end
 
   defp running_entry(overrides) do
     Map.merge(
@@ -150,6 +164,52 @@ defmodule SymphonyElixir.AgentExecutionTest do
       assert execution.status == :idle
     end
 
+    test "surfaces the real run failure for interrupted stale Codex runs" do
+      identifier = "SYM-RUNFAIL-#{System.unique_integer([:positive])}"
+      issue = %{identifier: identifier, project_slug: nil, labels: ["backend"], agent_kind: "codex"}
+      workspace = Workspace.path_for_issue(issue)
+      sessions_dir = Path.join(System.tmp_dir!(), "codex-sessions-#{System.unique_integer([:positive])}")
+      thread_id = "thread-runfail"
+
+      File.mkdir_p!(workspace)
+      File.mkdir_p!(sessions_dir)
+      Application.put_env(:symphony_elixir, :codex_sessions_dir, sessions_dir)
+
+      on_exit(fn ->
+        File.rm_rf(workspace)
+        File.rm_rf(sessions_dir)
+      end)
+
+      :ok = CodexSession.write(workspace, thread_id)
+      write_rollout!(sessions_dir, thread_id)
+
+      message =
+        "Codex ran out of room in the model's context window. Start a new thread or clear earlier history before retrying."
+
+      :ok = SessionEvents.append_run_failure(workspace, {:turn_failed, message})
+
+      stale = DateTime.add(DateTime.utc_now(), -10 * 60, :second)
+
+      snapshot = %{
+        running: [
+          running_entry(%{
+            identifier: identifier,
+            issue: issue,
+            agent_kind: "codex",
+            last_codex_timestamp: stale
+          })
+        ],
+        retrying: []
+      }
+
+      assert [execution] = AgentExecution.from_snapshot(snapshot)
+      assert execution.status == :aborted
+      assert execution.last_message == message
+      assert execution.error == message <> ". Use Resume in the execution panel."
+      refute execution.error =~ "{:turn_failed"
+      refute execution.error =~ "Turn aborted"
+    end
+
     test "marks running issues awaiting input or approval as waiting" do
       input_required = running_entry(%{last_codex_event: :turn_input_required})
       approval = running_entry(%{identifier: "SYM-2", last_codex_event: :approval_required})
@@ -283,6 +343,13 @@ defmodule SymphonyElixir.AgentExecutionTest do
                "claude exited with code 1"
     end
 
+    test "extracts inspected turn_failed messages" do
+      message =
+        "Codex ran out of room in the model's context window. Start a new thread or clear earlier history before retrying."
+
+      assert AgentExecution.format_failure("{:turn_failed, #{inspect(message)}}") == message
+    end
+
     test "strips runtime error stack traces" do
       error =
         "{%RuntimeError{message: \"Agent run failed for issue_id=5 issue_identifier=1859: " <>
@@ -292,5 +359,12 @@ defmodule SymphonyElixir.AgentExecutionTest do
 
       assert AgentExecution.format_failure("agent exited: " <> error) == "claude exited with code 1"
     end
+  end
+
+  defp write_rollout!(sessions_dir, thread_id) do
+    path = Path.join([sessions_dir, "2026", "rollout-#{thread_id}.jsonl"])
+    File.mkdir_p!(Path.dirname(path))
+    File.write!(path, ~s({"type":"event_msg","payload":{"type":"task_started"}}\n))
+    :ok
   end
 end

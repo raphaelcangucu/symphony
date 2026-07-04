@@ -39,6 +39,7 @@ defmodule SymphonyElixir.SettingsTest do
 
     assert Settings.all() == %{
              "agents" => %{"default_agent_kind" => "claude"},
+             "agent_models" => %{"codex" => nil, "claude" => nil, "cursor" => nil},
              "gateways" => %{
                "telegram_allowed_user_ids" => [],
                "telegram_bot_username" => nil,
@@ -122,6 +123,28 @@ defmodule SymphonyElixir.SettingsTest do
     assert Settings.Agents.default_agent_kind() == "codex"
     {:ok, _} = Settings.put("agents", "default_agent_kind", "claude")
     assert Settings.Agents.default_agent_kind() == "claude"
+  end
+
+  test "agent_models group defaults every supported agent to nil (CLI default)" do
+    assert Settings.get_group("agent_models") == %{
+             "codex" => nil,
+             "claude" => nil,
+             "cursor" => nil
+           }
+  end
+
+  test "agent_models casts values within the curated catalog and clears blanks" do
+    assert {:ok, "gpt-5-codex"} = Settings.put("agent_models", "codex", "gpt-5-codex")
+    assert Settings.get("agent_models", "codex") == "gpt-5-codex"
+    assert Settings.AgentModels.selected("codex") == "gpt-5-codex"
+
+    assert {:ok, nil} = Settings.put("agent_models", "codex", "")
+    assert Settings.get("agent_models", "codex") == nil
+  end
+
+  test "agent_models rejects models outside the catalog and unknown agents" do
+    assert {:error, :invalid_value} = Settings.put("agent_models", "codex", "gpt-9-imaginary")
+    assert {:error, :unknown_setting} = Settings.put("agent_models", "gemini", "auto")
   end
 
   test "ui group defaults to auto locale" do

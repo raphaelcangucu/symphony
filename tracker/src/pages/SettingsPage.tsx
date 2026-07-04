@@ -2,11 +2,8 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
-import { AgentUsagePanel } from "@/components/settings/AgentUsagePanel";
-import { ConnectedIdentitiesCard } from "@/components/settings/ConnectedIdentitiesCard";
 import { LanguageCard } from "@/components/settings/LanguageCard";
 import { OrchestrationRulesCard } from "@/components/settings/OrchestrationRulesCard";
-import { ProviderCredentialsCard } from "@/components/settings/ProviderCredentialsCard";
 import { PushNotificationsCard } from "@/components/settings/PushNotificationsCard";
 import { AGENT_ICONS, AGENT_KINDS, agentKindLabel, AgentChip } from "@/components/shared/AgentChip";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -130,17 +127,9 @@ export function SettingsPage() {
           </CardContent>
         </Card>
 
-        <AgentUsagePanel />
-
         <OrchestrationRulesCard initial={orchestrator} loadError={loadError} />
 
         <PushNotificationsCard />
-
-        <ConnectedIdentitiesCard />
-
-        <div className="xl:col-span-2">
-          <ProviderCredentialsCard />
-        </div>
       </div>
     </div>
   );

@@ -20,6 +20,7 @@ defmodule SymphonyElixir.Codex.CodingAgent do
   @thread_resume_id 5
   @goal_get_id 6
   @goal_clear_id 7
+  @thread_compact_start_id 8
   @steer_base_id 100
   @default_max_goal_turns 50
   @max_goal_turns_cap 500
@@ -264,7 +265,7 @@ defmodule SymphonyElixir.Codex.CodingAgent do
            turn_sandbox_policy: turn_sandbox_policy,
            thread_id: thread_id,
            workspace: workspace
-         },
+         } = session,
          prompt,
          issue,
          opts,
@@ -311,19 +312,26 @@ defmodule SymphonyElixir.Codex.CodingAgent do
              }}
 
           {:error, reason} ->
-            Logger.warning("Codex session ended with error for #{issue_context(issue)} session_id=#{session_id}: #{inspect(reason)}")
+            if context_window_failure?(reason) and not Keyword.get(opts, :context_window_compacted?, false) do
+              Logger.warning("Codex context window exhausted for #{issue_context(issue)} session_id=#{session_id}; compacting thread before retry")
 
-            emit_message(
-              on_message,
-              :turn_ended_with_error,
-              %{
-                session_id: session_id,
-                reason: reason
-              },
-              metadata
-            )
+              case compact_thread(port, thread_id, on_message, tool_executor, auto_approve_requests, turn_ctx) do
+                :ok ->
+                  retry_opts = Keyword.put(opts, :context_window_compacted?, true)
+                  run_single_turn(session, prompt, issue, retry_opts, on_message, tool_executor)
 
-            {:error, reason}
+                {:error, compact_reason} ->
+                  Logger.warning("Codex thread compaction failed for #{issue_context(issue)} session_id=#{session_id}: #{inspect(compact_reason)}")
+
+                  emit_turn_error(on_message, metadata, session_id, reason)
+                  {:error, reason}
+              end
+            else
+              Logger.warning("Codex session ended with error for #{issue_context(issue)} session_id=#{session_id}: #{inspect(reason)}")
+
+              emit_turn_error(on_message, metadata, session_id, reason)
+              {:error, reason}
+            end
         end
 
       {:error, reason} ->
@@ -341,6 +349,51 @@ defmodule SymphonyElixir.Codex.CodingAgent do
       :active -> :budget_exhausted
       _status -> :stop
     end
+  end
+
+  defp emit_turn_error(on_message, metadata, session_id, reason) do
+    emit_message(
+      on_message,
+      :turn_ended_with_error,
+      %{
+        session_id: session_id,
+        reason: reason
+      },
+      metadata
+    )
+  end
+
+  defp compact_thread(port, thread_id, on_message, tool_executor, auto_approve_requests, turn_ctx) do
+    send_message(port, %{
+      "method" => "thread/compact/start",
+      "id" => @thread_compact_start_id,
+      "params" => %{"threadId" => thread_id}
+    })
+
+    with {:ok, _result} <- await_response(port, @thread_compact_start_id),
+         {:ok, _payload} <-
+           await_turn_completion(
+             port,
+             on_message,
+             tool_executor,
+             auto_approve_requests,
+             compact_turn_context(turn_ctx)
+           ) do
+      :ok
+    else
+      {:error, reason} -> {:error, reason}
+      other -> {:error, other}
+    end
+  end
+
+  defp compact_turn_context(turn_ctx) do
+    %{
+      turn_ctx
+      | turn_id: "compact",
+        pending: %{},
+        turn_error: nil,
+        agent_message?: false
+    }
   end
 
   defp ensure_goal_active(%{goal_active: true}, _opts), do: true
@@ -1194,6 +1247,46 @@ defmodule SymphonyElixir.Codex.CodingAgent do
   end
 
   defp extract_error_message(_payload), do: nil
+
+  defp context_window_failure?({:turn_failed, reason}), do: context_window_failure?(reason)
+  defp context_window_failure?({:error, reason}), do: context_window_failure?(reason)
+
+  defp context_window_failure?(%{} = reason) do
+    context_window_error_code?(codex_error_code(reason)) or
+      context_window_failure?(extract_error_message(reason))
+  end
+
+  defp context_window_failure?(message) when is_binary(message) do
+    normalized = String.downcase(message)
+
+    String.contains?(normalized, "contextwindowexceeded") or
+      (String.contains?(normalized, "context window") and
+         (String.contains?(normalized, "out of room") or String.contains?(normalized, "exceed")))
+  end
+
+  defp context_window_failure?(_reason), do: false
+
+  defp context_window_error_code?("ContextWindowExceeded"), do: true
+  defp context_window_error_code?("context_window_exceeded"), do: true
+  defp context_window_error_code?(code) when is_binary(code), do: String.downcase(code) == "contextwindowexceeded"
+  defp context_window_error_code?(_code), do: false
+
+  defp codex_error_code(reason) when is_map(reason) do
+    [
+      ["error", "codexErrorInfo", "code"],
+      ["error", "codexErrorInfo", "type"],
+      ["params", "error", "codexErrorInfo", "code"],
+      ["params", "error", "codexErrorInfo", "type"],
+      ["codexErrorInfo", "code"],
+      ["codexErrorInfo", "type"]
+    ]
+    |> Enum.find_value(fn path ->
+      case dig(reason, path) do
+        value when is_binary(value) and value != "" -> value
+        _ -> nil
+      end
+    end)
+  end
 
   defp mark_agent_message(turn_ctx, payload) do
     if agent_message_delta_present?(payload) do

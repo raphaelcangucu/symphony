@@ -14,6 +14,7 @@
   "settings": {
     "usage": {
       "title": "Plan usage",
+      "pageDescription": "Plan quota consumed per agent, and when each window resets.",
       "description": "How much of each agent's plan quota is consumed, and when each window resets.",
       "unavailable": "Usage unavailable for this agent.",
       "loadFailed": "Could not load plan usage.",
@@ -37,22 +38,33 @@
     "title": "Settings",
     "subtitle": "Operator-level defaults for this Symphony instance.",
     "navLabel": "Settings sections",
+    "groups": {
+      "general": "General",
+      "agents": "Agents",
+      "tools": "CLIs & Tools",
+      "platform": "Platform",
+      "workspace": "Workspace",
+      "insights": "Insights"
+    },
     "sections": {
-      "general": {
-        "label": "General"
-      },
-      "templates": {
-        "label": "Templates"
-      },
-      "backups": {
-        "label": "Backups"
-      },
-      "gateways": {
-        "label": "Gateways"
-      },
-      "lab": {
-        "label": "Lab"
-      }
+      "general": { "label": "General" },
+      "appearance": { "label": "Appearance" },
+      "keybindings": { "label": "Keybindings" },
+      "providers": { "label": "Providers" },
+      "webAccess": { "label": "Web Access" },
+      "mcp": { "label": "MCP Servers" },
+      "integrations": { "label": "Integrations" },
+      "githubCli": { "label": "GitHub CLI" },
+      "coderabbitCli": { "label": "CodeRabbit CLI" },
+      "terminal": { "label": "Terminal" },
+      "magicPrompts": { "label": "Magic Prompts" },
+      "opinionated": { "label": "Opinionated" },
+      "usage": { "label": "Usage" },
+      "experimental": { "label": "Experimental" },
+      "templates": { "label": "Templates" },
+      "backups": { "label": "Backups" },
+      "gateways": { "label": "Gateways" },
+      "lab": { "label": "Lab" }
     },
     "loadFailed": "Failed to load settings — refresh to retry.",
     "codingAgent": {
@@ -162,6 +174,104 @@
         "saveFailed": "Failed to save {{label}}",
         "cleared": "{{label}} cleared",
         "clearFailed": "Failed to clear {{label}}"
+      }
+    },
+    "appearance": {
+      "description": "How the tracker looks on this device.",
+      "theme": {
+        "title": "Theme",
+        "description": "Choose light, dark, or follow the operating system. This preference is stored in this browser only."
+      }
+    },
+    "providers": {
+      "subtitle": "How Symphony authenticates to each provider, plus the tokens used to do it."
+    },
+    "experimental": {
+      "pageDescription": "Optional orchestration models under active development. Defaults favor the simpler unified parent path."
+    },
+    "agentTool": {
+      "cliTag": "CLI",
+      "betaBadge": "Beta",
+      "cli": "{{name}} CLI",
+      "settings": "{{name}} Settings",
+      "loadFailed": "Could not load agent status — refresh to retry.",
+      "unsupported": "Symphony can't run {{name}} yet. This page shows detection status only; there is nothing to configure here.",
+      "agents": {
+        "claude": "Claude Code",
+        "codex": "Codex",
+        "cursor": "Cursor Agent",
+        "opencode": "OpenCode",
+        "pi": "PI",
+        "commandCode": "Command Code",
+        "grok": "Grok"
+      },
+      "unknown": {
+        "title": "Unknown agent",
+        "description": "This agent isn't recognized. Pick one from the sidebar."
+      },
+      "status": {
+        "title": "Status",
+        "description": "Whether the CLI is discovered from your system PATH.",
+        "installed": "Installed",
+        "notInstalled": "Not installed",
+        "notFound": "Not found in PATH"
+      },
+      "source": {
+        "title": "Source",
+        "description": "Where Symphony resolves this CLI from.",
+        "path": "System PATH",
+        "pathDetail": "System PATH ({{path}})",
+        "none": "Not installed"
+      },
+      "install": {
+        "action": "Install",
+        "installed": "Installed",
+        "copied": "Install command copied — run it in your terminal.",
+        "copyFailed": "Could not copy the install command."
+      },
+      "model": {
+        "title": "Model",
+        "description": "Model passed to the {{name}} CLI. Leave on CLI default to omit the --model flag.",
+        "cliDefault": "CLI default (no --model)",
+        "saved": "{{name}} model updated",
+        "saveFailed": "Failed to update {{name}} model"
+      }
+    },
+    "placeholder": {
+      "body": "This capability isn't wired into Symphony yet. It's shown here so the settings map stays aligned with the agent workbench, and it will become configurable in a later iteration.",
+      "status": {
+        "comingSoon": "Coming soon"
+      },
+      "unknown": {
+        "title": "Unknown section",
+        "description": "This settings section isn't recognized. Pick one from the sidebar."
+      },
+      "keybindings": {
+        "description": "Keyboard shortcuts for the tracker."
+      },
+      "webAccess": {
+        "description": "Control whether agents can browse the web during runs."
+      },
+      "mcp": {
+        "description": "Model Context Protocol servers available to agents."
+      },
+      "integrations": {
+        "description": "Third-party integrations connected to this instance."
+      },
+      "githubCli": {
+        "description": "GitHub CLI (gh) detection and defaults."
+      },
+      "coderabbitCli": {
+        "description": "CodeRabbit CLI detection and defaults."
+      },
+      "terminal": {
+        "description": "Default terminal behavior for agent sessions."
+      },
+      "magicPrompts": {
+        "description": "Reusable magic prompts injected into agent runs."
+      },
+      "opinionated": {
+        "description": "Opinionated defaults that shape agent behavior."
       }
     },
     "gateways": {

@@ -332,6 +332,25 @@ defmodule SymphonyElixir.Codex.CodingAgentTest do
         assert result[:result] == :turn_completed
       end)
     end
+
+    test "compacts the thread and retries once when Codex reports context window exhaustion" do
+      with_fake_context_window_server(fn workspace, issue, trace_file ->
+        assert {:ok, result} = AppServer.run(workspace, "Build the feature", issue)
+        assert result[:result] == :turn_completed
+
+        messages = outbound_messages(trace_file)
+        assert message_with_method(messages, "thread/compact/start")
+
+        assert message_order(messages) == [
+                 "initialize",
+                 "initialized",
+                 "thread/start",
+                 "turn/start",
+                 "thread/compact/start",
+                 "turn/start"
+               ]
+      end)
+    end
   end
 
   describe "process group reaping" do
@@ -614,6 +633,87 @@ defmodule SymphonyElixir.Codex.CodingAgentTest do
     #{agent_message_line}
           printf '%s\\n' '{"method":"turn/completed"}'
           exit 0
+          ;;
+        *)
+          ;;
+      esac
+    done
+    """)
+
+    File.chmod!(codex_binary, 0o755)
+  end
+
+  defp with_fake_context_window_server(fun) when is_function(fun, 3) do
+    test_root =
+      Path.join(
+        System.tmp_dir!(),
+        "symphony-elixir-coding-agent-context-#{System.unique_integer([:positive])}"
+      )
+
+    try do
+      workspace_root = Path.join(test_root, "workspaces")
+      workspace = Path.join(workspace_root, "MT-CTX")
+      codex_binary = Path.join(test_root, "fake-codex")
+      trace_file = Path.join(test_root, "codex-context.trace")
+
+      File.mkdir_p!(workspace)
+      write_context_window_fake_codex!(codex_binary, trace_file)
+
+      write_workflow_file!(Workflow.workflow_file_path(),
+        workspace_root: workspace_root,
+        command: "#{codex_binary} app-server"
+      )
+
+      issue = %Issue{
+        id: "issue-context",
+        identifier: "MT-CTX",
+        title: "Context window",
+        description: "Exercise Codex context compaction",
+        state: "In Progress",
+        url: "https://example.org/issues/MT-CTX",
+        labels: ["backend"]
+      }
+
+      fun.(workspace, issue, trace_file)
+    after
+      File.rm_rf(test_root)
+    end
+  end
+
+  defp write_context_window_fake_codex!(codex_binary, trace_file) do
+    context_error =
+      "Codex ran out of room in the model context window. Start a new thread or clear earlier history before retrying."
+
+    File.write!(codex_binary, """
+    #!/bin/sh
+    trace_file="#{trace_file}"
+    turn_count=0
+
+    while IFS= read -r line; do
+      printf 'JSON:%s\\n' "$line" >> "$trace_file"
+
+      case "$line" in
+        *'"method":"initialize"'*)
+          printf '%s\\n' '{"id":1,"result":{}}'
+          ;;
+        *'"method":"initialized"'*)
+          ;;
+        *'"method":"thread/start"'*)
+          printf '%s\\n' '{"id":2,"result":{"thread":{"id":"thread-context"}}}'
+          ;;
+        *'"method":"turn/start"'*)
+          turn_count=$((turn_count + 1))
+          printf '%s\\n' '{"id":3,"result":{"turn":{"id":"turn-context-'$turn_count'"}}}'
+          if [ "$turn_count" -eq 1 ]; then
+            printf '%s\\n' '{"method":"turn/failed","params":{"error":{"message":"#{context_error}","codexErrorInfo":{"code":"ContextWindowExceeded"}}}}'
+          else
+            printf '%s\\n' '{"method":"turn/completed"}'
+            exit 0
+          fi
+          ;;
+        *'"method":"thread/compact/start"'*)
+          printf '%s\\n' '{"id":8,"result":{}}'
+          printf '%s\\n' '{"method":"turn/completed","params":{"compaction":true}}'
           ;;
         *)
           ;;

@@ -14,6 +14,7 @@
   "settings": {
     "usage": {
       "title": "Uso do plano",
+      "pageDescription": "Cota do plano consumida por agente e quando cada janela reinicia.",
       "description": "Quanto da cota de cada agente foi consumido e quando cada janela reinicia.",
       "unavailable": "Uso indisponível para este agente.",
       "loadFailed": "Não foi possível carregar o uso do plano.",
@@ -37,22 +38,33 @@
     "title": "Configurações",
     "subtitle": "Padrões da instância Symphony para o operador.",
     "navLabel": "Seções de configurações",
+    "groups": {
+      "general": "Geral",
+      "agents": "Agentes",
+      "tools": "CLIs e Ferramentas",
+      "platform": "Plataforma",
+      "workspace": "Workspace",
+      "insights": "Insights"
+    },
     "sections": {
-      "general": {
-        "label": "Geral"
-      },
-      "templates": {
-        "label": "Templates"
-      },
-      "backups": {
-        "label": "Backups"
-      },
-      "gateways": {
-        "label": "Gateways"
-      },
-      "lab": {
-        "label": "Lab"
-      }
+      "general": { "label": "Geral" },
+      "appearance": { "label": "Aparência" },
+      "keybindings": { "label": "Atalhos" },
+      "providers": { "label": "Providers" },
+      "webAccess": { "label": "Acesso à web" },
+      "mcp": { "label": "Servidores MCP" },
+      "integrations": { "label": "Integrações" },
+      "githubCli": { "label": "GitHub CLI" },
+      "coderabbitCli": { "label": "CodeRabbit CLI" },
+      "terminal": { "label": "Terminal" },
+      "magicPrompts": { "label": "Magic Prompts" },
+      "opinionated": { "label": "Opinionated" },
+      "usage": { "label": "Uso" },
+      "experimental": { "label": "Experimental" },
+      "templates": { "label": "Templates" },
+      "backups": { "label": "Backups" },
+      "gateways": { "label": "Gateways" },
+      "lab": { "label": "Lab" }
     },
     "loadFailed": "Falha ao carregar configurações — atualize para tentar novamente.",
     "codingAgent": {
@@ -162,6 +174,104 @@
         "saveFailed": "Falha ao salvar {{label}}",
         "cleared": "{{label}} removido",
         "clearFailed": "Falha ao remover {{label}}"
+      }
+    },
+    "appearance": {
+      "description": "Como o tracker aparece neste dispositivo.",
+      "theme": {
+        "title": "Tema",
+        "description": "Escolha claro, escuro ou seguir o sistema operacional. Esta preferência é salva apenas neste navegador."
+      }
+    },
+    "providers": {
+      "subtitle": "Com quem o Symphony se autentica em cada provider e os tokens usados para isso."
+    },
+    "experimental": {
+      "pageDescription": "Modelos de orquestração opcionais em desenvolvimento. O padrão favorece o caminho unificado do parent."
+    },
+    "agentTool": {
+      "cliTag": "CLI",
+      "betaBadge": "Beta",
+      "cli": "{{name}} CLI",
+      "settings": "Configurações do {{name}}",
+      "loadFailed": "Não foi possível carregar o status do agente — atualize para tentar novamente.",
+      "unsupported": "O Symphony ainda não executa {{name}}. Esta página mostra apenas o status de detecção; não há nada para configurar aqui.",
+      "agents": {
+        "claude": "Claude Code",
+        "codex": "Codex",
+        "cursor": "Cursor Agent",
+        "opencode": "OpenCode",
+        "pi": "PI",
+        "commandCode": "Command Code",
+        "grok": "Grok"
+      },
+      "unknown": {
+        "title": "Agente desconhecido",
+        "description": "Este agente não é reconhecido. Escolha um na barra lateral."
+      },
+      "status": {
+        "title": "Status",
+        "description": "Se a CLI é descoberta no PATH do sistema.",
+        "installed": "Instalado",
+        "notInstalled": "Não instalado",
+        "notFound": "Não encontrado no PATH"
+      },
+      "source": {
+        "title": "Origem",
+        "description": "De onde o Symphony resolve esta CLI.",
+        "path": "PATH do sistema",
+        "pathDetail": "PATH do sistema ({{path}})",
+        "none": "Não instalado"
+      },
+      "install": {
+        "action": "Instalar",
+        "installed": "Instalado",
+        "copied": "Comando de instalação copiado — execute no seu terminal.",
+        "copyFailed": "Não foi possível copiar o comando de instalação."
+      },
+      "model": {
+        "title": "Modelo",
+        "description": "Modelo passado para a CLI do {{name}}. Deixe no padrão da CLI para omitir a flag --model.",
+        "cliDefault": "Padrão da CLI (sem --model)",
+        "saved": "Modelo do {{name}} atualizado",
+        "saveFailed": "Falha ao atualizar o modelo do {{name}}"
+      }
+    },
+    "placeholder": {
+      "body": "Este recurso ainda não está integrado ao Symphony. Ele aparece aqui para manter o mapa de configurações alinhado ao workbench de agentes e ficará configurável em uma iteração futura.",
+      "status": {
+        "comingSoon": "Em breve"
+      },
+      "unknown": {
+        "title": "Seção desconhecida",
+        "description": "Esta seção de configurações não é reconhecida. Escolha uma na barra lateral."
+      },
+      "keybindings": {
+        "description": "Atalhos de teclado do tracker."
+      },
+      "webAccess": {
+        "description": "Controle se os agentes podem navegar na web durante as execuções."
+      },
+      "mcp": {
+        "description": "Servidores Model Context Protocol disponíveis para os agentes."
+      },
+      "integrations": {
+        "description": "Integrações de terceiros conectadas a esta instância."
+      },
+      "githubCli": {
+        "description": "Detecção e padrões da GitHub CLI (gh)."
+      },
+      "coderabbitCli": {
+        "description": "Detecção e padrões da CodeRabbit CLI."
+      },
+      "terminal": {
+        "description": "Comportamento padrão do terminal para sessões de agente."
+      },
+      "magicPrompts": {
+        "description": "Magic prompts reutilizáveis injetados nas execuções de agente."
+      },
+      "opinionated": {
+        "description": "Padrões opinativos que moldam o comportamento do agente."
       }
     },
     "gateways": {

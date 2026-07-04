@@ -125,6 +125,38 @@ defmodule SymphonyElixirWeb.Tracker.SettingsControllerTest do
     assert Map.has_key?(codex, "version") and Map.has_key?(codex, "command")
   end
 
+  test "GET /api/tracker/v1/settings/agents/tools returns status, source, and model per agent" do
+    conn = get(authed_conn(), "/api/tracker/v1/settings/agents/tools")
+
+    assert %{"data" => %{"tools" => tools}} = json_response(conn, 200)
+    assert length(tools) == 3
+
+    ids = tools |> Enum.map(& &1["id"]) |> Enum.sort()
+    assert ids == ["claude", "codex", "cursor"]
+
+    codex = Enum.find(tools, &(&1["id"] == "codex"))
+    assert is_boolean(codex["status"]["installed"])
+    assert Map.has_key?(codex["status"], "version")
+    assert Map.has_key?(codex["status"], "path")
+    assert codex["source"]["value"] in ["path", "none"]
+    assert is_list(codex["model"]["options"])
+    assert Map.has_key?(codex["model"], "selected")
+    assert Map.has_key?(codex["install"], "available")
+  end
+
+  test "PUT /api/tracker/v1/settings/agent_models persists a catalog model" do
+    conn = put(authed_conn(), "/api/tracker/v1/settings/agent_models", %{"codex" => "gpt-5-codex"})
+    assert %{"data" => %{"codex" => "gpt-5-codex"}} = json_response(conn, 200)
+
+    conn = get(authed_conn(), "/api/tracker/v1/settings")
+    assert %{"data" => %{"agent_models" => %{"codex" => "gpt-5-codex"}}} = json_response(conn, 200)
+  end
+
+  test "PUT /api/tracker/v1/settings/agent_models rejects models outside the catalog" do
+    conn = put(authed_conn(), "/api/tracker/v1/settings/agent_models", %{"codex" => "gpt-9-imaginary"})
+    assert %{"error" => %{"code" => "validation_failed"}} = json_response(conn, 422)
+  end
+
   test "GET /api/tracker/v1/settings/agents/usage returns per-agent usage snapshots" do
     snap =
       AgentUsage.Window.normalize("claude", %{

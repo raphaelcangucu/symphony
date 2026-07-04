@@ -23,12 +23,49 @@ export interface UiSettings {
   locale: LocalePreference;
 }
 
+export type AgentModelSettings = Partial<Record<AgentKind, string | null>>;
+
 export interface AllSettings {
   agents: AgentSettings;
+  agent_models?: AgentModelSettings;
   gateways?: GatewaySettings;
   lab: LabSettings;
   orchestrator: OrchestratorSettings;
   ui: UiSettings;
+}
+
+export type AgentToolSourceValue = "path" | "none";
+
+export interface AgentToolStatus {
+  installed: boolean;
+  version: string | null;
+  path: string | null;
+  command: string;
+}
+
+export interface AgentToolSource {
+  value: AgentToolSourceValue;
+  managed: boolean;
+  detail: string | null;
+}
+
+export interface AgentToolInstall {
+  available: boolean;
+  command: string | null;
+}
+
+export interface AgentToolModel {
+  options: string[];
+  selected: string | null;
+}
+
+export interface AgentTool {
+  id: string;
+  kind: AgentKind;
+  status: AgentToolStatus;
+  source: AgentToolSource;
+  install: AgentToolInstall;
+  model: AgentToolModel;
 }
 
 export interface AgentAvailabilityEntry {
@@ -56,6 +93,19 @@ export async function updateAgentSettings(input: Partial<AgentSettings>): Promis
 export async function fetchAgentAvailability(): Promise<AgentAvailability> {
   const response = await http.get(trackerPath("/settings/agents/availability"));
   return unwrapData<AgentAvailability>(response);
+}
+
+export async function fetchAgentTools(): Promise<AgentTool[]> {
+  const response = await http.get(trackerPath("/settings/agents/tools"));
+  return unwrapData<{ tools: AgentTool[] }>(response).tools;
+}
+
+export async function updateAgentModel(
+  agent: AgentKind,
+  model: string | null,
+): Promise<AgentModelSettings> {
+  const response = await http.put(trackerPath("/settings/agent_models"), { [agent]: model });
+  return unwrapData<AgentModelSettings>(response);
 }
 
 export async function updateOrchestratorSettings(
