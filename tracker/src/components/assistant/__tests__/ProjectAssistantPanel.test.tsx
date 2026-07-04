@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router-dom";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { fetchAssistantCatalogBundle } from "@/services/assistant";
@@ -95,6 +96,7 @@ const getThreadGitDiffMock = vi.hoisted(() => vi.fn());
 const getGitDiffMock = vi.hoisted(() => vi.fn());
 const getProjectOverviewMock = vi.hoisted(() => vi.fn());
 const getRepoTreeMock = vi.hoisted(() => vi.fn());
+const getPageMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/services/issues", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/services/issues")>()),
@@ -118,6 +120,7 @@ vi.mock("@/services/gitDiff", () => ({
 vi.mock("@/services/knowledgeBase", () => ({
   getProjectOverview: (...args: unknown[]) => getProjectOverviewMock(...args),
   getRepoTree: (...args: unknown[]) => getRepoTreeMock(...args),
+  getPage: (...args: unknown[]) => getPageMock(...args),
 }));
 
 beforeAll(async () => {
@@ -181,6 +184,13 @@ describe("ProjectAssistantPanel", () => {
           ],
         },
       ],
+    });
+    getPageMock.mockResolvedValue({
+      path: "guides/setup.md",
+      title: "Setup",
+      frontmatter: {},
+      body: "# Setup\n\nConfigure the project.",
+      markdown: "# Setup\n\nConfigure the project.",
     });
     for (const key of Object.keys(channelHandlers)) delete channelHandlers[key];
     pushReceives.length = 0;
@@ -303,7 +313,11 @@ describe("ProjectAssistantPanel", () => {
   });
 
   it("opens the project knowledge base from the composer button and shortcut", async () => {
-    render(<ProjectAssistantPanel projectSlug="macro-markets" threadId={7990} view="board" mode="page" />);
+    render(
+      <MemoryRouter>
+        <ProjectAssistantPanel projectSlug="macro-markets" threadId={7990} view="board" mode="page" />
+      </MemoryRouter>,
+    );
 
     const kbButton = await screen.findByRole("button", { name: /knowledge base/i });
     await waitFor(() => expect(kbButton).not.toBeDisabled());
@@ -890,7 +904,11 @@ describe("ProjectAssistantPanel", () => {
 
   it("opens a large knowledge base modal with a collapsible tree", async () => {
     const user = userEvent.setup();
-    render(<ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="page" />);
+    render(
+      <MemoryRouter>
+        <ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="page" />
+      </MemoryRouter>,
+    );
 
     const kbButton = await screen.findByRole("button", { name: "Knowledge Base" });
     await waitFor(() => expect(kbButton).not.toBeDisabled());
@@ -900,9 +918,15 @@ describe("ProjectAssistantPanel", () => {
     expect(await screen.findByText("front")).toBeInTheDocument();
     expect(await screen.findByText("Setup")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /Guides/i }));
+    await user.click(screen.getByRole("button", { name: "Add Setup to context" }));
 
-    expect(screen.queryByText("Setup")).not.toBeInTheDocument();
+    expect(await screen.findByText("kb:front:guides/setup.md")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("link", { name: "Setup" }));
+
+    expect(await screen.findByText("Configure the project.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Show tree" })).toBeInTheDocument();
+    expect(navigateMock).not.toHaveBeenCalledWith("/projects/macro-markets/kb/front/guides/setup.md");
   });
 
   it("renders an embedded assistant without viewport height", () => {
@@ -1160,6 +1184,42 @@ describe("ProjectAssistantPanel", () => {
         "send_message",
         expect.objectContaining({
           message: "ship it",
+          context: expect.objectContaining({
+            execution_mode: "build",
+          }),
+        }),
+      ),
+    );
+  });
+
+  it("opens the Magic command palette as a modal on project session routes", async () => {
+    render(<ProjectAssistantPanel projectSlug="macro-markets" threadId={7990} view="board" mode="page" />);
+
+    expect(await screen.findByRole("button", { name: /build/i })).toBeInTheDocument();
+    const magicButton = screen.getByRole("button", { name: /magic/i });
+    await waitFor(() => expect(magicButton).not.toBeDisabled());
+
+    // The Magic button opens a centered modal palette — not the inline `/` list.
+    fireEvent.click(magicButton);
+
+    const dialog = await screen.findByRole("dialog", { name: "Magic commands" });
+    expect(within(dialog).getByText("/plan")).toBeInTheDocument();
+    expect(within(dialog).getByText("/push")).toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: "Escape", code: "Escape" });
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "Magic commands" })).not.toBeInTheDocument(),
+    );
+
+    const textarea = screen.getByPlaceholderText("Write a message...");
+    fireEvent.change(textarea, { target: { value: "translate the docs" } });
+    fireEvent.keyDown(textarea, { key: "Enter", code: "Enter" });
+
+    await waitFor(() =>
+      expect(push).toHaveBeenCalledWith(
+        "send_message",
+        expect.objectContaining({
+          message: "translate the docs",
           context: expect.objectContaining({
             execution_mode: "build",
           }),

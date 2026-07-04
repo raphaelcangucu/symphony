@@ -18,6 +18,7 @@ export function assistantCommandsToSlashDefs(commands: AssistantCommand[], t: TF
         kind: "message",
         description: command.description,
         insertText: t("assistant.slash.skillDirective", { skill }),
+        category: command.category,
       });
       continue;
     }
@@ -26,6 +27,7 @@ export function assistantCommandsToSlashDefs(commands: AssistantCommand[], t: TF
       name: normalizedName,
       kind: normalizeBuiltinKind(command.submitKind),
       description: command.description,
+      category: command.category,
     });
   }
   return slashDefs;

@@ -23,6 +23,7 @@ describe("assistantCommandsToSlashDefs", () => {
         name: "/infer",
         kind: "infer",
         description: "Infer next step",
+        category: "core",
       },
     ]);
   });
@@ -49,6 +50,7 @@ describe("assistantCommandsToSlashDefs", () => {
         kind: "message",
         description: "Plan the work",
         insertText: "Use skill plan",
+        category: "workflow",
       },
     ]);
     expect(translate).toHaveBeenCalledWith("assistant.slash.skillDirective", { skill: "plan" });
@@ -82,6 +84,7 @@ describe("assistantCommandsToSlashDefs", () => {
         name: "/goal",
         kind: "goal",
         description: "Set the goal",
+        category: "core",
       },
     ]);
   });

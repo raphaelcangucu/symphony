@@ -66,6 +66,20 @@ export function projectSessionPath(projectSlug: string, threadId: number | strin
   return `${projectSessionsPath(projectSlug)}/${id}`;
 }
 
+/**
+ * Deep-linkable URL for an issue-bound execution session opened inline on the
+ * Sessions page. The issue identifier lives in the `exec` query param so the tab
+ * can be restored on reload or when the link is shared, while `agent=execution`
+ * focuses the execution (chat) section of the inline Agent view.
+ */
+export function projectExecutionSessionPath(projectSlug: string, issueIdentifier: string): string {
+  const identifier = requireNonBlank(issueIdentifier, "issueIdentifier");
+  const params = new URLSearchParams();
+  params.set("exec", identifier);
+  params.set("agent", "execution");
+  return `${projectSessionsPath(projectSlug)}?${params.toString()}`;
+}
+
 export function newIssueAssistantPath(projectSlug: string): string {
   return `/projects/${requireSlug(projectSlug)}/assistant/new-issue`;
 }

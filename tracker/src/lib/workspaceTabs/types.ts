@@ -3,6 +3,7 @@ export type WorkspaceTabKind =
   | "project-terminal"
   | "dynamic-terminal"
   | "assistant-session"
+  | "execution-session"
   | "sessions-list";
 
 export interface WorkspaceTabBase {
@@ -33,6 +34,11 @@ export interface AssistantSessionTab extends WorkspaceTabBase {
   threadId: number;
 }
 
+export interface ExecutionSessionTab extends WorkspaceTabBase {
+  kind: "execution-session";
+  issueIdentifier: string;
+}
+
 export interface SessionsListTab extends WorkspaceTabBase {
   kind: "sessions-list";
 }
@@ -42,6 +48,7 @@ export type WorkspaceTab =
   | ProjectTerminalTab
   | DynamicTerminalTab
   | AssistantSessionTab
+  | ExecutionSessionTab
   | SessionsListTab;
 
 export interface WorkspaceTabsState {
@@ -68,6 +75,12 @@ export function assistantSessionTabId(threadId: number): string {
     throw new Error("threadId must be a positive integer");
   }
   return `assistant-session:${threadId}`;
+}
+
+export function executionSessionTabId(issueIdentifier: string): string {
+  const identifier = issueIdentifier.trim();
+  if (!identifier) throw new Error("issueIdentifier is required");
+  return `execution-session:${identifier}`;
 }
 
 export const SESSIONS_LIST_TAB_ID = "sessions-list";
@@ -118,6 +131,18 @@ export function createAssistantSessionTab(threadId: number, title: string): Assi
     title: title.trim() || `Session ${threadId}`,
     closable: true,
     threadId,
+  };
+}
+
+export function createExecutionSessionTab(issueIdentifier: string, title: string): ExecutionSessionTab {
+  const identifier = issueIdentifier.trim();
+  if (!identifier) throw new Error("issueIdentifier is required");
+  return {
+    id: executionSessionTabId(identifier),
+    kind: "execution-session",
+    title: title.trim() || identifier,
+    closable: true,
+    issueIdentifier: identifier,
   };
 }
 

@@ -106,7 +106,7 @@ export function GoalPill({
       role="status"
       aria-live="polite"
       aria-label={t("assistant.authoring.goalBannerAria")}
-      className="rounded-t-xl border border-b-0 border-border/60 bg-muted/40 px-3 py-2 text-xs"
+      className="border-b border-border/60 bg-muted/40 px-3 py-2 text-xs"
     >
       <div className="flex items-center gap-2">
         <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-background text-violet-500">

@@ -257,6 +257,12 @@
       "loading": "Carregando comandos mágicos…",
       "empty": "Nenhum comando mágico encontrado.",
       "uncategorized": "Sem categoria",
+      "close": "Fechar",
+      "categories": {
+        "builtin": "Escrever",
+        "workflow": "Fluxo de trabalho",
+        "superpowers": "Superpoderes"
+      },
       "running": "Executando…",
       "runFailed": "Falha ao executar comando mágico",
       "badges": {
@@ -388,6 +394,7 @@
       },
       "tab": {
         "runStatus": "Status da execução",
+        "details": "Detalhes da execução",
         "noActiveAgent": "Nenhum agente ativo",
         "session": "Sessão",
         "turn": "Turno",
@@ -1909,6 +1916,8 @@
       "knowledgeBaseTitle": "Base de conhecimento",
       "knowledgeBaseDescription": "Navegue pelos docs de `{{slug}}` sem sair do composer.",
       "knowledgeBaseOpenPage": "Abrir",
+      "knowledgeBaseShowTree": "Mostrar árvore",
+      "knowledgeBaseSelectPage": "Selecione um documento na árvore da base de conhecimento.",
       "knowledgeBaseEmpty": "Nenhum repositório de base de conhecimento está configurado.",
       "knowledgeBaseLoadFailed": "Falha ao carregar a base de conhecimento.",
       "addToContext": "Adicionar ao contexto",
@@ -2206,6 +2215,7 @@
     "resumeStarted": "Retomando {{identifier}}",
     "resumeFailed": "Não foi possível retomar {{identifier}}",
     "openExecutionAria": "Abrir sessão de execução {{identifier}}",
+    "executionUnavailable": "Os detalhes da execução de {{identifier}} não estão disponíveis agora.",
     "turns": "{{count}} turnos",
     "runtime": "Duração {{value}}",
     "related": {

@@ -15,15 +15,25 @@ export interface SlashCommandDef {
    * (instead of changing the submit `kind`). Built-in commands leave this unset.
    */
   insertText?: string;
+  /**
+   * Grouping bucket surfaced by the Magic command palette (built-ins, workspace
+   * skills, superpowers). `null`/omitted commands fall into an "uncategorized"
+   * group. Server-provided commands supply their own raw category string.
+   */
+  category?: string | null;
 }
 
+const BUILTIN_CATEGORY = "builtin";
+const SKILL_CATEGORY = "workflow";
+
 const SLASH_COMMAND_SPECS = [
-  { name: "/goal", kind: "goal", descriptionKeys: { authoring: "assistant.slash.goal", execution: "assistant.slash.goalExecution" } },
-  { name: "/infer", kind: "infer", descriptionKeys: { authoring: "assistant.slash.infer", execution: "assistant.slash.infer" } },
-  { name: "/btw", kind: "btw", descriptionKeys: { authoring: "assistant.slash.btw", execution: "assistant.slash.btw" } },
+  { name: "/goal", kind: "goal", category: BUILTIN_CATEGORY, descriptionKeys: { authoring: "assistant.slash.goal", execution: "assistant.slash.goalExecution" } },
+  { name: "/infer", kind: "infer", category: BUILTIN_CATEGORY, descriptionKeys: { authoring: "assistant.slash.infer", execution: "assistant.slash.infer" } },
+  { name: "/btw", kind: "btw", category: BUILTIN_CATEGORY, descriptionKeys: { authoring: "assistant.slash.btw", execution: "assistant.slash.btw" } },
 ] as const satisfies ReadonlyArray<{
   name: `/${string}`;
   kind: Exclude<AssistantComposerSubmitKind, "message">;
+  category: string;
   descriptionKeys: Record<SlashCommandContext, string>;
 }>;
 
@@ -58,6 +68,7 @@ export function defaultSkillCommands(
       kind: "message" as const,
       description: t(spec.descriptionKey),
       insertText: t("assistant.slash.skillDirective", { skill }),
+      category: SKILL_CATEGORY,
     };
   });
 }
@@ -71,8 +82,34 @@ function resolveSlashCommands(
     name: spec.name,
     kind: spec.kind,
     description: t(spec.descriptionKeys[context]),
+    category: spec.category,
   }));
-  return [...builtins, ...extras];
+  return dedupeByName([...builtins, ...extras]);
+}
+
+// Server-provided extras can re-list the built-ins (goal/infer/btw); keep the
+// first (context-aware built-in) occurrence so the palette shows each once.
+function dedupeByName(commands: SlashCommandDef[]): SlashCommandDef[] {
+  const seen = new Set<string>();
+  return commands.filter((command) => {
+    const key = command.name.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+/**
+ * Full command set (built-ins + extras) for the current context, unfiltered.
+ * Powers the Magic command palette, which groups by category and filters via
+ * its own search input rather than the composer's `/`-token matcher.
+ */
+export function allSlashCommands(
+  t: Translate = i18n.t.bind(i18n) as Translate,
+  context: SlashCommandContext = "authoring",
+  extras?: SlashCommandDef[],
+): SlashCommandDef[] {
+  return resolveSlashCommands(t, context, extras ?? defaultSkillCommands(t, context));
 }
 
 function deslash(name: string): string {

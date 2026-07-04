@@ -11,15 +11,13 @@ import {
   BookOpen,
   Check,
   ChevronDown,
-  ChevronRight,
   Clock,
   FileText,
-  Folder,
-  GitBranch,
   ImageIcon,
   Plus,
   SendHorizontal,
   ShieldAlert,
+  Sparkles,
   X,
   Zap,
 } from "lucide-react";
@@ -56,6 +54,7 @@ import { EditedFilesSummary } from "@/components/assistant/EditedFilesSummary";
 import { AgentTaskPinnedPanel } from "@/components/agent-activity";
 import { ToolActivityTimeline } from "@/components/assistant/ToolActivityTimeline";
 import { WorkingIndicator } from "@/components/assistant/WorkingIndicator";
+import { KnowledgeBaseModal } from "@/components/kb/KnowledgeBaseModal";
 import { AttachmentFileChip } from "@/components/shared/AttachmentFileChip";
 import { AttachmentImage } from "@/components/shared/AttachmentImage";
 import { AttachmentVideo } from "@/components/shared/AttachmentVideo";
@@ -63,7 +62,6 @@ import { ExecutionModeMenu } from "@/components/issues/issue-detail/ExecutionMod
 import { GitDiffLauncher } from "@/components/issues/issue-detail/git-diff/GitDiffLauncher";
 import { GoalPill, type GoalPillPhase } from "@/components/shared/GoalPill";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Markdown } from "@/components/ui/markdown";
 import { normalizeAssistantDocumentHref } from "@/services/threadDocuments";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -73,8 +71,6 @@ import type { AgentTaskSnapshot } from "@/types/agentTasks";
 import { catalogFor, defaultComposerSettings, fallbackCatalogBundle, type AssistantCatalogBundle } from "@/lib/assistantSettings";
 import { combineDiffStats, diffStatsFromPatch, type DiffStats } from "@/lib/diffStats";
 import { DEFAULT_EXECUTION_MODE } from "@/lib/executionMode";
-import { kbPagePath as buildKbPagePath } from "@/lib/kbRoutes";
-import { useKbAllRepoTrees } from "@/hooks/useKbAllRepoTrees";
 import {
   fetchAssistantCatalogBundle,
   type AssistantChatMessage,
@@ -83,7 +79,6 @@ import {
   type UserQuestionsRequest,
 } from "@/services/assistant";
 import { getGitDiff, getThreadGitDiff } from "@/services/gitDiff";
-import { getProjectOverview } from "@/services/knowledgeBase";
 import { UserQuestionsCard } from "@/components/assistant/UserQuestionsCard";
 import {
   assistantExploreTopic,
@@ -118,7 +113,6 @@ import type { AgentKind, ExecutionMode } from "@/types/issue";
 import type { WorkspaceView } from "@/lib/workspaceRoutes";
 import { cn, SCROLLBAR_THIN } from "@/lib/utils";
 import { useAssistantCommands } from "@/hooks/useAssistantCommands";
-import type { KbProjectOverview, KbTreeNode as KbTreeNodeType } from "@/types/knowledgeBase";
 
 interface AuthoringGoalState {
   enabled: boolean;
@@ -365,6 +359,7 @@ export function ProjectAssistantPanel({
   const [serverAgentSeed, setServerAgentSeed] = useState<AgentKind | null>(routeAgentSeed);
   const contextInsertRequestIdRef = useRef(0);
   const [contextInsertRequest, setContextInsertRequest] = useState<ComposerContextInsertRequest | null>(null);
+  const [magicPaletteRequestId, setMagicPaletteRequestId] = useState(0);
   const [knowledgeBaseOpen, setKnowledgeBaseOpen] = useState(false);
 
   useEffect(() => {
@@ -380,6 +375,8 @@ export function ProjectAssistantPanel({
   // Mentions work anywhere with a project context: issues are always searchable,
   // while file/PR sources self-disable when there is no bound issue identifier.
   const mentionsEnabled = Boolean(projectSlug);
+  const hasExecutableContext = Boolean(issueIdentifier || threadId);
+  const slashContext = hasExecutableContext ? "execution" : "authoring";
   const mentionOptions = useContextMentionData(
     projectSlug ?? "",
     issueIdentifier ?? "",
@@ -389,13 +386,13 @@ export function ProjectAssistantPanel({
     commands: authoringCommands,
     isLoading: authoringCommandsLoading,
     error: authoringCommandsError,
-  } = useAssistantCommands({ projectSlug, context: "authoring" });
+  } = useAssistantCommands({ projectSlug, context: slashContext });
   const authoringSlashCommandExtras = useMemo(() => {
-    if (authoringCommandsLoading || authoringCommandsError) {
-      return defaultSkillCommands(t, "authoring");
+    if (authoringCommandsLoading || authoringCommandsError || authoringCommands.length === 0) {
+      return defaultSkillCommands(t, slashContext);
     }
     return assistantCommandsToSlashDefs(authoringCommands, t);
-  }, [authoringCommands, authoringCommandsError, authoringCommandsLoading, t]);
+  }, [authoringCommands, authoringCommandsError, authoringCommandsLoading, slashContext, t]);
   // Keep the live extra-context getter in a ref so `dispatchSend` reads the
   // latest open-document snapshot at send time without re-subscribing the channel.
   const getExtraContextRef = useRef<typeof getExtraContext>(getExtraContext);
@@ -844,7 +841,7 @@ export function ProjectAssistantPanel({
           agent: submit.agent,
           model: submit.settings.model,
           effort: submit.settings.effort,
-          ...(issueIdentifier ? { execution_mode: executionModeRef.current } : {}),
+          ...(hasExecutableContext ? { execution_mode: executionModeRef.current } : {}),
           ...extraContext,
         },
         attachments: submit.attachments,
@@ -861,7 +858,7 @@ export function ProjectAssistantPanel({
         setIsRunning(false);
       });
     },
-    [view, t, expandMentions, issueIdentifier],
+    [view, t, expandMentions, hasExecutableContext],
   );
 
   const steerTurn = useCallback(
@@ -1341,8 +1338,9 @@ export function ProjectAssistantPanel({
       floating={isPanelMode}
       hasQueued={queued.length > 0}
       seedMessage={composerSeedMessage}
-      slashContext="authoring"
+      slashContext={slashContext}
       slashCommandExtras={authoringSlashCommandExtras}
+      magicPaletteRequestId={magicPaletteRequestId}
       header={authoringGoalPill}
       contextInsertRequest={contextInsertRequest}
       hint={catalogLoading ? t("assistant.panel.loadingModels") : undefined}
@@ -1377,13 +1375,27 @@ export function ProjectAssistantPanel({
                 <span className="hidden sm:inline">{t("assistant.panel.openKnowledgeBase")}</span>
               </Button>
             ) : null}
-            {issueIdentifier ? (
+            {hasExecutableContext ? (
               <ExecutionModeMenu
                 agent={composerAgent}
                 mode={executionMode}
                 disabled={isRunning || catalogLoading}
                 onChange={setExecutionMode}
               />
+            ) : null}
+            {hasExecutableContext ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 gap-1 px-2 text-xs"
+                disabled={catalogLoading}
+                title={t("commands.magic.open")}
+                onClick={() => setMagicPaletteRequestId((current) => current + 1)}
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">{t("commands.magic.button")}</span>
+              </Button>
             ) : null}
           </>
         ) : undefined
@@ -1396,14 +1408,11 @@ export function ProjectAssistantPanel({
   );
 
   const knowledgeBaseDialog = projectSlug ? (
-    <ComposerKnowledgeBaseDialog
+    <KnowledgeBaseModal
       open={knowledgeBaseOpen}
       projectSlug={projectSlug}
       onOpenChange={setKnowledgeBaseOpen}
-      onOpenPage={(repoSlug, pagePath) => {
-        navigate(buildKbPagePath(projectSlug, repoSlug, pagePath));
-        setKnowledgeBaseOpen(false);
-      }}
+      onInsertContext={insertContextRef}
     />
   ) : null;
 
@@ -1605,206 +1614,6 @@ export function ProjectAssistantPanel({
       ) : null}
       {knowledgeBaseDialog}
     </AssistantRuntimeProvider>
-  );
-}
-
-function ComposerKnowledgeBaseDialog({
-  open,
-  projectSlug,
-  onOpenChange,
-  onOpenPage,
-}: {
-  open: boolean;
-  projectSlug: string;
-  onOpenChange: (open: boolean) => void;
-  onOpenPage: (repoSlug: string, pagePath: string) => void;
-}) {
-  const { t } = useTranslation();
-  const [overview, setOverview] = useState<KbProjectOverview | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const repoSlugs = useMemo(() => overview?.repositories.map((repo) => repo.repoSlug) ?? [], [overview]);
-  const { treesByRepo, loading: treesLoading } = useKbAllRepoTrees(open ? projectSlug : "", repoSlugs);
-
-  useEffect(() => {
-    if (!open) return;
-
-    let cancelled = false;
-    setLoadError(null);
-
-    async function loadOverview() {
-      try {
-        const nextOverview = await getProjectOverview(projectSlug);
-        if (!cancelled) setOverview(nextOverview);
-      } catch (cause) {
-        if (cancelled) return;
-        setOverview(null);
-        setLoadError(cause instanceof Error ? cause.message : t("assistant.panel.knowledgeBaseLoadFailed"));
-      }
-    }
-
-    void loadOverview();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [open, projectSlug, t]);
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[min(88vh,900px)] max-w-6xl flex-col gap-0 overflow-hidden p-0">
-        <DialogHeader className="border-b px-5 py-4">
-          <DialogTitle>{t("assistant.panel.knowledgeBaseTitle")}</DialogTitle>
-          <DialogDescription>{t("assistant.panel.knowledgeBaseDescription", { slug: projectSlug })}</DialogDescription>
-        </DialogHeader>
-        <div className={cn("min-h-0 flex-1 overflow-y-auto p-3", SCROLLBAR_THIN)}>
-          {loadError ? (
-            <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
-              {loadError}
-            </div>
-          ) : null}
-          {!overview && !loadError ? (
-            <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-              {t("common.loading")}
-            </div>
-          ) : null}
-          {overview ? (
-            <div className="space-y-3">
-              {overview.repositories.length === 0 ? (
-                <div className="rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground">
-                  {t("assistant.panel.knowledgeBaseEmpty")}
-                </div>
-              ) : null}
-              {overview.repositories.map((repo) => (
-                <ComposerKnowledgeBaseRepo
-                  key={repo.repoSlug}
-                  repoSlug={repo.repoSlug}
-                  title={repo.workspacePath}
-                  nodes={treesByRepo[repo.repoSlug] ?? []}
-                  loading={treesLoading && !treesByRepo[repo.repoSlug]}
-                  onOpenPage={onOpenPage}
-                />
-              ))}
-            </div>
-          ) : null}
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function ComposerKnowledgeBaseRepo({
-  repoSlug,
-  title,
-  nodes,
-  loading,
-  onOpenPage,
-}: {
-  repoSlug: string;
-  title: string;
-  nodes: KbTreeNodeType[];
-  loading: boolean;
-  onOpenPage: (repoSlug: string, pagePath: string) => void;
-}) {
-  const { t } = useTranslation();
-  const [open, setOpen] = useState(true);
-
-  return (
-    <section className="rounded-xl border bg-card/60">
-      <button
-        type="button"
-        className="flex w-full min-w-0 items-center gap-2 rounded-t-xl px-3 py-2 text-left hover:bg-accent/50"
-        aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
-      >
-        <ChevronRight className={cn("h-4 w-4 shrink-0 text-muted-foreground transition-transform", open && "rotate-90")} />
-        <GitBranch className="h-4 w-4 shrink-0 text-muted-foreground" />
-        <span className="min-w-0 flex-1 truncate text-sm font-semibold">{title}</span>
-      </button>
-      {open ? (
-        <div className="border-t p-2">
-          {loading ? <p className="px-2 py-1 text-xs text-muted-foreground">{t("common.loading")}</p> : null}
-          {!loading && nodes.length === 0 ? (
-            <p className="px-2 py-1 text-xs text-muted-foreground">{t("kb.sidebar.noDocs")}</p>
-          ) : null}
-          {nodes.map((node) => (
-            <ComposerKnowledgeBaseTreeNode key={node.path} repoSlug={repoSlug} node={node} depth={0} onOpenPage={onOpenPage} />
-          ))}
-        </div>
-      ) : null}
-    </section>
-  );
-}
-
-function ComposerKnowledgeBaseTreeNode({
-  repoSlug,
-  node,
-  depth,
-  onOpenPage,
-}: {
-  repoSlug: string;
-  node: KbTreeNodeType;
-  depth: number;
-  onOpenPage: (repoSlug: string, pagePath: string) => void;
-}) {
-  const { t } = useTranslation();
-  const [open, setOpen] = useState(true);
-  const paddingLeft = depth * 16 + 4;
-
-  if (node.type === "folder") {
-    return (
-      <div>
-        <button
-          type="button"
-          className="flex w-full min-w-0 items-center gap-1.5 rounded-md py-1 pr-2 text-left text-sm hover:bg-accent/50"
-          style={{ paddingLeft }}
-          aria-expanded={open}
-          onClick={() => setOpen((value) => !value)}
-        >
-          <ChevronRight className={cn("h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform", open && "rotate-90")} />
-          <Folder className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-          <span className="min-w-0 truncate text-muted-foreground">{node.title || node.name}</span>
-        </button>
-        {open
-          ? node.children.map((child) => (
-              <ComposerKnowledgeBaseTreeNode
-                key={child.path}
-                repoSlug={repoSlug}
-                node={child}
-                depth={depth + 1}
-                onOpenPage={onOpenPage}
-              />
-            ))
-          : null}
-      </div>
-    );
-  }
-
-  const Icon = node.type === "asset" ? ImageIcon : FileText;
-
-  return (
-    <div
-      className="group/kb-modal-row flex min-w-0 items-center gap-1.5 rounded-md py-1 pr-2 hover:bg-accent/50"
-      style={{ paddingLeft: paddingLeft + 20 }}
-    >
-      <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-      <button
-        type="button"
-        className="min-w-0 flex-1 truncate text-left text-sm text-muted-foreground hover:text-foreground"
-        title={node.path}
-        onClick={() => onOpenPage(repoSlug, node.path)}
-      >
-        {node.title || node.name}
-      </button>
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        className="h-6 px-2 text-[11px] opacity-0 group-hover/kb-modal-row:opacity-100"
-        onClick={() => onOpenPage(repoSlug, node.path)}
-      >
-        {t("assistant.panel.knowledgeBaseOpenPage")}
-      </Button>
-    </div>
   );
 }
 

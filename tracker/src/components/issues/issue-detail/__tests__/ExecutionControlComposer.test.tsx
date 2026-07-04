@@ -203,6 +203,44 @@ describe("ExecutionControlComposer", () => {
     });
   });
 
+  it("steers a live run on a plain message, without requiring /infer", () => {
+    const onSteer = vi.fn();
+    render(
+      <ExecutionControlComposer
+        projectSlug="advising"
+        issue={issue}
+        execution={makeExecution({ status: "live" })}
+        sessionConnected
+        canSteer
+        onSteer={onSteer}
+      />,
+    );
+
+    fireEvent.change(screen.getByPlaceholderText(/focus on the failing test/i), {
+      target: { value: "focus on the migration path" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^steer$/i }));
+
+    expect(onSteer).toHaveBeenCalledWith({
+      message: "focus on the migration path",
+      attachments: [],
+    });
+  });
+
+  it("disables steer while the session channel is not connected", () => {
+    render(
+      <ExecutionControlComposer
+        projectSlug="advising"
+        issue={issue}
+        execution={makeExecution({ status: "live" })}
+        canSteer
+        onSteer={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: /^steer$/i })).toBeDisabled();
+  });
+
   it("resumes a stalled run", async () => {
     const onIssueUpdated = vi.fn();
     dispatchIssueAgentMock.mockResolvedValue({

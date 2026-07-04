@@ -6,7 +6,6 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { IssueAuthoringPanel } from "@/components/assistant/IssueAuthoringPanel";
 import { IssueDocumentsDrawer } from "@/components/assistant/IssueDocumentsDrawer";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { cn, SCROLLBAR_THIN } from "@/lib/utils";
 import { composerSeedFromHandoff, consumePreviewAssistantHandoff } from "@/lib/previewAssistantHandoff";
 import { consumeReturnToAgentHandoff, type ReturnToAgentTemplate } from "@/lib/returnToAgent";
 import { assessEvidenceAttention } from "@/lib/evidenceStatus";
@@ -21,7 +20,6 @@ import type { AgentExecution } from "@/types/agent-execution";
 import type { Issue } from "@/types/issue";
 
 import { AgentTab } from "./AgentTab";
-import { BundlePanel } from "./BundlePanel";
 
 const AgentAuthoringPanel = memo(function AgentAuthoringPanel({
   projectSlug,
@@ -135,14 +133,11 @@ export function AgentTabs({
           view={view}
         />
       </TabsContent>
-      <TabsContent
-        value="execution"
-        className={cn("mt-0 min-h-0 flex-1 space-y-3 overflow-y-auto pb-1", SCROLLBAR_THIN)}
-      >
-        <BundlePanel issue={issue} executions={executions ?? (execution ? [execution] : [])} />
+      <TabsContent value="execution" className="mt-0 flex min-h-0 flex-1 flex-col overflow-hidden">
         <AgentTab
           issue={issue}
           execution={execution}
+          executions={executions}
           projectSlug={projectSlug}
           workflowMarkdown={workflowMarkdown}
           evidenceAttention={assessEvidenceAttention(evidenceRecords)}

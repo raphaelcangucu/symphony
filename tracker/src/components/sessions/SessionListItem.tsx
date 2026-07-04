@@ -1,40 +1,40 @@
 import { Clock, GitBranch, Play } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { Link } from "react-router-dom";
 
 import { AgentIconBadge, agentKindLabel } from "@/components/shared/AgentChip";
 import { SessionStatusBadge } from "@/components/sessions/SessionStatusBadge";
 import { Button } from "@/components/ui/button";
 import { canResumeExecution } from "@/lib/agentExecutionDisplay";
-import { issueAgentTabPath, type WorkspaceView } from "@/lib/workspaceRoutes";
 import { cn, formatDateTime } from "@/lib/utils";
 import type { AgentExecutionStatus } from "@/types/agent-execution";
 import type { ProjectSessionRow } from "@/lib/projectSessions";
 
 interface SessionListItemProps {
-  projectSlug: string;
-  view?: WorkspaceView;
   session: ProjectSessionRow;
   resumePending?: boolean;
+  onOpen: (session: ProjectSessionRow) => void;
   onResume: (session: ProjectSessionRow) => void;
 }
 
 export function SessionListItem({
-  projectSlug,
-  view = "board",
   session,
   resumePending = false,
+  onOpen,
   onResume,
 }: SessionListItemProps) {
   const { t } = useTranslation();
   const canResume = canResumeExecution(session.execution);
-  const href = issueAgentTabPath(projectSlug, view, session.issueIdentifier, "execution");
   const openLabel = t("sessions.openExecutionAria", { identifier: session.issueIdentifier });
 
   return (
     <li className="rounded-lg border border-border/60 bg-card/70 px-4 py-3 shadow-sm transition-colors hover:border-primary/30 hover:bg-card">
       <div className="flex items-start justify-between gap-3">
-        <Link to={href} aria-label={openLabel} className="group flex min-w-0 flex-1 items-start gap-3 text-left">
+        <button
+          type="button"
+          onClick={() => onOpen(session)}
+          aria-label={openLabel}
+          className="group flex min-w-0 flex-1 items-start gap-3 text-left"
+        >
           <ExecutionStatusDot status={session.status} className="mt-1.5" />
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
@@ -64,7 +64,7 @@ export function SessionListItem({
               </p>
             ) : null}
           </div>
-        </Link>
+        </button>
         {canResume ? (
           <Button
             type="button"

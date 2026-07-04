@@ -4,6 +4,7 @@ import { useAgentExecutions } from "@/hooks/useAgentExecutions";
 import { emptyProjectSessionGroups, groupProjectSessions, type ProjectSessionGroups } from "@/lib/projectSessions";
 import { listIssues } from "@/services/issues";
 import { listRecents } from "@/services/recents";
+import type { AgentExecution } from "@/types/agent-execution";
 import type { Issue } from "@/types/issue";
 import type { RecentSession } from "@/types/recents";
 
@@ -12,6 +13,10 @@ const RECENT_SESSIONS_LIMIT = 100;
 export interface UseProjectSessionsResult {
   groups: ProjectSessionGroups;
   relatedSessions: RecentSession[];
+  /** Full project issues, so inline session views can resolve an issue by identifier. */
+  issues: Issue[];
+  /** Live execution snapshots keyed by issue identifier. */
+  executions: ReadonlyMap<string, AgentExecution>;
   isLoading: boolean;
   error: string | null;
   refetch: () => Promise<void>;
@@ -69,5 +74,5 @@ export function useProjectSessions(projectSlug: string): UseProjectSessionsResul
     [executions, recents],
   );
 
-  return { groups, relatedSessions, isLoading, error, refetch };
+  return { groups, relatedSessions, issues, executions, isLoading, error, refetch };
 }

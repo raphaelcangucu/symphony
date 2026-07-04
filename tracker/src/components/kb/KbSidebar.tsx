@@ -46,8 +46,12 @@ interface Props {
   pageHref: (repoSlug: string, pagePath: string) => string;
   /** Optional in-place selection for embedded KB surfaces that should not route away. */
   onSelectPath?: (repoSlug: string, pagePath: string) => void;
+  /** Optional per-node action used by embedded KB surfaces, e.g. composer context insertion. */
+  onInsertContext?: (repoSlug: string, node: KbTreeNodeType) => void;
   /** Hides the per-repository header chrome when the scope has one implicit repo. */
   singleRepo?: boolean;
+  /** Render navigation/search only, hiding editing and reorder controls. */
+  readOnly?: boolean;
 }
 
 export function KbSidebar({
@@ -62,7 +66,9 @@ export function KbSidebar({
   inlineEdit,
   pageHref,
   onSelectPath,
+  onInsertContext,
   singleRepo = false,
+  readOnly = false,
 }: Props) {
   const { t } = useTranslation();
   const [collapsedRepos, setCollapsedRepos] = useState<Set<string>>(() => readCollapsedRepos());
@@ -110,10 +116,12 @@ export function KbSidebar({
                   <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                     {t("kb.sidebar.pages")}
                   </span>
-                  <KbAddNodeButton
-                    onAddPage={() => treeHandlers.onStartAddPage(repo.repoSlug, "", null)}
-                    onCreateFolder={() => treeHandlers.onCreateFolder(repo.repoSlug, "")}
-                  />
+                  {readOnly ? null : (
+                    <KbAddNodeButton
+                      onAddPage={() => treeHandlers.onStartAddPage(repo.repoSlug, "", null)}
+                      onCreateFolder={() => treeHandlers.onCreateFolder(repo.repoSlug, "")}
+                    />
+                  )}
                 </div>
               ) : (
                 <div
@@ -142,10 +150,12 @@ export function KbSidebar({
                   >
                     {repo.workspacePath}
                   </button>
-                  <KbAddNodeButton
-                    onAddPage={() => treeHandlers.onStartAddPage(repo.repoSlug, "", null)}
-                    onCreateFolder={() => treeHandlers.onCreateFolder(repo.repoSlug, "")}
-                  />
+                  {readOnly ? null : (
+                    <KbAddNodeButton
+                      onAddPage={() => treeHandlers.onStartAddPage(repo.repoSlug, "", null)}
+                      onCreateFolder={() => treeHandlers.onCreateFolder(repo.repoSlug, "")}
+                    />
+                  )}
                 </div>
               )}
 
@@ -161,6 +171,8 @@ export function KbSidebar({
                       inlineEdit={inlineEdit}
                       pageHref={pageHref}
                       onSelectPath={onSelectPath}
+                      onInsertContext={onInsertContext}
+                      readOnly={readOnly}
                     />
                   ) : null}
                   {nodes.length === 0 && !repo.docsPresent && !repoDraftActive ? (

@@ -31,6 +31,8 @@ describe("ProjectSessionsWorkspace", () => {
     vi.mocked(useProjectSessions).mockReturnValue({
       groups: emptyProjectSessionGroups(),
       relatedSessions: [],
+      issues: [],
+      executions: new Map(),
       isLoading: false,
       error: null,
       refetch,

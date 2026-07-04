@@ -3,33 +3,27 @@ import { describe, expect, it, vi } from "vitest";
 
 import { IssueDocumentsDrawer } from "@/components/assistant/IssueDocumentsDrawer";
 
-const assistantKbDocumentsPanel = vi.fn(
-  ({ projectSlug, issueIdentifier, citedPaths }: { projectSlug: string; issueIdentifier?: string; citedPaths: string[] }) => (
-    <section aria-label="mock KB panel">
-      KB {projectSlug}:{issueIdentifier ?? "none"} cited:{citedPaths.join(",") || "none"}
-    </section>
-  ),
+const knowledgeBaseModal = vi.fn(
+  ({ open, projectSlug }: { open: boolean; projectSlug: string }) =>
+    open ? <section aria-label="mock KB modal">KB modal {projectSlug}</section> : null,
 );
 
-vi.mock("@/components/assistant/AssistantKbDocumentsPanel", () => ({
-  AssistantKbDocumentsPanel: (props: Parameters<typeof assistantKbDocumentsPanel>[0]) =>
-    assistantKbDocumentsPanel(props),
+vi.mock("@/components/kb/KnowledgeBaseModal", () => ({
+  KnowledgeBaseModal: (props: Parameters<typeof knowledgeBaseModal>[0]) =>
+    knowledgeBaseModal(props),
 }));
 
 describe("IssueDocumentsDrawer", () => {
-  it("opens the project KB panel instead of issue workspace documents", () => {
+  it("opens the shared project KB modal instead of a documents drawer", () => {
     render(<IssueDocumentsDrawer projectSlug="macro-markets" identifier="MAC-1" />);
 
     fireEvent.click(screen.getByRole("button", { name: /documents/i }));
 
-    expect(screen.getByRole("region", { name: "mock KB panel" })).toHaveTextContent(
-      "KB macro-markets:MAC-1 cited:none",
-    );
-    expect(assistantKbDocumentsPanel).toHaveBeenCalledWith({
+    expect(screen.getByRole("region", { name: "mock KB modal" })).toHaveTextContent("KB modal macro-markets");
+    expect(knowledgeBaseModal).toHaveBeenLastCalledWith({
+      open: true,
       projectSlug: "macro-markets",
-      issueIdentifier: "MAC-1",
-      citedPaths: [],
-      className: "rounded-none border-0 shadow-none",
+      onOpenChange: expect.any(Function),
     });
   });
 });

@@ -47,7 +47,9 @@ import {
 import type { ComposerContextChipRef, MentionRef, ResolvedMention } from "@/components/assistant/contextMentions";
 import { useContextMentions } from "@/components/assistant/useContextMentions";
 import { ModelMenu } from "@/components/assistant/ModelMenu";
+import { ComposerCommandPalette } from "@/components/assistant/ComposerCommandPalette";
 import {
+  allSlashCommands,
   defaultSkillCommands,
   matchingSlashCommands,
   parseSlashCommand,
@@ -85,7 +87,7 @@ import {
   type AssistantEffort,
   type AssistantModelOption,
 } from "@/lib/assistantSettings";
-import { cn } from "@/lib/utils";
+import { cn, SCROLLBAR_THIN } from "@/lib/utils";
 import type { AgentKind } from "@/types/issue";
 
 function eventHasFiles(event: DragEvent<HTMLElement>): boolean {
@@ -138,6 +140,8 @@ interface AssistantComposerProps {
   seedMessage?: string | null;
   slashContext?: SlashCommandContext;
   slashCommandExtras?: SlashCommandDef[];
+  /** Incrementing token from the parent's Magic button that opens the palette. */
+  magicPaletteRequestId?: number;
   placeholder?: string;
   /** When `null`, the footer hint is hidden. */
   hint?: string | null;
@@ -195,6 +199,7 @@ export function AssistantComposer({
   seedMessage = null,
   slashContext = "authoring",
   slashCommandExtras,
+  magicPaletteRequestId = 0,
   placeholder,
   hint,
   resetToken,
@@ -222,6 +227,7 @@ export function AssistantComposer({
 }: AssistantComposerProps) {
   const { t } = useTranslation();
   const [input, setInput] = useState("");
+  const [magicOpen, setMagicOpen] = useState(false);
   const [attachments, setAttachments] = useState<AssistantAttachment[]>([]);
   const [contextRefs, setContextRefs] = useState<ComposerContextChipRef[]>([]);
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -366,6 +372,17 @@ export function AssistantComposer({
   const [mentionActiveIndex, setMentionActiveIndex] = useState(0);
   const orderedMentions = mentionsEnabled ? orderMentionOptions(mentionOptions ?? []) : [];
   const showMentions = mentionsEnabled && mentions.open && orderedMentions.length > 0;
+
+  useEffect(() => {
+    if (magicPaletteRequestId <= 0) return;
+    setMagicOpen(true);
+  }, [magicPaletteRequestId]);
+
+  const magicCommands = allSlashCommands(
+    t,
+    slashContext,
+    slashCommandExtras ?? defaultSkillCommands(t, slashContext),
+  );
 
   useEffect(() => {
     if (!contextInsertRequest) return;
@@ -714,6 +731,12 @@ export function AssistantComposer({
           ? createPortal(dropOverlay, dropTargetRef.current)
           : null
         : dropOverlay}
+      <ComposerCommandPalette
+        open={magicOpen}
+        onOpenChange={setMagicOpen}
+        commands={magicCommands}
+        onSelect={applySlashCommand}
+      />
       <div
         className={cn(
           "overflow-hidden rounded-2xl border bg-card transition-shadow",
@@ -819,17 +842,19 @@ export function AssistantComposer({
 
         {showPalette ? (
           <div className="border-b px-2 py-1.5">
-            {paletteCommands.map((command) => (
-              <button
-                key={command.name}
-                type="button"
-                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted/60"
-                onClick={() => applySlashCommand(command)}
-              >
-                <span className="font-mono text-xs font-semibold">{command.name}</span>
-                <span className="truncate text-xs text-muted-foreground">{command.description}</span>
-              </button>
-            ))}
+            <div className={cn("max-h-52 overflow-y-auto", SCROLLBAR_THIN)}>
+              {paletteCommands.map((command) => (
+                <button
+                  key={command.name}
+                  type="button"
+                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted/60"
+                  onClick={() => applySlashCommand(command)}
+                >
+                  <span className="shrink-0 font-mono text-xs font-semibold">{command.name}</span>
+                  <span className="truncate text-xs text-muted-foreground">{command.description}</span>
+                </button>
+              ))}
+            </div>
             <p className="px-2 pt-1 text-[10px] text-muted-foreground">{t("assistant.composer.tabToComplete")}</p>
           </div>
         ) : null}

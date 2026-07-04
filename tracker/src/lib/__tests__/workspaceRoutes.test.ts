@@ -19,6 +19,7 @@ import {
   projectExploreAssistantPath,
   projectSettingsPath,
   projectSessionPath,
+  projectExecutionSessionPath,
   projectSessionsPath,
   projectTerminalPath,
   newIssuePath,
@@ -131,6 +132,12 @@ describe("workspaceRoutes", () => {
   it("builds project session paths", () => {
     expect(projectSessionsPath("acme")).toBe("/projects/acme/sessions");
     expect(projectSessionPath("acme", "thread/1")).toBe("/projects/acme/sessions/thread%2F1");
+  });
+
+  it("builds a deep-linkable execution session path with the issue identifier", () => {
+    expect(projectExecutionSessionPath("acme", "MAC-13")).toBe(
+      "/projects/acme/sessions?exec=MAC-13&agent=execution",
+    );
   });
 
   it("derives the workspace section from a pathname", () => {

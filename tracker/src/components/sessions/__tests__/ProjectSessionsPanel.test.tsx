@@ -9,6 +9,7 @@ import { emptyProjectSessionGroups, type ProjectSessionGroups, type ProjectSessi
 import { dispatchIssueAgent } from "@/services/issueDispatch";
 import { createProjectSessionThread } from "@/services/assistantThreads";
 import type { AgentExecution } from "@/types/agent-execution";
+import type { Issue } from "@/types/issue";
 import type { RecentSession } from "@/types/recents";
 
 vi.mock("@/hooks/useProjectSessions", () => ({ useProjectSessions: vi.fn() }));
@@ -19,6 +20,11 @@ vi.mock("@/components/layout/WorkspaceContext", () => ({
 }));
 vi.mock("@/components/assistant/ProjectAssistantPanel", () => ({
   ProjectAssistantPanel: () => <div aria-label="mock assistant panel" />,
+}));
+vi.mock("@/components/issues/issue-detail/AgentTabs", () => ({
+  AgentTabs: (props: { issue: { identifier: string } }) => (
+    <div aria-label="mock agent tabs" data-issue={props.issue.identifier} />
+  ),
 }));
 
 function execution(): AgentExecution {
@@ -67,6 +73,28 @@ function groupsWithSavedRow(): ProjectSessionGroups {
   };
 }
 
+function demoIssue(): Issue {
+  return {
+    id: "DEMO-1",
+    identifier: "DEMO-1",
+    projectSlug: "demo",
+    status: "Todo",
+    title: "Saved launcher work",
+    description: null,
+    priority: null,
+    position: 0,
+    labels: [],
+    blockedBy: [],
+    assignee: null,
+    creator: null,
+    url: null,
+    branchName: null,
+    createdAt: "2026-07-02T09:00:00Z",
+    updatedAt: "2026-07-02T09:00:00Z",
+    attachments: [],
+  };
+}
+
 function recentSession(): RecentSession {
   return {
     id: "chat:1",
@@ -90,10 +118,13 @@ describe("ProjectSessionsPanel", () => {
 
   beforeEach(async () => {
     await initTestI18n("en");
+    window.localStorage.clear();
     vi.clearAllMocks();
     vi.mocked(useProjectSessions).mockReturnValue({
       groups: groupsWithSavedRow(),
       relatedSessions: [recentSession()],
+      issues: [demoIssue()],
+      executions: new Map([["DEMO-1", execution()]]),
       isLoading: false,
       error: null,
       refetch,
@@ -128,12 +159,35 @@ describe("ProjectSessionsPanel", () => {
     expect(screen.getByText("Saved launcher work")).toBeInTheDocument();
     expect(screen.getByText("Issue authoring chat")).toBeInTheDocument();
     expect(screen.queryByText("Related sessions")).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Open execution session DEMO-1/i })).toHaveAttribute(
-      "href",
-      "/projects/demo/board/issues/DEMO-1/agent?agent=execution",
-    );
+    expect(screen.getByRole("button", { name: /Open execution session DEMO-1/i })).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "Codex" })).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "Cursor Agent" })).toBeInTheDocument();
+  });
+
+  it("opens the execution session inline instead of navigating to the issue detail", () => {
+    renderWithI18n(
+      <MemoryRouter initialEntries={["/projects/demo/sessions"]}>
+        <ProjectSessionsPanel projectSlug="demo" />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Open execution session DEMO-1/i }));
+
+    expect(screen.getByRole("tab", { name: /Saved launcher work/i })).toBeInTheDocument();
+    const agentTabs = screen.getByLabelText("mock agent tabs");
+    expect(agentTabs).toBeInTheDocument();
+    expect(agentTabs).toHaveAttribute("data-issue", "DEMO-1");
+  });
+
+  it("restores the execution session from the exec identifier in the URL", () => {
+    renderWithI18n(
+      <MemoryRouter initialEntries={["/projects/demo/sessions?exec=DEMO-1&agent=execution"]}>
+        <ProjectSessionsPanel projectSlug="demo" activeExecutionIdentifier="DEMO-1" />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole("tab", { name: /Saved launcher work/i })).toBeInTheDocument();
+    expect(screen.getByLabelText("mock agent tabs")).toHaveAttribute("data-issue", "DEMO-1");
   });
 
   it("resumes a saved session", async () => {

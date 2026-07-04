@@ -1,5 +1,5 @@
 import { MessageSquare, Plus, RefreshCw } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -8,6 +8,7 @@ import { RecentStatusDot } from "@/components/layout/RecentStatusDot";
 import { recentSessionPath, recentSessionSubtitle } from "@/components/layout/recentSessionPath";
 import { useWorkspace } from "@/components/layout/WorkspaceContext";
 import { ProjectAssistantPanel } from "@/components/assistant/ProjectAssistantPanel";
+import { AgentTabs } from "@/components/issues/issue-detail/AgentTabs";
 import { SessionListItem } from "@/components/sessions/SessionListItem";
 import { AgentIconBadge, agentKindLabel } from "@/components/shared/AgentChip";
 import { Button } from "@/components/ui/button";
@@ -19,11 +20,19 @@ import { cn, SCROLLBAR_THIN } from "@/lib/utils";
 import {
   SESSIONS_LIST_TAB_ID,
   createAssistantSessionTab,
+  createExecutionSessionTab,
   createSessionsListTab,
 } from "@/lib/workspaceTabs/types";
-import { projectSessionPath, projectSessionsPath, type WorkspaceView } from "@/lib/workspaceRoutes";
+import {
+  projectExecutionSessionPath,
+  projectSessionPath,
+  projectSessionsPath,
+  type WorkspaceView,
+} from "@/lib/workspaceRoutes";
 import { dispatchIssueAgent } from "@/services/issueDispatch";
 import { createProjectSessionThread } from "@/services/assistantThreads";
+import type { AgentExecution } from "@/types/agent-execution";
+import type { Issue } from "@/types/issue";
 import type { RecentSession } from "@/types/recents";
 
 type UnifiedSessionItem =
@@ -33,13 +42,18 @@ type UnifiedSessionItem =
 interface ProjectSessionsWorkspaceProps {
   projectSlug: string;
   activeThreadId?: number | null;
+  activeExecutionIdentifier?: string | null;
 }
 
-export function ProjectSessionsWorkspace({ projectSlug, activeThreadId = null }: ProjectSessionsWorkspaceProps) {
+export function ProjectSessionsWorkspace({
+  projectSlug,
+  activeThreadId = null,
+  activeExecutionIdentifier = null,
+}: ProjectSessionsWorkspaceProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { view } = useWorkspace();
-  const { groups, relatedSessions, isLoading, error, refetch } = useProjectSessions(projectSlug);
+  const { groups, relatedSessions, issues, executions, isLoading, error, refetch } = useProjectSessions(projectSlug);
   const [resumePending, setResumePending] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
 
@@ -60,10 +74,39 @@ export function ProjectSessionsWorkspace({ projectSlug, activeThreadId = null }:
     [navigate, openTab, projectSlug],
   );
 
+  const openExecutionSession = useCallback(
+    (session: ProjectSessionRow) => {
+      openTab(createExecutionSessionTab(session.issueIdentifier, session.title));
+      navigate(projectExecutionSessionPath(projectSlug, session.issueIdentifier), { replace: true });
+    },
+    [navigate, openTab, projectSlug],
+  );
+
   useEffect(() => {
     if (!activeThreadId) return;
     openTab(createAssistantSessionTab(activeThreadId, t("sessions.newSessionTitle")));
   }, [activeThreadId, openTab, t]);
+
+  const executionTitleLookup = useMemo(() => {
+    const titles = new Map<string, string>();
+    for (const bucket of PROJECT_SESSION_BUCKETS) {
+      for (const row of groups[bucket]) titles.set(row.issueIdentifier, row.title);
+    }
+    for (const issue of issues) if (!titles.has(issue.identifier)) titles.set(issue.identifier, issue.title);
+    return titles;
+  }, [groups, issues]);
+
+  const openedExecutionRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!activeExecutionIdentifier) {
+      openedExecutionRef.current = null;
+      return;
+    }
+    if (openedExecutionRef.current === activeExecutionIdentifier) return;
+    openedExecutionRef.current = activeExecutionIdentifier;
+    const title = executionTitleLookup.get(activeExecutionIdentifier) ?? activeExecutionIdentifier;
+    openTab(createExecutionSessionTab(activeExecutionIdentifier, title));
+  }, [activeExecutionIdentifier, executionTitleLookup, openTab]);
 
   const handleSelectTab = useCallback(
     (tabId: string) => {
@@ -71,6 +114,10 @@ export function ProjectSessionsWorkspace({ projectSlug, activeThreadId = null }:
       const tab = tabs.find((entry) => entry.id === tabId);
       if (tab?.kind === "assistant-session") {
         navigate(projectSessionPath(projectSlug, tab.threadId), { replace: true });
+        return;
+      }
+      if (tab?.kind === "execution-session") {
+        navigate(projectExecutionSessionPath(projectSlug, tab.issueIdentifier), { replace: true });
         return;
       }
       if (tab?.kind === "sessions-list") {
@@ -199,10 +246,9 @@ export function ProjectSessionsWorkspace({ projectSlug, activeThreadId = null }:
             {sessionItems.length > 0 ? (
               <UnifiedSessionsList
                 items={sessionItems}
-                projectSlug={projectSlug}
-                view={view}
                 resumePending={resumePending}
                 onResume={handleResume}
+                onOpenExecutionSession={openExecutionSession}
                 onOpenAssistantSession={openAssistantSession}
               />
             ) : null}
@@ -220,24 +266,79 @@ export function ProjectSessionsWorkspace({ projectSlug, activeThreadId = null }:
             />
           </section>
         ) : null}
+
+        {activeTab?.kind === "execution-session" ? (
+          <ExecutionSessionTabContent
+            projectSlug={projectSlug}
+            issueIdentifier={activeTab.issueIdentifier}
+            issue={issues.find((entry) => entry.identifier === activeTab.issueIdentifier) ?? null}
+            execution={executions.get(activeTab.issueIdentifier)}
+            executions={executions}
+            view={view}
+            isLoading={isLoading}
+            onIssueUpdated={() => void refetch()}
+          />
+        ) : null}
       </section>
     </main>
   );
 }
 
+function ExecutionSessionTabContent({
+  projectSlug,
+  issueIdentifier,
+  issue,
+  execution,
+  executions,
+  view,
+  isLoading,
+  onIssueUpdated,
+}: {
+  projectSlug: string;
+  issueIdentifier: string;
+  issue: Issue | null;
+  execution?: AgentExecution;
+  executions: ReadonlyMap<string, AgentExecution>;
+  view: WorkspaceView;
+  isLoading: boolean;
+  onIssueUpdated: (updated: Issue) => void;
+}) {
+  const { t } = useTranslation();
+  const allExecutions = useMemo(() => Array.from(executions.values()), [executions]);
+
+  if (!issue) {
+    return (
+      <section className="flex min-h-0 flex-1 items-center justify-center rounded-xl border border-border/60 bg-background p-6 text-center text-sm text-muted-foreground shadow-sm">
+        {isLoading ? t("sessions.loading") : t("sessions.executionUnavailable", { identifier: issueIdentifier })}
+      </section>
+    );
+  }
+
+  return (
+    <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border/60 bg-background p-3 shadow-sm">
+      <AgentTabs
+        issue={issue}
+        projectSlug={projectSlug}
+        execution={execution}
+        executions={allExecutions}
+        view={view}
+        onIssueUpdated={onIssueUpdated}
+      />
+    </section>
+  );
+}
+
 function UnifiedSessionsList({
   items,
-  projectSlug,
-  view,
   resumePending,
   onResume,
+  onOpenExecutionSession,
   onOpenAssistantSession,
 }: {
   items: UnifiedSessionItem[];
-  projectSlug: string;
-  view: WorkspaceView;
   resumePending: string | null;
   onResume: (session: ProjectSessionRow) => void;
+  onOpenExecutionSession: (session: ProjectSessionRow) => void;
   onOpenAssistantSession: (threadId: number, title: string) => void;
 }) {
   return (
@@ -246,10 +347,9 @@ function UnifiedSessionsList({
         item.kind === "execution" ? (
           <SessionListItem
             key={item.key}
-            projectSlug={projectSlug}
-            view={view}
             session={item.session}
             resumePending={resumePending === item.session.issueIdentifier}
+            onOpen={onOpenExecutionSession}
             onResume={onResume}
           />
         ) : (

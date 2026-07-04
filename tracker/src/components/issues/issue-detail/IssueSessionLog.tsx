@@ -19,6 +19,8 @@ interface IssueSessionLogProps {
   error: string | null;
   logAgentKind?: string | null;
   preferredAgentKind?: string | null;
+  /** Grow to fill the available height (chat layout) instead of a fixed max. */
+  fill?: boolean;
 }
 
 function resolveAgentLabel(kind: string, t: ReturnType<typeof useTranslation>["t"]): string {
@@ -33,6 +35,7 @@ export function IssueSessionLog({
   error,
   logAgentKind = null,
   preferredAgentKind = null,
+  fill = false,
 }: IssueSessionLogProps) {
   const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -60,7 +63,7 @@ export function IssueSessionLog({
   }, [entries]);
 
   return (
-    <section className="rounded-xl border p-4">
+    <section className={cn("rounded-xl border p-4", fill && "flex min-h-0 flex-1 flex-col")}>
       <div className="flex items-center justify-between gap-3">
         <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           {t("issue.sessionLog.title")}
@@ -88,7 +91,11 @@ export function IssueSessionLog({
         <div
           ref={containerRef}
           aria-label={t("issue.sessionLog.ariaLabel", { identifier: issueIdentifier })}
-          className={cn("mt-3 max-h-[520px] space-y-3 overflow-auto rounded-lg bg-muted/20 p-3", SCROLLBAR_THIN)}
+          className={cn(
+            "mt-3 space-y-3 overflow-auto rounded-lg bg-muted/20 p-3",
+            SCROLLBAR_THIN,
+            fill ? "min-h-0 flex-1" : "max-h-[520px]",
+          )}
         >
           {entries.length > 0 ? (
             <SessionLogTranscript entries={entries} taskSnapshot={taskSnapshot} />
