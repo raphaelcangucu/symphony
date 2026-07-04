@@ -1,4 +1,4 @@
-import { Eraser, Pause, Play, RotateCcw, Send, Sparkles, X } from "lucide-react";
+import { Eraser, Pause, Play, Send, Sparkles, X } from "lucide-react";
 import { type KeyboardEvent as ReactKeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -85,10 +85,11 @@ export function ExecutionControlComposer({
   // Memoized submit handlers may close over a stale render; read mode from a ref
   // so dispatch always forwards the operator's current selection.
   const modeRef = useRef<ExecutionMode>(DEFAULT_EXECUTION_MODE);
-  const [dispatchPending, setDispatchPending] = useState<"resume" | "restart" | "hard_reset" | "stop" | null>(null);
+  const [dispatchPending, setDispatchPending] = useState<"resume" | "hard_reset" | "stop" | null>(null);
   const [dispatchStatus, setDispatchStatus] = useState<string | null>(null);
   const [dispatchError, setDispatchError] = useState<string | null>(null);
   const [hardResetOpen, setHardResetOpen] = useState(false);
+  const [newThreadInstructions, setNewThreadInstructions] = useState<string | null>(null);
   const [magicOpen, setMagicOpen] = useState(false);
   const [goalDismissed, setGoalDismissed] = useState(false);
   const [composerResetToken, setComposerResetToken] = useState(0);
@@ -141,7 +142,6 @@ export function ExecutionControlComposer({
   const control = deriveAgentControl(execution, t);
   const agentRunActive = control.isActive;
   const canResume = control.canResume;
-  const canRestart = control.canResume;
   const enterIntent = canSteer
     ? "steer"
     : control.isActive
@@ -186,9 +186,8 @@ export function ExecutionControlComposer({
     modeRef.current = mode;
   }, [mode]);
 
-  const dispatchProgressLabel: Record<"resume" | "restart" | "hard_reset" | "stop", string> = {
+  const dispatchProgressLabel: Record<"resume" | "hard_reset" | "stop", string> = {
     resume: t("issue.agent.dispatchResume"),
-    restart: t("issue.agent.dispatchRestart"),
     hard_reset: t("issue.agent.dispatchHardReset"),
     stop: t("issue.agent.dispatchStop"),
   };
@@ -199,8 +198,7 @@ export function ExecutionControlComposer({
 
   function guidanceFromSnapshot(snapshot: ComposerSnapshot): string {
     const parsed = parseSlashCommand(snapshot.input, t, "execution");
-    const typed =
-      parsed.kind === "infer" || parsed.kind === "goal" ? parsed.argument.trim() : snapshot.input.trim();
+    const typed = parsed.kind === "message" ? snapshot.input.trim() : parsed.argument.trim();
     return enrichGuidanceWithAttachments(expandMentions(typed), snapshot.attachments, projectSlug, {});
   }
 
@@ -217,7 +215,7 @@ export function ExecutionControlComposer({
   }
 
   async function runDispatch(
-    action: "resume" | "restart" | "hard_reset" | "stop",
+    action: "resume" | "hard_reset" | "stop",
     overrides?: { goal?: string | null; instructions?: string | null; contextRefs?: AssistantComposerSubmit["contextRefs"] },
   ) {
     setDispatchPending(action);
@@ -226,7 +224,7 @@ export function ExecutionControlComposer({
 
     const guidance =
       action === "stop" ? "" : (overrides?.instructions?.trim() || combinedGuidance());
-    // Normal resume/restart must not re-send a cached objective; only explicit
+    // Normal resume must not re-send a cached objective; only explicit
     // goal actions set the Codex goal (via controlIssueGoal). Resetting the same
     // objective would reset native goal accounting.
     const dispatchGoal = overrides?.goal ?? null;
@@ -318,6 +316,17 @@ export function ExecutionControlComposer({
     (submit: AssistantComposerSubmit) => {
       if (submit.kind === "goal") {
         void submitExecutionGoal(submit.message);
+        return;
+      }
+      if (submit.kind === "new_thread") {
+        const instructions = enrichGuidanceWithAttachments(
+          expandMentions(submit.message.trim()),
+          submit.attachments,
+          projectSlug,
+          {},
+        );
+        setNewThreadInstructions(instructions || null);
+        setHardResetOpen(true);
         return;
       }
       if (submit.kind === "btw") return;
@@ -458,14 +467,14 @@ export function ExecutionControlComposer({
     onResume: () => {
       if (!controlsDisabled && !agentRunActive) void runDispatch("resume");
     },
-    onRestart: () => {
-      if (!controlsDisabled && canRestart) void runDispatch("restart");
-    },
     onStop: () => {
       if (!controlsDisabled && agentRunActive) void runDispatch("stop");
     },
     onHardReset: () => {
-      if (!controlsDisabled) setHardResetOpen(true);
+      if (!controlsDisabled) {
+        setNewThreadInstructions(null);
+        setHardResetOpen(true);
+      }
     },
     onCycleMode: cycleExecutionMode,
     onFocusComposer: focusComposer,
@@ -489,7 +498,7 @@ export function ExecutionControlComposer({
   return (
     <section
       ref={sectionRef}
-      className="rounded-xl border border-border/70 bg-card/40 p-4"
+      className="min-w-0"
       onKeyDown={handleModeShortcut}
     >
       <ExecutionCommandPalette
@@ -497,13 +506,13 @@ export function ExecutionControlComposer({
         onResume={() => {
           if (!agentRunActive) void runDispatch("resume");
         }}
-        onRestart={() => {
-          if (canRestart) void runDispatch("restart");
-        }}
         onStop={() => {
           if (agentRunActive) void runDispatch("stop");
         }}
-        onHardReset={() => setHardResetOpen(true)}
+        onHardReset={() => {
+          setNewThreadInstructions(null);
+          setHardResetOpen(true);
+        }}
         onCycleMode={cycleExecutionMode}
         onFocusComposer={focusComposer}
         onMagicOpen={toggleMagicPalette}
@@ -515,23 +524,8 @@ export function ExecutionControlComposer({
         identifier={issue.identifier}
         onRan={handleMagicRan}
       />
-      <div className="min-w-0">
-        <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          {t("issue.agent.controlTitle")}
-        </div>
-        <p className="mt-1 text-xs text-muted-foreground">
-          {canSteer
-            ? t("issue.agent.hintSteer")
-            : agentRunActive
-              ? t("issue.agent.hintBusy")
-              : control.hasRun
-                ? t("issue.agent.hintResume")
-                : t("issue.agent.hintStart")}
-        </p>
-      </div>
-
       {queuedGuidance.length > 0 ? (
-        <div className="mt-3 rounded-lg border border-border/60 bg-muted/30 px-3 py-2">
+        <div className="mb-2 rounded-lg border border-border/60 bg-muted/30 px-3 py-2">
           <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
             {t("issue.agent.queuedGuidance")}
           </div>
@@ -567,7 +561,7 @@ export function ExecutionControlComposer({
         </div>
       ) : null}
 
-      <div className="mt-3">
+      <div>
         <AssistantComposer
           projectSlug={projectSlug}
           bundle={bundle}
@@ -621,28 +615,17 @@ export function ExecutionControlComposer({
                 type="button"
                 variant="ghost"
                 size="sm"
-                className="h-8 gap-1 px-2 text-xs"
-                disabled={!canRestart || controlsDisabled}
-                title={canRestart ? t("issue.agent.restartTitle") : t("issue.agent.restartPauseFirst")}
-                onClick={() => void runDispatch("restart")}
-              >
-                <RotateCcw className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">
-                  {dispatchPending === "restart" ? t("issue.agent.restarting") : t("issue.agent.restart")}
-                </span>
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
                 className="h-8 gap-1 px-2 text-xs text-destructive hover:text-destructive"
                 disabled={controlsDisabled}
-                title={t("issue.agent.hardResetTitle")}
-                onClick={() => setHardResetOpen(true)}
+                title={t("issue.agent.newThreadTitle")}
+                onClick={() => {
+                  setNewThreadInstructions(null);
+                  setHardResetOpen(true);
+                }}
               >
                 <Eraser className="h-3.5 w-3.5" />
                 <span className="hidden sm:inline">
-                  {dispatchPending === "hard_reset" ? t("issue.agent.resetting") : t("issue.agent.hardReset")}
+                  {dispatchPending === "hard_reset" ? t("issue.agent.resetting") : t("issue.agent.newThread")}
                 </span>
               </Button>
             </>
@@ -698,11 +681,17 @@ export function ExecutionControlComposer({
         />
       </div>
 
-      <Dialog open={hardResetOpen} onOpenChange={setHardResetOpen}>
+      <Dialog
+        open={hardResetOpen}
+        onOpenChange={(open) => {
+          setHardResetOpen(open);
+          if (!open) setNewThreadInstructions(null);
+        }}
+      >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{t("issue.agent.hardResetDialogTitle")}</DialogTitle>
-            <DialogDescription>{t("issue.agent.hardResetDialogDescription")}</DialogDescription>
+            <DialogTitle>{t("issue.agent.newThreadDialogTitle")}</DialogTitle>
+            <DialogDescription>{t("issue.agent.newThreadDialogDescription")}</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <DialogClose asChild>
@@ -717,11 +706,12 @@ export function ExecutionControlComposer({
               disabled={dispatchPending !== null}
               onClick={() => {
                 setHardResetOpen(false);
-                void runDispatch("hard_reset");
+                void runDispatch("hard_reset", { instructions: newThreadInstructions });
+                setNewThreadInstructions(null);
               }}
             >
               <Eraser className="mr-1.5 h-3.5 w-3.5" />
-              {t("issue.agent.hardReset")}
+              {t("issue.agent.newThread")}
             </Button>
           </DialogFooter>
         </DialogContent>

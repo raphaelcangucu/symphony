@@ -76,7 +76,7 @@ defmodule SymphonyElixir.Recents do
     |> Map.merge(%{
       status: humanize_exec_status(exec.status),
       status_kind: exec_status_kind(exec.status),
-      agent_kind: exec.agent_kind,
+      agent_kind: Map.get(exec, :agent_kind),
       updated_at: exec.last_event_at || issue.updated_at
     })
   end
@@ -201,6 +201,8 @@ defmodule SymphonyElixir.Recents do
   defp exec_status_kind(:retrying), do: :running
   defp exec_status_kind(:waiting), do: :waiting
   defp exec_status_kind(:idle), do: :idle
+  defp exec_status_kind(:aborted), do: :aborted
+  defp exec_status_kind(:error), do: :error
   defp exec_status_kind(_), do: :running
 
   defp workflow_status_kind(name) when is_binary(name) do

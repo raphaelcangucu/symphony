@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight, Clock, Eraser, GitFork, Layers, Loader2, Pause, RotateCcw, Target } from "lucide-react";
+import { ChevronDown, ChevronRight, Clock, Eraser, GitFork, Layers, Loader2, Pause, Target } from "lucide-react";
 import type { TFunction } from "i18next";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -537,20 +537,13 @@ function GoalCell({ execution }: { execution?: AgentExecution }) {
   );
 }
 
-type ConfirmAction = "restart" | "hard_reset";
+type ConfirmAction = "hard_reset";
 
 function confirmCopy(t: TFunction, action: ConfirmAction): { title: string; description: string; cta: string } {
-  if (action === "restart") {
-    return {
-      title: t("observability.session.restartDialogTitle"),
-      description: t("observability.session.restartDialogDescription"),
-      cta: t("observability.session.restart"),
-    };
-  }
   return {
-    title: t("observability.session.hardResetDialogTitle"),
-    description: t("observability.session.hardResetDialogDescription"),
-    cta: t("observability.session.hardReset"),
+    title: t("observability.session.newThreadDialogTitle"),
+    description: t("observability.session.newThreadDialogDescription"),
+    cta: t("observability.session.newThread"),
   };
 }
 
@@ -595,25 +588,13 @@ function SessionRowActions({ projectSlug, identifier }: { projectSlug: string | 
         type="button"
         size="sm"
         variant="ghost"
-        className="h-7 px-2"
-        disabled={disabled || busy}
-        title={disabled ? t("observability.session.noProjectMapping") : t("observability.session.restartTitle")}
-        onClick={() => setConfirm("restart")}
-      >
-        <RotateCcw className="mr-1 h-3.5 w-3.5" />
-        {pending === "restart" ? t("observability.session.restarting") : t("observability.session.restart")}
-      </Button>
-      <Button
-        type="button"
-        size="sm"
-        variant="ghost"
         className="h-7 px-2 text-destructive hover:text-destructive"
         disabled={disabled || busy}
-        title={disabled ? t("observability.session.noProjectMapping") : t("observability.session.hardResetTitle")}
+        title={disabled ? t("observability.session.noProjectMapping") : t("observability.session.newThreadTitle")}
         onClick={() => setConfirm("hard_reset")}
       >
         <Eraser className="mr-1 h-3.5 w-3.5" />
-        {pending === "hard_reset" ? t("observability.session.resetting") : t("observability.session.hardReset")}
+        {pending === "hard_reset" ? t("observability.session.resetting") : t("observability.session.newThread")}
       </Button>
 
       <Dialog open={confirm !== null} onOpenChange={(open) => (open ? null : setConfirm(null))}>
@@ -639,7 +620,7 @@ function SessionRowActions({ projectSlug, identifier }: { projectSlug: string | 
                   disabled={busy}
                   onClick={() => void run(confirm)}
                 >
-                  {confirm === "hard_reset" ? <Eraser className="mr-1.5 h-3.5 w-3.5" /> : <RotateCcw className="mr-1.5 h-3.5 w-3.5" />}
+                  <Eraser className="mr-1.5 h-3.5 w-3.5" />
                   {confirmCopy(t, confirm).cta}
                 </Button>
               </DialogFooter>

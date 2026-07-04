@@ -6,7 +6,7 @@ import type { AgentKind, ExecutionMode, Issue } from "@/types/issue";
 import { http, trackerPath, unwrapData } from "./http";
 import { type BackendIssueDto, normalizeIssue } from "./mappers";
 
-export type IssueDispatchAction = "resume" | "restart" | "hard_reset" | "stop" | "continue_work";
+export type IssueDispatchAction = "resume" | "hard_reset" | "stop" | "continue_work";
 
 export interface IssueDispatchInput {
   action: IssueDispatchAction;
@@ -66,7 +66,7 @@ export async function dispatchIssueAgent(
 }
 
 function normalizeDispatchAction(action: string | undefined): IssueDispatchAction {
-  if (action === "restart" || action === "hard_reset" || action === "stop" || action === "continue_work") {
+  if (action === "hard_reset" || action === "stop" || action === "continue_work") {
     return action;
   }
   return "resume";

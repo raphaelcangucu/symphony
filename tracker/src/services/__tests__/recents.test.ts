@@ -35,4 +35,15 @@ describe("normalizeRecentSession", () => {
     });
     expect(item.statusKind).toBe("active");
   });
+
+  it("preserves aborted execution status kind", () => {
+    const item = normalizeRecentSession({
+      id: "codex:ABC-1", kind: "codex", scope: null, project_slug: "demo",
+      project_name: "Demo", title: "Fix bug", identifier: "ABC-1", thread_id: null,
+      agent_kind: "codex", status: "Aborted", status_kind: "aborted", preview: null,
+      updated_at: "2026-05-30T00:00:00Z",
+    });
+
+    expect(item.statusKind).toBe("aborted");
+  });
 });

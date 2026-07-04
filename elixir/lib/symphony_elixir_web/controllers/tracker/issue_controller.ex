@@ -272,7 +272,7 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
         TrackerErrors.render(conn, :project_not_found)
 
       {:error, :invalid_action} ->
-        TrackerErrors.validation_msg(conn, "action must be resume, restart, hard_reset, stop, or continue_work")
+        TrackerErrors.validation_msg(conn, "action must be resume, hard_reset, stop, or continue_work")
 
       {:error, reason} ->
         TrackerErrors.render(conn, reason)
@@ -355,9 +355,6 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
 
   defp run_dispatch_action(project, identifier, "resume", opts),
     do: IssueDispatch.resume(project, identifier, opts)
-
-  defp run_dispatch_action(project, identifier, "restart", opts),
-    do: IssueDispatch.restart(project, identifier, opts)
 
   defp run_dispatch_action(project, identifier, "hard_reset", opts),
     do: IssueDispatch.hard_reset(project, identifier, opts)

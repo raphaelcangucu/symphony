@@ -395,7 +395,7 @@
       "controlTitle": "Agent control",
       "hintSteer": "Steer the live run with /infer, or pause to stop safely.",
       "hintBusy": "Agent is busy — queue guidance for the next resume, or pause to stop safely.",
-      "hintResume": "Resume where the run stopped, restart fresh, or add guidance before resuming.",
+      "hintResume": "Resume where the run stopped, start a new thread, or add guidance before resuming.",
       "hintStart": "Start the agent on this issue. Add optional guidance before you do.",
       "workflowObjective": "Workflow objective",
       "goalObjective": "Goal objective",
@@ -403,7 +403,7 @@
       "goalCommandWithObjective": "Pursue this execution goal via the orchestrator. Objective: {{objective}}. Keep working toward it across turns until the issue is done or you are blocked.",
       "goalCommandDefault": "Pursue an execution goal via the orchestrator. Derive the objective from the existing spec/plan/handoff, then keep working toward it across turns until the issue is done or you are blocked.",
       "goalSetDone": "Execution goal saved",
-      "sendGoalAria": "Send goal on resume or restart",
+      "sendGoalAria": "Send goal on resume",
       "queuedGuidance": "Queued guidance · sent on next resume",
       "queuedAttachments": "{{count}} attachment(s)",
       "removeQueuedAria": "Remove queued guidance",
@@ -418,6 +418,8 @@
       "restarting": "Restarting…",
       "hardResetTitle": "Stop the run, clear the session (turns and tokens), and start fresh. Keeps the workspace.",
       "hardReset": "Hard reset",
+      "newThreadTitle": "Discard the current agent thread and start a new one in this workspace.",
+      "newThread": "New thread",
       "resetting": "Resetting…",
       "sendingSteer": "Sending steer…",
       "pauseTitle": "Pause the run (keeps the session to resume later)",
@@ -425,7 +427,7 @@
       "resuming": "Resuming…",
       "dispatchResume": "Resuming agent…",
       "dispatchRestart": "Restarting agent…",
-      "dispatchHardReset": "Hard resetting session…",
+      "dispatchHardReset": "Starting new thread…",
       "dispatchStop": "Pausing agent…",
       "dispatchFailed": "Dispatch failed",
       "executionMode": {
@@ -449,16 +451,17 @@
         "placeholder": "Search actions…",
         "empty": "No actions",
         "resume": "Resume",
-        "restart": "Restart",
         "stop": "Stop",
-        "hardReset": "Hard reset",
+        "hardReset": "New thread",
         "cycleMode": "Cycle execution mode",
         "focusComposer": "Focus composer"
       },
       "hardResetDialogTitle": "Hard reset session?",
       "hardResetDialogDescription": "This stops any active run, discards the current agent session, and clears the turn and token counters, then starts a brand-new session. The workspace and its git state are preserved.",
+      "newThreadDialogTitle": "Start a new agent thread?",
+      "newThreadDialogDescription": "This stops any active run, discards the current agent session, and clears the turn and token counters. The next run starts in a brand-new Codex thread while preserving the workspace and git state.",
       "cancel": "Cancel",
-      "modelsHint": "Models from {{command}}. Agent and model apply on resume/restart; /infer steers the live {{agent}} session.",
+      "modelsHint": "Models from {{command}}. Agent and model apply on resume; /infer steers the live {{agent}} session.",
       "steerNotAvailable": "No steerable agent turn is running — use Resume to pick the run back up.",
       "orchestratorUnavailable": "The orchestrator is unavailable; try again in a moment.",
       "primaryStart": "Start",
@@ -1055,6 +1058,9 @@
       "agentHistory": "Showing {{shown}} history — {{preferred}} has not produced a log for this issue yet.",
       "source": "Source: {{agent}}",
       "ariaLabel": "Session log for {{identifier}}",
+      "chatHistoryAriaLabel": "Chat history for {{identifier}}",
+      "scrollToBottom": "Scroll to latest activity",
+      "eventGroup": "{{count}} events",
       "waiting": "Waiting for session output…",
       "subtitles": {
         "reasoning": "Internal reasoning",
@@ -1901,15 +1907,19 @@
       "restart": "Restart",
       "restarting": "Restarting…",
       "hardReset": "Hard reset",
+      "newThread": "New thread",
       "resetting": "Resetting…",
       "noProjectMapping": "No project mapping for this runtime",
       "pauseTitle": "Pause the run (keeps the session to resume later)",
       "restartTitle": "Restart with a fresh agent pass",
       "hardResetTitle": "Hard reset: clear the session and start fresh",
+      "newThreadTitle": "New thread: clear the agent session and keep the workspace",
       "restartDialogTitle": "Restart agent run?",
       "restartDialogDescription": "Stops the current run and starts a fresh agent pass on this issue. The workspace and git state are preserved.",
       "hardResetDialogTitle": "Hard reset session?",
       "hardResetDialogDescription": "Stops the run, discards the agent session, and clears the turn and token counters, then starts a brand-new session. The workspace and git state are preserved.",
+      "newThreadDialogTitle": "Start a new agent thread?",
+      "newThreadDialogDescription": "Stops the run, discards the current agent session, and clears the turn and token counters. The next run starts in a brand-new Codex thread while preserving the workspace and git state.",
       "cancel": "Cancel",
       "dispatchFailed": "Failed to {{action}} {{identifier}}"
     },
@@ -2087,6 +2097,7 @@
       "goalExecution": "Set an execution goal and dispatch via the orchestrator",
       "infer": "Steer the running agent without waiting",
       "btw": "Ask a quick side question (read-only, not saved)",
+      "newThread": "Start a new Codex thread in the existing workspace",
       "skillDirective": "Use the {{skill}} skill: ",
       "skills": {
         "plan": "Draft an implementation plan before coding",
@@ -2253,13 +2264,30 @@
       "questionFallback": "Q{{index}}"
     },
     "page": {
-      "conversationsAria": "Conversations",
-      "title": "Conversations",
+      "conversationsAria": "Sessions",
+      "title": "Sessions",
       "newChat": "New chat",
-      "searchPlaceholder": "Search conversations...",
-      "searchAria": "Search conversations",
-      "empty": "No conversations yet. Start a new one.",
-      "noMatch": "No conversations match your search."
+      "searchPlaceholder": "Search sessions...",
+      "searchAria": "Search sessions",
+      "empty": "No sessions yet. Start a new one.",
+      "noMatch": "No sessions match your search.",
+      "type": {
+        "chat": "Chat",
+        "execution": "Execution"
+      },
+      "filters": {
+        "trigger": "Filters",
+        "triggerCount": "Filters ({{count}})",
+        "title": "Filters",
+        "description": "Narrow assistant sessions by type, status, and project.",
+        "type": "Type",
+        "status": "Status",
+        "project": "Project",
+        "noProject": "No project",
+        "noOptions": "No options available.",
+        "clear": "Clear filters",
+        "done": "Done"
+      }
     },
     "documents": {
       "ariaLabel": "Issue documents",
@@ -2283,16 +2311,16 @@
     },
     "freeform": {
       "chatAria": "Assistant chat",
-      "backToConversations": "Conversations",
+      "backToConversations": "Sessions",
       "filesAria": "Assistant chat files",
-      "filesTitle": "Conversation files",
+      "filesTitle": "Session files",
       "filesHint": "Open markdown drafts on the right. Click a filename in the chat to jump to it here.",
       "createFailed": "Unable to start a new chat"
     },
     "archive": {
       "label": "Archive",
-      "ariaLabel": "Archive conversation",
-      "title": "Archive conversation",
+      "ariaLabel": "Archive session",
+      "title": "Archive session",
       "failed": "Unable to archive chat"
     },
     "threadDocuments": {
@@ -2325,6 +2353,7 @@
     "resumeStarted": "Resuming {{identifier}}",
     "resumeFailed": "Could not resume {{identifier}}",
     "openExecutionAria": "Open execution session {{identifier}}",
+    "openIssueAria": "Open issue {{identifier}}",
     "executionUnavailable": "Execution details for {{identifier}} are not available right now.",
     "turns": "{{count}} turns",
     "runtime": "Runtime {{value}}",
@@ -2418,7 +2447,8 @@
         "todo": "To do",
         "done": "Done",
         "closed": "Closed",
-        "error": "Error"
+        "error": "Error",
+        "aborted": "Aborted"
       }
     },
     "assistantMenu": {

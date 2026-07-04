@@ -4,49 +4,29 @@ import { useTranslation } from "react-i18next";
 
 import { ToolActivityItem } from "@/components/agent-activity/ToolActivityItem";
 import { TOOL_GROUP_ICON } from "@/components/agent-activity/toolGroupIcons";
-import { assistantToolCallToView } from "@/components/assistant/assistantToolCall";
-import { fileActivityFromToolCall } from "@/components/assistant/fileActivity";
-import { summarizeGroup, type ToolCallGroup, type ToolGroupSummary } from "@/lib/toolCallGroups";
+import { sessionPairToView, type SessionToolPair } from "@/components/issues/issue-detail/sessionToolCall";
 import { cn } from "@/lib/utils";
+import type { ToolGroupKind, ToolGroupStatus } from "@/lib/toolCallGroups";
 import type { AgentTaskSnapshot } from "@/types/agentTasks";
-import type { AssistantToolCall } from "@/services/assistant";
 
-function defaultOpen(group: ToolCallGroup): boolean {
-  if (group.status === "error") return true;
-  return group.kind === "action";
-}
-
-function rowKey(call: AssistantToolCall, index: number): string {
-  return call.id && call.id.trim() !== "" ? `tc-${call.id}` : `tc-${call.name}-${index}`;
-}
-
-function groupLabel(
-  group: ToolCallGroup,
-  summary: ToolGroupSummary,
-  t: ReturnType<typeof useTranslation>["t"],
-): string {
-  if (group.kind === "edit" && (summary.additions > 0 || summary.deletions > 0)) {
-    return t("assistant.toolGroup.editStats", {
-      n: summary.count,
-      additions: summary.additions,
-      deletions: summary.deletions,
-    });
-  }
-  return t(`assistant.toolGroup.${group.kind}`, { n: summary.count });
-}
-
-interface ToolActivityGroupProps {
-  group: ToolCallGroup;
+interface SessionToolActivityGroupProps {
+  kind: ToolGroupKind;
+  status: ToolGroupStatus;
+  pairs: SessionToolPair[];
   taskSnapshot?: AgentTaskSnapshot | null;
 }
 
-export function ToolActivityGroup({ group, taskSnapshot = null }: ToolActivityGroupProps) {
+/**
+ * Collapsible group for a run of consecutive same-kind session-log tool calls,
+ * mirroring the assistant chat's `ToolActivityGroup` but driven by paired
+ * session-log entries rather than assistant tool-call objects.
+ */
+export function SessionToolActivityGroup({ kind, status, pairs, taskSnapshot = null }: SessionToolActivityGroupProps) {
   const { t } = useTranslation();
-  const summary = summarizeGroup(group);
-  const [open, setOpen] = useState(() => defaultOpen(group));
-  const running = group.status === "running";
-  const failed = group.status === "error";
-  const Icon = TOOL_GROUP_ICON[group.kind];
+  const running = status === "running";
+  const failed = status === "error";
+  const [open, setOpen] = useState(() => failed || kind === "action");
+  const Icon = TOOL_GROUP_ICON[kind];
 
   return (
     <article
@@ -61,13 +41,13 @@ export function ToolActivityGroup({ group, taskSnapshot = null }: ToolActivityGr
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
         aria-busy={running}
-        data-testid="tool-activity-group"
+        data-testid="session-tool-activity-group"
       >
         <span className="shrink-0 text-muted-foreground">
           {running ? <Loader2 className="size-3.5 animate-spin" /> : <Icon className="size-3.5" />}
         </span>
         <span className="min-w-0 flex-1 truncate text-xs font-medium text-foreground">
-          {groupLabel(group, summary, t)}
+          {t(`assistant.toolGroup.${kind}`, { n: pairs.length })}
         </span>
         {failed ? (
           <span className="shrink-0 rounded-full border border-destructive/40 px-2 py-0.5 text-[10px] uppercase tracking-wide text-destructive">
@@ -82,13 +62,12 @@ export function ToolActivityGroup({ group, taskSnapshot = null }: ToolActivityGr
       </button>
       {open ? (
         <div className="space-y-2 border-t border-border/60 px-3 py-2.5">
-          {group.calls.map((call, index) => (
+          {pairs.map((pair, index) => (
             <ToolActivityItem
-              key={rowKey(call, index)}
-              toolName={call.name}
-              view={assistantToolCallToView(call)}
+              key={`session-tool-${pair.call.callId ?? pair.call.title}-${index}`}
+              toolName={pair.call.title}
+              view={sessionPairToView(pair.call, pair.result)}
               taskSnapshot={taskSnapshot}
-              fileActivity={fileActivityFromToolCall(call)}
             />
           ))}
         </div>

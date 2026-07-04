@@ -1,10 +1,26 @@
 import type { ToolBlockLanguage, ToolCallView } from "@/components/shared/ToolCallBlock";
 import { formatToolOutput, resolveToolDisplayName } from "@/lib/toolCallDisplay";
+import { classifyToolName, type ToolGroupKind, type ToolGroupStatus } from "@/lib/toolCallGroups";
 import type { SessionLogEntry, SessionLogEntryLanguage } from "@/types/session-log";
 
 export type SessionLogRenderItem =
   | { type: "entry"; entry: SessionLogEntry }
   | { type: "toolCall"; call: SessionLogEntry; result: SessionLogEntry | null };
+
+export interface SessionToolPair {
+  call: SessionLogEntry;
+  result: SessionLogEntry | null;
+}
+
+export type SessionLogGroupedItem =
+  | { type: "entry"; entry: SessionLogEntry }
+  | { type: "toolCall"; call: SessionLogEntry; result: SessionLogEntry | null }
+  | { type: "toolGroup"; kind: ToolGroupKind; status: ToolGroupStatus; pairs: SessionToolPair[] }
+  | { type: "eventGroup"; entries: SessionLogEntry[] };
+
+type PendingGroup =
+  | { type: "tool"; kind: ToolGroupKind; pairs: SessionToolPair[] }
+  | { type: "event"; entries: SessionLogEntry[] };
 
 export function pairSessionLogItems(entries: SessionLogEntry[]): SessionLogRenderItem[] {
   const consumedResultIndexes = new Set<number>();
@@ -28,6 +44,79 @@ export function pairSessionLogItems(entries: SessionLogEntry[]): SessionLogRende
   });
 
   return items;
+}
+
+/**
+ * Collapses the paired session-log stream into a transcript-friendly shape,
+ * grouping runs of consecutive same-kind tool calls and runs of consecutive
+ * `event` entries (mirroring the assistant chat). A lone tool call, event, or
+ * message stays standalone; a group is only emitted for two or more consecutive
+ * items of the same kind.
+ */
+export function groupSessionLogItems(entries: SessionLogEntry[]): SessionLogGroupedItem[] {
+  const items = pairSessionLogItems(entries);
+  const grouped: SessionLogGroupedItem[] = [];
+  let pending: PendingGroup | null = null;
+
+  const flush = () => {
+    if (!pending) return;
+
+    if (pending.type === "tool") {
+      if (pending.pairs.length === 1) {
+        const [pair] = pending.pairs;
+        grouped.push({ type: "toolCall", call: pair.call, result: pair.result });
+      } else {
+        grouped.push({
+          type: "toolGroup",
+          kind: pending.kind,
+          status: sessionGroupStatus(pending.pairs),
+          pairs: pending.pairs,
+        });
+      }
+    } else if (pending.entries.length === 1) {
+      grouped.push({ type: "entry", entry: pending.entries[0] });
+    } else {
+      grouped.push({ type: "eventGroup", entries: pending.entries });
+    }
+
+    pending = null;
+  };
+
+  for (const item of items) {
+    if (item.type === "toolCall") {
+      const kind = classifyToolName(item.call.title);
+      if (pending?.type === "tool" && pending.kind === kind) {
+        pending.pairs.push({ call: item.call, result: item.result });
+        continue;
+      }
+      flush();
+      pending = { type: "tool", kind, pairs: [{ call: item.call, result: item.result }] };
+      continue;
+    }
+
+    if (item.entry.kind === "event") {
+      if (pending?.type === "event") {
+        pending.entries.push(item.entry);
+        continue;
+      }
+      flush();
+      pending = { type: "event", entries: [item.entry] };
+      continue;
+    }
+
+    flush();
+    grouped.push(item);
+  }
+
+  flush();
+  return grouped;
+}
+
+export function sessionGroupStatus(pairs: SessionToolPair[]): ToolGroupStatus {
+  const statuses = pairs.map((pair) => pairStatus(pair.call, pair.result));
+  if (statuses.some((status) => status === "running")) return "running";
+  if (statuses.some((status) => status === "failed")) return "error";
+  return "complete";
 }
 
 export function sessionPairToView(call: SessionLogEntry, result: SessionLogEntry | null): ToolCallView {

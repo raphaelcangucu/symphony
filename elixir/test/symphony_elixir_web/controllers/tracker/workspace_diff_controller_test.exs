@@ -3,6 +3,7 @@ defmodule SymphonyElixirWeb.Tracker.WorkspaceDiffControllerTest do
 
   import Phoenix.ConnTest
 
+  alias SymphonyElixir.Assistant.History
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.Repo
 
@@ -67,6 +68,37 @@ defmodule SymphonyElixirWeb.Tracker.WorkspaceDiffControllerTest do
     assert paths == ["README.md", "new.txt"]
   end
 
+  test "show reads persisted issue thread workspace with multiple repositories", %{
+    issue: issue,
+    workspace: computed_workspace,
+    tmp_dir: tmp_dir
+  } do
+    persisted_workspace = Path.join(tmp_dir, "persisted")
+    File.mkdir_p!(persisted_workspace)
+    frontend = create_dirty_repo!(persisted_workspace, "frontend", "src/App.tsx")
+    backend = create_dirty_repo!(persisted_workspace, "backend", "lib/app.ex")
+
+    {:ok, _thread} =
+      History.ensure_issue_thread("advising", issue.identifier, %{workspace_path: persisted_workspace})
+
+    assert persisted_workspace != computed_workspace
+    assert File.dir?(frontend)
+    assert File.dir?(backend)
+
+    conn =
+      get(
+        authorized_conn(),
+        "/api/tracker/v1/projects/advising/issues/#{issue.identifier}/diff?type=uncommitted"
+      )
+
+    assert %{"data" => repos, "workspace" => %{"path" => ^persisted_workspace, "available" => true}} =
+             json_response(conn, 200)
+
+    assert repos |> Enum.map(& &1["repo"]) |> Enum.sort() == ["backend", "frontend"]
+    assert %{"files" => [%{"path" => "lib/app.ex"}]} = Enum.find(repos, &(&1["repo"] == "backend"))
+    assert %{"files" => [%{"path" => "src/App.tsx"}]} = Enum.find(repos, &(&1["repo"] == "frontend"))
+  end
+
   test "invalid diff type returns validation error", %{issue: issue} do
     conn =
       get(
@@ -122,5 +154,17 @@ defmodule SymphonyElixirWeb.Tracker.WorkspaceDiffControllerTest do
     {output, status} = System.cmd("bash", ["-lc", command], cd: cwd, stderr_to_stdout: true)
     assert status == 0, output
     output
+  end
+
+  defp create_dirty_repo!(workspace, name, dirty_path) do
+    repo = Path.join(workspace, name)
+    File.mkdir_p!(repo)
+    sh!(repo, "git init -b main")
+    sh!(repo, ~s(git config user.email "agent@test.local"))
+    sh!(repo, "git config user.name \"Symphony Agent\"")
+    sh!(repo, "echo base > README.md && git add README.md && git commit -m 'chore: base'")
+    File.mkdir_p!(Path.dirname(Path.join(repo, dirty_path)))
+    File.write!(Path.join(repo, dirty_path), "#{name}\n")
+    repo
   end
 end

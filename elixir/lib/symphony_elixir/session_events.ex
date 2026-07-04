@@ -14,6 +14,25 @@ defmodule SymphonyElixir.SessionEvents do
   def events_path(workspace) when is_binary(workspace), do: Path.join(workspace, @events_relative_path)
 
   @doc """
+  Clears Symphony-authored session annotations for a workspace.
+
+  Native agent rollout logs remain intact; this only removes Symphony's local
+  failure/abort annotations so an explicit new-thread reset starts with a clean
+  execution transcript.
+  """
+  @spec clear(Path.t()) :: :ok
+  def clear(workspace) when is_binary(workspace) do
+    workspace
+    |> events_path()
+    |> File.rm()
+    |> case do
+      :ok -> :ok
+      {:error, :enoent} -> :ok
+      {:error, _reason} -> :ok
+    end
+  end
+
+  @doc """
   Appends a turn-abort annotation to the workspace session-events file.
   """
   @spec append_abort(Path.t(), String.t(), keyword()) :: :ok

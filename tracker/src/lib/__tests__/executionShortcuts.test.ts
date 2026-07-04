@@ -19,8 +19,8 @@ describe("matchShortcut", () => {
     expect(matchShortcut({ key: "Enter", ctrlKey: true })).toBe("resume");
   });
 
-  it("maps mod+shift+r to restart", () => {
-    expect(matchShortcut({ key: "r", metaKey: true, shiftKey: true })).toBe("restart");
+  it("does not map the removed restart shortcut", () => {
+    expect(matchShortcut({ key: "r", metaKey: true, shiftKey: true })).toBeNull();
   });
 
   it("maps mod+. to stop", () => {
@@ -41,7 +41,8 @@ describe("matchShortcut", () => {
     expect(matchShortcut({ key: "z", metaKey: true })).toBeNull();
   });
 
-  it("does not confuse mod+r with mod+shift+r", () => {
+  it("does not map mod+r variants", () => {
     expect(matchShortcut({ key: "r", metaKey: true })).toBeNull();
+    expect(matchShortcut({ key: "r", metaKey: true, shiftKey: true })).toBeNull();
   });
 });

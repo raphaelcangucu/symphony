@@ -38,6 +38,23 @@ defmodule SymphonyElixir.RecentsTest do
     assert codex.project_slug == "demo"
   end
 
+  test "aborted codex rows expose aborted status kind" do
+    issue = %{identifier: "ABC-12", title: "Fix bug", status: "In Progress", branch_name: "abc-12", updated_at: DateTime.utc_now()}
+    exec = %{issue_identifier: "ABC-12", status: :aborted, last_event_at: DateTime.utc_now(), agent_kind: "codex"}
+
+    items =
+      Recents.list(
+        limit: 20,
+        executions: [exec],
+        issue_lister: fn "demo" -> [issue] end,
+        projects: [%{slug: "demo", name: "Demo"}]
+      )
+
+    codex = Enum.find(items, &(&1.kind == :codex))
+    assert codex.status == "Aborted"
+    assert codex.status_kind == :aborted
+  end
+
   test "issue-scoped chat rows expose the issue identifier" do
     {:ok, _project} = Context.ensure_project(%{name: "Demo", slug: "demo"})
 

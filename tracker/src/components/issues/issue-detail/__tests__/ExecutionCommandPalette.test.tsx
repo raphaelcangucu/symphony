@@ -8,7 +8,6 @@ import { isOverlayPaletteActive } from "@/lib/commandPaletteScope";
 function renderPalette(overrides: Record<string, unknown> = {}) {
   const handlers = {
     onResume: vi.fn(),
-    onRestart: vi.fn(),
     onStop: vi.fn(),
     onHardReset: vi.fn(),
     onCycleMode: vi.fn(),
@@ -25,9 +24,9 @@ describe("ExecutionCommandPalette", () => {
     await userEvent.keyboard("{Meta>}k{/Meta}");
 
     expect(await screen.findByText("Resume")).toBeInTheDocument();
-    expect(screen.getByText("Restart")).toBeInTheDocument();
+    expect(screen.queryByText("Restart")).not.toBeInTheDocument();
     expect(screen.getByText("Stop")).toBeInTheDocument();
-    expect(screen.getByText("Hard reset")).toBeInTheDocument();
+    expect(screen.getByText("New thread")).toBeInTheDocument();
     expect(screen.getByText("Cycle execution mode")).toBeInTheDocument();
     expect(screen.getByText("Focus composer")).toBeInTheDocument();
   });

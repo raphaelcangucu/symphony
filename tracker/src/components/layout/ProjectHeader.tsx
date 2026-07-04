@@ -19,6 +19,7 @@ interface ProjectHeaderProps {
   projectSlug: string;
   title?: string;
   rightSlot?: ReactNode;
+  sessionsCount?: number | null;
   trackerKind?: TrackerKind;
   syncState?: ProjectSyncState | null;
   onRefresh?: () => void;
@@ -96,6 +97,7 @@ export function ProjectHeader({
   projectSlug,
   title,
   rightSlot,
+  sessionsCount = null,
   trackerKind,
   syncState,
   onRefresh,
@@ -110,6 +112,10 @@ export function ProjectHeader({
   const remoteTracker = trackerKind != null && trackerKind !== "local";
   const syncFailing = remoteTracker && syncState?.status === "error";
   const syncErrorLabel = t("layout.projectHeader.syncError");
+  const normalizedSessionsCount =
+    typeof sessionsCount === "number" && Number.isFinite(sessionsCount) && sessionsCount > 0
+      ? Math.floor(sessionsCount)
+      : null;
 
   async function handleCopySyncError() {
     if (!syncState) return;
@@ -196,6 +202,11 @@ export function ProjectHeader({
           >
             <History className="h-4 w-4" />
             {t("layout.projectHeader.sessions")}
+            {normalizedSessionsCount != null ? (
+              <span className="rounded-full border border-border/70 bg-background px-1.5 py-0 text-[10px] font-medium leading-4 text-muted-foreground">
+                {normalizedSessionsCount}
+              </span>
+            ) : null}
           </NavLink>
         </Button>
         <Button variant="ghost" size="sm" asChild>

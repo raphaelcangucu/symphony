@@ -110,7 +110,7 @@ function contextIconFor(type: ComposerContextChipRef["type"]) {
   return FileText;
 }
 
-export type AssistantComposerSubmitKind = "message" | "infer" | "btw" | "goal";
+export type AssistantComposerSubmitKind = "message" | "infer" | "btw" | "goal" | "new_thread";
 
 export interface AssistantComposerSubmit {
   kind: AssistantComposerSubmitKind;

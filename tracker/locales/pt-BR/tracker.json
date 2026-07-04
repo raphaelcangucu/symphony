@@ -395,7 +395,7 @@
       "controlTitle": "Controle do agente",
       "hintSteer": "Direcione a execução ao vivo com /infer, ou pause para parar com segurança.",
       "hintBusy": "Agente ocupado — enfileire orientação para o próximo resume, ou pause para parar com segurança.",
-      "hintResume": "Retome de onde parou, reinicie do zero ou adicione orientação antes de retomar.",
+      "hintResume": "Retome de onde parou, inicie uma nova thread ou adicione orientação antes de retomar.",
       "hintStart": "Inicie o agente nesta issue. Adicione orientação opcional antes.",
       "workflowObjective": "Objetivo do workflow",
       "goalObjective": "Objetivo da meta",
@@ -403,7 +403,7 @@
       "goalCommandWithObjective": "Persiga este goal de execução via o orquestrador. Objetivo: {{objective}}. Continue trabalhando nele ao longo dos turnos até a issue estar pronta ou você ficar bloqueado.",
       "goalCommandDefault": "Persiga um goal de execução via o orquestrador. Derive o objetivo a partir do spec/plano/handoff existentes e continue trabalhando nele ao longo dos turnos até a issue estar pronta ou você ficar bloqueado.",
       "goalSetDone": "Goal de execução salvo",
-      "sendGoalAria": "Enviar meta no resume ou restart",
+      "sendGoalAria": "Enviar meta no resume",
       "queuedGuidance": "Orientação enfileirada · enviada no próximo resume",
       "queuedAttachments": "{{count}} anexo(s)",
       "removeQueuedAria": "Remover orientação enfileirada",
@@ -418,6 +418,8 @@
       "restarting": "Reiniciando…",
       "hardResetTitle": "Parar a execução, limpar a sessão (turnos e tokens) e começar do zero. Mantém o workspace.",
       "hardReset": "Reset completo",
+      "newThreadTitle": "Descartar a thread atual do agente e iniciar uma nova neste workspace.",
+      "newThread": "Nova thread",
       "resetting": "Resetando…",
       "sendingSteer": "Enviando steer…",
       "pauseTitle": "Pausar a execução (mantém a sessão para retomar depois)",
@@ -425,7 +427,7 @@
       "resuming": "Retomando…",
       "dispatchResume": "Retomando agente…",
       "dispatchRestart": "Reiniciando agente…",
-      "dispatchHardReset": "Resetando sessão…",
+      "dispatchHardReset": "Iniciando nova thread…",
       "dispatchStop": "Pausando agente…",
       "dispatchFailed": "Falha no dispatch",
       "executionMode": {
@@ -449,16 +451,17 @@
         "placeholder": "Buscar ações…",
         "empty": "Nenhuma ação",
         "resume": "Retomar",
-        "restart": "Reiniciar",
         "stop": "Parar",
-        "hardReset": "Reset completo",
+        "hardReset": "Nova thread",
         "cycleMode": "Alternar modo de execução",
         "focusComposer": "Focar no compositor"
       },
       "hardResetDialogTitle": "Reset completo da sessão?",
       "hardResetDialogDescription": "Isso para qualquer execução ativa, descarta a sessão atual do agente e limpa contadores de turnos e tokens, depois inicia uma sessão nova. O workspace e o estado git são preservados.",
+      "newThreadDialogTitle": "Iniciar nova thread do agente?",
+      "newThreadDialogDescription": "Isso para qualquer execução ativa, descarta a sessão atual do agente e limpa contadores de turnos e tokens. A próxima execução começa em uma nova thread Codex preservando o workspace e o estado git.",
       "cancel": "Cancelar",
-      "modelsHint": "Modelos de {{command}}. Agente e modelo aplicam no resume/restart; /infer direciona a sessão {{agent}} ao vivo.",
+      "modelsHint": "Modelos de {{command}}. Agente e modelo aplicam no resume; /infer direciona a sessão {{agent}} ao vivo.",
       "steerNotAvailable": "Nenhum turno direcionável em execução — use Resume para retomar.",
       "orchestratorUnavailable": "O orquestrador está indisponível; tente novamente em instantes.",
       "primaryStart": "Iniciar",
@@ -1055,6 +1058,9 @@
       "agentHistory": "Exibindo histórico do {{shown}} — {{preferred}} ainda não produziu log para esta issue.",
       "source": "Origem: {{agent}}",
       "ariaLabel": "Log da sessão para {{identifier}}",
+      "chatHistoryAriaLabel": "Histórico do chat para {{identifier}}",
+      "scrollToBottom": "Rolar para a atividade mais recente",
+      "eventGroup": "{{count}} eventos",
       "waiting": "Aguardando saída da sessão…",
       "subtitles": {
         "reasoning": "Raciocínio interno",
@@ -1901,15 +1907,19 @@
       "restart": "Reiniciar",
       "restarting": "Reiniciando…",
       "hardReset": "Reset completo",
+      "newThread": "Nova thread",
       "resetting": "Resetando…",
       "noProjectMapping": "Sem mapeamento de projeto para este runtime",
       "pauseTitle": "Pausar a execução (mantém a sessão para retomar depois)",
       "restartTitle": "Reiniciar com uma nova passagem do agente",
       "hardResetTitle": "Reset completo: limpar a sessão e começar do zero",
+      "newThreadTitle": "Nova thread: limpar a sessão do agente e manter o workspace",
       "restartDialogTitle": "Reiniciar execução do agente?",
       "restartDialogDescription": "Para a execução atual e inicia uma nova passagem do agente nesta issue. O workspace e o estado git são preservados.",
       "hardResetDialogTitle": "Reset completo da sessão?",
       "hardResetDialogDescription": "Para a execução, descarta a sessão do agente e limpa contadores de turnos e tokens, depois inicia uma sessão nova. O workspace e o estado git são preservados.",
+      "newThreadDialogTitle": "Iniciar nova thread do agente?",
+      "newThreadDialogDescription": "Para a execução, descarta a sessão atual do agente e limpa contadores de turnos e tokens. A próxima execução começa em uma nova thread Codex preservando o workspace e o estado git.",
       "cancel": "Cancelar",
       "dispatchFailed": "Falha ao {{action}} {{identifier}}"
     },
@@ -2112,6 +2122,7 @@
       "goalExecution": "Defina um goal de execução e despache via o orquestrador",
       "infer": "Direcione o agente em execução sem esperar",
       "btw": "Faça uma pergunta rápida (somente leitura, não salva)",
+      "newThread": "Inicie uma nova thread Codex no workspace existente",
       "skillDirective": "Use a skill {{skill}}: ",
       "skills": {
         "plan": "Esboce um plano de implementação antes de codar",
@@ -2253,13 +2264,30 @@
       "questionFallback": "P{{index}}"
     },
     "page": {
-      "conversationsAria": "Conversas",
-      "title": "Conversas",
+      "conversationsAria": "Sessões",
+      "title": "Sessões",
       "newChat": "Novo chat",
-      "searchPlaceholder": "Buscar conversas...",
-      "searchAria": "Buscar conversas",
-      "empty": "Nenhuma conversa ainda. Comece uma nova.",
-      "noMatch": "Nenhuma conversa corresponde à busca."
+      "searchPlaceholder": "Buscar sessões...",
+      "searchAria": "Buscar sessões",
+      "empty": "Nenhuma sessão ainda. Comece uma nova.",
+      "noMatch": "Nenhuma sessão corresponde à busca.",
+      "type": {
+        "chat": "Chat",
+        "execution": "Execução"
+      },
+      "filters": {
+        "trigger": "Filtros",
+        "triggerCount": "Filtros ({{count}})",
+        "title": "Filtros",
+        "description": "Filtre sessões do assistente por tipo, status e projeto.",
+        "type": "Tipo",
+        "status": "Status",
+        "project": "Projeto",
+        "noProject": "Sem projeto",
+        "noOptions": "Nenhuma opção disponível.",
+        "clear": "Limpar filtros",
+        "done": "Concluir"
+      }
     },
     "documents": {
       "ariaLabel": "Documentos da issue",
@@ -2283,16 +2311,16 @@
     },
     "freeform": {
       "chatAria": "Chat do assistente",
-      "backToConversations": "Conversas",
+      "backToConversations": "Sessões",
       "filesAria": "Arquivos do chat",
-      "filesTitle": "Arquivos da conversa",
+      "filesTitle": "Arquivos da sessão",
       "filesHint": "Abra rascunhos markdown à direita. Clique em um nome no chat para abrir aqui.",
       "createFailed": "Não foi possível iniciar um novo chat"
     },
     "archive": {
       "label": "Arquivar",
-      "ariaLabel": "Arquivar conversa",
-      "title": "Arquivar conversa",
+      "ariaLabel": "Arquivar sessão",
+      "title": "Arquivar sessão",
       "failed": "Não foi possível arquivar o chat"
     },
     "threadDocuments": {
@@ -2325,6 +2353,7 @@
     "resumeStarted": "Retomando {{identifier}}",
     "resumeFailed": "Não foi possível retomar {{identifier}}",
     "openExecutionAria": "Abrir sessão de execução {{identifier}}",
+    "openIssueAria": "Abrir issue {{identifier}}",
     "executionUnavailable": "Os detalhes da execução de {{identifier}} não estão disponíveis agora.",
     "turns": "{{count}} turnos",
     "runtime": "Duração {{value}}",
@@ -2418,7 +2447,8 @@
         "todo": "A fazer",
         "done": "Concluído",
         "closed": "Fechado",
-        "error": "Erro"
+        "error": "Erro",
+        "aborted": "Abortado"
       }
     },
     "assistantMenu": {

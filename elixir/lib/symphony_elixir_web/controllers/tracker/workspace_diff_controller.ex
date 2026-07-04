@@ -86,7 +86,20 @@ defmodule SymphonyElixirWeb.Tracker.WorkspaceDiffController do
     with {:ok, project} <- Context.get_project(project_slug),
          {:ok, _issue} <- IssueAdapter.dispatch(project, :get_issue, [identifier]) do
       issue = %Issue{identifier: identifier, project_slug: project_slug}
-      {:ok, Workspace.path_for_issue(issue)}
+      {:ok, resolved_issue_workspace(project_slug, identifier, issue)}
+    end
+  end
+
+  defp resolved_issue_workspace(project_slug, identifier, issue) do
+    case History.issue_workspace_context(identifier) do
+      %{project_slug: ^project_slug, workspace_path: path} when is_binary(path) and path != "" ->
+        Path.expand(path)
+
+      %{project_slug: nil, workspace_path: path} when is_binary(path) and path != "" ->
+        Path.expand(path)
+
+      _ ->
+        Workspace.path_for_issue(issue)
     end
   end
 

@@ -1,29 +1,33 @@
-import { MessageSquare, Plus, RefreshCw } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Clock, MessageSquare } from "lucide-react";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
+import { ArchiveChatButton } from "@/components/assistant/ArchiveChatButton";
 import { RecentStatusDot } from "@/components/layout/RecentStatusDot";
+import { ProjectSessionsChromeSetterContext } from "@/components/layout/ProjectSessionsChromeContext";
 import { recentSessionPath, recentSessionSubtitle } from "@/components/layout/recentSessionPath";
 import { useWorkspace } from "@/components/layout/WorkspaceContext";
 import { ProjectAssistantPanel } from "@/components/assistant/ProjectAssistantPanel";
 import { AgentTabs } from "@/components/issues/issue-detail/AgentTabs";
 import { SessionListItem } from "@/components/sessions/SessionListItem";
-import { AgentIconBadge, agentKindLabel } from "@/components/shared/AgentChip";
-import { Button } from "@/components/ui/button";
+import { SessionAgentBadge, SessionTypeBadge, type SessionBadgeKind } from "@/components/shared/SessionBadge";
 import { WorkspaceTabBar } from "@/components/workspace/WorkspaceTabBar";
+import { useArchiveChat } from "@/hooks/useArchiveChat";
 import { useProjectSessions } from "@/hooks/useProjectSessions";
 import { useWorkspaceTabs } from "@/hooks/useWorkspaceTabs";
 import { PROJECT_SESSION_BUCKETS, type ProjectSessionRow } from "@/lib/projectSessions";
-import { cn, SCROLLBAR_THIN } from "@/lib/utils";
+import { cn, formatDateTime, SCROLLBAR_THIN } from "@/lib/utils";
 import {
   SESSIONS_LIST_TAB_ID,
   createAssistantSessionTab,
   createExecutionSessionTab,
   createSessionsListTab,
+  executionSessionTabId,
 } from "@/lib/workspaceTabs/types";
 import {
+  issuePath,
   projectExecutionSessionPath,
   projectSessionPath,
   projectSessionsPath,
@@ -32,7 +36,7 @@ import {
 import { dispatchIssueAgent } from "@/services/issueDispatch";
 import { createProjectSessionThread } from "@/services/assistantThreads";
 import type { AgentExecution } from "@/types/agent-execution";
-import type { Issue } from "@/types/issue";
+import type { AgentKind, Issue } from "@/types/issue";
 import type { RecentSession } from "@/types/recents";
 
 type UnifiedSessionItem =
@@ -54,8 +58,10 @@ export function ProjectSessionsWorkspace({
   const navigate = useNavigate();
   const { view } = useWorkspace();
   const { groups, relatedSessions, issues, executions, isLoading, error, refetch } = useProjectSessions(projectSlug);
+  const setSessionsChrome = useContext(ProjectSessionsChromeSetterContext);
   const [resumePending, setResumePending] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const { archiving, archiveChat } = useArchiveChat(() => void refetch());
 
   const canonicalTabs = useMemo(() => [createSessionsListTab(t("sessions.title"))], [t]);
 
@@ -102,11 +108,19 @@ export function ProjectSessionsWorkspace({
       openedExecutionRef.current = null;
       return;
     }
-    if (openedExecutionRef.current === activeExecutionIdentifier) return;
-    openedExecutionRef.current = activeExecutionIdentifier;
+
     const title = executionTitleLookup.get(activeExecutionIdentifier) ?? activeExecutionIdentifier;
+    const tabId = executionSessionTabId(activeExecutionIdentifier);
+    const existingTab = tabs.find((tab) => tab.id === tabId);
+    const hasOpenedFallback =
+      openedExecutionRef.current === activeExecutionIdentifier &&
+      !executionTitleLookup.has(activeExecutionIdentifier) &&
+      existingTab != null;
+    if (hasOpenedFallback || existingTab?.title === title) return;
+
+    openedExecutionRef.current = activeExecutionIdentifier;
     openTab(createExecutionSessionTab(activeExecutionIdentifier, title));
-  }, [activeExecutionIdentifier, executionTitleLookup, openTab]);
+  }, [activeExecutionIdentifier, executionTitleLookup, openTab, tabs]);
 
   const handleSelectTab = useCallback(
     (tabId: string) => {
@@ -151,7 +165,7 @@ export function ProjectSessionsWorkspace({
     }
   }
 
-  async function handleCreateSession() {
+  const handleCreateSession = useCallback(async () => {
     if (creating) return;
     setCreating(true);
     try {
@@ -163,7 +177,18 @@ export function ProjectSessionsWorkspace({
     } finally {
       setCreating(false);
     }
-  }
+  }, [creating, openAssistantSession, projectSlug, refetch, t]);
+
+  const handleRefresh = useCallback(() => {
+    void refetch();
+  }, [refetch]);
+
+  const handleArchive = useCallback(
+    (threadId: number) => {
+      void archiveChat(threadId);
+    },
+    [archiveChat],
+  );
 
   const executionSessions = useMemo(
     () => PROJECT_SESSION_BUCKETS.flatMap((bucket) => groups[bucket]),
@@ -187,39 +212,27 @@ export function ProjectSessionsWorkspace({
   }, [executionSessions, relatedSessions]);
   const total = sessionItems.length;
 
+  useEffect(() => {
+    if (!setSessionsChrome) return;
+
+    setSessionsChrome({
+      count: total,
+      isCreating: creating,
+      isLoading,
+      onCreateSession: () => {
+        void handleCreateSession();
+      },
+      onRefresh: handleRefresh,
+    });
+
+    return () => {
+      setSessionsChrome(null);
+    };
+  }, [creating, handleCreateSession, handleRefresh, isLoading, setSessionsChrome, total]);
+
   return (
     <main className="box-border flex h-[calc(100vh-4rem)] min-h-0 flex-col overflow-hidden bg-gradient-to-br from-muted/40 via-background to-muted/20 p-3 sm:p-4">
       <section className="mx-auto flex h-full min-h-0 w-full max-w-[min(100%,96rem)] flex-col gap-2.5 overflow-hidden">
-        <header
-          data-testid="project-sessions-compact-header"
-          className="shrink-0 rounded-lg border border-border/60 bg-card/90 px-3 py-2 shadow-sm"
-        >
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex min-w-0 items-center gap-2">
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
-                <MessageSquare className="h-4 w-4" />
-              </span>
-              <h1 className="truncate text-base font-semibold tracking-tight">{t("sessions.title")}</h1>
-              {total > 0 ? (
-                <span className="rounded-full border border-border/70 bg-background px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-                  {total}
-                </span>
-              ) : null}
-            </div>
-            <div className="flex shrink-0 items-center gap-2">
-              <Button type="button" variant="outline" size="sm" className="h-8" onClick={() => void refetch()} disabled={isLoading}>
-                <RefreshCw className={isLoading ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
-                <span className="hidden sm:inline">{t("sessions.refresh")}</span>
-              </Button>
-              <Button type="button" size="sm" className="h-8" onClick={() => void handleCreateSession()} disabled={creating}>
-                <Plus className="h-4 w-4" />
-                {creating ? t("sessions.creating") : t("sessions.newSession")}
-              </Button>
-            </div>
-          </div>
-          {error ? <p className="mt-3 text-sm text-destructive">{error}</p> : null}
-        </header>
-
         <WorkspaceTabBar
           tabs={tabs}
           activeTabId={activeTabId}
@@ -228,6 +241,7 @@ export function ProjectSessionsWorkspace({
           ariaLabel={t("workspace.sessions.tabsAria")}
           shortcutHints
         />
+        {error ? <p className="shrink-0 px-1 text-sm text-destructive">{error}</p> : null}
 
         {activeTab?.kind === "sessions-list" ? (
           <div className={cn("min-h-0 flex-1 overflow-y-auto", SCROLLBAR_THIN)}>
@@ -246,8 +260,12 @@ export function ProjectSessionsWorkspace({
             {sessionItems.length > 0 ? (
               <UnifiedSessionsList
                 items={sessionItems}
+                projectSlug={projectSlug}
+                view={view}
                 resumePending={resumePending}
+                archiving={archiving}
                 onResume={handleResume}
+                onArchive={handleArchive}
                 onOpenExecutionSession={openExecutionSession}
                 onOpenAssistantSession={openAssistantSession}
               />
@@ -330,14 +348,22 @@ function ExecutionSessionTabContent({
 
 function UnifiedSessionsList({
   items,
+  projectSlug,
+  view,
   resumePending,
+  archiving,
   onResume,
+  onArchive,
   onOpenExecutionSession,
   onOpenAssistantSession,
 }: {
   items: UnifiedSessionItem[];
+  projectSlug: string;
+  view: WorkspaceView;
   resumePending: string | null;
+  archiving: boolean;
   onResume: (session: ProjectSessionRow) => void;
+  onArchive: (threadId: number) => void;
   onOpenExecutionSession: (session: ProjectSessionRow) => void;
   onOpenAssistantSession: (threadId: number, title: string) => void;
 }) {
@@ -348,6 +374,7 @@ function UnifiedSessionsList({
           <SessionListItem
             key={item.key}
             session={item.session}
+            issueHref={issuePath(projectSlug, view, item.session.issueIdentifier)}
             resumePending={resumePending === item.session.issueIdentifier}
             onOpen={onOpenExecutionSession}
             onResume={onResume}
@@ -356,6 +383,8 @@ function UnifiedSessionsList({
           <RelatedSessionCard
             key={item.key}
             session={item.session}
+            archiving={archiving}
+            onArchive={onArchive}
             onOpenAssistantSession={onOpenAssistantSession}
           />
         ),
@@ -366,9 +395,13 @@ function UnifiedSessionsList({
 
 function RelatedSessionCard({
   session,
+  archiving,
+  onArchive,
   onOpenAssistantSession,
 }: {
   session: RecentSession;
+  archiving: boolean;
+  onArchive: (threadId: number) => void;
   onOpenAssistantSession: (threadId: number, title: string) => void;
 }) {
   const { t } = useTranslation();
@@ -381,11 +414,41 @@ function RelatedSessionCard({
   if (canOpenAsTab && session.threadId != null) {
     return (
       <li className="rounded-lg border border-border/60 bg-card/70 px-4 py-3 shadow-sm">
-        <button
-          type="button"
-          className="flex min-w-0 w-full items-start gap-3 text-left"
-          onClick={() => onOpenAssistantSession(session.threadId!, session.title)}
-        >
+        <div className="flex items-start justify-between gap-3">
+          <button
+            type="button"
+            className="flex min-w-0 flex-1 items-start gap-3 text-left"
+            onClick={() => onOpenAssistantSession(session.threadId!, session.title)}
+          >
+            <RecentStatusDot statusKind={session.statusKind} className="mt-1.5" />
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <span className="truncate text-sm font-medium text-foreground">{session.title}</span>
+                <SessionKindBadge session={session} />
+              </div>
+              <p className="mt-1 truncate text-xs text-muted-foreground">{subtitle}</p>
+              <p className="mt-1 inline-flex items-center gap-1 text-xs text-muted-foreground">
+                <Clock className="h-3.5 w-3.5" />
+                {formatDateTime(session.updatedAt)}
+              </p>
+              {session.preview ? (
+                <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">
+                  <MessageSquare className="mr-1 inline h-3.5 w-3.5 align-text-bottom" />
+                  {session.preview}
+                </p>
+              ) : null}
+            </div>
+          </button>
+          <ArchiveChatButton threadId={session.threadId} archiving={archiving} onArchive={onArchive} />
+        </div>
+      </li>
+    );
+  }
+
+  return (
+    <li className="rounded-lg border border-border/60 bg-card/70 px-4 py-3 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <Link to={recentSessionPath(session)} className="flex min-w-0 flex-1 items-start gap-3">
           <RecentStatusDot statusKind={session.statusKind} className="mt-1.5" />
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
@@ -393,6 +456,10 @@ function RelatedSessionCard({
               <SessionKindBadge session={session} />
             </div>
             <p className="mt-1 truncate text-xs text-muted-foreground">{subtitle}</p>
+            <p className="mt-1 inline-flex items-center gap-1 text-xs text-muted-foreground">
+              <Clock className="h-3.5 w-3.5" />
+              {formatDateTime(session.updatedAt)}
+            </p>
             {session.preview ? (
               <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">
                 <MessageSquare className="mr-1 inline h-3.5 w-3.5 align-text-bottom" />
@@ -400,50 +467,32 @@ function RelatedSessionCard({
               </p>
             ) : null}
           </div>
-        </button>
-      </li>
-    );
-  }
-
-  return (
-    <li className="rounded-lg border border-border/60 bg-card/70 px-4 py-3 shadow-sm">
-      <Link to={recentSessionPath(session)} className="flex min-w-0 items-start gap-3">
-        <RecentStatusDot statusKind={session.statusKind} className="mt-1.5" />
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className="truncate text-sm font-medium text-foreground">{session.title}</span>
-            <SessionKindBadge session={session} />
-          </div>
-          <p className="mt-1 truncate text-xs text-muted-foreground">{subtitle}</p>
-          {session.preview ? (
-            <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">
-              <MessageSquare className="mr-1 inline h-3.5 w-3.5 align-text-bottom" />
-              {session.preview}
-            </p>
-          ) : null}
-        </div>
-      </Link>
+        </Link>
+        {session.threadId != null ? (
+          <ArchiveChatButton threadId={session.threadId} archiving={archiving} onArchive={onArchive} />
+        ) : null}
+      </div>
     </li>
   );
 }
 
 function SessionKindBadge({ session }: { session: RecentSession }) {
-  const { t } = useTranslation();
-  const label = session.agentKind
-    ? agentKindLabel(session.agentKind, t)
-    : session.kind === "codex"
-      ? t("sessions.related.agent")
-      : t("sessions.related.chat");
+  const agentKind = relatedSessionAgentKind(session);
 
-  if (!session.agentKind) {
-    return (
-      <span className="shrink-0 rounded-full border border-border/60 px-2 py-0.5 text-[10px] text-muted-foreground">
-        {label}
-      </span>
-    );
-  }
+  return (
+    <>
+      <SessionTypeBadge kind={relatedSessionBadgeKind(session)} />
+      {agentKind ? <SessionAgentBadge kind={agentKind} /> : null}
+    </>
+  );
+}
 
-  return <AgentIconBadge kind={session.agentKind} label={label} />;
+function relatedSessionBadgeKind(session: RecentSession): SessionBadgeKind {
+  return session.kind === "codex" ? "execution" : "chat";
+}
+
+function relatedSessionAgentKind(session: RecentSession): AgentKind | null {
+  return session.agentKind ?? (session.kind === "codex" ? "codex" : null);
 }
 
 function timestampValue(value: string | null | undefined): number {

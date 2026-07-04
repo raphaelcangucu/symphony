@@ -14,6 +14,7 @@ const STATUS_COLORS: Record<RecentStatusKind, string> = {
   done: "bg-emerald-600",
   closed: "bg-slate-500",
   error: "bg-red-500",
+  aborted: "bg-red-500",
 };
 
 const PULSING: ReadonlySet<RecentStatusKind> = new Set(["running", "retrying"]);

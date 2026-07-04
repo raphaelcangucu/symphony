@@ -1,6 +1,5 @@
 export type ExecutionShortcutId =
   | "resume"
-  | "restart"
   | "stop"
   | "hardReset"
   | "cycleMode"
@@ -16,7 +15,6 @@ export interface ExecutionShortcut {
 
 export const EXECUTION_SHORTCUTS: readonly ExecutionShortcut[] = [
   { id: "resume", keys: "mod+enter", labelKey: "issue.agent.shortcuts.resume" },
-  { id: "restart", keys: "mod+shift+r", labelKey: "issue.agent.shortcuts.restart" },
   { id: "stop", keys: "mod+.", labelKey: "issue.agent.shortcuts.stop" },
   { id: "hardReset", keys: "mod+shift+backspace", labelKey: "issue.agent.shortcuts.hardReset" },
   { id: "cycleMode", keys: "mod+shift+m", labelKey: "issue.agent.shortcuts.cycleMode" },

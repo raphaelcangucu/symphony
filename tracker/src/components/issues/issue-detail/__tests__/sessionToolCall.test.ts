@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { pairSessionLogItems, sessionPairToView } from "@/components/issues/issue-detail/sessionToolCall";
+import {
+  groupSessionLogItems,
+  pairSessionLogItems,
+  sessionPairToView,
+} from "@/components/issues/issue-detail/sessionToolCall";
 import type { SessionLogEntry } from "@/types/session-log";
 
 function entry(partial: Partial<SessionLogEntry>): SessionLogEntry {
@@ -69,5 +73,109 @@ describe("pairSessionLogItems", () => {
     expect(view.toolType).toBe("Glob");
     expect(view.output?.value).toContain("Glob pattern");
     expect(view.status).toBe("failed");
+  });
+});
+
+function toolCall(callId: string, title: string): SessionLogEntry {
+  return entry({ kind: "tool_call", title, body: `{"cmd":"${title}"}`, language: "bash", status: "completed", callId });
+}
+
+function toolResult(callId: string, status: SessionLogEntry["status"] = "completed"): SessionLogEntry {
+  return entry({ kind: "tool_result", title: "output", body: "ok", status, callId });
+}
+
+describe("groupSessionLogItems", () => {
+  it("groups consecutive same-kind tool calls into a single collapsible group", () => {
+    const items = groupSessionLogItems([
+      toolCall("c1", "shell"),
+      toolResult("c1"),
+      toolCall("c2", "exec_command"),
+      toolResult("c2"),
+    ]);
+
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({ type: "toolGroup", kind: "command", status: "complete" });
+    if (items[0].type !== "toolGroup") throw new Error("expected toolGroup");
+    expect(items[0].pairs).toHaveLength(2);
+  });
+
+  it("keeps a single tool call standalone (no group)", () => {
+    const items = groupSessionLogItems([toolCall("c1", "shell"), toolResult("c1")]);
+    expect(items).toHaveLength(1);
+    expect(items[0].type).toBe("toolCall");
+  });
+
+  it("splits groups when the tool kind changes", () => {
+    const items = groupSessionLogItems([
+      toolCall("c1", "shell"),
+      toolResult("c1"),
+      toolCall("c2", "read_file"),
+      toolResult("c2"),
+      toolCall("c3", "read_file"),
+      toolResult("c3"),
+    ]);
+
+    expect(items).toHaveLength(2);
+    expect(items[0].type).toBe("toolCall");
+    expect(items[1]).toMatchObject({ type: "toolGroup", kind: "read" });
+  });
+
+  it("breaks a group when a message entry interrupts the run", () => {
+    const items = groupSessionLogItems([
+      toolCall("c1", "shell"),
+      toolResult("c1"),
+      entry({ kind: "assistant", title: "assistant", body: "thinking" }),
+      toolCall("c2", "exec_command"),
+      toolResult("c2"),
+    ]);
+
+    expect(items).toHaveLength(3);
+    expect(items[0].type).toBe("toolCall");
+    expect(items[1].type).toBe("entry");
+    expect(items[2].type).toBe("toolCall");
+  });
+
+  it("marks the group as error when any tool in the run failed", () => {
+    const items = groupSessionLogItems([
+      toolCall("c1", "shell"),
+      toolResult("c1"),
+      toolCall("c2", "exec_command"),
+      toolResult("c2", "failed"),
+    ]);
+
+    if (items[0].type !== "toolGroup") throw new Error("expected toolGroup");
+    expect(items[0].status).toBe("error");
+  });
+
+  it("groups consecutive event entries into a single event group", () => {
+    const items = groupSessionLogItems([
+      entry({ kind: "event", title: "turn_started" }),
+      entry({ kind: "event", title: "agent run failed", body: "{:turn_failed, ...}" }),
+      entry({ kind: "event", title: "turn_aborted" }),
+    ]);
+
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({ type: "eventGroup" });
+    if (items[0].type !== "eventGroup") throw new Error("expected eventGroup");
+    expect(items[0].entries).toHaveLength(3);
+  });
+
+  it("keeps a lone event standalone (no group)", () => {
+    const items = groupSessionLogItems([entry({ kind: "event", title: "agent run failed" })]);
+    expect(items).toHaveLength(1);
+    expect(items[0].type).toBe("entry");
+  });
+
+  it("does not merge events with tools or messages", () => {
+    const items = groupSessionLogItems([
+      entry({ kind: "event", title: "turn_started" }),
+      entry({ kind: "event", title: "note" }),
+      entry({ kind: "assistant", title: "Codex", body: "hi" }),
+      entry({ kind: "event", title: "turn_completed" }),
+      toolCall("c1", "shell"),
+      toolResult("c1"),
+    ]);
+
+    expect(items.map((item) => item.type)).toEqual(["eventGroup", "entry", "entry", "toolCall"]);
   });
 });

@@ -14,6 +14,7 @@ defmodule SymphonyElixir.IssueDispatch do
     Orchestrator,
     ProjectConfig,
     Repo,
+    SessionEvents,
     Workspace
   }
 
@@ -27,7 +28,7 @@ defmodule SymphonyElixir.IssueDispatch do
 
   require Logger
 
-  @type action :: :resume | :restart | :hard_reset | :stop | :continue_work
+  @type action :: :resume | :hard_reset | :stop | :continue_work
   @type opts :: %{
           optional(:agent) => String.t() | nil,
           optional(:goal) => String.t() | nil,
@@ -44,8 +45,8 @@ defmodule SymphonyElixir.IssueDispatch do
   end
 
   @spec restart(Project.t(), String.t(), opts()) :: {:ok, map()} | {:error, term()}
-  def restart(%Project{} = project, identifier, opts \\ %{}) when is_binary(identifier) do
-    dispatch(project, identifier, :restart, opts)
+  def restart(%Project{}, identifier, _opts \\ %{}) when is_binary(identifier) do
+    {:error, :invalid_action}
   end
 
   @doc """
@@ -91,7 +92,7 @@ defmodule SymphonyElixir.IssueDispatch do
   end
 
   defp dispatch(%Project{} = project, identifier, action, opts)
-       when action in [:resume, :restart, :hard_reset, :continue_work] do
+       when action in [:resume, :hard_reset, :continue_work] do
     with {:ok, issue} <- IssueAdapter.dispatch(project, :get_issue, [identifier]),
          agent_kind = effective_agent_kind(project, issue, opts),
          opts = inject_context_refs(project, identifier, opts),
@@ -142,26 +143,20 @@ defmodule SymphonyElixir.IssueDispatch do
     end
   end
 
-  defp comment_required?(action, instructions) when action in [:restart, :hard_reset] do
-    not is_nil(normalize_optional_string(instructions))
-  end
+  defp comment_required?(:hard_reset, _instructions), do: true
 
   defp comment_required?(_action, _instructions), do: true
 
-  defp maybe_record_dispatch_activity(project, identifier, action, opts) when action in [:restart, :hard_reset] do
-    if comment_required?(action, Map.get(opts, :instructions)) do
-      :ok
-    else
-      metadata = %{"action" => Atom.to_string(action)}
+  defp maybe_record_dispatch_activity(project, identifier, :hard_reset = action, _opts) do
+    metadata = %{"action" => Atom.to_string(action)}
 
-      case Context.record_activity_event(project.slug, identifier, "agent_dispatch_requested", metadata) do
-        {:ok, _event} ->
-          :ok
+    case Context.record_activity_event(project.slug, identifier, "agent_dispatch_requested", metadata) do
+      {:ok, _event} ->
+        :ok
 
-        {:error, reason} ->
-          Logger.debug("Skipping dispatch activity identifier=#{identifier} reason=#{inspect(reason)}")
-          :ok
-      end
+      {:error, reason} ->
+        Logger.debug("Skipping dispatch activity identifier=#{identifier} reason=#{inspect(reason)}")
+        :ok
     end
   end
 
@@ -184,18 +179,13 @@ defmodule SymphonyElixir.IssueDispatch do
           Stale `targeted tests:` lines in the workpad describe a previous attempt; retry them only after the current plan item is implemented. Evidence before all plan items are `[x]` is slice evidence, not final handoff evidence.
           """
 
-        :restart ->
-          """
-          ## Restart agent run (tracker)
-
-          Start a fresh agent pass on this issue. Review the ticket, workspace, and session log before continuing.
-          """
-
         :hard_reset ->
           """
-          ## Hard reset agent run (tracker)
+          ## New agent thread (tracker)
 
-          The previous agent session was discarded (turns and token counters cleared) and a brand-new session is starting. The workspace is preserved — review the existing workspace and git state, then continue the ticket.
+          The previous agent session was discarded (turns and token counters cleared) and a brand-new Codex thread is starting in the existing workspace. The workspace is preserved — review the existing workspace and git state, then continue the ticket.
+
+          Do not long-poll external CI or deployment checks inside this agent turn. Check external status once; if checks are still pending, report that state and stop so Symphony can resume later without burning the thread context.
           """
 
         :continue_work ->
@@ -325,7 +315,9 @@ defmodule SymphonyElixir.IssueDispatch do
   end
 
   defp clear_agent_session(%Project{} = project, identifier, %IssueDTO{} = issue) do
-    clear_codex_session_sidecar(project, identifier, issue)
+    workspace = run_workspace(project, identifier, issue)
+    CodexSession.clear(workspace)
+    SessionEvents.clear(workspace)
 
     case Context.clear_agent_session_id(project.slug, identifier) do
       {:ok, _record} ->
@@ -337,14 +329,13 @@ defmodule SymphonyElixir.IssueDispatch do
     end
   end
 
-  defp clear_codex_session_sidecar(%Project{} = project, identifier, %IssueDTO{} = issue) do
+  defp run_workspace(%Project{} = project, identifier, %IssueDTO{} = issue) do
     %{
       id: issue.id,
       identifier: identifier,
       project_slug: issue.project_slug || project.slug
     }
     |> Workspace.path_for_issue()
-    |> CodexSession.clear()
   end
 
   defp maybe_move_for_action(%Project{} = project, %IssueDTO{} = issue, :continue_work, opts) do
@@ -472,11 +463,8 @@ defmodule SymphonyElixir.IssueDispatch do
   defp dispatch_message(:resume, %IssueDTO{identifier: identifier}),
     do: dgettext("dispatch", "Resuming agent work on %{identifier}", identifier: identifier)
 
-  defp dispatch_message(:restart, %IssueDTO{identifier: identifier}),
-    do: dgettext("dispatch", "Restarting agent work on %{identifier}", identifier: identifier)
-
   defp dispatch_message(:hard_reset, %IssueDTO{identifier: identifier}),
-    do: dgettext("dispatch", "Hard reset — starting a fresh agent session for %{identifier}", identifier: identifier)
+    do: dgettext("dispatch", "Starting a new agent thread for %{identifier}", identifier: identifier)
 
   defp dispatch_message(:continue_work, %IssueDTO{identifier: identifier}),
     do: dgettext("dispatch", "Continuing agent work on %{identifier}", identifier: identifier)

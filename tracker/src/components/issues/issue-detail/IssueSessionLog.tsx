@@ -1,11 +1,12 @@
-import { useEffect, useRef } from "react";
+import { ChevronDown } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import {
   AgentTaskPinnedPanel,
   SessionLogTranscript,
 } from "@/components/agent-activity";
-import { agentKindLabel } from "@/components/shared/AgentChip";
+import { Button } from "@/components/ui/button";
 import { deriveAgentTasks } from "@/lib/agentTasks";
 import { cn, SCROLLBAR_THIN } from "@/lib/utils";
 import type { SessionLogEntry } from "@/types/session-log";
@@ -23,23 +24,16 @@ interface IssueSessionLogProps {
   fill?: boolean;
 }
 
-function resolveAgentLabel(kind: string, t: ReturnType<typeof useTranslation>["t"]): string {
-  if (kind === "codex" || kind === "claude" || kind === "cursor") return agentKindLabel(kind, t);
-  return kind;
-}
-
 export function IssueSessionLog({
   issueIdentifier,
-  connected,
   entries,
   error,
-  logAgentKind = null,
-  preferredAgentKind = null,
   fill = false,
 }: IssueSessionLogProps) {
   const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const stickToBottomRef = useRef(true);
+  const [isAtBottom, setIsAtBottom] = useState(true);
   const taskSnapshot = deriveAgentTasks(entries);
 
   useEffect(() => {
@@ -48,7 +42,9 @@ export function IssueSessionLog({
 
     const updateStickiness = () => {
       const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
-      stickToBottomRef.current = distanceFromBottom <= STICK_TO_BOTTOM_THRESHOLD_PX;
+      const atBottom = distanceFromBottom <= STICK_TO_BOTTOM_THRESHOLD_PX;
+      stickToBottomRef.current = atBottom;
+      setIsAtBottom(atBottom);
     };
 
     updateStickiness();
@@ -62,37 +58,25 @@ export function IssueSessionLog({
     container.scrollTop = container.scrollHeight;
   }, [entries]);
 
+  const scrollToBottom = useCallback(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    stickToBottomRef.current = true;
+    setIsAtBottom(true);
+    container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
+  }, []);
+
   return (
-    <section className={cn("rounded-xl border p-4", fill && "flex min-h-0 flex-1 flex-col")}>
-      <div className="flex items-center justify-between gap-3">
-        <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          {t("issue.sessionLog.title")}
-        </div>
-        <span className="text-[11px] text-muted-foreground">
-          {connected ? t("issue.sessionLog.streaming") : t("issue.sessionLog.connecting")}
-        </span>
-      </div>
-      {logAgentKind && preferredAgentKind && logAgentKind !== preferredAgentKind ? (
-        <p className="mt-2 text-xs text-muted-foreground">
-          {t("issue.sessionLog.agentHistory", {
-            shown: resolveAgentLabel(logAgentKind, t),
-            preferred: resolveAgentLabel(preferredAgentKind, t),
-          })}
-        </p>
-      ) : logAgentKind ? (
-        <p className="mt-2 text-xs text-muted-foreground">
-          {t("issue.sessionLog.source", { agent: resolveAgentLabel(logAgentKind, t) })}
-        </p>
-      ) : null}
+    <section className={cn("relative min-h-0", fill && "flex flex-1 flex-col")}>
       <AgentTaskPinnedPanel snapshot={taskSnapshot} />
       {error ? (
-        <p className="mt-3 text-sm text-destructive">{error}</p>
+        <p className="rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">{error}</p>
       ) : (
         <div
           ref={containerRef}
-          aria-label={t("issue.sessionLog.ariaLabel", { identifier: issueIdentifier })}
+          aria-label={t("issue.sessionLog.chatHistoryAriaLabel", { identifier: issueIdentifier })}
           className={cn(
-            "mt-3 space-y-3 overflow-auto rounded-lg bg-muted/20 p-3",
+            "space-y-4 overflow-auto px-1 py-2",
             SCROLLBAR_THIN,
             fill ? "min-h-0 flex-1" : "max-h-[520px]",
           )}
@@ -104,6 +88,21 @@ export function IssueSessionLog({
           )}
         </div>
       )}
+      {!error && entries.length > 0 && !isAtBottom ? (
+        <div className="pointer-events-none absolute inset-x-0 bottom-2 z-10 flex justify-center">
+          <Button
+            type="button"
+            size="icon"
+            variant="secondary"
+            aria-label={t("issue.sessionLog.scrollToBottom")}
+            title={t("issue.sessionLog.scrollToBottom")}
+            onClick={scrollToBottom}
+            className="pointer-events-auto h-8 w-8 rounded-full border bg-background/95 shadow-md backdrop-blur-sm"
+          >
+            <ChevronDown className="h-4 w-4" />
+          </Button>
+        </div>
+      ) : null}
     </section>
   );
 }

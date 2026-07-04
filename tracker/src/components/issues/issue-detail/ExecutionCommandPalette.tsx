@@ -1,4 +1,4 @@
-import { Eraser, Pause, PenLine, Play, Repeat, RotateCcw, Sparkles, type LucideIcon } from "lucide-react";
+import { Eraser, Pause, PenLine, Play, Repeat, Sparkles, type LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -15,7 +15,6 @@ import { EXECUTION_SHORTCUTS, type ExecutionShortcutId } from "@/lib/executionSh
 
 interface ExecutionCommandPaletteProps {
   onResume?: () => void;
-  onRestart?: () => void;
   onStop?: () => void;
   onHardReset?: () => void;
   onCycleMode?: () => void;
@@ -27,7 +26,6 @@ interface ExecutionCommandPaletteProps {
 
 const ICONS: Record<ExecutionShortcutId, LucideIcon> = {
   resume: Play,
-  restart: RotateCcw,
   stop: Pause,
   hardReset: Eraser,
   cycleMode: Repeat,
@@ -51,7 +49,6 @@ function formatKeys(keys: string): string {
 
 export function ExecutionCommandPalette({
   onResume,
-  onRestart,
   onStop,
   onHardReset,
   onCycleMode,
@@ -80,7 +77,6 @@ export function ExecutionCommandPalette({
 
   const handlers: Record<ExecutionShortcutId, (() => void) | undefined> = {
     resume: onResume,
-    restart: onRestart,
     stop: onStop,
     hardReset: onHardReset,
     cycleMode: onCycleMode,

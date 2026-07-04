@@ -13,6 +13,7 @@ interface AgentTabProps {
   evidenceAttention?: EvidenceAttention;
   returnToAgentTemplate?: ReturnToAgentTemplate | null;
   steerSeedMessage?: string | null;
+  showExecutionStatus?: boolean;
   onIssueUpdated?: (updated: Issue) => void;
 }
 

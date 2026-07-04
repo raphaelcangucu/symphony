@@ -71,7 +71,7 @@ export async function runPromptTemplate(
 }
 
 function normalizeDispatchAction(action: string | undefined): IssueDispatchAction {
-  if (action === "restart" || action === "hard_reset" || action === "stop" || action === "continue_work") {
+  if (action === "hard_reset" || action === "stop" || action === "continue_work") {
     return action;
   }
   return "resume";

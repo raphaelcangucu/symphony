@@ -1,11 +1,14 @@
-import { PenLine, Play } from "lucide-react";
+import { ChevronDown, PenLine, Play } from "lucide-react";
 import { memo, useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { IssueAuthoringPanel } from "@/components/assistant/IssueAuthoringPanel";
 import { IssueDocumentsDrawer } from "@/components/assistant/IssueDocumentsDrawer";
+import { Button } from "@/components/ui/button";
+import { AgentStatusBadge } from "@/components/issues/AgentStatusBadge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { resolveDisplayStatus } from "@/lib/agentExecutionDisplay";
 import { composerSeedFromHandoff, consumePreviewAssistantHandoff } from "@/lib/previewAssistantHandoff";
 import { consumeReturnToAgentHandoff, type ReturnToAgentTemplate } from "@/lib/returnToAgent";
 import { assessEvidenceAttention } from "@/lib/evidenceStatus";
@@ -67,6 +70,8 @@ export function AgentTabs({
   const section = agentSectionFromSearchParams(new URLSearchParams(location.search));
   const [steerSeedMessage, setSteerSeedMessage] = useState<string | null>(null);
   const [returnToAgentTemplate, setReturnToAgentTemplate] = useState<ReturnToAgentTemplate | null>(null);
+  const [showExecutionStatus, setShowExecutionStatus] = useState(false);
+  const executionDisplayStatus = execution ? resolveDisplayStatus(execution) : null;
 
   const setSection = useCallback(
     (nextSection: AgentSection) => {
@@ -99,9 +104,32 @@ export function AgentTabs({
       className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden"
     >
       <div className="flex shrink-0 items-center justify-between gap-3">
-        <p className="text-xs text-muted-foreground">
-          {section === "authoring" ? t("issue.agentTabs.authoringHint") : t("issue.agentTabs.executionHint")}
-        </p>
+        <div
+          data-testid="agent-tabs-left-control"
+          className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1"
+        >
+          {section === "authoring" ? (
+            <p className="text-xs text-muted-foreground">{t("issue.agentTabs.authoringHint")}</p>
+          ) : null}
+          {section === "execution" ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-6 gap-1 px-1.5 text-xs text-muted-foreground hover:text-foreground"
+              aria-expanded={showExecutionStatus}
+              onClick={() => setShowExecutionStatus((current) => !current)}
+            >
+              {t("issue.agent.tab.runStatus")}
+              {executionDisplayStatus ? (
+                <AgentStatusBadge status={executionDisplayStatus} showIcon={false} className="ml-0.5 px-1.5 py-0 text-[10px]" />
+              ) : null}
+              <ChevronDown
+                className={`h-3 w-3 transition-transform ${showExecutionStatus ? "rotate-180" : ""}`}
+              />
+            </Button>
+          ) : null}
+        </div>
         <div className="flex shrink-0 items-center gap-2">
           <IssueDocumentsDrawer projectSlug={projectSlug} identifier={issue.identifier} />
           <TabsList
@@ -143,6 +171,7 @@ export function AgentTabs({
           evidenceAttention={assessEvidenceAttention(evidenceRecords)}
           returnToAgentTemplate={returnToAgentTemplate}
           steerSeedMessage={steerSeedMessage}
+          showExecutionStatus={showExecutionStatus}
           onIssueUpdated={onIssueUpdated}
         />
       </TabsContent>

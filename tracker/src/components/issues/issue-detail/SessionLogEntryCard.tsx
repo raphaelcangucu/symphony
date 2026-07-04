@@ -2,8 +2,10 @@ import { ChevronDown } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
+import { AssistantChatMessageBubble } from "@/components/assistant/AssistantChatMessageBubble";
 import { Markdown } from "@/components/ui/markdown";
 import { cn } from "@/lib/utils";
+import type { AssistantChatMessage } from "@/services/assistant";
 import type { SessionLogEntry } from "@/types/session-log";
 
 interface SessionLogEntryCardProps {
@@ -14,23 +16,8 @@ export function SessionLogEntryCard({ entry }: SessionLogEntryCardProps) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(!entry.collapsed);
 
-  if (entry.kind === "assistant") {
-    return (
-      <article className="rounded-2xl border border-border/60 bg-background px-4 py-3 shadow-sm">
-        <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{entry.title}</div>
-        {entry.body ? <Markdown className="max-w-none text-sm leading-7">{entry.body}</Markdown> : null}
-      </article>
-    );
-  }
-
-  if (entry.kind === "user") {
-    return (
-      <div className="flex justify-end">
-        <article className="max-w-[92%] rounded-3xl bg-slate-950 px-4 py-2.5 text-sm text-white shadow-sm dark:bg-primary dark:text-primary-foreground">
-          {entry.body ? <p className="whitespace-pre-wrap leading-6">{entry.body}</p> : null}
-        </article>
-      </div>
-    );
+  if (entry.kind === "assistant" || entry.kind === "user" || entry.kind === "message") {
+    return <AssistantChatMessageBubble message={chatMessageFromSessionEntry(entry)} />;
   }
 
   if (entry.kind === "reasoning") {
@@ -76,6 +63,16 @@ export function SessionLogEntryCard({ entry }: SessionLogEntryCardProps) {
       {entry.body ? <CodeBody language={entry.language} value={entry.body} /> : null}
     </CollapsibleCard>
   );
+}
+
+function chatMessageFromSessionEntry(entry: SessionLogEntry): AssistantChatMessage {
+  return {
+    id: `session-${entry.kind}-${entry.callId ?? entry.title}`,
+    role: entry.kind === "user" ? "user" : "assistant",
+    content: entry.body ?? "",
+    toolCalls: [],
+    metadata: {},
+  };
 }
 
 function CollapsibleCard({

@@ -22,6 +22,7 @@ interface ExecutionChatPanelProps {
   evidenceAttention?: EvidenceAttention;
   returnToAgentTemplate?: ReturnToAgentTemplate | null;
   steerSeedMessage?: string | null;
+  showExecutionStatus?: boolean;
   onIssueUpdated?: (updated: Issue) => void;
 }
 
@@ -41,6 +42,7 @@ export function ExecutionChatPanel({
   evidenceAttention,
   returnToAgentTemplate = null,
   steerSeedMessage = null,
+  showExecutionStatus = false,
   onIssueUpdated,
 }: ExecutionChatPanelProps) {
   const { t } = useTranslation();
@@ -77,12 +79,14 @@ export function ExecutionChatPanel({
     <div className="flex min-h-0 flex-1 flex-col gap-3 text-sm">
       <div className="shrink-0 space-y-3">
         <BundlePanel issue={issue} executions={bundleExecutions} />
-        <ExecutionStatusHeader
-          projectSlug={projectSlug}
-          issue={issue}
-          execution={execution}
-          onIssueUpdated={onIssueUpdated}
-        />
+        {showExecutionStatus ? (
+          <ExecutionStatusHeader
+            projectSlug={projectSlug}
+            issue={issue}
+            execution={execution}
+            onIssueUpdated={onIssueUpdated}
+          />
+        ) : null}
         {showReturnPanel ? (
           <ReturnToAgentPanel
             projectSlug={projectSlug}

@@ -2,7 +2,7 @@ export type RecentKind = "chat" | "codex";
 export type RecentScope = "project" | "project_session" | "project_explore" | "freeform" | "issue" | null;
 export type RecentStatusKind =
   | "running" | "waiting" | "retrying" | "idle" | "active"
-  | "closed" | "error" | "done" | "in_progress" | "todo";
+  | "closed" | "error" | "aborted" | "done" | "in_progress" | "todo";
 
 export interface RecentSession {
   id: string;

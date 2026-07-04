@@ -26,16 +26,20 @@ export interface SlashCommandDef {
 const BUILTIN_CATEGORY = "builtin";
 const SKILL_CATEGORY = "workflow";
 
-const SLASH_COMMAND_SPECS = [
-  { name: "/goal", kind: "goal", category: BUILTIN_CATEGORY, descriptionKeys: { authoring: "assistant.slash.goal", execution: "assistant.slash.goalExecution" } },
-  { name: "/infer", kind: "infer", category: BUILTIN_CATEGORY, descriptionKeys: { authoring: "assistant.slash.infer", execution: "assistant.slash.infer" } },
-  { name: "/btw", kind: "btw", category: BUILTIN_CATEGORY, descriptionKeys: { authoring: "assistant.slash.btw", execution: "assistant.slash.btw" } },
-] as const satisfies ReadonlyArray<{
+type BuiltinSlashCommandSpec = {
   name: `/${string}`;
   kind: Exclude<AssistantComposerSubmitKind, "message">;
   category: string;
+  contexts: readonly SlashCommandContext[];
   descriptionKeys: Record<SlashCommandContext, string>;
-}>;
+};
+
+const SLASH_COMMAND_SPECS: readonly BuiltinSlashCommandSpec[] = [
+  { name: "/goal", kind: "goal", category: BUILTIN_CATEGORY, contexts: ["authoring", "execution"], descriptionKeys: { authoring: "assistant.slash.goal", execution: "assistant.slash.goalExecution" } },
+  { name: "/infer", kind: "infer", category: BUILTIN_CATEGORY, contexts: ["authoring", "execution"], descriptionKeys: { authoring: "assistant.slash.infer", execution: "assistant.slash.infer" } },
+  { name: "/btw", kind: "btw", category: BUILTIN_CATEGORY, contexts: ["authoring", "execution"], descriptionKeys: { authoring: "assistant.slash.btw", execution: "assistant.slash.btw" } },
+  { name: "/new-thread", kind: "new_thread", category: BUILTIN_CATEGORY, contexts: ["execution"], descriptionKeys: { authoring: "assistant.slash.newThread", execution: "assistant.slash.newThread" } },
+] as const;
 
 export const SLASH_COMMAND_NAMES = SLASH_COMMAND_SPECS.map((spec) => spec.name);
 
@@ -79,11 +83,16 @@ function resolveSlashCommands(
   extras: SlashCommandDef[] = [],
 ): SlashCommandDef[] {
   const builtins = SLASH_COMMAND_SPECS.map((spec) => ({
-    name: spec.name,
-    kind: spec.kind,
-    description: t(spec.descriptionKeys[context]),
-    category: spec.category,
-  }));
+    ...spec,
+    descriptionKey: spec.descriptionKeys[context] ?? spec.descriptionKeys.authoring ?? spec.descriptionKeys.execution,
+  }))
+    .filter((spec) => !spec.contexts || spec.contexts.includes(context))
+    .map((spec) => ({
+      name: spec.name,
+      kind: spec.kind,
+      description: spec.descriptionKey ? t(spec.descriptionKey) : spec.name,
+      category: spec.category,
+    }));
   return dedupeByName([...builtins, ...extras]);
 }
 

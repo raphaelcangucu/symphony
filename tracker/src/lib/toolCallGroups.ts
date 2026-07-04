@@ -21,14 +21,17 @@ const EDIT_TOOLS = new Set(["apply_patch", "edit_file", "write_file"]);
 const COMMAND_TOOLS = new Set(["shell", "exec_command", "bash"]);
 const QUERY_PREFIXES = ["list_", "get_", "scan_"];
 
-export function classifyToolCall(call: AssistantToolCall): ToolGroupKind {
-  const name = call.name;
+export function classifyToolName(name: string): ToolGroupKind {
   if (EDIT_TOOLS.has(name)) return "edit";
   if (COMMAND_TOOLS.has(name)) return "command";
   if (READ_TOOLS.has(name)) return "read";
   if (isActionTool(name)) return "action";
   if (QUERY_PREFIXES.some((prefix) => name.startsWith(prefix))) return "query";
   return "other";
+}
+
+export function classifyToolCall(call: AssistantToolCall): ToolGroupKind {
+  return classifyToolName(call.name);
 }
 
 export function groupStatus(calls: AssistantToolCall[]): ToolGroupStatus {

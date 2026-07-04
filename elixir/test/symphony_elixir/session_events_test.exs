@@ -47,4 +47,12 @@ defmodule SymphonyElixir.SessionEventsTest do
     assert length(appended) == 1
     assert hd(appended)["abort_reason"] == "worker_exit"
   end
+
+  test "clear removes existing session event annotations", %{workspace: workspace} do
+    assert :ok = SessionEvents.append_run_failure(workspace, {:turn_failed, "context full"})
+    assert {:ok, [_entry], _} = SessionEvents.tail(workspace)
+
+    assert :ok = SessionEvents.clear(workspace)
+    assert {:ok, [], 0} = SessionEvents.tail(workspace)
+  end
 end

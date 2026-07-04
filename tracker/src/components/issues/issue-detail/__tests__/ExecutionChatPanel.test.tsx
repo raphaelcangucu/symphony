@@ -74,12 +74,18 @@ function renderPanel(props: Partial<Parameters<typeof ExecutionChatPanel>[0]> = 
 }
 
 describe("ExecutionChatPanel", () => {
-  it("renders the chat surface: status header, transcript and composer", () => {
+  it("renders the chat surface with transcript and composer", () => {
     renderPanel({ execution: makeExecution({ status: "live" }) });
 
-    expect(screen.getByText("Run status")).toBeInTheDocument();
-    expect(screen.getByLabelText("Session log for CDE-1132")).toBeInTheDocument();
+    expect(screen.queryByText("Run status")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Chat history for CDE-1132")).toBeInTheDocument();
     expect(screen.getByTestId("execution-composer")).toBeInTheDocument();
+  });
+
+  it("renders execution status when the parent toggle is open", () => {
+    renderPanel({ execution: makeExecution({ status: "live" }), showExecutionStatus: true });
+
+    expect(screen.getByText("Run status")).toBeInTheDocument();
   });
 
   it("keeps the composer inline (not behind advanced controls) outside a wait state", () => {
@@ -92,7 +98,7 @@ describe("ExecutionChatPanel", () => {
   it("still surfaces the composer when there is no execution yet", () => {
     renderPanel();
 
-    expect(screen.getByText("No active agent")).toBeInTheDocument();
+    expect(screen.queryByText("No active agent")).not.toBeInTheDocument();
     expect(screen.getByTestId("execution-composer")).toBeInTheDocument();
   });
 });

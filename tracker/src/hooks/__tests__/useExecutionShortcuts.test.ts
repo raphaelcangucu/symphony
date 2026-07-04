@@ -44,15 +44,15 @@ describe("useExecutionShortcuts", () => {
     expect(onResume).toHaveBeenCalledTimes(1);
   });
 
-  it("blocks destructive restart while typing in a textarea", () => {
-    const onRestart = vi.fn();
-    renderHook(() => useExecutionShortcuts({ onRestart }));
+  it("does not dispatch the removed restart shortcut", () => {
+    const onResume = vi.fn();
+    renderHook(() => useExecutionShortcuts({ onResume }));
 
     const textarea = document.createElement("textarea");
     document.body.appendChild(textarea);
     press(textarea, { key: "r", metaKey: true, shiftKey: true });
 
-    expect(onRestart).not.toHaveBeenCalled();
+    expect(onResume).not.toHaveBeenCalled();
   });
 
   it("respects the enabled flag", () => {

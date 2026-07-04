@@ -7,7 +7,6 @@ import {
 
 export interface ExecutionShortcutHandlers {
   onResume?: () => void;
-  onRestart?: () => void;
   onStop?: () => void;
   onHardReset?: () => void;
   onCycleMode?: () => void;
@@ -19,7 +18,6 @@ export interface ExecutionShortcutHandlers {
 
 const HANDLER_BY_ID: Record<ExecutionShortcutId, keyof ExecutionShortcutHandlers> = {
   resume: "onResume",
-  restart: "onRestart",
   stop: "onStop",
   hardReset: "onHardReset",
   cycleMode: "onCycleMode",
@@ -28,7 +26,7 @@ const HANDLER_BY_ID: Record<ExecutionShortcutId, keyof ExecutionShortcutHandlers
 };
 
 // Non-destructive shortcuts allowed to fire while the operator is typing in the
-// composer; destructive actions (restart/hardReset) require focus outside inputs.
+// composer; destructive actions (hardReset) require focus outside inputs.
 const ALLOWED_INSIDE_INPUT = new Set<ExecutionShortcutId>([
   "resume",
   "stop",

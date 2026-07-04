@@ -33,6 +33,22 @@ const entries: SessionLogEntry[] = [
 ];
 
 describe("IssueSessionLog tasks", () => {
+  it("presents the transcript as chat history instead of a session log panel", () => {
+    renderWithI18n(<IssueSessionLog issueIdentifier="ABC-1" connected entries={entries} error={null} />);
+
+    expect(screen.getByLabelText("Chat history for ABC-1")).toBeInTheDocument();
+    expect(screen.queryByText("Session log")).not.toBeInTheDocument();
+    expect(screen.queryByText("Streaming")).not.toBeInTheDocument();
+  });
+
+  it("renders assistant log messages as chat bubbles without an event title", () => {
+    renderWithI18n(<IssueSessionLog issueIdentifier="ABC-1" connected entries={entries} error={null} />);
+
+    expect(screen.getByTestId("assistant-chat-message")).toHaveAttribute("data-role", "assistant");
+    expect(screen.getByText("Starting")).toBeInTheDocument();
+    expect(screen.queryByText("Codex")).not.toBeInTheDocument();
+  });
+
   it("renders the pinned task panel above the transcript", () => {
     renderWithI18n(<IssueSessionLog issueIdentifier="ABC-1" connected entries={entries} error={null} />);
     expect(screen.getByLabelText("Tasks")).toBeInTheDocument();

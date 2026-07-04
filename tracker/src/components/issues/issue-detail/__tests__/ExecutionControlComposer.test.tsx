@@ -179,6 +179,20 @@ describe("ExecutionControlComposer", () => {
     expect(await screen.findByText("/release")).toBeInTheDocument();
   });
 
+  it("renders the composer without agent control panel copy", () => {
+    render(
+      <ExecutionControlComposer
+        projectSlug="advising"
+        issue={issue}
+        execution={interruptedExecution}
+        onSteer={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByText("Agent control")).not.toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/optional guidance/i)).toBeInTheDocument();
+  });
+
   it("steers a live run with /infer", () => {
     const onSteer = vi.fn();
     render(
@@ -532,11 +546,24 @@ describe("ExecutionControlComposer", () => {
     expect(onIssueUpdated).toHaveBeenCalledWith(issue);
   });
 
-  it("hard resets the session after confirmation", async () => {
+  it("does not show the removed restart action", () => {
+    render(
+      <ExecutionControlComposer
+        projectSlug="advising"
+        issue={issue}
+        execution={makeExecution({ status: "aborted", lastEvent: "turn_aborted" })}
+        onSteer={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: /^restart$/i })).not.toBeInTheDocument();
+  });
+
+  it("starts a new workspace thread after confirmation", async () => {
     const onIssueUpdated = vi.fn();
     dispatchIssueAgentMock.mockResolvedValue({
       action: "hard_reset",
-      message: "Hard reset session for CDE-1132",
+      message: "Starting a new agent thread for CDE-1132",
       issue,
     });
 
@@ -551,13 +578,13 @@ describe("ExecutionControlComposer", () => {
       />,
     );
 
-    const hardResetTrigger = screen.getByRole("button", { name: /hard reset/i });
-    expect(hardResetTrigger).not.toBeDisabled();
+    const newThreadTrigger = screen.getByRole("button", { name: /new thread/i });
+    expect(newThreadTrigger).not.toBeDisabled();
 
-    await user.click(hardResetTrigger);
+    await user.click(newThreadTrigger);
 
     const dialog = await screen.findByRole("dialog");
-    await user.click(within(dialog).getByRole("button", { name: /^hard reset$/i }));
+    await user.click(within(dialog).getByRole("button", { name: /^new thread$/i }));
 
     await waitFor(() =>
       expect(dispatchIssueAgentMock).toHaveBeenCalledWith(
@@ -567,6 +594,44 @@ describe("ExecutionControlComposer", () => {
       ),
     );
     expect(onIssueUpdated).toHaveBeenCalledWith(issue);
+  });
+
+  it("starts a new workspace thread from the slash command with guidance", async () => {
+    dispatchIssueAgentMock.mockResolvedValue({
+      action: "hard_reset",
+      message: "Starting a new agent thread for CDE-1132",
+      issue,
+    });
+
+    const user = userEvent.setup();
+    render(
+      <ExecutionControlComposer
+        projectSlug="advising"
+        issue={issue}
+        execution={makeExecution({ status: "aborted", lastEvent: "turn_aborted" })}
+        onSteer={vi.fn()}
+      />,
+    );
+
+    await user.type(
+      screen.getByPlaceholderText(/optional guidance/i),
+      "/new-thread continue from the current git diff",
+    );
+    await user.click(screen.getByRole("button", { name: /^resume$/i }));
+
+    const dialog = await screen.findByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: /^new thread$/i }));
+
+    await waitFor(() =>
+      expect(dispatchIssueAgentMock).toHaveBeenCalledWith(
+        "advising",
+        "CDE-1132",
+        expect.objectContaining({
+          action: "hard_reset",
+          instructions: "continue from the current git diff",
+        }),
+      ),
+    );
   });
 
   it("steers with pasted image attachments", async () => {

@@ -1,7 +1,8 @@
-import { Clock, GitBranch, Play } from "lucide-react";
+import { Clock, ExternalLink, GitBranch, Play } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router-dom";
 
-import { AgentIconBadge, agentKindLabel } from "@/components/shared/AgentChip";
+import { SessionAgentBadge, SessionTypeBadge } from "@/components/shared/SessionBadge";
 import { SessionStatusBadge } from "@/components/sessions/SessionStatusBadge";
 import { Button } from "@/components/ui/button";
 import { canResumeExecution } from "@/lib/agentExecutionDisplay";
@@ -11,6 +12,7 @@ import type { ProjectSessionRow } from "@/lib/projectSessions";
 
 interface SessionListItemProps {
   session: ProjectSessionRow;
+  issueHref: string;
   resumePending?: boolean;
   onOpen: (session: ProjectSessionRow) => void;
   onResume: (session: ProjectSessionRow) => void;
@@ -18,6 +20,7 @@ interface SessionListItemProps {
 
 export function SessionListItem({
   session,
+  issueHref,
   resumePending = false,
   onOpen,
   onResume,
@@ -25,6 +28,7 @@ export function SessionListItem({
   const { t } = useTranslation();
   const canResume = canResumeExecution(session.execution);
   const openLabel = t("sessions.openExecutionAria", { identifier: session.issueIdentifier });
+  const openIssueLabel = t("sessions.openIssueAria", { identifier: session.issueIdentifier });
 
   return (
     <li className="rounded-lg border border-border/60 bg-card/70 px-4 py-3 shadow-sm transition-colors hover:border-primary/30 hover:bg-card">
@@ -41,10 +45,9 @@ export function SessionListItem({
               <span className="font-mono text-xs font-semibold text-primary">
                 {session.issueIdentifier}
               </span>
+              <SessionTypeBadge kind="execution" />
               <SessionStatusBadge status={session.status} />
-              {session.agentKind ? (
-                <AgentIconBadge kind={session.agentKind} label={agentKindLabel(session.agentKind, t)} />
-              ) : null}
+              {session.agentKind ? <SessionAgentBadge kind={session.agentKind} /> : null}
             </div>
             <span className="mt-1 block truncate text-sm font-medium text-foreground group-hover:underline">
               {session.title}
@@ -65,6 +68,14 @@ export function SessionListItem({
             ) : null}
           </div>
         </button>
+        <Link
+          to={issueHref}
+          aria-label={openIssueLabel}
+          title={openIssueLabel}
+          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        >
+          <ExternalLink className="h-4 w-4" />
+        </Link>
         {canResume ? (
           <Button
             type="button"

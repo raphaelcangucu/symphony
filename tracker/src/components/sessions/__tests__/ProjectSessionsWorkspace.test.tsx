@@ -1,7 +1,12 @@
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { useState, type ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import {
+  ProjectSessionsChromeSetterContext,
+  type ProjectSessionsChromeState,
+} from "@/components/layout/ProjectSessionsChromeContext";
 import { ProjectSessionsWorkspace } from "@/components/sessions/ProjectSessionsWorkspace";
 import { useProjectSessions } from "@/hooks/useProjectSessions";
 import { initTestI18n, renderWithI18n } from "@/i18n/testUtils";
@@ -20,6 +25,24 @@ vi.mock("@/components/assistant/ProjectAssistantPanel", () => ({
 vi.mock("@/components/layout/WorkspaceContext", () => ({
   useWorkspace: () => ({ projectSlug: "demo", view: "board" }),
 }));
+
+function SessionsChromeHarness({ children }: { children: ReactNode }) {
+  const [chromeState, setChromeState] = useState<ProjectSessionsChromeState | null>(null);
+
+  return (
+    <ProjectSessionsChromeSetterContext.Provider value={setChromeState}>
+      {chromeState ? (
+        <div>
+          <span data-testid="sessions-chrome-count">{chromeState.count}</span>
+          <button type="button" onClick={chromeState.onCreateSession} disabled={chromeState.isCreating}>
+            {chromeState.isCreating ? "Creating..." : "New session"}
+          </button>
+        </div>
+      ) : null}
+      {children}
+    </ProjectSessionsChromeSetterContext.Provider>
+  );
+}
 
 describe("ProjectSessionsWorkspace", () => {
   const refetch = vi.fn();
@@ -51,16 +74,15 @@ describe("ProjectSessionsWorkspace", () => {
     });
   });
 
-  it("renders a compact sessions header", () => {
+  it("omits the duplicate sessions page header", () => {
     renderWithI18n(
       <MemoryRouter initialEntries={["/projects/demo/sessions"]}>
         <ProjectSessionsWorkspace projectSlug="demo" />
       </MemoryRouter>,
     );
 
-    const header = screen.getByTestId("project-sessions-compact-header");
-    expect(header).toHaveClass("py-2");
-    expect(within(header).getByRole("heading", { name: "Sessions" })).toBeInTheDocument();
+    expect(screen.queryByTestId("project-sessions-compact-header")).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Sessions" })).not.toBeInTheDocument();
     expect(screen.queryByText("Project sessions")).not.toBeInTheDocument();
     expect(screen.queryByText("All assistant chats and agent runs related to this project.")).not.toBeInTheDocument();
   });
@@ -68,11 +90,13 @@ describe("ProjectSessionsWorkspace", () => {
   it("opens a new assistant session in a tab", async () => {
     renderWithI18n(
       <MemoryRouter initialEntries={["/projects/demo/sessions"]}>
-        <ProjectSessionsWorkspace projectSlug="demo" />
+        <SessionsChromeHarness>
+          <ProjectSessionsWorkspace projectSlug="demo" />
+        </SessionsChromeHarness>
       </MemoryRouter>,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "New session" }));
+    fireEvent.click(await screen.findByRole("button", { name: "New session" }));
 
     await waitFor(() => expect(createProjectSessionThread).toHaveBeenCalled());
     expect(screen.getByRole("tab", { name: /Planning session/i })).toBeInTheDocument();

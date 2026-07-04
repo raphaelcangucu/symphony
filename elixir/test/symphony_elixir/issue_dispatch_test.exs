@@ -5,6 +5,8 @@ defmodule SymphonyElixir.IssueDispatchTest do
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.LocalTracker.IssueRecord
   alias SymphonyElixir.Repo
+  alias SymphonyElixir.SessionEvents
+  alias SymphonyElixir.Workspace
 
   setup do
     migrate_repo()
@@ -109,42 +111,19 @@ defmodule SymphonyElixir.IssueDispatchTest do
     assert updated.agent_goal == "Follow the workflow"
   end
 
-  test "restart keeps active issues in place", %{issue: issue} do
+  test "restart is no longer a public dispatch action", %{issue: issue} do
     {:ok, _} = Context.move_issue("pref", issue.identifier, %{"status" => "In Progress"})
     {:ok, project} = Context.get_project("pref")
 
-    assert {:ok, result} = IssueDispatch.restart(project, issue.identifier, %{})
-    assert result.action == "restart"
-
-    {:ok, updated} = Context.get_issue("pref", issue.identifier)
-    assert updated.status.name == "In Progress"
-
-    {:ok, comments} = Context.list_comments("pref", issue.identifier)
-    refute Enum.any?(comments, &String.contains?(&1.body, "## Restart agent run"))
-
-    {:ok, events} = Context.list_activity_events("pref", issue.identifier)
-
-    assert Enum.any?(events, fn event ->
-             event.event_type == "agent_dispatch_requested" and
-               event.metadata["action"] == "restart"
-           end)
+    assert {:error, :invalid_action} = IssueDispatch.restart(project, issue.identifier, %{})
   end
 
-  test "restart with instructions keeps a guidance comment", %{issue: issue} do
-    {:ok, _} = Context.move_issue("pref", issue.identifier, %{"status" => "In Progress"})
-    {:ok, project} = Context.get_project("pref")
-
-    assert {:ok, _result} = IssueDispatch.restart(project, issue.identifier, %{instructions: "Use the new plan"})
-
-    {:ok, comments} = Context.list_comments("pref", issue.identifier)
-    restart_comment = Enum.find(comments, &String.contains?(&1.body, "## Restart agent run"))
-    assert restart_comment.body =~ "Use the new plan"
-  end
-
-  test "hard reset clears the persisted agent session and keeps the issue dispatchable", %{issue: issue} do
+  test "hard reset creates a new agent thread while preserving the workspace", %{issue: issue} do
     {:ok, _} = Context.move_issue("pref", issue.identifier, %{"status" => "In Progress"})
     {:ok, record} = Context.set_agent_session_id("pref", issue.identifier, "thread-123")
     assert record.agent_session_id == "thread-123"
+    workspace = Workspace.path_for_issue(%{id: issue.id, identifier: issue.identifier, project_slug: "pref"})
+    assert :ok = SessionEvents.append_run_failure(workspace, {:turn_failed, "old context full"})
 
     {:ok, project} = Context.get_project("pref")
 
@@ -153,12 +132,15 @@ defmodule SymphonyElixir.IssueDispatchTest do
     assert result.message =~ issue.identifier
 
     assert Repo.get!(IssueRecord, record.id).agent_session_id == nil
+    assert {:ok, [], 0} = SessionEvents.tail(workspace)
 
     {:ok, updated} = Context.get_issue("pref", issue.identifier)
     assert updated.status.name == "In Progress"
 
     {:ok, comments} = Context.list_comments("pref", issue.identifier)
-    refute Enum.any?(comments, &String.contains?(&1.body, "## Hard reset agent run"))
+    reset_comment = Enum.find(comments, &String.contains?(&1.body, "## New agent thread"))
+    assert reset_comment.body =~ "brand-new Codex thread"
+    assert reset_comment.body =~ "Do not long-poll external CI"
 
     {:ok, events} = Context.list_activity_events("pref", issue.identifier)
 

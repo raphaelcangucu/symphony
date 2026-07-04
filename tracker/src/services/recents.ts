@@ -25,7 +25,7 @@ export interface BackendRecentItemDto {
 }
 
 const KNOWN_STATUS_KINDS: readonly RecentStatusKind[] = [
-  "running", "waiting", "retrying", "idle", "active", "closed", "error", "done", "in_progress", "todo",
+  "running", "waiting", "retrying", "idle", "active", "closed", "error", "aborted", "done", "in_progress", "todo",
 ];
 
 function normalizeStatusKind(value: string | null | undefined): RecentStatusKind {

@@ -84,6 +84,16 @@ describe("ProjectHeader polling indicator", () => {
     expect(trigger).toHaveTextContent("distributionmachine");
   });
 
+  it("shows the project sessions count in the sessions navigation item", () => {
+    render(
+      <MemoryRouter>
+        <ProjectHeader projectSlug="macro-markets" trackerKind="local" sessionsCount={22} />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole("link", { name: /Sessions\s+22/ })).toBeInTheDocument();
+  });
+
   it("labels the indicator active when polling is active", () => {
     renderHeader(true);
     expect(screen.getByLabelText("Polling active")).toBeInTheDocument();
