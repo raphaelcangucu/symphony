@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { useWindowFocus } from "@/hooks/useWindowFocus";
+import { useFocusedInterval } from "@/hooks/useFocusedInterval";
 import { listAgentExecutions } from "@/services/agentExecutions";
 import type { AgentExecution } from "@/types/agent-execution";
 
@@ -27,9 +27,6 @@ export function useAgentExecutions({
 }: UseAgentExecutionsArgs = {}): UseAgentExecutionsResult {
   const [executions, setExecutions] = useState<ReadonlyMap<string, AgentExecution>>(new Map());
   const inFlightRef = useRef(false);
-  const focused = useWindowFocus();
-  const focusedRef = useRef(focused);
-  focusedRef.current = focused;
 
   const refetch = useCallback(async () => {
     if (inFlightRef.current) return;
@@ -45,24 +42,10 @@ export function useAgentExecutions({
   }, []);
 
   useEffect(() => {
-    if (!enabled) {
-      setExecutions(new Map());
-      return undefined;
-    }
+    if (!enabled) setExecutions(new Map());
+  }, [enabled]);
 
-    if (focusedRef.current) void refetch();
-
-    const timer = setInterval(() => {
-      if (focusedRef.current) void refetch();
-    }, intervalMs);
-
-    return () => clearInterval(timer);
-  }, [enabled, intervalMs, refetch]);
-
-  useEffect(() => {
-    if (!enabled || !focused) return;
-    void refetch();
-  }, [enabled, focused, refetch]);
+  useFocusedInterval(() => void refetch(), intervalMs, { enabled });
 
   return { executions, refetch };
 }
