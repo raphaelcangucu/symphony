@@ -26,7 +26,7 @@ defmodule SymphonyElixir.Orchestrator do
   alias SymphonyElixir.Evidence
   alias SymphonyElixir.GitHub.IssueMarker
   alias SymphonyElixir.LocalTracker.{Context, IssueMapper, Repository}
-  alias SymphonyElixir.Orchestrator.{BundleCoordinator, BundleGate, GoalState}
+  alias SymphonyElixir.Orchestrator.{BundleCoordinator, BundleGate, GoalState, TokenDelta}
   alias SymphonyElixir.PublicRouting
   alias SymphonyElixir.PushNotifications.Dispatcher, as: PushDispatcher
   alias SymphonyElixir.RunContract.Finalizer
@@ -2907,7 +2907,7 @@ defmodule SymphonyElixir.Orchestrator do
   end
 
   defp integrate_codex_update(running_entry, %{event: event, timestamp: timestamp} = update) do
-    token_delta = extract_token_delta(running_entry, update)
+    token_delta = TokenDelta.for_update(running_entry, update)
     agent_input_tokens = Map.get(running_entry, :agent_input_tokens, 0)
     agent_output_tokens = Map.get(running_entry, :agent_output_tokens, 0)
     agent_total_tokens = Map.get(running_entry, :agent_total_tokens, 0)
@@ -3135,44 +3135,6 @@ defmodule SymphonyElixir.Orchestrator do
       output_tokens: max(0, output_tokens),
       total_tokens: max(0, total_tokens),
       seconds_running: max(0, seconds_running)
-    }
-  end
-
-  defp extract_token_delta(running_entry, update) do
-    running_entry = running_entry || %{}
-    usage = update[:usage] || %{}
-
-    {
-      compute_token_delta(running_entry, usage, :input_tokens, :codex_last_reported_input_tokens),
-      compute_token_delta(running_entry, usage, :output_tokens, :codex_last_reported_output_tokens),
-      compute_token_delta(running_entry, usage, :total_tokens, :codex_last_reported_total_tokens)
-    }
-    |> then(fn {input, output, total} ->
-      %{
-        input_tokens: input.delta,
-        output_tokens: output.delta,
-        total_tokens: total.delta,
-        input_reported: input.reported,
-        output_reported: output.reported,
-        total_reported: total.reported
-      }
-    end)
-  end
-
-  defp compute_token_delta(running_entry, usage, token_key, reported_key) do
-    next_total = Map.get(usage, token_key)
-    prev_reported = Map.get(running_entry, reported_key, 0)
-
-    delta =
-      if is_integer(next_total) and next_total >= prev_reported do
-        next_total - prev_reported
-      else
-        0
-      end
-
-    %{
-      delta: max(delta, 0),
-      reported: if(is_integer(next_total), do: next_total, else: prev_reported)
     }
   end
 
