@@ -24,13 +24,28 @@ self.addEventListener("push", (event) => {
     }
   }
 
+  // Skip the OS notification when a tracker window is focused: the user is
+  // already watching (live channels update the UI), so a popup is just noise.
+  // Chrome explicitly allows suppressing push notifications in this case.
   event.waitUntil(
-    self.registration.showNotification(payload.title, {
-      body: payload.body,
-      tag: payload.tag || defaults.tag,
-      data: { url: payload.url || defaults.url },
-      icon: "/tracker/favicon.svg",
-    }),
+    clients
+      .matchAll({ type: "window", includeUncontrolled: true })
+      .then((windowClients) => {
+        const focused = windowClients.some(
+          (client) => client.focused && client.visibilityState === "visible",
+        );
+
+        if (focused) {
+          return undefined;
+        }
+
+        return self.registration.showNotification(payload.title, {
+          body: payload.body,
+          tag: payload.tag || defaults.tag,
+          data: { url: payload.url || defaults.url },
+          icon: "/tracker/favicon.svg",
+        });
+      }),
   );
 });
 

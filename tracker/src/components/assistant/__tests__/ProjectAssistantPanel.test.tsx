@@ -866,6 +866,33 @@ describe("ProjectAssistantPanel", () => {
     );
   });
 
+  it("labels the approval card with the requesting agent for Claude approvals", async () => {
+    render(<ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="page" />);
+
+    await waitFor(() => expect(channelHandlers["approval_required"]).toEqual(expect.any(Function)));
+
+    channelHandlers["approval_required"]({
+      request_id: "claude-1",
+      agent: "claude",
+      tool_name: "Bash",
+      command: "rm -rf build",
+      cwd: "/workspace/app",
+      reason: "Claude requested approval to run Bash",
+    });
+
+    expect(await screen.findByText("Claude wants to run a command")).toBeInTheDocument();
+    expect(screen.getByText("rm -rf build")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+
+    await waitFor(() =>
+      expect(push).toHaveBeenCalledWith("submit_approval", {
+        request_id: "claude-1",
+        action: "approve",
+      }),
+    );
+  });
+
   it("adds agent command approval details to composer context", async () => {
     const user = userEvent.setup();
     render(<ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="page" />);

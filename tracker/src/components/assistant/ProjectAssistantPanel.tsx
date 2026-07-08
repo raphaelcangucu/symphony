@@ -10,6 +10,7 @@ import {
   BookOpen,
   ChevronDown,
   Clock,
+  ListChecks,
   Plus,
   SendHorizontal,
   ShieldAlert,
@@ -49,7 +50,12 @@ import {
   updateStreamingToolCall,
 } from "@/components/assistant/assistantStream";
 import { BtwOverlay, type BtwStatus } from "@/components/assistant/BtwOverlay";
-import { AgentTaskPinnedPanel } from "@/components/agent-activity";
+import {
+  AgentTaskPinnedPanel,
+  AssistantTasksDock,
+  completedTaskCount,
+  type AssistantTasksDockControl,
+} from "@/components/agent-activity";
 import { WorkingIndicator } from "@/components/assistant/WorkingIndicator";
 import { KnowledgeBaseModal } from "@/components/kb/KnowledgeBaseModal";
 import { ExecutionModeMenu } from "@/components/issues/issue-detail/ExecutionModeMenu";
@@ -176,11 +182,20 @@ interface ProjectAssistantPanelProps {
   onComposerAgentResolved?: (agent: AgentKind) => void;
   onOpenDocumentPath?: (path: string) => void;
   onKbDocumentReferencesChanged?: (paths: string[]) => void;
+  /**
+   * Reports the tasks dock control (progress + open state + toggle) so an
+   * external surface (e.g. the session top bar) can mirror the composer's
+   * tasks toggle. Reports `null` when there are no tasks or the panel is not
+   * in page mode. Only wired by consumers that render an external toggle.
+   */
+  onTasksDockControlChange?: (control: AssistantTasksDockControl | null) => void;
   composerSeedMessage?: string | null;
   contentMaxWidth?: ProjectAssistantContentMaxWidth;
 }
 
 const STICK_TO_BOTTOM_THRESHOLD_PX = 48;
+
+const TASKS_DOCK_STORAGE_KEY = "symphony.assistantTasksDock.open";
 
 function attachChatScrollStickiness(
   scroller: HTMLDivElement,
@@ -295,6 +310,7 @@ export function ProjectAssistantPanel({
   onComposerAgentResolved,
   onOpenDocumentPath,
   onKbDocumentReferencesChanged,
+  onTasksDockControlChange,
   composerSeedMessage = null,
   contentMaxWidth = "default",
 }: ProjectAssistantPanelProps) {
@@ -1079,6 +1095,30 @@ export function ProjectAssistantPanel({
     () => deriveAgentTasksFromAssistantMessages(visibleMessages),
     [visibleMessages],
   );
+  const hasTasks = (taskSnapshot?.tasks.length ?? 0) > 0;
+  const tasksDone = taskSnapshot ? completedTaskCount(taskSnapshot) : 0;
+  const tasksTotal = taskSnapshot?.tasks.length ?? 0;
+  const [tasksDockOpen, setTasksDockOpen] = useState<boolean>(
+    () => window.localStorage.getItem(TASKS_DOCK_STORAGE_KEY) !== "false",
+  );
+  const toggleTasksDock = useCallback(() => {
+    setTasksDockOpen((previous) => {
+      const next = !previous;
+      window.localStorage.setItem(TASKS_DOCK_STORAGE_KEY, String(next));
+      return next;
+    });
+  }, []);
+  const showTasksDock = isPageMode && tasksDockOpen && hasTasks && taskSnapshot != null;
+
+  useEffect(() => {
+    if (!onTasksDockControlChange) return undefined;
+    onTasksDockControlChange(
+      isPageMode && hasTasks
+        ? { done: tasksDone, total: tasksTotal, open: tasksDockOpen, toggle: toggleTasksDock }
+        : null,
+    );
+    return () => onTasksDockControlChange(null);
+  }, [onTasksDockControlChange, isPageMode, hasTasks, tasksDone, tasksTotal, tasksDockOpen, toggleTasksDock]);
   const kbDocumentReferences = useMemo(
     () =>
       visibleMessages.reduce<string[]>((references, message) => {
@@ -1159,7 +1199,7 @@ export function ProjectAssistantPanel({
 
   const messageItems = (
     <>
-      <AgentTaskPinnedPanel snapshot={taskSnapshot} />
+      {showTasksDock ? null : <AgentTaskPinnedPanel snapshot={taskSnapshot} />}
       {visibleMessages.map((message) => (
         <AssistantChatMessageBubble
           key={message.id}
@@ -1340,6 +1380,24 @@ export function ProjectAssistantPanel({
       toolbarAfterAttach={
         projectSlug || issueIdentifier || threadId ? (
           <>
+            {isPageMode && hasTasks ? (
+              <Button
+                type="button"
+                variant={tasksDockOpen ? "secondary" : "ghost"}
+                size="sm"
+                className="h-8 gap-1 px-2 text-xs"
+                aria-pressed={tasksDockOpen}
+                aria-label={tasksDockOpen ? t("issue.tasks.hide") : t("issue.tasks.show")}
+                title={tasksDockOpen ? t("issue.tasks.hide") : t("issue.tasks.show")}
+                onClick={toggleTasksDock}
+              >
+                <ListChecks className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">{t("issue.tasks.title")}</span>
+                <span className="tabular-nums text-[11px] text-muted-foreground">
+                  {t("issue.tasks.progress", { done: tasksDone, total: tasksTotal })}
+                </span>
+              </Button>
+            ) : null}
             {issueIdentifier || threadId ? (
               <GitDiffLauncher
                 projectSlug={projectSlug ?? undefined}
@@ -1434,12 +1492,14 @@ export function ProjectAssistantPanel({
         <section
           ref={panelRef}
           className={cn(
-            "relative flex flex-col",
+            "relative flex",
             isPageMode && (isFullPageProjectAssistant ? "h-[calc(100vh-4rem)]" : "h-full min-h-0"),
             isEmbeddedMode && "h-full min-h-0",
+            showTasksDock && "gap-3",
           )}
           aria-label={t("assistant.panel.ariaLabel")}
         >
+          <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
           {isEmbeddedMode || hideHeader ? null : (
             <div
               data-testid="project-assistant-compact-header"
@@ -1549,6 +1609,10 @@ export function ProjectAssistantPanel({
               ) : null}
             </div>
           )}
+          </div>
+          {showTasksDock && taskSnapshot ? (
+            <AssistantTasksDock snapshot={taskSnapshot} onClose={toggleTasksDock} />
+          ) : null}
         </section>
         {btw ? (
           <BtwOverlay question={btw.question} answer={btw.answer} status={btw.status} onClose={() => setBtw(null)} />
@@ -1638,7 +1702,7 @@ function CommandApprovalCard({
     <div className="rounded-2xl border border-amber-300/60 bg-amber-50/70 p-3 text-sm shadow-sm dark:border-amber-400/30 dark:bg-amber-950/30">
       <div className="mb-2 flex items-center gap-2 font-semibold text-amber-950 dark:text-amber-100">
         <ShieldAlert className="h-4 w-4 text-amber-600 dark:text-amber-300" />
-        <span>{t("assistant.panel.commandApproval.title")}</span>
+        <span>{t("assistant.panel.commandApproval.title", { agent: agentDisplayName(request.agent) })}</span>
       </div>
       {request.command ? (
         <pre className="mb-2 max-h-32 overflow-auto rounded-lg bg-background/80 px-3 py-2 font-mono text-xs text-foreground">
@@ -1713,7 +1777,7 @@ function contextRefForApprovalRequest(request: AssistantApprovalRequest, t: TFun
   return {
     type: "security",
     id: `permission:${requestId}`,
-    label: t("assistant.panel.commandApproval.title"),
+    label: t("assistant.panel.commandApproval.title", { agent: agentDisplayName(request.agent) }),
     detail: request.cwd ?? request.reason ?? requestId,
     content,
     state: "draft",

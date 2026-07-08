@@ -17,11 +17,44 @@ function statusIcon(status: AgentTaskStatus) {
   return <Circle className="size-4 shrink-0 text-muted-foreground" aria-hidden />;
 }
 
+export function completedTaskCount(snapshot: AgentTaskSnapshot): number {
+  return snapshot.tasks.filter((task) => task.status === "completed").length;
+}
+
+interface AgentTaskItemsProps {
+  snapshot: AgentTaskSnapshot;
+}
+
+export function AgentTaskItems({ snapshot }: AgentTaskItemsProps) {
+  const { t } = useTranslation();
+
+  return (
+    <>
+      {snapshot.explanation ? <p className="mt-2 text-xs text-muted-foreground">{snapshot.explanation}</p> : null}
+      <ul className="mt-2 space-y-1">
+        {snapshot.tasks.map((task: AgentTask) => (
+          <li
+            key={task.id}
+            data-status={task.status}
+            className="flex items-center gap-2 text-sm"
+            title={t(`issue.tasks.status.${task.status}`)}
+          >
+            {statusIcon(task.status)}
+            <span className={cn(task.status === "completed" && "text-muted-foreground line-through")}>
+              {task.text}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </>
+  );
+}
+
 export function AgentTaskList({ snapshot }: AgentTaskListProps) {
   const { t } = useTranslation();
   const [collapsed, setCollapsed] = useState<boolean>(() => window.localStorage.getItem(STORAGE_KEY) === "true");
 
-  const done = snapshot.tasks.filter((task) => task.status === "completed").length;
+  const done = completedTaskCount(snapshot);
 
   const toggle = () => {
     setCollapsed((prev) => {
@@ -52,26 +85,7 @@ export function AgentTaskList({ snapshot }: AgentTaskListProps) {
           {t("issue.tasks.progress", { done, total: snapshot.tasks.length })}
         </span>
       </div>
-      {collapsed ? null : (
-        <>
-          {snapshot.explanation ? <p className="mt-2 text-xs text-muted-foreground">{snapshot.explanation}</p> : null}
-          <ul className="mt-2 space-y-1">
-            {snapshot.tasks.map((task: AgentTask) => (
-              <li
-                key={task.id}
-                data-status={task.status}
-                className="flex items-center gap-2 text-sm"
-                title={t(`issue.tasks.status.${task.status}`)}
-              >
-                {statusIcon(task.status)}
-                <span className={cn(task.status === "completed" && "text-muted-foreground line-through")}>
-                  {task.text}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
+      {collapsed ? null : <AgentTaskItems snapshot={snapshot} />}
     </section>
   );
 }

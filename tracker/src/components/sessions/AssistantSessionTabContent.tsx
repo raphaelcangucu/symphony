@@ -2,6 +2,7 @@ import { GitBranch, GitCompare } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { AssistantTasksToolbarToggle, type AssistantTasksDockControl } from "@/components/agent-activity";
 import { ProjectAssistantPanel } from "@/components/assistant/ProjectAssistantPanel";
 import { IssueSessionSplitLayout } from "@/components/sessions/IssueSessionSplitLayout";
 import { WorkspaceDiffStatsChip } from "@/components/sessions/WorkspaceDiffStatsChip";
@@ -30,6 +31,7 @@ export function AssistantSessionTabContent({
   // launcher, so the toolbar button and the composer button share one modal
   // (same thread-scoped diff, same review-to-agent wiring).
   const [diffRequestId, setDiffRequestId] = useState(0);
+  const [tasksControl, setTasksControl] = useState<AssistantTasksDockControl | null>(null);
   const workspaceDiffStats = useWorkspaceDiffStats({
     projectSlug,
     issueIdentifier,
@@ -54,6 +56,7 @@ export function AssistantSessionTabContent({
           }
           toolbarLeading={
             <div className="inline-flex items-center gap-1">
+              <AssistantTasksToolbarToggle control={tasksControl} />
               <button
                 type="button"
                 aria-label={t("issue.diff.button")}
@@ -76,6 +79,7 @@ export function AssistantSessionTabContent({
             hideHeader
             diffRequestId={diffRequestId}
             contentMaxWidth="wide"
+            onTasksDockControlChange={setTasksControl}
           />
         </IssueSessionSplitLayout>
       ) : (
@@ -88,6 +92,7 @@ export function AssistantSessionTabContent({
             hideHeader
             diffRequestId={diffRequestId}
             contentMaxWidth="wide"
+            onTasksDockControlChange={setTasksControl}
           />
         </div>
       )}

@@ -88,6 +88,8 @@ export interface AssistantApprovalRequest {
   command: string | null;
   cwd: string | null;
   reason: string | null;
+  toolName: string | null;
+  agent: AgentKind | null;
 }
 
 interface BackendTurnStatusPayload {
@@ -151,6 +153,9 @@ interface ApprovalRequiredPayload {
   command?: string | null;
   cwd?: string | null;
   reason?: string | null;
+  tool_name?: string | null;
+  toolName?: string | null;
+  agent?: string | null;
 }
 
 interface DocumentChangedPayload {
@@ -384,9 +389,16 @@ function normalizeApprovalRequest(payload: unknown): AssistantApprovalRequest | 
     command: nonEmptyString(data.command),
     cwd: nonEmptyString(data.cwd),
     reason: nonEmptyString(data.reason),
+    toolName: nonEmptyString(data.tool_name ?? data.toolName),
+    agent: normalizeApprovalAgent(data.agent),
   };
 }
 
 function nonEmptyString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+function normalizeApprovalAgent(value: unknown): AgentKind | null {
+  if (value === "claude" || value === "codex" || value === "cursor") return value;
+  return null;
 }

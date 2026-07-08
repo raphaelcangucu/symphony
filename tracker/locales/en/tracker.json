@@ -1110,6 +1110,9 @@
       "progress": "{{done}}/{{total}} done",
       "collapse": "Collapse tasks",
       "expand": "Expand tasks",
+      "show": "Show tasks panel",
+      "hide": "Hide tasks panel",
+      "close": "Close tasks panel",
       "status": {
         "pending": "Pending",
         "in_progress": "In progress",
@@ -2141,7 +2144,7 @@
         "approveTitle": "Approve the plan and execute in build mode"
       },
       "commandApproval": {
-        "title": "Codex wants to run a command",
+        "title": "{{agent}} wants to run a command",
         "cwd": "Working directory",
         "reason": "Detected action",
         "approve": "Approve",
@@ -2522,14 +2525,10 @@
       "closeDock": "Close preview panel",
       "reload": "Reload preview",
       "openInNewTab": "Open preview in new tab",
-      "startServer": "Start dev server",
-      "stopServer": "Stop dev server",
-      "restartServer": "Restart dev server",
-      "loading": "Loading preview status...",
-      "provisioning": "{{slug}} is {{status}}...",
-      "crashed": "{{slug}} crashed. Check the issue's Preview tab for logs.",
-      "unavailable": "Preview is unavailable for this issue's workspace.",
-      "notRunning": "No dev server is running for this issue yet."
+      "showDetails": "Show dev server details",
+      "hideDetails": "Hide dev server details",
+      "serverTabsAria": "Dev servers",
+      "serverTabAria": "Preview {{slug}} ({{status}})"
     },
     "sessions": {
       "tabsAria": "Project session tabs"

@@ -549,26 +549,35 @@ defmodule SymphonyElixir.Codex.CodingAgent do
 
   defp session_policies(workspace, codex_section, opts) do
     codex_section
-    |> apply_execution_mode_section(Keyword.get(opts, :execution_mode))
+    |> apply_execution_mode_section(Keyword.get(opts, :execution_mode), codex_interactive?(opts))
     |> CodexConfig.runtime_settings(workspace)
   end
 
   # When the operator picks an execution mode, force the codex sandbox onto the
   # mode's ceiling (plan→read-only, build→workspace-write, yolo→danger-full-access)
   # and drop any per-project `turn_sandbox_policy` so the per-turn policy is
-  # recomputed from the new sandbox. yolo also pins approval to "never". Without a
-  # mode the project/instance section is honored unchanged.
-  defp apply_execution_mode_section(section, mode) when is_binary(mode) do
+  # recomputed from the new sandbox. The approval policy is then overridden per the
+  # mode + interactivity (see `ExecutionMode.codex_approval_override/2`): interactive
+  # `build` prompts (`on-request`), autonomous `build` and `yolo` pin to `never`
+  # (no human to approve), and `plan` honors the project config. Without a mode the
+  # project/instance section is honored unchanged.
+  defp apply_execution_mode_section(section, mode, interactive?) when is_binary(mode) do
     section
     |> Map.put("thread_sandbox", ExecutionMode.codex_policy(mode).sandbox)
     |> Map.delete("turn_sandbox_policy")
-    |> maybe_force_never_approval(mode)
+    |> apply_execution_mode_approval(mode, interactive?)
   end
 
-  defp apply_execution_mode_section(section, _mode), do: section
+  defp apply_execution_mode_section(section, _mode, _interactive?), do: section
 
-  defp maybe_force_never_approval(section, "yolo"), do: Map.put(section, "approval_policy", "never")
-  defp maybe_force_never_approval(section, _mode), do: section
+  defp apply_execution_mode_approval(section, mode, interactive?) do
+    case ExecutionMode.codex_approval_override(mode, interactive?) do
+      {:force, policy} -> Map.put(section, "approval_policy", policy)
+      :honor_config -> section
+    end
+  end
+
+  defp codex_interactive?(opts), do: Keyword.get(opts, :interactive_user_input, false) == true
 
   # The per-project `codex:` section is threaded via opts at dispatch
   # (`agent_runner`). Fall back to the process-global codex section when absent

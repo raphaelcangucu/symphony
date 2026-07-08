@@ -1110,6 +1110,9 @@
       "progress": "{{done}}/{{total}} concluídas",
       "collapse": "Recolher tarefas",
       "expand": "Expandir tarefas",
+      "show": "Mostrar painel de tarefas",
+      "hide": "Ocultar painel de tarefas",
+      "close": "Fechar painel de tarefas",
       "status": {
         "pending": "Pendente",
         "in_progress": "Em progresso",
@@ -2141,7 +2144,7 @@
         "approveTitle": "Aprovar o plano e executar em modo build"
       },
       "commandApproval": {
-        "title": "Codex quer executar um comando",
+        "title": "{{agent}} quer executar um comando",
         "cwd": "Diretório de trabalho",
         "reason": "Ação detectada",
         "approve": "Aprovar",
@@ -2522,14 +2525,10 @@
       "closeDock": "Fechar painel de preview",
       "reload": "Recarregar preview",
       "openInNewTab": "Abrir preview em nova aba",
-      "startServer": "Iniciar dev server",
-      "stopServer": "Parar dev server",
-      "restartServer": "Reiniciar dev server",
-      "loading": "Carregando status do preview...",
-      "provisioning": "{{slug}} está {{status}}...",
-      "crashed": "{{slug}} travou. Veja os logs na aba Preview da issue.",
-      "unavailable": "Preview indisponível para o workspace desta issue.",
-      "notRunning": "Nenhum dev server rodando para esta issue ainda."
+      "showDetails": "Mostrar detalhes dos dev servers",
+      "hideDetails": "Ocultar detalhes dos dev servers",
+      "serverTabsAria": "Dev servers",
+      "serverTabAria": "Preview de {{slug}} ({{status}})"
     },
     "sessions": {
       "tabsAria": "Abas de sessões do projeto"

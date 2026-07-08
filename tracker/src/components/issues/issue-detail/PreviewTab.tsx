@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DevServerOutputPanel } from "@/components/issues/issue-detail/DevServerOutputPanel";
-import { useIssueDevServers } from "@/hooks/useIssueDevServers";
+import { useIssueDevServers, type UseIssueDevServersResult } from "@/hooks/useIssueDevServers";
 import {
   localPreviewUrl,
   publicTunnelPreviewUrl,
@@ -53,10 +53,34 @@ const RETRYABLE_UNAVAILABLE_REASONS = new Set<IssueDevServerReason>([
 const ACTIVE_PROVISIONING_STATUSES = new Set<IssueDevServerStatus>(["pending", "provisioning", "starting"]);
 
 export function PreviewTab({ projectSlug, issueIdentifier, view, execution }: PreviewTabProps) {
+  const devServers = useIssueDevServers(projectSlug, issueIdentifier);
+
+  return (
+    <PreviewPanel
+      projectSlug={projectSlug}
+      issueIdentifier={issueIdentifier}
+      view={view}
+      execution={execution}
+      devServers={devServers}
+    />
+  );
+}
+
+interface PreviewPanelProps extends PreviewTabProps {
+  /** Shared dev-servers state, so embedders (e.g. the session preview dock) keep a single SSE subscription. */
+  devServers: UseIssueDevServersResult;
+}
+
+/**
+ * Full dev-server management panel: availability, tunnel, per-server controls,
+ * logs and assistant handoff. Rendered by the issue Preview tab and embedded by
+ * the session preview dock so both surfaces share the same behavior.
+ */
+export function PreviewPanel({ projectSlug, issueIdentifier, view, execution, devServers }: PreviewPanelProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { data, error, loading, restart, restartServer, start, startServer, stop, stopServer, startTunnel } =
-    useIssueDevServers(projectSlug, issueIdentifier);
+    devServers;
   const [startingTunnel, setStartingTunnel] = useState(false);
 
   const handleStartTunnel = useCallback(async () => {

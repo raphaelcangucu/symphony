@@ -572,6 +572,8 @@ export function ProjectSessionsWorkspace({
         <IssuePreviewDock
           projectSlug={projectSlug}
           issueIdentifier={previewDockIssue}
+          view={view}
+          execution={executions.get(previewDockIssue)}
           splitContainerRef={splitContainerRef}
           fullscreen={previewFullscreen}
           onToggleFullscreen={togglePreviewFullscreen}

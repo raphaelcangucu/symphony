@@ -1,42 +1,41 @@
 import {
   AppWindow,
   ExternalLink,
-  Loader2,
   Maximize2,
   Minimize2,
-  Play,
   RefreshCw,
-  RotateCcw,
-  Square,
+  SlidersHorizontal,
   X,
 } from "lucide-react";
 import { type RefObject, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { Badge } from "@/components/ui/badge";
+import { PreviewPanel } from "@/components/issues/issue-detail/PreviewTab";
 import { Button } from "@/components/ui/button";
 import { useHorizontalPanelResize } from "@/hooks/useHorizontalPanelResize";
 import { useIssueDevServers } from "@/hooks/useIssueDevServers";
 import { openablePreviewUrl, selectPrimaryServer } from "@/lib/devServerUrls";
 import { cn } from "@/lib/utils";
-import type { IssueDevServer, IssueDevServerStatus } from "@/types/issue";
+import type { WorkspaceView } from "@/lib/workspaceRoutes";
+import type { AgentExecution } from "@/types/agent-execution";
+import type { IssueDevServerStatus } from "@/types/issue";
 
 const PREVIEW_DOCK_WIDTH_STORAGE_KEY = "symphony:issue-preview-dock-width";
 
-const PROVISIONING_STATUSES = new Set<IssueDevServerStatus>(["pending", "provisioning", "starting"]);
-
-const STATUS_BADGE_CLASS: Record<IssueDevServerStatus, string> = {
-  crashed: "border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300",
-  pending: "border-slate-500/30 bg-slate-500/10 text-slate-700 dark:text-slate-300",
-  provisioning: "border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-300",
-  ready: "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-  starting: "border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-300",
-  stopped: "border-muted bg-muted text-muted-foreground",
+const STATUS_DOT_CLASS: Record<IssueDevServerStatus, string> = {
+  crashed: "bg-red-500",
+  pending: "bg-slate-400",
+  provisioning: "bg-blue-500",
+  ready: "bg-emerald-500",
+  starting: "bg-blue-500",
+  stopped: "bg-muted-foreground/40",
 };
 
 interface IssuePreviewDockProps {
   projectSlug: string;
   issueIdentifier: string;
+  view: WorkspaceView;
+  execution?: AgentExecution;
   splitContainerRef: RefObject<HTMLDivElement | null>;
   fullscreen: boolean;
   onToggleFullscreen: () => void;
@@ -46,13 +45,17 @@ interface IssuePreviewDockProps {
 export function IssuePreviewDock({
   projectSlug,
   issueIdentifier,
+  view,
+  execution,
   splitContainerRef,
   fullscreen,
   onToggleFullscreen,
   onClose,
 }: IssuePreviewDockProps) {
   const { t } = useTranslation();
-  const { data, error, loading, restart, start, stop } = useIssueDevServers(projectSlug, issueIdentifier);
+  const devServers = useIssueDevServers(projectSlug, issueIdentifier);
+  const [selectedServerId, setSelectedServerId] = useState<number | null>(null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   // Bumping the key forces the iframe to reload with the same URL.
   const [reloadKey, setReloadKey] = useState(0);
   const { width, isResizing, onResizePointerDown, onResizePointerUp } = useHorizontalPanelResize({
@@ -74,12 +77,17 @@ export function IssuePreviewDock({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [fullscreen, onToggleFullscreen]);
 
-  const primaryServer = selectPrimaryServer(data?.servers ?? []);
-  const tunnelRunning = data?.tunnel?.running ?? false;
-  const previewUrl = openablePreviewUrl(primaryServer, tunnelRunning);
+  const servers = devServers.data?.servers ?? [];
+  const selectedServer = servers.find((server) => server.id === selectedServerId) ?? selectPrimaryServer(servers);
+  const tunnelRunning = devServers.data?.tunnel?.running ?? false;
+  const previewUrl = openablePreviewUrl(selectedServer, tunnelRunning);
+  // Without a ready URL the iframe has nothing to show, so the management panel
+  // (with start/restart, logs and assistant handoff) takes over automatically.
+  const showDetails = detailsOpen || !previewUrl;
   const fullscreenLabel = fullscreen
     ? t("workspace.preview.exitFullscreen")
     : t("workspace.preview.expandFullscreen");
+  const detailsLabel = detailsOpen ? t("workspace.preview.hideDetails") : t("workspace.preview.showDetails");
 
   return (
     <aside
@@ -113,21 +121,51 @@ export function IssuePreviewDock({
         <header className="flex shrink-0 items-center justify-between gap-2 border-b border-border/50 px-3 py-1.5">
           <div className="flex min-w-0 items-center gap-2">
             <AppWindow className="h-4 w-4 shrink-0 text-muted-foreground" />
-            <span className="truncate text-sm font-medium">{t("workspace.preview.title")}</span>
-            {primaryServer ? (
-              <Badge className={cn("capitalize", STATUS_BADGE_CLASS[primaryServer.status])}>
-                {primaryServer.status}
-              </Badge>
+            <span className="shrink-0 text-sm font-medium">{t("workspace.preview.title")}</span>
+            {servers.length > 0 ? (
+              <div className="flex min-w-0 items-center gap-1 overflow-x-auto" role="tablist" aria-label={t("workspace.preview.serverTabsAria")}>
+                {servers.map((server) => {
+                  const active = selectedServer?.id === server.id;
+                  return (
+                    <button
+                      key={server.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={active}
+                      aria-label={t("workspace.preview.serverTabAria", { slug: server.slug, status: server.status })}
+                      title={`${server.slug} — ${server.status}`}
+                      onClick={() => setSelectedServerId(server.id)}
+                      className={cn(
+                        "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors",
+                        active
+                          ? "border-border bg-accent text-foreground"
+                          : "border-border/60 text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+                      )}
+                    >
+                      <span aria-hidden className={cn("h-1.5 w-1.5 rounded-full", STATUS_DOT_CLASS[server.status])} />
+                      <span className="max-w-[8rem] truncate">{server.slug}</span>
+                    </button>
+                  );
+                })}
+              </div>
             ) : null}
           </div>
           <div className="flex shrink-0 items-center gap-0.5">
-            <ServerActions
-              disabled={loading}
-              running={primaryServer?.status === "ready"}
-              onStart={() => void start()}
-              onStop={() => void stop()}
-              onRestart={() => void restart()}
-            />
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className={cn(
+                "h-7 w-7 text-muted-foreground hover:text-foreground",
+                detailsOpen && "bg-accent text-foreground",
+              )}
+              aria-label={detailsLabel}
+              aria-pressed={detailsOpen}
+              title={detailsLabel}
+              onClick={() => setDetailsOpen((current) => !current)}
+            >
+              <SlidersHorizontal className="h-3.5 w-3.5" />
+            </Button>
             {previewUrl ? (
               <>
                 <Button
@@ -183,27 +221,28 @@ export function IssuePreviewDock({
             </Button>
           </div>
         </header>
-        {previewUrl ? (
+        {showDetails ? (
+          <div className="min-h-0 flex-1 overflow-y-auto p-3">
+            <PreviewPanel
+              projectSlug={projectSlug}
+              issueIdentifier={issueIdentifier}
+              view={view}
+              execution={execution}
+              devServers={devServers}
+            />
+          </div>
+        ) : (
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-white">
             <iframe
               key={`${previewUrl}:${reloadKey}`}
-              src={previewUrl}
+              src={previewUrl ?? undefined}
               title={t("workspace.preview.frameTitle", { identifier: issueIdentifier })}
               className="h-full w-full flex-1 border-0"
               sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
             />
           </div>
-        ) : (
-          <PreviewEmptyState
-            error={error}
-            loading={loading}
-            server={primaryServer}
-            available={data?.available ?? false}
-            hasData={data != null}
-            onStart={() => void start()}
-          />
         )}
-        {previewUrl ? (
+        {!showDetails && previewUrl ? (
           <footer className="flex shrink-0 items-center border-t border-border/50 px-3 py-1">
             <span className="truncate font-mono text-[10px] text-muted-foreground" title={previewUrl}>
               {previewUrl}
@@ -212,150 +251,6 @@ export function IssuePreviewDock({
         ) : null}
       </div>
     </aside>
-  );
-}
-
-function ServerActions({
-  disabled,
-  running,
-  onStart,
-  onStop,
-  onRestart,
-}: {
-  disabled: boolean;
-  running: boolean;
-  onStart: () => void;
-  onStop: () => void;
-  onRestart: () => void;
-}) {
-  const { t } = useTranslation();
-
-  if (running) {
-    return (
-      <>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7 text-muted-foreground hover:text-foreground"
-          aria-label={t("workspace.preview.restartServer")}
-          title={t("workspace.preview.restartServer")}
-          disabled={disabled}
-          onClick={onRestart}
-        >
-          <RotateCcw className="h-3.5 w-3.5" />
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7 text-muted-foreground hover:text-foreground"
-          aria-label={t("workspace.preview.stopServer")}
-          title={t("workspace.preview.stopServer")}
-          disabled={disabled}
-          onClick={onStop}
-        >
-          <Square className="h-3.5 w-3.5" />
-        </Button>
-      </>
-    );
-  }
-
-  return (
-    <Button
-      type="button"
-      variant="ghost"
-      size="icon"
-      className="h-7 w-7 text-muted-foreground hover:text-foreground"
-      aria-label={t("workspace.preview.startServer")}
-      title={t("workspace.preview.startServer")}
-      disabled={disabled}
-      onClick={onStart}
-    >
-      <Play className="h-3.5 w-3.5" />
-    </Button>
-  );
-}
-
-function PreviewEmptyState({
-  error,
-  loading,
-  server,
-  available,
-  hasData,
-  onStart,
-}: {
-  error: string | null;
-  loading: boolean;
-  server: IssueDevServer | null;
-  available: boolean;
-  hasData: boolean;
-  onStart: () => void;
-}) {
-  const { t } = useTranslation();
-
-  if (loading && !hasData) {
-    return (
-      <EmptyStateShell icon={<Loader2 className="h-5 w-5 animate-spin" />}>
-        {t("workspace.preview.loading")}
-      </EmptyStateShell>
-    );
-  }
-
-  if (error && !hasData) {
-    return <EmptyStateShell tone="error">{error}</EmptyStateShell>;
-  }
-
-  if (server && PROVISIONING_STATUSES.has(server.status)) {
-    return (
-      <EmptyStateShell icon={<Loader2 className="h-5 w-5 animate-spin" />}>
-        {t("workspace.preview.provisioning", { slug: server.slug, status: server.status })}
-      </EmptyStateShell>
-    );
-  }
-
-  if (server && server.status === "crashed") {
-    return <EmptyStateShell tone="error">{t("workspace.preview.crashed", { slug: server.slug })}</EmptyStateShell>;
-  }
-
-  if (!available) {
-    return <EmptyStateShell>{t("workspace.preview.unavailable")}</EmptyStateShell>;
-  }
-
-  return (
-    <EmptyStateShell>
-      <div className="flex flex-col items-center gap-3">
-        <p>{t("workspace.preview.notRunning")}</p>
-        <Button type="button" size="sm" onClick={onStart}>
-          <Play className="h-3.5 w-3.5" />
-          {t("workspace.preview.startServer")}
-        </Button>
-      </div>
-    </EmptyStateShell>
-  );
-}
-
-function EmptyStateShell({
-  children,
-  icon,
-  tone = "default",
-}: {
-  children: React.ReactNode;
-  icon?: React.ReactNode;
-  tone?: "default" | "error";
-}) {
-  return (
-    <div
-      role="status"
-      aria-live="polite"
-      className={cn(
-        "flex min-h-0 flex-1 flex-col items-center justify-center gap-2 p-6 text-center text-sm",
-        tone === "error" ? "text-red-600 dark:text-red-400" : "text-muted-foreground",
-      )}
-    >
-      {icon}
-      <div>{children}</div>
-    </div>
   );
 }
 

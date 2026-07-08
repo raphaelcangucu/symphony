@@ -5,12 +5,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { IssuePreviewDock } from "@/components/sessions/IssuePreviewDock";
 import { initTestI18n } from "@/i18n/testUtils";
-import type { IssueDevServersResponse } from "@/types/issue";
+import type { IssueDevServer, IssueDevServersResponse } from "@/types/issue";
 
 const useIssueDevServersMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/hooks/useIssueDevServers", () => ({
   useIssueDevServers: (...args: unknown[]) => useIssueDevServersMock(...args),
+}));
+
+vi.mock("@/components/issues/issue-detail/PreviewTab", () => ({
+  PreviewPanel: ({ projectSlug, issueIdentifier }: { projectSlug: string; issueIdentifier: string }) => (
+    <div data-testid="preview-panel" data-project={projectSlug} data-issue={issueIdentifier} />
+  ),
 }));
 
 function devServersResult(overrides: Partial<ReturnType<typeof baseResult>> = {}) {
@@ -33,22 +39,25 @@ function baseResult() {
   };
 }
 
-function readyResponse(): IssueDevServersResponse {
+function server(overrides: Partial<IssueDevServer> = {}): IssueDevServer {
+  return {
+    id: 1,
+    slug: "web",
+    working_dir: "web",
+    port: 5173,
+    url: "http://myhost:5173/",
+    status: "ready",
+    primary: true,
+    session_name: "dev-web",
+    ...overrides,
+  };
+}
+
+function response(servers: IssueDevServer[]): IssueDevServersResponse {
   return {
     available: true,
     reason: "ok" as IssueDevServersResponse["reason"],
-    servers: [
-      {
-        id: 1,
-        slug: "web",
-        working_dir: "web",
-        port: 5173,
-        url: "http://myhost:5173/",
-        status: "ready",
-        primary: true,
-        session_name: "dev-web",
-      },
-    ],
+    servers,
     tunnel: { enabled: false, running: false },
   };
 }
@@ -69,6 +78,7 @@ function renderDock({
       <IssuePreviewDock
         projectSlug="macro-markets"
         issueIdentifier="510"
+        view="board"
         splitContainerRef={splitContainerRef}
         fullscreen={fullscreen}
         onToggleFullscreen={onToggleFullscreen}
@@ -86,46 +96,74 @@ describe("IssuePreviewDock", () => {
     useIssueDevServersMock.mockReturnValue(devServersResult());
   });
 
-  it("renders resize, fullscreen and close controls in split mode", () => {
+  it("renders resize, details, fullscreen and close controls in split mode", () => {
     renderDock();
 
     expect(screen.getByRole("button", { name: "Resize preview panel" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Show dev server details" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Expand preview to full screen" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Close preview panel" })).toBeInTheDocument();
   });
 
   it("embeds the dev server url in an iframe when the server is ready", () => {
-    useIssueDevServersMock.mockReturnValue(devServersResult({ data: readyResponse() }));
+    useIssueDevServersMock.mockReturnValue(devServersResult({ data: response([server()]) }));
 
     renderDock();
 
     const frame = screen.getByTitle("Dev server preview for 510");
     expect(frame).toHaveAttribute("src", "http://localhost:5173/");
     expect(screen.getByRole("button", { name: "Reload preview" })).toBeInTheDocument();
+    expect(screen.queryByTestId("preview-panel")).not.toBeInTheDocument();
   });
 
-  it("offers to start the dev server when none is running", async () => {
+  it("falls back to the management panel when no server is ready", () => {
+    useIssueDevServersMock.mockReturnValue(
+      devServersResult({ data: response([server({ status: "crashed" })]) }),
+    );
+
+    renderDock();
+
+    expect(screen.queryByTitle("Dev server preview for 510")).not.toBeInTheDocument();
+    const panel = screen.getByTestId("preview-panel");
+    expect(panel).toHaveAttribute("data-project", "macro-markets");
+    expect(panel).toHaveAttribute("data-issue", "510");
+  });
+
+  it("toggles the management panel from the details button while a preview is live", async () => {
     const user = userEvent.setup();
-    const start = vi.fn();
+    useIssueDevServersMock.mockReturnValue(devServersResult({ data: response([server()]) }));
+
+    renderDock();
+
+    await user.click(screen.getByRole("button", { name: "Show dev server details" }));
+    expect(screen.getByTestId("preview-panel")).toBeInTheDocument();
+    expect(screen.queryByTitle("Dev server preview for 510")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Hide dev server details" }));
+    expect(screen.queryByTestId("preview-panel")).not.toBeInTheDocument();
+    expect(screen.getByTitle("Dev server preview for 510")).toBeInTheDocument();
+  });
+
+  it("shows one tab per server and switches the iframe to the selected server", async () => {
+    const user = userEvent.setup();
     useIssueDevServersMock.mockReturnValue(
       devServersResult({
-        start,
-        data: {
-          available: true,
-          reason: "ok" as IssueDevServersResponse["reason"],
-          servers: [],
-          tunnel: { enabled: false, running: false },
-        },
+        data: response([
+          server(),
+          server({ id: 2, slug: "api", working_dir: "api", port: 8080, url: "http://myhost:8080/", primary: false }),
+        ]),
       }),
     );
 
     renderDock();
 
-    expect(screen.getByText("No dev server is running for this issue yet.")).toBeInTheDocument();
-    // The header action and the empty-state CTA both start the server.
-    const [headerStart] = screen.getAllByRole("button", { name: "Start dev server" });
-    await user.click(headerStart!);
-    expect(start).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("tab", { name: "Preview web (ready)" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByTitle("Dev server preview for 510")).toHaveAttribute("src", "http://localhost:5173/");
+
+    await user.click(screen.getByRole("tab", { name: "Preview api (ready)" }));
+
+    expect(screen.getByRole("tab", { name: "Preview api (ready)" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByTitle("Dev server preview for 510")).toHaveAttribute("src", "http://localhost:8080/");
   });
 
   it("invokes close and fullscreen callbacks", async () => {
