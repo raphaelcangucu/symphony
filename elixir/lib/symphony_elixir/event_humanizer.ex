@@ -19,6 +19,11 @@ defmodule SymphonyElixir.EventHumanizer do
   def adapter do
     case Config.agent_kind() do
       "codex" -> SymphonyElixir.Codex.EventHumanizer
+      "claude" -> SymphonyElixir.Claude.EventHumanizer
+      # Cursor and OpenCode CLI runners emit the Claude-style bridge vocabulary
+      # (item/created, turn/completed, ...), so they share its humanizer.
+      "cursor" -> SymphonyElixir.Claude.EventHumanizer
+      "opencode" -> SymphonyElixir.Claude.EventHumanizer
       _ -> SymphonyElixir.Claude.EventHumanizer
     end
   end

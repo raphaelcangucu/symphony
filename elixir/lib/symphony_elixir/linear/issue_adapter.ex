@@ -6,6 +6,7 @@ defmodule SymphonyElixir.Linear.IssueAdapter do
   alias SymphonyElixir.Linear.Client
   alias SymphonyElixir.Linear.IssueAdapter.Query
   alias SymphonyElixir.LocalTracker.Project
+  alias SymphonyElixir.Tracker.RemoteError
 
   @impl true
   def kind, do: :linear
@@ -202,7 +203,6 @@ defmodule SymphonyElixir.Linear.IssueAdapter do
   defp client, do: Application.get_env(:symphony_elixir, :linear_client_module, Client)
 
   defp map_error({:error, reason}), do: map_error(reason)
-  defp map_error({:remote_validation, _details} = error), do: error
   defp map_error(:status_not_found), do: :status_not_found
   defp map_error(:team_not_found), do: :remote_unavailable
   defp map_error(:create_failed), do: :remote_unavailable
@@ -210,10 +210,7 @@ defmodule SymphonyElixir.Linear.IssueAdapter do
   defp map_error({:linear_graphql_errors, errors}),
     do: {:remote_validation, %{errors: summarize_graphql_errors(errors)}}
 
-  defp map_error({:linear_api_status, 401}), do: :remote_unauthorized
-  defp map_error({:linear_api_status, 403}), do: :remote_forbidden
-  defp map_error({:linear_api_status, status}) when status in 500..599, do: :remote_unavailable
-  defp map_error(_), do: :remote_unavailable
+  defp map_error(reason), do: RemoteError.normalize(reason, :linear_api_status)
 
   defp summarize_graphql_errors(errors) when is_list(errors) do
     Enum.flat_map(errors, fn

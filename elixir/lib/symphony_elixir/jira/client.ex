@@ -12,7 +12,6 @@ defmodule SymphonyElixir.Jira.Client do
 
   alias SymphonyElixir.{Config, Issue, Jira}
 
-  @max_error_body_log_bytes 1_000
   @request_timeout_ms 30_000
   @search_page_size 50
   @search_path "/rest/api/3/search/jql"
@@ -378,30 +377,8 @@ defmodule SymphonyElixir.Jira.Client do
     )
   end
 
-  defp error_context(%{body: body}), do: " body=" <> summarize_error_body(body)
+  defp error_context(%{body: body}), do: " body=" <> SymphonyElixir.HTTP.ErrorBody.summarize(body)
   defp error_context(_response), do: ""
-
-  defp summarize_error_body(body) when is_binary(body) do
-    body
-    |> String.replace(~r/\s+/, " ")
-    |> String.trim()
-    |> truncate_error_body()
-    |> inspect()
-  end
-
-  defp summarize_error_body(body) do
-    body
-    |> inspect(limit: 20, printable_limit: @max_error_body_log_bytes)
-    |> truncate_error_body()
-  end
-
-  defp truncate_error_body(body) when is_binary(body) do
-    if byte_size(body) > @max_error_body_log_bytes do
-      binary_part(body, 0, @max_error_body_log_bytes) <> "...<truncated>"
-    else
-      body
-    end
-  end
 
   defp present(value) when is_binary(value) do
     case String.trim(value) do

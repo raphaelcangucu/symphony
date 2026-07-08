@@ -10,6 +10,8 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
   @default_limit 50
   @max_limit 100
   @min_limit 1
+  # Compile-time copy of the canonical list so it can be used in guards.
+  @agent_kinds SymphonyElixir.Settings.Agents.agent_kinds()
 
   @spec index(Conn.t(), map()) :: Conn.t()
   def index(conn, params) do
@@ -145,7 +147,7 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
   defp parse_scopes(scopes) when is_list(scopes), do: scopes
   defp parse_scopes(_), do: nil
 
-  defp normalize_agent(agent) when agent in ["codex", "claude", "cursor", "opencode"], do: agent
+  defp normalize_agent(agent) when agent in @agent_kinds, do: agent
   defp normalize_agent(_agent), do: nil
 
   defp clamp_limit(nil), do: @default_limit

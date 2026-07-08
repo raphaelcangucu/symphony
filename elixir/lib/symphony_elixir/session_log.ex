@@ -16,7 +16,7 @@ defmodule SymphonyElixir.SessionLog do
   alias SymphonyElixir.OpenCode.SessionLog, as: OpenCodeLog
   alias SymphonyElixir.SessionEvents
 
-  @agent_kinds ["claude", "cursor", "codex", "opencode"]
+  @agent_kinds SymphonyElixir.Settings.Agents.agent_kinds()
   @join_tail_bytes 512_000
 
   @doc """

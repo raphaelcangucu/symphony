@@ -55,23 +55,14 @@ defmodule SymphonyElixir.Tracker.IssueAdapter do
   @callback delete_comment(Project.t(), String.t(), term()) ::
               {:ok, map()} | {:error, tracker_error()}
 
-  @default_adapters %{
-    "local" => SymphonyElixir.LocalTracker.IssueAdapter,
-    "github" => SymphonyElixir.GitHub.IssueAdapter,
-    "linear" => SymphonyElixir.Linear.IssueAdapter,
-    "jira" => SymphonyElixir.Jira.IssueAdapter
-  }
-
-  @remote_kinds ["github", "linear", "jira"]
+  @remote_kinds SymphonyElixir.Tracker.Registry.remote_kinds()
 
   @spec for(Project.t()) :: module()
   def for(%Project{tracker_kind: kind}) do
     if kind in @remote_kinds and SymphonyElixir.Config.tracker_sync_enabled?() do
       SymphonyElixir.Tracker.Sync.LocalFirstAdapter
     else
-      overrides = Application.get_env(:symphony_elixir, :issue_adapters, %{})
-      merged = Map.merge(@default_adapters, overrides)
-      Map.get(merged, kind, SymphonyElixir.LocalTracker.IssueAdapter)
+      Map.get(configured_adapters(), kind, SymphonyElixir.LocalTracker.IssueAdapter)
     end
   end
 
@@ -82,11 +73,15 @@ defmodule SymphonyElixir.Tracker.IssueAdapter do
   """
   @spec remote_for(String.t()) :: module() | nil
   def remote_for(kind) when kind in @remote_kinds do
-    overrides = Application.get_env(:symphony_elixir, :issue_adapters, %{})
-    @default_adapters |> Map.merge(overrides) |> Map.get(kind)
+    Map.get(configured_adapters(), kind)
   end
 
   def remote_for(_kind), do: nil
+
+  defp configured_adapters do
+    overrides = Application.get_env(:symphony_elixir, :issue_adapters, %{})
+    Map.merge(SymphonyElixir.Tracker.Registry.issue_adapters(), overrides)
+  end
 
   @spec dispatch(Project.t(), atom(), list()) :: term()
   def dispatch(%Project{} = project, fun, args) when is_atom(fun) and is_list(args) do

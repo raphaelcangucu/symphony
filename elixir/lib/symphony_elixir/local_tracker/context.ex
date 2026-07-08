@@ -1995,7 +1995,7 @@ defmodule SymphonyElixir.LocalTracker.Context do
 
   defp normalize_agent_kind(agent) when is_binary(agent) do
     agent = agent |> String.trim() |> String.downcase()
-    if agent in ["codex", "claude", "cursor", "opencode"], do: agent, else: nil
+    if agent in SymphonyElixir.Settings.Agents.agent_kinds(), do: agent, else: nil
   end
 
   defp normalize_agent_kind(_agent), do: nil

@@ -7,8 +7,6 @@ defmodule SymphonyElixir.Linear.Client do
   alias SymphonyElixir.{Config, Issue, Linear}
 
   @issue_page_size 50
-  @max_error_body_log_bytes 1_000
-
   @query """
   query SymphonyLinearPoll($projectSlug: String!, $stateNames: [String!]!, $first: Int!, $relationFirst: Int!, $after: String) {
     issues(filter: {project: {slugId: {eq: $projectSlug}}, state: {name: {in: $stateNames}}}, first: $first, after: $after) {
@@ -337,31 +335,9 @@ defmodule SymphonyElixir.Linear.Client do
     body =
       response
       |> Map.get(:body)
-      |> summarize_error_body()
+      |> SymphonyElixir.HTTP.ErrorBody.summarize()
 
     operation_name <> " body=" <> body
-  end
-
-  defp summarize_error_body(body) when is_binary(body) do
-    body
-    |> String.replace(~r/\s+/, " ")
-    |> String.trim()
-    |> truncate_error_body()
-    |> inspect()
-  end
-
-  defp summarize_error_body(body) do
-    body
-    |> inspect(limit: 20, printable_limit: @max_error_body_log_bytes)
-    |> truncate_error_body()
-  end
-
-  defp truncate_error_body(body) when is_binary(body) do
-    if byte_size(body) > @max_error_body_log_bytes do
-      binary_part(body, 0, @max_error_body_log_bytes) <> "...<truncated>"
-    else
-      body
-    end
   end
 
   defp graphql_headers do

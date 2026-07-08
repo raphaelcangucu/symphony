@@ -22,7 +22,6 @@ defmodule SymphonyElixir.GitHub.Client do
 
   @graphql_endpoint "https://api.github.com/graphql"
   @rest_endpoint "https://api.github.com"
-  @max_error_body_log_bytes 1_000
   @project_item_page_size 50
   @resolve_item_page_size 20
 
@@ -1421,30 +1420,8 @@ defmodule SymphonyElixir.GitHub.Client do
     body =
       response
       |> Map.get(:body)
-      |> summarize_error_body()
+      |> SymphonyElixir.HTTP.ErrorBody.summarize()
 
     operation_name <> " body=" <> body
-  end
-
-  defp summarize_error_body(body) when is_binary(body) do
-    body
-    |> String.replace(~r/\s+/, " ")
-    |> String.trim()
-    |> truncate_error_body()
-    |> inspect()
-  end
-
-  defp summarize_error_body(body) do
-    body
-    |> inspect(limit: 20, printable_limit: @max_error_body_log_bytes)
-    |> truncate_error_body()
-  end
-
-  defp truncate_error_body(body) when is_binary(body) do
-    if byte_size(body) > @max_error_body_log_bytes do
-      binary_part(body, 0, @max_error_body_log_bytes) <> "...<truncated>"
-    else
-      body
-    end
   end
 end

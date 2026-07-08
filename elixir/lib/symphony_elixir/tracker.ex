@@ -89,13 +89,7 @@ defmodule SymphonyElixir.Tracker do
     if Config.tracker_sync_enabled?() do
       SymphonyElixir.Tracker.Sync.LocalFirstTracker
     else
-      remote_adapter(Config.tracker_kind())
+      SymphonyElixir.Tracker.Registry.tracker(Config.tracker_kind())
     end
   end
-
-  defp remote_adapter("local"), do: SymphonyElixir.LocalTracker.Tracker
-  defp remote_adapter("memory"), do: SymphonyElixir.Memory.Tracker
-  defp remote_adapter("linear"), do: SymphonyElixir.Linear.Tracker
-  defp remote_adapter("jira"), do: SymphonyElixir.Jira.Tracker
-  defp remote_adapter(_kind), do: SymphonyElixir.GitHub.Tracker
 end

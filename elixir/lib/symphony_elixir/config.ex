@@ -45,7 +45,7 @@ defmodule SymphonyElixir.Config do
   @default_github_max_backoff_ms 60_000
 
   @tracker_sections ["local", "linear", "jira", "github", "memory"]
-  @agent_sections ["claude", "codex", "cursor"]
+  @agent_sections ["claude", "codex", "cursor", "opencode"]
 
   # Type expectations for the per-project workflow_config sections that
   # `validate_workflow_config/1` strictly validates. Each entry is
@@ -933,7 +933,7 @@ defmodule SymphonyElixir.Config do
   defp validate_configured_agents! do
     case configured_agent_kinds() do
       [] ->
-        {:error, "No agent configured — add a codex:, claude:, or cursor: section to WORKFLOW.md"}
+        {:error, "No agent configured — add a codex:, claude:, cursor:, or opencode: section to WORKFLOW.md"}
 
       kinds ->
         validate_agent_kinds(kinds)
@@ -952,6 +952,7 @@ defmodule SymphonyElixir.Config do
   defp validate_agent_kind!("codex"), do: SymphonyElixir.Codex.Config.validate!()
   defp validate_agent_kind!("claude"), do: SymphonyElixir.Claude.Config.validate!()
   defp validate_agent_kind!("cursor"), do: SymphonyElixir.Cursor.Config.validate!()
+  defp validate_agent_kind!("opencode"), do: SymphonyElixir.OpenCode.Config.validate!()
   defp validate_agent_kind!(other), do: {:error, "Unknown agent kind #{inspect(other)} in WORKFLOW.md"}
 
   defp tracker_config_module do

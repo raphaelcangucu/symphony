@@ -16,7 +16,9 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
   alias SymphonyElixirWeb.TrackerErrors
   alias SymphonyElixirWeb.TrackerPresenter
 
-  @agent_labels %{"codex" => "Codex", "claude" => "Claude", "cursor" => "Cursor"}
+  # Compile-time copy of the canonical list so it can be used in guards.
+  @agent_kinds SymphonyElixir.Settings.Agents.agent_kinds()
+  @agent_labels %{"codex" => "Codex", "claude" => "Claude", "cursor" => "Cursor", "opencode" => "OpenCode"}
 
   @spec index(Conn.t(), map()) :: Conn.t()
   def index(conn, %{"project_slug" => project_slug} = params) do
@@ -198,7 +200,7 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
         |> Map.drop(["project_slug", "id"])
         |> normalize_update_attrs(project)
 
-      if Map.has_key?(attrs, "agent") and attrs["agent"] not in ["codex", "claude", "cursor", "opencode", nil] do
+      if Map.has_key?(attrs, "agent") and attrs["agent"] not in [nil | @agent_kinds] do
         TrackerErrors.validation_msg(conn, "agent must be codex, claude, cursor, or null")
       else
         case IssueAdapter.dispatch(project, :update_issue, [identifier, attrs]) do
@@ -483,7 +485,7 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
     |> maybe_put_agent_goal(Map.get(params, "agent"), Map.get(params, "goal"))
   end
 
-  defp maybe_put_agent(attrs, agent) when agent in ["codex", "claude", "cursor", "opencode"], do: Map.put(attrs, "agent", agent)
+  defp maybe_put_agent(attrs, agent) when agent in @agent_kinds, do: Map.put(attrs, "agent", agent)
   defp maybe_put_agent(attrs, _agent), do: attrs
 
   # Claude/Cursor consume `agent_goal` as workflow guidance. Codex goals are not
@@ -511,7 +513,7 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
   # highlighted as "default" since the effective agent is exposed separately via
   # effective_agent/1 (resolved at the project level at form-load time).
   defp agent_options do
-    Enum.map(["codex", "claude", "cursor", "opencode"], fn kind ->
+    Enum.map(@agent_kinds, fn kind ->
       %{value: kind, label: Map.fetch!(@agent_labels, kind), default: false}
     end)
   end
