@@ -10,9 +10,22 @@ defmodule SymphonyElixir.Claude.CodingAgent do
 
   require Logger
 
+  alias SymphonyElixir.Claude.ApprovalBroker
   alias SymphonyElixir.Claude.AppServer.{CliRunner, ToolGateway}
   alias SymphonyElixir.Config
   alias SymphonyElixir.ExecutionMode
+
+  # The MCP tool Claude calls to request operator approval when running with
+  # `--permission-mode default` (interactive `build`). The bare name is what the
+  # gateway advertises; the qualified name is what `--permission-prompt-tool`
+  # expects on the CLI.
+  @approval_tool_name "symphony_approve"
+  @approval_tool_qualified "mcp__symphony__symphony_approve"
+
+  # How long the blocking MCP approval handler waits for the operator before it
+  # gives up and denies (so a turn can never hang forever). Overridable per
+  # session via the `:approval_timeout_ms` opt.
+  @default_approval_timeout_ms 300_000
 
   @type session :: %{
           session_uuid: String.t(),
@@ -22,6 +35,7 @@ defmodule SymphonyElixir.Claude.CodingAgent do
           model: String.t() | nil,
           effort: String.t() | nil,
           permission_mode: String.t(),
+          permission_prompt_tool: String.t() | nil,
           gateway_token: String.t() | nil,
           mcp_config_path: Path.t() | nil,
           metadata: map()
@@ -31,6 +45,8 @@ defmodule SymphonyElixir.Claude.CodingAgent do
   def start_session(workspace, opts \\ []) do
     with :ok <- validate_workspace_cwd(workspace, opts),
          {:ok, gateway} <- maybe_register_tools(workspace, opts) do
+      interactive? = interactive?(opts)
+
       {:ok,
        %{
          session_uuid: generate_uuid(),
@@ -39,7 +55,8 @@ defmodule SymphonyElixir.Claude.CodingAgent do
          cli_session_id: nil,
          model: Keyword.get(opts, :model),
          effort: Keyword.get(opts, :effort),
-         permission_mode: ExecutionMode.claude_permission_mode(Keyword.get(opts, :execution_mode)),
+         permission_mode: ExecutionMode.claude_permission_mode(Keyword.get(opts, :execution_mode), interactive?),
+         permission_prompt_tool: Map.get(gateway, :permission_prompt_tool),
          gateway_token: Map.get(gateway, :token),
          mcp_config_path: Map.get(gateway, :path),
          metadata: %{}
@@ -128,16 +145,26 @@ defmodule SymphonyElixir.Claude.CodingAgent do
       effort: Keyword.get(opts, :effort, session.effort),
       mcp_config_path: session.mcp_config_path,
       permission_mode: turn_permission_mode(session, opts),
+      permission_prompt_tool: session.permission_prompt_tool,
       timeout_ms: Config.agent_turn_timeout_ms()
     }
   end
 
   # A per-turn execution mode (carried in the run opts) overrides the session's
-  # mode; otherwise the mode resolved at session start applies.
+  # mode; otherwise the mode resolved at session start applies. `default` only
+  # makes sense when the approval prompt tool was wired at session start —
+  # otherwise fall back to bypass so tool calls don't fail on "requires approval".
   defp turn_permission_mode(session, opts) do
-    case Keyword.get(opts, :execution_mode) do
-      mode when is_binary(mode) -> ExecutionMode.claude_permission_mode(mode)
-      _ -> session.permission_mode
+    requested =
+      case Keyword.get(opts, :execution_mode) do
+        mode when is_binary(mode) -> ExecutionMode.claude_permission_mode(mode, interactive?(opts))
+        _ -> session.permission_mode
+      end
+
+    if requested == "default" and is_nil(session.permission_prompt_tool) do
+      "bypassPermissions"
+    else
+      requested
     end
   end
 
@@ -145,14 +172,129 @@ defmodule SymphonyElixir.Claude.CodingAgent do
     specs = Keyword.get(opts, :dynamic_tools, [])
     executor = Keyword.get(opts, :tool_executor)
 
-    if specs != [] and is_function(executor, 2) do
-      with {:ok, token, url} <- ToolGateway.register_session(specs, wrap_executor(executor)) do
-        {:ok, %{token: token, path: ToolGateway.write_mcp_config!(Path.expand(workspace), url)}}
-      end
-    else
-      {:ok, %{}}
+    approval? =
+      ExecutionMode.claude_interactive_approval?(Keyword.get(opts, :execution_mode), interactive?(opts))
+
+    cond do
+      approval? ->
+        register_with_approval(workspace, specs, executor, opts)
+
+      specs != [] and is_function(executor, 2) ->
+        with {:ok, token, url} <- ToolGateway.register_session(specs, wrap_executor(executor)) do
+          {:ok, %{token: token, path: ToolGateway.write_mcp_config!(Path.expand(workspace), url)}}
+        end
+
+      true ->
+        {:ok, %{}}
     end
   end
+
+  # Interactive `build`: register the MCP gateway (even without other dynamic
+  # tools) plus a `symphony_approve` tool. Claude runs with `--permission-mode
+  # default` and `--permission-prompt-tool`, so every tool it can't statically run
+  # is routed to `handle_approval_request/4`, which asks the operator and blocks
+  # until they decide.
+  defp register_with_approval(workspace, specs, executor, opts) do
+    workspace = Path.expand(workspace)
+    on_approval_required = Keyword.get(opts, :on_approval_required)
+    timeout_ms = Keyword.get(opts, :approval_timeout_ms, @default_approval_timeout_ms)
+
+    approval_spec = %{
+      "name" => @approval_tool_name,
+      "description" => "Internal Symphony permission gate; invoked by Claude to request operator approval before running a tool.",
+      "inputSchema" => %{
+        "type" => "object",
+        "properties" => %{
+          "tool_name" => %{"type" => "string"},
+          "input" => %{"type" => "object"},
+          "tool_use_id" => %{"type" => "string"}
+        }
+      }
+    }
+
+    combined = combined_executor(executor, workspace, on_approval_required, timeout_ms)
+
+    with {:ok, token, url} <- ToolGateway.register_session([approval_spec | specs], wrap_executor(combined)) do
+      {:ok,
+       %{
+         token: token,
+         path: ToolGateway.write_mcp_config!(workspace, url),
+         permission_prompt_tool: @approval_tool_qualified
+       }}
+    end
+  end
+
+  # Routes the approval tool to the blocking handler and everything else to the
+  # session's real tool executor (if any).
+  defp combined_executor(user_executor, workspace, on_approval_required, timeout_ms) do
+    fn name, arguments ->
+      cond do
+        name == @approval_tool_name ->
+          handle_approval_request(arguments, workspace, on_approval_required, timeout_ms)
+
+        is_function(user_executor, 2) ->
+          user_executor.(name, arguments)
+
+        true ->
+          %{"success" => false, "contentItems" => [%{"text" => "Unknown tool: #{name}"}]}
+      end
+    end
+  end
+
+  # Blocking MCP permission-prompt handler. Surfaces the request to the operator
+  # via `on_approval_required`, waits (bounded) for the decision through the
+  # ApprovalBroker, then returns the Claude permission-result contract as JSON
+  # text (`{"behavior":"allow"|"deny", ...}`).
+  defp handle_approval_request(arguments, workspace, on_approval_required, timeout_ms) do
+    tool_name = approval_tool_name(arguments)
+    input = Map.get(arguments, "input") || %{}
+    request_id = generate_uuid()
+
+    if is_function(on_approval_required, 1) do
+      on_approval_required.(%{
+        request_id: request_id,
+        agent: "claude",
+        tool_name: tool_name,
+        command: approval_command(tool_name, input),
+        cwd: workspace,
+        input: input,
+        reason: "Claude requested approval to run #{tool_name}"
+      })
+
+      request_id
+      |> ApprovalBroker.await(timeout_ms)
+      |> permission_result(input)
+    else
+      # No channel is listening for approvals; deny rather than silently running.
+      Logger.warning("Claude approval requested for #{tool_name} but no on_approval_required callback is wired; denying")
+      permission_result(:deny, input)
+    end
+  end
+
+  defp permission_result(:approve, input) do
+    payload = %{"behavior" => "allow", "updatedInput" => input}
+    %{"success" => true, "contentItems" => [%{"text" => Jason.encode!(payload)}]}
+  end
+
+  defp permission_result(:deny, _input) do
+    payload = %{"behavior" => "deny", "message" => "Denied by operator"}
+    %{"success" => true, "contentItems" => [%{"text" => Jason.encode!(payload)}]}
+  end
+
+  defp approval_tool_name(arguments) do
+    Map.get(arguments, "tool_name") || Map.get(arguments, "toolName") || "command"
+  end
+
+  defp approval_command(tool_name, input) when is_map(input) do
+    case Map.get(input, "command") do
+      cmd when is_binary(cmd) and cmd != "" -> cmd
+      _ -> tool_name
+    end
+  end
+
+  defp approval_command(tool_name, _input), do: tool_name
+
+  defp interactive?(opts), do: Keyword.get(opts, :interactive_user_input, false) == true
 
   # The CLI prefixes MCP tools as mcp__symphony__<name>; executors know bare names.
   defp wrap_executor(executor) do

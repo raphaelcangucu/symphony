@@ -204,9 +204,14 @@ defmodule SymphonyElixir.Claude.SessionLog do
   defp parse_content_block(%{"type" => "tool_result", "tool_use_id" => tool_use_id} = block) do
     output = extract_tool_result_content(Map.get(block, "content"))
 
+    # `is_error: true` marks a denied/failed tool call (e.g. a Bash command that hit a
+    # permission wall). Reflect it as "failed" so the UI matches Codex/Cursor instead of
+    # rendering every errored tool as "completed".
+    status = if Map.get(block, "is_error") == true, do: "failed", else: "completed"
+
     entry("tool_result", "Tool output", output,
       language: "text",
-      status: "completed",
+      status: status,
       collapsed: output_long?(output),
       call_id: tool_use_id
     )

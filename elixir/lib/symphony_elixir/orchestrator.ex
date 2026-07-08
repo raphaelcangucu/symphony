@@ -196,6 +196,7 @@ defmodule SymphonyElixir.Orchestrator do
 
         state = %{state | running: Map.put(state.running, issue_id, updated_running_entry)}
         maybe_log_token_progress(running_entry, updated_running_entry)
+        maybe_notify_agent_attention(running_entry, update)
         state = maybe_enforce_token_budget(state, issue_id, updated_running_entry)
 
         notify_dashboard()
@@ -1376,6 +1377,26 @@ defmodule SymphonyElixir.Orchestrator do
     end
   end
 
+  # Codex events that mean the agent is blocked waiting on a human decision.
+  @agent_attention_events [:approval_required, :turn_input_required]
+
+  # Pushes only on the transition into a waiting event, so a stream of repeated
+  # approval events while the operator is away yields a single notification.
+  defp maybe_notify_agent_attention(before_entry, %{event: event})
+       when event in @agent_attention_events do
+    if Map.get(before_entry, :last_codex_event) in @agent_attention_events do
+      :ok
+    else
+      PushDispatcher.agent_attention_needed(%{
+        identifier: before_entry.identifier,
+        project_slug: running_entry_project_slug(before_entry),
+        event: event
+      })
+    end
+  end
+
+  defp maybe_notify_agent_attention(_before_entry, _update), do: :ok
+
   defp maybe_log_token_progress(before_entry, after_entry) do
     before_tokens = running_entry_total_tokens(before_entry)
     after_tokens = running_entry_total_tokens(after_entry)
@@ -1731,6 +1752,13 @@ defmodule SymphonyElixir.Orchestrator do
         record_run_pull_requests(issue, prs)
         persist_evidence(running_entry, issue, workspace)
         maybe_annotate_incomplete(running_entry, issue_id)
+
+        PushDispatcher.agent_run_finished(%{
+          identifier: issue.identifier,
+          project_slug: issue.project_slug,
+          title: issue.title
+        })
+
         apply_transition_after_contract(state, running_entry, issue_id)
 
       {:blocked, violations, reason} ->

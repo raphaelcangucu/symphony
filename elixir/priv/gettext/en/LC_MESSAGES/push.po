@@ -47,3 +47,27 @@ msgstr "Answer needed"
 
 msgid "Input needed"
 msgstr "Input needed"
+
+msgid "Agent run finished"
+msgstr "Agent run finished"
+
+msgid "Agent needs your approval"
+msgstr "Agent needs your approval"
+
+msgid "Agent needs your input"
+msgstr "Agent needs your input"
+
+msgid "Agent needs your attention"
+msgstr "Agent needs your attention"
+
+msgid "%{identifier}: the agent is waiting on you"
+msgstr "%{identifier}: the agent is waiting on you"
+
+msgid "Session turn finished"
+msgstr "Session turn finished"
+
+msgid "Session turn failed"
+msgstr "Session turn failed"
+
+msgid "Assistant session"
+msgstr "Assistant session"

@@ -5,6 +5,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { IssueSessionSplitLayout } from "@/components/sessions/IssueSessionSplitLayout";
 import {
+  SessionPreviewDockContext,
+  type SessionPreviewDockControls,
+} from "@/components/sessions/sessionPreviewDockContext";
+import {
   SessionTerminalDockContext,
   type SessionTerminalDockControls,
 } from "@/components/sessions/sessionTerminalDockContext";
@@ -18,18 +22,23 @@ vi.mock("@/hooks/useIssueEditor", () => ({
   }),
 }));
 
-function renderLayout(dock: SessionTerminalDockControls | null) {
+function renderLayout(
+  dock: SessionTerminalDockControls | null,
+  previewDock: SessionPreviewDockControls | null = null,
+) {
   return render(
     <MemoryRouter>
       <SessionTerminalDockContext.Provider value={dock}>
-        <IssueSessionSplitLayout
-          projectSlug="macro-markets"
-          issueIdentifier="510"
-          view="board"
-          headerStart={<p>Issue session</p>}
-        >
-          <div data-testid="session-content">Session body</div>
-        </IssueSessionSplitLayout>
+        <SessionPreviewDockContext.Provider value={previewDock}>
+          <IssueSessionSplitLayout
+            projectSlug="macro-markets"
+            issueIdentifier="510"
+            view="board"
+            headerStart={<p>Issue session</p>}
+          >
+            <div data-testid="session-content">Session body</div>
+          </IssueSessionSplitLayout>
+        </SessionPreviewDockContext.Provider>
       </SessionTerminalDockContext.Provider>
     </MemoryRouter>,
   );
@@ -69,5 +78,31 @@ describe("IssueSessionSplitLayout", () => {
       "href",
       "/projects/macro-markets/board/issues/510/terminal",
     );
+  });
+
+  it("toggles the workspace preview dock from the toolbar button", async () => {
+    const user = userEvent.setup();
+    const togglePreview = vi.fn();
+
+    renderLayout(null, { openIssueIdentifier: null, togglePreview });
+
+    const previewButton = screen.getByRole("button", { name: "Preview for 510" });
+    expect(previewButton).toHaveAttribute("aria-pressed", "false");
+
+    await user.click(previewButton);
+
+    expect(togglePreview).toHaveBeenCalledWith("510");
+  });
+
+  it("marks the preview button as pressed when the dock is open for this issue", () => {
+    renderLayout(null, { openIssueIdentifier: "510", togglePreview: vi.fn() });
+
+    expect(screen.getByRole("button", { name: "Preview for 510" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("hides the preview control without a preview-dock-aware workspace", () => {
+    renderLayout(null);
+
+    expect(screen.queryByRole("button", { name: "Preview for 510" })).not.toBeInTheDocument();
   });
 });

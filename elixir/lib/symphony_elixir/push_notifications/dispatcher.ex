@@ -24,6 +24,9 @@ defmodule SymphonyElixir.PushNotifications.Dispatcher do
   @agent_retry_kind "agent_retry"
   @agent_incomplete_kind "agent_incomplete"
   @agent_blocked_kind "agent_blocked"
+  @agent_finished_kind "agent_finished"
+  @agent_attention_kind "agent_attention"
+  @assistant_turn_kind "assistant_turn"
   @pr_limit_reached_kind "pr_limit_reached"
   @pr_needs_human_kind "pr_needs_human"
   @pr_ci_unrelated_kind "pr_ci_unrelated"
@@ -101,6 +104,61 @@ defmodule SymphonyElixir.PushNotifications.Dispatcher do
   end
 
   def evidence_generated(_issue, _record), do: :ok
+
+  @doc "Notifies that a coding-agent run finished successfully (publish contract passed)."
+  @spec agent_run_finished(map()) :: :ok
+  def agent_run_finished(%{identifier: identifier, project_slug: slug} = metadata)
+      when is_binary(identifier) and is_binary(slug) and slug != "" do
+    title = Map.get(metadata, :title) || identifier
+
+    with_push_locale(fn ->
+      notify(@agent_finished_kind, %{
+        title: dgettext("push", "Agent run finished"),
+        body: "#{identifier}: #{title}",
+        url: issue_url(slug, identifier),
+        tag: "agent_finished:#{slug}:#{identifier}"
+      })
+    end)
+  end
+
+  def agent_run_finished(_metadata), do: :ok
+
+  @doc "Notifies that a running coding agent is blocked waiting on a human decision."
+  @spec agent_attention_needed(map()) :: :ok
+  def agent_attention_needed(%{identifier: identifier, project_slug: slug} = metadata)
+      when is_binary(identifier) and is_binary(slug) and slug != "" do
+    event = Map.get(metadata, :event)
+
+    with_push_locale(fn ->
+      notify(@agent_attention_kind, %{
+        title: agent_attention_title(event),
+        body: dgettext("push", "%{identifier}: the agent is waiting on you", identifier: identifier),
+        url: issue_url(slug, identifier, "sessions"),
+        tag: "agent_attention:#{slug}:#{identifier}"
+      })
+    end)
+  end
+
+  def agent_attention_needed(_metadata), do: :ok
+
+  @doc "Notifies that an assistant session turn completed or failed."
+  @spec assistant_turn_completed(map(), :finished | :failed) :: :ok
+  def assistant_turn_completed(%{project_slug: slug} = thread, status)
+      when is_binary(slug) and slug != "" and status in [:finished, :failed] do
+    thread_id = Map.get(thread, :id)
+    label = assistant_turn_label(thread)
+
+    with_push_locale(fn ->
+      notify(@assistant_turn_kind, %{
+        title: assistant_turn_title(status),
+        body: label,
+        url: assistant_turn_url(slug, thread_id),
+        tag: "assistant_turn:#{thread_id}"
+      })
+    end)
+  end
+
+  def assistant_turn_completed(_thread, _status), do: :ok
 
   @spec agent_retry_scheduled(map()) :: :ok
   def agent_retry_scheduled(%{identifier: identifier, project_slug: slug} = metadata)
@@ -318,6 +376,30 @@ defmodule SymphonyElixir.PushNotifications.Dispatcher do
     do: issue_url(slug, identifier, "authoring")
 
   defp assistant_input_url(slug, _identifier), do: "/tracker/projects/#{slug}/assistant"
+
+  defp agent_attention_title(:approval_required), do: dgettext("push", "Agent needs your approval")
+  defp agent_attention_title(:turn_input_required), do: dgettext("push", "Agent needs your input")
+  defp agent_attention_title(_event), do: dgettext("push", "Agent needs your attention")
+
+  defp assistant_turn_title(:finished), do: dgettext("push", "Session turn finished")
+  defp assistant_turn_title(:failed), do: dgettext("push", "Session turn failed")
+
+  defp assistant_turn_label(thread) do
+    identifier = normalize_identifier(Map.get(thread, :issue_identifier))
+    title = normalize_identifier(Map.get(thread, :title))
+
+    cond do
+      is_binary(identifier) and is_binary(title) -> "#{identifier}: #{title}"
+      is_binary(identifier) -> identifier
+      is_binary(title) -> title
+      true -> dgettext("push", "Assistant session")
+    end
+  end
+
+  defp assistant_turn_url(slug, thread_id) when is_integer(thread_id),
+    do: "/tracker/projects/#{slug}/workspaces/#{thread_id}"
+
+  defp assistant_turn_url(slug, _thread_id), do: "/tracker/projects/#{slug}/workspaces"
 
   defp assistant_input_body(identifier, "approval") when is_binary(identifier),
     do: dgettext("push", "%{identifier}: approval required", identifier: identifier)

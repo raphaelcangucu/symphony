@@ -921,7 +921,15 @@ defmodule SymphonyElixir.Assistant.CodexSession do
         {:completed, tool_call} = file_activity
 
         Agent.update(collector, fn state ->
-          %{state | tool_calls: upsert_tool_call_by_id(state.tool_calls, Map.get(tool_call, :id), tool_call)}
+          tool_calls =
+            upsert_tool_call_by_id(
+              state.tool_calls,
+              Map.get(tool_call, :id),
+              tool_call,
+              fn -> Map.get(tool_call, :name) end
+            )
+
+          %{state | tool_calls: tool_calls}
         end)
 
         maybe_call(opts, :on_tool_call_completed, tool_call)
@@ -983,7 +991,13 @@ defmodule SymphonyElixir.Assistant.CodexSession do
             name = String.replace_prefix(raw_name, "mcp__symphony__", "")
             input = Map.get(item, "input") || Map.get(item, :input) || %{}
             tool_call = %{name: name, status: "running", arguments: input, output: nil, result: %{}, id: id}
-            Agent.update(collector, fn state -> %{state | tool_calls: upsert_tool_call(state.tool_calls, tool_call)} end)
+
+            # Upsert by tool_use_id, not name: a turn can issue many same-named calls
+            # (e.g. several Bash commands) and each must keep its own row.
+            Agent.update(collector, fn state ->
+              %{state | tool_calls: upsert_tool_call_by_id(state.tool_calls, id, tool_call, fn -> name end)}
+            end)
+
             maybe_call(opts, :on_tool_call_started, tool_call)
 
           item_type == "tool_result" ->
@@ -991,22 +1005,30 @@ defmodule SymphonyElixir.Assistant.CodexSession do
             content = Map.get(item, "content") || Map.get(item, :content) || ""
             is_error = Map.get(item, "is_error") || Map.get(item, :is_error) || false
             status = if is_error, do: "error", else: "complete"
-            name = Map.get(item, "name") || Map.get(item, :name)
-            input = Map.get(item, "input") || Map.get(item, :input)
-            name = name || infer_cursor_tool_name(content)
             output = format_cursor_tool_output(content)
 
-            tool_call = %{
-              name: name,
-              status: status,
-              arguments: input,
-              output: output,
-              result: %{},
-              id: id
-            }
+            # A Claude/Cursor tool_result carries no tool name — only the paired tool_call
+            # (started) event does. Leave :name unset so the by-id merge preserves the name
+            # captured at start; only fall back to inference when this result has no started
+            # entry to merge into. Setting an eager "unknown" here would clobber "Bash".
+            update =
+              %{status: status, output: output, result: %{}, id: id}
+              |> put_present(:name, claude_tool_name(Map.get(item, "name") || Map.get(item, :name)))
+              |> put_present(:arguments, Map.get(item, "input") || Map.get(item, :input))
 
-            Agent.update(collector, fn state -> %{state | tool_calls: upsert_tool_call_by_id(state.tool_calls, id, tool_call)} end)
-            maybe_call(opts, :on_tool_call_completed, tool_call)
+            merged =
+              Agent.get_and_update(collector, fn state ->
+                tool_calls =
+                  upsert_tool_call_by_id(state.tool_calls, id, update, fn -> infer_cursor_tool_name(content) end)
+
+                {Enum.find(tool_calls, &(Map.get(&1, :id) == id)), %{state | tool_calls: tool_calls}}
+              end)
+
+            maybe_call(
+              opts,
+              :on_tool_call_completed,
+              merged || ensure_tool_name(update, fn -> infer_cursor_tool_name(content) end)
+            )
 
           # The Claude adapter delivers finalized assistant text as an item/created
           # "text" item (the authoritative full text of a message block). Accumulate it
@@ -1137,15 +1159,44 @@ defmodule SymphonyElixir.Assistant.CodexSession do
     |> Enum.reverse()
   end
 
-  # Upsert by tool_use_id for claude notification-based tool results, merging into the
-  # existing started entry (preserving :name and :arguments from the started event).
-  defp upsert_tool_call_by_id(tool_calls, id, update) when is_binary(id) do
+  # Upsert by tool_use_id for claude/cursor notification-based tool results, merging into
+  # the existing started entry so the tool name and arguments captured at start survive.
+  # `fallback_name_fun` supplies a name only when the merged entry still lacks a real one
+  # (e.g. a result with no started entry), so a real name is never overwritten by "unknown".
+  defp upsert_tool_call_by_id(tool_calls, id, update, fallback_name_fun) when is_binary(id) do
     {matched, rest} = Enum.split_with(tool_calls, &(Map.get(&1, :id) == id))
-    merged = Map.merge(List.first(matched) || %{}, Map.reject(update, fn {_k, v} -> is_nil(v) end))
+
+    merged =
+      (List.first(matched) || %{})
+      |> Map.merge(Map.reject(update, fn {_k, v} -> is_nil(v) end))
+      |> ensure_tool_name(fallback_name_fun)
+
     Enum.reverse([merged | Enum.reverse(rest)])
   end
 
-  defp upsert_tool_call_by_id(tool_calls, _id, update), do: upsert_tool_call(tool_calls, update)
+  defp upsert_tool_call_by_id(tool_calls, _id, update, fallback_name_fun) do
+    cleaned = Map.reject(update, fn {_k, v} -> is_nil(v) end)
+    upsert_tool_call(tool_calls, ensure_tool_name(cleaned, fallback_name_fun))
+  end
+
+  # Keeps an existing, meaningful tool name; only applies the fallback when the name is
+  # missing, blank, or the placeholder "unknown".
+  defp ensure_tool_name(tool_call, fallback_name_fun) do
+    case Map.get(tool_call, :name) do
+      name when is_binary(name) and name != "" and name != "unknown" -> tool_call
+      _ -> Map.put(tool_call, :name, fallback_name_fun.())
+    end
+  end
+
+  defp put_present(map, _key, nil), do: map
+  defp put_present(map, key, value), do: Map.put(map, key, value)
+
+  # Strips the MCP gateway prefix; returns nil for a missing/blank name so callers can
+  # decide whether to fall back to inference.
+  defp claude_tool_name(name) when is_binary(name) and name != "",
+    do: String.replace_prefix(name, "mcp__symphony__", "")
+
+  defp claude_tool_name(_name), do: nil
 
   defp maybe_call(opts, key, payload) do
     case Keyword.get(opts, key) do

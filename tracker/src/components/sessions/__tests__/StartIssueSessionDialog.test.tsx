@@ -51,7 +51,7 @@ describe("StartIssueSessionDialog", () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByTestId("execution-mode-icon-build")).toBeInTheDocument();
+    expect(screen.getByTestId("execution-mode-icon-yolo")).toBeInTheDocument();
 
     await user.type(screen.getByLabelText(/session title/i), "Build pass 2");
     await user.click(screen.getByRole("button", { name: /start session/i }));
@@ -60,7 +60,7 @@ describe("StartIssueSessionDialog", () => {
       expect(createIssueSessionThreadMock).toHaveBeenCalledWith("macro-markets", "MAC-510", {
         title: "Build pass 2",
         agentKind: "codex",
-        executionMode: "build",
+        executionMode: "yolo",
         isolatedWorkspace: false,
       }),
     );

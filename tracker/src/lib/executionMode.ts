@@ -9,7 +9,9 @@ export interface ExecutionModeMeta {
   Icon: LucideIcon;
 }
 
-export const DEFAULT_EXECUTION_MODE: ExecutionMode = "build";
+// Agent runs are non-interactive: there is no operator to approve a tool mid-run,
+// so the default is the no-approval, full-access mode. Plan/Build stay selectable.
+export const DEFAULT_EXECUTION_MODE: ExecutionMode = "yolo";
 
 export const EXECUTION_MODES: ExecutionModeMeta[] = [
   {
@@ -33,7 +35,11 @@ export const EXECUTION_MODES: ExecutionModeMeta[] = [
 ];
 
 export function executionModeMeta(id: ExecutionMode): ExecutionModeMeta {
-  return EXECUTION_MODES.find((mode) => mode.id === id) ?? EXECUTION_MODES[1];
+  return (
+    EXECUTION_MODES.find((mode) => mode.id === id) ??
+    EXECUTION_MODES.find((mode) => mode.id === DEFAULT_EXECUTION_MODE) ??
+    EXECUTION_MODES[0]
+  );
 }
 
 export function availableModesFor(agent: AgentKind): ExecutionMode[] {

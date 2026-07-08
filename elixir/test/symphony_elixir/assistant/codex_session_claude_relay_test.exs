@@ -52,6 +52,30 @@ defmodule SymphonyElixir.Assistant.CodexSessionClaudeRelayTest do
     assert result.assistant_message == "Hello from fake claude"
   end
 
+  test "a claude tool call keeps its real name and status through the result merge", %{
+    workspace_root: workspace_root
+  } do
+    {:ok, thread} = History.create_freeform_thread(%{workspace_path: Path.join(workspace_root, "thread")})
+
+    {:ok, result} =
+      CodexSession.send_message_to_thread(
+        thread,
+        "oi",
+        %{"agent" => "claude"},
+        claude_command: "FAKE_CLAUDE_MODE=happy #{@fake}",
+        workspace_root: workspace_root,
+        dynamic_tools: []
+      )
+
+    # The fake stream runs mcp__symphony__list_issues and returns a successful result. The
+    # MCP prefix is stripped and the name captured on the tool_call (started) event must
+    # survive the tool_result merge — regression against the "unknown" clobber that made
+    # every Claude tool render as "Unknown".
+    assert [tool_call] = result.tool_calls
+    assert tool_call.name == "list_issues"
+    assert tool_call.status == "complete"
+  end
+
   test "a claude freeform turn streams live text deltas via on_assistant_delta", %{workspace_root: workspace_root} do
     {:ok, thread} = History.create_freeform_thread(%{workspace_path: Path.join(workspace_root, "thread")})
     test_pid = self()

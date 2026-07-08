@@ -180,7 +180,7 @@ describe("AgentTabs documents drawer", () => {
 
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
     expect(screen.getByText(/DIS-6/i)).toBeInTheDocument();
-    expect(screen.getByTestId("execution-mode-icon-build")).toBeInTheDocument();
+    expect(screen.getByTestId("execution-mode-icon-yolo")).toBeInTheDocument();
   });
 
   it("shows the view-issue, terminal, and code shortcuts when hrefs are provided", () => {

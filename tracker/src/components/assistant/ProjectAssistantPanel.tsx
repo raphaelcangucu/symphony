@@ -60,7 +60,6 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTr
 import { deriveAgentTasksFromAssistantMessages } from "@/lib/agentTasks";
 import { extractKbDocumentReferencesFromMarkdown } from "@/lib/assistantKbReferences";
 import { catalogFor, defaultComposerSettings, fallbackCatalogBundle, type AssistantCatalogBundle } from "@/lib/assistantSettings";
-import { combineDiffStats, diffStatsFromPatch, type DiffStats } from "@/lib/diffStats";
 import { DEFAULT_EXECUTION_MODE } from "@/lib/executionMode";
 import {
   fetchAssistantCatalogBundle,
@@ -68,7 +67,8 @@ import {
   type AssistantToolCall,
   type UserQuestionsRequest,
 } from "@/services/assistant";
-import { getGitDiff, getThreadGitDiff } from "@/services/gitDiff";
+import { WorkspaceDiffStatsChip } from "@/components/sessions/WorkspaceDiffStatsChip";
+import { useWorkspaceDiffStats } from "@/hooks/useWorkspaceDiffStats";
 import { UserQuestionsCard } from "@/components/assistant/UserQuestionsCard";
 import {
   assistantExploreTopic,
@@ -409,7 +409,6 @@ export function ProjectAssistantPanel({
   }, []);
 
   const [composerHeight, setComposerHeight] = useState(0);
-  const [workspaceDiffStats, setWorkspaceDiffStats] = useState<DiffStats | null>(null);
   const isPageMode = mode === "page";
   const isEmbeddedMode = mode === "embedded";
   const isPanelMode = isPageMode || isEmbeddedMode;
@@ -429,34 +428,12 @@ export function ProjectAssistantPanel({
   onIssueCreatedRef.current = onIssueCreated;
   onIssueGoalModeChangedRef.current = onIssueGoalModeChanged;
 
-  useEffect(() => {
-    if (!active) return;
-    if (!threadId && (!projectSlug || !issueIdentifier)) {
-      setWorkspaceDiffStats(null);
-      return;
-    }
-
-    let cancelled = false;
-
-    async function loadWorkspaceDiffStats() {
-      try {
-        const result = threadId
-          ? await getThreadGitDiff(threadId, "uncommitted")
-          : await getGitDiff(projectSlug ?? "", issueIdentifier ?? "", "uncommitted");
-        if (cancelled) return;
-        const stats = combineDiffStats(result.repos.flatMap((repo) => repo.files.map((file) => diffStatsFromPatch(file.patch))));
-        setWorkspaceDiffStats(stats.additions > 0 || stats.deletions > 0 ? stats : null);
-      } catch {
-        if (!cancelled) setWorkspaceDiffStats(null);
-      }
-    }
-
-    void loadWorkspaceDiffStats();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [active, issueIdentifier, projectSlug, threadId]);
+  const workspaceDiffStats = useWorkspaceDiffStats({
+    projectSlug,
+    issueIdentifier,
+    threadId,
+    enabled: active,
+  });
 
   const setScrollContainerRef = useCallback((node: HTMLDivElement | null) => {
     if (!node && scrollRef.current && !stickToBottomRef.current) {
@@ -1373,15 +1350,7 @@ export function ProjectAssistantPanel({
                 openRequestId={diffRequestId}
               />
             ) : null}
-            {hideHeader && workspaceDiffStats ? (
-              <span
-                className="inline-flex items-center gap-1 rounded-full border border-border/70 bg-background px-1.5 py-0.5 font-mono text-[10px]"
-                title={`+${workspaceDiffStats.additions}/-${workspaceDiffStats.deletions} lines`}
-              >
-                <span className="text-emerald-600">+{workspaceDiffStats.additions}</span>
-                <span className="text-rose-600">-{workspaceDiffStats.deletions}</span>
-              </span>
-            ) : null}
+            {hideHeader ? <WorkspaceDiffStatsChip stats={workspaceDiffStats} /> : null}
             {projectSlug ? (
               <Button
                 type="button"
@@ -1490,15 +1459,7 @@ export function ProjectAssistantPanel({
                       {projectSlug}
                     </span>
                   ) : null}
-                  {workspaceDiffStats ? (
-                    <span
-                      className="inline-flex items-center gap-1 rounded-full border border-border/70 bg-background px-2 py-0.5 font-mono text-[11px]"
-                      title={`+${workspaceDiffStats.additions}/-${workspaceDiffStats.deletions} lines`}
-                    >
-                      <span className="text-emerald-600">+{workspaceDiffStats.additions}</span>
-                      <span className="text-rose-600">-{workspaceDiffStats.deletions}</span>
-                    </span>
-                  ) : null}
+                  <WorkspaceDiffStatsChip stats={workspaceDiffStats} className="px-2 py-0.5 text-[11px]" />
                 </div>
                 {panelModelCommand ? (
                   <span className="min-w-0 max-w-full truncate text-[11px] text-muted-foreground sm:max-w-[18rem]">

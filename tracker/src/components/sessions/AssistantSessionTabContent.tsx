@@ -4,7 +4,9 @@ import { useTranslation } from "react-i18next";
 
 import { ProjectAssistantPanel } from "@/components/assistant/ProjectAssistantPanel";
 import { IssueSessionSplitLayout } from "@/components/sessions/IssueSessionSplitLayout";
+import { WorkspaceDiffStatsChip } from "@/components/sessions/WorkspaceDiffStatsChip";
 import { useAssistantThreadMetadata } from "@/hooks/useAssistantThreadMetadata";
+import { useWorkspaceDiffStats } from "@/hooks/useWorkspaceDiffStats";
 import type { WorkspaceView } from "@/lib/workspaceRoutes";
 import type { RecentSession } from "@/types/recents";
 
@@ -28,6 +30,11 @@ export function AssistantSessionTabContent({
   // launcher, so the toolbar button and the composer button share one modal
   // (same thread-scoped diff, same review-to-agent wiring).
   const [diffRequestId, setDiffRequestId] = useState(0);
+  const workspaceDiffStats = useWorkspaceDiffStats({
+    projectSlug,
+    issueIdentifier,
+    threadId,
+  });
 
   return (
     <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border/60 bg-background px-3 pb-2 pt-2 shadow-sm">
@@ -46,15 +53,18 @@ export function AssistantSessionTabContent({
             </span>
           }
           toolbarLeading={
-            <button
-              type="button"
-              aria-label={t("issue.diff.button")}
-              title={t("issue.diff.shortcutHint")}
-              onClick={() => setDiffRequestId((current) => current + 1)}
-              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-            >
-              <GitCompare className="h-4 w-4" />
-            </button>
+            <div className="inline-flex items-center gap-1">
+              <button
+                type="button"
+                aria-label={t("issue.diff.button")}
+                title={t("issue.diff.shortcutHint")}
+                onClick={() => setDiffRequestId((current) => current + 1)}
+                className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              >
+                <GitCompare className="h-4 w-4" />
+              </button>
+              <WorkspaceDiffStatsChip stats={workspaceDiffStats} />
+            </div>
           }
         >
           <ProjectAssistantPanel

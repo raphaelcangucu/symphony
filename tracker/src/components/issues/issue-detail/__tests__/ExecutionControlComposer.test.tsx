@@ -326,7 +326,7 @@ describe("ExecutionControlComposer", () => {
     );
   });
 
-  it("forwards the execution mode on resume (defaults to build)", async () => {
+  it("forwards the execution mode on resume (defaults to yolo)", async () => {
     dispatchIssueAgentMock.mockResolvedValue({
       action: "resume",
       message: "Resuming agent work on CDE-1132",
@@ -351,7 +351,7 @@ describe("ExecutionControlComposer", () => {
       expect(dispatchIssueAgentMock).toHaveBeenCalledWith(
         "advising",
         "CDE-1132",
-        expect.objectContaining({ action: "resume", mode: "build" }),
+        expect.objectContaining({ action: "resume", mode: "yolo" }),
       ),
     );
   });
@@ -375,13 +375,13 @@ describe("ExecutionControlComposer", () => {
 
     await waitFor(() => expect(fetchAssistantCatalogBundleMock).toHaveBeenCalled());
 
-    // codex order is plan → build → yolo, so one Shift+Tab moves build → yolo.
+    // codex order is plan → build → yolo, so from the yolo default one Shift+Tab wraps to plan.
     fireEvent.keyDown(screen.getByPlaceholderText(/optional guidance/i), {
       key: "Tab",
       shiftKey: true,
     });
 
-    expect(screen.getByRole("button", { name: /yolo/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /plan/i })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /^resume$/i }));
 
@@ -389,7 +389,7 @@ describe("ExecutionControlComposer", () => {
       expect(dispatchIssueAgentMock).toHaveBeenCalledWith(
         "advising",
         "CDE-1132",
-        expect.objectContaining({ action: "resume", mode: "yolo" }),
+        expect.objectContaining({ action: "resume", mode: "plan" }),
       ),
     );
   });

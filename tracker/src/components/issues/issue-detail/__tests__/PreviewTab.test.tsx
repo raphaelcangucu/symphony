@@ -164,7 +164,7 @@ describe("PreviewTab", () => {
 
     await user.click(screen.getByRole("button", { name: /ask assistant to fix/i }));
 
-    expect(navigate).toHaveBeenCalledWith("/projects/macro-markets/board/issues/MAC-1/agent");
+    expect(navigate).toHaveBeenCalledWith("/projects/macro-markets/board/issues/MAC-1/sessions");
     expect(sessionStorage.getItem("symphony:preview-assistant-handoff")).toContain("preview dev server failed");
   });
 
@@ -175,7 +175,7 @@ describe("PreviewTab", () => {
     const handoffButtons = screen.getAllByRole("button", { name: /ask assistant to fix/i });
     await user.click(handoffButtons[0]!);
 
-    expect(navigate).toHaveBeenCalledWith("/projects/macro-markets/board/issues/MAC-1/agent");
+    expect(navigate).toHaveBeenCalledWith("/projects/macro-markets/board/issues/MAC-1/sessions");
     const stored = sessionStorage.getItem("symphony:preview-assistant-handoff");
     expect(stored).toContain("preview dev server failed");
     expect(stored).toContain("sym-issue-macro-markets-MAC-1-web");

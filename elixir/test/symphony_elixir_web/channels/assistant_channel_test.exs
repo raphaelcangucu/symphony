@@ -24,6 +24,14 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
 
       :ok
     end
+
+    def assistant_turn_completed(thread, status) do
+      if pid = Application.get_env(:symphony_elixir, :push_test_pid) do
+        send(pid, {:assistant_turn_push, thread, status})
+      end
+
+      :ok
+    end
   end
 
   setup do
@@ -418,6 +426,66 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
     assert_reply(sref, :ok, %{})
 
     assert_receive {:approved, "cmd-1", "acceptForSession"}, 2_000
+    assert_push("assistant_completed", %{message: %{role: "assistant", content: "done"}})
+  end
+
+  test "submit_approval routes a claude approval to the ApprovalBroker and pushes tool metadata" do
+    test_pid = self()
+
+    runner = fn _workspace, _prompt, _issue, opts ->
+      Keyword.fetch!(opts, :on_turn_started).("turn-claude-approval")
+
+      Keyword.fetch!(opts, :on_approval_required).(%{
+        request_id: "claude-1",
+        agent: "claude",
+        tool_name: "Bash",
+        command: "ls -la",
+        cwd: "/workspace/app",
+        reason: "Claude requested approval to run Bash"
+      })
+
+      send(test_pid, {:runner, self()})
+
+      # Keep the turn alive until the operator's decision has propagated.
+      receive do
+        :finish -> :ok
+      after
+        3_000 -> :ok
+      end
+
+      {:ok, %{assistant_message: "done", turn_id: "turn-claude-approval", tool_calls: []}}
+    end
+
+    Application.put_env(:symphony_elixir, :assistant_runner, runner)
+
+    {:ok, _join, socket} =
+      socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
+      |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, "assistant:issue:macro-markets:MAC-1")
+
+    assert_push("history_loaded", %{})
+
+    ref = push(socket, "send_message", %{"message" => "go", "context" => %{"view" => "board"}})
+    assert_reply(ref, :ok, %{})
+    assert_receive {:runner, runner_pid}, 2_000
+
+    assert_push("approval_required", %{request_id: "claude-1", command: "ls -la", tool_name: "Bash", agent: "claude"})
+
+    # Stand in for the blocking Claude MCP handler that waits on the broker.
+    awaiter =
+      spawn(fn ->
+        send(test_pid, {:decision, SymphonyElixir.Claude.ApprovalBroker.await("claude-1", 3_000)})
+      end)
+
+    # Let the awaiter register with the broker before the decision is delivered.
+    _ = awaiter
+    Process.sleep(50)
+
+    sref = push(socket, "submit_approval", %{"request_id" => "claude-1", "action" => "approve"})
+    assert_reply(sref, :ok, %{})
+
+    assert_receive {:decision, :approve}, 3_000
+
+    send(runner_pid, :finish)
     assert_push("assistant_completed", %{message: %{role: "assistant", content: "done"}})
   end
 

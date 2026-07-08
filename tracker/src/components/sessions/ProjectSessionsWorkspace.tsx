@@ -1,7 +1,9 @@
 import { Clock, FolderPlus, MessageSquare, Trash2 } from "lucide-react";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
+import { IssuePreviewDock } from "@/components/sessions/IssuePreviewDock";
 import { IssueTerminalDock } from "@/components/sessions/IssueTerminalDock";
+import { SessionPreviewDockContext } from "@/components/sessions/sessionPreviewDockContext";
 import { SessionTerminalDockContext } from "@/components/sessions/sessionTerminalDockContext";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router-dom";
@@ -84,6 +86,8 @@ export function ProjectSessionsWorkspace({
   const splitContainerRef = useRef<HTMLDivElement>(null);
   const [terminalDockIssue, setTerminalDockIssue] = useState<string | null>(null);
   const [terminalFullscreen, setTerminalFullscreen] = useState(false);
+  const [previewDockIssue, setPreviewDockIssue] = useState<string | null>(null);
+  const [previewFullscreen, setPreviewFullscreen] = useState(false);
 
   const toggleTerminalDock = useCallback((issueIdentifier: string) => {
     setTerminalDockIssue((current) => {
@@ -91,6 +95,9 @@ export function ProjectSessionsWorkspace({
       if (next === null) setTerminalFullscreen(false);
       return next;
     });
+    // Only one dock at a time keeps the split layout readable.
+    setPreviewDockIssue(null);
+    setPreviewFullscreen(false);
   }, []);
 
   const closeTerminalDock = useCallback(() => {
@@ -102,9 +109,33 @@ export function ProjectSessionsWorkspace({
     setTerminalFullscreen((current) => !current);
   }, []);
 
+  const togglePreviewDock = useCallback((issueIdentifier: string) => {
+    setPreviewDockIssue((current) => {
+      const next = current === issueIdentifier ? null : issueIdentifier;
+      if (next === null) setPreviewFullscreen(false);
+      return next;
+    });
+    setTerminalDockIssue(null);
+    setTerminalFullscreen(false);
+  }, []);
+
+  const closePreviewDock = useCallback(() => {
+    setPreviewDockIssue(null);
+    setPreviewFullscreen(false);
+  }, []);
+
+  const togglePreviewFullscreen = useCallback(() => {
+    setPreviewFullscreen((current) => !current);
+  }, []);
+
   const terminalDockControls = useMemo(
     () => ({ openIssueIdentifier: terminalDockIssue, toggleTerminal: toggleTerminalDock }),
     [terminalDockIssue, toggleTerminalDock],
+  );
+
+  const previewDockControls = useMemo(
+    () => ({ openIssueIdentifier: previewDockIssue, togglePreview: togglePreviewDock }),
+    [previewDockIssue, togglePreviewDock],
   );
 
   const { tabs, activeTabId, activeTab, selectTab, openTab, closeTab } = useWorkspaceTabs({
@@ -357,6 +388,7 @@ export function ProjectSessionsWorkspace({
 
   return (
     <SessionTerminalDockContext.Provider value={terminalDockControls}>
+    <SessionPreviewDockContext.Provider value={previewDockControls}>
     <main className="box-border flex h-[calc(100vh-4rem)] min-h-0 flex-col overflow-hidden bg-gradient-to-br from-muted/40 via-background to-muted/20 p-2 sm:p-3">
       <div
         ref={splitContainerRef}
@@ -365,7 +397,7 @@ export function ProjectSessionsWorkspace({
       <section
         className={cn(
           "flex h-full min-h-0 min-w-0 flex-1 flex-col gap-2.5 overflow-hidden",
-          terminalFullscreen && "hidden",
+          (terminalFullscreen || previewFullscreen) && "hidden",
         )}
       >
         <WorkspaceTabBar
@@ -535,6 +567,17 @@ export function ProjectSessionsWorkspace({
           onClose={closeTerminalDock}
         />
       ) : null}
+
+      {previewDockIssue ? (
+        <IssuePreviewDock
+          projectSlug={projectSlug}
+          issueIdentifier={previewDockIssue}
+          splitContainerRef={splitContainerRef}
+          fullscreen={previewFullscreen}
+          onToggleFullscreen={togglePreviewFullscreen}
+          onClose={closePreviewDock}
+        />
+      ) : null}
       </div>
 
       <StartIssueSessionDialog
@@ -570,6 +613,7 @@ export function ProjectSessionsWorkspace({
         }}
       />
     </main>
+    </SessionPreviewDockContext.Provider>
     </SessionTerminalDockContext.Provider>
   );
 }

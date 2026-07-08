@@ -70,6 +70,54 @@ defmodule SymphonyElixir.PushNotifications.DispatcherTest do
     assert :ok = Dispatcher.agent_run_blocked(issue, [:missing_pr])
   end
 
+  test "agent_run_finished accepts run metadata" do
+    assert :ok =
+             Dispatcher.agent_run_finished(%{
+               identifier: "MAC-20",
+               project_slug: "macro-markets",
+               title: "Ship feature"
+             })
+  end
+
+  test "agent_run_finished is a no-op without project slug" do
+    assert :ok = Dispatcher.agent_run_finished(%{identifier: "MAC-20", project_slug: nil})
+    assert :ok = Dispatcher.agent_run_finished(%{})
+  end
+
+  test "agent_attention_needed accepts waiting events" do
+    assert :ok =
+             Dispatcher.agent_attention_needed(%{
+               identifier: "MAC-21",
+               project_slug: "macro-markets",
+               event: :approval_required
+             })
+
+    assert :ok =
+             Dispatcher.agent_attention_needed(%{
+               identifier: "MAC-21",
+               project_slug: "macro-markets",
+               event: :turn_input_required
+             })
+  end
+
+  test "agent_attention_needed is a no-op without identifiers" do
+    assert :ok = Dispatcher.agent_attention_needed(%{event: :approval_required})
+  end
+
+  test "assistant_turn_completed accepts thread metadata for finished and failed" do
+    thread = %{id: 7999, project_slug: "macro-markets", issue_identifier: "MAC-22", title: "Build pass"}
+
+    assert :ok = Dispatcher.assistant_turn_completed(thread, :finished)
+    assert :ok = Dispatcher.assistant_turn_completed(thread, :failed)
+  end
+
+  test "assistant_turn_completed ignores interrupted turns and threads without project" do
+    thread = %{id: 7999, project_slug: "macro-markets"}
+
+    assert :ok = Dispatcher.assistant_turn_completed(thread, :interrupted)
+    assert :ok = Dispatcher.assistant_turn_completed(%{id: 1, project_slug: nil}, :finished)
+  end
+
   test "pr_monitor_attention handles human-attention actions only" do
     project = %Project{slug: "macro-markets"}
 

@@ -104,3 +104,27 @@ msgstr "Resposta necessária"
 
 msgid "Input needed"
 msgstr "Input necessário"
+
+msgid "Agent run finished"
+msgstr "Execução do agente concluída"
+
+msgid "Agent needs your approval"
+msgstr "Agente precisa da sua aprovação"
+
+msgid "Agent needs your input"
+msgstr "Agente precisa do seu input"
+
+msgid "Agent needs your attention"
+msgstr "Agente precisa da sua atenção"
+
+msgid "%{identifier}: the agent is waiting on you"
+msgstr "%{identifier}: o agente está aguardando você"
+
+msgid "Session turn finished"
+msgstr "Turno da sessão concluído"
+
+msgid "Session turn failed"
+msgstr "Turno da sessão falhou"
+
+msgid "Assistant session"
+msgstr "Sessão do assistente"

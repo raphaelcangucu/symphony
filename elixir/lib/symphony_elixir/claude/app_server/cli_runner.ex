@@ -45,6 +45,7 @@ defmodule SymphonyElixir.Claude.AppServer.CliRunner do
           optional(:effort) => String.t() | nil,
           required(:mcp_config_path) => Path.t() | nil,
           required(:permission_mode) => String.t(),
+          optional(:permission_prompt_tool) => String.t() | nil,
           required(:timeout_ms) => pos_integer(),
           optional(:on_spawn) => (non_neg_integer() -> any())
         }
@@ -156,6 +157,8 @@ defmodule SymphonyElixir.Claude.AppServer.CliRunner do
     mcp_flag =
       if mcp_config_path, do: " --mcp-config #{mcp_config_path} --strict-mcp-config", else: ""
 
+    permission_prompt_flag = permission_prompt_flag(Map.get(args, :permission_prompt_tool))
+
     # Sanitize both ids before interpolating into the shell command.
     safe_cli_session_id = validate_session_id(cli_session_id, "cli_session_id")
     safe_session_uuid = validate_session_id(session_uuid, "session_uuid")
@@ -167,8 +170,25 @@ defmodule SymphonyElixir.Claude.AppServer.CliRunner do
         " --session-id #{safe_session_uuid}"
       end
 
-    base <> model_flag <> effort_flag <> mcp_flag <> session_flag
+    base <> model_flag <> effort_flag <> mcp_flag <> permission_prompt_flag <> session_flag
   end
+
+  # The MCP tool that Claude calls to request approval in `--permission-mode
+  # default` runs. The value is a fully-qualified MCP tool name
+  # (`mcp__<server>__<tool>`); validate it against a strict pattern before
+  # interpolating into the shell command so a malformed name can't inject.
+  @permission_prompt_tool_regex ~r/\A[A-Za-z0-9_]+\z/
+
+  defp permission_prompt_flag(tool) when is_binary(tool) do
+    if Regex.match?(@permission_prompt_tool_regex, tool) do
+      " --permission-prompt-tool #{tool}"
+    else
+      Logger.warning("CliRunner: unsafe permission-prompt-tool rejected: #{inspect(tool)}")
+      ""
+    end
+  end
+
+  defp permission_prompt_flag(_tool), do: ""
 
   # Reasoning effort is a closed set in the Claude CLI. Whitelist it before
   # interpolating into the shell command — unknown values (the CLI ignores

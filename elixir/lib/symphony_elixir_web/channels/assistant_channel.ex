@@ -17,6 +17,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   }
 
   alias SymphonyElixir.{AgentPreference, Config, LocalTracker.Context, ProjectConfig, Repo, Settings, Workspace}
+  alias SymphonyElixir.Claude.ApprovalBroker
   alias SymphonyElixirWeb.TrackerAuth
 
   @issue_authoring_tools ~w(create_draft_issue create_issue)
@@ -491,7 +492,9 @@ defmodule SymphonyElixirWeb.AssistantChannel do
       request_id: request_id,
       command: Map.get(request, :command),
       cwd: Map.get(request, :cwd),
-      reason: Map.get(request, :reason)
+      reason: Map.get(request, :reason),
+      tool_name: Map.get(request, :tool_name),
+      agent: Map.get(request, :agent)
     })
 
     notify_assistant_input_needed(socket, :approval)
@@ -664,13 +667,28 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     end
   end
 
-  defp deliver_approval(turn_pid, request_id, "approve", request) when is_pid(turn_pid) do
-    decision = Map.get(request, :decision) || Map.get(request, "decision") || "acceptForSession"
-    send(turn_pid, {:codex_approval, request_id, decision, self()})
+  # Claude approvals are answered out-of-band by the blocking MCP handler via the
+  # ApprovalBroker (keyed on request_id); Codex approvals are delivered to the
+  # turn process over its port protocol. Route by the originating agent.
+  defp deliver_approval(turn_pid, request_id, "approve", request) do
+    if claude_approval?(request) do
+      ApprovalBroker.resolve(request_id, :approve)
+    else
+      decision = Map.get(request, :decision) || Map.get(request, "decision") || "acceptForSession"
+      if is_pid(turn_pid), do: send(turn_pid, {:codex_approval, request_id, decision, self()})
+    end
   end
 
-  defp deliver_approval(turn_pid, _request_id, "cancel", _request) when is_pid(turn_pid) do
-    send(turn_pid, {:codex_interrupt})
+  defp deliver_approval(turn_pid, request_id, "cancel", request) do
+    if claude_approval?(request) do
+      ApprovalBroker.resolve(request_id, :deny)
+    else
+      if is_pid(turn_pid), do: send(turn_pid, {:codex_interrupt})
+    end
+  end
+
+  defp claude_approval?(request) do
+    (Map.get(request, :agent) || Map.get(request, "agent")) == "claude"
   end
 
   defp maybe_persist_user_questions(socket, questions, answers) do

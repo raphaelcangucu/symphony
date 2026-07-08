@@ -762,18 +762,24 @@ assistant chat. These are sent on the dispatch endpoint and persisted per issue.
   by `project_slug` + `identifier`, so it works for GitHub/Jira/Linear/local issues alike) and read
   back by `AgentRunner` when building the run. Explicit caller opts win over persisted settings,
   which win over project/workflow defaults.
-- **Execution mode is an operator override.** When no mode is selected, the run behaves exactly as
-  before — the project/workflow `codex:` config governs sandbox and approval. A selected mode maps
-  to per-agent policy knobs (`SymphonyElixir.ExecutionMode`):
+- **Execution mode is an operator override.** When no mode is selected, the Codex adapter behaves
+  exactly as before — the project/workflow `codex:` config governs sandbox and approval. A selected
+  mode maps to per-agent policy knobs (`SymphonyElixir.ExecutionMode`). The default mode is **yolo**:
+  agent runs are non-interactive, so a mid-run approval prompt cannot be answered and would stall or
+  fail the turn.
 
   | mode  | Codex sandbox / approval                     | Claude `permission_mode` | Cursor          |
   | ----- | -------------------------------------------- | ------------------------ | --------------- |
   | plan  | `read-only` (approval unchanged)             | `plan`                   | n/a (hidden)\*  |
-  | build | `workspace-write` (approval unchanged)       | `acceptEdits`            | default         |
+  | build | `workspace-write` (approval unchanged)       | `bypassPermissions`      | default         |
   | yolo  | `danger-full-access`, approval pinned `never`| `bypassPermissions`      | adds `--force`  |
 
   \*Cursor's CLI has no read-only mode, so **Plan** is hidden for Cursor; if a `plan` mode reaches
   the Cursor adapter it is treated as `build` (no `--force`) and logged.
+
+  Claude has no OS sandbox, so `permission_mode` is its only knob. Headless (`--print`) runs have no
+  TTY to approve tool use, and `acceptEdits` still prompts for `Bash`/non-edit tools — so both
+  `build` and `yolo` use `bypassPermissions`; only `plan` stays read-only.
 
 - **UI.** The composer's `ExecutionModeMenu` shows Plan/Build/Yolo with icons and a one-line
   description; `Shift+Tab` while typing cycles through the modes available for the active agent.

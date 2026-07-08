@@ -332,14 +332,27 @@ defmodule SymphonyElixir.Assistant.TurnManager do
   end
 
   defp broadcast_finish(thread_id, result) do
-    payload =
+    thread =
       case History.get_thread(thread_id) do
-        {:ok, thread} -> History.turn_payload(thread)
+        {:ok, thread} -> thread
         _ -> nil
       end
 
-    broadcast_from(self(), thread_id, {:turn_status, finish_status(payload, result), payload})
+    payload = History.turn_payload(thread)
+    status = finish_status(payload, result)
+
+    maybe_push_turn_completed(thread, status)
+    broadcast_from(self(), thread_id, {:turn_status, status, payload})
   end
+
+  defp maybe_push_turn_completed(thread, status) when is_map(thread) and status in [:finished, :failed] do
+    dispatcher =
+      Application.get_env(:symphony_elixir, :push_dispatcher, SymphonyElixir.PushNotifications.Dispatcher)
+
+    dispatcher.assistant_turn_completed(thread, status)
+  end
+
+  defp maybe_push_turn_completed(_thread, _status), do: :ok
 
   defp finish_status(%{status: "completed"}, _result), do: :finished
   defp finish_status(%{status: "interrupted"}, _result), do: :interrupted

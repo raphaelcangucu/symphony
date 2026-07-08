@@ -479,11 +479,11 @@
         },
         "build": {
           "label": "Build",
-          "desc": "Edit the workspace (default)"
+          "desc": "Edit the workspace"
         },
         "yolo": {
           "label": "Yolo",
-          "desc": "Full access, approvals bypassed"
+          "desc": "Full access, approvals bypassed (default)"
         }
       },
       "mentions": {
@@ -2511,6 +2511,25 @@
       "expandFullscreen": "Expand terminal to full screen",
       "exitFullscreen": "Exit full screen",
       "closeDock": "Close terminal panel"
+    },
+    "preview": {
+      "title": "Preview",
+      "ariaLabel": "Preview for {{identifier}}",
+      "frameTitle": "Dev server preview for {{identifier}}",
+      "resizeHandleAria": "Resize preview panel",
+      "expandFullscreen": "Expand preview to full screen",
+      "exitFullscreen": "Exit full screen",
+      "closeDock": "Close preview panel",
+      "reload": "Reload preview",
+      "openInNewTab": "Open preview in new tab",
+      "startServer": "Start dev server",
+      "stopServer": "Stop dev server",
+      "restartServer": "Restart dev server",
+      "loading": "Loading preview status...",
+      "provisioning": "{{slug}} is {{status}}...",
+      "crashed": "{{slug}} crashed. Check the issue's Preview tab for logs.",
+      "unavailable": "Preview is unavailable for this issue's workspace.",
+      "notRunning": "No dev server is running for this issue yet."
     },
     "sessions": {
       "tabsAria": "Project session tabs"

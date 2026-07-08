@@ -205,7 +205,7 @@ defmodule SymphonyElixir.IssueDispatchTest do
              IssueDispatch.resume(project, issue.identifier, %{agent: "codex", mode: "turbo"})
 
     assert {:ok, settings} = Context.get_agent_settings("pref", issue.identifier)
-    assert settings.mode == "build"
+    assert settings.mode == "yolo"
   end
 
   test "continue_work moves wait-state issues to in-progress and nudges dispatch", %{issue: issue} do

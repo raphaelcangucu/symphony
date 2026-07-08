@@ -44,7 +44,7 @@ defmodule SymphonyElixir.AgentRunnerExecutionOptsTest do
     assert Keyword.get(AgentRunner.put_execution_mode([], execution_mode: "plan"), :execution_mode) == "plan"
     assert Keyword.get(AgentRunner.put_execution_mode([], execution_mode: "yolo"), :execution_mode) == "yolo"
     # An invalid but present mode still coerces to the default.
-    assert Keyword.get(AgentRunner.put_execution_mode([], execution_mode: "turbo"), :execution_mode) == "build"
+    assert Keyword.get(AgentRunner.put_execution_mode([], execution_mode: "turbo"), :execution_mode) == "yolo"
   end
 
   test "put_execution_mode leaves session opts untouched when no mode was selected" do

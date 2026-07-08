@@ -7,6 +7,10 @@ import { AssistantSessionTabContent } from "@/components/sessions/AssistantSessi
 import { SessionTerminalDockContext } from "@/components/sessions/sessionTerminalDockContext";
 import { initTestI18n } from "@/i18n/testUtils";
 
+vi.mock("@/hooks/useWorkspaceDiffStats", () => ({
+  useWorkspaceDiffStats: () => ({ additions: 12, deletions: 3 }),
+}));
+
 vi.mock("@/components/assistant/ProjectAssistantPanel", () => ({
   ProjectAssistantPanel: ({ diffRequestId }: { diffRequestId?: number }) => (
     <div data-testid="assistant-panel" data-diff-request-id={diffRequestId ?? 0} />
@@ -80,6 +84,19 @@ describe("AssistantSessionTabContent", () => {
     await user.click(await screen.findByRole("button", { name: "Terminal for 510" }));
 
     expect(toggleTerminal).toHaveBeenCalledWith("510");
+  });
+
+  it("shows diff line counters next to the toolbar diff button", async () => {
+    render(
+      <MemoryRouter>
+        <SessionTerminalDockContext.Provider value={{ openIssueIdentifier: null, toggleTerminal: vi.fn() }}>
+          <AssistantSessionTabContent projectSlug="macro-markets" threadId={7996} view="board" />
+        </SessionTerminalDockContext.Provider>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("+12")).toBeInTheDocument();
+    expect(screen.getByText("-3")).toBeInTheDocument();
   });
 
   it("opens the composer's diff modal from the toolbar diff button", async () => {

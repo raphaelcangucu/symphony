@@ -1,6 +1,7 @@
 import { type ReactNode } from "react";
 
 import { IssueWorkingTreeToolbar } from "@/components/sessions/IssueWorkingTreeToolbar";
+import { useSessionPreviewDock } from "@/components/sessions/sessionPreviewDockContext";
 import { useSessionTerminalDock } from "@/components/sessions/sessionTerminalDockContext";
 import type { WorkspaceView } from "@/lib/workspaceRoutes";
 
@@ -30,6 +31,8 @@ export function IssueSessionSplitLayout({
 }: IssueSessionSplitLayoutProps) {
   const dock = useSessionTerminalDock();
   const terminalOpen = dock?.openIssueIdentifier === issueIdentifier;
+  const previewDock = useSessionPreviewDock();
+  const previewOpen = previewDock?.openIssueIdentifier === issueIdentifier;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -43,6 +46,8 @@ export function IssueSessionSplitLayout({
           trailing={toolbarTrailing}
           terminalOpen={terminalOpen}
           onTerminalToggle={dock ? () => dock.toggleTerminal(issueIdentifier) : undefined}
+          previewOpen={previewOpen}
+          onPreviewToggle={previewDock ? () => previewDock.togglePreview(issueIdentifier) : undefined}
         />
       </div>
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden pt-1.5">{children}</div>

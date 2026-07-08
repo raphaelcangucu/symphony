@@ -84,6 +84,28 @@ defmodule SymphonyElixir.Claude.SessionLogTest do
       assert result["body"] == "output text"
     end
 
+    test "parses an errored tool_result as failed" do
+      line =
+        Jason.encode!(%{
+          "type" => "user",
+          "message" => %{
+            "content" => [
+              %{
+                "type" => "tool_result",
+                "tool_use_id" => "toolu_123",
+                "content" => [%{"type" => "text", "text" => "This command requires approval"}],
+                "is_error" => true
+              }
+            ]
+          }
+        })
+
+      result = SessionLog.parse_line(line)
+      assert result["kind"] == "tool_result"
+      assert result["status"] == "failed"
+      assert result["body"] == "This command requires approval"
+    end
+
     test "parses thinking block as reasoning entry (collapsed)" do
       line =
         Jason.encode!(%{

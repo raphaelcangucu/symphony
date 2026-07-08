@@ -1168,7 +1168,7 @@ describe("ProjectAssistantPanel", () => {
       <ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-2" view="board" mode="page" />,
     );
 
-    expect(await screen.findByRole("button", { name: /build/i })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /yolo/i })).toBeInTheDocument();
 
     const textarea = screen.getByPlaceholderText("Write a message...");
     fireEvent.change(textarea, { target: { value: "@mac" } });
@@ -1185,7 +1185,7 @@ describe("ProjectAssistantPanel", () => {
         expect.objectContaining({
           message: "ship it",
           context: expect.objectContaining({
-            execution_mode: "build",
+            execution_mode: "yolo",
           }),
         }),
       ),
@@ -1195,7 +1195,7 @@ describe("ProjectAssistantPanel", () => {
   it("opens the Magic command palette as a modal on project session routes", async () => {
     render(<ProjectAssistantPanel projectSlug="macro-markets" threadId={7990} view="board" mode="page" />);
 
-    expect(await screen.findByRole("button", { name: /build/i })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /yolo/i })).toBeInTheDocument();
     const magicButton = screen.getByRole("button", { name: /magic/i });
     await waitFor(() => expect(magicButton).not.toBeDisabled());
 
@@ -1221,7 +1221,7 @@ describe("ProjectAssistantPanel", () => {
         expect.objectContaining({
           message: "translate the docs",
           context: expect.objectContaining({
-            execution_mode: "build",
+            execution_mode: "yolo",
           }),
         }),
       ),

@@ -103,6 +103,47 @@ defmodule SymphonyElixir.Claude.AppServer.CliRunnerTest do
     refute without_effort =~ "--effort"
   end
 
+  test "argv: --permission-prompt-tool is included when set and validated" do
+    args =
+      CliRunner.build_args(%{
+        session_uuid: "u-1",
+        cli_session_id: nil,
+        model: nil,
+        mcp_config_path: "/tmp/m.json",
+        permission_mode: "default",
+        permission_prompt_tool: "mcp__symphony__approval_prompt"
+      })
+
+    assert args =~ "--permission-prompt-tool mcp__symphony__approval_prompt"
+    assert args =~ "--permission-mode default"
+  end
+
+  test "argv: --permission-prompt-tool is omitted when absent or unsafe" do
+    without =
+      CliRunner.build_args(%{
+        session_uuid: "u-1",
+        cli_session_id: nil,
+        model: nil,
+        mcp_config_path: nil,
+        permission_mode: "bypassPermissions"
+      })
+
+    refute without =~ "--permission-prompt-tool"
+
+    unsafe =
+      CliRunner.build_args(%{
+        session_uuid: "u-1",
+        cli_session_id: nil,
+        model: nil,
+        mcp_config_path: "/tmp/m.json",
+        permission_mode: "default",
+        permission_prompt_tool: "mcp__symphony__x; rm -rf /"
+      })
+
+    refute unsafe =~ "--permission-prompt-tool"
+    refute unsafe =~ "rm -rf"
+  end
+
   test "build_args drops unknown/malicious effort values" do
     args =
       CliRunner.build_args(%{

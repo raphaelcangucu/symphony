@@ -18,8 +18,8 @@ describe("executionMode", () => {
     }
   });
 
-  it("defaults to build", () => {
-    expect(DEFAULT_EXECUTION_MODE).toBe("build");
+  it("defaults to yolo (non-interactive runs cannot approve mid-run)", () => {
+    expect(DEFAULT_EXECUTION_MODE).toBe("yolo");
   });
 
   it("exposes all modes for every agent kind", () => {
@@ -47,8 +47,9 @@ describe("executionMode", () => {
     expect(cycleMode("build", ["yolo", "plan"])).toBe("yolo");
   });
 
-  it("looks up metadata by id and falls back to build", () => {
+  it("looks up metadata by id and falls back to the default mode", () => {
     expect(executionModeMeta("yolo").id).toBe("yolo");
     expect(executionModeMeta("build").id).toBe("build");
+    expect(executionModeMeta("bogus" as never).id).toBe(DEFAULT_EXECUTION_MODE);
   });
 });

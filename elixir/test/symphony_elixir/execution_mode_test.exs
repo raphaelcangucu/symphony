@@ -11,14 +11,14 @@ defmodule SymphonyElixir.ExecutionModeTest do
     refute ExecutionMode.valid?(nil)
   end
 
-  test "default is build" do
-    assert ExecutionMode.default() == "build"
+  test "default is yolo (non-interactive runs cannot approve mid-run)" do
+    assert ExecutionMode.default() == "yolo"
   end
 
   test "normalize/1 coerces unknown values to the default" do
     assert ExecutionMode.normalize("plan") == "plan"
-    assert ExecutionMode.normalize("turbo") == "build"
-    assert ExecutionMode.normalize(nil) == "build"
+    assert ExecutionMode.normalize("turbo") == "yolo"
+    assert ExecutionMode.normalize(nil) == "yolo"
   end
 
   test "codex policy escalates with mode" do
@@ -27,21 +27,48 @@ defmodule SymphonyElixir.ExecutionModeTest do
     assert ExecutionMode.codex_policy("yolo").sandbox == "danger-full-access"
   end
 
-  test "codex policy keeps approval non-interactive" do
+  test "codex policy keeps approval non-interactive on the arity-1 (autonomous) ceiling" do
     assert ExecutionMode.codex_policy("plan").approval_policy == "never"
     assert ExecutionMode.codex_policy("build").approval_policy == "never"
     assert ExecutionMode.codex_policy("yolo").approval_policy == "never"
   end
 
-  test "codex policy falls back to build for unknown modes" do
-    assert ExecutionMode.codex_policy("turbo").sandbox == "workspace-write"
+  test "codex policy falls back to the default (yolo) for unknown modes" do
+    assert ExecutionMode.codex_policy("turbo").sandbox == "danger-full-access"
   end
 
-  test "claude permission_mode mapping" do
+  test "codex_approval_override prompts only for interactive build" do
+    assert ExecutionMode.codex_approval_override("build", true) == {:force, "on-request"}
+    assert ExecutionMode.codex_approval_override("build", false) == {:force, "never"}
+    assert ExecutionMode.codex_approval_override("yolo", true) == {:force, "never"}
+    assert ExecutionMode.codex_approval_override("yolo", false) == {:force, "never"}
+    assert ExecutionMode.codex_approval_override("plan", true) == :honor_config
+    assert ExecutionMode.codex_approval_override("plan", false) == :honor_config
+    # unknown coerces to yolo
+    assert ExecutionMode.codex_approval_override("turbo", true) == {:force, "never"}
+  end
+
+  test "claude permission_mode defaults to the autonomous ceiling (arity-1)" do
     assert ExecutionMode.claude_permission_mode("plan") == "plan"
-    assert ExecutionMode.claude_permission_mode("build") == "acceptEdits"
+    assert ExecutionMode.claude_permission_mode("build") == "bypassPermissions"
     assert ExecutionMode.claude_permission_mode("yolo") == "bypassPermissions"
-    assert ExecutionMode.claude_permission_mode("turbo") == "acceptEdits"
+    assert ExecutionMode.claude_permission_mode("turbo") == "bypassPermissions"
+  end
+
+  test "claude permission_mode uses default (prompting) only for interactive build" do
+    assert ExecutionMode.claude_permission_mode("plan", true) == "plan"
+    assert ExecutionMode.claude_permission_mode("build", true) == "default"
+    assert ExecutionMode.claude_permission_mode("build", false) == "bypassPermissions"
+    assert ExecutionMode.claude_permission_mode("yolo", true) == "bypassPermissions"
+    assert ExecutionMode.claude_permission_mode("turbo", true) == "bypassPermissions"
+  end
+
+  test "claude_interactive_approval? is true only for interactive build" do
+    assert ExecutionMode.claude_interactive_approval?("build", true)
+    refute ExecutionMode.claude_interactive_approval?("build", false)
+    refute ExecutionMode.claude_interactive_approval?("plan", true)
+    refute ExecutionMode.claude_interactive_approval?("yolo", true)
+    refute ExecutionMode.claude_interactive_approval?("turbo", true)
   end
 
   test "cursor force only on yolo" do

@@ -13,6 +13,13 @@ defmodule SymphonyElixir.Claude.CodingAgentTest do
     {root, ws}
   end
 
+  defp mcp_url(config_path) when is_binary(config_path) do
+    config_path
+    |> File.read!()
+    |> Jason.decode!()
+    |> get_in(["mcpServers", "symphony", "url"])
+  end
+
   test "start_session is portless and run_turn completes via the CLI runner" do
     {root, ws} = workspace()
 
@@ -81,7 +88,7 @@ defmodule SymphonyElixir.Claude.CodingAgentTest do
   end
 
   test "execution_mode maps onto the claude permission mode" do
-    for {mode, expected} <- [{"plan", "plan"}, {"build", "acceptEdits"}, {"yolo", "bypassPermissions"}] do
+    for {mode, expected} <- [{"plan", "plan"}, {"build", "bypassPermissions"}, {"yolo", "bypassPermissions"}] do
       {root, ws} = workspace()
 
       assert {:ok, session} =
@@ -95,7 +102,7 @@ defmodule SymphonyElixir.Claude.CodingAgentTest do
     end
   end
 
-  test "missing execution_mode defaults to the build permission mode" do
+  test "missing execution_mode defaults to bypassPermissions (headless has no approver)" do
     {root, ws} = workspace()
 
     assert {:ok, session} =
@@ -104,7 +111,127 @@ defmodule SymphonyElixir.Claude.CodingAgentTest do
                claude_command: "FAKE_CLAUDE_MODE=happy #{@fake}"
              )
 
-    assert session.permission_mode == "acceptEdits"
+    assert session.permission_mode == "bypassPermissions"
+  end
+
+  test "autonomous build (no interactive flag) stays bypassPermissions with no approval tool" do
+    {root, ws} = workspace()
+
+    assert {:ok, session} =
+             CodingAgent.start_session(ws,
+               workspace_root: root,
+               claude_command: "FAKE_CLAUDE_MODE=happy #{@fake}",
+               execution_mode: "build"
+             )
+
+    assert session.permission_mode == "bypassPermissions"
+    assert session.permission_prompt_tool == nil
+    assert session.mcp_config_path == nil
+  end
+
+  test "interactive build wires --permission-mode default and the approval prompt tool" do
+    {root, ws} = workspace()
+
+    assert {:ok, session} =
+             CodingAgent.start_session(ws,
+               workspace_root: root,
+               claude_command: "FAKE_CLAUDE_MODE=happy #{@fake}",
+               execution_mode: "build",
+               interactive_user_input: true,
+               on_approval_required: fn _ -> :ok end
+             )
+
+    assert session.permission_mode == "default"
+    assert session.permission_prompt_tool == "mcp__symphony__symphony_approve"
+    assert is_binary(session.mcp_config_path)
+    assert File.exists?(session.mcp_config_path)
+
+    assert :ok = CodingAgent.stop_session(session)
+  end
+
+  test "interactive build approval tool blocks until the operator approves, then allows" do
+    {root, ws} = workspace()
+    test_pid = self()
+
+    {:ok, session} =
+      CodingAgent.start_session(ws,
+        workspace_root: root,
+        claude_command: "FAKE_CLAUDE_MODE=happy #{@fake}",
+        execution_mode: "build",
+        interactive_user_input: true,
+        approval_timeout_ms: 5_000,
+        on_approval_required: fn request -> send(test_pid, {:approval_request, request}) end
+      )
+
+    url = mcp_url(session.mcp_config_path)
+
+    caller =
+      Task.async(fn ->
+        Req.post!(url,
+          json: %{
+            "jsonrpc" => "2.0",
+            "id" => 1,
+            "method" => "tools/call",
+            "params" => %{
+              "name" => "symphony_approve",
+              "arguments" => %{"tool_name" => "Bash", "input" => %{"command" => "ls -la"}}
+            }
+          },
+          retry: false
+        )
+      end)
+
+    assert_receive {:approval_request, %{request_id: request_id, command: "ls -la", tool_name: "Bash", agent: "claude"}}, 2_000
+
+    SymphonyElixir.Claude.ApprovalBroker.resolve(request_id, :approve)
+
+    response = Task.await(caller, 5_000)
+    assert %{"result" => %{"content" => [%{"text" => text}], "isError" => false}} = response.body
+    assert %{"behavior" => "allow", "updatedInput" => %{"command" => "ls -la"}} = Jason.decode!(text)
+
+    CodingAgent.stop_session(session)
+  end
+
+  test "interactive build approval tool denies when the operator declines" do
+    {root, ws} = workspace()
+    test_pid = self()
+
+    {:ok, session} =
+      CodingAgent.start_session(ws,
+        workspace_root: root,
+        claude_command: "FAKE_CLAUDE_MODE=happy #{@fake}",
+        execution_mode: "build",
+        interactive_user_input: true,
+        approval_timeout_ms: 5_000,
+        on_approval_required: fn request -> send(test_pid, {:approval_request, request}) end
+      )
+
+    url = mcp_url(session.mcp_config_path)
+
+    caller =
+      Task.async(fn ->
+        Req.post!(url,
+          json: %{
+            "jsonrpc" => "2.0",
+            "id" => 1,
+            "method" => "tools/call",
+            "params" => %{
+              "name" => "symphony_approve",
+              "arguments" => %{"tool_name" => "Bash", "input" => %{"command" => "rm -rf /"}}
+            }
+          },
+          retry: false
+        )
+      end)
+
+    assert_receive {:approval_request, %{request_id: request_id}}, 2_000
+    SymphonyElixir.Claude.ApprovalBroker.resolve(request_id, :deny)
+
+    response = Task.await(caller, 5_000)
+    assert %{"result" => %{"content" => [%{"text" => text}]}} = response.body
+    assert %{"behavior" => "deny", "message" => _} = Jason.decode!(text)
+
+    CodingAgent.stop_session(session)
   end
 
   test "workspace guard still rejects the workspace root itself" do
