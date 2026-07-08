@@ -126,6 +126,56 @@ defmodule SymphonyElixir.Workspace.Inventory do
   end
 
   @doc """
+  Scans working trees and pushes each entry to `emit` as it becomes available.
+
+  `emit` receives `{:entry, workspace_entry()}` or `{:totals, totals_map()}` and
+  must return `:ok` to continue or `:halt` when the client disconnected.
+  """
+  @spec scan_stream(String.t(), (term() -> :ok | :halt), keyword()) ::
+          {:ok, scan_result()} | {:error, term()}
+  def scan_stream(project_slug, emit, opts \\ [])
+      when is_binary(project_slug) and is_function(emit, 1) and is_list(opts) do
+    with {:ok, _project} <- Context.get_project(project_slug) do
+      layout = Workspace.project_layout(project_slug)
+      segment_root = segment_root(layout)
+      issues_by_safe_id = issue_lookup(project_slug)
+      executions_by_issue = executions_by_issue(opts)
+      size_fun = Keyword.get(opts, :size_fun, &directory_size_bytes/1)
+      concurrency = scan_concurrency(opts)
+
+      build_entry_fn = fn path ->
+        build_entry(path, issues_by_safe_id, executions_by_issue, size_fun, concurrency)
+      end
+
+      project_task = Task.async(fn -> project_workspace_entry(segment_root, size_fun, concurrency) end)
+
+      workspaces =
+        segment_root
+        |> candidate_dirs()
+        |> stream_map(build_entry_fn, concurrency, emit)
+
+      workspaces =
+        case Task.await(project_task, @scan_timeout) do
+          nil ->
+            workspaces
+
+          entry ->
+            case emit.({:entry, entry}) do
+              :halt -> workspaces
+              :ok -> [entry | workspaces]
+            end
+        end
+
+      totals = totals(workspaces)
+
+      case emit.({:totals, totals}) do
+        :halt -> {:ok, %{workspaces: workspaces, totals: totals}}
+        :ok -> {:ok, %{workspaces: workspaces, totals: totals}}
+      end
+    end
+  end
+
+  @doc """
   Removes workspaces and child worktrees in batch.
 
   Every path must resolve inside the project's workspace layout root. Issue
@@ -576,5 +626,27 @@ defmodule SymphonyElixir.Workspace.Inventory do
       timeout: @scan_timeout
     )
     |> Enum.map(fn {:ok, result} -> result end)
+  end
+
+  defp stream_map(items, fun, concurrency, emit) when is_function(fun, 1) and is_function(emit, 1) do
+    items
+    |> Task.async_stream(fun,
+      max_concurrency: concurrency,
+      ordered: false,
+      timeout: @scan_timeout
+    )
+    |> Enum.reduce_while([], fn
+      {:ok, nil}, acc ->
+        {:cont, acc}
+
+      {:ok, entry}, acc ->
+        case emit.({:entry, entry}) do
+          :halt -> {:halt, acc}
+          :ok -> {:cont, [entry | acc]}
+        end
+
+      _, acc ->
+        {:cont, acc}
+    end)
   end
 end

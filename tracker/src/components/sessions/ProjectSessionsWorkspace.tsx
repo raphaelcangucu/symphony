@@ -71,7 +71,7 @@ export function ProjectSessionsWorkspace({
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { view } = useWorkspace();
-  const { relatedSessions, issues, executions, inventory, isLoading, error, refetch } =
+  const { relatedSessions, issues, executions, inventory, isLoading, isInventoryLoading, error, refetch } =
     useProjectSessions(projectSlug);
   const setSessionsChrome = useContext(ProjectSessionsChromeSetterContext);
   const [resumePending, setResumePending] = useState<string | null>(null);
@@ -374,7 +374,7 @@ export function ProjectSessionsWorkspace({
     setSessionsChrome({
       count: total,
       isCreating: creating,
-      isLoading,
+      isLoading: isLoading || isInventoryLoading,
       onCreateSession: () => {
         void handleCreateSession();
       },
@@ -384,7 +384,7 @@ export function ProjectSessionsWorkspace({
     return () => {
       setSessionsChrome(null);
     };
-  }, [creating, handleCreateSession, handleRefresh, isLoading, setSessionsChrome, total]);
+  }, [creating, handleCreateSession, handleRefresh, isInventoryLoading, isLoading, setSessionsChrome, total]);
 
   return (
     <SessionTerminalDockContext.Provider value={terminalDockControls}>
@@ -415,19 +415,26 @@ export function ProjectSessionsWorkspace({
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2 px-1">
               <span className="text-xs text-muted-foreground">
                 {inventory
-                  ? t("workspacesPage.totals", {
-                      count: inventory.totals.count,
-                      size: formatBytes(inventory.totals.sizeBytes),
-                      reclaimable: formatBytes(inventory.totals.reclaimableBytes),
-                    })
-                  : null}
+                  ? isInventoryLoading
+                    ? t("workspacesPage.totalsLoading", {
+                        count: inventory.totals.count,
+                        size: formatBytes(inventory.totals.sizeBytes),
+                      })
+                    : t("workspacesPage.totals", {
+                        count: inventory.totals.count,
+                        size: formatBytes(inventory.totals.sizeBytes),
+                        reclaimable: formatBytes(inventory.totals.reclaimableBytes),
+                      })
+                  : isInventoryLoading
+                    ? t("workspacesPage.inventoryLoading")
+                    : null}
               </span>
               <div className="flex items-center gap-2">
                 <Button type="button" variant="outline" size="sm" onClick={() => setNewWorkspaceOpen(true)}>
                   <FolderPlus className="h-3.5 w-3.5" />
                   {t("workspacesPage.newWorkspace.button")}
                 </Button>
-                {inventory ? (
+                {inventory && !isInventoryLoading ? (
                   <Button type="button" variant="outline" size="sm" onClick={() => setCleanupOpen(true)}>
                     <Trash2 className="h-3.5 w-3.5" />
                     {t("workspacesPage.cleanup.button")}
@@ -442,7 +449,7 @@ export function ProjectSessionsWorkspace({
               </div>
             ) : null}
 
-            {!isLoading && total === 0 ? (
+            {!isLoading && total === 0 && !isInventoryLoading ? (
               <div className="rounded-lg border border-dashed bg-background/70 px-5 py-10 text-center text-sm text-muted-foreground">
                 {t("sessions.empty")}
               </div>

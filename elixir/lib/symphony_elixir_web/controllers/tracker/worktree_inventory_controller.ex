@@ -9,18 +9,30 @@ defmodule SymphonyElixirWeb.Tracker.WorktreeInventoryController do
 
   alias Plug.Conn
   alias SymphonyElixir.Assistant.History
+  alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.Workspace.Inventory
   alias SymphonyElixir.Workspace.Standalone
-  alias SymphonyElixirWeb.{TrackerErrors, TrackerPresenter}
+  alias SymphonyElixirWeb.{TrackerErrors, TrackerPresenter, WorktreeInventoryEventStream, WorktreeInventoryPresenter}
 
   @spec index(Conn.t(), map()) :: Conn.t()
   def index(conn, %{"project_slug" => project_slug}) do
     case Inventory.scan(project_slug) do
       {:ok, scan} ->
         json(conn, %{
-          data: Enum.map(scan.workspaces, &workspace_json/1),
-          totals: scan.totals
+          data: Enum.map(scan.workspaces, &WorktreeInventoryPresenter.entry_json/1),
+          totals: WorktreeInventoryPresenter.totals_json(scan.totals)
         })
+
+      {:error, reason} ->
+        TrackerErrors.render(conn, reason)
+    end
+  end
+
+  @spec events(Conn.t(), map()) :: Conn.t()
+  def events(conn, %{"project_slug" => project_slug}) do
+    case Context.get_project(project_slug) do
+      {:ok, _project} ->
+        WorktreeInventoryEventStream.stream(conn, project_slug)
 
       {:error, reason} ->
         TrackerErrors.render(conn, reason)
@@ -77,23 +89,6 @@ defmodule SymphonyElixirWeb.Tracker.WorktreeInventoryController do
 
   def create_workspace(conn, _params) do
     TrackerErrors.validation_msg(conn, "workspace name is required")
-  end
-
-  defp workspace_json(entry) do
-    %{
-      path: entry.path,
-      kind: Atom.to_string(entry.kind),
-      issue_identifier: entry.issue_identifier,
-      name: entry.name,
-      classification: Atom.to_string(entry.classification),
-      reclaimable: entry.reclaimable,
-      work_present: entry.work_present,
-      execution_status: entry.execution_status && Atom.to_string(entry.execution_status),
-      removable: entry.removable,
-      size_bytes: entry.size_bytes,
-      repos: entry.repos,
-      child_worktrees: entry.child_worktrees
-    }
   end
 
   defp removal_json(result) do

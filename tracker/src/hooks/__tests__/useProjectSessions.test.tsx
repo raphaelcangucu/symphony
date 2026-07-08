@@ -5,13 +5,19 @@ import { useAgentExecutions } from "@/hooks/useAgentExecutions";
 import { useProjectSessions } from "@/hooks/useProjectSessions";
 import { listIssues } from "@/services/issues";
 import { listRecents } from "@/services/recents";
+import { fetchWorkspaceInventory, subscribeWorkspaceInventory } from "@/services/worktrees";
 import type { AgentExecution } from "@/types/agent-execution";
 import type { Issue } from "@/types/issue";
 import type { RecentSession } from "@/types/recents";
+import type { WorkspaceInventoryEntry } from "@/types/worktrees";
 
 vi.mock("@/hooks/useAgentExecutions", () => ({ useAgentExecutions: vi.fn() }));
 vi.mock("@/services/issues", () => ({ listIssues: vi.fn() }));
 vi.mock("@/services/recents", () => ({ listRecents: vi.fn() }));
+vi.mock("@/services/worktrees", () => ({
+  fetchWorkspaceInventory: vi.fn(),
+  subscribeWorkspaceInventory: vi.fn(),
+}));
 
 function execution(issueIdentifier: string): AgentExecution {
   return {
@@ -86,6 +92,14 @@ describe("useProjectSessions", () => {
       refetch: refetchExecutions,
     });
     vi.mocked(listRecents).mockResolvedValue([]);
+    vi.mocked(subscribeWorkspaceInventory).mockImplementation((_slug, handlers) => {
+      handlers.onDone?.();
+      return () => undefined;
+    });
+    vi.mocked(fetchWorkspaceInventory).mockResolvedValue({
+      entries: [],
+      totals: { count: 0, sizeBytes: 0, reclaimableBytes: 0 },
+    });
   });
 
   it("joins project issues with execution snapshots", async () => {
@@ -111,5 +125,38 @@ describe("useProjectSessions", () => {
 
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     expect(result.current.relatedSessions.map((session) => session.title)).toEqual(["Issue chat"]);
+  });
+
+  it("streams inventory entries without blocking issue loading", async () => {
+    vi.mocked(listIssues).mockResolvedValue([issue("DEMO-1", "Saved launcher work")]);
+    vi.mocked(subscribeWorkspaceInventory).mockImplementation((_slug, handlers) => {
+      const entry: WorkspaceInventoryEntry = {
+        path: "/tmp/demo-workspace",
+        kind: "issue",
+        issueIdentifier: "DEMO-1",
+        name: null,
+        classification: "active",
+        reclaimable: false,
+        workPresent: false,
+        executionStatus: null,
+        removable: true,
+        sizeBytes: 1024,
+        repos: [],
+        childWorktrees: [],
+      };
+      queueMicrotask(() => {
+        handlers.onEntry(entry);
+        handlers.onTotals({ count: 1, sizeBytes: 1024, reclaimableBytes: 0 });
+        handlers.onDone?.();
+      });
+      return () => undefined;
+    });
+
+    const { result } = renderHook(() => useProjectSessions("demo"));
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.groups.saved).toHaveLength(1);
+    await waitFor(() => expect(result.current.isInventoryLoading).toBe(false));
+    expect(result.current.inventory?.entries).toHaveLength(1);
   });
 });

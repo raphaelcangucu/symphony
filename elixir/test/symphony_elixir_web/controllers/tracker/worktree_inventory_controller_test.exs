@@ -73,6 +73,33 @@ defmodule SymphonyElixirWeb.Tracker.WorktreeInventoryControllerTest do
     assert json_response(conn, 404)
   end
 
+  test "GET /worktrees/events streams entries and totals", ctx do
+    {:ok, issue} = Context.create_issue("wtapi", %{"title" => "Stream"})
+    ws = Path.join(ctx.segment_root, issue.identifier)
+    File.mkdir_p!(ws)
+    _repo = GitFixtures.make_repo!(ctx.tmp, ws, "backend")
+
+    conn = get(authorize(), "/api/tracker/v1/projects/wtapi/worktrees/events")
+
+    assert get_resp_header(conn, "content-type") == ["text/event-stream; charset=utf-8"]
+    assert conn.resp_body =~ "event: entry"
+    assert conn.resp_body =~ issue.identifier
+    assert conn.resp_body =~ "event: totals"
+    assert conn.resp_body =~ "event: done"
+  end
+
+  test "GET /worktrees/events accepts token query param for EventSource auth", ctx do
+    {:ok, issue} = Context.create_issue("wtapi", %{"title" => "Stream auth"})
+    ws = Path.join(ctx.segment_root, issue.identifier)
+    File.mkdir_p!(ws)
+    _repo = GitFixtures.make_repo!(ctx.tmp, ws, "backend")
+
+    conn = get(build_conn(), "/api/tracker/v1/projects/wtapi/worktrees/events?token=secret")
+
+    assert get_resp_header(conn, "content-type") == ["text/event-stream; charset=utf-8"]
+    assert conn.resp_body =~ "event: done"
+  end
+
   test "DELETE /worktrees removes listed workspaces and reports skips", ctx do
     {:ok, issue} = Context.create_issue("wtapi", %{"title" => "Old"})
     {:ok, _} = Context.update_issue_state("wtapi", issue.identifier, "Done")

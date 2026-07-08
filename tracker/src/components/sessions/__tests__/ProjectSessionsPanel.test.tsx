@@ -180,6 +180,7 @@ describe("ProjectSessionsPanel", () => {
       executions: new Map([["DEMO-1", execution()]]),
       inventory: null,
       isLoading: false,
+      isInventoryLoading: false,
       error: null,
       refetch,
     });
@@ -323,6 +324,7 @@ describe("ProjectSessionsPanel", () => {
       executions: new Map(),
       inventory: null,
       isLoading: true,
+      isInventoryLoading: false,
       error: null,
       refetch,
     });
@@ -342,6 +344,7 @@ describe("ProjectSessionsPanel", () => {
       executions: new Map([["DEMO-1", execution()]]),
       inventory: null,
       isLoading: false,
+      isInventoryLoading: false,
       error: null,
       refetch,
     });

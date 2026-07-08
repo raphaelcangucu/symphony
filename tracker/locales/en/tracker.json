@@ -2940,6 +2940,8 @@
     "clean": "clean",
     "ahead": "{{count}} ahead",
     "totals": "{{count}} trees · {{size}} · {{reclaimable}} reclaimable",
+    "totalsLoading": "{{count}} trees loaded · {{size}}…",
+    "inventoryLoading": "Scanning working trees…",
     "cleanup": {
       "button": "Clean up…",
       "title": "Clean up working trees",

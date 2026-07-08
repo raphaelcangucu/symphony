@@ -10,6 +10,7 @@ import type {
 } from "@/types/worktrees";
 
 import { normalizeAssistantThread, type BackendAssistantThreadDto } from "./assistantThreads";
+import { getTrackerToken } from "@/config";
 import { http, trackerPath } from "./http";
 
 interface BackendRepoDto {
@@ -124,6 +125,93 @@ export async function fetchWorkspaceInventory(projectSlug: string): Promise<Work
       sizeBytes: response.data.totals.size_bytes,
       reclaimableBytes: response.data.totals.reclaimable_bytes,
     },
+  };
+}
+
+export interface WorkspaceInventoryStreamHandlers {
+  onEntry: (entry: WorkspaceInventoryEntry) => void;
+  onTotals: (totals: WorkspaceInventory["totals"]) => void;
+  onDone?: () => void;
+  onError?: () => void;
+}
+
+function workspaceInventoryEventsPath(projectSlug: string): string {
+  const slug = encodeURIComponent(requireProjectSlug(projectSlug));
+  return trackerPath(`/projects/${slug}/worktrees/events`);
+}
+
+export function subscribeWorkspaceInventory(
+  projectSlug: string,
+  handlers: WorkspaceInventoryStreamHandlers,
+): () => void {
+  if (typeof EventSource === "undefined") {
+    handlers.onError?.();
+    return () => undefined;
+  }
+
+  const url = new URL(workspaceInventoryEventsPath(projectSlug), window.location.origin);
+  const token = getTrackerToken();
+
+  if (token) {
+    url.searchParams.set("token", token);
+  }
+
+  const source = new EventSource(url.toString());
+  let closed = false;
+
+  source.addEventListener("entry", (event) => {
+    try {
+      const payload = JSON.parse((event as MessageEvent<string>).data) as {
+        data?: BackendWorkspaceEntryDto;
+      };
+      if (payload.data) {
+        handlers.onEntry(normalizeEntry(payload.data));
+      }
+    } catch {
+      handlers.onError?.();
+    }
+  });
+
+  source.addEventListener("totals", (event) => {
+    try {
+      const payload = JSON.parse((event as MessageEvent<string>).data) as {
+        totals?: { count: number; size_bytes: number; reclaimable_bytes: number };
+      };
+      if (payload.totals) {
+        handlers.onTotals({
+          count: payload.totals.count,
+          sizeBytes: payload.totals.size_bytes,
+          reclaimableBytes: payload.totals.reclaimable_bytes,
+        });
+      }
+    } catch {
+      handlers.onError?.();
+    }
+  });
+
+  source.addEventListener("done", () => {
+    closed = true;
+    handlers.onDone?.();
+    source.close();
+  });
+
+  source.addEventListener("failure", () => {
+    closed = true;
+    handlers.onError?.();
+    source.close();
+  });
+
+  source.onerror = () => {
+    if (closed) {
+      return;
+    }
+
+    handlers.onError?.();
+  };
+
+  return () => {
+    closed = true;
+    source.close();
   };
 }
 

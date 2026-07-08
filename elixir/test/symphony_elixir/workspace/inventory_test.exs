@@ -116,6 +116,26 @@ defmodule SymphonyElixir.Workspace.InventoryTest do
     refute entry.reclaimable
   end
 
+  test "scan_stream emits each workspace entry and totals", ctx do
+    active = create_issue!("Active work")
+    active_ws = workspace_dir!(ctx.segment_root, active.identifier)
+    _repo = GitFixtures.make_repo!(ctx.tmp, active_ws, "backend")
+
+    events = Agent.start_link(fn -> [] end) |> elem(1)
+
+    emit = fn event ->
+      Agent.update(events, &[event | &1])
+      :ok
+    end
+
+    assert {:ok, scan} = Inventory.scan_stream("invproj", emit, executions: [], size_fun: size_fun())
+    emitted = Agent.get(events, &Enum.reverse/1)
+
+    assert length(scan.workspaces) == 1
+    assert {:entry, %{path: ^active_ws}} = Enum.at(emitted, 0)
+    assert {:totals, %{count: 1}} = List.last(emitted)
+  end
+
   test "scan lists child worktrees nested under a workspace repo", ctx do
     issue = create_issue!("Bundle parent")
     ws = workspace_dir!(ctx.segment_root, issue.identifier)

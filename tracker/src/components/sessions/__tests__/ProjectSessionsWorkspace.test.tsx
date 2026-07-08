@@ -61,6 +61,7 @@ describe("ProjectSessionsWorkspace", () => {
       executions: new Map(),
       inventory: null,
       isLoading: false,
+      isInventoryLoading: false,
       error: null,
       refetch,
     });
