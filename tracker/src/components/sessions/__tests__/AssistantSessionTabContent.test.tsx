@@ -8,7 +8,9 @@ import { SessionTerminalDockContext } from "@/components/sessions/sessionTermina
 import { initTestI18n } from "@/i18n/testUtils";
 
 vi.mock("@/components/assistant/ProjectAssistantPanel", () => ({
-  ProjectAssistantPanel: () => <div data-testid="assistant-panel" />,
+  ProjectAssistantPanel: ({ diffRequestId }: { diffRequestId?: number }) => (
+    <div data-testid="assistant-panel" data-diff-request-id={diffRequestId ?? 0} />
+  ),
 }));
 
 vi.mock("@/hooks/useIssueEditor", () => ({
@@ -78,5 +80,25 @@ describe("AssistantSessionTabContent", () => {
     await user.click(await screen.findByRole("button", { name: "Terminal for 510" }));
 
     expect(toggleTerminal).toHaveBeenCalledWith("510");
+  });
+
+  it("opens the composer's diff modal from the toolbar diff button", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter>
+        <SessionTerminalDockContext.Provider value={{ openIssueIdentifier: null, toggleTerminal: vi.fn() }}>
+          <AssistantSessionTabContent projectSlug="macro-markets" threadId={7996} view="board" />
+        </SessionTerminalDockContext.Provider>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByTestId("assistant-panel")).toHaveAttribute("data-diff-request-id", "0");
+
+    await user.click(screen.getByRole("button", { name: "Diff" }));
+    expect(screen.getByTestId("assistant-panel")).toHaveAttribute("data-diff-request-id", "1");
+
+    await user.click(screen.getByRole("button", { name: "Diff" }));
+    expect(screen.getByTestId("assistant-panel")).toHaveAttribute("data-diff-request-id", "2");
   });
 });

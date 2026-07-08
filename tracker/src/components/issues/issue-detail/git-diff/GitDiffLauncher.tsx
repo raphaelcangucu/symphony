@@ -1,5 +1,5 @@
 import { GitCompare } from "lucide-react";
-import { lazy, Suspense, useCallback, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,8 @@ interface GitDiffLauncherProps {
   disabled?: boolean;
   /** Enables diff line comments; receives the composed review prompt to deliver to the agent. */
   onSendReview?: (review: string) => void;
+  /** External open trigger: incrementing this counter opens the modal (like other requestId props). */
+  openRequestId?: number;
 }
 
 export function GitDiffLauncher({
@@ -22,6 +24,7 @@ export function GitDiffLauncher({
   threadId = null,
   disabled,
   onSendReview,
+  openRequestId = 0,
 }: GitDiffLauncherProps) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
@@ -33,6 +36,10 @@ export function GitDiffLauncher({
   }, [launcherDisabled]);
 
   useGitDiffShortcut(openModal, { enabled: !launcherDisabled });
+
+  useEffect(() => {
+    if (openRequestId > 0) openModal();
+  }, [openModal, openRequestId]);
 
   return (
     <>

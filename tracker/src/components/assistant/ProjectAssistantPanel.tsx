@@ -160,6 +160,8 @@ interface ProjectAssistantPanelProps {
    * gets the vertical space instead of two stacked headers.
    */
   hideHeader?: boolean;
+  /** Incrementing counter that opens the workspace diff modal from outside (e.g. the session toolbar). */
+  diffRequestId?: number;
   issueGoalMode?: boolean;
   issueGoalModeRequestId?: number;
   dispatchRequestId?: number;
@@ -278,6 +280,7 @@ export function ProjectAssistantPanel({
   onRunningChange,
   mode = "sheet",
   hideHeader = false,
+  diffRequestId = 0,
   issueGoalMode,
   issueGoalModeRequestId = 0,
   dispatchRequestId = 0,
@@ -1367,6 +1370,7 @@ export function ProjectAssistantPanel({
                 threadId={threadId ?? null}
                 disabled={catalogLoading}
                 onSendReview={sendDiffReview}
+                openRequestId={diffRequestId}
               />
             ) : null}
             {hideHeader && workspaceDiffStats ? (
