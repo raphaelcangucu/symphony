@@ -34,18 +34,18 @@ export function IssueWorkingTreeToolbar({
   const issueHref = issuePath(projectSlug, view, issueIdentifier, "sessions");
   const issueTerminalHref = issuePath(projectSlug, view, issueIdentifier, "terminal");
   const terminalActionClassName = cn(
-    "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+    "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
     terminalOpen && "bg-accent text-foreground",
   );
 
   return (
-    <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+    <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
       {leading}
       <Link
         to={issueHref}
         aria-label={t("sessions.openIssueAria", { identifier: issueIdentifier })}
         title={t("sessions.openIssueAria", { identifier: issueIdentifier })}
-        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
       >
         <ExternalLink className="h-4 w-4" />
       </Link>
@@ -70,7 +70,7 @@ export function IssueWorkingTreeToolbar({
           <TerminalSquare className="h-4 w-4" />
         </Link>
       )}
-      <IssueEditorMenu projectSlug={projectSlug} identifier={issueIdentifier} />
+      <IssueEditorMenu projectSlug={projectSlug} identifier={issueIdentifier} compact />
       <IssueDocumentsDrawer projectSlug={projectSlug} identifier={issueIdentifier} />
       {trailing}
     </div>

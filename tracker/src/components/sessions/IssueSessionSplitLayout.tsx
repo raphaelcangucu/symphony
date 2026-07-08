@@ -32,9 +32,9 @@ export function IssueSessionSplitLayout({
   const terminalOpen = dock?.openIssueIdentifier === issueIdentifier;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
-      <div className="flex shrink-0 items-center justify-between gap-3">
-        <div className="min-w-0 flex-1">{headerStart}</div>
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div className="flex h-8 shrink-0 items-center justify-between gap-2 border-b border-border/50 pb-1.5">
+        <div className="flex min-w-0 flex-1 items-center">{headerStart}</div>
         <IssueWorkingTreeToolbar
           projectSlug={projectSlug}
           issueIdentifier={issueIdentifier}
@@ -45,7 +45,7 @@ export function IssueSessionSplitLayout({
           onTerminalToggle={dock ? () => dock.toggleTerminal(issueIdentifier) : undefined}
         />
       </div>
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{children}</div>
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden pt-1.5">{children}</div>
     </div>
   );
 }

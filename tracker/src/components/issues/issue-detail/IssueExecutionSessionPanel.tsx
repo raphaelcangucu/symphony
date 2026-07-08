@@ -87,7 +87,7 @@ export function IssueExecutionSessionPanel({
             type="button"
             variant="outline"
             size="sm"
-            className="h-8 gap-1.5 px-2.5 text-xs"
+            className="h-7 gap-1.5 px-2 text-xs"
             onClick={() => setStartSessionOpen(true)}
             title={t("issue.agentTabs.newSessionTitle")}
           >

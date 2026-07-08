@@ -16,9 +16,11 @@ interface IssueEditorMenuProps {
   projectSlug: string;
   identifier: string;
   enabled?: boolean;
+  /** Tighter trigger for dense toolbars (session header row). */
+  compact?: boolean;
 }
 
-export function IssueEditorMenu({ projectSlug, identifier, enabled = true }: IssueEditorMenuProps) {
+export function IssueEditorMenu({ projectSlug, identifier, enabled = true, compact = false }: IssueEditorMenuProps) {
   const { t } = useTranslation();
   const editor = useIssueEditor({ projectSlug, identifier, enabled });
 
@@ -46,13 +48,14 @@ export function IssueEditorMenu({ projectSlug, identifier, enabled = true }: Iss
           type="button"
           variant="outline"
           size="sm"
+          className={compact ? "h-7 gap-1 px-2 text-xs" : undefined}
           disabled={!anyEditorAvailable && !editor.loading}
           title={editorMenuTitle}
           aria-label={t("issue.drawer.openInCode")}
         >
-          <Code2 className="h-4 w-4" />
+          <Code2 className={compact ? "h-3.5 w-3.5" : "h-4 w-4"} />
           <span className="hidden sm:inline">{t("issue.drawer.code")}</span>
-          <ChevronDown className="h-4 w-4 opacity-60" />
+          <ChevronDown className={compact ? "h-3.5 w-3.5 opacity-60" : "h-4 w-4 opacity-60"} />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="min-w-44">

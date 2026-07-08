@@ -154,6 +154,12 @@ interface ProjectAssistantPanelProps {
   /** Notifies the parent whenever the assistant turn running state changes. */
   onRunningChange?: (running: boolean) => void;
   mode?: "sheet" | "page" | "embedded";
+  /**
+   * Hides the panel's own title header. Used by session tabs where the
+   * surrounding layout already renders a working-tree header row, so the chat
+   * gets the vertical space instead of two stacked headers.
+   */
+  hideHeader?: boolean;
   issueGoalMode?: boolean;
   issueGoalModeRequestId?: number;
   dispatchRequestId?: number;
@@ -271,6 +277,7 @@ export function ProjectAssistantPanel({
   getExtraContext,
   onRunningChange,
   mode = "sheet",
+  hideHeader = false,
   issueGoalMode,
   issueGoalModeRequestId = 0,
   dispatchRequestId = 0,
@@ -1362,6 +1369,15 @@ export function ProjectAssistantPanel({
                 onSendReview={sendDiffReview}
               />
             ) : null}
+            {hideHeader && workspaceDiffStats ? (
+              <span
+                className="inline-flex items-center gap-1 rounded-full border border-border/70 bg-background px-1.5 py-0.5 font-mono text-[10px]"
+                title={`+${workspaceDiffStats.additions}/-${workspaceDiffStats.deletions} lines`}
+              >
+                <span className="text-emerald-600">+{workspaceDiffStats.additions}</span>
+                <span className="text-rose-600">-{workspaceDiffStats.deletions}</span>
+              </span>
+            ) : null}
             {projectSlug ? (
               <Button
                 type="button"
@@ -1451,7 +1467,7 @@ export function ProjectAssistantPanel({
           )}
           aria-label={t("assistant.panel.ariaLabel")}
         >
-          {isEmbeddedMode ? null : (
+          {isEmbeddedMode || hideHeader ? null : (
             <div
               data-testid="project-assistant-compact-header"
               className={cn(
