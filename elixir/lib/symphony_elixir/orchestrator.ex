@@ -27,6 +27,7 @@ defmodule SymphonyElixir.Orchestrator do
   alias SymphonyElixir.GitHub.IssueMarker
   alias SymphonyElixir.LocalTracker.{Context, IssueMapper, Repository}
   alias SymphonyElixir.Orchestrator.{
+    AgentTotals,
     BundleCoordinator,
     BundleGate,
     DispatchOrder,
@@ -52,12 +53,7 @@ defmodule SymphonyElixir.Orchestrator do
   # Emit one structured token-progress log each time a run crosses this many
   # cumulative tokens, so live monitoring can follow burn precisely.
   @token_progress_log_interval 1_000_000
-  @empty_agent_totals %{
-    input_tokens: 0,
-    output_tokens: 0,
-    total_tokens: 0,
-    seconds_running: 0
-  }
+  @empty_agent_totals AgentTotals.empty()
 
   defmodule State do
     @moduledoc """
@@ -2889,9 +2885,9 @@ defmodule SymphonyElixir.Orchestrator do
 
     %{
       state
-      | agent_totals: apply_token_delta(state.agent_totals, completion_delta),
+      | agent_totals: AgentTotals.apply_delta(state.agent_totals, completion_delta),
         agent_totals_by_project:
-          apply_project_token_delta(
+          AgentTotals.apply_project_delta(
             state.agent_totals_by_project,
             running_entry_project_slug(running_entry),
             completion_delta
@@ -2974,20 +2970,13 @@ defmodule SymphonyElixir.Orchestrator do
        when is_integer(input) and is_integer(output) and is_integer(total) do
     %{
       state
-      | agent_totals: apply_token_delta(agent_totals, token_delta),
-        agent_totals_by_project: apply_project_token_delta(by_project, project_slug, token_delta)
+      | agent_totals: AgentTotals.apply_delta(agent_totals, token_delta),
+        agent_totals_by_project:
+          AgentTotals.apply_project_delta(by_project, project_slug, token_delta)
     }
   end
 
   defp apply_codex_token_delta(state, _project_slug, _token_delta), do: state
-
-  defp apply_project_token_delta(by_project, project_slug, token_delta)
-       when is_map(by_project) and is_binary(project_slug) and project_slug != "" do
-    current = Map.get(by_project, project_slug, @empty_agent_totals)
-    Map.put(by_project, project_slug, apply_token_delta(current, token_delta))
-  end
-
-  defp apply_project_token_delta(by_project, _project_slug, _token_delta), do: by_project
 
   defp running_entry_project_slug(%{issue: %{project_slug: slug}}), do: slug
   defp running_entry_project_slug(%{project_slug: slug}), do: slug
@@ -2997,22 +2986,6 @@ defmodule SymphonyElixir.Orchestrator do
     do: %{state | agent_rate_limits: rate_limits}
 
   defp apply_agent_rate_limits(state, _update), do: state
-
-  defp apply_token_delta(agent_totals, token_delta) do
-    input_tokens = Map.get(agent_totals, :input_tokens, 0) + token_delta.input_tokens
-    output_tokens = Map.get(agent_totals, :output_tokens, 0) + token_delta.output_tokens
-    total_tokens = Map.get(agent_totals, :total_tokens, 0) + token_delta.total_tokens
-
-    seconds_running =
-      Map.get(agent_totals, :seconds_running, 0) + Map.get(token_delta, :seconds_running, 0)
-
-    %{
-      input_tokens: max(0, input_tokens),
-      output_tokens: max(0, output_tokens),
-      total_tokens: max(0, total_tokens),
-      seconds_running: max(0, seconds_running)
-    }
-  end
 
   defp running_seconds(%DateTime{} = started_at, %DateTime{} = now) do
     max(0, DateTime.diff(now, started_at, :second))
