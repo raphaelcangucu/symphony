@@ -1065,6 +1065,24 @@ export function ProjectAssistantPanel({
     [sendMessage],
   );
 
+  // Delivers a composed diff-review prompt as a normal turn: steered into the
+  // running turn when the agent is busy, or dispatched as a new message.
+  const sendDiffReview = useCallback(
+    (review: string) => {
+      const activeBundle = bundleRef.current ?? fallbackCatalogBundle();
+      const activeCatalog = catalogFor(activeBundle, activeBundle.defaultAgent);
+      sendMessage({
+        kind: "infer",
+        message: review,
+        agent: composerAgentRef.current ?? activeBundle.defaultAgent,
+        settings: defaultComposerSettings(activeCatalog),
+        attachments: [],
+        contextRefs: [],
+      });
+    },
+    [sendMessage],
+  );
+
   const visibleMessages = useMemo(() => displayMessages(messages, t), [messages, t]);
   const planApprovalMessageId = useMemo(
     () => latestPendingPlanMessageId(visibleMessages, approvedPlanMessageIds),
@@ -1341,6 +1359,7 @@ export function ProjectAssistantPanel({
                 identifier={issueIdentifier ?? null}
                 threadId={threadId ?? null}
                 disabled={catalogLoading}
+                onSendReview={sendDiffReview}
               />
             ) : null}
             {projectSlug ? (

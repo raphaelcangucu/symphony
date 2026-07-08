@@ -37,9 +37,34 @@ vi.mock("@/services/commitEvidence", () => ({
 }));
 
 vi.mock("../GitDiffViewer", () => ({
-  GitDiffViewer: ({ file, viewMode }: { file: { path: string } | null; viewMode: string }) => (
-    <div data-testid="git-diff-viewer" data-view-mode={viewMode}>
+  GitDiffViewer: ({
+    file,
+    viewMode,
+    comments,
+    onSaveComment,
+  }: {
+    file: { path: string } | null;
+    viewMode: string;
+    comments?: { id: string; comment: string }[];
+    onSaveComment?: (input: {
+      side: "additions" | "deletions";
+      lineNumber: number;
+      lineText: string | null;
+      comment: string;
+    }) => void;
+  }) => (
+    <div data-testid="git-diff-viewer" data-view-mode={viewMode} data-comment-count={comments?.length ?? "off"}>
       {file?.path ?? "no-file"}
+      {onSaveComment ? (
+        <button
+          type="button"
+          onClick={() =>
+            onSaveComment({ side: "additions", lineNumber: 3, lineText: "const x = 1;", comment: "Fix this line" })
+          }
+        >
+          mock add comment
+        </button>
+      ) : null}
     </div>
   ),
 }));
@@ -132,5 +157,41 @@ describe("GitDiffModal", () => {
     expect(commitGitDiffMock).toHaveBeenCalledWith("advising", "CDE-1", "feat: save");
     expect(diffRefetchMock).toHaveBeenCalled();
     expect(toastSuccessMock).toHaveBeenCalledWith("Committed 1 repo.");
+  });
+
+  it("collects line comments and sends the review prompt to the agent", async () => {
+    const user = userEvent.setup();
+    const onSendReview = vi.fn();
+    const onOpenChange = vi.fn();
+
+    render(
+      <GitDiffModal
+        open
+        onOpenChange={onOpenChange}
+        projectSlug="advising"
+        identifier="CDE-1"
+        onSendReview={onSendReview}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: /send .* to agent/i })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "mock add comment" }));
+    await user.click(screen.getByRole("button", { name: /send 1 to agent/i }));
+
+    expect(onSendReview).toHaveBeenCalledTimes(1);
+    const prompt = onSendReview.mock.calls[0][0] as string;
+    expect(prompt).toContain("### frontend/src/App.tsx");
+    expect(prompt).toContain("Fix this line");
+    expect(prompt).toContain("line 3");
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(toastSuccessMock).toHaveBeenCalled();
+  });
+
+  it("keeps review mode off when no onSendReview handler is provided", () => {
+    render(<GitDiffModal open onOpenChange={vi.fn()} projectSlug="advising" identifier="CDE-1" />);
+
+    expect(screen.getByTestId("git-diff-viewer")).toHaveAttribute("data-comment-count", "off");
+    expect(screen.queryByRole("button", { name: "mock add comment" })).not.toBeInTheDocument();
   });
 });

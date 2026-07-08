@@ -588,7 +588,12 @@ export function ExecutionControlComposer({
           }}
           toolbarAfterAttach={
             <>
-              <GitDiffLauncher projectSlug={projectSlug} identifier={issue.identifier} disabled={controlsDisabled} />
+              <GitDiffLauncher
+                projectSlug={projectSlug}
+                identifier={issue.identifier}
+                disabled={controlsDisabled}
+                onSendReview={(review) => void runDispatch("resume", { instructions: review })}
+              />
               <ExecutionModeMenu
                 agent={agent}
                 mode={mode}

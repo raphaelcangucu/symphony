@@ -1,16 +1,21 @@
-import { Columns2, GitBranch, GitCommitHorizontal, RefreshCw, Rows3, Search } from "lucide-react";
+import { Columns2, GitBranch, GitCommitHorizontal, MessageSquareText, RefreshCw, Rows3, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { GitDiffFileTree } from "@/components/issues/issue-detail/git-diff/GitDiffFileTree";
-import { GitDiffViewer } from "@/components/issues/issue-detail/git-diff/GitDiffViewer";
+import { GitDiffViewer, type SaveDiffCommentInput } from "@/components/issues/issue-detail/git-diff/GitDiffViewer";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useGitDiff } from "@/hooks/useGitDiff";
 import { useIssueCommitEvidence } from "@/hooks/useIssueCommitEvidence";
+import {
+  buildDiffReviewPrompt,
+  newDiffReviewCommentId,
+  type DiffReviewComment,
+} from "@/lib/diffReview";
 import { combineDiffStats, diffStatsFromPatch } from "@/lib/diffStats";
 import { loadDiffViewMode, saveDiffViewMode, type DiffViewMode } from "@/lib/diffViewMode";
 import { cn } from "@/lib/utils";
@@ -25,9 +30,18 @@ interface GitDiffModalProps {
   projectSlug?: string;
   identifier?: string | null;
   threadId?: number | null;
+  /** When set, line comments can be collected on the diff and sent back to the agent as one review prompt. */
+  onSendReview?: (review: string) => void;
 }
 
-export default function GitDiffModal({ open, onOpenChange, projectSlug = "", identifier = null, threadId = null }: GitDiffModalProps) {
+export default function GitDiffModal({
+  open,
+  onOpenChange,
+  projectSlug = "",
+  identifier = null,
+  threadId = null,
+  onSendReview,
+}: GitDiffModalProps) {
   const { t } = useTranslation();
   const supportsCommits = Boolean(projectSlug && identifier);
   const [activeTab, setActiveTab] = useState<GitDiffType | "commits">("branch");
@@ -66,6 +80,47 @@ export default function GitDiffModal({ open, onOpenChange, projectSlug = "", ide
   const files = activeTab === "commits" ? commitFiles : repoScopedDiffFiles;
   const selected = files.find((file) => file.key === selectedKey)?.file ?? files[0]?.file ?? null;
   const stats = combineDiffStats(files.map(({ file }) => diffStatsFromPatch(file.patch)));
+
+  // Review comments live on working-tree diffs only (not commit history) and
+  // are keyed by the repo-prefixed file path shown in the viewer.
+  const [reviewComments, setReviewComments] = useState<DiffReviewComment[]>([]);
+  const reviewEnabled = Boolean(onSendReview) && activeTab !== "commits";
+  const selectedFileComments = useMemo(
+    () => (selected ? reviewComments.filter((comment) => comment.filePath === selected.path) : []),
+    [reviewComments, selected],
+  );
+
+  function saveReviewComment(input: SaveDiffCommentInput) {
+    if (!selected) return;
+    setReviewComments((current) => {
+      if (input.id) {
+        return current.map((comment) =>
+          comment.id === input.id ? { ...comment, comment: input.comment } : comment,
+        );
+      }
+      const next: DiffReviewComment = {
+        id: newDiffReviewCommentId(),
+        filePath: selected.path,
+        side: input.side,
+        lineNumber: input.lineNumber,
+        lineText: input.lineText,
+        comment: input.comment,
+      };
+      return [...current, next];
+    });
+  }
+
+  function removeReviewComment(id: string) {
+    setReviewComments((current) => current.filter((comment) => comment.id !== id));
+  }
+
+  function sendReviewToAgent() {
+    if (!onSendReview || reviewComments.length === 0) return;
+    onSendReview(buildDiffReviewPrompt(reviewComments));
+    toast.success(t("issue.diff.review.sent", { count: reviewComments.length }));
+    setReviewComments([]);
+    onOpenChange(false);
+  }
 
   function handleViewModeChange(nextMode: DiffViewMode) {
     setViewMode(nextMode);
@@ -170,6 +225,17 @@ export default function GitDiffModal({ open, onOpenChange, projectSlug = "", ide
             <span className="text-[11px] text-emerald-600">+{stats.additions}</span>
             <span className="text-[11px] text-rose-600">-{stats.deletions}</span>
             <ViewModeToggle viewMode={viewMode} onChange={handleViewModeChange} />
+            {reviewEnabled && reviewComments.length > 0 ? (
+              <Button
+                type="button"
+                size="sm"
+                className="h-7 gap-1 rounded-md bg-sky-600 px-2 text-[11px] text-white hover:bg-sky-500"
+                onClick={sendReviewToAgent}
+              >
+                <MessageSquareText className="h-3.5 w-3.5" />
+                {t("issue.diff.review.sendButton", { count: reviewComments.length })}
+              </Button>
+            ) : null}
             <Button
               type="button"
               size="sm"
@@ -228,7 +294,13 @@ export default function GitDiffModal({ open, onOpenChange, projectSlug = "", ide
             {(activeTab === "commits" ? commits.loading || commitLoading : diff.loading) && files.length === 0 ? (
               <div className="flex h-full items-center justify-center text-sm text-muted-foreground">{t("issue.diff.loading")}</div>
             ) : (
-              <GitDiffViewer file={selected} viewMode={viewMode} />
+              <GitDiffViewer
+                file={selected}
+                viewMode={viewMode}
+                comments={reviewEnabled ? selectedFileComments : undefined}
+                onSaveComment={reviewEnabled ? saveReviewComment : undefined}
+                onRemoveComment={reviewEnabled ? removeReviewComment : undefined}
+              />
             )}
           </section>
         </div>

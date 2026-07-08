@@ -864,6 +864,15 @@
       "selectFile": "Selecione um arquivo para ver o diff.",
       "errors": {
         "loadFailed": "Não foi possível carregar o diff do workspace."
+      },
+      "review": {
+        "hint": "Clique no número da linha para comentar",
+        "placeholder": "Peça ao agente para mudar esta linha…",
+        "save": "Adicionar comentário",
+        "edit": "Editar",
+        "remove": "Remover",
+        "sendButton": "Enviar {{count}} ao agente",
+        "sent": "Revisão com {{count}} comentários enviada ao agente"
       }
     },
     "preview": {

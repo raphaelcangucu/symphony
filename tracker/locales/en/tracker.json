@@ -864,6 +864,15 @@
       "selectFile": "Select a file to view its diff.",
       "errors": {
         "loadFailed": "Could not load workspace diff."
+      },
+      "review": {
+        "hint": "Click a line number to comment",
+        "placeholder": "Ask the agent to change this line…",
+        "save": "Add comment",
+        "edit": "Edit",
+        "remove": "Remove",
+        "sendButton": "Send {{count}} to agent",
+        "sent": "Review with {{count}} comments sent to the agent"
       }
     },
     "preview": {

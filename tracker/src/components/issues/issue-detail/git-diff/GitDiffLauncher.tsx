@@ -12,9 +12,17 @@ interface GitDiffLauncherProps {
   identifier?: string | null;
   threadId?: number | null;
   disabled?: boolean;
+  /** Enables diff line comments; receives the composed review prompt to deliver to the agent. */
+  onSendReview?: (review: string) => void;
 }
 
-export function GitDiffLauncher({ projectSlug, identifier = null, threadId = null, disabled }: GitDiffLauncherProps) {
+export function GitDiffLauncher({
+  projectSlug,
+  identifier = null,
+  threadId = null,
+  disabled,
+  onSendReview,
+}: GitDiffLauncherProps) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const unavailable = !identifier && !threadId;
@@ -48,6 +56,7 @@ export function GitDiffLauncher({ projectSlug, identifier = null, threadId = nul
             projectSlug={projectSlug}
             identifier={identifier}
             threadId={threadId}
+            onSendReview={onSendReview}
           />
         </Suspense>
       ) : null}
