@@ -65,4 +65,51 @@ describe("StartIssueSessionDialog", () => {
     );
     expect(onCreated).toHaveBeenCalledWith(expect.objectContaining({ id: 42 }));
   });
+
+  it("keeps typed title and agent when parent re-renders with a new issue object", async () => {
+    const user = userEvent.setup();
+    const baseIssue = { identifier: "MAC-510", title: "Add languages", agentKind: "codex" as const };
+
+    const { rerender } = render(
+      <MemoryRouter initialEntries={["/projects/macro-markets/board"]}>
+        <Routes>
+          <Route
+            path="/projects/macro-markets/board"
+            element={
+              <StartIssueSessionDialog
+                projectSlug="macro-markets"
+                issue={baseIssue}
+                open
+                onOpenChange={() => {}}
+              />
+            }
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await user.type(screen.getByLabelText(/session title/i), "Build pass 2");
+    await user.click(screen.getByRole("button", { name: /claude code/i }));
+
+    rerender(
+      <MemoryRouter initialEntries={["/projects/macro-markets/board"]}>
+        <Routes>
+          <Route
+            path="/projects/macro-markets/board"
+            element={
+              <StartIssueSessionDialog
+                projectSlug="macro-markets"
+                issue={{ ...baseIssue }}
+                open
+                onOpenChange={() => {}}
+              />
+            }
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByLabelText(/session title/i)).toHaveValue("Build pass 2");
+    expect(screen.getByRole("button", { name: /claude code/i })).toHaveAttribute("aria-pressed", "true");
+  });
 });

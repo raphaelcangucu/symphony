@@ -223,6 +223,33 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
       assert_receive {:workspace, ^expected}
     end
 
+    test "runs the turn for an issue_session-scoped thread" do
+      thread_workspace = Workspace.path_for_issue("MAC-1")
+      File.mkdir_p!(thread_workspace)
+
+      {:ok, session_thread} =
+        History.create_issue_session_thread("macro", "MAC-1", %{
+          title: "Build pass",
+          execution_mode: "yolo",
+          workspace_path: thread_workspace
+        })
+
+      assert session_thread.scope == "issue_session"
+
+      test_pid = self()
+
+      runner = fn workspace, _prompt, _issue, _opts ->
+        send(test_pid, {:session_workspace, workspace})
+        {:ok, %{assistant_message: "ack", tool_calls: [], codex_thread_id: "ct", turn_id: "t1"}}
+      end
+
+      assert {:ok, result} =
+               CodexSession.send_message_to_issue_thread(session_thread, "oi", %{}, runner: runner)
+
+      assert result.assistant_message == "ack"
+      assert_receive {:session_workspace, ^thread_workspace}
+    end
+
     test "resolves the per-project workspace root from the thread project, not the bare identifier" do
       # Mirrors a GitHub-backed project: a per-project workspace root distinct from the
       # global root and no local IssueRecord for the identifier, so identifier-only

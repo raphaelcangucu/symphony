@@ -1,3 +1,4 @@
+import axios from "axios";
 import type { TFunction } from "i18next";
 import { toast } from "sonner";
 
@@ -32,6 +33,14 @@ export async function createIssueSession(
 }
 
 export function issueSessionStartErrorMessage(cause: unknown, t: TFunction, identifier: string): string {
+  if (axios.isAxiosError(cause)) {
+    const body = cause.response?.data;
+    if (body && typeof body === "object" && "error" in body) {
+      const message = (body as { error?: { message?: string } }).error?.message?.trim();
+      if (message) return message;
+    }
+  }
+
   if (cause instanceof Error && cause.message.trim()) return cause.message;
   return t("issueSession.startFailed", { identifier });
 }

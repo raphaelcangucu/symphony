@@ -5,6 +5,7 @@ import { Link } from "react-router-dom";
 
 import { IssueDocumentsDrawer } from "@/components/assistant/IssueDocumentsDrawer";
 import { IssueEditorMenu } from "@/components/issues/IssueEditorMenu";
+import { cn } from "@/lib/utils";
 import { issuePath, type WorkspaceView } from "@/lib/workspaceRoutes";
 
 interface IssueWorkingTreeToolbarProps {
@@ -15,6 +16,9 @@ interface IssueWorkingTreeToolbarProps {
   leading?: ReactNode;
   /** Extra controls rendered after documents (e.g. new session). */
   trailing?: ReactNode;
+  /** When set, the terminal control toggles an inline dock instead of navigating away. */
+  terminalOpen?: boolean;
+  onTerminalToggle?: () => void;
 }
 
 export function IssueWorkingTreeToolbar({
@@ -23,10 +27,16 @@ export function IssueWorkingTreeToolbar({
   view,
   leading = null,
   trailing = null,
+  terminalOpen = false,
+  onTerminalToggle,
 }: IssueWorkingTreeToolbarProps) {
   const { t } = useTranslation();
   const issueHref = issuePath(projectSlug, view, issueIdentifier, "sessions");
   const issueTerminalHref = issuePath(projectSlug, view, issueIdentifier, "terminal");
+  const terminalActionClassName = cn(
+    "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+    terminalOpen && "bg-accent text-foreground",
+  );
 
   return (
     <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
@@ -39,14 +49,27 @@ export function IssueWorkingTreeToolbar({
       >
         <ExternalLink className="h-4 w-4" />
       </Link>
-      <Link
-        to={issueTerminalHref}
-        aria-label={t("issue.terminal.ariaLabel", { identifier: issueIdentifier })}
-        title={t("issue.terminal.ariaLabel", { identifier: issueIdentifier })}
-        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-      >
-        <TerminalSquare className="h-4 w-4" />
-      </Link>
+      {onTerminalToggle ? (
+        <button
+          type="button"
+          aria-label={t("issue.terminal.ariaLabel", { identifier: issueIdentifier })}
+          title={t("issue.terminal.ariaLabel", { identifier: issueIdentifier })}
+          aria-pressed={terminalOpen}
+          onClick={onTerminalToggle}
+          className={terminalActionClassName}
+        >
+          <TerminalSquare className="h-4 w-4" />
+        </button>
+      ) : (
+        <Link
+          to={issueTerminalHref}
+          aria-label={t("issue.terminal.ariaLabel", { identifier: issueIdentifier })}
+          title={t("issue.terminal.ariaLabel", { identifier: issueIdentifier })}
+          className={terminalActionClassName}
+        >
+          <TerminalSquare className="h-4 w-4" />
+        </Link>
+      )}
       <IssueEditorMenu projectSlug={projectSlug} identifier={issueIdentifier} />
       <IssueDocumentsDrawer projectSlug={projectSlug} identifier={issueIdentifier} />
       {trailing}

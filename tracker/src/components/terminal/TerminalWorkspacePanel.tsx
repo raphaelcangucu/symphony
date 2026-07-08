@@ -1,5 +1,5 @@
 import { Plus } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
@@ -23,9 +23,17 @@ import {
 interface TerminalWorkspacePanelProps {
   projectSlug: string;
   issueIdentifier: string;
+  variant?: "default" | "embedded";
+  /** Extra controls appended to the tab bar (e.g. fullscreen toggle when docked). */
+  trailingActions?: ReactNode;
 }
 
-export function TerminalWorkspacePanel({ projectSlug, issueIdentifier }: TerminalWorkspacePanelProps) {
+export function TerminalWorkspacePanel({
+  projectSlug,
+  issueIdentifier,
+  variant = "default",
+  trailingActions = null,
+}: TerminalWorkspacePanelProps) {
   const { t } = useTranslation();
   const [creatingTab, setCreatingTab] = useState(false);
   const [loadingTabs, setLoadingTabs] = useState(true);
@@ -126,10 +134,12 @@ export function TerminalWorkspacePanel({ projectSlug, issueIdentifier }: Termina
 
   return (
     <section className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden">
-      <div className="shrink-0 space-y-0.5">
-        <h3 className="text-sm font-medium">{t("workspace.terminal.title")}</h3>
-        <p className="text-xs text-muted-foreground">{t("workspace.terminal.description")}</p>
-      </div>
+      {variant === "default" ? (
+        <div className="shrink-0 space-y-0.5">
+          <h3 className="text-sm font-medium">{t("workspace.terminal.title")}</h3>
+          <p className="text-xs text-muted-foreground">{t("workspace.terminal.description")}</p>
+        </div>
+      ) : null}
 
       <WorkspaceTabBar
         tabs={tabs}
@@ -139,18 +149,23 @@ export function TerminalWorkspacePanel({ projectSlug, issueIdentifier }: Termina
         ariaLabel={t("workspace.terminal.tabsAria")}
         shortcutHints
         trailing={
-          dynamicTabsEnabled ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-7 gap-1 px-2 text-xs"
-              disabled={creatingTab || loadingTabs}
-              onClick={() => void handleCreateTab()}
-            >
-              <Plus className="h-3.5 w-3.5" />
-              {creatingTab ? t("workspace.terminal.creatingTab") : t("workspace.terminal.newTab")}
-            </Button>
+          dynamicTabsEnabled || trailingActions ? (
+            <>
+              {dynamicTabsEnabled ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 gap-1 px-2 text-xs"
+                  disabled={creatingTab || loadingTabs}
+                  onClick={() => void handleCreateTab()}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  {creatingTab ? t("workspace.terminal.creatingTab") : t("workspace.terminal.newTab")}
+                </Button>
+              ) : null}
+              {trailingActions}
+            </>
           ) : null
         }
       />

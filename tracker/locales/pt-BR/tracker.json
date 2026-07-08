@@ -2437,7 +2437,11 @@
       "dynamicAriaLabel": "Aba de terminal {{title}}",
       "projectDockEyebrow": "Workspace do projeto",
       "projectDockTitle": "Terminal",
-      "projectDockDescription": "Shells interativos do ambiente de dev do projeto. Permanece aberto enquanto você trabalha no board."
+      "projectDockDescription": "Shells interativos do ambiente de dev do projeto. Permanece aberto enquanto você trabalha no board.",
+      "resizeHandleAria": "Redimensionar painel do terminal",
+      "expandFullscreen": "Expandir terminal para tela cheia",
+      "exitFullscreen": "Sair da tela cheia",
+      "closeDock": "Fechar painel do terminal"
     },
     "sessions": {
       "tabsAria": "Abas de sessões do projeto"

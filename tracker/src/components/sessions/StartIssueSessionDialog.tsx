@@ -1,5 +1,5 @@
 import { PlayCircle } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -60,15 +60,25 @@ export function StartIssueSessionDialog({
   const [title, setTitle] = useState("");
   const [instructions, setInstructions] = useState("");
   const [starting, setStarting] = useState(false);
+  const initializedForRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!open || !issue) return;
+    if (!open) {
+      initializedForRef.current = null;
+      return;
+    }
+    if (!issue) return;
+
+    const resetKey = issue.identifier;
+    if (initializedForRef.current === resetKey) return;
+
+    initializedForRef.current = resetKey;
     setMode(DEFAULT_EXECUTION_MODE);
     setAgent(resolveDefaultAgent(issue));
     setTitle("");
     setInstructions("");
     setStarting(false);
-  }, [issue, open]);
+  }, [open, issue?.identifier, issue?.agentKind]);
 
   async function handleStart() {
     if (!issue || starting) return;

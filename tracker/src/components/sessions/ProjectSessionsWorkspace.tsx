@@ -1,5 +1,8 @@
 import { Clock, MessageSquare } from "lucide-react";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+
+import { IssueTerminalDock } from "@/components/sessions/IssueTerminalDock";
+import { SessionTerminalDockContext } from "@/components/sessions/sessionTerminalDockContext";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -71,6 +74,32 @@ export function ProjectSessionsWorkspace({
   const { archiving, archiveChat } = useArchiveChat(() => void refetch());
 
   const canonicalTabs = useMemo(() => [createSessionsListTab(t("sessions.title"))], [t]);
+
+  const splitContainerRef = useRef<HTMLDivElement>(null);
+  const [terminalDockIssue, setTerminalDockIssue] = useState<string | null>(null);
+  const [terminalFullscreen, setTerminalFullscreen] = useState(false);
+
+  const toggleTerminalDock = useCallback((issueIdentifier: string) => {
+    setTerminalDockIssue((current) => {
+      const next = current === issueIdentifier ? null : issueIdentifier;
+      if (next === null) setTerminalFullscreen(false);
+      return next;
+    });
+  }, []);
+
+  const closeTerminalDock = useCallback(() => {
+    setTerminalDockIssue(null);
+    setTerminalFullscreen(false);
+  }, []);
+
+  const toggleTerminalFullscreen = useCallback(() => {
+    setTerminalFullscreen((current) => !current);
+  }, []);
+
+  const terminalDockControls = useMemo(
+    () => ({ openIssueIdentifier: terminalDockIssue, toggleTerminal: toggleTerminalDock }),
+    [terminalDockIssue, toggleTerminalDock],
+  );
 
   const { tabs, activeTabId, activeTab, selectTab, openTab, closeTab } = useWorkspaceTabs({
     scope: "project-sessions",
@@ -304,8 +333,18 @@ export function ProjectSessionsWorkspace({
   }, [creating, handleCreateSession, handleRefresh, isLoading, setSessionsChrome, total]);
 
   return (
-    <main className="box-border flex h-[calc(100vh-4rem)] min-h-0 flex-col overflow-hidden bg-gradient-to-br from-muted/40 via-background to-muted/20 p-3 sm:p-4">
-      <section className="mx-auto flex h-full min-h-0 w-full max-w-[min(100%,96rem)] flex-col gap-2.5 overflow-hidden">
+    <SessionTerminalDockContext.Provider value={terminalDockControls}>
+    <main className="box-border flex h-[calc(100vh-4rem)] min-h-0 flex-col overflow-hidden bg-gradient-to-br from-muted/40 via-background to-muted/20 p-2 sm:p-3">
+      <div
+        ref={splitContainerRef}
+        className="flex h-full min-h-0 w-full gap-3 overflow-hidden"
+      >
+      <section
+        className={cn(
+          "flex h-full min-h-0 min-w-0 flex-1 flex-col gap-2.5 overflow-hidden",
+          terminalFullscreen && "hidden",
+        )}
+      >
         <WorkspaceTabBar
           tabs={tabs}
           activeTabId={activeTabId}
@@ -379,7 +418,20 @@ export function ProjectSessionsWorkspace({
           />
         ) : null}
       </section>
+
+      {terminalDockIssue ? (
+        <IssueTerminalDock
+          projectSlug={projectSlug}
+          issueIdentifier={terminalDockIssue}
+          splitContainerRef={splitContainerRef}
+          fullscreen={terminalFullscreen}
+          onToggleFullscreen={toggleTerminalFullscreen}
+          onClose={closeTerminalDock}
+        />
+      ) : null}
+      </div>
     </main>
+    </SessionTerminalDockContext.Provider>
   );
 }
 

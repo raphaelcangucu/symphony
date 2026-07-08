@@ -18,7 +18,10 @@ const projectAssistantPanel = vi.fn((props: { contentMaxWidth?: string }) => (
 ));
 
 vi.mock("@/hooks/useProjectSessions", () => ({ useProjectSessions: vi.fn() }));
-vi.mock("@/services/assistantThreads", () => ({ createProjectSessionThread: vi.fn() }));
+vi.mock("@/services/assistantThreads", () => ({
+  createProjectSessionThread: vi.fn(),
+  listAssistantThreads: vi.fn(async () => []),
+}));
 vi.mock("@/components/assistant/ProjectAssistantPanel", () => ({
   ProjectAssistantPanel: (props: { contentMaxWidth?: string }) => projectAssistantPanel(props),
 }));
@@ -114,7 +117,8 @@ describe("ProjectSessionsWorkspace", () => {
       expect(screen.getByRole("tab", { name: /Project session/i })).toHaveAttribute("aria-selected", "true"),
     );
     expect(screen.getByLabelText("mock assistant panel")).toBeInTheDocument();
-    expect(container.querySelector("main > section")).toHaveClass("max-w-[min(100%,96rem)]");
+    expect(container.querySelector("main > div")).toHaveClass("w-full");
+    expect(container.querySelector("main > div")).not.toHaveClass("max-w-[min(100%,96rem)]");
     expect(screen.getByLabelText("mock assistant panel")).toHaveAttribute("data-content-max-width", "wide");
   });
 });

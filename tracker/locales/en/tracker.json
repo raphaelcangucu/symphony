@@ -2437,7 +2437,11 @@
       "dynamicAriaLabel": "Terminal tab {{title}}",
       "projectDockEyebrow": "Project workspace",
       "projectDockTitle": "Terminal",
-      "projectDockDescription": "Interactive shells for the project dev environment. Stays open while you work on the board."
+      "projectDockDescription": "Interactive shells for the project dev environment. Stays open while you work on the board.",
+      "resizeHandleAria": "Resize terminal panel",
+      "expandFullscreen": "Expand terminal to full screen",
+      "exitFullscreen": "Exit full screen",
+      "closeDock": "Close terminal panel"
     },
     "sessions": {
       "tabsAria": "Project session tabs"

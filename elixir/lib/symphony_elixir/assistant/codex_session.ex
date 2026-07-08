@@ -196,12 +196,13 @@ defmodule SymphonyElixir.Assistant.CodexSession do
   @spec send_message_to_issue_thread(SymphonyElixir.Assistant.Thread.t(), String.t(), map(), keyword()) ::
           {:ok, turn_result()} | {:error, term()}
   def send_message_to_issue_thread(
-        %{scope: "issue", id: thread_id, project_slug: project_slug, issue_identifier: identifier} = thread,
+        %{scope: scope, id: thread_id, project_slug: project_slug, issue_identifier: identifier} = thread,
         message,
         context,
         opts \\ []
       )
-      when is_binary(message) and is_map(context) and is_list(opts) do
+      when scope in ["issue", "issue_session"] and is_binary(message) and is_map(context) and
+             is_list(opts) do
     # Reload so that agent_thread_ids written by a prior turn are visible even
     # when the caller holds a frozen struct from an earlier socket assign.
     thread = with({:ok, t} <- History.get_thread(thread_id), do: t) || thread

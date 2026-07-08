@@ -2,7 +2,7 @@ import { ChevronDown, PlayCircle } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { IssueWorkingTreeToolbar } from "@/components/sessions/IssueWorkingTreeToolbar";
+import { IssueSessionSplitLayout } from "@/components/sessions/IssueSessionSplitLayout";
 import { StartIssueSessionDialog } from "@/components/sessions/StartIssueSessionDialog";
 import { Button } from "@/components/ui/button";
 import { AgentStatusBadge } from "@/components/issues/AgentStatusBadge";
@@ -62,8 +62,11 @@ export function IssueExecutionSessionPanel({
 
   return (
     <>
-      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
-        <div className="flex shrink-0 items-center justify-between gap-3">
+      <IssueSessionSplitLayout
+        projectSlug={projectSlug}
+        issueIdentifier={issue.identifier}
+        view={view}
+        headerStart={
           <Button
             type="button"
             variant="ghost"
@@ -78,40 +81,34 @@ export function IssueExecutionSessionPanel({
             ) : null}
             <ChevronDown className={`h-3 w-3 transition-transform ${showExecutionStatus ? "rotate-180" : ""}`} />
           </Button>
-          <IssueWorkingTreeToolbar
-            projectSlug={projectSlug}
-            issueIdentifier={issue.identifier}
-            view={view}
-            trailing={
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-8 gap-1.5 px-2.5 text-xs"
-                onClick={() => setStartSessionOpen(true)}
-                title={t("issue.agentTabs.newSessionTitle")}
-              >
-                <PlayCircle className="h-3.5 w-3.5" />
-                {t("issue.agentTabs.newSession")}
-              </Button>
-            }
-          />
-        </div>
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <AgentTab
-            issue={issue}
-            execution={execution}
-            executions={executions}
-            projectSlug={projectSlug}
-            workflowMarkdown={workflowMarkdown}
-            evidenceAttention={assessEvidenceAttention(evidenceRecords)}
-            returnToAgentTemplate={returnToAgentTemplate}
-            steerSeedMessage={steerSeedMessage}
-            showExecutionStatus={showExecutionStatus}
-            onIssueUpdated={onIssueUpdated}
-          />
-        </div>
-      </div>
+        }
+        toolbarTrailing={
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 gap-1.5 px-2.5 text-xs"
+            onClick={() => setStartSessionOpen(true)}
+            title={t("issue.agentTabs.newSessionTitle")}
+          >
+            <PlayCircle className="h-3.5 w-3.5" />
+            {t("issue.agentTabs.newSession")}
+          </Button>
+        }
+      >
+        <AgentTab
+          issue={issue}
+          execution={execution}
+          executions={executions}
+          projectSlug={projectSlug}
+          workflowMarkdown={workflowMarkdown}
+          evidenceAttention={assessEvidenceAttention(evidenceRecords)}
+          returnToAgentTemplate={returnToAgentTemplate}
+          steerSeedMessage={steerSeedMessage}
+          showExecutionStatus={showExecutionStatus}
+          onIssueUpdated={onIssueUpdated}
+        />
+      </IssueSessionSplitLayout>
       <StartIssueSessionDialog
         projectSlug={projectSlug}
         issue={{
