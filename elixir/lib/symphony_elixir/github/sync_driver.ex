@@ -10,7 +10,7 @@ defmodule SymphonyElixir.GitHub.SyncDriver do
   require Logger
 
   alias SymphonyElixir.LocalTracker.{IssueRecord, Project}
-  alias SymphonyElixir.Tracker.Sync.{Normalize, OutboxEntry}
+  alias SymphonyElixir.Tracker.Sync.{Normalize, OutboxEntry, Push}
 
   @impl true
   def pull(%Project{} = project, _opts) do
@@ -21,58 +21,23 @@ defmodule SymphonyElixir.GitHub.SyncDriver do
 
   @impl true
   def push(%Project{} = project, %OutboxEntry{entity_type: "state", operation: "move", payload: payload}) do
-    case adapter().move_issue(project, payload["identifier"], %{"status" => payload["state"]}) do
-      {:ok, dto} -> {:ok, dto.id}
-      error -> error
-    end
+    Push.push_state_move(adapter(), project, payload)
   end
 
   def push(%Project{} = project, %OutboxEntry{entity_type: "comment", operation: "create", payload: payload}) do
-    case adapter().add_comment(project, payload["identifier"], payload["body"], %{}) do
-      {:ok, %{remote_id: remote_id}} when is_binary(remote_id) -> {:ok, remote_id}
-      # The real adapter returns the created comment node under `:id`; link it so
-      # later edits (workpad/evidence) flow as in-place `comment:update`.
-      {:ok, %{id: id}} when is_binary(id) -> {:ok, id}
-      {:ok, _other} -> {:ok, nil}
-      error -> error
-    end
+    Push.push_comment_create(adapter(), project, payload)
   end
 
-  def push(%Project{} = project, %OutboxEntry{entity_type: "comment", operation: "update", payload: payload} = entry) do
-    case payload["remote_id"] do
-      remote_id when is_binary(remote_id) and remote_id != "" ->
-        case adapter().update_comment(project, payload["identifier"], remote_id, payload["body"]) do
-          {:ok, %{remote_id: updated_id}} -> {:ok, updated_id || remote_id}
-          {:ok, _other} -> {:ok, remote_id}
-          error -> error
-        end
-
-      # Workpad updated before its create was pushed: degrade to create so the
-      # content still reaches GitHub.
-      _missing ->
-        push(project, %{entry | operation: "create"})
-    end
+  def push(%Project{} = project, %OutboxEntry{entity_type: "comment", operation: "update", payload: payload}) do
+    Push.push_comment_update(adapter(), project, payload)
   end
 
   def push(%Project{} = project, %OutboxEntry{entity_type: "comment", operation: "delete", payload: payload}) do
-    case payload["remote_id"] do
-      remote_id when is_binary(remote_id) and remote_id != "" ->
-        case adapter().delete_comment(project, payload["identifier"], remote_id) do
-          {:ok, %{id: id}} -> {:ok, id}
-          {:ok, _other} -> {:ok, remote_id}
-          error -> error
-        end
-
-      _missing ->
-        {:ok, nil}
-    end
+    Push.push_comment_delete(adapter(), project, payload)
   end
 
   def push(%Project{} = project, %OutboxEntry{entity_type: "issue", operation: "create", payload: payload}) do
-    case adapter().create_issue(project, payload) do
-      {:ok, dto} -> {:ok, dto.id}
-      error -> error
-    end
+    Push.push_issue_create(adapter(), project, payload)
   end
 
   def push(%Project{} = project, %OutboxEntry{entity_type: "issue", operation: "update", payload: payload}) do

@@ -13,10 +13,8 @@ defmodule SymphonyElixir.OpenCode.CliRunner do
 
   require Logger
 
+  alias SymphonyElixir.Agent.CliRunner.Base
   alias SymphonyElixir.ExecutionMode
-
-  @port_line_bytes 1_048_576
-  @max_stream_log_bytes 1_000
 
   @type turn_args :: %{
           required(:command) => String.t(),
@@ -49,47 +47,9 @@ defmodule SymphonyElixir.OpenCode.CliRunner do
 
     workspace = Path.expand(workspace)
 
-    symphony_dir = Path.join(workspace, ".symphony")
-    File.mkdir_p!(symphony_dir)
-    prompt_path = Path.join(symphony_dir, "opencode-prompt-#{session_uuid}.md")
-    File.write!(prompt_path, prompt)
-
-    cli_args = build_args(args)
-    escaped_prompt_path = shell_escape(prompt_path)
-    shell_line = "#{command} #{cli_args} < #{escaped_prompt_path}"
-
-    {executable, port_args} =
-      case System.find_executable("setsid") do
-        nil ->
-          {System.find_executable("bash"), [~c"-lc", String.to_charlist(shell_line)]}
-
-        setsid_path ->
-          {setsid_path, [~c"--wait", ~c"bash", ~c"-lc", String.to_charlist(shell_line)]}
-      end
-
-    port =
-      Port.open(
-        {:spawn_executable, executable},
-        [
-          :binary,
-          :exit_status,
-          :stderr_to_stdout,
-          args: port_args,
-          cd: String.to_charlist(workspace),
-          line: @port_line_bytes
-        ]
-      )
-
-    case Map.get(args, :on_spawn) do
-      nil ->
-        :ok
-
-      on_spawn ->
-        case :erlang.port_info(port, :os_pid) do
-          {:os_pid, os_pid} -> on_spawn.(os_pid)
-          _ -> :ok
-        end
-    end
+    prompt_path = Base.write_prompt_file(workspace, "opencode", session_uuid, prompt)
+    port = Base.open_cli_port(command, build_args(args), prompt_path, workspace)
+    Base.notify_spawn(port, Map.get(args, :on_spawn))
 
     initial_state = %{
       cli_session_id: args.cli_session_id,
@@ -99,11 +59,22 @@ defmodule SymphonyElixir.OpenCode.CliRunner do
       resume_invalid: false
     }
 
+    handlers = [
+      on_json: fn payload, state -> process_event(payload, on_event, state) end,
+      on_stray_line: fn line, state ->
+        Base.log_stray_line(line, "OpenCode cli stream")
+        capture_cli_stream_error(line, state)
+      end,
+      on_exit: fn status, state ->
+        Base.finalize_exit(on_event, status, state, exit_label: "opencode")
+      end
+    ]
+
     try do
-      receive_loop(port, on_event, timeout_ms, "", initial_state)
+      Base.receive_loop(port, timeout_ms, "", initial_state, handlers)
     after
       File.rm(prompt_path)
-      stop_port(port)
+      Base.stop_port(port)
     end
   end
 
@@ -115,11 +86,11 @@ defmodule SymphonyElixir.OpenCode.CliRunner do
   def build_args(%{cli_session_id: cli_session_id, model: model} = args) do
     base = "run --format json"
 
-    base
-    <> model_flag(model)
-    <> session_flag(cli_session_id)
-    <> agent_flag(Map.get(args, :execution_mode))
-    <> auto_flag(Map.get(args, :execution_mode))
+    base <>
+      model_flag(model) <>
+      session_flag(cli_session_id) <>
+      agent_flag(Map.get(args, :execution_mode)) <>
+      auto_flag(Map.get(args, :execution_mode))
   end
 
   defp model_flag(model) when is_binary(model) and model not in ["", "auto"] do
@@ -157,40 +128,6 @@ defmodule SymphonyElixir.OpenCode.CliRunner do
   defp auto_flag("yolo"), do: " --auto"
   defp auto_flag(_execution_mode), do: ""
 
-  defp shell_escape(path) do
-    "'" <> String.replace(path, "'", "'\\''") <> "'"
-  end
-
-  defp receive_loop(port, on_event, timeout_ms, pending_line, state) do
-    receive do
-      {^port, {:data, {:eol, chunk}}} ->
-        complete_line = pending_line <> to_string(chunk)
-        handle_line(port, on_event, complete_line, timeout_ms, state)
-
-      {^port, {:data, {:noeol, chunk}}} ->
-        receive_loop(port, on_event, timeout_ms, pending_line <> to_string(chunk), state)
-
-      {^port, {:exit_status, status}} ->
-        handle_exit(on_event, status, state)
-    after
-      timeout_ms ->
-        kill_port(port)
-        {:error, :turn_timeout}
-    end
-  end
-
-  defp handle_line(port, on_event, line, timeout_ms, state) do
-    case Jason.decode(line) do
-      {:ok, payload} ->
-        new_state = process_event(payload, on_event, state)
-        receive_loop(port, on_event, timeout_ms, "", new_state)
-
-      {:error, _reason} ->
-        log_non_json_stream_line(line, "cli stream")
-        receive_loop(port, on_event, timeout_ms, "", capture_cli_stream_error(line, state))
-    end
-  end
-
   defp capture_cli_stream_error(line, state) do
     state
     |> then(&maybe_flag_invalid_resume(line, &1))
@@ -210,43 +147,6 @@ defmodule SymphonyElixir.OpenCode.CliRunner do
       %{state | resume_invalid: true}
     else
       state
-    end
-  end
-
-  defp handle_exit(on_event, status, state) do
-    has_error = not is_nil(state.error)
-    clean_exit = status in [0, 130]
-
-    cond do
-      state.resume_invalid and (has_error or not clean_exit) ->
-        {:error, {:resume_session_not_found, state.cli_session_id}}
-
-      has_error or not clean_exit ->
-        message = state.error || "opencode exited with code #{status}"
-
-        on_event.(%{
-          "method" => "turn/failed",
-          "params" => %{"error" => message}
-        })
-
-        {:error, {:turn_failed, message}}
-
-      true ->
-        on_event.(%{
-          "method" => "turn/completed",
-          "params" => %{
-            "usage" => state.usage,
-            "cost_usd" => state.cost_usd
-          }
-        })
-
-        {:ok,
-         %{
-           cli_session_id: state.cli_session_id,
-           status: :completed,
-           usage: state.usage,
-           cost_usd: state.cost_usd
-         }}
     end
   end
 
@@ -375,57 +275,7 @@ defmodule SymphonyElixir.OpenCode.CliRunner do
     part
     |> Jason.encode!()
     |> then(&:crypto.hash(:sha256, &1))
-    |> Base.encode16(case: :lower)
+    |> Elixir.Base.encode16(case: :lower)
     |> String.slice(0, 12)
-  end
-
-  defp kill_port(port) when is_port(port) do
-    case :erlang.port_info(port, :os_pid) do
-      {:os_pid, os_pid} ->
-        pid_str = to_string(os_pid)
-
-        if System.find_executable("setsid") do
-          System.cmd("kill", ["-9", "-#{pid_str}"], stderr_to_stdout: true)
-        else
-          System.cmd("pkill", ["-9", "-P", pid_str], stderr_to_stdout: true)
-          System.cmd("kill", ["-9", pid_str], stderr_to_stdout: true)
-        end
-
-      _ ->
-        :ok
-    end
-
-    stop_port(port)
-  end
-
-  defp stop_port(port) when is_port(port) do
-    case :erlang.port_info(port) do
-      :undefined ->
-        :ok
-
-      _ ->
-        try do
-          Port.close(port)
-          :ok
-        rescue
-          ArgumentError -> :ok
-        end
-    end
-  end
-
-  defp log_non_json_stream_line(data, stream_label) do
-    text =
-      data
-      |> to_string()
-      |> String.trim()
-      |> String.slice(0, @max_stream_log_bytes)
-
-    if text != "" do
-      if String.match?(text, ~r/\b(error|warn|warning|failed|fatal|panic|exception)\b/i) do
-        Logger.warning("OpenCode #{stream_label} output: #{text}")
-      else
-        Logger.debug("OpenCode #{stream_label} output: #{text}")
-      end
-    end
   end
 end
