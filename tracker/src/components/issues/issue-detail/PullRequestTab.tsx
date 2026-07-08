@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { PullRequestChildGroupsSection } from "@/components/issues/pull-request/PullRequestChildGroupsSection";
 import { PullRequestIssueCards } from "@/components/issues/pull-request/PullRequestIssueCards";
 import { Button } from "@/components/ui/button";
+import { EmptyState as SharedEmptyState } from "@/components/ui/empty-state";
 import { linkPullRequest } from "@/services/pullRequests";
 import { cn } from "@/lib/utils";
 import type { Issue } from "@/types/issue";
@@ -215,9 +216,8 @@ function monitorLabel(monitor: PullRequestMonitorInfo, t: TFunction): string {
 
 function EmptyState({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-      <GitPullRequest className="h-5 w-5" />
+    <SharedEmptyState variant="simple" icon={<GitPullRequest className="h-5 w-5" />}>
       <p>{children}</p>
-    </div>
+    </SharedEmptyState>
   );
 }

@@ -2,6 +2,7 @@ import { Check, Pencil, X } from "lucide-react";
 import { type KeyboardEvent, type RefObject, useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 interface InlineEditableTextProps {
@@ -114,24 +115,21 @@ export function InlineEditableText({
           />
         )}
         <div className="flex items-center gap-1.5">
-          <button
-            type="button"
-            disabled={saving}
-            onClick={() => void commit()}
-            className="inline-flex items-center gap-1 rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
-          >
+          <Button type="button" size="sm" disabled={saving} onClick={() => void commit()} className="h-auto gap-1 px-2.5 py-1">
             <Check className="h-3.5 w-3.5" />
             {t("issue.comments.save")}
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
+            variant="outline"
+            size="sm"
             disabled={saving}
             onClick={cancel}
-            className="inline-flex items-center gap-1 rounded-md border border-border/70 px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
+            className="h-auto gap-1 px-2.5 py-1 text-muted-foreground"
           >
             <X className="h-3.5 w-3.5" />
             {t("issue.comments.cancel")}
-          </button>
+          </Button>
           {multiline ? (
             <span className="text-[11px] text-muted-foreground">{t("issue.inlineText.saveHint")}</span>
           ) : null}

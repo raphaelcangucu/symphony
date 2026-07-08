@@ -2,6 +2,8 @@ import { X } from "lucide-react";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 
+import { Button } from "@/components/ui/button";
+import { OVERLAY_CLASS } from "@/components/ui/dialog";
 import { Markdown } from "@/components/ui/markdown";
 import { cn } from "@/lib/utils";
 
@@ -27,7 +29,7 @@ export function BtwOverlay({ question, answer, status, onClose }: BtwOverlayProp
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/20 p-4 sm:items-center"
+      className={cn(OVERLAY_CLASS, "flex items-end justify-center bg-black/20 p-4 sm:items-center")}
       onClick={onClose}
       role="presentation"
     >
@@ -39,14 +41,16 @@ export function BtwOverlay({ question, answer, status, onClose }: BtwOverlayProp
       >
         <div className="mb-2 flex items-start justify-between gap-2">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t("assistant.btw.title")}</p>
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="icon"
             aria-label={t("assistant.btw.closeAria")}
             onClick={onClose}
-            className="rounded p-0.5 hover:bg-muted"
+            className="h-6 w-6"
           >
             <X className="h-4 w-4" />
-          </button>
+          </Button>
         </div>
         <p className="mb-3 text-sm font-medium">{question}</p>
         <div className={cn("text-sm", status === "error" && "text-destructive")}>

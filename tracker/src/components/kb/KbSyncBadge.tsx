@@ -1,21 +1,22 @@
 import { useTranslation } from "react-i18next";
 
-import { cn } from "@/lib/utils";
+import { StatusPill } from "@/components/ui/status-pill";
+import type { StatusTone } from "@/lib/statusPresentation";
 import type { KbSyncState, KbSyncStatus } from "@/types/knowledgeBase";
 
 interface Props {
   state: KbSyncState | null;
 }
 
-const STATUS_STYLES: Record<KbSyncStatus, string> = {
-  idle: "bg-muted text-muted-foreground",
-  syncing: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
-  synced: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300",
-  open_pr: "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300",
-  merged: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300",
-  conflict: "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300",
-  checks_failed: "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300",
-  error: "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300",
+const STATUS_TONES: Record<KbSyncStatus, StatusTone> = {
+  idle: "muted",
+  syncing: "info",
+  synced: "success",
+  open_pr: "warning",
+  merged: "success",
+  conflict: "destructive",
+  checks_failed: "destructive",
+  error: "destructive",
 };
 
 const FAILURE_STATUSES: KbSyncStatus[] = ["conflict", "checks_failed", "error"];
@@ -27,14 +28,9 @@ export function KbSyncBadge({ state }: Props) {
 
   return (
     <div className="flex items-center gap-2">
-      <span
-        className={cn(
-          "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
-          STATUS_STYLES[status],
-        )}
-      >
+      <StatusPill tone={STATUS_TONES[status]} size="md">
         {t(`kb.sync.status.${status}`)}
-      </span>
+      </StatusPill>
 
       {state?.prUrl ? (
         <a
@@ -48,7 +44,7 @@ export function KbSyncBadge({ state }: Props) {
       ) : null}
 
       {showFailure ? (
-        <span className="max-w-[16rem] truncate text-xs text-red-600" title={state?.lastError ?? undefined}>
+        <span className="max-w-[16rem] truncate text-xs text-destructive" title={state?.lastError ?? undefined}>
           {state?.lastError}
         </span>
       ) : null}
