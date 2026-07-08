@@ -26,7 +26,13 @@ defmodule SymphonyElixir.Orchestrator do
   alias SymphonyElixir.Evidence
   alias SymphonyElixir.GitHub.IssueMarker
   alias SymphonyElixir.LocalTracker.{Context, IssueMapper, Repository}
-  alias SymphonyElixir.Orchestrator.{BundleCoordinator, BundleGate, IncompleteReason, RunUpdate}
+  alias SymphonyElixir.Orchestrator.{
+    BundleCoordinator,
+    BundleGate,
+    DispatchOrder,
+    IncompleteReason,
+    RunUpdate
+  }
   alias SymphonyElixir.PublicRouting
   alias SymphonyElixir.PushNotifications.Dispatcher, as: PushDispatcher
   alias SymphonyElixir.RunContract.Finalizer
@@ -357,7 +363,7 @@ defmodule SymphonyElixir.Orchestrator do
   @doc false
   @spec sort_issues_for_dispatch_for_test([Issue.t()]) :: [Issue.t()]
   def sort_issues_for_dispatch_for_test(issues) when is_list(issues) do
-    sort_issues_for_dispatch(issues)
+    DispatchOrder.sort(issues)
   end
 
   defp reconcile_running_issue_states(issues, state) do
@@ -574,7 +580,7 @@ defmodule SymphonyElixir.Orchestrator do
   defp running_entry_workspace(_running_entry), do: nil
 
   defp choose_issues(issues, state) do
-    candidates = sort_issues_for_dispatch(issues)
+    candidates = DispatchOrder.sort(issues)
 
     held = held_child_issue_ids(candidates)
 
@@ -798,26 +804,6 @@ defmodule SymphonyElixir.Orchestrator do
 
   defp terminal_record_state?(%{status: %{is_terminal: terminal}}) when is_boolean(terminal), do: terminal
   defp terminal_record_state?(_record), do: false
-
-  defp sort_issues_for_dispatch(issues) when is_list(issues) do
-    Enum.sort_by(issues, fn
-      %Issue{} = issue ->
-        {priority_rank(issue.priority), issue_created_at_sort_key(issue), issue.identifier || issue.id || ""}
-
-      _ ->
-        {priority_rank(nil), issue_created_at_sort_key(nil), ""}
-    end)
-  end
-
-  defp priority_rank(priority) when is_integer(priority) and priority in 1..4, do: priority
-  defp priority_rank(_priority), do: 5
-
-  defp issue_created_at_sort_key(%Issue{created_at: %DateTime{} = created_at}) do
-    DateTime.to_unix(created_at, :microsecond)
-  end
-
-  defp issue_created_at_sort_key(%Issue{}), do: 9_223_372_036_854_775_807
-  defp issue_created_at_sort_key(_issue), do: 9_223_372_036_854_775_807
 
   defp should_dispatch_issue?(
          %Issue{} = issue,
