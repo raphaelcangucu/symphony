@@ -1,12 +1,7 @@
 import {
   AudioLines,
-  Bot,
-  Brain,
-  ChevronDown,
   CircleDot,
-  Feather,
   FileText,
-  Flame,
   FolderOpen,
   GitPullRequest,
   MessageSquare,
@@ -15,12 +10,10 @@ import {
   Send,
   Shield,
   ShieldAlert,
-  Sparkles,
   Square,
   X,
 } from "lucide-react";
 import {
-  type DragEvent,
   type FormEvent,
   type KeyboardEvent,
   type ReactNode,
@@ -34,19 +27,17 @@ import { createPortal } from "react-dom";
 import { toast } from "sonner";
 
 import {
-  type AssistantAttachment,
-  createAttachmentPreview,
   revokeAttachmentPreviews,
   serializeAttachments,
-  validateAttachmentFile,
 } from "@/components/assistant/assistantAttachments";
+import { ComposerToolbar } from "@/components/assistant/ComposerToolbar";
 import {
   ContextMentionPopover,
   orderMentionOptions,
 } from "@/components/assistant/ContextMentionPopover";
 import type { ComposerContextChipRef, MentionRef, ResolvedMention } from "@/components/assistant/contextMentions";
+import { useComposerAttachments } from "@/components/assistant/useComposerAttachments";
 import { useContextMentions } from "@/components/assistant/useContextMentions";
-import { ModelMenu } from "@/components/assistant/ModelMenu";
 import { MagicCommandPalette } from "@/components/commands/MagicCommandPalette";
 import type { RunPromptTemplateResult } from "@/services/magicCommands";
 import {
@@ -57,43 +48,23 @@ import {
   type SlashCommandContext,
   type SlashCommandDef,
 } from "@/components/assistant/slashCommands";
-import { agentKindLabel } from "@/components/shared/AgentChip";
-import { uploadAssistantAttachment } from "@/services/assistant";
 import { isVideoMediaType } from "@/services/attachments";
-import { extractFilesFromClipboard } from "@/lib/clipboardImages";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Textarea } from "@/components/ui/textarea";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import {
   catalogFor,
   defaultComposerSettings,
-  effortLabel,
-  effortsForModel,
   loadComposerState,
   normalizeEffort,
   saveComposerState,
-  type AssistantAgentCatalog,
   type AssistantCatalogBundle,
   type AssistantComposerSettings,
   type AssistantComposerState,
   type AssistantEffort,
-  type AssistantModelOption,
 } from "@/lib/assistantSettings";
 import { cn, SCROLLBAR_THIN } from "@/lib/utils";
 import type { AgentKind } from "@/types/issue";
-
-function eventHasFiles(event: DragEvent<HTMLElement>): boolean {
-  return Array.from(event.dataTransfer?.types ?? []).includes("Files");
-}
 
 function addContextRef(current: ComposerContextChipRef[], ref: ComposerContextChipRef): ComposerContextChipRef[] {
   if (!ref.id.trim()) return current;
@@ -132,15 +103,22 @@ export interface ComposerContextInsertRequest {
   ref: ComposerContextChipRef;
 }
 
-interface AssistantComposerProps {
-  projectSlug: string;
-  bundle: AssistantCatalogBundle;
-  disabled?: boolean;
-  floating?: boolean;
-  hasQueued?: boolean;
-  seedMessage?: string | null;
-  slashContext?: SlashCommandContext;
-  slashCommandExtras?: SlashCommandDef[];
+/**
+ * `@`-mention wiring. When enabled, the parent supplies `mentionOptions` for
+ * the current query (reported via `onMentionQueryChange`) and records
+ * selections via `onMentionSelect` so it can expand the inserted tokens into
+ * the dispatched prompt.
+ */
+export interface ComposerMentionProps {
+  /** Enables `@`-mentions (issues / files / PRs) in the textarea. */
+  mentionsEnabled?: boolean;
+  mentionOptions?: ResolvedMention[];
+  onMentionQueryChange?: (query: string | null) => void;
+  onMentionSelect?: (entity: ResolvedMention) => void;
+}
+
+/** Magic command palette wiring (open triggers and run results). */
+export interface ComposerMagicProps {
   /** Incrementing token from the parent's Magic button that opens the palette. */
   magicPaletteRequestId?: number;
   /** Controlled open state for the magic palette (e.g. execution toolbar toggle). */
@@ -149,25 +127,26 @@ interface AssistantComposerProps {
   /** Issue identifier for prompt-template magic commands (execution context). */
   magicIssueIdentifier?: string;
   onMagicRan?: (result: RunPromptTemplateResult) => void;
-  placeholder?: string;
-  /** When `null`, the footer hint is hidden. */
-  hint?: string | null;
-  resetToken?: number;
-  composerDisabled?: boolean;
-  agentMenuDisabled?: boolean;
-  canSubmit?: boolean;
-  /** Allow submit (and the default send affordance) with an empty input. */
-  allowEmptySubmit?: boolean;
-  /**
-   * Enables `@`-mentions (issues / files / PRs) in the textarea. When on, the
-   * parent supplies `mentionOptions` for the current query (reported via
-   * `onMentionQueryChange`) and records selections via `onMentionSelect` so it
-   * can expand the inserted tokens into the dispatched prompt.
-   */
-  mentionsEnabled?: boolean;
-  mentionOptions?: ResolvedMention[];
-  onMentionQueryChange?: (query: string | null) => void;
-  onMentionSelect?: (entity: ResolvedMention) => void;
+}
+
+/** Slash-command palette configuration. */
+export interface ComposerSlashCommandProps {
+  slashContext?: SlashCommandContext;
+  slashCommandExtras?: SlashCommandDef[];
+}
+
+/** Agent / model / effort selection reporting and seeding. */
+export interface ComposerAgentSelectionProps {
+  /** Reports the currently selected agent (on mount and on every change). */
+  onAgentChange?: (agent: AgentKind) => void;
+  /** Reports the selected agent's model/effort settings (on mount and change). */
+  onSettingsChange?: (agent: AgentKind, settings: AssistantComposerSettings) => void;
+  /** Initial/server-resolved agent for reopening a persisted session. */
+  agentSeed?: AgentKind | null;
+}
+
+/** Slots for parent-provided elements rendered inside the composer chrome. */
+export interface ComposerSlotProps {
   /**
    * Optional element rendered flush inside the composer card, above the input
    * (e.g. the authoring-goal pill). Sharing the card makes it read as one piece
@@ -177,18 +156,35 @@ interface AssistantComposerProps {
   toolbarAfterAttach?: ReactNode;
   submitActions?: ReactNode;
   footer?: ReactNode;
+}
+
+interface AssistantComposerProps
+  extends ComposerMentionProps,
+    ComposerMagicProps,
+    ComposerSlashCommandProps,
+    ComposerAgentSelectionProps,
+    ComposerSlotProps {
+  projectSlug: string;
+  bundle: AssistantCatalogBundle;
+  disabled?: boolean;
+  floating?: boolean;
+  hasQueued?: boolean;
+  seedMessage?: string | null;
+  placeholder?: string;
+  /** When `null`, the footer hint is hidden. */
+  hint?: string | null;
+  resetToken?: number;
+  composerDisabled?: boolean;
+  agentMenuDisabled?: boolean;
+  canSubmit?: boolean;
+  /** Allow submit (and the default send affordance) with an empty input. */
+  allowEmptySubmit?: boolean;
   contextInsertRequest?: ComposerContextInsertRequest | null;
   onForceQueued?: () => void;
   /** Called when Enter is pressed with an empty input (no attachments). */
   onEmptySubmit?: () => void;
   onSubmit: (payload: AssistantComposerSubmit) => void;
   onComposerSnapshot?: (snapshot: ComposerSnapshot) => void;
-  /** Reports the currently selected agent (on mount and on every change). */
-  onAgentChange?: (agent: AgentKind) => void;
-  /** Reports the selected agent's model/effort settings (on mount and change). */
-  onSettingsChange?: (agent: AgentKind, settings: AssistantComposerSettings) => void;
-  /** Initial/server-resolved agent for reopening a persisted session. */
-  agentSeed?: AgentKind | null;
   /**
    * Optional element that acts as the file drop zone. When provided, dropping
    * files anywhere inside it (e.g. the whole assistant panel) attaches them,
@@ -241,12 +237,21 @@ export function AssistantComposer({
   const [internalMagicOpen, setInternalMagicOpen] = useState(false);
   const magicOpen = magicPaletteOpen ?? internalMagicOpen;
   const setMagicOpen = onMagicPaletteOpenChange ?? setInternalMagicOpen;
-  const [attachments, setAttachments] = useState<AssistantAttachment[]>([]);
+  const {
+    attachments,
+    uploadingImage,
+    dragActive,
+    nativeDropZoneActive,
+    handleFilePick,
+    handlePaste,
+    handleDragEnter,
+    handleDragOver,
+    handleDragLeave,
+    handleDrop,
+    removeAttachment,
+    clearAttachments,
+  } = useComposerAttachments({ projectSlug, dropTargetRef });
   const [contextRefs, setContextRefs] = useState<ComposerContextChipRef[]>([]);
-  const [uploadingImage, setUploadingImage] = useState(false);
-  const [dragActive, setDragActive] = useState(false);
-  const [nativeDropZoneActive, setNativeDropZoneActive] = useState(false);
-  const dragDepthRef = useRef(0);
   const [composerState, setComposerState] = useState<AssistantComposerState>(() => loadComposerState(bundle));
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -265,8 +270,6 @@ export function AssistantComposer({
   const catalog = catalogFor(bundle, composerState.agent);
   const settings: AssistantComposerSettings =
     composerState.byAgent[composerState.agent] ?? defaultComposerSettings(catalog);
-
-  const effortOptions = effortsForModel(catalog, settings.model);
 
   useEffect(() => {
     if (!agentSeed) return;
@@ -349,7 +352,7 @@ export function AssistantComposer({
   useEffect(() => {
     if (resetToken === undefined) return;
     setInput("");
-    setAttachments([]);
+    clearAttachments();
     setContextRefs([]);
     mentions.close();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -489,132 +492,6 @@ export function AssistantComposer({
     });
   }
 
-  async function uploadFiles(files: File[]) {
-    if (files.length === 0) return;
-    if (!projectSlug.trim()) {
-      toast.error(t("assistant.composer.attachmentsUnavailable"));
-      return;
-    }
-
-    for (const file of files) {
-      try {
-        validateAttachmentFile(file);
-        setUploadingImage(true);
-        const uploaded = await uploadAssistantAttachment(projectSlug, file);
-        const attachment = createAttachmentPreview(file, uploaded);
-        setAttachments((current) => [...current, attachment]);
-      } catch (cause) {
-        toast.error(cause instanceof Error ? cause.message : t("assistant.composer.uploadFailed"));
-      } finally {
-        setUploadingImage(false);
-      }
-    }
-  }
-
-  const uploadFilesRef = useRef(uploadFiles);
-  uploadFilesRef.current = uploadFiles;
-
-  // When a drop target element is provided (e.g. the whole assistant panel),
-  // attach native drag-and-drop listeners to it so files can be dropped
-  // anywhere inside the panel, not only on the composer form.
-  useEffect(() => {
-    const el = dropTargetRef?.current ?? null;
-    if (!el) {
-      setNativeDropZoneActive(false);
-      return;
-    }
-
-    setNativeDropZoneActive(true);
-
-    const hasFiles = (event: globalThis.DragEvent) =>
-      Array.from(event.dataTransfer?.types ?? []).includes("Files");
-
-    const onDragEnter = (event: globalThis.DragEvent) => {
-      if (!hasFiles(event)) return;
-      event.preventDefault();
-      dragDepthRef.current += 1;
-      setDragActive(true);
-    };
-    const onDragOver = (event: globalThis.DragEvent) => {
-      if (!hasFiles(event)) return;
-      event.preventDefault();
-      if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
-    };
-    const onDragLeave = (event: globalThis.DragEvent) => {
-      if (!hasFiles(event)) return;
-      dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
-      if (dragDepthRef.current === 0) setDragActive(false);
-    };
-    const onDrop = (event: globalThis.DragEvent) => {
-      if (!hasFiles(event)) return;
-      event.preventDefault();
-      dragDepthRef.current = 0;
-      setDragActive(false);
-      void uploadFilesRef.current(Array.from(event.dataTransfer?.files ?? []));
-    };
-
-    el.addEventListener("dragenter", onDragEnter);
-    el.addEventListener("dragover", onDragOver);
-    el.addEventListener("dragleave", onDragLeave);
-    el.addEventListener("drop", onDrop);
-
-    return () => {
-      el.removeEventListener("dragenter", onDragEnter);
-      el.removeEventListener("dragover", onDragOver);
-      el.removeEventListener("dragleave", onDragLeave);
-      el.removeEventListener("drop", onDrop);
-    };
-  }, [dropTargetRef]);
-
-  async function handleFilePick(event: React.ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(event.target.files ?? []);
-    event.target.value = "";
-    await uploadFiles(files);
-  }
-
-  function handlePaste(event: React.ClipboardEvent<HTMLTextAreaElement>) {
-    const files = extractFilesFromClipboard(event);
-    if (files.length === 0) return;
-    event.preventDefault();
-    void uploadFiles(files);
-  }
-
-  function handleDragEnter(event: DragEvent<HTMLFormElement>) {
-    if (!eventHasFiles(event)) return;
-    event.preventDefault();
-    dragDepthRef.current += 1;
-    setDragActive(true);
-  }
-
-  function handleDragOver(event: DragEvent<HTMLFormElement>) {
-    if (!eventHasFiles(event)) return;
-    event.preventDefault();
-    event.dataTransfer.dropEffect = "copy";
-  }
-
-  function handleDragLeave(event: DragEvent<HTMLFormElement>) {
-    if (!eventHasFiles(event)) return;
-    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
-    if (dragDepthRef.current === 0) setDragActive(false);
-  }
-
-  function handleDrop(event: DragEvent<HTMLFormElement>) {
-    if (!eventHasFiles(event)) return;
-    event.preventDefault();
-    dragDepthRef.current = 0;
-    setDragActive(false);
-    const files = Array.from(event.dataTransfer.files ?? []);
-    void uploadFiles(files);
-  }
-
-  function removeAttachment(id: string) {
-    setAttachments((current) => {
-      const target = current.find((attachment) => attachment.id === id);
-      if (target) revokeAttachmentPreviews([target]);
-      return current.filter((attachment) => attachment.id !== id);
-    });
-  }
-
   function removeContextRef(type: ComposerContextChipRef["type"], id: string) {
     setContextRefs((current) => current.filter((ref) => ref.type !== type || ref.id !== id));
   }
@@ -638,7 +515,7 @@ export function AssistantComposer({
 
     revokeAttachmentPreviews(attachments);
     setInput("");
-    setAttachments([]);
+    clearAttachments();
     setContextRefs([]);
     mentions.close();
     recordingRef.current = false;
@@ -926,35 +803,18 @@ export function AssistantComposer({
           </div>
 
           <div className="flex flex-wrap items-center justify-end gap-1">
-            <AgentMenu
+            <ComposerToolbar
               bundle={bundle}
-              agent={composerState.agent}
-              disabled={disabled || agentMenuDisabled}
-              onChange={updateAgent}
-            />
-            <ModelMenu
               catalog={catalog}
-              model={settings.model}
-              disabled={disabled || composerDisabled}
-              onChange={updateModel}
+              agent={composerState.agent}
+              settings={settings}
+              disabled={disabled}
+              composerDisabled={composerDisabled}
+              agentMenuDisabled={agentMenuDisabled}
+              onAgentChange={updateAgent}
+              onModelChange={updateModel}
+              onEffortChange={updateEffort}
             />
-            {effortOptions.length > 0 ? (
-              <EffortMenu
-                catalog={catalog}
-                model={settings.model}
-                effort={settings.effort}
-                options={effortOptions}
-                disabled={disabled || composerDisabled}
-                onChange={updateEffort}
-              />
-            ) : (
-              <DerivedThinkingMenu
-                catalog={catalog}
-                model={settings.model}
-                disabled={disabled || composerDisabled}
-                onModelChange={updateModel}
-              />
-            )}
             <Button
               type="button"
               variant="ghost"
@@ -1017,276 +877,5 @@ export function AssistantComposer({
       )}
       {footer}
     </form>
-  );
-}
-
-function AgentMenu({
-  bundle,
-  agent,
-  disabled,
-  onChange,
-}: {
-  bundle: AssistantCatalogBundle;
-  agent: AgentKind;
-  disabled?: boolean;
-  onChange: (agent: AgentKind) => void;
-}) {
-  const { t } = useTranslation();
-  const current = catalogFor(bundle, agent);
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button type="button" variant="ghost" size="sm" className="h-8 gap-1 px-2 text-xs" disabled={disabled}>
-          <Bot className="h-3.5 w-3.5 shrink-0 text-emerald-500" />
-          {agentKindLabel(current.agent, t)}
-          <ChevronDown className="h-3 w-3 opacity-60" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuLabel>{t("assistant.composer.agentMenu")}</DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        <DropdownMenuRadioGroup value={agent} onValueChange={(v) => onChange(v as AgentKind)}>
-          {bundle.agents.map((catalog) => (
-            <DropdownMenuRadioItem key={catalog.agent} value={catalog.agent}>
-              {agentKindLabel(catalog.agent, t)}
-            </DropdownMenuRadioItem>
-          ))}
-        </DropdownMenuRadioGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
-/**
- * Renders a "thinking intensity" icon (Jean-style) for a reasoning-effort id.
- * Returns an element (not a component type) so it can be used inline during
- * render without tripping react-hooks/static-components.
- */
-function effortIconElement(effortId: string, testId: string): ReactNode {
-  const id = effortId.toLowerCase();
-  const className = "h-3.5 w-3.5 shrink-0";
-  if (id === "low" || id === "minimal") return <Feather className={`${className} text-sky-500`} data-testid={testId} />;
-  if (id === "high") return <Flame className={`${className} text-orange-500`} data-testid={testId} />;
-  if (id === "xhigh" || id === "max" || id === "ultra" || id === "ultracode") {
-    return <Sparkles className={`${className} text-fuchsia-500`} data-testid={testId} />;
-  }
-  return <Brain className={`${className} text-violet-500`} data-testid={testId} />;
-}
-
-const DERIVED_VARIANT_TOKENS = new Set([
-  "none",
-  "minimal",
-  "low",
-  "medium",
-  "high",
-  "xhigh",
-  "max",
-  "thinking",
-  "fast",
-]);
-
-const DERIVED_EFFORT_ORDER = ["none", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
-
-interface DerivedThinkingOption {
-  key: string;
-  model: string;
-  effort: string;
-  thinking: boolean;
-  label: string;
-}
-
-function DerivedThinkingMenu({
-  catalog,
-  model,
-  disabled,
-  onModelChange,
-}: {
-  catalog: AssistantAgentCatalog;
-  model: string;
-  disabled?: boolean;
-  onModelChange: (model: string) => void;
-}) {
-  const { t } = useTranslation();
-  const options = derivedThinkingOptions(catalog, model, t);
-  const current = options.find((option) => option.model === model);
-
-  if (!current || options.length <= 1) return null;
-
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button type="button" variant="ghost" size="sm" className="h-8 gap-1 px-2 text-xs" disabled={disabled}>
-          {effortIconElement(current.effort || "medium", "derived-effort-trigger-icon")}
-          {current.label}
-          <ChevronDown className="h-3 w-3 opacity-60" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuLabel>{t("assistant.composer.reasoningEffort")}</DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        <DropdownMenuRadioGroup value={current.key} onValueChange={(key) => {
-          const option = options.find((entry) => entry.key === key);
-          if (option) onModelChange(option.model);
-        }}>
-          {options.map((option) => (
-            <DropdownMenuRadioItem key={option.key} value={option.key} className="gap-2">
-              {effortIconElement(option.effort || "medium", `derived-effort-icon-${option.key}`)}
-              {option.label}
-            </DropdownMenuRadioItem>
-          ))}
-        </DropdownMenuRadioGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
-function derivedThinkingOptions(
-  catalog: AssistantAgentCatalog,
-  modelId: string,
-  t: ReturnType<typeof useTranslation>["t"],
-): DerivedThinkingOption[] {
-  const currentModel = findCatalogModel(catalog, modelId);
-  const current = currentModel ? derivedModelVariant(currentModel) : null;
-  const target = current ?? firstDerivedModelVariant(catalog);
-  if (!target) return [];
-
-  const seen = new Set<string>();
-  const modelOptions = catalog.models
-    .map((entry) => ({ entry, variant: derivedModelVariant(entry) }))
-    .filter(({ variant }) => variant && variant.baseKey === target.baseKey && variant.fast === target.fast)
-    .flatMap(({ entry, variant }) => {
-      if (!variant) return [];
-      const key = `${variant.thinking ? "thinking" : "standard"}:${variant.effort}`;
-      if (seen.has(key)) return [];
-      seen.add(key);
-      return [{
-        key,
-        model: entry.model,
-        effort: variant.effort,
-        thinking: variant.thinking,
-        label: derivedThinkingLabel(catalog, entry.model, variant.effort, variant.thinking, t),
-      }];
-    })
-    .sort((a, b) => derivedOptionSort(a) - derivedOptionSort(b));
-
-  if (currentModel?.model === "auto") {
-    return [
-      {
-        key: "auto",
-        model: "auto",
-        effort: "",
-        thinking: false,
-        label: t("assistant.composer.autoThinking"),
-      },
-      ...modelOptions,
-    ];
-  }
-
-  return modelOptions;
-}
-
-function derivedThinkingLabel(
-  catalog: AssistantAgentCatalog,
-  modelId: string,
-  effort: string,
-  thinking: boolean,
-  t: ReturnType<typeof useTranslation>["t"],
-): string {
-  const base = effort ? effortLabel(catalog, modelId, effort, t) : t("assistant.composer.autoThinking");
-  return thinking ? t("assistant.composer.thinkingEffort", { effort: base }) : base;
-}
-
-function derivedOptionSort(option: DerivedThinkingOption): number {
-  const effortIndex = DERIVED_EFFORT_ORDER.indexOf(option.effort as (typeof DERIVED_EFFORT_ORDER)[number]);
-  const normalizedEffortIndex = effortIndex === -1 ? DERIVED_EFFORT_ORDER.length : effortIndex;
-  return (option.thinking ? 100 : 0) + normalizedEffortIndex;
-}
-
-function derivedModelVariant(model: AssistantModelOption):
-  | { baseKey: string; effort: string; thinking: boolean; fast: boolean }
-  | null {
-  const tokens = model.model.toLowerCase().split("-").filter(Boolean);
-  if (tokens.length === 0 || model.model === "auto") return null;
-
-  const fast = tokens.includes("fast");
-  const thinking = tokens.includes("thinking") || /\bthinking\b/i.test(model.label);
-  const effort = explicitEffort(tokens, model.label);
-  const baseTokens = tokens.filter((token) => !DERIVED_VARIANT_TOKENS.has(token));
-
-  return {
-    baseKey: baseTokens.join("-"),
-    effort: effort || "medium",
-    thinking,
-    fast,
-  };
-}
-
-function firstDerivedModelVariant(catalog: AssistantAgentCatalog):
-  | { baseKey: string; effort: string; thinking: boolean; fast: boolean }
-  | null {
-  for (const model of catalog.models) {
-    const variant = derivedModelVariant(model);
-    if (variant) return variant;
-  }
-  return null;
-}
-
-function explicitEffort(tokens: string[], label: string): string | null {
-  for (const effort of ["none", "minimal", "low", "medium", "high", "xhigh", "max"]) {
-    if (tokens.includes(effort)) return effort;
-  }
-  const lower = label.toLowerCase();
-  if (/\bextra high\b/.test(lower)) return "xhigh";
-  if (/\bmax\b/.test(lower)) return "max";
-  if (/\bhigh\b/.test(lower)) return "high";
-  if (/\bmedium\b/.test(lower)) return "medium";
-  if (/\blow\b/.test(lower)) return "low";
-  if (/\bnone\b/.test(lower)) return "none";
-  return null;
-}
-
-function findCatalogModel(catalog: AssistantAgentCatalog, modelId: string): AssistantModelOption | undefined {
-  return catalog.models.find((entry) => entry.model === modelId || entry.id === modelId);
-}
-
-function EffortMenu({
-  catalog,
-  model,
-  effort,
-  options,
-  disabled,
-  onChange,
-}: {
-  catalog: AssistantAgentCatalog;
-  model: string;
-  effort: AssistantEffort;
-  options: ReturnType<typeof effortsForModel>;
-  disabled?: boolean;
-  onChange: (effort: AssistantEffort) => void;
-}) {
-  const { t } = useTranslation();
-
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button type="button" variant="ghost" size="sm" className="h-8 gap-1 px-2 text-xs" disabled={disabled}>
-          {effortIconElement(effort, "effort-trigger-icon")}
-          {effortLabel(catalog, model, effort)}
-          <ChevronDown className="h-3 w-3 opacity-60" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuLabel>{t("assistant.composer.reasoningEffort")}</DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        <DropdownMenuRadioGroup value={effort} onValueChange={onChange}>
-          {options.map((option) => (
-            <DropdownMenuRadioItem key={option.id} value={option.id} className="gap-2">
-              {effortIconElement(option.id, `effort-icon-${option.id}`)}
-              {option.label}
-            </DropdownMenuRadioItem>
-          ))}
-        </DropdownMenuRadioGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
   );
 }
