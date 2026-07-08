@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback } from "react";
 
+import { useAsyncResource } from "@/hooks/useAsyncResource";
 import { i18n } from "@/i18n";
 import { createComment, deleteComment, listComments, updateComment } from "@/services/comments";
 import type { Comment, CreateCommentInput, UpdateCommentInput } from "@/types/comment";
@@ -20,6 +21,8 @@ export interface UseIssueCommentsResult {
   updateComment: (commentId: string, input: UpdateCommentInput) => Promise<Comment>;
   deleteComment: (commentId: string) => Promise<void>;
 }
+
+const NO_COMMENTS: Comment[] = [];
 
 function sortByCreatedAt(comments: Comment[]): Comment[] {
   return [...comments].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
@@ -46,39 +49,26 @@ export function useIssueComments({
   identifier,
   enabled = true,
 }: UseIssueCommentsArgs): UseIssueCommentsResult {
-  const [comments, setComments] = useState<Comment[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const inFlightRef = useRef(false);
+  const fetcher = useCallback(async () => {
+    const items = await listComments(projectSlug, identifier ?? "");
+    return sortByCreatedAt(items);
+  }, [projectSlug, identifier]);
 
-  const active = enabled && Boolean(identifier && projectSlug);
-
-  const refetch = useCallback(async () => {
-    if (!identifier || !projectSlug) return;
-    if (inFlightRef.current) return;
-    inFlightRef.current = true;
-    setLoading(true);
-    try {
-      const items = await listComments(projectSlug, identifier);
-      setComments(sortByCreatedAt(items));
-      setError(null);
-    } catch {
-      setError(i18n.t("issue.comments.errors.loadFailed"));
-    } finally {
-      inFlightRef.current = false;
-      setLoading(false);
-    }
-  }, [identifier, projectSlug]);
-
-  useEffect(() => {
-    if (!active) {
-      setComments([]);
-      setError(null);
-      setLoading(false);
-      return;
-    }
-    void refetch();
-  }, [active, refetch]);
+  const {
+    data: comments,
+    loading,
+    error,
+    refetch,
+    setData: setComments,
+  } = useAsyncResource<Comment[]>({
+    fetcher,
+    canFetch: Boolean(identifier && projectSlug),
+    enabled,
+    errorMessage: () => i18n.t("issue.comments.errors.loadFailed"),
+    initialData: NO_COMMENTS,
+    refetchOnActivate: "always",
+    resetWhenInactive: true,
+  });
 
   const addComment = useCallback(
     async (input: CreateCommentInput) => {
@@ -89,7 +79,7 @@ export function useIssueComments({
       setComments((current) => sortByCreatedAt([...current, created]));
       return created;
     },
-    [identifier, projectSlug],
+    [identifier, projectSlug, setComments],
   );
 
   const updateCommentById = useCallback(
@@ -101,7 +91,7 @@ export function useIssueComments({
       setComments((current) => sortByCreatedAt(current.map((comment) => (comment.id === commentId ? updated : comment))));
       return updated;
     },
-    [identifier, projectSlug],
+    [identifier, projectSlug, setComments],
   );
 
   const deleteCommentById = useCallback(
@@ -112,7 +102,7 @@ export function useIssueComments({
       await deleteComment(projectSlug, identifier, commentId);
       setComments((current) => current.filter((comment) => comment.id !== commentId));
     },
-    [identifier, projectSlug],
+    [identifier, projectSlug, setComments],
   );
 
   return {
