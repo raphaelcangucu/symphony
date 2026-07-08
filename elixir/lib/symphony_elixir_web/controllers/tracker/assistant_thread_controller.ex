@@ -73,7 +73,8 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
     attrs = %{
       title: params["title"],
       agent_kind: normalize_agent(params["agent_kind"]),
-      execution_mode: params["execution_mode"] || params["mode"]
+      execution_mode: params["execution_mode"] || params["mode"],
+      isolated_workspace: params["isolated_workspace"] == true
     }
 
     with {:ok, thread} <- History.create_issue_session_thread(project_slug, issue_identifier, attrs) do

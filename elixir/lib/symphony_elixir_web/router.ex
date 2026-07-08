@@ -175,6 +175,9 @@ defmodule SymphonyElixirWeb.Router do
       :artifact
     )
 
+    get("/projects/:project_slug/worktrees", WorktreeInventoryController, :index)
+    delete("/projects/:project_slug/worktrees", WorktreeInventoryController, :remove)
+    post("/projects/:project_slug/workspaces", WorktreeInventoryController, :create_workspace)
     get("/projects/:project_slug/pull_requests", ProjectPullRequestController, :index)
     get("/projects/:project_slug/branches", BranchController, :index)
     get("/projects/:project_slug/issues/:identifier/pull_requests", PullRequestController, :index)

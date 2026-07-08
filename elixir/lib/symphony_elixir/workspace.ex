@@ -86,6 +86,37 @@ defmodule SymphonyElixir.Workspace do
     |> Map.fetch!(:root)
   end
 
+  @doc """
+  Resolves the workspace layout (root + per-project segment) for a project.
+
+  Issue workspaces live at `<root>/<segment>/<safe_id>`; the segment directory
+  itself doubles as the shared project workspace. Used by the working-tree
+  inventory so its scan agrees with the paths `create_for_issue/1` produces.
+  """
+  @spec project_layout(String.t()) :: %{root: Path.t(), segment: String.t()}
+  def project_layout(project_slug) when is_binary(project_slug) do
+    layout = layout_for(%{project_slug: project_slug, issue_identifier: nil, issue_id: nil})
+    %{root: layout.root, segment: layout.segment}
+  end
+
+  @doc """
+  Returns the next free isolated parallel-tree path for an issue.
+
+  Parallel trees are siblings of the issue workspace named `<safe_id>__p<N>`,
+  so one issue can host extra clean sessions without touching the tree its
+  execution/authoring sessions share. `N` starts at 1 and skips paths that
+  already exist on disk.
+  """
+  @spec next_parallel_path(map() | String.t() | nil) :: Path.t()
+  def next_parallel_path(issue_or_identifier) do
+    base = path_for_issue(issue_or_identifier)
+
+    1..1000
+    |> Enum.map(fn index -> "#{base}__p#{index}" end)
+    |> Enum.find(&(not File.exists?(&1)))
+    |> Kernel.||("#{base}__p#{System.unique_integer([:positive])}")
+  end
+
   @spec remove(Path.t()) :: {:ok, [String.t()]} | {:error, term(), String.t()}
   def remove(workspace) do
     case File.exists?(workspace) do

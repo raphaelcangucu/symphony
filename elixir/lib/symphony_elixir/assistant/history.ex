@@ -117,6 +117,30 @@ defmodule SymphonyElixir.Assistant.History do
   end
 
   @doc """
+  Counts active assistant threads pinned to `workspace_path`.
+
+  Used by the working-tree inventory to decide whether an isolated parallel
+  tree or a standalone workspace is orphaned (zero active sessions) and can be
+  offered for cleanup.
+  """
+  @spec count_active_threads_for_workspace(String.t()) :: non_neg_integer()
+  def count_active_threads_for_workspace(workspace_path) when is_binary(workspace_path) do
+    case String.trim(workspace_path) do
+      "" ->
+        0
+
+      path ->
+        Thread
+        |> where([thread], thread.workspace_path == ^path and thread.status == "active")
+        |> Repo.aggregate(:count)
+    end
+  rescue
+    _error -> 0
+  catch
+    :exit, _reason -> 0
+  end
+
+  @doc """
   Returns the persisted workspace context for an active issue authoring thread.
   """
   @spec issue_workspace_context(String.t()) ::
@@ -517,8 +541,8 @@ defmodule SymphonyElixir.Assistant.History do
       when is_binary(project_slug) and is_binary(issue_identifier) and is_map(attrs) do
     with {:ok, slug} <- normalize_required_string(project_slug, :project_slug),
          {:ok, identifier} <- normalize_required_string(issue_identifier, :issue_identifier),
-         {:ok, _project} <- Context.get_project(slug) do
-      workspace_path = Workspace.path_for_issue(identifier)
+         {:ok, _project} <- Context.get_project(slug),
+         {:ok, workspace_path} <- issue_session_workspace(slug, identifier, attrs) do
       execution_mode = normalize_execution_mode(Map.get(attrs, :execution_mode) || Map.get(attrs, "execution_mode"))
 
       metadata =
@@ -526,15 +550,43 @@ defmodule SymphonyElixir.Assistant.History do
         |> Map.get(:metadata, Map.get(attrs, "metadata", %{}))
         |> Map.new()
         |> Map.put("execution_mode", execution_mode)
+        |> Map.put("workspace_kind", if(isolated_workspace?(attrs), do: "isolated", else: "shared"))
 
       attrs
+      |> Map.drop([:isolated_workspace, "isolated_workspace"])
       |> Map.put(:scope, "issue_session")
       |> Map.put(:project_slug, slug)
       |> Map.put(:issue_identifier, identifier)
       |> Map.put_new(:title, "Issue session")
-      |> Map.put_new(:workspace_path, workspace_path)
+      |> Map.put(:workspace_path, workspace_path)
       |> Map.put_new(:status, "active")
       |> Map.put(:metadata, metadata)
+      |> then(&Thread.changeset(%Thread{}, &1))
+      |> Repo.insert()
+    end
+  end
+
+  @doc """
+  Creates a project-scoped session thread pinned to an explicit workspace path.
+
+  Used by standalone workspaces: the tree is materialized by the caller
+  (`SymphonyElixir.Workspace.Standalone.create/4`), so unlike
+  `create_project_session_thread/2` this does not ensure the shared explore
+  workspace.
+  """
+  @spec create_workspace_session_thread(String.t(), String.t(), attrs()) ::
+          {:ok, Thread.t()} | {:error, term()}
+  def create_workspace_session_thread(project_slug, workspace_path, attrs \\ %{})
+      when is_binary(project_slug) and is_binary(workspace_path) and is_map(attrs) do
+    with {:ok, slug} <- normalize_required_string(project_slug, :project_slug),
+         {:ok, path} <- normalize_required_string(workspace_path, :workspace_path),
+         {:ok, _project} <- Context.get_project(slug) do
+      attrs
+      |> Map.put(:scope, "project_session")
+      |> Map.put(:project_slug, slug)
+      |> Map.put_new(:title, "Workspace session")
+      |> Map.put(:workspace_path, path)
+      |> Map.put_new(:status, "active")
       |> then(&Thread.changeset(%Thread{}, &1))
       |> Repo.insert()
     end
@@ -1010,4 +1062,23 @@ defmodule SymphonyElixir.Assistant.History do
   defp normalize_required_string(_value, field), do: {:error, {:missing_required_field, field}}
 
   defp normalize_execution_mode(mode), do: ExecutionMode.normalize(mode)
+
+  # Default: the session shares the issue's working tree. With
+  # `isolated_workspace: true` a sibling `<safe_id>__p<N>` tree is materialized
+  # (after_create hook runs) so parallel work cannot collide with a running
+  # execution.
+  defp issue_session_workspace(slug, identifier, attrs) do
+    issue_ref = %{identifier: identifier, project_slug: slug}
+
+    if isolated_workspace?(attrs) do
+      parallel_path = Workspace.next_parallel_path(issue_ref)
+      Workspace.ensure_at(parallel_path, issue_ref)
+    else
+      {:ok, Workspace.path_for_issue(issue_ref)}
+    end
+  end
+
+  defp isolated_workspace?(attrs) do
+    Map.get(attrs, :isolated_workspace, Map.get(attrs, "isolated_workspace")) == true
+  end
 end
