@@ -2,19 +2,13 @@ import { Check, Clock, Loader2, Pause, Pencil, Play, Target, Trash2, X } from "l
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
+import { useNowTick } from "@/hooks/useNowTick";
+import { formatGoalClock } from "@/lib/timeFormat";
 import { cn } from "@/lib/utils";
 
 export type GoalPillPhase = "running" | "paused" | "stalled" | "completed" | "pending";
 
-export function formatGoalClock(seconds: number): string {
-  const safe = Math.max(0, Math.floor(seconds));
-  const h = Math.floor(safe / 3600);
-  const m = Math.floor((safe % 3600) / 60);
-  const s = safe % 60;
-  if (h > 0) return `${h}h ${m}m ${s}s`;
-  if (m > 0) return `${m}m ${s}s`;
-  return `${s}s`;
-}
+export { formatGoalClock } from "@/lib/timeFormat";
 
 /**
  * Codex-style goal indicator docked above a composer. Shared by the authoring
@@ -43,7 +37,7 @@ export function GoalPill({
   const { t } = useTranslation();
   const trimmed = objective?.trim() || null;
 
-  const [tick, setTick] = useState(() => Date.now());
+  const tick = useNowTick(1000, { enabled: running });
   const runStartRef = useRef<number | null>(null);
   const baseRef = useRef<number>(timeUsedSeconds ?? 0);
 
@@ -58,12 +52,6 @@ export function GoalPill({
       baseRef.current = timeUsedSeconds ?? baseRef.current;
     }
   }, [running, timeUsedSeconds]);
-
-  useEffect(() => {
-    if (!running) return;
-    const id = window.setInterval(() => setTick(Date.now()), 1000);
-    return () => window.clearInterval(id);
-  }, [running]);
 
   const elapsedSeconds =
     running && runStartRef.current != null

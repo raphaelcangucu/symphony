@@ -6,7 +6,9 @@ import { ResumeSessionButton } from "@/components/shared/ResumeSessionButton";
 import { SessionAgentBadge, SessionTypeBadge } from "@/components/shared/SessionBadge";
 import { SessionStatusBadge } from "@/components/sessions/SessionStatusBadge";
 import { canResumeExecution } from "@/lib/agentExecutionDisplay";
-import { cn, formatDateTime } from "@/lib/utils";
+import { executionStatusDotClass } from "@/lib/statusPresentation";
+import { formatDateTime, formatDurationSeconds } from "@/lib/timeFormat";
+import { cn } from "@/lib/utils";
 import type { AgentExecutionStatus } from "@/types/agent-execution";
 import type { ProjectSessionRow } from "@/lib/projectSessions";
 
@@ -58,7 +60,7 @@ export function SessionListItem({
                 {formatDateTime(session.lastEventAt)}
               </span>
               <span>{t("sessions.turns", { count: session.turnCount })}</span>
-              <span>{t("sessions.runtime", { value: formatRuntime(session.runtimeSeconds) })}</span>
+              <span>{t("sessions.runtime", { value: formatDurationSeconds(session.runtimeSeconds) })}</span>
             </div>
             {session.goalObjective ? (
               <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">
@@ -84,17 +86,6 @@ export function SessionListItem({
   );
 }
 
-const STATUS_DOT_CLASS: Record<AgentExecutionStatus, string> = {
-  live: "bg-emerald-500 animate-pulse",
-  retrying: "bg-orange-500 animate-pulse",
-  waiting: "bg-amber-500",
-  idle: "bg-slate-400",
-  saved: "bg-slate-500",
-  paused: "bg-amber-500",
-  error: "bg-red-500",
-  aborted: "bg-red-500",
-};
-
 function ExecutionStatusDot({ status, className }: { status: AgentExecutionStatus; className?: string }) {
   const { t } = useTranslation();
   const label = t(`sessions.status.${status}`);
@@ -104,19 +95,9 @@ function ExecutionStatusDot({ status, className }: { status: AgentExecutionStatu
       role="img"
       aria-label={label}
       title={label}
-      className={cn("inline-block h-2 w-2 shrink-0 rounded-full", STATUS_DOT_CLASS[status], className)}
+      className={cn("inline-block h-2 w-2 shrink-0 rounded-full", executionStatusDotClass(status), className)}
     />
   );
-}
-
-function formatRuntime(seconds: number | null): string {
-  if (seconds === null || seconds < 0) return "-";
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.floor(seconds / 60);
-  const remainder = seconds % 60;
-  if (minutes < 60) return `${minutes}m ${remainder.toString().padStart(2, "0")}s`;
-  const hours = Math.floor(minutes / 60);
-  return `${hours}h ${(minutes % 60).toString().padStart(2, "0")}m`;
 }
 
 export interface AuthoringSessionRow {

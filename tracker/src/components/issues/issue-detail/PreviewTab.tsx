@@ -17,6 +17,7 @@ import {
   stashPreviewAssistantHandoff,
 } from "@/lib/previewAssistantHandoff";
 import { issueAgentTabPath, type WorkspaceView } from "@/lib/workspaceRoutes";
+import { devServerStatusBadgeClass } from "@/lib/statusPresentation";
 import { cn } from "@/lib/utils";
 import type { AgentExecution } from "@/types/agent-execution";
 import type { IssueDevServer, IssueDevServerReason, IssueDevServerStatus, IssueDevServersResponse } from "@/types/issue";
@@ -27,15 +28,6 @@ interface PreviewTabProps {
   view: WorkspaceView;
   execution?: AgentExecution;
 }
-
-const STATUS_BADGE_CLASS: Record<IssueDevServerStatus, string> = {
-  crashed: "border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300",
-  pending: "border-slate-500/30 bg-slate-500/10 text-slate-700 dark:text-slate-300",
-  provisioning: "border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-300",
-  ready: "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-  starting: "border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-300",
-  stopped: "border-muted bg-muted text-muted-foreground",
-};
 
 const RETRYABLE_UNAVAILABLE_REASONS = new Set<IssueDevServerReason>([
   "lock_unavailable",
@@ -445,7 +437,7 @@ function ServerRow({
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-medium">{server.slug}</span>
             {server.primary ? <Badge variant="outline">{t("issue.preview.primaryBadge")}</Badge> : null}
-            <Badge className={cn("capitalize", STATUS_BADGE_CLASS[server.status])}>{server.status}</Badge>
+            <Badge className={cn("capitalize", devServerStatusBadgeClass(server.status))}>{server.status}</Badge>
           </div>
           <p className="text-xs text-muted-foreground">
             {server.working_dir

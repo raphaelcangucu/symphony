@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { Markdown } from "@/components/ui/markdown";
+import { formatShortDate } from "@/lib/timeFormat";
 import { cn } from "@/lib/utils";
 import { readIssueDocument } from "@/services/issueDocuments";
 import type { IssueDocument, IssueDocumentKind } from "@/types/issueDocument";
@@ -389,7 +390,7 @@ function DocumentListItem({
           {document.updatedAt ? (
             <>
               <span aria-hidden className="h-0.5 w-0.5 rounded-full bg-muted-foreground/50" />
-              <span>{formatUpdatedAt(document.updatedAt)}</span>
+              <span>{formatShortDate(document.updatedAt)}</span>
             </>
           ) : null}
         </span>
@@ -428,9 +429,3 @@ function groupDocumentsByKind(documents: IssueDocument[]): Array<{ kind: IssueDo
   })).filter((group) => group.documents.length > 0);
 }
 
-function formatUpdatedAt(updatedAt: string): string {
-  const date = new Date(updatedAt);
-  if (Number.isNaN(date.getTime())) return updatedAt;
-
-  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-}

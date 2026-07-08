@@ -10,11 +10,7 @@ import {
 } from "@/components/assistant/AssistantComposer";
 import { assistantCommandsToSlashDefs } from "@/components/assistant/assistantCommandDefs";
 import type { AssistantOutgoingAttachment } from "@/components/assistant/assistantAttachments";
-import {
-  expandComposerMentions,
-  parseMentionTokens,
-  type ResolvedMention,
-} from "@/components/assistant/contextMentions";
+import { useComposerMentions } from "@/hooks/useComposerMentions";
 import { useContextMentionData } from "@/components/assistant/useContextMentionData";
 import { defaultSkillCommands, parseSlashCommand } from "@/components/assistant/slashCommands";
 import { ExecutionCommandPalette } from "@/components/issues/issue-detail/ExecutionCommandPalette";
@@ -111,22 +107,7 @@ export function ExecutionControlComposer({
     }
     return assistantCommandsToSlashDefs(assistantCommands, t);
   }, [assistantCommands, assistantCommandsError, assistantCommandsLoading, t]);
-  // Cache resolved entities by token so dispatched instructions can expand the
-  // inline `@type:id` tokens into a `## Context` block, even across re-renders.
-  const resolvedMentionsRef = useRef<Map<string, ResolvedMention>>(new Map());
-
-  const rememberMention = useCallback((entity: ResolvedMention) => {
-    resolvedMentionsRef.current.set(`${entity.type}:${entity.id}`, entity);
-  }, []);
-
-  const expandMentions = useCallback((text: string): string => {
-    const tokens = parseMentionTokens(text);
-    if (tokens.length === 0) return text;
-    const resolved = tokens.map(
-      (token) => resolvedMentionsRef.current.get(`${token.type}:${token.id}`) ?? token,
-    );
-    return expandComposerMentions(text, resolved);
-  }, []);
+  const { rememberMention, expandMentions } = useComposerMentions();
 
   // Codex goals are sourced solely from the live execution snapshot (the native
   // Codex thread), never from the cached issue.agentGoal column.

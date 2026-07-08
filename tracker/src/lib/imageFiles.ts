@@ -1,5 +1,10 @@
 const IMAGE_EXTENSIONS = [".png", ".jpg", ".jpeg", ".gif", ".webp"] as const;
 
+/** Sanitize a file name for use as markdown image alt text. */
+export function sanitizeImageAlt(name: string): string {
+  return name.replace(/[[\]]/g, "").trim() || "image";
+}
+
 export function isImageFileName(name: string): boolean {
   const lower = name.trim().toLowerCase();
   return IMAGE_EXTENSIONS.some((ext) => lower.endsWith(ext));

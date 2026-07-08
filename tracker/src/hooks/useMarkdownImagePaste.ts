@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { validateImageFile } from "@/components/assistant/assistantAttachments";
 import { i18n } from "@/i18n";
 import { extractImageFilesFromClipboard } from "@/lib/clipboardImages";
+import { sanitizeImageAlt as sanitizeAlt } from "@/lib/imageFiles";
 import { uploadAssistantAttachment } from "@/services/assistant";
 import { projectAttachmentUrl } from "@/services/attachments";
 
@@ -15,10 +16,6 @@ interface UseMarkdownImagePasteOptions {
 interface UseMarkdownImagePasteResult {
   handlePaste: (event: ClipboardEvent<HTMLTextAreaElement>) => void;
   uploading: boolean;
-}
-
-function sanitizeAlt(name: string): string {
-  return name.replace(/[[\]]/g, "").trim() || "image";
 }
 
 function appendImageMarkdown(current: string, markdown: string): string {

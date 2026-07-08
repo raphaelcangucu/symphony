@@ -32,12 +32,8 @@ import {
   type AssistantChatPlanApprovalAction,
 } from "@/components/assistant/AssistantChatMessageBubble";
 import { assistantCommandsToSlashDefs } from "@/components/assistant/assistantCommandDefs";
-import {
-  type ComposerContextChipRef,
-  expandComposerMentions,
-  parseMentionTokens,
-  type ResolvedMention,
-} from "@/components/assistant/contextMentions";
+import { type ComposerContextChipRef } from "@/components/assistant/contextMentions";
+import { useComposerMentions } from "@/hooks/useComposerMentions";
 import { useContextMentionData } from "@/components/assistant/useContextMentionData";
 import { defaultSkillCommands } from "@/components/assistant/slashCommands";
 import {
@@ -354,7 +350,6 @@ export function ProjectAssistantPanel({
   const [executionMode, setExecutionMode] = useState<ExecutionMode>(DEFAULT_EXECUTION_MODE);
   const executionModeRef = useRef<ExecutionMode>(DEFAULT_EXECUTION_MODE);
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
-  const resolvedMentionsRef = useRef<Map<string, ResolvedMention>>(new Map());
   // Mentions work anywhere with a project context: issues are always searchable,
   // while file/PR sources self-disable when there is no bound issue identifier.
   const mentionsEnabled = Boolean(projectSlug);
@@ -385,18 +380,7 @@ export function ProjectAssistantPanel({
     executionModeRef.current = executionMode;
   }, [executionMode]);
 
-  const rememberMention = useCallback((entity: ResolvedMention) => {
-    resolvedMentionsRef.current.set(`${entity.type}:${entity.id}`, entity);
-  }, []);
-
-  const expandMentions = useCallback((text: string): string => {
-    const tokens = parseMentionTokens(text);
-    if (tokens.length === 0) return text;
-    const resolved = tokens.map(
-      (token) => resolvedMentionsRef.current.get(`${token.type}:${token.id}`) ?? token,
-    );
-    return expandComposerMentions(text, resolved);
-  }, []);
+  const { rememberMention, expandMentions } = useComposerMentions();
 
   const [composerHeight, setComposerHeight] = useState(0);
   const [workspaceDiffStats, setWorkspaceDiffStats] = useState<DiffStats | null>(null);

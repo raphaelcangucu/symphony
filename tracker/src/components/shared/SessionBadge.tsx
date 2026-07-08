@@ -2,6 +2,7 @@ import { Activity, MessageSquare } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { AGENT_ICONS } from "@/components/shared/AgentChip";
+import { recentStatusBadgeClass } from "@/lib/statusPresentation";
 import { cn } from "@/lib/utils";
 import type { AgentKind } from "@/types/issue";
 import type { RecentSession, RecentStatusKind } from "@/types/recents";
@@ -18,20 +19,6 @@ const AGENT_LABELS: Record<AgentKind, string> = {
 const SESSION_LABELS: Record<SessionBadgeKind, string> = {
   chat: "Chat",
   execution: "Execution",
-};
-
-const STATUS_CLASS: Record<RecentStatusKind, string> = {
-  running: "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-  retrying: "border-orange-500/30 bg-orange-500/10 text-orange-700 dark:text-orange-300",
-  waiting: "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
-  idle: "border-slate-500/30 bg-slate-500/10 text-slate-700 dark:text-slate-300",
-  active: "border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300",
-  in_progress: "border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-300",
-  todo: "border-slate-500/30 bg-slate-500/10 text-slate-700 dark:text-slate-300",
-  done: "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-  closed: "border-slate-500/30 bg-slate-500/10 text-slate-700 dark:text-slate-300",
-  error: "border-destructive/40 bg-destructive/10 text-destructive",
-  aborted: "border-destructive/40 bg-destructive/10 text-destructive",
 };
 
 export function shortAgentKindLabel(kind: AgentKind): string {
@@ -51,8 +38,8 @@ export function SessionTypeBadge({ kind, className }: { kind: SessionBadgeKind; 
       label={label}
       className={cn(
         kind === "execution"
-          ? "border-violet-200 bg-violet-50 text-violet-700"
-          : "border-sky-200 bg-sky-50 text-sky-700",
+          ? "border-violet-500/30 bg-violet-500/10 text-violet-700 dark:text-violet-300"
+          : "border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300",
         className,
       )}
       icon={<Icon className="h-3 w-3" aria-hidden="true" />}
@@ -82,7 +69,7 @@ export function SessionStatusKindBadge({
   label: string;
   className?: string;
 }) {
-  return <SessionBadgeShell label={label} className={cn(STATUS_CLASS[statusKind], className)} />;
+  return <SessionBadgeShell label={label} className={cn(recentStatusBadgeClass(statusKind), className)} />;
 }
 
 export function recentSessionBadgeKind(session: RecentSession): SessionBadgeKind {
