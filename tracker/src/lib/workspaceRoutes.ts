@@ -54,9 +54,15 @@ export function projectExploreAssistantPath(projectSlug: string): string {
   return `/projects/${requireSlug(projectSlug)}/assistant/explore`;
 }
 
+/**
+ * The Workspaces page is the evolution of the old Sessions page: same tabbed
+ * surface, but grouped by working tree. Legacy `/sessions` URLs redirect here.
+ */
 export function projectSessionsPath(projectSlug: string): string {
-  return `/projects/${requireSlug(projectSlug)}/sessions`;
+  return `/projects/${requireSlug(projectSlug)}/workspaces`;
 }
+
+export const projectWorkspacesPath = projectSessionsPath;
 
 export function projectTerminalPath(projectSlug: string): string {
   return `/projects/${requireSlug(projectSlug)}/terminal`;
@@ -155,7 +161,7 @@ export function issuePath(
 export const PROJECTS_PATH = "/projects";
 
 /** Top-level workspace sections reachable from the project header. */
-export const PROJECT_SECTIONS = ["board", "list", "sessions", "terminal", "assistant", "settings", "kb"] as const;
+export const PROJECT_SECTIONS = ["board", "list", "workspaces", "sessions", "terminal", "assistant", "settings", "kb"] as const;
 
 export type ProjectSection = (typeof PROJECT_SECTIONS)[number];
 

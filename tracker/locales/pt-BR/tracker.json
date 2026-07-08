@@ -106,24 +106,60 @@
       "insights": "Insights"
     },
     "sections": {
-      "general": { "label": "Geral" },
-      "appearance": { "label": "Aparência" },
-      "keybindings": { "label": "Atalhos" },
-      "providers": { "label": "Providers" },
-      "webAccess": { "label": "Acesso à web" },
-      "mcp": { "label": "Servidores MCP" },
-      "integrations": { "label": "Integrações" },
-      "githubCli": { "label": "GitHub CLI" },
-      "coderabbitCli": { "label": "CodeRabbit CLI" },
-      "terminal": { "label": "Terminal" },
-      "magicPrompts": { "label": "Magic Prompts" },
-      "opinionated": { "label": "Opinionated" },
-      "usage": { "label": "Uso" },
-      "experimental": { "label": "Experimental" },
-      "templates": { "label": "Templates" },
-      "backups": { "label": "Backups" },
-      "gateways": { "label": "Gateways" },
-      "lab": { "label": "Lab" }
+      "general": {
+        "label": "Geral"
+      },
+      "appearance": {
+        "label": "Aparência"
+      },
+      "keybindings": {
+        "label": "Atalhos"
+      },
+      "providers": {
+        "label": "Providers"
+      },
+      "webAccess": {
+        "label": "Acesso à web"
+      },
+      "mcp": {
+        "label": "Servidores MCP"
+      },
+      "integrations": {
+        "label": "Integrações"
+      },
+      "githubCli": {
+        "label": "GitHub CLI"
+      },
+      "coderabbitCli": {
+        "label": "CodeRabbit CLI"
+      },
+      "terminal": {
+        "label": "Terminal"
+      },
+      "magicPrompts": {
+        "label": "Magic Prompts"
+      },
+      "opinionated": {
+        "label": "Opinionated"
+      },
+      "usage": {
+        "label": "Uso"
+      },
+      "experimental": {
+        "label": "Experimental"
+      },
+      "templates": {
+        "label": "Templates"
+      },
+      "backups": {
+        "label": "Backups"
+      },
+      "gateways": {
+        "label": "Gateways"
+      },
+      "lab": {
+        "label": "Lab"
+      }
     },
     "loadFailed": "Falha ao carregar configurações — atualize para tentar novamente.",
     "codingAgent": {
@@ -201,7 +237,11 @@
       "description": "Com quem o Symphony se autentica em cada provider. A regra \"atribuídas a mim\" do orquestrador usa essas identidades.",
       "loadFailed": "Falha ao carregar identidades — atualize para tentar novamente.",
       "loading": "Carregando…",
-      "providers": { "github": "GitHub", "jira": "Jira", "linear": "Linear" },
+      "providers": {
+        "github": "GitHub",
+        "jira": "Jira",
+        "linear": "Linear"
+      },
       "status": {
         "notConfigured": "Não configurado",
         "connected": "Conectado",
@@ -259,7 +299,6 @@
         "claude": "Claude Code",
         "codex": "Codex",
         "cursor": "Cursor Agent",
-        "opencode": "OpenCode",
         "opencode": "OpenCode",
         "pi": "PI",
         "commandCode": "Command Code",
@@ -434,9 +473,18 @@
       "dispatchFailed": "Falha no dispatch",
       "executionMode": {
         "title": "Modo de execução",
-        "plan": { "label": "Plan", "desc": "Somente leitura — analisa e planeja, sem editar" },
-        "build": { "label": "Build", "desc": "Edita o workspace (padrão)" },
-        "yolo": { "label": "Yolo", "desc": "Acesso total, aprovações ignoradas" }
+        "plan": {
+          "label": "Plan",
+          "desc": "Somente leitura — analisa e planeja, sem editar"
+        },
+        "build": {
+          "label": "Build",
+          "desc": "Edita o workspace (padrão)"
+        },
+        "yolo": {
+          "label": "Yolo",
+          "desc": "Acesso total, aprovações ignoradas"
+        }
       },
       "mentions": {
         "listLabel": "Menções de contexto",
@@ -1223,7 +1271,10 @@
         "context": "Contexto: {{details}}",
         "constraints": "Restrições: siga artefatos, specs e planos existentes da issue quando houver; verifique as mudanças antes de reportar conclusão; pare quando concluir ou ficar bloqueado."
       },
-      "terms": { "goal": "goal", "workflow": "workflow" },
+      "terms": {
+        "goal": "goal",
+        "workflow": "workflow"
+      },
       "labels": "Labels",
       "assignees": "Assignees",
       "loadingLabels": "Carregando labels...",
@@ -2315,9 +2366,18 @@
       "retry": "Tentar novamente",
       "noContent": "Nenhum conteúdo para exibir.",
       "kinds": {
-        "spec": { "label": "Spec", "group": "Specs" },
-        "plan": { "label": "Plan", "group": "Plans" },
-        "handoff": { "label": "Handoff", "group": "Handoff" }
+        "spec": {
+          "label": "Spec",
+          "group": "Specs"
+        },
+        "plan": {
+          "label": "Plan",
+          "group": "Plans"
+        },
+        "handoff": {
+          "label": "Handoff",
+          "group": "Handoff"
+        }
       },
       "itemAria": "{{label}} {{title}}"
     },
@@ -2471,7 +2531,12 @@
       "knowledgeBase": "Base de Conhecimento",
       "switchProject": "Trocar de projeto",
       "loadingProjects": "Carregando projetos…",
-      "trackers": { "github": "GitHub Project", "linear": "Linear", "jira": "Jira" }
+      "trackers": {
+        "github": "GitHub Project",
+        "linear": "Linear",
+        "jira": "Jira"
+      },
+      "workspaces": "Workspaces"
     },
     "recents": {
       "title": "Recentes",
@@ -2589,7 +2654,10 @@
   "kb": {
     "loading": "Carregando…",
     "saved": "Salvo",
-    "sidebar": { "noDocs": "Sem docs ainda", "pages": "Páginas" },
+    "sidebar": {
+      "noDocs": "Sem docs ainda",
+      "pages": "Páginas"
+    },
     "actions": {
       "more": "Ações para {{title}}",
       "rename": "Renomear",
@@ -2824,6 +2892,64 @@
       "github_network_error": "Symphony não conseguiu alcançar o GitHub. Verifique a conectividade do servidor e tente novamente.",
       "missingLogin": "A resposta do viewer não inclui o login do GitHub.",
       "default": "Symphony não conseguiu identificar o operador. Verifique a configuração do servidor."
+    }
+  },
+  "workspacesPage": {
+    "title": "Workspaces",
+    "sections": {
+      "project": "Workspaces do projeto",
+      "active": "Issues ativas",
+      "waiting": "Aguardando",
+      "orphans": "Recuperáveis",
+      "chats": "Conversas do projeto"
+    },
+    "projectWorkspace": "Workspace do projeto (padrão)",
+    "standaloneBadge": "Avulso",
+    "parallelBadge": "Tree isolada",
+    "orphanBadge": "Órfão",
+    "workPresentWarning": "Trabalho não publicado",
+    "issueGone": "Issue removida ou arquivada",
+    "reposDirty": "{{count}} arquivos alterados",
+    "clean": "limpo",
+    "ahead": "{{count}} à frente",
+    "totals": "{{count}} trees · {{size}} · {{reclaimable}} recuperáveis",
+    "cleanup": {
+      "button": "Limpar…",
+      "title": "Limpar working trees",
+      "description": "Trees órfãs sem trabalho não publicado vêm pré-selecionadas. A remoção apaga o diretório inteiro.",
+      "sizeColumn": "Tamanho",
+      "empty": "Nada para limpar.",
+      "confirm": "Remover selecionados",
+      "removing": "Removendo…",
+      "done": "{{count}} working trees removidas",
+      "partial": "{{removed}} removidas, {{skipped}} puladas",
+      "failed": "Falha na limpeza",
+      "blockedExecution": "Execução ativa",
+      "cancel": "Cancelar"
+    },
+    "newWorkspace": {
+      "button": "Novo workspace",
+      "title": "Novo workspace avulso",
+      "description": "Uma working tree limpa para este projeto, sem vínculo com issue.",
+      "nameLabel": "Nome",
+      "namePlaceholder": "spike-cache",
+      "branchesLabel": "Branch por repositório",
+      "branchPlaceholder": "branch padrão",
+      "create": "Criar workspace",
+      "creating": "Criando…",
+      "created": "Workspace {{name}} criado",
+      "failed": "Não foi possível criar o workspace"
+    },
+    "newSession": {
+      "button": "Nova sessão",
+      "isolatedLabel": "Working tree isolada",
+      "isolatedHint": "Cria uma tree irmã limpa para que esta sessão não conflite com a execução em andamento."
+    },
+    "sessionRows": {
+      "execution": "Execution",
+      "authoring": "Authoring",
+      "open": "Abrir",
+      "remove": "Remover"
     }
   }
 }

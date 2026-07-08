@@ -140,7 +140,7 @@ describe("NewIssueMenu", () => {
             path="/projects/macro-markets/board"
             element={<NewIssueMenu projectSlug="macro-markets" />}
           />
-          <Route path="/projects/macro-markets/sessions" element={<div>Project sessions</div>} />
+          <Route path="/projects/macro-markets/workspaces" element={<div>Project sessions</div>} />
         </Routes>
       </MemoryRouter>,
     );

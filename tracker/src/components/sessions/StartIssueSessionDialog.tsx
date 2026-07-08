@@ -59,6 +59,7 @@ export function StartIssueSessionDialog({
   const [agent, setAgent] = useState<AgentKind>("codex");
   const [title, setTitle] = useState("");
   const [instructions, setInstructions] = useState("");
+  const [isolatedWorkspace, setIsolatedWorkspace] = useState(false);
   const [starting, setStarting] = useState(false);
   const initializedForRef = useRef<string | null>(null);
 
@@ -77,6 +78,7 @@ export function StartIssueSessionDialog({
     setAgent(resolveDefaultAgent(issue));
     setTitle("");
     setInstructions("");
+    setIsolatedWorkspace(false);
     setStarting(false);
   }, [open, issue?.identifier, issue?.agentKind]);
 
@@ -92,6 +94,7 @@ export function StartIssueSessionDialog({
           agent,
           title: title.trim() || t("issue.sessions.defaultSessionTitle"),
           instructions: instructions.trim() || null,
+          isolatedWorkspace,
         },
         t,
       );
@@ -174,6 +177,24 @@ export function StartIssueSessionDialog({
                 disabled={starting}
               />
             </div>
+
+            <label className="flex cursor-pointer items-start gap-2">
+              <input
+                type="checkbox"
+                className="mt-0.5 h-4 w-4 accent-primary"
+                checked={isolatedWorkspace}
+                disabled={starting}
+                onChange={(event) => setIsolatedWorkspace(event.target.checked)}
+              />
+              <span className="min-w-0">
+                <span className="block text-xs font-medium text-foreground">
+                  {t("workspacesPage.newSession.isolatedLabel")}
+                </span>
+                <span className="block text-xs text-muted-foreground">
+                  {t("workspacesPage.newSession.isolatedHint")}
+                </span>
+              </span>
+            </label>
           </div>
         ) : null}
 

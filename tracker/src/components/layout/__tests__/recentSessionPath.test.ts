@@ -14,7 +14,7 @@ describe("recentSessionPath", () => {
     expect(recentSessionPath({ ...base, kind: "chat", scope: "freeform", threadId: 7 })).toBe("/assistant/7");
   });
   it("project chat with thread id → /projects/:slug/sessions/:threadId", () => {
-    expect(recentSessionPath({ ...base, kind: "chat", scope: "project", projectSlug: "demo", threadId: 3 })).toBe("/projects/demo/sessions/3");
+    expect(recentSessionPath({ ...base, kind: "chat", scope: "project", projectSlug: "demo", threadId: 3 })).toBe("/projects/demo/workspaces/3");
   });
 
   it("project explore chat → /projects/:slug/assistant/explore", () => {
@@ -24,13 +24,13 @@ describe("recentSessionPath", () => {
   });
   it("codex → sessions page inline execution tab", () => {
     expect(recentSessionPath({ ...base, kind: "codex", scope: null, projectSlug: "demo", identifier: "ABC-1" })).toBe(
-      "/projects/demo/sessions?exec=ABC-1&agent=execution",
+      "/projects/demo/workspaces?exec=ABC-1&agent=execution",
     );
   });
   it("issue authoring chat → project sessions authoring tab", () => {
     expect(
       recentSessionPath({ ...base, kind: "chat", scope: "issue", projectSlug: "demo", identifier: "ABC-1", threadId: 9 }),
-    ).toBe("/projects/demo/sessions?exec=ABC-1&agent=authoring");
+    ).toBe("/projects/demo/workspaces?exec=ABC-1&agent=authoring");
   });
   it("issue_session chat → /projects/:slug/sessions/:threadId", () => {
     expect(
@@ -42,7 +42,7 @@ describe("recentSessionPath", () => {
         identifier: "ABC-1",
         threadId: 9,
       }),
-    ).toBe("/projects/demo/sessions/9");
+    ).toBe("/projects/demo/workspaces/9");
   });
   it("chat session links preserve the stored agent", () => {
     expect(
@@ -55,12 +55,12 @@ describe("recentSessionPath", () => {
         identifier: "ABC-1",
         threadId: 9,
       }),
-    ).toBe("/projects/demo/sessions/9?assistant_agent=cursor");
+    ).toBe("/projects/demo/workspaces/9?assistant_agent=cursor");
   });
   it("issue authoring chat without thread id still opens authoring tab", () => {
     expect(
       recentSessionPath({ ...base, kind: "chat", scope: "issue", projectSlug: "demo", identifier: "ABC-1", threadId: null }),
-    ).toBe("/projects/demo/sessions?exec=ABC-1&agent=authoring");
+    ).toBe("/projects/demo/workspaces?exec=ABC-1&agent=authoring");
   });
   it("freeform chat without threadId → /assistant", () => {
     expect(recentSessionPath({ ...base, kind: "chat", scope: "freeform", threadId: null })).toBe("/assistant");

@@ -61,6 +61,7 @@ describe("StartIssueSessionDialog", () => {
         title: "Build pass 2",
         agentKind: "codex",
         executionMode: "build",
+        isolatedWorkspace: false,
       }),
     );
     expect(onCreated).toHaveBeenCalledWith(expect.objectContaining({ id: 42 }));

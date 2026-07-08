@@ -201,7 +201,7 @@ export function ProjectHeader({
             className={({ isActive }) => cn(isActive && "bg-accent text-foreground")}
           >
             <History className="h-4 w-4" />
-            {t("layout.projectHeader.sessions")}
+            {t("layout.projectHeader.workspaces")}
             {normalizedSessionsCount != null ? (
               <span className="rounded-full border border-border/70 bg-background px-1.5 py-0 text-[10px] font-medium leading-4 text-muted-foreground">
                 {normalizedSessionsCount}

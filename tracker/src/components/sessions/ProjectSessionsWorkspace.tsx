@@ -1,4 +1,4 @@
-import { Clock, MessageSquare } from "lucide-react";
+import { Clock, FolderPlus, MessageSquare, Trash2 } from "lucide-react";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
 import { IssueTerminalDock } from "@/components/sessions/IssueTerminalDock";
@@ -15,13 +15,19 @@ import { useWorkspace } from "@/components/layout/WorkspaceContext";
 import { AssistantSessionTabContent } from "@/components/sessions/AssistantSessionTabContent";
 import { IssueAuthoringSessionPanel } from "@/components/issues/issue-detail/IssueAuthoringSessionPanel";
 import { IssueExecutionSessionPanel } from "@/components/issues/issue-detail/IssueExecutionSessionPanel";
-import { AuthoringSessionListItem, SessionListItem, type AuthoringSessionRow } from "@/components/sessions/SessionListItem";
+import { NewStandaloneWorkspaceDialog } from "@/components/sessions/NewStandaloneWorkspaceDialog";
+import { type AuthoringSessionRow } from "@/components/sessions/SessionListItem";
+import { StartIssueSessionDialog, type StartIssueSessionDialogIssue } from "@/components/sessions/StartIssueSessionDialog";
+import { WorkspaceCardItem } from "@/components/sessions/WorkspaceCardItem";
+import { WorkspaceCleanupDialog } from "@/components/sessions/WorkspaceCleanupDialog";
 import { RecentSessionBadges } from "@/components/shared/SessionBadge";
+import { Button } from "@/components/ui/button";
 import { WorkspaceTabBar } from "@/components/workspace/WorkspaceTabBar";
 import { useArchiveChat } from "@/hooks/useArchiveChat";
 import { useProjectSessions } from "@/hooks/useProjectSessions";
 import { useWorkspaceTabs } from "@/hooks/useWorkspaceTabs";
-import { PROJECT_SESSION_BUCKETS, type ProjectSessionRow } from "@/lib/projectSessions";
+import { type ProjectSessionRow } from "@/lib/projectSessions";
+import { buildWorkspaceCards, formatBytes, type WorkspaceCard } from "@/lib/workspaceCards";
 import { cn, formatDateTime, SCROLLBAR_THIN } from "@/lib/utils";
 import {
   SESSIONS_LIST_TAB_ID,
@@ -42,14 +48,10 @@ import {
 } from "@/lib/workspaceRoutes";
 import { dispatchIssueAgent } from "@/services/issueDispatch";
 import { createProjectSessionThread } from "@/services/assistantThreads";
+import { removeWorkspaces } from "@/services/worktrees";
 import type { AgentExecution } from "@/types/agent-execution";
 import type { Issue } from "@/types/issue";
 import type { RecentSession } from "@/types/recents";
-
-type UnifiedSessionItem =
-  | { kind: "execution"; key: string; sortValue: number; session: ProjectSessionRow }
-  | { kind: "authoring"; key: string; sortValue: number; session: AuthoringSessionRow }
-  | { kind: "related"; key: string; sortValue: number; session: RecentSession };
 
 interface ProjectSessionsWorkspaceProps {
   projectSlug: string;
@@ -67,13 +69,17 @@ export function ProjectSessionsWorkspace({
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { view } = useWorkspace();
-  const { groups, relatedSessions, issues, executions, isLoading, error, refetch } = useProjectSessions(projectSlug);
+  const { relatedSessions, issues, executions, inventory, isLoading, error, refetch } =
+    useProjectSessions(projectSlug);
   const setSessionsChrome = useContext(ProjectSessionsChromeSetterContext);
   const [resumePending, setResumePending] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [cleanupOpen, setCleanupOpen] = useState(false);
+  const [newWorkspaceOpen, setNewWorkspaceOpen] = useState(false);
+  const [newSessionIssue, setNewSessionIssue] = useState<StartIssueSessionDialogIssue | null>(null);
   const { archiving, archiveChat } = useArchiveChat(() => void refetch());
 
-  const canonicalTabs = useMemo(() => [createSessionsListTab(t("sessions.title"))], [t]);
+  const canonicalTabs = useMemo(() => [createSessionsListTab(t("workspacesPage.title"))], [t]);
 
   const splitContainerRef = useRef<HTMLDivElement>(null);
   const [terminalDockIssue, setTerminalDockIssue] = useState<string | null>(null);
@@ -134,6 +140,28 @@ export function ProjectSessionsWorkspace({
     [navigate, openTab, projectSlug, t],
   );
 
+  const openAuthoringByIdentifier = useCallback(
+    (issueIdentifier: string) => {
+      const issue = issues.find((entry) => entry.identifier === issueIdentifier);
+      openAuthoringSession({
+        issueIdentifier,
+        title: issue?.title ?? issueIdentifier,
+        updatedAt: "",
+        agentKind: null,
+      });
+    },
+    [issues, openAuthoringSession],
+  );
+
+  const openRecentSession = useCallback(
+    (session: RecentSession) => {
+      if (session.threadId != null) {
+        openAssistantSession(session.threadId, session.title);
+      }
+    },
+    [openAssistantSession],
+  );
+
   useEffect(() => {
     if (!activeThreadId) return;
     openTab(createAssistantSessionTab(activeThreadId, t("sessions.newSessionTitle")));
@@ -141,12 +169,9 @@ export function ProjectSessionsWorkspace({
 
   const executionTitleLookup = useMemo(() => {
     const titles = new Map<string, string>();
-    for (const bucket of PROJECT_SESSION_BUCKETS) {
-      for (const row of groups[bucket]) titles.set(row.issueIdentifier, row.title);
-    }
-    for (const issue of issues) if (!titles.has(issue.identifier)) titles.set(issue.identifier, issue.title);
+    for (const issue of issues) titles.set(issue.identifier, issue.title);
     return titles;
-  }, [groups, issues]);
+  }, [issues]);
 
   const openedAuthoringRef = useRef<string | null>(null);
   useEffect(() => {
@@ -262,57 +287,55 @@ export function ProjectSessionsWorkspace({
     [archiveChat],
   );
 
-  const executionSessions = useMemo(
-    () => PROJECT_SESSION_BUCKETS.flatMap((bucket) => groups[bucket]),
-    [groups],
+  const cards = useMemo(
+    () =>
+      buildWorkspaceCards({
+        executions: executions.values(),
+        issues,
+        relatedSessions,
+        inventory: inventory?.entries ?? [],
+      }),
+    [executions, inventory, issues, relatedSessions],
   );
-  const authoringSessions = useMemo((): AuthoringSessionRow[] => {
-    const rows = new Map<string, AuthoringSessionRow>();
-    for (const session of executionSessions) {
-      rows.set(session.issueIdentifier, {
-        issueIdentifier: session.issueIdentifier,
-        title: session.title,
-        updatedAt: session.lastEventAt ?? session.startedAt ?? "",
-        agentKind: session.agentKind,
-      });
-    }
-    for (const session of relatedSessions) {
-      if (session.scope !== "issue" || !session.identifier || rows.has(session.identifier)) continue;
-      rows.set(session.identifier, {
-        issueIdentifier: session.identifier,
-        title: session.title,
-        updatedAt: session.updatedAt,
-        agentKind: session.agentKind === "opencode" ? null : session.agentKind,
-      });
-    }
-    return [...rows.values()];
-  }, [executionSessions, relatedSessions]);
+  const total =
+    cards.projectCards.length +
+    cards.activeCards.length +
+    cards.waitingCards.length +
+    cards.orphanCards.length +
+    cards.chatSessions.length;
 
-  const sessionItems = useMemo<UnifiedSessionItem[]>(() => {
-    const executionItems: UnifiedSessionItem[] = executionSessions.map((session) => ({
-      kind: "execution",
-      key: `execution:${session.issueIdentifier}`,
-      sortValue: timestampValue(session.lastEventAt ?? session.startedAt),
-      session,
-    }));
-    const authoringItems: UnifiedSessionItem[] = authoringSessions.map((session) => ({
-      kind: "authoring",
-      key: `authoring:${session.issueIdentifier}`,
-      sortValue: timestampValue(session.updatedAt),
-      session,
-    }));
-    const relatedItems: UnifiedSessionItem[] = relatedSessions
-      .filter((session) => session.scope !== "issue")
-      .map((session) => ({
-        kind: "related",
-        key: `related:${session.id}`,
-        sortValue: timestampValue(session.updatedAt),
-        session,
-      }));
+  const projectRepos = useMemo(() => {
+    const projectEntry = inventory?.entries.find((entry) => entry.kind === "project");
+    return projectEntry?.repos ?? [];
+  }, [inventory]);
 
-    return [...executionItems, ...authoringItems, ...relatedItems].sort((a, b) => b.sortValue - a.sortValue);
-  }, [authoringSessions, executionSessions, relatedSessions]);
-  const total = sessionItems.length;
+  const handleRemoveWorkspace = useCallback(
+    async (path: string) => {
+      try {
+        const results = await removeWorkspaces(projectSlug, [path]);
+        const skipped = results.find((result) => result.status === "skipped");
+        if (skipped) {
+          toast.warning(skipped.reason ?? t("workspacesPage.cleanup.failed"));
+        }
+        await refetch();
+      } catch (cause) {
+        toast.error(cause instanceof Error ? cause.message : t("workspacesPage.cleanup.failed"));
+      }
+    },
+    [projectSlug, refetch, t],
+  );
+
+  const handleNewSession = useCallback(
+    (issueIdentifier: string) => {
+      const issue = issues.find((entry) => entry.identifier === issueIdentifier);
+      setNewSessionIssue({
+        identifier: issueIdentifier,
+        title: issue?.title ?? issueIdentifier,
+        agentKind: executions.get(issueIdentifier)?.agentKind ?? null,
+      });
+    },
+    [executions, issues],
+  );
 
   useEffect(() => {
     if (!setSessionsChrome) return;
@@ -357,6 +380,30 @@ export function ProjectSessionsWorkspace({
 
         {activeTab?.kind === "sessions-list" ? (
           <div className={cn("min-h-0 flex-1 overflow-y-auto", SCROLLBAR_THIN)}>
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2 px-1">
+              <span className="text-xs text-muted-foreground">
+                {inventory
+                  ? t("workspacesPage.totals", {
+                      count: inventory.totals.count,
+                      size: formatBytes(inventory.totals.sizeBytes),
+                      reclaimable: formatBytes(inventory.totals.reclaimableBytes),
+                    })
+                  : null}
+              </span>
+              <div className="flex items-center gap-2">
+                <Button type="button" variant="outline" size="sm" onClick={() => setNewWorkspaceOpen(true)}>
+                  <FolderPlus className="h-3.5 w-3.5" />
+                  {t("workspacesPage.newWorkspace.button")}
+                </Button>
+                {inventory ? (
+                  <Button type="button" variant="outline" size="sm" onClick={() => setCleanupOpen(true)}>
+                    <Trash2 className="h-3.5 w-3.5" />
+                    {t("workspacesPage.cleanup.button")}
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+
             {isLoading && total === 0 ? (
               <div className="rounded-lg border border-dashed bg-background/70 px-5 py-10 text-center text-sm text-muted-foreground">
                 {t("sessions.loading")}
@@ -369,20 +416,79 @@ export function ProjectSessionsWorkspace({
               </div>
             ) : null}
 
-            {sessionItems.length > 0 ? (
-              <UnifiedSessionsList
-                items={sessionItems}
+            <div className="space-y-4">
+              <WorkspaceCardSection
+                title={t("workspacesPage.sections.project")}
+                cards={cards.projectCards}
                 projectSlug={projectSlug}
                 view={view}
                 resumePending={resumePending}
-                archiving={archiving}
+                onOpenExecution={openExecutionSession}
+                onOpenAuthoring={openAuthoringByIdentifier}
+                onOpenSession={openRecentSession}
                 onResume={handleResume}
-                onArchive={handleArchive}
-                onOpenAuthoringSession={openAuthoringSession}
-                onOpenExecutionSession={openExecutionSession}
-                onOpenAssistantSession={openAssistantSession}
+                onNewSession={handleNewSession}
+                onRemove={handleRemoveWorkspace}
               />
-            ) : null}
+              <WorkspaceCardSection
+                title={t("workspacesPage.sections.active")}
+                cards={cards.activeCards}
+                projectSlug={projectSlug}
+                view={view}
+                resumePending={resumePending}
+                onOpenExecution={openExecutionSession}
+                onOpenAuthoring={openAuthoringByIdentifier}
+                onOpenSession={openRecentSession}
+                onResume={handleResume}
+                onNewSession={handleNewSession}
+                onRemove={handleRemoveWorkspace}
+              />
+              <WorkspaceCardSection
+                title={t("workspacesPage.sections.waiting")}
+                cards={cards.waitingCards}
+                projectSlug={projectSlug}
+                view={view}
+                resumePending={resumePending}
+                onOpenExecution={openExecutionSession}
+                onOpenAuthoring={openAuthoringByIdentifier}
+                onOpenSession={openRecentSession}
+                onResume={handleResume}
+                onNewSession={handleNewSession}
+                onRemove={handleRemoveWorkspace}
+              />
+              <WorkspaceCardSection
+                title={t("workspacesPage.sections.orphans")}
+                cards={cards.orphanCards}
+                projectSlug={projectSlug}
+                view={view}
+                resumePending={resumePending}
+                onOpenExecution={openExecutionSession}
+                onOpenAuthoring={openAuthoringByIdentifier}
+                onOpenSession={openRecentSession}
+                onResume={handleResume}
+                onNewSession={handleNewSession}
+                onRemove={handleRemoveWorkspace}
+              />
+
+              {cards.chatSessions.length > 0 ? (
+                <section>
+                  <h2 className="mb-2 px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    {t("workspacesPage.sections.chats")}
+                  </h2>
+                  <ul className="grid gap-2 md:grid-cols-2">
+                    {cards.chatSessions.map((session) => (
+                      <RelatedSessionCard
+                        key={session.id}
+                        session={session}
+                        archiving={archiving}
+                        onArchive={handleArchive}
+                        onOpenAssistantSession={openAssistantSession}
+                      />
+                    ))}
+                  </ul>
+                </section>
+              ) : null}
+            </div>
           </div>
         ) : null}
 
@@ -430,8 +536,93 @@ export function ProjectSessionsWorkspace({
         />
       ) : null}
       </div>
+
+      <StartIssueSessionDialog
+        projectSlug={projectSlug}
+        issue={newSessionIssue}
+        open={newSessionIssue !== null}
+        onOpenChange={(open) => {
+          if (!open) setNewSessionIssue(null);
+        }}
+        view={view}
+        navigateToProjectSession
+        onCreated={() => void refetch()}
+      />
+
+      {inventory ? (
+        <WorkspaceCleanupDialog
+          projectSlug={projectSlug}
+          entries={inventory.entries}
+          open={cleanupOpen}
+          onOpenChange={setCleanupOpen}
+          onCleaned={() => void refetch()}
+        />
+      ) : null}
+
+      <NewStandaloneWorkspaceDialog
+        projectSlug={projectSlug}
+        projectRepos={projectRepos}
+        open={newWorkspaceOpen}
+        onOpenChange={setNewWorkspaceOpen}
+        onCreated={(_, threadId) => {
+          void refetch();
+          navigate(projectSessionPath(projectSlug, threadId), { replace: true });
+        }}
+      />
     </main>
     </SessionTerminalDockContext.Provider>
+  );
+}
+
+function WorkspaceCardSection({
+  title,
+  cards,
+  projectSlug,
+  view,
+  resumePending,
+  onOpenExecution,
+  onOpenAuthoring,
+  onOpenSession,
+  onResume,
+  onNewSession,
+  onRemove,
+}: {
+  title: string;
+  cards: WorkspaceCard[];
+  projectSlug: string;
+  view: WorkspaceView;
+  resumePending: string | null;
+  onOpenExecution: (session: ProjectSessionRow) => void;
+  onOpenAuthoring: (issueIdentifier: string) => void;
+  onOpenSession: (session: RecentSession) => void;
+  onResume: (session: ProjectSessionRow) => void;
+  onNewSession: (issueIdentifier: string) => void;
+  onRemove: (path: string) => void;
+}) {
+  if (cards.length === 0) return null;
+
+  return (
+    <section>
+      <h2 className="mb-2 px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</h2>
+      <ul className="grid gap-2">
+        {cards.map((card) => (
+          <WorkspaceCardItem
+            key={card.key}
+            card={card}
+            issueHref={
+              card.issueIdentifier ? issuePath(projectSlug, view, card.issueIdentifier, "sessions") : null
+            }
+            resumePending={resumePending === card.issueIdentifier}
+            onOpenExecution={onOpenExecution}
+            onOpenAuthoring={onOpenAuthoring}
+            onOpenSession={onOpenSession}
+            onResume={onResume}
+            onNewSession={onNewSession}
+            onRemove={onRemove}
+          />
+        ))}
+      </ul>
+    </section>
   );
 }
 
@@ -506,62 +697,6 @@ function ExecutionSessionTabContent({
         onIssueUpdated={onIssueUpdated}
       />
     </section>
-  );
-}
-
-function UnifiedSessionsList({
-  items,
-  projectSlug,
-  view,
-  resumePending,
-  archiving,
-  onResume,
-  onArchive,
-  onOpenAuthoringSession,
-  onOpenExecutionSession,
-  onOpenAssistantSession,
-}: {
-  items: UnifiedSessionItem[];
-  projectSlug: string;
-  view: WorkspaceView;
-  resumePending: string | null;
-  archiving: boolean;
-  onResume: (session: ProjectSessionRow) => void;
-  onArchive: (threadId: number) => void;
-  onOpenAuthoringSession: (session: AuthoringSessionRow) => void;
-  onOpenExecutionSession: (session: ProjectSessionRow) => void;
-  onOpenAssistantSession: (threadId: number, title: string) => void;
-}) {
-  return (
-    <ul className="grid gap-2 md:grid-cols-2">
-      {items.map((item) =>
-        item.kind === "execution" ? (
-          <SessionListItem
-            key={item.key}
-            session={item.session}
-            issueHref={issuePath(projectSlug, view, item.session.issueIdentifier, "sessions")}
-            resumePending={resumePending === item.session.issueIdentifier}
-            onOpen={onOpenExecutionSession}
-            onResume={onResume}
-          />
-        ) : item.kind === "authoring" ? (
-          <AuthoringSessionListItem
-            key={item.key}
-            session={item.session}
-            issueHref={issuePath(projectSlug, view, item.session.issueIdentifier, "sessions")}
-            onOpen={onOpenAuthoringSession}
-          />
-        ) : (
-          <RelatedSessionCard
-            key={item.key}
-            session={item.session}
-            archiving={archiving}
-            onArchive={onArchive}
-            onOpenAssistantSession={onOpenAssistantSession}
-          />
-        ),
-      )}
-    </ul>
   );
 }
 
@@ -655,8 +790,3 @@ function SessionKindBadge({ session }: { session: RecentSession }) {
   return <RecentSessionBadges session={session} />;
 }
 
-function timestampValue(value: string | null | undefined): number {
-  if (!value) return 0;
-  const parsed = Date.parse(value);
-  return Number.isFinite(parsed) ? parsed : 0;
-}

@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { BrowserRouter, Navigate, Outlet, Route, Routes, useParams } from "react-router-dom";
+import { BrowserRouter, Navigate, Outlet, Route, Routes, useLocation, useParams } from "react-router-dom";
 import { Toaster } from "sonner";
 
 import { ViewerProvider } from "@/components/auth/ViewerProvider";
@@ -58,6 +58,13 @@ function LegacyTemplateRedirect() {
   return <Navigate to={settingsTemplatesPath(slug || undefined)} replace />;
 }
 
+function LegacySessionsRedirect() {
+  const { projectSlug = "", threadId } = useParams();
+  const location = useLocation();
+  const suffix = threadId ? `/${encodeURIComponent(threadId)}` : "";
+  return <Navigate to={`/projects/${projectSlug}/workspaces${suffix}${location.search}`} replace />;
+}
+
 export function App() {
   return (
     <BrowserRouter basename={routerBasename}>
@@ -99,8 +106,11 @@ export function App() {
                 <Route path="assistant/terminal" element={<ProjectTerminalRoute />} />
                 <Route path="assistant/new-issue" element={<IssueAssistantRoute />} />
                 <Route path="assistant/issue/:issueId" element={<IssueAssistantRoute />} />
-                <Route path="sessions" element={<ProjectSessionsPage />} />
-                <Route path="sessions/:threadId" element={<ProjectSessionPage />} />
+                <Route path="workspaces" element={<ProjectSessionsPage />} />
+                <Route path="workspaces/:threadId" element={<ProjectSessionPage />} />
+                {/* Legacy Sessions URLs redirect to the Workspaces page. */}
+                <Route path="sessions" element={<LegacySessionsRedirect />} />
+                <Route path="sessions/:threadId" element={<LegacySessionsRedirect />} />
                 <Route path="terminal" element={<ProjectTerminalPage />} />
                 <Route path="settings" element={<ProjectSettingsPage />} />
                 <Route path="settings/:tab" element={<ProjectSettingsPage />} />

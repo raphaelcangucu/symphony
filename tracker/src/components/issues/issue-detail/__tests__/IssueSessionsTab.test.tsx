@@ -93,12 +93,12 @@ describe("IssueSessionsTab", () => {
     );
 
     await user.click(screen.getByRole("button", { name: /open execution session MAC-510/i }));
-    expect(navigateMock).toHaveBeenCalledWith("/projects/macro-markets/sessions?exec=MAC-510&agent=execution");
+    expect(navigateMock).toHaveBeenCalledWith("/projects/macro-markets/workspaces?exec=MAC-510&agent=execution");
 
     await user.click(screen.getByText("Build pass 1"));
-    expect(navigateMock).toHaveBeenCalledWith("/projects/macro-markets/sessions/12");
+    expect(navigateMock).toHaveBeenCalledWith("/projects/macro-markets/workspaces/12");
 
     await user.click(screen.getByText("Issue plan draft"));
-    expect(navigateMock).toHaveBeenCalledWith("/projects/macro-markets/sessions?exec=MAC-510&agent=authoring");
+    expect(navigateMock).toHaveBeenCalledWith("/projects/macro-markets/workspaces?exec=MAC-510&agent=authoring");
   });
 });

@@ -11,6 +11,8 @@ export interface CreateIssueSessionInput {
   agent?: AgentKind | null;
   title?: string | null;
   instructions?: string | null;
+  /** When true the session gets its own clean sibling working tree. */
+  isolatedWorkspace?: boolean;
 }
 
 export async function createIssueSession(
@@ -23,6 +25,7 @@ export async function createIssueSession(
     title: input.title?.trim() || undefined,
     agentKind: input.agent === "opencode" ? undefined : (input.agent ?? undefined),
     executionMode: input.mode ?? "build",
+    isolatedWorkspace: input.isolatedWorkspace === true,
   });
 
   if (t) {

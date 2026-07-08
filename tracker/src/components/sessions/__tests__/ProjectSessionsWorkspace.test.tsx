@@ -59,6 +59,7 @@ describe("ProjectSessionsWorkspace", () => {
       relatedSessions: [],
       issues: [],
       executions: new Map(),
+      inventory: null,
       isLoading: false,
       error: null,
       refetch,
@@ -79,7 +80,7 @@ describe("ProjectSessionsWorkspace", () => {
 
   it("omits the duplicate sessions page header", () => {
     renderWithI18n(
-      <MemoryRouter initialEntries={["/projects/demo/sessions"]}>
+      <MemoryRouter initialEntries={["/projects/demo/workspaces"]}>
         <ProjectSessionsWorkspace projectSlug="demo" />
       </MemoryRouter>,
     );
@@ -92,7 +93,7 @@ describe("ProjectSessionsWorkspace", () => {
 
   it("opens a new assistant session in a tab", async () => {
     renderWithI18n(
-      <MemoryRouter initialEntries={["/projects/demo/sessions"]}>
+      <MemoryRouter initialEntries={["/projects/demo/workspaces"]}>
         <SessionsChromeHarness>
           <ProjectSessionsWorkspace projectSlug="demo" />
         </SessionsChromeHarness>
@@ -108,7 +109,7 @@ describe("ProjectSessionsWorkspace", () => {
 
   it("selects an active thread tab from the route", async () => {
     const { container } = renderWithI18n(
-      <MemoryRouter initialEntries={["/projects/demo/sessions/42"]}>
+      <MemoryRouter initialEntries={["/projects/demo/workspaces/42"]}>
         <ProjectSessionsWorkspace projectSlug="demo" activeThreadId={42} />
       </MemoryRouter>,
     );

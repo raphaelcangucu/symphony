@@ -95,7 +95,7 @@ describe("AssistantPage", () => {
     );
     expect(screen.getByRole("link", { name: /Fix login/ })).toHaveAttribute(
       "href",
-      "/projects/app/sessions?exec=ABC-12&agent=execution",
+      "/projects/app/workspaces?exec=ABC-12&agent=execution",
     );
     expect(screen.getByRole("link", { name: "Open issue ABC-12" })).toHaveAttribute(
       "href",

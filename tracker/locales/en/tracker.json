@@ -106,24 +106,60 @@
       "insights": "Insights"
     },
     "sections": {
-      "general": { "label": "General" },
-      "appearance": { "label": "Appearance" },
-      "keybindings": { "label": "Keybindings" },
-      "providers": { "label": "Providers" },
-      "webAccess": { "label": "Web Access" },
-      "mcp": { "label": "MCP Servers" },
-      "integrations": { "label": "Integrations" },
-      "githubCli": { "label": "GitHub CLI" },
-      "coderabbitCli": { "label": "CodeRabbit CLI" },
-      "terminal": { "label": "Terminal" },
-      "magicPrompts": { "label": "Magic Prompts" },
-      "opinionated": { "label": "Opinionated" },
-      "usage": { "label": "Usage" },
-      "experimental": { "label": "Experimental" },
-      "templates": { "label": "Templates" },
-      "backups": { "label": "Backups" },
-      "gateways": { "label": "Gateways" },
-      "lab": { "label": "Lab" }
+      "general": {
+        "label": "General"
+      },
+      "appearance": {
+        "label": "Appearance"
+      },
+      "keybindings": {
+        "label": "Keybindings"
+      },
+      "providers": {
+        "label": "Providers"
+      },
+      "webAccess": {
+        "label": "Web Access"
+      },
+      "mcp": {
+        "label": "MCP Servers"
+      },
+      "integrations": {
+        "label": "Integrations"
+      },
+      "githubCli": {
+        "label": "GitHub CLI"
+      },
+      "coderabbitCli": {
+        "label": "CodeRabbit CLI"
+      },
+      "terminal": {
+        "label": "Terminal"
+      },
+      "magicPrompts": {
+        "label": "Magic Prompts"
+      },
+      "opinionated": {
+        "label": "Opinionated"
+      },
+      "usage": {
+        "label": "Usage"
+      },
+      "experimental": {
+        "label": "Experimental"
+      },
+      "templates": {
+        "label": "Templates"
+      },
+      "backups": {
+        "label": "Backups"
+      },
+      "gateways": {
+        "label": "Gateways"
+      },
+      "lab": {
+        "label": "Lab"
+      }
     },
     "loadFailed": "Failed to load settings — refresh to retry.",
     "codingAgent": {
@@ -201,7 +237,11 @@
       "description": "Who Symphony authenticates as on each provider. The orchestrator's \"assigned to me\" rule matches against these identities.",
       "loadFailed": "Failed to load identities — refresh to retry.",
       "loading": "Loading…",
-      "providers": { "github": "GitHub", "jira": "Jira", "linear": "Linear" },
+      "providers": {
+        "github": "GitHub",
+        "jira": "Jira",
+        "linear": "Linear"
+      },
       "status": {
         "notConfigured": "Not configured",
         "connected": "Connected",
@@ -259,7 +299,6 @@
         "claude": "Claude Code",
         "codex": "Codex",
         "cursor": "Cursor Agent",
-        "opencode": "OpenCode",
         "opencode": "OpenCode",
         "pi": "PI",
         "commandCode": "Command Code",
@@ -434,9 +473,18 @@
       "dispatchFailed": "Dispatch failed",
       "executionMode": {
         "title": "Execution mode",
-        "plan": { "label": "Plan", "desc": "Read-only — analyze and plan, no edits" },
-        "build": { "label": "Build", "desc": "Edit the workspace (default)" },
-        "yolo": { "label": "Yolo", "desc": "Full access, approvals bypassed" }
+        "plan": {
+          "label": "Plan",
+          "desc": "Read-only — analyze and plan, no edits"
+        },
+        "build": {
+          "label": "Build",
+          "desc": "Edit the workspace (default)"
+        },
+        "yolo": {
+          "label": "Yolo",
+          "desc": "Full access, approvals bypassed"
+        }
       },
       "mentions": {
         "listLabel": "Context mentions",
@@ -1223,7 +1271,10 @@
         "context": "Context: {{details}}",
         "constraints": "Constraints: follow existing issue artifacts, specs, and plans when present; verify changes before reporting completion; stop when complete or blocked."
       },
-      "terms": { "goal": "goal", "workflow": "workflow" },
+      "terms": {
+        "goal": "goal",
+        "workflow": "workflow"
+      },
       "labels": "Labels",
       "assignees": "Assignees",
       "loadingLabels": "Loading labels...",
@@ -1723,9 +1774,9 @@
         "serveCount_one": "{{count}} serve",
         "serveCount_other": "{{count}} serve",
         "addStep": "Add step",
-      "addStepTo": "Add step to {{label}}",
-      "generalGroup": "General",
-      "noStepsProposed": "No steps proposed; add steps manually or a .symphony/devenv.yaml",
+        "addStepTo": "Add step to {{label}}",
+        "generalGroup": "General",
+        "noStepsProposed": "No steps proposed; add steps manually or a .symphony/devenv.yaml",
         "proposeFailed": "Failed to propose steps",
         "running": "Running: {{command}}",
         "runFailed": "Failed to run step",
@@ -2315,9 +2366,18 @@
       "retry": "Retry",
       "noContent": "No content to display.",
       "kinds": {
-        "spec": { "label": "Spec", "group": "Specs" },
-        "plan": { "label": "Plan", "group": "Plans" },
-        "handoff": { "label": "Handoff", "group": "Handoff" }
+        "spec": {
+          "label": "Spec",
+          "group": "Specs"
+        },
+        "plan": {
+          "label": "Plan",
+          "group": "Plans"
+        },
+        "handoff": {
+          "label": "Handoff",
+          "group": "Handoff"
+        }
       },
       "itemAria": "{{label}} {{title}}"
     },
@@ -2471,7 +2531,12 @@
       "knowledgeBase": "Knowledge Base",
       "switchProject": "Switch project",
       "loadingProjects": "Loading projects…",
-      "trackers": { "github": "GitHub Project", "linear": "Linear", "jira": "Jira" }
+      "trackers": {
+        "github": "GitHub Project",
+        "linear": "Linear",
+        "jira": "Jira"
+      },
+      "workspaces": "Workspaces"
     },
     "recents": {
       "title": "Recents",
@@ -2589,7 +2654,10 @@
   "kb": {
     "loading": "Loading…",
     "saved": "Saved",
-    "sidebar": { "noDocs": "No docs yet", "pages": "Pages" },
+    "sidebar": {
+      "noDocs": "No docs yet",
+      "pages": "Pages"
+    },
     "actions": {
       "more": "Actions for {{title}}",
       "rename": "Rename",
@@ -2824,6 +2892,64 @@
       "github_network_error": "Symphony could not reach GitHub. Check the server's connectivity and retry.",
       "missingLogin": "Viewer payload is missing the GitHub login.",
       "default": "Symphony could not identify the operator. Check the server configuration."
+    }
+  },
+  "workspacesPage": {
+    "title": "Workspaces",
+    "sections": {
+      "project": "Project workspaces",
+      "active": "Active issues",
+      "waiting": "Waiting",
+      "orphans": "Reclaimable",
+      "chats": "Project chats"
+    },
+    "projectWorkspace": "Project workspace (default)",
+    "standaloneBadge": "Standalone",
+    "parallelBadge": "Isolated tree",
+    "orphanBadge": "Orphan",
+    "workPresentWarning": "Unpublished work",
+    "issueGone": "Issue removed or archived",
+    "reposDirty": "{{count}} changed files",
+    "clean": "clean",
+    "ahead": "{{count}} ahead",
+    "totals": "{{count}} trees · {{size}} · {{reclaimable}} reclaimable",
+    "cleanup": {
+      "button": "Clean up…",
+      "title": "Clean up working trees",
+      "description": "Orphaned trees with no unpublished work are pre-selected. Removal deletes the whole directory.",
+      "sizeColumn": "Size",
+      "empty": "Nothing to clean up.",
+      "confirm": "Remove selected",
+      "removing": "Removing…",
+      "done": "Removed {{count}} working trees",
+      "partial": "{{removed}} removed, {{skipped}} skipped",
+      "failed": "Cleanup failed",
+      "blockedExecution": "Live execution",
+      "cancel": "Cancel"
+    },
+    "newWorkspace": {
+      "button": "New workspace",
+      "title": "New standalone workspace",
+      "description": "A clean working tree for this project, detached from any issue.",
+      "nameLabel": "Name",
+      "namePlaceholder": "spike-cache",
+      "branchesLabel": "Branch per repository",
+      "branchPlaceholder": "default branch",
+      "create": "Create workspace",
+      "creating": "Creating…",
+      "created": "Workspace {{name}} created",
+      "failed": "Could not create the workspace"
+    },
+    "newSession": {
+      "button": "New session",
+      "isolatedLabel": "Isolated working tree",
+      "isolatedHint": "Creates a clean sibling tree so this session cannot conflict with the running execution."
+    },
+    "sessionRows": {
+      "execution": "Execution",
+      "authoring": "Authoring",
+      "open": "Open",
+      "remove": "Remove"
     }
   }
 }

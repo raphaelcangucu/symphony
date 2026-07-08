@@ -132,16 +132,16 @@ describe("workspaceRoutes", () => {
   });
 
   it("builds project session paths", () => {
-    expect(projectSessionsPath("acme")).toBe("/projects/acme/sessions");
-    expect(projectSessionPath("acme", "thread/1")).toBe("/projects/acme/sessions/thread%2F1");
+    expect(projectSessionsPath("acme")).toBe("/projects/acme/workspaces");
+    expect(projectSessionPath("acme", "thread/1")).toBe("/projects/acme/workspaces/thread%2F1");
   });
 
   it("builds a deep-linkable execution session path with the issue identifier", () => {
     expect(projectExecutionSessionPath("acme", "MAC-13")).toBe(
-      "/projects/acme/sessions?exec=MAC-13&agent=execution",
+      "/projects/acme/workspaces?exec=MAC-13&agent=execution",
     );
     expect(projectAuthoringSessionPath("acme", "MAC-13")).toBe(
-      "/projects/acme/sessions?exec=MAC-13&agent=authoring",
+      "/projects/acme/workspaces?exec=MAC-13&agent=authoring",
     );
   });
 

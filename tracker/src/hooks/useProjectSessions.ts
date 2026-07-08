@@ -4,9 +4,11 @@ import { useAgentExecutions } from "@/hooks/useAgentExecutions";
 import { emptyProjectSessionGroups, groupProjectSessions, type ProjectSessionGroups } from "@/lib/projectSessions";
 import { listIssues } from "@/services/issues";
 import { listRecents } from "@/services/recents";
+import { fetchWorkspaceInventory } from "@/services/worktrees";
 import type { AgentExecution } from "@/types/agent-execution";
 import type { Issue } from "@/types/issue";
 import type { RecentSession } from "@/types/recents";
+import type { WorkspaceInventory } from "@/types/worktrees";
 
 const RECENT_SESSIONS_LIMIT = 100;
 
@@ -17,6 +19,8 @@ export interface UseProjectSessionsResult {
   issues: Issue[];
   /** Live execution snapshots keyed by issue identifier. */
   executions: ReadonlyMap<string, AgentExecution>;
+  /** Working-tree inventory (git + disk state per workspace); null while unavailable. */
+  inventory: WorkspaceInventory | null;
   isLoading: boolean;
   error: string | null;
   refetch: () => Promise<void>;
@@ -26,6 +30,7 @@ export function useProjectSessions(projectSlug: string): UseProjectSessionsResul
   const { executions, refetch: refetchExecutions } = useAgentExecutions();
   const [issues, setIssues] = useState<Issue[]>([]);
   const [recents, setRecents] = useState<RecentSession[]>([]);
+  const [inventory, setInventory] = useState<WorkspaceInventory | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -34,6 +39,7 @@ export function useProjectSessions(projectSlug: string): UseProjectSessionsResul
     if (!slug) {
       setIssues([]);
       setRecents([]);
+      setInventory(null);
       setIsLoading(false);
       setError("missing-project");
       return;
@@ -41,9 +47,16 @@ export function useProjectSessions(projectSlug: string): UseProjectSessionsResul
 
     setIsLoading(true);
     try {
-      const [nextIssues, nextRecents] = await Promise.all([listIssues(slug), listRecents(RECENT_SESSIONS_LIMIT)]);
+      const [nextIssues, nextRecents, nextInventory] = await Promise.all([
+        listIssues(slug),
+        listRecents(RECENT_SESSIONS_LIMIT),
+        // The inventory scan shells out to git/du; a failure must not take the
+        // whole page down, so it degrades to null.
+        fetchWorkspaceInventory(slug).catch(() => null),
+      ]);
       setIssues(nextIssues);
       setRecents(nextRecents.filter((session) => session.projectSlug === slug));
+      setInventory(nextInventory);
       setError(null);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "load-failed");
@@ -74,5 +87,5 @@ export function useProjectSessions(projectSlug: string): UseProjectSessionsResul
     [executions, recents],
   );
 
-  return { groups, relatedSessions, issues, executions, isLoading, error, refetch };
+  return { groups, relatedSessions, issues, executions, inventory, isLoading, error, refetch };
 }

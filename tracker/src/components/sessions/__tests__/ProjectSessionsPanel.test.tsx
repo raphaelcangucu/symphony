@@ -121,6 +121,15 @@ function demoIssue(): Issue {
   };
 }
 
+function authoringIssue(): Issue {
+  return {
+    ...demoIssue(),
+    id: "DEMO-2",
+    identifier: "DEMO-2",
+    title: "Issue authoring chat",
+  };
+}
+
 function relatedProjectSession(): RecentSession {
   return {
     id: "chat:1",
@@ -167,8 +176,9 @@ describe("ProjectSessionsPanel", () => {
     vi.mocked(useProjectSessions).mockReturnValue({
       groups: groupsWithSavedRow(),
       relatedSessions: [recentSession(), relatedProjectSession()],
-      issues: [demoIssue()],
+      issues: [demoIssue(), authoringIssue()],
       executions: new Map([["DEMO-1", execution()]]),
+      inventory: null,
       isLoading: false,
       error: null,
       refetch,
@@ -204,27 +214,27 @@ describe("ProjectSessionsPanel", () => {
     });
   });
 
-  it("renders project sessions and related chats", () => {
+  it("renders workspace cards and related chats", () => {
     renderWithI18n(
       <MemoryRouter>
         <ProjectSessionsPanel projectSlug="demo" />
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole("tab", { name: /Sessions/i })).toBeInTheDocument();
-    expect(screen.getAllByText("Saved launcher work")).toHaveLength(2);
+    expect(screen.getByRole("tab", { name: /Workspaces/i })).toBeInTheDocument();
+    // One card per issue: the execution session is a row inside the card, not
+    // a second card.
+    expect(screen.getAllByText("Saved launcher work")).toHaveLength(1);
     expect(screen.getByText("Issue authoring chat")).toBeInTheDocument();
     expect(screen.getByText("Project chat")).toBeInTheDocument();
     expect(screen.getAllByText(formatDateTime("2026-07-04T15:30:00Z")).length).toBeGreaterThan(0);
     expect(screen.queryByText("Related sessions")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Open execution session DEMO-1/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Open authoring session DEMO-1/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Open authoring session DEMO-2/i })).toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: "Open issue DEMO-1" })[0]).toHaveAttribute(
       "href",
       "/projects/demo/board/issues/DEMO-1/sessions",
     );
-    expect(screen.getAllByRole("img", { name: "Execution" }).length).toBeGreaterThan(0);
-    expect(screen.getAllByRole("img", { name: "Chat" }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("img", { name: "Codex" }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("img", { name: "Cursor" }).length).toBeGreaterThan(0);
     expect(screen.queryByText("Cursor Agent")).not.toBeInTheDocument();
@@ -245,7 +255,7 @@ describe("ProjectSessionsPanel", () => {
 
   it("opens the execution session inline instead of navigating to the issue detail", () => {
     renderWithI18n(
-      <MemoryRouter initialEntries={["/projects/demo/sessions"]}>
+      <MemoryRouter initialEntries={["/projects/demo/workspaces"]}>
         <ProjectSessionsPanel projectSlug="demo" />
       </MemoryRouter>,
     );
@@ -260,7 +270,7 @@ describe("ProjectSessionsPanel", () => {
 
   it("restores the execution session from the exec identifier in the URL", () => {
     renderWithI18n(
-      <MemoryRouter initialEntries={["/projects/demo/sessions?exec=DEMO-1&agent=execution"]}>
+      <MemoryRouter initialEntries={["/projects/demo/workspaces?exec=DEMO-1&agent=execution"]}>
         <ProjectSessionsPanel projectSlug="demo" activeExecutionIdentifier="DEMO-1" />
       </MemoryRouter>,
     );
@@ -271,20 +281,20 @@ describe("ProjectSessionsPanel", () => {
 
   it("opens the authoring session inline as its own workspace tab", () => {
     renderWithI18n(
-      <MemoryRouter initialEntries={["/projects/demo/sessions"]}>
+      <MemoryRouter initialEntries={["/projects/demo/workspaces"]}>
         <ProjectSessionsPanel projectSlug="demo" />
       </MemoryRouter>,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /Open authoring session DEMO-1/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Open authoring session DEMO-2/i }));
 
-    expect(screen.getByRole("tab", { name: /Saved launcher work · Authoring/i })).toBeInTheDocument();
-    expect(screen.getByLabelText("mock authoring session panel")).toHaveAttribute("data-issue", "DEMO-1");
+    expect(screen.getByRole("tab", { name: /Authoring/i })).toBeInTheDocument();
+    expect(screen.getByLabelText("mock authoring session panel")).toHaveAttribute("data-issue", "DEMO-2");
   });
 
   it("restores the authoring session from the exec identifier in the URL", () => {
     renderWithI18n(
-      <MemoryRouter initialEntries={["/projects/demo/sessions?exec=DEMO-1&agent=authoring"]}>
+      <MemoryRouter initialEntries={["/projects/demo/workspaces?exec=DEMO-1&agent=authoring"]}>
         <ProjectSessionsPanel projectSlug="demo" activeAuthoringIdentifier="DEMO-1" />
       </MemoryRouter>,
     );
@@ -311,13 +321,14 @@ describe("ProjectSessionsPanel", () => {
       relatedSessions: [],
       issues: [],
       executions: new Map(),
+      inventory: null,
       isLoading: true,
       error: null,
       refetch,
     });
 
     renderWithI18n(
-      <MemoryRouter initialEntries={["/projects/demo/sessions?exec=DEMO-1&agent=execution"]}>
+      <MemoryRouter initialEntries={["/projects/demo/workspaces?exec=DEMO-1&agent=execution"]}>
         <ReloadHarness />
       </MemoryRouter>,
     );
@@ -329,6 +340,7 @@ describe("ProjectSessionsPanel", () => {
       relatedSessions: [recentSession(), relatedProjectSession()],
       issues: [demoIssue()],
       executions: new Map([["DEMO-1", execution()]]),
+      inventory: null,
       isLoading: false,
       error: null,
       refetch,
@@ -364,7 +376,9 @@ describe("ProjectSessionsPanel", () => {
       </MemoryRouter>,
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: "New session" }));
+    // The chrome harness button comes first; workspace cards render their own
+    // per-issue "New session" buttons below it.
+    fireEvent.click((await screen.findAllByRole("button", { name: "New session" }))[0]);
 
     await waitFor(() =>
       expect(createProjectSessionThread).toHaveBeenCalledWith("demo", { title: "Project session" }),

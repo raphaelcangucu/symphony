@@ -91,7 +91,7 @@ describe("ProjectHeader polling indicator", () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole("link", { name: /Sessions\s+22/ })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Workspaces\s+22/ })).toBeInTheDocument();
   });
 
   it("labels the indicator active when polling is active", () => {

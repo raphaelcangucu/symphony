@@ -7,14 +7,14 @@ import { IssueSessionPickerDialog } from "@/components/sessions/IssueSessionPick
 import type { Issue } from "@/types/issue";
 
 const listIssuesMock = vi.hoisted(() => vi.fn());
-const dispatchIssueAgentMock = vi.hoisted(() => vi.fn());
+const createIssueSessionThreadMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/services/issues", () => ({
   listIssues: (...args: unknown[]) => listIssuesMock(...args),
 }));
 
-vi.mock("@/services/issueDispatch", () => ({
-  dispatchIssueAgent: (...args: unknown[]) => dispatchIssueAgentMock(...args),
+vi.mock("@/services/assistantThreads", () => ({
+  createIssueSessionThread: (...args: unknown[]) => createIssueSessionThreadMock(...args),
 }));
 
 const sampleIssues: Issue[] = [
@@ -42,12 +42,19 @@ const sampleIssues: Issue[] = [
 describe("IssueSessionPickerDialog", () => {
   beforeEach(() => {
     listIssuesMock.mockReset();
-    dispatchIssueAgentMock.mockReset();
+    createIssueSessionThreadMock.mockReset();
     listIssuesMock.mockResolvedValue(sampleIssues);
-    dispatchIssueAgentMock.mockResolvedValue({
-      action: "hard_reset",
-      message: "New session started",
-      issue: sampleIssues[0],
+    createIssueSessionThreadMock.mockResolvedValue({
+      id: 42,
+      scope: "issue_session",
+      agentKind: "codex",
+      projectSlug: "macro-markets",
+      projectName: "Macro Markets",
+      issueIdentifier: "MAC-510",
+      title: "Issue session",
+      status: "active",
+      preview: null,
+      updatedAt: "2026-07-01T00:00:00Z",
     });
   });
 
@@ -68,7 +75,7 @@ describe("IssueSessionPickerDialog", () => {
             }
           />
           <Route
-            path="/projects/macro-markets/sessions"
+            path="/projects/macro-markets/workspaces/:threadId"
             element={<div>Sessions workspace</div>}
           />
         </Routes>
@@ -81,11 +88,11 @@ describe("IssueSessionPickerDialog", () => {
     await user.click(await screen.findByRole("button", { name: /start session/i }));
 
     await waitFor(() =>
-      expect(dispatchIssueAgentMock).toHaveBeenCalledWith("macro-markets", "MAC-510", {
-        action: "hard_reset",
-        mode: "build",
-        agent: "codex",
-        instructions: null,
+      expect(createIssueSessionThreadMock).toHaveBeenCalledWith("macro-markets", "MAC-510", {
+        title: "Issue session",
+        agentKind: "codex",
+        executionMode: "build",
+        isolatedWorkspace: false,
       }),
     );
     expect(await screen.findByText("Sessions workspace")).toBeInTheDocument();
