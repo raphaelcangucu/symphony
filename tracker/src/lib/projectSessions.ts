@@ -40,6 +40,8 @@ export function sessionBucketFor(status: AgentExecutionStatus): ProjectSessionBu
       return "waiting";
     case "saved":
       return "saved";
+    case "paused":
+      return "waiting";
     case "error":
     case "aborted":
       return "recent";

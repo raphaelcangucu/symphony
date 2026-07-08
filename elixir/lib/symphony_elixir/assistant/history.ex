@@ -4,6 +4,7 @@ defmodule SymphonyElixir.Assistant.History do
   import Ecto.Query
 
   alias SymphonyElixir.Assistant.{Message, ProjectExploreWorkspace, Thread}
+  alias SymphonyElixir.{ExecutionMode, Workspace}
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.Repo
 
@@ -415,7 +416,7 @@ defmodule SymphonyElixir.Assistant.History do
   """
   @spec set_thread_agent(Thread.t(), String.t()) ::
           {:ok, Thread.t()} | {:error, Ecto.Changeset.t()}
-  def set_thread_agent(%Thread{} = thread, kind) when kind in ["codex", "claude", "cursor"] do
+  def set_thread_agent(%Thread{} = thread, kind) when kind in ["codex", "claude", "cursor", "opencode"] do
     update_thread(thread, %{agent_kind: kind})
   end
 
@@ -505,6 +506,40 @@ defmodule SymphonyElixir.Assistant.History do
     end
   end
 
+  @doc """
+  Creates a new build-mode assistant session bound to an issue.
+
+  Unlike the singular `scope: "issue"` authoring thread, many active
+  `issue_session` rows may coexist for the same issue identifier.
+  """
+  @spec create_issue_session_thread(String.t(), String.t(), attrs()) :: {:ok, Thread.t()} | {:error, term()}
+  def create_issue_session_thread(project_slug, issue_identifier, attrs \\ %{})
+      when is_binary(project_slug) and is_binary(issue_identifier) and is_map(attrs) do
+    with {:ok, slug} <- normalize_required_string(project_slug, :project_slug),
+         {:ok, identifier} <- normalize_required_string(issue_identifier, :issue_identifier),
+         {:ok, _project} <- Context.get_project(slug) do
+      workspace_path = Workspace.path_for_issue(identifier)
+      execution_mode = normalize_execution_mode(Map.get(attrs, :execution_mode) || Map.get(attrs, "execution_mode"))
+
+      metadata =
+        attrs
+        |> Map.get(:metadata, Map.get(attrs, "metadata", %{}))
+        |> Map.new()
+        |> Map.put("execution_mode", execution_mode)
+
+      attrs
+      |> Map.put(:scope, "issue_session")
+      |> Map.put(:project_slug, slug)
+      |> Map.put(:issue_identifier, identifier)
+      |> Map.put_new(:title, "Issue session")
+      |> Map.put_new(:workspace_path, workspace_path)
+      |> Map.put_new(:status, "active")
+      |> Map.put(:metadata, metadata)
+      |> then(&Thread.changeset(%Thread{}, &1))
+      |> Repo.insert()
+    end
+  end
+
   @spec get_thread(integer()) :: {:ok, Thread.t()} | {:error, :not_found}
   def get_thread(id) when is_integer(id) do
     case Repo.get(Thread, id) do
@@ -517,7 +552,9 @@ defmodule SymphonyElixir.Assistant.History do
   def list_threads(opts \\ []) when is_list(opts) do
     Thread
     |> filter_scope(Keyword.get(opts, :scope))
+    |> filter_scopes(Keyword.get(opts, :scopes))
     |> filter_project(Keyword.get(opts, :project_slug))
+    |> filter_issue_identifier(Keyword.get(opts, :issue_identifier))
     |> filter_archived(Keyword.get(opts, :include_archived, false))
     |> order_by([t], desc: t.updated_at, desc: t.id)
     |> limit(^Keyword.get(opts, :limit, 50))
@@ -794,8 +831,21 @@ defmodule SymphonyElixir.Assistant.History do
   defp filter_scope(query, nil), do: query
   defp filter_scope(query, scope) when is_binary(scope), do: where(query, [t], t.scope == ^scope)
 
+  defp filter_scopes(query, nil), do: query
+  defp filter_scopes(query, []), do: query
+
+  defp filter_scopes(query, scopes) when is_list(scopes) do
+    where(query, [t], t.scope in ^scopes)
+  end
+
   defp filter_project(query, nil), do: query
   defp filter_project(query, slug) when is_binary(slug), do: where(query, [t], t.project_slug == ^slug)
+
+  defp filter_issue_identifier(query, nil), do: query
+
+  defp filter_issue_identifier(query, identifier) when is_binary(identifier) do
+    where(query, [t], t.issue_identifier == ^identifier)
+  end
 
   defp filter_archived(query, true), do: query
   defp filter_archived(query, _), do: where(query, [t], t.status != "archived")
@@ -958,4 +1008,6 @@ defmodule SymphonyElixir.Assistant.History do
   end
 
   defp normalize_required_string(_value, field), do: {:error, {:missing_required_field, field}}
+
+  defp normalize_execution_mode(mode), do: ExecutionMode.normalize(mode)
 end

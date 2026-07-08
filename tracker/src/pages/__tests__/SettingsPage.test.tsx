@@ -20,7 +20,7 @@ vi.mock("@/services/settings", () => ({
 }));
 
 vi.mock("@/services/agentUsage", () => ({
-  getAgentUsage: vi.fn().mockResolvedValue({ codex: null, claude: null, cursor: null }),
+  getAgentUsage: vi.fn().mockResolvedValue({ codex: null, claude: null, cursor: null, opencode: null }),
 }));
 
 describe("SettingsPage", () => {
@@ -41,6 +41,7 @@ describe("SettingsPage", () => {
       codex: { available: true, version: "codex 3.1.0", command: "codex" },
       claude: { available: false, version: null, command: "claude" },
       cursor: { available: false, version: null, command: "cursor-agent" },
+      opencode: { available: false, version: null, command: "opencode" },
     });
     vi.mocked(settingsService.fetchIdentities).mockResolvedValue([]);
     vi.mocked(settingsService.fetchCredentials).mockResolvedValue([]);
@@ -61,7 +62,7 @@ describe("SettingsPage", () => {
 
     await waitFor(() => expect(screen.getByRole("button", { name: /Codex/ })).toBeTruthy());
     expect(screen.getByText(/codex 3\.1\.0/)).toBeTruthy();
-    expect(screen.getAllByText(/not found/i)).toHaveLength(2);
+    expect(screen.getAllByText(/not found/i)).toHaveLength(3);
   });
 
   it("saves a new default agent via PUT", async () => {

@@ -23,7 +23,7 @@ interface BackendAgentUsageDto {
 
 type BackendUsageMapDto = Partial<Record<AgentKind, BackendAgentUsageDto | null>>;
 
-const AGENT_KEYS: AgentKind[] = ["codex", "claude", "cursor"];
+const AGENT_KEYS: AgentKind[] = ["codex", "claude", "cursor", "opencode"];
 
 function clampPercent(value: number | null | undefined): number {
   if (typeof value !== "number" || Number.isNaN(value)) return 0;

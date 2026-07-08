@@ -205,12 +205,12 @@ describe("ObservabilityPage", () => {
     );
 
     await screen.findByRole("link", { name: "508" });
-    await userEvent.click(screen.getByRole("button", { name: /hard reset/i }));
+    await userEvent.click(screen.getByRole("button", { name: /new thread/i }));
 
     expect(dispatchIssueAgentMock).not.toHaveBeenCalled();
 
     const dialog = await screen.findByRole("dialog");
-    await userEvent.click(within(dialog).getByRole("button", { name: /hard reset/i }));
+    await userEvent.click(within(dialog).getByRole("button", { name: /new thread/i }));
 
     await waitFor(() =>
       expect(dispatchIssueAgentMock).toHaveBeenCalledWith("macro-markets", "508", { action: "hard_reset" }),

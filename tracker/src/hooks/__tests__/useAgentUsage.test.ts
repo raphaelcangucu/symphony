@@ -5,7 +5,7 @@ import { useAgentUsage } from "@/hooks/useAgentUsage";
 import * as service from "@/services/agentUsage";
 import type { AgentUsageMap } from "@/types/agent-usage";
 
-const emptyMap: AgentUsageMap = { codex: null, claude: null, cursor: null };
+const emptyMap: AgentUsageMap = { codex: null, claude: null, cursor: null, opencode: null };
 
 describe("useAgentUsage", () => {
   afterEach(() => vi.restoreAllMocks());

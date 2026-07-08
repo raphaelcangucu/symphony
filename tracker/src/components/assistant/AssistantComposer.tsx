@@ -47,7 +47,8 @@ import {
 import type { ComposerContextChipRef, MentionRef, ResolvedMention } from "@/components/assistant/contextMentions";
 import { useContextMentions } from "@/components/assistant/useContextMentions";
 import { ModelMenu } from "@/components/assistant/ModelMenu";
-import { ComposerCommandPalette } from "@/components/assistant/ComposerCommandPalette";
+import { MagicCommandPalette } from "@/components/commands/MagicCommandPalette";
+import type { RunPromptTemplateResult } from "@/services/magicCommands";
 import {
   allSlashCommands,
   defaultSkillCommands,
@@ -142,6 +143,12 @@ interface AssistantComposerProps {
   slashCommandExtras?: SlashCommandDef[];
   /** Incrementing token from the parent's Magic button that opens the palette. */
   magicPaletteRequestId?: number;
+  /** Controlled open state for the magic palette (e.g. execution toolbar toggle). */
+  magicPaletteOpen?: boolean;
+  onMagicPaletteOpenChange?: (open: boolean) => void;
+  /** Issue identifier for prompt-template magic commands (execution context). */
+  magicIssueIdentifier?: string;
+  onMagicRan?: (result: RunPromptTemplateResult) => void;
   placeholder?: string;
   /** When `null`, the footer hint is hidden. */
   hint?: string | null;
@@ -200,6 +207,10 @@ export function AssistantComposer({
   slashContext = "authoring",
   slashCommandExtras,
   magicPaletteRequestId = 0,
+  magicPaletteOpen,
+  onMagicPaletteOpenChange,
+  magicIssueIdentifier,
+  onMagicRan,
   placeholder,
   hint,
   resetToken,
@@ -227,7 +238,9 @@ export function AssistantComposer({
 }: AssistantComposerProps) {
   const { t } = useTranslation();
   const [input, setInput] = useState("");
-  const [magicOpen, setMagicOpen] = useState(false);
+  const [internalMagicOpen, setInternalMagicOpen] = useState(false);
+  const magicOpen = magicPaletteOpen ?? internalMagicOpen;
+  const setMagicOpen = onMagicPaletteOpenChange ?? setInternalMagicOpen;
   const [attachments, setAttachments] = useState<AssistantAttachment[]>([]);
   const [contextRefs, setContextRefs] = useState<ComposerContextChipRef[]>([]);
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -731,11 +744,14 @@ export function AssistantComposer({
           ? createPortal(dropOverlay, dropTargetRef.current)
           : null
         : dropOverlay}
-      <ComposerCommandPalette
+      <MagicCommandPalette
         open={magicOpen}
         onOpenChange={setMagicOpen}
-        commands={magicCommands}
-        onSelect={applySlashCommand}
+        slashCommands={magicCommands}
+        onSlashSelect={applySlashCommand}
+        projectSlug={magicIssueIdentifier ? projectSlug : undefined}
+        identifier={magicIssueIdentifier}
+        onRan={onMagicRan}
       />
       <div
         className={cn(

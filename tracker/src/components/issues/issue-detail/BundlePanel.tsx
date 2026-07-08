@@ -92,7 +92,7 @@ export function BundlePanel({ issue, bundle = null, executions = [] }: BundlePan
                 {childIdentifier && issue.projectSlug ? (
                   <Link
                     className="ml-auto text-primary underline-offset-2 hover:underline"
-                    to={withAgentSection(issuePath(issue.projectSlug, "board", childIdentifier, "agent"), "", "execution")}
+                    to={withAgentSection(issuePath(issue.projectSlug, "board", childIdentifier, "sessions"), "", "execution")}
                   >
                     {childIdentifier}
                   </Link>

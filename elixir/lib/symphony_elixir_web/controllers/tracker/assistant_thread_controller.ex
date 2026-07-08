@@ -16,7 +16,9 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
     opts =
       []
       |> put_opt(:scope, params["scope"])
+      |> put_opt(:scopes, parse_scopes(params["scopes"]))
       |> put_opt(:project_slug, params["project_slug"])
+      |> put_opt(:issue_identifier, params["issue_identifier"])
       |> Keyword.put(:limit, clamp_limit(params["limit"]))
 
     data =
@@ -67,8 +69,28 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
     end
   end
 
+  def create(conn, %{"scope" => "issue_session", "project_slug" => project_slug, "issue_identifier" => issue_identifier} = params) do
+    attrs = %{
+      title: params["title"],
+      agent_kind: normalize_agent(params["agent_kind"]),
+      execution_mode: params["execution_mode"] || params["mode"]
+    }
+
+    with {:ok, thread} <- History.create_issue_session_thread(project_slug, issue_identifier, attrs) do
+      conn
+      |> put_status(:created)
+      |> json(%{data: TrackerPresenter.assistant_thread(with_preview(thread))})
+    else
+      {:error, %Ecto.Changeset{} = changeset} ->
+        TrackerErrors.render(conn, changeset)
+
+      {:error, reason} ->
+        TrackerErrors.render(conn, reason)
+    end
+  end
+
   def create(conn, _params) do
-    TrackerErrors.validation_msg(conn, "scope must be freeform or project_session")
+    TrackerErrors.validation_msg(conn, "scope must be freeform, project_session, or issue_session")
   end
 
   @spec archive(Conn.t(), map()) :: Conn.t()
@@ -107,7 +129,23 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
   defp put_opt(opts, _key, ""), do: opts
   defp put_opt(opts, key, value), do: Keyword.put(opts, key, value)
 
-  defp normalize_agent(agent) when agent in ["codex", "claude", "cursor"], do: agent
+  defp parse_scopes(nil), do: nil
+  defp parse_scopes(""), do: nil
+
+  defp parse_scopes(value) when is_binary(value) do
+    value
+    |> String.split(",", trim: true)
+    |> Enum.reject(&(&1 == ""))
+    |> case do
+      [] -> nil
+      scopes -> scopes
+    end
+  end
+
+  defp parse_scopes(scopes) when is_list(scopes), do: scopes
+  defp parse_scopes(_), do: nil
+
+  defp normalize_agent(agent) when agent in ["codex", "claude", "cursor", "opencode"], do: agent
   defp normalize_agent(_agent), do: nil
 
   defp clamp_limit(nil), do: @default_limit

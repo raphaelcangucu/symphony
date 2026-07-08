@@ -5,6 +5,7 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadControllerTest do
   import Plug.Conn
 
   alias SymphonyElixir.Assistant.{CodexSession, History}
+  alias SymphonyElixir.LocalTracker.Context
 
   @endpoint SymphonyElixirWeb.Endpoint
   @token_env "SYMPHONY_TRACKER_TOKEN"
@@ -69,6 +70,46 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadControllerTest do
       |> post("/api/tracker/v1/assistant/threads", %{scope: "project"})
 
     assert %{"error" => %{"message" => _}} = json_response(conn, 422)
+  end
+
+  test "POST creates multiple issue_session threads for the same issue" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+
+    conn_one =
+      authorize()
+      |> post("/api/tracker/v1/assistant/threads", %{
+        scope: "issue_session",
+        project_slug: "macro-markets",
+        issue_identifier: "MAC-510",
+        title: "Build pass 1",
+        execution_mode: "build"
+      })
+
+    assert %{"data" => %{"id" => id_one, "scope" => "issue_session", "issue_identifier" => "MAC-510"}} =
+             json_response(conn_one, 201)
+
+    conn_two =
+      authorize()
+      |> post("/api/tracker/v1/assistant/threads", %{
+        scope: "issue_session",
+        project_slug: "macro-markets",
+        issue_identifier: "MAC-510",
+        title: "Build pass 2",
+        execution_mode: "build"
+      })
+
+    assert %{"data" => %{"id" => id_two}} = json_response(conn_two, 201)
+    assert id_two != id_one
+
+    conn =
+      authorize()
+      |> get(
+        "/api/tracker/v1/assistant/threads?project_slug=macro-markets&issue_identifier=MAC-510&scopes=issue_session"
+      )
+
+    assert %{"data" => rows} = json_response(conn, 200)
+    assert length(rows) == 2
+    assert Enum.all?(rows, &(&1["scope"] == "issue_session"))
   end
 
   defp authorize do

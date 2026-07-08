@@ -210,6 +210,49 @@ defmodule SymphonyElixir.AgentExecutionTest do
       refute execution.error =~ "Turn aborted"
     end
 
+    test "classifies operator-paused stale Codex runs as paused, not aborted" do
+      identifier = "SYM-PAUSED-#{System.unique_integer([:positive])}"
+      issue = %{identifier: identifier, project_slug: nil, labels: ["backend"], agent_kind: "codex"}
+      workspace = Workspace.path_for_issue(issue)
+      sessions_dir = Path.join(System.tmp_dir!(), "codex-sessions-#{System.unique_integer([:positive])}")
+      thread_id = "thread-paused"
+
+      File.mkdir_p!(workspace)
+      File.mkdir_p!(sessions_dir)
+      Application.put_env(:symphony_elixir, :codex_sessions_dir, sessions_dir)
+
+      on_exit(fn ->
+        File.rm_rf(workspace)
+        File.rm_rf(sessions_dir)
+      end)
+
+      :ok = CodexSession.write(workspace, thread_id)
+      write_rollout!(sessions_dir, thread_id)
+
+      # A deliberate operator stop is recorded as a `user_stop` abort event.
+      :ok = SessionEvents.append_abort(workspace, "user_stop", detail: "Stopped manually via hard reset")
+
+      stale = DateTime.add(DateTime.utc_now(), -10 * 60, :second)
+
+      snapshot = %{
+        running: [
+          running_entry(%{
+            identifier: identifier,
+            issue: issue,
+            agent_kind: "codex",
+            last_codex_timestamp: stale
+          })
+        ],
+        retrying: []
+      }
+
+      assert [execution] = AgentExecution.from_snapshot(snapshot)
+      assert execution.status == :paused
+      assert execution.last_event == "turn_paused"
+      # A pause is benign and resumable, so it carries no error.
+      assert execution.error == nil
+    end
+
     test "marks running issues awaiting input or approval as waiting" do
       input_required = running_entry(%{last_codex_event: :turn_input_required})
       approval = running_entry(%{identifier: "SYM-2", last_codex_event: :approval_required})

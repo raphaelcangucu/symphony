@@ -27,28 +27,40 @@ describe("recentSessionPath", () => {
       "/projects/demo/sessions?exec=ABC-1&agent=execution",
     );
   });
-  it("issue chat → /projects/:slug/assistant/issue/:identifier", () => {
+  it("issue authoring chat → project sessions authoring tab", () => {
     expect(
       recentSessionPath({ ...base, kind: "chat", scope: "issue", projectSlug: "demo", identifier: "ABC-1", threadId: 9 }),
-    ).toBe("/projects/demo/assistant/issue/ABC-1");
+    ).toBe("/projects/demo/sessions?exec=ABC-1&agent=authoring");
+  });
+  it("issue_session chat → /projects/:slug/sessions/:threadId", () => {
+    expect(
+      recentSessionPath({
+        ...base,
+        kind: "chat",
+        scope: "issue_session",
+        projectSlug: "demo",
+        identifier: "ABC-1",
+        threadId: 9,
+      }),
+    ).toBe("/projects/demo/sessions/9");
   });
   it("chat session links preserve the stored agent", () => {
     expect(
       recentSessionPath({
         ...base,
         kind: "chat",
-        scope: "issue",
+        scope: "issue_session",
         agentKind: "cursor",
         projectSlug: "demo",
         identifier: "ABC-1",
         threadId: 9,
       }),
-    ).toBe("/projects/demo/assistant/issue/ABC-1?assistant_agent=cursor");
+    ).toBe("/projects/demo/sessions/9?assistant_agent=cursor");
   });
-  it("issue chat without identifier → project assistant fallback", () => {
+  it("issue authoring chat without thread id still opens authoring tab", () => {
     expect(
-      recentSessionPath({ ...base, kind: "chat", scope: "issue", projectSlug: "demo", identifier: null, threadId: 9 }),
-    ).toBe("/projects/demo/assistant");
+      recentSessionPath({ ...base, kind: "chat", scope: "issue", projectSlug: "demo", identifier: "ABC-1", threadId: null }),
+    ).toBe("/projects/demo/sessions?exec=ABC-1&agent=authoring");
   });
   it("freeform chat without threadId → /assistant", () => {
     expect(recentSessionPath({ ...base, kind: "chat", scope: "freeform", threadId: null })).toBe("/assistant");

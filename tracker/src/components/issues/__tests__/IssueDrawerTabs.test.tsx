@@ -78,8 +78,8 @@ vi.mock("@/components/issues/issue-detail/ActivityTab", () => ({
   ActivityTab: () => <div>Activity panel</div>,
 }));
 
-vi.mock("@/components/issues/issue-detail/AgentTabs", () => ({
-  AgentTabs: () => <div>Agent panel</div>,
+vi.mock("@/components/issues/issue-detail/IssueSessionsTab", () => ({
+  IssueSessionsTab: () => <div>Sessions panel</div>,
 }));
 
 const unavailableEditor: UseIssueEditorResult = {

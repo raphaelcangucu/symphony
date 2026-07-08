@@ -990,7 +990,8 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     {raw, Payload.normalize_attachments(raw, project_slug)}
   end
 
-  defp run_send_turn(%{scope: "issue"} = thread, _project_slug, trimmed, context, opts) do
+  defp run_send_turn(%{scope: scope} = thread, _project_slug, trimmed, context, opts)
+       when scope in ["issue", "issue_session"] do
     CodexSession.send_message_to_issue_thread(thread, trimmed, context, opts)
   end
 

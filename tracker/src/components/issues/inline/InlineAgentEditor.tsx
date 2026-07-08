@@ -32,7 +32,7 @@ export function InlineAgentEditor({
 
   const optionItems = useMemo(() => {
     if (options.length > 0) return options;
-    return (["codex", "claude", "cursor"] as AgentKind[]).map((value) => ({
+    return (["codex", "claude", "cursor", "opencode"] as AgentKind[]).map((value) => ({
       value,
       label: agentKindLabel(value, t),
       default: false,

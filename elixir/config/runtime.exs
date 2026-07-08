@@ -91,6 +91,7 @@ if config_env() != :test do
     codex_thread_sandbox: System.get_env("SYMPHONY_CODEX_THREAD_SANDBOX") || "workspace-write",
     claude_command: System.get_env("SYMPHONY_CLAUDE_COMMAND") || "claude",
     cursor_command: System.get_env("SYMPHONY_CURSOR_COMMAND") || "cursor-agent",
+    opencode_command: System.get_env("SYMPHONY_OPENCODE_COMMAND") || "opencode",
     default_agent_kind: System.get_env("SYMPHONY_DEFAULT_AGENT_KIND") || "codex",
     preview_pool_range: parse_range.("SYMPHONY_PREVIEW_POOL", [10_000, 30_000]),
     preview_slots_per_project: parse_int.("SYMPHONY_PREVIEW_SLOTS_PER_PROJECT", 32),

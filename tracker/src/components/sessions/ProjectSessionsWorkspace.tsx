@@ -9,9 +9,10 @@ import { RecentStatusDot } from "@/components/layout/RecentStatusDot";
 import { ProjectSessionsChromeSetterContext } from "@/components/layout/ProjectSessionsChromeContext";
 import { recentSessionPath, recentSessionSubtitle } from "@/components/layout/recentSessionPath";
 import { useWorkspace } from "@/components/layout/WorkspaceContext";
-import { ProjectAssistantPanel } from "@/components/assistant/ProjectAssistantPanel";
-import { AgentTabs } from "@/components/issues/issue-detail/AgentTabs";
-import { SessionListItem } from "@/components/sessions/SessionListItem";
+import { AssistantSessionTabContent } from "@/components/sessions/AssistantSessionTabContent";
+import { IssueAuthoringSessionPanel } from "@/components/issues/issue-detail/IssueAuthoringSessionPanel";
+import { IssueExecutionSessionPanel } from "@/components/issues/issue-detail/IssueExecutionSessionPanel";
+import { AuthoringSessionListItem, SessionListItem, type AuthoringSessionRow } from "@/components/sessions/SessionListItem";
 import { RecentSessionBadges } from "@/components/shared/SessionBadge";
 import { WorkspaceTabBar } from "@/components/workspace/WorkspaceTabBar";
 import { useArchiveChat } from "@/hooks/useArchiveChat";
@@ -21,13 +22,16 @@ import { PROJECT_SESSION_BUCKETS, type ProjectSessionRow } from "@/lib/projectSe
 import { cn, formatDateTime, SCROLLBAR_THIN } from "@/lib/utils";
 import {
   SESSIONS_LIST_TAB_ID,
+  authoringSessionTabId,
   createAssistantSessionTab,
+  createAuthoringSessionTab,
   createExecutionSessionTab,
   createSessionsListTab,
   executionSessionTabId,
 } from "@/lib/workspaceTabs/types";
 import {
   issuePath,
+  projectAuthoringSessionPath,
   projectExecutionSessionPath,
   projectSessionPath,
   projectSessionsPath,
@@ -41,18 +45,21 @@ import type { RecentSession } from "@/types/recents";
 
 type UnifiedSessionItem =
   | { kind: "execution"; key: string; sortValue: number; session: ProjectSessionRow }
+  | { kind: "authoring"; key: string; sortValue: number; session: AuthoringSessionRow }
   | { kind: "related"; key: string; sortValue: number; session: RecentSession };
 
 interface ProjectSessionsWorkspaceProps {
   projectSlug: string;
   activeThreadId?: number | null;
   activeExecutionIdentifier?: string | null;
+  activeAuthoringIdentifier?: string | null;
 }
 
 export function ProjectSessionsWorkspace({
   projectSlug,
   activeThreadId = null,
   activeExecutionIdentifier = null,
+  activeAuthoringIdentifier = null,
 }: ProjectSessionsWorkspaceProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -80,12 +87,22 @@ export function ProjectSessionsWorkspace({
     [navigate, openTab, projectSlug],
   );
 
+  const openAuthoringSession = useCallback(
+    (session: AuthoringSessionRow) => {
+      const tabTitle = `${session.title} · ${t("issue.agentTabs.authoring")}`;
+      openTab(createAuthoringSessionTab(session.issueIdentifier, tabTitle));
+      navigate(projectAuthoringSessionPath(projectSlug, session.issueIdentifier), { replace: true });
+    },
+    [navigate, openTab, projectSlug, t],
+  );
+
   const openExecutionSession = useCallback(
     (session: ProjectSessionRow) => {
-      openTab(createExecutionSessionTab(session.issueIdentifier, session.title));
+      const tabTitle = `${session.title} · ${t("issue.agentTabs.execution")}`;
+      openTab(createExecutionSessionTab(session.issueIdentifier, tabTitle));
       navigate(projectExecutionSessionPath(projectSlug, session.issueIdentifier), { replace: true });
     },
-    [navigate, openTab, projectSlug],
+    [navigate, openTab, projectSlug, t],
   );
 
   useEffect(() => {
@@ -102,6 +119,27 @@ export function ProjectSessionsWorkspace({
     return titles;
   }, [groups, issues]);
 
+  const openedAuthoringRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!activeAuthoringIdentifier) {
+      openedAuthoringRef.current = null;
+      return;
+    }
+
+    const title = executionTitleLookup.get(activeAuthoringIdentifier) ?? activeAuthoringIdentifier;
+    const tabId = authoringSessionTabId(activeAuthoringIdentifier);
+    const existingTab = tabs.find((tab) => tab.id === tabId);
+    const tabTitle = `${title} · ${t("issue.agentTabs.authoring")}`;
+    const hasOpenedFallback =
+      openedAuthoringRef.current === activeAuthoringIdentifier &&
+      !executionTitleLookup.has(activeAuthoringIdentifier) &&
+      existingTab != null;
+    if (hasOpenedFallback || existingTab?.title === tabTitle) return;
+
+    openedAuthoringRef.current = activeAuthoringIdentifier;
+    openTab(createAuthoringSessionTab(activeAuthoringIdentifier, tabTitle));
+  }, [activeAuthoringIdentifier, executionTitleLookup, openTab, t, tabs]);
+
   const openedExecutionRef = useRef<string | null>(null);
   useEffect(() => {
     if (!activeExecutionIdentifier) {
@@ -112,15 +150,16 @@ export function ProjectSessionsWorkspace({
     const title = executionTitleLookup.get(activeExecutionIdentifier) ?? activeExecutionIdentifier;
     const tabId = executionSessionTabId(activeExecutionIdentifier);
     const existingTab = tabs.find((tab) => tab.id === tabId);
+    const tabTitle = `${title} · ${t("issue.agentTabs.execution")}`;
     const hasOpenedFallback =
       openedExecutionRef.current === activeExecutionIdentifier &&
       !executionTitleLookup.has(activeExecutionIdentifier) &&
       existingTab != null;
-    if (hasOpenedFallback || existingTab?.title === title) return;
+    if (hasOpenedFallback || existingTab?.title === tabTitle) return;
 
     openedExecutionRef.current = activeExecutionIdentifier;
-    openTab(createExecutionSessionTab(activeExecutionIdentifier, title));
-  }, [activeExecutionIdentifier, executionTitleLookup, openTab, tabs]);
+    openTab(createExecutionSessionTab(activeExecutionIdentifier, tabTitle));
+  }, [activeExecutionIdentifier, executionTitleLookup, openTab, t, tabs]);
 
   const handleSelectTab = useCallback(
     (tabId: string) => {
@@ -128,6 +167,10 @@ export function ProjectSessionsWorkspace({
       const tab = tabs.find((entry) => entry.id === tabId);
       if (tab?.kind === "assistant-session") {
         navigate(projectSessionPath(projectSlug, tab.threadId), { replace: true });
+        return;
+      }
+      if (tab?.kind === "authoring-session") {
+        navigate(projectAuthoringSessionPath(projectSlug, tab.issueIdentifier), { replace: true });
         return;
       }
       if (tab?.kind === "execution-session") {
@@ -194,6 +237,28 @@ export function ProjectSessionsWorkspace({
     () => PROJECT_SESSION_BUCKETS.flatMap((bucket) => groups[bucket]),
     [groups],
   );
+  const authoringSessions = useMemo((): AuthoringSessionRow[] => {
+    const rows = new Map<string, AuthoringSessionRow>();
+    for (const session of executionSessions) {
+      rows.set(session.issueIdentifier, {
+        issueIdentifier: session.issueIdentifier,
+        title: session.title,
+        updatedAt: session.lastEventAt ?? session.startedAt ?? "",
+        agentKind: session.agentKind,
+      });
+    }
+    for (const session of relatedSessions) {
+      if (session.scope !== "issue" || !session.identifier || rows.has(session.identifier)) continue;
+      rows.set(session.identifier, {
+        issueIdentifier: session.identifier,
+        title: session.title,
+        updatedAt: session.updatedAt,
+        agentKind: session.agentKind === "opencode" ? null : session.agentKind,
+      });
+    }
+    return [...rows.values()];
+  }, [executionSessions, relatedSessions]);
+
   const sessionItems = useMemo<UnifiedSessionItem[]>(() => {
     const executionItems: UnifiedSessionItem[] = executionSessions.map((session) => ({
       kind: "execution",
@@ -201,15 +266,23 @@ export function ProjectSessionsWorkspace({
       sortValue: timestampValue(session.lastEventAt ?? session.startedAt),
       session,
     }));
-    const relatedItems: UnifiedSessionItem[] = relatedSessions.map((session) => ({
-      kind: "related",
-      key: `related:${session.id}`,
+    const authoringItems: UnifiedSessionItem[] = authoringSessions.map((session) => ({
+      kind: "authoring",
+      key: `authoring:${session.issueIdentifier}`,
       sortValue: timestampValue(session.updatedAt),
       session,
     }));
+    const relatedItems: UnifiedSessionItem[] = relatedSessions
+      .filter((session) => session.scope !== "issue")
+      .map((session) => ({
+        kind: "related",
+        key: `related:${session.id}`,
+        sortValue: timestampValue(session.updatedAt),
+        session,
+      }));
 
-    return [...executionItems, ...relatedItems].sort((a, b) => b.sortValue - a.sortValue);
-  }, [executionSessions, relatedSessions]);
+    return [...executionItems, ...authoringItems, ...relatedItems].sort((a, b) => b.sortValue - a.sortValue);
+  }, [authoringSessions, executionSessions, relatedSessions]);
   const total = sessionItems.length;
 
   useEffect(() => {
@@ -266,6 +339,7 @@ export function ProjectSessionsWorkspace({
                 archiving={archiving}
                 onResume={handleResume}
                 onArchive={handleArchive}
+                onOpenAuthoringSession={openAuthoringSession}
                 onOpenExecutionSession={openExecutionSession}
                 onOpenAssistantSession={openAssistantSession}
               />
@@ -274,15 +348,22 @@ export function ProjectSessionsWorkspace({
         ) : null}
 
         {activeTab?.kind === "assistant-session" ? (
-          <section className="min-h-0 flex-1 overflow-hidden rounded-xl border border-border/60 bg-background shadow-sm">
-            <ProjectAssistantPanel
-              projectSlug={projectSlug}
-              threadId={activeTab.threadId}
-              view={view}
-              mode="page"
-              contentMaxWidth="wide"
-            />
-          </section>
+          <AssistantSessionTabContent
+            projectSlug={projectSlug}
+            threadId={activeTab.threadId}
+            view={view}
+            relatedSessions={relatedSessions}
+          />
+        ) : null}
+
+        {activeTab?.kind === "authoring-session" ? (
+          <AuthoringSessionTabContent
+            projectSlug={projectSlug}
+            issueIdentifier={activeTab.issueIdentifier}
+            issue={issues.find((entry) => entry.identifier === activeTab.issueIdentifier) ?? null}
+            view={view}
+            isLoading={isLoading}
+          />
         ) : null}
 
         {activeTab?.kind === "execution-session" ? (
@@ -299,6 +380,36 @@ export function ProjectSessionsWorkspace({
         ) : null}
       </section>
     </main>
+  );
+}
+
+function AuthoringSessionTabContent({
+  projectSlug,
+  issueIdentifier,
+  issue,
+  view,
+  isLoading,
+}: {
+  projectSlug: string;
+  issueIdentifier: string;
+  issue: Issue | null;
+  view: WorkspaceView;
+  isLoading: boolean;
+}) {
+  const { t } = useTranslation();
+
+  if (!issue) {
+    return (
+      <section className="flex min-h-0 flex-1 items-center justify-center rounded-xl border border-border/60 bg-background p-6 text-center text-sm text-muted-foreground shadow-sm">
+        {isLoading ? t("sessions.loading") : t("sessions.executionUnavailable", { identifier: issueIdentifier })}
+      </section>
+    );
+  }
+
+  return (
+    <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border/60 bg-background p-3 shadow-sm">
+      <IssueAuthoringSessionPanel issue={issue} projectSlug={projectSlug} view={view} />
+    </section>
   );
 }
 
@@ -334,14 +445,12 @@ function ExecutionSessionTabContent({
 
   return (
     <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border/60 bg-background p-3 shadow-sm">
-      <AgentTabs
+      <IssueExecutionSessionPanel
         issue={issue}
         projectSlug={projectSlug}
         execution={execution}
         executions={allExecutions}
         view={view}
-        issueHref={issuePath(projectSlug, view, issue.identifier)}
-        issueTerminalHref={issuePath(projectSlug, view, issue.identifier, "terminal")}
         onIssueUpdated={onIssueUpdated}
       />
     </section>
@@ -356,6 +465,7 @@ function UnifiedSessionsList({
   archiving,
   onResume,
   onArchive,
+  onOpenAuthoringSession,
   onOpenExecutionSession,
   onOpenAssistantSession,
 }: {
@@ -366,6 +476,7 @@ function UnifiedSessionsList({
   archiving: boolean;
   onResume: (session: ProjectSessionRow) => void;
   onArchive: (threadId: number) => void;
+  onOpenAuthoringSession: (session: AuthoringSessionRow) => void;
   onOpenExecutionSession: (session: ProjectSessionRow) => void;
   onOpenAssistantSession: (threadId: number, title: string) => void;
 }) {
@@ -376,10 +487,17 @@ function UnifiedSessionsList({
           <SessionListItem
             key={item.key}
             session={item.session}
-            issueHref={issuePath(projectSlug, view, item.session.issueIdentifier)}
+            issueHref={issuePath(projectSlug, view, item.session.issueIdentifier, "sessions")}
             resumePending={resumePending === item.session.issueIdentifier}
             onOpen={onOpenExecutionSession}
             onResume={onResume}
+          />
+        ) : item.kind === "authoring" ? (
+          <AuthoringSessionListItem
+            key={item.key}
+            session={item.session}
+            issueHref={issuePath(projectSlug, view, item.session.issueIdentifier, "sessions")}
+            onOpen={onOpenAuthoringSession}
           />
         ) : (
           <RelatedSessionCard
@@ -409,7 +527,10 @@ function RelatedSessionCard({
   const { t } = useTranslation();
   const subtitle = recentSessionSubtitle(session, t);
   const canOpenAsTab =
-    (session.scope === "project_session" || session.scope === "project") &&
+    (session.scope === "project_session" ||
+      session.scope === "project" ||
+      session.scope === "issue" ||
+      session.scope === "issue_session") &&
     session.threadId != null &&
     session.projectSlug;
 

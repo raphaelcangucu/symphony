@@ -260,6 +260,7 @@
         "codex": "Codex",
         "cursor": "Cursor Agent",
         "opencode": "OpenCode",
+        "opencode": "OpenCode",
         "pi": "PI",
         "commandCode": "Command Code",
         "grok": "Grok"
@@ -547,6 +548,7 @@
         "comments": "Comments",
         "evidence": "Evidence",
         "blockers": "Blockers",
+        "sessions": "Sessions",
         "agent": "Agent",
         "preview": "Preview",
         "activity": "Activity",
@@ -582,7 +584,17 @@
       "executionHint": "Watch the live run, steer with /infer, and pause or resume.",
       "sectionsAria": "Agent sections",
       "authoring": "Authoring",
-      "execution": "Execution"
+      "execution": "Execution",
+      "newSession": "New session",
+      "newSessionTitle": "Start a fresh agent session for this issue"
+    },
+    "sessions": {
+      "hint": "Create build-mode sessions for this issue. Sessions open on the project Sessions page.",
+      "newSession": "New session",
+      "empty": "No sessions for this issue yet. Start one in build mode to begin.",
+      "defaultSessionTitle": "Issue session",
+      "issueSessionBadge": "Build session",
+      "authoringBadge": "Authoring"
     },
     "toolCall": {
       "status": {
@@ -1069,7 +1081,8 @@
       "agentLabels": {
         "codex": "Codex",
         "claude": "Claude Code",
-        "cursor": "Cursor Agent"
+        "cursor": "Cursor Agent",
+        "opencode": "OpenCode"
       },
       "errors": {
         "joinTimeout": "Timed out joining session log channel",
@@ -1234,6 +1247,7 @@
       "optionsAria": "New issue options",
       "withAssistant": "New issue with assistant",
       "newProjectSession": "New project session",
+      "newIssueSession": "New issue session",
       "newProjectTerminal": "New project terminal",
       "quickCreate": "Quick create"
     },
@@ -2118,7 +2132,8 @@
       "agents": {
         "codex": "Codex CLI",
         "claude": "Claude Code",
-        "cursor": "Cursor Agent"
+        "cursor": "Cursor Agent",
+        "opencode": "OpenCode"
       },
       "models": {
         "gpt-5_5": "GPT-5.5",
@@ -2334,6 +2349,30 @@
       "noContent": "No content to display."
     }
   },
+  "issueSessionPicker": {
+    "title": "New issue session",
+    "description": "Choose an issue, then configure a fresh agent session before dispatching.",
+    "placeholder": "Search issues by ID or title…",
+    "empty": "No matching issues.",
+    "loading": "Loading issues…"
+  },
+  "issueSession": {
+    "started": "Started a new session for {{identifier}}",
+    "startFailed": "Could not start a new session for {{identifier}}",
+    "dialog": {
+      "title": "New issue session",
+      "description": "Start a fresh agent session for {{identifier}} — {{title}}. Configure the run before dispatching.",
+      "descriptionFallback": "Configure a fresh agent session before dispatching.",
+      "agentLabel": "Agent",
+      "modeLabel": "Execution mode",
+      "titleLabel": "Session title",
+      "instructionsLabel": "Initial instructions (optional)",
+      "instructionsPlaceholder": "What should the agent focus on in this session?",
+      "cancel": "Cancel",
+      "start": "Start session",
+      "starting": "Starting…"
+    }
+  },
   "sessions": {
     "eyebrow": "Project sessions",
     "title": "Sessions",
@@ -2350,6 +2389,8 @@
     "resumeStarted": "Resuming {{identifier}}",
     "resumeFailed": "Could not resume {{identifier}}",
     "openExecutionAria": "Open execution session {{identifier}}",
+    "openAuthoringAria": "Open authoring session {{identifier}}",
+    "issueThreadHint": "Issue {{identifier}} working tree",
     "openIssueAria": "Open issue {{identifier}}",
     "executionUnavailable": "Execution details for {{identifier}} are not available right now.",
     "turns": "{{count}} turns",

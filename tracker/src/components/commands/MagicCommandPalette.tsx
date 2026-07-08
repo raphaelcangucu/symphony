@@ -5,17 +5,17 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
+import type { SlashCommandDef } from "@/components/assistant/slashCommands";
+import { MagicPaletteShell } from "@/components/commands/MagicPaletteShell";
+import {
+  groupPromptTemplates,
+  groupSlashCommands,
+  slashCommandSearchValue,
+} from "@/components/commands/magicPaletteCategories";
 import { useMagicCommands } from "@/components/commands/useMagicCommands";
 import { agentKindLabel } from "@/components/shared/AgentChip";
 import { Badge } from "@/components/ui/badge";
-import {
-  CommandDialog,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
+import { CommandGroup, CommandItem } from "@/components/ui/command";
 import { executionModeMeta } from "@/lib/executionMode";
 import type { RunPromptTemplateResult } from "@/services/magicCommands";
 import type { PromptTemplate } from "@/types/prompt-template";
@@ -24,15 +24,11 @@ import type { AgentKind, ExecutionMode } from "@/types/issue";
 interface MagicCommandPaletteProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  projectSlug: string;
-  identifier: string;
+  slashCommands?: SlashCommandDef[];
+  onSlashSelect?: (command: SlashCommandDef) => void;
+  projectSlug?: string;
+  identifier?: string;
   onRan?: (result: RunPromptTemplateResult) => void;
-}
-
-interface CommandCategoryGroup {
-  id: string;
-  heading: string;
-  items: PromptTemplate[];
 }
 
 interface CommandMetadata {
@@ -45,31 +41,38 @@ interface CommandMetadata {
 export function MagicCommandPalette({
   open,
   onOpenChange,
-  projectSlug,
-  identifier,
+  slashCommands = [],
+  onSlashSelect,
+  projectSlug = "",
+  identifier = "",
   onRan,
 }: MagicCommandPaletteProps) {
   const { t } = useTranslation();
-  const { commands, isLoading, run, isRunning } = useMagicCommands({
-    projectSlug,
-    identifier,
-    onRan,
-  });
   const [pendingSlug, setPendingSlug] = useState<string | null>(null);
 
-  const uncategorizedLabel = t("commands.magic.uncategorized");
-  const groupedCommands = useMemo(
-    () => groupCommandsByCategory(commands, uncategorizedLabel),
-    [commands, uncategorizedLabel],
+  const promptTemplatesEnabled = Boolean(projectSlug.trim() && identifier.trim());
+  const { commands: templateCommands, isLoading, run, isRunning } = useMagicCommands({
+    projectSlug: promptTemplatesEnabled ? projectSlug : "",
+    identifier: promptTemplatesEnabled ? identifier : "",
+    onRan,
+  });
+
+  const slashGroups = useMemo(() => groupSlashCommands(slashCommands, t), [slashCommands, t]);
+  const templateGroups = useMemo(
+    () => (promptTemplatesEnabled ? groupPromptTemplates(templateCommands, t) : []),
+    [promptTemplatesEnabled, templateCommands, t],
   );
 
   const dispatchPending = isRunning || pendingSlug !== null;
   const inputPlaceholder = dispatchPending
     ? t("commands.magic.searchRunning")
     : t("commands.magic.searchPlaceholder");
-  const emptyLabel = isLoading ? t("commands.magic.loading") : t("commands.magic.empty");
+  const emptyLabel =
+    promptTemplatesEnabled && isLoading && templateGroups.length === 0 && slashGroups.length === 0
+      ? t("commands.magic.loading")
+      : t("commands.magic.empty");
 
-  async function handleSelect(command: PromptTemplate) {
+  async function handleTemplateSelect(command: PromptTemplate) {
     if (dispatchPending) return;
 
     try {
@@ -84,88 +87,90 @@ export function MagicCommandPalette({
     }
   }
 
-  return (
-    <CommandDialog open={open} onOpenChange={onOpenChange} label={t("commands.magic.title")}>
-      <CommandInput placeholder={inputPlaceholder} disabled={dispatchPending} />
-      <CommandList>
-        <CommandEmpty>{emptyLabel}</CommandEmpty>
-        {groupedCommands.map((group) => (
-          <CommandGroup key={group.id} heading={group.heading}>
-            {group.items.map((command) => {
-              const metadata = commandMetadata(command, t);
-              const isPending = command.slug === pendingSlug;
-
-              return (
-                <CommandItem
-                  key={command.id}
-                  value={commandSearchValue(command, metadata)}
-                  disabled={dispatchPending}
-                  onSelect={() => void handleSelect(command)}
-                >
-                  <div className="flex min-w-0 flex-1 items-center justify-between gap-2">
-                    <span className="truncate">{command.name}</span>
-                    <div className="flex shrink-0 items-center gap-1.5">
-                      {metadata.agent ? (
-                        <MetaBadge
-                          prefix={t("commands.magic.badges.agent")}
-                          label={metadata.agent}
-                          dataTestId={`magic-command-agent-${command.slug}`}
-                        />
-                      ) : null}
-                      {metadata.model ? (
-                        <MetaBadge
-                          prefix={t("commands.magic.badges.model")}
-                          label={metadata.model}
-                          dataTestId={`magic-command-model-${command.slug}`}
-                        />
-                      ) : null}
-                      {metadata.effort ? (
-                        <MetaBadge
-                          prefix={t("commands.magic.badges.effort")}
-                          label={metadata.effort}
-                          icon={effortIcon(command.effort)}
-                          dataTestId={`magic-command-effort-${command.slug}`}
-                        />
-                      ) : null}
-                      {metadata.mode ? (
-                        <MetaBadge
-                          prefix={t("commands.magic.badges.mode")}
-                          label={metadata.mode.label}
-                          icon={metadata.mode.icon}
-                          dataTestId={`magic-command-mode-${command.slug}`}
-                        />
-                      ) : null}
-                      {isPending ? (
-                        <Badge variant="secondary" className="gap-1 px-1.5 py-0 text-[10px] font-medium">
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                          {t("commands.magic.running")}
-                        </Badge>
-                      ) : null}
-                    </div>
-                  </div>
-                </CommandItem>
-              );
-            })}
-          </CommandGroup>
-        ))}
-      </CommandList>
-    </CommandDialog>
-  );
-}
-
-function groupCommandsByCategory(commands: PromptTemplate[], uncategorizedLabel: string): CommandCategoryGroup[] {
-  const grouped = new Map<string, CommandCategoryGroup>();
-
-  for (const command of commands) {
-    const categoryValue = normalizeNonBlank(command.category);
-    const id = categoryValue ? categoryValue.toLocaleLowerCase() : "__uncategorized__";
-    const heading = categoryValue ? titleCase(categoryValue) : uncategorizedLabel;
-    const group = grouped.get(id) ?? { id, heading, items: [] };
-    group.items.push(command);
-    grouped.set(id, group);
+  function handleSlashSelect(command: SlashCommandDef) {
+    if (dispatchPending) return;
+    onSlashSelect?.(command);
+    onOpenChange(false);
   }
 
-  return [...grouped.values()];
+  return (
+    <MagicPaletteShell
+      open={open}
+      onOpenChange={onOpenChange}
+      searchPlaceholder={inputPlaceholder}
+      searchDisabled={dispatchPending}
+      emptyLabel={emptyLabel}
+    >
+      {slashGroups.map((group) => (
+        <CommandGroup key={`slash-${group.id}`} heading={group.heading}>
+          {group.items.map((command) => (
+            <CommandItem
+              key={command.name}
+              value={slashCommandSearchValue(command)}
+              disabled={dispatchPending}
+              onSelect={() => handleSlashSelect(command)}
+            >
+              <div className="flex min-w-0 flex-1 items-center justify-between gap-2">
+                <span className="truncate">{command.name}</span>
+              </div>
+            </CommandItem>
+          ))}
+        </CommandGroup>
+      ))}
+      {templateGroups.map((group) => (
+        <CommandGroup key={`template-${group.id}`} heading={group.heading}>
+          {group.items.map((command) => {
+            const metadata = commandMetadata(command, t);
+            const isPending = command.slug === pendingSlug;
+
+            return (
+              <CommandItem
+                key={command.id}
+                value={commandSearchValue(command, metadata)}
+                disabled={dispatchPending}
+                onSelect={() => void handleTemplateSelect(command)}
+              >
+                <div className="flex min-w-0 flex-1 items-center justify-between gap-2">
+                  <span className="truncate">{command.name}</span>
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    {metadata.agent ? (
+                      <MetaBadge
+                        prefix={t("commands.magic.badges.agent")}
+                        label={metadata.agent}
+                        dataTestId={`magic-command-agent-${command.slug}`}
+                      />
+                    ) : null}
+                    {metadata.effort ? (
+                      <MetaBadge
+                        prefix={t("commands.magic.badges.effort")}
+                        label={metadata.effort}
+                        icon={effortIcon(command.effort)}
+                        dataTestId={`magic-command-effort-${command.slug}`}
+                      />
+                    ) : null}
+                    {metadata.mode ? (
+                      <MetaBadge
+                        prefix={t("commands.magic.badges.mode")}
+                        label={metadata.mode.label}
+                        icon={metadata.mode.icon}
+                        dataTestId={`magic-command-mode-${command.slug}`}
+                      />
+                    ) : null}
+                    {isPending ? (
+                      <Badge variant="secondary" className="gap-1 px-1.5 py-0 text-[10px] font-medium">
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        {t("commands.magic.running")}
+                      </Badge>
+                    ) : null}
+                  </div>
+                </div>
+              </CommandItem>
+            );
+          })}
+        </CommandGroup>
+      ))}
+    </MagicPaletteShell>
+  );
 }
 
 function commandMetadata(command: PromptTemplate, t: TFunction): CommandMetadata {
@@ -182,6 +187,7 @@ function commandSearchValue(command: PromptTemplate, metadata: CommandMetadata):
     command.name,
     command.slug,
     normalizeNonBlank(command.category),
+    normalizeNonBlank(command.description),
     metadata.agent,
     metadata.model,
     metadata.effort,
@@ -224,14 +230,6 @@ function modeLabel(value: string | null, t: TFunction): { label: string; icon: R
   const meta = executionModeMeta(mode);
   const Icon = meta.Icon;
   return { label: t(meta.labelKey), icon: <Icon className="h-3 w-3 shrink-0" /> };
-}
-
-function titleCase(value: string): string {
-  return value
-    .split(/[\s_-]+/)
-    .filter((entry) => entry.length > 0)
-    .map((entry) => entry[0].toUpperCase() + entry.slice(1))
-    .join(" ");
 }
 
 function normalizeNonBlank(value: string | null): string | null {

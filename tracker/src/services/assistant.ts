@@ -6,6 +6,7 @@ import {
   fallbackClaudeCatalog,
   fallbackCodexCatalog,
   fallbackCursorCatalog,
+  fallbackOpenCodeCatalog,
   loadCachedCatalogBundle,
   saveCachedCatalogBundle,
   type AssistantAgentCatalog,
@@ -330,16 +331,22 @@ export function normalizeAssistantCatalogBundle(dto: BackendAssistantCatalogBund
   const agents: AssistantAgentCatalog[] = rawAgents
     .map((agentDto): AssistantAgentCatalog | null => {
       const agentKind = agentDto.agent;
-      if (agentKind !== "codex" && agentKind !== "claude" && agentKind !== "cursor") return null;
+      if (agentKind !== "codex" && agentKind !== "claude" && agentKind !== "cursor" && agentKind !== "opencode") return null;
 
       const models = (agentDto.models ?? []).map(normalizeAssistantModel).filter((m) => m.model.length > 0);
       if (models.length === 0) {
         if (agentKind === "claude") return fallbackClaudeCatalog();
         if (agentKind === "cursor") return fallbackCursorCatalog();
+        if (agentKind === "opencode") return fallbackOpenCodeCatalog();
         return fallbackCodexCatalog();
       }
 
-      const fallbackCommands: Record<AgentKind, string> = { codex: "codex app-server", claude: "claude", cursor: "cursor-agent" };
+      const fallbackCommands: Record<AgentKind, string> = {
+        codex: "codex app-server",
+        claude: "claude",
+        cursor: "cursor-agent",
+        opencode: "opencode",
+      };
 
       return {
         agent: agentKind as AgentKind,

@@ -30,18 +30,31 @@ function CursorIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+function OpenCodeIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true" {...props}>
+      <rect x="4" y="4" width="7" height="7" rx="1.5" />
+      <rect x="13" y="4" width="7" height="7" rx="1.5" />
+      <rect x="4" y="13" width="7" height="7" rx="1.5" />
+      <rect x="13" y="13" width="7" height="7" rx="1.5" />
+    </svg>
+  );
+}
+
 export const AGENT_ICONS: Record<AgentKind, (props: SVGProps<SVGSVGElement>) => ReactElement> = {
   codex: CodexIcon,
   claude: ClaudeIcon,
   cursor: CursorIcon,
+  opencode: OpenCodeIcon,
 };
 
-export const AGENT_KINDS: AgentKind[] = ["codex", "claude", "cursor"];
+export const AGENT_KINDS: AgentKind[] = ["codex", "claude", "cursor", "opencode"];
 
 const AGENT_LABEL_KEYS: Record<AgentKind, string> = {
   codex: "issue.sessionLog.agentLabels.codex",
   claude: "issue.sessionLog.agentLabels.claude",
   cursor: "issue.sessionLog.agentLabels.cursor",
+  opencode: "issue.sessionLog.agentLabels.opencode",
 };
 
 type Translate = TFunction;

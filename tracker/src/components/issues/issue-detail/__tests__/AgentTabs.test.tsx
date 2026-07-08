@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AgentTabs } from "@/components/issues/issue-detail/AgentTabs";
@@ -160,6 +160,27 @@ describe("AgentTabs documents drawer", () => {
     expect(screen.queryByRole("link", { name: /open issue DIS-6/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /terminal for DIS-6/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /open in code/i })).not.toBeInTheDocument();
+  });
+
+  it("opens the new session dialog from the quick action button", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter initialEntries={["/projects/distributionmachine/board/issues/DIS-6/agent?agent=authoring"]}>
+        <Routes>
+          <Route
+            path="/projects/distributionmachine/board/issues/DIS-6/agent"
+            element={<AgentTabs issue={issue} projectSlug="distributionmachine" view="board" />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await user.click(screen.getByRole("button", { name: /new session/i }));
+
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByText(/DIS-6/i)).toBeInTheDocument();
+    expect(screen.getByTestId("execution-mode-icon-build")).toBeInTheDocument();
   });
 
   it("shows the view-issue, terminal, and code shortcuts when hrefs are provided", () => {

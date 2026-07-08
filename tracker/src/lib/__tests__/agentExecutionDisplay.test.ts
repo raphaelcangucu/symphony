@@ -69,6 +69,18 @@ describe("agentExecutionDisplay", () => {
     expect(resolveDisplayStatus(raw)).toBe("live");
     expect(canResumeExecution(raw)).toBe(false);
   });
+
+  it("keeps operator-paused runs paused even with lingering abort signals", () => {
+    const raw = execution({
+      status: "paused",
+      lastEvent: "turn_aborted",
+      error: "Turn aborted",
+    });
+
+    expect(resolveDisplayStatus(raw)).toBe("paused");
+    expect(reconcileExecutionStatus(raw).status).toBe("paused");
+    expect(canResumeExecution(raw)).toBe(true);
+  });
 });
 
 describe("deriveAgentControl", () => {
@@ -116,6 +128,18 @@ describe("deriveAgentControl", () => {
     expect(control.canResume).toBe(true);
     expect(control.primaryAction).toBe("resume");
     expect(control.primaryLabel).toBe("Resume");
+    expect(control.enterIntent).toBe("resume");
+  });
+
+  it("offers resume for a paused run without treating it as active", () => {
+    const control = deriveAgentControl(execution({ status: "paused", lastEvent: "turn_paused" }));
+
+    expect(control.state).toBe("paused");
+    expect(control.isActive).toBe(false);
+    expect(control.canSteer).toBe(false);
+    expect(control.canPause).toBe(false);
+    expect(control.canResume).toBe(true);
+    expect(control.primaryAction).toBe("resume");
     expect(control.enterIntent).toBe("resume");
   });
 

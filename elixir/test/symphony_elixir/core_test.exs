@@ -109,6 +109,27 @@ defmodule SymphonyElixir.CoreTest do
     assert Orchestrator.should_dispatch_issue_for_test(unlabeled_issue, state)
   end
 
+  test "operator-paused issues are gated out of autonomous dispatch until resumed" do
+    slug = seed_prompt_project!("Prompt", %{"tracker" => %{"active_states" => ["Todo"]}})
+
+    issue = %Issue{
+      id: "paused-issue-1",
+      identifier: "PP-20",
+      project_slug: slug,
+      title: "Paused issue",
+      state: "Todo",
+      labels: ["symphony:codex"],
+      assigned_to_worker: true
+    }
+
+    # Eligible for autonomous dispatch while not paused.
+    assert Orchestrator.should_dispatch_issue_for_test(issue, empty_dispatch_state())
+
+    # A deliberate operator pause must stop the poll loop from re-dispatching it.
+    paused_state = %{empty_dispatch_state() | paused: MapSet.new([issue.id])}
+    refute Orchestrator.should_dispatch_issue_for_test(issue, paused_state)
+  end
+
   test "config defaults and validation checks" do
     write_workflow_file!(Workflow.workflow_file_path(),
       tracker_api_token: nil,

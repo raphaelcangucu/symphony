@@ -22,10 +22,11 @@ describe("executionMode", () => {
     expect(DEFAULT_EXECUTION_MODE).toBe("build");
   });
 
-  it("exposes all modes for codex/claude but hides plan for cursor", () => {
+  it("exposes all modes for every agent kind", () => {
     expect(availableModesFor("codex")).toEqual(["plan", "build", "yolo"]);
     expect(availableModesFor("claude")).toEqual(["plan", "build", "yolo"]);
-    expect(availableModesFor("cursor")).toEqual(["build", "yolo"]);
+    expect(availableModesFor("cursor")).toEqual(["plan", "build", "yolo"]);
+    expect(availableModesFor("opencode")).toEqual(["plan", "build", "yolo"]);
   });
 
   it("cycles to the next available mode and wraps around", () => {
@@ -35,14 +36,15 @@ describe("executionMode", () => {
     expect(cycleMode("yolo", all)).toBe("plan");
   });
 
-  it("cycles within the agent's available set (cursor skips plan)", () => {
+  it("cycles within the agent's available set", () => {
     const cursor = availableModesFor("cursor");
     expect(cycleMode("build", cursor)).toBe("yolo");
-    expect(cycleMode("yolo", cursor)).toBe("build");
+    expect(cycleMode("yolo", cursor)).toBe("plan");
+    expect(cycleMode("plan", cursor)).toBe("build");
   });
 
   it("returns the first available mode when current is unavailable", () => {
-    expect(cycleMode("plan", availableModesFor("cursor"))).toBe("build");
+    expect(cycleMode("build", ["yolo", "plan"])).toBe("yolo");
   });
 
   it("looks up metadata by id and falls back to build", () => {

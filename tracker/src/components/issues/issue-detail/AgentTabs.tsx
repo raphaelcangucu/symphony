@@ -1,4 +1,4 @@
-import { ChevronDown, ExternalLink, PenLine, Play, TerminalSquare } from "lucide-react";
+import { ChevronDown, ExternalLink, PenLine, Play, PlayCircle, TerminalSquare } from "lucide-react";
 import { memo, useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useLocation, useNavigate } from "react-router-dom";
@@ -6,6 +6,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { IssueAuthoringPanel } from "@/components/assistant/IssueAuthoringPanel";
 import { IssueDocumentsDrawer } from "@/components/assistant/IssueDocumentsDrawer";
 import { IssueEditorMenu } from "@/components/issues/IssueEditorMenu";
+import { StartIssueSessionDialog } from "@/components/sessions/StartIssueSessionDialog";
 import { Button } from "@/components/ui/button";
 import { AgentStatusBadge } from "@/components/issues/AgentStatusBadge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -82,6 +83,7 @@ export function AgentTabs({
   const [steerSeedMessage, setSteerSeedMessage] = useState<string | null>(null);
   const [returnToAgentTemplate, setReturnToAgentTemplate] = useState<ReturnToAgentTemplate | null>(null);
   const [showExecutionStatus, setShowExecutionStatus] = useState(false);
+  const [startSessionOpen, setStartSessionOpen] = useState(false);
   const executionDisplayStatus = execution ? resolveDisplayStatus(execution) : null;
 
   const setSection = useCallback(
@@ -107,6 +109,7 @@ export function AgentTabs({
   }, [issue.identifier, projectSlug, setSection]);
 
   return (
+    <>
     <Tabs
       value={section}
       onValueChange={(value) => {
@@ -142,6 +145,17 @@ export function AgentTabs({
           ) : null}
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 gap-1.5 px-2.5 text-xs"
+            onClick={() => setStartSessionOpen(true)}
+            title={t("issue.agentTabs.newSessionTitle")}
+          >
+            <PlayCircle className="h-3.5 w-3.5" />
+            {t("issue.agentTabs.newSession")}
+          </Button>
           {issueHref ? (
             <>
               <Link
@@ -210,5 +224,18 @@ export function AgentTabs({
         />
       </TabsContent>
     </Tabs>
+    <StartIssueSessionDialog
+      projectSlug={projectSlug}
+      issue={{
+        identifier: issue.identifier,
+        title: issue.title,
+        agentKind: issue.agentKind ?? null,
+      }}
+      open={startSessionOpen}
+      onOpenChange={setStartSessionOpen}
+      view={view}
+      onCreated={() => setSection("execution")}
+    />
+    </>
   );
 }

@@ -12,6 +12,7 @@ const AGENT_LABELS: Record<AgentKind, string> = {
   codex: "Codex",
   claude: "Claude",
   cursor: "Cursor",
+  opencode: "OpenCode",
 };
 
 const SESSION_LABELS: Record<SessionBadgeKind, string> = {

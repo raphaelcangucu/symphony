@@ -87,7 +87,7 @@ defmodule SymphonyElixir.Gateways.SessionResolver do
 
   defp create_thread(%Binding{active_mode: mode}), do: {:error, {:unsupported_gateway_mode, mode}}
 
-  defp maybe_set_thread_agent(thread, kind) when kind in ["codex", "claude", "cursor"] do
+  defp maybe_set_thread_agent(thread, kind) when kind in ["codex", "claude", "cursor", "opencode"] do
     History.set_thread_agent(thread, kind)
   end
 

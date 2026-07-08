@@ -159,7 +159,7 @@ defmodule SymphonyElixirWeb.SessionLogChannel do
     end
   end
 
-  @known_agent_kinds ["codex", "claude", "cursor"]
+  @known_agent_kinds ["codex", "claude", "cursor", "opencode"]
 
   # The client tells us which agent the operator is actually viewing (the
   # selected/running agent in the UI). Honor it so the session log shows that

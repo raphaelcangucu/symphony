@@ -14,7 +14,7 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
   alias SymphonyElixir.Tracker.IssueDTO
 
   @page_size 50
-  @agent_kinds ["codex", "claude", "cursor"]
+  @agent_kinds ["codex", "claude", "cursor", "opencode"]
 
   @impl true
   def kind, do: :github

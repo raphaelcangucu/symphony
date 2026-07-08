@@ -51,12 +51,13 @@ describe("agentUsage service", () => {
     expect(snapshot?.windows[0].resetsAt).toBeNull();
   });
 
-  it("normalizeAgentUsageMap always has codex/claude/cursor keys", () => {
+  it("normalizeAgentUsageMap always has codex/claude/cursor/opencode keys", () => {
     const map = normalizeAgentUsageMap({ claude: { agent_kind: "claude", plan: "max" } });
-    expect(Object.keys(map).sort()).toEqual(["claude", "codex", "cursor"]);
+    expect(Object.keys(map).sort()).toEqual(["claude", "codex", "cursor", "opencode"]);
     expect(map.claude?.plan).toBe("max");
     expect(map.codex).toBeNull();
     expect(map.cursor).toBeNull();
+    expect(map.opencode).toBeNull();
   });
 
   it("getAgentUsage unwraps the envelope and normalizes", async () => {

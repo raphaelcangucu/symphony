@@ -161,9 +161,30 @@ export function fallbackCursorCatalog(
   };
 }
 
+export function fallbackOpenCodeCatalog(
+  command = "opencode",
+  t: Translate = i18n.t.bind(i18n) as Translate,
+): AssistantAgentCatalog {
+  return {
+    agent: "opencode",
+    agentLabel: catalogAgentLabel("opencode", t),
+    command,
+    defaultModel: "opencode/gpt-5.5",
+    models: [
+      fallbackModel("opencode/gpt-5.5", true, "", [], t),
+      fallbackModel("anthropic/claude-sonnet-4-6", false, "", [], t),
+    ],
+  };
+}
+
 export function fallbackCatalogBundle(t: Translate = i18n.t.bind(i18n) as Translate): AssistantCatalogBundle {
   return {
-    agents: [fallbackCodexCatalog(undefined, t), fallbackClaudeCatalog(undefined, t), fallbackCursorCatalog(undefined, t)],
+    agents: [
+      fallbackCodexCatalog(undefined, t),
+      fallbackClaudeCatalog(undefined, t),
+      fallbackCursorCatalog(undefined, t),
+      fallbackOpenCodeCatalog(undefined, t),
+    ],
     defaultAgent: "codex",
   };
 }
@@ -221,7 +242,12 @@ export function loadComposerState(bundle: AssistantCatalogBundle): AssistantComp
     if (!raw) return defaultState;
 
     const parsed = JSON.parse(raw) as Partial<AssistantComposerState>;
-    const agent: AgentKind = (parsed.agent === "codex" || parsed.agent === "claude" || parsed.agent === "cursor")
+    const agent: AgentKind = (
+      parsed.agent === "codex"
+      || parsed.agent === "claude"
+      || parsed.agent === "cursor"
+      || parsed.agent === "opencode"
+    )
       ? parsed.agent
       : bundle.defaultAgent;
 

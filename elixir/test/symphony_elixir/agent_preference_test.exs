@@ -49,6 +49,7 @@ defmodule SymphonyElixir.AgentPreferenceTest do
       assert AgentPreference.normalize("codex") == "codex"
       assert AgentPreference.normalize("claude") == "claude"
       assert AgentPreference.normalize("cursor") == "cursor"
+      assert AgentPreference.normalize("opencode") == "opencode"
       assert AgentPreference.normalize(:claude) == nil
       assert AgentPreference.normalize("gemini") == nil
       assert AgentPreference.normalize(nil) == nil
@@ -59,6 +60,7 @@ defmodule SymphonyElixir.AgentPreferenceTest do
     test "returns the explicit agent label kind, nil otherwise" do
       assert AgentRouting.label_agent_kind(["bug", "symphony:claude"]) == "claude"
       assert AgentRouting.label_agent_kind(["symphony:codex"]) == "codex"
+      assert AgentRouting.label_agent_kind(["symphony:opencode"]) == "opencode"
       assert AgentRouting.label_agent_kind(["symphony"]) == nil
       assert AgentRouting.label_agent_kind([]) == nil
     end

@@ -50,7 +50,7 @@ import { ActivityTab } from "./issue-detail/ActivityTab";
 import { AgentLongRunningBadge, AgentStatusBadge } from "./AgentStatusBadge";
 import { AgentResumeIconButton } from "./AgentResumeIconButton";
 import { resolveDisplayStatus } from "@/lib/agentExecutionDisplay";
-import { AgentTabs } from "./issue-detail/AgentTabs";
+import { IssueSessionsTab } from "./issue-detail/IssueSessionsTab";
 import { AssigneeAvatar } from "./AssigneeAvatar";
 import { CommentsTab } from "./issue-detail/CommentsTab";
 import { EvidenceTab } from "./issue-detail/EvidenceTab";
@@ -66,7 +66,7 @@ const TAB_DEFS = [
   { value: "pr", labelKey: "issue.drawer.tabs.pr", Icon: GitPullRequest },
   { value: "comments", labelKey: "issue.drawer.tabs.comments", Icon: MessageSquare },
   { value: "evidence", labelKey: "issue.drawer.tabs.evidence", Icon: ClipboardCheck },
-  { value: "agent", labelKey: "issue.drawer.tabs.agent", Icon: Bot },
+  { value: "sessions", labelKey: "issue.drawer.tabs.sessions", Icon: Bot },
   { value: "preview", labelKey: "issue.drawer.tabs.preview", Icon: Server },
   { value: "activity", labelKey: "issue.drawer.tabs.activity", Icon: Activity },
   { value: "terminal", labelKey: "issue.drawer.tabs.terminal", Icon: TerminalSquare },
@@ -409,7 +409,7 @@ export function IssueDrawer({
               <div
                 className={cn(
                   "relative min-h-0 flex-1",
-                  tab === "agent" || tab === "terminal"
+                  tab === "sessions" || tab === "terminal"
                     ? "flex flex-col overflow-hidden px-4 py-3 sm:px-6"
                     : cn("overflow-auto px-6 py-5", SCROLLBAR_THIN),
                 )}
@@ -503,15 +503,12 @@ export function IssueDrawer({
                     trackerConfig={trackerConfig}
                   />
                 </TabsContent>
-                <TabsContent value="agent" className="mt-0 flex min-h-0 flex-1 flex-col overflow-hidden">
-                  <AgentTabs
+                <TabsContent value="sessions" className="mt-0 flex min-h-0 flex-1 flex-col overflow-hidden">
+                  <IssueSessionsTab
                     issue={issue}
                     projectSlug={projectSlug}
                     execution={execution}
                     view={view}
-                    workflowMarkdown={workflowMarkdown}
-                    evidenceRecords={evidence.records}
-                    onIssueUpdated={onIssueUpdated}
                   />
                 </TabsContent>
                 <TabsContent value="preview">

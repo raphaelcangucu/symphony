@@ -42,10 +42,10 @@ export const AGENT_TOOL_DESCRIPTORS: AgentToolDescriptor[] = [
   },
   {
     slug: "opencode",
-    kind: null,
+    kind: "opencode",
     labelKey: "settings.agentTool.agents.opencode",
     beta: false,
-    supported: false,
+    supported: true,
     icon: Boxes,
   },
   {

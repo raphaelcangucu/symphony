@@ -87,7 +87,7 @@ export interface Issue {
   subIssueSummary?: { total: number; completed: number; percentCompleted: number } | null;
 }
 
-export const AGENT_KINDS = ["codex", "claude", "cursor"] as const;
+export const AGENT_KINDS = ["codex", "claude", "cursor", "opencode"] as const;
 export type AgentKind = (typeof AGENT_KINDS)[number];
 
 export const EXECUTION_MODE_IDS = ["plan", "build", "yolo"] as const;

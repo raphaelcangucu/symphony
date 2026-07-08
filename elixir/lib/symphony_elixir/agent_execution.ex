@@ -755,7 +755,7 @@ defmodule SymphonyElixir.AgentExecution do
 
   defp normalize_objective(_value), do: nil
 
-  defp goal_kind(%{agent_kind: kind}) when kind in ["claude", "cursor"], do: "workflow"
+  defp goal_kind(%{agent_kind: kind}) when kind in ["claude", "cursor", "opencode"], do: "workflow"
   defp goal_kind(_entry), do: "goal"
 
   defp goal_source("goal"), do: "native"

@@ -26,13 +26,13 @@ describe("ExecutionModeMenu", () => {
     expect(onChange).toHaveBeenCalledWith("plan");
   });
 
-  it("hides the plan mode for cursor (no read-only equivalent)", async () => {
+  it("lists plan mode for cursor", async () => {
     const user = userEvent.setup();
     render(<ExecutionModeMenu agent="cursor" mode="build" onChange={vi.fn()} />);
 
     await user.click(screen.getByRole("button", { name: /build/i }));
 
-    expect(screen.queryByRole("menuitemradio", { name: /plan/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("menuitemradio", { name: /plan/i })).toBeInTheDocument();
     expect(screen.getByRole("menuitemradio", { name: /yolo/i })).toBeInTheDocument();
   });
 });

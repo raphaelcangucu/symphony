@@ -84,4 +84,9 @@ defmodule SymphonyElixir.InstanceConfigTest do
     Application.put_env(:symphony_elixir, :preview_pool_range, "nope")
     assert InstanceConfig.preview_pool_range() == [10_000, 30_000]
   end
+
+  test "opencode_command/0 returns default when env unset" do
+    Application.delete_env(:symphony_elixir, :opencode_command)
+    assert InstanceConfig.opencode_command() == "opencode"
+  end
 end

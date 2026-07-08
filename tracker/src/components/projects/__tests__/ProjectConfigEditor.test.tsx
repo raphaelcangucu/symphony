@@ -3,6 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+import type { ComponentProps } from "react";
+import { MemoryRouter } from "react-router-dom";
+
 import { ProjectConfigEditor } from "@/components/projects/ProjectConfigEditor";
 import * as devEnv from "@/services/devEnv";
 import * as projects from "@/services/projects";
@@ -59,6 +62,14 @@ function project(overrides: Partial<Project> = {}): Project {
   };
 }
 
+function renderEditor(props: ComponentProps<typeof ProjectConfigEditor>) {
+  return render(
+    <MemoryRouter>
+      <ProjectConfigEditor {...props} />
+    </MemoryRouter>,
+  );
+}
+
 describe("ProjectConfigEditor", () => {
   beforeEach(() => {
     vi.mocked(devEnv.listDevEnvSteps).mockResolvedValue([]);
@@ -68,7 +79,7 @@ describe("ProjectConfigEditor", () => {
 
   it("hydrates the workflow editor from workflow_markdown", async () => {
     vi.mocked(remote.discoverGitHubProjects).mockResolvedValue([]);
-    render(<ProjectConfigEditor project={project()} onSaved={vi.fn()} activeTab="workflow" />);
+    renderEditor({ project: project(), onSaved: vi.fn(), activeTab: "workflow" });
 
     expect(await screen.findByDisplayValue(/active_states: \[Todo\]/)).toBeInTheDocument();
     expect(screen.getByDisplayValue(/Prompt body/)).toBeInTheDocument();
@@ -81,7 +92,7 @@ describe("ProjectConfigEditor", () => {
     vi.mocked(projects.updateProjectSetup).mockResolvedValue(saved);
     const onSaved = vi.fn();
 
-    render(<ProjectConfigEditor project={project()} onSaved={onSaved} activeTab="workflow" />);
+    renderEditor({ project: project(), onSaved, activeTab: "workflow" });
 
     const editor = await screen.findByLabelText(/project workflow markdown/i);
     fireEvent.change(editor, { target: { value: workflowMarkdown.replace("Todo", "In Progress") } });
@@ -107,7 +118,7 @@ describe("ProjectConfigEditor", () => {
     );
     const onSaved = vi.fn();
 
-    render(<ProjectConfigEditor project={project()} onSaved={onSaved} />);
+    renderEditor({ project: project(), onSaved });
     await userEvent.click(screen.getByRole("button", { name: /save/i }));
 
     await waitFor(() => expect(projects.updateProjectSetup).toHaveBeenCalled());
@@ -125,7 +136,7 @@ describe("ProjectConfigEditor", () => {
     vi.mocked(projects.updateProjectRepositories).mockResolvedValue(withRepos);
     vi.mocked(projects.updateProjectSetup).mockResolvedValue(withRepos);
 
-    render(<ProjectConfigEditor project={withRepos} onSaved={vi.fn()} />);
+    renderEditor({ project: withRepos, onSaved: vi.fn() });
 
     await userEvent.type(screen.getByLabelText("Workspace path for acme/web"), "-app");
     await userEvent.click(screen.getByRole("button", { name: /save/i }));
@@ -146,7 +157,7 @@ describe("ProjectConfigEditor", () => {
       ],
     });
 
-    render(<ProjectConfigEditor project={withRepos} onSaved={vi.fn()} activeTab="dev" />);
+    renderEditor({ project: withRepos, onSaved: vi.fn(), activeTab: "dev" });
 
     expect(await screen.findByText("acme/web")).toBeInTheDocument();
     expect(screen.getByText("acme/api")).toBeInTheDocument();
@@ -169,7 +180,7 @@ describe("ProjectConfigEditor", () => {
     vi.mocked(projects.updateProject).mockResolvedValue(withRepos);
     vi.mocked(projects.updateProjectSetup).mockResolvedValue(withRepos);
 
-    render(<ProjectConfigEditor project={withRepos} onSaved={vi.fn()} activeTab="dev" />);
+    renderEditor({ project: withRepos, onSaved: vi.fn(), activeTab: "dev" });
 
     await screen.findByDisplayValue("yarn dev");
     await userEvent.click(screen.getByRole("button", { name: /save configuration/i }));
@@ -183,7 +194,7 @@ describe("ProjectConfigEditor", () => {
     vi.mocked(remote.discoverGitHubProjects).mockResolvedValue([]);
     const onSaved = vi.fn();
 
-    render(<ProjectConfigEditor project={project()} onSaved={onSaved} />);
+    renderEditor({ project: project(), onSaved });
 
     await userEvent.clear(screen.getByRole("textbox", { name: "Name" }));
     await userEvent.click(screen.getByRole("button", { name: /save/i }));

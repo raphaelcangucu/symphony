@@ -62,9 +62,35 @@ vi.mock("@/components/issues/IssueCreateDialog", () => ({
   IssueCreateDialog: (props: Parameters<typeof issueCreateDialog>[0]) => issueCreateDialog(props),
 }));
 
+const issueSessionPickerDialog = vi.fn(
+  ({
+    projectSlug,
+    open,
+    onOpenChange,
+  }: {
+    projectSlug: string;
+    open?: boolean;
+    onOpenChange?: (open: boolean) => void;
+  }) =>
+    open ? (
+      <section aria-label="mock issue session picker">
+        <p>project:{projectSlug}</p>
+        <button type="button" onClick={() => onOpenChange?.(false)}>
+          close picker
+        </button>
+      </section>
+    ) : null,
+);
+
+vi.mock("@/components/sessions/IssueSessionPickerDialog", () => ({
+  IssueSessionPickerDialog: (props: Parameters<typeof issueSessionPickerDialog>[0]) =>
+    issueSessionPickerDialog(props),
+}));
+
 describe("NewIssueMenu", () => {
   beforeEach(() => {
     issueCreateDialog.mockClear();
+    issueSessionPickerDialog.mockClear();
   });
 
   it("navigates to the assistant new issue route from the primary action", async () => {
@@ -123,6 +149,22 @@ describe("NewIssueMenu", () => {
     await user.click(await screen.findByRole("menuitem", { name: "New project session" }));
 
     expect(await screen.findByText("Project sessions")).toBeInTheDocument();
+  });
+
+  it("opens the issue session picker from the menu", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter>
+        <NewIssueMenu projectSlug="macro-markets" />
+      </MemoryRouter>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "New issue options" }));
+    await user.click(await screen.findByRole("menuitem", { name: "New issue session" }));
+
+    expect(screen.getByRole("region", { name: "mock issue session picker" })).toBeInTheDocument();
+    expect(screen.getByText("project:macro-markets")).toBeInTheDocument();
   });
 
   it("opens the project terminal from the menu", async () => {

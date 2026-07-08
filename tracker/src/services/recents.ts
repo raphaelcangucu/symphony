@@ -37,11 +37,20 @@ function normalizeKind(value: string): RecentKind {
 }
 
 function normalizeAgentKind(value: string | null | undefined): RecentSession["agentKind"] {
-  return value === "codex" || value === "claude" || value === "cursor" ? value : null;
+  return value === "codex" || value === "claude" || value === "cursor" || value === "opencode" ? value : null;
 }
 
 function normalizeScope(value: string | null | undefined): RecentScope {
-  if (value === "project" || value === "project_session" || value === "project_explore" || value === "freeform" || value === "issue") return value;
+  if (
+    value === "project" ||
+    value === "project_session" ||
+    value === "project_explore" ||
+    value === "freeform" ||
+    value === "issue" ||
+    value === "issue_session"
+  ) {
+    return value;
+  }
   return null;
 }
 

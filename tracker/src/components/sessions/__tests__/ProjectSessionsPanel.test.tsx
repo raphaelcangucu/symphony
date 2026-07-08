@@ -27,9 +27,14 @@ vi.mock("@/components/layout/WorkspaceContext", () => ({
 vi.mock("@/components/assistant/ProjectAssistantPanel", () => ({
   ProjectAssistantPanel: () => <div aria-label="mock assistant panel" />,
 }));
-vi.mock("@/components/issues/issue-detail/AgentTabs", () => ({
-  AgentTabs: (props: { issue: { identifier: string } }) => (
-    <div aria-label="mock agent tabs" data-issue={props.issue.identifier} />
+vi.mock("@/components/issues/issue-detail/IssueExecutionSessionPanel", () => ({
+  IssueExecutionSessionPanel: (props: { issue: { identifier: string } }) => (
+    <div aria-label="mock execution session panel" data-issue={props.issue.identifier} />
+  ),
+}));
+vi.mock("@/components/issues/issue-detail/IssueAuthoringSessionPanel", () => ({
+  IssueAuthoringSessionPanel: (props: { issue: { identifier: string } }) => (
+    <div aria-label="mock authoring session panel" data-issue={props.issue.identifier} />
   ),
 }));
 
@@ -116,9 +121,27 @@ function demoIssue(): Issue {
   };
 }
 
-function recentSession(): RecentSession {
+function relatedProjectSession(): RecentSession {
   return {
     id: "chat:1",
+    kind: "chat",
+    scope: "project_session",
+    agentKind: "cursor",
+    projectSlug: "demo",
+    projectName: "Demo",
+    title: "Project chat",
+    identifier: null,
+    threadId: 1,
+    status: "Active",
+    statusKind: "active",
+    preview: "Discussing the project",
+    updatedAt: "2026-07-04T15:30:00Z",
+  };
+}
+
+function recentSession(): RecentSession {
+  return {
+    id: "chat:2",
     kind: "chat",
     scope: "issue",
     agentKind: "cursor",
@@ -126,7 +149,7 @@ function recentSession(): RecentSession {
     projectName: "Demo",
     title: "Issue authoring chat",
     identifier: "DEMO-2",
-    threadId: 1,
+    threadId: 2,
     status: "Active",
     statusKind: "active",
     preview: "Discussing the issue",
@@ -143,7 +166,7 @@ describe("ProjectSessionsPanel", () => {
     vi.clearAllMocks();
     vi.mocked(useProjectSessions).mockReturnValue({
       groups: groupsWithSavedRow(),
-      relatedSessions: [recentSession()],
+      relatedSessions: [recentSession(), relatedProjectSession()],
       issues: [demoIssue()],
       executions: new Map([["DEMO-1", execution()]]),
       isLoading: false,
@@ -189,19 +212,21 @@ describe("ProjectSessionsPanel", () => {
     );
 
     expect(screen.getByRole("tab", { name: /Sessions/i })).toBeInTheDocument();
-    expect(screen.getByText("Saved launcher work")).toBeInTheDocument();
+    expect(screen.getAllByText("Saved launcher work")).toHaveLength(2);
     expect(screen.getByText("Issue authoring chat")).toBeInTheDocument();
-    expect(screen.getByText(formatDateTime("2026-07-04T15:30:00Z"))).toBeInTheDocument();
+    expect(screen.getByText("Project chat")).toBeInTheDocument();
+    expect(screen.getAllByText(formatDateTime("2026-07-04T15:30:00Z")).length).toBeGreaterThan(0);
     expect(screen.queryByText("Related sessions")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Open execution session DEMO-1/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Open issue DEMO-1" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: /Open authoring session DEMO-1/i })).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: "Open issue DEMO-1" })[0]).toHaveAttribute(
       "href",
-      "/projects/demo/board/issues/DEMO-1",
+      "/projects/demo/board/issues/DEMO-1/sessions",
     );
-    expect(screen.getByRole("img", { name: "Execution" })).toBeInTheDocument();
-    expect(screen.getByRole("img", { name: "Chat" })).toBeInTheDocument();
-    expect(screen.getByRole("img", { name: "Codex" })).toBeInTheDocument();
-    expect(screen.getByRole("img", { name: "Cursor" })).toBeInTheDocument();
+    expect(screen.getAllByRole("img", { name: "Execution" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("img", { name: "Chat" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("img", { name: "Codex" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("img", { name: "Cursor" }).length).toBeGreaterThan(0);
     expect(screen.queryByText("Cursor Agent")).not.toBeInTheDocument();
   });
 
@@ -227,10 +252,10 @@ describe("ProjectSessionsPanel", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Open execution session DEMO-1/i }));
 
-    expect(screen.getByRole("tab", { name: /Saved launcher work/i })).toBeInTheDocument();
-    const agentTabs = screen.getByLabelText("mock agent tabs");
-    expect(agentTabs).toBeInTheDocument();
-    expect(agentTabs).toHaveAttribute("data-issue", "DEMO-1");
+    expect(screen.getByRole("tab", { name: /Saved launcher work · Execution/i })).toBeInTheDocument();
+    const executionPanel = screen.getByLabelText("mock execution session panel");
+    expect(executionPanel).toBeInTheDocument();
+    expect(executionPanel).toHaveAttribute("data-issue", "DEMO-1");
   });
 
   it("restores the execution session from the exec identifier in the URL", () => {
@@ -240,8 +265,32 @@ describe("ProjectSessionsPanel", () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole("tab", { name: /Saved launcher work/i })).toBeInTheDocument();
-    expect(screen.getByLabelText("mock agent tabs")).toHaveAttribute("data-issue", "DEMO-1");
+    expect(screen.getByRole("tab", { name: /Saved launcher work · Execution/i })).toBeInTheDocument();
+    expect(screen.getByLabelText("mock execution session panel")).toHaveAttribute("data-issue", "DEMO-1");
+  });
+
+  it("opens the authoring session inline as its own workspace tab", () => {
+    renderWithI18n(
+      <MemoryRouter initialEntries={["/projects/demo/sessions"]}>
+        <ProjectSessionsPanel projectSlug="demo" />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Open authoring session DEMO-1/i }));
+
+    expect(screen.getByRole("tab", { name: /Saved launcher work · Authoring/i })).toBeInTheDocument();
+    expect(screen.getByLabelText("mock authoring session panel")).toHaveAttribute("data-issue", "DEMO-1");
+  });
+
+  it("restores the authoring session from the exec identifier in the URL", () => {
+    renderWithI18n(
+      <MemoryRouter initialEntries={["/projects/demo/sessions?exec=DEMO-1&agent=authoring"]}>
+        <ProjectSessionsPanel projectSlug="demo" activeAuthoringIdentifier="DEMO-1" />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole("tab", { name: /Saved launcher work · Authoring/i })).toBeInTheDocument();
+    expect(screen.getByLabelText("mock authoring session panel")).toHaveAttribute("data-issue", "DEMO-1");
   });
 
   it("renames a restored execution tab when issue data loads after a page reload", async () => {
@@ -273,11 +322,11 @@ describe("ProjectSessionsPanel", () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByRole("tab", { name: /DEMO-1/i })).toBeInTheDocument();
+    expect(await screen.findByRole("tab", { name: /DEMO-1 · Execution/i })).toBeInTheDocument();
 
     vi.mocked(useProjectSessions).mockReturnValue({
       groups: groupsWithSavedRow(),
-      relatedSessions: [recentSession()],
+      relatedSessions: [recentSession(), relatedProjectSession()],
       issues: [demoIssue()],
       executions: new Map([["DEMO-1", execution()]]),
       isLoading: false,
@@ -287,8 +336,8 @@ describe("ProjectSessionsPanel", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Refresh hook snapshot" }));
 
-    await waitFor(() => expect(screen.getByRole("tab", { name: /Saved launcher work/i })).toBeInTheDocument());
-    expect(screen.queryByRole("tab", { name: /^DEMO-1/i })).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("tab", { name: /Saved launcher work · Execution/i })).toBeInTheDocument());
+    expect(screen.queryByRole("tab", { name: /^DEMO-1 · Execution/i })).not.toBeInTheDocument();
   });
 
   it("resumes a saved session", async () => {

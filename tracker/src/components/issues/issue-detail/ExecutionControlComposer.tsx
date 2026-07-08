@@ -17,7 +17,6 @@ import {
 } from "@/components/assistant/contextMentions";
 import { useContextMentionData } from "@/components/assistant/useContextMentionData";
 import { defaultSkillCommands, parseSlashCommand } from "@/components/assistant/slashCommands";
-import { MagicCommandPalette } from "@/components/commands/MagicCommandPalette";
 import { ExecutionCommandPalette } from "@/components/issues/issue-detail/ExecutionCommandPalette";
 import { ExecutionModeMenu } from "@/components/issues/issue-detail/ExecutionModeMenu";
 import { GitDiffLauncher } from "@/components/issues/issue-detail/git-diff/GitDiffLauncher";
@@ -517,13 +516,6 @@ export function ExecutionControlComposer({
         onFocusComposer={focusComposer}
         onMagicOpen={toggleMagicPalette}
       />
-      <MagicCommandPalette
-        open={magicOpen}
-        onOpenChange={setMagicOpen}
-        projectSlug={projectSlug}
-        identifier={issue.identifier}
-        onRan={handleMagicRan}
-      />
       {queuedGuidance.length > 0 ? (
         <div className="mb-2 rounded-lg border border-border/60 bg-muted/30 px-3 py-2">
           <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
@@ -568,6 +560,10 @@ export function ExecutionControlComposer({
           floating
           slashContext="execution"
           slashCommandExtras={slashCommandExtras}
+          magicPaletteOpen={magicOpen}
+          onMagicPaletteOpenChange={setMagicOpen}
+          magicIssueIdentifier={issue.identifier}
+          onMagicRan={handleMagicRan}
           placeholder={composerPlaceholder}
           hint={null}
           seedMessage={seedMessage}

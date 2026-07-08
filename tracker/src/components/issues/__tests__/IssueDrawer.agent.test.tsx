@@ -1,7 +1,6 @@
 import "@testing-library/jest-dom/vitest";
 
 import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import type { ReactElement } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -93,36 +92,51 @@ vi.mock("@/hooks/useIssueDevServers", () => ({
   }),
 }));
 
-vi.mock("@/components/assistant/IssueAuthoringPanel", () => ({
-  IssueAuthoringPanel: ({
-    projectSlug,
-    identifier,
-    view,
-    compact,
-  }: {
-    projectSlug: string;
-    identifier?: string;
-    view: "board" | "list";
-    compact?: boolean;
-  }) => (
-    <div data-testid="issue-authoring-panel">
-      Authoring panel for {projectSlug}:{identifier}:{view}:{compact ? "compact" : "full"}
-    </div>
-  ),
+vi.mock("@/components/sessions/StartIssueSessionDialog", () => ({
+  StartIssueSessionDialog: () => null,
 }));
 
-vi.mock("@/components/assistant/IssueDocumentsDrawer", () => ({
-  IssueDocumentsDrawer: ({ projectSlug, identifier }: { projectSlug: string; identifier: string }) => (
-    <button type="button">{`Documents ${projectSlug}:${identifier}`}</button>
-  ),
+vi.mock("@/hooks/useArchiveChat", () => ({
+  useArchiveChat: () => ({ archiving: false, archiveChat: vi.fn() }),
 }));
 
-vi.mock("@/components/issues/issue-detail/AgentTab", () => ({
-  AgentTab: ({ issue, execution }: { issue: Issue; execution?: AgentExecution }) => (
-    <div data-testid="agent-execution-panel">
-      Execution panel for {issue.identifier}:{execution?.status ?? "none"}
-    </div>
-  ),
+vi.mock("@/hooks/useIssueSessions", () => ({
+  useIssueSessions: () => ({
+    executionSession: {
+      issueIdentifier: "MAC-1",
+      title: "Split agent detail tab",
+      agentKind: "codex",
+      status: "live",
+      bucket: "active",
+      lastEventAt: "2026-05-31T00:02:00Z",
+      turnCount: 1,
+      runtimeSeconds: 42,
+      startedAt: "2026-05-31T00:01:00Z",
+      goalObjective: null,
+      execution: {
+        status: "live",
+      },
+    },
+    chatSessions: [
+      {
+        id: 7,
+        scope: "issue_session",
+        agentKind: "codex",
+        projectSlug: "macro-markets",
+        projectName: "Macro Markets",
+        issueIdentifier: "MAC-1",
+        title: "Build pass 1",
+        status: "active",
+        preview: "Start with the menu",
+        updatedAt: "2026-05-31T00:03:00Z",
+      },
+    ],
+    isLoading: false,
+    error: null,
+    resumePending: false,
+    refetch: vi.fn(),
+    resumeExecution: vi.fn(),
+  }),
 }));
 
 function renderDrawer(ui: ReactElement, initialEntries?: string[]) {
@@ -177,14 +191,12 @@ const execution: AgentExecution = {
   turnCount: 1,
 };
 
-describe("IssueDrawer Agent tab", () => {
+describe("IssueDrawer sessions tab", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it("defaults to authoring and switches to the execution view", async () => {
-    const user = userEvent.setup();
-
+  it("lists execution and chat sessions without inline panels", () => {
     renderDrawer(
       <IssueDrawer
         issue={issue}
@@ -193,43 +205,13 @@ describe("IssueDrawer Agent tab", () => {
         execution={execution}
         open
         onOpenChange={() => {}}
-        tab="agent"
+        tab="sessions"
       />,
     );
 
-    expect(screen.getByRole("tab", { name: /authoring/i })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /execution/i })).toBeInTheDocument();
-    expect(screen.getByRole("tablist", { name: /agent sections/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /documents macro-markets:MAC-1/i })).toBeInTheDocument();
-    expect(screen.getByTestId("issue-authoring-panel")).toHaveTextContent(
-      "Authoring panel for macro-markets:MAC-1:list:compact",
-    );
-    expect(screen.queryByTestId("agent-execution-panel")).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole("tab", { name: /execution/i }));
-
-    expect(screen.getByTestId("agent-execution-panel")).toHaveTextContent("Execution panel for MAC-1:live");
-    expect(screen.getByRole("button", { name: /documents macro-markets:MAC-1/i })).toBeInTheDocument();
-    expect(screen.queryByTestId("issue-authoring-panel")).not.toBeInTheDocument();
-  });
-
-  it("opens execution when ?agent=execution is present", () => {
-    renderDrawer(
-      <IssueDrawer
-        issue={issue}
-        projectSlug="macro-markets"
-        view="list"
-        execution={execution}
-        open
-        onOpenChange={() => {}}
-        tab="agent"
-      />,
-      ["/projects/macro-markets/list/issues/MAC-1/agent?agent=execution"],
-    );
-
-    expect(screen.getByTestId("agent-execution-panel")).toHaveTextContent("Execution panel for MAC-1:live");
-    expect(screen.getByRole("button", { name: /documents macro-markets:MAC-1/i })).toBeInTheDocument();
-    expect(screen.queryByTestId("issue-authoring-panel")).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /sessions/i })).toBeInTheDocument();
+    expect(screen.getByText("Build pass 1")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /open execution session MAC-1/i })).toBeInTheDocument();
   });
 
   it("shows a pursuing goal indicator in the issue header", () => {

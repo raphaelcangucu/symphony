@@ -41,6 +41,7 @@ defmodule SymphonyElixir.InstanceConfig do
   @default_codex_thread_sandbox "workspace-write"
   @default_claude_command "claude"
   @default_cursor_command "cursor-agent"
+  @default_opencode_command "opencode"
   @default_agent_kind "codex"
   @default_preview_pool_range [10_000, 30_000]
   @default_preview_slots_per_project 32
@@ -231,6 +232,9 @@ defmodule SymphonyElixir.InstanceConfig do
 
   @spec cursor_command() :: String.t()
   def cursor_command, do: get(:cursor_command, @default_cursor_command)
+
+  @spec opencode_command() :: String.t()
+  def opencode_command, do: get(:opencode_command, @default_opencode_command)
 
   @spec default_agent_kind() :: String.t()
   def default_agent_kind, do: get(:default_agent_kind, @default_agent_kind)

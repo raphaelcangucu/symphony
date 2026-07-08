@@ -5,7 +5,7 @@ defmodule SymphonyElixir.Settings.Agents do
 
   alias SymphonyElixir.InstanceConfig
 
-  @agent_kinds ["codex", "claude", "cursor"]
+  @agent_kinds ["codex", "claude", "cursor", "opencode"]
 
   @impl true
   def group, do: "agents"

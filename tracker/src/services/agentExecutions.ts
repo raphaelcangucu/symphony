@@ -65,6 +65,7 @@ const KNOWN_STATUSES: readonly AgentExecutionStatus[] = [
   "retrying",
   "error",
   "aborted",
+  "paused",
   "saved",
 ];
 
@@ -72,8 +73,8 @@ function normalizeStatus(status: string | null | undefined): AgentExecutionStatu
   return KNOWN_STATUSES.includes(status as AgentExecutionStatus) ? (status as AgentExecutionStatus) : "idle";
 }
 
-function normalizeAgentKind(kind: string | null | undefined): "codex" | "claude" | "cursor" | null {
-  if (kind === "codex" || kind === "claude" || kind === "cursor") return kind;
+function normalizeAgentKind(kind: string | null | undefined): "codex" | "claude" | "cursor" | "opencode" | null {
+  if (kind === "codex" || kind === "claude" || kind === "cursor" || kind === "opencode") return kind;
   return null;
 }
 

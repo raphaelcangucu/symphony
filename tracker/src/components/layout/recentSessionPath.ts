@@ -1,7 +1,12 @@
 import type { TFunction } from "i18next";
 
 import { i18n } from "@/i18n";
-import { issueAssistantPath, projectExecutionSessionPath, projectExploreAssistantPath, projectSessionPath } from "@/lib/workspaceRoutes";
+import {
+  projectAuthoringSessionPath,
+  projectExecutionSessionPath,
+  projectExploreAssistantPath,
+  projectSessionPath,
+} from "@/lib/workspaceRoutes";
 import type { RecentSession } from "@/types/recents";
 
 export function recentSessionSubtitle(
@@ -12,7 +17,7 @@ export function recentSessionSubtitle(
     return [session.identifier, session.projectName ?? session.projectSlug].filter(Boolean).join(" · ");
   }
 
-  if (session.scope === "issue") {
+  if (session.scope === "issue" || session.scope === "issue_session") {
     return [session.identifier, session.projectName ?? session.projectSlug].filter(Boolean).join(" · ");
   }
 
@@ -37,7 +42,11 @@ export function recentSessionPath(session: RecentSession): string {
   }
 
   if (session.scope === "issue" && session.projectSlug && session.identifier) {
-    return withAssistantAgent(issueAssistantPath(session.projectSlug, session.identifier), session);
+    return withAssistantAgent(projectAuthoringSessionPath(session.projectSlug, session.identifier), session);
+  }
+
+  if (session.scope === "issue_session" && session.projectSlug && session.threadId != null) {
+    return withAssistantAgent(projectSessionPath(session.projectSlug, session.threadId), session);
   }
 
   if (session.scope === "freeform") {

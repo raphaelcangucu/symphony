@@ -181,6 +181,7 @@ defmodule SymphonyElixir.Recents do
   defp scope_atom("project_explore"), do: :project_explore
   defp scope_atom("freeform"), do: :freeform
   defp scope_atom("issue"), do: :issue
+  defp scope_atom("issue_session"), do: :issue_session
   defp scope_atom(_), do: :project
 
   defp humanize_thread_status("active"), do: "Active"

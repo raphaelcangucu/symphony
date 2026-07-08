@@ -15,8 +15,9 @@ defmodule SymphonyElixir.AgentRouting do
   @label_codex "symphony:codex"
   @label_claude "symphony:claude"
   @label_cursor "symphony:cursor"
+  @label_opencode "symphony:opencode"
 
-  @agent_labels [@label_codex, @label_claude, @label_cursor]
+  @agent_labels [@label_codex, @label_claude, @label_cursor, @label_opencode]
 
   @spec symphony_label() :: String.t()
   def symphony_label, do: @symphony_label
@@ -43,6 +44,7 @@ defmodule SymphonyElixir.AgentRouting do
     cond do
       @label_claude in normalized -> "claude"
       @label_cursor in normalized -> "cursor"
+      @label_opencode in normalized -> "opencode"
       @label_codex in normalized -> "codex"
       true -> nil
     end

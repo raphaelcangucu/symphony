@@ -10,7 +10,7 @@ defmodule SymphonyElixir.Gateways.Binding do
 
   @binding_kinds ~w(project_topic direct_freeform)
   @statuses ~w(active disabled archived)
-  @agent_kinds ~w(codex claude cursor)
+  @agent_kinds ~w(codex claude cursor opencode)
   @modes ~w(explore project issue kb freeform)
 
   schema "gateway_bindings" do

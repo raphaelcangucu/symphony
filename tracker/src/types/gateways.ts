@@ -1,4 +1,4 @@
-export type GatewayAgentKind = "codex" | "claude" | "cursor";
+export type GatewayAgentKind = "codex" | "claude" | "cursor" | "opencode";
 export type GatewayMode = "explore" | "project" | "issue" | "kb" | "freeform";
 
 export interface TelegramGatewaySettings {

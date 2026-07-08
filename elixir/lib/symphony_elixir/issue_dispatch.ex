@@ -472,7 +472,7 @@ defmodule SymphonyElixir.IssueDispatch do
   defp dispatch_message(:stop, %IssueDTO{identifier: identifier}),
     do: dgettext("dispatch", "Paused agent run for %{identifier} — resume when ready", identifier: identifier)
 
-  defp normalize_agent(agent) when agent in ["codex", "claude", "cursor"], do: agent
+  defp normalize_agent(agent) when agent in ["codex", "claude", "cursor", "opencode"], do: agent
   defp normalize_agent(_agent), do: nil
 
   defp normalize_optional_string(value) when is_binary(value) do

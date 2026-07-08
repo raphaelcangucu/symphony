@@ -40,9 +40,30 @@ function normalizeAgentKind(value: string | null | undefined): AssistantThread["
   return value === "codex" || value === "claude" || value === "cursor" ? value : null;
 }
 
-export async function listAssistantThreads(scope = "freeform"): Promise<AssistantThread[]> {
-  const response = await http.get(trackerPath(`/assistant/threads?scope=${encodeURIComponent(scope)}`));
+export async function listAssistantThreads(
+  scopeOrOptions: string | ListAssistantThreadsOptions = "freeform",
+): Promise<AssistantThread[]> {
+  const params = new URLSearchParams();
+  if (typeof scopeOrOptions === "string") {
+    params.set("scope", scopeOrOptions);
+  } else {
+    if (scopeOrOptions.scope) params.set("scope", scopeOrOptions.scope);
+    if (scopeOrOptions.scopes?.length) params.set("scopes", scopeOrOptions.scopes.join(","));
+    if (scopeOrOptions.projectSlug) params.set("project_slug", scopeOrOptions.projectSlug);
+    if (scopeOrOptions.issueIdentifier) params.set("issue_identifier", scopeOrOptions.issueIdentifier);
+    if (scopeOrOptions.limit != null) params.set("limit", String(scopeOrOptions.limit));
+  }
+
+  const response = await http.get(trackerPath(`/assistant/threads?${params.toString()}`));
   return unwrapData<BackendAssistantThreadDto[]>(response).map(normalizeAssistantThread);
+}
+
+export interface ListAssistantThreadsOptions {
+  scope?: string;
+  scopes?: string[];
+  projectSlug?: string;
+  issueIdentifier?: string;
+  limit?: number;
 }
 
 export async function createFreeformThread(title?: string): Promise<AssistantThread> {
@@ -59,6 +80,26 @@ export async function createProjectSessionThread(
     project_slug: projectSlug,
     title: input.title,
     agent_kind: input.agentKind ?? undefined,
+  });
+  return normalizeAssistantThread(unwrapData<BackendAssistantThreadDto>(response));
+}
+
+export async function createIssueSessionThread(
+  projectSlug: string,
+  issueIdentifier: string,
+  input: {
+    title?: string;
+    agentKind?: "codex" | "claude" | "cursor" | null;
+    executionMode?: "plan" | "build" | "yolo";
+  } = {},
+): Promise<AssistantThread> {
+  const response = await http.post(trackerPath("/assistant/threads"), {
+    scope: "issue_session",
+    project_slug: projectSlug,
+    issue_identifier: issueIdentifier,
+    title: input.title,
+    agent_kind: input.agentKind ?? undefined,
+    execution_mode: input.executionMode ?? "build",
   });
   return normalizeAssistantThread(unwrapData<BackendAssistantThreadDto>(response));
 }

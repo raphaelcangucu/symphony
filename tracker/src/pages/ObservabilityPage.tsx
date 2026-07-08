@@ -317,7 +317,7 @@ function SessionIssueLink({ row }: { row: ProjectRunningRow }) {
     return (
       <Link
         className="text-primary underline-offset-2 hover:underline"
-        to={withAgentSection(issuePath(row.resolvedProjectSlug, "board", row.issueIdentifier, "agent"), "", "execution")}
+        to={withAgentSection(issuePath(row.resolvedProjectSlug, "board", row.issueIdentifier, "sessions"), "", "execution")}
       >
         {row.issueIdentifier}
       </Link>
@@ -738,7 +738,7 @@ function PrMonitorSection({ heartbeat, evaluations, nowMs }: PrMonitorSectionPro
                         <Link
                           className="text-primary underline-offset-2 hover:underline"
                           to={withAgentSection(
-                            issuePath(evaluation.projectSlug, "board", evaluation.issueIdentifier, "agent"),
+                            issuePath(evaluation.projectSlug, "board", evaluation.issueIdentifier, "sessions"),
                             "",
                             "execution",
                           )}

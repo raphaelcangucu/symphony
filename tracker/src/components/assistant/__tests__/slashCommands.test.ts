@@ -4,7 +4,6 @@ import {
   defaultSkillCommands,
   matchingSlashCommands,
   parseSlashCommand,
-  SLASH_COMMAND_NAMES,
 } from "../slashCommands";
 
 describe("parseSlashCommand", () => {
@@ -38,8 +37,8 @@ describe("parseSlashCommand", () => {
 });
 
 describe("matchingSlashCommands", () => {
-  it("lists all commands when input is just a slash", () => {
-    expect(matchingSlashCommands("/").map((c) => c.name)).toEqual(SLASH_COMMAND_NAMES);
+  it("lists authoring commands when input is just a slash", () => {
+    expect(matchingSlashCommands("/").map((c) => c.name)).toEqual(["/goal", "/infer", "/btw"]);
   });
 
   it("filters by prefix", () => {

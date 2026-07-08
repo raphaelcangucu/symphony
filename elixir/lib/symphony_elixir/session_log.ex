@@ -7,14 +7,16 @@ defmodule SymphonyElixir.SessionLog do
   - `"codex"` → `SymphonyElixir.Codex.SessionLog`
   - `"claude"` → `SymphonyElixir.Claude.SessionLog`
   - `"cursor"` → `SymphonyElixir.Cursor.SessionLog`
+  - `"opencode"` → `SymphonyElixir.OpenCode.SessionLog`
   """
 
   alias SymphonyElixir.Claude.SessionLog, as: ClaudeLog
   alias SymphonyElixir.Codex.SessionLog, as: CodexLog
   alias SymphonyElixir.Cursor.SessionLog, as: CursorLog
+  alias SymphonyElixir.OpenCode.SessionLog, as: OpenCodeLog
   alias SymphonyElixir.SessionEvents
 
-  @agent_kinds ["claude", "cursor", "codex"]
+  @agent_kinds ["claude", "cursor", "codex", "opencode"]
   @join_tail_bytes 512_000
 
   @doc """
@@ -52,6 +54,7 @@ defmodule SymphonyElixir.SessionLog do
   def resolve_log_path("codex", workspace, opts), do: CodexLog.resolve_rollout_path(workspace, opts)
   def resolve_log_path("claude", workspace, opts), do: ClaudeLog.resolve_log_path(workspace, opts)
   def resolve_log_path("cursor", workspace, opts), do: CursorLog.resolve_log_path(workspace, opts)
+  def resolve_log_path("opencode", workspace, opts), do: OpenCodeLog.resolve_log_path(workspace, opts)
   def resolve_log_path(_agent_kind, workspace, opts), do: CodexLog.resolve_rollout_path(workspace, opts)
 
   @doc """
@@ -99,6 +102,7 @@ defmodule SymphonyElixir.SessionLog do
 
   def tail("claude", path, opts), do: tail_with_events(ClaudeLog.tail(path, opts), opts)
   def tail("cursor", path, opts), do: tail_with_events(CursorLog.tail(path, opts), opts)
+  def tail("opencode", path, opts), do: tail_with_events(OpenCodeLog.tail(path, opts), opts)
   def tail(_agent_kind, path, opts), do: tail_with_events(CodexLog.tail(path, opts), opts)
 
   @spec read_from(String.t(), Path.t(), non_neg_integer(), keyword()) ::
@@ -111,6 +115,9 @@ defmodule SymphonyElixir.SessionLog do
   def read_from("cursor", path, offset, opts),
     do: read_from_with_events(CursorLog.read_from(path, offset), offset, opts)
 
+  def read_from("opencode", path, offset, opts),
+    do: read_from_with_events(OpenCodeLog.read_from(path, offset), offset, opts)
+
   def read_from(_agent_kind, path, offset, opts),
     do: read_from_with_events(CodexLog.read_from(path, offset), offset, opts)
 
@@ -120,9 +127,12 @@ defmodule SymphonyElixir.SessionLog do
 
   defp tail_with_events(other, _opts), do: other
 
-  defp read_from_with_events({:ok, entries, offset}, _path_offset, opts) do
-    {:ok, merge_workspace_events(entries, opts), offset}
-  end
+  # Incremental polling must NOT re-merge the Symphony session-events file. The
+  # session log channel streams those separately via its own symphony offset, so
+  # merging the full events file on every tick would re-push each prior
+  # annotation forever (the transcript grows without bound). Only the initial
+  # `tail` merges the Symphony history once.
+  defp read_from_with_events({:ok, entries, offset}, _path_offset, _opts), do: {:ok, entries, offset}
 
   defp read_from_with_events(other, _path_offset, _opts), do: other
 

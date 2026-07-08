@@ -3,6 +3,7 @@ defmodule SymphonyElixir.SessionLogTest do
 
   alias SymphonyElixir.Claude.SessionLog, as: ClaudeLog
   alias SymphonyElixir.Cursor.SessionLog, as: CursorLog
+  alias SymphonyElixir.SessionEvents
   alias SymphonyElixir.SessionLog
 
   test "resolve_log_source/3 prefers the requested agent over another agent's existing log" do
@@ -79,5 +80,40 @@ defmodule SymphonyElixir.SessionLogTest do
 
     assert {:ok, "claude", ^path} =
              SessionLog.resolve_log_source("cursor", workspace, projects_dir: Path.dirname(claude_dir))
+  end
+
+  test "read_from/4 never re-merges Symphony events, while tail/3 merges them once" do
+    workspace = Path.join(System.tmp_dir!(), "session-log-events-#{System.unique_integer()}")
+    claude_root = Path.join(System.tmp_dir!(), "claude-projects-#{System.unique_integer()}")
+    claude_dir = Path.join(claude_root, ClaudeLog.encode_workspace(workspace))
+
+    File.mkdir_p!(claude_dir)
+    File.mkdir_p!(workspace)
+
+    path = Path.join(claude_dir, "session.jsonl")
+    write_assistant_line!(path, "native work")
+
+    :ok = SessionEvents.append_abort(workspace, "user_stop", detail: "Stopped manually via hard reset")
+
+    on_exit(fn ->
+      File.rm_rf(workspace)
+      File.rm_rf(claude_root)
+    end)
+
+    opts = [workspace: workspace]
+
+    # Initial load folds the Symphony abort annotation into the transcript once.
+    assert {:ok, tail_entries, _tail_offset} = SessionLog.tail("claude", path, opts)
+    assert Enum.any?(tail_entries, &symphony_abort?/1)
+
+    # Incremental polling must return only new native entries. Re-merging the
+    # full Symphony events file on every tick is what made the transcript grow
+    # without bound after a user_stop pause.
+    assert {:ok, read_entries, _read_offset} = SessionLog.read_from("claude", path, 0, opts)
+    refute Enum.any?(read_entries, &symphony_abort?/1)
+  end
+
+  defp symphony_abort?(entry) when is_map(entry) do
+    Map.get(entry, "title") == "Turn aborted" or Map.get(entry, :title) == "Turn aborted"
   end
 end

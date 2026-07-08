@@ -1,8 +1,9 @@
-import { Bot, ChevronDown, Plus, Sparkles, TerminalSquare } from "lucide-react";
+import { Bot, ChevronDown, CircleDot, Plus, Sparkles, TerminalSquare } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 
+import { IssueSessionPickerDialog } from "@/components/sessions/IssueSessionPickerDialog";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -40,6 +41,7 @@ export function NewIssueMenu({
 }: NewIssueMenuProps) {
   const { t } = useTranslation();
   const [quickCreateOpen, setQuickCreateOpen] = useState(false);
+  const [issueSessionPickerOpen, setIssueSessionPickerOpen] = useState(false);
 
   const assistantPath = newIssueAssistantPath(projectSlug);
   const sessionsPath = projectSessionsPath(projectSlug);
@@ -62,6 +64,10 @@ export function NewIssueMenu({
           {t("issue.create.newProjectSession")}
         </Link>
       </DropdownMenuItem>
+      <DropdownMenuItem onSelect={() => setIssueSessionPickerOpen(true)}>
+        <CircleDot className="mr-2 h-4 w-4" />
+        {t("issue.create.newIssueSession")}
+      </DropdownMenuItem>
       <DropdownMenuItem asChild>
         <Link to={terminalPath}>
           <TerminalSquare className="mr-2 h-4 w-4" />
@@ -76,14 +82,21 @@ export function NewIssueMenu({
   );
 
   const dialog = (
-    <IssueCreateDialog
-      projectSlug={projectSlug}
-      defaultStatus={status}
-      statuses={statuses}
-      onCreated={onCreated}
-      open={quickCreateOpen}
-      onOpenChange={setQuickCreateOpen}
-    />
+    <>
+      <IssueCreateDialog
+        projectSlug={projectSlug}
+        defaultStatus={status}
+        statuses={statuses}
+        onCreated={onCreated}
+        open={quickCreateOpen}
+        onOpenChange={setQuickCreateOpen}
+      />
+      <IssueSessionPickerDialog
+        projectSlug={projectSlug}
+        open={issueSessionPickerOpen}
+        onOpenChange={setIssueSessionPickerOpen}
+      />
+    </>
   );
 
   if (variant === "icon") {

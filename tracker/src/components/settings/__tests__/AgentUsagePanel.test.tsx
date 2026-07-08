@@ -23,6 +23,7 @@ const usageMap: AgentUsageMap = {
   },
   claude: null,
   cursor: null,
+  opencode: null,
 };
 
 describe("AgentUsagePanel", () => {

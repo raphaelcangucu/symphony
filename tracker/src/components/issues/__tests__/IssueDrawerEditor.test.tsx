@@ -82,8 +82,8 @@ vi.mock("@/components/issues/issue-detail/BlockersTab", () => ({
   BlockersTab: () => <div>Blockers</div>,
 }));
 
-vi.mock("@/components/issues/issue-detail/AgentTabs", () => ({
-  AgentTabs: () => <div>Agent</div>,
+vi.mock("@/components/issues/issue-detail/IssueSessionsTab", () => ({
+  IssueSessionsTab: () => <div>Sessions</div>,
 }));
 
 const unavailableEditor = {

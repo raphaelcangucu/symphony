@@ -72,12 +72,15 @@ export interface AgentAvailabilityEntry {
   available: boolean;
   version: string | null;
   command: string;
+  authenticated?: boolean | null;
+  detail?: string | null;
 }
 
 export interface AgentAvailability {
   codex: AgentAvailabilityEntry;
   claude: AgentAvailabilityEntry;
   cursor: AgentAvailabilityEntry;
+  opencode: AgentAvailabilityEntry;
 }
 
 export async function fetchSettings(): Promise<AllSettings> {

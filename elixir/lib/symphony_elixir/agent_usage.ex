@@ -14,7 +14,7 @@ defmodule SymphonyElixir.AgentUsage do
 
   @store_key {__MODULE__, :store}
   @default_ttl_ms 600_000
-  @known_agents ["codex", "claude", "cursor"]
+  @known_agents ["codex", "claude", "cursor", "opencode"]
 
   @type entry :: %{snapshot: Snapshot.t() | nil, stale: boolean()}
 

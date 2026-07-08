@@ -51,6 +51,7 @@
       "waiting": "Aguardando revisão",
       "idle": "Ocioso",
       "saved": "Salvo (retomável)",
+      "paused": "Pausado",
       "error": "Erro",
       "aborted": "Abortado"
     },
@@ -258,6 +259,7 @@
         "claude": "Claude Code",
         "codex": "Codex",
         "cursor": "Cursor Agent",
+        "opencode": "OpenCode",
         "opencode": "OpenCode",
         "pi": "PI",
         "commandCode": "Command Code",
@@ -483,6 +485,7 @@
         "retrying": "Repetindo",
         "error": "Erro",
         "aborted": "Abortado",
+        "paused": "Pausado",
         "saved": "Goal salvo"
       },
       "goalStatus": {
@@ -545,6 +548,7 @@
         "comments": "Comentários",
         "evidence": "Evidência",
         "blockers": "Bloqueios",
+        "sessions": "Sessões",
         "agent": "Agente",
         "preview": "Preview",
         "activity": "Atividade",
@@ -580,7 +584,17 @@
       "executionHint": "Acompanhe a execução ao vivo, direcione com /infer e pause ou retome.",
       "sectionsAria": "Seções do agente",
       "authoring": "Authoring",
-      "execution": "Execução"
+      "execution": "Execução",
+      "newSession": "Nova sessão",
+      "newSessionTitle": "Iniciar uma sessão nova do agente para esta issue"
+    },
+    "sessions": {
+      "hint": "Crie sessões em modo build para esta issue. As sessões abrem na página de Sessões do projeto.",
+      "newSession": "Nova sessão",
+      "empty": "Nenhuma sessão para esta issue ainda. Inicie uma em modo build para começar.",
+      "defaultSessionTitle": "Sessão da issue",
+      "issueSessionBadge": "Sessão build",
+      "authoringBadge": "Authoring"
     },
     "toolCall": {
       "status": {
@@ -1067,7 +1081,8 @@
       "agentLabels": {
         "codex": "Codex",
         "claude": "Claude Code",
-        "cursor": "Cursor Agent"
+        "cursor": "Cursor Agent",
+        "opencode": "OpenCode"
       },
       "errors": {
         "joinTimeout": "Tempo esgotado ao entrar no canal de log da sessão",
@@ -1232,6 +1247,7 @@
       "optionsAria": "Opções de nova issue",
       "withAssistant": "Nova issue com assistente",
       "newProjectSession": "Nova sessão do projeto",
+      "newIssueSession": "Nova sessão para issue",
       "newProjectTerminal": "Novo terminal do projeto",
       "quickCreate": "Criação rápida"
     },
@@ -2141,7 +2157,8 @@
       "agents": {
         "codex": "Codex CLI",
         "claude": "Claude Code",
-        "cursor": "Cursor Agent"
+        "cursor": "Cursor Agent",
+        "opencode": "OpenCode"
       },
       "models": {
         "gpt-5_5": "GPT-5.5",
@@ -2332,6 +2349,30 @@
       "noContent": "Nenhum conteúdo para exibir."
     }
   },
+  "issueSessionPicker": {
+    "title": "Nova sessão para issue",
+    "description": "Escolha uma issue e configure a sessão nova do agente antes de despachar.",
+    "placeholder": "Buscar issues por ID ou título…",
+    "empty": "Nenhuma issue encontrada.",
+    "loading": "Carregando issues…"
+  },
+  "issueSession": {
+    "started": "Nova sessão iniciada para {{identifier}}",
+    "startFailed": "Não foi possível iniciar uma nova sessão para {{identifier}}",
+    "dialog": {
+      "title": "Nova sessão para issue",
+      "description": "Inicie uma sessão nova do agente para {{identifier}} — {{title}}. Configure a execução antes de despachar.",
+      "descriptionFallback": "Configure uma sessão nova do agente antes de despachar.",
+      "agentLabel": "Agente",
+      "modeLabel": "Modo de execução",
+      "titleLabel": "Título da sessão",
+      "instructionsLabel": "Instruções iniciais (opcional)",
+      "instructionsPlaceholder": "No que o agente deve focar nesta sessão?",
+      "cancel": "Cancelar",
+      "start": "Iniciar sessão",
+      "starting": "Iniciando…"
+    }
+  },
   "sessions": {
     "eyebrow": "Sessões do projeto",
     "title": "Sessões",
@@ -2348,6 +2389,8 @@
     "resumeStarted": "Retomando {{identifier}}",
     "resumeFailed": "Não foi possível retomar {{identifier}}",
     "openExecutionAria": "Abrir sessão de execução {{identifier}}",
+    "openAuthoringAria": "Abrir sessão de authoring {{identifier}}",
+    "issueThreadHint": "Working tree da issue {{identifier}}",
     "openIssueAria": "Abrir issue {{identifier}}",
     "executionUnavailable": "Os detalhes da execução de {{identifier}} não estão disponíveis agora.",
     "turns": "{{count}} turnos",
@@ -2369,6 +2412,7 @@
       "waiting": "Aguardando",
       "idle": "Ocioso",
       "saved": "Salva",
+      "paused": "Pausada",
       "error": "Erro",
       "aborted": "Abortada"
     }

@@ -220,10 +220,12 @@ describe("ProjectListPage", () => {
 
     archiveRequest.resolve({ ...activeProject, archivedAt: "2026-05-28T12:00:00Z" });
 
-    expect(await screen.findByText("Active Project")).toBeTruthy();
-    expect(screen.getAllByText("Archived").length).toBeGreaterThan(0);
-    expect(screen.getByRole("button", { name: "Restore Active Project" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Delete Active Project permanently" })).toBeTruthy();
+    await waitFor(() => {
+      expect(screen.getByText("Active Project")).toBeTruthy();
+      expect(screen.getAllByText("Archived").length).toBeGreaterThan(0);
+      expect(screen.getByRole("button", { name: "Restore Active Project" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Delete Active Project permanently" })).toBeTruthy();
+    });
   });
 
   it("shows archived project status and lifecycle actions", async () => {

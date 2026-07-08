@@ -15,10 +15,11 @@ defmodule SymphonyElixirWeb.Tracker.AssistantController do
     {:ok, codex} = ModelCatalog.list_models()
     {:ok, claude} = SymphonyElixir.Claude.ModelCatalog.list_models()
     {:ok, cursor} = SymphonyElixir.Cursor.ModelCatalog.list_models()
+    {:ok, opencode} = SymphonyElixir.OpenCode.ModelCatalog.list_models()
 
     json(conn, %{
       data: %{
-        agents: [codex, claude, cursor],
+        agents: [codex, claude, cursor, opencode],
         default_agent: Settings.Agents.default_agent_kind()
       }
     })

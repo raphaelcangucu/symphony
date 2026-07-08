@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { MagicCommandPalette } from "@/components/commands/MagicCommandPalette";
+import type { SlashCommandDef } from "@/components/assistant/slashCommands";
 import { initTestI18n } from "@/i18n/testUtils";
 import type { RunPromptTemplateResult } from "@/services/magicCommands";
 import type { PromptTemplate } from "@/types/prompt-template";
@@ -84,7 +85,6 @@ describe("MagicCommandPalette", () => {
     expect(screen.getByText("Build", { selector: "[cmdk-group-heading]" })).toBeInTheDocument();
     expect(screen.getByText("Uncategorized", { selector: "[cmdk-group-heading]" })).toBeInTheDocument();
     expect(screen.getByText("Codex")).toBeInTheDocument();
-    expect(screen.getByText("gpt-5.5")).toBeInTheDocument();
     expect(screen.getByText("High")).toBeInTheDocument();
     expect(screen.getByText("Plan")).toBeInTheDocument();
 
@@ -184,7 +184,70 @@ describe("MagicCommandPalette", () => {
     await user.keyboard("{Escape}");
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
   });
+
+  it("groups slash commands by category heading", () => {
+    render(
+      <MagicCommandPalette
+        open
+        onOpenChange={vi.fn()}
+        slashCommands={slashCommands}
+        onSlashSelect={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Compose", { selector: "[cmdk-group-heading]" })).toBeInTheDocument();
+    expect(screen.getByText("Workflow", { selector: "[cmdk-group-heading]" })).toBeInTheDocument();
+    expect(screen.getByText("Superpowers", { selector: "[cmdk-group-heading]" })).toBeInTheDocument();
+    expect(screen.getByText("Uncategorized", { selector: "[cmdk-group-heading]" })).toBeInTheDocument();
+    expect(screen.getByText("/push")).toBeInTheDocument();
+  });
+
+  it("filters slash commands by search and returns the selected command", async () => {
+    const user = userEvent.setup();
+    const onSlashSelect = vi.fn();
+    const onOpenChange = vi.fn();
+
+    render(
+      <MagicCommandPalette
+        open
+        onOpenChange={onOpenChange}
+        slashCommands={slashCommands}
+        onSlashSelect={onSlashSelect}
+      />,
+    );
+
+    await user.type(screen.getByPlaceholderText("Search magic commands…"), "/push");
+
+    await waitFor(() => {
+      const options = screen.getAllByRole("option");
+      expect(options[0]).toHaveTextContent("/push");
+    });
+
+    await user.keyboard("{Enter}");
+
+    expect(onSlashSelect).toHaveBeenCalledWith(expect.objectContaining({ name: "/push" }));
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
 });
+
+const slashCommands: SlashCommandDef[] = [
+  { name: "/goal", kind: "goal", description: "Set the goal", category: "builtin" },
+  {
+    name: "/push",
+    kind: "message",
+    description: "Push the branch",
+    category: "workflow",
+    insertText: "Use the push skill: ",
+  },
+  {
+    name: "/brainstorm",
+    kind: "message",
+    description: "Explore ideas",
+    category: "superpowers",
+    insertText: "Use the brainstorm skill: ",
+  },
+  { name: "/legacy", kind: "message", description: "Uncategorized command", category: null },
+];
 
 function makeTemplate(overrides: Partial<PromptTemplate>): PromptTemplate {
   return {

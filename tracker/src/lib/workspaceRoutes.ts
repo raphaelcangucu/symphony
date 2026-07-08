@@ -3,7 +3,7 @@ import { requireNonBlank, requireProjectSlug } from "@/lib/serviceValidation";
 
 export type WorkspaceView = "board" | "list";
 
-export const ISSUE_TABS = ["summary", "pr", "comments", "evidence", "agent", "preview", "activity", "terminal"] as const;
+export const ISSUE_TABS = ["summary", "pr", "comments", "evidence", "sessions", "preview", "activity", "terminal"] as const;
 
 export type IssueTab = (typeof ISSUE_TABS)[number];
 
@@ -26,13 +26,14 @@ export function isIssueTab(value: string | undefined | null): value is IssueTab 
 }
 
 /** Issue drawer tabs that are no longer exposed in the UI but may still appear in old links. */
-const HIDDEN_ISSUE_TABS = new Set(["blockers"]);
+const HIDDEN_ISSUE_TABS = new Set(["blockers", "agent"]);
 
 export function isHiddenIssueTab(value: string | undefined | null): boolean {
   return typeof value === "string" && HIDDEN_ISSUE_TABS.has(value);
 }
 
 export function resolveIssueTab(value: string | undefined | null): IssueTab {
+  if (value === "agent") return "sessions";
   if (isIssueTab(value)) return value;
   return DEFAULT_ISSUE_TAB;
 }
@@ -72,6 +73,14 @@ export function projectSessionPath(projectSlug: string, threadId: number | strin
  * can be restored on reload or when the link is shared, while `agent=execution`
  * focuses the execution (chat) section of the inline Agent view.
  */
+export function projectAuthoringSessionPath(projectSlug: string, issueIdentifier: string): string {
+  const identifier = requireNonBlank(issueIdentifier, "issueIdentifier");
+  const params = new URLSearchParams();
+  params.set("exec", identifier);
+  params.set("agent", "authoring");
+  return `${projectSessionsPath(projectSlug)}?${params.toString()}`;
+}
+
 export function projectExecutionSessionPath(projectSlug: string, issueIdentifier: string): string {
   const identifier = requireNonBlank(issueIdentifier, "issueIdentifier");
   const params = new URLSearchParams();
@@ -219,8 +228,8 @@ export function issueAgentTabPath(
   projectSlug: string,
   view: WorkspaceView,
   identifier: string,
-  section: AgentSection = DEFAULT_AGENT_SECTION,
+  section: AgentSection = "authoring",
 ): string {
-  const pathname = issuePath(projectSlug, view, identifier, "agent");
+  const pathname = issuePath(projectSlug, view, identifier, "sessions");
   return withAgentSection(pathname, "", section);
 }

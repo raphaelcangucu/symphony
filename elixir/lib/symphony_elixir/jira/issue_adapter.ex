@@ -395,7 +395,7 @@ defmodule SymphonyElixir.Jira.IssueAdapter do
     base = string_list(Map.get(attrs, "labels")) ++ string_list(Map.get(attrs, "label_ids"))
 
     case Map.get(attrs, "agent") do
-      agent when agent in ["codex", "claude", "cursor"] -> Enum.uniq(base ++ ["symphony:#{agent}"])
+      agent when agent in ["codex", "claude", "cursor", "opencode"] -> Enum.uniq(base ++ ["symphony:#{agent}"])
       _ -> Enum.uniq(base)
     end
   end

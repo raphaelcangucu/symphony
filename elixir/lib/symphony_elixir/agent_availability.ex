@@ -14,10 +14,17 @@ defmodule SymphonyElixir.AgentAvailability do
           available: boolean(),
           version: String.t() | nil,
           command: String.t(),
-          path: String.t() | nil
+          path: String.t() | nil,
+          authenticated: boolean() | nil,
+          detail: String.t() | nil
         }
 
-  @spec probe() :: %{codex: result(), claude: result(), cursor: result()}
+  @spec probe() :: %{
+          codex: result(),
+          claude: result(),
+          cursor: result(),
+          opencode: result()
+        }
   def probe do
     case cached() do
       {:ok, value} ->
@@ -27,7 +34,8 @@ defmodule SymphonyElixir.AgentAvailability do
         value = %{
           codex: probe_command(InstanceConfig.codex_command()),
           claude: probe_command(InstanceConfig.claude_command()),
-          cursor: probe_command(InstanceConfig.cursor_command())
+          cursor: probe_command(InstanceConfig.cursor_command()),
+          opencode: probe_command(InstanceConfig.opencode_command())
         }
 
         :persistent_term.put(@cache_key, {value, now_ms()})
@@ -41,10 +49,24 @@ defmodule SymphonyElixir.AgentAvailability do
 
     case System.find_executable(binary) do
       nil ->
-        %{available: false, version: nil, command: binary, path: nil}
+        %{
+          available: false,
+          version: nil,
+          command: binary,
+          path: nil,
+          authenticated: nil,
+          detail: nil
+        }
 
       path ->
-        %{available: true, version: read_version(path), command: binary, path: path}
+        %{
+          available: true,
+          version: read_version(path),
+          command: binary,
+          path: path,
+          authenticated: nil,
+          detail: nil
+        }
     end
   end
 

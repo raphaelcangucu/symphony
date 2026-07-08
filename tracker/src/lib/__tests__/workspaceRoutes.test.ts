@@ -19,6 +19,7 @@ import {
   projectExploreAssistantPath,
   projectSettingsPath,
   projectSessionPath,
+  projectAuthoringSessionPath,
   projectExecutionSessionPath,
   projectSessionsPath,
   projectTerminalPath,
@@ -69,9 +70,10 @@ describe("workspaceRoutes", () => {
   });
 
   it("strips a leading hash when building GitHub issue paths", () => {
-    expect(issuePath("macro-markets", "board", "#508", "agent")).toBe(
-      "/projects/macro-markets/board/issues/508/agent",
+    expect(issuePath("macro-markets", "board", "#508", "sessions")).toBe(
+      "/projects/macro-markets/board/issues/508/sessions",
     );
+    expect(resolveIssueTab("agent")).toBe("sessions");
   });
 
   it("requires an identifier for issue paths", () => {
@@ -138,6 +140,9 @@ describe("workspaceRoutes", () => {
     expect(projectExecutionSessionPath("acme", "MAC-13")).toBe(
       "/projects/acme/sessions?exec=MAC-13&agent=execution",
     );
+    expect(projectAuthoringSessionPath("acme", "MAC-13")).toBe(
+      "/projects/acme/sessions?exec=MAC-13&agent=authoring",
+    );
   });
 
   it("derives the workspace section from a pathname", () => {
@@ -167,24 +172,24 @@ describe("workspaceRoutes", () => {
     expect(isBoardPath("/projects/acme/assistant/explore")).toBe(false);
   });
 
-  it("builds the issue agent tab path with an optional section", () => {
-    expect(issueAgentTabPath("macro-markets", "board", "510")).toBe("/projects/macro-markets/board/issues/510/agent");
+  it("builds the issue sessions tab path with an optional section", () => {
+    expect(issueAgentTabPath("macro-markets", "board", "510")).toBe("/projects/macro-markets/board/issues/510/sessions");
     expect(issueAgentTabPath("macro-markets", "board", "510", "execution")).toBe(
-      "/projects/macro-markets/board/issues/510/agent?agent=execution",
+      "/projects/macro-markets/board/issues/510/sessions?agent=execution",
     );
   });
 
   it("reads and writes the agent sub-tab search param", () => {
     expect(agentSectionFromSearchParams(new URLSearchParams())).toBe("authoring");
     expect(agentSectionFromSearchParams(new URLSearchParams("agent=execution"))).toBe("execution");
-    expect(withAgentSection("/projects/acme/board/issues/1/agent", "", "execution")).toBe(
-      "/projects/acme/board/issues/1/agent?agent=execution",
+    expect(withAgentSection("/projects/acme/board/issues/1/sessions", "", "execution")).toBe(
+      "/projects/acme/board/issues/1/sessions?agent=execution",
     );
-    expect(withAgentSection("/projects/acme/board/issues/1/agent", "q=test", "execution")).toBe(
-      "/projects/acme/board/issues/1/agent?q=test&agent=execution",
+    expect(withAgentSection("/projects/acme/board/issues/1/sessions", "q=test", "execution")).toBe(
+      "/projects/acme/board/issues/1/sessions?q=test&agent=execution",
     );
-    expect(withAgentSection("/projects/acme/board/issues/1/agent", "agent=execution", "authoring")).toBe(
-      "/projects/acme/board/issues/1/agent",
+    expect(withAgentSection("/projects/acme/board/issues/1/sessions", "agent=execution", "authoring")).toBe(
+      "/projects/acme/board/issues/1/sessions",
     );
   });
 });
