@@ -5,7 +5,7 @@ import { AgentLongRunningBadge, AgentStatusBadge } from "@/components/issues/Age
 import { AgentResumeIconButton } from "@/components/issues/AgentResumeIconButton";
 import { agentKindLabel } from "@/components/shared/AgentChip";
 import { resolveDisplayStatus } from "@/lib/agentExecutionDisplay";
-import { formatDateTime } from "@/lib/utils";
+import { formatDateTime, formatDurationSeconds } from "@/lib/timeFormat";
 import type { AgentExecution } from "@/types/agent-execution";
 import type { Issue } from "@/types/issue";
 
@@ -14,16 +14,6 @@ interface ExecutionStatusHeaderProps {
   issue: Issue;
   execution?: AgentExecution;
   onIssueUpdated?: (updated: Issue) => void;
-}
-
-function formatRuntime(seconds: number | null): string {
-  if (seconds === null || seconds < 0) return "-";
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.floor(seconds / 60);
-  const remainder = seconds % 60;
-  if (minutes < 60) return `${minutes}m ${remainder}s`;
-  const hours = Math.floor(minutes / 60);
-  return `${hours}h ${minutes % 60}m`;
 }
 
 function formatTokens(value: number): string {
@@ -112,7 +102,7 @@ export function ExecutionStatusHeader({
             </div>
             <div>
               <dt className="text-xs text-muted-foreground">{t("issue.agent.tab.runtime")}</dt>
-              <dd className="mt-1">{formatRuntime(execution.runtimeSeconds)}</dd>
+              <dd className="mt-1">{formatDurationSeconds(execution.runtimeSeconds)}</dd>
             </div>
             <div>
               <dt className="text-xs text-muted-foreground">{t("issue.agent.tab.started")}</dt>

@@ -1,8 +1,8 @@
 defmodule SymphonyElixir.Assistant.PullRequestLookup do
   @moduledoc false
 
-  alias SymphonyElixir.GitHub.PullRequests
   alias SymphonyElixir.LocalTracker.Project
+  alias SymphonyElixir.SourceControl
   alias SymphonyElixir.Tracker.Sync.LocalStore
   alias SymphonyElixir.Tracker.Sync.PullRequests, as: SyncPullRequests
 
@@ -10,12 +10,12 @@ defmodule SymphonyElixir.Assistant.PullRequestLookup do
   def list_for_issue(%Project{} = project, identifier, opts \\ []) when is_binary(identifier) do
     identifier = normalize_identifier(identifier)
 
-    if PullRequests.supported?(project) do
+    if SourceControl.supported?(project) do
       {:ok,
        %{
          supported: true,
-         available: PullRequests.available?(),
-         pull_requests: list_github(project, identifier, opts)
+         available: SourceControl.available?(),
+         pull_requests: list_live(project, identifier, opts)
        }}
     else
       {:ok,
@@ -27,8 +27,8 @@ defmodule SymphonyElixir.Assistant.PullRequestLookup do
     end
   end
 
-  defp list_github(project, identifier, opts) do
-    {:ok, pull_requests} = PullRequests.for_project_issue(project, identifier, opts)
+  defp list_live(project, identifier, opts) do
+    {:ok, pull_requests} = SourceControl.for_project_issue(project, identifier, opts)
     persist_discovered(project, identifier, pull_requests)
     merge(Enum.map(pull_requests, &summarize_live/1), list_persisted(project.slug, identifier))
   end

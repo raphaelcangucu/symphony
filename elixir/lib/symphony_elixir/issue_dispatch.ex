@@ -28,6 +28,9 @@ defmodule SymphonyElixir.IssueDispatch do
 
   require Logger
 
+  # Compile-time copy of the canonical list so it can be used in guards.
+  @agent_kinds SymphonyElixir.Settings.Agents.agent_kinds()
+
   @type action :: :resume | :hard_reset | :stop | :continue_work
   @type opts :: %{
           optional(:agent) => String.t() | nil,
@@ -472,7 +475,7 @@ defmodule SymphonyElixir.IssueDispatch do
   defp dispatch_message(:stop, %IssueDTO{identifier: identifier}),
     do: dgettext("dispatch", "Paused agent run for %{identifier} — resume when ready", identifier: identifier)
 
-  defp normalize_agent(agent) when agent in ["codex", "claude", "cursor", "opencode"], do: agent
+  defp normalize_agent(agent) when agent in @agent_kinds, do: agent
   defp normalize_agent(_agent), do: nil
 
   defp normalize_optional_string(value) when is_binary(value) do

@@ -23,6 +23,7 @@
     "@radix-ui/react-separator": "latest",
     "@radix-ui/react-slot": "latest",
     "@radix-ui/react-tabs": "latest",
+    "@radix-ui/react-tooltip": "^1.2.12",
     "@tailwindcss/vite": "latest",
     "@tiptap/extension-code-block": "^3.27.1",
     "@tiptap/extension-drag-handle-react": "^3.27.1",

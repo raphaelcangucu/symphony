@@ -16,9 +16,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useAgentExecutions } from "@/hooks/useAgentExecutions";
+import { useNowTick } from "@/hooks/useNowTick";
 import { useObservability } from "@/hooks/useObservability";
 import { usePrMonitorObservability } from "@/hooks/usePrMonitorObservability";
 import { normalizeIssueIdentifier } from "@/lib/issueIdentifiers";
+import { elapsedSecondsSince } from "@/lib/timeFormat";
 import { cn } from "@/lib/utils";
 import { issuePath, withAgentSection, workspaceBasePath } from "@/lib/workspaceRoutes";
 import { dispatchIssueAgent, type IssueDispatchAction } from "@/services/issueDispatch";
@@ -53,18 +55,14 @@ interface ProjectRunningRow extends GlobalRunningRow {
 }
 
 function formatRuntime(startedAt: string | null, nowMs: number): string {
-  if (!startedAt) return "--";
-  const started = Date.parse(startedAt);
-  if (Number.isNaN(started)) return "--";
-  const seconds = Math.max(Math.floor((nowMs - started) / 1000), 0);
+  const seconds = elapsedSecondsSince(startedAt, nowMs);
+  if (seconds === null) return "--";
   return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
 }
 
 function formatAgo(at: string | null, nowMs: number, t: TFunction): string {
-  if (!at) return t("observability.time.never");
-  const ts = Date.parse(at);
-  if (Number.isNaN(ts)) return t("observability.time.never");
-  const seconds = Math.max(Math.floor((nowMs - ts) / 1000), 0);
+  const seconds = elapsedSecondsSince(at, nowMs);
+  if (seconds === null) return t("observability.time.never");
   if (seconds < 60) return t("observability.time.secondsAgo", { count: seconds });
   const minutes = Math.floor(seconds / 60);
   if (minutes < 60) return t("observability.time.minutesAgo", { count: minutes });
@@ -169,12 +167,7 @@ export function ObservabilityPage() {
   const { executions } = useAgentExecutions();
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState(ALL_PROJECTS);
-  const [nowMs, setNowMs] = useState(() => Date.now());
-
-  useEffect(() => {
-    const interval = window.setInterval(() => setNowMs(Date.now()), 1000);
-    return () => window.clearInterval(interval);
-  }, []);
+  const nowMs = useNowTick(1000);
 
   useEffect(() => {
     let active = true;

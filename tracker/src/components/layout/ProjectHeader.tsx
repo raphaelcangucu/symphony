@@ -9,6 +9,8 @@ import { Badge, badgeVariants } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { NewIssueMenu } from "@/components/issues/NewIssueMenu";
 import { ProjectSwitcher } from "@/components/layout/ProjectSwitcher";
+import { copyTextToClipboard } from "@/lib/clipboard";
+import { parseTimestamp } from "@/lib/timeFormat";
 import { cn } from "@/lib/utils";
 import { kbProjectPath } from "@/lib/kbRoutes";
 import { projectSessionsPath, projectTerminalPath, workspaceBasePath } from "@/lib/workspaceRoutes";
@@ -29,9 +31,8 @@ interface ProjectHeaderProps {
 }
 
 function formatTimeAgo(iso: string | null, t: TFunction): string | null {
-  if (!iso) return null;
-  const timestamp = new Date(iso).getTime();
-  if (Number.isNaN(timestamp)) return null;
+  const timestamp = parseTimestamp(iso);
+  if (timestamp === null) return null;
   const minutes = Math.max(0, Math.round((Date.now() - timestamp) / 60_000));
   if (minutes < 1) return t("layout.projectHeader.lessThanMinute");
   if (minutes < 60) return t("layout.projectHeader.minutesAgo", { count: minutes });
@@ -63,34 +64,6 @@ function buildSyncErrorReport(
   if (syncState.lastPushAt) lines.push(`Last push: ${syncState.lastPushAt}`);
   if (syncState.lastFullSyncAt) lines.push(`Last full sync: ${syncState.lastFullSyncAt}`);
   return lines.join("\n");
-}
-
-async function copyTextToClipboard(text: string): Promise<boolean> {
-  if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
-    try {
-      await navigator.clipboard.writeText(text);
-      return true;
-    } catch {
-      // Fall back to the legacy path below (e.g. non-secure contexts).
-    }
-  }
-
-  if (typeof document === "undefined") return false;
-
-  try {
-    const textarea = document.createElement("textarea");
-    textarea.value = text;
-    textarea.setAttribute("readonly", "");
-    textarea.style.position = "fixed";
-    textarea.style.left = "-9999px";
-    document.body.appendChild(textarea);
-    textarea.select();
-    const copied = document.execCommand("copy");
-    document.body.removeChild(textarea);
-    return copied;
-  } catch {
-    return false;
-  }
 }
 
 export function ProjectHeader({

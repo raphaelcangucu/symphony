@@ -3,8 +3,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { AssistantOutgoingAttachment } from "@/components/assistant/assistantAttachments";
 import type { ComposerContextChipRef } from "@/components/assistant/contextMentions";
+import { usePhoenixChannel } from "@/hooks/usePhoenixChannel";
 import { i18n } from "@/i18n";
-import { createTrackerSocket } from "@/services/phoenix/socket";
 import { sessionLogTopic } from "@/services/session-log";
 import { payloadEntries, type SessionLogEntry } from "@/types/session-log";
 
@@ -48,101 +48,79 @@ export function useSessionLogChannel({
 }: UseSessionLogChannelArgs): UseSessionLogChannelResult {
   const [entries, setEntries] = useState<SessionLogEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [connected, setConnected] = useState(false);
   const [steerError, setSteerError] = useState<string | null>(null);
   const [steerPending, setSteerPending] = useState(false);
   const [logAgentKind, setLogAgentKind] = useState<string | null>(null);
   const [preferredAgentKind, setPreferredAgentKind] = useState<string | null>(null);
   const [logFallback, setLogFallback] = useState(false);
-  const channelRef = useRef<Channel | null>(null);
 
-  useEffect(() => {
-    const project = projectSlug.trim();
-    const identifier = issueIdentifier.trim();
-    if (!enabled || !project || !identifier) {
-      setEntries([]);
-      setConnected(false);
-      setError(null);
-      setSteerError(null);
-      setSteerPending(false);
-      setLogAgentKind(null);
-      setPreferredAgentKind(null);
-      setLogFallback(false);
-      channelRef.current = null;
-      return undefined;
-    }
+  const project = projectSlug.trim();
+  const identifier = issueIdentifier.trim();
+  const active = enabled && Boolean(project) && Boolean(identifier);
+  const preferredKind = agentKind?.trim();
 
-    const socket = createTrackerSocket();
-    socket.connect();
-
-    const joinParams: Record<string, string> = { project_slug: project };
-    const preferredKind = agentKind?.trim();
-    if (preferredKind) joinParams.agent_kind = preferredKind;
-    const channel = socket.channel(sessionLogTopic(project, identifier), joinParams);
-    channelRef.current = channel;
-    let cancelled = false;
-
-    channel.on("entries", (payload) => {
-      const next = payloadEntries(payload);
-      if (next.length === 0) return;
-      setEntries((current) => [...current, ...next]);
-    });
-
-    channel.on("steer_ok", () => {
-      if (cancelled) return;
-      setSteerPending(false);
-      setSteerError(null);
-    });
-
-    channel.on("steer_failed", (payload) => {
-      if (cancelled) return;
-      setSteerPending(false);
-      const record = payload as Record<string, unknown>;
-      const reason = typeof record.reason === "string" ? record.reason : "steer_failed";
-      setSteerError(reason);
-    });
-
-    channel
-      .join()
-      .receive("ok", (payload) => {
-        if (cancelled) return;
-        setConnected(true);
-        setError(null);
-        setEntries(payloadEntries(payload));
-        const record = payload as Record<string, unknown>;
-        setLogAgentKind(typeof record.agent_kind === "string" ? record.agent_kind : null);
-        setPreferredAgentKind(
-          typeof record.preferred_agent_kind === "string" ? record.preferred_agent_kind : null,
-        );
-        setLogFallback(record.log_fallback === true);
-      })
-      .receive("error", (reason) => {
-        if (cancelled) return;
-        setConnected(false);
-        setError(formatJoinError(reason, agentKind));
-      })
-      .receive("timeout", () => {
-        if (cancelled) return;
-        setConnected(false);
-        setError(i18n.t("issue.sessionLog.errors.joinTimeout"));
+  const { channel, connected } = usePhoenixChannel({
+    topic: active ? sessionLogTopic(project, identifier) : null,
+    params: {
+      project_slug: project,
+      ...(preferredKind ? { agent_kind: preferredKind } : {}),
+    },
+    onSetup: (nextChannel) => {
+      nextChannel.on("entries", (payload) => {
+        const next = payloadEntries(payload);
+        if (next.length === 0) return;
+        setEntries((current) => [...current, ...next]);
       });
 
-    return () => {
-      cancelled = true;
-      channelRef.current = null;
-      channel.leave();
-      socket.disconnect();
-    };
-  }, [agentKind, enabled, issueIdentifier, projectSlug]);
+      nextChannel.on("steer_ok", () => {
+        setSteerPending(false);
+        setSteerError(null);
+      });
+
+      nextChannel.on("steer_failed", (payload) => {
+        setSteerPending(false);
+        const record = payload as Record<string, unknown>;
+        const reason = typeof record.reason === "string" ? record.reason : "steer_failed";
+        setSteerError(reason);
+      });
+    },
+    onJoin: (payload) => {
+      setError(null);
+      setEntries(payloadEntries(payload));
+      const record = payload as Record<string, unknown>;
+      setLogAgentKind(typeof record.agent_kind === "string" ? record.agent_kind : null);
+      setPreferredAgentKind(
+        typeof record.preferred_agent_kind === "string" ? record.preferred_agent_kind : null,
+      );
+      setLogFallback(record.log_fallback === true);
+    },
+    onJoinError: (reason) => setError(formatJoinError(reason, agentKind)),
+    onJoinTimeout: () => setError(i18n.t("issue.sessionLog.errors.joinTimeout")),
+  });
+
+  // Reset the transcript state whenever the channel target changes or closes.
+  useEffect(() => {
+    if (active) return;
+    setEntries([]);
+    setError(null);
+    setSteerError(null);
+    setSteerPending(false);
+    setLogAgentKind(null);
+    setPreferredAgentKind(null);
+    setLogFallback(false);
+  }, [active]);
+
+  const channelRef = useRef<Channel | null>(null);
+  channelRef.current = channel;
 
   const steerTurn = useCallback((payload: AgentSteerPayload) => {
-    const channel = channelRef.current;
+    const target = channelRef.current;
     const trimmed = payload.message.trim();
-    if (!channel || (trimmed.length === 0 && payload.attachments.length === 0 && (payload.contextRefs ?? []).length === 0)) return;
+    if (!target || (trimmed.length === 0 && payload.attachments.length === 0 && (payload.contextRefs ?? []).length === 0)) return;
 
     setSteerPending(true);
     setSteerError(null);
-    channel
+    target
       .push("steer_turn", { message: trimmed, attachments: payload.attachments, context_refs: payload.contextRefs ?? [] })
       .receive("error", (reason) => {
         setSteerPending(false);
@@ -153,7 +131,7 @@ export function useSessionLogChannel({
   }, []);
 
   return {
-    channel: channelRef.current,
+    channel,
     connected,
     entries,
     error,

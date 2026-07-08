@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { formatFullDateTime } from "@/lib/timeFormat";
 import { cn } from "@/lib/utils";
 import { getCommitEvidence } from "@/services/commitEvidence";
 import type { CommitEvidenceDetail, CommitEvidenceSummary, CommitFileChange } from "@/types/commitEvidence";
@@ -73,7 +74,7 @@ export function CommitDiffSheet({
           </SheetDescription>
           {commit ? (
             <p className="text-xs text-muted-foreground">
-              {commit.author} · {formatDate(commit.authoredAt)} · +{commit.insertions} / -{commit.deletions}
+              {commit.author} · {formatFullDateTime(commit.authoredAt)} · +{commit.insertions} / -{commit.deletions}
             </p>
           ) : null}
         </SheetHeader>
@@ -176,8 +177,3 @@ function DiffLine({ line }: { line: string }) {
   return <code className={className}>{line || " "}</code>;
 }
 
-function formatDate(value: string): string {
-  if (!value) return "";
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
-}

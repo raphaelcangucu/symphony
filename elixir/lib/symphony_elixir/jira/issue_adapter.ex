@@ -9,6 +9,7 @@ defmodule SymphonyElixir.Jira.IssueAdapter do
   alias SymphonyElixir.Jira.IssueAdapter.{Filter, Query}
   alias SymphonyElixir.LocalTracker.Project
   alias SymphonyElixir.Tracker.IssueDTO
+  alias SymphonyElixir.Tracker.RemoteError
   alias SymphonyElixir.Tracker.Workpad
 
   @default_issue_type "Task"
@@ -451,15 +452,11 @@ defmodule SymphonyElixir.Jira.IssueAdapter do
   defp trim_string(_value), do: ""
 
   defp map_error({:error, reason}), do: map_error(reason)
-  defp map_error({:remote_validation, _details} = error), do: error
   defp map_error(:issue_not_found), do: :issue_not_found
   defp map_error(:status_not_found), do: :status_not_found
   defp map_error(:create_failed), do: :remote_unavailable
   defp map_error({:jira_api_status, 400}), do: {:remote_validation, %{}}
-  defp map_error({:jira_api_status, 401}), do: :remote_unauthorized
-  defp map_error({:jira_api_status, 403}), do: :remote_forbidden
   defp map_error({:jira_api_status, 404}), do: :issue_not_found
   defp map_error({:jira_api_status, 429}), do: :remote_rate_limited
-  defp map_error({:jira_api_status, status}) when status in 500..599, do: :remote_unavailable
-  defp map_error(_reason), do: :remote_unavailable
+  defp map_error(reason), do: RemoteError.normalize(reason, :jira_api_status)
 end

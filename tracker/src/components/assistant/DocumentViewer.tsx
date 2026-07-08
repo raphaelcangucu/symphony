@@ -4,7 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Markdown } from "@/components/ui/markdown";
+import { formatShortDate } from "@/lib/timeFormat";
 import { cn } from "@/lib/utils";
 import { readIssueDocument } from "@/services/issueDocuments";
 import type { IssueDocument, IssueDocumentKind } from "@/types/issueDocument";
@@ -389,7 +391,7 @@ function DocumentListItem({
           {document.updatedAt ? (
             <>
               <span aria-hidden className="h-0.5 w-0.5 rounded-full bg-muted-foreground/50" />
-              <span>{formatUpdatedAt(document.updatedAt)}</span>
+              <span>{formatShortDate(document.updatedAt)}</span>
             </>
           ) : null}
         </span>
@@ -400,12 +402,16 @@ function DocumentListItem({
 
 function DocumentViewerEmptyState({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex h-full min-h-0 flex-col items-center justify-center rounded-2xl border border-dashed border-border/70 bg-card/60 px-6 py-10 text-center shadow-sm backdrop-blur-sm">
-      <span aria-hidden className="mb-3 flex h-10 w-10 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
-        <FileText className="h-5 w-5" />
-      </span>
+    <EmptyState
+      variant="panel"
+      icon={
+        <span aria-hidden className="mb-3 flex h-10 w-10 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
+          <FileText className="h-5 w-5" />
+        </span>
+      }
+    >
       <p className="max-w-xs text-sm text-muted-foreground">{children}</p>
-    </div>
+    </EmptyState>
   );
 }
 
@@ -428,9 +434,3 @@ function groupDocumentsByKind(documents: IssueDocument[]): Array<{ kind: IssueDo
   })).filter((group) => group.documents.length > 0);
 }
 
-function formatUpdatedAt(updatedAt: string): string {
-  const date = new Date(updatedAt);
-  if (Number.isNaN(date.getTime())) return updatedAt;
-
-  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-}

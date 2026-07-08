@@ -15,16 +15,4 @@ export const SCROLLBAR_THIN = [
   "[&::-webkit-scrollbar-thumb]:bg-muted-foreground/35",
 ].join(" ");
 
-export function formatDateTime(value: string | null | undefined): string {
-  if (!value) return "-";
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "-";
-
-  return date.toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
+export { formatDateTime } from "@/lib/timeFormat";

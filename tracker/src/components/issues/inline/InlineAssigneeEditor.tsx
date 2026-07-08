@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { AssigneeAvatar } from "@/components/issues/AssigneeAvatar";
+import { useInlinePickerDismiss } from "@/hooks/useInlinePickerDismiss";
 import { useMeIdentities } from "@/hooks/useMeIdentities";
 import {
   assigneeMatchesMe,
@@ -73,19 +74,7 @@ export function InlineAssigneeEditor({
     if (saved) setOpen(false);
   }, [currentValue, draft, onSave]);
 
-  useEffect(() => {
-    if (!open) return undefined;
-
-    function handlePointerDown(event: MouseEvent) {
-      if (!containerRef.current?.contains(event.target as Node)) {
-        void commit();
-      }
-    }
-
-    window.addEventListener("mousedown", handlePointerDown);
-    requestAnimationFrame(() => searchRef.current?.focus());
-    return () => window.removeEventListener("mousedown", handlePointerDown);
-  }, [commit, open]);
+  useInlinePickerDismiss({ open, containerRef, onDismiss: () => void commit(), focusRef: searchRef });
 
   const optionItems = useMemo(() => {
     type AssigneeItem = {

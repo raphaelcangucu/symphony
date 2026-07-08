@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 
 import { CommitDiffSheet } from "@/components/issues/issue-detail/CommitDiffSheet";
 import { Button } from "@/components/ui/button";
+import { formatFullDateTime } from "@/lib/timeFormat";
 import { cn } from "@/lib/utils";
 import type { CommitEvidenceSummary, CommitEvidenceWorkspace } from "@/types/commitEvidence";
 
@@ -72,7 +73,7 @@ export function CommitEvidenceSection({
             <span className="font-mono text-xs text-primary">{commit.shortSha}</span>
             <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px]">{commit.repo}</span>
             <span className="min-w-0 flex-1 truncate text-sm">{commit.message}</span>
-            <span className="text-xs text-muted-foreground">{formatDate(commit.authoredAt)}</span>
+            <span className="text-xs text-muted-foreground">{formatFullDateTime(commit.authoredAt)}</span>
           </div>
           <div className="mt-1 flex flex-wrap gap-3 text-xs text-muted-foreground">
             <span>{commit.author}</span>
@@ -94,8 +95,3 @@ export function CommitEvidenceSection({
   );
 }
 
-function formatDate(value: string): string {
-  if (!value) return "";
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
-}

@@ -11,10 +11,11 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
   alias SymphonyElixir.GitHub.IssueRepo
   alias SymphonyElixir.GitHub.RepoSpec
   alias SymphonyElixir.LocalTracker.{Context, Project}
-  alias SymphonyElixir.Tracker.IssueDTO
+  alias SymphonyElixir.Tracker.{IssueDTO, RemoteError}
 
   @page_size 50
-  @agent_kinds ["codex", "claude", "cursor", "opencode"]
+  # Compile-time copy of the canonical list so it can be used in guards.
+  @agent_kinds SymphonyElixir.Settings.Agents.agent_kinds()
 
   @impl true
   def kind, do: :github
@@ -1080,7 +1081,6 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
   defp client, do: Application.get_env(:symphony_elixir, :github_client_module, Client)
 
   defp map_error({:error, reason}), do: map_error(reason)
-  defp map_error({:remote_validation, _details} = error), do: error
   defp map_error({:invalid_repository, message}), do: {:remote_validation, %{repository: [message]}}
   defp map_error(:issue_not_found), do: :issue_not_found
   defp map_error(:pending_remote_id), do: :pending_remote_id
@@ -1100,11 +1100,8 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
   defp map_error({:github_graphql_errors, errors}),
     do: {:remote_validation, %{errors: summarize_graphql_errors(errors)}}
 
-  defp map_error({:github_api_status, 401}), do: :remote_unauthorized
-  defp map_error({:github_api_status, 403}), do: :remote_forbidden
-  defp map_error({:github_api_status, status}) when status in 500..599, do: :remote_unavailable
   defp map_error({:rate_limited, info}) when is_map(info), do: {:rate_limited, info}
-  defp map_error(_), do: :remote_unavailable
+  defp map_error(reason), do: RemoteError.normalize(reason, :github_api_status)
 
   defp summarize_graphql_errors(errors) when is_list(errors) do
     Enum.flat_map(errors, fn

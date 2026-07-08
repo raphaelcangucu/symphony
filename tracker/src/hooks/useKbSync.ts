@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
+
+import { useFocusedInterval } from "@/hooks/useFocusedInterval";
 import type { KbSyncState } from "@/types/knowledgeBase";
 import { getSyncStatus, requestSync } from "@/services/knowledgeBase";
 
@@ -38,12 +40,7 @@ export function useKbSync(projectSlug: string, repoSlug: string | null): UseKbSy
     await refresh();
   }, [projectSlug, repoSlug, refresh]);
 
-  useEffect(() => {
-    if (!repoSlug) return;
-    void refresh();
-    const handle = setInterval(() => void refresh(), POLL_INTERVAL_MS);
-    return () => clearInterval(handle);
-  }, [repoSlug, refresh]);
+  useFocusedInterval(() => void refresh(), POLL_INTERVAL_MS, { enabled: Boolean(repoSlug) });
 
   return { state, loading, triggerSync };
 }

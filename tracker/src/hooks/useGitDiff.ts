@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback } from "react";
 
+import { useAsyncResource } from "@/hooks/useAsyncResource";
 import { i18n } from "@/i18n";
 import { getGitDiff, getThreadGitDiff } from "@/services/gitDiff";
 import type { GitDiffRepo, GitDiffType, GitDiffWorkspace } from "@/types/gitDiff";
@@ -20,6 +21,13 @@ export interface UseGitDiffResult {
   refetch: () => Promise<void>;
 }
 
+interface GitDiffSnapshot {
+  repos: GitDiffRepo[];
+  workspace: GitDiffWorkspace | null;
+}
+
+const EMPTY_SNAPSHOT: GitDiffSnapshot = { repos: [], workspace: null };
+
 export function useGitDiff({
   projectSlug,
   identifier,
@@ -27,47 +35,18 @@ export function useGitDiff({
   type,
   enabled = true,
 }: UseGitDiffArgs): UseGitDiffResult {
-  const [repos, setRepos] = useState<GitDiffRepo[]>([]);
-  const [workspace, setWorkspace] = useState<GitDiffWorkspace | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const inFlightRef = useRef(false);
-  const hasLoadedRef = useRef(false);
-
-  const active = enabled && Boolean(threadId || (identifier && projectSlug));
-
-  const refetch = useCallback(async () => {
-    if (!threadId && (!identifier || !projectSlug)) return;
-    if (inFlightRef.current) return;
-    inFlightRef.current = true;
-    setLoading(true);
-    try {
-      const result = threadId ? await getThreadGitDiff(threadId, type) : await getGitDiff(projectSlug, identifier!, type);
-      setRepos(result.repos);
-      setWorkspace(result.workspace);
-      setError(null);
-      hasLoadedRef.current = true;
-    } catch {
-      setError(i18n.t("issue.diff.errors.loadFailed"));
-    } finally {
-      inFlightRef.current = false;
-      setLoading(false);
-    }
+  const fetcher = useCallback(async (): Promise<GitDiffSnapshot> => {
+    const result = threadId ? await getThreadGitDiff(threadId, type) : await getGitDiff(projectSlug, identifier!, type);
+    return { repos: result.repos, workspace: result.workspace };
   }, [identifier, projectSlug, threadId, type]);
 
-  useEffect(() => {
-    hasLoadedRef.current = false;
-    setRepos([]);
-    setWorkspace(null);
-    setError(null);
-    setLoading(false);
-  }, [identifier, projectSlug, threadId, type]);
+  const { data, loading, error, refetch } = useAsyncResource<GitDiffSnapshot>({
+    fetcher,
+    canFetch: Boolean(threadId || (identifier && projectSlug)),
+    enabled,
+    errorMessage: () => i18n.t("issue.diff.errors.loadFailed"),
+    initialData: EMPTY_SNAPSHOT,
+  });
 
-  useEffect(() => {
-    if (!active) return;
-    if (hasLoadedRef.current) return;
-    void refetch();
-  }, [active, refetch]);
-
-  return { repos, workspace, loading, error, refetch };
+  return { repos: data.repos, workspace: data.workspace, loading, error, refetch };
 }

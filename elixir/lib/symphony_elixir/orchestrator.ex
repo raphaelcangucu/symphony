@@ -26,7 +26,14 @@ defmodule SymphonyElixir.Orchestrator do
   alias SymphonyElixir.Evidence
   alias SymphonyElixir.GitHub.IssueMarker
   alias SymphonyElixir.LocalTracker.{Context, IssueMapper, Repository}
-  alias SymphonyElixir.Orchestrator.{BundleCoordinator, BundleGate}
+  alias SymphonyElixir.Orchestrator.{
+    AgentTotals,
+    BundleCoordinator,
+    BundleGate,
+    DispatchOrder,
+    IncompleteReason,
+    RunUpdate
+  }
   alias SymphonyElixir.PublicRouting
   alias SymphonyElixir.PushNotifications.Dispatcher, as: PushDispatcher
   alias SymphonyElixir.RunContract.Finalizer
@@ -46,12 +53,7 @@ defmodule SymphonyElixir.Orchestrator do
   # Emit one structured token-progress log each time a run crosses this many
   # cumulative tokens, so live monitoring can follow burn precisely.
   @token_progress_log_interval 1_000_000
-  @empty_agent_totals %{
-    input_tokens: 0,
-    output_tokens: 0,
-    total_tokens: 0,
-    seconds_running: 0
-  }
+  @empty_agent_totals AgentTotals.empty()
 
   defmodule State do
     @moduledoc """
@@ -187,7 +189,7 @@ defmodule SymphonyElixir.Orchestrator do
         {:noreply, state}
 
       running_entry ->
-        {updated_running_entry, token_delta} = integrate_codex_update(running_entry, update)
+        {updated_running_entry, token_delta} = RunUpdate.integrate(running_entry, update)
 
         state =
           state
@@ -358,7 +360,7 @@ defmodule SymphonyElixir.Orchestrator do
   @doc false
   @spec sort_issues_for_dispatch_for_test([Issue.t()]) :: [Issue.t()]
   def sort_issues_for_dispatch_for_test(issues) when is_list(issues) do
-    sort_issues_for_dispatch(issues)
+    DispatchOrder.sort(issues)
   end
 
   defp reconcile_running_issue_states(issues, state) do
@@ -575,7 +577,7 @@ defmodule SymphonyElixir.Orchestrator do
   defp running_entry_workspace(_running_entry), do: nil
 
   defp choose_issues(issues, state) do
-    candidates = sort_issues_for_dispatch(issues)
+    candidates = DispatchOrder.sort(issues)
 
     held = held_child_issue_ids(candidates)
 
@@ -799,26 +801,6 @@ defmodule SymphonyElixir.Orchestrator do
 
   defp terminal_record_state?(%{status: %{is_terminal: terminal}}) when is_boolean(terminal), do: terminal
   defp terminal_record_state?(_record), do: false
-
-  defp sort_issues_for_dispatch(issues) when is_list(issues) do
-    Enum.sort_by(issues, fn
-      %Issue{} = issue ->
-        {priority_rank(issue.priority), issue_created_at_sort_key(issue), issue.identifier || issue.id || ""}
-
-      _ ->
-        {priority_rank(nil), issue_created_at_sort_key(nil), ""}
-    end)
-  end
-
-  defp priority_rank(priority) when is_integer(priority) and priority in 1..4, do: priority
-  defp priority_rank(_priority), do: 5
-
-  defp issue_created_at_sort_key(%Issue{created_at: %DateTime{} = created_at}) do
-    DateTime.to_unix(created_at, :microsecond)
-  end
-
-  defp issue_created_at_sort_key(%Issue{}), do: 9_223_372_036_854_775_807
-  defp issue_created_at_sort_key(_issue), do: 9_223_372_036_854_775_807
 
   defp should_dispatch_issue?(
          %Issue{} = issue,
@@ -2242,52 +2224,17 @@ defmodule SymphonyElixir.Orchestrator do
   @doc false
   @spec incomplete_workpad_comment_body(term()) :: String.t()
   def incomplete_workpad_comment_body(reason) do
-    handoff_note = incomplete_handoff_note(reason)
+    handoff_note = IncompleteReason.handoff_note(reason)
 
     """
     ## Codex Workpad
 
-    > ⚠️ Symphony auto-note: this agent run ended **incomplete** (#{incomplete_reason_text(reason)}).
+    > ⚠️ Symphony auto-note: this agent run ended **incomplete** (#{IncompleteReason.reason_text(reason)}).
     >
     > #{handoff_note}
     > - Please review the workspace state and move the issue back to Rework (or re-dispatch) if the task is not actually done.
     """
   end
-
-  defp incomplete_handoff_note({:validate_gate, violations}) do
-    cond do
-      Evidence.Gate.environment_blocked_only?(violations) ->
-        "- The issue was **not** moved to review — required tests could not run in the workspace environment (e.g. no Docker/network). This is an environment blocker, not necessarily a code failure: fix the environment (or sandbox capabilities) and re-dispatch."
-
-      Enum.any?(violations, &(&1.kind == :judge_rejected)) ->
-        reasons = violations |> Enum.filter(&(&1.kind == :judge_rejected)) |> Enum.map_join("; ", & &1.detail)
-        "- The issue was **not** moved to review — the independent validation judge rejected the evidence (#{reasons}). The tests do not yet prove the change; fix the tests/evidence and re-dispatch."
-
-      true ->
-        "- The issue was **not** moved to review — evidence/validation is missing or failing."
-    end
-  end
-
-  defp incomplete_handoff_note({:publish_gate, _}),
-    do: "- The issue was **not** moved to review — publish requirements (PRs / pushed branches) are unsatisfied."
-
-  defp incomplete_handoff_note(_),
-    do: "- No pull request was confirmed for this issue at handoff.\n    > - The issue was moved to its review state automatically by the orchestrator, not by the agent finishing the work."
-
-  defp incomplete_reason_text(:max_turns), do: "reached the configured max turns with the issue still active"
-
-  defp incomplete_reason_text({:publish_gate, _violations}),
-    do: "ended with the publish gate unsatisfied (deliverables missing)"
-
-  defp incomplete_reason_text({:validate_gate, violations}) do
-    if Evidence.Gate.environment_blocked_only?(violations) do
-      "ended with required tests blocked by the workspace environment (e.g. missing Docker/network), not a code failure"
-    else
-      "ended with the validate gate unsatisfied (test/e2e evidence missing or failing)"
-    end
-  end
-
-  defp incomplete_reason_text(other), do: "reason=#{inspect(other)}"
 
   defp add_incomplete_label(running_entry), do: add_label(running_entry, @incomplete_run_label)
 
@@ -2934,130 +2881,6 @@ defmodule SymphonyElixir.Orchestrator do
     end)
   end
 
-  defp integrate_codex_update(running_entry, %{event: event, timestamp: timestamp} = update) do
-    token_delta = extract_token_delta(running_entry, update)
-    agent_input_tokens = Map.get(running_entry, :agent_input_tokens, 0)
-    agent_output_tokens = Map.get(running_entry, :agent_output_tokens, 0)
-    agent_total_tokens = Map.get(running_entry, :agent_total_tokens, 0)
-    codex_app_server_pid = Map.get(running_entry, :codex_app_server_pid)
-    last_reported_input = Map.get(running_entry, :codex_last_reported_input_tokens, 0)
-    last_reported_output = Map.get(running_entry, :codex_last_reported_output_tokens, 0)
-    last_reported_total = Map.get(running_entry, :codex_last_reported_total_tokens, 0)
-    turn_count = Map.get(running_entry, :turn_count, 0)
-
-    {
-      Map.merge(running_entry, %{
-        last_codex_timestamp: timestamp,
-        last_codex_message: summarize_codex_update(update),
-        session_id: session_id_for_update(running_entry.session_id, update),
-        last_codex_event: event,
-        goal: goal_for_update(running_entry, update),
-        codex_app_server_pid: codex_app_server_pid_for_update(codex_app_server_pid, update),
-        agent_input_tokens: agent_input_tokens + token_delta.input_tokens,
-        agent_output_tokens: agent_output_tokens + token_delta.output_tokens,
-        agent_total_tokens: agent_total_tokens + token_delta.total_tokens,
-        codex_last_reported_input_tokens: max(last_reported_input, token_delta.input_reported),
-        codex_last_reported_output_tokens: max(last_reported_output, token_delta.output_reported),
-        codex_last_reported_total_tokens: max(last_reported_total, token_delta.total_reported),
-        turn_count: turn_count_for_update(turn_count, running_entry.session_id, update)
-      }),
-      token_delta
-    }
-  end
-
-  defp codex_app_server_pid_for_update(_existing, %{codex_app_server_pid: pid})
-       when is_binary(pid),
-       do: pid
-
-  defp codex_app_server_pid_for_update(_existing, %{codex_app_server_pid: pid})
-       when is_integer(pid),
-       do: Integer.to_string(pid)
-
-  defp codex_app_server_pid_for_update(_existing, %{codex_app_server_pid: pid}) when is_list(pid),
-    do: to_string(pid)
-
-  defp codex_app_server_pid_for_update(existing, _update), do: existing
-
-  defp session_id_for_update(_existing, %{session_id: session_id}) when is_binary(session_id),
-    do: session_id
-
-  defp session_id_for_update(existing, _update), do: existing
-
-  defp goal_for_update(running_entry, update) do
-    existing = Map.get(running_entry, :goal)
-
-    case goal_update_payload(update) do
-      :clear ->
-        nil
-
-      %{} = goal ->
-        normalize_goal_payload(goal, Map.get(running_entry, :agent_kind), existing)
-
-      nil ->
-        existing
-    end
-  end
-
-  defp goal_update_payload(%{payload: %{"method" => "thread/goal/cleared"}}), do: :clear
-  defp goal_update_payload(%{payload: %{"method" => "thread/goal/updated", "params" => %{"goal" => goal}}}), do: goal
-  defp goal_update_payload(%{payload: %{"method" => "turn/completed", "params" => %{"goal" => goal}}}), do: goal
-  defp goal_update_payload(%{payload: %{"params" => %{"goal" => goal}}}), do: goal
-  defp goal_update_payload(_update), do: nil
-
-  # credo:disable-for-next-line Credo.Check.Refactor.CyclomaticComplexity
-  defp normalize_goal_payload(goal, agent_kind, existing) when is_map(goal) do
-    prompt_goal? = agent_kind in ["claude", "cursor"]
-
-    %{
-      kind: if(prompt_goal?, do: "workflow", else: "goal"),
-      source: if(prompt_goal?, do: "prompt", else: "native"),
-      objective: goal_value(goal, "objective") || map_value(existing, :objective),
-      status: goal_value(goal, "status") || map_value(existing, :status) || "active",
-      token_budget: goal_value(goal, "tokenBudget") || map_value(existing, :token_budget),
-      tokens_used: goal_value(goal, "tokensUsed") || map_value(existing, :tokens_used),
-      time_used_seconds: goal_value(goal, "timeUsedSeconds") || map_value(existing, :time_used_seconds),
-      updated_at: goal_value(goal, "updatedAt") || map_value(existing, :updated_at),
-      capabilities: if(prompt_goal?, do: ["view"], else: ["get", "edit", "pause", "resume", "clear"])
-    }
-  end
-
-  defp normalize_goal_payload(_goal, _agent_kind, existing), do: existing
-
-  defp goal_value(map, key) when is_map(map) do
-    Map.get(map, key) || Map.get(map, Macro.underscore(key) |> String.to_atom())
-  rescue
-    ArgumentError -> Map.get(map, key)
-  end
-
-  defp map_value(map, key) when is_map(map), do: Map.get(map, key)
-  defp map_value(_map, _key), do: nil
-
-  defp turn_count_for_update(existing_count, existing_session_id, %{
-         event: :session_started,
-         session_id: session_id
-       })
-       when is_integer(existing_count) and is_binary(session_id) do
-    if session_id == existing_session_id do
-      existing_count
-    else
-      existing_count + 1
-    end
-  end
-
-  defp turn_count_for_update(existing_count, _existing_session_id, _update)
-       when is_integer(existing_count),
-       do: existing_count
-
-  defp turn_count_for_update(_existing_count, _existing_session_id, _update), do: 0
-
-  defp summarize_codex_update(update) do
-    %{
-      event: update[:event],
-      message: update[:payload] || update[:raw],
-      timestamp: update[:timestamp]
-    }
-  end
-
   defp schedule_tick(delay_ms) do
     :timer.send_after(delay_ms, self(), :tick)
     :ok
@@ -3090,9 +2913,9 @@ defmodule SymphonyElixir.Orchestrator do
 
     %{
       state
-      | agent_totals: apply_token_delta(state.agent_totals, completion_delta),
+      | agent_totals: AgentTotals.apply_delta(state.agent_totals, completion_delta),
         agent_totals_by_project:
-          apply_project_token_delta(
+          AgentTotals.apply_project_delta(
             state.agent_totals_by_project,
             running_entry_project_slug(running_entry),
             completion_delta
@@ -3175,20 +2998,13 @@ defmodule SymphonyElixir.Orchestrator do
        when is_integer(input) and is_integer(output) and is_integer(total) do
     %{
       state
-      | agent_totals: apply_token_delta(agent_totals, token_delta),
-        agent_totals_by_project: apply_project_token_delta(by_project, project_slug, token_delta)
+      | agent_totals: AgentTotals.apply_delta(agent_totals, token_delta),
+        agent_totals_by_project:
+          AgentTotals.apply_project_delta(by_project, project_slug, token_delta)
     }
   end
 
   defp apply_codex_token_delta(state, _project_slug, _token_delta), do: state
-
-  defp apply_project_token_delta(by_project, project_slug, token_delta)
-       when is_map(by_project) and is_binary(project_slug) and project_slug != "" do
-    current = Map.get(by_project, project_slug, @empty_agent_totals)
-    Map.put(by_project, project_slug, apply_token_delta(current, token_delta))
-  end
-
-  defp apply_project_token_delta(by_project, _project_slug, _token_delta), do: by_project
 
   defp running_entry_project_slug(%{issue: %{project_slug: slug}}), do: slug
   defp running_entry_project_slug(%{project_slug: slug}), do: slug
@@ -3198,60 +3014,6 @@ defmodule SymphonyElixir.Orchestrator do
     do: %{state | agent_rate_limits: rate_limits}
 
   defp apply_agent_rate_limits(state, _update), do: state
-
-  defp apply_token_delta(agent_totals, token_delta) do
-    input_tokens = Map.get(agent_totals, :input_tokens, 0) + token_delta.input_tokens
-    output_tokens = Map.get(agent_totals, :output_tokens, 0) + token_delta.output_tokens
-    total_tokens = Map.get(agent_totals, :total_tokens, 0) + token_delta.total_tokens
-
-    seconds_running =
-      Map.get(agent_totals, :seconds_running, 0) + Map.get(token_delta, :seconds_running, 0)
-
-    %{
-      input_tokens: max(0, input_tokens),
-      output_tokens: max(0, output_tokens),
-      total_tokens: max(0, total_tokens),
-      seconds_running: max(0, seconds_running)
-    }
-  end
-
-  defp extract_token_delta(running_entry, update) do
-    running_entry = running_entry || %{}
-    usage = update[:usage] || %{}
-
-    {
-      compute_token_delta(running_entry, usage, :input_tokens, :codex_last_reported_input_tokens),
-      compute_token_delta(running_entry, usage, :output_tokens, :codex_last_reported_output_tokens),
-      compute_token_delta(running_entry, usage, :total_tokens, :codex_last_reported_total_tokens)
-    }
-    |> then(fn {input, output, total} ->
-      %{
-        input_tokens: input.delta,
-        output_tokens: output.delta,
-        total_tokens: total.delta,
-        input_reported: input.reported,
-        output_reported: output.reported,
-        total_reported: total.reported
-      }
-    end)
-  end
-
-  defp compute_token_delta(running_entry, usage, token_key, reported_key) do
-    next_total = Map.get(usage, token_key)
-    prev_reported = Map.get(running_entry, reported_key, 0)
-
-    delta =
-      if is_integer(next_total) and next_total >= prev_reported do
-        next_total - prev_reported
-      else
-        0
-      end
-
-    %{
-      delta: max(delta, 0),
-      reported: if(is_integer(next_total), do: next_total, else: prev_reported)
-    }
-  end
 
   defp running_seconds(%DateTime{} = started_at, %DateTime{} = now) do
     max(0, DateTime.diff(now, started_at, :second))

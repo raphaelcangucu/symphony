@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
 
 import { useWorkspace } from "@/components/layout/WorkspaceContext";
+import { useDebouncedCallback } from "@/hooks/useDebouncedCallback";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -44,7 +45,6 @@ export function BoardFiltersDrawer({ open, onOpenChange, focusSearch = false }: 
   const { issues } = useWorkspace();
 
   const [searchDraft, setSearchDraft] = useState(searchParams.get(SEARCH_PARAM) ?? "");
-  const debounceRef = useRef<number | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   const filters = useMemo(() => filtersFromSearchParams(searchParams), [searchParams]);
@@ -75,10 +75,11 @@ export function BoardFiltersDrawer({ open, onOpenChange, focusSearch = false }: 
     );
   }
 
+  const commitSearchDebounced = useDebouncedCallback(commitSearch, DEBOUNCE_MS);
+
   function onSearchChange(value: string) {
     setSearchDraft(value);
-    if (debounceRef.current) window.clearTimeout(debounceRef.current);
-    debounceRef.current = window.setTimeout(() => commitSearch(value), DEBOUNCE_MS);
+    commitSearchDebounced(value);
   }
 
   function toggleParam(key: string, token: string) {

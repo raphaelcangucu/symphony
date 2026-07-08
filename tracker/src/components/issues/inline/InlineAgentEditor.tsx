@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { agentKindLabel } from "@/components/shared/AgentChip";
+import { useInlinePickerDismiss } from "@/hooks/useInlinePickerDismiss";
 import { cn } from "@/lib/utils";
 import type { AgentKind, AgentOption } from "@/types/issue";
 
@@ -46,18 +47,7 @@ export function InlineAgentEditor({
     if (!open) setDraft(agent ?? "inherit");
   }, [agent, open]);
 
-  useEffect(() => {
-    if (!open) return undefined;
-
-    function handlePointerDown(event: MouseEvent) {
-      if (!containerRef.current?.contains(event.target as Node)) {
-        setOpen(false);
-      }
-    }
-
-    window.addEventListener("mousedown", handlePointerDown);
-    return () => window.removeEventListener("mousedown", handlePointerDown);
-  }, [open]);
+  useInlinePickerDismiss({ open, containerRef, onDismiss: () => setOpen(false) });
 
   async function commit() {
     const nextAgent = draft === "inherit" ? null : draft;

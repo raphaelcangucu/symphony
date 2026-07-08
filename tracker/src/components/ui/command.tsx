@@ -3,6 +3,7 @@ import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { Command as CommandPrimitive } from "cmdk";
 import { Search } from "lucide-react";
 
+import { OVERLAY_CLASS } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
 const Command = React.forwardRef<
@@ -42,7 +43,7 @@ function CommandDialog({
   return (
     <DialogPrimitive.Root {...props}>
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/40" />
+        <DialogPrimitive.Overlay className={OVERLAY_CLASS} />
         <DialogPrimitive.Content
           className={cn(
             "fixed left-1/2 top-[15%] z-50 w-[calc(100%-2rem)] -translate-x-1/2 overflow-hidden rounded-xl border bg-popover p-0 shadow-2xl",

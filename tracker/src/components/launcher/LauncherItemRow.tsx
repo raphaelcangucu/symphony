@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import type { LauncherDataItem } from "@/components/launcher/useLauncherData";
 import { Button } from "@/components/ui/button";
+import { looseExecutionStatusDotClass } from "@/lib/statusPresentation";
 import { cn } from "@/lib/utils";
 import type { LauncherTabId } from "@/types/launcher";
 
@@ -11,16 +12,6 @@ const TAB_ICON: Record<LauncherTabId, typeof CircleDot> = {
   issues: CircleDot,
   prs: GitPullRequest,
   branches: GitBranch,
-};
-
-const STATUS_DOT: Record<string, string> = {
-  live: "bg-emerald-500 animate-pulse",
-  retrying: "bg-amber-500",
-  waiting: "bg-amber-400",
-  idle: "bg-slate-400",
-  saved: "bg-sky-500",
-  error: "bg-red-500",
-  aborted: "bg-red-400",
 };
 
 export interface LauncherItemRowActions {
@@ -63,7 +54,7 @@ export function LauncherItemRow({
       </div>
       {item.status ? (
         <span
-          className={cn("h-2 w-2 shrink-0 rounded-full", STATUS_DOT[item.status] ?? "bg-slate-400")}
+          className={cn("h-2 w-2 shrink-0 rounded-full", looseExecutionStatusDotClass(item.status))}
           aria-label={t(`launcher.status.${item.status}`)}
         />
       ) : null}

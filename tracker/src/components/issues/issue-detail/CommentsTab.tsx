@@ -7,11 +7,10 @@ import { Button } from "@/components/ui/button";
 import { Markdown } from "@/components/ui/markdown";
 import { Textarea } from "@/components/ui/textarea";
 import { useCommentMentions } from "@/hooks/useCommentMentions";
+import { useIssueFormOptions } from "@/hooks/useIssueFormOptions";
 import { useMarkdownImagePaste } from "@/hooks/useMarkdownImagePaste";
 import { cn } from "@/lib/utils";
-import { getIssueFormOptions } from "@/services/issues";
 import type { Comment, CreateCommentInput, UpdateCommentInput } from "@/types/comment";
-import type { IssueAssigneeOption } from "@/types/issue";
 
 import { CommentCard, EvidenceBadge, SyncBadge, WorkpadBadge } from "./CommentCard";
 import { MentionAutocomplete } from "./MentionAutocomplete";
@@ -41,26 +40,13 @@ export function CommentsTab({
   const [body, setBody] = useState("");
   const [mode, setMode] = useState<ComposerMode>("write");
   const [submitting, setSubmitting] = useState(false);
-  const [assignees, setAssignees] = useState<IssueAssigneeOption[]>([]);
+  const { options: formOptions } = useIssueFormOptions(projectSlug);
+  const assignees = formOptions.assignees;
   const [mentionIndex, setMentionIndex] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const mentionContainerRef = useRef<HTMLDivElement>(null);
   const { handlePaste, uploading } = useMarkdownImagePaste({ projectSlug, setValue: setBody });
   const mentions = useCommentMentions(body, assignees);
-
-  useEffect(() => {
-    let cancelled = false;
-    void getIssueFormOptions(projectSlug)
-      .then((options) => {
-        if (!cancelled) setAssignees(options.assignees);
-      })
-      .catch(() => {
-        if (!cancelled) setAssignees([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [projectSlug]);
 
   useEffect(() => {
     if (!mentions.open) {

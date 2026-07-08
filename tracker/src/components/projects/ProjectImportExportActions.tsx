@@ -5,6 +5,7 @@ import { toast } from "sonner";
 
 import { ProjectImportDialog } from "@/components/projects/ProjectImportDialog";
 import { Button } from "@/components/ui/button";
+import { copyTextToClipboard } from "@/lib/clipboard";
 import {
   exportProject,
   importProjectConfig,
@@ -67,7 +68,7 @@ export function ProjectImportExportActions({ project, onImported }: ProjectImpor
       const info = await shareProject(project.slug);
       const shareUrl = info.raw_url ?? info.html_url;
       if (shareUrl) {
-        await navigator.clipboard.writeText(shareUrl);
+        await copyTextToClipboard(shareUrl);
       }
       toast.success(t("project.config.importExport.shareSuccess"), {
         description: shareUrl,

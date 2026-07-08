@@ -10,8 +10,9 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { AGENT_ICONS, agentKindLabel, AgentChip } from "@/components/shared/AgentChip";
+import { useIssueFormOptions } from "@/hooks/useIssueFormOptions";
 import { cn } from "@/lib/utils";
-import { createIssue, getIssueFormOptions } from "@/services/issues";
+import { createIssue } from "@/services/issues";
 import type {
   AgentKind,
   Issue,
@@ -124,15 +125,13 @@ export function IssueCreateDialog({
   const [codexGoalEdited, setCodexGoalEdited] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  const [options, setOptions] = useState<IssueFormOptions | null>(null);
-  const [optionsLoading, setOptionsLoading] = useState(false);
+  const { options, loading: optionsLoading } = useIssueFormOptions(projectSlug, { enabled: open });
 
   const fallbackStatuses = statuses && statuses.length > 0 ? statuses : DEFAULT_WORKFLOW_STATUSES;
-  const statusOptions =
-    options && options.statuses.length > 0 ? options.statuses : fallbackStatuses;
-  const visibleLabels = (options?.labels ?? []).filter((label) => !SYMPHONY_LABEL_PATTERN.test(label.name));
-  const assigneeOptions = options?.assignees ?? [];
-  const agentOptions = options?.agents ?? [];
+  const statusOptions = options.statuses.length > 0 ? options.statuses : fallbackStatuses;
+  const visibleLabels = options.labels.filter((label) => !SYMPHONY_LABEL_PATTERN.test(label.name));
+  const assigneeOptions = options.assignees;
+  const agentOptions = options.agents;
 
   useEffect(() => {
     if (open) setStatus(defaultStatus);
@@ -147,29 +146,6 @@ export function IssueCreateDialog({
       setCodexGoal(buildAgentGoal(title, description, t));
     }
   }, [agent, codexGoalEdited, codexGoalMode, description, t, title]);
-
-  useEffect(() => {
-    if (!open || !projectSlug.trim()) return;
-
-    let cancelled = false;
-    setOptionsLoading(true);
-    getIssueFormOptions(projectSlug)
-      .then((result) => {
-        if (cancelled) return;
-        setOptions(result);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setOptions({ labels: [], assignees: [], statuses: [], agents: [], effectiveAgent: "codex" });
-      })
-      .finally(() => {
-        if (!cancelled) setOptionsLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [open, projectSlug]);
 
   function setOpen(next: boolean) {
     if (!isControlled) setInternalOpen(next);
@@ -294,7 +270,7 @@ export function IssueCreateDialog({
               <span className="text-xs font-medium text-muted-foreground">{t("issue.create.agent")}</span>
               <div className="flex flex-wrap gap-1.5">
                 <AgentChip
-                  label={t("issue.create.inherit", { agent: agentKindLabel(options?.effectiveAgent ?? "codex", t) })}
+                  label={t("issue.create.inherit", { agent: agentKindLabel(options.effectiveAgent, t) })}
                   active={agent === ""}
                   onClick={() => setAgent("")}
                 />

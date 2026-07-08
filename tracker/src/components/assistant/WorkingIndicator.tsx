@@ -2,6 +2,8 @@ import { Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { useNowTick } from "@/hooks/useNowTick";
+import { formatClockElapsed } from "@/lib/timeFormat";
 import { cn } from "@/lib/utils";
 
 const WORKING_VERB_KEYS = [
@@ -28,23 +30,13 @@ function prefersReducedMotion(): boolean {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
-function formatElapsed(ms: number): string {
-  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
-}
 
 export function WorkingIndicator({ startedAt, activeTool }: WorkingIndicatorProps) {
   const { t } = useTranslation();
   const reducedMotion = useRef(prefersReducedMotion());
-  const [elapsedMs, setElapsedMs] = useState(() => Date.now() - startedAt);
+  const nowMs = useNowTick(1000);
+  const elapsedMs = nowMs - startedAt;
   const [verbIndex, setVerbIndex] = useState(0);
-
-  useEffect(() => {
-    const id = window.setInterval(() => setElapsedMs(Date.now() - startedAt), 1000);
-    return () => window.clearInterval(id);
-  }, [startedAt]);
 
   useEffect(() => {
     if (reducedMotion.current) return;
@@ -70,7 +62,7 @@ export function WorkingIndicator({ startedAt, activeTool }: WorkingIndicatorProp
         className={cn("h-3.5 w-3.5", reducedMotion.current ? "opacity-70" : "animate-spin")}
       />
       <span>{label}…</span>
-      <span className="tabular-nums text-xs opacity-70">· {formatElapsed(elapsedMs)}</span>
+      <span className="tabular-nums text-xs opacity-70">· {formatClockElapsed(elapsedMs)}</span>
     </div>
   );
 }

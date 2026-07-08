@@ -4,7 +4,7 @@ import { toast } from "sonner";
 
 import { i18n } from "@/i18n";
 import { extractImageFilesFromClipboard } from "@/lib/clipboardImages";
-import { filterImageFiles } from "@/lib/imageFiles";
+import { filterImageFiles, sanitizeImageAlt as sanitizeAlt } from "@/lib/imageFiles";
 import {
   type KbAssetContext,
   kbImageMarkdown,
@@ -53,10 +53,6 @@ interface UseKbEditorPasteResult {
 
 interface QueuedImage extends KbPendingPasteImage {
   file: File;
-}
-
-function sanitizeAlt(name: string): string {
-  return name.replace(/[[\]]/g, "").trim() || "image";
 }
 
 function fileBaseName(name: string): string {

@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { parseTimestamp } from "@/lib/timeFormat";
 import { http } from "@/services/http";
 import {
   backupDownloadUrl,
@@ -39,10 +40,9 @@ function humanBytes(n: number): string {
 }
 
 function hoursSince(iso: string | null): number | null {
-  if (!iso) return null;
-  const t = new Date(iso).getTime();
-  if (Number.isNaN(t)) return null;
-  return (Date.now() - t) / (1000 * 60 * 60);
+  const timestamp = parseTimestamp(iso);
+  if (timestamp === null) return null;
+  return (Date.now() - timestamp) / (1000 * 60 * 60);
 }
 
 function formatSince(iso: string | null, t: TFunction): string {

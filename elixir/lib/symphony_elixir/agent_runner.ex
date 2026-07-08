@@ -24,9 +24,9 @@ defmodule SymphonyElixir.AgentRunner do
 
   alias SymphonyElixir.Codex.DynamicTool
   alias SymphonyElixir.Evidence
-  alias SymphonyElixir.GitHub.Client, as: GitHubClient
   alias SymphonyElixir.GitHub.ReadCache
   alias SymphonyElixir.LocalTracker.Context
+  alias SymphonyElixir.SourceControl
   alias SymphonyElixir.Workpad.ExecutionContract
   alias SymphonyElixir.Workspace.Worktree
 
@@ -1250,7 +1250,7 @@ defmodule SymphonyElixir.AgentRunner do
     key = {:issue_open_pr, SymphonyElixir.GitHub.Config.repo(), identifier}
 
     result =
-      ReadCache.fetch(key, fn -> GitHubClient.issue_has_open_pull_request?(identifier) end, @open_pr_cache_ttl_ms)
+      ReadCache.fetch(key, fn -> SourceControl.issue_has_open_pull_request?(identifier) end, @open_pr_cache_ttl_ms)
 
     case result do
       {:ok, true} -> true

@@ -12,7 +12,7 @@ defmodule SymphonyElixir.Linear.SyncDriver do
 
   alias SymphonyElixir.Evidence.RemoteArtifacts
   alias SymphonyElixir.LocalTracker.{IssueRecord, Project}
-  alias SymphonyElixir.Tracker.Sync.{Normalize, OutboxEntry}
+  alias SymphonyElixir.Tracker.Sync.{Normalize, OutboxEntry, Push}
 
   @impl true
   def pull(%Project{} = project, _opts) do
@@ -23,10 +23,7 @@ defmodule SymphonyElixir.Linear.SyncDriver do
 
   @impl true
   def push(%Project{} = project, %OutboxEntry{entity_type: "state", operation: "move", payload: payload}) do
-    case adapter().move_issue(project, payload["identifier"], %{"status" => payload["state"]}) do
-      {:ok, dto} -> {:ok, dto.id}
-      error -> error
-    end
+    Push.push_state_move(adapter(), project, payload)
   end
 
   def push(%Project{}, %OutboxEntry{entity_type: "comment", operation: "create", payload: payload} = entry) do

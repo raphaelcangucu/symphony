@@ -29,14 +29,8 @@ import {
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { InlineEditableText } from "@/components/issues/inline/InlineEditableText";
-import { useIssueComments } from "@/hooks/useIssueComments";
-import { useIssueEditor } from "@/hooks/useIssueEditor";
-import { useIssueUpdater } from "@/hooks/useIssueUpdater";
-import type { EditorReason } from "@/services/editor";
-import { useIssueCommitEvidence } from "@/hooks/useIssueCommitEvidence";
-import { useIssueEvidence } from "@/hooks/useIssueEvidence";
-import { useIssuePullRequests } from "@/hooks/useIssuePullRequests";
-import { useLabSettings } from "@/hooks/useLabSettings";
+import { useIssueDrawerData } from "@/hooks/useIssueDrawerData";
+import { editorUnavailableTitle, openDesktopProtocolUrl } from "@/lib/editorLinks";
 import { cn, SCROLLBAR_THIN } from "@/lib/utils";
 import { issueDisplayIdentifier } from "@/lib/issueIdentifiers";
 import { canResumeExecution } from "@/lib/agentExecutionDisplay";
@@ -124,46 +118,18 @@ export function IssueDrawer({
   const meta = issue ? getStatusMeta(issue.status) : null;
   const StatusIcon = meta?.Icon;
 
-  const lab = useLabSettings(open && Boolean(issue));
+  const {
+    lab,
+    pr,
+    comments: commentsState,
+    evidence,
+    commitEvidence,
+    editor,
+    issueUpdater,
+  } = useIssueDrawerData({ projectSlug, issue, open, onIssueUpdated });
   const labBundleChildOrchestration = lab.bundle_child_orchestration;
-
-  const pr = useIssuePullRequests({
-    projectSlug,
-    identifier: issue?.identifier ?? null,
-    enabled: open && Boolean(issue),
-  });
   const primaryPr = pr.pullRequests[0] ?? null;
   const prRollup = primaryPr ? rollupMeta(primaryPr.checksState) : null;
-
-  const commentsState = useIssueComments({
-    projectSlug,
-    identifier: issue?.identifier ?? null,
-    enabled: open && Boolean(issue),
-  });
-
-  const evidence = useIssueEvidence({
-    projectSlug,
-    identifier: issue?.identifier ?? null,
-    enabled: open && Boolean(issue),
-  });
-
-  const commitEvidence = useIssueCommitEvidence({
-    projectSlug,
-    identifier: issue?.identifier ?? null,
-    enabled: open && Boolean(issue),
-  });
-
-  const editor = useIssueEditor({
-    projectSlug,
-    identifier: issue?.identifier ?? null,
-    enabled: open && Boolean(issue),
-  });
-
-  const issueUpdater = useIssueUpdater({
-    projectSlug,
-    issue,
-    onUpdated: onIssueUpdated,
-  });
 
   const trackerConfig = parseWorkflowTrackerConfig(workflowMarkdown);
   const inWaitState = issue ? isWaitState(issue.status, trackerConfig) : false;
@@ -549,31 +515,3 @@ function TabCount({ children, tone = "muted" }: { children: ReactNode; tone?: "m
   );
 }
 
-function openDesktopProtocolUrl(url: string) {
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.rel = "noopener";
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-}
-
-function editorUnavailableTitle(
-  reason: EditorReason | null,
-  loading: boolean,
-  t: (key: string) => string,
-): string {
-  if (loading) return t("issue.drawer.editor.checking");
-  switch (reason) {
-    case "starting":
-      return t("issue.drawer.editor.starting");
-    case "workspace_missing":
-      return t("issue.drawer.editor.workspaceMissing");
-    case "workspace_skills_unavailable":
-      return t("issue.drawer.editor.workspacePreparing");
-    case "unavailable":
-      return t("issue.drawer.editor.unavailableUpgrade");
-    default:
-      return t("issue.drawer.editor.unavailable");
-  }
-}

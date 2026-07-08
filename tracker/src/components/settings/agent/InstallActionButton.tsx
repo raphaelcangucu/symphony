@@ -4,20 +4,11 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { copyTextToClipboard } from "@/lib/clipboard";
 
 interface InstallActionButtonProps {
   installed: boolean;
   command: string | null;
-}
-
-async function copyToClipboard(text: string): Promise<boolean> {
-  if (typeof navigator === "undefined" || !navigator.clipboard) return false;
-  try {
-    await navigator.clipboard.writeText(text);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 export function InstallActionButton({ installed, command }: InstallActionButtonProps) {
@@ -35,7 +26,7 @@ export function InstallActionButton({ installed, command }: InstallActionButtonP
 
   async function handleClick() {
     if (!command) return;
-    const ok = await copyToClipboard(command);
+    const ok = await copyTextToClipboard(command);
     if (ok) {
       setCopied(true);
       window.setTimeout(() => setCopied(false), 2000);

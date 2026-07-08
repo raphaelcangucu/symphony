@@ -10,7 +10,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useIssueEditor } from "@/hooks/useIssueEditor";
-import type { EditorReason } from "@/services/editor";
+import { editorUnavailableTitle, openDesktopProtocolUrl } from "@/lib/editorLinks";
 
 interface IssueEditorMenuProps {
   projectSlug: string;
@@ -88,31 +88,3 @@ export function IssueEditorMenu({ projectSlug, identifier, enabled = true, compa
   );
 }
 
-function openDesktopProtocolUrl(url: string) {
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.rel = "noopener";
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-}
-
-function editorUnavailableTitle(
-  reason: EditorReason | null,
-  loading: boolean,
-  t: (key: string) => string,
-): string {
-  if (loading) return t("issue.drawer.editor.checking");
-  switch (reason) {
-    case "starting":
-      return t("issue.drawer.editor.starting");
-    case "workspace_missing":
-      return t("issue.drawer.editor.workspaceMissing");
-    case "workspace_skills_unavailable":
-      return t("issue.drawer.editor.workspacePreparing");
-    case "unavailable":
-      return t("issue.drawer.editor.unavailableUpgrade");
-    default:
-      return t("issue.drawer.editor.unavailable");
-  }
-}

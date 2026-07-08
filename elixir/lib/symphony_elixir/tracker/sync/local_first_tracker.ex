@@ -428,10 +428,17 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstTracker do
     end
   end
 
+  # Remote kinds resolve through the registry (fixes "jira" previously falling
+  # through to GitHub). Non-remote kinds keep the historical GitHub fallback:
+  # this module is only active when sync is enabled, which only applies to
+  # remote trackers.
   defp remote_adapter do
-    case Config.tracker_kind() do
-      "linear" -> SymphonyElixir.Linear.Tracker
-      _ -> SymphonyElixir.GitHub.Tracker
+    kind = Config.tracker_kind()
+
+    if kind in SymphonyElixir.Tracker.Registry.remote_kinds() do
+      SymphonyElixir.Tracker.Registry.tracker(kind)
+    else
+      SymphonyElixir.GitHub.Tracker
     end
   end
 end

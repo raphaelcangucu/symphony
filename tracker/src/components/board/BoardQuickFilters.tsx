@@ -1,10 +1,11 @@
 import { Check, Clock, ListFilter, Search, UserRound, X } from "lucide-react";
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
 
 import { AssigneeAvatar } from "@/components/issues/AssigneeAvatar";
 import { useWorkspace } from "@/components/layout/WorkspaceContext";
+import { useDebouncedCallback } from "@/hooks/useDebouncedCallback";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -31,7 +32,6 @@ export function BoardQuickFilters() {
   const { issues } = useWorkspace();
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchDraft, setSearchDraft] = useState(searchParams.get(SEARCH_PARAM) ?? "");
-  const debounceRef = useRef<number | null>(null);
 
   const filters = useMemo(() => filtersFromSearchParams(searchParams), [searchParams]);
 
@@ -62,10 +62,11 @@ export function BoardQuickFilters() {
     );
   }
 
+  const commitSearchDebounced = useDebouncedCallback(commitSearch, DEBOUNCE_MS);
+
   function onSearchChange(value: string) {
     setSearchDraft(value);
-    if (debounceRef.current) window.clearTimeout(debounceRef.current);
-    debounceRef.current = window.setTimeout(() => commitSearch(value), DEBOUNCE_MS);
+    commitSearchDebounced(value);
   }
 
   function toggleAssignee(token: string) {
@@ -138,7 +139,7 @@ export function BoardQuickFilters() {
             aria-label={t("board.clearSearch")}
             onClick={() => {
               setSearchDraft("");
-              if (debounceRef.current) window.clearTimeout(debounceRef.current);
+              commitSearchDebounced.cancel();
               commitSearch("");
             }}
             className="absolute right-2 top-1/2 -translate-y-1/2 rounded-sm text-muted-foreground transition hover:text-foreground"

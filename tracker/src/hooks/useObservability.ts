@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 
+import { usePhoenixChannel } from "@/hooks/usePhoenixChannel";
 import { listObservability } from "@/services/observability";
 import { bindObservabilityEvents, OBSERVABILITY_TOPIC } from "@/services/phoenix/observabilityChannel";
-import { createTrackerSocket } from "@/services/phoenix/socket";
 import type { RuntimeObservability } from "@/types/observability";
 
 interface UseObservabilityResult {
@@ -33,31 +33,28 @@ export function useObservability(): UseObservabilityResult {
         if (active && requestId === requestIdRef.current) setLoading(false);
       });
 
-    const socket = createTrackerSocket();
-    socket.connect();
-    const channel = socket.channel(OBSERVABILITY_TOPIC);
-
-    bindObservabilityEvents(channel, {
-      onUpdated: (runtime) =>
-        setRuntimes((current) => {
-          const index = current.findIndex((entry) => entry.runtimeId === runtime.runtimeId);
-          if (index === -1) return [...current, runtime];
-          const next = current.slice();
-          next[index] = runtime;
-          return next;
-        }),
-      onRemoved: (runtimeId) =>
-        setRuntimes((current) => current.filter((entry) => entry.runtimeId !== runtimeId)),
-    });
-
-    channel.join().receive("error", (reason) => console.error("observability channel join failed", reason));
-
     return () => {
       active = false;
-      channel.leave();
-      socket.disconnect();
     };
   }, []);
+
+  usePhoenixChannel({
+    topic: OBSERVABILITY_TOPIC,
+    onSetup: (channel) =>
+      bindObservabilityEvents(channel, {
+        onUpdated: (runtime) =>
+          setRuntimes((current) => {
+            const index = current.findIndex((entry) => entry.runtimeId === runtime.runtimeId);
+            if (index === -1) return [...current, runtime];
+            const next = current.slice();
+            next[index] = runtime;
+            return next;
+          }),
+        onRemoved: (runtimeId) =>
+          setRuntimes((current) => current.filter((entry) => entry.runtimeId !== runtimeId)),
+      }),
+    onJoinError: (reason) => console.error("observability channel join failed", reason),
+  });
 
   return { runtimes, loading };
 }

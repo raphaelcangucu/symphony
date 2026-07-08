@@ -16,24 +16,15 @@ defmodule SymphonyElixir.Claude.AppServer.CliRunner do
   bash spawn the child directly: `bash -lc "FAKE... cmd args < prompt_file"`.
 
   ### Timeout / process-kill strategy
-  On Linux (setsid available) we spawn via `setsid bash -lc ...` so bash becomes
-  a new process-group leader (pgid == bash's pid). On timeout we send
-  `kill -9 -<pgid>` which kills the entire group — bash, its direct children,
-  and any grandchildren the real Claude CLI spawns.
-
-  On macOS / systems without setsid we fall back to the legacy two-step:
-  1. `pkill -9 -P <pid>` — kill direct children of bash.
-  2. `kill -9 <pid>`     — kill bash itself.
-  This legacy path does NOT kill grandchildren spawned with a new process group,
-  but it is the best we can do without setsid.
-
-  In both paths the port is closed after the kill signals are sent.
+  Shared with the other CLI runners via `SymphonyElixir.Agent.CliRunner.Base`:
+  setsid process-group kill on Linux, legacy `pkill -P` + `kill -9` fallback on
+  macOS / systems without setsid. In both paths the port is closed after the
+  kill signals are sent.
   """
 
   require Logger
 
-  @port_line_bytes 1_048_576
-  @max_stream_log_bytes 1_000
+  alias SymphonyElixir.Agent.CliRunner.Base
 
   @type turn_args :: %{
           required(:command) => String.t(),
@@ -69,53 +60,9 @@ defmodule SymphonyElixir.Claude.AppServer.CliRunner do
 
     workspace = Path.expand(workspace)
 
-    # Write prompt to a temp file (ports can't half-close stdin)
-    symphony_dir = Path.join(workspace, ".symphony")
-    File.mkdir_p!(symphony_dir)
-    prompt_path = Path.join(symphony_dir, "claude-prompt-#{session_uuid}.md")
-    File.write!(prompt_path, prompt)
-
-    cli_args = build_args(args)
-    escaped_prompt_path = shell_escape(prompt_path)
-    shell_line = "#{command} #{cli_args} < #{escaped_prompt_path}"
-
-    # Use setsid when available (Linux) so bash becomes a new process-group
-    # leader (pgid == bash pid). This lets kill_port send kill -9 -<pgid> to
-    # eliminate grandchildren too. On macOS / systems without setsid we fall
-    # back to spawning bash directly and use the legacy pkill-P + kill-9 path.
-    {executable, port_args} =
-      case System.find_executable("setsid") do
-        nil ->
-          {System.find_executable("bash"), [~c"-lc", String.to_charlist(shell_line)]}
-
-        setsid_path ->
-          {setsid_path, [~c"--wait", ~c"bash", ~c"-lc", String.to_charlist(shell_line)]}
-      end
-
-    port =
-      Port.open(
-        {:spawn_executable, executable},
-        [
-          :binary,
-          :exit_status,
-          :stderr_to_stdout,
-          args: port_args,
-          cd: String.to_charlist(workspace),
-          line: @port_line_bytes
-        ]
-      )
-
-    # Notify the caller of the OS pid so it can perform group kills on interrupt.
-    case Map.get(args, :on_spawn) do
-      nil ->
-        :ok
-
-      on_spawn ->
-        case :erlang.port_info(port, :os_pid) do
-          {:os_pid, os_pid} -> on_spawn.(os_pid)
-          _ -> :ok
-        end
-    end
+    prompt_path = Base.write_prompt_file(workspace, "claude", session_uuid, prompt)
+    port = Base.open_cli_port(command, build_args(args), prompt_path, workspace)
+    Base.notify_spawn(port, Map.get(args, :on_spawn))
 
     initial_state = %{
       cli_session_id: args.cli_session_id,
@@ -126,11 +73,25 @@ defmodule SymphonyElixir.Claude.AppServer.CliRunner do
       resume_invalid: false
     }
 
+    handlers = [
+      on_json: fn payload, state -> process_event(payload, on_event, state) end,
+      on_stray_line: fn line, state ->
+        Base.log_stray_line(line, "Claude cli stream")
+        maybe_flag_invalid_resume(line, state)
+      end,
+      on_exit: fn status, state ->
+        Base.finalize_exit(on_event, status, state,
+          exit_label: "claude",
+          transform_usage: &usage_with_total/1
+        )
+      end
+    ]
+
     try do
-      receive_loop(port, on_event, timeout_ms, "", initial_state)
+      Base.receive_loop(port, timeout_ms, "", initial_state, handlers)
     after
       File.rm(prompt_path)
-      stop_port(port)
+      Base.stop_port(port)
     end
   end
 
@@ -215,89 +176,11 @@ defmodule SymphonyElixir.Claude.AppServer.CliRunner do
   # Private helpers
   # ────────────────────────────────────────────────────────────
 
-  # Single-quote escape a shell path: wrap in single quotes, escape interior
-  # single quotes as '\''
-  defp shell_escape(path) do
-    "'" <> String.replace(path, "'", "'\\''") <> "'"
-  end
-
-  defp receive_loop(port, on_event, timeout_ms, pending_line, state) do
-    receive do
-      {^port, {:data, {:eol, chunk}}} ->
-        complete_line = pending_line <> to_string(chunk)
-        handle_line(port, on_event, complete_line, timeout_ms, state)
-
-      {^port, {:data, {:noeol, chunk}}} ->
-        receive_loop(port, on_event, timeout_ms, pending_line <> to_string(chunk), state)
-
-      {^port, {:exit_status, status}} ->
-        handle_exit(port, on_event, status, state)
-    after
-      timeout_ms ->
-        kill_port(port)
-        {:error, :turn_timeout}
-    end
-  end
-
-  defp handle_line(port, on_event, line, timeout_ms, state) do
-    case Jason.decode(line) do
-      {:ok, payload} ->
-        new_state = process_event(payload, on_event, state)
-        receive_loop(port, on_event, timeout_ms, "", new_state)
-
-      {:error, _reason} ->
-        log_non_json_stream_line(line, "cli stream")
-        receive_loop(port, on_event, timeout_ms, "", maybe_flag_invalid_resume(line, state))
-    end
-  end
-
   # The claude CLI reports a `--resume` to a session it no longer knows as a plain
   # (non-JSON) "No conversation found with session ID: <id>" line and then aborts.
   # Flag it so handle_exit can surface a distinct error the adapter can recover from.
   defp maybe_flag_invalid_resume(line, state) do
     if String.contains?(line, "No conversation found with session ID"), do: %{state | resume_invalid: true}, else: state
-  end
-
-  defp handle_exit(_port, on_event, status, state) do
-    has_error = not is_nil(state.error)
-    clean_exit = status in [0, 130]
-
-    cond do
-      state.resume_invalid and (has_error or not clean_exit) ->
-        # The resume target no longer exists in claude's local session store. Return a
-        # distinct error (no turn/failed event) so the adapter can transparently retry
-        # the turn as a fresh session instead of hard-failing the thread forever.
-        {:error, {:resume_session_not_found, state.cli_session_id}}
-
-      has_error or not clean_exit ->
-        message = state.error || "claude exited with code #{status}"
-
-        on_event.(%{
-          "method" => "turn/failed",
-          "params" => %{"error" => message}
-        })
-
-        {:error, {:turn_failed, message}}
-
-      true ->
-        usage = usage_with_total(state.usage)
-
-        on_event.(%{
-          "method" => "turn/completed",
-          "params" => %{
-            "usage" => usage,
-            "cost_usd" => state.cost_usd
-          }
-        })
-
-        {:ok,
-         %{
-           cli_session_id: state.cli_session_id,
-           status: :completed,
-           usage: usage,
-           cost_usd: state.cost_usd
-         }}
-    end
   end
 
   # ────────────────────────────────────────────────────────────
@@ -503,77 +386,5 @@ defmodule SymphonyElixir.Claude.AppServer.CliRunner do
       output_tokens: output,
       total_tokens: input + output + cache_read + cache_creation
     }
-  end
-
-  # ────────────────────────────────────────────────────────────
-  # Port management (copied from CodingAgent.stop_port/1 pattern)
-  # ────────────────────────────────────────────────────────────
-
-  # Kill the process tree spawned by the port, then close the port.
-  # Used on timeout.
-  #
-  # setsid path (Linux, setsid available at spawn time): bash is the
-  # process-group leader (pgid == bash's pid). Sending kill -9 -<pgid>
-  # atomically kills bash, its direct children, and all grandchildren that
-  # share the group — i.e. helpers spawned by the real Claude CLI.
-  #
-  # Legacy fallback (macOS / no setsid): bash was NOT placed in a new group,
-  # so we do the two-step: pkill -P kills direct children, then kill -9 kills
-  # bash itself. Grandchildren that escaped to a different group survive.
-  defp kill_port(port) when is_port(port) do
-    case :erlang.port_info(port, :os_pid) do
-      {:os_pid, os_pid} ->
-        pid_str = to_string(os_pid)
-
-        if System.find_executable("setsid") do
-          # setsid was used at spawn time → pgid == os_pid → kill whole group
-          System.cmd("kill", ["-9", "-#{pid_str}"], stderr_to_stdout: true)
-        else
-          # Legacy path: kill direct children first, then bash itself
-          System.cmd("pkill", ["-9", "-P", pid_str], stderr_to_stdout: true)
-          System.cmd("kill", ["-9", pid_str], stderr_to_stdout: true)
-        end
-
-      _ ->
-        :ok
-    end
-
-    stop_port(port)
-  end
-
-  defp stop_port(port) when is_port(port) do
-    case :erlang.port_info(port) do
-      :undefined ->
-        :ok
-
-      _ ->
-        try do
-          Port.close(port)
-          :ok
-        rescue
-          ArgumentError ->
-            :ok
-        end
-    end
-  end
-
-  # ────────────────────────────────────────────────────────────
-  # Logging helpers (same style as CodingAgent.log_non_json_stream_line/2)
-  # ────────────────────────────────────────────────────────────
-
-  defp log_non_json_stream_line(data, stream_label) do
-    text =
-      data
-      |> to_string()
-      |> String.trim()
-      |> String.slice(0, @max_stream_log_bytes)
-
-    if text != "" do
-      if String.match?(text, ~r/\b(error|warn|warning|failed|fatal|panic|exception)\b/i) do
-        Logger.warning("Claude #{stream_label} output: #{text}")
-      else
-        Logger.debug("Claude #{stream_label} output: #{text}")
-      end
-    end
   end
 end

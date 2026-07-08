@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { getStatusMeta } from "@/components/board/status-meta";
+import { useInlinePickerDismiss } from "@/hooks/useInlinePickerDismiss";
 import { cn } from "@/lib/utils";
 import type { Issue } from "@/types/issue";
 
@@ -51,19 +52,10 @@ export function InlineIssuePicker({
   );
 
   useEffect(() => {
-    if (!open) {
-      setSearchQuery("");
-      return undefined;
-    }
-
-    function handlePointerDown(event: MouseEvent) {
-      if (!containerRef.current?.contains(event.target as Node)) setOpen(false);
-    }
-
-    window.addEventListener("mousedown", handlePointerDown);
-    requestAnimationFrame(() => searchRef.current?.focus());
-    return () => window.removeEventListener("mousedown", handlePointerDown);
+    if (!open) setSearchQuery("");
   }, [open]);
+
+  useInlinePickerDismiss({ open, containerRef, onDismiss: () => setOpen(false), focusRef: searchRef });
 
   const filtered = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();

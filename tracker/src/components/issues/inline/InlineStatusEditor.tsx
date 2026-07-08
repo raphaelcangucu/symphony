@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { getStatusMeta } from "@/components/board/status-meta";
+import { useInlinePickerDismiss } from "@/hooks/useInlinePickerDismiss";
 import { cn } from "@/lib/utils";
 import type { WorkflowStatusName } from "@/types/workflow-status";
 
@@ -41,18 +42,7 @@ export function InlineStatusEditor({
     if (saved) setOpen(false);
   }, [draft, onSave, status]);
 
-  useEffect(() => {
-    if (!open) return undefined;
-
-    function handlePointerDown(event: MouseEvent) {
-      if (!containerRef.current?.contains(event.target as Node)) {
-        void commit();
-      }
-    }
-
-    window.addEventListener("mousedown", handlePointerDown);
-    return () => window.removeEventListener("mousedown", handlePointerDown);
-  }, [commit, open]);
+  useInlinePickerDismiss({ open, containerRef, onDismiss: () => void commit() });
 
   return (
     <div ref={containerRef} className="relative">
