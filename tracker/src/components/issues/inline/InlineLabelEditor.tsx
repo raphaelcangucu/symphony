@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { labelDotClass } from "@/components/board/label-colors";
+import { useInlinePickerDismiss } from "@/hooks/useInlinePickerDismiss";
 import { resolveLabelColor, resolveLabelDisplay } from "@/lib/labelDisplay";
 import { isSymphonyLabelName, matchesPickerSearch, sortLabelPickerItems } from "@/lib/pickerOptions";
 import { cn } from "@/lib/utils";
@@ -101,19 +102,7 @@ export function InlineLabelEditor({
     if (saved) setOpen(false);
   }, [onSave, options, selectedLabelValues]);
 
-  useEffect(() => {
-    if (!open) return undefined;
-
-    function handlePointerDown(event: MouseEvent) {
-      if (!containerRef.current?.contains(event.target as Node)) {
-        void commit();
-      }
-    }
-
-    window.addEventListener("mousedown", handlePointerDown);
-    requestAnimationFrame(() => searchRef.current?.focus());
-    return () => window.removeEventListener("mousedown", handlePointerDown);
-  }, [commit, open]);
+  useInlinePickerDismiss({ open, containerRef, onDismiss: () => void commit(), focusRef: searchRef });
 
   const optionItems = useMemo(() => {
     const seen = new Set<string>();

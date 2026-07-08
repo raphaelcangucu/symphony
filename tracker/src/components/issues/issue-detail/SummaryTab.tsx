@@ -17,9 +17,9 @@ import { PriorityIndicator, priorityLabel } from "@/components/issues/PriorityIn
 import { PullRequestLink } from "@/components/issues/pull-request/PullRequestLink";
 import { Separator } from "@/components/ui/separator";
 import { useIssueDevServers } from "@/hooks/useIssueDevServers";
+import { useIssueFormOptions } from "@/hooks/useIssueFormOptions";
 import { userVisibleLabels } from "@/lib/symphonyLabels";
 import { cn, formatDateTime } from "@/lib/utils";
-import { getIssueFormOptions } from "@/services/issues";
 import type { AgentExecution } from "@/types/agent-execution";
 import type { Comment } from "@/types/comment";
 import type {
@@ -98,12 +98,6 @@ export function SummaryTab({
   onClearParent,
 }: SummaryTabProps) {
   const { t } = useTranslation();
-  const [labelOptions, setLabelOptions] = useState<IssueLabelOption[]>([]);
-  const [assigneeOptions, setAssigneeOptions] = useState<IssueAssigneeOption[]>([]);
-  const [statusOptions, setStatusOptions] = useState<WorkflowStatusName[]>([]);
-  const [agentOptions, setAgentOptions] = useState<AgentOption[]>([]);
-  const [effectiveAgent, setEffectiveAgent] = useState<AgentKind>("codex");
-  const [labelOptionsLoading, setLabelOptionsLoading] = useState(false);
   const meta = getStatusMeta(issue.status);
   const StatusIcon = meta.Icon;
   const { data: previewData } = useIssueDevServers(issue.projectSlug, issue.identifier);
@@ -127,37 +121,14 @@ export function SummaryTab({
     onSaveDescription || onSaveLabels || onSaveStatus || onSavePriority || onSaveAssignee || onSaveAgent,
   );
 
-  useEffect(() => {
-    if (!editable || !projectSlug.trim()) return undefined;
-
-    let cancelled = false;
-    setLabelOptionsLoading(true);
-    void getIssueFormOptions(projectSlug)
-      .then((options) => {
-        if (!cancelled) {
-          setLabelOptions(options.labels);
-          setAssigneeOptions(options.assignees);
-          setStatusOptions(options.statuses);
-          setAgentOptions(options.agents);
-          setEffectiveAgent(options.effectiveAgent);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setLabelOptions([]);
-          setAssigneeOptions([]);
-          setAgentOptions([]);
-          setEffectiveAgent("codex");
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLabelOptionsLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [editable, projectSlug]);
+  const { options: formOptions, loading: labelOptionsLoading } = useIssueFormOptions(projectSlug, {
+    enabled: editable,
+  });
+  const labelOptions = formOptions.labels;
+  const assigneeOptions = formOptions.assignees;
+  const statusOptions = formOptions.statuses;
+  const agentOptions = formOptions.agents;
+  const effectiveAgent = formOptions.effectiveAgent;
 
   return (
     <div className="grid gap-x-8 gap-y-6 text-sm lg:grid-cols-[minmax(0,1fr)_236px]">

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { PriorityIndicator, priorityLabel, priorityOptions } from "@/components/issues/PriorityIndicator";
+import { useInlinePickerDismiss } from "@/hooks/useInlinePickerDismiss";
 import { cn } from "@/lib/utils";
 import type { IssuePriority } from "@/types/issue";
 
@@ -37,18 +38,7 @@ export function InlinePriorityEditor({
     if (saved) setOpen(false);
   }, [draft, onSave, priority]);
 
-  useEffect(() => {
-    if (!open) return undefined;
-
-    function handlePointerDown(event: MouseEvent) {
-      if (!containerRef.current?.contains(event.target as Node)) {
-        void commit();
-      }
-    }
-
-    window.addEventListener("mousedown", handlePointerDown);
-    return () => window.removeEventListener("mousedown", handlePointerDown);
-  }, [commit, open]);
+  useInlinePickerDismiss({ open, containerRef, onDismiss: () => void commit() });
 
   return (
     <div ref={containerRef} className="relative">
