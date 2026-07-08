@@ -1,5 +1,8 @@
 # Git worktrees for isolated agent runs
 .worktrees/
 
+# Local backup of refactor phase 5a modules (not part of this branch)
+.phase5a-recovered/
+
 # Per-developer project YAML bundles (make project-import / project-export)
 /projects/

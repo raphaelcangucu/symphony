@@ -35,10 +35,17 @@ defmodule SymphonyElixir.RunContract do
   @spec repo_states(Path.t(), keyword()) :: [RepoState.t()]
   def repo_states(workspace, opts \\ []) when is_binary(workspace) do
     default_branches = Keyword.get(opts, :default_branches, %{})
+    concurrency = Keyword.get(opts, :max_concurrency, max(System.schedulers_online(), 4))
 
     workspace
     |> repo_dirs()
-    |> Enum.map(&inspect_repo(&1, default_branches))
+    |> Task.async_stream(
+      &inspect_repo(&1, default_branches),
+      max_concurrency: concurrency,
+      ordered: true,
+      timeout: :infinity
+    )
+    |> Enum.map(fn {:ok, state} -> state end)
   end
 
   @spec work_present?([RepoState.t()]) :: boolean()

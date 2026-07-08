@@ -29,6 +29,7 @@ defmodule SymphonyElixir.Workspace.Inventory do
   @standalone_prefix "__ws_"
   @worktrees_dir ".worktrees"
   @blocking_execution_statuses [:live, :retrying]
+  @scan_timeout :infinity
 
   @type repo_entry :: %{
           name: String.t(),
@@ -84,6 +85,8 @@ defmodule SymphonyElixir.Workspace.Inventory do
     * `:executions` — replaces `AgentExecution.list/0` as the source of live
       execution statuses.
     * `:size_fun` — replaces the `du`-based directory size probe.
+    * `:max_concurrency` — caps parallel workspace/repo probes (default:
+      `max(System.schedulers_online(), 4)`).
   """
   @spec scan(String.t(), keyword()) :: {:ok, scan_result()} | {:error, term()}
   def scan(project_slug, opts \\ []) when is_binary(project_slug) and is_list(opts) do
@@ -93,13 +96,30 @@ defmodule SymphonyElixir.Workspace.Inventory do
       issues_by_safe_id = issue_lookup(project_slug)
       executions_by_issue = executions_by_issue(opts)
       size_fun = Keyword.get(opts, :size_fun, &directory_size_bytes/1)
+      concurrency = scan_concurrency(opts)
+
+      build_entry_fn = fn path ->
+        build_entry(path, issues_by_safe_id, executions_by_issue, size_fun, concurrency)
+      end
+
+      candidate_task =
+        Task.async(fn ->
+          segment_root
+          |> candidate_dirs()
+          |> async_map(build_entry_fn, concurrency)
+          |> Enum.reject(&is_nil/1)
+        end)
+
+      project_task = Task.async(fn -> project_workspace_entry(segment_root, size_fun, concurrency) end)
+
+      workspaces = Task.await(candidate_task, @scan_timeout)
+      project_entry = Task.await(project_task, @scan_timeout)
 
       workspaces =
-        segment_root
-        |> candidate_dirs()
-        |> Enum.map(&build_entry(&1, issues_by_safe_id, executions_by_issue, size_fun))
-        |> Enum.reject(&is_nil/1)
-        |> attach_project_workspace(segment_root, size_fun)
+        case project_entry do
+          nil -> workspaces
+          entry -> [entry | workspaces]
+        end
 
       {:ok, %{workspaces: workspaces, totals: totals(workspaces)}}
     end
@@ -181,7 +201,7 @@ defmodule SymphonyElixir.Workspace.Inventory do
     :exit, _reason -> []
   end
 
-  defp build_entry(path, issues_by_safe_id, executions_by_issue, size_fun) do
+  defp build_entry(path, issues_by_safe_id, executions_by_issue, size_fun, concurrency) do
     basename = Path.basename(path)
 
     cond do
@@ -191,23 +211,23 @@ defmodule SymphonyElixir.Workspace.Inventory do
         nil
 
       String.starts_with?(basename, @standalone_prefix) ->
-        standalone_entry(path, basename, size_fun)
+        standalone_entry(path, basename, size_fun, concurrency)
 
       match = Regex.named_captures(@parallel_suffix_regex, basename) ->
-        parallel_entry(path, match, issues_by_safe_id, executions_by_issue, size_fun)
+        parallel_entry(path, match, issues_by_safe_id, executions_by_issue, size_fun, concurrency)
 
       issue = Map.get(issues_by_safe_id, basename) ->
-        issue_entry(path, issue, executions_by_issue, size_fun)
+        issue_entry(path, issue, executions_by_issue, size_fun, concurrency)
 
       workspace_like?(path) ->
-        unknown_entry(path, size_fun)
+        unknown_entry(path, size_fun, concurrency)
 
       true ->
         nil
     end
   end
 
-  defp issue_entry(path, issue, executions_by_issue, size_fun) do
+  defp issue_entry(path, issue, executions_by_issue, size_fun, concurrency) do
     repo_states = raw_repo_states(path)
     execution_status = Map.get(executions_by_issue, issue.identifier)
     orphan? = issue.archived or issue.terminal
@@ -225,12 +245,12 @@ defmodule SymphonyElixir.Workspace.Inventory do
       execution_status: execution_status,
       removable: not blocked?,
       size_bytes: size_fun.(path),
-      repos: repo_entries(repo_states, size_fun),
-      child_worktrees: child_worktree_entries(repo_states, size_fun)
+      repos: repo_entries(repo_states, size_fun, concurrency),
+      child_worktrees: child_worktree_entries(repo_states, size_fun, concurrency)
     }
   end
 
-  defp parallel_entry(path, %{"base" => base}, issues_by_safe_id, executions_by_issue, size_fun) do
+  defp parallel_entry(path, %{"base" => base}, issues_by_safe_id, executions_by_issue, size_fun, concurrency) do
     issue = Map.get(issues_by_safe_id, base)
     identifier = if(issue, do: issue.identifier, else: nil)
     execution_status = if(identifier, do: Map.get(executions_by_issue, identifier), else: nil)
@@ -250,12 +270,12 @@ defmodule SymphonyElixir.Workspace.Inventory do
       execution_status: execution_status,
       removable: true,
       size_bytes: size_fun.(path),
-      repos: repo_entries(repo_states, size_fun),
+      repos: repo_entries(repo_states, size_fun, concurrency),
       child_worktrees: []
     }
   end
 
-  defp standalone_entry(path, basename, size_fun) do
+  defp standalone_entry(path, basename, size_fun, concurrency) do
     active_threads = History.count_active_threads_for_workspace(path)
     orphan? = active_threads == 0
     repo_states = raw_repo_states(path)
@@ -272,12 +292,12 @@ defmodule SymphonyElixir.Workspace.Inventory do
       execution_status: nil,
       removable: true,
       size_bytes: size_fun.(path),
-      repos: repo_entries(repo_states, size_fun),
+      repos: repo_entries(repo_states, size_fun, concurrency),
       child_worktrees: []
     }
   end
 
-  defp unknown_entry(path, size_fun) do
+  defp unknown_entry(path, size_fun, concurrency) do
     repo_states = raw_repo_states(path)
     work_present = RunContract.work_present?(repo_states)
 
@@ -292,20 +312,20 @@ defmodule SymphonyElixir.Workspace.Inventory do
       execution_status: nil,
       removable: true,
       size_bytes: size_fun.(path),
-      repos: repo_entries(repo_states, size_fun),
-      child_worktrees: child_worktree_entries(repo_states, size_fun)
+      repos: repo_entries(repo_states, size_fun, concurrency),
+      child_worktrees: child_worktree_entries(repo_states, size_fun, concurrency)
     }
   end
 
-  defp attach_project_workspace(entries, segment_root, size_fun) do
+  defp project_workspace_entry(segment_root, size_fun, concurrency) do
     repo_states = raw_repo_states(segment_root)
 
-    case repo_entries(repo_states, size_fun) do
+    case repo_entries(repo_states, size_fun, concurrency) do
       [] ->
-        entries
+        nil
 
       repos ->
-        project_entry = %{
+        %{
           path: segment_root,
           kind: :project,
           issue_identifier: nil,
@@ -317,26 +337,28 @@ defmodule SymphonyElixir.Workspace.Inventory do
           removable: false,
           size_bytes: Enum.sum_by(repos, & &1.size_bytes),
           repos: repos,
-          child_worktrees: child_worktree_entries(repo_states, size_fun)
+          child_worktrees: child_worktree_entries(repo_states, size_fun, concurrency)
         }
-
-        [project_entry | entries]
     end
   end
 
-  defp repo_entries(repo_states, size_fun) do
-    Enum.map(repo_states, fn repo ->
-      %{
-        name: repo.name,
-        path: repo.path,
-        branch: repo.branch,
-        default_branch: repo.default_branch,
-        dirty: repo.dirty?,
-        upstream: repo.upstream?,
-        ahead_count: repo.ahead_count,
-        size_bytes: size_fun.(repo.path)
-      }
-    end)
+  defp repo_entries(repo_states, size_fun, concurrency) do
+    repo_states
+    |> async_map(
+      fn repo ->
+        %{
+          name: repo.name,
+          path: repo.path,
+          branch: repo.branch,
+          default_branch: repo.default_branch,
+          dirty: repo.dirty?,
+          upstream: repo.upstream?,
+          ahead_count: repo.ahead_count,
+          size_bytes: size_fun.(repo.path)
+        }
+      end,
+      concurrency
+    )
   end
 
   defp raw_repo_states(workspace) do
@@ -347,22 +369,26 @@ defmodule SymphonyElixir.Workspace.Inventory do
       []
   end
 
-  defp child_worktree_entries(repo_states, size_fun) do
-    Enum.flat_map(repo_states, fn repo ->
-      worktrees_root = Path.join(repo.path, @worktrees_dir)
+  defp child_worktree_entries(repo_states, size_fun, concurrency) do
+    child_targets =
+      Enum.flat_map(repo_states, fn repo ->
+        worktrees_root = Path.join(repo.path, @worktrees_dir)
 
-      case File.ls(worktrees_root) do
-        {:ok, slugs} ->
-          slugs
-          |> Enum.sort()
-          |> Enum.map(&Path.join(worktrees_root, &1))
-          |> Enum.filter(&File.dir?/1)
-          |> Enum.map(&child_worktree_entry(&1, repo.name, size_fun))
+        case File.ls(worktrees_root) do
+          {:ok, slugs} ->
+            slugs
+            |> Enum.sort()
+            |> Enum.map(&Path.join(worktrees_root, &1))
+            |> Enum.filter(&File.dir?/1)
+            |> Enum.map(fn child_path -> {child_path, repo.name} end)
 
-        {:error, _reason} ->
-          []
-      end
-    end)
+          {:error, _reason} ->
+            []
+        end
+      end)
+
+    child_targets
+    |> async_map(fn {path, repo_name} -> child_worktree_entry(path, repo_name, size_fun) end, concurrency)
   end
 
   defp child_worktree_entry(path, repo_name, size_fun) do
@@ -532,5 +558,23 @@ defmodule SymphonyElixir.Workspace.Inventory do
 
   defp safe_identifier(identifier) do
     String.replace(identifier || "issue", ~r/[^a-zA-Z0-9._-]/, "_")
+  end
+
+  defp scan_concurrency(opts) do
+    Keyword.get(opts, :max_concurrency, default_scan_concurrency())
+  end
+
+  defp default_scan_concurrency do
+    max(System.schedulers_online(), 4)
+  end
+
+  defp async_map(items, fun, concurrency) when is_function(fun, 1) do
+    items
+    |> Task.async_stream(fun,
+      max_concurrency: concurrency,
+      ordered: true,
+      timeout: @scan_timeout
+    )
+    |> Enum.map(fn {:ok, result} -> result end)
   end
 end
