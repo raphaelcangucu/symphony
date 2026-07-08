@@ -26,7 +26,7 @@ defmodule SymphonyElixir.Orchestrator do
   alias SymphonyElixir.Evidence
   alias SymphonyElixir.GitHub.IssueMarker
   alias SymphonyElixir.LocalTracker.{Context, IssueMapper, Repository}
-  alias SymphonyElixir.Orchestrator.{BundleCoordinator, BundleGate, RunUpdate}
+  alias SymphonyElixir.Orchestrator.{BundleCoordinator, BundleGate, IncompleteReason, RunUpdate}
   alias SymphonyElixir.PublicRouting
   alias SymphonyElixir.PushNotifications.Dispatcher, as: PushDispatcher
   alias SymphonyElixir.RunContract.Finalizer
@@ -2214,52 +2214,17 @@ defmodule SymphonyElixir.Orchestrator do
   @doc false
   @spec incomplete_workpad_comment_body(term()) :: String.t()
   def incomplete_workpad_comment_body(reason) do
-    handoff_note = incomplete_handoff_note(reason)
+    handoff_note = IncompleteReason.handoff_note(reason)
 
     """
     ## Codex Workpad
 
-    > ⚠️ Symphony auto-note: this agent run ended **incomplete** (#{incomplete_reason_text(reason)}).
+    > ⚠️ Symphony auto-note: this agent run ended **incomplete** (#{IncompleteReason.reason_text(reason)}).
     >
     > #{handoff_note}
     > - Please review the workspace state and move the issue back to Rework (or re-dispatch) if the task is not actually done.
     """
   end
-
-  defp incomplete_handoff_note({:validate_gate, violations}) do
-    cond do
-      Evidence.Gate.environment_blocked_only?(violations) ->
-        "- The issue was **not** moved to review — required tests could not run in the workspace environment (e.g. no Docker/network). This is an environment blocker, not necessarily a code failure: fix the environment (or sandbox capabilities) and re-dispatch."
-
-      Enum.any?(violations, &(&1.kind == :judge_rejected)) ->
-        reasons = violations |> Enum.filter(&(&1.kind == :judge_rejected)) |> Enum.map_join("; ", & &1.detail)
-        "- The issue was **not** moved to review — the independent validation judge rejected the evidence (#{reasons}). The tests do not yet prove the change; fix the tests/evidence and re-dispatch."
-
-      true ->
-        "- The issue was **not** moved to review — evidence/validation is missing or failing."
-    end
-  end
-
-  defp incomplete_handoff_note({:publish_gate, _}),
-    do: "- The issue was **not** moved to review — publish requirements (PRs / pushed branches) are unsatisfied."
-
-  defp incomplete_handoff_note(_),
-    do: "- No pull request was confirmed for this issue at handoff.\n    > - The issue was moved to its review state automatically by the orchestrator, not by the agent finishing the work."
-
-  defp incomplete_reason_text(:max_turns), do: "reached the configured max turns with the issue still active"
-
-  defp incomplete_reason_text({:publish_gate, _violations}),
-    do: "ended with the publish gate unsatisfied (deliverables missing)"
-
-  defp incomplete_reason_text({:validate_gate, violations}) do
-    if Evidence.Gate.environment_blocked_only?(violations) do
-      "ended with required tests blocked by the workspace environment (e.g. missing Docker/network), not a code failure"
-    else
-      "ended with the validate gate unsatisfied (test/e2e evidence missing or failing)"
-    end
-  end
-
-  defp incomplete_reason_text(other), do: "reason=#{inspect(other)}"
 
   defp add_incomplete_label(running_entry), do: add_label(running_entry, @incomplete_run_label)
 
