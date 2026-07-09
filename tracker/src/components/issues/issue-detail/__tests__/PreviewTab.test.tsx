@@ -13,6 +13,11 @@ vi.mock("@/hooks/useIssueDevServers", () => ({
   useIssueDevServers: vi.fn(),
 }));
 
+vi.mock("@/services/issueDevServers", () => ({
+  fetchDevServerOutput: vi.fn(async () => ({ output: "", session_name: "" })),
+  subscribeDevServerOutput: vi.fn(() => () => undefined),
+}));
+
 const navigate = vi.fn();
 
 vi.mock("react-router-dom", async () => {
@@ -44,10 +49,10 @@ describe("PreviewTab", () => {
     }
   });
 
-  it("renders the primary preview link and manual controls when ready", () => {
+  it("renders one ready CTA, secondary controls, and compact server metadata", () => {
     renderPreview(
       response([
-        server({ id: 1, slug: "api", status: "ready", url: "http://127.0.0.1:4000", primary: false }),
+        server({ id: 1, slug: "api", status: "ready", port: 4000, url: "http://127.0.0.1:4000", primary: false }),
         server({ id: 2, slug: "web", status: "ready", url: "http://127.0.0.1:5173", primary: true }),
       ]),
     );
@@ -57,22 +62,18 @@ describe("PreviewTab", () => {
     expect(link).toHaveAttribute("target", "_blank");
     expect(link).toHaveAttribute("rel", expect.stringContaining("noreferrer"));
 
-    expect(screen.getByRole("button", { name: /^start preview$/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^start preview$/i })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^stop preview$/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^restart preview$/i })).toBeInTheDocument();
-    expect(screen.getByText("web")).toBeInTheDocument();
-    expect(screen.getByText("api")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /^open api preview$/i })).toHaveAttribute(
-      "href",
-      "http://127.0.0.1:4000",
-    );
-    expect(screen.getByRole("link", { name: /^open web preview$/i })).toHaveAttribute(
-      "href",
-      "http://127.0.0.1:5173",
-    );
+    expect(screen.getByText("api · :4000 · ready")).toBeInTheDocument();
+    expect(screen.getByText("web · :5173 · ready")).toBeInTheDocument();
+    expect(screen.getByText("primary")).toBeInTheDocument();
+    expect(screen.getAllByText("http://127.0.0.1:5173")).toHaveLength(1);
+    expect(screen.queryByText(/preview is ready from/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /^open api preview$/i })).not.toBeInTheDocument();
   });
 
-  it("shows public tunnel and localhost URLs for a ready server when the tunnel is running", () => {
+  it("shows tunnel state inline and one ready URL when the tunnel is running", () => {
     renderPreview(
       response(
         [
@@ -89,19 +90,14 @@ describe("PreviewTab", () => {
       ),
     );
 
-    expect(screen.getByText(/public preview urls/i)).toBeInTheDocument();
-    const publicLinks = screen.getAllByRole("link", {
-      name: "https://macro-markets-510-back.example.tracker.cods.dev/admin",
-    });
-    expect(publicLinks.length).toBeGreaterThan(0);
-    for (const link of publicLinks) {
-      expect(link).toHaveAttribute("href", "https://macro-markets-510-back.example.tracker.cods.dev/admin");
-    }
-    const localLinks = screen.getAllByRole("link", { name: "http://localhost:4102/admin" });
-    expect(localLinks.length).toBeGreaterThan(0);
-    for (const link of localLinks) {
-      expect(link).toHaveAttribute("href", "http://localhost:4102/admin");
-    }
+    expect(screen.getByText(/tunnel: running/i)).toBeInTheDocument();
+    expect(screen.queryByText(/public preview urls/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /^open preview$/i })).toHaveAttribute(
+      "href",
+      "https://macro-markets-510-back.example.tracker.cods.dev/admin",
+    );
+    expect(screen.getAllByText("https://macro-markets-510-back.example.tracker.cods.dev/admin")).toHaveLength(1);
+    expect(screen.queryByText("http://localhost:4102/admin")).not.toBeInTheDocument();
   });
 
   it("does not duplicate a localhost URL when the preview already points at loopback", () => {
@@ -141,7 +137,7 @@ describe("PreviewTab", () => {
   it("disables manual controls when previews are unavailable", () => {
     renderPreview({ available: false, reason: "disabled", servers: [] });
 
-    expect(screen.getByRole("button", { name: /^start preview$/i })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: /^start preview$/i })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^stop preview$/i })).toBeDisabled();
     expect(screen.getByRole("button", { name: /^restart preview$/i })).toBeDisabled();
   });
@@ -208,7 +204,7 @@ describe("PreviewTab", () => {
     expect(hookActions.restartServer).toHaveBeenCalledWith(10);
   });
 
-  it("warns and shows only localhost URLs when the tunnel is enabled but not running", () => {
+  it("shows stopped tunnel state inline and only the localhost ready URL", () => {
     renderPreview(
       response(
         [
@@ -225,7 +221,8 @@ describe("PreviewTab", () => {
       ),
     );
 
-    expect(screen.getByText(/cloudflare tunnel is not running/i)).toBeInTheDocument();
+    expect(screen.getByText(/tunnel: stopped/i)).toBeInTheDocument();
+    expect(screen.queryByText(/cloudflare tunnel is not running/i)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /start tunnel/i })).toBeInTheDocument();
     expect(
       screen.queryByRole("link", { name: "https://macro-markets-510-back.example.tracker.cods.dev/admin" }),
@@ -234,10 +231,8 @@ describe("PreviewTab", () => {
       "href",
       "http://localhost:4102/admin",
     );
-    expect(screen.getByRole("link", { name: /^open back preview$/i })).toHaveAttribute(
-      "href",
-      "http://localhost:4102/admin",
-    );
+    expect(screen.getAllByText("http://localhost:4102/admin")).toHaveLength(1);
+    expect(screen.queryByRole("link", { name: /^open back preview$/i })).not.toBeInTheDocument();
   });
 
   it("calls startTunnel when Start tunnel is clicked", async () => {

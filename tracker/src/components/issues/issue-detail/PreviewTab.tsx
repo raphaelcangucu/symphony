@@ -1,17 +1,16 @@
-import { AlertTriangle, Bot, Cloud, ExternalLink, Loader2, Play, RotateCcw, Server, Square } from "lucide-react";
+import { AlertTriangle, Bot, Cloud, ExternalLink, Loader2, MoreHorizontal, Play, RotateCcw, Server, Square } from "lucide-react";
 import type { TFunction } from "i18next";
-import { useCallback, useState } from "react";
+import { useCallback, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DevServerOutputPanel } from "@/components/issues/issue-detail/DevServerOutputPanel";
 import { useIssueDevServers, type UseIssueDevServersResult } from "@/hooks/useIssueDevServers";
 import {
   localPreviewUrl,
-  publicTunnelPreviewUrl,
   readyPreviewUrl,
   selectPrimaryServer,
 } from "@/lib/devServerUrls";
@@ -107,7 +106,6 @@ export function PreviewPanel({ projectSlug, issueIdentifier, view, execution, de
   );
   const primaryServer = selectPrimaryServer(data?.servers ?? []);
   const primaryUrl = readyPreviewUrl(primaryServer);
-  const primaryPublicUrl = publicTunnelPreviewUrl(primaryServer);
   const primaryLocalUrl = localPreviewUrl(primaryServer);
   const hasRequiredIdentifiers = projectSlug.trim().length > 0 && issueIdentifier.trim().length > 0;
 
@@ -155,11 +153,16 @@ export function PreviewPanel({ projectSlug, issueIdentifier, view, execution, de
     ACTIVE_PROVISIONING_STATUSES.has(primaryServer.status)
       ? provisioningStatusMessage(primaryServer, t)
       : null;
-  const controlsDisabled = loading || !canRunManualActions(data.available, data.reason);
-  const failureReason = data.reason && isPreviewFailureReason(data.reason);
+  const canRunActions = canRunManualActions(data.available, data.reason);
+  const controlsDisabled = loading || !canRunActions;
+  const failureReason = data.reason != null && isPreviewFailureReason(data.reason);
+  const primaryFailureServer =
+    primaryServer && isPreviewFailureServerStatus(primaryServer.status) ? primaryServer : null;
   const tunnelEnabled = data.tunnel?.enabled ?? false;
   const tunnelRunning = data.tunnel?.running ?? false;
   const openPrimaryUrl = tunnelRunning ? primaryUrl : (primaryLocalUrl ?? primaryUrl);
+  const canStartPreview = openPrimaryUrl == null && canRunActions && !failureReason && primaryFailureServer == null;
+  const canAskAssistant = openPrimaryUrl == null && (failureReason || primaryFailureServer != null);
 
   return (
     <div className="space-y-4 text-sm">
@@ -169,80 +172,43 @@ export function PreviewPanel({ projectSlug, issueIdentifier, view, execution, de
         </StateCallout>
       ) : null}
 
-      <TunnelNotice
-        enabled={tunnelEnabled}
-        running={tunnelRunning}
-        starting={startingTunnel}
-        onStart={() => void handleStartTunnel()}
-      />
-
       <Card>
-        <CardHeader className="gap-3">
+        <CardHeader className="gap-3 p-4">
+          <PreviewStatusStrip
+            available={data.available}
+            loading={loading}
+            onStartTunnel={() => void handleStartTunnel()}
+            startingTunnel={startingTunnel}
+            tunnelEnabled={tunnelEnabled}
+            tunnelRunning={tunnelRunning}
+          />
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div className="space-y-1">
+            <div className="min-w-0 space-y-1">
               <CardTitle className="flex items-center gap-2 text-base">
                 <Server className="h-4 w-4" />
                 {t("issue.preview.cardTitle")}
               </CardTitle>
-              <CardDescription>
-                {t("issue.preview.availability", {
-                  status: data.available ? t("issue.preview.available") : t("issue.preview.unavailable"),
-                })}
-                {loading ? t("issue.preview.refreshing") : ""}
-              </CardDescription>
             </div>
-            <PreviewControls disabled={controlsDisabled} onRestart={restart} onStart={start} onStop={stop} />
+            <div className="flex flex-col gap-2 sm:items-end">
+              <PrimaryPreviewAction
+                canAskAssistant={canAskAssistant}
+                canStart={canStartPreview}
+                disabled={controlsDisabled}
+                onAskAssistant={() => askAssistantToFix(data, primaryFailureServer)}
+                onStart={start}
+                openUrl={openPrimaryUrl}
+              />
+              <SecondaryPreviewControls disabled={controlsDisabled} onRestart={restart} onStop={stop} />
+            </div>
           </div>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-4 p-4 pt-0">
+          {openPrimaryUrl ? <ReadyUrlLine url={openPrimaryUrl} /> : null}
+
           {unavailableMessage ? (
             <StateCallout tone="warning" title={unavailableMessage.title}>
-              <div className="space-y-3">
-                <p>{unavailableMessage.body}</p>
-                {failureReason ? (
-                  <AskAssistantButton onClick={() => askAssistantToFix(data)} />
-                ) : null}
-              </div>
+              {unavailableMessage.body}
             </StateCallout>
-          ) : null}
-
-          {openPrimaryUrl ? (
-            <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-4">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-sm font-medium text-emerald-800 dark:text-emerald-200">
-                    {primaryServer
-                      ? t("issue.preview.readyFrom", { slug: primaryServer.slug })
-                      : t("issue.preview.ready")}
-                  </p>
-                  <p className="mt-1 break-all font-mono text-xs text-emerald-700 dark:text-emerald-300">
-                    {openPrimaryUrl}
-                  </p>
-                  {tunnelRunning && primaryPublicUrl ? (
-                    <p className="mt-1 break-all font-mono text-xs text-emerald-700/80 dark:text-emerald-300/80">
-                      {t("issue.preview.publicTunnel")}{" "}
-                      <a href={primaryPublicUrl} target="_blank" rel="noreferrer noopener" className="underline">
-                        {primaryPublicUrl}
-                      </a>
-                    </p>
-                  ) : null}
-                  {tunnelRunning && primaryLocalUrl ? (
-                    <p className="mt-1 break-all font-mono text-xs text-emerald-700/80 dark:text-emerald-300/80">
-                      {t("issue.preview.local")}{" "}
-                      <a href={primaryLocalUrl} target="_blank" rel="noreferrer noopener" className="underline">
-                        {primaryLocalUrl}
-                      </a>
-                    </p>
-                  ) : null}
-                </div>
-                <Button asChild size="sm">
-                  <a href={openPrimaryUrl} target="_blank" rel="noreferrer noopener">
-                    <ExternalLink className="h-3.5 w-3.5" />
-                    {t("issue.preview.openPreview")}
-                  </a>
-                </Button>
-              </div>
-            </div>
           ) : null}
 
           {provisioningMessage ? (
@@ -272,7 +238,7 @@ export function PreviewPanel({ projectSlug, issueIdentifier, view, execution, de
                 {t("issue.preview.noServers")}
               </p>
             ) : (
-              <div className="space-y-2">
+              <div className="divide-y rounded-lg border">
                 {data.servers.map((server) => (
                   <ServerRow
                     key={server.id}
@@ -300,30 +266,113 @@ export function PreviewPanel({ projectSlug, issueIdentifier, view, execution, de
   );
 }
 
-function PreviewControls({
+function PreviewStatusStrip({
+  available,
+  loading,
+  onStartTunnel,
+  startingTunnel,
+  tunnelEnabled,
+  tunnelRunning,
+}: {
+  available: boolean;
+  loading: boolean;
+  onStartTunnel: () => void;
+  startingTunnel: boolean;
+  tunnelEnabled: boolean;
+  tunnelRunning: boolean;
+}) {
+  const { t } = useTranslation();
+  const tunnelLabel = tunnelEnabled
+    ? tunnelRunning
+      ? t("issue.preview.tunnelRunning")
+      : t("issue.preview.tunnelStopped")
+    : t("issue.preview.tunnelDisabled");
+
+  return (
+    <div
+      aria-label={t("issue.preview.statusStripLabel")}
+      className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2 text-xs text-muted-foreground"
+    >
+      <span>
+        {t("issue.preview.availability", {
+          status: available ? t("issue.preview.available") : t("issue.preview.unavailable"),
+        })}
+        {loading ? t("issue.preview.refreshing") : ""}
+      </span>
+      <span aria-hidden="true">·</span>
+      <span>{tunnelLabel}</span>
+      {tunnelEnabled && !tunnelRunning ? (
+        <Button type="button" size="sm" variant="ghost" className="ml-auto h-7 px-2" onClick={onStartTunnel} disabled={startingTunnel}>
+          {startingTunnel ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Cloud className="h-3.5 w-3.5" />}
+          {startingTunnel ? t("issue.preview.startingTunnel") : t("issue.preview.startTunnel")}
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
+function PrimaryPreviewAction({
+  canAskAssistant,
+  canStart,
+  disabled,
+  onAskAssistant,
+  onStart,
+  openUrl,
+}: {
+  canAskAssistant: boolean;
+  canStart: boolean;
+  disabled: boolean;
+  onAskAssistant: () => void;
+  onStart: () => Promise<void>;
+  openUrl: string | null;
+}) {
+  const { t } = useTranslation();
+
+  if (openUrl) {
+    return (
+      <Button asChild size="sm">
+        <a href={openUrl} target="_blank" rel="noreferrer noopener">
+          <ExternalLink className="h-3.5 w-3.5" />
+          {t("issue.preview.openPreview")}
+        </a>
+      </Button>
+    );
+  }
+
+  if (canAskAssistant) {
+    return <AskAssistantButton onClick={onAskAssistant} primary />;
+  }
+
+  if (canStart) {
+    return (
+      <Button type="button" size="sm" onClick={() => void onStart()} disabled={disabled}>
+        <Play className="h-3.5 w-3.5" />
+        {t("issue.preview.startPreview")}
+      </Button>
+    );
+  }
+
+  return null;
+}
+
+function SecondaryPreviewControls({
   disabled,
   onRestart,
-  onStart,
   onStop,
 }: {
   disabled: boolean;
   onRestart: () => Promise<void>;
-  onStart: () => Promise<void>;
   onStop: () => Promise<void>;
 }) {
   const { t } = useTranslation();
 
   return (
     <div className="flex flex-wrap gap-2">
-      <Button type="button" size="sm" onClick={() => void onStart()} disabled={disabled}>
-        <Play className="h-3.5 w-3.5" />
-        {t("issue.preview.startPreview")}
-      </Button>
-      <Button type="button" size="sm" variant="outline" onClick={() => void onStop()} disabled={disabled}>
+      <Button type="button" size="sm" variant="ghost" onClick={() => void onStop()} disabled={disabled}>
         <Square className="h-3.5 w-3.5" />
         {t("issue.preview.stopPreview")}
       </Button>
-      <Button type="button" size="sm" variant="outline" onClick={() => void onRestart()} disabled={disabled}>
+      <Button type="button" size="sm" variant="ghost" onClick={() => void onRestart()} disabled={disabled}>
         <RotateCcw className="h-3.5 w-3.5" />
         {t("issue.preview.restartPreview")}
       </Button>
@@ -331,102 +380,22 @@ function PreviewControls({
   );
 }
 
-function ServerControls({
-  disabled,
-  onRestart,
-  onStart,
-  onStop,
-  slug,
-}: {
-  disabled: boolean;
-  onRestart: () => void;
-  onStart: () => void;
-  onStop: () => void;
-  slug: string;
-}) {
+function ReadyUrlLine({ url }: { url: string }) {
   const { t } = useTranslation();
 
   return (
-    <div className="flex flex-wrap gap-2">
-      <Button
-        type="button"
-        size="sm"
-        onClick={onStart}
-        disabled={disabled}
-        aria-label={t("issue.preview.startServerAria", { slug })}
-      >
-        <Play className="h-3.5 w-3.5" />
-        {t("issue.preview.start")}
-      </Button>
-      <Button
-        type="button"
-        size="sm"
-        variant="outline"
-        onClick={onStop}
-        disabled={disabled}
-        aria-label={t("issue.preview.stopServerAria", { slug })}
-      >
-        <Square className="h-3.5 w-3.5" />
-        {t("issue.preview.stop")}
-      </Button>
-      <Button
-        type="button"
-        size="sm"
-        variant="outline"
-        onClick={onRestart}
-        disabled={disabled}
-        aria-label={t("issue.preview.restartServerAria", { slug })}
-      >
-        <RotateCcw className="h-3.5 w-3.5" />
-        {t("issue.preview.restart")}
-      </Button>
+    <div className="flex flex-col gap-1 rounded-lg border bg-emerald-500/10 px-3 py-2 text-xs sm:flex-row sm:items-center">
+      <span className="font-medium text-emerald-800 dark:text-emerald-200">{t("issue.preview.readyUrl")}</span>
+      <code className="break-all font-mono text-emerald-700 dark:text-emerald-300">{url}</code>
     </div>
   );
 }
 
-function TunnelNotice({
-  enabled,
-  running,
-  starting,
-  onStart,
-}: {
-  enabled: boolean;
-  running: boolean;
-  starting: boolean;
-  onStart: () => void;
-}) {
-  const { t } = useTranslation();
-
-  if (!enabled) {
-    return null;
-  }
-
-  if (running) {
-    return (
-      <StateCallout tone="default" icon={<Cloud className="h-5 w-5" />} title={t("issue.preview.tunnelRunningTitle")}>
-        {t("issue.preview.tunnelRunningBody")}
-      </StateCallout>
-    );
-  }
-
-  return (
-    <StateCallout tone="warning" title={t("issue.preview.tunnelStoppedTitle")}>
-      <div className="space-y-3">
-        <p>{t("issue.preview.tunnelStoppedBody")}</p>
-        <Button type="button" size="sm" onClick={onStart} disabled={starting}>
-          {starting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Cloud className="h-3.5 w-3.5" />}
-          {starting ? t("issue.preview.startingTunnel") : t("issue.preview.startTunnel")}
-        </Button>
-      </div>
-    </StateCallout>
-  );
-}
-
-function AskAssistantButton({ onClick }: { onClick: () => void }) {
+function AskAssistantButton({ onClick, primary = false }: { onClick: () => void; primary?: boolean }) {
   const { t } = useTranslation();
 
   return (
-    <Button type="button" size="sm" variant="outline" onClick={onClick}>
+    <Button type="button" size="sm" variant={primary ? "default" : "outline"} onClick={onClick}>
       <Bot className="h-3.5 w-3.5" />
       {t("issue.preview.askAssistant")}
     </Button>
@@ -455,74 +424,116 @@ function ServerRow({
   tunnelRunning: boolean;
 }) {
   const { t } = useTranslation();
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const actionsId = useId();
   const previewUrl = readyPreviewUrl(server);
-  const publicUrl = publicTunnelPreviewUrl(server);
   const localUrl = localPreviewUrl(server);
   const openUrl = tunnelRunning ? previewUrl : (localUrl ?? previewUrl);
+  const portLabel = server.port ? `:${server.port}` : t("issue.preview.noPort");
+  const compactLabel = `${server.slug} · ${portLabel} · ${server.status}`;
+  const hasOverflowActions = openUrl != null || onAskAssistant != null;
 
   return (
-    <div className="rounded-lg border p-3">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0 space-y-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="font-medium">{server.slug}</span>
-            {server.primary ? <Badge variant="outline">{t("issue.preview.primaryBadge")}</Badge> : null}
-            <Badge className={cn("capitalize", devServerStatusBadgeClass(server.status))}>{server.status}</Badge>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            {server.working_dir
-              ? t("issue.preview.workingDir", { dir: server.working_dir })
-              : t("issue.preview.noWorkingDir")}
-            {server.port ? t("issue.preview.port", { port: server.port }) : ""}
-          </p>
-          {tunnelRunning && publicUrl ? (
-            <p className="break-all font-mono text-xs text-muted-foreground">
-              {t("issue.preview.publicTunnel")}{" "}
-              <a href={publicUrl} target="_blank" rel="noreferrer noopener" className="underline">
-                {publicUrl}
-              </a>
-            </p>
+    <div className="p-3">
+      <div className="flex items-center gap-2">
+        <div className="min-w-0 flex-1 truncate text-xs">
+          <span className="font-medium">{compactLabel}</span>
+          {server.primary ? (
+            <Badge variant="outline" className="ml-2 align-middle">
+              {t("issue.preview.primaryBadge")}
+            </Badge>
           ) : null}
-          {tunnelRunning && localUrl ? (
-            <p className="break-all font-mono text-xs text-muted-foreground">
-              {t("issue.preview.local")}{" "}
-              <a href={localUrl} target="_blank" rel="noreferrer noopener" className="underline">
-                {localUrl}
-              </a>
-            </p>
+          <Badge className={cn("ml-2 align-middle capitalize", devServerStatusBadgeClass(server.status))}>{server.status}</Badge>
+          {server.session_name ? (
+            <span className="ml-2 truncate font-mono text-muted-foreground">{server.session_name}</span>
           ) : null}
-          {server.session_name ? <p className="font-mono text-xs text-muted-foreground">{server.session_name}</p> : null}
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <ServerControls
+        <div className="relative flex shrink-0 items-center gap-0.5">
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="h-8 w-8"
+            onClick={() => onStart(server.id)}
             disabled={controlsDisabled}
-            onRestart={() => onRestart(server.id)}
-            onStart={() => onStart(server.id)}
-            onStop={() => onStop(server.id)}
-            slug={server.slug}
-          />
-          {onAskAssistant ? <AskAssistantButton onClick={onAskAssistant} /> : null}
-          {openUrl ? (
-            <Button asChild size="sm" variant="outline">
-              <a href={openUrl} target="_blank" rel="noreferrer noopener">
-                <ExternalLink className="h-3.5 w-3.5" />
-                {t("issue.preview.openServerPreview", { slug: server.slug })}
-              </a>
-            </Button>
+            aria-label={t("issue.preview.startServerAria", { slug: server.slug })}
+          >
+            <Play className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="h-8 w-8"
+            onClick={() => onStop(server.id)}
+            disabled={controlsDisabled}
+            aria-label={t("issue.preview.stopServerAria", { slug: server.slug })}
+          >
+            <Square className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="h-8 w-8"
+            onClick={() => onRestart(server.id)}
+            disabled={controlsDisabled}
+            aria-label={t("issue.preview.restartServerAria", { slug: server.slug })}
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+          </Button>
+          {hasOverflowActions ? (
+            <div className="relative">
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                className="h-8 w-8"
+                aria-controls={actionsId}
+                aria-expanded={actionsOpen}
+                aria-label={t("issue.preview.moreActionsAria", { slug: server.slug })}
+                onClick={() => setActionsOpen((value) => !value)}
+              >
+                <MoreHorizontal className="h-3.5 w-3.5" />
+              </Button>
+              {actionsOpen ? (
+                <div
+                  id={actionsId}
+                  className="absolute right-0 z-10 mt-1 min-w-44 rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
+                >
+                  {onAskAssistant ? (
+                    <Button type="button" size="sm" variant="ghost" className="w-full justify-start" onClick={onAskAssistant}>
+                      <Bot className="h-3.5 w-3.5" />
+                      {t("issue.preview.askAssistant")}
+                    </Button>
+                  ) : null}
+                  {openUrl ? (
+                    <Button asChild size="sm" variant="ghost" className="w-full justify-start">
+                      <a href={openUrl} target="_blank" rel="noreferrer noopener" aria-label={t("issue.preview.openServerPreview", { slug: server.slug })}>
+                        <ExternalLink className="h-3.5 w-3.5" />
+                        {t("issue.preview.openUrl")}
+                      </a>
+                    </Button>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
           ) : (
-            <span className="text-xs text-muted-foreground">{t("issue.preview.noUrlYet")}</span>
+            <span className="px-2 text-xs text-muted-foreground">{t("issue.preview.noUrlYet")}</span>
           )}
         </div>
       </div>
-      <DevServerOutputPanel
-        defaultOpen={ACTIVE_PROVISIONING_STATUSES.has(server.status) || server.status === "crashed"}
-        issueIdentifier={issueIdentifier}
-        projectSlug={projectSlug}
-        serverId={server.id}
-        sessionName={server.session_name}
-        slug={server.slug}
-        status={server.status}
-      />
+      <div className="mt-2">
+        <DevServerOutputPanel
+          defaultOpen={ACTIVE_PROVISIONING_STATUSES.has(server.status) || server.status === "crashed"}
+          issueIdentifier={issueIdentifier}
+          projectSlug={projectSlug}
+          serverId={server.id}
+          sessionName={server.session_name}
+          slug={server.slug}
+          status={server.status}
+        />
+      </div>
     </div>
   );
 }
@@ -556,7 +567,7 @@ function StateCallout({
       <span className="mt-0.5 shrink-0">{icon ?? <AlertTriangle className="h-5 w-5" />}</span>
       <div className="space-y-1">
         <p className="font-medium">{title}</p>
-        <p>{children}</p>
+        <div>{children}</div>
       </div>
     </div>
   );
