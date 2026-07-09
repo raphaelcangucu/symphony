@@ -6,6 +6,15 @@
     "save": "Salvar",
     "refresh": "Atualizar"
   },
+  "time": {
+    "relative": {
+      "justNow": "agora",
+      "seconds": "há {{count}}s",
+      "minutes": "há {{count}}m",
+      "hours": "há {{count}}h",
+      "days": "há {{count}}d"
+    }
+  },
   "launcher": {
     "title": "Nova sessão",
     "subtitle": "Entre numa execução por issue, PR, branch ou ação rápida.",
@@ -2957,7 +2966,11 @@
     "reposDirty": "{{count}} arquivos alterados",
     "clean": "limpo",
     "ahead": "{{count}} à frente",
+    "inventoryLabel": "Inventário",
     "totals": "{{count}} trees · {{size}} · {{reclaimable}} recuperáveis",
+    "totalsTrees": "{{count}} trees",
+    "totalsSize": "{{size}}",
+    "totalsReclaimable": "{{reclaimable}} recuperáveis",
     "totalsLoading": "{{count}} trees carregadas · {{size}}…",
     "inventoryLoading": "Escaneando working trees…",
     "cleanup": {

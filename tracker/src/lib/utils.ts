@@ -15,4 +15,4 @@ export const SCROLLBAR_THIN = [
   "[&::-webkit-scrollbar-thumb]:bg-muted-foreground/35",
 ].join(" ");
 
-export { formatDateTime } from "@/lib/timeFormat";
+export { formatDateTime, formatRelativeTime } from "@/lib/timeFormat";

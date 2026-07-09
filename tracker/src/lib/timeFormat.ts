@@ -4,8 +4,12 @@
  * scattered across session lists, observability, evidence and assistant views.
  */
 
+import { i18n } from "@/i18n";
+
 const MINUTE_SECONDS = 60;
 const HOUR_SECONDS = 3600;
+const RELATIVE_JUST_NOW_SECONDS = 5;
+const RELATIVE_DAY_SECONDS = 86400;
 
 export function parseTimestamp(value: string | null | undefined): number | null {
   if (!value) return null;
@@ -78,4 +82,29 @@ export function formatDateTime(value: string | null | undefined): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+/**
+ * Compact relative time for dense UI rows: "just now", "30s ago", "15m ago", "2h ago", "2d ago".
+ * Locale strings live under `time.relative.*`. Invalid/null → "-".
+ */
+export function formatRelativeTime(value: string | null | undefined, nowMs: number = Date.now()): string {
+  const timestamp = parseTimestamp(value);
+  if (timestamp === null) return "-";
+
+  const elapsedSeconds = Math.max(0, Math.floor((nowMs - timestamp) / 1000));
+
+  if (elapsedSeconds < RELATIVE_JUST_NOW_SECONDS) {
+    return i18n.t("time.relative.justNow");
+  }
+  if (elapsedSeconds < MINUTE_SECONDS) {
+    return i18n.t("time.relative.seconds", { count: elapsedSeconds });
+  }
+  if (elapsedSeconds < HOUR_SECONDS) {
+    return i18n.t("time.relative.minutes", { count: Math.floor(elapsedSeconds / MINUTE_SECONDS) });
+  }
+  if (elapsedSeconds < RELATIVE_DAY_SECONDS) {
+    return i18n.t("time.relative.hours", { count: Math.floor(elapsedSeconds / HOUR_SECONDS) });
+  }
+  return i18n.t("time.relative.days", { count: Math.floor(elapsedSeconds / RELATIVE_DAY_SECONDS) });
 }

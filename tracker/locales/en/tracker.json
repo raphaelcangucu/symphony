@@ -6,6 +6,15 @@
     "save": "Save",
     "refresh": "Refresh"
   },
+  "time": {
+    "relative": {
+      "justNow": "just now",
+      "seconds": "{{count}}s ago",
+      "minutes": "{{count}}m ago",
+      "hours": "{{count}}h ago",
+      "days": "{{count}}d ago"
+    }
+  },
   "launcher": {
     "title": "New session",
     "subtitle": "Jump into a run from an issue, PR, branch, or quick action.",
@@ -2957,7 +2966,11 @@
     "reposDirty": "{{count}} changed files",
     "clean": "clean",
     "ahead": "{{count}} ahead",
+    "inventoryLabel": "Inventory",
     "totals": "{{count}} trees · {{size}} · {{reclaimable}} reclaimable",
+    "totalsTrees": "{{count}} trees",
+    "totalsSize": "{{size}}",
+    "totalsReclaimable": "{{reclaimable}} reclaimable",
     "totalsLoading": "{{count}} trees loaded · {{size}}…",
     "inventoryLoading": "Scanning working trees…",
     "cleanup": {
