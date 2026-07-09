@@ -6,22 +6,25 @@
 
 ## Problem
 
-Operators watching a durable assistant turn (especially Claude) often see only **“Crunching…”** with no command detail and no way to act, while the agent is busy on long work (e.g. `docker exec … pest --parallel`).
+Operators watching a durable assistant turn often see only **“Crunching…”** with no command detail and no way to act, while the agent is busy on long work (e.g. a long shell/test command).
 
-Root causes observed on thread `7999` (2026-07-09):
+**Primary agent:** Codex. **Shared contracts:** Claude, Cursor, and OpenCode must use the same interrupt, kill-tool, streaming, and snapshot contracts — not Codex-only special cases.
+
+Motivating incident (thread `7999`, 2026-07-09, Claude) exposed gaps that also apply to every backend:
 
 1. Live `assistant_delta` / `tool_call_*` pushes are bound to the **originating WebSocket** except for goal threads (which already fan out via PubSub).
 2. In-flight tools are **not persisted** until turn end, so reconnect/history cannot rebuild “what’s running now.”
-3. The working strip shows tool **name** only (or rotating verbs), not the Bash command; Bash rows default collapsed.
-4. Claude turns ignore `{:codex_interrupt}` (Codex-only receive loop), so Stop does not kill the CLI process group.
-5. `serve_restart` / TurnManager reconcile can mark DB `interrupted` while an orphan Claude/Bash process keeps running — UI and reality diverge.
+3. The working strip shows tool **name** only (or rotating verbs), not the Bash/command string; shell rows default collapsed.
+4. Non-Codex runners ignore `{:codex_interrupt}` (Codex-only receive loop), so Stop does not kill the CLI process group for Claude/Cursor/OpenCode.
+5. `serve_restart` / TurnManager reconcile can mark DB `interrupted` while an orphan agent/Bash process keeps running — UI and reality diverge.
 
 ## Goals
 
-1. **Live visibility on every joined tab** for durable assistant threads (same fan-out pattern as goal threads).
+1. **Live visibility on every joined tab** for durable assistant threads (same fan-out pattern as goal threads), for **all** agent kinds.
 2. **Reconnect survival:** join restores mid-turn tool snapshot; PubSub continues the stream.
-3. **Act on it:** Stop turn (kills agent process group) and Kill command (cancels the active tool’s OS child when possible).
+3. **Act on it:** Stop turn (kills agent process group) and Kill command (cancels the active tool’s OS child when possible), via **one** agent-agnostic contract.
 4. **Honest naming:** rename `SymphonyElixir.Assistant.CodexSession` → `AgentSession` (it already runs all agents).
+5. **Codex-first, shared contracts:** design and verify against Codex; Claude / Cursor / OpenCode implement the same messages and channel events (no per-agent UI or channel API).
 
 ## Non-goals
 
@@ -36,7 +39,7 @@ Root causes observed on thread `7999` (2026-07-09):
 **Extend goal-style PubSub to all durable turns**, keep a lightweight mid-turn snapshot in `metadata.current_turn`, and wire agent-agnostic interrupt/kill.
 
 ```
-Agent CLI stream (Claude / Codex / Cursor / …)
+Agent CLI stream (Codex primary; Claude / Cursor / OpenCode same path)
   → AgentSession.relay_* (today: CodexSession.relay_codex_event)
   → turn_stream_opts push_stream
        ├─ push(originating socket)
@@ -44,18 +47,21 @@ Agent CLI stream (Claude / Codex / Cursor / …)
   → every AssistantChannel subscriber
        → ProjectAssistantPanel
 
-Stop turn:
-  UI → stop_turn → TurnManager → interrupt worker
-    → CliRunner.kill_port (process group)
-    → current_turn interrupted; clear active_tools
-    → PubSub turn_status
+Shared control contract (all agents):
+  Stop turn:
+    UI → stop_turn → TurnManager → {:agent_interrupt} to worker
+      → kill process group (Codex app-server path or CliRunner.kill_port)
+      → current_turn interrupted; clear active_tools
+      → PubSub turn_status
 
-Kill command:
-  UI → kill_tool {tool_call_id}
-    → best-effort kill of that tool’s OS child under the agent CLI
-    → tool status canceled; turn stays running
-    → if no child PID: toast + offer Stop turn
+  Kill command:
+    UI → kill_tool {tool_call_id}
+      → {:kill_tool, id} to worker (best-effort OS child kill)
+      → tool status canceled; turn stays running
+      → if unsupported / no child PID: error + offer Stop turn
 ```
+
+`{:codex_interrupt}` may remain as a one-release alias that maps to `{:agent_interrupt}` inside Codex only; channel/UI always speak `stop_turn` / `kill_tool` / `agent_interrupt`.
 
 ## Data model
 
@@ -98,17 +104,20 @@ On `tool_call_started` / `tool_call_completed` / meaningful activity:
 
 ### Stop turn
 
-- Channel event: `stop_turn` (extend existing interrupt paths)
-- Worker must handle interrupt for **Claude and Cursor** via `Agent.CliRunner.Base.kill_port/1` (process group), not only Codex’s `{:codex_interrupt}` receive loop
+- Channel event: `stop_turn` (one API for every agent kind)
+- TurnManager sends `{:agent_interrupt}` to the registered worker
+- **Codex:** CodingAgent receive loop treats `{:agent_interrupt}` like today’s interrupt (keep `{:codex_interrupt}` as alias)
+- **Claude / Cursor / OpenCode:** `Agent.CliRunner.Base.receive_loop` handles `{:agent_interrupt}` → `kill_port/1` (process group)
 - Persist `interrupted` + reason; clear `active_tools`; PubSub `turn_status`
 
 ### Kill tool
 
-- Channel event: `kill_tool` with `%{tool_call_id: …}`
-- Best-effort: identify OS child for that tool (Claude Bash/docker child under the CLI process group); kill that subtree
+- Channel event: `kill_tool` with `%{tool_call_id: …}` (one API for every agent kind)
+- TurnManager sends `{:kill_tool, tool_call_id}` to the worker
+- Best-effort: kill that tool’s OS child under the agent process tree (shell/Bash/docker exec, etc.)
 - Mark that tool `canceled` in snapshot + push `tool_call_completed` (or dedicated canceled status)
 - Turn remains `running`
-- If child cannot be identified: return error payload; UI offers Stop turn
+- If child cannot be identified or agent cannot target a single tool: return error payload (`can_stop_turn: true`); UI offers Stop turn
 
 ### Orphan honesty
 
@@ -141,22 +150,23 @@ On `tool_call_started` / `tool_call_completed` / meaningful activity:
 
 ## Testing
 
-1. Non-goal durable turn: second channel receives `tool_call_started` via PubSub
+1. Non-goal durable turn: second channel receives `tool_call_started` via PubSub (agent-agnostic)
 2. Join mid-turn restores `active_tools` into streaming UI
-3. Claude `stop_turn` kills port / marks interrupted
-4. `kill_tool` cancels one tool and leaves turn running (or returns fallback error)
-5. WorkingIndicator shows command string when active tool has arguments
-6. Rename: existing session tests pass under `AgentSession`
+3. **Codex** `stop_turn` interrupts the live turn and marks interrupted (primary)
+4. **Claude** (and Cursor/OpenCode CLI path) `stop_turn` kills port / marks interrupted (same contract)
+5. `kill_tool` cancels one tool and leaves turn running (or returns fallback error) — same reply shape for all agents
+6. WorkingIndicator shows command string when active tool has arguments
+7. Rename: existing session tests pass under `AgentSession`
 
 ## Rollout
 
 - Single feature PR; metadata-only (no migration)
-- Claude is the primary failure mode; Codex/Cursor share the same interrupt/kill contracts
+- **Codex is primary** for design and acceptance; Claude / Cursor / OpenCode must share the same channel events and worker messages
 - Update turn-session-tracking design doc non-goal in the same PR
 
 ## Success criteria
 
-- Refreshing or opening a second tab mid-turn shows the live Bash/command (not only “Crunching…”)
-- Stop ends Claude CLI + children and clears the running UI
-- Kill cancels a stuck Pest/Bash when a child PID is available; otherwise Stop is offered
+- Refreshing or opening a second tab mid-turn shows the live command (not only “Crunching…”) for any agent kind
+- Stop ends the agent process group and clears the running UI (verified on Codex; same path for Claude/Cursor/OpenCode)
+- Kill cancels a stuck shell tool when a child PID is available; otherwise Stop is offered — same UX for all agents
 - `CodexSession` name is gone from the assistant turn path in favor of `AgentSession`

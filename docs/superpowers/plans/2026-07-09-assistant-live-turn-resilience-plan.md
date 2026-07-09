@@ -2,9 +2,9 @@
 
 > **For agentic workers:** Implement task-by-task using checkbox (`- [ ]`) steps. Prefer **(A)** a fresh subagent or focused session per task with review between tasks, or **(B)** inline execution in this chat with checkpoints after each task. Run Elixir tests from `elixir/`; tracker tests from `tracker/`.
 
-**Goal:** Make durable assistant turns visible and controllable on every joined tab — live tool/command updates via PubSub, mid-turn snapshot on reconnect, Stop turn that kills Claude/Cursor/Codex process groups, and Kill command for the active Bash child — plus rename `CodexSession` → `AgentSession`.
+**Goal:** Make durable assistant turns visible and controllable on every joined tab — live tool/command updates via PubSub, mid-turn snapshot on reconnect, Stop turn + Kill command via one agent-agnostic contract — plus rename `CodexSession` → `AgentSession`.
 
-**Architecture:** Extend the existing goal-thread PubSub fan-out in `AssistantChannel.turn_stream_opts/4` to all durable threads; persist `active_tools` + `last_activity_at` on `metadata.current_turn` via `History`; teach `Agent.CliRunner.Base.receive_loop/5` to honor `{:agent_interrupt}` / `{:kill_tool, id}` and call `kill_port/1` (or child kill); surface Stop/Kill + command text in `WorkingIndicator` and tool rows.
+**Architecture:** Extend the existing goal-thread PubSub fan-out in `AssistantChannel.turn_stream_opts/4` to all durable threads; persist `active_tools` + `last_activity_at` on `metadata.current_turn` via `History`; standardize on `{:agent_interrupt}` / `{:kill_tool, id}` for **all** backends (**Codex primary**; Claude / Cursor / OpenCode share the same channel events and worker messages — Codex maps the new messages in its receive loop, CLI agents handle them in `Agent.CliRunner.Base.receive_loop/5`); surface Stop/Kill + command text in `WorkingIndicator` and tool rows.
 
 **Tech Stack:** Elixir / Phoenix Channels, Ecto + SQLite, `GoalRun` PubSub, React/TypeScript (`tracker/`), ExUnit, Vitest.
 
@@ -36,8 +36,9 @@
 - `elixir/lib/symphony_elixir/assistant/history.ex` — `active_tools` / `last_activity_at` helpers; extend `turn_payload/1`; clear tools on interrupt/complete/fail
 - `elixir/lib/symphony_elixir_web/channels/assistant_channel.ex` — fan-out all durable streams; `stop_turn` / `kill_tool`; hydrate join
 - `elixir/lib/symphony_elixir/assistant/turn_manager.ex` — interrupt/kill routing to worker pid
-- `elixir/lib/symphony_elixir/agent/cli_runner/base.ex` — interrupt + kill_tool in `receive_loop`
-- `elixir/lib/symphony_elixir/claude/app_server/cli_runner.ex` (and Cursor equivalent if it uses Base) — ensure interrupt reaches Base loop
+- `elixir/lib/symphony_elixir/agent/cli_runner/base.ex` — shared `{:agent_interrupt}` / `{:kill_tool, id}` for Claude / Cursor / OpenCode CLI path
+- `elixir/lib/symphony_elixir/codex/coding_agent.ex` — accept `{:agent_interrupt}` / `{:kill_tool, id}` (primary); keep `{:codex_interrupt}` as alias
+- `elixir/lib/symphony_elixir/claude/app_server/cli_runner.ex` (and Cursor/OpenCode runners using Base) — ensure interrupt reaches Base loop
 - Call sites of `CodexSession` (channel, controllers, issue_dispatch, etc.)
 
 **Modify (frontend)**
@@ -75,7 +76,7 @@ In `agent_session.ex`, change:
 defmodule SymphonyElixir.Assistant.AgentSession do
 ```
 
-Update `@moduledoc` to say it is the shared assistant turn runner for all agent backends (Claude, Codex, Cursor, OpenCode), not Codex-only.
+Update `@moduledoc` to say it is the shared assistant turn runner for all agent backends (**Codex primary**; Claude, Cursor, OpenCode share the same contracts), not a Codex-only module.
 
 - [ ] **Step 2: Rename test modules/files**
 
@@ -442,32 +443,35 @@ In `receive_loop/5` `receive` clauses, add:
 
 Document: `{:kill_tool, id}` is best-effort; if no children, caller may escalate to full interrupt. Returning `:ok` from the clause and continuing the loop keeps the turn alive.
 
-- [ ] **Step 4: Wire Claude runner**
+- [ ] **Step 4: Wire all backends to the shared contract**
 
-Ensure the Task that runs `CliRunner.run_turn` is the same pid TurnManager registers, so `send(turn_pid, {:agent_interrupt})` reaches `receive_loop`. If Claude nests another process, forward interrupt from the outer Task into the runner (or run receive_loop in the registered Task).
+**Codex (primary):** In `Codex.CodingAgent` receive loop, handle `{:agent_interrupt}` the same as `{:codex_interrupt}`; handle `{:kill_tool, id}` with best-effort child kill or return unsupported so channel can offer Stop. Keep `{:codex_interrupt}` as a one-release alias only inside Codex.
 
-Codex path: keep accepting `{:codex_interrupt}` **and** treat `{:agent_interrupt}` as the same in `Codex.CodingAgent` receive loop (dual-name for one release).
+**Claude / Cursor / OpenCode (CLI / Base):** Ensure the Task that runs `CliRunner.run_turn` is the same pid TurnManager registers, so `send(turn_pid, {:agent_interrupt})` reaches `receive_loop`. If a runner nests another process, forward interrupt into the Base loop.
+
+Channel/UI never send agent-specific interrupt atoms — only `stop_turn` / `kill_tool` → TurnManager → `{:agent_interrupt}` / `{:kill_tool, id}`.
 
 - [ ] **Step 5: Run tests — PASS**
 
 ```bash
 cd elixir && mix test test/symphony_elixir/agent/cli_runner/base_test.exs
+# Plus a focused Codex interrupt alias test if one exists / add beside coding_agent tests
 ```
 
 - [ ] **Step 6: Commit**
 
 ```bash
 git commit -m "$(cat <<'EOF'
-feat(agent): honor agent_interrupt and kill_tool in CLI receive_loop
+feat(agent): shared agent_interrupt and kill_tool contract
 
 Summary:
-- Base.receive_loop kills the process group on interrupt; best-effort child kill for tools.
+- Base.receive_loop + Codex CodingAgent honor the same interrupt/kill messages.
 
 Rationale:
-- Claude ignored Codex-only interrupt messages, leaving Pest/Bash orphans.
+- Codex is primary; Claude/Cursor/OpenCode must share contracts, not Codex-only atoms.
 
 Tests:
-- mix test base_test.exs
+- mix test base_test.exs (+ Codex interrupt coverage)
 
 Co-authored-by: Codex <codex@openai.com>
 EOF
@@ -487,7 +491,8 @@ EOF
 
 ```elixir
 test "stop_turn interrupts running turn and clears active_tools", %{socket: socket, thread: thread} do
-  # start turn with runner that sleeps / waits for interrupt
+  # Prefer a Codex-shaped fake runner that waits for {:agent_interrupt}
+  # (primary). Also cover a CLI-shaped runner that uses Base.receive_loop.
   push(socket, "stop_turn", %{})
   assert_reply ..., :ok
   # assert History.current_turn status interrupted, reason user_stop
@@ -507,7 +512,7 @@ end
 In `handle_call({:interrupt, thread_id, reason}, …)`:
 
 1. Lookup worker pid from registry
-2. If pid: `send(pid, {:agent_interrupt})` (and `{:codex_interrupt}` for Codex compatibility)
+2. If pid: `send(pid, {:agent_interrupt})` only (Codex aliases internally; do not require callers to know `{:codex_interrupt}`)
 3. `History.interrupt_turn_state(thread, reason)` (clears active_tools from Task 2)
 4. Broadcast `{:turn_status, :interrupted, History.turn_payload(thread)}`
 5. Reply `:ok`
@@ -525,7 +530,7 @@ def handle_in("stop_turn", _payload, socket) do
 end
 ```
 
-Also update existing goal_pause / approval-cancel paths that only send `{:codex_interrupt}` to send `{:agent_interrupt}` as well.
+Also update existing goal_pause / approval-cancel paths that only send `{:codex_interrupt}` to send `{:agent_interrupt}` (Codex still accepts the old atom as an alias).
 
 - [ ] **Step 4: Run tests — PASS**
 
@@ -533,10 +538,10 @@ Also update existing goal_pause / approval-cancel paths that only send `{:codex_
 
 ```bash
 git commit -m "$(cat <<'EOF'
-feat(assistant): stop_turn kills agent process group
+feat(assistant): stop_turn via shared agent_interrupt contract
 
 Summary:
-- Channel stop_turn → TurnManager interrupt → agent_interrupt + durable interrupted state.
+- Channel stop_turn → TurnManager → {:agent_interrupt} + durable interrupted state.
 
 Tests:
 - mix test assistant_channel_test / turn_manager_test
@@ -862,10 +867,11 @@ EOF
 | PubSub fan-out all durable turns | 3 |
 | Mid-turn `active_tools` + `last_activity_at` | 2, 3 |
 | Join restores snapshot | 8 (hydrate) |
-| Stop turn kills process group (Claude) | 4, 5 |
+| Shared stop/kill contract (Codex primary; Claude/Cursor/OpenCode same) | 4, 5, 6 |
+| Stop turn kills/interrupts agent process | 4, 5 |
 | Kill command best-effort + fallback | 4, 6, 8 |
 | Working strip shows command | 8 |
-| Expand running Bash | 9 |
+| Expand running Bash/shell | 9 |
 | Rename CodexSession → AgentSession | 1 |
 | Amend 2026-06-21 non-goal | 10 |
 | No auto-resume / no auto-kill | honored (no tasks add them) |
