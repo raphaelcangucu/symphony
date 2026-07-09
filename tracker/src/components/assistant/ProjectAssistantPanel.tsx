@@ -795,15 +795,17 @@ export function ProjectAssistantPanel({
       setIsAtBottom(true);
       scrollBehaviorRef.current = "initial";
       setIsRunning(true);
-      // Scroll immediately so the outgoing message is visible even before the
-      // next paint / ResizeObserver cycle (content growth used to detach stickiness).
-      const scroller = scrollRef.current;
-      if (scroller) {
-        requestAnimationFrame(() => {
-          if (!scrollRef.current || !stickToBottomRef.current) return;
-          scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-        });
-      }
+      // Keep the transcript pinned to the bottom for the outgoing turn. Double-rAF
+      // waits for layout after the user bubble lands (server echo / local append).
+      const scrollOutgoingIntoView = () => {
+        const scroller = scrollRef.current;
+        if (!scroller || !stickToBottomRef.current) return;
+        scroller.scrollTo({ top: scroller.scrollHeight, behavior: "smooth" });
+      };
+      requestAnimationFrame(() => {
+        scrollOutgoingIntoView();
+        requestAnimationFrame(scrollOutgoingIntoView);
+      });
       channel.push("send_message", payload).receive("error", (reason) => {
         setConnectionError(errorMessage(reason));
         setIsRunning(false);
@@ -1110,15 +1112,24 @@ export function ProjectAssistantPanel({
     const scroller = scrollRef.current;
     if (!scroller) return undefined;
 
+    let secondFrame = 0;
     const frame = requestAnimationFrame(() => {
       if (!stickToBottomRef.current) return;
 
       const behavior = isRunning && scrollBehaviorRef.current !== "initial" ? "smooth" : "auto";
       scrollBehaviorRef.current = "smooth";
       scroller.scrollTo({ top: scroller.scrollHeight, behavior });
+      // Second frame: message/tool rows often grow after the first paint.
+      secondFrame = requestAnimationFrame(() => {
+        if (!stickToBottomRef.current || !scrollRef.current) return;
+        scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "auto" });
+      });
     });
 
-    return () => cancelAnimationFrame(frame);
+    return () => {
+      cancelAnimationFrame(frame);
+      cancelAnimationFrame(secondFrame);
+    };
   }, [isPanelMode, visibleMessages, isRunning]);
 
   const runtime = useExternalStoreRuntime<AssistantChatMessage>(

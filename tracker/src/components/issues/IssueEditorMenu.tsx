@@ -2,7 +2,10 @@ import { ChevronDown, Code2 } from "lucide-react";
 import { useCallback } from "react";
 import { useTranslation } from "react-i18next";
 
-import { sessionToolbarLabeledButtonClassName } from "@/components/sessions/sessionToolbarStyles";
+import {
+  sessionToolbarIconButtonClassName,
+  sessionToolbarLabeledButtonClassName,
+} from "@/components/sessions/sessionToolbarStyles";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -12,6 +15,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useIssueEditor } from "@/hooks/useIssueEditor";
 import { editorUnavailableTitle, openDesktopProtocolUrl } from "@/lib/editorLinks";
+import { cn } from "@/lib/utils";
 
 interface IssueEditorMenuProps {
   projectSlug: string;
@@ -47,16 +51,20 @@ export function IssueEditorMenu({ projectSlug, identifier, enabled = true, compa
       <DropdownMenuTrigger asChild>
         <Button
           type="button"
-          variant="outline"
+          variant={compact ? "ghost" : "outline"}
           size="sm"
-          className={compact ? sessionToolbarLabeledButtonClassName : undefined}
+          className={cn(compact ? sessionToolbarIconButtonClassName : sessionToolbarLabeledButtonClassName)}
           disabled={!anyEditorAvailable && !editor.loading}
           title={editorMenuTitle}
           aria-label={t("issue.drawer.openInCode")}
         >
-          <Code2 className={compact ? "h-3.5 w-3.5" : "h-4 w-4"} />
-          <span className="hidden sm:inline">{t("issue.drawer.code")}</span>
-          <ChevronDown className={compact ? "h-3.5 w-3.5 opacity-60" : "h-4 w-4 opacity-60"} />
+          <Code2 className="h-4 w-4" />
+          {compact ? null : (
+            <>
+              <span className="hidden sm:inline">{t("issue.drawer.code")}</span>
+              <ChevronDown className="h-4 w-4 opacity-60" />
+            </>
+          )}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="min-w-44">

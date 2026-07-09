@@ -96,7 +96,7 @@ export function IssueWorkingTreeToolbar({
         </button>
       ) : null}
       <IssueEditorMenu projectSlug={projectSlug} identifier={issueIdentifier} compact />
-      <IssueDocumentsDrawer projectSlug={projectSlug} identifier={issueIdentifier} />
+      <IssueDocumentsDrawer projectSlug={projectSlug} identifier={issueIdentifier} compact />
       {trailing}
     </div>
   );
