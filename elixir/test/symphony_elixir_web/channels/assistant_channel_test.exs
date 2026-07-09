@@ -361,6 +361,93 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
     assert turn["active_tools"] == []
   end
 
+  test "kill_tool cancels an active tool and leaves the turn running" do
+    test_pid = self()
+
+    runner = fn _workspace, _prompt, _issue, opts ->
+      tool_call = %{
+        id: "tool-kill",
+        name: "Bash",
+        arguments: %{"command" => "sleep 30"}
+      }
+
+      Keyword.fetch!(opts, :on_tool_call_started).(tool_call)
+      send(test_pid, {:runner_started, self()})
+
+      receive do
+        {:kill_tool, "tool-kill"} ->
+          send(test_pid, {:tool_killed, self()})
+      after
+        2_000 ->
+          send(test_pid, {:runner_timeout, self()})
+      end
+
+      receive do
+        :finish -> :ok
+      after
+        2_000 -> :ok
+      end
+
+      {:ok, %{assistant_message: "ok", codex_thread_id: "ct-kill", turn_id: "turn-kill", tool_calls: []}}
+    end
+
+    Application.put_env(:symphony_elixir, :assistant_runner, runner)
+
+    {:ok, %{thread_id: thread_id}, socket} =
+      socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
+      |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, "assistant:issue:macro-markets:DIS-KILL")
+
+    ref = push(socket, "send_message", %{"message" => "go", "context" => %{}})
+    assert_reply(ref, :ok, %{})
+    assert_receive {:runner_started, runner_pid}, 2_000
+    assert_push("tool_call_started", %{tool_call: %{id: "tool-kill", name: "Bash"}})
+
+    kill_ref = push(socket, "kill_tool", %{"tool_call_id" => "tool-kill"})
+    assert_reply(kill_ref, :ok, %{})
+    assert_receive {:tool_killed, ^runner_pid}, 1_000
+    assert_push("tool_call_completed", %{tool_call: %{id: "tool-kill", name: "Bash", status: "canceled"}})
+
+    {:ok, updated_thread} = History.get_thread(thread_id)
+    assert History.current_turn(updated_thread)["status"] == "running"
+    assert History.current_turn(updated_thread)["active_tools"] == []
+
+    send(runner_pid, :finish)
+    assert_push("assistant_completed", %{message: %{role: "assistant", content: "ok"}})
+  end
+
+  test "kill_tool returns a stoppable error when the tool is not running" do
+    {:ok, %{thread_id: _thread_id}, socket} =
+      socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
+      |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, "assistant:issue:macro-markets:DIS-KILL-MISSING")
+
+    kill_ref = push(socket, "kill_tool", %{"tool_call_id" => "missing"})
+
+    assert_reply(kill_ref, :error, %{reason: "tool_not_running", can_stop_turn: true})
+  end
+
+  test "kill_tool returns a stoppable error when no worker owns the active tool" do
+    {:ok, %{thread_id: thread_id}, socket} =
+      socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
+      |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, "assistant:issue:macro-markets:DIS-KILL-ORPHAN")
+
+    {:ok, thread} = History.get_thread(thread_id)
+
+    {:ok, running_thread} =
+      History.start_turn_state(thread, %{trigger: "user", prompt: "orphan tool", agent_kind: "codex"})
+
+    {:ok, _with_tool} =
+      History.upsert_active_tool(running_thread, %{
+        "id" => "tool-orphan",
+        "name" => "Bash",
+        "arguments_summary" => "sleep 30",
+        "started_at" => "2026-07-09T12:00:00Z"
+      })
+
+    kill_ref = push(socket, "kill_tool", %{"tool_call_id" => "tool-orphan"})
+
+    assert_reply(kill_ref, :error, %{reason: "no_worker", can_stop_turn: true})
+  end
+
   test "a send while running steers the live turn instead of starting a second one" do
     test_pid = self()
 

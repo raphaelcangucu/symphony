@@ -200,6 +200,25 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     end
   end
 
+  def handle_in("kill_tool", %{"tool_call_id" => tool_call_id}, socket) when is_binary(tool_call_id) do
+    case {thread_id_from_socket(socket), normalize_tool_call_id(tool_call_id)} do
+      {thread_id, tool_call_id} when is_integer(thread_id) and is_binary(tool_call_id) ->
+        case TurnManager.kill_tool(thread_id, tool_call_id) do
+          :ok -> {:reply, :ok, socket}
+          {:error, reason} -> {:reply, {:error, kill_tool_error_payload(reason)}, socket}
+        end
+
+      {_thread_id, nil} ->
+        {:reply, {:error, %{reason: "tool_call_id is required"}}, socket}
+
+      _ ->
+        {:reply, {:error, %{reason: "thread is required"}}, socket}
+    end
+  end
+
+  def handle_in("kill_tool", _payload, socket),
+    do: {:reply, {:error, %{reason: "tool_call_id is required"}}, socket}
+
   def handle_in("set_goal_mode", %{"goal_mode" => false}, socket) do
     with {:ok, thread} <- issue_thread(socket),
          {:ok, _payload, updated_thread} <- AuthoringGoalControl.clear(thread) do
@@ -581,7 +600,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   # Durable turn streaming fanned out to reloaded/other tabs (the originating tab
   # receives events directly from the run Task's callbacks).
   def handle_info({:turn_stream, event, payload}, socket) do
-    if socket.assigns[:turn_status] != :running and is_binary(event) and is_map(payload) do
+    if should_push_turn_stream?(socket, event, payload) do
       push(socket, event, payload)
     end
 
@@ -798,6 +817,29 @@ defmodule SymphonyElixirWeb.AssistantChannel do
 
   defp thread_id_from_socket(%Socket{assigns: %{thread: %{id: id}}}) when is_integer(id), do: id
   defp thread_id_from_socket(_socket), do: nil
+
+  defp normalize_tool_call_id(tool_call_id) when is_binary(tool_call_id) do
+    case String.trim(tool_call_id) do
+      "" -> nil
+      trimmed -> trimmed
+    end
+  end
+
+  defp kill_tool_error_payload(reason) when reason in [:tool_not_running, :no_worker] do
+    %{reason: Atom.to_string(reason), can_stop_turn: true}
+  end
+
+  defp kill_tool_error_payload(reason), do: %{reason: error_reason(reason)}
+
+  defp should_push_turn_stream?(socket, event, payload) when is_binary(event) and is_map(payload) do
+    socket.assigns[:turn_status] != :running or canceled_tool_completion?(event, payload)
+  end
+
+  defp should_push_turn_stream?(_socket, _event, _payload), do: false
+
+  defp canceled_tool_completion?("tool_call_completed", %{tool_call: %{status: "canceled"}}), do: true
+  defp canceled_tool_completion?("tool_call_completed", %{"tool_call" => %{"status" => "canceled"}}), do: true
+  defp canceled_tool_completion?(_event, _payload), do: false
 
   # credo:disable-for-next-line Credo.Check.Refactor.CyclomaticComplexity
   defp do_send_message(message, payload, socket) do
