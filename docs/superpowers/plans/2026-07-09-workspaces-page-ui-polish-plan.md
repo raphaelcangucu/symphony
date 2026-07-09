@@ -36,7 +36,7 @@
 - Modify: `tracker/locales/pt-BR/tracker.json`
 - Modify: `tracker/src/lib/utils.ts` (re-export)
 
-- [ ] **Step 1: Add i18n keys**
+- [x] **Step 1: Add i18n keys**
 
 In `tracker/locales/en/tracker.json`, add sibling to `"common"` (top-level):
 
@@ -84,7 +84,7 @@ In `tracker/locales/pt-BR/tracker.json` mirror:
 
 Keep existing `workspacesPage.totals` / `totalsLoading` keys (may still be used while loading).
 
-- [ ] **Step 2: Write the failing unit tests**
+- [x] **Step 2: Write the failing unit tests**
 
 Create `tracker/src/lib/__tests__/timeFormat.test.ts`:
 
@@ -128,7 +128,7 @@ describe("formatRelativeTime", () => {
 });
 ```
 
-- [ ] **Step 3: Run test to verify it fails**
+- [x] **Step 3: Run test to verify it fails**
 
 Run:
 
@@ -138,7 +138,7 @@ cd tracker && npm test -- src/lib/__tests__/timeFormat.test.ts
 
 Expected: FAIL — `formatRelativeTime` is not exported.
 
-- [ ] **Step 4: Implement `formatRelativeTime`**
+- [x] **Step 4: Implement `formatRelativeTime`**
 
 Append to `tracker/src/lib/timeFormat.ts`:
 
@@ -184,7 +184,7 @@ Re-export from `tracker/src/lib/utils.ts` next to the existing `formatDateTime` 
 export { formatDateTime, formatRelativeTime } from "@/lib/timeFormat";
 ```
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [x] **Step 5: Run tests to verify they pass**
 
 Run:
 
@@ -194,7 +194,7 @@ cd tracker && npm test -- src/lib/__tests__/timeFormat.test.ts
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add tracker/src/lib/timeFormat.ts tracker/src/lib/utils.ts \
@@ -216,7 +216,7 @@ EOF
 - Modify: `tracker/src/components/sessions/WorkspaceCardItem.tsx`
 - Modify: `tracker/src/components/sessions/__tests__/ProjectSessionsPanel.test.tsx`
 
-- [ ] **Step 1: Update the panel test that asserts absolute timestamps in the list**
+- [x] **Step 1: Update the panel test that asserts absolute timestamps in the list**
 
 In `ProjectSessionsPanel.test.tsx`, replace the absolute datetime visibility assertion with relative-time awareness. Keep open/link assertions.
 
@@ -242,7 +242,7 @@ expect(
 
 Also assert the issue link still resolves (already present) and that New session / Open buttons remain role-queryable.
 
-- [ ] **Step 2: Run the panel test to verify the relative assertion fails on old markup**
+- [x] **Step 2: Run the panel test to verify the relative assertion fails on old markup**
 
 Run:
 
@@ -252,7 +252,7 @@ cd tracker && npm test -- src/components/sessions/__tests__/ProjectSessionsPanel
 
 Expected: FAIL on relative text / title attributes (old markup still prints absolute `formatDateTime` as visible text without relative).
 
-- [ ] **Step 3: Rewrite `WorkspaceCardItem` to the hybrid anatomy**
+- [x] **Step 3: Rewrite `WorkspaceCardItem` to the hybrid anatomy**
 
 Replace the component body in `tracker/src/components/sessions/WorkspaceCardItem.tsx` with this structure (preserve exports/props):
 
@@ -503,7 +503,7 @@ function ExecutionStatusDot({ status }: { status: AgentExecutionStatus }) {
 
 Delete the local `STATUS_DOT_CLASS` map entirely. Keep `Clock` import out (relative text no longer needs the clock icon in every row — saves density).
 
-- [ ] **Step 4: Re-run panel tests**
+- [x] **Step 4: Re-run panel tests**
 
 Run:
 
@@ -513,7 +513,7 @@ cd tracker && npm test -- src/components/sessions/__tests__/ProjectSessionsPanel
 
 Expected: PASS. If New session labels or layout queries break, adjust aria/name queries only — do not loosen behavior assertions.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tracker/src/components/sessions/WorkspaceCardItem.tsx \
@@ -534,7 +534,7 @@ EOF
 - Modify: `tracker/src/components/sessions/ProjectSessionsWorkspace.tsx`
 - Modify: `tracker/src/components/sessions/__tests__/ProjectSessionsWorkspace.test.tsx` (only if assertions mention uppercase or old empty markup)
 
-- [ ] **Step 1: Update list toolbar + empty/loading + section heading**
+- [x] **Step 1: Update list toolbar + empty/loading + section heading**
 
 In `ProjectSessionsWorkspace.tsx`:
 
@@ -616,7 +616,7 @@ to:
 
 (drop `uppercase` so pt-BR “Aguardando” stays sentence case).
 
-- [ ] **Step 2: Run workspace + panel tests**
+- [x] **Step 2: Run workspace + panel tests**
 
 Run:
 
@@ -626,7 +626,7 @@ cd tracker && npm test -- src/components/sessions/__tests__/ProjectSessionsWorks
 
 Expected: PASS. Update any brittle text queries if they depended on the old concatenated totals string.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add tracker/src/components/sessions/ProjectSessionsWorkspace.tsx \
@@ -645,7 +645,7 @@ EOF
 
 **Files:** none required beyond fixes discovered by tests.
 
-- [ ] **Step 1: Run focused suites + timeFormat**
+- [x] **Step 1: Run focused suites + timeFormat**
 
 ```bash
 cd tracker && npm test -- \
@@ -657,7 +657,7 @@ cd tracker && npm test -- \
 
 Expected: all PASS.
 
-- [ ] **Step 2: Manual checklist on `http://localhost:4000/tracker/projects/gamba/workspaces`**
+- [x] **Step 2: Manual checklist on `http://localhost:4000/tracker/projects/gamba/workspaces`**
 
 Confirm:
 
@@ -668,7 +668,7 @@ Confirm:
 5. Card is `rounded-xl` with light hover lift; section titles are sentence case (“Aguardando”).
 6. All actions use shared Button sizing (no micro Abrir, issue open is Button+Link).
 
-- [ ] **Step 3: Fix any visual/test regressions found, then final commit if needed**
+- [x] **Step 3: Fix any visual/test regressions found, then final commit if needed**
 
 ```bash
 git add -A

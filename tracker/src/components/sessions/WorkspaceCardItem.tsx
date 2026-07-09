@@ -131,7 +131,7 @@ export function WorkspaceCardItem({
           </div>
         </div>
 
-        <div className="flex shrink-0 flex-row flex-wrap items-center gap-1 sm:w-[7.5rem] sm:flex-col sm:items-stretch">
+        <div className="flex shrink-0 flex-row flex-wrap items-center gap-1 self-start sm:w-[7.5rem] sm:flex-col sm:items-stretch">
           {card.issueIdentifier && onNewSession ? (
             <Button type="button" variant="default" size="sm" onClick={() => onNewSession(card.issueIdentifier!)}>
               <Plus className="h-3.5 w-3.5" />
