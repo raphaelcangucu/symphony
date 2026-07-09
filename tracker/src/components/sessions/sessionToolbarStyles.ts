@@ -2,7 +2,8 @@ import { cn } from "@/lib/utils";
 
 /** Shared chrome for the issue session header / working-tree toolbar. */
 export const sessionToolbarIconButtonClassName = cn(
-  "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors",
+  // p-0/gap-0 override Button size="sm" padding so Lucide icons stay h-4 like sibling Links.
+  "inline-flex h-7 w-7 shrink-0 items-center justify-center gap-0 p-0 rounded-md text-muted-foreground transition-colors",
   "hover:bg-accent hover:text-foreground",
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
 );

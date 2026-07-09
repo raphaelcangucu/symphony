@@ -58,11 +58,11 @@ export function IssueEditorMenu({ projectSlug, identifier, enabled = true, compa
           title={editorMenuTitle}
           aria-label={t("issue.drawer.openInCode")}
         >
-          <Code2 className="h-4 w-4" />
+          <Code2 className="h-4 w-4 shrink-0" />
           {compact ? null : (
             <>
               <span className="hidden sm:inline">{t("issue.drawer.code")}</span>
-              <ChevronDown className="h-4 w-4 opacity-60" />
+              <ChevronDown className="h-4 w-4 shrink-0 opacity-60" />
             </>
           )}
         </Button>

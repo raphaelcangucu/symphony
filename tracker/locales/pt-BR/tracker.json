@@ -2255,7 +2255,8 @@
     "composer": {
       "placeholder": "Escreva uma mensagem...",
       "dropFiles": "Solte arquivos para anexar",
-      "tabToComplete": "Tab para completar",
+      "tabToComplete": "↑↓ para selecionar · Tab para completar",
+      "slashCommands": "Comandos slash",
       "attachFile": "Anexar arquivo",
       "removeAttachment": "Remover {{name}}",
       "agentMenu": "Agente",

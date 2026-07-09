@@ -42,7 +42,7 @@ export function IssueDocumentsDrawer({
         aria-label={label}
         title={label}
       >
-        <FileText className="h-4 w-4" />
+        <FileText className="h-4 w-4 shrink-0" />
         {compact ? null : <span>{label}</span>}
       </Button>
       <KnowledgeBaseModal open={open} projectSlug={projectSlug} onOpenChange={setOpen} />
