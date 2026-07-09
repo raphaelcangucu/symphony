@@ -6,3 +6,5 @@
 
 # Per-developer project YAML bundles (make project-import / project-export)
 /projects/
+
+.superpowers/
