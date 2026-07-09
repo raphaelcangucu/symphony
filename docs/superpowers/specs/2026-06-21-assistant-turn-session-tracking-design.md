@@ -100,8 +100,11 @@ added `steer_turn`/`turn/interrupt`. That foundation is in place:
 **Non-goals**
 
 - Auto-resuming the Codex turn without an operator click (Resume is manual).
-- Moving live token/delta **streaming** onto PubSub (deltas still go to the
-  originating socket, as today). Only lifecycle/status is PubSub+DB.
+- ~~Moving live token/delta **streaming** onto PubSub (deltas still go to the
+  originating socket, as today). Only lifecycle/status is PubSub+DB.~~
+  **(superseded 2026-07-09)** Live token/tool streaming for durable threads is
+  PubSub-fanned; see `2026-07-09-assistant-live-turn-resilience-design.md`.
+  Lifecycle/status remains PubSub+DB.
 - Reworking `/btw` side-queries or voice/image attachment flows.
 - Re-attaching the running OS Codex process across a full restart (the child dies
   with the BEAM; we record `interrupted`, we do not adopt a live process).
@@ -214,15 +217,19 @@ are no live workers, so any `running` thread is by definition orphaned.
 
 ## 6. Streaming vs. lifecycle (scope boundary)
 
-- **Live streaming** (`assistant_delta`, `tool_call_*`, `message_created`) keeps
-  going to the **originating socket**, exactly as today. No change.
+- ~~**Live streaming** (`assistant_delta`, `tool_call_*`, `message_created`) keeps
+  going to the **originating socket**, exactly as today. No change.~~
+  **(superseded 2026-07-09)** Live token/tool streaming for durable threads is
+  PubSub-fanned to every joined tab; see
+  `2026-07-09-assistant-live-turn-resilience-design.md`.
 - **Lifecycle/status** (`running` / `finished` / `interrupted`) is broadcast via
   the per-thread PubSub topic **and** persisted to `metadata.current_turn`. A reloaded
   tab subscribes on join and renders "executing since X" or "interrupted", and
   receives the terminal event to clear the indicator — the same mechanism `GoalRun`
   already uses, now for every thread.
 
-This keeps the change contained: we do **not** rebuild delta fan-out.
+This keeps lifecycle durable; live stream fan-out for durable turns is covered by
+the 2026-07-09 resilience design.
 
 ## 7. New message while running — steer, then queue
 
