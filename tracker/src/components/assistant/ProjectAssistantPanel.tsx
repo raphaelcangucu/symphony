@@ -37,9 +37,11 @@ import {
 import { BtwOverlay, type BtwStatus } from "@/components/assistant/BtwOverlay";
 import {
   AssistantTasksDock,
+  AssistantTasksSheet,
   completedTaskCount,
   type AssistantTasksDockControl,
 } from "@/components/agent-activity";
+import { useIsLgUp } from "@/hooks/useMediaQuery";
 import {
   attachChatScrollStickiness,
   setMessagesPreservingScroll,
@@ -971,9 +973,14 @@ export function ProjectAssistantPanel({
   const hasTasks = (taskSnapshot?.tasks.length ?? 0) > 0;
   const tasksDone = taskSnapshot ? completedTaskCount(taskSnapshot) : 0;
   const tasksTotal = taskSnapshot?.tasks.length ?? 0;
+  const isLgUp = useIsLgUp();
   const [tasksDockOpen, setTasksDockOpen] = useState<boolean>(
     () => window.localStorage.getItem(TASKS_DOCK_STORAGE_KEY) !== "false",
   );
+  const persistTasksDockOpen = useCallback((next: boolean) => {
+    window.localStorage.setItem(TASKS_DOCK_STORAGE_KEY, String(next));
+    setTasksDockOpen(next);
+  }, []);
   const toggleTasksDock = useCallback(() => {
     setTasksDockOpen((previous) => {
       const next = !previous;
@@ -981,7 +988,9 @@ export function ProjectAssistantPanel({
       return next;
     });
   }, []);
-  const showTasksDock = isPageMode && tasksDockOpen && hasTasks && taskSnapshot != null;
+  const tasksAvailable = isPageMode && hasTasks && taskSnapshot != null;
+  const showTasksDock = tasksAvailable && tasksDockOpen && isLgUp;
+  const showTasksSheet = tasksAvailable && tasksDockOpen && !isLgUp;
 
   useEffect(() => {
     if (!onTasksDockControlChange) return undefined;
@@ -1242,26 +1251,28 @@ export function ProjectAssistantPanel({
       onMentionSelect={rememberMention}
       agentSeed={serverAgentSeed}
       toolbarAfterAttach={
+        isPageMode && hasTasks ? (
+          <Button
+            type="button"
+            variant={tasksDockOpen ? "secondary" : "ghost"}
+            size="sm"
+            className="h-8 gap-1 px-2 text-xs"
+            aria-pressed={tasksDockOpen}
+            aria-label={tasksDockOpen ? t("issue.tasks.hide") : t("issue.tasks.show")}
+            title={tasksDockOpen ? t("issue.tasks.hide") : t("issue.tasks.show")}
+            onClick={toggleTasksDock}
+          >
+            <ListChecks className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">{t("issue.tasks.title")}</span>
+            <span className="tabular-nums text-[11px] text-muted-foreground">
+              {t("issue.tasks.progress", { done: tasksDone, total: tasksTotal })}
+            </span>
+          </Button>
+        ) : undefined
+      }
+      toolbarMore={
         projectSlug || issueIdentifier || threadId ? (
           <>
-            {isPageMode && hasTasks ? (
-              <Button
-                type="button"
-                variant={tasksDockOpen ? "secondary" : "ghost"}
-                size="sm"
-                className="h-8 gap-1 px-2 text-xs"
-                aria-pressed={tasksDockOpen}
-                aria-label={tasksDockOpen ? t("issue.tasks.hide") : t("issue.tasks.show")}
-                title={tasksDockOpen ? t("issue.tasks.hide") : t("issue.tasks.show")}
-                onClick={toggleTasksDock}
-              >
-                <ListChecks className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">{t("issue.tasks.title")}</span>
-                <span className="tabular-nums text-[11px] text-muted-foreground">
-                  {t("issue.tasks.progress", { done: tasksDone, total: tasksTotal })}
-                </span>
-              </Button>
-            ) : null}
             {issueIdentifier || threadId ? (
               <GitDiffLauncher
                 projectSlug={projectSlug ?? undefined}
@@ -1458,6 +1469,13 @@ export function ProjectAssistantPanel({
             <AssistantTasksDock snapshot={taskSnapshot} onClose={toggleTasksDock} />
           ) : null}
         </section>
+        {showTasksSheet && taskSnapshot ? (
+          <AssistantTasksSheet
+            open={tasksDockOpen}
+            snapshot={taskSnapshot}
+            onOpenChange={persistTasksDockOpen}
+          />
+        ) : null}
         {btw ? (
           <BtwOverlay question={btw.question} answer={btw.answer} status={btw.status} onClose={() => setBtw(null)} />
         ) : null}

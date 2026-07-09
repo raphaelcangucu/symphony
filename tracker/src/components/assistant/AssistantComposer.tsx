@@ -30,7 +30,8 @@ import {
   revokeAttachmentPreviews,
   serializeAttachments,
 } from "@/components/assistant/assistantAttachments";
-import { ComposerToolbar } from "@/components/assistant/ComposerToolbar";
+import { ComposerMoreMenu, ComposerToolbar } from "@/components/assistant/ComposerToolbar";
+import { useIsLgUp } from "@/hooks/useMediaQuery";
 import {
   ContextMentionPopover,
   orderMentionOptions,
@@ -154,6 +155,11 @@ export interface ComposerSlotProps {
    */
   header?: ReactNode;
   toolbarAfterAttach?: ReactNode;
+  /**
+   * Secondary tools collapsed into a More menu below `lg` (Diff, KB, Yolo, Magic, etc.).
+   * At `lg+` these render inline after `toolbarAfterAttach`.
+   */
+  toolbarMore?: ReactNode;
   submitActions?: ReactNode;
   footer?: ReactNode;
 }
@@ -220,6 +226,7 @@ export function AssistantComposer({
   onMentionSelect,
   header,
   toolbarAfterAttach,
+  toolbarMore,
   submitActions,
   footer,
   contextInsertRequest = null,
@@ -233,6 +240,7 @@ export function AssistantComposer({
   dropTargetRef,
 }: AssistantComposerProps) {
   const { t } = useTranslation();
+  const isLgUp = useIsLgUp();
   const [input, setInput] = useState("");
   const [internalMagicOpen, setInternalMagicOpen] = useState(false);
   const magicOpen = magicPaletteOpen ?? internalMagicOpen;
@@ -779,8 +787,8 @@ export function AssistantComposer({
           className="min-h-[4.5rem] resize-none border-0 bg-transparent px-4 py-3 shadow-none focus-visible:ring-0"
         />
 
-        <div className="flex items-center justify-between gap-2 px-3 pb-3">
-          <div className="flex items-center gap-1">
+        <div className="flex flex-wrap items-center justify-between gap-2 px-3 pb-3">
+          <div className="flex min-w-0 flex-wrap items-center gap-1">
             <input
               ref={fileInputRef}
               type="file"
@@ -800,6 +808,7 @@ export function AssistantComposer({
               <Plus className="h-4 w-4" />
             </Button>
             {toolbarAfterAttach}
+            {toolbarMore ? (isLgUp ? toolbarMore : <ComposerMoreMenu disabled={disabled || composerDisabled}>{toolbarMore}</ComposerMoreMenu>) : null}
           </div>
 
           <div className="flex flex-wrap items-center justify-end gap-1">
@@ -811,6 +820,7 @@ export function AssistantComposer({
               disabled={disabled}
               composerDisabled={composerDisabled}
               agentMenuDisabled={agentMenuDisabled}
+              compact={!isLgUp}
               onAgentChange={updateAgent}
               onModelChange={updateModel}
               onEffortChange={updateEffort}

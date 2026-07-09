@@ -2,6 +2,7 @@ export { AgentTaskInlineCard } from "./AgentTaskInlineCard";
 export { AgentTaskItems, AgentTaskList, completedTaskCount } from "./AgentTaskList";
 export { AgentTaskPinnedPanel } from "./AgentTaskPinnedPanel";
 export { AssistantTasksDock } from "./AssistantTasksDock";
+export { AssistantTasksSheet } from "./AssistantTasksSheet";
 export { AssistantTasksToolbarToggle, type AssistantTasksDockControl } from "./AssistantTasksToolbarToggle";
 export { SessionEventGroup } from "./SessionEventGroup";
 export { SessionLogTranscript } from "./SessionLogTranscript";

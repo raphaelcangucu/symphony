@@ -5,6 +5,10 @@ import { Link } from "react-router-dom";
 
 import { IssueDocumentsDrawer } from "@/components/assistant/IssueDocumentsDrawer";
 import { IssueEditorMenu } from "@/components/issues/IssueEditorMenu";
+import {
+  sessionToolbarIconButtonActiveClassName,
+  sessionToolbarIconButtonClassName,
+} from "@/components/sessions/sessionToolbarStyles";
 import { cn } from "@/lib/utils";
 import { issuePath, type WorkspaceView } from "@/lib/workspaceRoutes";
 
@@ -39,12 +43,12 @@ export function IssueWorkingTreeToolbar({
   const issueHref = issuePath(projectSlug, view, issueIdentifier, "sessions");
   const issueTerminalHref = issuePath(projectSlug, view, issueIdentifier, "terminal");
   const terminalActionClassName = cn(
-    "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-    terminalOpen && "bg-accent text-foreground",
+    sessionToolbarIconButtonClassName,
+    terminalOpen && sessionToolbarIconButtonActiveClassName,
   );
   const previewActionClassName = cn(
-    "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-    previewOpen && "bg-accent text-foreground",
+    sessionToolbarIconButtonClassName,
+    previewOpen && sessionToolbarIconButtonActiveClassName,
   );
 
   return (
@@ -54,7 +58,7 @@ export function IssueWorkingTreeToolbar({
         to={issueHref}
         aria-label={t("sessions.openIssueAria", { identifier: issueIdentifier })}
         title={t("sessions.openIssueAria", { identifier: issueIdentifier })}
-        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        className={sessionToolbarIconButtonClassName}
       >
         <ExternalLink className="h-4 w-4" />
       </Link>
