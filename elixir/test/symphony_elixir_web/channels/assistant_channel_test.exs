@@ -245,6 +245,66 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
     assert_receive {:steered, [%{"type" => "text", "text" => "actually do Y"}]}, 2_000
   end
 
+  test "second subscriber receives tool_call_started for a non-goal durable turn" do
+    test_pid = self()
+
+    runner = fn _workspace, _prompt, _issue, opts ->
+      tool_call = %{
+        id: "tool-pubsub",
+        name: "Bash",
+        arguments: %{"command" => "mix test test/symphony_elixir_web/channels/assistant_channel_test.exs"}
+      }
+
+      Keyword.fetch!(opts, :on_tool_call_started).(tool_call)
+      send(test_pid, {:runner_started, self()})
+
+      receive do
+        :finish -> :ok
+      after
+        2_000 -> :ok
+      end
+
+      Keyword.fetch!(opts, :on_tool_call_completed).(Map.put(tool_call, :status, "completed"))
+      {:ok, %{assistant_message: "ok", codex_thread_id: "ct-pubsub", turn_id: "turn-pubsub", tool_calls: []}}
+    end
+
+    Application.put_env(:symphony_elixir, :assistant_runner, runner)
+    topic = "assistant:issue:macro-markets:DIS-PUBSUB"
+
+    {:ok, %{thread_id: thread_id}, socket_a} =
+      socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
+      |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, topic)
+
+    {:ok, _join, _socket_b} =
+      socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
+      |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, topic)
+
+    ref = push(socket_a, "send_message", %{"message" => "go", "context" => %{}})
+    assert_reply(ref, :ok, %{})
+    assert_receive {:runner_started, runner_pid}, 2_000
+
+    assert_push("tool_call_started", %{tool_call: %{name: "Bash"}})
+    assert_push("tool_call_started", %{tool_call: %{name: "Bash"}})
+
+    {:ok, running_thread} = History.get_thread(thread_id)
+
+    assert [
+             %{
+               "id" => "tool-pubsub",
+               "name" => "Bash",
+               "arguments_summary" => "mix test test/symphony_elixir_web/channels/assistant_channel_test.exs"
+             }
+           ] = History.current_turn(running_thread)["active_tools"]
+
+    send(runner_pid, :finish)
+
+    assert_push("tool_call_completed", %{tool_call: %{name: "Bash", status: "completed"}})
+    assert_push("tool_call_completed", %{tool_call: %{name: "Bash", status: "completed"}})
+
+    {:ok, completed_thread} = History.get_thread(thread_id)
+    assert History.current_turn(completed_thread)["active_tools"] == []
+  end
+
   test "a send while running steers the live turn instead of starting a second one" do
     test_pid = self()
 

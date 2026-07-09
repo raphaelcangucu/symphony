@@ -21,6 +21,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   alias SymphonyElixirWeb.TrackerAuth
 
   @issue_authoring_tools ~w(create_draft_issue create_issue)
+  @tool_arguments_summary_max_length 200
 
   @impl true
   def join("assistant:issue:" <> raw_issue_topic, _payload, socket) do
@@ -564,14 +565,18 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     {:noreply, socket}
   end
 
-  # Goal-turn streaming fanned out to reloaded/other tabs (the originating tab
+  # Durable turn streaming fanned out to reloaded/other tabs (the originating tab
   # receives events directly from the run Task's callbacks).
-  def handle_info({:goal_stream, event, payload}, socket) do
+  def handle_info({:turn_stream, event, payload}, socket) do
     if socket.assigns[:turn_status] != :running and is_binary(event) and is_map(payload) do
       push(socket, event, payload)
     end
 
     {:noreply, socket}
+  end
+
+  def handle_info({:goal_stream, event, payload}, socket) do
+    handle_info({:turn_stream, event, payload}, socket)
   end
 
   # Turn lifecycle fanned out by TurnManager over the thread topic. The socket that
@@ -1379,12 +1384,13 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   defp turn_stream_opts(%Socket{} = socket, thread, channel_pid, context) when is_map(context) do
     goal_thread = goal_thread?(thread)
     thread_id = if is_map(thread), do: Map.get(thread, :id), else: nil
+    durable_thread = durable_thread?(thread)
 
     push_stream = fn event, payload ->
       push(socket, event, payload)
 
-      if goal_thread and is_integer(thread_id) do
-        GoalRun.broadcast_from(channel_pid, thread_id, {:goal_stream, event, payload})
+      if durable_thread and is_integer(thread_id) do
+        GoalRun.broadcast_from(channel_pid, thread_id, {:turn_stream, event, payload})
       end
     end
 
@@ -1394,8 +1400,12 @@ defmodule SymphonyElixirWeb.AssistantChannel do
       |> Keyword.merge(Payload.model_opts(context))
       |> Keyword.put(:on_message_created, fn message -> push_stream.("message_created", %{message: message}) end)
       |> Keyword.put(:on_assistant_delta, fn delta -> push_stream.("assistant_delta", %{delta: delta}) end)
-      |> Keyword.put(:on_tool_call_started, fn tool_call -> push_stream.("tool_call_started", %{tool_call: tool_call}) end)
+      |> Keyword.put(:on_tool_call_started, fn tool_call ->
+        maybe_upsert_active_tool(thread_id, tool_call)
+        push_stream.("tool_call_started", %{tool_call: tool_call})
+      end)
       |> Keyword.put(:on_tool_call_completed, fn tool_call ->
+        maybe_remove_active_tool(thread_id, tool_call)
         push_stream.("tool_call_completed", %{tool_call: tool_call})
       end)
       |> Keyword.put(:on_documents_changed, fn identifier ->
@@ -1447,6 +1457,113 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     do: History.thread_goal_mode(thread)
 
   defp goal_thread?(_thread), do: false
+
+  defp durable_thread?(%{id: id}) when is_integer(id), do: true
+  defp durable_thread?(_thread), do: false
+
+  defp maybe_upsert_active_tool(thread_id, tool_call) when is_integer(thread_id) and is_map(tool_call) do
+    with {:ok, active_tool} <- active_tool_payload(tool_call),
+         {:ok, thread} <- History.get_thread(thread_id),
+         {:ok, _updated} <- History.upsert_active_tool(thread, active_tool) do
+      :ok
+    else
+      _ -> :ok
+    end
+  end
+
+  defp maybe_upsert_active_tool(_thread_id, _tool_call), do: :ok
+
+  defp maybe_remove_active_tool(thread_id, tool_call) when is_integer(thread_id) and is_map(tool_call) do
+    with id when is_binary(id) <- tool_call_id(tool_call),
+         {:ok, thread} <- History.get_thread(thread_id),
+         {:ok, _updated} <- History.remove_active_tool(thread, id) do
+      :ok
+    else
+      _ -> :ok
+    end
+  end
+
+  defp maybe_remove_active_tool(_thread_id, _tool_call), do: :ok
+
+  defp active_tool_payload(tool_call) when is_map(tool_call) do
+    with id when is_binary(id) <- tool_call_id(tool_call) do
+      {:ok,
+       %{
+         "id" => id,
+         "name" => tool_call_name(tool_call),
+         "arguments_summary" => summarize_tool_call(tool_call),
+         "started_at" => DateTime.utc_now() |> DateTime.to_iso8601()
+       }}
+    else
+      _ -> :error
+    end
+  end
+
+  defp tool_call_id(tool_call) when is_map(tool_call) do
+    tool_call
+    |> get_any("id")
+    |> case do
+      id when is_binary(id) ->
+        case String.trim(id) do
+          "" -> nil
+          trimmed -> trimmed
+        end
+
+      id when is_integer(id) ->
+        Integer.to_string(id)
+
+      _ ->
+        nil
+    end
+  end
+
+  defp tool_call_name(tool_call) when is_map(tool_call) do
+    case get_any(tool_call, "name") do
+      name when is_binary(name) and name != "" -> name
+      _ -> "tool"
+    end
+  end
+
+  defp summarize_tool_call(tool_call) when is_map(tool_call) do
+    arguments = get_any(tool_call, "arguments") || get_any(tool_call, "input") || %{}
+
+    summary =
+      case get_any(arguments, "command") do
+        command when is_binary(command) and command != "" ->
+          command
+
+        _ ->
+          arguments
+          |> summary_source(tool_call)
+          |> compact_summary()
+      end
+
+    truncate_tool_summary(summary)
+  end
+
+  defp summary_source(arguments, tool_call) when arguments in [nil, %{}], do: tool_call
+  defp summary_source(arguments, _tool_call), do: arguments
+
+  defp compact_summary(value) when is_binary(value), do: String.trim(value)
+
+  defp compact_summary(value) do
+    case Jason.encode(value) do
+      {:ok, encoded} -> encoded
+      {:error, _reason} -> inspect(value, limit: 20, printable_limit: @tool_arguments_summary_max_length)
+    end
+  end
+
+  defp truncate_tool_summary(summary) when is_binary(summary) do
+    if String.length(summary) > @tool_arguments_summary_max_length do
+      summary
+      |> String.slice(0, @tool_arguments_summary_max_length - 3)
+      |> Kernel.<>("...")
+    else
+      summary
+    end
+  end
+
+  defp truncate_tool_summary(_summary), do: ""
 
   # Synthesizes a goal payload carrying an explicit status for cases where no
   # native goal exists yet (e.g. pausing the very first batch before the Codex
