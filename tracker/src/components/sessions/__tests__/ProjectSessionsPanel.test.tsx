@@ -11,7 +11,7 @@ import { ProjectSessionsPanel } from "@/components/sessions/ProjectSessionsPanel
 import { useProjectSessions } from "@/hooks/useProjectSessions";
 import { initTestI18n, renderWithI18n } from "@/i18n/testUtils";
 import { emptyProjectSessionGroups, type ProjectSessionGroups, type ProjectSessionRow } from "@/lib/projectSessions";
-import { formatDateTime } from "@/lib/utils";
+import { formatDateTime, formatRelativeTime } from "@/lib/utils";
 import { dispatchIssueAgent } from "@/services/issueDispatch";
 import { archiveAssistantThread, createProjectSessionThread } from "@/services/assistantThreads";
 import type { AgentExecution } from "@/types/agent-execution";
@@ -228,7 +228,9 @@ describe("ProjectSessionsPanel", () => {
     expect(screen.getAllByText("Saved launcher work")).toHaveLength(1);
     expect(screen.getByText("Issue authoring chat")).toBeInTheDocument();
     expect(screen.getByText("Project chat")).toBeInTheDocument();
-    expect(screen.getAllByText(formatDateTime("2026-07-04T15:30:00Z")).length).toBeGreaterThan(0);
+    const relativeAuthoring = formatRelativeTime("2026-07-04T15:30:00Z");
+    expect(screen.getAllByText(relativeAuthoring).length).toBeGreaterThan(0);
+    expect(screen.getAllByTitle(formatDateTime("2026-07-04T15:30:00Z")).length).toBeGreaterThan(0);
     expect(screen.queryByText("Related sessions")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Open execution session DEMO-1/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Open authoring session DEMO-2/i })).toBeInTheDocument();
