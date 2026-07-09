@@ -122,22 +122,25 @@ export function DevServerOutputPanel({
 
       {open ? (
         <div className="p-2">
-          {error ? <p className="mb-2 text-xs text-red-400">{error}</p> : null}
-          <pre
-            ref={preRef}
-            aria-label={t("issue.devServer.outputAria", { slug })}
-            className={cn(
-              "max-h-64 overflow-auto whitespace-pre-wrap break-words rounded bg-black/40 p-3 font-mono text-[11px] leading-relaxed text-slate-100",
-              output.trim().length === 0 && "text-slate-500",
-            )}
-            onScroll={(event) => {
-              const element = event.currentTarget;
-              const nearBottom = element.scrollHeight - element.scrollTop - element.clientHeight < 24;
-              stickToBottomRef.current = nearBottom;
-            }}
-          >
-            {output.trim().length > 0 ? output : t("issue.devServer.empty")}
-          </pre>
+          {error ? (
+            <p className="text-xs text-red-400">{error}</p>
+          ) : (
+            <pre
+              ref={preRef}
+              aria-label={t("issue.devServer.outputAria", { slug })}
+              className={cn(
+                "max-h-64 overflow-auto whitespace-pre-wrap break-words rounded bg-black/40 p-3 font-mono text-[11px] leading-relaxed text-slate-100",
+                output.trim().length === 0 && "text-slate-500",
+              )}
+              onScroll={(event) => {
+                const element = event.currentTarget;
+                const nearBottom = element.scrollHeight - element.scrollTop - element.clientHeight < 24;
+                stickToBottomRef.current = nearBottom;
+              }}
+            >
+              {output.trim().length > 0 ? output : t("issue.devServer.empty")}
+            </pre>
+          )}
         </div>
       ) : null}
     </div>
