@@ -1,4 +1,4 @@
-defmodule SymphonyElixir.Assistant.CodexSessionClaudeRelayTest do
+defmodule SymphonyElixir.Assistant.AgentSessionClaudeRelayTest do
   # Regression test for the claude-native assistant: the streamed assistant TEXT
   # produced by the Claude CLI backend must reach the persisted assistant message.
   # Before the fix, relay_codex_event only understood Codex's "item/agentMessage/delta"
@@ -7,7 +7,7 @@ defmodule SymphonyElixir.Assistant.CodexSessionClaudeRelayTest do
   # "Codex completed the turn without returning assistant text." message.
   use ExUnit.Case, async: false
 
-  alias SymphonyElixir.Assistant.{CodexSession, History}
+  alias SymphonyElixir.Assistant.{AgentSession, History}
   alias SymphonyElixir.Repo
   alias SymphonyElixir.Workflow
 
@@ -39,7 +39,7 @@ defmodule SymphonyElixir.Assistant.CodexSessionClaudeRelayTest do
     {:ok, thread} = History.create_freeform_thread(%{workspace_path: Path.join(workspace_root, "thread")})
 
     {:ok, result} =
-      CodexSession.send_message_to_thread(
+      AgentSession.send_message_to_thread(
         thread,
         "oi",
         %{"agent" => "claude"},
@@ -58,7 +58,7 @@ defmodule SymphonyElixir.Assistant.CodexSessionClaudeRelayTest do
     {:ok, thread} = History.create_freeform_thread(%{workspace_path: Path.join(workspace_root, "thread")})
 
     {:ok, result} =
-      CodexSession.send_message_to_thread(
+      AgentSession.send_message_to_thread(
         thread,
         "oi",
         %{"agent" => "claude"},
@@ -81,7 +81,7 @@ defmodule SymphonyElixir.Assistant.CodexSessionClaudeRelayTest do
     test_pid = self()
 
     {:ok, _result} =
-      CodexSession.send_message_to_thread(
+      AgentSession.send_message_to_thread(
         thread,
         "oi",
         %{"agent" => "claude"},
@@ -99,7 +99,7 @@ defmodule SymphonyElixir.Assistant.CodexSessionClaudeRelayTest do
     {:ok, thread} = History.create_freeform_thread(%{workspace_path: Path.join(workspace_root, "thread")})
 
     {:ok, result} =
-      CodexSession.send_message_to_thread(
+      AgentSession.send_message_to_thread(
         thread,
         "oi",
         %{"agent" => "claude"},
@@ -119,7 +119,7 @@ defmodule SymphonyElixir.Assistant.CodexSessionClaudeRelayTest do
     {:ok, thread} = History.put_agent_thread_id(thread, "claude", "sess-stale")
 
     {:ok, result} =
-      CodexSession.send_message_to_thread(
+      AgentSession.send_message_to_thread(
         thread,
         "oi",
         %{"agent" => "claude"},

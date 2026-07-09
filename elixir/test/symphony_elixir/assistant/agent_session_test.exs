@@ -1,8 +1,8 @@
-defmodule SymphonyElixir.Assistant.CodexSessionTest do
+defmodule SymphonyElixir.Assistant.AgentSessionTest do
   use ExUnit.Case, async: false
 
   alias Ecto.Adapters.SQL
-  alias SymphonyElixir.Assistant.{CodexSession, History, ToolExecutor}
+  alias SymphonyElixir.Assistant.{AgentSession, History, ToolExecutor}
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.Repo
   alias SymphonyElixir.Workspace
@@ -46,7 +46,7 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
     end
 
     assert {:ok, result} =
-             CodexSession.send_message("macro-markets", "Quem e vc?", %{view: "board"},
+             AgentSession.send_message("macro-markets", "Quem e vc?", %{view: "board"},
                runner: runner,
                workspace_root: workspace_root
              )
@@ -55,7 +55,7 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
     assert result.tool_calls == []
 
     assert_receive {:runner_called, workspace, prompt, issue, opts}
-    assert {:ok, expected_workspace} = CodexSession.assistant_workspace("macro-markets", workspace_root: workspace_root)
+    assert {:ok, expected_workspace} = AgentSession.assistant_workspace("macro-markets", workspace_root: workspace_root)
     assert workspace == expected_workspace
     assert File.dir?(workspace)
     assert prompt =~ "Project assistant for `macro-markets`"
@@ -84,7 +84,7 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
     end
 
     assert {:ok, _result} =
-             CodexSession.send_message("macro-markets", "Oi", %{}, runner: first_runner, workspace_root: workspace_root)
+             AgentSession.send_message("macro-markets", "Oi", %{}, runner: first_runner, workspace_root: workspace_root)
 
     parent = self()
 
@@ -94,7 +94,7 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
     end
 
     assert {:ok, _result} =
-             CodexSession.send_message("macro-markets", "Voce lembra?", %{},
+             AgentSession.send_message("macro-markets", "Voce lembra?", %{},
                runner: second_runner,
                workspace_root: workspace_root
              )
@@ -115,7 +115,7 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
     end
 
     assert {:ok, result} =
-             CodexSession.send_message_to_thread(thread, "hi", %{}, runner: runner)
+             AgentSession.send_message_to_thread(thread, "hi", %{}, runner: runner)
 
     assert result.assistant_message == "ok"
     assert_received {:opts, opts}
@@ -163,7 +163,7 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
     end
 
     assert {:ok, _result} =
-             CodexSession.send_message_to_thread(thread, "hi", %{}, runner: runner)
+             AgentSession.send_message_to_thread(thread, "hi", %{}, runner: runner)
 
     assert_receive {:freeform_opts, opts}
     assert Keyword.get(opts, :codex_config)["approval_policy"] == "never"
@@ -177,7 +177,7 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
       })
 
     assert {:ok, result} =
-             CodexSession.send_message_to_thread(
+             AgentSession.send_message_to_thread(
                thread,
                "hi",
                %{"agent" => "codex"},
@@ -216,7 +216,7 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
       end
 
       assert {:ok, result} =
-               CodexSession.send_message_to_issue_thread(thread, "hi", %{}, runner: runner)
+               AgentSession.send_message_to_issue_thread(thread, "hi", %{}, runner: runner)
 
       assert result.assistant_message == "done"
       expected = Workspace.path_for_issue("MAC-1")
@@ -244,7 +244,7 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
       end
 
       assert {:ok, result} =
-               CodexSession.send_message_to_issue_thread(session_thread, "oi", %{}, runner: runner)
+               AgentSession.send_message_to_issue_thread(session_thread, "oi", %{}, runner: runner)
 
       assert result.assistant_message == "ack"
       assert_receive {:session_workspace, ^thread_workspace}
@@ -283,7 +283,7 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
         {:ok, %{assistant_message: "ok", tool_calls: [], codex_thread_id: "ct", turn_id: "t1"}}
       end
 
-      assert {:ok, _result} = CodexSession.send_message_to_issue_thread(thread, "hi", %{}, runner: runner)
+      assert {:ok, _result} = AgentSession.send_message_to_issue_thread(thread, "hi", %{}, runner: runner)
 
       assert_receive {:issue_run, workspace, opts}
       assert Keyword.get(opts, :workspace_root) == expected_root
@@ -309,7 +309,7 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
       end
 
       assert {:ok, _result} =
-               CodexSession.send_message_to_issue_thread(thread, "hi", %{}, runner: runner)
+               AgentSession.send_message_to_issue_thread(thread, "hi", %{}, runner: runner)
 
       assert_receive {:workspace, ^persisted}
     end
@@ -334,7 +334,7 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
       end
 
       assert {:ok, _result} =
-               CodexSession.send_message_to_issue_thread(thread, "hi", %{}, runner: runner)
+               AgentSession.send_message_to_issue_thread(thread, "hi", %{}, runner: runner)
 
       expected = Workspace.path_for_issue(issue_ref)
       assert_receive {:workspace, ^expected}
@@ -359,7 +359,7 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
       callback = fn payload -> send(test_pid, {:message_created, payload}) end
 
       assert {:ok, result} =
-               CodexSession.send_message_to_issue_thread(thread, "hi", %{source: "test"},
+               AgentSession.send_message_to_issue_thread(thread, "hi", %{source: "test"},
                  runner: runner,
                  on_message_created: callback
                )
@@ -407,7 +407,7 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
       end
 
       assert {:ok, _result} =
-               CodexSession.send_message_to_issue_thread(thread, "hi", %{},
+               AgentSession.send_message_to_issue_thread(thread, "hi", %{},
                  runner: runner,
                  dynamic_tools: ToolExecutor.tool_specs(),
                  tool_executor: malicious_executor
@@ -448,7 +448,7 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
       end
 
       assert {:ok, _result} =
-               CodexSession.send_message_to_issue_thread(thread, "hi", %{}, runner: runner)
+               AgentSession.send_message_to_issue_thread(thread, "hi", %{}, runner: runner)
 
       assert_receive {:runner_opts, opts}
 
@@ -468,7 +468,7 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
       end
 
       assert {:ok, _result} =
-               CodexSession.send_message_to_issue_thread(thread, "explore", %{}, runner: runner)
+               AgentSession.send_message_to_issue_thread(thread, "explore", %{}, runner: runner)
 
       assert_receive {:prompt, prompt}
       assert prompt =~ "Do NOT call update_issue during"
@@ -484,7 +484,7 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
       end
 
       assert {:ok, _result} =
-               CodexSession.send_message_to_issue_thread(thread, "build X", %{}, runner: runner)
+               AgentSession.send_message_to_issue_thread(thread, "build X", %{}, runner: runner)
 
       assert_receive {:prompt, prompt}
       assert prompt =~ "brainstorming"
@@ -508,7 +508,7 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
       end
 
       assert {:ok, _result} =
-               CodexSession.send_message_to_issue_thread(thread, "vamos fazer um brainstorming", %{}, runner: runner)
+               AgentSession.send_message_to_issue_thread(thread, "vamos fazer um brainstorming", %{}, runner: runner)
 
       assert_receive {:prompt, prompt}
       assert prompt =~ "brainstorming"
@@ -525,7 +525,7 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
       end
 
       assert {:ok, _result} =
-               CodexSession.send_message_to_issue_thread(thread, "what does this issue cover?", %{}, runner: runner)
+               AgentSession.send_message_to_issue_thread(thread, "what does this issue cover?", %{}, runner: runner)
 
       assert_receive {:prompt, prompt}
       assert prompt =~ "choose depth from the conversation"
@@ -541,7 +541,7 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
       end
 
       assert {:ok, _result} =
-               CodexSession.send_message_to_issue_thread(thread, "hello", %{}, runner: runner)
+               AgentSession.send_message_to_issue_thread(thread, "hello", %{}, runner: runner)
 
       assert_receive {:prompt, prompt}
       assert prompt =~ "dispatch_codex"
@@ -558,7 +558,7 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
       end
 
       assert {:ok, _result} =
-               CodexSession.send_message_to_issue_thread(thread, "done", %{}, runner: runner)
+               AgentSession.send_message_to_issue_thread(thread, "done", %{}, runner: runner)
 
       assert_receive {:prompt, prompt}
       prompt_text = String.downcase(prompt)
@@ -583,7 +583,7 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
       end
 
       assert {:ok, _result} =
-               CodexSession.send_message_to_issue_thread(thread, "ship it", %{}, runner: runner)
+               AgentSession.send_message_to_issue_thread(thread, "ship it", %{}, runner: runner)
 
       assert_receive {:prompt, prompt, opts}
       # Authoring goal runs Codex goal mode directly in the conversation...
@@ -611,7 +611,7 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
       end
 
       assert {:ok, _result} =
-               CodexSession.send_message_to_issue_thread(thread, "hi", %{}, runner: runner)
+               AgentSession.send_message_to_issue_thread(thread, "hi", %{}, runner: runner)
 
       assert_receive {:prompt, prompt, opts}
       refute prompt =~ "AUTHORING GOAL: ACTIVE"
@@ -629,7 +629,7 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
       end
 
       assert {:ok, _result} =
-               CodexSession.send_message_to_issue_thread(thread, "spec it", %{},
+               AgentSession.send_message_to_issue_thread(thread, "spec it", %{},
                  runner: runner,
                  on_documents_changed: fn id -> send(test_pid, {:docs_changed, id}) end
                )
@@ -654,7 +654,7 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
       end
 
       assert {:ok, _result} =
-               CodexSession.send_message_to_issue_thread(thread, "revise spec", %{},
+               AgentSession.send_message_to_issue_thread(thread, "revise spec", %{},
                  runner: runner,
                  on_documents_changed: fn id -> send(test_pid, {:docs_changed, id}) end
                )
@@ -670,7 +670,7 @@ defmodule SymphonyElixir.Assistant.CodexSessionTest do
       end
 
       assert {:ok, _result} =
-               CodexSession.send_message_to_issue_thread(thread, "chat only", %{},
+               AgentSession.send_message_to_issue_thread(thread, "chat only", %{},
                  runner: runner,
                  on_documents_changed: fn id -> send(test_pid, {:docs_changed, id}) end
                )

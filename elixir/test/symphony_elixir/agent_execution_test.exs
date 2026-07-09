@@ -2,7 +2,7 @@ defmodule SymphonyElixir.AgentExecutionTest do
   use ExUnit.Case, async: false
 
   alias SymphonyElixir.AgentExecution
-  alias SymphonyElixir.Codex.Session, as: CodexSession
+  alias SymphonyElixir.Codex.Session, as: CodexStore
   alias SymphonyElixir.SessionEvents
   alias SymphonyElixir.Workspace
 
@@ -140,7 +140,7 @@ defmodule SymphonyElixir.AgentExecutionTest do
       workspace = Workspace.path_for_issue(issue_ref)
       on_exit(fn -> File.rm_rf(workspace) end)
 
-      :ok = CodexSession.put_goal(workspace, %{"objective" => "Pursue the native goal", "status" => "active"})
+      :ok = CodexStore.put_goal(workspace, %{"objective" => "Pursue the native goal", "status" => "active"})
 
       entry = running_entry(%{identifier: identifier, agent_kind: "codex", issue: issue_ref})
       snapshot = %{running: [entry], retrying: []}
@@ -180,7 +180,7 @@ defmodule SymphonyElixir.AgentExecutionTest do
         File.rm_rf(sessions_dir)
       end)
 
-      :ok = CodexSession.write(workspace, thread_id)
+      :ok = CodexStore.write(workspace, thread_id)
       write_rollout!(sessions_dir, thread_id)
 
       message =
@@ -226,7 +226,7 @@ defmodule SymphonyElixir.AgentExecutionTest do
         File.rm_rf(sessions_dir)
       end)
 
-      :ok = CodexSession.write(workspace, thread_id)
+      :ok = CodexStore.write(workspace, thread_id)
       write_rollout!(sessions_dir, thread_id)
 
       # A deliberate operator stop is recorded as a `user_stop` abort event.

@@ -1,7 +1,7 @@
 defmodule SymphonyElixir.Assistant.AttachmentStore do
   @moduledoc "Stores project assistant uploads inside the Codex assistant workspace."
 
-  alias SymphonyElixir.Assistant.CodexSession
+  alias SymphonyElixir.Assistant.AgentSession
 
   @max_image_bytes 4 * 1024 * 1024
   @max_file_bytes 5 * 1024 * 1024
@@ -25,7 +25,7 @@ defmodule SymphonyElixir.Assistant.AttachmentStore do
 
   @spec store_image(String.t(), Plug.Upload.t()) :: {:ok, stored_attachment()} | {:error, term()}
   def store_image(project_slug, %Plug.Upload{} = upload) when is_binary(project_slug) do
-    with {:ok, workspace} <- CodexSession.assistant_workspace(project_slug),
+    with {:ok, workspace} <- AgentSession.assistant_workspace(project_slug),
          :ok <- File.mkdir_p(uploads_dir(workspace)),
          {:ok, extension} <- allowed_extension(upload),
          {:ok, size_bytes} <- validate_size(upload.path),
@@ -49,7 +49,7 @@ defmodule SymphonyElixir.Assistant.AttachmentStore do
 
   @spec store_file(String.t(), Plug.Upload.t()) :: {:ok, stored_attachment()} | {:error, term()}
   def store_file(project_slug, %Plug.Upload{} = upload) when is_binary(project_slug) do
-    with {:ok, workspace} <- CodexSession.assistant_workspace(project_slug),
+    with {:ok, workspace} <- AgentSession.assistant_workspace(project_slug),
          :ok <- File.mkdir_p(uploads_dir(workspace)),
          {:ok, extension} <- allowed_file_extension(upload),
          {:ok, size_bytes} <- validate_file_size(upload.path),
@@ -92,7 +92,7 @@ defmodule SymphonyElixir.Assistant.AttachmentStore do
 
   @spec resolve_path(String.t(), String.t()) :: {:ok, Path.t()} | {:error, term()}
   def resolve_path(project_slug, relative_path) when is_binary(project_slug) and is_binary(relative_path) do
-    with {:ok, workspace} <- CodexSession.assistant_workspace(project_slug),
+    with {:ok, workspace} <- AgentSession.assistant_workspace(project_slug),
          {:ok, safe_relative} <- safe_relative_path(relative_path),
          absolute = Path.join(workspace, safe_relative),
          true <- File.exists?(absolute) do
@@ -111,7 +111,7 @@ defmodule SymphonyElixir.Assistant.AttachmentStore do
   """
   @spec list_uploads(String.t()) :: {:ok, [{String.t(), Path.t()}]} | {:error, term()}
   def list_uploads(project_slug) when is_binary(project_slug) do
-    with {:ok, workspace} <- CodexSession.assistant_workspace(project_slug) do
+    with {:ok, workspace} <- AgentSession.assistant_workspace(project_slug) do
       dir = uploads_dir(workspace)
 
       case File.ls(dir) do

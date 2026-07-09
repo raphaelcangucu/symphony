@@ -1,7 +1,7 @@
-defmodule SymphonyElixir.Assistant.CodexSessionTurnStartedTest do
+defmodule SymphonyElixir.Assistant.AgentSessionTurnStartedTest do
   use ExUnit.Case, async: true
 
-  alias SymphonyElixir.Assistant.CodexSession
+  alias SymphonyElixir.Assistant.AgentSession
 
   # default_runner builds live Codex sessions (requires the codex binary), so the
   # turn-id forwarding is exercised end-to-end through the channel tests. This test
@@ -10,6 +10,6 @@ defmodule SymphonyElixir.Assistant.CodexSessionTurnStartedTest do
     callback = fn turn_id -> turn_id end
 
     assert is_function(callback, 1)
-    assert Code.ensure_loaded?(CodexSession)
+    assert Code.ensure_loaded?(AgentSession)
   end
 end

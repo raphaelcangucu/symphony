@@ -4,7 +4,7 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
   use Phoenix.Controller, formats: [:json]
 
   alias Plug.Conn
-  alias SymphonyElixir.Assistant.{CodexSession, History}
+  alias SymphonyElixir.Assistant.{AgentSession, History}
   alias SymphonyElixirWeb.{TrackerErrors, TrackerPresenter}
 
   @default_limit 50
@@ -38,11 +38,11 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
     # the autoincrement id we only learn after insert. Seed with the freeform root
     # as a placeholder, then immediately rewrite it to the per-thread path so the
     # document viewer scopes reads to this thread instead of the shared parent.
-    attrs = %{title: params["title"], workspace_path: CodexSession.freeform_workspace_root()}
+    attrs = %{title: params["title"], workspace_path: AgentSession.freeform_workspace_root()}
 
     with {:ok, thread} <- History.create_freeform_thread(attrs),
          {:ok, thread} <-
-           History.update_thread(thread, %{workspace_path: CodexSession.freeform_workspace(thread.id)}) do
+           History.update_thread(thread, %{workspace_path: AgentSession.freeform_workspace(thread.id)}) do
       conn
       |> put_status(:created)
       |> json(%{data: TrackerPresenter.assistant_thread(with_preview(thread))})

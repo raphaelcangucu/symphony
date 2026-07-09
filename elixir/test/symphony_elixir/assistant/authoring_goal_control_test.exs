@@ -2,7 +2,7 @@ defmodule SymphonyElixir.Assistant.AuthoringGoalControlTest do
   use ExUnit.Case, async: false
 
   alias SymphonyElixir.Assistant.{AuthoringGoalControl, History, Thread}
-  alias SymphonyElixir.Codex.Session, as: CodexSession
+  alias SymphonyElixir.Codex.Session, as: CodexStore
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.Repo
   alias SymphonyElixir.Workflow
@@ -114,16 +114,16 @@ defmodule SymphonyElixir.Assistant.AuthoringGoalControlTest do
     assert is_binary(workspace)
 
     :ok =
-      CodexSession.put_goal(workspace, %{
+      CodexStore.put_goal(workspace, %{
         "objective" => "Stale authoring objective",
         "status" => "active"
       })
 
-    assert {:ok, %{"objective" => "Stale authoring objective"}} = CodexSession.read_goal(workspace)
+    assert {:ok, %{"objective" => "Stale authoring objective"}} = CodexStore.read_goal(workspace)
 
     assert {:ok, payload, _updated} = AuthoringGoalControl.clear(thread)
     assert payload.enabled == false
-    assert CodexSession.read_goal(workspace) == :error
+    assert CodexStore.read_goal(workspace) == :error
   end
 
   test "pause requires a native Codex goal", %{thread: thread} do

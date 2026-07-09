@@ -2,7 +2,7 @@ defmodule SymphonyElixir.Assistant.GoalToolsTest do
   use ExUnit.Case, async: false
 
   alias SymphonyElixir.Assistant.GoalTools
-  alias SymphonyElixir.Codex.Session, as: CodexSession
+  alias SymphonyElixir.Codex.Session, as: CodexStore
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.Repo
   alias SymphonyElixir.Workspace
@@ -45,8 +45,8 @@ defmodule SymphonyElixir.Assistant.GoalToolsTest do
     File.mkdir_p!(workspace)
     on_exit(fn -> File.rm_rf!(workspace) end)
 
-    CodexSession.write(workspace, "00000000-0000-4000-8000-000000000001")
-    :ok = CodexSession.put_goal(workspace, %{"objective" => "Stale", "status" => "active"})
+    CodexStore.write(workspace, "00000000-0000-4000-8000-000000000001")
+    :ok = CodexStore.put_goal(workspace, %{"objective" => "Stale", "status" => "active"})
     {:ok, _} = Context.set_agent_session_id(project.slug, issue.identifier, "00000000-0000-4000-8000-000000000001")
 
     assert {:ok, result} =
@@ -56,7 +56,7 @@ defmodule SymphonyElixir.Assistant.GoalToolsTest do
              )
 
     assert result.data.cleared == true
-    assert CodexSession.read_goal(workspace) == :error
+    assert CodexStore.read_goal(workspace) == :error
   end
 
   test "returns missing identifier for project chat calls without identifier", %{project: project} do

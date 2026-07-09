@@ -7,7 +7,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
 
   alias SymphonyElixir.Assistant.{
     AuthoringGoalControl,
-    CodexSession,
+    AgentSession,
     GoalRun,
     History,
     Payload,
@@ -848,7 +848,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
 
   # Re-dispatches a thread's interrupted current turn as a brand-new turn that
   # re-uses the saved prompt + codex_thread_id. Codex continuity is automatic:
-  # run_send_turn -> CodexSession reloads the thread and continues the persisted
+  # run_send_turn -> AgentSession reloads the thread and continues the persisted
   # agent conversation; the codex_thread_id here is for display/trace only.
   defp do_resume_turn(thread, turn, socket) do
     channel_pid = self()
@@ -1010,24 +1010,24 @@ defmodule SymphonyElixirWeb.AssistantChannel do
 
   defp run_send_turn(%{scope: scope} = thread, _project_slug, trimmed, context, opts)
        when scope in ["issue", "issue_session"] do
-    CodexSession.send_message_to_issue_thread(thread, trimmed, context, opts)
+    AgentSession.send_message_to_issue_thread(thread, trimmed, context, opts)
   end
 
   defp run_send_turn(%{scope: "freeform"} = thread, _project_slug, trimmed, context, opts) do
-    CodexSession.send_message_to_thread(thread, trimmed, context, opts)
+    AgentSession.send_message_to_thread(thread, trimmed, context, opts)
   end
 
   defp run_send_turn(%{scope: scope} = thread, _project_slug, trimmed, context, opts)
        when scope in ["project_explore", "project_session"] do
-    CodexSession.send_message_to_project_explore_thread(thread, trimmed, context, opts)
+    AgentSession.send_message_to_project_explore_thread(thread, trimmed, context, opts)
   end
 
   defp run_send_turn(%{scope: "kb"} = thread, _project_slug, trimmed, context, opts) do
-    CodexSession.send_message_to_kb_thread(thread, trimmed, context, opts)
+    AgentSession.send_message_to_kb_thread(thread, trimmed, context, opts)
   end
 
   defp run_send_turn(_thread, project_slug, trimmed, context, opts) do
-    CodexSession.send_message(project_slug, trimmed, context, opts)
+    AgentSession.send_message(project_slug, trimmed, context, opts)
   end
 
   defp maybe_push_created_issue(result, %Socket{assigns: %{project_slug: project_slug}} = socket)
@@ -1486,7 +1486,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
         # refresh: register in the durable run registry, run, then notify reloaded/
         # other tabs over PubSub before handing the result back to this channel.
         GoalRun.track(thread_id)
-        result = CodexSession.continue_issue_goal(thread, %{}, opts)
+        result = AgentSession.continue_issue_goal(thread, %{}, opts)
         GoalRun.untrack(thread_id)
         GoalRun.broadcast_from(channel_pid, thread_id, {:goal_run_finished, finished_message(result)})
         send(channel_pid, {:assistant_turn_finished, result})

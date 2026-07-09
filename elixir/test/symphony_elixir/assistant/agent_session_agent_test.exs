@@ -1,7 +1,7 @@
-defmodule SymphonyElixir.Assistant.CodexSessionAgentTest do
+defmodule SymphonyElixir.Assistant.AgentSessionAgentTest do
   use ExUnit.Case, async: false
 
-  alias SymphonyElixir.Assistant.{CodexSession, History}
+  alias SymphonyElixir.Assistant.{AgentSession, History}
   alias SymphonyElixir.Repo
   alias SymphonyElixir.Settings.Setting
 
@@ -30,7 +30,7 @@ defmodule SymphonyElixir.Assistant.CodexSessionAgentTest do
     end
 
     {:ok, _result} =
-      CodexSession.send_message_to_thread(thread, "hello", %{"agent" => "claude"}, runner: runner)
+      AgentSession.send_message_to_thread(thread, "hello", %{"agent" => "claude"}, runner: runner)
 
     assert_received {:runner_opts, "claude", "sess-prev"}
 
@@ -50,7 +50,7 @@ defmodule SymphonyElixir.Assistant.CodexSessionAgentTest do
       {:ok, %{assistant_message: "ok", tool_calls: [], thread_id: "x", turn_id: "t"}}
     end
 
-    {:ok, _} = CodexSession.send_message_to_thread(thread, "hi", %{}, runner: runner)
+    {:ok, _} = AgentSession.send_message_to_thread(thread, "hi", %{}, runner: runner)
     assert_received {:agent, "claude"}
   end
 
@@ -63,11 +63,11 @@ defmodule SymphonyElixir.Assistant.CodexSessionAgentTest do
       {:ok, %{assistant_message: "ok", tool_calls: [], cli_session_id: "cl-1", turn_id: "t"}}
     end
 
-    {:ok, _} = CodexSession.send_message_to_thread(thread, "turn 1", %{"agent" => "claude"}, runner: runner)
+    {:ok, _} = AgentSession.send_message_to_thread(thread, "turn 1", %{"agent" => "claude"}, runner: runner)
     assert_received {:thread_id_opt, nil}
 
     # Same STALE struct (simulates the channel's frozen assign) — the session layer must reload.
-    {:ok, _} = CodexSession.send_message_to_thread(thread, "turn 2", %{"agent" => "claude"}, runner: runner)
+    {:ok, _} = AgentSession.send_message_to_thread(thread, "turn 2", %{"agent" => "claude"}, runner: runner)
     assert_received {:thread_id_opt, "cl-1"}
   end
 end

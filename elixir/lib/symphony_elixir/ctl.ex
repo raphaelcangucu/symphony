@@ -24,7 +24,7 @@ defmodule SymphonyElixir.Ctl do
   @assistant_reload_modules [
     SymphonyElixir.Assistant.AttachmentStore,
     SymphonyElixir.Assistant.BlockerTools,
-    SymphonyElixir.Assistant.CodexSession,
+    SymphonyElixir.Assistant.AgentSession,
     SymphonyElixir.Assistant.DiscoveryTools,
     SymphonyElixir.Assistant.DispatchTools,
     SymphonyElixir.Assistant.OrchestratorTools,

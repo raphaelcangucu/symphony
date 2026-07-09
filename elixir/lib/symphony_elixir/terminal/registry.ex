@@ -3,7 +3,7 @@ defmodule SymphonyElixir.Terminal.Registry do
   Issue terminal session registry backed by stable tmux session names.
   """
 
-  alias SymphonyElixir.Codex.Session, as: CodexSession
+  alias SymphonyElixir.Codex.Session, as: CodexStore
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.Terminal.{TabStore, Tmux}
   alias SymphonyElixir.Tracker.IssueAdapter
@@ -159,7 +159,7 @@ defmodule SymphonyElixir.Terminal.Registry do
   defp resolve_codex_session(cwd, opts) do
     case Keyword.get(opts, :codex_resolver) do
       resolver when is_function(resolver, 1) -> resolver.(cwd)
-      _absent -> CodexSession.resolve(cwd)
+      _absent -> CodexStore.resolve(cwd)
     end
   end
 

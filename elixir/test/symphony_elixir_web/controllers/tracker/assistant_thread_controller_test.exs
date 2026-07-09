@@ -4,7 +4,7 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadControllerTest do
   import Phoenix.ConnTest
   import Plug.Conn
 
-  alias SymphonyElixir.Assistant.{CodexSession, History}
+  alias SymphonyElixir.Assistant.{AgentSession, History}
   alias SymphonyElixir.LocalTracker.Context
 
   @endpoint SymphonyElixirWeb.Endpoint
@@ -40,8 +40,8 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadControllerTest do
 
     {:ok, thread} = History.get_thread(id)
 
-    assert thread.workspace_path == CodexSession.freeform_workspace(id)
-    refute thread.workspace_path == CodexSession.freeform_workspace_root()
+    assert thread.workspace_path == AgentSession.freeform_workspace(id)
+    refute thread.workspace_path == AgentSession.freeform_workspace_root()
   end
 
   test "GET lists freeform threads" do

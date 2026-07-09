@@ -1,5 +1,10 @@
-defmodule SymphonyElixir.Assistant.CodexSession do
-  @moduledoc "Runs project assistant chat turns through a Codex app-server session boundary."
+defmodule SymphonyElixir.Assistant.AgentSession do
+  @moduledoc """
+  Shared assistant turn runner for all agent backends.
+
+  Codex is the primary backend; Claude, Cursor, and OpenCode share the same
+  runner contracts through this module.
+  """
 
   alias SymphonyElixir.Assistant.{
     FileActivityPresenter,
