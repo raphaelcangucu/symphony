@@ -535,3 +535,4 @@ defmodule SymphonyElixir.Config do
     if Path.type(path) == :absolute, do: path, else: Path.expand(path, root)
   end
 end
+

@@ -2270,7 +2270,11 @@
         "fileTooLarge": "Arquivos devem ter no máximo 5 MB.",
         "audioTooLarge": "Gravações de áudio devem ter no máximo 8 MB.",
         "readAudioFailed": "Falha ao ler o áudio."
-      }
+      },
+      "moreTools": "Mais",
+      "moreToolsAria": "Mais ferramentas do compositor",
+      "modelChipAria": "Agente, modelo e raciocínio",
+      "compactModelMenu": "Configurações do modelo"
     },
     "authoring": {
       "chatAria": "Chat de authoring da issue",
