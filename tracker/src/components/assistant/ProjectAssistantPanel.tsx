@@ -791,9 +791,19 @@ export function ProjectAssistantPanel({
 
       setConnectionError(null);
       stickToBottomRef.current = true;
+      pinnedScrollTopRef.current = null;
       setIsAtBottom(true);
       scrollBehaviorRef.current = "initial";
       setIsRunning(true);
+      // Scroll immediately so the outgoing message is visible even before the
+      // next paint / ResizeObserver cycle (content growth used to detach stickiness).
+      const scroller = scrollRef.current;
+      if (scroller) {
+        requestAnimationFrame(() => {
+          if (!scrollRef.current || !stickToBottomRef.current) return;
+          scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+        });
+      }
       channel.push("send_message", payload).receive("error", (reason) => {
         setConnectionError(errorMessage(reason));
         setIsRunning(false);

@@ -10,7 +10,7 @@ export function attachChatScrollStickiness(
   pinnedScrollTopRef: MutableRefObject<number | null>,
   onAtBottomChange?: (atBottom: boolean) => void,
 ): () => void {
-  const updateStickiness = () => {
+  const updateStickinessFromScroll = () => {
     const distanceFromBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
     const atBottom = distanceFromBottom <= STICK_TO_BOTTOM_THRESHOLD_PX;
     stickToBottomRef.current = atBottom;
@@ -18,11 +18,27 @@ export function attachChatScrollStickiness(
     onAtBottomChange?.(atBottom);
   };
 
+  /**
+   * Content growth (new message / streaming) must not flip stickiness off.
+   * While stuck, keep the viewport pinned to the bottom as height increases.
+   */
+  const followContentGrowth = () => {
+    if (!stickToBottomRef.current) {
+      updateStickinessFromScroll();
+      return;
+    }
+
+    pinnedScrollTopRef.current = null;
+    onAtBottomChange?.(true);
+    scroller.scrollTo({ top: scroller.scrollHeight, behavior: "auto" });
+  };
+
   const detachFromBottom = () => {
     stickToBottomRef.current = false;
     pinnedScrollTopRef.current = scroller.scrollTop;
     // Stop an in-flight smooth scroll by pinning the current position.
     scroller.scrollTo({ top: scroller.scrollTop, behavior: "auto" });
+    onAtBottomChange?.(false);
   };
 
   const onWheel = (event: WheelEvent) => {
@@ -38,18 +54,18 @@ export function attachChatScrollStickiness(
     if (touchStartY != null && y != null && y - touchStartY > 8) detachFromBottom();
   };
 
-  updateStickiness();
-  scroller.addEventListener("scroll", updateStickiness, { passive: true });
+  updateStickinessFromScroll();
+  scroller.addEventListener("scroll", updateStickinessFromScroll, { passive: true });
   scroller.addEventListener("wheel", onWheel, { passive: true });
   scroller.addEventListener("touchstart", onTouchStart, { passive: true });
   scroller.addEventListener("touchmove", onTouchMove, { passive: true });
 
   const content = scroller.firstElementChild;
-  const resizeObserver = content ? new ResizeObserver(updateStickiness) : null;
+  const resizeObserver = content ? new ResizeObserver(followContentGrowth) : null;
   if (content) resizeObserver?.observe(content);
 
   return () => {
-    scroller.removeEventListener("scroll", updateStickiness);
+    scroller.removeEventListener("scroll", updateStickinessFromScroll);
     scroller.removeEventListener("wheel", onWheel);
     scroller.removeEventListener("touchstart", onTouchStart);
     scroller.removeEventListener("touchmove", onTouchMove);
