@@ -11,9 +11,11 @@ defmodule SymphonyElixir.Codex.DynamicTool do
     EvidenceTools,
     GoalTools,
     HandoffTools,
+    ListPreviewTools,
     PreviewTools,
     PullRequestTools,
-    ToolExecutor
+    ToolExecutor,
+    TunnelTools
   }
 
   alias SymphonyElixir.GitHub.Client, as: GitHubClient
@@ -34,6 +36,8 @@ defmodule SymphonyElixir.Codex.DynamicTool do
   @check_handoff_gate_tool "check_handoff_gate"
   @get_evidence_status_tool "get_evidence_status"
   @manage_preview_tool "manage_preview"
+  @list_previews_tool "list_previews"
+  @manage_tunnel_tool "manage_tunnel"
   @manage_dev_env_tool "manage_dev_env"
   @link_pull_request_tool "link_pull_request"
   @manage_codex_goal_tool "manage_codex_goal"
@@ -219,6 +223,12 @@ defmodule SymphonyElixir.Codex.DynamicTool do
       @manage_preview_tool ->
         execute_bound_assistant_tool(PreviewTools, arguments, opts)
 
+      @list_previews_tool ->
+        execute_bound_assistant_tool(ListPreviewTools, arguments, opts)
+
+      @manage_tunnel_tool ->
+        execute_bound_assistant_tool(TunnelTools, arguments, opts)
+
       @manage_dev_env_tool ->
         execute_bound_assistant_tool(DevEnvTools, arguments, opts, coding_agent: true)
 
@@ -294,6 +304,8 @@ defmodule SymphonyElixir.Codex.DynamicTool do
         HandoffTools.issue_bound_tool_spec(),
         EvidenceTools.issue_bound_tool_spec(),
         PreviewTools.issue_bound_tool_spec(),
+        ListPreviewTools.assistant_tool_spec(),
+        TunnelTools.issue_bound_tool_spec(),
         DevEnvTools.issue_bound_tool_spec(),
         PullRequestTools.issue_bound_tool_spec(),
         GoalTools.issue_bound_tool_spec()

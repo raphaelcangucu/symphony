@@ -337,6 +337,8 @@ defmodule SymphonyElixir.Assistant.ToolExecutorTest do
     assert Enum.any?(ToolExecutor.tool_specs(), &(&1["name"] == "update_comment"))
     assert Enum.any?(ToolExecutor.tool_specs(), &(&1["name"] == "list_pull_requests"))
     assert Enum.any?(ToolExecutor.tool_specs(), &(&1["name"] == "manage_preview"))
+    assert Enum.any?(ToolExecutor.tool_specs(), &(&1["name"] == "list_previews"))
+    assert Enum.any?(ToolExecutor.tool_specs(), &(&1["name"] == "manage_tunnel"))
     assert Enum.any?(ToolExecutor.tool_specs(), &(&1["name"] == "check_handoff_gate"))
     assert Enum.any?(ToolExecutor.tool_specs(), &(&1["name"] == "get_evidence_status"))
     assert Enum.any?(ToolExecutor.tool_specs(), &(&1["name"] == "manage_dev_env"))

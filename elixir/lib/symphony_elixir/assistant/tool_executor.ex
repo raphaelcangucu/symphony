@@ -16,6 +16,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     GoalTools,
     HandoffTools,
     KnowledgeBaseTools,
+    ListPreviewTools,
     OrchestratorTools,
     PreviewTools,
     ProjectBoardTools,
@@ -26,7 +27,8 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     SetupTools,
     SteerTools,
     SyncTools,
-    ToolText
+    ToolText,
+    TunnelTools
   }
 
   alias SymphonyElixir.Codex.DynamicTool
@@ -54,6 +56,8 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     update_comment
     list_pull_requests
     manage_preview
+    list_previews
+    manage_tunnel
     update_project_workflow
     update_project_repositories
     get_agent_executions
@@ -454,6 +458,8 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
       )
     ] ++
       [HandoffTools.assistant_tool_spec(), EvidenceTools.assistant_tool_spec(), PreviewTools.assistant_tool_spec()] ++
+      ListPreviewTools.tool_specs() ++
+      TunnelTools.tool_specs() ++
       SetupTools.tool_specs() ++
       [DevEnvTools.assistant_tool_spec()] ++
       [
@@ -865,6 +871,14 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
          data: payload
        }}
     end
+  end
+
+  defp do_execute(project, "list_previews", arguments, opts) do
+    ListPreviewTools.execute(project_slug(project), arguments, opts)
+  end
+
+  defp do_execute(project, "manage_tunnel", arguments, opts) do
+    TunnelTools.execute(project_slug(project), arguments, opts)
   end
 
   defp do_execute(project, "manage_preview", arguments, opts) do
