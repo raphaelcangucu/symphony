@@ -1025,6 +1025,14 @@ defmodule SymphonyElixir.Codex.CodingAgent do
       {:codex_interrupt} ->
         send_interrupt(port, turn_ctx)
         receive_loop(port, on_message, timeout_ms, pending_line, tool_executor, auto_approve_requests, turn_ctx)
+
+      {:agent_interrupt} ->
+        send_interrupt(port, turn_ctx)
+        receive_loop(port, on_message, timeout_ms, pending_line, tool_executor, auto_approve_requests, turn_ctx)
+
+      {:kill_tool, _tool_call_id} ->
+        kill_port_children(port)
+        receive_loop(port, on_message, timeout_ms, pending_line, tool_executor, auto_approve_requests, turn_ctx)
     after
       timeout_ms ->
         {:error, :turn_timeout}
@@ -1906,8 +1914,25 @@ defmodule SymphonyElixir.Codex.CodingAgent do
 
     # Reap the whole Codex subtree before closing the port. pkill -P walks direct
     # children; under an Erlang Port the app-server workload is a child of this pid.
-    System.cmd("pkill", ["-9", "-P", pid_str], stderr_to_stdout: true)
+    kill_process_children(pid_str)
     System.cmd("kill", ["-9", pid_str], stderr_to_stdout: true)
+    :ok
+  end
+
+  defp kill_port_children(port) when is_port(port) do
+    case :erlang.port_info(port, :os_pid) do
+      {:os_pid, os_pid} ->
+        os_pid
+        |> to_string()
+        |> kill_process_children()
+
+      _ ->
+        :ok
+    end
+  end
+
+  defp kill_process_children(pid_str) when is_binary(pid_str) do
+    System.cmd("pkill", ["-9", "-P", pid_str], stderr_to_stdout: true)
     :ok
   end
 

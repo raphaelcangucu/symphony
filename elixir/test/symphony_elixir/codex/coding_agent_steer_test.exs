@@ -33,6 +33,38 @@ defmodule SymphonyElixir.Codex.CodingAgentSteerTest do
     end)
   end
 
+  test "writes turn/interrupt when shared agent_interrupt is received mid-turn" do
+    with_fake_steer_server(&write_interrupt_fake_codex!/2, fn workspace, issue, trace_file ->
+      test_pid = self()
+
+      runner =
+        Task.async(fn ->
+          AppServer.run(workspace, "Build the feature", issue,
+            on_message: fn message ->
+              if Map.get(message, :event) == :session_started do
+                send(test_pid, {:turn_started, Map.get(message, :turn_id)})
+              end
+            end
+          )
+        end)
+
+      try do
+        assert_receive {:turn_started, "turn-interrupt"}, 2_000
+
+        send(runner.pid, {:agent_interrupt})
+
+        assert {:ok, {:error, {:turn_cancelled, %{"turnId" => "turn-interrupt"}}}} =
+                 Task.yield(runner, 2_000)
+
+        interrupt = trace_file |> outbound_messages() |> message_with_method("turn/interrupt")
+
+        assert interrupt["params"] == %{"threadId" => "thread-steer", "turnId" => "turn-interrupt"}
+      after
+        Task.shutdown(runner, :brutal_kill)
+      end
+    end)
+  end
+
   test "resyncs to the server-reported turn id and retries once when expectedTurnId is stale" do
     with_fake_steer_server(&write_mismatch_fake_codex!/2, fn workspace, issue, trace_file ->
       test_pid = self()
@@ -131,6 +163,42 @@ defmodule SymphonyElixir.Codex.CodingAgentSteerTest do
         *'"method":"turn/steer"'*)
           printf '%s\\n' '{"id":100,"result":{"turnId":"turn-steer"}}'
           printf '%s\\n' '{"method":"turn/completed","params":{"turn":{"id":"turn-steer","status":"completed"}}}'
+          exit 0
+          ;;
+        *)
+          ;;
+      esac
+    done
+    """)
+
+    File.chmod!(codex_binary, 0o755)
+  end
+
+  # Blocks until the client sends the shared interrupt control message, then
+  # reports a cancelled turn so the test can observe the runner finishing.
+  defp write_interrupt_fake_codex!(codex_binary, trace_file) do
+    File.write!(codex_binary, """
+    #!/bin/sh
+    trace_file="#{trace_file}"
+
+    while IFS= read -r line; do
+      printf 'JSON:%s\\n' "$line" >> "$trace_file"
+
+      case "$line" in
+        *'"method":"initialize"'*)
+          printf '%s\\n' '{"id":1,"result":{}}'
+          ;;
+        *'"method":"initialized"'*)
+          ;;
+        *'"method":"thread/start"'*)
+          printf '%s\\n' '{"id":2,"result":{"thread":{"id":"thread-steer"}}}'
+          ;;
+        *'"method":"turn/start"'*)
+          printf '%s\\n' '{"id":3,"result":{"turn":{"id":"turn-interrupt"}}}'
+          printf '%s\\n' '{"method":"turn/started","params":{"turn":{"id":"turn-interrupt"}}}'
+          ;;
+        *'"method":"turn/interrupt"'*)
+          printf '%s\\n' '{"method":"turn/cancelled","params":{"turnId":"turn-interrupt"}}'
           exit 0
           ;;
         *)
