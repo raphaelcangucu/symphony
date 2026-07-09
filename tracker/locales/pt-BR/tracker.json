@@ -2320,6 +2320,11 @@
     },
     "working": {
       "runningTool": "Executando {{tool}}",
+      "runningToolWithCommand": "Executando {{tool}} · {{command}}",
+      "stop": "Parar",
+      "kill": "Matar",
+      "staleHint": "Sem atualizações — Parar ou Matar?",
+      "killFailed": "Não foi possível matar esse comando. Parar o turno?",
       "verbs": {
         "pondering": "Refletindo",
         "cooking": "Preparando",

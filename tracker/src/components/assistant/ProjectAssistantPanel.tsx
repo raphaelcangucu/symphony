@@ -34,6 +34,9 @@ import {
   replaceStreamingMessage,
   updateStreamingToolCall,
 } from "@/components/assistant/assistantStream";
+import type { WorkingActiveToolDetail } from "@/components/assistant/WorkingIndicator";
+import { useNowTick } from "@/hooks/useNowTick";
+import { toast } from "sonner";
 import { BtwOverlay, type BtwStatus } from "@/components/assistant/BtwOverlay";
 import {
   AssistantTasksDock,
@@ -102,9 +105,12 @@ import {
   resumeAuthoringGoal,
   resumeTurn,
   isTerminalTurnStatus,
+  killTool,
   setAuthoringGoalObjective,
+  stopTurn,
   submitApproval,
   submitUserInput,
+  type AssistantActiveTool,
   type AssistantApprovalRequest,
   type AssistantDocumentChangedPayload,
   type AssistantTurnStatus,
@@ -117,6 +123,54 @@ import { cn, SCROLLBAR_THIN } from "@/lib/utils";
 import { useAssistantCommands } from "@/hooks/useAssistantCommands";
 
 export type { DraftIssueCreated } from "@/components/assistant/assistantPanelHelpers";
+
+const STALE_ACTIVITY_MS = 120_000;
+
+function hydrateStreamingActiveTools(
+  messages: AssistantChatMessage[],
+  tools: AssistantActiveTool[],
+): AssistantChatMessage[] {
+  return tools.reduce(
+    (current, tool) =>
+      updateStreamingToolCall(current, {
+        id: tool.id,
+        name: tool.name,
+        status: "running",
+        arguments: tool.argumentsSummary ? { command: tool.argumentsSummary } : null,
+        result: {},
+      }),
+    messages,
+  );
+}
+
+function activeToolDetailFromMessages(
+  chatMessages: AssistantChatMessage[],
+  turn: AssistantTurnStatus | null,
+): WorkingActiveToolDetail | null {
+  const streaming = chatMessages.find((message) => message.id === STREAMING_ASSISTANT_ID);
+  const running = streaming?.toolCalls.find((toolCall) => toolCall.status === "running");
+  if (running) {
+    const summary =
+      typeof running.arguments?.command === "string"
+        ? running.arguments.command
+        : running.arguments
+          ? JSON.stringify(running.arguments)
+          : null;
+    return {
+      id: typeof running.id === "string" && running.id.trim() !== "" ? running.id : running.name,
+      name: running.name,
+      argumentsSummary: summary,
+    };
+  }
+
+  const snapshot = turn?.activeTools?.[0];
+  if (!snapshot) return null;
+  return {
+    id: snapshot.id,
+    name: snapshot.name,
+    argumentsSummary: snapshot.argumentsSummary,
+  };
+}
 
 export type ProjectAssistantMode = "project" | "explore" | "freeform" | "kb";
 type ProjectAssistantContentMaxWidth = "default" | "wide";
@@ -541,6 +595,9 @@ export function ProjectAssistantPanel({
       onTurnStatus: (status) => {
         setLastTurn(status);
         setIsRunning(status.status === "running");
+        if (status.status === "running" && status.activeTools.length > 0) {
+          setMessages((current) => hydrateStreamingActiveTools(current, status.activeTools));
+        }
         if (isTerminalTurnStatus(status.status)) {
           setPendingQuestions(null);
           requestHistorySync(channel);
@@ -558,7 +615,12 @@ export function ProjectAssistantPanel({
       // when a turn is still in flight.
       const joinedLastTurn = readLastTurn(response);
       setLastTurn(joinedLastTurn);
-      if (joinedLastTurn?.status === "running") setIsRunning(true);
+      if (joinedLastTurn?.status === "running") {
+        setIsRunning(true);
+        if (joinedLastTurn.activeTools.length > 0) {
+          setMessages((current) => hydrateStreamingActiveTools(current, joinedLastTurn.activeTools));
+        }
+      }
 
       if (issueIdentifier) {
         const hydratedGoalMode = goalModeFromResponse(response) ?? false;
@@ -1052,10 +1114,36 @@ export function ProjectAssistantPanel({
     ),
   );
 
-  const activeTool =
-    messages
-      .find((message) => message.id === STREAMING_ASSISTANT_ID)
-      ?.toolCalls.find((toolCall) => toolCall.status === "running")?.name ?? null;
+  const activeToolDetail = activeToolDetailFromMessages(messages, lastTurn);
+  const nowMs = useNowTick(1000, { enabled: isRunning });
+  const stale =
+    isRunning &&
+    typeof lastTurn?.lastActivityAt === "string" &&
+    Number.isFinite(Date.parse(lastTurn.lastActivityAt)) &&
+    nowMs - Date.parse(lastTurn.lastActivityAt) >= STALE_ACTIVITY_MS;
+
+  const handleStopTurn = useCallback(() => {
+    const channel = channelRef.current;
+    if (!channel) return;
+    stopTurn(channel).receive("error", (reason) => setConnectionError(errorMessage(reason)));
+  }, []);
+
+  const handleKillTool = useCallback(
+    (toolCallId: string) => {
+      const channel = channelRef.current;
+      if (!channel) return;
+      killTool(channel, toolCallId).receive("error", (reason) => {
+        const payload = (reason ?? {}) as { can_stop_turn?: boolean; reason?: string };
+        if (payload.can_stop_turn === true) {
+          toast.error(t("assistant.working.killFailed"));
+          return;
+        }
+        setConnectionError(errorMessage(reason));
+      });
+    },
+    [t],
+  );
+
   const panelTitle = isExploreMode
     ? t("assistant.panel.exploreTitle")
     : projectSlug
@@ -1097,13 +1185,16 @@ export function ProjectAssistantPanel({
       threadId={threadId}
       isRunning={isRunning}
       runningStartedAt={runningStartedAt}
-      activeTool={activeTool}
+      activeToolDetail={activeToolDetail}
+      stale={stale}
       connectionError={connectionError}
       channelReady={channelReady}
       planApprovalMessageId={planApprovalMessageId}
       onOpenDocumentPath={onOpenDocumentPath}
       onInsertContext={insertContextRef}
       onApprovePlan={dispatchApprovedPlan}
+      onStop={handleStopTurn}
+      onKillTool={handleKillTool}
     />
   );
 

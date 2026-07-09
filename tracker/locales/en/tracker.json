@@ -2320,6 +2320,11 @@
     },
     "working": {
       "runningTool": "Running {{tool}}",
+      "runningToolWithCommand": "Running {{tool}} · {{command}}",
+      "stop": "Stop",
+      "kill": "Kill",
+      "staleHint": "No updates — Stop or Kill?",
+      "killFailed": "Could not kill that command. Stop the turn instead?",
       "verbs": {
         "pondering": "Pondering",
         "cooking": "Cooking",

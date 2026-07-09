@@ -3,7 +3,10 @@ import {
   AssistantChatMessageBubble,
   type AssistantChatPlanApprovalAction,
 } from "@/components/assistant/AssistantChatMessageBubble";
-import { WorkingIndicator } from "@/components/assistant/WorkingIndicator";
+import {
+  WorkingIndicator,
+  type WorkingActiveToolDetail,
+} from "@/components/assistant/WorkingIndicator";
 import type { ComposerContextChipRef } from "@/components/assistant/contextMentions";
 import type { AssistantChatMessage } from "@/services/assistant";
 import type { AgentTaskSnapshot } from "@/types/agentTasks";
@@ -17,13 +20,16 @@ interface AssistantMessageListProps {
   threadId?: number;
   isRunning: boolean;
   runningStartedAt: number | null;
-  activeTool: string | null;
+  activeToolDetail: WorkingActiveToolDetail | null;
+  stale?: boolean;
   connectionError: string | null;
   channelReady: boolean;
   planApprovalMessageId: string | null;
   onOpenDocumentPath?: (path: string) => void;
   onInsertContext: (ref: ComposerContextChipRef) => void;
   onApprovePlan: AssistantChatPlanApprovalAction["onApprove"];
+  onStop?: () => void;
+  onKillTool?: (toolCallId: string) => void;
 }
 
 export function AssistantMessageList({
@@ -35,13 +41,16 @@ export function AssistantMessageList({
   threadId,
   isRunning,
   runningStartedAt,
-  activeTool,
+  activeToolDetail,
+  stale = false,
   connectionError,
   channelReady,
   planApprovalMessageId,
   onOpenDocumentPath,
   onInsertContext,
   onApprovePlan,
+  onStop,
+  onKillTool,
 }: AssistantMessageListProps) {
   return (
     <>
@@ -56,6 +65,7 @@ export function AssistantMessageList({
           onOpenDocumentPath={onOpenDocumentPath}
           onInsertContext={onInsertContext}
           taskSnapshot={taskSnapshot}
+          onKillTool={onKillTool}
           planApprovalAction={
             issueIdentifier && !isRunning && message.id === planApprovalMessageId
               ? { messageId: message.id, disabled: !channelReady, onApprove: onApprovePlan }
@@ -65,7 +75,13 @@ export function AssistantMessageList({
       ))}
       {connectionError ? <p className="text-sm text-destructive">{connectionError}</p> : null}
       {isRunning && runningStartedAt != null ? (
-        <WorkingIndicator startedAt={runningStartedAt} activeTool={activeTool} />
+        <WorkingIndicator
+          startedAt={runningStartedAt}
+          activeToolDetail={activeToolDetail}
+          stale={stale}
+          onStop={onStop}
+          onKill={onKillTool}
+        />
       ) : null}
     </>
   );

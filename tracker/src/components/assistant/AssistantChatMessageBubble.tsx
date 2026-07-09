@@ -33,6 +33,7 @@ interface AssistantChatMessageBubbleProps {
   onInsertContext?: (ref: ComposerContextChipRef) => void;
   taskSnapshot?: AgentTaskSnapshot | null;
   planApprovalAction?: AssistantChatPlanApprovalAction;
+  onKillTool?: (toolCallId: string) => void;
 }
 
 export function AssistantChatMessageBubble({
@@ -44,6 +45,7 @@ export function AssistantChatMessageBubble({
   onInsertContext,
   taskSnapshot = null,
   planApprovalAction,
+  onKillTool,
 }: AssistantChatMessageBubbleProps) {
   const isUser = message.role === "user";
   const attachments = Array.isArray(message.metadata.attachments) ? message.metadata.attachments : [];
@@ -85,7 +87,11 @@ export function AssistantChatMessageBubble({
         )}
         {message.toolCalls.length ? (
           <div className={cn("mt-3 border-t pt-2", isUser && "border-white/20")}>
-            <ToolActivityTimeline toolCalls={message.toolCalls} taskSnapshot={taskSnapshot} />
+            <ToolActivityTimeline
+              toolCalls={message.toolCalls}
+              taskSnapshot={taskSnapshot}
+              onKillTool={onKillTool}
+            />
             {!isUser ? (
               <EditedFilesSummary
                 toolCalls={message.toolCalls}
