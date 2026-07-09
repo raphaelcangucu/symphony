@@ -4,6 +4,15 @@ defmodule SymphonyElixir.Assistant.PreviewToolsTest do
   alias SymphonyElixir.Assistant.PreviewTools
   alias SymphonyElixir.Issue
 
+  test "tool specs allow output action and optional server" do
+    for spec <- PreviewTools.tool_specs() do
+      properties = spec["inputSchema"]["properties"]
+
+      assert properties["server"]["type"] == "string"
+      assert "output" in properties["action"]["enum"]
+    end
+  end
+
   test "enrich_view adds serve_steps_configured and next_steps for no_serve_step" do
     view = %{available: false, reason: :no_serve_step, servers: []}
 
@@ -109,6 +118,36 @@ defmodule SymphonyElixir.Assistant.PreviewToolsTest do
     assert [%{slug: "web", status: "starting"}] = result.data.servers
   end
 
+  test "start with server slug targets one instance" do
+    issue = %Issue{id: "1", identifier: "DEMO-1", project_slug: "demo"}
+    {:ok, started} = Agent.start_link(fn -> nil end)
+
+    assert {:ok, result} =
+             PreviewTools.execute("demo", %{"action" => "start", "server" => "front"},
+               issue: issue,
+               start_instance: fn slug, identifier, server_id ->
+                 Agent.update(started, fn _ -> {slug, identifier, server_id} end)
+                 {:ok, self()}
+               end,
+               issue_targets: fn _slug, _id ->
+                 {:ok,
+                  %{
+                    available: true,
+                    reason: nil,
+                    servers: [
+                      %{id: 7, slug: "front", status: "starting", port: 4101, primary: true},
+                      %{id: 8, slug: "back", status: "stopped", port: 4100}
+                    ]
+                  }}
+               end,
+               list_serve_steps: fn _slug -> [%{role: "serve"}] end
+             )
+
+    assert Agent.get(started, & &1) == {"demo", "DEMO-1", 7}
+    assert result.tool == "manage_preview"
+    assert Enum.any?(result.data.servers, &(&1.slug == "front"))
+  end
+
   test "start reports all servers ready when the preview comes up in time" do
     issue = %Issue{id: "1", identifier: "DEMO-4", project_slug: "demo"}
 
@@ -135,7 +174,10 @@ defmodule SymphonyElixir.Assistant.PreviewToolsTest do
                issue: issue,
                start_for_issue: fn _slug, _id, _opts -> {:error, :crashed} end,
                issue_targets: fn _slug, _id ->
-                 {:ok, %{available: true, reason: nil, servers: [%{slug: "web", status: "crashed", port: 4300}]}}
+                 {:ok, %{available: true, reason: nil, servers: [%{id: 9, slug: "web", status: "crashed", port: 4300}]}}
+               end,
+               capture_output: fn "demo", "DEMO-5", 9 ->
+                 {:ok, %{output: "boom\nstack\n", session_name: "sym-dev-demo-DEMO-5-web"}}
                end,
                list_serve_steps: fn _slug -> [%{role: "serve"}] end
              )
@@ -144,6 +186,7 @@ defmodule SymphonyElixir.Assistant.PreviewToolsTest do
     assert result.message =~ "crashed"
     assert result.message =~ "Do not block"
     assert result.data.next_steps =~ "retry"
+    assert result.data.output_tail =~ "boom"
   end
 
   test "start passes config errors such as :disabled straight through as failures" do
@@ -176,5 +219,44 @@ defmodule SymphonyElixir.Assistant.PreviewToolsTest do
 
     assert result.message =~ "Restarted preview"
     assert result.message =~ "all servers are ready"
+  end
+
+  test "output returns bounded output_tail for a server" do
+    issue = %Issue{id: "1", identifier: "DEMO-1", project_slug: "demo"}
+    output = 1..105 |> Enum.map_join("\n", &"line-#{&1}")
+
+    assert {:ok, result} =
+             PreviewTools.execute("demo", %{"action" => "output", "server" => "front"},
+               issue: issue,
+               issue_targets: fn _slug, _id ->
+                 {:ok,
+                  %{
+                    available: true,
+                    reason: nil,
+                    servers: [%{id: 7, slug: "front", status: "crashed", port: 4101, primary: true}]
+                  }}
+               end,
+               capture_output: fn _slug, _id, 7 ->
+                 {:ok, %{output: output, session_name: "sym-dev-demo-DEMO-1-front"}}
+               end,
+               list_serve_steps: fn _slug -> [%{role: "serve"}] end
+             )
+
+    assert result.tool == "manage_preview"
+    assert result.data.reason == "crashed"
+    assert result.data.output_tail =~ "line-105"
+    refute result.data.output_tail =~ "line-1\n"
+    assert length(String.split(result.data.output_tail, "\n")) == 100
+    assert result.data.server.slug == "front"
+    assert is_binary(result.data.next_steps)
+  end
+
+  test "output without server returns structured invalid args" do
+    issue = %Issue{id: "1", identifier: "DEMO-1", project_slug: "demo"}
+
+    assert {:error, {:invalid_preview_arguments, message}} =
+             PreviewTools.execute("demo", %{"action" => "output"}, issue: issue)
+
+    assert message =~ "server"
   end
 end

@@ -9,10 +9,14 @@ defmodule SymphonyElixir.Assistant.PreviewTools do
 
   @tool "manage_preview"
 
-  @description """
-  Inspect or control the issue dev-server preview (status, start, stop, restart).
-  When preview is unavailable, read `next_steps` and configure serve steps via manage_dev_env first.
+  @tool_description """
+  Inspect or control the issue dev-server preview.
+  Actions: status|start|stop|restart|output.
+  Optional `server` (slug or id) scopes start/stop/restart/status/output to one process.
+  On failure, read `reason`, `output_tail`, and `next_steps` to self-heal (fix code, manage_dev_env, restart).
   """
+
+  @output_tail_max_lines 100
 
   # `start`/`restart` only wait this long for the dev server to report `ready`
   # before returning. The instance keeps booting asynchronously regardless, so a
@@ -32,7 +36,7 @@ defmodule SymphonyElixir.Assistant.PreviewTools do
 
   @spec assistant_tool_spec() :: map()
   def assistant_tool_spec do
-    tool_spec(@description, %{
+    tool_spec(@tool_description, %{
       "type" => "object",
       "additionalProperties" => false,
       "required" => ["identifier", "action"],
@@ -41,19 +45,21 @@ defmodule SymphonyElixir.Assistant.PreviewTools do
           "type" => "string",
           "description" => "Issue identifier, for example MAC-1."
         },
-        "action" => preview_action_schema()
+        "action" => preview_action_schema(),
+        "server" => server_schema()
       }
     })
   end
 
   @spec issue_bound_tool_spec() :: map()
   def issue_bound_tool_spec do
-    tool_spec(@description, %{
+    tool_spec(@tool_description, %{
       "type" => "object",
       "additionalProperties" => false,
       "required" => ["action"],
       "properties" => %{
-        "action" => preview_action_schema()
+        "action" => preview_action_schema(),
+        "server" => server_schema()
       }
     })
   end
@@ -70,39 +76,98 @@ defmodule SymphonyElixir.Assistant.PreviewTools do
 
     with {:ok, identifier} <- resolve_identifier(project_slug, arguments, opts),
          {:ok, action} <- normalize_preview_action(Map.get(arguments, "action")) do
-      execute_action(project_slug, identifier, action, issue_targets, list_serve_steps, opts)
+      execute_action(project_slug, identifier, action, arguments, issue_targets, list_serve_steps, opts)
     end
   end
 
-  defp execute_action(project_slug, identifier, :status, issue_targets, list_serve_steps, _opts) do
+  defp execute_action(project_slug, identifier, :status, arguments, issue_targets, list_serve_steps, _opts) do
     with {:ok, view} <- issue_targets.(project_slug, identifier) do
+      data =
+        project_slug
+        |> enrich_view(maybe_scope_view_to_server(view, server_argument(arguments)), list_serve_steps)
+
       {:ok,
        %{
          tool: @tool,
          message: "Preview status for #{identifier}.",
-         data: enrich_view(project_slug, view, list_serve_steps)
+         data: data
        }}
     end
   end
 
-  defp execute_action(project_slug, identifier, :start, issue_targets, list_serve_steps, opts) do
-    start_for_issue = Keyword.get(opts, :start_for_issue, &Manager.start_for_issue/3)
-    run_preview_start("Started", start_for_issue, project_slug, identifier, issue_targets, list_serve_steps)
+  defp execute_action(project_slug, identifier, :start, arguments, issue_targets, list_serve_steps, opts) do
+    case scoped_action_fun(project_slug, identifier, arguments, issue_targets, opts, :start) do
+      {:ok, start_fun} ->
+        run_preview_start("Started", start_fun, project_slug, identifier, issue_targets, list_serve_steps, opts)
+
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
 
-  defp execute_action(project_slug, identifier, :stop, issue_targets, list_serve_steps, opts) do
-    stop_for_issue = Keyword.get(opts, :stop_for_issue, &Manager.stop_for_issue/2)
-    :ok = stop_for_issue.(project_slug, identifier)
+  defp execute_action(project_slug, identifier, :stop, arguments, issue_targets, list_serve_steps, opts) do
+    case stop_preview(project_slug, identifier, arguments, issue_targets, opts) do
+      :ok ->
+        {:ok, action_result("Stopped preview for #{identifier}.", project_slug, identifier, issue_targets, list_serve_steps)}
 
-    {:ok, action_result("Stopped preview for #{identifier}.", project_slug, identifier, issue_targets, list_serve_steps)}
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
 
-  defp execute_action(project_slug, identifier, :restart, issue_targets, list_serve_steps, opts) do
-    restart_for_issue = Keyword.get(opts, :restart_for_issue, &Manager.restart_for_issue/3)
-    run_preview_start("Restarted", restart_for_issue, project_slug, identifier, issue_targets, list_serve_steps)
+  defp execute_action(project_slug, identifier, :restart, arguments, issue_targets, list_serve_steps, opts) do
+    case scoped_action_fun(project_slug, identifier, arguments, issue_targets, opts, :restart) do
+      {:ok, restart_fun} ->
+        run_preview_start("Restarted", restart_fun, project_slug, identifier, issue_targets, list_serve_steps, opts)
+
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
 
-  defp run_preview_start(verb, start_fun, project_slug, identifier, issue_targets, list_serve_steps) do
+  defp execute_action(project_slug, identifier, :output, arguments, issue_targets, _list_serve_steps, opts) do
+    capture_output = Keyword.get(opts, :capture_output, &Manager.capture_server_output/3)
+
+    with {:ok, server_arg} <- required_server_argument(arguments),
+         {:ok, view} <- issue_targets.(project_slug, identifier),
+         {:ok, server} <- resolve_server(view, server_arg),
+         {:ok, server_id} <- server_id(server) do
+      case capture_output.(project_slug, identifier, server_id) do
+        {:ok, %{output: output}} ->
+          {:ok,
+           %{
+             tool: @tool,
+             message: "Command output for #{server_field(server, :slug)} on #{identifier}.",
+             data: %{
+               available: Map.get(view, :available) || Map.get(view, "available"),
+               reason: status_reason(server_status(server)),
+               server: enrich_server(server),
+               output_tail: tail_output(output),
+               next_steps: output_next_steps(server_status(server))
+             }
+           }}
+
+        {:error, :not_found} ->
+          {:error, :server_not_found}
+
+        {:error, message} when is_binary(message) ->
+          {:ok,
+           %{
+             tool: @tool,
+             message: "Could not read output for #{server_field(server, :slug)}.",
+             data: %{
+               ok: false,
+               reason: "output_unavailable",
+               server: enrich_server(server),
+               output_tail: nil,
+               next_steps: "Retry manage_preview output, or inspect the Preview dock logs. Error: #{message}"
+             }
+           }}
+      end
+    end
+  end
+
+  defp run_preview_start(verb, start_fun, project_slug, identifier, issue_targets, list_serve_steps, opts) do
     case start_fun.(project_slug, identifier, ready_timeout_ms: @start_ready_timeout_ms) do
       {:ok, _pids} ->
         with_preview_view(project_slug, identifier, issue_targets, list_serve_steps, fn data ->
@@ -117,10 +182,15 @@ defmodule SymphonyElixir.Assistant.PreviewTools do
 
       {:error, reason} when reason in @recoverable_start_errors ->
         with_preview_view(project_slug, identifier, issue_targets, list_serve_steps, fn data ->
+          data =
+            data
+            |> apply_failed_next_steps(reason)
+            |> maybe_attach_crashed_output(project_slug, identifier, opts)
+
           %{
             tool: @tool,
             message: failed_start_message(reason, identifier),
-            data: apply_failed_next_steps(data, reason)
+            data: data
           }
         end)
 
@@ -153,6 +223,49 @@ defmodule SymphonyElixir.Assistant.PreviewTools do
   end
 
   defp server_status(_server), do: "unknown"
+
+  defp scoped_action_fun(project_slug, identifier, arguments, issue_targets, opts, action) do
+    case server_argument(arguments) do
+      nil ->
+        {:ok, issue_action_fun(opts, action)}
+
+      server_arg ->
+        with {:ok, view} <- issue_targets.(project_slug, identifier),
+             {:ok, server} <- resolve_server(view, server_arg),
+             {:ok, id} <- server_id(server) do
+          {:ok, instance_action_fun(opts, action, id)}
+        end
+    end
+  end
+
+  defp issue_action_fun(opts, :start), do: Keyword.get(opts, :start_for_issue, &Manager.start_for_issue/3)
+  defp issue_action_fun(opts, :restart), do: Keyword.get(opts, :restart_for_issue, &Manager.restart_for_issue/3)
+
+  defp instance_action_fun(opts, :start, server_id) do
+    start_instance = Keyword.get(opts, :start_instance, &Manager.start_instance_for_server/3)
+    fn project_slug, identifier, _opts -> start_instance.(project_slug, identifier, server_id) end
+  end
+
+  defp instance_action_fun(opts, :restart, server_id) do
+    restart_instance = Keyword.get(opts, :restart_instance, &Manager.restart_instance_for_server/3)
+    fn project_slug, identifier, _opts -> restart_instance.(project_slug, identifier, server_id) end
+  end
+
+  defp stop_preview(project_slug, identifier, arguments, issue_targets, opts) do
+    case server_argument(arguments) do
+      nil ->
+        stop_for_issue = Keyword.get(opts, :stop_for_issue, &Manager.stop_for_issue/2)
+        stop_for_issue.(project_slug, identifier)
+
+      server_arg ->
+        with {:ok, view} <- issue_targets.(project_slug, identifier),
+             {:ok, server} <- resolve_server(view, server_arg),
+             {:ok, id} <- server_id(server) do
+          stop_instance = Keyword.get(opts, :stop_instance, &Manager.stop_instance_for_server/3)
+          stop_instance.(project_slug, identifier, id)
+        end
+    end
+  end
 
   defp start_message(verb, identifier, :ready),
     do: "#{verb} preview for #{identifier} — all servers are ready."
@@ -192,6 +305,24 @@ defmodule SymphonyElixir.Assistant.PreviewTools do
   defp apply_failed_next_steps(data, :lock_unavailable), do: Map.put(data, :next_steps, @lock_next_steps)
   defp apply_failed_next_steps(data, _reason), do: Map.put(data, :next_steps, @not_ready_next_steps)
 
+  defp maybe_attach_crashed_output(data, project_slug, identifier, opts) do
+    capture_output = Keyword.get(opts, :capture_output, &Manager.capture_server_output/3)
+
+    with %{} = server <- first_crashed_server(data),
+         {:ok, id} <- server_id(server),
+         {:ok, %{output: output}} <- capture_output.(project_slug, identifier, id) do
+      Map.put(data, :output_tail, tail_output(output))
+    else
+      _ -> data
+    end
+  end
+
+  defp first_crashed_server(%{servers: servers}) when is_list(servers) do
+    Enum.find(servers, &(server_status(&1) == "crashed"))
+  end
+
+  defp first_crashed_server(_data), do: nil
+
   defp action_result(message, project_slug, identifier, issue_targets, list_serve_steps) do
     {:ok, view} = issue_targets.(project_slug, identifier)
 
@@ -223,6 +354,7 @@ defmodule SymphonyElixir.Assistant.PreviewTools do
   defp enrich_server(server) when is_map(server) do
     port = Map.get(server, :port) || Map.get(server, "port")
     slug = to_string(Map.get(server, :slug) || Map.get(server, "slug") || "")
+    public_url = Map.get(server, :public_url) || Map.get(server, "public_url") || Map.get(server, :url) || Map.get(server, "url")
 
     local_url =
       if is_integer(port) and port > 0 do
@@ -232,10 +364,17 @@ defmodule SymphonyElixir.Assistant.PreviewTools do
         nil
       end
 
-    Map.put(server, :local_url, local_url)
+    server
+    |> Map.put(:local_url, local_url)
+    |> maybe_put_public_url(public_url)
   end
 
   defp enrich_server(server), do: server
+
+  defp maybe_put_public_url(server, public_url) when is_binary(public_url) and public_url != "",
+    do: Map.put(server, :public_url, public_url)
+
+  defp maybe_put_public_url(server, _public_url), do: server
 
   defp present_reason(nil), do: nil
   defp present_reason(reason) when is_atom(reason), do: Atom.to_string(reason)
@@ -270,6 +409,7 @@ defmodule SymphonyElixir.Assistant.PreviewTools do
       "start" -> {:ok, :start}
       "stop" -> {:ok, :stop}
       "restart" -> {:ok, :restart}
+      "output" -> {:ok, :output}
       other -> {:error, {:invalid_preview_action, other}}
     end
   end
@@ -279,10 +419,112 @@ defmodule SymphonyElixir.Assistant.PreviewTools do
   defp preview_action_schema do
     %{
       "type" => "string",
-      "enum" => ["status", "start", "stop", "restart"],
-      "description" => "Preview action."
+      "enum" => ["status", "start", "stop", "restart", "output"],
+      "description" => "Preview action. Use output with server to read command logs."
     }
   end
+
+  defp server_schema do
+    %{
+      "type" => "string",
+      "description" => "Optional server slug (front) or numeric id."
+    }
+  end
+
+  defp maybe_scope_view_to_server(view, nil), do: view
+
+  defp maybe_scope_view_to_server(view, server_arg) do
+    case resolve_server(view, server_arg) do
+      {:ok, server} -> Map.put(view, :servers, [server])
+      {:error, _reason} -> view
+    end
+  end
+
+  defp required_server_argument(arguments) do
+    case server_argument(arguments) do
+      nil -> {:error, {:invalid_preview_arguments, "output requires server"}}
+      "" -> {:error, {:invalid_preview_arguments, "output requires server"}}
+      server -> {:ok, server}
+    end
+  end
+
+  defp server_argument(arguments) when is_map(arguments) do
+    case Map.get(arguments, "server") || Map.get(arguments, :server) do
+      server when is_binary(server) -> String.trim(server)
+      nil -> nil
+      server -> server
+    end
+  end
+
+  defp resolve_server(_view, nil), do: :all
+  defp resolve_server(_view, ""), do: {:error, {:invalid_preview_arguments, "server must not be empty"}}
+
+  defp resolve_server(view, server_arg) when is_binary(server_arg) do
+    servers = Map.get(view, :servers) || Map.get(view, "servers") || []
+
+    case Integer.parse(server_arg) do
+      {id, ""} ->
+        find_server(servers, fn server -> server_id_value(server) == id end)
+
+      _ ->
+        find_server(servers, fn server -> to_string(server_field(server, :slug) || "") == server_arg end)
+    end
+  end
+
+  defp resolve_server(_view, _server_arg), do: {:error, {:invalid_preview_arguments, "server must be a string"}}
+
+  defp find_server(servers, predicate) do
+    case Enum.find(servers, predicate) do
+      nil -> {:error, {:invalid_preview_arguments, "server not found"}}
+      server -> {:ok, server}
+    end
+  end
+
+  defp server_id(server) do
+    case server_id_value(server) do
+      id when is_integer(id) and id > 0 -> {:ok, id}
+      _ -> {:error, {:invalid_preview_arguments, "server id is missing"}}
+    end
+  end
+
+  defp server_id_value(server) do
+    case server_field(server, :id) do
+      id when is_integer(id) -> id
+      id when is_binary(id) -> parse_positive_integer(id)
+      _ -> nil
+    end
+  end
+
+  defp parse_positive_integer(value) do
+    case Integer.parse(value) do
+      {id, ""} when id > 0 -> id
+      _ -> nil
+    end
+  end
+
+  defp server_field(server, key) when is_map(server) do
+    Map.get(server, key) || Map.get(server, Atom.to_string(key))
+  end
+
+  defp server_field(_server, _key), do: nil
+
+  defp tail_output(output) when is_binary(output) do
+    output
+    |> String.split("\n", trim: true)
+    |> Enum.take(-@output_tail_max_lines)
+    |> Enum.join("\n")
+  end
+
+  defp tail_output(_output), do: ""
+
+  defp status_reason("crashed"), do: "crashed"
+  defp status_reason(_status), do: nil
+
+  defp output_next_steps("crashed"),
+    do: "Read output_tail, fix the underlying error (or manage_dev_env), then manage_preview restart with the same server."
+
+  defp output_next_steps(_status),
+    do: "If the server is unhealthy, fix the root cause then manage_preview restart."
 
   defp tool_spec(description, input_schema) do
     %{"name" => @tool, "description" => String.trim(description), "inputSchema" => input_schema}
