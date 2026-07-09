@@ -479,7 +479,7 @@
         },
         "build": {
           "label": "Build",
-          "desc": "Edita o workspace"
+          "desc": "Edita o workspace — pede aprovação antes de rodar comandos"
         },
         "yolo": {
           "label": "Yolo",
