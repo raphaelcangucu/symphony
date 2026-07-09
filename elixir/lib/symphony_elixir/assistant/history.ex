@@ -312,6 +312,49 @@ defmodule SymphonyElixir.Assistant.History do
     patch_current_turn(thread, fn turn -> merge_codex(turn, attrs) end)
   end
 
+  @doc "Upserts a running tool snapshot on the current turn and bumps activity."
+  @spec upsert_active_tool(Thread.t(), map()) :: {:ok, Thread.t()} | {:error, Ecto.Changeset.t()}
+  def upsert_active_tool(%Thread{} = thread, tool) when is_map(tool) do
+    tool = stringify_tool(tool)
+    id = active_tool_id!(tool)
+    tool = Map.put(tool, "id", id)
+
+    patch_current_turn(thread, fn turn ->
+      tools =
+        turn
+        |> active_tools()
+        |> Enum.reject(&(&1["id"] == id))
+
+      turn
+      |> Map.put("active_tools", tools ++ [tool])
+      |> Map.put("last_activity_at", now_iso())
+    end)
+  end
+
+  def upsert_active_tool(%Thread{}, _tool), do: raise(ArgumentError, "active tool must be a map")
+
+  @doc "Removes a running tool snapshot from the current turn and bumps activity."
+  @spec remove_active_tool(Thread.t(), String.t()) :: {:ok, Thread.t()} | {:error, Ecto.Changeset.t()}
+  def remove_active_tool(%Thread{} = thread, tool_id) when is_binary(tool_id) do
+    tool_id = active_tool_id!(%{"id" => tool_id})
+
+    patch_current_turn(thread, fn turn ->
+      tools = Enum.reject(active_tools(turn), &(&1["id"] == tool_id))
+
+      turn
+      |> Map.put("active_tools", tools)
+      |> Map.put("last_activity_at", now_iso())
+    end)
+  end
+
+  def remove_active_tool(%Thread{}, _tool_id), do: raise(ArgumentError, "active tool id must be a string")
+
+  @doc "Bumps the current turn activity timestamp."
+  @spec touch_turn_activity(Thread.t()) :: {:ok, Thread.t()} | {:error, Ecto.Changeset.t()}
+  def touch_turn_activity(%Thread{} = thread) do
+    patch_current_turn(thread, &Map.put(&1, "last_activity_at", now_iso()))
+  end
+
   @doc "Transition the current turn to completed."
   @spec complete_turn_state(Thread.t(), map()) :: {:ok, Thread.t()} | {:error, Ecto.Changeset.t()}
   def complete_turn_state(%Thread{} = thread, attrs) when is_map(attrs) do
@@ -320,6 +363,7 @@ defmodule SymphonyElixir.Assistant.History do
       |> merge_codex(attrs)
       |> Map.put("status", "completed")
       |> Map.put("finished_at", now_iso())
+      |> Map.put("active_tools", [])
     end)
   end
 
@@ -331,6 +375,7 @@ defmodule SymphonyElixir.Assistant.History do
       |> Map.put("status", "failed")
       |> Map.put("error", turn_error_text(reason))
       |> Map.put("finished_at", now_iso())
+      |> Map.put("active_tools", [])
     end)
   end
 
@@ -342,6 +387,7 @@ defmodule SymphonyElixir.Assistant.History do
       |> Map.put("status", "interrupted")
       |> Map.put("interrupted_reason", reason)
       |> Map.put("finished_at", now_iso())
+      |> Map.put("active_tools", [])
     end)
   end
 
@@ -382,7 +428,9 @@ defmodule SymphonyElixir.Assistant.History do
       turn_id: turn["turn_id"],
       started_at: turn["started_at"],
       finished_at: turn["finished_at"],
-      can_resume: turn["status"] == "interrupted"
+      can_resume: turn["status"] == "interrupted",
+      active_tools: active_tools(turn),
+      last_activity_at: turn["last_activity_at"]
     }
   end
 
@@ -654,6 +702,45 @@ defmodule SymphonyElixir.Assistant.History do
       turn -> update_thread(thread, %{metadata: Map.put(metadata || %{}, @current_turn_key, fun.(turn))})
     end
   end
+
+  defp active_tools(%{"active_tools" => tools}) when is_list(tools) do
+    Enum.filter(tools, &is_map/1)
+  end
+
+  defp active_tools(%{"active_tools" => nil}), do: []
+  defp active_tools(_turn), do: []
+
+  defp stringify_tool(tool) when is_map(tool) do
+    %{}
+    |> put_tool_field("id", field_any(tool, "id"))
+    |> put_tool_field("name", field_any(tool, "name"))
+    |> put_tool_field("arguments_summary", field_any(tool, "arguments_summary"))
+    |> put_tool_field("started_at", field_any(tool, "started_at"))
+  end
+
+  defp put_tool_field(tool, _key, nil), do: tool
+  defp put_tool_field(tool, key, value), do: Map.put(tool, key, stringify(value))
+
+  defp active_tool_id!(tool) do
+    case field_any(tool, "id") do
+      id when is_binary(id) ->
+        case String.trim(id) do
+          "" -> raise ArgumentError, "active tool requires id"
+          trimmed -> trimmed
+        end
+
+      nil ->
+        raise ArgumentError, "active tool requires id"
+
+      id ->
+        id
+        |> stringify()
+        |> active_tool_id_from_string!()
+    end
+  end
+
+  defp active_tool_id_from_string!(""), do: raise(ArgumentError, "active tool requires id")
+  defp active_tool_id_from_string!(id), do: id
 
   defp merge_codex(turn, attrs) do
     codex_thread_id = stringify(Map.get(attrs, :codex_thread_id)) || turn["codex_thread_id"]

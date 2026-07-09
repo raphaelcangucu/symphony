@@ -74,6 +74,111 @@ defmodule SymphonyElixir.Assistant.TurnHistoryTest do
     assert turn["interrupted_reason"] == "task_crash"
   end
 
+  test "upsert_active_tool records tool and last_activity_at", %{thread: thread} do
+    assert {:ok, thread} =
+             History.start_turn_state(thread, %{trigger: "user", prompt: "go", agent_kind: "claude"})
+
+    tool = %{
+      "id" => "tool-1",
+      "name" => "Bash",
+      "arguments_summary" => "pest --parallel --shard=3/3",
+      "started_at" => "2026-07-09T12:00:00Z"
+    }
+
+    assert {:ok, updated} = History.upsert_active_tool(thread, tool)
+
+    turn = History.current_turn(updated)
+    assert turn["active_tools"] == [tool]
+    assert is_binary(turn["last_activity_at"])
+
+    payload = History.turn_payload(updated)
+    assert payload.active_tools == [tool]
+    assert is_binary(payload.last_activity_at)
+  end
+
+  test "upsert_active_tool replaces existing tool by id", %{thread: thread} do
+    assert {:ok, thread} =
+             History.start_turn_state(thread, %{trigger: "user", prompt: "go", agent_kind: "claude"})
+
+    assert {:ok, thread} =
+             History.upsert_active_tool(thread, %{
+               id: "tool-1",
+               name: "Bash",
+               arguments_summary: "ls",
+               started_at: "2026-07-09T12:00:00Z"
+             })
+
+    assert {:ok, updated} =
+             History.upsert_active_tool(thread, %{
+               id: "tool-1",
+               name: "Bash",
+               arguments_summary: "pwd",
+               started_at: "2026-07-09T12:00:01Z"
+             })
+
+    assert History.current_turn(updated)["active_tools"] == [
+             %{
+               "id" => "tool-1",
+               "name" => "Bash",
+               "arguments_summary" => "pwd",
+               "started_at" => "2026-07-09T12:00:01Z"
+             }
+           ]
+  end
+
+  test "remove_active_tool drops matching id", %{thread: thread} do
+    assert {:ok, thread} =
+             History.start_turn_state(thread, %{trigger: "user", prompt: "go", agent_kind: "claude"})
+
+    {:ok, thread} =
+      History.upsert_active_tool(thread, %{
+        "id" => "tool-1",
+        "name" => "Bash",
+        "arguments_summary" => "ls",
+        "started_at" => "2026-07-09T12:00:00Z"
+      })
+
+    assert {:ok, updated} = History.remove_active_tool(thread, "tool-1")
+
+    turn = History.current_turn(updated)
+    assert turn["active_tools"] == []
+    assert is_binary(turn["last_activity_at"])
+  end
+
+  test "touch_turn_activity bumps last_activity_at", %{thread: thread} do
+    assert {:ok, thread} =
+             History.start_turn_state(thread, %{trigger: "user", prompt: "go", agent_kind: "claude"})
+
+    assert {:ok, updated} = History.touch_turn_activity(thread)
+    assert is_binary(History.current_turn(updated)["last_activity_at"])
+  end
+
+  test "terminal turn states clear active_tools", %{thread: thread} do
+    assert {:ok, thread} =
+             History.start_turn_state(thread, %{trigger: "user", prompt: "go", agent_kind: "claude"})
+
+    {:ok, thread} =
+      History.upsert_active_tool(thread, %{
+        "id" => "tool-1",
+        "name" => "Bash",
+        "arguments_summary" => "ls",
+        "started_at" => "2026-07-09T12:00:00Z"
+      })
+
+    assert {:ok, completed} = History.complete_turn_state(thread, %{})
+    assert History.current_turn(completed)["active_tools"] == []
+
+    {:ok, thread} = History.start_turn_state(thread, %{trigger: "user", prompt: "go"})
+    {:ok, thread} = History.upsert_active_tool(thread, %{"id" => "tool-1"})
+    assert {:ok, failed} = History.fail_turn_state(thread, "boom")
+    assert History.current_turn(failed)["active_tools"] == []
+
+    {:ok, thread} = History.start_turn_state(thread, %{trigger: "user", prompt: "go"})
+    {:ok, thread} = History.upsert_active_tool(thread, %{"id" => "tool-1"})
+    assert {:ok, interrupted} = History.interrupt_turn_state(thread, "user_stop")
+    assert History.current_turn(interrupted)["active_tools"] == []
+  end
+
   test "turn_elapsed_seconds is non-negative while running and nil otherwise", %{thread: thread} do
     {:ok, running} = History.start_turn_state(thread, %{trigger: "user", prompt: "x"})
     assert History.turn_elapsed_seconds(running) >= 0
