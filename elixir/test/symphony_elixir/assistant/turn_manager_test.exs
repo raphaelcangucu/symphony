@@ -109,6 +109,61 @@ defmodule SymphonyElixir.Assistant.TurnManagerTest do
     assert_receive {:assistant_turn_finished, _}, 1_000
   end
 
+  test "interrupt sends agent_interrupt, clears active tools, and keeps interrupted state", %{thread: thread} do
+    TurnManager.subscribe(thread.id)
+    test_pid = self()
+
+    run = fn ->
+      send(test_pid, {:worker, self()})
+
+      receive do
+        {:agent_interrupt} ->
+          send(test_pid, {:worker_interrupted, self()})
+
+          receive do
+            {:codex_interrupt} -> send(test_pid, {:unexpected_codex_interrupt, self()})
+          after
+            50 -> :ok
+          end
+      after
+        2_000 ->
+          send(test_pid, {:worker_timeout, self()})
+      end
+
+      {:error, :interrupted}
+    end
+
+    assert {:ok, %{pid: worker}} = TurnManager.start_turn(thread.id, "stop me", run: run, reply_to: self())
+    assert_receive {:worker, ^worker}, 1_000
+    assert_receive {:turn_status, :running, %{status: "running"}}, 1_000
+
+    {:ok, running_thread} = History.get_thread(thread.id)
+
+    {:ok, _with_tool} =
+      History.upsert_active_tool(running_thread, %{
+        "id" => "tool-stop",
+        "name" => "Bash",
+        "arguments_summary" => "sleep 30",
+        "started_at" => "2026-07-09T12:00:00Z"
+      })
+
+    assert :ok = TurnManager.interrupt(thread.id, "user_stop")
+    assert_receive {:worker_interrupted, ^worker}, 1_000
+    refute_receive {:unexpected_codex_interrupt, ^worker}, 100
+
+    assert_receive {:turn_status, :interrupted, %{status: "interrupted", can_resume: true, active_tools: []}},
+                   1_000
+
+    assert_receive {:assistant_turn_finished, {:error, :interrupted}}, 1_000
+    Process.sleep(20)
+
+    {:ok, interrupted_thread} = History.get_thread(thread.id)
+    turn = History.current_turn(interrupted_thread)
+    assert turn["status"] == "interrupted"
+    assert turn["interrupted_reason"] == "user_stop"
+    assert turn["active_tools"] == []
+  end
+
   test "enqueue drains the next turn when the current one finishes", %{thread: thread} do
     test_pid = self()
 

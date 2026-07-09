@@ -305,6 +305,62 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
     assert History.current_turn(completed_thread)["active_tools"] == []
   end
 
+  test "stop_turn interrupts the running turn and pushes interrupted status" do
+    test_pid = self()
+
+    runner = fn _workspace, _prompt, _issue, opts ->
+      tool_call = %{
+        id: "tool-stop",
+        name: "Bash",
+        arguments: %{"command" => "sleep 30"}
+      }
+
+      Keyword.fetch!(opts, :on_tool_call_started).(tool_call)
+      send(test_pid, {:runner_started, self()})
+
+      receive do
+        {:agent_interrupt} ->
+          send(test_pid, {:agent_interrupted, self()})
+
+          receive do
+            {:codex_interrupt} -> send(test_pid, {:codex_interrupted, self()})
+          after
+            50 -> :ok
+          end
+      after
+        2_000 ->
+          send(test_pid, {:runner_timeout, self()})
+      end
+
+      {:error, :interrupted}
+    end
+
+    Application.put_env(:symphony_elixir, :assistant_runner, runner)
+    topic = "assistant:issue:macro-markets:DIS-STOP"
+
+    {:ok, %{thread_id: thread_id}, socket} =
+      socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
+      |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, topic)
+
+    ref = push(socket, "send_message", %{"message" => "go", "context" => %{}})
+    assert_reply(ref, :ok, %{})
+    assert_receive {:runner_started, runner_pid}, 2_000
+    assert_push("tool_call_started", %{tool_call: %{name: "Bash"}})
+
+    stop_ref = push(socket, "stop_turn", %{})
+    assert_reply(stop_ref, :ok, %{})
+    assert_receive {:agent_interrupted, ^runner_pid}, 1_000
+    refute_receive {:codex_interrupted, ^runner_pid}, 100
+
+    assert_push("turn_status", %{status: "interrupted", can_resume: true, active_tools: []})
+
+    {:ok, interrupted_thread} = History.get_thread(thread_id)
+    turn = History.current_turn(interrupted_thread)
+    assert turn["status"] == "interrupted"
+    assert turn["interrupted_reason"] == "user_stop"
+    assert turn["active_tools"] == []
+  end
+
   test "a send while running steers the live turn instead of starting a second one" do
     test_pid = self()
 

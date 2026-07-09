@@ -83,6 +83,12 @@ defmodule SymphonyElixir.Assistant.TurnManager do
     GenServer.cast(__MODULE__, {:enqueue, thread_id, prompt, opts})
   end
 
+  @doc "Interrupt the live worker for a thread and persist an interrupted turn state."
+  @spec interrupt(integer(), String.t()) :: :ok | {:error, term()}
+  def interrupt(thread_id, reason) when is_integer(thread_id) and is_binary(reason) do
+    GenServer.call(__MODULE__, {:interrupt, thread_id, reason})
+  end
+
   @doc "Resolve the live worker pid + codex turn id for cross-channel steer/interrupt."
   @spec steer_target(integer()) :: {:ok, pid(), String.t() | nil} | :error
   def steer_target(thread_id) when is_integer(thread_id) do
@@ -139,6 +145,22 @@ defmodule SymphonyElixir.Assistant.TurnManager do
       {:reply, {:error, :turn_in_progress}, state}
     else
       do_start_turn(thread_id, prompt, opts, state)
+    end
+  end
+
+  @impl true
+  def handle_call({:interrupt, thread_id, reason}, _from, state) do
+    worker_pid = interrupt_worker_pid(thread_id, state)
+    if is_pid(worker_pid), do: send(worker_pid, {:agent_interrupt})
+
+    case persist_interrupt(thread_id, reason) do
+      {:ok, updated_thread} ->
+        state = cleanup_interrupted_turn(thread_id, state)
+        broadcast_from(self(), thread_id, {:turn_status, :interrupted, History.turn_payload(updated_thread)})
+        {:reply, :ok, state}
+
+      {:error, reason} ->
+        {:reply, {:error, reason}, state}
     end
   end
 
@@ -290,6 +312,39 @@ defmodule SymphonyElixir.Assistant.TurnManager do
     with {:ok, thread} <- History.get_thread(thread_id),
          true <- History.turn_running?(thread) do
       History.interrupt_turn_state(thread, "task_crash")
+    end
+  end
+
+  defp persist_interrupt(thread_id, reason) do
+    with {:ok, thread} <- History.get_thread(thread_id),
+         {:ok, updated_thread} <- History.interrupt_turn_state(thread, reason) do
+      {:ok, updated_thread}
+    end
+  end
+
+  defp interrupt_worker_pid(thread_id, state) do
+    case lookup(thread_id) do
+      {pid, _turn_id} when is_pid(pid) ->
+        pid
+
+      _ ->
+        case Map.get(state, {:turn, thread_id}) do
+          %{pid: pid} when is_pid(pid) -> pid
+          _ -> nil
+        end
+    end
+  end
+
+  defp cleanup_interrupted_turn(thread_id, state) do
+    case Map.pop(state, {:turn, thread_id}) do
+      {%{monitor_ref: ref}, rest} ->
+        Process.demonitor(ref, [:flush])
+        unregister(thread_id)
+        Map.delete(rest, {:queue, thread_id})
+
+      {_entry, rest} ->
+        unregister(thread_id)
+        Map.delete(rest, {:queue, thread_id})
     end
   end
 

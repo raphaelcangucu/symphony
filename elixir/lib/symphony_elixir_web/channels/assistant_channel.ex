@@ -187,6 +187,19 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     {:reply, :ok, socket}
   end
 
+  def handle_in("stop_turn", _payload, socket) do
+    case thread_id_from_socket(socket) do
+      thread_id when is_integer(thread_id) ->
+        case TurnManager.interrupt(thread_id, "user_stop") do
+          :ok -> {:reply, :ok, socket}
+          {:error, reason} -> {:reply, {:error, %{reason: error_reason(reason)}}, socket}
+        end
+
+      _ ->
+        {:reply, {:error, %{reason: "thread is required"}}, socket}
+    end
+  end
+
   def handle_in("set_goal_mode", %{"goal_mode" => false}, socket) do
     with {:ok, thread} <- issue_thread(socket),
          {:ok, _payload, updated_thread} <- AuthoringGoalControl.clear(thread) do
@@ -688,7 +701,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     if claude_approval?(request) do
       ApprovalBroker.resolve(request_id, :deny)
     else
-      if is_pid(turn_pid), do: send(turn_pid, {:codex_interrupt})
+      if is_pid(turn_pid), do: send(turn_pid, {:agent_interrupt})
     end
   end
 
@@ -1626,7 +1639,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   defp finished_message(_), do: nil
 
   defp pause_running_turn(socket) do
-    if is_pid(socket.assigns[:turn_pid]), do: send(socket.assigns.turn_pid, {:codex_interrupt})
+    if is_pid(socket.assigns[:turn_pid]), do: send(socket.assigns.turn_pid, {:agent_interrupt})
     assign(socket, :goal_paused, true)
   end
 
