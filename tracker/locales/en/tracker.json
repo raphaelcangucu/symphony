@@ -2270,7 +2270,11 @@
         "fileTooLarge": "Files must be 5 MB or smaller.",
         "audioTooLarge": "Audio recordings must be 8 MB or smaller.",
         "readAudioFailed": "Failed to read audio."
-      }
+      },
+      "moreTools": "More",
+      "moreToolsAria": "More composer tools",
+      "modelChipAria": "Agent, model, and reasoning",
+      "compactModelMenu": "Model settings"
     },
     "authoring": {
       "chatAria": "Issue authoring chat",

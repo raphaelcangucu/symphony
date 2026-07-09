@@ -5,9 +5,14 @@ import { useTranslation } from "react-i18next";
 import { AssistantTasksToolbarToggle, type AssistantTasksDockControl } from "@/components/agent-activity";
 import { ProjectAssistantPanel } from "@/components/assistant/ProjectAssistantPanel";
 import { IssueSessionSplitLayout } from "@/components/sessions/IssueSessionSplitLayout";
+import {
+  sessionToolbarChipClassName,
+  sessionToolbarIconButtonClassName,
+} from "@/components/sessions/sessionToolbarStyles";
 import { WorkspaceDiffStatsChip } from "@/components/sessions/WorkspaceDiffStatsChip";
 import { useAssistantThreadMetadata } from "@/hooks/useAssistantThreadMetadata";
 import { useWorkspaceDiffStats } from "@/hooks/useWorkspaceDiffStats";
+import { cn } from "@/lib/utils";
 import type { WorkspaceView } from "@/lib/workspaceRoutes";
 import type { RecentSession } from "@/types/recents";
 
@@ -47,7 +52,7 @@ export function AssistantSessionTabContent({
           view={view}
           headerStart={
             <span
-              className="inline-flex min-w-0 items-center gap-1.5 rounded-full border border-border/70 bg-muted/40 px-2 py-0.5 font-mono text-[11px] font-medium text-muted-foreground"
+              className={cn(sessionToolbarChipClassName, "font-mono")}
               title={t("sessions.issueThreadHint", { identifier: issueIdentifier })}
             >
               <GitBranch className="h-3 w-3 shrink-0" />
@@ -62,7 +67,7 @@ export function AssistantSessionTabContent({
                 aria-label={t("issue.diff.button")}
                 title={t("issue.diff.shortcutHint")}
                 onClick={() => setDiffRequestId((current) => current + 1)}
-                className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                className={sessionToolbarIconButtonClassName}
               >
                 <GitCompare className="h-4 w-4" />
               </button>

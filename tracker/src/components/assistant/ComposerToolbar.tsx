@@ -1,5 +1,6 @@
-import { Bot, Brain, ChevronDown, Feather, Flame, Sparkles } from "lucide-react";
-import type { ReactNode } from "react";
+import { Bot, Brain, ChevronDown, Ellipsis, Feather, Flame, Sparkles } from "lucide-react";
+import { type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 
 import { ModelMenu } from "@/components/assistant/ModelMenu";
@@ -14,16 +15,19 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   catalogFor,
   effortLabel,
   effortsForModel,
+  modelLabel,
   type AssistantAgentCatalog,
   type AssistantCatalogBundle,
   type AssistantComposerSettings,
   type AssistantEffort,
   type AssistantModelOption,
 } from "@/lib/assistantSettings";
+import { cn } from "@/lib/utils";
 import type { AgentKind } from "@/types/issue";
 
 interface ComposerToolbarProps {
@@ -34,6 +38,8 @@ interface ComposerToolbarProps {
   disabled: boolean;
   composerDisabled: boolean;
   agentMenuDisabled: boolean;
+  /** Single chip with nested agent/model/effort sections (narrow viewports). */
+  compact?: boolean;
   onAgentChange: (agent: AgentKind) => void;
   onModelChange: (model: string) => void;
   onEffortChange: (effort: AssistantEffort) => void;
@@ -48,11 +54,30 @@ export function ComposerToolbar({
   disabled,
   composerDisabled,
   agentMenuDisabled,
+  compact = false,
   onAgentChange,
   onModelChange,
   onEffortChange,
 }: ComposerToolbarProps) {
   const effortOptions = effortsForModel(catalog, settings.model);
+
+  if (compact) {
+    return (
+      <CompactModelChip
+        bundle={bundle}
+        catalog={catalog}
+        agent={agent}
+        settings={settings}
+        effortOptions={effortOptions}
+        disabled={disabled}
+        composerDisabled={composerDisabled}
+        agentMenuDisabled={agentMenuDisabled}
+        onAgentChange={onAgentChange}
+        onModelChange={onModelChange}
+        onEffortChange={onEffortChange}
+      />
+    );
+  }
 
   return (
     <>
@@ -81,6 +106,273 @@ export function ComposerToolbar({
         />
       )}
     </>
+  );
+}
+
+interface ComposerMoreMenuProps {
+  children: ReactNode;
+  disabled?: boolean;
+}
+
+interface MoreMenuPosition {
+  top: number;
+  left: number;
+  openUpward: boolean;
+}
+
+/** Collapses secondary composer tools into a portaled More menu (avoids card overflow clipping). */
+export function ComposerMoreMenu({ children, disabled = false }: ComposerMoreMenuProps) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const [position, setPosition] = useState<MoreMenuPosition | null>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const panelId = useId();
+
+  useLayoutEffect(() => {
+    if (!open || !triggerRef.current) {
+      setPosition(null);
+      return;
+    }
+
+    const updatePosition = () => {
+      const trigger = triggerRef.current;
+      const panel = panelRef.current;
+      if (!trigger) return;
+
+      const rect = trigger.getBoundingClientRect();
+      const panelHeight = panel?.offsetHeight ?? 160;
+      const panelWidth = panel?.offsetWidth ?? 208;
+      const gap = 6;
+      const spaceAbove = rect.top;
+      const spaceBelow = window.innerHeight - rect.bottom;
+      // Prefer below the trigger so the menu does not cover the textarea.
+      const openUpward = spaceBelow < panelHeight + gap && spaceAbove > spaceBelow;
+      const rawTop = openUpward ? rect.top - gap - panelHeight : rect.bottom + gap;
+      const rawLeft = rect.left;
+      const top = Math.max(8, Math.min(rawTop, window.innerHeight - panelHeight - 8));
+      const left = Math.max(8, Math.min(rawLeft, window.innerWidth - panelWidth - 8));
+      setPosition({ top, left, openUpward });
+    };
+
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [open, children]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+
+    const onPointerDown = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (triggerRef.current?.contains(target)) return;
+      if (panelRef.current?.contains(target)) return;
+      // Nested Radix menus portal outside our panel — keep More open while they are used.
+      if (target instanceof Element && target.closest("[data-radix-popper-content-wrapper]")) return;
+      setOpen(false);
+    };
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
+  if (children == null) return null;
+
+  const panel =
+    open && typeof document !== "undefined"
+      ? createPortal(
+          <div
+            ref={panelRef}
+            id={panelId}
+            role="menu"
+            aria-label={t("assistant.composer.moreToolsAria")}
+            style={
+              position
+                ? { top: position.top, left: position.left }
+                : { top: -9999, left: -9999, visibility: "hidden" }
+            }
+            className={cn(
+              "fixed z-50 min-w-[13rem] rounded-md border bg-popover p-1 text-popover-foreground shadow-md",
+              "flex flex-col gap-0.5",
+              "[&_button]:h-8 [&_button]:w-full [&_button]:justify-start [&_button]:rounded-sm [&_button]:px-2 [&_button]:font-normal",
+              "[&_button_span.hidden]:inline",
+              "[&_>span]:mx-0.5 [&_>span]:my-0.5 [&_>span]:w-[calc(100%-0.25rem)] [&_>span]:justify-start",
+            )}
+            onClick={(event) => {
+              const target = event.target;
+              if (!(target instanceof Element)) return;
+              if (target.closest("[data-radix-popper-content-wrapper]")) return;
+              const button = target.closest("button");
+              if (!button || button.getAttribute("aria-haspopup") === "menu") return;
+              window.setTimeout(() => setOpen(false), 0);
+            }}
+          >
+            {children}
+          </div>,
+          document.body,
+        )
+      : null;
+
+  return (
+    <>
+      <Button
+        ref={triggerRef}
+        type="button"
+        variant="ghost"
+        size="icon"
+        className={cn(
+          "h-8 w-8 rounded-full text-muted-foreground",
+          open && "bg-accent text-foreground",
+        )}
+        disabled={disabled}
+        aria-expanded={open}
+        aria-controls={panelId}
+        aria-haspopup="menu"
+        aria-label={t("assistant.composer.moreToolsAria")}
+        title={t("assistant.composer.moreTools")}
+        onClick={() => setOpen((previous) => !previous)}
+      >
+        <Ellipsis className="h-4 w-4" />
+      </Button>
+      {panel}
+    </>
+  );
+}
+
+function CompactModelChip({
+  bundle,
+  catalog,
+  agent,
+  settings,
+  effortOptions,
+  disabled,
+  composerDisabled,
+  agentMenuDisabled,
+  onAgentChange,
+  onModelChange,
+  onEffortChange,
+}: {
+  bundle: AssistantCatalogBundle;
+  catalog: AssistantAgentCatalog;
+  agent: AgentKind;
+  settings: AssistantComposerSettings;
+  effortOptions: ReturnType<typeof effortsForModel>;
+  disabled: boolean;
+  composerDisabled: boolean;
+  agentMenuDisabled: boolean;
+  onAgentChange: (agent: AgentKind) => void;
+  onModelChange: (model: string) => void;
+  onEffortChange: (effort: AssistantEffort) => void;
+}) {
+  const { t } = useTranslation();
+  const agentDisabled = disabled || agentMenuDisabled;
+  const settingsDisabled = disabled || composerDisabled;
+  const modelName = modelLabel(catalog, settings.model);
+  const effortName =
+    effortOptions.length > 0 ? effortLabel(catalog, settings.model, settings.effort, t) : null;
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-8 max-w-[11rem] gap-1 px-2 text-xs"
+          disabled={disabled}
+          aria-label={t("assistant.composer.modelChipAria")}
+          title={[agentKindLabel(agent, t), modelName, effortName].filter(Boolean).join(" · ")}
+        >
+          <Bot className="h-3.5 w-3.5 shrink-0 text-emerald-500" />
+          <span className="truncate">{modelName}</span>
+          <ChevronDown className="h-3 w-3 shrink-0 opacity-60" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-64 p-1">
+        <DropdownMenuLabel>{t("assistant.composer.compactModelMenu")}</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
+          {t("assistant.composer.agentMenu")}
+        </DropdownMenuLabel>
+        <DropdownMenuRadioGroup
+          value={agent}
+          onValueChange={(value) => {
+            if (agentDisabled) return;
+            onAgentChange(value as AgentKind);
+          }}
+        >
+          {bundle.agents.map((entry) => (
+            <DropdownMenuRadioItem key={entry.agent} value={entry.agent} disabled={agentDisabled}>
+              {agentKindLabel(entry.agent, t)}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
+          {t("assistant.modelMenu.modelSuffix")}
+        </DropdownMenuLabel>
+        <ScrollArea className="max-h-48" onWheel={(event) => event.stopPropagation()}>
+          <DropdownMenuRadioGroup
+            value={settings.model}
+            onValueChange={(value) => {
+              if (settingsDisabled) return;
+              onModelChange(value);
+            }}
+          >
+            {catalog.models.map((entry) => (
+              <DropdownMenuRadioItem
+                key={entry.id ?? entry.model}
+                value={entry.model}
+                disabled={settingsDisabled}
+                className="gap-2"
+              >
+                <span className="truncate">{entry.label || entry.model}</span>
+              </DropdownMenuRadioItem>
+            ))}
+          </DropdownMenuRadioGroup>
+        </ScrollArea>
+        {effortOptions.length > 0 ? (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
+              {t("assistant.composer.reasoningEffort")}
+            </DropdownMenuLabel>
+            <DropdownMenuRadioGroup
+              value={settings.effort}
+              onValueChange={(value) => {
+                if (settingsDisabled) return;
+                onEffortChange(value as AssistantEffort);
+              }}
+            >
+              {effortOptions.map((option) => (
+                <DropdownMenuRadioItem
+                  key={option.id}
+                  value={option.id}
+                  disabled={settingsDisabled}
+                  className="gap-2"
+                >
+                  {effortIconElement(option.id, `compact-effort-icon-${option.id}`)}
+                  {option.label}
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+          </>
+        ) : null}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 

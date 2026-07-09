@@ -1,6 +1,10 @@
 import { ListChecks } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
+import {
+  sessionToolbarChipClassName,
+  sessionToolbarIconButtonActiveClassName,
+} from "@/components/sessions/sessionToolbarStyles";
 import { cn } from "@/lib/utils";
 
 export interface AssistantTasksDockControl {
@@ -31,13 +35,14 @@ export function AssistantTasksToolbarToggle({ control, className }: AssistantTas
       title={open ? t("issue.tasks.hide") : t("issue.tasks.show")}
       onClick={toggle}
       className={cn(
-        "inline-flex h-7 shrink-0 items-center gap-1 rounded-md px-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-        open && "bg-accent text-foreground",
+        sessionToolbarChipClassName,
+        "cursor-pointer transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+        open && sessionToolbarIconButtonActiveClassName,
         className,
       )}
     >
-      <ListChecks className="h-4 w-4 shrink-0" aria-hidden />
-      <span className="text-[11px] tabular-nums">{t("issue.tasks.progress", { done, total })}</span>
+      <ListChecks className="h-3.5 w-3.5 shrink-0" aria-hidden />
+      <span className="tabular-nums">{t("issue.tasks.progress", { done, total })}</span>
     </button>
   );
 }

@@ -2,6 +2,7 @@ import { ChevronDown, Code2 } from "lucide-react";
 import { useCallback } from "react";
 import { useTranslation } from "react-i18next";
 
+import { sessionToolbarLabeledButtonClassName } from "@/components/sessions/sessionToolbarStyles";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -48,7 +49,7 @@ export function IssueEditorMenu({ projectSlug, identifier, enabled = true, compa
           type="button"
           variant="outline"
           size="sm"
-          className={compact ? "h-7 gap-1 px-2 text-xs" : undefined}
+          className={compact ? sessionToolbarLabeledButtonClassName : undefined}
           disabled={!anyEditorAvailable && !editor.loading}
           title={editorMenuTitle}
           aria-label={t("issue.drawer.openInCode")}
