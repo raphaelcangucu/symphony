@@ -38,9 +38,14 @@ function groupLabel(
 interface ToolActivityGroupProps {
   group: ToolCallGroup;
   taskSnapshot?: AgentTaskSnapshot | null;
+  onKillTool?: (toolCallId: string) => void;
 }
 
-export function ToolActivityGroup({ group, taskSnapshot = null }: ToolActivityGroupProps) {
+export function ToolActivityGroup({
+  group,
+  taskSnapshot = null,
+  onKillTool,
+}: ToolActivityGroupProps) {
   const { t } = useTranslation();
   const summary = summarizeGroup(group);
   const [open, setOpen] = useState(() => defaultOpen(group));
@@ -86,9 +91,11 @@ export function ToolActivityGroup({ group, taskSnapshot = null }: ToolActivityGr
             <ToolActivityItem
               key={rowKey(call, index)}
               toolName={call.name}
+              toolCallId={call.id}
               view={assistantToolCallToView(call)}
               taskSnapshot={taskSnapshot}
               fileActivity={fileActivityFromToolCall(call)}
+              onKillTool={onKillTool}
             />
           ))}
         </div>

@@ -75,12 +75,21 @@ export function normalizeGoalStatus(payload: unknown): AuthoringGoalStatus {
  * only ever true when the backend reports an interrupted turn that can be
  * re-dispatched via `resumeTurn`.
  */
+export interface AssistantActiveTool {
+  id: string;
+  name: string;
+  argumentsSummary: string | null;
+  startedAt: string | null;
+}
+
 export interface AssistantTurnStatus {
   status: string;
   sessionId: string | null;
   startedAt: string | null;
   finishedAt: string | null;
   canResume: boolean;
+  activeTools: AssistantActiveTool[];
+  lastActivityAt: string | null;
 }
 
 export interface AssistantApprovalRequest {
@@ -92,12 +101,23 @@ export interface AssistantApprovalRequest {
   agent: AgentKind | null;
 }
 
+interface BackendActiveToolPayload {
+  id?: string | null;
+  name?: string | null;
+  arguments_summary?: string | null;
+  argumentsSummary?: string | null;
+  started_at?: string | null;
+  startedAt?: string | null;
+}
+
 interface BackendTurnStatusPayload {
   status?: string | null;
   session_id?: string | null;
   started_at?: string | null;
   finished_at?: string | null;
   can_resume?: boolean | null;
+  active_tools?: BackendActiveToolPayload[] | null;
+  last_activity_at?: string | null;
 }
 
 export function normalizeTurnStatus(payload: unknown): AssistantTurnStatus {
@@ -108,7 +128,31 @@ export function normalizeTurnStatus(payload: unknown): AssistantTurnStatus {
     startedAt: typeof data.started_at === "string" ? data.started_at : null,
     finishedAt: typeof data.finished_at === "string" ? data.finished_at : null,
     canResume: data.can_resume === true,
+    activeTools: normalizeActiveTools(data.active_tools),
+    lastActivityAt: typeof data.last_activity_at === "string" ? data.last_activity_at : null,
   };
+}
+
+function normalizeActiveTools(tools: BackendActiveToolPayload[] | null | undefined): AssistantActiveTool[] {
+  if (!Array.isArray(tools)) return [];
+
+  return tools.flatMap((tool) => {
+    const id = typeof tool?.id === "string" ? tool.id.trim() : "";
+    const name = typeof tool?.name === "string" ? tool.name.trim() : "";
+    if (!id || !name) return [];
+
+    const summary = tool.arguments_summary ?? tool.argumentsSummary;
+    const started = tool.started_at ?? tool.startedAt;
+
+    return [
+      {
+        id,
+        name,
+        argumentsSummary: typeof summary === "string" && summary.trim().length > 0 ? summary : null,
+        startedAt: typeof started === "string" && started.trim().length > 0 ? started : null,
+      },
+    ];
+  });
 }
 
 export function readLastTurn(joinPayload: unknown): AssistantTurnStatus | null {
@@ -327,6 +371,18 @@ export function clearAuthoringGoal(channel: Channel): ReturnType<Channel["push"]
 
 export function resumeTurn(channel: Channel): ReturnType<Channel["push"]> {
   return channel.push("resume_turn", {});
+}
+
+export function stopTurn(channel: Channel): ReturnType<Channel["push"]> {
+  return channel.push("stop_turn", {});
+}
+
+export function killTool(channel: Channel, toolCallId: string): ReturnType<Channel["push"]> {
+  if (typeof toolCallId !== "string" || toolCallId.trim().length === 0) {
+    throw new Error("toolCallId is required");
+  }
+
+  return channel.push("kill_tool", { tool_call_id: toolCallId.trim() });
 }
 
 export function requestHistorySync(channel: Channel): ReturnType<Channel["push"]> {

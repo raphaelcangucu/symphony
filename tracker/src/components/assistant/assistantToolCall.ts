@@ -14,14 +14,20 @@ const ACTION_TOOLS = new Set<string>([
 ]);
 
 const ACTION_PREFIXES = ["create_", "update_", "move_", "dispatch_", "provision_", "add_"];
+const SHELL_TOOLS = new Set(["Bash", "bash", "shell", "Shell"]);
 
 export function isActionTool(name: string): boolean {
   if (ACTION_TOOLS.has(name)) return true;
   return ACTION_PREFIXES.some((prefix) => name.startsWith(prefix));
 }
 
+export function isShellTool(name: string): boolean {
+  return SHELL_TOOLS.has(name);
+}
+
 export function assistantToolCallToView(toolCall: AssistantToolCall): ToolCallView {
   const action = isActionTool(toolCall.name);
+  const shellRunning = isShellTool(toolCall.name) && toolCall.status === "running";
   const input = serializeArguments(toolCall.arguments);
   const output = toolCall.output ? formatToolOutput(toolCall.output) : null;
 
@@ -29,9 +35,9 @@ export function assistantToolCallToView(toolCall: AssistantToolCall): ToolCallVi
     toolType: localizeToolName(toolCall.name, input, output),
     description: null,
     status: mapStatus(toolCall.status),
-    input: input ? { value: input, language: "json" } : null,
+    input: input ? { value: input, language: isShellTool(toolCall.name) ? "bash" : "json" } : null,
     output: output ? { value: output, language: "text" } : null,
-    defaultCollapsed: !action,
+    defaultCollapsed: !(action || shellRunning),
   };
 }
 

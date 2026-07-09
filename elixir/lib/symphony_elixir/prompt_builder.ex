@@ -345,7 +345,7 @@ defmodule SymphonyElixir.PromptBuilder do
 
   # Orchestrator dispatches are execution runs — not issue authoring. Inject the
   # vendored subagent-driven-development skill (same pattern as complex-mode
-  # authoring in Assistant.CodexSession) and tell the agent to skip design-first
+  # authoring in Assistant.AgentSession) and tell the agent to skip design-first
   # skills that are already satisfied by injected spec/plan artifacts.
   @doc false
   @spec execution_methodology_section() :: String.t()

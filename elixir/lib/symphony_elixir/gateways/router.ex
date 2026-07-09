@@ -2,7 +2,7 @@ defmodule SymphonyElixir.Gateways.Router do
   @moduledoc "Routes normalized gateway messages through access control, commands, and assistant sessions."
 
   alias SymphonyElixir.Gateways
-  alias SymphonyElixir.Assistant.CodexSession
+  alias SymphonyElixir.Assistant.AgentSession
   alias SymphonyElixir.Gateways.{Binding, CommandParser, InboundMessage, SessionResolver}
   alias SymphonyElixir.Settings
   alias SymphonyElixir.Settings.Gateways, as: GatewaySettings
@@ -205,23 +205,23 @@ defmodule SymphonyElixir.Gateways.Router do
   end
 
   defp run_assistant_turn(%{scope: "freeform"} = thread, binding, message, opts) do
-    CodexSession.send_message_to_thread(thread, message.raw_text, gateway_context(binding, message), runner_opts(binding, opts))
+    AgentSession.send_message_to_thread(thread, message.raw_text, gateway_context(binding, message), runner_opts(binding, opts))
   end
 
   defp run_assistant_turn(%{scope: "project_explore"} = thread, binding, message, opts) do
-    CodexSession.send_message_to_project_explore_thread(thread, message.raw_text, gateway_context(binding, message), runner_opts(binding, opts))
+    AgentSession.send_message_to_project_explore_thread(thread, message.raw_text, gateway_context(binding, message), runner_opts(binding, opts))
   end
 
   defp run_assistant_turn(%{scope: "project"} = thread, binding, message, opts) do
-    CodexSession.send_message_to_thread(thread, message.raw_text, gateway_context(binding, message), runner_opts(binding, opts))
+    AgentSession.send_message_to_thread(thread, message.raw_text, gateway_context(binding, message), runner_opts(binding, opts))
   end
 
   defp run_assistant_turn(%{scope: "issue"} = thread, binding, message, opts) do
-    CodexSession.send_message_to_issue_thread(thread, message.raw_text, gateway_context(binding, message), runner_opts(binding, opts))
+    AgentSession.send_message_to_issue_thread(thread, message.raw_text, gateway_context(binding, message), runner_opts(binding, opts))
   end
 
   defp run_assistant_turn(%{scope: "kb"} = thread, binding, message, opts) do
-    CodexSession.send_message_to_kb_thread(thread, message.raw_text, gateway_context(binding, message), runner_opts(binding, opts))
+    AgentSession.send_message_to_kb_thread(thread, message.raw_text, gateway_context(binding, message), runner_opts(binding, opts))
   end
 
   defp gateway_context(binding, message) do

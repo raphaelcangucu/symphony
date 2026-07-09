@@ -45,6 +45,19 @@ describe("assistant tool call adapter", () => {
     expect(view.defaultCollapsed).toBe(true);
   });
 
+  it("does not default-collapse running Bash tools", () => {
+    const view = assistantToolCallToView(
+      toolCall({
+        id: "t1",
+        name: "Bash",
+        status: "running",
+        arguments: { command: "pest --parallel" },
+      }),
+    );
+    expect(view.defaultCollapsed).toBe(false);
+    expect(view.input?.language).toBe("bash");
+  });
+
   it("maps error status to failed", () => {
     const view = assistantToolCallToView(toolCall({ name: "move_issue", status: "error", output: "Issue not found." }));
     expect(view.status).toBe("failed");

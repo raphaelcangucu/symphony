@@ -22,7 +22,7 @@ defmodule SymphonyElixir.Codex.GoalControl do
   require Logger
 
   alias SymphonyElixir.Codex.CodingAgent
-  alias SymphonyElixir.Codex.Session, as: CodexSession
+  alias SymphonyElixir.Codex.Session, as: CodexStore
   alias SymphonyElixir.{InstanceConfig, ProjectConfig, Repo, Workspace}
   alias SymphonyElixir.LocalTracker.{Context, Project}
   alias SymphonyElixir.Tracker.IssueAdapter
@@ -201,7 +201,7 @@ defmodule SymphonyElixir.Codex.GoalControl do
   defp clear_mirrored_goal(%Project{} = project, identifier) do
     with {:ok, issue} <- IssueAdapter.dispatch(project, :get_issue, [identifier]) do
       issue_ref = issue_ref(project, issue)
-      CodexSession.put_goal(Workspace.path_for_issue(issue_ref), nil)
+      CodexStore.put_goal(Workspace.path_for_issue(issue_ref), nil)
     else
       _ -> :ok
     end

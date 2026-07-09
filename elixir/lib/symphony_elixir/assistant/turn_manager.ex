@@ -83,6 +83,20 @@ defmodule SymphonyElixir.Assistant.TurnManager do
     GenServer.cast(__MODULE__, {:enqueue, thread_id, prompt, opts})
   end
 
+  @doc "Interrupt the live worker for a thread and persist an interrupted turn state."
+  @spec interrupt(integer(), String.t()) :: :ok | {:error, term()}
+  def interrupt(thread_id, reason) when is_integer(thread_id) and is_binary(reason) do
+    GenServer.call(__MODULE__, {:interrupt, thread_id, reason})
+  end
+
+  @doc "Cancel a running tool on the live worker and fan out its canceled status."
+  @spec kill_tool(integer(), String.t()) :: :ok | {:error, :tool_not_running | :no_worker | term()}
+  def kill_tool(thread_id, tool_call_id) when is_integer(thread_id) and is_binary(tool_call_id) do
+    GenServer.call(__MODULE__, {:kill_tool, thread_id, tool_call_id})
+  end
+
+  def kill_tool(_thread_id, _tool_call_id), do: {:error, :invalid_tool_call_id}
+
   @doc "Resolve the live worker pid + codex turn id for cross-channel steer/interrupt."
   @spec steer_target(integer()) :: {:ok, pid(), String.t() | nil} | :error
   def steer_target(thread_id) when is_integer(thread_id) do
@@ -139,6 +153,40 @@ defmodule SymphonyElixir.Assistant.TurnManager do
       {:reply, {:error, :turn_in_progress}, state}
     else
       do_start_turn(thread_id, prompt, opts, state)
+    end
+  end
+
+  @impl true
+  def handle_call({:interrupt, thread_id, reason}, _from, state) do
+    worker_pid = interrupt_worker_pid(thread_id, state)
+    if is_pid(worker_pid), do: send(worker_pid, {:agent_interrupt})
+
+    case persist_interrupt(thread_id, reason) do
+      {:ok, updated_thread} ->
+        state = cleanup_interrupted_turn(thread_id, state)
+        broadcast_from(self(), thread_id, {:turn_status, :interrupted, History.turn_payload(updated_thread)})
+        {:reply, :ok, state}
+
+      {:error, reason} ->
+        {:reply, {:error, reason}, state}
+    end
+  end
+
+  @impl true
+  def handle_call({:kill_tool, thread_id, tool_call_id}, _from, state) do
+    with {:ok, thread} <- History.get_thread(thread_id),
+         {:ok, active_tool} <- fetch_active_tool(thread, tool_call_id),
+         worker_pid when is_pid(worker_pid) <- interrupt_worker_pid(thread_id, state),
+         :ok <- send_kill_tool(worker_pid, tool_call_id),
+         {:ok, _updated_thread} <- History.remove_active_tool(thread, tool_call_id) do
+      broadcast_killed_tool(thread_id, active_tool)
+      {:reply, :ok, state}
+    else
+      {:error, reason} ->
+        {:reply, {:error, reason}, state}
+
+      nil ->
+        {:reply, {:error, :no_worker}, state}
     end
   end
 
@@ -290,6 +338,78 @@ defmodule SymphonyElixir.Assistant.TurnManager do
     with {:ok, thread} <- History.get_thread(thread_id),
          true <- History.turn_running?(thread) do
       History.interrupt_turn_state(thread, "task_crash")
+    end
+  end
+
+  defp persist_interrupt(thread_id, reason) do
+    with {:ok, thread} <- History.get_thread(thread_id),
+         {:ok, updated_thread} <- History.interrupt_turn_state(thread, reason) do
+      {:ok, updated_thread}
+    end
+  end
+
+  defp fetch_active_tool(thread, tool_call_id) do
+    thread
+    |> History.current_turn()
+    |> active_tools()
+    |> Enum.find(&active_tool_id?(&1, tool_call_id))
+    |> case do
+      nil -> {:error, :tool_not_running}
+      active_tool -> {:ok, active_tool}
+    end
+  end
+
+  defp active_tools(%{"active_tools" => tools}) when is_list(tools), do: Enum.filter(tools, &is_map/1)
+  defp active_tools(_turn), do: []
+
+  defp active_tool_id?(tool, tool_call_id) when is_map(tool) do
+    Map.get(tool, "id") == tool_call_id or Map.get(tool, :id) == tool_call_id
+  end
+
+  defp send_kill_tool(worker_pid, tool_call_id) do
+    send(worker_pid, {:kill_tool, tool_call_id})
+    :ok
+  end
+
+  defp broadcast_killed_tool(thread_id, active_tool) do
+    broadcast_from(
+      self(),
+      thread_id,
+      {:turn_stream, "tool_call_completed", %{tool_call: canceled_tool_payload(active_tool)}}
+    )
+  end
+
+  defp canceled_tool_payload(active_tool) do
+    %{
+      id: Map.get(active_tool, "id") || Map.get(active_tool, :id),
+      name: Map.get(active_tool, "name") || Map.get(active_tool, :name),
+      status: "canceled"
+    }
+  end
+
+  defp interrupt_worker_pid(thread_id, state) do
+    case lookup(thread_id) do
+      {pid, _turn_id} when is_pid(pid) ->
+        pid
+
+      _ ->
+        case Map.get(state, {:turn, thread_id}) do
+          %{pid: pid} when is_pid(pid) -> pid
+          _ -> nil
+        end
+    end
+  end
+
+  defp cleanup_interrupted_turn(thread_id, state) do
+    case Map.pop(state, {:turn, thread_id}) do
+      {%{monitor_ref: ref}, rest} ->
+        Process.demonitor(ref, [:flush])
+        unregister(thread_id)
+        Map.delete(rest, {:queue, thread_id})
+
+      {_entry, rest} ->
+        unregister(thread_id)
+        Map.delete(rest, {:queue, thread_id})
     end
   end
 

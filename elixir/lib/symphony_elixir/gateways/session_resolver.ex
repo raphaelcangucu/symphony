@@ -1,7 +1,7 @@
 defmodule SymphonyElixir.Gateways.SessionResolver do
   @moduledoc "Resolves gateway bindings to durable Symphony assistant threads."
 
-  alias SymphonyElixir.Assistant.{CodexSession, History, Thread}
+  alias SymphonyElixir.Assistant.{AgentSession, History, Thread}
   alias SymphonyElixir.Gateways
   alias SymphonyElixir.Gateways.Binding
 
@@ -28,7 +28,7 @@ defmodule SymphonyElixir.Gateways.SessionResolver do
 
   defp create_thread(%Binding{binding_kind: "direct_freeform"} = binding) do
     History.create_gateway_freeform_thread(%{
-      workspace_path: CodexSession.freeform_workspace(binding.id),
+      workspace_path: AgentSession.freeform_workspace(binding.id),
       title: "Telegram DM #{binding.sender_id}",
       agent_kind: binding.default_agent_kind,
       metadata: %{

@@ -134,6 +134,14 @@ defmodule SymphonyElixir.Agent.CliRunner.Base do
 
       {^port, {:exit_status, status}} ->
         Keyword.fetch!(handlers, :on_exit).(status, state)
+
+      {:agent_interrupt} ->
+        kill_port(port)
+        {:error, :interrupted}
+
+      {:kill_tool, _tool_call_id} ->
+        kill_port_children(port)
+        receive_loop(port, timeout_ms, pending_line, state, handlers)
     after
       timeout_ms ->
         kill_port(port)
@@ -236,6 +244,17 @@ defmodule SymphonyElixir.Agent.CliRunner.Base do
     end
 
     stop_port(port)
+  end
+
+  defp kill_port_children(port) when is_port(port) do
+    case :erlang.port_info(port, :os_pid) do
+      {:os_pid, os_pid} ->
+        System.cmd("pkill", ["-9", "-P", to_string(os_pid)], stderr_to_stdout: true)
+        :ok
+
+      _ ->
+        :ok
+    end
   end
 
   @doc """

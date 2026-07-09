@@ -56,7 +56,7 @@ defmodule SymphonyElixir.Assistant.ToolSchemaTest do
     end
   end
 
-  describe "freeform tool registration (CodexSession.run_freeform_turn path)" do
+  describe "freeform tool registration (AgentSession.run_freeform_turn path)" do
     test "ProjectBoardTools.tool_specs/0 builds every scoped tool without raising" do
       assert length(ProjectBoardTools.tool_specs()) == length(ProjectBoardTools.tools())
     end

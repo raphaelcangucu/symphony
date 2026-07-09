@@ -9,9 +9,14 @@ import type { AssistantToolCall } from "@/services/assistant";
 interface ToolActivityTimelineProps {
   toolCalls: AssistantToolCall[];
   taskSnapshot?: AgentTaskSnapshot | null;
+  onKillTool?: (toolCallId: string) => void;
 }
 
-export function ToolActivityTimeline({ toolCalls, taskSnapshot = null }: ToolActivityTimelineProps) {
+export function ToolActivityTimeline({
+  toolCalls,
+  taskSnapshot = null,
+  onKillTool,
+}: ToolActivityTimelineProps) {
   if (toolCalls.length === 0) return null;
 
   const groups = groupToolCalls(toolCalls);
@@ -21,7 +26,12 @@ export function ToolActivityTimeline({ toolCalls, taskSnapshot = null }: ToolAct
       {groups.map((group, groupIndex) => {
         if (group.calls.length > 1) {
           return (
-            <ToolActivityGroup group={group} taskSnapshot={taskSnapshot} key={`group-${group.kind}-${groupIndex}`} />
+            <ToolActivityGroup
+              group={group}
+              taskSnapshot={taskSnapshot}
+              onKillTool={onKillTool}
+              key={`group-${group.kind}-${groupIndex}`}
+            />
           );
         }
 
@@ -32,9 +42,11 @@ export function ToolActivityTimeline({ toolCalls, taskSnapshot = null }: ToolAct
           <ToolActivityItem
             key={key}
             toolName={call.name}
+            toolCallId={call.id}
             view={assistantToolCallToView(call)}
             taskSnapshot={taskSnapshot}
             fileActivity={fileActivityFromToolCall(call)}
+            onKillTool={onKillTool}
           />
         );
       })}

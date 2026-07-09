@@ -19,7 +19,7 @@ defmodule SymphonyElixir.IssueDispatch do
   }
 
   alias SymphonyElixir.Codex.GoalControl
-  alias SymphonyElixir.Codex.Session, as: CodexSession
+  alias SymphonyElixir.Codex.Session, as: CodexStore
   alias SymphonyElixir.LocalTracker.{Context, Project}
   alias SymphonyElixir.Tracker.{IssueAdapter, IssueDTO}
   alias SymphonyElixirWeb.TrackerPresenter
@@ -319,7 +319,7 @@ defmodule SymphonyElixir.IssueDispatch do
 
   defp clear_agent_session(%Project{} = project, identifier, %IssueDTO{} = issue) do
     workspace = run_workspace(project, identifier, issue)
-    CodexSession.clear(workspace)
+    CodexStore.clear(workspace)
     SessionEvents.clear(workspace)
 
     case Context.clear_agent_session_id(project.slug, identifier) do

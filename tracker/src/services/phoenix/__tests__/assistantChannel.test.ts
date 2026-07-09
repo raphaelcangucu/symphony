@@ -7,6 +7,7 @@ import {
   bindAssistantEvents,
   clearAuthoringGoal,
   isTerminalTurnStatus,
+  killTool,
   normalizeGoalStatus,
   normalizeTurnStatus,
   pauseAuthoringGoal,
@@ -16,6 +17,7 @@ import {
   resumeAuthoringGoal,
   resumeTurn,
   setAuthoringGoalObjective,
+  stopTurn,
 } from "../assistantChannel";
 
 describe("assistantThreadTopic", () => {
@@ -292,6 +294,15 @@ describe("turn status channel", () => {
         started_at: "2026-06-22T12:00:00Z",
         finished_at: null,
         can_resume: false,
+        active_tools: [
+          {
+            id: "tool-1",
+            name: "Bash",
+            arguments_summary: "pest --parallel",
+            started_at: "2026-07-09T12:00:00Z",
+          },
+        ],
+        last_activity_at: "2026-07-09T12:01:00Z",
       }),
     ).toEqual({
       status: "running",
@@ -299,6 +310,15 @@ describe("turn status channel", () => {
       startedAt: "2026-06-22T12:00:00Z",
       finishedAt: null,
       canResume: false,
+      activeTools: [
+        {
+          id: "tool-1",
+          name: "Bash",
+          argumentsSummary: "pest --parallel",
+          startedAt: "2026-07-09T12:00:00Z",
+        },
+      ],
+      lastActivityAt: "2026-07-09T12:01:00Z",
     });
 
     expect(normalizeTurnStatus(null)).toEqual({
@@ -307,12 +327,14 @@ describe("turn status channel", () => {
       startedAt: null,
       finishedAt: null,
       canResume: false,
+      activeTools: [],
+      lastActivityAt: null,
     });
   });
 
   it("reads last_turn from a join payload, or null when absent", () => {
     expect(readLastTurn({ last_turn: { status: "interrupted", can_resume: true } })).toEqual(
-      expect.objectContaining({ status: "interrupted", canResume: true }),
+      expect.objectContaining({ status: "interrupted", canResume: true, activeTools: [] }),
     );
     expect(readLastTurn({})).toBeNull();
     expect(readLastTurn(null)).toBeNull();
@@ -325,6 +347,17 @@ describe("turn status channel", () => {
     resumeTurn(channel);
 
     expect(push).toHaveBeenCalledWith("resume_turn", {});
+  });
+
+  it("pushes stop_turn and kill_tool", () => {
+    const push = vi.fn();
+    const channel = { push } as never;
+
+    stopTurn(channel);
+    killTool(channel, "tool-1");
+
+    expect(push).toHaveBeenCalledWith("stop_turn", {});
+    expect(push).toHaveBeenCalledWith("kill_tool", { tool_call_id: "tool-1" });
   });
 
   it("forwards history_synced to onHistorySynced", () => {

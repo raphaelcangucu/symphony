@@ -23,7 +23,7 @@ defmodule SymphonyElixir.Assistant.AuthoringGoalControl do
   alias SymphonyElixir.Assistant.{History, Thread}
   alias SymphonyElixir.Codex.CodingAgent
   alias SymphonyElixir.Codex.GoalControl
-  alias SymphonyElixir.Codex.Session, as: CodexSession
+  alias SymphonyElixir.Codex.Session, as: CodexStore
   alias SymphonyElixir.{InstanceConfig, ProjectConfig, Repo, Workspace}
   alias SymphonyElixir.LocalTracker.Context
 
@@ -254,11 +254,11 @@ defmodule SymphonyElixir.Assistant.AuthoringGoalControl do
   # Authoring and execution share the issue workspace sidecar mirror
   # (`.symphony/codex-session.json`). Clearing only the assistant-thread native
   # goal is not enough: the execution tab reads the mirror via
-  # `CodexSession.read_goal/1`, so a stale objective leaks into execution after
+  # `CodexStore.read_goal/1`, so a stale objective leaks into execution after
   # handoff unless we wipe local artifacts here too.
   defp clear_persisted_goal_artifacts(%Thread{} = thread) do
     case workspace_for_thread(thread) do
-      workspace when is_binary(workspace) -> CodexSession.put_goal(workspace, nil)
+      workspace when is_binary(workspace) -> CodexStore.put_goal(workspace, nil)
       _ -> :ok
     end
 

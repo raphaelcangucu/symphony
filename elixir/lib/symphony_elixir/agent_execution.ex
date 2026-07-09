@@ -14,7 +14,7 @@ defmodule SymphonyElixir.AgentExecution do
   """
 
   alias SymphonyElixir.AgentRouting
-  alias SymphonyElixir.Codex.Session, as: CodexSession
+  alias SymphonyElixir.Codex.Session, as: CodexStore
   alias SymphonyElixir.LocalTracker.{Context, IssueMapper}
   alias SymphonyElixir.{Orchestrator, StatusDashboard}
   alias SymphonyElixir.ProjectConfig
@@ -738,7 +738,7 @@ defmodule SymphonyElixir.AgentExecution do
   end
 
   defp native_mirror_objective(workspace) when is_binary(workspace) do
-    case CodexSession.read_goal(workspace) do
+    case CodexStore.read_goal(workspace) do
       {:ok, %{"objective" => objective}} -> normalize_objective(objective)
       _ -> nil
     end

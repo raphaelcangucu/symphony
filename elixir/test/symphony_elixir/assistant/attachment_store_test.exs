@@ -143,7 +143,7 @@ defmodule SymphonyElixir.Assistant.AttachmentStoreTest do
   end
 
   defp stored_path_workspace(project_slug) do
-    {:ok, workspace} = SymphonyElixir.Assistant.CodexSession.assistant_workspace(project_slug)
+    {:ok, workspace} = SymphonyElixir.Assistant.AgentSession.assistant_workspace(project_slug)
     workspace
   end
 end

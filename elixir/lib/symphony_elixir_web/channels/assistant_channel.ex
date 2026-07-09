@@ -7,7 +7,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
 
   alias SymphonyElixir.Assistant.{
     AuthoringGoalControl,
-    CodexSession,
+    AgentSession,
     GoalRun,
     History,
     Payload,
@@ -21,6 +21,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   alias SymphonyElixirWeb.TrackerAuth
 
   @issue_authoring_tools ~w(create_draft_issue create_issue)
+  @tool_arguments_summary_max_length 200
 
   @impl true
   def join("assistant:issue:" <> raw_issue_topic, _payload, socket) do
@@ -185,6 +186,38 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     push_history_sync(socket)
     {:reply, :ok, socket}
   end
+
+  def handle_in("stop_turn", _payload, socket) do
+    case thread_id_from_socket(socket) do
+      thread_id when is_integer(thread_id) ->
+        case TurnManager.interrupt(thread_id, "user_stop") do
+          :ok -> {:reply, :ok, socket}
+          {:error, reason} -> {:reply, {:error, %{reason: error_reason(reason)}}, socket}
+        end
+
+      _ ->
+        {:reply, {:error, %{reason: "thread is required"}}, socket}
+    end
+  end
+
+  def handle_in("kill_tool", %{"tool_call_id" => tool_call_id}, socket) when is_binary(tool_call_id) do
+    case {thread_id_from_socket(socket), normalize_tool_call_id(tool_call_id)} do
+      {thread_id, tool_call_id} when is_integer(thread_id) and is_binary(tool_call_id) ->
+        case TurnManager.kill_tool(thread_id, tool_call_id) do
+          :ok -> {:reply, :ok, socket}
+          {:error, reason} -> {:reply, {:error, kill_tool_error_payload(reason)}, socket}
+        end
+
+      {_thread_id, nil} ->
+        {:reply, {:error, %{reason: "tool_call_id is required"}}, socket}
+
+      _ ->
+        {:reply, {:error, %{reason: "thread is required"}}, socket}
+    end
+  end
+
+  def handle_in("kill_tool", _payload, socket),
+    do: {:reply, {:error, %{reason: "tool_call_id is required"}}, socket}
 
   def handle_in("set_goal_mode", %{"goal_mode" => false}, socket) do
     with {:ok, thread} <- issue_thread(socket),
@@ -564,14 +597,18 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     {:noreply, socket}
   end
 
-  # Goal-turn streaming fanned out to reloaded/other tabs (the originating tab
+  # Durable turn streaming fanned out to reloaded/other tabs (the originating tab
   # receives events directly from the run Task's callbacks).
-  def handle_info({:goal_stream, event, payload}, socket) do
-    if socket.assigns[:turn_status] != :running and is_binary(event) and is_map(payload) do
+  def handle_info({:turn_stream, event, payload}, socket) do
+    if should_push_turn_stream?(socket, event, payload) do
       push(socket, event, payload)
     end
 
     {:noreply, socket}
+  end
+
+  def handle_info({:goal_stream, event, payload}, socket) do
+    handle_info({:turn_stream, event, payload}, socket)
   end
 
   # Turn lifecycle fanned out by TurnManager over the thread topic. The socket that
@@ -683,7 +720,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     if claude_approval?(request) do
       ApprovalBroker.resolve(request_id, :deny)
     else
-      if is_pid(turn_pid), do: send(turn_pid, {:codex_interrupt})
+      if is_pid(turn_pid), do: send(turn_pid, {:agent_interrupt})
     end
   end
 
@@ -781,6 +818,29 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   defp thread_id_from_socket(%Socket{assigns: %{thread: %{id: id}}}) when is_integer(id), do: id
   defp thread_id_from_socket(_socket), do: nil
 
+  defp normalize_tool_call_id(tool_call_id) when is_binary(tool_call_id) do
+    case String.trim(tool_call_id) do
+      "" -> nil
+      trimmed -> trimmed
+    end
+  end
+
+  defp kill_tool_error_payload(reason) when reason in [:tool_not_running, :no_worker] do
+    %{reason: Atom.to_string(reason), can_stop_turn: true}
+  end
+
+  defp kill_tool_error_payload(reason), do: %{reason: error_reason(reason)}
+
+  defp should_push_turn_stream?(socket, event, payload) when is_binary(event) and is_map(payload) do
+    socket.assigns[:turn_status] != :running or canceled_tool_completion?(event, payload)
+  end
+
+  defp should_push_turn_stream?(_socket, _event, _payload), do: false
+
+  defp canceled_tool_completion?("tool_call_completed", %{tool_call: %{status: "canceled"}}), do: true
+  defp canceled_tool_completion?("tool_call_completed", %{"tool_call" => %{"status" => "canceled"}}), do: true
+  defp canceled_tool_completion?(_event, _payload), do: false
+
   # credo:disable-for-next-line Credo.Check.Refactor.CyclomaticComplexity
   defp do_send_message(message, payload, socket) do
     project_slug = socket.assigns[:project_slug]
@@ -848,7 +908,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
 
   # Re-dispatches a thread's interrupted current turn as a brand-new turn that
   # re-uses the saved prompt + codex_thread_id. Codex continuity is automatic:
-  # run_send_turn -> CodexSession reloads the thread and continues the persisted
+  # run_send_turn -> AgentSession reloads the thread and continues the persisted
   # agent conversation; the codex_thread_id here is for display/trace only.
   defp do_resume_turn(thread, turn, socket) do
     channel_pid = self()
@@ -1010,24 +1070,24 @@ defmodule SymphonyElixirWeb.AssistantChannel do
 
   defp run_send_turn(%{scope: scope} = thread, _project_slug, trimmed, context, opts)
        when scope in ["issue", "issue_session"] do
-    CodexSession.send_message_to_issue_thread(thread, trimmed, context, opts)
+    AgentSession.send_message_to_issue_thread(thread, trimmed, context, opts)
   end
 
   defp run_send_turn(%{scope: "freeform"} = thread, _project_slug, trimmed, context, opts) do
-    CodexSession.send_message_to_thread(thread, trimmed, context, opts)
+    AgentSession.send_message_to_thread(thread, trimmed, context, opts)
   end
 
   defp run_send_turn(%{scope: scope} = thread, _project_slug, trimmed, context, opts)
        when scope in ["project_explore", "project_session"] do
-    CodexSession.send_message_to_project_explore_thread(thread, trimmed, context, opts)
+    AgentSession.send_message_to_project_explore_thread(thread, trimmed, context, opts)
   end
 
   defp run_send_turn(%{scope: "kb"} = thread, _project_slug, trimmed, context, opts) do
-    CodexSession.send_message_to_kb_thread(thread, trimmed, context, opts)
+    AgentSession.send_message_to_kb_thread(thread, trimmed, context, opts)
   end
 
   defp run_send_turn(_thread, project_slug, trimmed, context, opts) do
-    CodexSession.send_message(project_slug, trimmed, context, opts)
+    AgentSession.send_message(project_slug, trimmed, context, opts)
   end
 
   defp maybe_push_created_issue(result, %Socket{assigns: %{project_slug: project_slug}} = socket)
@@ -1379,12 +1439,13 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   defp turn_stream_opts(%Socket{} = socket, thread, channel_pid, context) when is_map(context) do
     goal_thread = goal_thread?(thread)
     thread_id = if is_map(thread), do: Map.get(thread, :id), else: nil
+    durable_thread = durable_thread?(thread)
 
     push_stream = fn event, payload ->
       push(socket, event, payload)
 
-      if goal_thread and is_integer(thread_id) do
-        GoalRun.broadcast_from(channel_pid, thread_id, {:goal_stream, event, payload})
+      if durable_thread and is_integer(thread_id) do
+        GoalRun.broadcast_from(channel_pid, thread_id, {:turn_stream, event, payload})
       end
     end
 
@@ -1394,8 +1455,12 @@ defmodule SymphonyElixirWeb.AssistantChannel do
       |> Keyword.merge(Payload.model_opts(context))
       |> Keyword.put(:on_message_created, fn message -> push_stream.("message_created", %{message: message}) end)
       |> Keyword.put(:on_assistant_delta, fn delta -> push_stream.("assistant_delta", %{delta: delta}) end)
-      |> Keyword.put(:on_tool_call_started, fn tool_call -> push_stream.("tool_call_started", %{tool_call: tool_call}) end)
+      |> Keyword.put(:on_tool_call_started, fn tool_call ->
+        maybe_upsert_active_tool(thread_id, tool_call)
+        push_stream.("tool_call_started", %{tool_call: tool_call})
+      end)
       |> Keyword.put(:on_tool_call_completed, fn tool_call ->
+        maybe_remove_active_tool(thread_id, tool_call)
         push_stream.("tool_call_completed", %{tool_call: tool_call})
       end)
       |> Keyword.put(:on_documents_changed, fn identifier ->
@@ -1448,6 +1513,113 @@ defmodule SymphonyElixirWeb.AssistantChannel do
 
   defp goal_thread?(_thread), do: false
 
+  defp durable_thread?(%{id: id}) when is_integer(id), do: true
+  defp durable_thread?(_thread), do: false
+
+  defp maybe_upsert_active_tool(thread_id, tool_call) when is_integer(thread_id) and is_map(tool_call) do
+    with {:ok, active_tool} <- active_tool_payload(tool_call),
+         {:ok, thread} <- History.get_thread(thread_id),
+         {:ok, _updated} <- History.upsert_active_tool(thread, active_tool) do
+      :ok
+    else
+      _ -> :ok
+    end
+  end
+
+  defp maybe_upsert_active_tool(_thread_id, _tool_call), do: :ok
+
+  defp maybe_remove_active_tool(thread_id, tool_call) when is_integer(thread_id) and is_map(tool_call) do
+    with id when is_binary(id) <- tool_call_id(tool_call),
+         {:ok, thread} <- History.get_thread(thread_id),
+         {:ok, _updated} <- History.remove_active_tool(thread, id) do
+      :ok
+    else
+      _ -> :ok
+    end
+  end
+
+  defp maybe_remove_active_tool(_thread_id, _tool_call), do: :ok
+
+  defp active_tool_payload(tool_call) when is_map(tool_call) do
+    with id when is_binary(id) <- tool_call_id(tool_call) do
+      {:ok,
+       %{
+         "id" => id,
+         "name" => tool_call_name(tool_call),
+         "arguments_summary" => summarize_tool_call(tool_call),
+         "started_at" => DateTime.utc_now() |> DateTime.to_iso8601()
+       }}
+    else
+      _ -> :error
+    end
+  end
+
+  defp tool_call_id(tool_call) when is_map(tool_call) do
+    tool_call
+    |> get_any("id")
+    |> case do
+      id when is_binary(id) ->
+        case String.trim(id) do
+          "" -> nil
+          trimmed -> trimmed
+        end
+
+      id when is_integer(id) ->
+        Integer.to_string(id)
+
+      _ ->
+        nil
+    end
+  end
+
+  defp tool_call_name(tool_call) when is_map(tool_call) do
+    case get_any(tool_call, "name") do
+      name when is_binary(name) and name != "" -> name
+      _ -> "tool"
+    end
+  end
+
+  defp summarize_tool_call(tool_call) when is_map(tool_call) do
+    arguments = get_any(tool_call, "arguments") || get_any(tool_call, "input") || %{}
+
+    summary =
+      case get_any(arguments, "command") do
+        command when is_binary(command) and command != "" ->
+          command
+
+        _ ->
+          arguments
+          |> summary_source(tool_call)
+          |> compact_summary()
+      end
+
+    truncate_tool_summary(summary)
+  end
+
+  defp summary_source(arguments, tool_call) when arguments in [nil, %{}], do: tool_call
+  defp summary_source(arguments, _tool_call), do: arguments
+
+  defp compact_summary(value) when is_binary(value), do: String.trim(value)
+
+  defp compact_summary(value) do
+    case Jason.encode(value) do
+      {:ok, encoded} -> encoded
+      {:error, _reason} -> inspect(value, limit: 20, printable_limit: @tool_arguments_summary_max_length)
+    end
+  end
+
+  defp truncate_tool_summary(summary) when is_binary(summary) do
+    if String.length(summary) > @tool_arguments_summary_max_length do
+      summary
+      |> String.slice(0, @tool_arguments_summary_max_length - 3)
+      |> Kernel.<>("...")
+    else
+      summary
+    end
+  end
+
+  defp truncate_tool_summary(_summary), do: ""
+
   # Synthesizes a goal payload carrying an explicit status for cases where no
   # native goal exists yet (e.g. pausing the very first batch before the Codex
   # thread id is persisted), so the pill can still render the right phase.
@@ -1486,7 +1658,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
         # refresh: register in the durable run registry, run, then notify reloaded/
         # other tabs over PubSub before handing the result back to this channel.
         GoalRun.track(thread_id)
-        result = CodexSession.continue_issue_goal(thread, %{}, opts)
+        result = AgentSession.continue_issue_goal(thread, %{}, opts)
         GoalRun.untrack(thread_id)
         GoalRun.broadcast_from(channel_pid, thread_id, {:goal_run_finished, finished_message(result)})
         send(channel_pid, {:assistant_turn_finished, result})
@@ -1509,7 +1681,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   defp finished_message(_), do: nil
 
   defp pause_running_turn(socket) do
-    if is_pid(socket.assigns[:turn_pid]), do: send(socket.assigns.turn_pid, {:codex_interrupt})
+    if is_pid(socket.assigns[:turn_pid]), do: send(socket.assigns.turn_pid, {:agent_interrupt})
     assign(socket, :goal_paused, true)
   end
 

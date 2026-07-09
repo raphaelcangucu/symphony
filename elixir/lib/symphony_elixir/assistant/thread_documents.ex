@@ -1,7 +1,7 @@
 defmodule SymphonyElixir.Assistant.ThreadDocuments do
   @moduledoc "Sandboxed read access to markdown files in a freeform assistant thread workspace."
 
-  alias SymphonyElixir.Assistant.{CodexSession, History}
+  alias SymphonyElixir.Assistant.{AgentSession, History}
 
   @max_bytes 512_000
   @max_depth 8
@@ -62,16 +62,16 @@ defmodule SymphonyElixir.Assistant.ThreadDocuments do
         Path.expand(path)
 
       true ->
-        CodexSession.freeform_workspace(thread_id)
+        AgentSession.freeform_workspace(thread_id)
     end
   end
 
   defp resolve_workspace(%{id: thread_id}) when is_integer(thread_id) do
-    CodexSession.freeform_workspace(thread_id)
+    AgentSession.freeform_workspace(thread_id)
   end
 
   defp shared_freeform_root?(path) do
-    Path.expand(path) == Path.expand(CodexSession.freeform_workspace_root())
+    Path.expand(path) == Path.expand(AgentSession.freeform_workspace_root())
   end
 
   defp collect_markdown(workspace) do
