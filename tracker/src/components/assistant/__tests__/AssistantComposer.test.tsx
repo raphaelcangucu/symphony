@@ -190,6 +190,41 @@ describe("AssistantComposer", () => {
     expect(textarea).toHaveValue("/btw ");
   });
 
+  it("highlights the first slash command and moves selection with arrow keys", () => {
+    render(
+      <AssistantComposer projectSlug="macro-markets" bundle={mockBundle} onSubmit={vi.fn()} />,
+    );
+
+    const textarea = screen.getByPlaceholderText("Write a message...");
+    fireEvent.change(textarea, { target: { value: "/" } });
+
+    const goal = screen.getByRole("option", { name: /\/goal/i });
+    const infer = screen.getByRole("option", { name: /\/infer/i });
+    expect(goal).toHaveAttribute("aria-selected", "true");
+    expect(infer).toHaveAttribute("aria-selected", "false");
+
+    fireEvent.keyDown(textarea, { key: "ArrowDown", code: "ArrowDown" });
+    expect(goal).toHaveAttribute("aria-selected", "false");
+    expect(infer).toHaveAttribute("aria-selected", "true");
+
+    fireEvent.keyDown(textarea, { key: "ArrowUp", code: "ArrowUp" });
+    expect(goal).toHaveAttribute("aria-selected", "true");
+    expect(infer).toHaveAttribute("aria-selected", "false");
+  });
+
+  it("completes the highlighted slash command on Tab after arrow navigation", () => {
+    render(
+      <AssistantComposer projectSlug="macro-markets" bundle={mockBundle} onSubmit={vi.fn()} />,
+    );
+
+    const textarea = screen.getByPlaceholderText("Write a message...");
+    fireEvent.change(textarea, { target: { value: "/" } });
+    fireEvent.keyDown(textarea, { key: "ArrowDown", code: "ArrowDown" });
+    fireEvent.keyDown(textarea, { key: "Tab", code: "Tab" });
+
+    expect(textarea).toHaveValue("/infer ");
+  });
+
   it("forces the oldest queued message when Enter is pressed on an empty input", () => {
     const onSubmit = vi.fn();
     const onForceQueued = vi.fn();

@@ -394,6 +394,8 @@ export function AssistantComposer({
 
   const mentions = useContextMentions(input);
   const [mentionActiveIndex, setMentionActiveIndex] = useState(0);
+  const [paletteActiveIndex, setPaletteActiveIndex] = useState(0);
+  const paletteListRef = useRef<HTMLDivElement>(null);
   const orderedMentions = mentionsEnabled ? orderMentionOptions(mentionOptions ?? []) : [];
   const showMentions = mentionsEnabled && mentions.open && orderedMentions.length > 0;
 
@@ -424,6 +426,16 @@ export function AssistantComposer({
   useEffect(() => {
     setMentionActiveIndex(0);
   }, [mentions.query, orderedMentions.length]);
+
+  useEffect(() => {
+    setPaletteActiveIndex(0);
+  }, [input, paletteCommands.length]);
+
+  useEffect(() => {
+    if (!showPalette || !paletteListRef.current) return;
+    const active = paletteListRef.current.querySelector<HTMLElement>("[data-active='true']");
+    active?.scrollIntoView({ block: "nearest" });
+  }, [paletteActiveIndex, showPalette]);
 
   function applySlashCommand(command: SlashCommandDef) {
     setInput(command.insertText ?? `${command.name} `);
@@ -562,10 +574,23 @@ export function AssistantComposer({
       }
     }
 
-    if (event.key === "Tab" && !event.shiftKey && showPalette && paletteCommands.length > 0) {
-      event.preventDefault();
-      applySlashCommand(paletteCommands[0]);
-      return;
+    if (showPalette && paletteCommands.length > 0) {
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        setPaletteActiveIndex((index) => (index + 1) % paletteCommands.length);
+        return;
+      }
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        setPaletteActiveIndex((index) => (index - 1 + paletteCommands.length) % paletteCommands.length);
+        return;
+      }
+      if (event.key === "Tab" && !event.shiftKey) {
+        event.preventDefault();
+        const command = paletteCommands[paletteActiveIndex] ?? paletteCommands[0];
+        if (command) applySlashCommand(command);
+        return;
+      }
     }
 
     if (event.key !== "Enter" || event.shiftKey) return;
@@ -743,18 +768,36 @@ export function AssistantComposer({
 
         {showPalette ? (
           <div className="border-b px-2 py-1.5">
-            <div className={cn("max-h-52 overflow-y-auto", SCROLLBAR_THIN)}>
-              {paletteCommands.map((command) => (
-                <button
-                  key={command.name}
-                  type="button"
-                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted/60"
-                  onClick={() => applySlashCommand(command)}
-                >
-                  <span className="shrink-0 font-mono text-xs font-semibold">{command.name}</span>
-                  <span className="truncate text-xs text-muted-foreground">{command.description}</span>
-                </button>
-              ))}
+            <div
+              ref={paletteListRef}
+              role="listbox"
+              aria-label={t("assistant.composer.slashCommands")}
+              className={cn("max-h-52 overflow-y-auto", SCROLLBAR_THIN)}
+            >
+              {paletteCommands.map((command, index) => {
+                const isActive = index === paletteActiveIndex;
+                return (
+                  <button
+                    key={command.name}
+                    type="button"
+                    role="option"
+                    data-active={isActive ? "true" : "false"}
+                    aria-selected={isActive}
+                    className={cn(
+                      "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm",
+                      isActive ? "bg-muted/60" : "hover:bg-muted/60",
+                    )}
+                    onMouseDown={(event) => {
+                      event.preventDefault();
+                      applySlashCommand(command);
+                    }}
+                    onMouseEnter={() => setPaletteActiveIndex(index)}
+                  >
+                    <span className="shrink-0 font-mono text-xs font-semibold">{command.name}</span>
+                    <span className="truncate text-xs text-muted-foreground">{command.description}</span>
+                  </button>
+                );
+              })}
             </div>
             <p className="px-2 pt-1 text-[10px] text-muted-foreground">{t("assistant.composer.tabToComplete")}</p>
           </div>
