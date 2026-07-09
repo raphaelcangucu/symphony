@@ -24,6 +24,7 @@ import { WorkspaceCardItem } from "@/components/sessions/WorkspaceCardItem";
 import { WorkspaceCleanupDialog } from "@/components/sessions/WorkspaceCleanupDialog";
 import { RecentSessionBadges } from "@/components/shared/SessionBadge";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { WorkspaceTabBar } from "@/components/workspace/WorkspaceTabBar";
 import { useArchiveChat } from "@/hooks/useArchiveChat";
 import { useProjectSessions } from "@/hooks/useProjectSessions";
@@ -412,23 +413,38 @@ export function ProjectSessionsWorkspace({
 
         {activeTab?.kind === "sessions-list" ? (
           <div className={cn("min-h-0 flex-1 overflow-y-auto", SCROLLBAR_THIN)}>
-            <div className="mb-2 flex flex-wrap items-center justify-between gap-2 px-1">
-              <span className="text-xs text-muted-foreground">
-                {inventory
-                  ? isInventoryLoading
-                    ? t("workspacesPage.totalsLoading", {
-                        count: inventory.totals.count,
-                        size: formatBytes(inventory.totals.sizeBytes),
-                      })
-                    : t("workspacesPage.totals", {
-                        count: inventory.totals.count,
-                        size: formatBytes(inventory.totals.sizeBytes),
-                        reclaimable: formatBytes(inventory.totals.reclaimableBytes),
-                      })
-                  : isInventoryLoading
-                    ? t("workspacesPage.inventoryLoading")
-                    : null}
-              </span>
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border/60 bg-card/70 px-3 py-2 shadow-sm">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-[11px] font-semibold tracking-wide text-muted-foreground">
+                  {t("workspacesPage.inventoryLabel")}
+                </span>
+                {inventory ? (
+                  <>
+                    <span className="rounded-full border border-border/60 bg-muted/40 px-2 py-0.5 text-[11px] text-foreground/80">
+                      {isInventoryLoading
+                        ? t("workspacesPage.totalsLoading", {
+                            count: inventory.totals.count,
+                            size: formatBytes(inventory.totals.sizeBytes),
+                          })
+                        : t("workspacesPage.totalsTrees", { count: inventory.totals.count })}
+                    </span>
+                    {!isInventoryLoading ? (
+                      <span className="rounded-full border border-border/60 bg-muted/40 px-2 py-0.5 text-[11px] text-foreground/80">
+                        {t("workspacesPage.totalsSize", { size: formatBytes(inventory.totals.sizeBytes) })}
+                      </span>
+                    ) : null}
+                    {!isInventoryLoading && inventory.totals.reclaimableBytes > 0 ? (
+                      <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-700 dark:text-emerald-400">
+                        {t("workspacesPage.totalsReclaimable", {
+                          reclaimable: formatBytes(inventory.totals.reclaimableBytes),
+                        })}
+                      </span>
+                    ) : null}
+                  </>
+                ) : isInventoryLoading ? (
+                  <span className="text-xs text-muted-foreground">{t("workspacesPage.inventoryLoading")}</span>
+                ) : null}
+              </div>
               <div className="flex items-center gap-2">
                 <Button type="button" variant="outline" size="sm" onClick={() => setNewWorkspaceOpen(true)}>
                   <FolderPlus className="h-3.5 w-3.5" />
@@ -444,15 +460,11 @@ export function ProjectSessionsWorkspace({
             </div>
 
             {isLoading && total === 0 ? (
-              <div className="rounded-lg border border-dashed bg-background/70 px-5 py-10 text-center text-sm text-muted-foreground">
-                {t("sessions.loading")}
-              </div>
+              <EmptyState variant="simple">{t("sessions.loading")}</EmptyState>
             ) : null}
 
             {!isLoading && total === 0 && !isInventoryLoading ? (
-              <div className="rounded-lg border border-dashed bg-background/70 px-5 py-10 text-center text-sm text-muted-foreground">
-                {t("sessions.empty")}
-              </div>
+              <EmptyState variant="simple">{t("sessions.empty")}</EmptyState>
             ) : null}
 
             <div className="space-y-4">
@@ -511,7 +523,7 @@ export function ProjectSessionsWorkspace({
 
               {cards.chatSessions.length > 0 ? (
                 <section>
-                  <h2 className="mb-2 px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  <h2 className="mb-2 px-1 text-xs font-semibold tracking-wide text-muted-foreground">
                     {t("workspacesPage.sections.chats")}
                   </h2>
                   <ul className="grid gap-2 md:grid-cols-2">
@@ -656,7 +668,7 @@ function WorkspaceCardSection({
 
   return (
     <section>
-      <h2 className="mb-2 px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</h2>
+      <h2 className="mb-2 px-1 text-xs font-semibold tracking-wide text-muted-foreground">{title}</h2>
       <ul className="grid gap-2">
         {cards.map((card) => (
           <WorkspaceCardItem
