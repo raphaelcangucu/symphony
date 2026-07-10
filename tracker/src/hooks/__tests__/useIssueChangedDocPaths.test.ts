@@ -2,41 +2,87 @@ import { renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useIssueChangedDocPaths } from "@/hooks/useIssueChangedDocPaths";
-import { getGitDiff } from "@/services/gitDiff";
+import { getIssueRepoTree, getProjectOverview } from "@/services/knowledgeBase";
 
-vi.mock("@/services/gitDiff", () => ({
-  getGitDiff: vi.fn(),
+vi.mock("@/services/knowledgeBase", () => ({
+  getProjectOverview: vi.fn(),
+  getIssueRepoTree: vi.fn(),
 }));
 
-const getGitDiffMock = vi.mocked(getGitDiff);
+const getProjectOverviewMock = vi.mocked(getProjectOverview);
+const getIssueRepoTreeMock = vi.mocked(getIssueRepoTree);
 
 describe("useIssueChangedDocPaths", () => {
   beforeEach(() => {
-    getGitDiffMock.mockReset();
+    getProjectOverviewMock.mockReset();
+    getIssueRepoTreeMock.mockReset();
   });
 
-  it("loads docs-relative changed paths from the uncommitted issue diff", async () => {
-    getGitDiffMock.mockResolvedValue({
-      workspace: { path: "/tmp", available: true },
-      repos: [
+  it("loads docs-relative changed paths from the issue KB trees", async () => {
+    getProjectOverviewMock.mockResolvedValue({
+      project: { slug: "macro-markets", name: "Macro Markets" },
+      repositories: [
         {
-          repo: "front",
-          files: [
-            {
-              path: "docs/superpowers/specs/a.md",
-              oldPath: null,
-              status: "added",
-              patch: "",
-            },
-            {
-              path: "lib/x.ts",
-              oldPath: null,
-              status: "modified",
-              patch: "",
-            },
-          ],
+          repoSlug: "back",
+          workspacePath: "back",
+          githubFullName: "clouapp/back",
+          role: "backend",
+          docsPresent: true,
+        },
+        {
+          repoSlug: "front",
+          workspacePath: "front",
+          githubFullName: "clouapp/front",
+          role: "frontend",
+          docsPresent: true,
         },
       ],
+    });
+    getIssueRepoTreeMock.mockImplementation(async (_project, _issue, repoSlug) => {
+      if (repoSlug === "back") {
+        return {
+          repository: {
+            repoSlug: "back",
+            workspacePath: "back",
+            githubFullName: "clouapp/back",
+            role: "backend",
+            docsPresent: true,
+          },
+          docsPresent: true,
+          tree: [
+            {
+              type: "folder",
+              name: "superpowers",
+              path: "superpowers",
+              title: "superpowers",
+              order: null,
+              favorite: false,
+              children: [
+                {
+                  type: "page",
+                  name: "a.md",
+                  path: "superpowers/specs/a.md",
+                  title: "A",
+                  order: null,
+                  favorite: false,
+                  children: [],
+                },
+              ],
+            },
+          ],
+        };
+      }
+      return {
+        repository: {
+          repoSlug: "front",
+          workspacePath: "front",
+          githubFullName: "clouapp/front",
+          role: "frontend",
+          docsPresent: true,
+        },
+        docsPresent: true,
+        tree: [],
+      };
     });
 
     const { result } = renderHook(() =>
@@ -47,8 +93,10 @@ describe("useIssueChangedDocPaths", () => {
     );
 
     await waitFor(() => expect(result.current.loading).toBe(false));
-    expect(getGitDiffMock).toHaveBeenCalledWith("macro-markets", "510", "uncommitted");
-    expect(result.current.entries).toEqual([{ repo: "front", path: "superpowers/specs/a.md" }]);
+    expect(getProjectOverviewMock).toHaveBeenCalledWith("macro-markets");
+    expect(getIssueRepoTreeMock).toHaveBeenCalledWith("macro-markets", "510", "back");
+    expect(getIssueRepoTreeMock).toHaveBeenCalledWith("macro-markets", "510", "front");
+    expect(result.current.entries).toEqual([{ repo: "back", path: "superpowers/specs/a.md" }]);
     expect(result.current.paths).toEqual(["superpowers/specs/a.md"]);
     expect(result.current.count).toBe(1);
   });
@@ -64,13 +112,32 @@ describe("useIssueChangedDocPaths", () => {
     expect(result.current.paths).toEqual([]);
     expect(result.current.entries).toEqual([]);
     expect(result.current.count).toBe(0);
-    expect(getGitDiffMock).not.toHaveBeenCalled();
+    expect(getProjectOverviewMock).not.toHaveBeenCalled();
   });
 
   it("reloads when refreshKey changes", async () => {
-    getGitDiffMock.mockResolvedValue({
-      workspace: { path: "/tmp", available: true },
-      repos: [],
+    getProjectOverviewMock.mockResolvedValue({
+      project: { slug: "macro-markets", name: "Macro Markets" },
+      repositories: [
+        {
+          repoSlug: "back",
+          workspacePath: "back",
+          githubFullName: "clouapp/back",
+          role: "backend",
+          docsPresent: true,
+        },
+      ],
+    });
+    getIssueRepoTreeMock.mockResolvedValue({
+      repository: {
+        repoSlug: "back",
+        workspacePath: "back",
+        githubFullName: "clouapp/back",
+        role: "backend",
+        docsPresent: true,
+      },
+      docsPresent: true,
+      tree: [],
     });
 
     const { rerender } = renderHook(
@@ -83,8 +150,8 @@ describe("useIssueChangedDocPaths", () => {
       { initialProps: { refreshKey: 0 } },
     );
 
-    await waitFor(() => expect(getGitDiffMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(getIssueRepoTreeMock).toHaveBeenCalledTimes(1));
     rerender({ refreshKey: 1 });
-    await waitFor(() => expect(getGitDiffMock).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(getIssueRepoTreeMock).toHaveBeenCalledTimes(2));
   });
 });

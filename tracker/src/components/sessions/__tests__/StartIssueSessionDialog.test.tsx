@@ -28,7 +28,7 @@ describe("StartIssueSessionDialog", () => {
     });
   });
 
-  it("creates a build-mode issue session thread", async () => {
+  it("creates a build-mode issue session thread on the issue tree by default", async () => {
     const user = userEvent.setup();
     const onCreated = vi.fn();
 
@@ -52,6 +52,8 @@ describe("StartIssueSessionDialog", () => {
     );
 
     expect(screen.getByTestId("execution-mode-icon-yolo")).toBeInTheDocument();
+    expect(screen.getByTestId("workspace-target-issue")).toBeInTheDocument();
+    expect(screen.queryByTestId("workspace-target-parent")).not.toBeInTheDocument();
 
     await user.type(screen.getByLabelText(/session title/i), "Build pass 2");
     await user.click(screen.getByRole("button", { name: /start session/i }));
@@ -62,9 +64,88 @@ describe("StartIssueSessionDialog", () => {
         agentKind: "codex",
         executionMode: "yolo",
         isolatedWorkspace: false,
+        useParentWorkspace: false,
       }),
     );
     expect(onCreated).toHaveBeenCalledWith(expect.objectContaining({ id: 42 }));
+  });
+
+  it("offers the parent tree option for subtasks and sends useParentWorkspace", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter initialEntries={["/projects/macro-markets/board"]}>
+        <Routes>
+          <Route
+            path="/projects/macro-markets/board"
+            element={
+              <StartIssueSessionDialog
+                projectSlug="macro-markets"
+                issue={{
+                  identifier: "MAC-16",
+                  title: "Settlement",
+                  agentKind: "codex",
+                  parentIdentifier: "510",
+                }}
+                open
+                onOpenChange={() => {}}
+              />
+            }
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByTestId("workspace-target-parent")).toBeInTheDocument();
+    await user.click(screen.getByTestId("workspace-target-parent"));
+    await user.click(screen.getByRole("button", { name: /start session/i }));
+
+    await waitFor(() =>
+      expect(createIssueSessionThreadMock).toHaveBeenCalledWith(
+        "macro-markets",
+        "MAC-16",
+        expect.objectContaining({
+          isolatedWorkspace: false,
+          useParentWorkspace: true,
+        }),
+      ),
+    );
+  });
+
+  it("sends isolatedWorkspace when the parallel tree option is selected", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter initialEntries={["/projects/macro-markets/board"]}>
+        <Routes>
+          <Route
+            path="/projects/macro-markets/board"
+            element={
+              <StartIssueSessionDialog
+                projectSlug="macro-markets"
+                issue={{ identifier: "MAC-510", title: "Add languages", agentKind: "codex" }}
+                open
+                onOpenChange={() => {}}
+              />
+            }
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await user.click(screen.getByTestId("workspace-target-isolated"));
+    await user.click(screen.getByRole("button", { name: /start session/i }));
+
+    await waitFor(() =>
+      expect(createIssueSessionThreadMock).toHaveBeenCalledWith(
+        "macro-markets",
+        "MAC-510",
+        expect.objectContaining({
+          isolatedWorkspace: true,
+          useParentWorkspace: false,
+        }),
+      ),
+    );
   });
 
   it("keeps typed title and agent when parent re-renders with a new issue object", async () => {

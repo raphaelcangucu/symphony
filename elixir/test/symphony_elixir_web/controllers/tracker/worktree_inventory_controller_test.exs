@@ -182,6 +182,48 @@ defmodule SymphonyElixirWeb.Tracker.WorktreeInventoryControllerTest do
     assert thread.metadata["workspace_kind"] == "isolated"
   end
 
+  test "POST issue_session with use_parent_workspace pins the thread to the parent tree", ctx do
+    {:ok, parent} = Context.create_issue("wtapi", %{"title" => "Parent"})
+    {:ok, child} = Context.create_issue("wtapi", %{"title" => "Child"})
+    {:ok, _} = Context.add_blocker("wtapi", child.identifier, parent.identifier, "sub_issue_of")
+
+    parent_ws = Path.join(ctx.segment_root, parent.identifier)
+    File.mkdir_p!(parent_ws)
+
+    conn =
+      authorize()
+      |> post("/api/tracker/v1/assistant/threads", %{
+        scope: "issue_session",
+        project_slug: "wtapi",
+        issue_identifier: child.identifier,
+        title: "Reuse parent",
+        use_parent_workspace: true
+      })
+
+    assert %{"data" => %{"id" => id}} = json_response(conn, 201)
+    {:ok, thread} = History.get_thread(id)
+
+    assert thread.workspace_path == parent_ws
+    assert thread.metadata["workspace_kind"] == "parent"
+    assert thread.metadata["parent_workspace_issue"] == parent.identifier
+  end
+
+  test "POST issue_session with use_parent_workspace fails when the issue has no parent" do
+    {:ok, issue} = Context.create_issue("wtapi", %{"title" => "Orphan"})
+
+    conn =
+      authorize()
+      |> post("/api/tracker/v1/assistant/threads", %{
+        scope: "issue_session",
+        project_slug: "wtapi",
+        issue_identifier: issue.identifier,
+        title: "No parent",
+        use_parent_workspace: true
+      })
+
+    assert %{"error" => %{"code" => "no_parent_issue"}} = json_response(conn, 422)
+  end
+
   test "POST issue_session without the flag shares the issue tree", ctx do
     {:ok, issue} = Context.create_issue("wtapi", %{"title" => "Shared"})
 

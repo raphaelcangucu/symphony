@@ -23,10 +23,13 @@ import { projectSessionPath, type WorkspaceView } from "@/lib/workspaceRoutes";
 import type { AgentKind, ExecutionMode } from "@/types/issue";
 import type { AssistantThread } from "@/types/assistant-thread";
 
+export type WorkspaceTarget = "issue" | "parent" | "isolated";
+
 export interface StartIssueSessionDialogIssue {
   identifier: string;
   title: string;
   agentKind: AgentKind | null;
+  parentIdentifier?: string | null;
 }
 
 interface StartIssueSessionDialogProps {
@@ -59,9 +62,12 @@ export function StartIssueSessionDialog({
   const [agent, setAgent] = useState<AgentKind>("codex");
   const [title, setTitle] = useState("");
   const [instructions, setInstructions] = useState("");
-  const [isolatedWorkspace, setIsolatedWorkspace] = useState(false);
+  const [workspaceTarget, setWorkspaceTarget] = useState<WorkspaceTarget>("issue");
   const [starting, setStarting] = useState(false);
   const initializedForRef = useRef<string | null>(null);
+
+  const parentIdentifier = issue?.parentIdentifier?.trim() || null;
+  const hasParent = Boolean(parentIdentifier);
 
   useEffect(() => {
     if (!open) {
@@ -70,7 +76,7 @@ export function StartIssueSessionDialog({
     }
     if (!issue) return;
 
-    const resetKey = issue.identifier;
+    const resetKey = `${issue.identifier}:${parentIdentifier ?? ""}`;
     if (initializedForRef.current === resetKey) return;
 
     initializedForRef.current = resetKey;
@@ -78,9 +84,15 @@ export function StartIssueSessionDialog({
     setAgent(resolveDefaultAgent(issue));
     setTitle("");
     setInstructions("");
-    setIsolatedWorkspace(false);
+    setWorkspaceTarget("issue");
     setStarting(false);
-  }, [open, issue?.identifier, issue?.agentKind]);
+  }, [open, issue?.identifier, issue?.agentKind, parentIdentifier]);
+
+  useEffect(() => {
+    if (!hasParent && workspaceTarget === "parent") {
+      setWorkspaceTarget("issue");
+    }
+  }, [hasParent, workspaceTarget]);
 
   async function handleStart() {
     if (!issue || starting) return;
@@ -94,7 +106,8 @@ export function StartIssueSessionDialog({
           agent,
           title: title.trim() || t("issue.sessions.defaultSessionTitle"),
           instructions: instructions.trim() || null,
-          isolatedWorkspace,
+          isolatedWorkspace: workspaceTarget === "isolated",
+          useParentWorkspace: workspaceTarget === "parent",
         },
         t,
       );
@@ -165,6 +178,43 @@ export function StartIssueSessionDialog({
             </div>
 
             <div className="space-y-2">
+              <span className="text-xs font-medium text-muted-foreground">
+                {t("workspacesPage.newSession.workspaceTargetLabel")}
+              </span>
+              <div className="space-y-2" role="radiogroup" aria-label={t("workspacesPage.newSession.workspaceTargetLabel")}>
+                <WorkspaceTargetOption
+                  value="issue"
+                  selected={workspaceTarget}
+                  disabled={starting}
+                  onSelect={setWorkspaceTarget}
+                  label={t("workspacesPage.newSession.issueTreeLabel", { identifier: issue.identifier })}
+                  hint={t("workspacesPage.newSession.issueTreeHint", { identifier: issue.identifier })}
+                  testId="workspace-target-issue"
+                />
+                {hasParent && parentIdentifier ? (
+                  <WorkspaceTargetOption
+                    value="parent"
+                    selected={workspaceTarget}
+                    disabled={starting}
+                    onSelect={setWorkspaceTarget}
+                    label={t("workspacesPage.newSession.parentTreeLabel", { identifier: parentIdentifier })}
+                    hint={t("workspacesPage.newSession.parentTreeHint")}
+                    testId="workspace-target-parent"
+                  />
+                ) : null}
+                <WorkspaceTargetOption
+                  value="isolated"
+                  selected={workspaceTarget}
+                  disabled={starting}
+                  onSelect={setWorkspaceTarget}
+                  label={t("workspacesPage.newSession.isolatedLabel")}
+                  hint={t("workspacesPage.newSession.isolatedHint")}
+                  testId="workspace-target-isolated"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
               <label htmlFor="issue-session-instructions" className="text-xs font-medium text-muted-foreground">
                 {t("issueSession.dialog.instructionsLabel")}
               </label>
@@ -177,24 +227,6 @@ export function StartIssueSessionDialog({
                 disabled={starting}
               />
             </div>
-
-            <label className="flex cursor-pointer items-start gap-2">
-              <input
-                type="checkbox"
-                className="mt-0.5 h-4 w-4 accent-primary"
-                checked={isolatedWorkspace}
-                disabled={starting}
-                onChange={(event) => setIsolatedWorkspace(event.target.checked)}
-              />
-              <span className="min-w-0">
-                <span className="block text-xs font-medium text-foreground">
-                  {t("workspacesPage.newSession.isolatedLabel")}
-                </span>
-                <span className="block text-xs text-muted-foreground">
-                  {t("workspacesPage.newSession.isolatedHint")}
-                </span>
-              </span>
-            </label>
           </div>
         ) : null}
 
@@ -211,5 +243,47 @@ export function StartIssueSessionDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function WorkspaceTargetOption({
+  value,
+  selected,
+  disabled,
+  onSelect,
+  label,
+  hint,
+  testId,
+}: {
+  value: WorkspaceTarget;
+  selected: WorkspaceTarget;
+  disabled: boolean;
+  onSelect: (value: WorkspaceTarget) => void;
+  label: string;
+  hint: string;
+  testId: string;
+}) {
+  const active = selected === value;
+  return (
+    <label
+      data-testid={testId}
+      className={`flex cursor-pointer items-start gap-2 rounded-md border px-3 py-2 ${
+        active ? "border-primary/50 bg-primary/5" : "border-border/70"
+      } ${disabled ? "opacity-60" : ""}`}
+    >
+      <input
+        type="radio"
+        className="mt-0.5 h-4 w-4 accent-primary"
+        name="workspace-target"
+        value={value}
+        checked={active}
+        disabled={disabled}
+        onChange={() => onSelect(value)}
+      />
+      <span className="min-w-0">
+        <span className="block text-xs font-medium text-foreground">{label}</span>
+        <span className="block text-xs text-muted-foreground">{hint}</span>
+      </span>
+    </label>
   );
 }

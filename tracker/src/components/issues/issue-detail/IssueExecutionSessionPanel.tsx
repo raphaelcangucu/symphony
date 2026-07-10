@@ -115,6 +115,7 @@ export function IssueExecutionSessionPanel({
           identifier: issue.identifier,
           title: issue.title,
           agentKind: issue.agentKind ?? null,
+          parentIdentifier: issue.parentIdentifier ?? null,
         }}
         open={startSessionOpen}
         onOpenChange={setStartSessionOpen}

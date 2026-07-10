@@ -13,6 +13,8 @@ export interface CreateIssueSessionInput {
   instructions?: string | null;
   /** When true the session gets its own clean sibling working tree. */
   isolatedWorkspace?: boolean;
+  /** When true the session reuses the parent issue's canonical working tree. */
+  useParentWorkspace?: boolean;
 }
 
 export async function createIssueSession(
@@ -26,6 +28,7 @@ export async function createIssueSession(
     agentKind: input.agent === "opencode" ? undefined : (input.agent ?? undefined),
     executionMode: input.mode ?? "build",
     isolatedWorkspace: input.isolatedWorkspace === true,
+    useParentWorkspace: input.useParentWorkspace === true,
   });
 
   if (t) {

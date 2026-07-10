@@ -115,14 +115,14 @@ describe("ProjectHeader polling indicator", () => {
     expect(screen.getByRole("link", { name: /Workspaces\s+22/ })).toBeInTheDocument();
   });
 
-  it("labels the knowledge base nav item as Docs", () => {
+  it("labels the knowledge base nav item as KB", () => {
     render(
       <MemoryRouter>
         <ProjectHeader projectSlug="macro-markets" trackerKind="local" />
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole("link", { name: "Docs" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "KB" })).toBeInTheDocument();
   });
 
   it("labels the indicator active when polling is active", () => {

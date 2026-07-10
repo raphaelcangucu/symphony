@@ -344,6 +344,7 @@ export function ProjectSessionsWorkspace({
         identifier: issueIdentifier,
         title: issue?.title ?? issueIdentifier,
         agentKind: executions.get(issueIdentifier)?.agentKind ?? null,
+        parentIdentifier: issue?.parentIdentifier ?? null,
       });
     },
     [executions, issues],

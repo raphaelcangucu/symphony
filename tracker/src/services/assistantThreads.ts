@@ -93,6 +93,8 @@ export async function createIssueSessionThread(
     executionMode?: "plan" | "build" | "yolo";
     /** When true the session gets its own clean sibling working tree instead of sharing the issue's. */
     isolatedWorkspace?: boolean;
+    /** When true the session reuses the parent issue's canonical working tree. */
+    useParentWorkspace?: boolean;
   } = {},
 ): Promise<AssistantThread> {
   const response = await http.post(trackerPath("/assistant/threads"), {
@@ -103,6 +105,7 @@ export async function createIssueSessionThread(
     agent_kind: input.agentKind ?? undefined,
     execution_mode: input.executionMode ?? "build",
     isolated_workspace: input.isolatedWorkspace === true ? true : undefined,
+    use_parent_workspace: input.useParentWorkspace === true ? true : undefined,
   });
   return normalizeAssistantThread(unwrapData<BackendAssistantThreadDto>(response));
 }

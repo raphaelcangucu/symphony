@@ -394,6 +394,24 @@ defmodule SymphonyElixirWeb.TrackerErrors do
         dgettext("errors", "That parent is already a sub-issue of this issue.")
       )
 
+  def render(conn, :no_parent_issue),
+    do:
+      error(
+        conn,
+        422,
+        "no_parent_issue",
+        dgettext("errors", "This issue has no parent, so its parent working tree cannot be used.")
+      )
+
+  def render(conn, :parent_workspace_unavailable),
+    do:
+      error(
+        conn,
+        422,
+        "parent_workspace_unavailable",
+        dgettext("errors", "Could not resolve or create the parent issue working tree.")
+      )
+
   def render(conn, :repo_not_checked_out),
     do:
       not_found(

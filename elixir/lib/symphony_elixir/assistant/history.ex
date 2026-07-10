@@ -5,7 +5,7 @@ defmodule SymphonyElixir.Assistant.History do
 
   alias SymphonyElixir.Assistant.{Message, ProjectExploreWorkspace, Thread}
   alias SymphonyElixir.{ExecutionMode, Workspace}
-  alias SymphonyElixir.LocalTracker.Context
+  alias SymphonyElixir.LocalTracker.{Context, IssueAdapter}
   alias SymphonyElixir.Repo
 
   @type attrs :: map()
@@ -590,7 +590,7 @@ defmodule SymphonyElixir.Assistant.History do
     with {:ok, slug} <- normalize_required_string(project_slug, :project_slug),
          {:ok, identifier} <- normalize_required_string(issue_identifier, :issue_identifier),
          {:ok, _project} <- Context.get_project(slug),
-         {:ok, workspace_path} <- issue_session_workspace(slug, identifier, attrs) do
+         {:ok, workspace_path, workspace_meta} <- issue_session_workspace(slug, identifier, attrs) do
       execution_mode = normalize_execution_mode(Map.get(attrs, :execution_mode) || Map.get(attrs, "execution_mode"))
 
       metadata =
@@ -598,10 +598,15 @@ defmodule SymphonyElixir.Assistant.History do
         |> Map.get(:metadata, Map.get(attrs, "metadata", %{}))
         |> Map.new()
         |> Map.put("execution_mode", execution_mode)
-        |> Map.put("workspace_kind", if(isolated_workspace?(attrs), do: "isolated", else: "shared"))
+        |> Map.merge(workspace_meta)
 
       attrs
-      |> Map.drop([:isolated_workspace, "isolated_workspace"])
+      |> Map.drop([
+        :isolated_workspace,
+        "isolated_workspace",
+        :use_parent_workspace,
+        "use_parent_workspace"
+      ])
       |> Map.put(:scope, "issue_session")
       |> Map.put(:project_slug, slug)
       |> Map.put(:issue_identifier, identifier)
@@ -1150,22 +1155,56 @@ defmodule SymphonyElixir.Assistant.History do
 
   defp normalize_execution_mode(mode), do: ExecutionMode.normalize(mode)
 
-  # Default: the session shares the issue's working tree. With
-  # `isolated_workspace: true` a sibling `<safe_id>__p<N>` tree is materialized
-  # (after_create hook runs) so parallel work cannot collide with a running
-  # execution.
+  # Default: the session shares the issue's canonical working tree
+  # (`…/<issue>`). Options:
+  # - `isolated_workspace: true` → sibling `…/<issue>__p<N>` (parallel, no collision)
+  # - `use_parent_workspace: true` → parent's canonical tree (subtasks only)
   defp issue_session_workspace(slug, identifier, attrs) do
     issue_ref = %{identifier: identifier, project_slug: slug}
 
-    if isolated_workspace?(attrs) do
-      parallel_path = Workspace.next_parallel_path(issue_ref)
-      Workspace.ensure_at(parallel_path, issue_ref)
+    cond do
+      isolated_workspace?(attrs) ->
+        parallel_path = Workspace.next_parallel_path(issue_ref)
+
+        with {:ok, path} <- Workspace.ensure_at(parallel_path, issue_ref) do
+          {:ok, path, %{"workspace_kind" => "isolated"}}
+        end
+
+      use_parent_workspace?(attrs) ->
+        parent_issue_workspace(slug, identifier)
+
+      true ->
+        {:ok, Workspace.path_for_issue(issue_ref), %{"workspace_kind" => "shared"}}
+    end
+  end
+
+  defp parent_issue_workspace(slug, identifier) do
+    with {:ok, issue} <- Context.get_issue(slug, identifier),
+         dto <- IssueAdapter.to_dto(issue),
+         parent when is_binary(parent) and parent != "" <- dto.parent_identifier do
+      parent_ref = %{identifier: parent, project_slug: slug}
+      parent_path = Workspace.path_for_issue(parent_ref)
+
+      case Workspace.ensure_at(parent_path, parent_ref) do
+        {:ok, path} ->
+          {:ok, path, %{"workspace_kind" => "parent", "parent_workspace_issue" => parent}}
+
+        {:error, _reason} ->
+          {:error, :parent_workspace_unavailable}
+      end
     else
-      {:ok, Workspace.path_for_issue(issue_ref)}
+      nil -> {:error, :no_parent_issue}
+      {:error, :issue_not_found} -> {:error, :issue_not_found}
+      {:error, reason} -> {:error, reason}
+      _ -> {:error, :no_parent_issue}
     end
   end
 
   defp isolated_workspace?(attrs) do
     Map.get(attrs, :isolated_workspace, Map.get(attrs, "isolated_workspace")) == true
+  end
+
+  defp use_parent_workspace?(attrs) do
+    Map.get(attrs, :use_parent_workspace, Map.get(attrs, "use_parent_workspace")) == true
   end
 end

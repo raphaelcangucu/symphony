@@ -22,7 +22,7 @@ import {
   reorderPages,
   togglePageFavorite,
 } from "@/lib/kbTreeActions";
-import { withSyntheticChangedPages } from "@/lib/kbTreeFilter";
+import { augmentTreesWithChangedPages, withSyntheticChangedPages } from "@/lib/kbTreeFilter";
 import { cn, SCROLLBAR_THIN } from "@/lib/utils";
 import {
   deleteAsset,
@@ -46,7 +46,7 @@ interface KnowledgeBaseModalProps {
   onInsertContext?: (ref: ComposerContextChipRef) => void;
   /** When set, enables Alterados/Todos filtering for the issue working tree. */
   issueIdentifier?: string | null;
-  /** Docs-relative paths from the issue uncommitted diff (already stripped of `docs/`). */
+  /** Docs-relative paths changed in the issue worktree (already stripped of `docs/`). */
   changedDocPaths?: string[];
   /** Preferred: repo-associated changed docs for multi-repo synthetic insertion. */
   changedDocEntries?: Array<{ repo: string; path: string }>;
@@ -82,8 +82,13 @@ export function KnowledgeBaseModal({
   const { treesByRepo, reloadRepo } = useKbAllRepoTrees(open ? projectSlug : "", repoSlugs);
   const changedPathSet = useMemo(() => new Set(effectiveEntries.map((entry) => entry.path)), [effectiveEntries]);
   const displayedTreesByRepo = useMemo(() => {
-    if (!issueMode || filter !== "changed" || effectiveEntries.length === 0) return treesByRepo;
-    return withSyntheticChangedPages(treesByRepo, repoSlugs, effectiveEntries);
+    if (!issueMode || effectiveEntries.length === 0) return treesByRepo;
+    if (filter === "changed") {
+      return withSyntheticChangedPages(treesByRepo, repoSlugs, effectiveEntries);
+    }
+    // "Todas as docs" still shows the project tree, but also surfaces branch-only
+    // docs (e.g. superpowers/) that exist in the issue worktree and not on base.
+    return augmentTreesWithChangedPages(treesByRepo, repoSlugs, effectiveEntries);
   }, [effectiveEntries, filter, issueMode, repoSlugs, treesByRepo]);
   const selectedIsAsset = isKbImageAssetPath(activePath);
   const loadPage = useCallback(

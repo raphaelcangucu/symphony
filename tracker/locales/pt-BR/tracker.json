@@ -2604,7 +2604,7 @@
       "sessions": "Sessões",
       "terminal": "Terminal",
       "knowledgeBase": "Base de Conhecimento",
-      "docs": "Docs",
+      "docs": "KB",
       "viewsNav": "Visões do projeto",
       "switchProject": "Trocar de projeto",
       "loadingProjects": "Carregando projetos…",
@@ -3027,8 +3027,13 @@
     },
     "newSession": {
       "button": "Nova sessão",
-      "isolatedLabel": "Working tree isolada",
-      "isolatedHint": "Cria uma tree irmã limpa para que esta sessão não conflite com a execução em andamento."
+      "workspaceTargetLabel": "Working tree",
+      "issueTreeLabel": "Tree desta issue ({{identifier}})",
+      "issueTreeHint": "Usa a tree canônica da issue (…/{{identifier}}), compartilhada entre sessões dela. Não é a tree do parent nem uma tree paralela.",
+      "parentTreeLabel": "Tree do parent ({{identifier}})",
+      "parentTreeHint": "Reutiliza a working tree da issue pai — útil para subtasks que devem continuar no mesmo checkout da fundação.",
+      "isolatedLabel": "Tree isolada paralela",
+      "isolatedHint": "Cria uma tree irmã limpa (…/issue__pN) para esta sessão não conflitar com outra execução da mesma issue."
     },
     "sessionRows": {
       "execution": "Execution",

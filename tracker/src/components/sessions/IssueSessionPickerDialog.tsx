@@ -38,6 +38,7 @@ function toStartIssue(issue: Issue): StartIssueSessionDialogIssue {
     identifier: issue.identifier,
     title: issue.title,
     agentKind: issue.agentKind ?? null,
+    parentIdentifier: issue.parentIdentifier ?? null,
   };
 }
 

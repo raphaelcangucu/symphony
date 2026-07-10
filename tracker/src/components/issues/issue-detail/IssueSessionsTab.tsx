@@ -126,6 +126,7 @@ export function IssueSessionsTab({ issue, projectSlug, execution, view }: IssueS
           identifier: issue.identifier,
           title: issue.title,
           agentKind: issue.agentKind ?? null,
+          parentIdentifier: issue.parentIdentifier ?? null,
         }}
         open={createOpen}
         onOpenChange={setCreateOpen}

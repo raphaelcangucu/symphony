@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { filterKbTreesByPaths, insertSyntheticKbPage } from "@/lib/kbTreeFilter";
+import {
+  augmentTreesWithChangedPages,
+  filterKbTreesByPaths,
+  insertSyntheticKbPage,
+  withSyntheticChangedPages,
+} from "@/lib/kbTreeFilter";
 import type { KbTreeNode } from "@/types/knowledgeBase";
 
 const tree: KbTreeNode[] = [
@@ -78,5 +83,22 @@ describe("kbTreeFilter", () => {
         ],
       },
     ]);
+  });
+
+  it("keeps the full tree when augmenting with branch-only docs", () => {
+    const next = augmentTreesWithChangedPages({ back: tree }, ["back"], [
+      { repo: "back", path: "superpowers/specs/new.md" },
+    ]);
+    expect(next.back?.some((node) => node.path === "market")).toBe(true);
+    expect(next.back?.some((node) => node.path === "superpowers")).toBe(true);
+  });
+
+  it("filters to changed paths and still inserts missing ones", () => {
+    const next = withSyntheticChangedPages({ back: tree }, ["back"], [
+      { repo: "back", path: "market/omnibus.md" },
+      { repo: "back", path: "superpowers/specs/new.md" },
+    ]);
+    expect(next.back).toHaveLength(2);
+    expect(next.back?.map((node) => node.path).sort()).toEqual(["market", "superpowers"]);
   });
 });

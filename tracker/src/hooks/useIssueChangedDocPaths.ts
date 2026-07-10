@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 
-import { collectChangedDocEntries, type ChangedDocEntry } from "@/lib/changedDocPaths";
+import type { ChangedDocEntry } from "@/lib/changedDocPaths";
 import { normalizeIssueIdentifier } from "@/lib/issueIdentifiers";
-import { getGitDiff } from "@/services/gitDiff";
+import { getIssueRepoTree, getProjectOverview } from "@/services/knowledgeBase";
+import type { KbTreeNode } from "@/types/knowledgeBase";
 
 interface UseIssueChangedDocPathsArgs {
   projectSlug?: string | null;
@@ -20,6 +21,13 @@ interface UseIssueChangedDocPathsResult {
   reload: () => void;
 }
 
+/**
+ * Docs changed in an issue working tree (committed vs base, plus dirty/untracked).
+ *
+ * Uses the issue KB tree API — the same source as the issue-scoped sidebar —
+ * instead of the uncommitted-only git diff, so branch-committed docs like
+ * `docs/superpowers/**` still appear after they are committed.
+ */
 export function useIssueChangedDocPaths({
   projectSlug = null,
   issueIdentifier = null,
@@ -47,17 +55,31 @@ export function useIssueChangedDocPaths({
     let cancelled = false;
     setLoading(true);
 
-    void getGitDiff(projectSlug, normalizedIdentifier, "uncommitted")
-      .then((diff) => {
+    void (async () => {
+      try {
+        const overview = await getProjectOverview(projectSlug);
         if (cancelled) return;
-        setEntries(collectChangedDocEntries(diff));
-      })
-      .catch(() => {
+
+        const repoSlugs = overview.repositories.map((repo) => repo.repoSlug).filter(Boolean);
+        const trees = await Promise.all(
+          repoSlugs.map(async (repoSlug) => {
+            try {
+              const tree = await getIssueRepoTree(projectSlug, normalizedIdentifier, repoSlug);
+              return { repoSlug, nodes: tree.tree };
+            } catch {
+              return { repoSlug, nodes: [] as KbTreeNode[] };
+            }
+          }),
+        );
+        if (cancelled) return;
+
+        setEntries(collectEntriesFromIssueTrees(trees));
+      } catch {
         if (!cancelled) setEntries([]);
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) setLoading(false);
-      });
+      }
+    })();
 
     return () => {
       cancelled = true;
@@ -73,4 +95,30 @@ export function useIssueChangedDocPaths({
     loading,
     reload,
   };
+}
+
+function collectEntriesFromIssueTrees(
+  trees: Array<{ repoSlug: string; nodes: KbTreeNode[] }>,
+): ChangedDocEntry[] {
+  const seen = new Set<string>();
+  const entries: ChangedDocEntry[] = [];
+
+  for (const { repoSlug, nodes } of trees) {
+    for (const path of collectPagePaths(nodes)) {
+      const key = `${repoSlug}\0${path}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      entries.push({ repo: repoSlug, path });
+    }
+  }
+
+  return entries;
+}
+
+function collectPagePaths(nodes: KbTreeNode[]): string[] {
+  return nodes.flatMap((node) => {
+    if (node.type === "page") return [node.path];
+    if (node.type === "folder") return collectPagePaths(node.children);
+    return [];
+  });
 }

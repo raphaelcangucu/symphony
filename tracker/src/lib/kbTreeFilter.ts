@@ -32,11 +32,24 @@ export function withSyntheticChangedPages(
   const entries = normalizeChangedEntries(changed, repoSlugs);
   const pathSet = new Set(entries.map((entry) => entry.path));
   const filtered = filterKbTreesByPaths(treesByRepo, pathSet);
+  return augmentTreesWithChangedPages(filtered, repoSlugs, entries);
+}
+
+/**
+ * Keeps the full project tree and inserts any issue-branch docs that are missing
+ * (e.g. `docs/superpowers/**` that exist only on the task branch).
+ */
+export function augmentTreesWithChangedPages(
+  treesByRepo: Record<string, KbTreeNode[]>,
+  repoSlugs: string[],
+  changed: ChangedDocEntry[] | Set<string>,
+): Record<string, KbTreeNode[]> {
+  const entries = normalizeChangedEntries(changed, repoSlugs);
   const presentByRepo = Object.fromEntries(
     Object.entries(treesByRepo).map(([repoSlug, nodes]) => [repoSlug, new Set(collectPagePaths(nodes))]),
   );
 
-  const next: Record<string, KbTreeNode[]> = { ...filtered };
+  const next: Record<string, KbTreeNode[]> = { ...treesByRepo };
 
   for (const entry of entries) {
     const repoSlug = resolveRepoSlug(entry.repo, repoSlugs);
@@ -45,6 +58,7 @@ export function withSyntheticChangedPages(
     if (present.has(entry.path)) continue;
     next[repoSlug] = insertSyntheticKbPage(next[repoSlug] ?? [], entry.path);
     present.add(entry.path);
+    presentByRepo[repoSlug] = present;
   }
 
   return next;
