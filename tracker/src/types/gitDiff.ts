@@ -14,6 +14,10 @@ export interface GitDiffFileChange {
 
 export interface GitDiffRepo {
   repo: string;
+  branch?: string | null;
+  base?: string | null;
+  ahead?: number | null;
+  behind?: number | null;
   files: GitDiffFileChange[];
 }
 

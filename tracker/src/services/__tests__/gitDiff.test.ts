@@ -31,11 +31,58 @@ describe("getGitDiff", () => {
       repos: [
         {
           repo: "frontend",
+          branch: null,
+          base: null,
+          ahead: null,
+          behind: null,
           files: [{ path: "src/App.tsx", oldPath: null, status: "modified", patch: "diff --git" }],
         },
       ],
       workspace: { path: "/tmp/ws", available: true },
     });
+  });
+
+  it("maps branch metadata from the raw envelope", async () => {
+    vi.mocked(http.get).mockResolvedValue({
+      data: {
+        data: [
+          {
+            repo: "frontend",
+            branch: "feat/x",
+            base: "main",
+            ahead: 3,
+            behind: 1,
+            files: [{ path: "src/App.tsx", old_path: null, status: "modified", patch: "diff --git" }],
+          },
+        ],
+        workspace: { path: "/tmp/ws", available: true },
+      },
+    });
+
+    const result = await getGitDiff("demo", "ABC-1", "branch");
+
+    expect(result.repos[0]).toEqual({
+      repo: "frontend",
+      branch: "feat/x",
+      base: "main",
+      ahead: 3,
+      behind: 1,
+      files: [{ path: "src/App.tsx", oldPath: null, status: "modified", patch: "diff --git" }],
+    });
+  });
+
+  it("coerces non-numeric ahead/behind values to null", async () => {
+    vi.mocked(http.get).mockResolvedValue({
+      data: {
+        data: [{ repo: "frontend", ahead: "3", behind: null, files: [] }],
+        workspace: { path: "/tmp/ws", available: true },
+      },
+    });
+
+    const result = await getGitDiff("demo", "ABC-1", "branch");
+
+    expect(result.repos[0]?.ahead).toBeNull();
+    expect(result.repos[0]?.behind).toBeNull();
   });
 
   it("loads thread workspace diffs", async () => {

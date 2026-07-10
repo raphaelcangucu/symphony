@@ -21,6 +21,10 @@ interface BackendGitDiffFileDto {
 
 interface BackendGitDiffRepoDto {
   repo?: string | null;
+  branch?: string | null;
+  base?: string | null;
+  ahead?: number | null;
+  behind?: number | null;
   files?: BackendGitDiffFileDto[] | null;
 }
 
@@ -111,8 +115,16 @@ export async function commitThreadGitDiff(threadId: number, message: string): Pr
 function normalizeRepo(dto: BackendGitDiffRepoDto) {
   return {
     repo: dto.repo ?? "",
+    branch: dto.branch ?? null,
+    base: dto.base ?? null,
+    ahead: normalizeOptionalNumber(dto.ahead),
+    behind: normalizeOptionalNumber(dto.behind),
     files: (dto.files ?? []).map(normalizeFile),
   };
+}
+
+function normalizeOptionalNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 function normalizeFile(dto: BackendGitDiffFileDto): GitDiffFileChange {
