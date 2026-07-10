@@ -105,6 +105,7 @@ export default function GitDiffModal({
         lineNumber: input.lineNumber,
         lineText: input.lineText,
         comment: input.comment,
+        source: activeTab === "uncommitted" ? "uncommitted" : "branch",
       };
       return [...current, next];
     });

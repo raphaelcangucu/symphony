@@ -181,7 +181,7 @@ describe("GitDiffModal", () => {
 
     expect(onSendReview).toHaveBeenCalledTimes(1);
     const prompt = onSendReview.mock.calls[0][0] as string;
-    expect(prompt).toContain("### frontend/src/App.tsx");
+    expect(prompt).toContain("### (branch) — frontend/src/App.tsx");
     expect(prompt).toContain("Fix this line");
     expect(prompt).toContain("line 3");
     expect(onOpenChange).toHaveBeenCalledWith(false);

@@ -1,15 +1,24 @@
 export type DiffReviewSide = "additions" | "deletions";
+export type DiffReviewSource = "branch" | "uncommitted" | "commit";
 
-/** One line-anchored review comment on the workspace diff. */
 export interface DiffReviewComment {
   id: string;
-  /** Repo-prefixed path as shown in the diff modal (e.g. `backend/src/auth.ts`). */
   filePath: string;
   side: DiffReviewSide;
   lineNumber: number;
-  /** The code line the comment is anchored to, for a robust agent prompt. */
   lineText: string | null;
   comment: string;
+  source: DiffReviewSource;
+  commitSha?: string;
+  commitRepo?: string;
+}
+
+export interface CommitNote {
+  repo: string;
+  sha: string;
+  shortSha: string;
+  message: string;
+  note: string;
 }
 
 export function newDiffReviewCommentId(): string {
@@ -64,38 +73,72 @@ export function lineTextFromPatch(patch: string, side: DiffReviewSide, lineNumbe
   return null;
 }
 
-/**
- * Serializes collected diff comments into one agent-facing review prompt.
- * The prompt is written in English (canonical agent language) and groups
- * comments by file in a stable order.
- */
-export function buildDiffReviewPrompt(comments: readonly DiffReviewComment[]): string {
-  const byFile = new Map<string, DiffReviewComment[]>();
+function lineCommentHeading(comment: DiffReviewComment): string {
+  if (comment.source === "commit") {
+    const repo = comment.commitRepo?.trim() || "repo";
+    const short =
+      comment.commitSha && comment.commitSha.length >= 7
+        ? comment.commitSha.slice(0, 7)
+        : comment.commitSha || "???????";
+    return `### ${repo} @ ${short} — ${comment.filePath}`;
+  }
+  if (comment.source === "branch") return `### (branch) — ${comment.filePath}`;
+  return `### (working tree) — ${comment.filePath}`;
+}
+
+function formatLineItems(fileComments: DiffReviewComment[]): string {
+  return fileComments
+    .slice()
+    .sort((a, b) => a.lineNumber - b.lineNumber)
+    .map((comment) => {
+      const location =
+        comment.side === "deletions"
+          ? `line ${comment.lineNumber} (removed)`
+          : `line ${comment.lineNumber}`;
+      const anchor = comment.lineText?.trim() ? `\n  > ${comment.lineText.trim()}` : "";
+      return `- ${location}:${anchor}\n  ${comment.comment.trim().replace(/\n/g, "\n  ")}`;
+    })
+    .join("\n");
+}
+
+export function buildDiffReviewPrompt(
+  comments: readonly DiffReviewComment[],
+  notes: readonly CommitNote[] = [],
+): string {
+  const usableNotes = notes.filter((n) => n.note.trim().length > 0);
+  const noteSection =
+    usableNotes.length === 0
+      ? []
+      : [
+          "## Commit notes",
+          ...usableNotes.map((n) => {
+            const short = n.shortSha || n.sha.slice(0, 7);
+            return `### ${n.repo} @ ${short} — ${n.message}\n- ${n.note.trim().replace(/\n/g, "\n  ")}`;
+          }),
+          "",
+        ];
+
+  const byHeading = new Map<string, DiffReviewComment[]>();
   for (const comment of comments) {
-    const list = byFile.get(comment.filePath) ?? [];
+    const heading = lineCommentHeading(comment);
+    const list = byHeading.get(heading) ?? [];
     list.push(comment);
-    byFile.set(comment.filePath, list);
+    byHeading.set(heading, list);
   }
 
-  const sections = [...byFile.entries()].map(([filePath, fileComments]) => {
-    const items = fileComments
-      .slice()
-      .sort((a, b) => a.lineNumber - b.lineNumber)
-      .map((comment) => {
-        const location =
-          comment.side === "deletions"
-            ? `line ${comment.lineNumber} (removed)`
-            : `line ${comment.lineNumber}`;
-        const anchor = comment.lineText?.trim() ? `\n  > ${comment.lineText.trim()}` : "";
-        return `- ${location}:${anchor}\n  ${comment.comment.trim().replace(/\n/g, "\n  ")}`;
-      })
-      .join("\n");
-    return `### ${filePath}\n${items}`;
-  });
+  const lineSections = [...byHeading.entries()].map(
+    ([heading, fileComments]) => `${heading}\n${formatLineItems(fileComments)}`,
+  );
+
+  const lineBlock =
+    lineSections.length === 0 ? [] : ["## Line comments", "", ...lineSections];
 
   return [
-    "I reviewed the current working-tree diff and left line comments. Address each one:",
+    "I reviewed workspace diffs and left notes. Address each:",
     "",
-    ...sections,
-  ].join("\n");
+    ...noteSection,
+    ...lineBlock,
+  ]
+    .join("\n")
+    .trimEnd();
 }
