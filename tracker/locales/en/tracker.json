@@ -874,6 +874,25 @@
       "errors": {
         "loadFailed": "Could not load workspace diff."
       },
+      "status": {
+        "aheadBehind": "↑ {{ahead}} ahead · ↓ {{behind}} behind",
+        "aheadBehindUnknown": "↑ {{ahead}} ahead · ↓ — behind",
+        "branchBase": "{{branch}} ← {{base}}",
+        "branchUnknown": "Branch unavailable",
+        "workingTree": "Working tree",
+        "reviewCount_one": "{{count}} review",
+        "reviewCount_other": "{{count}} reviews"
+      },
+      "commitNote": {
+        "label": "Commit note",
+        "placeholder": "Write a note for the assistant…"
+      },
+      "empty": {
+        "uncommittedTitle": "No uncommitted changes",
+        "uncommittedBody": "The working tree is clean. Refresh or inspect the branch diff.",
+        "viewBranch": "View Branch",
+        "refresh": "Refresh"
+      },
       "review": {
         "hint": "Click a line number to comment",
         "placeholder": "Ask the agent to change this line…",
@@ -881,7 +900,9 @@
         "edit": "Edit",
         "remove": "Remove",
         "sendButton": "Send {{count}} to agent",
-        "sent": "Review with {{count}} comments sent to the agent"
+        "sent": "Review with {{count}} comments sent to the agent",
+        "sendWithNotes_one": "Send review ({{count}} item)",
+        "sendWithNotes_other": "Send review ({{count}} items)"
       }
     },
     "preview": {

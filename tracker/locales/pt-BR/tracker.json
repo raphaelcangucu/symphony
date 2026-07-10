@@ -874,6 +874,25 @@
       "errors": {
         "loadFailed": "Não foi possível carregar o diff do workspace."
       },
+      "status": {
+        "aheadBehind": "↑ {{ahead}} à frente · ↓ {{behind}} atrás",
+        "aheadBehindUnknown": "↑ {{ahead}} à frente · ↓ — atrás",
+        "branchBase": "{{branch}} ← {{base}}",
+        "branchUnknown": "Branch indisponível",
+        "workingTree": "Árvore de trabalho",
+        "reviewCount_one": "{{count}} revisão",
+        "reviewCount_other": "{{count}} revisões"
+      },
+      "commitNote": {
+        "label": "Nota do commit",
+        "placeholder": "Escreva uma nota para o assistant…"
+      },
+      "empty": {
+        "uncommittedTitle": "Nenhuma alteração não commitada",
+        "uncommittedBody": "A árvore de trabalho está limpa. Atualize ou inspecione o diff da branch.",
+        "viewBranch": "Ver Branch",
+        "refresh": "Atualizar"
+      },
       "review": {
         "hint": "Clique no número da linha para comentar",
         "placeholder": "Peça ao agente para mudar esta linha…",
@@ -881,7 +900,9 @@
         "edit": "Editar",
         "remove": "Remover",
         "sendButton": "Enviar {{count}} ao agente",
-        "sent": "Revisão com {{count}} comentários enviada ao agente"
+        "sent": "Revisão com {{count}} comentários enviada ao agente",
+        "sendWithNotes_one": "Enviar revisão ({{count}} item)",
+        "sendWithNotes_other": "Enviar revisão ({{count}} itens)"
       }
     },
     "preview": {

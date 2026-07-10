@@ -175,7 +175,12 @@ function FileRow({
       <span className="shrink-0 tabular-nums text-[10px] text-emerald-600">+{stats.additions}</span>
       <span className="shrink-0 tabular-nums text-[10px] text-rose-600">-{stats.deletions}</span>
       {commentCount > 0 ? (
-        <span className="shrink-0 text-[10px] text-sky-600">💬{commentCount}</span>
+        <span
+          className="shrink-0 text-[10px] text-sky-600"
+          title={`${commentCount} comments`}
+        >
+          💬{commentCount}
+        </span>
       ) : null}
     </button>
   );
