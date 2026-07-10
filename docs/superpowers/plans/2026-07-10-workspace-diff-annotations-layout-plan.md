@@ -610,6 +610,9 @@ it("enables review on Commits and includes commit note + line comment in the pro
         sha: "abcdef123456",
         shortSha: "abcdef1",
         message: "docs: plan",
+        author: "agent",
+        authoredAt: "2026-07-10T00:00:00Z",
+        filesChanged: 1,
         insertions: 10,
         deletions: 0,
       },
@@ -623,9 +626,15 @@ it("enables review on Commits and includes commit note + line comment in the pro
   vi.mocked(getCommitEvidence).mockResolvedValue({
     repo: "frontend",
     sha: "abcdef123456",
+    shortSha: "abcdef1",
     message: "docs: plan",
+    author: "agent",
+    authoredAt: "2026-07-10T00:00:00Z",
+    filesChanged: 1,
+    insertions: 10,
+    deletions: 0,
     files: [{ path: "docs/plan.md", oldPath: null, status: "added", patch: "@@\n+hello\n" }],
-  } as never);
+  });
 
   render(
     <GitDiffModal
