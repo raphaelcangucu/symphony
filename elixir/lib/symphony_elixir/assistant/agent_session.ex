@@ -25,6 +25,8 @@ defmodule SymphonyElixir.Assistant.AgentSession do
   alias SymphonyElixir.{AgentPreference, InstanceConfig, ProjectConfig, Repo, Settings, Skills, Workspace}
   alias SymphonyElixir.Settings.Orchestration
 
+  require Logger
+
   @history_limit 20
 
   @type turn_result :: %{
@@ -268,7 +270,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
       not History.thread_goal_mode(thread) ->
         {:error, :goal_mode_disabled}
 
-      agent_kind not in [nil, "codex", :codex] ->
+      agent_kind not in [nil, "codex", :codex, "claude", :claude] ->
         {:error, :goal_not_native}
 
       true ->
@@ -852,23 +854,49 @@ defmodule SymphonyElixir.Assistant.AgentSession do
 
   defp normalize_goal_objective(_), do: nil
 
-  # Native Codex goals only apply to the codex agent. `agent_kind` arrives as a
-  # string ("codex") from AgentPreference.normalize/1, so we must accept the
-  # string form here — comparing against the bare `:codex` atom silently skipped
-  # injection and left the authoring goal "enabled" without ever running.
+  # Authoring goals: Codex uses native thread/goal via `:goal` opt; Claude uses
+  # the `/goal` sidecar (`goal_role: :authoring`) injected by Claude.CodingAgent.
   defp maybe_put_authoring_goal(opts, thread, agent_kind) do
     cond do
-      agent_kind not in [nil, "codex", :codex] ->
-        opts
-
       not History.thread_goal_mode(thread) ->
         opts
 
-      true ->
+      agent_kind in [nil, "codex", :codex] ->
         objective = History.thread_goal_objective(thread) || "Complete the authoring objective for this issue."
         Keyword.put(opts, :goal, objective)
+
+      agent_kind in ["claude", :claude] ->
+        objective = History.thread_goal_objective(thread) || "Complete the authoring objective for this issue."
+        _ = maybe_set_claude_authoring_goal(thread, objective)
+
+        opts
+        |> Keyword.put(:goal_role, :authoring)
+        |> Keyword.delete(:goal)
+
+      true ->
+        opts
     end
   end
+
+  defp maybe_set_claude_authoring_goal(%{project_slug: slug, issue_identifier: identifier}, objective)
+       when is_binary(slug) and is_binary(identifier) and is_binary(objective) do
+    case Context.get_project(slug) do
+      {:ok, project} ->
+        case SymphonyElixir.Claude.GoalControl.set_objective(project, identifier, :authoring, objective) do
+          {:ok, _} ->
+            :ok
+
+          {:error, reason} ->
+            Logger.debug("Claude authoring goal set skipped: #{inspect(reason)}")
+            :ok
+        end
+
+      _ ->
+        :ok
+    end
+  end
+
+  defp maybe_set_claude_authoring_goal(_thread, _objective), do: :ok
 
   defp default_runner(workspace, prompt, issue, opts) do
     agent_kind = Keyword.get(opts, :agent_kind)

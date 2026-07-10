@@ -66,20 +66,25 @@ defmodule SymphonyElixir.Assistant.AuthoringGoalControl do
     end
   end
 
-  @doc "Pauses the native authoring goal (status: paused). Keeps the goal enabled."
+  @doc "Pauses the native authoring goal (status: paused). Keeps the goal enabled. Codex only."
   @spec pause(Thread.t()) :: result()
   def pause(%Thread{} = thread) do
-    with_native(thread, {:set, %{status: "paused"}})
+    case authoring_agent(thread) do
+      "claude" -> {:error, :unsupported_for_agent}
+      _ -> with_native(thread, {:set, %{status: "paused"}})
+    end
   end
 
   @doc """
-  Flips the native authoring goal back to active. The autonomous continuation
-  batch (the actual turns) is kicked by the caller (channel) after this returns;
-  this only mutates native goal state.
+  Flips the native authoring goal back to active. Codex only — Claude has no
+  pause/resume on `/goal`.
   """
   @spec resume(Thread.t()) :: result()
   def resume(%Thread{} = thread) do
-    with_native(thread, {:set, %{status: "active"}})
+    case authoring_agent(thread) do
+      "claude" -> {:error, :unsupported_for_agent}
+      _ -> with_native(thread, {:set, %{status: "active"}})
+    end
   end
 
   @doc "Removes the authoring goal: clears the native goal (best-effort) and disables the flag."
@@ -103,6 +108,10 @@ defmodule SymphonyElixir.Assistant.AuthoringGoalControl do
   the native `thread/goal/set` is a Codex port round-trip that can block (and, if
   a turn holds the thread, fight it), so it must run off the channel process.
   """
+  @doc """
+  Replaces the authoring objective. Persists it to thread metadata and syncs the
+  agent-native goal when possible (Codex thread/goal or Claude /goal mirror).
+  """
   @spec set_objective(Thread.t(), String.t()) :: result()
   def set_objective(%Thread{} = thread, objective) when is_binary(objective) do
     case String.trim(objective) do
@@ -112,7 +121,7 @@ defmodule SymphonyElixir.Assistant.AuthoringGoalControl do
       trimmed ->
         with {:ok, updated} <- History.set_goal_mode(thread, true, trimmed) do
           goal =
-            case safe_manage(updated, {:set, %{objective: trimmed, status: "active"}}) do
+            case sync_agent_objective(updated, trimmed) do
               {:ok, goal} -> goal
               _ -> nil
             end
@@ -169,6 +178,63 @@ defmodule SymphonyElixir.Assistant.AuthoringGoalControl do
   end
 
   # --- internals -----------------------------------------------------------
+
+  defp sync_agent_objective(%Thread{} = thread, objective) do
+    case authoring_agent(thread) do
+      "claude" -> sync_claude_objective(thread, objective)
+      _ -> safe_manage(thread, {:set, %{objective: objective, status: "active"}})
+    end
+  end
+
+  defp sync_claude_objective(%Thread{} = thread, objective) do
+    case issue_project(thread) do
+      {:ok, project, identifier} ->
+        case SymphonyElixir.Claude.GoalControl.set_objective(project, identifier, :authoring, objective) do
+          {:ok, goal} ->
+            {:ok,
+             %{
+               "objective" => Map.get(goal, "objective"),
+               "status" => Map.get(goal, "status"),
+               "source" => "claude"
+             }}
+
+          {:error, reason} ->
+            {:error, reason}
+        end
+
+      _ ->
+        {:error, :no_project}
+    end
+  end
+
+  defp authoring_agent(%Thread{} = thread) do
+    case History.agent_thread_id(thread, "claude") do
+      id when is_binary(id) and id != "" ->
+        "claude"
+
+      _ ->
+        case issue_project(thread) do
+          {:ok, project, identifier} ->
+            case Context.get_agent_settings(project.slug, identifier) do
+              {:ok, %{agent_kind: "claude"}} -> "claude"
+              _ -> "codex"
+            end
+
+          _ ->
+            "codex"
+        end
+    end
+  end
+
+  defp issue_project(%Thread{project_slug: slug, issue_identifier: identifier})
+       when is_binary(slug) and is_binary(identifier) do
+    case Context.get_project(slug) do
+      {:ok, project} -> {:ok, project, identifier}
+      other -> other
+    end
+  end
+
+  defp issue_project(_thread), do: {:error, :no_project}
 
   defp with_native(%Thread{} = thread, command) do
     enabled = History.thread_goal_mode(thread)
@@ -309,12 +375,15 @@ defmodule SymphonyElixir.Assistant.AuthoringGoalControl do
   # tokensUsed, timeUsedSeconds}`. Enrich it into the AgentExecutionGoal shape the
   # front-end `normalizeGoal/1` expects (kind/source/capabilities + camelCase).
   defp serialize_goal(goal, objective_fallback) when is_map(goal) do
+    source = if Map.get(goal, "source") == "claude", do: "claude", else: "native"
+    capabilities = if source == "claude", do: ["get", "edit", "clear"], else: @capabilities
+
     %{
       kind: "goal",
-      source: "native",
+      source: source,
       objective: goal_string(Map.get(goal, "objective")) || objective_fallback,
       status: goal_string(Map.get(goal, "status")),
-      capabilities: @capabilities,
+      capabilities: capabilities,
       tokenBudget: goal_number(Map.get(goal, "tokenBudget")),
       tokensUsed: goal_number(Map.get(goal, "tokensUsed")),
       timeUsedSeconds: goal_number(Map.get(goal, "timeUsedSeconds")),
