@@ -13,9 +13,17 @@ interface GitDiffFileTreeProps {
   selectedPath: string | null;
   onSelect: (file: GitDiffFileChange) => void;
   onToggleFlat: () => void;
+  commentCountsByPath?: Record<string, number>;
 }
 
-export function GitDiffFileTree({ files, flat, selectedPath, onSelect, onToggleFlat }: GitDiffFileTreeProps) {
+export function GitDiffFileTree({
+  files,
+  flat,
+  selectedPath,
+  onSelect,
+  onToggleFlat,
+  commentCountsByPath,
+}: GitDiffFileTreeProps) {
   const { t } = useTranslation();
   const [query, setQuery] = useState("");
   const filteredFiles = useMemo(() => {
@@ -66,11 +74,18 @@ export function GitDiffFileTree({ files, flat, selectedPath, onSelect, onToggleF
               depth={0}
               selected={selectedPath === file.path}
               onSelect={onSelect}
+              commentCount={commentCountsByPath?.[file.path] ?? 0}
             />
           ))
         ) : (
           tree.map((node) => (
-            <TreeNode key={node.id} node={node} selectedPath={selectedPath} onSelect={onSelect} />
+            <TreeNode
+              key={node.id}
+              node={node}
+              selectedPath={selectedPath}
+              onSelect={onSelect}
+              commentCountsByPath={commentCountsByPath}
+            />
           ))
         )}
       </div>
@@ -82,11 +97,13 @@ function TreeNode({
   node,
   selectedPath,
   onSelect,
+  commentCountsByPath,
   depth = 0,
 }: {
   node: GitDiffTreeNode;
   selectedPath: string | null;
   onSelect: (file: GitDiffFileChange) => void;
+  commentCountsByPath?: Record<string, number>;
   depth?: number;
 }) {
   if (node.type === "folder") {
@@ -100,7 +117,14 @@ function TreeNode({
           <span className="truncate">{node.name}</span>
         </div>
         {node.children.map((child) => (
-          <TreeNode key={child.id} node={child} selectedPath={selectedPath} onSelect={onSelect} depth={depth + 1} />
+          <TreeNode
+            key={child.id}
+            node={child}
+            selectedPath={selectedPath}
+            onSelect={onSelect}
+            commentCountsByPath={commentCountsByPath}
+            depth={depth + 1}
+          />
         ))}
       </div>
     );
@@ -114,6 +138,7 @@ function TreeNode({
       depth={depth}
       selected={selectedPath === file.path}
       onSelect={onSelect}
+      commentCount={commentCountsByPath?.[file.path] ?? 0}
     />
   );
 }
@@ -124,12 +149,14 @@ function FileRow({
   depth,
   selected,
   onSelect,
+  commentCount = 0,
 }: {
   file: GitDiffFileChange;
   name: string;
   depth: number;
   selected: boolean;
   onSelect: (file: GitDiffFileChange) => void;
+  commentCount?: number;
 }) {
   const stats = diffStatsFromPatch(file.patch);
 
@@ -147,6 +174,9 @@ function FileRow({
       <span className="min-w-0 flex-1 truncate font-mono text-[11px]">{name}</span>
       <span className="shrink-0 tabular-nums text-[10px] text-emerald-600">+{stats.additions}</span>
       <span className="shrink-0 tabular-nums text-[10px] text-rose-600">-{stats.deletions}</span>
+      {commentCount > 0 ? (
+        <span className="shrink-0 text-[10px] text-sky-600">💬{commentCount}</span>
+      ) : null}
     </button>
   );
 }

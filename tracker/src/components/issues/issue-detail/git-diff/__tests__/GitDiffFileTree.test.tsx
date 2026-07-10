@@ -72,4 +72,19 @@ describe("GitDiffFileTree", () => {
     expect(screen.queryByText("frontend/src/App.tsx")).not.toBeInTheDocument();
     expect(screen.getByLabelText("php file")).toBeInTheDocument();
   });
+
+  it("shows a comment badge count for paths with comments", () => {
+    render(
+      <GitDiffFileTree
+        files={files}
+        flat
+        selectedPath={null}
+        onSelect={vi.fn()}
+        onToggleFlat={vi.fn()}
+        commentCountsByPath={{ "frontend/src/App.tsx": 2 }}
+      />,
+    );
+
+    expect(screen.getByText("💬2")).toBeInTheDocument();
+  });
 });
