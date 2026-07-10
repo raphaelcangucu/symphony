@@ -748,7 +748,7 @@ defmodule SymphonyElixir.AgentExecution do
     end
   end
 
-  defp project_goal(agent_kind, status, workflow_objective, workspace)
+  defp project_goal(agent_kind, status, workflow_objective, _workspace)
        when agent_kind in ["cursor", "opencode"] do
     case normalize_objective(workflow_objective) do
       nil ->
