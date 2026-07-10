@@ -149,6 +149,66 @@ defmodule SymphonyElixir.Claude.CodingAgentTest do
     assert :ok = CodingAgent.stop_session(session)
   end
 
+  test "interactive session installs AskUserQuestion settings when ask_user_session is set" do
+    alias SymphonyElixir.Assistant.UserInputBroker
+    alias SymphonyElixir.Claude.AppServer.ToolGateway
+
+    {root, ws} = workspace()
+    UserInputBroker.ensure_started()
+    # Ensure ToolGateway has a bound port for loopback URL discovery.
+    {:ok, mcp_token, _url} = ToolGateway.register_session([], fn _, _ -> %{} end)
+    on_exit(fn -> ToolGateway.unregister_session(mcp_token) end)
+
+    token = "ask-#{System.unique_integer([:positive])}"
+
+    assert {:ok, session} =
+             CodingAgent.start_session(ws,
+               workspace_root: root,
+               claude_command: "FAKE_CLAUDE_MODE=happy #{@fake}",
+               interactive_user_input: true,
+               ask_user_session: %{
+                 token: token,
+                 channel_pid: self(),
+                 thread_id: 42
+               }
+             )
+
+    assert is_binary(session.settings_path)
+    assert File.exists?(session.settings_path)
+    assert session.ask_user_token == token
+    assert {:ok, %{channel_pid: pid, thread_id: 42, agent: "claude"}} = UserInputBroker.lookup_session(token)
+    assert pid == self()
+
+    args =
+      SymphonyElixir.Claude.AppServer.CliRunner.build_args(%{
+        session_uuid: session.session_uuid,
+        cli_session_id: nil,
+        model: nil,
+        mcp_config_path: nil,
+        permission_mode: "bypassPermissions",
+        settings_path: session.settings_path
+      })
+
+    assert args =~ "--settings #{session.settings_path}"
+
+    assert :ok = CodingAgent.stop_session(session)
+    refute File.exists?(session.settings_path)
+    assert :error = UserInputBroker.lookup_session(token)
+  end
+
+  test "non-interactive session has no AskUserQuestion settings" do
+    {root, ws} = workspace()
+
+    assert {:ok, session} =
+             CodingAgent.start_session(ws,
+               workspace_root: root,
+               claude_command: "FAKE_CLAUDE_MODE=happy #{@fake}"
+             )
+
+    assert session.settings_path == nil
+    assert session.ask_user_token == nil
+  end
+
   test "interactive build approval tool blocks until the operator approves, then allows" do
     {root, ws} = workspace()
     test_pid = self()

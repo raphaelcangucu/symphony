@@ -228,6 +228,17 @@ defmodule SymphonyElixir.Claude.AppServer.ToolGateway do
     :ok
   end
 
+  @doc "Current loopback base URL for this Bandit listener, e.g. `http://127.0.0.1:PORT`."
+  @spec loopback_base_url() :: String.t() | nil
+  def loopback_base_url do
+    ensure_started()
+
+    case :persistent_term.get(@pt_key, nil) do
+      {_pid, port} when is_integer(port) -> "http://127.0.0.1:#{port}"
+      _ -> nil
+    end
+  end
+
   @doc """
   Write an MCP config file pointing at the given session URL into
   `workspace/.symphony/`. Returns the path of the written file.

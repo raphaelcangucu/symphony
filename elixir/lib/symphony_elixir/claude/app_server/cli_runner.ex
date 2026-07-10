@@ -119,6 +119,7 @@ defmodule SymphonyElixir.Claude.AppServer.CliRunner do
       if mcp_config_path, do: " --mcp-config #{mcp_config_path} --strict-mcp-config", else: ""
 
     permission_prompt_flag = permission_prompt_flag(Map.get(args, :permission_prompt_tool))
+    settings_flag = settings_flag(Map.get(args, :settings_path))
 
     # Sanitize both ids before interpolating into the shell command.
     safe_cli_session_id = validate_session_id(cli_session_id, "cli_session_id")
@@ -131,7 +132,7 @@ defmodule SymphonyElixir.Claude.AppServer.CliRunner do
         " --session-id #{safe_session_uuid}"
       end
 
-    base <> model_flag <> effort_flag <> mcp_flag <> permission_prompt_flag <> session_flag
+    base <> model_flag <> effort_flag <> mcp_flag <> permission_prompt_flag <> settings_flag <> session_flag
   end
 
   # The MCP tool that Claude calls to request approval in `--permission-mode
@@ -150,6 +151,20 @@ defmodule SymphonyElixir.Claude.AppServer.CliRunner do
   end
 
   defp permission_prompt_flag(_tool), do: ""
+
+  # Absolute settings paths only; reject shell metacharacters before interpolating.
+  @safe_settings_path_regex ~r/\A\/[A-Za-z0-9._\/-]+\z/
+
+  defp settings_flag(path) when is_binary(path) do
+    if Regex.match?(@safe_settings_path_regex, path) and File.exists?(path) do
+      " --settings #{path}"
+    else
+      Logger.warning("CliRunner: unsafe or missing --settings path rejected: #{inspect(path)}")
+      ""
+    end
+  end
+
+  defp settings_flag(_path), do: ""
 
   # Reasoning effort is a closed set in the Claude CLI. Whitelist it before
   # interpolating into the shell command — unknown values (the CLI ignores
