@@ -4,6 +4,7 @@ defmodule SymphonyElixir.Evidence.WorkspaceDiffTest do
   import SymphonyElixir.GitFixtures
 
   alias SymphonyElixir.Evidence.WorkspaceDiff
+  alias SymphonyElixir.RunContract
 
   @moduletag :tmp_dir
 
@@ -14,8 +15,14 @@ defmodule SymphonyElixir.Evidence.WorkspaceDiffTest do
 
     sh!(
       repo,
-      "git checkout -b feat/x && mkdir -p src && printf 'a\\n' > src/App.tsx && git add -A && git commit -m work"
+      """
+      git checkout -b feat/x &&
+      mkdir -p src && printf 'a\\n' > src/App.tsx && git add -A && git commit -m work &&
+      git push -u origin feat/x
+      """
     )
+
+    [%{ahead_count: 0}] = RunContract.repo_states(ws)
 
     assert {:ok, [entry]} = WorkspaceDiff.changes(ws, :branch)
     assert entry.repo == "frontend"

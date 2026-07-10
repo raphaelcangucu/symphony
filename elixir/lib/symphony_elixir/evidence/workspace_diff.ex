@@ -45,7 +45,7 @@ defmodule SymphonyElixir.Evidence.WorkspaceDiff do
             repo: repo_state.name,
             branch: repo_state.branch,
             base: repo_state.default_branch,
-            ahead: repo_state.ahead_count,
+            ahead: ahead_count(repo_state),
             behind: behind_count(repo_state),
             files: files
           }
@@ -59,6 +59,22 @@ defmodule SymphonyElixir.Evidence.WorkspaceDiff do
   end
 
   def changes(_workspace, _type), do: {:error, :invalid_diff_type}
+
+  defp ahead_count(%RepoState{path: path, default_branch: default})
+       when is_binary(default) and default != "" do
+    case git(path, ["rev-list", "--count", "origin/#{default}..HEAD"]) do
+      {:ok, output} ->
+        case Integer.parse(String.trim(output)) do
+          {n, _} -> n
+          :error -> 0
+        end
+
+      {:error, _} ->
+        0
+    end
+  end
+
+  defp ahead_count(_), do: 0
 
   defp behind_count(%RepoState{path: path, default_branch: default})
        when is_binary(default) and default != "" do
