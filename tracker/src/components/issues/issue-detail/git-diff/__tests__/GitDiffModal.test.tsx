@@ -355,8 +355,10 @@ describe("GitDiffModal", () => {
     render(<GitDiffModal open onOpenChange={vi.fn()} projectSlug="advising" identifier="CDE-1" />);
     await user.click(screen.getByRole("tab", { name: /uncommitted/i }));
 
-    expect(screen.getByText(/working tree/i)).toBeInTheDocument();
+    expect(screen.getByTestId("uncommitted-summary-strip")).toBeInTheDocument();
     expect(screen.getByText(/no uncommitted changes/i)).toBeInTheDocument();
+    await user.click(screen.getByTestId("uncommitted-empty-refresh"));
+    expect(diffRefetchMock).toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: /view branch/i }));
     expect(screen.getByRole("tab", { name: /^branch$/i })).toHaveAttribute("data-state", "active");
   });

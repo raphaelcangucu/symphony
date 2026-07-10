@@ -334,7 +334,7 @@ export default function GitDiffModal({
           <RepoNav repos={repoNames} activeRepo={activeRepo} onChange={setActiveRepo} />
         ) : null}
         {activeTab === "branch" ? <BranchStatusStrip repo={statusRepo} fileCount={files.length} stats={stats} /> : null}
-        {activeTab === "uncommitted" && !showUncommittedEmpty ? (
+        {activeTab === "uncommitted" ? (
           <UncommittedSummaryStrip fileCount={files.length} stats={stats} reviewCount={uncommittedReviewCount} />
         ) : null}
 
@@ -545,7 +545,10 @@ function UncommittedSummaryStrip({
   const { t } = useTranslation();
 
   return (
-    <div className="flex h-8 shrink-0 items-center justify-between gap-3 border-b bg-muted/10 px-3 text-[11px]">
+    <div
+      data-testid="uncommitted-summary-strip"
+      className="flex h-8 shrink-0 items-center justify-between gap-3 border-b bg-muted/10 px-3 text-[11px]"
+    >
       <div className="flex min-w-0 items-center gap-2">
         <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500" />
         <span className="truncate font-medium">{t("issue.diff.status.workingTree")}</span>
@@ -576,7 +579,14 @@ function UncommittedEmptyState({
       <p className="text-sm font-medium text-foreground">{t("issue.diff.empty.uncommittedTitle")}</p>
       <p className="max-w-sm text-xs text-muted-foreground">{t("issue.diff.empty.uncommittedBody")}</p>
       <div className="flex items-center gap-2">
-        <Button type="button" size="sm" variant="outline" className="h-7 gap-1 px-2 text-[11px]" onClick={onRefresh}>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="h-7 gap-1 px-2 text-[11px]"
+          data-testid="uncommitted-empty-refresh"
+          onClick={onRefresh}
+        >
           <RefreshCw className="h-3.5 w-3.5" />
           {t("issue.diff.empty.refresh")}
         </Button>
