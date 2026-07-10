@@ -13,6 +13,7 @@ defmodule SymphonyElixir.Claude.CodingAgent do
   alias SymphonyElixir.Claude.ApprovalBroker
   alias SymphonyElixir.Claude.AskUserHook
   alias SymphonyElixir.Claude.AppServer.{CliRunner, ToolGateway}
+  alias SymphonyElixir.Claude.GoalControl, as: ClaudeGoal
   alias SymphonyElixir.Assistant.UserInputBroker
   alias SymphonyElixir.Config
   alias SymphonyElixir.ExecutionMode
@@ -76,6 +77,9 @@ defmodule SymphonyElixir.Claude.CodingAgent do
     on_message = Keyword.get(opts, :on_message, &default_on_message/1)
     turn_id = generate_uuid()
     session_id = "#{session.session_uuid}-#{turn_id}"
+    goal_role = Keyword.get(opts, :goal_role, :execution)
+
+    {prompt, pending} = ClaudeGoal.apply_pending_to_prompt(prompt, session.workspace, goal_role)
 
     emit_message(on_message, :session_started, %{session_id: session_id, thread_id: session.session_uuid, turn_id: turn_id}, %{})
 
@@ -85,6 +89,7 @@ defmodule SymphonyElixir.Claude.CodingAgent do
 
     case CliRunner.run_turn(turn_args(session, prompt, opts), on_event) do
       {:ok, result} ->
+        acknowledge_goal_inject(session.workspace, goal_role, pending)
         emit_message(on_message, :turn_completed, %{payload: %{"usage" => result.usage}, result: result}, %{usage: result.usage})
 
         {:ok,
@@ -106,14 +111,16 @@ defmodule SymphonyElixir.Claude.CodingAgent do
         # upstream, so the thread self-heals for subsequent turns.
         Logger.warning("Claude resume session #{inspect(stale_id)} not found for #{issue_context(issue)}; retrying with a fresh session")
 
-        run_turn(%{session | cli_session_id: nil}, prompt, issue, opts)
+        _ = ClaudeGoal.requeue_set_if_active(session.workspace, goal_role)
+        run_turn(%{session | cli_session_id: nil}, strip_goal_prefix(prompt, pending), issue, opts)
 
       {:error, {:turn_failed, "claude exited with code 1"}} when session.cli_session_id != nil ->
         # A resumed Claude session can exit non-zero when the local conversation
         # ended outside Symphony. Retry once as a fresh session before failing.
         Logger.warning("Claude resumed session #{inspect(session.cli_session_id)} exited for #{issue_context(issue)}; retrying with a fresh session")
 
-        run_turn(%{session | cli_session_id: nil}, prompt, issue, opts)
+        _ = ClaudeGoal.requeue_set_if_active(session.workspace, goal_role)
+        run_turn(%{session | cli_session_id: nil}, strip_goal_prefix(prompt, pending), issue, opts)
 
       {:error, reason} ->
         Logger.warning("Claude turn failed for #{issue_context(issue)}: #{inspect(reason)}")
@@ -153,6 +160,30 @@ defmodule SymphonyElixir.Claude.CodingAgent do
   end
 
   # ── Private helpers ────────────────────────────────────────────────────────
+
+  defp acknowledge_goal_inject(_workspace, _role, :none), do: :ok
+
+  defp acknowledge_goal_inject(workspace, role, pending) when pending in [:set, :clear] do
+    _ = ClaudeGoal.acknowledge_inject(workspace, role, pending)
+    :ok
+  end
+
+  defp strip_goal_prefix(prompt, :none), do: prompt
+
+  defp strip_goal_prefix(prompt, :set) do
+    case Regex.run(~r/\A\/goal [^\n]*\n\n([\s\S]*)\z/, prompt) do
+      [_, rest] -> rest
+      _ -> prompt
+    end
+  end
+
+  defp strip_goal_prefix(prompt, :clear) do
+    case String.split(prompt, "/goal clear\n\n", parts: 2) do
+      ["/goal clear\n\n", rest] -> rest
+      [rest] -> rest
+      _ -> prompt
+    end
+  end
 
   defp turn_args(session, prompt, opts) do
     %{

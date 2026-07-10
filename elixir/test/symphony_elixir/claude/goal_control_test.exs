@@ -114,6 +114,26 @@ defmodule SymphonyElixir.Claude.GoalControlTest do
     assert GoalStore.read(workspace, :execution) == :error
   end
 
+  test "apply_pending_to_prompt prefixes /goal for set and clear", %{
+    project: project,
+    issue: issue,
+    workspace: workspace
+  } do
+    assert {:ok, _} = GoalControl.set_objective(project, issue.identifier, :execution, "tests pass")
+
+    assert {"/goal tests pass\n\nDo the work", :set} =
+             GoalControl.apply_pending_to_prompt("Do the work", workspace, :execution)
+
+    assert :ok = GoalControl.acknowledge_inject(workspace, :execution, :set)
+    assert {:ok, _} = GoalControl.clear(project, issue.identifier, :execution)
+
+    assert {"/goal clear\n\nDo the work", :clear} =
+             GoalControl.apply_pending_to_prompt("Do the work", workspace, :execution)
+
+    assert :ok = GoalControl.acknowledge_inject(workspace, :execution, :clear)
+    assert {"Do the work", :none} = GoalControl.apply_pending_to_prompt("Do the work", workspace, :execution)
+  end
+
   defp migrate_repo do
     {:ok, _repo, _apps} =
       Ecto.Migrator.with_repo(Repo, fn repo ->
