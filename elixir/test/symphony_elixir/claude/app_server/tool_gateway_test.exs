@@ -96,4 +96,59 @@ defmodule SymphonyElixir.Claude.AppServer.ToolGatewayTest do
     assert response.status == 200
     assert %{"result" => %{"isError" => false}} = response.body
   end
+
+  test "POST /user-input/:token awaits answers from broker" do
+    alias SymphonyElixir.Assistant.UserInputBroker
+
+    UserInputBroker.ensure_started()
+    session_token = "user-input-#{System.unique_integer([:positive])}"
+    channel = self()
+
+    assert :ok =
+             UserInputBroker.bind_session(session_token, %{
+               channel_pid: channel,
+               thread_id: 1,
+               agent: "claude"
+             })
+
+    on_exit(fn -> UserInputBroker.unbind_session(session_token) end)
+
+    {:ok, mcp_token, mcp_url} = ToolGateway.register_session([], fn _, _ -> %{"ok" => true} end)
+    on_exit(fn -> ToolGateway.unregister_session(mcp_token) end)
+
+    base =
+      mcp_url
+      |> URI.parse()
+      |> Map.put(:path, "/user-input/#{session_token}")
+      |> URI.to_string()
+
+    request_id = "hook-req-1"
+
+    questions = [
+      %{
+        "header" => "H",
+        "question" => "Q?",
+        "options" => [%{"label" => "A", "description" => "d"}]
+      }
+    ]
+
+    task =
+      Task.async(fn ->
+        Req.post(base,
+          json: %{"request_id" => request_id, "questions" => questions, "timeout_ms" => 5_000},
+          receive_timeout: 5_000,
+          retry: false
+        )
+      end)
+
+    assert_receive {:assistant_user_input_required, %{request_id: ^request_id, questions: ui_qs}}, 2_000
+    assert hd(ui_qs)["id"] == "q0"
+
+    assert :ok = UserInputBroker.resolve(request_id, %{"q0" => %{"answers" => ["A"]}})
+
+    assert {:ok, %{status: 200, body: body}} = Task.await(task)
+    assert body["permissionDecision"] == "allow"
+    assert body["updatedInput"]["answers"]["Q?"] == "A"
+    assert is_list(body["updatedInput"]["questions"])
+  end
 end

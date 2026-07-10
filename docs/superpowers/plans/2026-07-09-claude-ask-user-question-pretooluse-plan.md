@@ -63,7 +63,7 @@
 - Modify: `elixir/lib/symphony_elixir/shared_supervisor.ex`
 - Test: `elixir/test/symphony_elixir/assistant/user_input_broker_test.exs`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```elixir
 defmodule SymphonyElixir.Assistant.UserInputBrokerTest do
@@ -103,12 +103,12 @@ defmodule SymphonyElixir.Assistant.UserInputBrokerTest do
 end
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd elixir && mise exec -- mix test test/symphony_elixir/assistant/user_input_broker_test.exs`
 Expected: FAIL — module missing
 
-- [ ] **Step 3: Implement UserInputBroker**
+- [x] **Step 3: Implement UserInputBroker**
 
 ```elixir
 defmodule SymphonyElixir.Assistant.UserInputBroker do
@@ -237,12 +237,12 @@ In `shared_supervisor.ex` `child_specs/0`, immediately after `ApprovalBroker.reg
 SymphonyElixir.Assistant.UserInputBroker.registry_child_spec(),
 ```
 
-- [ ] **Step 4: Run tests — PASS**
+- [x] **Step 4: Run tests — PASS**
 
 Run: `cd elixir && mise exec -- mix test test/symphony_elixir/assistant/user_input_broker_test.exs`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add elixir/lib/symphony_elixir/assistant/user_input_broker.ex \
@@ -259,7 +259,7 @@ git commit -m "feat(assistant): add UserInputBroker for Claude AskUserQuestion"
 - Create: `elixir/lib/symphony_elixir/assistant/user_question_normalizer.ex`
 - Test: `elixir/test/symphony_elixir/assistant/user_question_normalizer_test.exs`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```elixir
 defmodule SymphonyElixir.Assistant.UserQuestionNormalizerTest do
@@ -302,11 +302,11 @@ defmodule SymphonyElixir.Assistant.UserQuestionNormalizerTest do
 end
 ```
 
-- [ ] **Step 2: Run — FAIL**
+- [x] **Step 2: Run — FAIL**
 
 Run: `cd elixir && mise exec -- mix test test/symphony_elixir/assistant/user_question_normalizer_test.exs`
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```elixir
 defmodule SymphonyElixir.Assistant.UserQuestionNormalizer do
@@ -384,7 +384,7 @@ defmodule SymphonyElixir.Assistant.UserQuestionNormalizer do
 end
 ```
 
-- [ ] **Step 4: Run — PASS + commit**
+- [x] **Step 4: Run — PASS + commit**
 
 ```bash
 git add elixir/lib/symphony_elixir/assistant/user_question_normalizer.ex \
@@ -400,7 +400,7 @@ git commit -m "feat(assistant): normalize Claude AskUserQuestion payloads for UI
 - Modify: `elixir/lib/symphony_elixir/claude/app_server/tool_gateway.ex`
 - Modify: `elixir/test/symphony_elixir/claude/app_server/tool_gateway_test.exs`
 
-- [ ] **Step 1: Write the failing HTTP round-trip test**
+- [x] **Step 1: Write the failing HTTP round-trip test**
 
 Add to `tool_gateway_test.exs`:
 
@@ -442,9 +442,9 @@ after
 end
 ```
 
-- [ ] **Step 2: Run — FAIL (route 404)**
+- [x] **Step 2: Run — FAIL (route 404)**
 
-- [ ] **Step 3: Implement route in ToolGateway**
+- [x] **Step 3: Implement route in ToolGateway**
 
 In `tool_gateway.ex`, add alias + route before the catch-all:
 
@@ -512,7 +512,7 @@ end
 
 Keep ToolGateway's "stdlib-only" comment accurate by treating Assistant.* as an intentional exception documented in the module moduledoc, **or** move the Plug handler into `SymphonyElixir.Assistant.UserInputHttp` and call it from ToolGateway to preserve isolation. Prefer a thin `UserInputHttp.call/2` invoked from ToolGateway if the import rule is enforced by tests/`mix` checks.
 
-- [ ] **Step 4: Run — PASS + commit**
+- [x] **Step 4: Run — PASS + commit**
 
 ```bash
 git add elixir/lib/symphony_elixir/claude/app_server/tool_gateway.ex \
@@ -530,7 +530,7 @@ git commit -m "feat(claude): expose loopback user-input await on ToolGateway"
 - Create: `elixir/lib/symphony_elixir/claude/ask_user_hook.ex`
 - Test: `elixir/test/symphony_elixir/claude/ask_user_hook_test.exs`
 
-- [ ] **Step 1: Failing test for settings payload + deny stdout helper**
+- [x] **Step 1: Failing test for settings payload + deny stdout helper**
 
 ```elixir
 test "write_settings! installs PreToolUse matcher and returns settings path" do
@@ -563,7 +563,7 @@ test "allow_payload builds hookSpecificOutput" do
 end
 ```
 
-- [ ] **Step 2: Implement `AskUserHook` + shell script**
+- [x] **Step 2: Implement `AskUserHook` + shell script**
 
 `ask_user_hook.sh` (must be executable):
 
@@ -623,7 +623,7 @@ exit 0
 
 Prefer writing a tiny wrapper next to settings that exports `SYMPHONY_ASK_USER_URL=http://127.0.0.1:<port>/user-input/<token>` then `exec` the priv script — so Claude's settings JSON stays small and path-safe.
 
-- [ ] **Step 3: PASS + commit**
+- [x] **Step 3: PASS + commit**
 
 ```bash
 git add elixir/priv/claude/ask_user_hook.sh \
@@ -641,7 +641,7 @@ git commit -m "feat(claude): add AskUserQuestion PreToolUse hook runner"
 - Modify: `elixir/lib/symphony_elixir/claude/app_server/cli_runner.ex`
 - Test: `elixir/test/symphony_elixir/claude/coding_agent_test.exs` (extend)
 
-- [ ] **Step 1: Fail test — interactive session writes settings when channel binding provided**
+- [x] **Step 1: Fail test — interactive session writes settings when channel binding provided**
 
 ```elixir
 test "interactive session installs AskUserQuestion settings when ask_user_session is set" do
@@ -654,7 +654,7 @@ end
 
 Non-interactive session must have `settings_path: nil`.
 
-- [ ] **Step 2: Implement**
+- [x] **Step 2: Implement**
 
 Extend session map with `settings_path` and `ask_user_token`.
 
@@ -670,7 +670,7 @@ In `turn_args/3` / `CliRunner.build_args/1`: append ` --settings #{path}` when p
 
 Channel / AgentSession must pass `ask_user_session` into runner opts — see Task 6.
 
-- [ ] **Step 3: PASS + commit**
+- [x] **Step 3: PASS + commit**
 
 ```bash
 git commit -m "feat(claude): install PreToolUse settings for interactive AskUserQuestion"
@@ -685,7 +685,7 @@ git commit -m "feat(claude): install PreToolUse settings for interactive AskUser
 - Modify: `elixir/lib/symphony_elixir/assistant/agent_session.ex` (if needed to forward `ask_user_session`)
 - Test: `elixir/test/symphony_elixir_web/channels/assistant_channel_test.exs`
 
-- [ ] **Step 1: Failing channel test**
+- [x] **Step 1: Failing channel test**
 
 Mirror existing user-questions test; for Claude:
 
@@ -695,7 +695,7 @@ Mirror existing user-questions test; for Claude:
 4. `submit_user_input` → assert `UserInputBroker.resolve` unblocks an `await` (no `{:codex_user_input}` sent).
 5. Existing Codex test still greps for `{:codex_user_input, …}`.
 
-- [ ] **Step 2: Implement `submit_user_input` branch**
+- [x] **Step 2: Implement `submit_user_input` branch**
 
 ```elixir
 def handle_in("submit_user_input", %{"request_id" => request_id, "answers" => answers}, socket)
@@ -727,7 +727,7 @@ end
 
 `current_turn_agent/1`: read `History.current_turn(thread)["agent_kind"]` normalized, default `"codex"`.
 
-- [ ] **Step 3: Pass ask_user_session into Claude turns**
+- [x] **Step 3: Pass ask_user_session into Claude turns**
 
 In `turn_stream_opts/4`, when effective agent is `"claude"`:
 
@@ -750,7 +750,7 @@ Ensure `AgentSession.default_runner/4` / Claude `start_session` receives this op
 
 On `reset_turn/1` / turn completion: unbind token if stored on socket assigns (`:ask_user_token`).
 
-- [ ] **Step 4: PASS + commit**
+- [x] **Step 4: PASS + commit**
 
 ```bash
 git commit -m "feat(assistant): route Claude user_input submits through UserInputBroker"
@@ -762,11 +762,11 @@ git commit -m "feat(assistant): route Claude user_input submits through UserInpu
 
 **Files:** none new unless needed for fixture.
 
-- [ ] **Step 1: Unit smoke — priv script against ToolGateway**
+- [x] **Step 1: Unit smoke — priv script against ToolGateway**
 
 In test, bind session, POST via `ask_user_hook.sh` with env vars set, resolve from another process, assert stdout JSON has `permissionDecision: allow`.
 
-- [ ] **Step 2: Run focused suites**
+- [x] **Step 2: Run focused suites**
 
 ```bash
 cd elixir && mise exec -- mix test \
@@ -784,7 +784,7 @@ Expected: PASS
 
 Restart serve, open a Claude workspace turn, ask it to clarify with options, confirm `UserQuestionsCard` appears and turn resumes without **FALHOU**.
 
-- [ ] **Step 4: Final commit if any fixups**
+- [x] **Step 4: Final commit if any fixups**
 
 ```bash
 git commit -m "test(claude): cover AskUserQuestion PreToolUse happy path"

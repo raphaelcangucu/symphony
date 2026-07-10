@@ -11,7 +11,9 @@ defmodule SymphonyElixir.Claude.CodingAgent do
   require Logger
 
   alias SymphonyElixir.Claude.ApprovalBroker
+  alias SymphonyElixir.Claude.AskUserHook
   alias SymphonyElixir.Claude.AppServer.{CliRunner, ToolGateway}
+  alias SymphonyElixir.Assistant.UserInputBroker
   alias SymphonyElixir.Config
   alias SymphonyElixir.ExecutionMode
 
@@ -38,13 +40,16 @@ defmodule SymphonyElixir.Claude.CodingAgent do
           permission_prompt_tool: String.t() | nil,
           gateway_token: String.t() | nil,
           mcp_config_path: Path.t() | nil,
+          settings_path: Path.t() | nil,
+          ask_user_token: String.t() | nil,
           metadata: map()
         }
 
   @impl true
   def start_session(workspace, opts \\ []) do
     with :ok <- validate_workspace_cwd(workspace, opts),
-         {:ok, gateway} <- maybe_register_tools(workspace, opts) do
+         {:ok, gateway} <- maybe_register_tools(workspace, opts),
+         {:ok, ask_user} <- maybe_install_ask_user_hook(workspace, opts) do
       interactive? = interactive?(opts)
 
       {:ok,
@@ -59,6 +64,8 @@ defmodule SymphonyElixir.Claude.CodingAgent do
          permission_prompt_tool: Map.get(gateway, :permission_prompt_tool),
          gateway_token: Map.get(gateway, :token),
          mcp_config_path: Map.get(gateway, :path),
+         settings_path: Map.get(ask_user, :settings_path),
+         ask_user_token: Map.get(ask_user, :token),
          metadata: %{}
        }}
     end
@@ -116,9 +123,22 @@ defmodule SymphonyElixir.Claude.CodingAgent do
   end
 
   @impl true
-  def stop_session(%{gateway_token: token, mcp_config_path: path}) do
+  def stop_session(session) when is_map(session) do
+    token = Map.get(session, :gateway_token)
+    path = Map.get(session, :mcp_config_path)
+    settings_path = Map.get(session, :settings_path)
+    ask_user_token = Map.get(session, :ask_user_token)
+
     if is_binary(token), do: ToolGateway.unregister_session(token)
     if is_binary(path), do: File.rm(path)
+    if is_binary(settings_path), do: File.rm(settings_path)
+
+    if is_binary(settings_path) do
+      wrapper = Path.join(Path.dirname(settings_path), "ask_user_hook_wrapper.sh")
+      File.rm(wrapper)
+    end
+
+    if is_binary(ask_user_token), do: UserInputBroker.unbind_session(ask_user_token)
     :ok
   end
 
@@ -146,6 +166,7 @@ defmodule SymphonyElixir.Claude.CodingAgent do
       mcp_config_path: session.mcp_config_path,
       permission_mode: turn_permission_mode(session, opts),
       permission_prompt_tool: session.permission_prompt_tool,
+      settings_path: Map.get(session, :settings_path),
       timeout_ms: Config.agent_turn_timeout_ms()
     }
   end
@@ -295,6 +316,60 @@ defmodule SymphonyElixir.Claude.CodingAgent do
   defp approval_command(tool_name, _input), do: tool_name
 
   defp interactive?(opts), do: Keyword.get(opts, :interactive_user_input, false) == true
+
+  defp maybe_install_ask_user_hook(workspace, opts) do
+    ask = Keyword.get(opts, :ask_user_session)
+
+    cond do
+      not interactive?(opts) ->
+        {:ok, %{}}
+
+      not is_map(ask) ->
+        {:ok, %{}}
+
+      true ->
+        install_ask_user_hook(workspace, ask)
+    end
+  end
+
+  defp install_ask_user_hook(workspace, ask) when is_map(ask) do
+    token = Map.get(ask, :token) || Map.get(ask, "token")
+    channel_pid = Map.get(ask, :channel_pid) || Map.get(ask, "channel_pid")
+    thread_id = Map.get(ask, :thread_id) || Map.get(ask, "thread_id")
+    base_url = ToolGateway.loopback_base_url()
+
+    cond do
+      not is_binary(token) or token == "" ->
+        {:error, :ask_user_token_required}
+
+      not is_pid(channel_pid) ->
+        {:error, :ask_user_channel_required}
+
+      not is_binary(base_url) ->
+        {:error, :ask_user_gateway_unavailable}
+
+      true ->
+        UserInputBroker.ensure_started()
+
+        :ok =
+          UserInputBroker.bind_session(token, %{
+            channel_pid: channel_pid,
+            thread_id: thread_id,
+            agent: "claude"
+          })
+
+        settings_dir = Path.join([Path.expand(workspace), ".symphony", "ask-user-#{token}"])
+
+        case AskUserHook.write_settings!(settings_dir,
+               session_token: token,
+               gateway_base_url: base_url,
+               timeout_ms: Map.get(ask, :timeout_ms) || Map.get(ask, "timeout_ms") || 300_000
+             ) do
+          {:ok, settings_path} ->
+            {:ok, %{token: token, settings_path: settings_path}}
+        end
+    end
+  end
 
   # The CLI prefixes MCP tools as mcp__symphony__<name>; executors know bare names.
   defp wrap_executor(executor) do

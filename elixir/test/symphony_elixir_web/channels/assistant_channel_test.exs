@@ -703,6 +703,89 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
     assert_reply(ref, :error, %{reason: "ActiveTurnNotAwaitingInput"})
   end
 
+  test "submit_user_input for Claude resolves through UserInputBroker without codex_user_input" do
+    alias SymphonyElixir.Assistant.UserInputBroker
+
+    test_pid = self()
+    request_id = "claude-q-#{System.unique_integer([:positive])}"
+    UserInputBroker.ensure_started()
+
+    runner = fn _workspace, _prompt, _issue, opts ->
+      send(test_pid, {:runner_opts, opts})
+      Keyword.fetch!(opts, :on_turn_started).("turn-claude-q")
+
+      Keyword.fetch!(opts, :on_user_input_required).(%{
+        request_id: request_id,
+        questions: [
+          %{
+            "id" => "q1",
+            "header" => "Target",
+            "question" => "Which target?",
+            "isOther" => false,
+            "options" => [%{"label" => "Default", "description" => ""}]
+          }
+        ]
+      })
+
+      send(test_pid, {:runner, self()})
+
+      receive do
+        {:codex_user_input, _request_id, _answers, _reply_to} ->
+          send(test_pid, :unexpected_codex_user_input)
+
+        :finish ->
+          :ok
+      after
+        3_000 -> :ok
+      end
+
+      {:ok, %{assistant_message: "done", turn_id: "turn-claude-q", tool_calls: []}}
+    end
+
+    Application.put_env(:symphony_elixir, :assistant_runner, runner)
+
+    {:ok, _join, socket} =
+      socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
+      |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, "assistant:issue:macro-markets:MAC-1")
+
+    assert_push("history_loaded", %{})
+
+    awaiter =
+      Task.async(fn ->
+        UserInputBroker.await(request_id, 5_000)
+      end)
+
+    Process.sleep(30)
+
+    ref =
+      push(socket, "send_message", %{
+        "message" => "clarify",
+        "context" => %{"view" => "board", "agent" => "claude"}
+      })
+
+    assert_reply(ref, :ok, %{})
+    assert_receive {:runner_opts, opts}, 2_000
+    assert %{token: token, channel_pid: channel_pid} = Keyword.get(opts, :ask_user_session)
+    assert is_binary(token) and token != ""
+    assert is_pid(channel_pid)
+
+    assert_receive {:runner, runner_pid}, 2_000
+    assert_push("user_input_required", %{request_id: ^request_id, questions: [%{"id" => "q1"}]})
+
+    sref =
+      push(socket, "submit_user_input", %{
+        "request_id" => request_id,
+        "answers" => %{"q1" => "Default"}
+      })
+
+    assert_reply(sref, :ok, %{})
+    assert {:ok, %{"q1" => %{"answers" => ["Default"]}}} = Task.await(awaiter, 5_000)
+    refute_receive :unexpected_codex_user_input, 200
+
+    send(runner_pid, :finish)
+    assert_push("assistant_completed", %{message: %{role: "assistant", content: "done"}})
+  end
+
   test "project draft issue turn promotes the chat in place to the issue thread without leaving an orphan" do
     Application.put_env(:symphony_elixir, :assistant_runner, fn _workspace, _prompt, _issue, _opts ->
       {:ok,

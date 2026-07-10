@@ -13,7 +13,8 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     Payload,
     SideQuery,
     ToolExecutor,
-    TurnManager
+    TurnManager,
+    UserInputBroker
   }
 
   alias SymphonyElixir.{AgentPreference, Config, LocalTracker.Context, ProjectConfig, Repo, Settings, Workspace}
@@ -381,9 +382,10 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     else
       pending = socket.assigns[:pending_user_inputs] || %{}
       {questions, rest} = Map.pop(pending, request_id, [])
+      normalized = normalize_user_answers(answers)
 
       maybe_persist_user_questions(socket, questions, answers)
-      send(socket.assigns.turn_pid, {:codex_user_input, request_id, normalize_user_answers(answers), self()})
+      deliver_user_input(socket, request_id, normalized)
 
       {:reply, :ok, assign(socket, :pending_user_inputs, rest)}
     end
@@ -514,6 +516,10 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     push(socket, "user_input_required", %{request_id: request_id, questions: questions})
     notify_assistant_input_needed(socket, :question)
     {:noreply, assign(socket, :pending_user_inputs, pending)}
+  end
+
+  def handle_info({:assistant_ask_user_token, token}, socket) when is_binary(token) do
+    {:noreply, assign(socket, :ask_user_token, token)}
   end
 
   def handle_info({:user_input_ok, _request_id}, socket), do: {:noreply, socket}
@@ -688,6 +694,44 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     Map.new(answers, fn {question_id, value} -> {question_id, %{"answers" => [to_string(value)]}} end)
   end
 
+  # Claude AskUserQuestion waits on UserInputBroker (PreToolUse loopback); Codex
+  # answers land on the turn process as {:codex_user_input, ...}.
+  defp deliver_user_input(socket, request_id, normalized) do
+    case current_turn_agent(socket) do
+      "claude" ->
+        UserInputBroker.resolve(to_string(request_id), normalized)
+
+      _ ->
+        send(socket.assigns.turn_pid, {:codex_user_input, request_id, normalized, self()})
+    end
+  end
+
+  defp current_turn_agent(%Socket{assigns: %{thread: thread}} = socket) when is_map(thread) do
+    live_thread =
+      case Map.get(thread, :id) do
+        id when is_integer(id) ->
+          case History.get_thread(id) do
+            {:ok, fresh} -> fresh
+            _ -> thread
+          end
+
+        _ ->
+          thread
+      end
+
+    turn = History.current_turn(live_thread) || %{}
+
+    AgentPreference.normalize(Map.get(turn, "agent_kind") || Map.get(turn, :agent_kind)) ||
+      AgentPreference.normalize(Map.get(live_thread, :agent_kind)) ||
+      ask_user_agent_fallback(socket) ||
+      "codex"
+  end
+
+  defp current_turn_agent(_socket), do: "codex"
+
+  defp ask_user_agent_fallback(%Socket{assigns: %{ask_user_token: token}}) when is_binary(token), do: "claude"
+  defp ask_user_agent_fallback(_socket), do: nil
+
   defp notify_assistant_input_needed(socket, request_kind) do
     dispatcher = Application.get_env(:symphony_elixir, :push_dispatcher, SymphonyElixir.PushNotifications.Dispatcher)
 
@@ -769,12 +813,18 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   end
 
   defp reset_turn(socket) do
+    case socket.assigns[:ask_user_token] do
+      token when is_binary(token) -> UserInputBroker.unbind_session(token)
+      _ -> :ok
+    end
+
     socket
     |> assign(:turn_status, :idle)
     |> assign(:turn_pid, nil)
     |> assign(:turn_ref, nil)
     |> assign(:codex_turn_id, nil)
     |> assign(:pending_user_inputs, %{})
+    |> assign(:ask_user_token, nil)
   end
 
   # Resolve the live worker for steering: prefer the always-on TurnManager registry
@@ -1477,12 +1527,36 @@ defmodule SymphonyElixirWeb.AssistantChannel do
       |> Keyword.put(:on_approval_required, fn request ->
         send(channel_pid, {:assistant_approval_required, request})
       end)
+      |> maybe_put_ask_user_session(socket, thread, channel_pid, context)
 
     if goal_thread and match?(%{scope: "issue"}, thread) do
       Keyword.put(opts, :on_goal_updated, fn native_goal ->
         send(channel_pid, {:authoring_goal_updated, native_goal})
       end)
     else
+      opts
+    end
+  end
+
+  defp maybe_put_ask_user_session(opts, socket, thread, channel_pid, context) do
+    agent =
+      AgentPreference.normalize(Map.get(context, "agent") || Map.get(context, :agent)) ||
+        AgentPreference.normalize(Map.get(thread, :agent_kind)) ||
+        "codex"
+
+    if agent == "claude" do
+      token = "ask-#{System.unique_integer([:positive])}"
+      thread_id = if is_map(thread), do: Map.get(thread, :id)
+
+      send(channel_pid, {:assistant_ask_user_token, token})
+
+      Keyword.put(opts, :ask_user_session, %{
+        token: token,
+        channel_pid: channel_pid,
+        thread_id: thread_id
+      })
+    else
+      _ = socket
       opts
     end
   end
