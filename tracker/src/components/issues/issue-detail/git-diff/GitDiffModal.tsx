@@ -17,7 +17,7 @@ import {
   type CommitNote,
   type DiffReviewComment,
 } from "@/lib/diffReview";
-import { combineDiffStats, diffStatsFromPatch } from "@/lib/diffStats";
+import { combineDiffStats, diffStatsFromPatch, type DiffStats } from "@/lib/diffStats";
 import { loadDiffViewMode, saveDiffViewMode, type DiffViewMode } from "@/lib/diffViewMode";
 import { cn } from "@/lib/utils";
 import { getCommitEvidence } from "@/services/commitEvidence";
@@ -81,6 +81,12 @@ export default function GitDiffModal({
   const files = activeTab === "commits" ? commitFiles : repoScopedDiffFiles;
   const selected = files.find((file) => file.key === selectedKey)?.file ?? files[0]?.file ?? null;
   const stats = combineDiffStats(files.map(({ file }) => diffStatsFromPatch(file.patch)));
+  const statusRepo = useMemo(() => {
+    if (activeTab !== "branch") return null;
+    const scoped = activeRepo === "all" ? diff.repos : diff.repos.filter((repo) => repo.repo === activeRepo);
+    return scoped.length === 1 ? scoped[0] : null;
+  }, [activeRepo, activeTab, diff.repos]);
+  const showUncommittedEmpty = activeTab === "uncommitted" && !diff.loading && files.length === 0;
 
   // Review comments and commit notes are keyed by source so the same file
   // path can carry independent annotations across branch/uncommitted/commit tabs.
@@ -112,6 +118,19 @@ export default function GitDiffModal({
     }
     return counts;
   }, [reviewComments]);
+  const commentCountsByPath = useMemo(() => {
+    if (activeTab !== "branch" && activeTab !== "uncommitted") return undefined;
+    const counts: Record<string, number> = {};
+    for (const comment of reviewComments) {
+      if (comment.source !== activeTab) continue;
+      counts[comment.filePath] = (counts[comment.filePath] ?? 0) + 1;
+    }
+    return counts;
+  }, [activeTab, reviewComments]);
+  const uncommittedReviewCount = useMemo(
+    () => reviewComments.filter((comment) => comment.source === "uncommitted").length,
+    [reviewComments],
+  );
 
   function saveReviewComment(input: SaveDiffCommentInput) {
     if (!selected) return;
@@ -314,60 +333,69 @@ export default function GitDiffModal({
         {activeTab !== "commits" && repoNames.length > 1 ? (
           <RepoNav repos={repoNames} activeRepo={activeRepo} onChange={setActiveRepo} />
         ) : null}
+        {activeTab === "branch" ? <BranchStatusStrip repo={statusRepo} fileCount={files.length} stats={stats} /> : null}
+        {activeTab === "uncommitted" && !showUncommittedEmpty ? (
+          <UncommittedSummaryStrip fileCount={files.length} stats={stats} reviewCount={uncommittedReviewCount} />
+        ) : null}
 
-        <div className="grid min-h-0 flex-1 grid-cols-[20rem_minmax(0,1fr)] bg-background">
-          <aside className="min-h-0 overflow-hidden border-r">
-            {activeTab === "commits" ? (
-              <CommitList
-                commits={commits.commits}
-                selected={selectedCommit}
-                commitNotes={commitNotes}
-                commentCountsByCommitKey={commentCountsByCommitKey}
-                onSelect={(commit) => {
-                  setSelectedCommitKey(commitKey(commit));
-                  setCommitDetail(null);
-                }}
-              />
-            ) : (
-              <GitDiffFileTree
-                files={files.map((entry) => entry.file)}
-                flat={flat}
-                selectedPath={selected?.path ?? null}
-                onSelect={(file) => setSelectedKey(fileKey(file))}
-                onToggleFlat={() => setFlat((current) => !current)}
-              />
-            )}
-          </aside>
-          <section className="flex min-h-0 flex-col overflow-hidden">
-            {activeTab === "commits" && selectedCommit ? (
-              <div className="shrink-0 border-b bg-muted/10 px-3 py-2">
-                <label className="text-[11px] font-medium text-muted-foreground" htmlFor="workspace-commit-note">
-                  {t("issue.diff.commitNote.label")}
-                </label>
-                <Textarea
-                  id="workspace-commit-note"
-                  value={selectedCommitNote?.note ?? ""}
-                  onChange={(event) => updateCommitNote(event.target.value)}
-                  placeholder={t("issue.diff.commitNote.placeholder")}
-                  className="mt-1 min-h-14 text-xs"
+        {showUncommittedEmpty ? (
+          <UncommittedEmptyState onRefresh={() => void diff.refetch()} onViewBranch={() => setActiveTab("branch")} />
+        ) : (
+          <div className="grid min-h-0 flex-1 grid-cols-[20rem_minmax(0,1fr)] bg-background">
+            <aside className="min-h-0 overflow-hidden border-r">
+              {activeTab === "commits" ? (
+                <CommitList
+                  commits={commits.commits}
+                  selected={selectedCommit}
+                  commitNotes={commitNotes}
+                  commentCountsByCommitKey={commentCountsByCommitKey}
+                  onSelect={(commit) => {
+                    setSelectedCommitKey(commitKey(commit));
+                    setCommitDetail(null);
+                  }}
                 />
-              </div>
-            ) : null}
-            <div className="min-h-0 flex-1 overflow-hidden">
-              {(activeTab === "commits" ? commits.loading || commitLoading : diff.loading) && files.length === 0 ? (
-                <div className="flex h-full items-center justify-center text-sm text-muted-foreground">{t("issue.diff.loading")}</div>
               ) : (
-                <GitDiffViewer
-                  file={selected}
-                  viewMode={viewMode}
-                  comments={reviewEnabled ? selectedFileComments : undefined}
-                  onSaveComment={reviewEnabled ? saveReviewComment : undefined}
-                  onRemoveComment={reviewEnabled ? removeReviewComment : undefined}
+                <GitDiffFileTree
+                  files={files.map((entry) => entry.file)}
+                  flat={flat}
+                  selectedPath={selected?.path ?? null}
+                  onSelect={(file) => setSelectedKey(fileKey(file))}
+                  onToggleFlat={() => setFlat((current) => !current)}
+                  commentCountsByPath={commentCountsByPath}
                 />
               )}
-            </div>
-          </section>
-        </div>
+            </aside>
+            <section className="flex min-h-0 flex-col overflow-hidden">
+              {activeTab === "commits" && selectedCommit ? (
+                <div className="shrink-0 border-b bg-muted/10 px-3 py-2">
+                  <label className="text-[11px] font-medium text-muted-foreground" htmlFor="workspace-commit-note">
+                    {t("issue.diff.commitNote.label")}
+                  </label>
+                  <Textarea
+                    id="workspace-commit-note"
+                    value={selectedCommitNote?.note ?? ""}
+                    onChange={(event) => updateCommitNote(event.target.value)}
+                    placeholder={t("issue.diff.commitNote.placeholder")}
+                    className="mt-1 min-h-14 text-xs"
+                  />
+                </div>
+              ) : null}
+              <div className="min-h-0 flex-1 overflow-hidden">
+                {(activeTab === "commits" ? commits.loading || commitLoading : diff.loading) && files.length === 0 ? (
+                  <div className="flex h-full items-center justify-center text-sm text-muted-foreground">{t("issue.diff.loading")}</div>
+                ) : (
+                  <GitDiffViewer
+                    file={selected}
+                    viewMode={viewMode}
+                    comments={reviewEnabled ? selectedFileComments : undefined}
+                    onSaveComment={reviewEnabled ? saveReviewComment : undefined}
+                    onRemoveComment={reviewEnabled ? removeReviewComment : undefined}
+                  />
+                )}
+              </div>
+            </section>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
     <Dialog open={commitDialogOpen} onOpenChange={setCommitDialogOpen}>
@@ -461,6 +489,107 @@ function RepoNav({ repos, activeRepo, onChange }: { repos: string[]; activeRepo:
           {repo}
         </button>
       ))}
+    </div>
+  );
+}
+
+function BranchStatusStrip({
+  repo,
+  fileCount,
+  stats,
+}: {
+  repo: GitDiffRepo | null;
+  fileCount: number;
+  stats: DiffStats;
+}) {
+  const { t } = useTranslation();
+  const hasBranch = Boolean(repo?.branch);
+
+  return (
+    <div className="flex h-8 shrink-0 items-center justify-between gap-3 border-b bg-muted/10 px-3 text-[11px]">
+      <div className="flex min-w-0 items-center gap-2">
+        <GitBranch className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        {hasBranch ? (
+          <span className="truncate font-mono">
+            {t("issue.diff.status.branchBase", { branch: repo!.branch, base: repo!.base ?? "—" })}
+          </span>
+        ) : (
+          <span className="truncate text-muted-foreground">{t("issue.diff.status.branchUnknown")}</span>
+        )}
+        {hasBranch ? (
+          <span className="truncate text-muted-foreground">
+            {repo!.behind === null || repo!.behind === undefined
+              ? t("issue.diff.status.aheadBehindUnknown", { ahead: repo!.ahead ?? 0 })
+              : t("issue.diff.status.aheadBehind", { ahead: repo!.ahead ?? 0, behind: repo!.behind })}
+          </span>
+        ) : null}
+      </div>
+      <div className="flex shrink-0 items-center gap-2 tabular-nums">
+        <span className="text-muted-foreground">{t("issue.diff.files", { count: fileCount })}</span>
+        <span className="text-emerald-600">+{stats.additions}</span>
+        <span className="text-rose-600">-{stats.deletions}</span>
+      </div>
+    </div>
+  );
+}
+
+function UncommittedSummaryStrip({
+  fileCount,
+  stats,
+  reviewCount,
+}: {
+  fileCount: number;
+  stats: DiffStats;
+  reviewCount: number;
+}) {
+  const { t } = useTranslation();
+
+  return (
+    <div className="flex h-8 shrink-0 items-center justify-between gap-3 border-b bg-muted/10 px-3 text-[11px]">
+      <div className="flex min-w-0 items-center gap-2">
+        <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500" />
+        <span className="truncate font-medium">{t("issue.diff.status.workingTree")}</span>
+      </div>
+      <div className="flex shrink-0 items-center gap-2 tabular-nums">
+        <span className="text-muted-foreground">{t("issue.diff.files", { count: fileCount })}</span>
+        <span className="text-emerald-600">+{stats.additions}</span>
+        <span className="text-rose-600">-{stats.deletions}</span>
+        {reviewCount > 0 ? (
+          <span className="text-sky-600">{t("issue.diff.status.reviewCount", { count: reviewCount })}</span>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function UncommittedEmptyState({
+  onRefresh,
+  onViewBranch,
+}: {
+  onRefresh: () => void;
+  onViewBranch: () => void;
+}) {
+  const { t } = useTranslation();
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 bg-background p-8 text-center">
+      <p className="text-sm font-medium text-foreground">{t("issue.diff.empty.uncommittedTitle")}</p>
+      <p className="max-w-sm text-xs text-muted-foreground">{t("issue.diff.empty.uncommittedBody")}</p>
+      <div className="flex items-center gap-2">
+        <Button type="button" size="sm" variant="outline" className="h-7 gap-1 px-2 text-[11px]" onClick={onRefresh}>
+          <RefreshCw className="h-3.5 w-3.5" />
+          {t("issue.diff.empty.refresh")}
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          className="h-7 gap-1 rounded-md bg-slate-950 px-2 text-[11px] text-white hover:bg-slate-800"
+          onClick={onViewBranch}
+        >
+          <GitBranch className="h-3.5 w-3.5" />
+          {t("issue.diff.empty.viewBranch")}
+        </Button>
+      </div>
     </div>
   );
 }

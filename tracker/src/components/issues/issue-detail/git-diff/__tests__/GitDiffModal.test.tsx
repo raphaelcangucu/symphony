@@ -316,4 +316,48 @@ describe("GitDiffModal", () => {
     await user.click(screen.getByRole("button", { name: /feat: second/i }));
     expect(screen.getByTestId("git-diff-viewer")).toHaveAttribute("data-comment-count", "0");
   });
+
+  it("shows branch status strip with ahead/behind on Branch tab", () => {
+    useGitDiffMock.mockReturnValue({
+      repos: [
+        {
+          repo: "frontend",
+          branch: "feat/x",
+          base: "main",
+          ahead: 8,
+          behind: 0,
+          files: [{ path: "src/App.tsx", oldPath: null, status: "modified", patch: "@@\n+a\n" }],
+        },
+      ],
+      workspace: { path: "/tmp/ws", available: true },
+      loading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+
+    render(<GitDiffModal open onOpenChange={vi.fn()} projectSlug="advising" identifier="CDE-1" />);
+
+    expect(screen.getByText(/feat\/x/i)).toBeInTheDocument();
+    expect(screen.getByText(/main/i)).toBeInTheDocument();
+    expect(screen.getByText(/8 ahead/i)).toBeInTheDocument();
+  });
+
+  it("shows working-tree strip and empty actions when uncommitted has no files", async () => {
+    const user = userEvent.setup();
+    useGitDiffMock.mockReturnValue({
+      repos: [],
+      workspace: { path: "/tmp/ws", available: true },
+      loading: false,
+      error: null,
+      refetch: diffRefetchMock,
+    });
+
+    render(<GitDiffModal open onOpenChange={vi.fn()} projectSlug="advising" identifier="CDE-1" />);
+    await user.click(screen.getByRole("tab", { name: /uncommitted/i }));
+
+    expect(screen.getByText(/working tree/i)).toBeInTheDocument();
+    expect(screen.getByText(/no uncommitted changes/i)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /view branch/i }));
+    expect(screen.getByRole("tab", { name: /^branch$/i })).toHaveAttribute("data-state", "active");
+  });
 });
