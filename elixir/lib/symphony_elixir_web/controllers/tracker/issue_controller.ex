@@ -7,6 +7,7 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
 
   alias Plug.Conn
   alias SymphonyElixir.{AgentPreference, IssueDispatch, Orchestrator, ProjectConfig, Repo}
+  alias SymphonyElixir.Claude.GoalControl, as: ClaudeGoal
   alias SymphonyElixir.Codex.GoalControl
   alias SymphonyElixir.GitHub.AttachmentRewriter
   alias SymphonyElixir.LocalTracker.Context
@@ -19,6 +20,7 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
   # Compile-time copy of the canonical list so it can be used in guards.
   @agent_kinds SymphonyElixir.Settings.Agents.agent_kinds()
   @agent_labels %{"codex" => "Codex", "claude" => "Claude", "cursor" => "Cursor", "opencode" => "OpenCode"}
+  @goal_actions ~w(get pause resume clear set_objective set_budget)
 
   @spec index(Conn.t(), map()) :: Conn.t()
   def index(conn, %{"project_slug" => project_slug} = params) do
@@ -282,8 +284,8 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
   end
 
   @doc """
-  Drives the native Codex goal controls (pause/resume/clear/edit/budget/get) for
-  an issue's durable goal thread. Mutations map directly onto `thread/goal/*`.
+  Drives agent goal controls for an issue. Codex maps onto `thread/goal/*`;
+  Claude maps onto the `/goal` sidecar mirror.
   """
   @spec goal_control(Conn.t(), map()) :: Conn.t()
   def goal_control(conn, %{"project_slug" => project_slug, "identifier" => identifier} = params) do
@@ -311,34 +313,99 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
       {:error, :no_codex_thread} ->
         TrackerErrors.validation_msg(conn, "no Codex goal thread exists for this issue yet")
 
+      {:error, :claude_goal_unsupported_version} ->
+        TrackerErrors.validation_msg(conn, "Claude /goal requires Claude Code >= 2.1.139")
+
+      {:error, :unsupported_for_agent} ->
+        TrackerErrors.validation_msg(conn, "this goal action is not supported for the issue agent")
+
+      {:error, :objective_too_long} ->
+        TrackerErrors.validation_msg(conn, "objective must be at most 4000 characters")
+
       {:error, reason} ->
         TrackerErrors.render(conn, reason)
     end
   end
 
-  defp run_goal_action(project, identifier, "get", _params),
+  defp run_goal_action(project, identifier, action, params) when action in @goal_actions do
+    agent = resolve_goal_agent(project, identifier, params)
+
+    case agent do
+      "claude" -> run_claude_goal_action(project, identifier, action, params)
+      "cursor" -> run_unsupported_goal_action(action)
+      "opencode" -> run_unsupported_goal_action(action)
+      _ -> run_codex_goal_action(project, identifier, action, params)
+    end
+  end
+
+  defp run_goal_action(_project, _identifier, _action, _params), do: {:error, :invalid_action}
+
+  defp run_unsupported_goal_action("get"), do: {:ok, nil}
+  defp run_unsupported_goal_action(_action), do: {:error, :unsupported_for_agent}
+
+  defp run_claude_goal_action(project, identifier, "get", _params),
+    do: ClaudeGoal.get(project, identifier, :execution)
+
+  defp run_claude_goal_action(project, identifier, "pause", _params),
+    do: ClaudeGoal.pause(project, identifier, :execution)
+
+  defp run_claude_goal_action(project, identifier, "resume", _params),
+    do: ClaudeGoal.resume(project, identifier, :execution)
+
+  defp run_claude_goal_action(project, identifier, "clear", _params),
+    do: ClaudeGoal.clear(project, identifier, :execution)
+
+  defp run_claude_goal_action(project, identifier, "set_objective", params),
+    do: ClaudeGoal.set_objective(project, identifier, :execution, Map.get(params, "objective", ""))
+
+  defp run_claude_goal_action(project, identifier, "set_budget", _params),
+    do: ClaudeGoal.set_budget(project, identifier, :execution, nil)
+
+  defp run_codex_goal_action(project, identifier, "get", _params),
     do: GoalControl.get(project, identifier)
 
-  defp run_goal_action(project, identifier, "pause", _params),
+  defp run_codex_goal_action(project, identifier, "pause", _params),
     do: GoalControl.pause(project, identifier)
 
-  defp run_goal_action(project, identifier, "resume", _params),
+  defp run_codex_goal_action(project, identifier, "resume", _params),
     do: GoalControl.resume(project, identifier)
 
-  defp run_goal_action(project, identifier, "clear", _params),
+  defp run_codex_goal_action(project, identifier, "clear", _params),
     do: GoalControl.clear(project, identifier)
 
-  defp run_goal_action(project, identifier, "set_objective", params),
+  defp run_codex_goal_action(project, identifier, "set_objective", params),
     do: GoalControl.set_objective(project, identifier, Map.get(params, "objective", ""))
 
-  defp run_goal_action(project, identifier, "set_budget", params) do
+  defp run_codex_goal_action(project, identifier, "set_budget", params) do
     case parse_token_budget(Map.get(params, "token_budget")) do
       {:ok, budget} -> GoalControl.set_budget(project, identifier, budget)
       :error -> {:error, :invalid_budget}
     end
   end
 
-  defp run_goal_action(_project, _identifier, _action, _params), do: {:error, :invalid_action}
+  defp resolve_goal_agent(project, identifier, params) do
+    explicit =
+      case Map.get(params, "agent") do
+        agent when is_binary(agent) -> String.trim(String.downcase(agent))
+        _ -> nil
+      end
+
+    cond do
+      explicit in @agent_kinds ->
+        explicit
+
+      true ->
+        case Context.get_agent_settings(project.slug, identifier) do
+          {:ok, %{agent_kind: kind}} when is_binary(kind) and kind != "" -> kind
+          _ ->
+            case IssueAdapter.dispatch(project, :get_issue, [identifier]) do
+              {:ok, %{agent: agent}} when is_binary(agent) and agent != "" -> agent
+              {:ok, %{agent_kind: kind}} when is_binary(kind) and kind != "" -> kind
+              _ -> "codex"
+            end
+        end
+    end
+  end
 
   defp parse_token_budget(nil), do: {:ok, nil}
   defp parse_token_budget(value) when is_integer(value) and value > 0, do: {:ok, value}

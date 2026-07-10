@@ -18,6 +18,7 @@ defmodule SymphonyElixir.IssueDispatch do
     Workspace
   }
 
+  alias SymphonyElixir.Claude.GoalControl, as: ClaudeGoal
   alias SymphonyElixir.Codex.GoalControl
   alias SymphonyElixir.Codex.Session, as: CodexStore
   alias SymphonyElixir.LocalTracker.{Context, Project}
@@ -103,7 +104,7 @@ defmodule SymphonyElixir.IssueDispatch do
          {:ok, _comment} <- maybe_add_comment(project, identifier, action, opts),
          {:ok, _} <- maybe_update_agent(project, identifier, opts, agent_kind),
          :ok <- maybe_persist_agent_settings(project, identifier, opts, agent_kind),
-         :ok <- maybe_route_codex_goal(project, identifier, opts, agent_kind),
+         :ok <- maybe_route_agent_goal(project, identifier, opts, agent_kind),
          :ok <- maybe_hard_reset(project, identifier, issue, action),
          {:ok, _} <- maybe_move_for_action(project, issue, action, opts),
          :ok <- cancel_retry(identifier),
@@ -261,10 +262,10 @@ defmodule SymphonyElixir.IssueDispatch do
     end
   end
 
-  # When a Codex dispatch supplies a goal, establish it on the native Codex
-  # thread rather than caching it on the issue. Best-effort so a transient Codex
-  # failure never blocks resume/restart.
-  defp maybe_route_codex_goal(project, identifier, opts, "codex") do
+  # When a dispatch supplies a goal, establish it on the agent-native surface
+  # (Codex thread/goal or Claude /goal mirror). Best-effort so a transient failure
+  # never blocks resume/restart.
+  defp maybe_route_agent_goal(project, identifier, opts, "codex") do
     case normalize_optional_string(Map.get(opts, :goal)) do
       nil ->
         :ok
@@ -281,7 +282,24 @@ defmodule SymphonyElixir.IssueDispatch do
     end
   end
 
-  defp maybe_route_codex_goal(_project, _identifier, _opts, _agent_kind), do: :ok
+  defp maybe_route_agent_goal(project, identifier, opts, "claude") do
+    case normalize_optional_string(Map.get(opts, :goal)) do
+      nil ->
+        :ok
+
+      objective ->
+        case ClaudeGoal.set_objective(project, identifier, :execution, objective) do
+          {:ok, _goal} ->
+            :ok
+
+          {:error, reason} ->
+            Logger.debug("Skipping Claude goal routing on dispatch identifier=#{identifier} reason=#{inspect(reason)}")
+            {:error, reason}
+        end
+    end
+  end
+
+  defp maybe_route_agent_goal(_project, _identifier, _opts, _agent_kind), do: :ok
 
   # Effective agent kind for this dispatch: an explicit `opts[:agent]` override
   # wins, otherwise resolve task labels over the project default.

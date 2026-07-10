@@ -2,7 +2,7 @@ defmodule SymphonyElixir.Assistant.GoalTools do
   @moduledoc false
 
   alias SymphonyElixir.AgentGoal
-  alias SymphonyElixir.LocalTracker.{Context, Project}
+  alias SymphonyElixir.LocalTracker.Context
 
   @tool "goal"
   @actions ~w(get set_objective pause resume clear set_budget)

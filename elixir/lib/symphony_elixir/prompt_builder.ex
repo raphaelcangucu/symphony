@@ -288,28 +288,46 @@ defmodule SymphonyElixir.PromptBuilder do
   def child_constraints_section(_parent_identifier), do: ""
 
   # Codex receives the long-running objective as a native goal (set on the
-  # thread by the orchestrator), so it is not duplicated here. Claude and Cursor
-  # have no native goal primitive, so the workflow objective is injected into the
-  # prompt and they rely on the agent runner's multi-turn loop for continuation.
-  defp workflow_guidance_section(%SymphonyElixir.Issue{agent_goal: goal}, agent_kind)
+  # thread by the orchestrator), so it is not duplicated here. Claude uses
+  # native `/goal` when a mirror is active; otherwise (and for Cursor) the
+  # workflow objective is injected into the prompt and they rely on the agent
+  # runner's multi-turn loop for continuation.
+  defp workflow_guidance_section(%SymphonyElixir.Issue{agent_goal: goal} = issue, agent_kind)
        when agent_kind in ["claude", "cursor"] and is_binary(goal) do
-    case String.trim(goal) do
-      "" ->
-        ""
+    if agent_kind == "claude" and claude_execution_goal_active?(issue) do
+      ""
+    else
+      case String.trim(goal) do
+        "" ->
+          ""
 
-      trimmed ->
-        """
+        trimmed ->
+          """
 
-        ## Long-running workflow
+          ## Long-running workflow
 
-        Treat this issue as a long-running workflow: keep iterating across turns until the objective below is met or you are genuinely blocked. Do not end the run while the issue is still active and work remains.
+          Treat this issue as a long-running workflow: keep iterating across turns until the objective below is met or you are genuinely blocked. Do not end the run while the issue is still active and work remains.
 
-        #{trimmed}
-        """
+          #{trimmed}
+          """
+      end
     end
   end
 
   defp workflow_guidance_section(_issue, _agent_kind), do: ""
+
+  defp claude_execution_goal_active?(%SymphonyElixir.Issue{} = issue) do
+    workspace = SymphonyElixir.Workspace.path_for_issue(issue)
+
+    case SymphonyElixir.Claude.GoalStore.read(workspace, :execution) do
+      {:ok, %{"status" => "active", "objective" => objective}}
+      when is_binary(objective) and objective != "" ->
+        true
+
+      _ ->
+        false
+    end
+  end
 
   # The workpad must exist before any code — and its scope must come from the
   # context Symphony already injected (authoring spec/plan first, then the issue

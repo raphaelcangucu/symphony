@@ -710,32 +710,91 @@ defmodule SymphonyElixir.AgentExecution do
   end
 
   # Build a UI-facing goal projection. Codex goals are sourced only from the
-  # native goal mirror (`.symphony/codex-session.json`), keeping the Codex thread
-  # authoritative; Claude/Cursor "workflow" goals come from the provided
-  # `agent_goal` prompt guidance.
+  # native goal mirror (`.symphony/codex-session.json`). Claude goals come from
+  # `.symphony/claude-goal.json` when active; otherwise Claude/Cursor fall back
+  # to `agent_goal` prompt guidance as workflow.
   defp build_goal(agent_kind, status, workflow_objective, workspace) do
-    kind = goal_kind(%{agent_kind: agent_kind})
+    case project_goal(agent_kind, status, workflow_objective, workspace) do
+      nil -> nil
+      goal -> goal
+    end
+  end
 
-    objective =
-      case kind do
-        "goal" -> native_mirror_objective(workspace)
-        _ -> normalize_objective(workflow_objective)
-      end
+  defp project_goal("claude", status, workflow_objective, workspace) do
+    case claude_mirror_goal(workspace) do
+      %{objective: objective} = mirror ->
+        %{
+          kind: "goal",
+          source: "claude",
+          status: Map.get(mirror, :status) || status,
+          objective: objective,
+          capabilities: ["get", "edit", "clear"]
+        }
 
-    case objective do
+      nil ->
+        case normalize_objective(workflow_objective) do
+          nil ->
+            nil
+
+          value ->
+            %{
+              kind: "workflow",
+              source: "prompt",
+              status: status,
+              objective: value,
+              capabilities: ["view"]
+            }
+        end
+    end
+  end
+
+  defp project_goal(agent_kind, status, workflow_objective, workspace)
+       when agent_kind in ["cursor", "opencode"] do
+    case normalize_objective(workflow_objective) do
       nil ->
         nil
 
       value ->
         %{
-          kind: kind,
-          source: goal_source(kind),
+          kind: "workflow",
+          source: "prompt",
           status: status,
           objective: value,
-          capabilities: goal_capabilities(kind)
+          capabilities: ["view"]
         }
     end
   end
+
+  defp project_goal(_agent_kind, status, _workflow_objective, workspace) do
+    case native_mirror_objective(workspace) do
+      nil ->
+        nil
+
+      value ->
+        %{
+          kind: "goal",
+          source: "native",
+          status: status,
+          objective: value,
+          capabilities: ["get", "edit", "clear"]
+        }
+    end
+  end
+
+  defp claude_mirror_goal(workspace) when is_binary(workspace) do
+    case SymphonyElixir.Claude.GoalStore.read(workspace, :execution) do
+      {:ok, %{"status" => "active", "objective" => objective}} ->
+        case normalize_objective(objective) do
+          nil -> nil
+          value -> %{objective: value, status: "active"}
+        end
+
+      _ ->
+        nil
+    end
+  end
+
+  defp claude_mirror_goal(_workspace), do: nil
 
   defp native_mirror_objective(workspace) when is_binary(workspace) do
     case CodexStore.read_goal(workspace) do
@@ -754,21 +813,6 @@ defmodule SymphonyElixir.AgentExecution do
   end
 
   defp normalize_objective(_value), do: nil
-
-  defp goal_kind(%{agent_kind: kind}) when kind in ["claude", "cursor", "opencode"], do: "workflow"
-  defp goal_kind(_entry), do: "goal"
-
-  defp goal_source("goal"), do: "native"
-  defp goal_source("workflow"), do: "prompt"
-
-  # Capabilities for goals projected without a live Codex app-server connection
-  # (saved/not-loaded, interrupted, and fallback states). Native pause/resume
-  # require a resolvable thread, which a dormant goal does not have, so we only
-  # advertise the controls `GoalControl` can satisfy from the cached objective.
-  # The UI falls back to dispatch (start/stop the worker) for resume/pause.
-  defp goal_capabilities("goal"), do: ["get", "edit", "clear"]
-  defp goal_capabilities("workflow"), do: ["view"]
-  defp goal_capabilities(_kind), do: []
 
   defp long_running_kind(%{kind: kind}) when is_binary(kind), do: kind
   defp long_running_kind(_goal), do: nil
