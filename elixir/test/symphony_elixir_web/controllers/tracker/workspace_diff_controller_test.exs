@@ -60,8 +60,13 @@ defmodule SymphonyElixirWeb.Tracker.WorkspaceDiffControllerTest do
         "/api/tracker/v1/projects/advising/issues/#{issue.identifier}/diff?type=uncommitted"
       )
 
+    response = json_response(conn, 200)
+
     assert %{"data" => [%{"repo" => "advising", "files" => files}], "workspace" => workspace} =
-             json_response(conn, 200)
+             response
+
+    assert %{"repo" => _, "branch" => _, "base" => _, "ahead" => _, "behind" => _, "files" => _} =
+             hd(response["data"])
 
     assert workspace["available"] == true
     paths = Enum.map(files, & &1["path"]) |> Enum.sort()

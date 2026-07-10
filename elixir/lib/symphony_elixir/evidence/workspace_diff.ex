@@ -23,7 +23,14 @@ defmodule SymphonyElixir.Evidence.WorkspaceDiff do
           status: String.t(),
           patch: String.t()
         }
-  @type repo_diff :: %{repo: String.t(), files: [file_change()]}
+  @type repo_diff :: %{
+          repo: String.t(),
+          branch: String.t() | nil,
+          base: String.t() | nil,
+          ahead: non_neg_integer(),
+          behind: non_neg_integer() | nil,
+          files: [file_change()]
+        }
 
   @spec changes(Path.t(), diff_type()) :: {:ok, [repo_diff()]} | {:error, :invalid_diff_type}
   def changes(workspace, type) when is_binary(workspace) and type in [:uncommitted, :branch] do
@@ -31,7 +38,18 @@ defmodule SymphonyElixir.Evidence.WorkspaceDiff do
       repos =
         workspace
         |> RunContract.repo_states()
-        |> Enum.map(&%{repo: &1.name, files: repo_files(&1, type)})
+        |> Enum.map(fn repo_state ->
+          files = repo_files(repo_state, type)
+
+          %{
+            repo: repo_state.name,
+            branch: repo_state.branch,
+            base: repo_state.default_branch,
+            ahead: repo_state.ahead_count,
+            behind: behind_count(repo_state),
+            files: files
+          }
+        end)
         |> Enum.reject(fn %{files: files} -> files == [] end)
 
       {:ok, repos}
@@ -41,6 +59,22 @@ defmodule SymphonyElixir.Evidence.WorkspaceDiff do
   end
 
   def changes(_workspace, _type), do: {:error, :invalid_diff_type}
+
+  defp behind_count(%RepoState{path: path, default_branch: default})
+       when is_binary(default) and default != "" do
+    case git(path, ["rev-list", "--count", "HEAD..origin/#{default}"]) do
+      {:ok, output} ->
+        case Integer.parse(String.trim(output)) do
+          {n, _} -> n
+          :error -> nil
+        end
+
+      {:error, _} ->
+        nil
+    end
+  end
+
+  defp behind_count(_), do: nil
 
   defp repo_files(%RepoState{} = repo, :branch) do
     base = diff_base(repo)

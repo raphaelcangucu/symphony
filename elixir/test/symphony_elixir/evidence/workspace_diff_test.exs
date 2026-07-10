@@ -7,6 +7,26 @@ defmodule SymphonyElixir.Evidence.WorkspaceDiffTest do
 
   @moduletag :tmp_dir
 
+  test "branch diff includes branch metadata on each repo", %{tmp_dir: tmp_dir} do
+    ws = Path.join(tmp_dir, "GAM-9")
+    File.mkdir_p!(ws)
+    repo = make_repo!(tmp_dir, ws, "frontend")
+
+    sh!(
+      repo,
+      "git checkout -b feat/x && mkdir -p src && printf 'a\\n' > src/App.tsx && git add -A && git commit -m work"
+    )
+
+    assert {:ok, [entry]} = WorkspaceDiff.changes(ws, :branch)
+    assert entry.repo == "frontend"
+    assert entry.branch == "feat/x"
+    assert entry.base == "main"
+    assert is_integer(entry.ahead)
+    assert entry.ahead >= 1
+    assert is_integer(entry.behind) or is_nil(entry.behind)
+    assert [%{path: "src/App.tsx"}] = entry.files
+  end
+
   test "branch diff returns per-file patches vs origin default base", %{tmp_dir: tmp_dir} do
     ws = Path.join(tmp_dir, "GAM-9")
     File.mkdir_p!(ws)
