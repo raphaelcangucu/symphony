@@ -1,6 +1,6 @@
 ---
 name: subtask-orchestration
-description: Break a parent task into subtasks using Symphony's execution-bundle model. Use when an issue is large enough to split, spans multiple repositories, or has independently shippable parts. Covers the two execution shapes (workpad_task, child_run), deterministic classification, the per-repo parent integration branch children PR into, shared contracts and the runtime comms tools for cross-unit coordination, and the authoring tool sequence.
+description: Break a parent task into subtasks using Symphony's execution-bundle model. Use when an issue is large enough to split, spans multiple repositories, or has independently shippable parts. Covers the two execution shapes (workpad_task, child_run), lab-aware classification, shared contracts, and the authoring tool sequence. Default (Lab off) keeps same-repo work in one working tree.
 ---
 
 # Subtask orchestration
@@ -9,18 +9,27 @@ Symphony executes a parent task as an **execution bundle**: an ordered set of un
 contracts and dependency edges, stored as a YAML block in the parent's `## Codex Workpad` comment.
 The authoring assistant builds the bundle; the runner consumes it and never re-derives structure.
 
-## Lab flag: two orchestration modes
+## Lab flag: two orchestration modes (read this first)
 
 Instance setting **`lab.bundle_child_orchestration`** (Settings → Lab, default **off**):
 
-| Flag | `child_run` meaning | Orchestrator |
+| Flag | Meaning | Orchestrator |
 | --- | --- | --- |
-| **off** (default) | Subagent scope inside the **parent run** — one PR per repo, no integration branch | Dispatches **only the parent**; parent uses `subagent-driven-development` |
-| **on** (lab) | Separate orchestrator run per unit — worktrees, integration branch, child PRs | Parent coordinator + orchestrator child dispatches (below) |
+| **off** (default) | **Unified parent** — one working tree / one feature branch per repo / one PR per repo. `child_run` is a board unit executed as a native subagent inside the parent run. | Dispatches **only the parent**; parent uses `subagent-driven-development` |
+| **on** (lab) | **Isolated child runs** — separate orchestrator run per `child_run`, git worktrees, integration branch, child PRs | Parent coordinator + orchestrator child dispatches |
 
 The bundle YAML (units, deps, contracts) is required in **both** modes. Only execution topology changes.
 
-## The two execution shapes (lab mode on)
+**Authoring rule:** when Lab is OFF, never recommend isolated worktrees, `symphony/{parent}/{repo}` integration branches, or per-unit PRs. Prefer `workpad_task` for same-repo work. Check `orchestration_mode` on `classify_execution_unit` / `create_subtask` responses (`unified` vs `bundle_child`).
+
+## The two execution shapes (default: Lab OFF)
+
+| Shape | Where it runs (Lab OFF) | Use when |
+| --- | --- | --- |
+| `workpad_task` | Inline in the parent's run and **same working tree**. Ships on the parent feature branch / PR. | Same-repo work — including units with `depends_on` / shared contracts. |
+| `child_run` | Board sub-issue + native subagent **inside the parent session** (still same tree / one PR). | Different-repo units, or when the user wants a separate tracked issue. |
+
+## The two execution shapes (only when Lab ON)
 
 | Shape | Where it runs | Use when |
 | --- | --- | --- |
@@ -29,9 +38,11 @@ The bundle YAML (units, deps, contracts) is required in **both** modes. Only exe
 
 Both shapes are held to the **same quality bar**: TDD plus per-subtask **evidence** (tests +
 artifacts). Native subagents (Codex/Claude/Cursor) are allowed inside **both** shapes for independent
-slices of a unit — keep all of a unit's work inside that unit's single worktree/branch/PR.
+slices of a unit.
 
-## Per-repo integration branch (how children land)
+## Per-repo integration branch (Lab ON only)
+
+Skip this section when Lab is OFF.
 
 For each repo touched by the bundle, the parent owns one integration branch
 `symphony/{parent}/{repo}`:
@@ -46,7 +57,7 @@ For each repo touched by the bundle, the parent owns one integration branch
    units are all merged, opens exactly **one** final PR per repo
    (`symphony/{parent}/{repo}` → that repo's default branch).
 
-**Dependency chains**: a dependent releases when its predecessor reaches human review (PR open) —
+**Dependency chains** (Lab ON): a dependent releases when its predecessor reaches human review (PR open) —
 before that predecessor is merged into the integration branch. Forking the dependent's worktree off
 the predecessor's branch is what hands it the predecessor's schema/API without waiting for the merge.
 In a linear chain (A → B → C), C forks off B (which already contains A). Cross-repo predecessors are
@@ -58,13 +69,21 @@ re-provision) but still runs its own tests and captures its own evidence.
 
 ## Deterministic classification (do not re-decide at run time)
 
-Apply these rules in order; the first match wins:
+`classify_execution_unit` / `create_subtask` pass the current Lab flag into the classifier.
 
-1. **`:different_repo`** — the unit targets a different repo than the parent → `child_run` (its own worktree for that repo).
-2. **`:independent_deliverable`** — the unit is independently shippable (`deliverable: "pr"`) → `child_run`.
-3. **`:contract_coupled`** — it `produces`/`consumes` a shared contract or `depends_on` another unit → `child_run`.
+### Lab OFF (default)
+
+1. **`:different_repo`** — unit repo ≠ parent repo (both known) → `child_run` (board unit; still unified topology).
+2. **`:same_repo_inline`** — otherwise → `workpad_task` (same repo, or parent repo unknown — cannot prove isolation is needed).
+3. **`:unknown_repo`** — unit repo unknown → **ambiguous**: keep the subtask a draft and ask the user.
+
+### Lab ON
+
+1. **`:different_repo`** — different repo than the parent → `child_run`.
+2. **`:independent_deliverable`** — `deliverable: "pr"` → `child_run`.
+3. **`:contract_coupled`** — produces/consumes a shared contract or `depends_on` another unit → `child_run`.
 4. **`:same_repo_inline`** — same repo, no isolation needed → `workpad_task`.
-5. **`:unknown_repo`** — repo is unknown → **ambiguous**: keep the subtask a draft and ask the user.
+5. **`:unknown_repo`** — repo unknown → **ambiguous**.
 
 Use `classify_execution_unit` to preview a classification without writing anything.
 
@@ -92,7 +111,7 @@ While the bundle runs, the parent and children coordinate through tools instead 
 
 ## Authoring tool sequence
 
-1. `classify_execution_unit` — preview a subtask's shape when unsure (no writes).
+1. `classify_execution_unit` — preview a subtask's shape when unsure (no writes). Read `orchestration_mode`.
 2. `create_subtask` — create the child issue, link it under the parent, and add it to the bundle
    (auto-classifies when `unit_type` is omitted).
 3. `set_issue_parent` — reparent or detach a subtask (rejects cycles).
@@ -104,4 +123,5 @@ While the bundle runs, the parent and children coordinate through tools instead 
 ## Ambiguity fallback
 
 If classification is ambiguous (unknown repo) or the user is undecided about scope, keep the subtask as
-a **draft** and ask one clarifying question. Never guess the execution shape.
+a **draft** and ask one clarifying question. Never guess the execution shape. Never invent Lab-ON
+topology (worktrees / integration branches) while Lab is OFF.

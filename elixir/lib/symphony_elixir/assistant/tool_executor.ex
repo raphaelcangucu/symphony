@@ -26,10 +26,13 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     RunningAgentsTools,
     SetupTools,
     SteerTools,
+    SubtaskAuthoring,
     SyncTools,
     ToolText,
     TunnelTools
   }
+
+  alias SymphonyElixir.Settings.Lab
 
   alias SymphonyElixir.Codex.DynamicTool
   alias SymphonyElixir.Config
@@ -323,7 +326,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
       }),
       tool_spec(
         "classify_execution_unit",
-        "Deterministically classify a planned subtask as workpad_task (inline in the parent's run/PR) or child_run (own run/worktree, PR into the parent's per-repo integration branch). Preview only; no writes.",
+        classify_execution_unit_description(),
         %{
           "type" => "object",
           "additionalProperties" => false,
@@ -339,7 +342,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
       ),
       tool_spec(
         "create_subtask",
-        "Create a child issue under a parent and attach it to the parent's execution bundle. Omit unit_type to auto-classify (workpad_task inline in the parent's run, or child_run with its own worktree and a PR into the parent's per-repo integration branch). Use for breaking a task into subtasks.",
+        create_subtask_description(),
         %{
           "type" => "object",
           "additionalProperties" => false,
@@ -1038,9 +1041,10 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     }
 
     parent_repo = normalize_optional_string(Map.get(arguments, "parent_repo"))
+    mode = SubtaskAuthoring.orchestration_mode_string()
 
     {classification, rule} =
-      case Classifier.classify(unit, parent_repo: parent_repo) do
+      case Classifier.classify(unit, classify_opts(parent_repo)) do
         {:ok, type, rule} -> {to_string(type), to_string(rule)}
         {:ambiguous, reason} -> {"ambiguous", to_string(reason)}
       end
@@ -1048,8 +1052,8 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     {:ok,
      %{
        tool: "classify_execution_unit",
-       message: "Classified as #{classification} (#{rule}).",
-       data: %{classification: classification, rule: rule}
+       message: "Classified as #{classification} (#{rule}) under orchestration_mode=#{mode}.",
+       data: %{classification: classification, rule: rule, orchestration_mode: mode}
      }}
   end
 
@@ -1058,20 +1062,24 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
          {:ok, title} <- normalize_required_string(Map.get(arguments, "title"), :title),
          {:ok, parent} <- IssueAdapter.dispatch(project, :get_issue, [parent_id]),
          repo <- normalize_optional_string(Map.get(arguments, "repo")) || parent.repository_full_name,
-         {:ok, type} <- resolve_unit_type(arguments, repo, parent.repository_full_name),
+         parent_repo <- resolve_parent_repo(project, parent, repo),
+         {:ok, type} <- resolve_unit_type(arguments, repo, parent_repo),
          attrs <- build_subtask_attrs(arguments, title, repo),
          {:ok, child} <- IssueAdapter.dispatch(project, :create_issue, [attrs]),
          :ok <- link_subtask_parent(project, parent, child),
          {:ok, _comment} <- upsert_bundle_unit(project, parent, child, repo, type, arguments) do
+      mode = SubtaskAuthoring.orchestration_mode_string()
+
       {:ok,
        %{
          tool: "create_subtask",
-         message: "Created #{type} subtask #{child.identifier} under #{parent.identifier}.",
+         message: "Created #{type} subtask #{child.identifier} under #{parent.identifier} (orchestration_mode=#{mode}).",
          data: %{
            parent: parent.identifier,
            subtask: child.identifier,
            unit_type: to_string(type),
-           repo: repo
+           repo: repo,
+           orchestration_mode: mode
          }
        }}
     end
@@ -1390,8 +1398,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     |> maybe_put_attr("repository", repo)
   end
 
-  # Legacy `subagent_unit` collapses into `:child_run` (own worktree, PR into the
-  # parent's per-repo integration branch).
+  # Legacy `subagent_unit` collapses into `:child_run`.
   defp resolve_unit_type(%{"unit_type" => "subagent_unit"}, _repo, _parent_repo), do: {:ok, :child_run}
 
   defp resolve_unit_type(%{"unit_type" => t}, _repo, _parent_repo)
@@ -1407,9 +1414,57 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
       depends_on: normalize_string_list(Map.get(arguments, "depends_on"))
     }
 
-    case Classifier.classify(unit, parent_repo: parent_repo) do
+    case Classifier.classify(unit, classify_opts(parent_repo)) do
       {:ok, type, _rule} -> {:ok, type}
       {:ambiguous, reason} -> {:error, {:ambiguous_classification, reason}}
+    end
+  end
+
+  defp classify_opts(parent_repo) do
+    [
+      parent_repo: parent_repo,
+      bundle_child_orchestration: Lab.bundle_child_orchestration?()
+    ]
+  end
+
+  # Local-tracker issues often lack repository_full_name; fall back to the project's
+  # primary linked repo so same-repo vs different-repo classification still works.
+  defp resolve_parent_repo(project, parent, _unit_repo) do
+    normalize_optional_string(parent.repository_full_name) || primary_project_repo(project)
+  end
+
+  defp primary_project_repo(project) do
+    slug = project_slug(project)
+
+    repos = Context.list_repositories(slug)
+
+    primary =
+      Enum.find(repos, &(normalize_optional_string(Map.get(&1, :role)) == "primary")) ||
+        List.first(repos)
+
+    case primary do
+      %{github_full_name: name} -> normalize_optional_string(name)
+      _ -> nil
+    end
+  end
+
+  defp classify_execution_unit_description do
+    case SubtaskAuthoring.orchestration_mode() do
+      :bundle_child ->
+        "Deterministically classify a planned subtask as workpad_task (inline in the parent's run/PR) or child_run (own run/worktree, PR into the parent's per-repo integration branch). Preview only; no writes. Response includes orchestration_mode=bundle_child."
+
+      _ ->
+        "Deterministically classify a planned subtask under unified orchestration (lab.bundle_child_orchestration OFF). Same-repo units classify as workpad_task (same working tree / one PR); only different-repo units become child_run board units. Preview only; no writes. Response includes orchestration_mode=unified."
+    end
+  end
+
+  defp create_subtask_description do
+    case SubtaskAuthoring.orchestration_mode() do
+      :bundle_child ->
+        "Create a child issue under a parent and attach it to the parent's execution bundle. Omit unit_type to auto-classify (workpad_task inline in the parent's run, or child_run with its own isolated git worktree and a PR into the parent's per-repo integration branch). Use for breaking a task into subtasks."
+
+      _ ->
+        "Create a child issue under a parent and attach it to the parent's execution bundle under unified orchestration (lab OFF). Omit unit_type to auto-classify: same-repo work becomes workpad_task (same working tree, one feature branch/PR); different-repo becomes child_run as a board unit still executed in the parent session. Do not invent isolated worktrees while Lab is off."
     end
   end
 

@@ -4,8 +4,9 @@ defmodule SymphonyElixir.Assistant.ExecutionBundleToolsTest do
   alias Ecto.Adapters.SQL
   alias SymphonyElixir.Assistant.{ProjectBoardTools, ToolExecutor}
   alias SymphonyElixir.Codex.DynamicTool
-  alias SymphonyElixir.LocalTracker.{Context, IssueAdapter, Label}
+  alias SymphonyElixir.LocalTracker.{Context, IssueAdapter}
   alias SymphonyElixir.Repo
+  alias SymphonyElixir.Settings
   alias SymphonyElixir.Settings.Setting
   alias SymphonyElixir.Tracker.Workpad
   alias SymphonyElixir.Workpad.ExecutionBundle
@@ -27,6 +28,7 @@ defmodule SymphonyElixir.Assistant.ExecutionBundleToolsTest do
     assert result.tool == "classify_execution_unit"
     assert result.data.classification == "child_run"
     assert result.data.rule == "different_repo"
+    assert result.data.orchestration_mode == "unified"
   end
 
   test "classify_execution_unit returns workpad_task for the same repo" do
@@ -38,6 +40,7 @@ defmodule SymphonyElixir.Assistant.ExecutionBundleToolsTest do
 
     assert result.data.classification == "workpad_task"
     assert result.data.rule == "same_repo_inline"
+    assert result.data.orchestration_mode == "unified"
   end
 
   test "classify_execution_unit is exposed in the project board tool specs" do
@@ -45,7 +48,24 @@ defmodule SymphonyElixir.Assistant.ExecutionBundleToolsTest do
     assert "classify_execution_unit" in names
   end
 
-  test "classify_execution_unit reports child_run for same-repo contract-coupled work" do
+  test "lab-off classify keeps same-repo contract-coupled work as workpad_task" do
+    refute Settings.Lab.bundle_child_orchestration?()
+
+    assert {:ok, result} =
+             ToolExecutor.execute("macro-markets", "classify_execution_unit", %{
+               "repo" => "macro-markets/app",
+               "parent_repo" => "macro-markets/app",
+               "consumes" => ["api"]
+             })
+
+    assert result.data.classification == "workpad_task"
+    assert result.data.rule == "same_repo_inline"
+    assert result.data.orchestration_mode == "unified"
+  end
+
+  test "lab-on classify reports child_run for same-repo contract-coupled work" do
+    assert {:ok, true} = Settings.put("lab", "bundle_child_orchestration", true)
+
     assert {:ok, result} =
              ToolExecutor.execute("macro-markets", "classify_execution_unit", %{
                "repo" => "macro-markets/app",
@@ -55,15 +75,49 @@ defmodule SymphonyElixir.Assistant.ExecutionBundleToolsTest do
 
     assert result.data.classification == "child_run"
     assert result.data.rule == "shared_contract"
+    assert result.data.orchestration_mode == "bundle_child"
+  end
+
+  test "tool specs describe unified mode when lab is off" do
+    refute Settings.Lab.bundle_child_orchestration?()
+    specs = ToolExecutor.tool_specs()
+    classify = Enum.find(specs, &(&1["name"] == "classify_execution_unit"))
+    create = Enum.find(specs, &(&1["name"] == "create_subtask"))
+
+    assert classify["description"] =~ "unified"
+    refute classify["description"] =~ "integration branch"
+    assert create["description"] =~ "same working tree"
+    refute create["description"] =~ "isolated git worktree"
+  end
+
+  test "tool specs describe bundle_child mode when lab is on" do
+    assert {:ok, true} = Settings.put("lab", "bundle_child_orchestration", true)
+    specs = ToolExecutor.tool_specs()
+    classify = Enum.find(specs, &(&1["name"] == "classify_execution_unit"))
+    create = Enum.find(specs, &(&1["name"] == "create_subtask"))
+
+    assert classify["description"] =~ "integration branch"
+    assert create["description"] =~ "isolated git worktree"
   end
 
   describe "create_subtask" do
     setup do
-      {:ok, parent} = Context.create_issue("macro-markets", %{"title" => "Lottery wheel", "status" => "Backlog"})
+      {:ok, _} =
+        Context.replace_repositories("macro-markets", [
+          %{"github_full_name" => "macro-markets/app", "workspace_path" => "app", "role" => "primary"},
+          %{"github_full_name" => "macro-markets/backend", "workspace_path" => "backend", "role" => "backend"}
+        ])
+
+      {:ok, parent} =
+        Context.create_issue("macro-markets", %{
+          "title" => "Lottery wheel",
+          "status" => "Backlog"
+        })
+
       %{parent: parent}
     end
 
-    test "auto-classifies an independent deliverable as a child_run", %{parent: parent} do
+    test "auto-classifies a different-repo deliverable as a child_run", %{parent: parent} do
       assert {:ok, result} =
                ToolExecutor.execute("macro-markets", "create_subtask", %{
                  "parent_identifier" => parent.identifier,
@@ -75,6 +129,23 @@ defmodule SymphonyElixir.Assistant.ExecutionBundleToolsTest do
       assert result.tool == "create_subtask"
       assert result.data.unit_type == "child_run"
       assert result.data.parent == parent.identifier
+      assert result.data.orchestration_mode == "unified"
+    end
+
+    test "lab-off auto-classifies same-repo independent deliverable as workpad_task", %{parent: parent} do
+      refute Settings.Lab.bundle_child_orchestration?()
+
+      assert {:ok, result} =
+               ToolExecutor.execute("macro-markets", "create_subtask", %{
+                 "parent_identifier" => parent.identifier,
+                 "title" => "Same-repo settlement",
+                 "repo" => "macro-markets/app",
+                 "deliverable" => "pr",
+                 "depends_on" => ["foundation"]
+               })
+
+      assert result.data.unit_type == "workpad_task"
+      assert result.data.orchestration_mode == "unified"
     end
 
     test "auto-classifies a same-repo subtask as a workpad_task", %{parent: parent} do
@@ -86,6 +157,7 @@ defmodule SymphonyElixir.Assistant.ExecutionBundleToolsTest do
                })
 
       assert result.data.unit_type == "workpad_task"
+      assert result.data.orchestration_mode == "unified"
     end
 
     test "maps a legacy explicit subagent_unit unit_type to child_run", %{parent: parent} do

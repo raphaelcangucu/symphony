@@ -5,10 +5,61 @@ defmodule SymphonyElixir.Assistant.SubtaskAuthoring do
   tools (`classify_execution_unit`, `create_subtask`, `set_issue_parent`,
   `define_shared_contract`/`update_shared_contract`, `preview_execution_plan`,
   `get_execution_bundle`).
+
+  Text is lab-aware: when `lab.bundle_child_orchestration` is off (default), the
+  assistant must not recommend isolated worktrees or integration-branch PRs.
   """
 
-  @guidance """
+  alias SymphonyElixir.Settings.Lab
+
+  @unified_guidance """
   SUBTASKS & EXECUTION BUNDLE
+
+  Instance Lab: lab.bundle_child_orchestration is OFF (default / unified parent mode).
+  Do NOT suggest isolated git worktrees, per-unit feature branches, or PRs against
+  `symphony/{parent}/{repo}`. Those only apply when the Lab flag is ON.
+
+  A parent task can be broken into subtasks. Each subtask is one of two execution shapes:
+  - workpad_task: runs inline in the parent's run and the same working tree. Ships on the
+    parent's feature branch / PR. Prefer this for same-repo work — including units that
+    depend_on siblings or share contracts.
+  - child_run: a tracked sub-issue in the parent's execution bundle. With Lab OFF it still
+    executes inside the parent run (native subagent), on the same working tree and one
+    feature branch per repo, with one final PR per repo. Use child_run mainly for
+    different-repo units (or when the user explicitly wants a separate board issue).
+    Never describe child_run as opening its own worktree or integration-branch PR while Lab is OFF.
+
+  Both shapes share the same quality bar: TDD plus per-subtask evidence (tests + artifacts).
+
+  Classify deterministically (the runner never re-decides). With Lab OFF, rules in order:
+  1. different repo than the parent -> child_run (board unit; still same parent session topology)
+  2. same repo (even with depends_on / shared contracts / deliverable: "pr") -> workpad_task
+  3. repo unknown -> ambiguous: leave it a draft and ask the user before classifying.
+
+  Shared contracts still coordinate units that depend on each other (especially across repos):
+  define a shared contract whose owner is the producing unit and whose consumers are the
+  dependent units. Consumers gate on the contract being ready. At runtime, units coordinate via
+  `report_unit_status` and `query_bundle_status`.
+
+  Tool sequence when authoring subtasks:
+  1. classify_execution_unit to preview a subtask's shape (no writes) when unsure — read
+     `orchestration_mode` in the response (`unified` means same-tree).
+  2. create_subtask to create the child and attach it to the parent's execution bundle
+     (auto-classifies when unit_type is omitted). Prefer omitting unit_type, or pass
+     workpad_task for same-repo coupled work.
+  3. set_issue_parent to reparent or detach a subtask (rejects cycles).
+  4. define_shared_contract / update_shared_contract for cross-unit dependencies.
+  5. preview_execution_plan to validate the bundle before handing off; get_execution_bundle
+     to inspect the current plan.
+
+  Ambiguity fallback: if classification is ambiguous (unknown repo) or the user is undecided,
+  keep the subtask as a draft and ask one clarifying question instead of guessing.
+  """
+
+  @bundle_child_guidance """
+  SUBTASKS & EXECUTION BUNDLE
+
+  Instance Lab: lab.bundle_child_orchestration is ON (experimental isolated child runs).
 
   A parent task can be broken into subtasks. Each subtask is one of two execution shapes:
   - workpad_task: runs inline in the parent's run/workspace (same repo, no separate PR). Use for tightly
@@ -49,5 +100,28 @@ defmodule SymphonyElixir.Assistant.SubtaskAuthoring do
   """
 
   @spec guidance() :: String.t()
-  def guidance, do: @guidance
+  def guidance, do: guidance([])
+
+  @spec guidance(keyword()) :: String.t()
+  def guidance(opts) when is_list(opts) do
+    case Keyword.get(opts, :orchestration_mode) || default_orchestration_mode() do
+      :bundle_child -> @bundle_child_guidance
+      _ -> @unified_guidance
+    end
+  end
+
+  @spec orchestration_mode() :: :unified | :bundle_child
+  def orchestration_mode, do: default_orchestration_mode()
+
+  @spec orchestration_mode_string() :: String.t()
+  def orchestration_mode_string do
+    case default_orchestration_mode() do
+      :bundle_child -> "bundle_child"
+      _ -> "unified"
+    end
+  end
+
+  defp default_orchestration_mode do
+    if Lab.bundle_child_orchestration?(), do: :bundle_child, else: :unified
+  end
 end

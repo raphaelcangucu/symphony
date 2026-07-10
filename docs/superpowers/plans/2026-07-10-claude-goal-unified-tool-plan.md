@@ -60,7 +60,7 @@
 - Create: `elixir/lib/symphony_elixir/claude/goal_store.ex`
 - Test: `elixir/test/symphony_elixir/claude/goal_store_test.exs`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```elixir
 defmodule SymphonyElixir.Claude.GoalStoreTest do

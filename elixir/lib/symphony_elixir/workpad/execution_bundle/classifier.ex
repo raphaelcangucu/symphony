@@ -1,7 +1,12 @@
 defmodule SymphonyElixir.Workpad.ExecutionBundle.Classifier do
   @moduledoc """
   Pure, deterministic classification of an execution-bundle unit into either
-  `:workpad_task` (inline, same run) or `:child_run` (own run/worktree/PR).
+  `:workpad_task` (inline, same run) or `:child_run` (own run when isolation is needed).
+
+  Pass `bundle_child_orchestration: true` for Lab-on topology (isolated worktrees /
+  integration branches). When false (product default), same-repo units stay
+  `:workpad_task` even if they declare contracts, dependencies, or `deliverable: "pr"` —
+  they share the parent's working tree and final PR.
 
   The executor never re-decides: the authoring assistant calls this and persists
   the result on the bundle. Returns `{:ambiguous, reason}` when a human must
@@ -25,14 +30,28 @@ defmodule SymphonyElixir.Workpad.ExecutionBundle.Classifier do
   @spec classify(unit(), keyword()) :: result()
   def classify(unit, opts) when is_map(unit) do
     parent_repo = Keyword.get(opts, :parent_repo)
+    lab_on? = Keyword.get(opts, :bundle_child_orchestration, false) == true
     repo = present(Map.get(unit, :repo))
 
     cond do
-      is_nil(repo) -> {:ambiguous, :unknown_repo}
-      not is_nil(parent_repo) and repo != parent_repo -> {:ok, :child_run, :different_repo}
-      independent?(unit) -> {:ok, :child_run, :independent_deliverable}
-      contract_coupled?(unit) -> {:ok, :child_run, :shared_contract}
-      true -> {:ok, :workpad_task, :same_repo_inline}
+      is_nil(repo) ->
+        {:ambiguous, :unknown_repo}
+
+      not is_nil(parent_repo) and repo != parent_repo ->
+        {:ok, :child_run, :different_repo}
+
+      # Lab OFF (default): anything not proven cross-repo stays in the parent tree.
+      not lab_on? ->
+        {:ok, :workpad_task, :same_repo_inline}
+
+      independent?(unit) ->
+        {:ok, :child_run, :independent_deliverable}
+
+      contract_coupled?(unit) ->
+        {:ok, :child_run, :shared_contract}
+
+      true ->
+        {:ok, :workpad_task, :same_repo_inline}
     end
   end
 
