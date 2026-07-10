@@ -194,4 +194,62 @@ describe("GitDiffModal", () => {
     expect(screen.getByTestId("git-diff-viewer")).toHaveAttribute("data-comment-count", "off");
     expect(screen.queryByRole("button", { name: "mock add comment" })).not.toBeInTheDocument();
   });
+
+  it("enables review on Commits and includes commit note + line comment in the prompt", async () => {
+    const user = userEvent.setup();
+    const onSendReview = vi.fn();
+    useIssueCommitEvidenceMock.mockReturnValue({
+      commits: [
+        {
+          repo: "frontend",
+          sha: "abcdef123456",
+          shortSha: "abcdef1",
+          message: "docs: plan",
+          author: "agent",
+          authoredAt: "2026-07-10T00:00:00Z",
+          filesChanged: 1,
+          insertions: 10,
+          deletions: 0,
+        },
+      ],
+      loading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+    const { getCommitEvidence } = await import("@/services/commitEvidence");
+    vi.mocked(getCommitEvidence).mockResolvedValue({
+      repo: "frontend",
+      sha: "abcdef123456",
+      shortSha: "abcdef1",
+      message: "docs: plan",
+      author: "agent",
+      authoredAt: "2026-07-10T00:00:00Z",
+      filesChanged: 1,
+      insertions: 10,
+      deletions: 0,
+      files: [{ path: "docs/plan.md", oldPath: null, status: "added", patch: "@@\n+hello\n" }],
+    });
+
+    render(
+      <GitDiffModal
+        open
+        onOpenChange={vi.fn()}
+        projectSlug="advising"
+        identifier="CDE-1"
+        onSendReview={onSendReview}
+      />,
+    );
+
+    await user.click(screen.getByRole("tab", { name: /commits/i }));
+    const note = await screen.findByLabelText(/commit note/i);
+    await user.type(note, "use as context");
+    await user.click(await screen.findByRole("button", { name: "mock add comment" }));
+    await user.click(screen.getByRole("button", { name: /send .* to agent/i }));
+
+    const prompt = onSendReview.mock.calls[0][0] as string;
+    expect(prompt).toContain("## Commit notes");
+    expect(prompt).toContain("use as context");
+    expect(prompt).toContain("Fix this line");
+    expect(prompt).toMatch(/commit|abcdef1|frontend/i);
+  });
 });

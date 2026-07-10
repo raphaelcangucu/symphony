@@ -14,6 +14,7 @@ import { useIssueCommitEvidence } from "@/hooks/useIssueCommitEvidence";
 import {
   buildDiffReviewPrompt,
   newDiffReviewCommentId,
+  type CommitNote,
   type DiffReviewComment,
 } from "@/lib/diffReview";
 import { combineDiffStats, diffStatsFromPatch } from "@/lib/diffStats";
@@ -81,14 +82,36 @@ export default function GitDiffModal({
   const selected = files.find((file) => file.key === selectedKey)?.file ?? files[0]?.file ?? null;
   const stats = combineDiffStats(files.map(({ file }) => diffStatsFromPatch(file.patch)));
 
-  // Review comments live on working-tree diffs only (not commit history) and
-  // are keyed by the repo-prefixed file path shown in the viewer.
+  // Review comments and commit notes are keyed by source so the same file
+  // path can carry independent annotations across branch/uncommitted/commit tabs.
   const [reviewComments, setReviewComments] = useState<DiffReviewComment[]>([]);
-  const reviewEnabled = Boolean(onSendReview) && activeTab !== "commits";
-  const selectedFileComments = useMemo(
-    () => (selected ? reviewComments.filter((comment) => comment.filePath === selected.path) : []),
-    [reviewComments, selected],
-  );
+  const [commitNotes, setCommitNotes] = useState<CommitNote[]>([]);
+  const reviewEnabled = Boolean(onSendReview);
+  const selectedFileComments = useMemo(() => {
+    if (!selected) return [];
+    return reviewComments.filter((comment) => {
+      if (comment.filePath !== selected.path) return false;
+      if (activeTab !== "commits") return true;
+      return (
+        comment.source === "commit" &&
+        comment.commitSha === selectedCommit?.sha &&
+        comment.commitRepo === selectedCommit?.repo
+      );
+    });
+  }, [activeTab, reviewComments, selected, selectedCommit]);
+  const selectedCommitNote =
+    selectedCommit?.repo && selectedCommit?.sha
+      ? commitNotes.find((note) => note.repo === selectedCommit.repo && note.sha === selectedCommit.sha)
+      : undefined;
+  const commentCountsByCommitKey = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const comment of reviewComments) {
+      if (comment.source !== "commit" || !comment.commitRepo || !comment.commitSha) continue;
+      const key = `${comment.commitRepo}:${comment.commitSha}`;
+      counts[key] = (counts[key] ?? 0) + 1;
+    }
+    return counts;
+  }, [reviewComments]);
 
   function saveReviewComment(input: SaveDiffCommentInput) {
     if (!selected) return;
@@ -98,15 +121,20 @@ export default function GitDiffModal({
           comment.id === input.id ? { ...comment, comment: input.comment } : comment,
         );
       }
-      const next: DiffReviewComment = {
+      const base = {
         id: newDiffReviewCommentId(),
         filePath: selected.path,
         side: input.side,
         lineNumber: input.lineNumber,
         lineText: input.lineText,
         comment: input.comment,
-        source: activeTab === "uncommitted" ? "uncommitted" : "branch",
       };
+      const next: DiffReviewComment =
+        activeTab === "commits" && selectedCommit
+          ? { ...base, source: "commit", commitSha: selectedCommit.sha, commitRepo: selectedCommit.repo }
+          : activeTab === "uncommitted"
+            ? { ...base, source: "uncommitted" }
+            : { ...base, source: "branch" };
       return [...current, next];
     });
   }
@@ -115,11 +143,26 @@ export default function GitDiffModal({
     setReviewComments((current) => current.filter((comment) => comment.id !== id));
   }
 
+  function updateCommitNote(text: string) {
+    if (!selectedCommit) return;
+    const { repo, sha, shortSha, message } = selectedCommit;
+    setCommitNotes((current) => {
+      const existing = current.find((note) => note.repo === repo && note.sha === sha);
+      if (existing) {
+        return current.map((note) => (note.repo === repo && note.sha === sha ? { ...note, note: text } : note));
+      }
+      return [...current, { repo, sha, shortSha, message, note: text }];
+    });
+  }
+
   function sendReviewToAgent() {
-    if (!onSendReview || reviewComments.length === 0) return;
-    onSendReview(buildDiffReviewPrompt(reviewComments));
-    toast.success(t("issue.diff.review.sent", { count: reviewComments.length }));
+    const hasNotes = commitNotes.some((note) => note.note.trim().length > 0);
+    if (!onSendReview || (reviewComments.length === 0 && !hasNotes)) return;
+    const count = reviewComments.length + commitNotes.filter((note) => note.note.trim().length > 0).length;
+    onSendReview(buildDiffReviewPrompt(reviewComments, commitNotes));
+    toast.success(t("issue.diff.review.sent", { count }));
     setReviewComments([]);
+    setCommitNotes([]);
     onOpenChange(false);
   }
 
@@ -226,7 +269,7 @@ export default function GitDiffModal({
             <span className="text-[11px] text-emerald-600">+{stats.additions}</span>
             <span className="text-[11px] text-rose-600">-{stats.deletions}</span>
             <ViewModeToggle viewMode={viewMode} onChange={handleViewModeChange} />
-            {reviewEnabled && reviewComments.length > 0 ? (
+            {reviewEnabled && reviewComments.length + commitNotes.filter((note) => note.note.trim()).length > 0 ? (
               <Button
                 type="button"
                 size="sm"
@@ -234,7 +277,9 @@ export default function GitDiffModal({
                 onClick={sendReviewToAgent}
               >
                 <MessageSquareText className="h-3.5 w-3.5" />
-                {t("issue.diff.review.sendButton", { count: reviewComments.length })}
+                {t("issue.diff.review.sendButton", {
+                  count: reviewComments.length + commitNotes.filter((note) => note.note.trim()).length,
+                })}
               </Button>
             ) : null}
             <Button
@@ -276,6 +321,8 @@ export default function GitDiffModal({
               <CommitList
                 commits={commits.commits}
                 selected={selectedCommit}
+                commitNotes={commitNotes}
+                commentCountsByCommitKey={commentCountsByCommitKey}
                 onSelect={(commit) => {
                   setSelectedCommitKey(commitKey(commit));
                   setCommitDetail(null);
@@ -291,18 +338,34 @@ export default function GitDiffModal({
               />
             )}
           </aside>
-          <section className="min-h-0 overflow-hidden">
-            {(activeTab === "commits" ? commits.loading || commitLoading : diff.loading) && files.length === 0 ? (
-              <div className="flex h-full items-center justify-center text-sm text-muted-foreground">{t("issue.diff.loading")}</div>
-            ) : (
-              <GitDiffViewer
-                file={selected}
-                viewMode={viewMode}
-                comments={reviewEnabled ? selectedFileComments : undefined}
-                onSaveComment={reviewEnabled ? saveReviewComment : undefined}
-                onRemoveComment={reviewEnabled ? removeReviewComment : undefined}
-              />
-            )}
+          <section className="flex min-h-0 flex-col overflow-hidden">
+            {activeTab === "commits" && selectedCommit ? (
+              <div className="shrink-0 border-b bg-muted/10 px-3 py-2">
+                <label className="text-[11px] font-medium text-muted-foreground" htmlFor="workspace-commit-note">
+                  {t("issue.diff.commitNote.label")}
+                </label>
+                <Textarea
+                  id="workspace-commit-note"
+                  value={selectedCommitNote?.note ?? ""}
+                  onChange={(event) => updateCommitNote(event.target.value)}
+                  placeholder={t("issue.diff.commitNote.placeholder")}
+                  className="mt-1 min-h-14 text-xs"
+                />
+              </div>
+            ) : null}
+            <div className="min-h-0 flex-1 overflow-hidden">
+              {(activeTab === "commits" ? commits.loading || commitLoading : diff.loading) && files.length === 0 ? (
+                <div className="flex h-full items-center justify-center text-sm text-muted-foreground">{t("issue.diff.loading")}</div>
+              ) : (
+                <GitDiffViewer
+                  file={selected}
+                  viewMode={viewMode}
+                  comments={reviewEnabled ? selectedFileComments : undefined}
+                  onSaveComment={reviewEnabled ? saveReviewComment : undefined}
+                  onRemoveComment={reviewEnabled ? removeReviewComment : undefined}
+                />
+              )}
+            </div>
           </section>
         </div>
       </DialogContent>
@@ -405,10 +468,14 @@ function RepoNav({ repos, activeRepo, onChange }: { repos: string[]; activeRepo:
 function CommitList({
   commits,
   selected,
+  commitNotes = [],
+  commentCountsByCommitKey = {},
   onSelect,
 }: {
   commits: CommitEvidenceSummary[];
   selected: CommitEvidenceSummary | null;
+  commitNotes?: CommitNote[];
+  commentCountsByCommitKey?: Record<string, number>;
   onSelect: (commit: CommitEvidenceSummary) => void;
 }) {
   const [query, setQuery] = useState("");
@@ -441,9 +508,12 @@ function CommitList({
         ) : (
           filteredCommits.map((commit) => {
             const active = selected?.sha === commit.sha;
+            const key = commitKey(commit);
+            const note = commitNotes.find((entry) => entry.repo === commit.repo && entry.sha === commit.sha);
+            const commentCount = commentCountsByCommitKey[key] ?? 0;
             return (
               <button
-                key={commitKey(commit)}
+                key={key}
                 type="button"
                 onClick={() => onSelect(commit)}
                 className={cn(
@@ -459,6 +529,8 @@ function CommitList({
                     <span className="truncate">{commit.repo}</span>
                     <span className="text-emerald-600">+{commit.insertions}</span>
                     <span className="text-rose-600">-{commit.deletions}</span>
+                    {note?.note.trim() ? <span title={note.note}>📝</span> : null}
+                    {commentCount > 0 ? <span>💬{commentCount}</span> : null}
                   </span>
                 </span>
               </button>
