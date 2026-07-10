@@ -22,20 +22,35 @@ import {
   reorderPages,
   togglePageFavorite,
 } from "@/lib/kbTreeActions";
+import { withSyntheticChangedPages } from "@/lib/kbTreeFilter";
 import { cn, SCROLLBAR_THIN } from "@/lib/utils";
 import { deleteAsset, deleteFolder, getPage, getProjectOverview, renameAsset, savePage } from "@/services/knowledgeBase";
 import type { KbInlineEdit, KbPageDraft, KbRenameTarget } from "@/types/kbPageDraft";
 import type { KbPage, KbProjectOverview, KbTreeNode as KbTreeNodeType } from "@/types/knowledgeBase";
+
+type KbModalDocumentFilter = "changed" | "all";
 
 interface KnowledgeBaseModalProps {
   open: boolean;
   projectSlug: string;
   onOpenChange: (open: boolean) => void;
   onInsertContext?: (ref: ComposerContextChipRef) => void;
+  /** When set, enables Alterados/Todos filtering for the issue working tree. */
+  issueIdentifier?: string | null;
+  /** Docs-relative paths from the issue uncommitted diff (already stripped of `docs/`). */
+  changedDocPaths?: string[];
 }
 
-export function KnowledgeBaseModal({ open, projectSlug, onOpenChange, onInsertContext }: KnowledgeBaseModalProps) {
+export function KnowledgeBaseModal({
+  open,
+  projectSlug,
+  onOpenChange,
+  onInsertContext,
+  issueIdentifier = null,
+  changedDocPaths = [],
+}: KnowledgeBaseModalProps) {
   const { t } = useTranslation();
+  const issueMode = Boolean(issueIdentifier);
   const [overview, setOverview] = useState<KbProjectOverview | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [activeRepo, setActiveRepo] = useState<string | null>(null);
@@ -44,8 +59,16 @@ export function KnowledgeBaseModal({ open, projectSlug, onOpenChange, onInsertCo
   const [saving, setSaving] = useState(false);
   const [pageDraft, setPageDraft] = useState<KbPageDraft | null>(null);
   const [renameTarget, setRenameTarget] = useState<KbRenameTarget | null>(null);
+  const [filter, setFilter] = useState<KbModalDocumentFilter>(() =>
+    issueMode && changedDocPaths.length > 0 ? "changed" : "all",
+  );
   const repoSlugs = useMemo(() => overview?.repositories.map((repo) => repo.repoSlug) ?? [], [overview]);
   const { treesByRepo, reloadRepo } = useKbAllRepoTrees(open ? projectSlug : "", repoSlugs);
+  const changedPathSet = useMemo(() => new Set(changedDocPaths.filter(Boolean)), [changedDocPaths]);
+  const displayedTreesByRepo = useMemo(() => {
+    if (!issueMode || filter !== "changed" || changedPathSet.size === 0) return treesByRepo;
+    return withSyntheticChangedPages(treesByRepo, repoSlugs, changedPathSet);
+  }, [changedPathSet, filter, issueMode, repoSlugs, treesByRepo]);
   const selectedIsAsset = isKbImageAssetPath(activePath);
   const { page: selectedPage, loading: selectedPageLoading, error: selectedPageError, reload: reloadSelectedPage } = useKbPage(
     projectSlug,
@@ -81,6 +104,17 @@ export function KnowledgeBaseModal({ open, projectSlug, onOpenChange, onInsertCo
     if (!overview) return;
     setActiveRepo((current) => current ?? overview.repositories[0]?.repoSlug ?? null);
   }, [overview]);
+
+  useEffect(() => {
+    if (!open) return;
+    setFilter(issueMode && changedPathSet.size > 0 ? "changed" : "all");
+  }, [changedPathSet.size, issueMode, open, issueIdentifier]);
+
+  useEffect(() => {
+    if (issueMode && filter === "changed" && changedPathSet.size === 0) {
+      setFilter("all");
+    }
+  }, [changedPathSet.size, filter, issueMode]);
 
   const pageHref = useCallback((repoSlug: string, pagePath: string) => buildKbPagePath(projectSlug, repoSlug, pagePath), [projectSlug]);
   const handleSelectRepo = useCallback((repoSlug: string) => {
@@ -314,7 +348,25 @@ export function KnowledgeBaseModal({ open, projectSlug, onOpenChange, onInsertCo
       <DialogContent className="flex h-[min(88vh,900px)] max-w-6xl flex-col gap-0 overflow-hidden p-0">
         <DialogHeader className="border-b px-5 py-4">
           <DialogTitle>{t("assistant.panel.knowledgeBaseTitle")}</DialogTitle>
-          <DialogDescription>{t("assistant.panel.knowledgeBaseDescription", { slug: projectSlug })}</DialogDescription>
+          <DialogDescription>
+            {issueMode
+              ? t("kb.assistantDocuments.changedSubtitle", { count: changedPathSet.size })
+              : t("assistant.panel.knowledgeBaseDescription", { slug: projectSlug })}
+          </DialogDescription>
+          {issueMode ? (
+            <div className="mt-3 grid max-w-xs grid-cols-2 gap-1 rounded-lg bg-muted/50 p-1">
+              <FilterButton
+                active={filter === "changed"}
+                disabled={changedPathSet.size === 0}
+                onClick={() => setFilter("changed")}
+              >
+                {t("kb.assistantDocuments.changed")}
+              </FilterButton>
+              <FilterButton active={filter === "all"} onClick={() => setFilter("all")}>
+                {t("kb.assistantDocuments.all")}
+              </FilterButton>
+            </div>
+          ) : null}
         </DialogHeader>
         <div
           className={cn(
@@ -344,7 +396,7 @@ export function KnowledgeBaseModal({ open, projectSlug, onOpenChange, onInsertCo
                     <KbSidebar
                       projectSlug={projectSlug}
                       overview={overview}
-                      treesByRepo={treesByRepo}
+                      treesByRepo={displayedTreesByRepo}
                       activeRepo={activeRepo}
                       activePath={activePath}
                       onSelectRepo={handleSelectRepo}
@@ -477,6 +529,31 @@ function KnowledgeBaseModalPreview({
         )}
       </div>
     </section>
+  );
+}
+
+function FilterButton({
+  active,
+  disabled = false,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <Button
+      type="button"
+      variant={active ? "secondary" : "ghost"}
+      size="sm"
+      disabled={disabled}
+      className="h-7 rounded-md px-2 text-xs"
+      onClick={onClick}
+    >
+      {children}
+    </Button>
   );
 }
 

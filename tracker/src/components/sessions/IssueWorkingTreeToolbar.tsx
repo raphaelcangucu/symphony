@@ -26,6 +26,9 @@ interface IssueWorkingTreeToolbarProps {
   /** When set, shows a preview control toggling the inline dev-server preview dock. */
   previewOpen?: boolean;
   onPreviewToggle?: () => void;
+  /** Opens the shared issue KB modal owned by the assistant panel. */
+  onOpenKnowledgeBase?: () => void;
+  changedDocCount?: number;
 }
 
 export function IssueWorkingTreeToolbar({
@@ -38,6 +41,8 @@ export function IssueWorkingTreeToolbar({
   onTerminalToggle,
   previewOpen = false,
   onPreviewToggle,
+  onOpenKnowledgeBase,
+  changedDocCount,
 }: IssueWorkingTreeToolbarProps) {
   const { t } = useTranslation();
   const issueHref = issuePath(projectSlug, view, issueIdentifier, "sessions");
@@ -96,7 +101,21 @@ export function IssueWorkingTreeToolbar({
         </button>
       ) : null}
       <IssueEditorMenu projectSlug={projectSlug} identifier={issueIdentifier} compact />
-      <IssueDocumentsDrawer projectSlug={projectSlug} identifier={issueIdentifier} compact />
+      <IssueDocumentsDrawer
+        projectSlug={projectSlug}
+        identifier={issueIdentifier}
+        compact
+        triggerOnly={Boolean(onOpenKnowledgeBase)}
+        onOpenChange={
+          onOpenKnowledgeBase
+            ? (next) => {
+                if (next) onOpenKnowledgeBase();
+              }
+            : undefined
+        }
+        changedDocCount={onOpenKnowledgeBase ? changedDocCount : undefined}
+        changedDocPaths={onOpenKnowledgeBase ? [] : undefined}
+      />
       {trailing}
     </div>
   );

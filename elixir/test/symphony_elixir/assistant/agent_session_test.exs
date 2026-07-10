@@ -489,6 +489,8 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
       assert_receive {:prompt, prompt}
       assert prompt =~ "brainstorming"
       assert prompt =~ "docs/superpowers/specs"
+      assert prompt =~ "choose a git repository"
+      assert prompt =~ "Never write to the workspace-root"
       assert prompt =~ "Codex is a coding agent"
       assert prompt =~ "may proceed directly to code"
       assert prompt =~ "choose depth from the conversation"
@@ -513,6 +515,7 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
       assert_receive {:prompt, prompt}
       assert prompt =~ "brainstorming"
       assert prompt =~ "docs/superpowers/specs"
+      assert prompt =~ "choose a git repository"
       refute prompt =~ "MODE: COMPLEX"
     end
 

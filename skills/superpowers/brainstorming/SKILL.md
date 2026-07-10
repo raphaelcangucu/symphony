@@ -26,7 +26,7 @@ Complete these items in order:
 3. **Ask clarifying questions** — one at a time, understand purpose/constraints/success criteria
 4. **Propose 2-3 approaches** — with trade-offs and your recommendation
 5. **Present design** — in sections scaled to their complexity, get user approval after each section
-6. **Write design doc** — save to `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md` and commit
+6. **Write design doc** — pick a git repo in the issue workspace, save under that repo's `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md`, and commit
 7. **Spec self-review** — quick inline check for placeholders, contradictions, ambiguity, scope (see below)
 8. **User reviews written spec** — ask user to review the spec file before proceeding
 9. **Transition to implementation** — create an implementation plan (see the writing-plans skill)
@@ -108,16 +108,24 @@ digraph brainstorming {
 
 **Documentation:**
 
-- Write the validated design (spec) to `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md`
-  - (User preferences for spec location override this default)
+- **Choose a repository first.** Issue workspaces are often multi-repo (nested
+  git checkouts such as `back/`, `front/`). Specs MUST live inside one of those
+  repos so they appear in git Diff and the tracker's changed-docs KB filter.
+  - Write under `<repo>/docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md`
+    (for example, `back/docs/superpowers/specs/2026-07-09-510-settlement-design.md`).
+  - Prefer the repo that owns the change domain, or the same repo as related
+    existing specs when continuing work. If more than one repo is plausible,
+    ask the user which repo before writing.
+  - **Never** write to the workspace-root `docs/` folder (outside any git
+    repo). That path is invisible to Diff / changed-docs.
+  - (User preferences for spec location override this default.)
   - When the task/issue id is known, include it in lowercase in the filename:
-    `docs/superpowers/specs/YYYY-MM-DD-<task-id>-<topic>-design.md`
-    (for example, `docs/superpowers/specs/2026-06-21-dis-6-admin-i18n-design.md`).
-- Commit the design document to git
-- In the handoff/review message, explicitly include the saved spec path as a
-  repo-relative markdown path. This associates the artifact with the current
-  issue conversation and lets the tracker show only relevant documents, not every
-  project spec.
+    `<repo>/docs/superpowers/specs/YYYY-MM-DD-<task-id>-<topic>-design.md`.
+- Commit the design document in that repository
+- In the handoff/review message, explicitly include the saved path including
+  the repo workspace segment (e.g. `back/docs/superpowers/specs/...`). This
+  associates the artifact with the current issue conversation and lets the
+  tracker show only relevant documents.
 
 **Spec Self-Review:**
 After writing the spec document, look at it with fresh eyes:
@@ -132,10 +140,10 @@ Fix any issues inline. No need to re-review — just fix and move on.
 **User Review Gate:**
 After the spec review loop passes, ask the user to review the written spec before proceeding:
 
-> "Spec written and committed to `<path>`.
+> "Spec written and committed to `<repo>/docs/superpowers/specs/<filename>.md`.
 >
 > Documents:
-> - Spec: `<path>`
+> - Spec: `<repo>/docs/superpowers/specs/<filename>.md`
 >
 > Please review it and let me know if you want to make any changes before we start writing out the implementation plan."
 

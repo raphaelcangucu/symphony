@@ -37,6 +37,7 @@ export function AssistantSessionTabContent({
   // (same thread-scoped diff, same review-to-agent wiring).
   const [diffRequestId, setDiffRequestId] = useState(0);
   const [tasksControl, setTasksControl] = useState<AssistantTasksDockControl | null>(null);
+  const [kbControl, setKbControl] = useState<{ open: () => void; changedDocCount: number } | null>(null);
   const workspaceDiffStats = useWorkspaceDiffStats({
     projectSlug,
     issueIdentifier,
@@ -50,6 +51,8 @@ export function AssistantSessionTabContent({
           projectSlug={projectSlug}
           issueIdentifier={issueIdentifier}
           view={view}
+          onOpenKnowledgeBase={kbControl?.open}
+          changedDocCount={kbControl?.changedDocCount ?? 0}
           headerStart={
             <span
               className={cn(sessionToolbarChipClassName, "font-mono")}
@@ -85,6 +88,7 @@ export function AssistantSessionTabContent({
             diffRequestId={diffRequestId}
             contentMaxWidth="wide"
             onTasksDockControlChange={setTasksControl}
+            onKnowledgeBaseControlChange={setKbControl}
           />
         </IssueSessionSplitLayout>
       ) : (

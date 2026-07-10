@@ -803,12 +803,16 @@ defmodule SymphonyElixir.Assistant.AgentSession do
     - Quick brief or enriched description only: search the repositories in this working tree for relevant
       context (README, code, conventions) and call update_issue for `#{identifier}` once the description is
       stable and agreed in chat — not while still exploring or confirming hypotheses. Do not create spec/plan files.
-    - Brainstorming, design, or implementation planning: write spec files to `docs/superpowers/specs/` and plan
-      files to `docs/superpowers/plans/` in this working tree, with section-by-section approval in chat. Codex is
-      a coding agent; when the user explicitly asks to skip spec/plan work or authorizes implementation,
-      acknowledge that direction and you may proceed directly to code.
-    - When the task is ready for handoff: write a concise `docs/superpowers/handoff.md` (key decisions + current state)
-      and enrich the issue description (executive summary + links to spec/plan files) via update_issue — not before.
+    - Brainstorming, design, or implementation planning: **choose a git repository** in this working tree
+      first (e.g. `back/`, `front/`), then write specs to `<repo>/docs/superpowers/specs/` and plans to
+      `<repo>/docs/superpowers/plans/` inside that repo. Prefer the repo that owns the change (or the same
+      repo as related existing specs); ask the user which repo if unclear. Never write to the workspace-root
+      `docs/` folder — it is outside git and will not appear in Diff / changed-docs. Use section-by-section
+      approval in chat. Codex is a coding agent; when the user explicitly asks to skip spec/plan work or
+      authorizes implementation, acknowledge that direction and you may proceed directly to code.
+    - When the task is ready for handoff: write a concise `<repo>/docs/superpowers/handoff.md` (key decisions +
+      current state) in the same chosen repo and enrich the issue description (executive summary + links to
+      spec/plan files) via update_issue — not before.
     Do not call update_issue while still exploring or before spec/plan sections are agreed in chat (when doing design work).
     State which depth you are taking and proceed.
     """

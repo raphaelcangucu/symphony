@@ -2821,9 +2821,11 @@
       "subtitle": "{{count}} cited in chat",
       "changedSubtitle": "{{count}} changed docs in this task",
       "cited": "Cited docs",
+      "changed": "Changed docs",
       "all": "All docs",
       "empty": "No knowledge base documents found.",
       "noCitedMatches": "No cited knowledge base documents matched this project.",
+      "noChangedMatches": "No changed docs in this task working tree.",
       "selectPage": "Select a knowledge base page."
     },
     "create": {

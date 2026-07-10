@@ -13,15 +13,21 @@ Assume they are a skilled developer, but know almost nothing about our toolset o
 
 **Announce at start:** "I'm using the writing-plans skill to create the implementation plan."
 
-**Save plans to:** `docs/superpowers/plans/YYYY-MM-DD-<feature-name>.md`
-- (User preferences for plan location override this default)
+**Save plans to:** `<repo>/docs/superpowers/plans/YYYY-MM-DD-<feature-name>.md`
+- **Choose a repository first** (same rule as brainstorming specs). Multi-repo
+  issue workspaces require writing inside a nested git repo (`back/`, `front/`,
+  etc.). Prefer the repo that owns the work, or the same repo as the paired
+  spec. Ask the user if unclear.
+- **Never** write to the workspace-root `docs/` folder — it is outside git and
+  will not show in Diff / changed-docs.
+- (User preferences for plan location override this default.)
 - When the task/issue id is known, include it in lowercase in the filename:
-  `docs/superpowers/plans/YYYY-MM-DD-<task-id>-<feature-name>-plan.md`
-  (for example, `docs/superpowers/plans/2026-06-21-dis-6-admin-i18n-plan.md`).
-- In the handoff message, explicitly include the saved plan path as a
-  repo-relative markdown path. This associates the artifact with the current
-  issue conversation and lets the tracker show only relevant documents, not every
-  project plan.
+  `<repo>/docs/superpowers/plans/YYYY-MM-DD-<task-id>-<feature-name>-plan.md`
+  (for example, `back/docs/superpowers/plans/2026-06-21-dis-6-admin-i18n-plan.md`).
+- In the handoff message, explicitly include the saved path including the repo
+  workspace segment (e.g. `back/docs/superpowers/plans/...`). This associates
+  the artifact with the current issue conversation and lets the tracker show
+  only relevant documents.
 
 ## Scope Check
 
@@ -139,10 +145,10 @@ If you find issues, fix them inline. No need to re-review — just fix and move 
 After saving the plan, report the saved artifact before execution:
 
 ```markdown
-Plan complete and saved to `docs/superpowers/plans/<filename>.md`.
+Plan complete and saved to `<repo>/docs/superpowers/plans/<filename>.md`.
 
 Documents:
-- Plan: `docs/superpowers/plans/<filename>.md`
+- Plan: `<repo>/docs/superpowers/plans/<filename>.md`
 ```
 
 Then execute it task-by-task: implement each task, run its tests, and commit before moving to the next. Review between tasks and keep the plan's checkboxes up to date as you complete steps.

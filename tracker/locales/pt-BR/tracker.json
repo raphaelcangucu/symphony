@@ -2821,9 +2821,11 @@
       "subtitle": "{{count}} citados no chat",
       "changedSubtitle": "{{count}} docs alteradas nesta task",
       "cited": "Docs citadas",
+      "changed": "Docs alteradas",
       "all": "Todas as docs",
       "empty": "Nenhum documento da base de conhecimento encontrado.",
       "noCitedMatches": "Nenhuma doc citada da base de conhecimento corresponde a este projeto.",
+      "noChangedMatches": "Nenhuma doc alterada no working tree desta task.",
       "selectPage": "Selecione uma página da base de conhecimento."
     },
     "create": {

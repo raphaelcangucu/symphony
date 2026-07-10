@@ -12,6 +12,8 @@ interface IssueSessionSplitLayoutProps {
   headerStart: ReactNode;
   toolbarLeading?: ReactNode;
   toolbarTrailing?: ReactNode;
+  onOpenKnowledgeBase?: () => void;
+  changedDocCount?: number;
   children: ReactNode;
 }
 
@@ -27,6 +29,8 @@ export function IssueSessionSplitLayout({
   headerStart,
   toolbarLeading = null,
   toolbarTrailing = null,
+  onOpenKnowledgeBase,
+  changedDocCount,
   children,
 }: IssueSessionSplitLayoutProps) {
   const dock = useSessionTerminalDock();
@@ -48,6 +52,8 @@ export function IssueSessionSplitLayout({
           onTerminalToggle={dock ? () => dock.toggleTerminal(issueIdentifier) : undefined}
           previewOpen={previewOpen}
           onPreviewToggle={previewDock ? () => previewDock.togglePreview(issueIdentifier) : undefined}
+          onOpenKnowledgeBase={onOpenKnowledgeBase}
+          changedDocCount={changedDocCount}
         />
       </div>
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden pt-1.5">{children}</div>

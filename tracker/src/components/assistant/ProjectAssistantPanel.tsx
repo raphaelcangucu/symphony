@@ -82,12 +82,14 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTr
 import { deriveAgentTasksFromAssistantMessages } from "@/lib/agentTasks";
 import { catalogFor, defaultComposerSettings, fallbackCatalogBundle, type AssistantCatalogBundle } from "@/lib/assistantSettings";
 import { DEFAULT_EXECUTION_MODE } from "@/lib/executionMode";
+import { normalizeIssueIdentifier } from "@/lib/issueIdentifiers";
 import {
   fetchAssistantCatalogBundle,
   type AssistantChatMessage,
   type UserQuestionsRequest,
 } from "@/services/assistant";
 import { WorkspaceDiffStatsChip } from "@/components/sessions/WorkspaceDiffStatsChip";
+import { useIssueChangedDocPaths } from "@/hooks/useIssueChangedDocPaths";
 import { useWorkspaceDiffStats } from "@/hooks/useWorkspaceDiffStats";
 import { UserQuestionsCard } from "@/components/assistant/UserQuestionsCard";
 import {
@@ -217,6 +219,8 @@ interface ProjectAssistantPanelProps {
   onComposerAgentResolved?: (agent: AgentKind) => void;
   onOpenDocumentPath?: (path: string) => void;
   onKbDocumentReferencesChanged?: (paths: string[]) => void;
+  /** Lets a parent toolbar open the same issue-scoped KB modal as the composer KB button. */
+  onKnowledgeBaseControlChange?: (control: { open: () => void; changedDocCount: number } | null) => void;
   /**
    * Reports the tasks dock control (progress + open state + toggle) so an
    * external surface (e.g. the session top bar) can mirror the composer's
@@ -270,6 +274,7 @@ export function ProjectAssistantPanel({
   onComposerAgentResolved,
   onOpenDocumentPath,
   onKbDocumentReferencesChanged,
+  onKnowledgeBaseControlChange,
   onTasksDockControlChange,
   composerSeedMessage = null,
   contentMaxWidth = "default",
@@ -329,6 +334,12 @@ export function ProjectAssistantPanel({
   const [contextInsertRequest, setContextInsertRequest] = useState<ComposerContextInsertRequest | null>(null);
   const [magicPaletteRequestId, setMagicPaletteRequestId] = useState(0);
   const [knowledgeBaseOpen, setKnowledgeBaseOpen] = useState(false);
+  const [changedDocsRefreshKey, setChangedDocsRefreshKey] = useState(0);
+  const changedDocs = useIssueChangedDocPaths({
+    projectSlug,
+    issueIdentifier: issueIdentifier ?? null,
+    refreshKey: changedDocsRefreshKey,
+  });
 
   useEffect(() => {
     if (!routeAgentSeed) return;
@@ -547,7 +558,12 @@ export function ProjectAssistantPanel({
       },
       onUserInputRequired: (request) => setPendingQuestions(request),
       onApprovalRequired: (request) => setPendingApproval(request),
-      onAssistantDocumentChanged: (payload) => onDocumentChangedRef.current?.(payload),
+      onAssistantDocumentChanged: (payload) => {
+        if (payload.identifier && issueIdentifier && normalizeIssueIdentifier(payload.identifier) === normalizeIssueIdentifier(issueIdentifier)) {
+          setChangedDocsRefreshKey((current) => current + 1);
+        }
+        onDocumentChangedRef.current?.(payload);
+      },
       onAssistantIssueCreated: (payload) => onIssueCreatedRef.current?.(payload),
       onSteerFailed: ({ message }) => {
         if (!message) return;
@@ -1076,6 +1092,18 @@ export function ProjectAssistantPanel({
     return () => onTasksDockControlChange(null);
   }, [onTasksDockControlChange, isPageMode, hasTasks, tasksDone, tasksTotal, tasksDockOpen, toggleTasksDock]);
 
+  useEffect(() => {
+    if (!onKnowledgeBaseControlChange || !projectSlug) {
+      onKnowledgeBaseControlChange?.(null);
+      return undefined;
+    }
+    onKnowledgeBaseControlChange({
+      open: () => setKnowledgeBaseOpen(true),
+      changedDocCount: changedDocs.count,
+    });
+    return () => onKnowledgeBaseControlChange(null);
+  }, [changedDocs.count, onKnowledgeBaseControlChange, projectSlug]);
+
   const kbDocumentReferences = useMemo(
     () =>
       visibleMessages.reduce<string[]>((references, message) => {
@@ -1401,7 +1429,7 @@ export function ProjectAssistantPanel({
                 type="button"
                 variant="ghost"
                 size="sm"
-                className="h-8 gap-1 px-2 text-xs"
+                className="relative h-8 gap-1 px-2 text-xs"
                 disabled={catalogLoading}
                 aria-label={t("layout.projectHeader.knowledgeBase")}
                 title={t("assistant.panel.openKnowledgeBaseShortcut")}
@@ -1409,6 +1437,13 @@ export function ProjectAssistantPanel({
               >
                 <BookOpen className="h-3.5 w-3.5" />
                 <span className="hidden sm:inline">{t("assistant.panel.openKnowledgeBase")}</span>
+                {changedDocs.count > 0 ? (
+                  <span
+                    aria-hidden
+                    className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-amber-500"
+                    data-testid="changed-docs-dot"
+                  />
+                ) : null}
               </Button>
             ) : null}
             {hasExecutableContext ? (
@@ -1447,6 +1482,8 @@ export function ProjectAssistantPanel({
     <KnowledgeBaseModal
       open={knowledgeBaseOpen}
       projectSlug={projectSlug}
+      issueIdentifier={issueIdentifier ?? null}
+      changedDocPaths={changedDocs.paths}
       onOpenChange={setKnowledgeBaseOpen}
       onInsertContext={insertContextRef}
     />
