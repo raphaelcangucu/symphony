@@ -424,9 +424,11 @@ defmodule SymphonyElixir.Codex.DynamicToolTest do
                  "check_handoff_gate",
                  "get_evidence_status",
                  "manage_preview",
+                 "list_previews",
+                 "manage_tunnel",
                  "manage_dev_env",
                  "link_pull_request",
-                 "manage_codex_goal",
+                 "goal",
                  "update_shared_contract",
                  "query_bundle_status",
                  "report_unit_status"

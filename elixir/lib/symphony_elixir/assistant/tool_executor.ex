@@ -75,7 +75,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     sync_issue
     list_running_agents
     steer_agent
-    manage_codex_goal
+    goal
     classify_execution_unit
     create_subtask
     set_issue_parent
@@ -126,7 +126,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     get_agent_executions
     dispatch_coding_agent
     dispatch_codex
-    manage_codex_goal
+    goal
     create_issue
     create_draft_issue
     list_project_repositories
@@ -565,7 +565,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
 
     build_tool_specs()
     |> Enum.filter(&(Map.get(&1, "name") in @issue_bound_supported_tools))
-    |> Enum.reject(&(&1["name"] == "manage_codex_goal"))
+    |> Enum.reject(&(&1["name"] == "goal"))
     |> Kernel.++([GoalTools.issue_bound_tool_spec()])
     |> ToolText.localize_specs()
     |> Enum.map(&bind_tool_spec_identifier(&1, identifier))
@@ -933,7 +933,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     SteerTools.execute(project_slug(project), arguments, opts)
   end
 
-  defp do_execute(project, "manage_codex_goal", arguments, opts) do
+  defp do_execute(project, "goal", arguments, opts) do
     case GoalTools.execute(project_slug(project), arguments, opts) do
       {:ok, result} -> {:ok, result}
       {:error, reason} -> {:error, goal_tool_error(reason)}
@@ -1783,7 +1783,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
   end
 
   defp codex_failure_response(:missing_action) do
-    codex_failure_response("action is required for manage_codex_goal.")
+    codex_failure_response("action is required for goal.")
   end
 
   defp codex_failure_response(:invalid_context) do
@@ -1803,7 +1803,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
   end
 
   defp codex_failure_response({:invalid_action, action}) do
-    codex_failure_response("Invalid manage_codex_goal action: #{inspect(action)}.")
+    codex_failure_response("Invalid goal action: #{inspect(action)}.")
   end
 
   defp codex_failure_response(:kb_page_not_found) do

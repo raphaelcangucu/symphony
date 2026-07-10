@@ -40,7 +40,7 @@ defmodule SymphonyElixir.Codex.DynamicTool do
   @manage_tunnel_tool "manage_tunnel"
   @manage_dev_env_tool "manage_dev_env"
   @link_pull_request_tool "link_pull_request"
-  @manage_codex_goal_tool "manage_codex_goal"
+  @goal_tool "goal"
   @query_bundle_status_tool "query_bundle_status"
   @report_unit_status_tool "report_unit_status"
   @update_shared_contract_tool "update_shared_contract"
@@ -232,7 +232,7 @@ defmodule SymphonyElixir.Codex.DynamicTool do
       @manage_dev_env_tool ->
         execute_bound_assistant_tool(DevEnvTools, arguments, opts, coding_agent: true)
 
-      @manage_codex_goal_tool ->
+      @goal_tool ->
         execute_bound_assistant_tool(GoalTools, arguments, opts)
 
       @link_pull_request_tool ->

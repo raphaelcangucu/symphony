@@ -35,7 +35,7 @@ defmodule SymphonyElixir.Assistant.ProjectBoardTools do
     sync_issue
     list_running_agents
     steer_agent
-    manage_codex_goal
+    goal
     classify_execution_unit
     create_subtask
     set_issue_parent

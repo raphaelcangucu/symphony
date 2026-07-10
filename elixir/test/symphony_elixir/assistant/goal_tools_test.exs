@@ -17,7 +17,7 @@ defmodule SymphonyElixir.Assistant.GoalToolsTest do
 
   test "assistant spec requires identifier and action" do
     spec = GoalTools.assistant_tool_spec()
-    assert spec["name"] == "manage_codex_goal"
+    assert spec["name"] == "goal"
     assert "identifier" in spec["inputSchema"]["required"]
     assert "action" in spec["inputSchema"]["required"]
   end
@@ -30,7 +30,7 @@ defmodule SymphonyElixir.Assistant.GoalToolsTest do
                bound_issue_identifier: issue.identifier
              )
 
-    assert result.tool == "manage_codex_goal"
+    assert result.tool == "goal"
     assert result.data.context == "authoring"
     assert result.data.objective == "Draft the rollout plan"
     assert result.data.enabled == true
