@@ -9,6 +9,7 @@ defmodule SymphonyElixir.AgentAvailability do
 
   @cache_key {__MODULE__, :cache}
   @cache_ttl_ms 60_000
+  @claude_goal_min_version "2.1.139"
 
   @type result :: %{
           available: boolean(),
@@ -74,6 +75,64 @@ defmodule SymphonyElixir.AgentAvailability do
   def invalidate_cache do
     :persistent_term.erase(@cache_key)
     :ok
+  end
+
+  @doc """
+  True when the probed Claude CLI version is >= 2.1.139 (native `/goal`).
+
+  Override with `Application.put_env(:symphony_elixir, :claude_goal_supported_override, true|false)`
+  in tests.
+  """
+  @spec claude_goal_supported?() :: boolean()
+  def claude_goal_supported? do
+    case Application.get_env(:symphony_elixir, :claude_goal_supported_override) do
+      true ->
+        true
+
+      false ->
+        false
+
+      _ ->
+        min =
+          Application.get_env(:symphony_elixir, :claude_goal_min_version, @claude_goal_min_version)
+
+        case probe().claude do
+          %{available: true, version: version} when is_binary(version) ->
+            version_at_least?(version, min)
+
+          _ ->
+            false
+        end
+    end
+  end
+
+  @spec version_at_least?(String.t() | nil, String.t()) :: boolean()
+  def version_at_least?(version, minimum) when is_binary(minimum) do
+    case {parse_semver(version), parse_semver(minimum)} do
+      {nil, _} -> false
+      {current, min} -> version_gte?(current, min)
+    end
+  end
+
+  def version_at_least?(_version, _minimum), do: false
+
+  defp parse_semver(text) when is_binary(text) do
+    case Regex.run(~r/(\d+)\.(\d+)\.(\d+)/, text) do
+      [_, a, b, c] -> {String.to_integer(a), String.to_integer(b), String.to_integer(c)}
+      _ -> nil
+    end
+  end
+
+  defp parse_semver(_text), do: nil
+
+  defp version_gte?({a, b, c}, {x, y, z}) do
+    cond do
+      a > x -> true
+      a < x -> false
+      b > y -> true
+      b < y -> false
+      true -> c >= z
+    end
   end
 
   defp read_version(path) do

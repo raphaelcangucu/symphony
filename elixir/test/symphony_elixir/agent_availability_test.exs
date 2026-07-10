@@ -44,4 +44,21 @@ defmodule SymphonyElixir.AgentAvailabilityTest do
     assert Map.has_key?(result.opencode, :authenticated)
     assert Map.has_key?(result.opencode, :detail)
   end
+
+  test "version_at_least? compares semver from version strings" do
+    assert AgentAvailability.version_at_least?("2.1.139", "2.1.139")
+    assert AgentAvailability.version_at_least?("2.1.140", "2.1.139")
+    assert AgentAvailability.version_at_least?("claude 2.2.0 (abc)", "2.1.139")
+    refute AgentAvailability.version_at_least?("2.1.138", "2.1.139")
+    refute AgentAvailability.version_at_least?(nil, "2.1.139")
+  end
+
+  test "claude_goal_supported? honors override" do
+    Application.put_env(:symphony_elixir, :claude_goal_supported_override, true)
+    on_exit(fn -> Application.delete_env(:symphony_elixir, :claude_goal_supported_override) end)
+    assert AgentAvailability.claude_goal_supported?() == true
+
+    Application.put_env(:symphony_elixir, :claude_goal_supported_override, false)
+    assert AgentAvailability.claude_goal_supported?() == false
+  end
 end
