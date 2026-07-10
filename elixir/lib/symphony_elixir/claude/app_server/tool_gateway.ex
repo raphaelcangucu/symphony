@@ -99,12 +99,17 @@ defmodule SymphonyElixir.Claude.AppServer.ToolGateway do
 
   ### NO tracker/Phoenix imports
 
-  Per component rule: only Plug, Bandit, Jason, and Elixir stdlib.
+  Per component rule: only Plug, Bandit, Jason, and Elixir stdlib. The
+  `/user-input/:session_token` façade is an intentional exception: it
+  delegates to `SymphonyElixir.Assistant.UserInputHttp` so PreToolUse hooks
+  share this loopback listener without putting Assistant logic here.
   """
 
   use Plug.Router
 
   require Logger
+
+  alias SymphonyElixir.Assistant.UserInputHttp
 
   @table __MODULE__
   @pt_key {__MODULE__, :server}
@@ -126,6 +131,10 @@ defmodule SymphonyElixir.Claude.AppServer.ToolGateway do
       [{^token, specs, executor, _inserted_at}] ->
         handle_rpc(conn, specs, executor)
     end
+  end
+
+  post "/user-input/:session_token" do
+    UserInputHttp.handle_conn(conn, session_token)
   end
 
   match _ do
