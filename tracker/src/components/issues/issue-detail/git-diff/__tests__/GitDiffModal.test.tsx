@@ -252,4 +252,68 @@ describe("GitDiffModal", () => {
     expect(prompt).toContain("Fix this line");
     expect(prompt).toMatch(/commit|abcdef1|frontend/i);
   });
+
+  it("isolates line comments to the selected commit", async () => {
+    const user = userEvent.setup();
+    const onSendReview = vi.fn();
+    const commitA = {
+      repo: "frontend",
+      sha: "aaaaaaaaaaaa",
+      shortSha: "aaaaaaa",
+      message: "feat: first",
+      author: "agent",
+      authoredAt: "2026-07-10T00:00:00Z",
+      filesChanged: 1,
+      insertions: 5,
+      deletions: 0,
+    };
+    const commitB = {
+      repo: "backend",
+      sha: "bbbbbbbbbbbb",
+      shortSha: "bbbbbbb",
+      message: "feat: second",
+      author: "agent",
+      authoredAt: "2026-07-10T01:00:00Z",
+      filesChanged: 1,
+      insertions: 3,
+      deletions: 1,
+    };
+    useIssueCommitEvidenceMock.mockReturnValue({
+      commits: [commitA, commitB],
+      loading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+    const { getCommitEvidence } = await import("@/services/commitEvidence");
+    vi.mocked(getCommitEvidence).mockImplementation(async (_project, _identifier, repo, sha) => {
+      if (repo === commitA.repo && sha === commitA.sha) {
+        return {
+          ...commitA,
+          files: [{ path: "src/a.ts", oldPath: null, status: "modified", patch: "@@\n+a\n" }],
+        };
+      }
+      return {
+        ...commitB,
+        files: [{ path: "lib/b.ts", oldPath: null, status: "modified", patch: "@@\n+b\n" }],
+      };
+    });
+
+    render(
+      <GitDiffModal
+        open
+        onOpenChange={vi.fn()}
+        projectSlug="advising"
+        identifier="CDE-1"
+        onSendReview={onSendReview}
+      />,
+    );
+
+    await user.click(screen.getByRole("tab", { name: /commits/i }));
+    await screen.findByRole("button", { name: "mock add comment" });
+    await user.click(screen.getByRole("button", { name: "mock add comment" }));
+    expect(screen.getByTestId("git-diff-viewer")).toHaveAttribute("data-comment-count", "1");
+
+    await user.click(screen.getByRole("button", { name: /feat: second/i }));
+    expect(screen.getByTestId("git-diff-viewer")).toHaveAttribute("data-comment-count", "0");
+  });
 });

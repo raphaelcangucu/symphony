@@ -507,7 +507,7 @@ function CommitList({
           <p className="px-3 py-6 text-center text-xs text-muted-foreground">No commits.</p>
         ) : (
           filteredCommits.map((commit) => {
-            const active = selected?.sha === commit.sha;
+            const active = selected !== null && commitKey(commit) === commitKey(selected);
             const key = commitKey(commit);
             const note = commitNotes.find((entry) => entry.repo === commit.repo && entry.sha === commit.sha);
             const commentCount = commentCountsByCommitKey[key] ?? 0;
