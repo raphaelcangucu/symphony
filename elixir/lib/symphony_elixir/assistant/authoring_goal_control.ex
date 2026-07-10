@@ -100,17 +100,12 @@ defmodule SymphonyElixir.Assistant.AuthoringGoalControl do
   end
 
   @doc """
-  Replaces the authoring objective. Persists it to thread metadata and, when a
-  native goal already exists, updates it (resetting native accounting per the
-  Codex contract) and reactivates it.
+  Replaces the authoring objective. Persists it to thread metadata and syncs the
+  agent-native goal when possible (Codex thread/goal or Claude /goal mirror).
 
   Prefer `set_objective_metadata/2` + `sync_native_objective/1` from the channel:
   the native `thread/goal/set` is a Codex port round-trip that can block (and, if
   a turn holds the thread, fight it), so it must run off the channel process.
-  """
-  @doc """
-  Replaces the authoring objective. Persists it to thread metadata and syncs the
-  agent-native goal when possible (Codex thread/goal or Claude /goal mirror).
   """
   @spec set_objective(Thread.t(), String.t()) :: result()
   def set_objective(%Thread{} = thread, objective) when is_binary(objective) do
