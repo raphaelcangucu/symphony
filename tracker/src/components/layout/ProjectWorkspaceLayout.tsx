@@ -1,4 +1,4 @@
-import { Plus, RefreshCw, Settings } from "lucide-react";
+import { Settings } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Navigate, Outlet, useLocation, useNavigate, useParams } from "react-router-dom";
@@ -59,33 +59,11 @@ function WorkspaceChrome() {
           sessionsCount={showProjectSessionsChrome ? sessionsChrome?.count : null}
           rightSlot={
             <>
-              {showProjectSessionsChrome && sessionsChrome ? (
-                <>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={sessionsChrome.onRefresh}
-                    disabled={sessionsChrome.isLoading}
-                  >
-                    <RefreshCw className={sessionsChrome.isLoading ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
-                    <span className="hidden sm:inline">{t("sessions.refresh")}</span>
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={sessionsChrome.onCreateSession}
-                    disabled={sessionsChrome.isCreating}
-                  >
-                    <Plus className="h-4 w-4" />
-                    {sessionsChrome.isCreating ? t("sessions.creating") : t("sessions.newSession")}
-                  </Button>
-                </>
-              ) : null}
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
+                className="h-8 w-8 px-0"
                 onClick={() => navigate(projectSettingsPath(projectSlug))}
                 disabled={!project}
                 aria-label={t("layout.editProject")}
@@ -94,6 +72,7 @@ function WorkspaceChrome() {
                 <Settings className="h-4 w-4" />
               </Button>
               {showProjectEditor ? <ProjectEditorMenu projectSlug={projectSlug} /> : null}
+              <div aria-hidden="true" className="mx-0.5 h-5 w-px shrink-0 bg-border" />
               <ProjectAssistantMenu projectSlug={projectSlug} />
               {showBoardFilters ? <BoardFiltersTrigger /> : null}
             </>

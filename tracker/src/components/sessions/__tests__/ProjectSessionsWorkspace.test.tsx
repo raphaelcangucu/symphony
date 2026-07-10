@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import { useState, type ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -11,7 +11,6 @@ import { ProjectSessionsWorkspace } from "@/components/sessions/ProjectSessionsW
 import { useProjectSessions } from "@/hooks/useProjectSessions";
 import { initTestI18n, renderWithI18n } from "@/i18n/testUtils";
 import { emptyProjectSessionGroups } from "@/lib/projectSessions";
-import { createProjectSessionThread } from "@/services/assistantThreads";
 
 const projectAssistantPanel = vi.fn((props: { contentMaxWidth?: string }) => (
   <div aria-label="mock assistant panel" data-content-max-width={props.contentMaxWidth} />
@@ -19,7 +18,6 @@ const projectAssistantPanel = vi.fn((props: { contentMaxWidth?: string }) => (
 
 vi.mock("@/hooks/useProjectSessions", () => ({ useProjectSessions: vi.fn() }));
 vi.mock("@/services/assistantThreads", () => ({
-  createProjectSessionThread: vi.fn(),
   listAssistantThreads: vi.fn(async () => []),
 }));
 vi.mock("@/components/assistant/ProjectAssistantPanel", () => ({
@@ -34,14 +32,7 @@ function SessionsChromeHarness({ children }: { children: ReactNode }) {
 
   return (
     <ProjectSessionsChromeSetterContext.Provider value={setChromeState}>
-      {chromeState ? (
-        <div>
-          <span data-testid="sessions-chrome-count">{chromeState.count}</span>
-          <button type="button" onClick={chromeState.onCreateSession} disabled={chromeState.isCreating}>
-            {chromeState.isCreating ? "Creating..." : "New session"}
-          </button>
-        </div>
-      ) : null}
+      {chromeState ? <span data-testid="sessions-chrome-count">{chromeState.count}</span> : null}
       {children}
     </ProjectSessionsChromeSetterContext.Provider>
   );
@@ -65,18 +56,6 @@ describe("ProjectSessionsWorkspace", () => {
       error: null,
       refetch,
     });
-    vi.mocked(createProjectSessionThread).mockResolvedValue({
-      id: 42,
-      scope: "project_session",
-      agentKind: null,
-      projectSlug: "demo",
-      projectName: "Demo",
-      issueIdentifier: null,
-      title: "Planning session",
-      status: "active",
-      preview: null,
-      updatedAt: "2026-07-03T00:00:00Z",
-    });
   });
 
   it("omits the duplicate sessions page header", () => {
@@ -92,7 +71,7 @@ describe("ProjectSessionsWorkspace", () => {
     expect(screen.queryByText("All assistant chats and agent runs related to this project.")).not.toBeInTheDocument();
   });
 
-  it("opens a new assistant session in a tab", async () => {
+  it("publishes the sessions count to the project header chrome", async () => {
     renderWithI18n(
       <MemoryRouter initialEntries={["/projects/demo/workspaces"]}>
         <SessionsChromeHarness>
@@ -101,11 +80,7 @@ describe("ProjectSessionsWorkspace", () => {
       </MemoryRouter>,
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: "New session" }));
-
-    await waitFor(() => expect(createProjectSessionThread).toHaveBeenCalled());
-    expect(screen.getByRole("tab", { name: /Planning session/i })).toBeInTheDocument();
-    expect(screen.getByLabelText("mock assistant panel")).toBeInTheDocument();
+    expect(await screen.findByTestId("sessions-chrome-count")).toHaveTextContent("0");
   });
 
   it("selects an active thread tab from the route", async () => {

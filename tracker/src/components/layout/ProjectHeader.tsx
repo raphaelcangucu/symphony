@@ -2,7 +2,7 @@ import { AlertTriangle, BookOpen, History, LayoutDashboard, List, RefreshCw, Ter
 import type { TFunction } from "i18next";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { NavLink } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 import { toast } from "sonner";
 
 import { Badge, badgeVariants } from "@/components/ui/badge";
@@ -13,7 +13,7 @@ import { copyTextToClipboard } from "@/lib/clipboard";
 import { parseTimestamp } from "@/lib/timeFormat";
 import { cn } from "@/lib/utils";
 import { kbProjectPath } from "@/lib/kbRoutes";
-import { projectSessionsPath, projectTerminalPath, workspaceBasePath } from "@/lib/workspaceRoutes";
+import { isBoardPath, projectSessionsPath, projectTerminalPath, workspaceBasePath } from "@/lib/workspaceRoutes";
 import type { Issue } from "@/types/issue";
 import type { ProjectSyncState, TrackerKind } from "@/types/project";
 
@@ -66,6 +66,10 @@ function buildSyncErrorReport(
   return lines.join("\n");
 }
 
+function HeaderDivider() {
+  return <div aria-hidden="true" className="mx-0.5 h-5 w-px shrink-0 bg-border" />;
+}
+
 export function ProjectHeader({
   projectSlug,
   title,
@@ -79,6 +83,8 @@ export function ProjectHeader({
   onIssueCreated,
 }: ProjectHeaderProps) {
   const { t } = useTranslation();
+  const location = useLocation();
+  const onBoard = isBoardPath(location.pathname);
   const pollingLabel = pollingActive
     ? t("layout.projectHeader.pollingActive")
     : t("layout.projectHeader.pollingPaused");
@@ -103,8 +109,8 @@ export function ProjectHeader({
 
   return (
     <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b bg-background/95 px-6 backdrop-blur">
-      <ProjectSwitcher projectSlug={projectSlug} title={title} />
-      <div className="flex items-center gap-2">
+      <div className="flex min-w-0 items-center gap-2">
+        <ProjectSwitcher projectSlug={projectSlug} title={title} />
         {refreshing ? (
           <span className="flex items-center gap-1.5 text-xs text-muted-foreground" aria-live="polite">
             <RefreshCw className="h-3.5 w-3.5 animate-spin" />
@@ -127,20 +133,20 @@ export function ProjectHeader({
           </button>
         ) : null}
         {remoteTracker ? (
-          <div className="flex items-center gap-2">
-            <Badge variant="muted">{t(`layout.projectHeader.trackers.${trackerKind}`)}</Badge>
-            <span
-              role="status"
-              aria-label={pollingLabel}
-              title={pollingLabel}
-              className={cn(
-                "h-2 w-2 rounded-full",
-                pollingActive ? "bg-green-500" : "bg-muted-foreground",
-              )}
-            />
+          <div className="flex items-center gap-0.5">
+            <Badge variant="muted" className="gap-1.5">
+              <span
+                role="status"
+                aria-label={pollingLabel}
+                title={pollingLabel}
+                className={cn("h-2 w-2 rounded-full", pollingActive ? "bg-green-500" : "bg-muted-foreground")}
+              />
+              {t(`layout.projectHeader.trackers.${trackerKind}`)}
+            </Badge>
             <Button
               size="sm"
               variant="ghost"
+              className="h-8 w-8 px-0"
               onClick={onRefresh}
               aria-label={t("layout.projectHeader.refreshBoard")}
               disabled={refreshing}
@@ -149,57 +155,71 @@ export function ProjectHeader({
             </Button>
           </div>
         ) : null}
-        {rightSlot}
-        <Button variant="ghost" size="sm" asChild>
-          <NavLink
-            to={workspaceBasePath(projectSlug, "board")}
-            className={({ isActive }) => cn(isActive && "bg-accent text-foreground")}
-          >
-            <LayoutDashboard className="h-4 w-4" />
-            {t("layout.projectHeader.board")}
-          </NavLink>
-        </Button>
-        <Button variant="ghost" size="sm" asChild>
-          <NavLink
-            to={workspaceBasePath(projectSlug, "list")}
-            className={({ isActive }) => cn(isActive && "bg-accent text-foreground")}
-          >
-            <List className="h-4 w-4" />
-            {t("layout.projectHeader.list")}
-          </NavLink>
-        </Button>
-        <Button variant="ghost" size="sm" asChild>
-          <NavLink
-            to={projectSessionsPath(projectSlug)}
-            className={({ isActive }) => cn(isActive && "bg-accent text-foreground")}
-          >
-            <History className="h-4 w-4" />
-            {t("layout.projectHeader.workspaces")}
-            {normalizedSessionsCount != null ? (
-              <span className="rounded-full border border-border/70 bg-background px-1.5 py-0 text-[10px] font-medium leading-4 text-muted-foreground">
-                {normalizedSessionsCount}
-              </span>
-            ) : null}
-          </NavLink>
-        </Button>
-        <Button variant="ghost" size="sm" asChild>
-          <NavLink
-            to={projectTerminalPath(projectSlug)}
-            className={({ isActive }) => cn(isActive && "bg-accent text-foreground")}
-          >
-            <TerminalSquare className="h-4 w-4" />
-            {t("layout.projectHeader.terminal")}
-          </NavLink>
-        </Button>
-        <Button variant="ghost" size="sm" asChild>
-          <NavLink
-            to={kbProjectPath(projectSlug)}
-            className={({ isActive }) => cn(isActive && "bg-accent text-foreground")}
-          >
-            <BookOpen className="h-4 w-4" />
-            {t("layout.projectHeader.knowledgeBase")}
-          </NavLink>
-        </Button>
+      </div>
+
+      <div className="flex items-center gap-3">
+        {rightSlot ? (
+          <>
+            <div className="flex items-center gap-0.5">{rightSlot}</div>
+            <HeaderDivider />
+          </>
+        ) : null}
+
+        <nav className="flex items-center gap-0.5" aria-label={t("layout.projectHeader.viewsNav")}>
+          {onBoard ? (
+            <Button variant="ghost" size="sm" asChild>
+              <NavLink to={workspaceBasePath(projectSlug, "list")}>
+                <List className="h-4 w-4" />
+                {t("layout.projectHeader.list")}
+              </NavLink>
+            </Button>
+          ) : (
+            <Button variant="ghost" size="sm" asChild>
+              <NavLink
+                to={workspaceBasePath(projectSlug, "board")}
+                className={({ isActive }) => cn(isActive && "bg-accent text-foreground")}
+              >
+                <LayoutDashboard className="h-4 w-4" />
+                {t("layout.projectHeader.board")}
+              </NavLink>
+            </Button>
+          )}
+          <Button variant="ghost" size="sm" asChild>
+            <NavLink
+              to={projectSessionsPath(projectSlug)}
+              className={({ isActive }) => cn(isActive && "bg-accent text-foreground")}
+            >
+              <History className="h-4 w-4" />
+              {t("layout.projectHeader.workspaces")}
+              {normalizedSessionsCount != null ? (
+                <span className="rounded-full border border-border/70 bg-background px-1.5 py-0 text-[10px] font-medium leading-4 text-muted-foreground">
+                  {normalizedSessionsCount}
+                </span>
+              ) : null}
+            </NavLink>
+          </Button>
+          <Button variant="ghost" size="sm" asChild>
+            <NavLink
+              to={projectTerminalPath(projectSlug)}
+              className={({ isActive }) => cn(isActive && "bg-accent text-foreground")}
+            >
+              <TerminalSquare className="h-4 w-4" />
+              {t("layout.projectHeader.terminal")}
+            </NavLink>
+          </Button>
+          <Button variant="ghost" size="sm" asChild>
+            <NavLink
+              to={kbProjectPath(projectSlug)}
+              className={({ isActive }) => cn(isActive && "bg-accent text-foreground")}
+            >
+              <BookOpen className="h-4 w-4" />
+              {t("layout.projectHeader.docs")}
+            </NavLink>
+          </Button>
+        </nav>
+
+        <HeaderDivider />
+
         <NewIssueMenu projectSlug={projectSlug} size="sm" onCreated={onIssueCreated} />
       </div>
     </header>

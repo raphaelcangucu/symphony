@@ -2583,6 +2583,8 @@
       "sessions": "Sessões",
       "terminal": "Terminal",
       "knowledgeBase": "Base de Conhecimento",
+      "docs": "Docs",
+      "viewsNav": "Visões do projeto",
       "switchProject": "Trocar de projeto",
       "loadingProjects": "Carregando projetos…",
       "trackers": {

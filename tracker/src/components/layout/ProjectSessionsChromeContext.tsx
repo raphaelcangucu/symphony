@@ -1,11 +1,8 @@
 import { createContext, type Dispatch, type SetStateAction } from "react";
 
+/** Count badge for the Workspaces nav item while on the sessions page. */
 export interface ProjectSessionsChromeState {
   count: number;
-  isCreating: boolean;
-  isLoading: boolean;
-  onCreateSession: () => void;
-  onRefresh: () => void;
 }
 
 export const ProjectSessionsChromeSetterContext = createContext<

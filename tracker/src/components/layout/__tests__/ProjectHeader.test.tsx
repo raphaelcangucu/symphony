@@ -84,6 +84,27 @@ describe("ProjectHeader polling indicator", () => {
     expect(trigger).toHaveTextContent("distributionmachine");
   });
 
+  it("shows List when on the board view and Board otherwise", () => {
+    const { unmount } = render(
+      <MemoryRouter initialEntries={["/projects/macro-markets/board"]}>
+        <ProjectHeader projectSlug="macro-markets" trackerKind="local" />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole("link", { name: "List" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Board" })).toBeNull();
+    unmount();
+
+    render(
+      <MemoryRouter initialEntries={["/projects/macro-markets/list"]}>
+        <ProjectHeader projectSlug="macro-markets" trackerKind="local" />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole("link", { name: "Board" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "List" })).toBeNull();
+  });
+
   it("shows the project sessions count in the sessions navigation item", () => {
     render(
       <MemoryRouter>
@@ -92,6 +113,16 @@ describe("ProjectHeader polling indicator", () => {
     );
 
     expect(screen.getByRole("link", { name: /Workspaces\s+22/ })).toBeInTheDocument();
+  });
+
+  it("labels the knowledge base nav item as Docs", () => {
+    render(
+      <MemoryRouter>
+        <ProjectHeader projectSlug="macro-markets" trackerKind="local" />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole("link", { name: "Docs" })).toBeInTheDocument();
   });
 
   it("labels the indicator active when polling is active", () => {

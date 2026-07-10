@@ -1,7 +1,8 @@
 import { Bot, ChevronDown, CircleDot, Plus, Sparkles, TerminalSquare } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 
 import { IssueSessionPickerDialog } from "@/components/sessions/IssueSessionPickerDialog";
 import { Button } from "@/components/ui/button";
@@ -11,8 +12,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { newIssueAssistantPath, projectSessionsPath, projectTerminalPath } from "@/lib/workspaceRoutes";
+import { newIssueAssistantPath, projectSessionPath, projectTerminalPath } from "@/lib/workspaceRoutes";
 import { cn } from "@/lib/utils";
+import { createProjectSessionThread } from "@/services/assistantThreads";
 import type { Issue } from "@/types/issue";
 import type { WorkflowStatusName } from "@/types/workflow-status";
 
@@ -40,13 +42,29 @@ export function NewIssueMenu({
   className,
 }: NewIssueMenuProps) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [quickCreateOpen, setQuickCreateOpen] = useState(false);
   const [issueSessionPickerOpen, setIssueSessionPickerOpen] = useState(false);
+  const [creatingProjectSession, setCreatingProjectSession] = useState(false);
 
   const assistantPath = newIssueAssistantPath(projectSlug);
-  const sessionsPath = projectSessionsPath(projectSlug);
   const terminalPath = projectTerminalPath(projectSlug);
   const addLabel = status ? t("issue.create.addToStatus", { status }) : t("issue.create.add");
+
+  async function handleCreateProjectSession() {
+    if (creatingProjectSession) return;
+    setCreatingProjectSession(true);
+    try {
+      const thread = await createProjectSessionThread(projectSlug, {
+        title: t("sessions.newSessionTitle"),
+      });
+      navigate(projectSessionPath(projectSlug, thread.id));
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : t("sessions.createFailed"));
+    } finally {
+      setCreatingProjectSession(false);
+    }
+  }
 
   const renderMenuItems = (includeIssueAssistant: boolean) => (
     <DropdownMenuContent align="end" className="w-56">
@@ -58,11 +76,15 @@ export function NewIssueMenu({
           </Link>
         </DropdownMenuItem>
       ) : null}
-      <DropdownMenuItem asChild>
-        <Link to={sessionsPath}>
-          <Bot className="mr-2 h-4 w-4" />
-          {t("issue.create.newProjectSession")}
-        </Link>
+      <DropdownMenuItem
+        disabled={creatingProjectSession}
+        onSelect={(event) => {
+          event.preventDefault();
+          void handleCreateProjectSession();
+        }}
+      >
+        <Bot className="mr-2 h-4 w-4" />
+        {creatingProjectSession ? t("sessions.creating") : t("issue.create.newProjectSession")}
       </DropdownMenuItem>
       <DropdownMenuItem onSelect={() => setIssueSessionPickerOpen(true)}>
         <CircleDot className="mr-2 h-4 w-4" />

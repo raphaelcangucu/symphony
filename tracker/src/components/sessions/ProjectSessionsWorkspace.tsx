@@ -50,7 +50,6 @@ import {
   type WorkspaceView,
 } from "@/lib/workspaceRoutes";
 import { dispatchIssueAgent } from "@/services/issueDispatch";
-import { createProjectSessionThread } from "@/services/assistantThreads";
 import { removeWorkspaces } from "@/services/worktrees";
 import type { AgentExecution } from "@/types/agent-execution";
 import type { Issue } from "@/types/issue";
@@ -76,7 +75,6 @@ export function ProjectSessionsWorkspace({
     useProjectSessions(projectSlug);
   const setSessionsChrome = useContext(ProjectSessionsChromeSetterContext);
   const [resumePending, setResumePending] = useState<string | null>(null);
-  const [creating, setCreating] = useState(false);
   const [cleanupOpen, setCleanupOpen] = useState(false);
   const [newWorkspaceOpen, setNewWorkspaceOpen] = useState(false);
   const [newSessionIssue, setNewSessionIssue] = useState<StartIssueSessionDialogIssue | null>(null);
@@ -294,24 +292,6 @@ export function ProjectSessionsWorkspace({
     }
   }
 
-  const handleCreateSession = useCallback(async () => {
-    if (creating) return;
-    setCreating(true);
-    try {
-      const thread = await createProjectSessionThread(projectSlug, { title: t("sessions.newSessionTitle") });
-      await refetch();
-      openAssistantSession(thread.id, thread.title ?? t("sessions.newSessionTitle"));
-    } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : t("sessions.createFailed"));
-    } finally {
-      setCreating(false);
-    }
-  }, [creating, openAssistantSession, projectSlug, refetch, t]);
-
-  const handleRefresh = useCallback(() => {
-    void refetch();
-  }, [refetch]);
-
   const handleArchive = useCallback(
     (threadId: number) => {
       void archiveChat(threadId);
@@ -372,20 +352,12 @@ export function ProjectSessionsWorkspace({
   useEffect(() => {
     if (!setSessionsChrome) return;
 
-    setSessionsChrome({
-      count: total,
-      isCreating: creating,
-      isLoading: isLoading || isInventoryLoading,
-      onCreateSession: () => {
-        void handleCreateSession();
-      },
-      onRefresh: handleRefresh,
-    });
+    setSessionsChrome({ count: total });
 
     return () => {
       setSessionsChrome(null);
     };
-  }, [creating, handleCreateSession, handleRefresh, isInventoryLoading, isLoading, setSessionsChrome, total]);
+  }, [setSessionsChrome, total]);
 
   return (
     <SessionTerminalDockContext.Provider value={terminalDockControls}>

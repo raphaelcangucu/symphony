@@ -43,11 +43,7 @@ function SessionsChromeHarness({ children }: { children: ReactNode }) {
 
   return (
     <ProjectSessionsChromeSetterContext.Provider value={setChromeState}>
-      {chromeState ? (
-        <button type="button" onClick={chromeState.onCreateSession} disabled={chromeState.isCreating}>
-          {chromeState.isCreating ? "Creating..." : "New session"}
-        </button>
-      ) : null}
+      {chromeState ? <span data-testid="sessions-chrome-count">{chromeState.count}</span> : null}
       {children}
     </ProjectSessionsChromeSetterContext.Provider>
   );
@@ -372,7 +368,7 @@ describe("ProjectSessionsPanel", () => {
     expect(refetch).toHaveBeenCalled();
   });
 
-  it("creates a new project session", async () => {
+  it("publishes the sessions count to the project header chrome", async () => {
     renderWithI18n(
       <MemoryRouter>
         <SessionsChromeHarness>
@@ -381,14 +377,6 @@ describe("ProjectSessionsPanel", () => {
       </MemoryRouter>,
     );
 
-    // The chrome harness button comes first; workspace cards render their own
-    // per-issue "New session" buttons below it.
-    fireEvent.click((await screen.findAllByRole("button", { name: "New session" }))[0]);
-
-    await waitFor(() =>
-      expect(createProjectSessionThread).toHaveBeenCalledWith("demo", { title: "Project session" }),
-    );
-    expect(refetch).toHaveBeenCalled();
-    expect(screen.getByRole("tab", { name: /Project session/i })).toBeInTheDocument();
+    expect(await screen.findByTestId("sessions-chrome-count")).toBeInTheDocument();
   });
 });

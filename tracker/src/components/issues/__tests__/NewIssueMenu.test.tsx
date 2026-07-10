@@ -1,11 +1,20 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { NewIssueMenu } from "@/components/issues/NewIssueMenu";
+import { createProjectSessionThread } from "@/services/assistantThreads";
 import type { Issue } from "@/types/issue";
 import type { WorkflowStatusName } from "@/types/workflow-status";
+
+vi.mock("@/services/assistantThreads", () => ({
+  createProjectSessionThread: vi.fn(),
+}));
+
+vi.mock("sonner", () => ({
+  toast: { success: vi.fn(), error: vi.fn() },
+}));
 
 const createdIssue: Issue = {
   id: "issue-1",
@@ -91,6 +100,7 @@ describe("NewIssueMenu", () => {
   beforeEach(() => {
     issueCreateDialog.mockClear();
     issueSessionPickerDialog.mockClear();
+    vi.mocked(createProjectSessionThread).mockReset();
   });
 
   it("navigates to the assistant new issue route from the primary action", async () => {
@@ -130,8 +140,20 @@ describe("NewIssueMenu", () => {
     expect(screen.getByText("status:In Progress")).toBeInTheDocument();
   });
 
-  it("opens the project sessions page from the menu", async () => {
+  it("creates a project session from the menu and navigates to it", async () => {
     const user = userEvent.setup();
+    vi.mocked(createProjectSessionThread).mockResolvedValue({
+      id: 42,
+      scope: "project_session",
+      agentKind: null,
+      projectSlug: "macro-markets",
+      projectName: "Macro Markets",
+      issueIdentifier: null,
+      title: "Project session",
+      status: "active",
+      preview: null,
+      updatedAt: "2026-07-03T00:00:00Z",
+    });
 
     render(
       <MemoryRouter initialEntries={["/projects/macro-markets/board"]}>
@@ -140,7 +162,7 @@ describe("NewIssueMenu", () => {
             path="/projects/macro-markets/board"
             element={<NewIssueMenu projectSlug="macro-markets" />}
           />
-          <Route path="/projects/macro-markets/workspaces" element={<div>Project sessions</div>} />
+          <Route path="/projects/macro-markets/workspaces/:threadId" element={<div>Opened session</div>} />
         </Routes>
       </MemoryRouter>,
     );
@@ -148,7 +170,10 @@ describe("NewIssueMenu", () => {
     await user.click(screen.getByRole("button", { name: "New issue options" }));
     await user.click(await screen.findByRole("menuitem", { name: "New project session" }));
 
-    expect(await screen.findByText("Project sessions")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(createProjectSessionThread).toHaveBeenCalledWith("macro-markets", { title: "Project session" }),
+    );
+    expect(await screen.findByText("Opened session")).toBeInTheDocument();
   });
 
   it("opens the issue session picker from the menu", async () => {
