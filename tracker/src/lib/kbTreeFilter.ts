@@ -1,3 +1,4 @@
+import type { ChangedDocEntry } from "@/lib/changedDocPaths";
 import type { KbTreeNode } from "@/types/knowledgeBase";
 
 export function filterKbTreesByPaths(
@@ -18,31 +19,61 @@ export function filterTreeByPaths(nodes: KbTreeNode[], paths: Set<string>): KbTr
   });
 }
 
-/** Ensures changed paths missing from the project tree still appear in Alterados mode. */
+/**
+ * Ensures changed paths missing from the project tree still appear in Alterados mode.
+ * Prefer `ChangedDocEntry[]` so multi-repo workspaces insert into the owning repo.
+ * A bare `Set<string>` still works for single-repo projects (legacy).
+ */
 export function withSyntheticChangedPages(
   treesByRepo: Record<string, KbTreeNode[]>,
   repoSlugs: string[],
-  changedPaths: Set<string>,
+  changed: ChangedDocEntry[] | Set<string>,
 ): Record<string, KbTreeNode[]> {
-  const filtered = filterKbTreesByPaths(treesByRepo, changedPaths);
-  const present = new Set(
-    Object.values(treesByRepo).flatMap((nodes) => collectPagePaths(nodes)),
+  const entries = normalizeChangedEntries(changed, repoSlugs);
+  const pathSet = new Set(entries.map((entry) => entry.path));
+  const filtered = filterKbTreesByPaths(treesByRepo, pathSet);
+  const presentByRepo = Object.fromEntries(
+    Object.entries(treesByRepo).map(([repoSlug, nodes]) => [repoSlug, new Set(collectPagePaths(nodes))]),
   );
 
-  if (repoSlugs.length !== 1) {
-    return filtered;
+  const next: Record<string, KbTreeNode[]> = { ...filtered };
+
+  for (const entry of entries) {
+    const repoSlug = resolveRepoSlug(entry.repo, repoSlugs);
+    if (!repoSlug) continue;
+    const present = presentByRepo[repoSlug] ?? new Set<string>();
+    if (present.has(entry.path)) continue;
+    next[repoSlug] = insertSyntheticKbPage(next[repoSlug] ?? [], entry.path);
+    present.add(entry.path);
   }
 
-  const [repoSlug] = repoSlugs;
-  if (!repoSlug) return filtered;
+  return next;
+}
 
-  let tree = filtered[repoSlug] ?? [];
-  for (const path of changedPaths) {
-    if (!present.has(path)) {
-      tree = insertSyntheticKbPage(tree, path);
-    }
+function normalizeChangedEntries(
+  changed: ChangedDocEntry[] | Set<string>,
+  repoSlugs: string[],
+): ChangedDocEntry[] {
+  if (changed instanceof Set) {
+    if (repoSlugs.length !== 1) return [];
+    const [repoSlug] = repoSlugs;
+    if (!repoSlug) return [];
+    return [...changed].map((path) => ({ repo: repoSlug, path }));
   }
-  return { ...filtered, [repoSlug]: tree };
+  return changed;
+}
+
+function resolveRepoSlug(repoName: string, repoSlugs: string[]): string | null {
+  const normalized = repoName.trim().toLowerCase();
+  if (!normalized) {
+    return repoSlugs.length === 1 ? (repoSlugs[0] ?? null) : null;
+  }
+  const exact = repoSlugs.find((slug) => slug.toLowerCase() === normalized);
+  if (exact) return exact;
+  const partial = repoSlugs.find(
+    (slug) => slug.toLowerCase().includes(normalized) || normalized.includes(slug.toLowerCase()),
+  );
+  return partial ?? null;
 }
 
 export function insertSyntheticKbPage(nodes: KbTreeNode[], path: string): KbTreeNode[] {

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 
-import { collectChangedDocPaths } from "@/lib/changedDocPaths";
+import { collectChangedDocEntries, type ChangedDocEntry } from "@/lib/changedDocPaths";
 import { normalizeIssueIdentifier } from "@/lib/issueIdentifiers";
 import { getGitDiff } from "@/services/gitDiff";
 
@@ -13,6 +13,7 @@ interface UseIssueChangedDocPathsArgs {
 }
 
 interface UseIssueChangedDocPathsResult {
+  entries: ChangedDocEntry[];
   paths: string[];
   count: number;
   loading: boolean;
@@ -25,7 +26,7 @@ export function useIssueChangedDocPaths({
   enabled = true,
   refreshKey = 0,
 }: UseIssueChangedDocPathsArgs): UseIssueChangedDocPathsResult {
-  const [paths, setPaths] = useState<string[]>([]);
+  const [entries, setEntries] = useState<ChangedDocEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
 
@@ -38,7 +39,7 @@ export function useIssueChangedDocPaths({
 
   useEffect(() => {
     if (!canLoad || !projectSlug || !normalizedIdentifier) {
-      setPaths([]);
+      setEntries([]);
       setLoading(false);
       return;
     }
@@ -49,10 +50,10 @@ export function useIssueChangedDocPaths({
     void getGitDiff(projectSlug, normalizedIdentifier, "uncommitted")
       .then((diff) => {
         if (cancelled) return;
-        setPaths(collectChangedDocPaths(diff));
+        setEntries(collectChangedDocEntries(diff));
       })
       .catch(() => {
-        if (!cancelled) setPaths([]);
+        if (!cancelled) setEntries([]);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -63,9 +64,12 @@ export function useIssueChangedDocPaths({
     };
   }, [canLoad, normalizedIdentifier, projectSlug, refreshKey, reloadToken]);
 
+  const paths = entries.map((entry) => entry.path);
+
   return {
+    entries,
     paths,
-    count: paths.length,
+    count: entries.length,
     loading,
     reload,
   };

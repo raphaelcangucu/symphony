@@ -24,7 +24,16 @@ import {
 } from "@/lib/kbTreeActions";
 import { withSyntheticChangedPages } from "@/lib/kbTreeFilter";
 import { cn, SCROLLBAR_THIN } from "@/lib/utils";
-import { deleteAsset, deleteFolder, getPage, getProjectOverview, renameAsset, savePage } from "@/services/knowledgeBase";
+import {
+  deleteAsset,
+  deleteFolder,
+  getIssuePage,
+  getPage,
+  getProjectOverview,
+  renameAsset,
+  saveIssuePage,
+  savePage,
+} from "@/services/knowledgeBase";
 import type { KbInlineEdit, KbPageDraft, KbRenameTarget } from "@/types/kbPageDraft";
 import type { KbPage, KbProjectOverview, KbTreeNode as KbTreeNodeType } from "@/types/knowledgeBase";
 
@@ -39,6 +48,8 @@ interface KnowledgeBaseModalProps {
   issueIdentifier?: string | null;
   /** Docs-relative paths from the issue uncommitted diff (already stripped of `docs/`). */
   changedDocPaths?: string[];
+  /** Preferred: repo-associated changed docs for multi-repo synthetic insertion. */
+  changedDocEntries?: Array<{ repo: string; path: string }>;
 }
 
 export function KnowledgeBaseModal({
@@ -48,6 +59,7 @@ export function KnowledgeBaseModal({
   onInsertContext,
   issueIdentifier = null,
   changedDocPaths = [],
+  changedDocEntries,
 }: KnowledgeBaseModalProps) {
   const { t } = useTranslation();
   const issueMode = Boolean(issueIdentifier);
@@ -59,21 +71,33 @@ export function KnowledgeBaseModal({
   const [saving, setSaving] = useState(false);
   const [pageDraft, setPageDraft] = useState<KbPageDraft | null>(null);
   const [renameTarget, setRenameTarget] = useState<KbRenameTarget | null>(null);
+  const effectiveEntries = useMemo(() => {
+    if (changedDocEntries && changedDocEntries.length > 0) return changedDocEntries;
+    return changedDocPaths.filter(Boolean).map((path) => ({ repo: "", path }));
+  }, [changedDocEntries, changedDocPaths]);
   const [filter, setFilter] = useState<KbModalDocumentFilter>(() =>
-    issueMode && changedDocPaths.length > 0 ? "changed" : "all",
+    issueMode && effectiveEntries.length > 0 ? "changed" : "all",
   );
   const repoSlugs = useMemo(() => overview?.repositories.map((repo) => repo.repoSlug) ?? [], [overview]);
   const { treesByRepo, reloadRepo } = useKbAllRepoTrees(open ? projectSlug : "", repoSlugs);
-  const changedPathSet = useMemo(() => new Set(changedDocPaths.filter(Boolean)), [changedDocPaths]);
+  const changedPathSet = useMemo(() => new Set(effectiveEntries.map((entry) => entry.path)), [effectiveEntries]);
   const displayedTreesByRepo = useMemo(() => {
-    if (!issueMode || filter !== "changed" || changedPathSet.size === 0) return treesByRepo;
-    return withSyntheticChangedPages(treesByRepo, repoSlugs, changedPathSet);
-  }, [changedPathSet, filter, issueMode, repoSlugs, treesByRepo]);
+    if (!issueMode || filter !== "changed" || effectiveEntries.length === 0) return treesByRepo;
+    return withSyntheticChangedPages(treesByRepo, repoSlugs, effectiveEntries);
+  }, [effectiveEntries, filter, issueMode, repoSlugs, treesByRepo]);
   const selectedIsAsset = isKbImageAssetPath(activePath);
+  const loadPage = useCallback(
+    (scopeProjectSlug: string, repoSlug: string, path: string) =>
+      issueIdentifier
+        ? getIssuePage(scopeProjectSlug, issueIdentifier, repoSlug, path)
+        : getPage(scopeProjectSlug, repoSlug, path),
+    [issueIdentifier],
+  );
   const { page: selectedPage, loading: selectedPageLoading, error: selectedPageError, reload: reloadSelectedPage } = useKbPage(
     projectSlug,
     activeRepo,
     activePath && !selectedIsAsset ? activePath : null,
+    loadPage,
   );
 
   useEffect(() => {
@@ -107,14 +131,14 @@ export function KnowledgeBaseModal({
 
   useEffect(() => {
     if (!open) return;
-    setFilter(issueMode && changedPathSet.size > 0 ? "changed" : "all");
-  }, [changedPathSet.size, issueMode, open, issueIdentifier]);
+    setFilter(issueMode && effectiveEntries.length > 0 ? "changed" : "all");
+  }, [effectiveEntries.length, issueMode, open, issueIdentifier]);
 
   useEffect(() => {
-    if (issueMode && filter === "changed" && changedPathSet.size === 0) {
+    if (issueMode && filter === "changed" && effectiveEntries.length === 0) {
       setFilter("all");
     }
-  }, [changedPathSet.size, filter, issueMode]);
+  }, [effectiveEntries.length, filter, issueMode]);
 
   const pageHref = useCallback((repoSlug: string, pagePath: string) => buildKbPagePath(projectSlug, repoSlug, pagePath), [projectSlug]);
   const handleSelectRepo = useCallback((repoSlug: string) => {
@@ -136,10 +160,15 @@ export function KnowledgeBaseModal({
       if (!activeRepo || !activePath || !selectedPage) return;
       setSaving(true);
       try {
-        await savePage(projectSlug, activeRepo, activePath, {
+        const payload = {
           frontmatter: selectedPage.frontmatter ?? {},
           body: markdown,
-        });
+        };
+        if (issueIdentifier) {
+          await saveIssuePage(projectSlug, issueIdentifier, activeRepo, activePath, payload);
+        } else {
+          await savePage(projectSlug, activeRepo, activePath, payload);
+        }
         await reloadSelectedPage();
       } catch {
         toast.error(t("kb.errors.saveFailed"));
@@ -147,7 +176,7 @@ export function KnowledgeBaseModal({
         setSaving(false);
       }
     },
-    [activePath, activeRepo, projectSlug, reloadSelectedPage, selectedPage, t],
+    [activePath, activeRepo, issueIdentifier, projectSlug, reloadSelectedPage, selectedPage, t],
   );
 
   const handleCreatePage = useCallback(
@@ -317,9 +346,12 @@ export function KnowledgeBaseModal({
       const title = node.title || node.name || node.path;
       const detail = `KB ${repoSlug}`;
       if (node.type === "page") {
-        const page = activeRepo === repoSlug && activePath === node.path && selectedPage
-          ? selectedPage
-          : await getPage(projectSlug, repoSlug, node.path);
+        const page =
+          activeRepo === repoSlug && activePath === node.path && selectedPage
+            ? selectedPage
+            : issueIdentifier
+              ? await getIssuePage(projectSlug, issueIdentifier, repoSlug, node.path)
+              : await getPage(projectSlug, repoSlug, node.path);
         onInsertContext({
           type: "doc",
           id: `kb:${repoSlug}:${node.path}`,
@@ -340,33 +372,44 @@ export function KnowledgeBaseModal({
         state: "draft",
       });
     },
-    [activePath, activeRepo, onInsertContext, projectSlug, selectedPage],
+    [activePath, activeRepo, issueIdentifier, onInsertContext, projectSlug, selectedPage],
   );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex h-[min(88vh,900px)] max-w-6xl flex-col gap-0 overflow-hidden p-0">
         <DialogHeader className="border-b px-5 py-4">
-          <DialogTitle>{t("assistant.panel.knowledgeBaseTitle")}</DialogTitle>
-          <DialogDescription>
-            {issueMode
-              ? t("kb.assistantDocuments.changedSubtitle", { count: changedPathSet.size })
-              : t("assistant.panel.knowledgeBaseDescription", { slug: projectSlug })}
-          </DialogDescription>
-          {issueMode ? (
-            <div className="mt-3 grid max-w-xs grid-cols-2 gap-1 rounded-lg bg-muted/50 p-1">
-              <FilterButton
-                active={filter === "changed"}
-                disabled={changedPathSet.size === 0}
-                onClick={() => setFilter("changed")}
-              >
-                {t("kb.assistantDocuments.changed")}
-              </FilterButton>
-              <FilterButton active={filter === "all"} onClick={() => setFilter("all")}>
-                {t("kb.assistantDocuments.all")}
-              </FilterButton>
+          <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+            <div className="min-w-0 space-y-1">
+              <DialogTitle>{t("assistant.panel.knowledgeBaseTitle")}</DialogTitle>
+              <DialogDescription>
+                {issueMode
+                  ? t("kb.assistantDocuments.changedSubtitle", { count: effectiveEntries.length })
+                  : t("assistant.panel.knowledgeBaseDescription", { slug: projectSlug })}
+              </DialogDescription>
             </div>
-          ) : null}
+            {issueMode ? (
+              <div
+                role="tablist"
+                aria-label={t("kb.assistantDocuments.title")}
+                className="flex shrink-0 items-center gap-0.5 self-end"
+              >
+                <FilterTab
+                  active={filter === "changed"}
+                  disabled={effectiveEntries.length === 0}
+                  onClick={() => setFilter("changed")}
+                >
+                  {t("kb.assistantDocuments.changed")}
+                </FilterTab>
+                <span aria-hidden className="px-0.5 text-[11px] text-muted-foreground/50">
+                  ·
+                </span>
+                <FilterTab active={filter === "all"} onClick={() => setFilter("all")}>
+                  {t("kb.assistantDocuments.all")}
+                </FilterTab>
+              </div>
+            ) : null}
+          </div>
         </DialogHeader>
         <div
           className={cn(
@@ -487,9 +530,16 @@ function KnowledgeBaseModalPreview({
     <section className="flex min-h-0 flex-col">
       <header className="flex min-w-0 items-center gap-2 border-b px-4 py-2">
         {treeCollapsed ? (
-          <Button type="button" variant="ghost" size="sm" className="h-7 gap-1.5 px-2 text-xs" onClick={onShowTree}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 shrink-0"
+            onClick={onShowTree}
+            aria-label={t("assistant.panel.knowledgeBaseShowTree")}
+            title={t("assistant.panel.knowledgeBaseShowTree")}
+          >
             <PanelLeftOpen className="h-3.5 w-3.5" />
-            {t("assistant.panel.knowledgeBaseShowTree")}
           </Button>
         ) : null}
         <div className="min-w-0 flex-1">
@@ -532,7 +582,7 @@ function KnowledgeBaseModalPreview({
   );
 }
 
-function FilterButton({
+function FilterTab({
   active,
   disabled = false,
   onClick,
@@ -544,16 +594,23 @@ function FilterButton({
   children: React.ReactNode;
 }) {
   return (
-    <Button
+    <button
       type="button"
-      variant={active ? "secondary" : "ghost"}
-      size="sm"
+      role="tab"
+      aria-selected={active}
       disabled={disabled}
-      className="h-7 rounded-md px-2 text-xs"
       onClick={onClick}
+      className={cn(
+        "rounded-sm px-1.5 py-0.5 text-[11px] font-medium tracking-wide transition-colors",
+        "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+        "disabled:pointer-events-none disabled:opacity-40",
+        active
+          ? "text-foreground underline decoration-foreground/35 decoration-1 underline-offset-[5px]"
+          : "text-muted-foreground hover:text-foreground",
+      )}
     >
       {children}
-    </Button>
+    </button>
   );
 }
 

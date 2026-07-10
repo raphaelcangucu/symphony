@@ -1484,6 +1484,7 @@ export function ProjectAssistantPanel({
       projectSlug={projectSlug}
       issueIdentifier={issueIdentifier ?? null}
       changedDocPaths={changedDocs.paths}
+      changedDocEntries={changedDocs.entries}
       onOpenChange={setKnowledgeBaseOpen}
       onInsertContext={insertContextRef}
     />

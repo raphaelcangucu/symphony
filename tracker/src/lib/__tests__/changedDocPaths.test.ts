@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { collectChangedDocPaths } from "@/lib/changedDocPaths";
+import { collectChangedDocEntries, collectChangedDocPaths } from "@/lib/changedDocPaths";
 import type { GitDiffResult } from "@/types/gitDiff";
 
 function diff(repos: GitDiffResult["repos"]): GitDiffResult {
@@ -101,5 +101,39 @@ describe("collectChangedDocPaths", () => {
     );
 
     expect(paths).toEqual(["same.md"]);
+  });
+
+  it("keeps repo association for synthetic tree insertion", () => {
+    const entries = collectChangedDocEntries(
+      diff([
+        {
+          repo: "back",
+          files: [
+            {
+              path: "docs/superpowers/specs/settlement.md",
+              oldPath: null,
+              status: "added",
+              patch: "",
+            },
+          ],
+        },
+        {
+          repo: "front",
+          files: [
+            {
+              path: "docs/guide.md",
+              oldPath: null,
+              status: "modified",
+              patch: "",
+            },
+          ],
+        },
+      ]),
+    );
+
+    expect(entries).toEqual([
+      { repo: "back", path: "superpowers/specs/settlement.md" },
+      { repo: "front", path: "guide.md" },
+    ]);
   });
 });

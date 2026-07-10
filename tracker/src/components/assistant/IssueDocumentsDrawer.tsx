@@ -54,6 +54,7 @@ export function IssueDocumentsDrawer({
     refreshKey,
   });
   const paths = changedDocPathsProp ?? loaded.paths;
+  const entries = changedDocPathsProp === undefined ? loaded.entries : paths.map((path) => ({ repo: "", path }));
   const count = changedDocCountProp ?? loaded.count;
 
   if (!normalizedIdentifier) return null;
@@ -90,6 +91,7 @@ export function IssueDocumentsDrawer({
           projectSlug={projectSlug}
           issueIdentifier={normalizedIdentifier}
           changedDocPaths={paths}
+          changedDocEntries={entries}
           onOpenChange={setOpen}
         />
       )}

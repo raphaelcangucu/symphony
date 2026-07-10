@@ -89,7 +89,7 @@ describe("KnowledgeBaseModal", () => {
     expect(screen.getByRole("link", { name: "Changed doc" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Other doc" })).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "All docs" }));
+    fireEvent.click(screen.getByRole("tab", { name: "All docs" }));
     expect(screen.getByRole("link", { name: "Other doc" })).toBeInTheDocument();
   });
 
@@ -103,7 +103,7 @@ describe("KnowledgeBaseModal", () => {
     );
 
     await waitFor(() => expect(screen.getByRole("link", { name: "Changed doc" })).toBeInTheDocument());
-    expect(screen.queryByRole("button", { name: "Changed docs" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Changed docs" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Other doc" })).toBeInTheDocument();
   });
 });

@@ -48,6 +48,7 @@ describe("useIssueChangedDocPaths", () => {
 
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(getGitDiffMock).toHaveBeenCalledWith("macro-markets", "510", "uncommitted");
+    expect(result.current.entries).toEqual([{ repo: "front", path: "superpowers/specs/a.md" }]);
     expect(result.current.paths).toEqual(["superpowers/specs/a.md"]);
     expect(result.current.count).toBe(1);
   });
@@ -61,6 +62,7 @@ describe("useIssueChangedDocPaths", () => {
     );
 
     expect(result.current.paths).toEqual([]);
+    expect(result.current.entries).toEqual([]);
     expect(result.current.count).toBe(0);
     expect(getGitDiffMock).not.toHaveBeenCalled();
   });
