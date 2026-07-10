@@ -359,10 +359,12 @@ export function ExecutionControlComposer({
   const goalPhase = executionGoalPhase(agentRunActive, showGoalPill, execution);
   const goalTimeUsedSeconds =
     execution?.goal?.timeUsedSeconds ?? (agentRunActive ? execution?.runtimeSeconds : null) ?? null;
-  const nativeGoal = execution?.goal?.source === "native" && execution?.goal?.kind === "goal";
+  const controllableGoal =
+    execution?.goal?.kind === "goal" &&
+    (execution.goal.source === "native" || execution.goal.source === "claude");
 
   async function handleGoalPause() {
-    if (nativeGoal && execution?.goal?.capabilities.includes("pause")) {
+    if (controllableGoal && execution?.goal?.capabilities.includes("pause")) {
       try {
         await controlIssueGoal(projectSlug, issue.identifier, { action: "pause" });
       } catch (cause) {
@@ -374,7 +376,7 @@ export function ExecutionControlComposer({
   }
 
   async function handleGoalResume() {
-    if (nativeGoal && execution?.goal?.capabilities.includes("resume") && !agentRunActive) {
+    if (controllableGoal && execution?.goal?.capabilities.includes("resume") && !agentRunActive) {
       try {
         await controlIssueGoal(projectSlug, issue.identifier, { action: "resume" });
       } catch (cause) {

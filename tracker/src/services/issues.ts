@@ -77,7 +77,9 @@ function serializeCreateInput(input: CreateIssueInput): Record<string, unknown> 
   if (input.labelIds && input.labelIds.length > 0) payload.label_ids = input.labelIds;
   if (input.assigneeIds && input.assigneeIds.length > 0) payload.assignee_ids = input.assigneeIds;
   if (input.agent) payload.agent = input.agent;
-  if (input.agent === "codex" && input.goal?.trim()) payload.goal = input.goal.trim();
+  if ((input.agent === "codex" || input.agent === "claude") && input.goal?.trim()) {
+    payload.goal = input.goal.trim();
+  }
 
   return payload;
 }

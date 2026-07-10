@@ -87,7 +87,7 @@ function normalizeGoalKind(kind: unknown): AgentExecutionGoalKind | null {
 }
 
 function normalizeGoalSource(source: unknown): AgentExecutionGoalSource | null {
-  return source === "native" || source === "prompt" ? source : null;
+  return source === "native" || source === "prompt" || source === "claude" ? source : null;
 }
 
 function stringValue(value: unknown): string | null {

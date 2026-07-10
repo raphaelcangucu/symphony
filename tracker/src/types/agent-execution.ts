@@ -15,7 +15,7 @@ export interface AgentExecutionTokens {
 }
 
 export type AgentExecutionGoalKind = "goal" | "workflow";
-export type AgentExecutionGoalSource = "native" | "prompt";
+export type AgentExecutionGoalSource = "native" | "prompt" | "claude";
 
 export interface AgentExecutionGoal {
   kind: AgentExecutionGoalKind;

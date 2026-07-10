@@ -105,7 +105,7 @@ describe("IssueCreateDialog Codex goal mode", () => {
     );
   });
 
-  it("shows workflow mode for Claude and sends an edited workflow when checked", async () => {
+  it("shows goal mode for Claude and sends an edited goal when checked", async () => {
     const user = userEvent.setup();
 
     render(<IssueCreateDialog projectSlug="macro-markets" open onOpenChange={vi.fn()} />);
@@ -113,26 +113,26 @@ describe("IssueCreateDialog Codex goal mode", () => {
     await user.type(screen.getByPlaceholderText("Issue title"), "Claude task");
     await user.click(await screen.findByRole("button", { name: "Claude" }));
 
-    const workflowMode = await screen.findByRole("checkbox", { name: /workflow mode/i });
-    expect(workflowMode).toBeInTheDocument();
+    const goalMode = await screen.findByRole("checkbox", { name: /goal mode/i });
+    expect(goalMode).toBeInTheDocument();
 
-    await user.click(workflowMode);
+    await user.click(goalMode);
 
-    const workflow = await screen.findByRole("textbox", {
+    const goal = await screen.findByRole("textbox", {
       name: i18n.t("issue.create.goalAria", {
         agent: i18n.t("issue.sessionLog.agentLabels.claude"),
-        term: i18n.t("issue.create.terms.workflow"),
+        term: i18n.t("issue.create.terms.goal"),
       }),
     });
-    expect(workflow).toHaveValue(
+    expect(goal).toHaveValue(
       [
         i18n.t("issue.create.goal.objective", { objective: "Claude task" }),
         i18n.t("issue.create.goal.constraints"),
       ].join("\n"),
     );
 
-    await user.clear(workflow);
-    await user.type(workflow, "Ship the Claude workflow and verify it.");
+    await user.clear(goal);
+    await user.type(goal, "Ship the Claude goal and verify it.");
     await user.click(screen.getByRole("button", { name: "Create" }));
 
     await waitFor(() => expect(mockCreateIssue).toHaveBeenCalled());
@@ -140,7 +140,7 @@ describe("IssueCreateDialog Codex goal mode", () => {
       "macro-markets",
       expect.objectContaining({
         agent: "claude",
-        goal: "Ship the Claude workflow and verify it.",
+        goal: "Ship the Claude goal and verify it.",
       }),
     );
   });

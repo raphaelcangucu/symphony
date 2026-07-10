@@ -78,11 +78,9 @@ function buildAgentGoal(title: string, description: string, t: TFunction): strin
   return lines.join("\n");
 }
 
-// Codex calls the long-running mode a "goal"; Claude Code and Cursor call it a "workflow".
+// Codex and Claude use "goal"; Cursor still uses prompt-only "workflow".
 function longRunningModeTerm(agent: AgentKind, t: TFunction): string {
-  return agent === "claude" || agent === "cursor"
-    ? t("issue.create.terms.workflow")
-    : t("issue.create.terms.goal");
+  return agent === "cursor" ? t("issue.create.terms.workflow") : t("issue.create.terms.goal");
 }
 
 function validationMessage(code: string | undefined, t: TFunction): string {
