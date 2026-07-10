@@ -22,6 +22,14 @@ defmodule SymphonyElixir.Assistant.UserInputBrokerTest do
     assert {:error, :timeout} = UserInputBroker.await(request_id, 50)
   end
 
+  test "resolve before await still delivers answers" do
+    request_id = "req-early-#{System.unique_integer([:positive])}"
+    answers = %{"q1" => %{"answers" => ["Buffered"]}}
+
+    assert :ok = UserInputBroker.resolve(request_id, answers)
+    assert {:ok, ^answers} = UserInputBroker.await(request_id, 2_000)
+  end
+
   test "bind_session and lookup_session round-trip" do
     token = "tok-#{System.unique_integer([:positive])}"
     binding = %{channel_pid: self(), thread_id: 7999, agent: "claude"}

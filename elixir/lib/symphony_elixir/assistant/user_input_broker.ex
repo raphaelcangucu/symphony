@@ -7,12 +7,16 @@ defmodule SymphonyElixir.Assistant.UserInputBroker do
   - ETS session table keyed by `session_token` → `%{channel_pid, thread_id, agent}`
     so the loopback HTTP façade can push `:assistant_user_input_required` into the
     live assistant channel.
+
+  Early `resolve/2` answers are buffered briefly so a channel submit that races
+  ahead of the HTTP await still unblocks the hook.
   """
 
   require Logger
 
   @await_registry __MODULE__.AwaitRegistry
   @sessions __MODULE__.Sessions
+  @pending __MODULE__.Pending
   @default_timeout_ms 300_000
 
   @type answers :: %{optional(String.t()) => map()}
@@ -31,6 +35,7 @@ defmodule SymphonyElixir.Assistant.UserInputBroker do
   def ensure_started do
     ensure_registry()
     ensure_sessions_table()
+    ensure_pending_table()
     :ok
   end
 
@@ -42,27 +47,21 @@ defmodule SymphonyElixir.Assistant.UserInputBroker do
       when is_binary(request_id) and is_integer(timeout_ms) and timeout_ms >= 0 do
     ensure_started()
 
-    case Registry.register(@await_registry, request_id, nil) do
-      {:ok, _owner} ->
-        receive do
-          {:user_input_answers, ^request_id, answers} when is_map(answers) ->
-            {:ok, answers}
-        after
-          timeout_ms ->
-            Logger.warning("[UserInputBroker] request #{short(request_id)} timed out after #{timeout_ms}ms")
-            {:error, :timeout}
-        end
+    case take_pending(request_id) do
+      {:ok, answers} ->
+        {:ok, answers}
 
-      {:error, {:already_registered, _pid}} ->
-        Logger.warning("[UserInputBroker] duplicate request_id #{short(request_id)}")
-        {:error, :duplicate}
+      :error ->
+        do_await(request_id, timeout_ms)
     end
   end
 
-  @doc "Deliver answers to the waiter registered for `request_id` (no-op if nobody waits)."
+  @doc "Deliver answers to the waiter registered for `request_id` (buffers if nobody waits yet)."
   @spec resolve(String.t(), answers()) :: :ok
   def resolve(request_id, answers) when is_binary(request_id) and is_map(answers) do
     ensure_started()
+    # Always buffer first so a submit that races ahead of Registry.register still lands.
+    true = :ets.insert(@pending, {request_id, answers})
 
     Registry.dispatch(@await_registry, request_id, fn entries ->
       Enum.each(entries, fn {pid, _value} ->
@@ -101,6 +100,40 @@ defmodule SymphonyElixir.Assistant.UserInputBroker do
     :ok
   end
 
+  defp do_await(request_id, timeout_ms) do
+    case Registry.register(@await_registry, request_id, nil) do
+      {:ok, _owner} ->
+        # A resolve may have landed between take_pending and register.
+        case take_pending(request_id) do
+          {:ok, answers} ->
+            {:ok, answers}
+
+          :error ->
+            receive do
+              {:user_input_answers, ^request_id, answers} when is_map(answers) ->
+                _ = take_pending(request_id)
+                {:ok, answers}
+            after
+              timeout_ms ->
+                _ = take_pending(request_id)
+                Logger.warning("[UserInputBroker] request #{short(request_id)} timed out after #{timeout_ms}ms")
+                {:error, :timeout}
+            end
+        end
+
+      {:error, {:already_registered, _pid}} ->
+        Logger.warning("[UserInputBroker] duplicate request_id #{short(request_id)}")
+        {:error, :duplicate}
+    end
+  end
+
+  defp take_pending(request_id) do
+    case :ets.take(@pending, request_id) do
+      [{^request_id, answers}] when is_map(answers) -> {:ok, answers}
+      _ -> :error
+    end
+  end
+
   defp ensure_registry do
     if Process.whereis(@await_registry) == nil do
       case Registry.start_link(keys: :unique, name: @await_registry) do
@@ -122,6 +155,17 @@ defmodule SymphonyElixir.Assistant.UserInputBroker do
     case :ets.whereis(@sessions) do
       :undefined ->
         :ets.new(@sessions, [:named_table, :public, :set, read_concurrency: true])
+        :ok
+
+      _tid ->
+        :ok
+    end
+  end
+
+  defp ensure_pending_table do
+    case :ets.whereis(@pending) do
+      :undefined ->
+        :ets.new(@pending, [:named_table, :public, :set, read_concurrency: true])
         :ok
 
       _tid ->
