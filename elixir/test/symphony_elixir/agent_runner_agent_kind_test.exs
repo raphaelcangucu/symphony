@@ -62,4 +62,15 @@ defmodule SymphonyElixir.AgentRunnerAgentKindTest do
     issue = %Issue{id: "1", identifier: "X-1", project_slug: "missing", agent_kind: nil}
     assert AgentRunner.issue_agent_kind(issue) == "codex"
   end
+
+  test "settings.agent_kind beats label agent_kind" do
+    :ok = Context.put_agent_settings("pref", "PREF-9", %{agent_kind: "cursor"})
+    issue = %Issue{id: "9", identifier: "PREF-9", project_slug: "pref", agent_kind: "codex"}
+    assert AgentRunner.issue_agent_kind(issue) == "cursor"
+  end
+
+  test "label agent is used when settings agent_kind is empty" do
+    issue = %Issue{id: "10", identifier: "PREF-10", project_slug: "pref", agent_kind: "codex"}
+    assert AgentRunner.issue_agent_kind(issue) == "codex"
+  end
 end
