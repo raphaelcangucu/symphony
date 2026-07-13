@@ -64,6 +64,7 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
            |> maybe_inject_creator(),
          {:ok, issue} <- IssueAdapter.dispatch(project, :create_issue, [attrs]) do
       maybe_establish_codex_goal(project, issue, params)
+      persist_execution_settings(project, issue, params)
 
       conn
       |> put_status(:created)
@@ -87,6 +88,7 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
          {:ok, _child} <- Context.set_issue_parent(project_slug, issue.identifier, parent_identifier) do
       ParentLink.enqueue_link(project, issue.identifier, parent_identifier)
       maybe_establish_codex_goal(project, issue, params)
+      persist_execution_settings(project, issue, params)
 
       conn
       |> put_status(:created)
@@ -212,6 +214,7 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
               Orchestrator.request_refresh()
             end
 
+            persist_execution_settings(project, issue, params)
             json(conn, %{data: present_issue(project, issue)})
 
           {:error, reason} ->
@@ -512,6 +515,76 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
       attrs
     end
   end
+
+  # Writes agent/model/effort pins to issue_agent_settings after create/update.
+  # Settings are the source of truth; symphony:* label mirror happens via the
+  # existing create/update agent attr path (best-effort, settings-first here).
+  defp persist_execution_settings(project, issue, params) when is_map(params) do
+    attrs = execution_settings_attrs(params)
+
+    if attrs == %{} do
+      :ok
+    else
+      case issue_identifier(issue) do
+        identifier when is_binary(identifier) ->
+          case Context.put_agent_settings(project.slug, identifier, attrs) do
+            :ok ->
+              :ok
+
+            {:error, reason} ->
+              Logger.warning(
+                "Failed to persist execution settings project=#{project.slug} identifier=#{identifier} reason=#{inspect(reason)}"
+              )
+
+              :ok
+          end
+
+        _ ->
+          :ok
+      end
+    end
+  end
+
+  defp execution_settings_attrs(params) when is_map(params) do
+    %{}
+    |> maybe_put_execution_agent(params)
+    |> maybe_put_execution_string(params, "model", :model)
+    |> maybe_put_execution_string(params, "effort", :effort)
+  end
+
+  defp maybe_put_execution_agent(attrs, params) do
+    if Map.has_key?(params, "agent") do
+      case Map.get(params, "agent") do
+        nil -> Map.put(attrs, :agent_kind, nil)
+        agent when agent in @agent_kinds -> Map.put(attrs, :agent_kind, agent)
+        _invalid -> attrs
+      end
+    else
+      attrs
+    end
+  end
+
+  defp maybe_put_execution_string(attrs, params, key, dest) do
+    if Map.has_key?(params, key) do
+      Map.put(attrs, dest, blank_execution_string(Map.get(params, key)))
+    else
+      attrs
+    end
+  end
+
+  defp blank_execution_string(nil), do: nil
+
+  defp blank_execution_string(value) when is_binary(value) do
+    case String.trim(value) do
+      "" -> nil
+      trimmed -> trimmed
+    end
+  end
+
+  defp blank_execution_string(_value), do: nil
+
+  defp issue_identifier(%{identifier: identifier}) when is_binary(identifier), do: identifier
+  defp issue_identifier(_issue), do: nil
 
   defp maybe_put_priority(attrs, params) do
     if Map.has_key?(params, "priority") do

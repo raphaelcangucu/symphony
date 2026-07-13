@@ -15,6 +15,7 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
   alias SymphonyElixir.AgentExecution
   alias SymphonyElixir.PromptTemplates.Template
   alias SymphonyElixir.AgentRouting
+  alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.Tracker.DisplayIdentifier
   alias SymphonyElixir.Tracker.ExternalUrl
   alias SymphonyElixir.Tracker.IssueDTO
@@ -106,6 +107,8 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
 
   @spec issue(IssueDTO.t()) :: map()
   def issue(%IssueDTO{} = dto) do
+    label_agent = AgentRouting.label_agent_kind(dto.labels)
+
     %{
       id: dto.id,
       identifier: dto.identifier,
@@ -124,7 +127,7 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
       project_slug: dto.project_slug,
       status: dto.status,
       labels: dto.labels,
-      agent_kind: AgentRouting.label_agent_kind(dto.labels),
+      agent_kind: label_agent,
       blocked_by: dto.blocked_by,
       attachments: Enum.map(dto.attachments, &issue_attachment/1),
       started_at: nil,
@@ -135,6 +138,7 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
       parent_identifier: dto.parent_identifier,
       sub_issue_summary: dto.sub_issue_summary
     }
+    |> merge_execution_pins(dto.project_slug, dto.identifier, label_agent)
   end
 
   @spec issue(IssueRecord.t()) :: map()
@@ -161,6 +165,30 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
       inserted_at: iso8601(issue.inserted_at),
       updated_at: iso8601(issue.updated_at)
     }
+    |> merge_execution_pins(loaded_project_slug(issue), issue.identifier, nil)
+  end
+
+  defp merge_execution_pins(base, slug, identifier, label_agent)
+       when is_binary(slug) and is_binary(identifier) do
+    case Context.get_agent_settings(slug, identifier) do
+      {:ok, settings} ->
+        Map.merge(base, %{
+          agent_kind: settings.agent_kind || label_agent,
+          model: settings.model,
+          effort: settings.effort
+        })
+
+      {:error, :not_found} ->
+        Map.merge(base, %{
+          agent_kind: label_agent,
+          model: nil,
+          effort: nil
+        })
+    end
+  end
+
+  defp merge_execution_pins(base, _slug, _identifier, label_agent) do
+    Map.merge(base, %{agent_kind: label_agent, model: nil, effort: nil})
   end
 
   defp issue_attachment(attachment) do
