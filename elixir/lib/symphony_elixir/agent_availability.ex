@@ -1,10 +1,11 @@
 defmodule SymphonyElixir.AgentAvailability do
   @moduledoc """
   Probes whether the codex/claude/cursor CLI binaries are present, with a
-  short cache so the Settings page can poll cheaply. The probed binary is the
-  first word of the configured command.
+  short cache so the Settings page can poll cheaply. Claude is probed through
+  its full configured shell command so env prefixes and wrappers match turns.
   """
 
+  alias SymphonyElixir.Claude.Config, as: ClaudeConfig
   alias SymphonyElixir.InstanceConfig
 
   @cache_key {__MODULE__, :cache}
@@ -34,7 +35,7 @@ defmodule SymphonyElixir.AgentAvailability do
       :miss ->
         value = %{
           codex: probe_command(InstanceConfig.codex_command()),
-          claude: probe_command(InstanceConfig.claude_command()),
+          claude: probe_claude_command(ClaudeConfig.resolve_command()),
           cursor: probe_command(InstanceConfig.cursor_command()),
           opencode: probe_command(InstanceConfig.opencode_command())
         }
@@ -85,6 +86,15 @@ defmodule SymphonyElixir.AgentAvailability do
   """
   @spec claude_goal_supported?() :: boolean()
   def claude_goal_supported? do
+    claude_goal_supported?(ClaudeConfig.resolve_command())
+  end
+
+  @spec claude_goal_supported?(String.t()) :: boolean()
+  def claude_goal_supported?(command) when is_binary(command) do
+    claude_goal_supported?(command, nil)
+  end
+
+  defp claude_goal_supported?(command, workspace) do
     case Application.get_env(:symphony_elixir, :claude_goal_supported_override) do
       true ->
         true
@@ -96,7 +106,7 @@ defmodule SymphonyElixir.AgentAvailability do
         min =
           Application.get_env(:symphony_elixir, :claude_goal_min_version, @claude_goal_min_version)
 
-        case probe().claude do
+        case probe_claude_command(command, workspace) do
           %{available: true, version: version} when is_binary(version) ->
             version_at_least?(version, min)
 
@@ -116,6 +126,12 @@ defmodule SymphonyElixir.AgentAvailability do
   """
   @spec claude_goal_preflight(Path.t()) :: :ok | {:error, atom()}
   def claude_goal_preflight(workspace) when is_binary(workspace) do
+    claude_goal_preflight(workspace, ClaudeConfig.resolve_command())
+  end
+
+  @spec claude_goal_preflight(Path.t(), String.t()) :: :ok | {:error, atom()}
+  def claude_goal_preflight(workspace, command)
+      when is_binary(workspace) and is_binary(command) do
     case Application.get_env(:symphony_elixir, :claude_goal_preflight_override) do
       :ok ->
         :ok
@@ -124,7 +140,7 @@ defmodule SymphonyElixir.AgentAvailability do
         {:error, reason}
 
       _ ->
-        with true <- claude_goal_supported?() || {:error, :claude_goal_unsupported_version},
+        with true <- claude_goal_supported?(command, workspace) || {:error, :claude_goal_unsupported_version},
              true <- File.dir?(workspace) || {:error, :claude_workspace_untrusted},
              :ok <- validate_claude_settings(workspace) do
           :ok
@@ -168,6 +184,30 @@ defmodule SymphonyElixir.AgentAvailability do
     end
   rescue
     _ -> nil
+  end
+
+  defp probe_claude_command(command, workspace \\ nil) do
+    case ClaudeConfig.read_version(command, workspace) do
+      version when is_binary(version) ->
+        %{
+          available: true,
+          version: version,
+          command: command,
+          path: nil,
+          authenticated: nil,
+          detail: nil
+        }
+
+      nil ->
+        %{
+          available: false,
+          version: nil,
+          command: command,
+          path: nil,
+          authenticated: nil,
+          detail: nil
+        }
+    end
   end
 
   defp cached do

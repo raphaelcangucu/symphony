@@ -11,7 +11,7 @@ defmodule SymphonyElixir.Claude.ModelCatalog do
   where available (Opus 4.7+), otherwise the GA default `high`.
   """
 
-  alias SymphonyElixir.InstanceConfig
+  alias SymphonyElixir.Claude.Config, as: ClaudeConfig
 
   @default_model "claude-opus-4-8"
 
@@ -41,7 +41,7 @@ defmodule SymphonyElixir.Claude.ModelCatalog do
      %{
        agent: "claude",
        agent_label: "Claude Code",
-       command: InstanceConfig.claude_command(),
+       command: ClaudeConfig.resolve_command(),
        default_model: @default_model,
        models: Enum.map(@models, &present_model/1)
      }}

@@ -7,6 +7,8 @@ defmodule SymphonyElixir.Claude.GoalControl do
   or `/goal clear` prompt prefix on the next CLI turn.
   """
 
+  require Logger
+
   alias SymphonyElixir.AgentAvailability
   alias SymphonyElixir.Claude.GoalStore
   alias SymphonyElixir.LocalTracker.{Context, Project}
@@ -32,16 +34,16 @@ defmodule SymphonyElixir.Claude.GoalControl do
   @spec set_objective(Project.t(), String.t(), role(), String.t()) :: goal_result()
   def set_objective(%Project{} = project, identifier, :execution, objective)
       when is_binary(identifier) and is_binary(objective) do
-    with :ok <- ensure_supported(),
-         {:ok, workspace} <- ensure_workspace(project, identifier),
+    with {:ok, workspace} <- ensure_workspace(project, identifier),
+         :ok <- ensure_supported(workspace),
          :ok <-
            GoalStore.put(workspace, :execution, %{
              "status" => "active",
              "objective" => objective,
              "pending_command" => "set"
            }),
-         :ok <- maybe_mirror_agent_goal(project, identifier, :execution, String.trim(objective)),
          {:ok, goal} <- GoalStore.read(workspace, :execution) do
+      mirror_agent_goal_best_effort(project, identifier, String.trim(objective))
       {:ok, goal}
     else
       :error -> {:error, :goal_store_read_failed}
@@ -58,12 +60,14 @@ defmodule SymphonyElixir.Claude.GoalControl do
     with {:ok, workspace} <- ensure_workspace(project, identifier) do
       case GoalStore.read(workspace, :execution) do
         :error ->
-          :ok = maybe_clear_agent_goal(project, identifier, :execution)
-          {:ok, :cleared}
+          with :ok <- maybe_clear_agent_goal(project, identifier, :execution) do
+            {:ok, :cleared}
+          end
 
-        {:ok, %{"status" => "cleared"}} ->
-          :ok = maybe_clear_agent_goal(project, identifier, :execution)
-          {:ok, :cleared}
+        {:ok, %{"status" => "completed", "objective" => nil}} ->
+          with :ok <- maybe_clear_agent_goal(project, identifier, :execution) do
+            {:ok, :cleared}
+          end
 
         {:ok, goal} ->
           case GoalStore.put(workspace, :execution, %{
@@ -140,7 +144,7 @@ defmodule SymphonyElixir.Claude.GoalControl do
   end
 
   @spec acknowledge_inject(Path.t(), role(), {:set | :clear, String.t()}, integer() | nil) ::
-          :ok | {:error, term()}
+          :ok | :stale | {:error, term()}
   def acknowledge_inject(workspace, role, {command, revision}, assistant_thread_id)
       when is_binary(workspace) and role in [:execution, :authoring] and
              command in [:set, :clear] and is_binary(revision) do
@@ -177,45 +181,86 @@ defmodule SymphonyElixir.Claude.GoalControl do
           {String.t(), term()} | {:error, term()}
   def apply_pending_to_prompt(prompt, workspace, role, assistant_thread_id)
       when is_binary(prompt) and is_binary(workspace) and role in [:execution, :authoring] do
-    case pending_with_revision(workspace, role, assistant_thread_id) do
-      {:inject, :set, objective, revision} ->
+    case GoalStore.read(workspace, role, assistant_thread_id) do
+      {:ok, goal} ->
+        apply_snapshot_to_prompt(prompt, goal)
+
+      :error ->
+        apply_snapshot_to_prompt(prompt, nil)
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  @doc "Applies a previously-read, revision-bearing goal snapshot to a CLI prompt."
+  @spec apply_snapshot_to_prompt(String.t(), map() | nil) ::
+          {String.t(), {:set | :clear, String.t()} | :none} | {:error, term()}
+  def apply_snapshot_to_prompt(prompt, snapshot) when is_binary(prompt) do
+    case snapshot do
+      %{"pending_command" => "set", "objective" => objective, "revision" => revision}
+      when is_binary(objective) and objective != "" and is_binary(revision) and revision != "" ->
         {"/goal #{objective}\n\n" <> prompt, {:set, revision}}
 
-      {:inject, :clear, revision} ->
+      %{"pending_command" => "clear", "revision" => revision}
+      when is_binary(revision) and revision != "" ->
         {"/goal clear\n\n" <> prompt, {:clear, revision}}
 
-      :none ->
+      %{"pending_command" => nil, "revision" => revision}
+      when is_binary(revision) and revision != "" ->
         {prompt, :none}
 
-      {:error, reason} ->
-        {:error, reason}
-    end
-  end
-
-  defp pending_with_revision(workspace, role, assistant_thread_id) do
-    case GoalStore.read(workspace, role, assistant_thread_id) do
-      {:ok, %{"pending_command" => "set", "objective" => objective, "revision" => revision}}
-      when is_binary(objective) and objective != "" and is_binary(revision) ->
-        {:inject, :set, objective, revision}
-
-      {:ok, %{"pending_command" => "clear", "revision" => revision}} when is_binary(revision) ->
-        {:inject, :clear, revision}
-
-      {:error, reason} ->
-        {:error, reason}
+      nil ->
+        {prompt, :none}
 
       _ ->
-        :none
+        {:error, :goal_revision_required}
     end
   end
 
-  defp ensure_supported do
-    if AgentAvailability.claude_goal_supported?() do
-      :ok
-    else
-      {:error, :claude_goal_unsupported_version}
+  @doc "Clears the issue-level objective mirror after native execution-goal clear."
+  @spec clear_tracker_mirror(map()) :: :ok | {:error, term()}
+  def clear_tracker_mirror(%{project_slug: project_slug, identifier: identifier})
+      when is_binary(project_slug) and is_binary(identifier) do
+    set_tracker_mirror(project_slug, identifier, nil)
+  end
+
+  def clear_tracker_mirror(_issue), do: {:error, :issue_context_required}
+
+  @doc "Revision-safely acknowledges native clear and clears its tracker mirror."
+  @spec acknowledge_clear_and_mirror(Path.t(), String.t(), integer() | nil, map()) ::
+          :ok | :stale | {:error, term()}
+  def acknowledge_clear_and_mirror(workspace, revision, assistant_thread_id, issue)
+      when is_binary(workspace) and is_binary(revision) do
+    with {:ok, project_slug, identifier} <- tracker_coordinates(issue) do
+      GoalStore.acknowledge_clear_with_mirror(
+        workspace,
+        :execution,
+        revision,
+        assistant_thread_id,
+        fn -> set_tracker_mirror(project_slug, identifier, nil) end,
+        fn newer_goal ->
+          set_tracker_mirror(project_slug, identifier, Map.get(newer_goal, "objective"))
+        end
+      )
     end
   end
+
+  defp tracker_coordinates(%{project_slug: project_slug, identifier: identifier})
+       when is_binary(project_slug) and is_binary(identifier),
+       do: {:ok, project_slug, identifier}
+
+  defp tracker_coordinates(_issue), do: {:error, :issue_context_required}
+
+  defp set_tracker_mirror(project_slug, identifier, objective) do
+    case Context.set_agent_goal(project_slug, identifier, objective) do
+      {:ok, _issue} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp ensure_supported(workspace),
+    do: AgentAvailability.claude_goal_preflight(workspace)
 
   defp raise_thread_id_required! do
     raise ArgumentError, "assistant_thread_id is required for Claude authoring goal control"
@@ -239,11 +284,48 @@ defmodule SymphonyElixir.Claude.GoalControl do
     end
   end
 
-  defp maybe_mirror_agent_goal(project, identifier, :execution, objective) do
-    case Context.set_agent_goal(project.slug, identifier, objective) do
-      {:ok, _} -> :ok
-      {:error, reason} -> {:error, reason}
+  defp mirror_agent_goal_best_effort(project, identifier, objective) do
+    try do
+      case Context.set_agent_goal(project.slug, identifier, objective) do
+        {:ok, _} ->
+          :ok
+
+        {:error, reason} ->
+          log_mirror_failure(project, identifier, :returned_error, reason, [])
+
+        unexpected ->
+          log_mirror_failure(project, identifier, :unexpected_return, unexpected, [])
+      end
+    rescue
+      exception ->
+        log_mirror_failure(project, identifier, :error, exception, __STACKTRACE__)
+    catch
+      kind, reason ->
+        log_mirror_failure(project, identifier, kind, reason, __STACKTRACE__)
     end
+
+    :ok
+  end
+
+  defp log_mirror_failure(project, identifier, kind, reason, stacktrace) do
+    try do
+      detail =
+        if kind in [:error, :exit, :throw],
+          do: Exception.format(kind, reason, stacktrace),
+          else: inspect(reason)
+
+      Logger.warning(
+        "Claude goal sidecar persisted but tracker mirror update failed " <>
+          "project_slug=#{project.slug} issue_identifier=#{identifier} " <>
+          "failure_kind=#{kind} reason=#{detail}"
+      )
+    rescue
+      _exception -> :ok
+    catch
+      _kind, _reason -> :ok
+    end
+
+    :ok
   end
 
   defp maybe_clear_agent_goal(project, identifier, :execution) do

@@ -39,6 +39,36 @@ const connect = vi.fn();
 const disconnect = vi.fn();
 const socketChannel = vi.fn(() => channel);
 
+function goalSnapshot(overrides: Record<string, unknown> = {}) {
+  return {
+    thread_id: 1,
+    enabled: true,
+    objective: "Audit",
+    native: true,
+    status: "running",
+    provider: "codex",
+    source: "native",
+    capabilities: ["stop", "pause", "resume", "edit", "clear"],
+    goal: {
+      kind: "goal",
+      source: "native",
+      objective: "Audit",
+      status: "running",
+      capabilities: ["stop", "pause", "resume", "edit", "clear"],
+      time_used_seconds: 42,
+      revision: "10",
+    },
+    process_running: true,
+    process_elapsed_seconds: 42,
+    resumable: false,
+    interrupted: false,
+    revision: "10",
+    request_order: 10,
+    updated_at: "2026-07-13T12:00:42Z",
+    ...overrides,
+  };
+}
+
 vi.mock("@assistant-ui/react", () => ({
   AssistantRuntimeProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   useExternalStoreRuntime: () => ({}),
@@ -466,6 +496,18 @@ describe("ProjectAssistantPanel", () => {
     await waitFor(() =>
       expect(push).toHaveBeenCalledWith("set_goal_mode", { goal_mode: true, objective: "ship the feature" }),
     );
+    // Resolving the set_goal_mode push surfaces the canonical Goal dock.
+    const goalCallIndex = push.mock.calls.findIndex(([event]) => event === "set_goal_mode");
+    pushReceives[goalCallIndex]?.ok?.(
+      goalSnapshot({
+        objective: "ship the feature",
+        goal: {
+          ...goalSnapshot().goal as Record<string, unknown>,
+          objective: "ship the feature",
+        },
+      }),
+    );
+
     await waitFor(() =>
       expect(push).toHaveBeenCalledWith(
         "send_message",
@@ -484,26 +526,130 @@ describe("ProjectAssistantPanel", () => {
     expect(goalSendMessage).toMatch(/authoring goal/i);
     expect(goalSendMessage).toMatch(/do not dispatch the orchestrator/i);
 
-    // Resolving the set_goal_mode push surfaces the Authoring goal banner.
-    const goalCallIndex = push.mock.calls.findIndex(([event]) => event === "set_goal_mode");
-    pushReceives[goalCallIndex]?.ok?.({ goal_mode: true, goal_objective: "ship the feature" });
-
-    const banner = await screen.findByRole("status", { name: "Authoring goal" });
+    const banner = await screen.findByRole("region", { name: "Goal" });
     expect(banner).toHaveTextContent("ship the feature");
   });
 
-  it("rehydrates the authoring goal banner from the join response", async () => {
+  it("does not dispatch the framed /goal message when set_goal_mode fails", async () => {
+    const onIssueGoalModeError = vi.fn();
+    render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        issueIdentifier="MAC-1"
+        view="board"
+        mode="page"
+        onIssueGoalModeError={onIssueGoalModeError}
+      />,
+    );
+
+    const textarea = await screen.findByPlaceholderText("Write a message...");
+    fireEvent.change(textarea, { target: { value: "/goal ship safely" } });
+    fireEvent.keyDown(textarea, { key: "Enter", code: "Enter" });
+
+    await waitFor(() =>
+      expect(push).toHaveBeenCalledWith("set_goal_mode", {
+        goal_mode: true,
+        objective: "ship safely",
+      }),
+    );
+
+    const goalCallIndex = push.mock.calls.findIndex(([event]) => event === "set_goal_mode");
+    act(() => pushReceives[goalCallIndex]?.error?.({ reason: "native goal failed" }));
+
+    expect(onIssueGoalModeError).toHaveBeenCalledWith("native goal failed");
+    expect(push).not.toHaveBeenCalledWith(
+      "send_message",
+      expect.objectContaining({ message: expect.stringContaining("ship safely") }),
+    );
+  });
+
+  it("does not dispatch the framed /goal message when set_goal_mode times out", async () => {
+    const onIssueGoalModeError = vi.fn();
+    render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        issueIdentifier="MAC-1"
+        view="board"
+        mode="page"
+        onIssueGoalModeError={onIssueGoalModeError}
+      />,
+    );
+
+    const textarea = await screen.findByPlaceholderText("Write a message...");
+    fireEvent.change(textarea, { target: { value: "/goal ship eventually" } });
+    fireEvent.keyDown(textarea, { key: "Enter", code: "Enter" });
+
+    await waitFor(() => expect(push).toHaveBeenCalledWith("set_goal_mode", expect.anything()));
+    const goalCallIndex = push.mock.calls.findIndex(([event]) => event === "set_goal_mode");
+    act(() => pushReceives[goalCallIndex]?.timeout?.({}));
+
+    expect(onIssueGoalModeError).toHaveBeenCalledWith("Assistant goal mode update timed out");
+    expect(push).not.toHaveBeenCalledWith(
+      "send_message",
+      expect.objectContaining({ message: expect.stringContaining("ship eventually") }),
+    );
+  });
+
+  it("rehydrates a complete Goal snapshot for any persistent session", async () => {
     join.mockImplementation(() => ({
       receive: (status: string, callback: (response: unknown) => void) =>
         status === "ok"
-          ? callback({ goal_mode: true, goal_objective: "Audit the auth module", thread_id: 1 })
+          ? callback({
+              thread_id: 1,
+              goal_status: goalSnapshot({
+                objective: "Audit the auth module",
+                provider: "claude",
+                source: "claude",
+                goal: {
+                  ...goalSnapshot().goal as Record<string, unknown>,
+                  source: "claude",
+                  objective: "Audit the auth module",
+                },
+              }),
+            })
           : undefined,
     }));
 
-    render(<ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="page" />);
+    render(<ProjectAssistantPanel projectSlug="macro-markets" threadId={1} view="board" mode="page" />);
 
-    const banner = await screen.findByRole("status", { name: "Authoring goal" });
+    const banner = await screen.findByRole("region", { name: "Goal" });
     expect(banner).toHaveTextContent("Audit the auth module");
+    expect(banner).toHaveTextContent("Claude Code");
+  });
+
+  it("disables provider switching for an enabled Goal and re-enables it after removal", async () => {
+    join.mockImplementation(() => ({
+      receive: (status: string, callback: (response: unknown) => void) =>
+        status === "ok"
+          ? callback({
+              thread_id: 1,
+              effective_agent: "codex",
+              goal_status: goalSnapshot({ process_running: false }),
+            })
+          : undefined,
+    }));
+
+    render(<ProjectAssistantPanel projectSlug="macro-markets" threadId={1} view="board" mode="page" />);
+
+    const agentMenu = await screen.findByRole("button", { name: "Codex" });
+    expect(agentMenu).toBeDisabled();
+
+    act(() => {
+      channelHandlers["goal_status"](
+        goalSnapshot({
+          enabled: false,
+          objective: null,
+          status: null,
+          capabilities: [],
+          goal: null,
+          process_running: false,
+          revision: "11",
+          request_order: 11,
+        }),
+      );
+    });
+
+    await waitFor(() => expect(agentMenu).not.toBeDisabled());
   });
 
   it("shows a Resume button when the last turn was interrupted and pushes resume_turn on click", async () => {
@@ -521,31 +667,23 @@ describe("ProjectAssistantPanel", () => {
     expect(push).toHaveBeenCalledWith("resume_turn", {});
   });
 
-  it("requests native goal status on join and shows pause while a goal is running", async () => {
+  it("shows pause when a newer Goal event reports a running process", async () => {
     join.mockImplementation(() => ({
       receive: (status: string, callback: (response: unknown) => void) =>
-        status === "ok" ? callback({ goal_mode: true, goal_objective: "Audit", thread_id: 1 }) : undefined,
+        status === "ok"
+          ? callback({ thread_id: 1, goal_status: goalSnapshot({ process_running: false }) })
+          : undefined,
     }));
 
     render(<ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="page" />);
-    await screen.findByRole("status", { name: "Authoring goal" });
+    await screen.findByRole("region", { name: "Goal" });
 
-    // Channel asks for the native goal after join.
-    expect(push).toHaveBeenCalledWith("goal_status", {});
-
-    // Native goal is active and a turn is streaming → the pill shows Pause + timer.
-    channelHandlers["goal_status"]({
-      enabled: true,
-      objective: "Audit",
-      native: true,
-      goal: { kind: "goal", source: "native", status: "active", timeUsedSeconds: 42 },
-      running: true,
-    });
-    channelHandlers["goal_running"]({ running: true });
+    // A newer canonical snapshot reports that the Goal process is running.
+    channelHandlers["goal_status"](goalSnapshot({ revision: "11", request_order: 11 }));
 
     const pause = await screen.findByRole("button", { name: "Pause goal" });
-    const pill = screen.getByRole("status", { name: "Authoring goal" });
-    expect(pill.textContent ?? "").toMatch(/\d+s/);
+    const pill = screen.getByRole("region", { name: "Goal" });
+    expect(pill).toHaveTextContent(/\d+s/);
 
     fireEvent.click(pause);
     expect(push).toHaveBeenCalledWith("goal_pause", {});
@@ -554,20 +692,20 @@ describe("ProjectAssistantPanel", () => {
   it("resumes a stalled native goal from the pill", async () => {
     join.mockImplementation(() => ({
       receive: (status: string, callback: (response: unknown) => void) =>
-        status === "ok" ? callback({ goal_mode: true, goal_objective: "Audit", thread_id: 1 }) : undefined,
+        status === "ok"
+          ? callback({
+              thread_id: 1,
+              goal_status: goalSnapshot({
+                status: "paused",
+                capabilities: ["resume"],
+                process_running: false,
+                resumable: true,
+              }),
+            })
+          : undefined,
     }));
 
     render(<ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="page" />);
-    await screen.findByRole("status", { name: "Authoring goal" });
-
-    // Native goal exists and is active but no turn is streaming → stalled, offer Resume.
-    channelHandlers["goal_status"]({
-      enabled: true,
-      objective: "Audit",
-      native: true,
-      goal: { kind: "goal", source: "native", status: "active", timeUsedSeconds: 10 },
-      running: false,
-    });
 
     const resume = await screen.findByRole("button", { name: "Resume goal" });
     fireEvent.click(resume);
@@ -577,15 +715,23 @@ describe("ProjectAssistantPanel", () => {
   it("removes and edits the authoring goal objective from the pill", async () => {
     join.mockImplementation(() => ({
       receive: (status: string, callback: (response: unknown) => void) =>
-        status === "ok" ? callback({ goal_mode: true, goal_objective: "Audit", thread_id: 1 }) : undefined,
+        status === "ok"
+          ? callback({
+              thread_id: 1,
+              goal_status: goalSnapshot({
+                process_running: false,
+                capabilities: ["edit", "clear"],
+              }),
+            })
+          : undefined,
     }));
 
     render(<ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="page" />);
-    await screen.findByRole("status", { name: "Authoring goal" });
+    await screen.findByRole("region", { name: "Goal" });
 
     // Edit: open inline editor, change the objective, save.
     fireEvent.click(await screen.findByRole("button", { name: "Edit objective" }));
-    const editor = await screen.findByPlaceholderText("Describe the authoring objective…");
+    const editor = await screen.findByPlaceholderText("Describe the goal objective…");
     fireEvent.change(editor, { target: { value: "Audit the admin UI" } });
     fireEvent.click(screen.getByRole("button", { name: "Save objective" }));
     expect(push).toHaveBeenCalledWith("goal_set_objective", { objective: "Audit the admin UI" });
@@ -593,6 +739,158 @@ describe("ProjectAssistantPanel", () => {
     // Remove: clears the goal entirely.
     fireEvent.click(await screen.findByRole("button", { name: "Remove goal" }));
     expect(push).toHaveBeenCalledWith("goal_clear", {});
+  });
+
+  it("keeps turn state independent from Goal state and treats history sync as transcript-only", async () => {
+    join.mockImplementation(() => ({
+      receive: (status: string, callback: (response: unknown) => void) =>
+        status === "ok"
+          ? callback({ thread_id: 1, goal_status: goalSnapshot() })
+          : undefined,
+    }));
+
+    render(<ProjectAssistantPanel projectSlug="macro-markets" threadId={1} view="board" mode="page" />);
+    expect(await screen.findByText("Pursuing goal")).toBeInTheDocument();
+
+    channelHandlers["assistant_completed"]({
+      message: { id: 5, role: "assistant", content: "ordinary turn complete", tool_calls: [] },
+    });
+    channelHandlers["history_synced"]({
+      messages: [{ id: 5, role: "assistant", content: "transcript reconciled", tool_calls: [] }],
+      goal_status: goalSnapshot({ enabled: false, revision: "99", request_order: 99 }),
+    });
+
+    expect(await screen.findByText("transcript reconciled")).toBeInTheDocument();
+    expect(screen.getByText("Pursuing goal")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Goal" })).toHaveTextContent("Audit");
+  });
+
+  it("rejects stale Goal events after a complete join snapshot", async () => {
+    join.mockImplementation(() => ({
+      receive: (status: string, callback: (response: unknown) => void) =>
+        status === "ok"
+          ? callback({
+              thread_id: 1,
+              goal_status: goalSnapshot({ objective: "Newest objective", revision: "20" }),
+            })
+          : undefined,
+    }));
+
+    render(<ProjectAssistantPanel projectSlug="macro-markets" threadId={1} view="board" mode="page" />);
+    expect(await screen.findByText("Newest objective")).toBeInTheDocument();
+
+    channelHandlers["authoring_goal_changed"](
+      goalSnapshot({
+        objective: "Stale objective",
+        revision: "19",
+        request_order: 999,
+      }),
+    );
+
+    expect(screen.getByText("Newest objective")).toBeInTheDocument();
+    expect(screen.queryByText("Stale objective")).not.toBeInTheDocument();
+  });
+
+  it("applies the Goal comparator to control replies", async () => {
+    join.mockImplementation(() => ({
+      receive: (status: string, callback: (response: unknown) => void) =>
+        status === "ok"
+          ? callback({ thread_id: 1, goal_status: goalSnapshot({ revision: "30" }) })
+          : undefined,
+    }));
+
+    render(<ProjectAssistantPanel projectSlug="macro-markets" threadId={1} view="board" mode="page" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Pause goal" }));
+
+    const pauseCallIndex = push.mock.calls.findIndex(([event]) => event === "goal_pause");
+    pushReceives[pauseCallIndex]?.ok?.(
+      goalSnapshot({
+        status: "paused",
+        process_running: false,
+        revision: "29",
+        request_order: 999,
+      }),
+    );
+    expect(screen.getByText("Pursuing goal")).toBeInTheDocument();
+
+    pushReceives[pauseCallIndex]?.ok?.(
+      goalSnapshot({
+        status: "paused",
+        process_running: false,
+        resumable: true,
+        revision: "30",
+        request_order: 31,
+      }),
+    );
+    expect(await screen.findByText("Goal paused")).toBeInTheDocument();
+  });
+
+  it("latches a paused Goal queue until a newer running snapshot releases it", async () => {
+    join.mockImplementation(() => ({
+      receive: (status: string, callback: (response: unknown) => void) =>
+        status === "ok"
+          ? callback({
+              thread_id: 1,
+              goal_status: goalSnapshot({
+                status: "paused",
+                process_running: false,
+                capabilities: ["resume"],
+              }),
+            })
+          : undefined,
+    }));
+
+    render(<ProjectAssistantPanel projectSlug="macro-markets" threadId={1} view="board" mode="page" />);
+    const textarea = await screen.findByPlaceholderText("Write a message...");
+    fireEvent.change(textarea, { target: { value: "continue after resume" } });
+    fireEvent.keyDown(textarea, { key: "Enter", code: "Enter" });
+
+    expect(await screen.findByText("continue after resume")).toBeInTheDocument();
+    expect(push).not.toHaveBeenCalledWith(
+      "send_message",
+      expect.objectContaining({ message: "continue after resume" }),
+    );
+
+    channelHandlers["goal_status"](
+      goalSnapshot({ revision: "11", request_order: 11, process_running: true }),
+    );
+
+    await waitFor(() =>
+      expect(push).toHaveBeenCalledWith(
+        "send_message",
+        expect.objectContaining({ message: "continue after resume" }),
+      ),
+    );
+  });
+
+  it("uses the current Claude provider and only its advertised controls", async () => {
+    join.mockImplementation(() => ({
+      receive: (status: string, callback: (response: unknown) => void) =>
+        status === "ok"
+          ? callback({
+              thread_id: 1,
+              effective_agent: "claude",
+              goal_status: goalSnapshot({
+                provider: "claude",
+                source: "claude",
+                capabilities: ["pause"],
+                goal: {
+                  ...goalSnapshot().goal as Record<string, unknown>,
+                  source: "claude",
+                  capabilities: ["pause"],
+                },
+              }),
+            })
+          : undefined,
+    }));
+
+    render(<ProjectAssistantPanel projectSlug="macro-markets" threadId={1} view="board" mode="page" />);
+
+    expect(await screen.findByText("Claude Code")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Pause goal" }));
+    expect(push).toHaveBeenCalledWith("goal_pause", {});
+    expect(screen.queryByRole("button", { name: "Stop goal process" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Remove goal" })).not.toBeInTheDocument();
   });
 
   it("opens an overlay and streams the answer when /btw is submitted", async () => {

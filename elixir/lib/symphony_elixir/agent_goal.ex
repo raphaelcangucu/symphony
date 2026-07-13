@@ -8,7 +8,7 @@ defmodule SymphonyElixir.AgentGoal do
   """
 
   alias SymphonyElixir.Assistant.AuthoringGoalControl
-  alias SymphonyElixir.Assistant.{History, Thread}
+  alias SymphonyElixir.Assistant.{History, Thread, TurnManager}
   alias SymphonyElixir.Claude.GoalControl, as: ClaudeGoal
   alias SymphonyElixir.Codex.GoalControl, as: CodexGoal
   alias SymphonyElixir.LocalTracker.{Context, Project}
@@ -92,7 +92,7 @@ defmodule SymphonyElixir.AgentGoal do
   defp authoring_dispatch(thread, action, args) do
     case action do
       "get" ->
-        wrap_authoring(AuthoringGoalControl.status(thread))
+        coalesced_authoring_status(thread)
 
       "set_objective" ->
         with {:ok, objective} <- required_objective(args) do
@@ -166,11 +166,21 @@ defmodule SymphonyElixir.AgentGoal do
 
   defp wrap_authoring(result, opts \\ [])
 
-  defp wrap_authoring({:ok, payload, _thread}, opts) do
+  defp wrap_authoring({:ok, payload, thread}, opts) do
     data = %{
       enabled: Map.get(payload, :enabled),
       objective: Map.get(payload, :objective),
       native: Map.get(payload, :native),
+      status: Map.get(payload, :status),
+      provider: Map.get(payload, :provider),
+      source: Map.get(payload, :source),
+      capabilities: Map.get(payload, :capabilities, []),
+      revision: History.thread_goal_revision(thread) || Map.get(payload, :revision),
+      updated_at: History.thread_goal_updated_at(thread) || Map.get(payload, :updated_at),
+      request_order:
+        Keyword.get_lazy(opts, :request_order, fn ->
+          System.unique_integer([:positive, :monotonic])
+        end),
       goal: Map.get(payload, :goal)
     }
 
@@ -179,6 +189,19 @@ defmodule SymphonyElixir.AgentGoal do
   end
 
   defp wrap_authoring({:error, reason}, _opts), do: {:error, reason}
+
+  defp coalesced_authoring_status(%Thread{id: id}) when is_integer(id) do
+    operation = fn ->
+      with {:ok, current_thread} <- History.get_thread(id) do
+        AuthoringGoalControl.status(current_thread)
+      end
+    end
+
+    case TurnManager.resolve_goal_status_sync(id, operation) do
+      {:ok, result, request_order} -> wrap_authoring(result, request_order: request_order)
+      {:error, reason} -> {:error, reason}
+    end
+  end
 
   defp resolve_agent(%Project{} = project, identifier, args) do
     explicit = normalize_agent(Map.get(args, "agent") || Map.get(args, :agent))
@@ -252,6 +275,7 @@ defmodule SymphonyElixir.AgentGoal do
   defp validate_active_thread(%Thread{}), do: {:error, :assistant_thread_not_active}
 
   defp validate_thread_project(%Thread{project_slug: nil}, nil), do: :ok
+  defp validate_thread_project(%Thread{}, nil), do: :ok
 
   defp validate_thread_project(%Thread{project_slug: slug}, %Project{slug: slug})
        when is_binary(slug),

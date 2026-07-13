@@ -72,28 +72,22 @@ defmodule SymphonyElixir.Assistant.AgentSessionAgentTest do
     assert_received {:thread_id_opt, "cl-1"}
   end
 
-  test "switching a goal-enabled thread from Codex to Claude queues the first Claude injection" do
+  test "rejects a provider switch while an enabled Goal is bound to another provider" do
     workspace = Path.join(System.tmp_dir!(), "goal-provider-switch-#{System.unique_integer([:positive])}")
     File.mkdir_p!(workspace)
     on_exit(fn -> File.rm_rf!(workspace) end)
-
-    Application.put_env(:symphony_elixir, :claude_goal_supported_override, true)
-    on_exit(fn -> Application.delete_env(:symphony_elixir, :claude_goal_supported_override) end)
 
     {:ok, thread} =
       History.create_freeform_thread(%{workspace_path: workspace, agent_kind: "codex"})
 
     {:ok, thread} = History.set_goal_mode(thread, true, "Audit")
-    test_pid = self()
 
-    runner = fn _workspace, _prompt, _issue, _opts ->
-      send(test_pid, {:queued_goal, GoalStore.read(workspace, :authoring, thread.id)})
-      {:ok, %{assistant_message: "ok", tool_calls: [], cli_session_id: "claude-1", turn_id: "t"}}
-    end
+    assert {:error, {:authoring_goal_provider_mismatch, "codex", "claude"}} =
+             AgentSession.send_message_to_thread(thread, "switch", %{"agent" => "claude"},
+               runner: fn _, _, _, _ -> flunk("provider mismatch must fail before running") end
+             )
 
-    assert {:ok, _} =
-             AgentSession.send_message_to_thread(thread, "switch", %{"agent" => "claude"}, runner: runner)
-
-    assert_received {:queued_goal, {:ok, %{"objective" => "Audit", "pending_command" => "set"}}}
+    assert Repo.get!(SymphonyElixir.Assistant.Thread, thread.id).agent_kind == "codex"
+    assert :error = GoalStore.read(workspace, :authoring, thread.id)
   end
 end

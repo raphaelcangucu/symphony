@@ -11,12 +11,14 @@ import {
   normalizeGoalStatus,
   normalizeTurnStatus,
   pauseAuthoringGoal,
+  readGoalStatus,
   readLastTurn,
   requestGoalStatus,
   requestHistorySync,
   resumeAuthoringGoal,
   resumeTurn,
   setAuthoringGoalObjective,
+  shouldAcceptGoalStatus,
   stopTurn,
 } from "../assistantChannel";
 
@@ -206,7 +208,6 @@ describe("authoring goal channel", () => {
     const handlers: Record<string, (payload: unknown) => void> = {};
     const channel = { on: (event: string, cb: (payload: unknown) => void) => (handlers[event] = cb) } as never;
     const onGoalStatus = vi.fn();
-    const onGoalRunning = vi.fn();
 
     bindAssistantEvents(channel, {
       onHistoryLoaded: vi.fn(),
@@ -217,31 +218,102 @@ describe("authoring goal channel", () => {
       onAssistantCompleted: vi.fn(),
       onAssistantError: vi.fn(),
       onGoalStatus,
-      onGoalRunning,
     });
 
     handlers["goal_status"]({
+      thread_id: 17,
       enabled: true,
       objective: "Audit the admin UI",
       native: true,
-      goal: { kind: "goal", source: "native", status: "paused", timeUsedSeconds: 73, token_budget: 200000 },
-      running: false,
+      status: "paused",
+      provider: "codex",
+      source: "native",
+      capabilities: ["resume", "edit", "resume", " "],
+      goal: {
+        kind: "goal",
+        source: "native",
+        status: "paused",
+        time_used_seconds: 73,
+        token_budget: 200000,
+        revision: "11",
+      },
+      process_running: false,
+      process_started_at: "2026-07-13T12:00:00Z",
+      process_elapsed_seconds: 73,
+      resumable: true,
+      interrupted: false,
+      revision: "11",
+      request_order: 8,
+      event_order: 7,
+      updated_at: "2026-07-13T12:01:13Z",
     });
-    handlers["goal_running"]({ running: true });
 
-    expect(onGoalStatus).toHaveBeenCalledWith({
+    expect(onGoalStatus).toHaveBeenCalledWith(expect.objectContaining({
+      threadId: 17,
       enabled: true,
       objective: "Audit the admin UI",
       native: true,
-      goal: expect.objectContaining({ status: "paused", timeUsedSeconds: 73, tokenBudget: 200000 }),
+      status: "paused",
+      provider: "codex",
+      source: "native",
+      capabilities: ["resume", "edit"],
+      goal: expect.objectContaining({
+        status: "paused",
+        timeUsedSeconds: 73,
+        tokenBudget: 200000,
+        revision: "11",
+      }),
+      processRunning: false,
+      processElapsedSeconds: 73,
+      resumable: true,
+      revision: "11",
+      requestOrder: 8,
+      eventOrder: 7,
       running: false,
-    });
-    expect(onGoalRunning).toHaveBeenCalledWith(true);
+    }));
   });
 
   it("treats a blank objective and missing goal as empty", () => {
     const status = normalizeGoalStatus({ enabled: true, objective: "  ", native: false, goal: null });
-    expect(status).toEqual({ enabled: true, objective: null, native: false, goal: null, running: false });
+    expect(status).toMatchObject({
+      enabled: true,
+      objective: null,
+      native: false,
+      status: null,
+      provider: null,
+      source: null,
+      capabilities: [],
+      goal: null,
+      processRunning: false,
+      revision: null,
+      requestOrder: null,
+      eventOrder: null,
+      running: false,
+    });
+  });
+
+  it("reads the complete goal snapshot nested in join payloads", () => {
+    expect(
+      readGoalStatus({
+        goal_status: {
+          thread_id: "22",
+          enabled: true,
+          status: "running",
+          provider: "claude",
+          capabilities: ["stop", "pause"],
+          revision: "91",
+          request_order: 14,
+        },
+      }),
+    ).toMatchObject({
+      threadId: 22,
+      enabled: true,
+      status: "running",
+      provider: "claude",
+      capabilities: ["stop", "pause"],
+      revision: "91",
+      requestOrder: 14,
+    });
   });
 
   it("pushes goal control intents with empty payloads", () => {
@@ -259,6 +331,89 @@ describe("authoring goal channel", () => {
     expect(push).toHaveBeenCalledWith("goal_resume", {});
     expect(push).toHaveBeenCalledWith("goal_clear", {});
     expect(push).toHaveBeenCalledWith("goal_set_objective", { objective: "Finish the spec" });
+  });
+});
+
+describe("goal status ordering", () => {
+  it("accepts newer durable revisions and rejects stale or cross-thread events", () => {
+    const current = normalizeGoalStatus({
+      thread_id: 7,
+      enabled: true,
+      revision: "10",
+      request_order: 5,
+    });
+
+    expect(
+      shouldAcceptGoalStatus(
+        normalizeGoalStatus({ thread_id: 7, enabled: true, revision: "11", request_order: 1 }),
+        current,
+      ),
+    ).toBe(true);
+    expect(
+      shouldAcceptGoalStatus(
+        normalizeGoalStatus({ thread_id: 7, enabled: true, revision: "9", request_order: 99 }),
+        current,
+      ),
+    ).toBe(false);
+    expect(
+      shouldAcceptGoalStatus(
+        normalizeGoalStatus({ thread_id: 8, enabled: true, revision: "12", request_order: 99 }),
+        current,
+      ),
+    ).toBe(false);
+  });
+
+  it("uses request order only when durable revisions are equal", () => {
+    const current = normalizeGoalStatus({
+      thread_id: 7,
+      enabled: true,
+      revision: "10",
+      request_order: 5,
+    });
+
+    expect(
+      shouldAcceptGoalStatus(
+        normalizeGoalStatus({ thread_id: 7, enabled: true, revision: "10", request_order: 6 }),
+        current,
+      ),
+    ).toBe(true);
+    expect(
+      shouldAcceptGoalStatus(
+        normalizeGoalStatus({ thread_id: 7, enabled: true, revision: "10", request_order: 4 }),
+        current,
+      ),
+    ).toBe(false);
+  });
+
+  it("applies the same comparator to channel events and control replies", () => {
+    const handlers: Record<string, (payload: unknown) => void> = {};
+    const channel = {
+      on: (event: string, callback: (payload: unknown) => void) => {
+        handlers[event] = callback;
+      },
+    } as never;
+    const onGoalStatus = vi.fn();
+    const acceptControlReply = bindAssistantEvents(channel, {
+      onHistoryLoaded: vi.fn(),
+      onMessageCreated: vi.fn(),
+      onAssistantDelta: vi.fn(),
+      onToolCallStarted: vi.fn(),
+      onToolCallCompleted: vi.fn(),
+      onAssistantCompleted: vi.fn(),
+      onAssistantError: vi.fn(),
+      onGoalStatus,
+    });
+
+    handlers["goal_status"]({ thread_id: 7, enabled: true, revision: "20", request_order: 3 });
+
+    expect(
+      acceptControlReply({ thread_id: 7, enabled: false, revision: "19", request_order: 99 }),
+    ).toBe(false);
+    expect(
+      acceptControlReply({ thread_id: 7, enabled: false, revision: "20", request_order: 4 }),
+    ).toBe(true);
+    expect(onGoalStatus).toHaveBeenCalledTimes(2);
+    expect(onGoalStatus).toHaveBeenLastCalledWith(expect.objectContaining({ enabled: false }));
   });
 });
 
@@ -306,6 +461,7 @@ describe("turn status channel", () => {
       }),
     ).toEqual({
       status: "running",
+      generation: null,
       sessionId: "ct-1",
       startedAt: "2026-06-22T12:00:00Z",
       finishedAt: null,
@@ -323,6 +479,7 @@ describe("turn status channel", () => {
 
     expect(normalizeTurnStatus(null)).toEqual({
       status: "unknown",
+      generation: null,
       sessionId: null,
       startedAt: null,
       finishedAt: null,

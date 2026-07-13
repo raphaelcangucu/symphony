@@ -68,7 +68,7 @@ defmodule SymphonyElixir.Codex.CodingAgentTest do
       end)
     end
 
-    test "auto-continues while completed turns report an active goal" do
+    test "auto-continues after a separate active goal update and bare turn completion" do
       with_fake_goal_server([:active, :completed], fn workspace, issue, trace_file ->
         enable_goals!()
 
@@ -80,6 +80,7 @@ defmodule SymphonyElixir.Codex.CodingAgentTest do
 
         assert result[:result] == :turn_completed
         assert length(turn_starts) == 2
+        refute message_with_method(messages, "thread/goal/get")
 
         assert turn_prompt(Enum.at(turn_starts, 0)) =~ "Build the feature"
 
@@ -88,7 +89,7 @@ defmodule SymphonyElixir.Codex.CodingAgentTest do
       end)
     end
 
-    test "stops auto-continuation when completed turns report a blocked goal" do
+    test "stops auto-continuation after a separate terminal goal update" do
       with_fake_goal_server([:blocked, :active], fn workspace, issue, trace_file ->
         enable_goals!()
 
@@ -99,6 +100,21 @@ defmodule SymphonyElixir.Codex.CodingAgentTest do
 
         assert messages_with_method(messages, "thread/goal/set") |> length() == 1
         assert messages_with_method(messages, "turn/start") |> length() == 1
+      end)
+    end
+
+    test "gets the authoritative active goal after a bare completion with no goal update" do
+      with_fake_goal_server(:missing_update_active, fn workspace, issue, trace_file ->
+        enable_goals!()
+
+        assert {:ok, result} =
+                 AppServer.run(workspace, "Build the feature", issue, goal: "Ship the feature")
+
+        messages = outbound_messages(trace_file)
+
+        assert result[:result] == :turn_completed
+        assert messages_with_method(messages, "thread/goal/get") |> length() == 1
+        assert messages_with_method(messages, "turn/start") |> length() == 2
       end)
     end
 
@@ -509,7 +525,8 @@ defmodule SymphonyElixir.Codex.CodingAgentTest do
           ;;
         *'"method":"turn/start"'*)
           printf '%s\\n' '{"id":3,"result":{"turn":{"id":"turn-resume"}}}'
-          printf '%s\\n' '{"method":"turn/completed","params":{"goal":{"status":"completed"}}}'
+          printf '%s\\n' '{"method":"thread/goal/updated","params":{"threadId":"thread-resume","goal":{"status":"completed"}}}'
+          printf '%s\\n' '{"method":"turn/completed"}'
           exit 0
           ;;
         *)
@@ -748,7 +765,17 @@ defmodule SymphonyElixir.Codex.CodingAgentTest do
       case response_mode do
         statuses when is_list(statuses) -> ~s({"id":4,"result":{}})
         :goal_ok -> ~s({"id":4,"result":{}})
+        :missing_update_active -> ~s({"id":4,"result":{}})
         :goal_error -> ~s({"id":4,"error":{"code":-32601,"message":"Method not found"}})
+      end
+
+    goal_get_response =
+      case response_mode do
+        :missing_update_active ->
+          ~s({"id":6,"result":{"goal":{"threadId":"thread-goal","objective":"Ship the feature","status":"active"}}})
+
+        _ ->
+          ~s({"id":6,"result":{"goal":{"threadId":"thread-goal","objective":"Ship the feature","status":"completed"}}})
       end
 
     turn_completion_cases =
@@ -758,7 +785,7 @@ defmodule SymphonyElixir.Codex.CodingAgentTest do
       |> Enum.map_join("\n", fn {status, index} ->
         """
                   #{index})
-                    printf '%s\\n' '#{turn_completed_payload(status)}'
+        #{turn_lifecycle_events(status)}
                     ;;
         """
       end)
@@ -785,6 +812,9 @@ defmodule SymphonyElixir.Codex.CodingAgentTest do
         *'"method":"thread/goal/set"'*)
           printf '%s\\n' '#{goal_response}'
           ;;
+        *'"method":"thread/goal/get"'*)
+          printf '%s\\n' '#{goal_get_response}'
+          ;;
         *'"method":"turn/start"'*)
           turn_count=$((turn_count + 1))
           printf '%s\\n' '{"id":3,"result":{"turn":{"id":"turn-goal"}}}'
@@ -808,18 +838,19 @@ defmodule SymphonyElixir.Codex.CodingAgentTest do
   end
 
   defp turn_completion_statuses(statuses) when is_list(statuses), do: statuses
+  defp turn_completion_statuses(:missing_update_active), do: [:missing, :completed]
   defp turn_completion_statuses(_response_mode), do: [:unknown]
 
-  defp turn_completed_payload(:active),
-    do: ~s({"method":"turn/completed","params":{"goal":{"status":"active"}}})
+  defp turn_lifecycle_events(status) when status in [:active, :completed, :blocked] do
+    """
+                    printf '%s\\n' '{"method":"thread/goal/updated","params":{"threadId":"thread-goal","goal":{"status":"#{status}"}}}'
+                    printf '%s\\n' '{"method":"turn/completed"}'
+    """
+  end
 
-  defp turn_completed_payload(:completed),
-    do: ~s({"method":"turn/completed","params":{"goal":{"status":"completed"}}})
-
-  defp turn_completed_payload(:blocked),
-    do: ~s({"method":"turn/completed","params":{"goal":{"status":"blocked"}}})
-
-  defp turn_completed_payload(:unknown), do: ~s({"method":"turn/completed"})
+  defp turn_lifecycle_events(status) when status in [:missing, :unknown] do
+    ~s(                    printf '%s\\n' '{"method":"turn/completed"}')
+  end
 
   defp enable_goals! do
     workflow_file = Workflow.workflow_file_path()

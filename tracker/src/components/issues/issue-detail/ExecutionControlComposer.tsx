@@ -1,4 +1,4 @@
-import { Eraser, Pause, Play, Send, Sparkles, X } from "lucide-react";
+import { Eraser, Play, Send, Sparkles, Square, X } from "lucide-react";
 import { type KeyboardEvent as ReactKeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -16,7 +16,8 @@ import { defaultSkillCommands, parseSlashCommand } from "@/components/assistant/
 import { ExecutionCommandPalette } from "@/components/issues/issue-detail/ExecutionCommandPalette";
 import { ExecutionModeMenu } from "@/components/issues/issue-detail/ExecutionModeMenu";
 import { GitDiffLauncher } from "@/components/issues/issue-detail/git-diff/GitDiffLauncher";
-import { GoalPill, type GoalPillPhase } from "@/components/shared/GoalPill";
+import { GoalPill } from "@/components/shared/GoalPill";
+import { deriveGoalPresentation, normalizeGoalProvider } from "@/components/shared/goalPresentation";
 import { useExecutionShortcuts } from "@/hooks/useExecutionShortcuts";
 import { useAssistantCommands } from "@/hooks/useAssistantCommands";
 import { Button } from "@/components/ui/button";
@@ -109,15 +110,17 @@ export function ExecutionControlComposer({
   }, [assistantCommands, assistantCommandsError, assistantCommandsLoading, t]);
   const { rememberMention, expandMentions } = useComposerMentions();
 
-  // Codex goals are sourced solely from the live execution snapshot (the native
-  // Codex thread), never from the cached issue.agentGoal column.
+  // Goal visibility follows the durable execution snapshot, never objective
+  // text or the cached issue.agentGoal column. Blank objectives use the shared
+  // localized fallback in GoalPill.
+  const hasExecutionGoal = execution?.goal != null;
   const trimmedGoalObjective = execution?.goal?.objective?.trim() || "";
   const goalObjective = trimmedGoalObjective.length > 0 ? trimmedGoalObjective : null;
-  const showGoalPill = !goalDismissed && goalObjective != null;
+  const showGoalPill = !goalDismissed && hasExecutionGoal;
 
   useEffect(() => {
-    if (!goalObjective) setGoalDismissed(false);
-  }, [goalObjective]);
+    if (!hasExecutionGoal) setGoalDismissed(false);
+  }, [hasExecutionGoal]);
 
   const control = deriveAgentControl(execution, t);
   const agentRunActive = control.isActive;
@@ -166,75 +169,90 @@ export function ExecutionControlComposer({
     modeRef.current = mode;
   }, [mode]);
 
-  const dispatchProgressLabel: Record<"resume" | "hard_reset" | "stop", string> = {
-    resume: t("issue.agent.dispatchResume"),
-    hard_reset: t("issue.agent.dispatchHardReset"),
-    stop: t("issue.agent.dispatchStop"),
-  };
+  const dispatchProgressLabel = useMemo<Record<"resume" | "hard_reset" | "stop", string>>(
+    () => ({
+      resume: t("issue.agent.dispatchResume"),
+      hard_reset: t("issue.agent.dispatchHardReset"),
+      stop: t("issue.agent.dispatchStop"),
+    }),
+    [t],
+  );
 
-  function guidanceFromQueued(entry: QueuedGuidanceItem): string {
-    return enrichGuidanceWithAttachments(entry.text, entry.attachments, projectSlug, entry.fileTexts);
-  }
+  const guidanceFromQueued = useCallback(
+    (entry: QueuedGuidanceItem): string =>
+      enrichGuidanceWithAttachments(entry.text, entry.attachments, projectSlug, entry.fileTexts),
+    [projectSlug],
+  );
 
-  function guidanceFromSnapshot(snapshot: ComposerSnapshot): string {
-    const parsed = parseSlashCommand(snapshot.input, t, "execution");
-    const typed = parsed.kind === "message" ? snapshot.input.trim() : parsed.argument.trim();
-    return enrichGuidanceWithAttachments(expandMentions(typed), snapshot.attachments, projectSlug, {});
-  }
+  const guidanceFromSnapshot = useCallback(
+    (snapshot: ComposerSnapshot): string => {
+      const parsed = parseSlashCommand(snapshot.input, t, "execution");
+      const typed = parsed.kind === "message" ? snapshot.input.trim() : parsed.argument.trim();
+      return enrichGuidanceWithAttachments(expandMentions(typed), snapshot.attachments, projectSlug, {});
+    },
+    [expandMentions, projectSlug, t],
+  );
 
-  function combinedGuidance(): string {
+  const combinedGuidance = useCallback((): string => {
     const parts = [
       ...queuedGuidance.map((entry) => guidanceFromQueued(entry)),
       guidanceFromSnapshot(composerSnapshotRef.current),
     ].filter((entry) => entry.length > 0);
     return parts.join("\n\n");
-  }
+  }, [guidanceFromQueued, guidanceFromSnapshot, queuedGuidance]);
 
   function removeQueued(index: number) {
     setQueued((current) => current.filter((_, i) => i !== index));
   }
 
-  async function runDispatch(
-    action: "resume" | "hard_reset" | "stop",
-    overrides?: { goal?: string | null; instructions?: string | null; contextRefs?: AssistantComposerSubmit["contextRefs"] },
-  ) {
-    setDispatchPending(action);
-    setDispatchError(null);
-    setDispatchStatus(dispatchProgressLabel[action]);
+  const runDispatch = useCallback(
+    async (
+      action: "resume" | "hard_reset" | "stop",
+      overrides?: {
+        goal?: string | null;
+        instructions?: string | null;
+        contextRefs?: AssistantComposerSubmit["contextRefs"];
+      },
+    ) => {
+      setDispatchPending(action);
+      setDispatchError(null);
+      setDispatchStatus(dispatchProgressLabel[action]);
 
-    const guidance =
-      action === "stop" ? "" : (overrides?.instructions?.trim() || combinedGuidance());
-    // Normal resume must not re-send a cached objective; only explicit
-    // goal actions set the Codex goal (via controlIssueGoal). Resetting the same
-    // objective would reset native goal accounting.
-    const dispatchGoal = overrides?.goal ?? null;
+      const guidance =
+        action === "stop" ? "" : (overrides?.instructions?.trim() || combinedGuidance());
+      // Normal resume must not re-send a cached objective; only explicit
+      // goal actions set the Codex goal (via controlIssueGoal). Resetting the same
+      // objective would reset native goal accounting.
+      const dispatchGoal = overrides?.goal ?? null;
 
-    try {
-      const result = await dispatchIssueAgent(projectSlug, issue.identifier, {
-        action,
-        agent,
-        goal: dispatchGoal,
-        instructions: guidance || null,
-        model: composerSettingsRef.current.model,
-        effort: composerSettingsRef.current.effort,
-        mode: modeRef.current,
-        contextRefs: overrides?.contextRefs,
-      });
-      onIssueUpdated?.(result.issue);
-      setDispatchStatus(result.message);
-      if (action !== "stop") {
-        setQueued([]);
-        setComposerResetToken((token) => token + 1);
+      try {
+        const result = await dispatchIssueAgent(projectSlug, issue.identifier, {
+          action,
+          agent,
+          goal: dispatchGoal,
+          instructions: guidance || null,
+          model: composerSettingsRef.current.model,
+          effort: composerSettingsRef.current.effort,
+          mode: modeRef.current,
+          contextRefs: overrides?.contextRefs,
+        });
+        onIssueUpdated?.(result.issue);
+        setDispatchStatus(result.message);
+        if (action !== "stop") {
+          setQueued([]);
+          setComposerResetToken((token) => token + 1);
+        }
+      } catch (cause) {
+        const message = cause instanceof Error ? cause.message : t("issue.agent.dispatchFailed");
+        setDispatchError(message);
+        setDispatchStatus(null);
+        toast.error(message);
+      } finally {
+        setDispatchPending(null);
       }
-    } catch (cause) {
-      const message = cause instanceof Error ? cause.message : t("issue.agent.dispatchFailed");
-      setDispatchError(message);
-      setDispatchStatus(null);
-      toast.error(message);
-    } finally {
-      setDispatchPending(null);
-    }
-  }
+    },
+    [agent, combinedGuidance, dispatchProgressLabel, issue.identifier, onIssueUpdated, projectSlug, t],
+  );
 
   const submitExecutionGoal = useCallback(
     async (objectiveArg: string) => {
@@ -284,10 +302,10 @@ export function ExecutionControlComposer({
       canSteer,
       control.isActive,
       dispatchPending,
-      issue,
-      onIssueUpdated,
+      issue.identifier,
       onSteer,
       projectSlug,
+      runDispatch,
       t,
     ],
   );
@@ -344,50 +362,74 @@ export function ExecutionControlComposer({
         void runDispatch("resume", { instructions, contextRefs: submit.contextRefs });
       }
     },
-    [canSteer, control.isActive, dispatchPending, expandMentions, onSteer, projectSlug, submitExecutionGoal],
+    [
+      canSteer,
+      control.isActive,
+      dispatchPending,
+      expandMentions,
+      onSteer,
+      projectSlug,
+      runDispatch,
+      submitExecutionGoal,
+    ],
   );
 
   const handleEmptySubmit = useCallback(() => {
     if (canSteer || control.isActive || dispatchPending) return;
     if (canResume) void runDispatch("resume");
-  }, [canResume, canSteer, control.isActive, dispatchPending]);
+  }, [canResume, canSteer, control.isActive, dispatchPending, runDispatch]);
 
   const sendDisabled =
     controlsDisabled || (canSteer && (!sessionConnected || steerPending));
   const primaryDisabled = controlsDisabled || (!agentRunActive && !canResume);
 
-  const goalPhase = executionGoalPhase(agentRunActive, showGoalPill, execution);
+  const executionGoal = execution?.goal ?? null;
+  const goalProvider = normalizeGoalProvider(null, executionGoal?.source);
+  const goalCapabilities = executionGoal?.capabilities ?? [];
+  const goalPhase = deriveGoalPresentation({
+    status: executionGoal?.status,
+    processRunning: agentRunActive,
+    resumable: execution ? canResumeExecution(execution) : false,
+    interrupted: execution?.status === "aborted",
+  }).phase;
   const goalTimeUsedSeconds =
-    execution?.goal?.timeUsedSeconds ?? (agentRunActive ? execution?.runtimeSeconds : null) ?? null;
+    executionGoal?.timeUsedSeconds ?? (agentRunActive ? execution?.runtimeSeconds : null) ?? null;
   const controllableGoal =
-    execution?.goal?.kind === "goal" &&
-    (execution.goal.source === "native" || execution.goal.source === "claude");
+    executionGoal?.kind === "goal" && (goalProvider === "codex" || goalProvider === "claude");
+  const canStopGoal = controllableGoal && agentRunActive && goalCapabilities.includes("stop");
+  const canPauseGoal = controllableGoal && agentRunActive && goalCapabilities.includes("pause");
+  const canResumeGoal =
+    controllableGoal && !agentRunActive && !dispatchPending && goalCapabilities.includes("resume");
+  const canRemoveGoal = controllableGoal && goalCapabilities.includes("clear");
+  const canEditGoal =
+    controllableGoal &&
+    (goalCapabilities.includes("edit") || goalCapabilities.includes("set_objective"));
+
+  function handleGoalStop() {
+    if (!canStopGoal) return;
+    void runDispatch("stop");
+  }
 
   async function handleGoalPause() {
-    if (controllableGoal && execution?.goal?.capabilities.includes("pause")) {
-      try {
-        await controlIssueGoal(projectSlug, issue.identifier, { action: "pause" });
-      } catch (cause) {
-        toast.error(cause instanceof Error ? cause.message : t("issue.agent.goalControls.failed"));
-      }
-      return;
+    if (!canPauseGoal) return;
+    try {
+      await controlIssueGoal(projectSlug, issue.identifier, { action: "pause" });
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : t("issue.agent.goalControls.failed"));
     }
-    if (agentRunActive) void runDispatch("stop");
   }
 
   async function handleGoalResume() {
-    if (controllableGoal && execution?.goal?.capabilities.includes("resume") && !agentRunActive) {
-      try {
-        await controlIssueGoal(projectSlug, issue.identifier, { action: "resume" });
-      } catch (cause) {
-        toast.error(cause instanceof Error ? cause.message : t("issue.agent.goalControls.failed"));
-      }
-      return;
+    if (!canResumeGoal) return;
+    try {
+      await controlIssueGoal(projectSlug, issue.identifier, { action: "resume" });
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : t("issue.agent.goalControls.failed"));
     }
-    if (!agentRunActive && !dispatchPending) void runDispatch("resume");
   }
 
   async function handleGoalRemove() {
+    if (!canRemoveGoal) return;
     try {
       await controlIssueGoal(projectSlug, issue.identifier, { action: "clear" });
       setGoalDismissed(true);
@@ -398,6 +440,7 @@ export function ExecutionControlComposer({
   }
 
   async function handleGoalEdit(objective: string) {
+    if (!canEditGoal) return;
     try {
       await controlIssueGoal(projectSlug, issue.identifier, { action: "set_objective", objective });
       setGoalDismissed(false);
@@ -467,13 +510,16 @@ export function ExecutionControlComposer({
   const goalPill = showGoalPill ? (
     <GoalPill
       phase={goalPhase}
+      provider={goalProvider}
+      capabilities={goalCapabilities}
       objective={goalObjective}
       running={agentRunActive}
       timeUsedSeconds={goalTimeUsedSeconds}
-      onPause={() => void handleGoalPause()}
-      onResume={() => void handleGoalResume()}
-      onRemove={() => void handleGoalRemove()}
-      onEditObjective={(objective) => void handleGoalEdit(objective)}
+      onStop={canStopGoal ? handleGoalStop : undefined}
+      onPause={canPauseGoal ? () => void handleGoalPause() : undefined}
+      onResume={canResumeGoal ? () => void handleGoalResume() : undefined}
+      onRemove={canRemoveGoal ? () => void handleGoalRemove() : undefined}
+      onEditObjective={canEditGoal ? (objective) => void handleGoalEdit(objective) : undefined}
     />
   ) : null;
 
@@ -632,11 +678,11 @@ export function ExecutionControlComposer({
                   variant="outline"
                   className="h-8 gap-1"
                   disabled={controlsDisabled}
-                  title={t("issue.agent.pauseTitle")}
+                  title={t("issue.agent.stopTitle")}
                   onClick={() => void runDispatch("stop")}
                 >
-                  <Pause className="h-3.5 w-3.5" />
-                  {dispatchPending === "stop" ? t("issue.agent.dispatchStop") : t("issue.agent.primaryPause")}
+                  <Square className="h-3.5 w-3.5" />
+                  {dispatchPending === "stop" ? t("issue.agent.dispatchStop") : t("issue.agent.primaryStop")}
                 </Button>
               ) : (
                 <Button type="submit" size="sm" variant="secondary" className="h-8 gap-1" disabled={primaryDisabled}>
@@ -702,26 +748,6 @@ export function ExecutionControlComposer({
       </Dialog>
     </section>
   );
-}
-
-function executionGoalPhase(
-  agentRunActive: boolean,
-  hasGoal: boolean,
-  execution?: AgentExecution,
-): GoalPillPhase {
-  if (agentRunActive) return "running";
-  if (execution?.goal?.status === "paused") return "paused";
-  if (
-    execution?.goal?.status === "completed" ||
-    execution?.goal?.status === "complete" ||
-    execution?.goal?.status === "done" ||
-    execution?.goal?.status === "satisfied"
-  ) {
-    return "completed";
-  }
-  if (execution && canResumeExecution(execution)) return "stalled";
-  if (hasGoal) return "pending";
-  return "pending";
 }
 
 function formatSteerError(reason: string, t: (key: string) => string): string {

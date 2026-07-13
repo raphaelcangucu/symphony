@@ -231,7 +231,11 @@ defmodule SymphonyElixir.Assistant.History do
   """
   @spec set_goal_mode(Thread.t(), boolean()) :: {:ok, Thread.t()} | {:error, Ecto.Changeset.t()}
   def set_goal_mode(%Thread{metadata: metadata} = thread, enabled) when is_boolean(enabled) do
-    next = Map.put(metadata || %{}, "goal_mode", enabled)
+    next =
+      (metadata || %{})
+      |> Map.put("goal_mode", enabled)
+      |> put_next_goal_revision()
+
     update_thread(thread, %{metadata: next})
   end
 
@@ -249,9 +253,32 @@ defmodule SymphonyElixir.Assistant.History do
       (metadata || %{})
       |> Map.put("goal_mode", enabled)
       |> put_goal_objective_meta(objective)
+      |> put_next_goal_revision()
 
     update_thread(thread, %{metadata: next})
   end
+
+  @doc "Advances the durable authoring Goal mutation revision without changing its objective."
+  @spec bump_goal_revision(Thread.t()) :: {:ok, Thread.t()} | {:error, Ecto.Changeset.t()}
+  def bump_goal_revision(%Thread{metadata: metadata} = thread) do
+    update_thread(thread, %{metadata: put_next_goal_revision(metadata || %{})})
+  end
+
+  @doc "Returns the durable authoring Goal mutation revision."
+  @spec thread_goal_revision(Thread.t()) :: String.t() | nil
+  def thread_goal_revision(%Thread{metadata: %{"goal_revision" => revision}})
+      when is_binary(revision) and revision != "",
+      do: revision
+
+  def thread_goal_revision(%Thread{}), do: nil
+
+  @doc "Returns when the durable authoring Goal was last mutated."
+  @spec thread_goal_updated_at(Thread.t()) :: String.t() | nil
+  def thread_goal_updated_at(%Thread{metadata: %{"goal_updated_at" => updated_at}})
+      when is_binary(updated_at) and updated_at != "",
+      do: updated_at
+
+  def thread_goal_updated_at(%Thread{}), do: nil
 
   defp put_goal_objective_meta(metadata, objective) when is_binary(objective) do
     case String.trim(objective) do
@@ -261,6 +288,24 @@ defmodule SymphonyElixir.Assistant.History do
   end
 
   defp put_goal_objective_meta(metadata, _objective), do: Map.delete(metadata, "goal_objective")
+
+  defp put_next_goal_revision(metadata) do
+    current =
+      case Map.get(metadata, "goal_revision") do
+        revision when is_binary(revision) ->
+          case Integer.parse(revision) do
+            {value, ""} when value >= 0 -> value
+            _ -> 0
+          end
+
+        _ ->
+          0
+      end
+
+    metadata
+    |> Map.put("goal_revision", Integer.to_string(current + 1))
+    |> Map.put("goal_updated_at", DateTime.utc_now() |> DateTime.to_iso8601())
+  end
 
   @doc """
   Returns whether the Authoring (chat) goal is enabled on a thread's metadata. Defaults to `false`.
@@ -289,6 +334,7 @@ defmodule SymphonyElixir.Assistant.History do
   def start_turn_state(%Thread{metadata: metadata} = thread, attrs) when is_map(attrs) do
     turn = %{
       "status" => "running",
+      "generation" => stringify(Map.get(attrs, :generation)),
       "trigger" => Map.get(attrs, :trigger, "user"),
       "prompt" => to_string(Map.get(attrs, :prompt, "")),
       "agent_kind" => stringify(Map.get(attrs, :agent_kind)),
@@ -391,6 +437,19 @@ defmodule SymphonyElixir.Assistant.History do
     end)
   end
 
+  @doc "Atomically interrupts the same running turn, preserving a completion that won the race."
+  @spec interrupt_turn_state_if_running(Thread.t(), String.t()) ::
+          {:ok, Thread.t()} | {:already_finished, Thread.t()} | {:error, term()}
+  def interrupt_turn_state_if_running(%Thread{} = thread, reason) when is_binary(reason) do
+    case current_turn(thread) do
+      %{"status" => "running"} = turn ->
+        interrupt_same_running_turn(thread, turn, turn_identity(turn), reason, 3)
+
+      _ ->
+        {:already_finished, thread}
+    end
+  end
+
   @doc "The current turn map stored on the thread metadata, or nil."
   @spec current_turn(Thread.t()) :: map() | nil
   def current_turn(%Thread{metadata: %{@current_turn_key => turn}}) when is_map(turn), do: turn
@@ -422,6 +481,7 @@ defmodule SymphonyElixir.Assistant.History do
   def turn_payload(turn) when is_map(turn) do
     %{
       status: turn["status"],
+      generation: turn["generation"],
       trigger: turn["trigger"],
       session_id: turn["session_id"],
       codex_thread_id: turn["codex_thread_id"],
@@ -706,6 +766,67 @@ defmodule SymphonyElixir.Assistant.History do
       nil -> {:ok, thread}
       turn -> update_thread(thread, %{metadata: Map.put(metadata || %{}, @current_turn_key, fun.(turn))})
     end
+  end
+
+  defp interrupt_same_running_turn(thread, turn, identity, reason, retries_left) do
+    interrupted_turn =
+      turn
+      |> Map.put("status", "interrupted")
+      |> Map.put("interrupted_reason", reason)
+      |> Map.put("finished_at", now_iso())
+      |> Map.put("active_tools", [])
+
+    metadata = Map.put(thread.metadata || %{}, @current_turn_key, interrupted_turn)
+    updated_at = DateTime.utc_now()
+
+    query =
+      from(t in Thread,
+        where: t.id == ^thread.id and t.updated_at == ^thread.updated_at
+      )
+
+    case Repo.update_all(query, set: [metadata: metadata, updated_at: updated_at]) do
+      {1, _rows} ->
+        get_thread(thread.id)
+
+      {0, _rows} ->
+        reconcile_interrupt_conflict(thread.id, identity, reason, retries_left)
+    end
+  end
+
+  defp reconcile_interrupt_conflict(thread_id, identity, reason, retries_left) do
+    with {:ok, current_thread} <- get_thread(thread_id) do
+      case current_turn(current_thread) do
+        %{"status" => "running"} = current_turn when retries_left > 0 ->
+          if turn_identity(current_turn) == identity do
+            interrupt_same_running_turn(
+              current_thread,
+              current_turn,
+              identity,
+              reason,
+              retries_left - 1
+            )
+          else
+            {:already_finished, current_thread}
+          end
+
+        %{"status" => "running"} = current_turn ->
+          if turn_identity(current_turn) == identity,
+            do: {:error, :turn_interrupt_conflict},
+            else: {:already_finished, current_thread}
+
+        _ ->
+          {:already_finished, current_thread}
+      end
+    end
+  end
+
+  defp turn_identity(turn) when is_map(turn) do
+    {
+      Map.get(turn, "started_at"),
+      Map.get(turn, "generation"),
+      Map.get(turn, "trigger"),
+      Map.get(turn, "prompt")
+    }
   end
 
   defp active_tools(%{"active_tools" => tools}) when is_list(tools) do

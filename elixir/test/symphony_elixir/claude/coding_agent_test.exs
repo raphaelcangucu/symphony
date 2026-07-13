@@ -143,7 +143,7 @@ defmodule SymphonyElixir.Claude.CodingAgentTest do
         claude_command: "FAKE_CLAUDE_MODE=happy #{@fake}"
       )
 
-    assert {:error, {:goal_injection_failed, :invalid_goal_store}} =
+    assert {:error, {:goal_state_read_failed, :invalid_goal_store}} =
              CodingAgent.run_turn(session, "continue", @issue,
                goal_role: :authoring,
                assistant_thread_id: thread_id
@@ -236,12 +236,104 @@ defmodule SymphonyElixir.Claude.CodingAgentTest do
           claude_command: "FAKE_CLAUDE_MODE=happy #{@fake}"
         )
 
-      assert {:error, {:goal_injection_failed, :invalid_goal_store}} =
+      assert {:error, {:goal_state_read_failed, :invalid_goal_store}} =
                CodingAgent.run_turn(session, "continue", @issue,
                  goal_role: :authoring,
                  assistant_thread_id: thread_id
                )
     end
+  end
+
+  test "goal preflight uses the exact command later stored on the session" do
+    {root, ws} = workspace()
+    wrapper = Path.join(root, "claude-wrapper")
+    marker = Path.join(root, "preflight-command")
+
+    File.write!(
+      wrapper,
+      """
+      #!/usr/bin/env bash
+      if [ "$1" = "--version" ]; then
+        printf '%s\n' "$GOAL_COMMAND_MARKER" > "#{marker}"
+        echo "2.1.139"
+        exit 0
+      fi
+      exec #{@fake} "$@"
+      """
+    )
+
+    File.chmod!(wrapper, 0o755)
+    command = "GOAL_COMMAND_MARKER=exact #{wrapper}"
+
+    assert {:ok, session} =
+             CodingAgent.start_session(ws,
+               workspace_root: root,
+               claude_command: command,
+               goal_role: :authoring
+             )
+
+    assert session.command == command
+    assert File.read!(marker) == "exact\n"
+  end
+
+  test "goal acknowledgement failure fails the completed turn visibly" do
+    {root, ws} = workspace()
+
+    assert :ok =
+             GoalStore.put(ws, :execution, %{
+               "status" => "completed",
+               "objective" => "Audit",
+               "pending_command" => "set"
+             })
+
+    {:ok, session} =
+      CodingAgent.start_session(ws,
+        workspace_root: root,
+        claude_command: "FAKE_CLAUDE_MODE=happy #{@fake}"
+      )
+
+    on_message = fn
+      %{event: :session_started} ->
+        path = GoalStore.path(ws, :execution)
+        File.rm!(path)
+        File.mkdir_p!(path)
+
+      _message ->
+        :ok
+    end
+
+    assert {:error, {:goal_acknowledgement_failed, {:goal_store_read_failed, :eisdir}}} =
+             CodingAgent.run_turn(session, "continue", @issue, on_message: on_message)
+  end
+
+  test "goal lifecycle finalization failure fails the completed turn visibly" do
+    {root, ws} = workspace()
+
+    assert :ok =
+             GoalStore.put(ws, :execution, %{
+               "status" => "running",
+               "objective" => "Audit",
+               "pending_command" => nil
+             })
+
+    {:ok, session} =
+      CodingAgent.start_session(ws,
+        workspace_root: root,
+        claude_command: "FAKE_CLAUDE_MODE=happy #{@fake}"
+      )
+
+    on_message = fn
+      %{event: :session_started} ->
+        path = GoalStore.path(ws, :execution)
+        File.rm!(path)
+        File.mkdir_p!(path)
+
+      _message ->
+        :ok
+    end
+
+    assert {:error, {:goal_lifecycle_transition_failed, {:goal_store_read_failed, :eisdir}}} =
+             CodingAgent.run_turn(session, "continue", @issue, on_message: on_message)
   end
 
   test "second turn resumes with the captured cli session id" do

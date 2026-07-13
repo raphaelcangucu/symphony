@@ -64,9 +64,6 @@ import {
   extractKbDocumentReferencesFromMessage,
   fallbackAttachmentMessage,
   goalModeFromResponse,
-  goalObjectiveFromResponse,
-  goalRunElapsedFromResponse,
-  goalRunningFromResponse,
   isTextEntryTarget,
   latestPendingPlanMessageId,
   messageFromResponse,
@@ -101,10 +98,9 @@ import {
   bindAssistantEvents,
   clearAuthoringGoal,
   dispatchCodingAgent,
-  normalizeGoalStatus,
   pauseAuthoringGoal,
+  readGoalStatus,
   readLastTurn,
-  requestGoalStatus,
   requestHistorySync,
   resumeAuthoringGoal,
   resumeTurn,
@@ -119,6 +115,7 @@ import {
   type AssistantDocumentChangedPayload,
   type AssistantTurnStatus,
   type AssistantIssueCreatedPayload,
+  type GoalStatusAcceptor,
 } from "@/services/phoenix/assistantChannel";
 import { createTrackerSocket } from "@/services/phoenix/socket";
 import type { AgentKind, ExecutionMode } from "@/types/issue";
@@ -282,7 +279,7 @@ export function ProjectAssistantPanel({
   const { t } = useTranslation();
   const location = useLocation();
   const [open, setOpen] = useState(false);
-  const [isRunning, setIsRunning] = useState(false);
+  const [turnRunning, setTurnRunning] = useState(false);
   const [runningStartedAt, setRunningStartedAt] = useState<number | null>(null);
   const [queued, setQueued] = useState<QueuedMessage[]>([]);
   const [btw, setBtw] = useState<{ id: string | null; question: string; answer: string; status: BtwStatus } | null>(
@@ -290,11 +287,13 @@ export function ProjectAssistantPanel({
   );
   const [messages, setMessages] = useState<AssistantChatMessage[]>([]);
   const [approvedPlanMessageIds, setApprovedPlanMessageIds] = useState<Set<string>>(() => new Set());
-  // Tab-scoped Authoring goal: a native Codex goal running directly in this chat (no orchestrator).
-  // It is independent from the issue's Execution goal owned by the Execution tab. `native` reflects
-  // whether a native Codex goal exists yet (established by a turn); `status`/`timeUsedSeconds` come
-  // from the native goal so the pill shows truthful state instead of just the enabled flag.
+  // Tab-scoped Authoring Goal state is durable and independent from both the
+  // issue's Execution goal and the lifecycle of an ordinary assistant turn.
   const [authoringGoal, setAuthoringGoal] = useState<AuthoringGoalState>(emptyAuthoringGoal);
+  const [goalQueuePermitted, setGoalQueuePermitted] = useState(false);
+  const goalQueueHeld = authoringGoal.enabled && !goalQueuePermitted;
+  const submissionBlocked = turnRunning || goalQueueHeld;
+  const goalEnabledRef = useRef(false);
   // The thread's last turn lifecycle state; an interrupted turn surfaces a Resume affordance.
   const [lastTurn, setLastTurn] = useState<AssistantTurnStatus | null>(null);
   const [pendingQuestions, setPendingQuestions] = useState<UserQuestionsRequest | null>(null);
@@ -304,6 +303,7 @@ export function ProjectAssistantPanel({
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const [channelReady, setChannelReady] = useState(false);
   const channelRef = useRef<Channel | null>(null);
+  const goalStatusAcceptorRef = useRef<GoalStatusAcceptor>(() => false);
   const bundleRef = useRef<AssistantCatalogBundle | null>(null);
   const composerDockRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -456,14 +456,14 @@ export function ProjectAssistantPanel({
 
   useEffect(() => {
     setRunningStartedAt((current) => {
-      if (isRunning) return current ?? Date.now();
+      if (turnRunning) return current ?? Date.now();
       return null;
     });
-  }, [isRunning]);
+  }, [turnRunning]);
 
   useEffect(() => {
-    onRunningChange?.(isRunning);
-  }, [isRunning, onRunningChange]);
+    onRunningChange?.(turnRunning);
+  }, [turnRunning, onRunningChange]);
 
   useEffect(() => {
     if (!active) return;
@@ -507,6 +507,8 @@ export function ProjectAssistantPanel({
     lastConfirmedGoalModeRef.current = null;
     pendingGoalModeRef.current = null;
     setAuthoringGoal(emptyAuthoringGoal);
+    goalEnabledRef.current = false;
+    setGoalQueuePermitted(false);
     setLastTurn(null);
 
     const socket = createTrackerSocket();
@@ -525,25 +527,22 @@ export function ProjectAssistantPanel({
     const channel = socket.channel(topic);
     channelRef.current = channel;
 
-    bindAssistantEvents(channel, {
+    goalStatusAcceptorRef.current = bindAssistantEvents(channel, {
       onHistoryLoaded: (history) =>
         setMessagesPreservingScroll(scrollRef.current, stickToBottomRef, history, setMessages),
       onHistorySynced: (history) => {
         setMessagesPreservingScroll(scrollRef.current, stickToBottomRef, history, setMessages);
-        setIsRunning(false);
-        setPendingQuestions(null);
-        setPendingApproval(null);
       },
       onMessageCreated: (message) => setMessages((current) => appendMessage(current, message)),
       onAssistantDelta: (delta) => {
-        setIsRunning(true);
+        setTurnRunning(true);
         setMessages((current) => appendAssistantDelta(current, delta));
       },
       onToolCallStarted: (toolCall) => setMessages((current) => updateStreamingToolCall(current, toolCall)),
       onToolCallCompleted: (toolCall) => setMessages((current) => updateStreamingToolCall(current, toolCall)),
       onAssistantCompleted: (message) => {
         setMessages((current) => replaceStreamingMessage(current, message));
-        setIsRunning(false);
+        setTurnRunning(false);
         setPendingQuestions(null);
         setPendingApproval(null);
         const createdIssue = draftIssueCreatedFromMessage(message);
@@ -552,7 +551,7 @@ export function ProjectAssistantPanel({
       onAssistantError: (message) => {
         setMessages((current) => appendMessage(current, assistantMessage("assistant-error", message)));
         setConnectionError(message);
-        setIsRunning(false);
+        setTurnRunning(false);
         setPendingQuestions(null);
         setPendingApproval(null);
       },
@@ -605,15 +604,18 @@ export function ProjectAssistantPanel({
       onBtwError: ({ btwId, message }) =>
         setBtw((current) => (current && current.id === btwId ? { ...current, answer: message, status: "error" } : current)),
       onGoalStatus: (status) => {
+        const newlyEnabled = status.enabled && !goalEnabledRef.current;
+        goalEnabledRef.current = status.enabled;
+
+        setGoalQueuePermitted((current) => {
+          if (!status.enabled) return true;
+          if (status.status === "paused" || (status.interrupted && !status.processRunning)) return false;
+          if (status.processRunning) return true;
+          if (newlyEnabled) return false;
+          return current;
+        });
+
         setAuthoringGoal((current) => mergeGoalStatus(current, status));
-        // In a goal-enabled thread every turn is a goal turn, so the status push is
-        // authoritative for whether the assistant is busy: running:true reattaches a
-        // tab to a run already in flight (e.g. after a refresh); running:false means
-        // idle (covers paused-cancel where no assistant_completed/error is emitted).
-        setIsRunning(status.running);
-      },
-      onGoalRunning: (running) => {
-        if (running) setIsRunning(true);
       },
       // Observer/reattached tabs receive turn_status fan-out (the originating tab
       // reconciles via assistant_completed/error). Mirror the running indicator and
@@ -621,8 +623,12 @@ export function ProjectAssistantPanel({
       // durable history sync on terminal status so tabs recover when streaming events
       // targeted a dead channel process.
       onTurnStatus: (status) => {
+        if (goalEnabledRef.current) {
+          if (status.status === "running") setGoalQueuePermitted(true);
+          if (status.status === "interrupted") setGoalQueuePermitted(false);
+        }
         setLastTurn(status);
-        setIsRunning(status.status === "running");
+        setTurnRunning(status.status === "running");
         if (status.status === "running" && status.activeTools.length > 0) {
           setMessages((current) => hydrateStreamingActiveTools(current, status.activeTools));
         }
@@ -644,31 +650,21 @@ export function ProjectAssistantPanel({
       const joinedLastTurn = readLastTurn(response);
       setLastTurn(joinedLastTurn);
       if (joinedLastTurn?.status === "running") {
-        setIsRunning(true);
+        setTurnRunning(true);
         if (joinedLastTurn.activeTools.length > 0) {
           setMessages((current) => hydrateStreamingActiveTools(current, joinedLastTurn.activeTools));
         }
+      }
+
+      const joinedGoalStatus = readGoalStatus(response);
+      if (joinedGoalStatus) {
+        goalStatusAcceptorRef.current(joinedGoalStatus);
       }
 
       if (issueIdentifier) {
         const hydratedGoalMode = goalModeFromResponse(response) ?? false;
         lastConfirmedGoalModeRef.current = hydratedGoalMode;
         if (hydratedGoalMode) onIssueGoalModeChangedRef.current?.(true);
-        // Reattach to a goal turn already in flight (e.g. started before this
-        // refresh): seed the pill timer from the server's run-elapsed and mark the
-        // assistant running so the pill renders "executing" immediately.
-        const goalRunning = hydratedGoalMode && goalRunningFromResponse(response);
-        setAuthoringGoal({
-          ...emptyAuthoringGoal,
-          enabled: hydratedGoalMode,
-          objective: hydratedGoalMode ? goalObjectiveFromResponse(response) : null,
-          status: goalRunning ? "active" : null,
-          timeUsedSeconds: goalRunning ? goalRunElapsedFromResponse(response) : null,
-        });
-        if (goalRunning) setIsRunning(true);
-        // Pull the native goal (status + timer) asynchronously; the channel pushes
-        // "goal_status" back. Cheap no-op server-side when the goal isn't enabled.
-        if (hydratedGoalMode) requestGoalStatus(channel);
       }
 
       const agent = effectiveAgentFromResponse(response);
@@ -687,6 +683,7 @@ export function ProjectAssistantPanel({
     return () => {
       setChannelReady(false);
       channelRef.current = null;
+      goalStatusAcceptorRef.current = () => false;
       channel.leave();
       socket.disconnect();
     };
@@ -706,6 +703,7 @@ export function ProjectAssistantPanel({
     pendingGoalModeRef.current = { enabled: issueGoalMode, requestId };
     const pushResult = channel.push("set_goal_mode", { goal_mode: issueGoalMode });
     pushResult.receive("ok", (response) => {
+      goalStatusAcceptorRef.current(response);
       const enabled = goalModeFromResponse(response) ?? issueGoalMode;
       lastConfirmedGoalModeRef.current = enabled;
       pendingGoalModeRef.current = null;
@@ -820,7 +818,7 @@ export function ProjectAssistantPanel({
       pinnedScrollTopRef.current = null;
       setIsAtBottom(true);
       scrollBehaviorRef.current = "initial";
-      setIsRunning(true);
+      setTurnRunning(true);
       // Keep the transcript pinned to the bottom for the outgoing turn. Double-rAF
       // waits for layout after the user bubble lands (server echo / local append).
       const scrollOutgoingIntoView = () => {
@@ -834,7 +832,7 @@ export function ProjectAssistantPanel({
       });
       channel.push("send_message", payload).receive("error", (reason) => {
         setConnectionError(errorMessage(reason));
-        setIsRunning(false);
+        setTurnRunning(false);
       });
     },
     [view, t, expandMentions, hasExecutableContext],
@@ -861,14 +859,12 @@ export function ProjectAssistantPanel({
         return;
       }
 
-      if (!issueIdentifier) {
-        setMessages((current) =>
-          appendMessage(current, assistantMessage(`goal-help-${crypto.randomUUID()}`, t("assistant.panel.goalRequiresIssue"))),
-        );
-        return;
-      }
-
       const objective = submit.message.trim();
+      const framed =
+        objective.length > 0
+          ? t("assistant.panel.goalCommandWithObjective", { objective })
+          : t("assistant.panel.goalCommandDefault");
+      const framedSubmit: AssistantComposerSubmit = { ...submit, kind: "message", message: framed };
 
       // Authoring goal: persist the chat goal + objective so this turn (and the next ones) run
       // Codex native goal mode directly in the conversation. This never dispatches the orchestrator
@@ -878,75 +874,69 @@ export function ProjectAssistantPanel({
         ...(objective.length > 0 ? { objective } : {}),
       });
       goalPush.receive("ok", (response) => {
+        goalStatusAcceptorRef.current(response);
         const enabled = goalModeFromResponse(response) ?? true;
         lastConfirmedGoalModeRef.current = enabled;
         onIssueGoalModeChanged?.(enabled);
-        setAuthoringGoal((current) => ({
-          ...current,
-          enabled,
-          objective: goalObjectiveFromResponse(response) ?? (objective.length > 0 ? objective : current.objective),
-        }));
+
+        if (submissionBlocked) {
+          setQueued((current) => [...current, { id: crypto.randomUUID(), payload: framedSubmit }]);
+        } else {
+          dispatchSend(framedSubmit);
+        }
       });
       goalPush.receive("error", (reason) => onIssueGoalModeError?.(errorMessage(reason, t)));
       goalPush.receive("timeout", () => onIssueGoalModeError?.(t("assistant.panel.goalModeUpdateTimeout")));
-
-      const framed =
-        objective.length > 0
-          ? t("assistant.panel.goalCommandWithObjective", { objective })
-          : t("assistant.panel.goalCommandDefault");
-      const framedSubmit: AssistantComposerSubmit = { ...submit, kind: "message", message: framed };
-
-      if (isRunning) {
-        setQueued((current) => [...current, { id: crypto.randomUUID(), payload: framedSubmit }]);
-      } else {
-        dispatchSend(framedSubmit);
-      }
     },
-    [dispatchSend, isRunning, issueIdentifier, onIssueGoalModeChanged, onIssueGoalModeError, t],
+    [dispatchSend, submissionBlocked, onIssueGoalModeChanged, onIssueGoalModeError, t],
   );
 
   const pauseGoal = useCallback(() => {
     const channel = channelRef.current;
     if (!channel) return;
-    // Optimistic: mark paused immediately; the reply carries the authoritative state.
-    setAuthoringGoal((current) => ({ ...current, status: "paused" }));
-    pauseAuthoringGoal(channel).receive("ok", (response) => {
-      setAuthoringGoal((current) => mergeGoalStatus(current, normalizeGoalStatus(response)));
-    });
-  }, []);
+    pauseAuthoringGoal(channel)
+      .receive("ok", (response) => {
+        goalStatusAcceptorRef.current(response);
+      })
+      .receive("error", (reason) => onIssueGoalModeError?.(errorMessage(reason, t)));
+  }, [onIssueGoalModeError, t]);
 
   const resumeGoal = useCallback(() => {
     const channel = channelRef.current;
     if (!channel) return;
-    setAuthoringGoal((current) => ({ ...current, status: "active" }));
-    setIsRunning(true);
-    resumeAuthoringGoal(channel).receive("error", (reason) => {
-      setIsRunning(false);
-      onIssueGoalModeError?.(errorMessage(reason, t));
-    });
+    resumeAuthoringGoal(channel)
+      .receive("ok", (response) => goalStatusAcceptorRef.current(response))
+      .receive("error", (reason) => {
+        onIssueGoalModeError?.(errorMessage(reason, t));
+      });
   }, [onIssueGoalModeError, t]);
 
   const removeGoal = useCallback(() => {
     const channel = channelRef.current;
     if (!channel) return;
-    clearAuthoringGoal(channel).receive("ok", (response) => {
-      setAuthoringGoal((current) => mergeGoalStatus(current, normalizeGoalStatus(response)));
-      lastConfirmedGoalModeRef.current = false;
-      onIssueGoalModeChanged?.(false);
-    });
-  }, [onIssueGoalModeChanged]);
+    clearAuthoringGoal(channel)
+      .receive("ok", (response) => {
+        goalStatusAcceptorRef.current(response);
+        if (goalModeFromResponse(response) === false) {
+          lastConfirmedGoalModeRef.current = false;
+          onIssueGoalModeChanged?.(false);
+        }
+      })
+      .receive("error", (reason) => onIssueGoalModeError?.(errorMessage(reason, t)));
+  }, [onIssueGoalModeChanged, onIssueGoalModeError, t]);
 
   const editGoalObjective = useCallback(
     (objective: string) => {
       const channel = channelRef.current;
       const trimmed = objective.trim();
       if (!channel || trimmed.length === 0) return;
-      setAuthoringGoal((current) => ({ ...current, objective: trimmed }));
-      setAuthoringGoalObjective(channel, trimmed).receive("ok", (response) => {
-        setAuthoringGoal((current) => mergeGoalStatus(current, normalizeGoalStatus(response)));
-      });
+      setAuthoringGoalObjective(channel, trimmed)
+        .receive("ok", (response) => {
+          goalStatusAcceptorRef.current(response);
+        })
+        .receive("error", (reason) => onIssueGoalModeError?.(errorMessage(reason, t)));
     },
-    [],
+    [onIssueGoalModeError, t],
   );
 
   const sendMessage = useCallback(
@@ -962,8 +952,11 @@ export function ProjectAssistantPanel({
       if (!trimmed && !hasAttachments && !hasContextRefs) return;
 
       if (submit.kind === "infer") {
-        if (isRunning) {
-          steerTurn(submit);
+        if (submissionBlocked) {
+          setQueued((current) => [
+            ...current,
+            { id: crypto.randomUUID(), payload: { ...submit, kind: "message" } },
+          ]);
         } else {
           dispatchSend({ ...submit, kind: "message" });
         }
@@ -990,41 +983,43 @@ export function ProjectAssistantPanel({
         return;
       }
 
-      if (isRunning) {
+      if (submissionBlocked) {
         setQueued((current) => [...current, { id: crypto.randomUUID(), payload: { ...submit, kind: "message" } }]);
         return;
       }
 
       dispatchSend(submit);
     },
-    [dispatchSend, enableGoalCommand, isRunning, steerTurn, t],
+    [dispatchSend, enableGoalCommand, submissionBlocked, t],
   );
 
-  const wasRunningRef = useRef(false);
+  const queueBlocked = submissionBlocked;
+  const wasQueueBlockedRef = useRef(false);
+
   useEffect(() => {
-    const justFinished = wasRunningRef.current && !isRunning;
-    wasRunningRef.current = isRunning;
-    if (!justFinished || queued.length === 0) return;
+    const justReleased = wasQueueBlockedRef.current && !queueBlocked;
+    wasQueueBlockedRef.current = queueBlocked;
+    if (!justReleased || queued.length === 0) return;
 
     const [next, ...rest] = queued;
     setQueued(rest);
     dispatchSend(next.payload);
-  }, [isRunning, queued, dispatchSend]);
+  }, [queueBlocked, queued, dispatchSend]);
 
   const forceSendQueued = useCallback(
     (id: string) => {
       const item = queued.find((entry) => entry.id === id);
-      if (!item) return;
+      if (!item || goalQueueHeld) return;
 
       setQueued((current) => current.filter((entry) => entry.id !== id));
 
-      if (isRunning) {
+      if (turnRunning) {
         steerTurn(item.payload);
       } else {
         dispatchSend(item.payload);
       }
     },
-    [queued, isRunning, steerTurn, dispatchSend],
+    [queued, goalQueueHeld, turnRunning, steerTurn, dispatchSend],
   );
 
   const forceSendOldestQueued = useCallback(() => {
@@ -1154,7 +1149,7 @@ export function ProjectAssistantPanel({
     const frame = requestAnimationFrame(() => {
       if (!stickToBottomRef.current) return;
 
-      const behavior = isRunning && scrollBehaviorRef.current !== "initial" ? "smooth" : "auto";
+      const behavior = turnRunning && scrollBehaviorRef.current !== "initial" ? "smooth" : "auto";
       scrollBehaviorRef.current = "smooth";
       scroller.scrollTo({ top: scroller.scrollHeight, behavior });
       // Second frame: message/tool rows often grow after the first paint.
@@ -1168,24 +1163,24 @@ export function ProjectAssistantPanel({
       cancelAnimationFrame(frame);
       cancelAnimationFrame(secondFrame);
     };
-  }, [isPanelMode, visibleMessages, isRunning]);
+  }, [isPanelMode, visibleMessages, turnRunning]);
 
   const runtime = useExternalStoreRuntime<AssistantChatMessage>(
     useMemo(
       () => ({
-        isRunning,
+        isRunning: turnRunning,
         messages: visibleMessages,
         convertMessage,
         onNew,
       }),
-      [isRunning, visibleMessages, onNew],
+      [turnRunning, visibleMessages, onNew],
     ),
   );
 
   const activeToolDetail = activeToolDetailFromMessages(messages, lastTurn);
-  const nowMs = useNowTick(1000, { enabled: isRunning });
+  const nowMs = useNowTick(1000, { enabled: turnRunning });
   const stale =
-    isRunning &&
+    turnRunning &&
     typeof lastTurn?.lastActivityAt === "string" &&
     Number.isFinite(Date.parse(lastTurn.lastActivityAt)) &&
     nowMs - Date.parse(lastTurn.lastActivityAt) >= STALE_ACTIVITY_MS;
@@ -1251,7 +1246,7 @@ export function ProjectAssistantPanel({
       projectSlug={projectSlug}
       issueIdentifier={issueIdentifier}
       threadId={threadId}
-      isRunning={isRunning}
+      isRunning={turnRunning}
       runningStartedAt={runningStartedAt}
       activeToolDetail={activeToolDetail}
       stale={stale}
@@ -1334,7 +1329,7 @@ export function ProjectAssistantPanel({
 
   // An interrupted turn can be re-dispatched; offer Resume while no turn is running.
   const resumeBanner =
-    lastTurn?.canResume && !isRunning ? (
+    lastTurn?.canResume && !turnRunning ? (
       <div className="px-4 pb-2">
         <div className="flex items-center gap-2 rounded-lg border border-amber-300/60 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-400/30 dark:bg-amber-950/40 dark:text-amber-300">
           <span className="min-w-0 flex-1">{t("assistant.panel.turnInterrupted")}</span>
@@ -1358,17 +1353,46 @@ export function ProjectAssistantPanel({
 
   // Docks flush inside the composer card (passed as its `header`) so the goal
   // reads as the top of the message box — one piece, no separating line.
+  const authoringGoalControlsSupported =
+    authoringGoal.provider === "codex" || authoringGoal.provider === "claude";
   const authoringGoalPill =
-    issueIdentifier && authoringGoal.enabled ? (
+    authoringGoal.enabled ? (
       <GoalPill
-        phase={authoringGoalPhase(authoringGoal, isRunning)}
+        phase={authoringGoalPhase(authoringGoal)}
+        provider={authoringGoal.provider}
+        capabilities={authoringGoal.capabilities}
         objective={authoringGoal.objective}
-        running={isRunning}
+        running={authoringGoal.processRunning}
         timeUsedSeconds={authoringGoal.timeUsedSeconds}
-        onPause={pauseGoal}
-        onResume={resumeGoal}
-        onRemove={removeGoal}
-        onEditObjective={editGoalObjective}
+        onStop={
+          authoringGoal.processRunning &&
+          authoringGoalControlsSupported &&
+          authoringGoal.capabilities.includes("stop")
+            ? handleStopTurn
+            : undefined
+        }
+        onPause={
+          authoringGoalControlsSupported && authoringGoal.capabilities.includes("pause")
+            ? pauseGoal
+            : undefined
+        }
+        onResume={
+          authoringGoalControlsSupported && authoringGoal.capabilities.includes("resume")
+            ? resumeGoal
+            : undefined
+        }
+        onRemove={
+          authoringGoalControlsSupported && authoringGoal.capabilities.includes("clear")
+            ? removeGoal
+            : undefined
+        }
+        onEditObjective={
+          authoringGoalControlsSupported &&
+          (authoringGoal.capabilities.includes("edit") ||
+            authoringGoal.capabilities.includes("set_objective"))
+            ? editGoalObjective
+            : undefined
+        }
       />
     ) : null;
 
@@ -1397,7 +1421,7 @@ export function ProjectAssistantPanel({
     <AssistantComposer
       projectSlug={projectSlug ?? ""}
       bundle={composerBundle}
-      agentMenuDisabled={isRunning || catalogLoading}
+      agentMenuDisabled={authoringGoal.enabled || turnRunning || catalogLoading}
       composerDisabled={catalogLoading}
       floating={isPanelMode}
       hasQueued={queued.length > 0}

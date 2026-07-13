@@ -22,13 +22,13 @@ defmodule SymphonyElixir.Claude.GoalControlTest do
     %{project: project, issue: issue, workspace: workspace}
   end
 
-  test "set_objective writes active mirror with pending set", %{
+  test "set_objective writes canonical running mirror with pending set", %{
     project: project,
     issue: issue,
     workspace: workspace
   } do
     assert {:ok, goal} = GoalControl.set_objective(project, issue.identifier, :execution, "tests pass")
-    assert goal["status"] == "active"
+    assert goal["status"] == "running"
     assert goal["objective"] == "tests pass"
     assert goal["pending_command"] == "set"
     assert {:ok, stored} = GoalStore.read(workspace, :execution)
@@ -45,7 +45,7 @@ defmodule SymphonyElixir.Claude.GoalControlTest do
     assert {:ok, _} = GoalControl.set_objective(project, issue.identifier, :execution, "tests pass")
     assert {:ok, goal} = GoalControl.clear(project, issue.identifier, :execution)
     assert goal["pending_command"] == "clear"
-    assert goal["status"] == "active"
+    assert goal["status"] == "running"
   end
 
   test "clear without goal is idempotent", %{project: project, issue: issue} do
@@ -91,17 +91,17 @@ defmodule SymphonyElixir.Claude.GoalControlTest do
     assert :ok = GoalControl.acknowledge_inject(workspace, :execution, set_token, nil)
     assert {:ok, goal} = GoalStore.read(workspace, :execution)
     assert goal["pending_command"] == nil
-    assert goal["status"] == "active"
+    assert goal["status"] == "running"
   end
 
-  test "acknowledge_inject clear marks cleared", %{project: project, issue: issue, workspace: workspace} do
+  test "acknowledge_inject clear marks completed", %{project: project, issue: issue, workspace: workspace} do
     assert {:ok, _} = GoalControl.set_objective(project, issue.identifier, :execution, "tests pass")
     assert {:ok, _} = GoalControl.clear(project, issue.identifier, :execution)
     assert {:inject, :clear} = GoalControl.consume_pending(workspace, :execution)
     {_, clear_token} = GoalControl.apply_pending_to_prompt("work", workspace, :execution)
     assert :ok = GoalControl.acknowledge_inject(workspace, :execution, clear_token, nil)
     assert {:ok, goal} = GoalStore.read(workspace, :execution)
-    assert goal["status"] == "cleared"
+    assert goal["status"] == "completed"
     assert goal["objective"] == nil
   end
 
@@ -167,6 +167,30 @@ defmodule SymphonyElixir.Claude.GoalControlTest do
 
     assert :ok = GoalControl.acknowledge_inject(workspace, :execution, {:clear, clear_revision}, nil)
     assert {"Do the work", :none} = GoalControl.apply_pending_to_prompt("Do the work", workspace, :execution)
+  end
+
+  test "multiline objectives remain one retryable goal command", %{
+    project: project,
+    issue: issue,
+    workspace: workspace
+  } do
+    objective = "Audit authentication\nRun the focused tests\nReport failures"
+    assert {:ok, _goal} = GoalControl.set_objective(project, issue.identifier, :execution, objective)
+
+    assert {prompt, {:set, revision}} =
+             GoalControl.apply_pending_to_prompt("Continue the work", workspace, :execution)
+
+    assert prompt == "/goal #{objective}\n\nContinue the work"
+    assert is_binary(revision)
+
+    assert :ok = GoalControl.acknowledge_inject(workspace, :execution, {:set, revision}, nil)
+    assert :ok = GoalControl.requeue_set_if_active(workspace, :execution)
+
+    assert {retry_prompt, {:set, retry_revision}} =
+             GoalControl.apply_pending_to_prompt("Retry after interruption", workspace, :execution)
+
+    assert retry_prompt == "/goal #{objective}\n\nRetry after interruption"
+    refute retry_revision == revision
   end
 
   defp migrate_repo do

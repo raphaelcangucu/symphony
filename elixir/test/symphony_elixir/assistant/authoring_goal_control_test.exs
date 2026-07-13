@@ -7,6 +7,8 @@ defmodule SymphonyElixir.Assistant.AuthoringGoalControlTest do
   alias SymphonyElixir.Repo
   alias SymphonyElixir.Workflow
 
+  @fake_codex_app_server Path.expand("../../support/fixtures/fake_codex_app_server.py", __DIR__)
+
   setup do
     migrate_repo()
     clean_repo()
@@ -239,6 +241,50 @@ defmodule SymphonyElixir.Assistant.AuthoringGoalControlTest do
     assert {:ok, unchanged} = History.get_thread(thread.id)
     refute History.thread_goal_mode(unchanged)
     assert History.thread_goal_objective(unchanged) == nil
+  end
+
+  test "Codex activation uses the exact thread project's workspace root", %{thread: thread} do
+    custom_root =
+      Path.join(System.tmp_dir!(), "thread-8003-workspaces-#{System.unique_integer([:positive])}")
+
+    workspace = Path.join(custom_root, "DIS-8003")
+    File.mkdir_p!(workspace)
+    on_exit(fn -> File.rm_rf!(custom_root) end)
+
+    {:ok, _project} = Context.ensure_project(%{name: "Distrib", slug: "distrib"})
+
+    {:ok, _setup} =
+      Context.upsert_project_setup("distrib", %{
+        workflow_markdown:
+          SymphonyElixir.Workflow.to_markdown(
+            %{
+              "workspace" => %{"root" => custom_root},
+              "codex" => %{
+                "command" => "python3 #{@fake_codex_app_server}",
+                "goals_enabled" => true
+              }
+            },
+            ""
+          )
+      })
+
+    {:ok, project_thread} =
+      thread
+      |> Thread.changeset(%{
+        project_slug: "distrib",
+        issue_identifier: "DIS-8003",
+        workspace_path: workspace,
+        agent_kind: "codex",
+        agent_thread_ids: %{"codex" => "thread-8003"}
+      })
+      |> Repo.update()
+
+    assert {:ok, payload, updated} =
+             AuthoringGoalControl.set_objective(project_thread, "Finish thread 8003")
+
+    assert payload.native
+    assert payload.objective == "Finish thread 8003"
+    assert History.thread_goal_mode(updated)
   end
 
   test "normalizes native lifecycle statuses and preserves Codex accounting", %{thread: thread} do

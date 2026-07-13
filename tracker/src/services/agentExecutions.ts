@@ -98,8 +98,22 @@ function numberValue(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+function timestampValue(value: unknown): number | string | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
 function stringArrayValue(value: unknown): string[] {
-  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+  if (!Array.isArray(value)) return [];
+  return [
+    ...new Set(
+      value.flatMap((item) => {
+        if (typeof item !== "string") return [];
+        const normalized = item.trim();
+        return normalized ? [normalized] : [];
+      }),
+    ),
+  ];
 }
 
 export function normalizeGoal(goal: Record<string, unknown> | null | undefined): AgentExecutionGoal | null {
@@ -117,7 +131,8 @@ export function normalizeGoal(goal: Record<string, unknown> | null | undefined):
     tokenBudget: numberValue(goal.tokenBudget ?? goal.token_budget),
     tokensUsed: numberValue(goal.tokensUsed ?? goal.tokens_used),
     timeUsedSeconds: numberValue(goal.timeUsedSeconds ?? goal.time_used_seconds),
-    updatedAt: numberValue(goal.updatedAt ?? goal.updated_at),
+    updatedAt: timestampValue(goal.updatedAt ?? goal.updated_at),
+    revision: stringValue(goal.revision),
   };
 }
 

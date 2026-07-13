@@ -23,18 +23,23 @@ defmodule SymphonyElixir.Assistant.AuthoringGoalControl do
   alias SymphonyElixir.Assistant.{History, Thread}
   alias SymphonyElixir.Codex.CodingAgent
   alias SymphonyElixir.Claude.GoalStore, as: ClaudeGoalStore
-  alias SymphonyElixir.{AgentAvailability, Config, InstanceConfig, ProjectConfig, Repo}
+  alias SymphonyElixir.{AgentAvailability, InstanceConfig, ProjectConfig, Repo, Workspace}
   alias SymphonyElixir.LocalTracker.Context
 
   @native_agent_kind "codex"
   @capabilities ["get", "edit", "pause", "resume", "clear"]
+  @claude_capabilities ["get", "edit", "clear"]
 
   @type payload :: %{
           enabled: boolean(),
           objective: String.t() | nil,
           native: boolean(),
           status: String.t() | nil,
+          provider: String.t(),
+          source: String.t(),
           capabilities: [String.t()],
+          revision: String.t() | nil,
+          updated_at: String.t() | nil,
           goal: map() | nil
         }
 
@@ -60,10 +65,14 @@ defmodule SymphonyElixir.Assistant.AuthoringGoalControl do
     enabled = History.thread_goal_mode(thread)
     objective = History.thread_goal_objective(thread)
 
-    case fetch_native_goal(thread) do
-      {:ok, goal} -> {:ok, build_payload(enabled, objective, goal), thread}
-      {:error, :no_codex_thread} -> {:ok, build_payload(enabled, objective, nil), thread}
-      {:error, reason} -> {:error, reason}
+    if enabled do
+      case fetch_native_goal(thread) do
+        {:ok, goal} -> {:ok, build_payload(enabled, objective, goal), thread}
+        {:error, :no_codex_thread} -> {:ok, build_payload(enabled, objective, nil), thread}
+        {:error, reason} -> {:error, reason}
+      end
+    else
+      {:ok, build_payload(false, nil, nil), thread}
     end
   end
 
@@ -82,12 +91,42 @@ defmodule SymphonyElixir.Assistant.AuthoringGoalControl do
     end
   end
 
+  @doc "Returns Goal controls supported by the authoritative thread provider."
+  @spec capabilities(Thread.t()) :: [String.t()]
+  def capabilities(%Thread{} = thread) do
+    case authoring_agent(thread) do
+      "codex" -> @capabilities
+      "claude" -> @claude_capabilities
+      _ -> []
+    end
+  end
+
+  @doc "Returns whether the authoritative thread provider supports a Goal control."
+  @spec supports_capability?(Thread.t(), String.t()) :: boolean()
+  def supports_capability?(%Thread{} = thread, capability) when is_binary(capability) do
+    capability in capabilities(thread)
+  end
+
+  @doc """
+  Verifies that pause can be issued without contacting the native provider.
+
+  Requires the authoritative Codex provider, a persisted native Codex thread
+  identifier, and an executable workspace.
+  """
+  @spec pause_preflight(Thread.t()) :: :ok | {:error, term()}
+  def pause_preflight(%Thread{} = thread) do
+    with :ok <- require_pause_provider(thread),
+         {:ok, _thread_id} <- require_codex_thread(thread),
+         {:ok, _workspace} <- executable_workspace(thread) do
+      :ok
+    end
+  end
+
   @doc "Pauses the native authoring goal (status: paused). Keeps the goal enabled. Codex only."
   @spec pause(Thread.t()) :: result()
   def pause(%Thread{} = thread) do
-    case authoring_agent(thread) do
-      "claude" -> {:error, :unsupported_for_agent}
-      _ -> with_native(thread, {:set, %{status: "paused"}})
+    with :ok <- pause_preflight(thread) do
+      with_native(thread, {:set, %{status: "paused"}})
     end
   end
 
@@ -97,10 +136,9 @@ defmodule SymphonyElixir.Assistant.AuthoringGoalControl do
   """
   @spec resume(Thread.t()) :: result()
   def resume(%Thread{} = thread) do
-    case authoring_agent(thread) do
-      "claude" -> {:error, :unsupported_for_agent}
-      _ -> with_native(thread, {:set, %{status: "active"}})
-    end
+    if supports_capability?(thread, "resume"),
+      do: with_native(thread, {:set, %{status: "active"}}),
+      else: {:error, :unsupported_for_agent}
   end
 
   @doc "Removes the authoring goal after native/storage clear succeeds."
@@ -154,29 +192,42 @@ defmodule SymphonyElixir.Assistant.AuthoringGoalControl do
   end
 
   @doc """
-  Pushes the thread's stored objective into the native Codex goal (best-effort).
+  Pushes the thread's stored objective into the provider-native goal (best-effort).
 
-  Per the Codex `thread/goal/set` contract this resets native accounting, so the
+  Native objective synchronization may reset provider accounting, so the
   caller should only run it when no turn is running (otherwise it both competes
   for the thread and clobbers the live timer/budget). Returns the refreshed
   payload with the native goal merged when the set succeeds.
   """
   @spec sync_native_objective(Thread.t()) :: result()
   def sync_native_objective(%Thread{} = thread) do
-    enabled = History.thread_goal_mode(thread)
-
     case History.thread_goal_objective(thread) do
       objective when is_binary(objective) and objective != "" ->
-        goal =
-          case sync_agent_objective(thread, objective) do
-            {:ok, goal} -> goal
-            _ -> nil
-          end
-
-        {:ok, build_payload(enabled, objective, goal), thread}
+        sync_native_objective(thread, objective)
 
       _ ->
-        {:ok, build_payload(enabled, nil, nil), thread}
+        {:ok, build_payload(History.thread_goal_mode(thread), nil, nil), thread}
+    end
+  end
+
+  @doc "Pushes an explicit objective into the thread's native agent goal."
+  @spec sync_native_objective(Thread.t(), String.t()) :: result()
+  def sync_native_objective(%Thread{} = thread, objective) when is_binary(objective) do
+    case String.trim(objective) do
+      "" ->
+        {:error, :empty_objective}
+
+      trimmed ->
+        case sync_agent_objective(thread, trimmed) do
+          {:ok, goal} ->
+            {:ok, build_payload(History.thread_goal_mode(thread), trimmed, goal), thread}
+
+          {:error, :no_codex_thread} ->
+            {:ok, build_payload(History.thread_goal_mode(thread), trimmed, nil), thread}
+
+          {:error, reason} ->
+            {:error, reason}
+        end
     end
   end
 
@@ -198,8 +249,8 @@ defmodule SymphonyElixir.Assistant.AuthoringGoalControl do
   end
 
   defp sync_claude_objective(%Thread{} = thread, objective) do
-    with :ok <- ensure_claude_supported(),
-         {:ok, workspace} <- executable_workspace(thread),
+    with {:ok, workspace} <- executable_workspace(thread),
+         :ok <- AgentAvailability.claude_goal_preflight(workspace),
          :ok <-
            ClaudeGoalStore.put(
              workspace,
@@ -226,13 +277,24 @@ defmodule SymphonyElixir.Assistant.AuthoringGoalControl do
     end
   end
 
-  defp with_native(%Thread{} = thread, command) do
-    enabled = History.thread_goal_mode(thread)
-    objective = History.thread_goal_objective(thread)
+  defp require_pause_provider(%Thread{} = thread) do
+    if authoring_agent(thread) == "codex", do: :ok, else: {:error, :unsupported_for_agent}
+  end
 
+  defp with_native(%Thread{} = thread, command) do
     case do_manage(thread, command) do
-      {:ok, goal} -> {:ok, build_payload(enabled, objective, goal), thread}
-      {:error, reason} -> {:error, reason}
+      {:ok, goal} ->
+        with {:ok, updated} <- History.bump_goal_revision(thread) do
+          {:ok,
+           build_payload(
+             History.thread_goal_mode(updated),
+             History.thread_goal_objective(updated),
+             goal
+           ), updated}
+        end
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
@@ -262,10 +324,11 @@ defmodule SymphonyElixir.Assistant.AuthoringGoalControl do
 
   defp do_manage(%Thread{} = thread, command) do
     with {:ok, thread_id} <- require_codex_thread(thread),
-         {:ok, workspace} <- executable_workspace(thread) do
+         {:ok, workspace} <- executable_workspace(thread),
+         {:ok, workspace_root} <- workspace_root(thread, workspace) do
       opts = [
         thread_id: thread_id,
-        workspace_root: Config.workspace_root(),
+        workspace_root: workspace_root,
         codex_config: codex_config(thread.project_slug)
       ]
 
@@ -273,10 +336,25 @@ defmodule SymphonyElixir.Assistant.AuthoringGoalControl do
     end
   end
 
+  defp workspace_root(%Thread{project_slug: project_slug, issue_identifier: identifier}, _workspace)
+       when is_binary(project_slug) and project_slug != "" do
+    {:ok, Workspace.workspace_root_for(%{id: nil, identifier: identifier, project_slug: project_slug})}
+  end
+
+  defp workspace_root(%Thread{}, workspace) when is_binary(workspace) do
+    {:ok, Path.dirname(Path.expand(workspace))}
+  end
+
   defp require_codex_thread(%Thread{} = thread) do
     case codex_thread_id(thread) do
-      id when is_binary(id) and id != "" -> {:ok, id}
-      _ -> {:error, :no_codex_thread}
+      id when is_binary(id) ->
+        case String.trim(id) do
+          "" -> {:error, :no_codex_thread}
+          persisted_id -> {:ok, persisted_id}
+        end
+
+      _ ->
+        {:error, :no_codex_thread}
     end
   end
 
@@ -364,12 +442,6 @@ defmodule SymphonyElixir.Assistant.AuthoringGoalControl do
   defp executable_workspace(%Thread{}),
     do: {:error, {:authoring_goal_unavailable, :workspace_not_executable}}
 
-  defp ensure_claude_supported do
-    if AgentAvailability.claude_goal_supported?(),
-      do: :ok,
-      else: {:error, :claude_goal_unsupported_version}
-  end
-
   defp read_claude_goal(%Thread{id: id} = thread) when is_integer(id) do
     with {:ok, workspace} <- executable_workspace(thread) do
       ClaudeGoalStore.read(workspace, :authoring, id)
@@ -394,14 +466,18 @@ defmodule SymphonyElixir.Assistant.AuthoringGoalControl do
 
   defp build_payload(enabled, objective, goal) do
     source = if is_map(goal) and Map.get(goal, "source") == "claude", do: "claude", else: "native"
-    capabilities = if source == "claude", do: ["get", "edit", "clear"], else: @capabilities
+    capabilities = if source == "claude", do: @claude_capabilities, else: @capabilities
 
     %{
       enabled: enabled,
       objective: objective,
       native: is_map(goal),
       status: payload_status(enabled, goal),
+      provider: if(source == "claude", do: "claude", else: "codex"),
+      source: source,
       capabilities: capabilities,
+      revision: goal_string(goal_value(goal, "revision")),
+      updated_at: goal_string(goal_value(goal, "updated_at")),
       goal: serialize_goal(goal, objective)
     }
   end
@@ -411,7 +487,7 @@ defmodule SymphonyElixir.Assistant.AuthoringGoalControl do
   # front-end `normalizeGoal/1` expects (kind/source/capabilities + camelCase).
   defp serialize_goal(goal, objective_fallback) when is_map(goal) do
     source = if Map.get(goal, "source") == "claude", do: "claude", else: "native"
-    capabilities = if source == "claude", do: ["get", "edit", "clear"], else: @capabilities
+    capabilities = if source == "claude", do: @claude_capabilities, else: @capabilities
 
     %{
       kind: "goal",
@@ -422,7 +498,8 @@ defmodule SymphonyElixir.Assistant.AuthoringGoalControl do
       tokenBudget: goal_number(Map.get(goal, "tokenBudget")),
       tokensUsed: goal_number(Map.get(goal, "tokensUsed")),
       timeUsedSeconds: goal_number(Map.get(goal, "timeUsedSeconds")),
-      updatedAt: nil
+      updatedAt: goal_timestamp(Map.get(goal, "updatedAt") || Map.get(goal, "updated_at")),
+      revision: goal_string(Map.get(goal, "revision"))
     }
   end
 
@@ -433,6 +510,13 @@ defmodule SymphonyElixir.Assistant.AuthoringGoalControl do
 
   defp goal_number(value) when is_number(value), do: value
   defp goal_number(_value), do: nil
+
+  defp goal_timestamp(value) when is_number(value), do: value
+  defp goal_timestamp(value) when is_binary(value) and value != "", do: value
+  defp goal_timestamp(_value), do: nil
+
+  defp goal_value(goal, key) when is_map(goal), do: Map.get(goal, key)
+  defp goal_value(_goal, _key), do: nil
 
   defp payload_status(false, _goal), do: nil
   defp payload_status(true, goal) when is_map(goal), do: normalize_lifecycle_status(Map.get(goal, "status"))

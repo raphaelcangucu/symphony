@@ -178,7 +178,8 @@ defmodule SymphonyElixir.AgentRunnerTest do
             ;;
           *'"method":"turn/start"'*)
             printf '%s\\n' '{"id":3,"result":{"turn":{"id":"turn-runner-goal"}}}'
-            printf '%s\\n' '{"method":"turn/completed","params":{"goal":{"status":"completed"}}}'
+            printf '%s\\n' '{"method":"thread/goal/updated","params":{"threadId":"thread-runner-goal","goal":{"status":"completed"}}}'
+            printf '%s\\n' '{"method":"turn/completed"}'
             exit 0
             ;;
         esac
@@ -260,7 +261,8 @@ defmodule SymphonyElixir.AgentRunnerTest do
             ;;
           *'"method":"turn/start"'*)
             printf '%s\\n' '{"id":3,"result":{"turn":{"id":"turn-runner-issue-goal"}}}'
-            printf '%s\\n' '{"method":"turn/completed","params":{"goal":{"status":"completed"}}}'
+            printf '%s\\n' '{"method":"thread/goal/updated","params":{"threadId":"thread-runner-issue-goal","goal":{"status":"completed"}}}'
+            printf '%s\\n' '{"method":"turn/completed"}'
             exit 0
             ;;
         esac
@@ -351,7 +353,8 @@ defmodule SymphonyElixir.AgentRunnerTest do
             ;;
           *'"method":"turn/start"'*)
             printf '%s\\n' '{"id":3,"result":{"turn":{"id":"turn-runner-goal-budget"}}}'
-            printf '%s\\n' '{"method":"turn/completed","params":{"goal":{"status":"active"}}}'
+            printf '%s\\n' '{"method":"thread/goal/updated","params":{"threadId":"thread-runner-goal-budget","goal":{"status":"active"}}}'
+            printf '%s\\n' '{"method":"turn/completed"}'
             ;;
         esac
       done

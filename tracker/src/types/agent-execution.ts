@@ -26,7 +26,8 @@ export interface AgentExecutionGoal {
   tokenBudget: number | null;
   tokensUsed: number | null;
   timeUsedSeconds: number | null;
-  updatedAt: number | null;
+  updatedAt: number | string | null;
+  revision?: string | null;
 }
 
 export interface AgentExecution {

@@ -167,27 +167,9 @@ function extractIssueIdentifier(value: unknown): string | null {
 
 export function goalModeFromResponse(response: unknown): boolean | null {
   if (!response || typeof response !== "object") return null;
-  const value = (response as Record<string, unknown>).goal_mode;
+  const record = response as Record<string, unknown>;
+  const value = record.goal_mode ?? record.enabled;
   return typeof value === "boolean" ? value : null;
-}
-
-export function goalObjectiveFromResponse(response: unknown): string | null {
-  if (!response || typeof response !== "object") return null;
-  const value = (response as Record<string, unknown>).goal_objective;
-  if (typeof value !== "string") return null;
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-}
-
-export function goalRunningFromResponse(response: unknown): boolean {
-  if (!response || typeof response !== "object") return false;
-  return (response as Record<string, unknown>).goal_running === true;
-}
-
-export function goalRunElapsedFromResponse(response: unknown): number | null {
-  if (!response || typeof response !== "object") return null;
-  const value = (response as Record<string, unknown>).goal_run_elapsed_seconds;
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 export function effectiveAgentFromResponse(response: unknown): AgentKind | null {

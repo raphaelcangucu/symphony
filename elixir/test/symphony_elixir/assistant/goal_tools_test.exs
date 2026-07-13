@@ -99,6 +99,27 @@ defmodule SymphonyElixir.Assistant.GoalToolsTest do
              GoalTools.execute(project.slug, %{"action" => "get", "context" => "execution"})
   end
 
+  test "execution uses the validated bound issue identifier instead of model input", %{
+    project: project,
+    issue: issue
+  } do
+    assert {:ok, result} =
+             GoalTools.execute(
+               project.slug,
+               %{
+                 "identifier" => "WRONG-999",
+                 "action" => "get",
+                 "context" => "execution",
+                 "agent" => "claude"
+               },
+               bound_issue_identifier: issue.identifier
+             )
+
+    assert result.data.identifier == issue.identifier
+    assert result.message =~ issue.identifier
+    refute result.message =~ "WRONG-999"
+  end
+
   test "authoring without identifier targets the exact bound issue session thread", %{
     project: project,
     issue: issue,

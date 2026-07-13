@@ -108,10 +108,9 @@ defmodule SymphonyElixir.Assistant.GoalTools do
 
   defp resolve_context(arguments, opts) do
     default =
-      case Keyword.get(opts, :bound_issue_identifier) do
-        id when is_binary(id) and id != "" -> "authoring"
-        _ -> "execution"
-      end
+      if valid_thread_id?(Keyword.get(opts, :assistant_thread_id)),
+        do: "authoring",
+        else: "execution"
 
     case Map.get(arguments, "context") do
       nil -> {:ok, default}

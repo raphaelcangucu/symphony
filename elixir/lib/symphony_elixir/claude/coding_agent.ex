@@ -10,12 +10,14 @@ defmodule SymphonyElixir.Claude.CodingAgent do
 
   require Logger
 
+  alias SymphonyElixir.AgentAvailability
+  alias SymphonyElixir.Assistant.UserInputBroker
   alias SymphonyElixir.Claude.ApprovalBroker
   alias SymphonyElixir.Claude.AskUserHook
   alias SymphonyElixir.Claude.AppServer.{CliRunner, ToolGateway}
+  alias SymphonyElixir.Claude.Config, as: ClaudeConfig
   alias SymphonyElixir.Claude.GoalControl, as: ClaudeGoal
   alias SymphonyElixir.Claude.GoalStore
-  alias SymphonyElixir.Assistant.UserInputBroker
   alias SymphonyElixir.Config
   alias SymphonyElixir.ExecutionMode
 
@@ -49,7 +51,10 @@ defmodule SymphonyElixir.Claude.CodingAgent do
 
   @impl true
   def start_session(workspace, opts \\ []) do
+    command = ClaudeConfig.resolve_command(opts)
+
     with :ok <- validate_workspace_cwd(workspace, opts),
+         :ok <- maybe_preflight_goal_command(workspace, command, opts),
          {:ok, gateway} <- maybe_register_tools(workspace, opts),
          {:ok, ask_user} <- maybe_install_ask_user_hook(workspace, opts) do
       interactive? = interactive?(opts)
@@ -58,7 +63,7 @@ defmodule SymphonyElixir.Claude.CodingAgent do
        %{
          session_uuid: generate_uuid(),
          workspace: Path.expand(workspace),
-         command: resolve_command(opts),
+         command: command,
          cli_session_id: nil,
          model: Keyword.get(opts, :model),
          effort: Keyword.get(opts, :effort),
@@ -75,15 +80,24 @@ defmodule SymphonyElixir.Claude.CodingAgent do
 
   @impl true
   def run_turn(session, prompt, issue, opts \\ []) do
+    original_prompt = prompt
     on_message = Keyword.get(opts, :on_message, &default_on_message/1)
     turn_id = generate_uuid()
     session_id = "#{session.session_uuid}-#{turn_id}"
     goal_role = Keyword.get(opts, :goal_role, :execution)
     assistant_thread_id = Keyword.get(opts, :assistant_thread_id)
-    native_goal_active = native_goal_active?(session.workspace, goal_role, assistant_thread_id)
+
+    goal_snapshot =
+      case read_goal_snapshot(session.workspace, goal_role, assistant_thread_id) do
+        {:ok, snapshot} -> snapshot
+        {:error, reason} -> throw({:goal_state_read_failed, reason})
+      end
+
+    native_goal_active = native_goal_active?(goal_snapshot)
+    goal_revision = goal_snapshot_revision(goal_snapshot)
 
     {prompt, pending} =
-      case ClaudeGoal.apply_pending_to_prompt(prompt, session.workspace, goal_role, assistant_thread_id) do
+      case ClaudeGoal.apply_snapshot_to_prompt(prompt, goal_snapshot) do
         {:error, reason} -> throw({:goal_injection_failed, reason})
         value -> value
       end
@@ -96,27 +110,38 @@ defmodule SymphonyElixir.Claude.CodingAgent do
 
     case CliRunner.run_turn(turn_args(session, prompt, opts), on_event) do
       {:ok, result} ->
-        finalize_goal_inject(
-          session.workspace,
-          goal_role,
-          assistant_thread_id,
-          pending,
-          native_goal_active,
-          :completed
-        )
+        case finalize_goal_inject(
+               session.workspace,
+               goal_role,
+               assistant_thread_id,
+               pending,
+               native_goal_active,
+               :completed,
+               goal_revision,
+               issue
+             ) do
+          :ok ->
+            emit_message(
+              on_message,
+              :turn_completed,
+              %{payload: %{"usage" => result.usage}, result: result},
+              %{usage: result.usage}
+            )
 
-        emit_message(on_message, :turn_completed, %{payload: %{"usage" => result.usage}, result: result}, %{usage: result.usage})
+            {:ok,
+             %{
+               result: :turn_completed,
+               session_id: session_id,
+               thread_id: session.session_uuid,
+               turn_id: turn_id,
+               cli_session_id: result.cli_session_id,
+               usage: result.usage,
+               cost_usd: result.cost_usd
+             }}
 
-        {:ok,
-         %{
-           result: :turn_completed,
-           session_id: session_id,
-           thread_id: session.session_uuid,
-           turn_id: turn_id,
-           cli_session_id: result.cli_session_id,
-           usage: result.usage,
-           cost_usd: result.cost_usd
-         }}
+          {:error, reason} ->
+            report_turn_error(on_message, session_id, issue, reason)
+        end
 
       {:error, {:resume_session_not_found, stale_id}} when session.cli_session_id != nil ->
         # The persisted backend session no longer exists in claude's local store
@@ -126,35 +151,57 @@ defmodule SymphonyElixir.Claude.CodingAgent do
         # upstream, so the thread self-heals for subsequent turns.
         Logger.warning("Claude resume session #{inspect(stale_id)} not found for #{issue_context(issue)}; retrying with a fresh session")
 
-        _ = ClaudeGoal.requeue_set_if_active(session.workspace, goal_role, assistant_thread_id)
-        run_turn(%{session | cli_session_id: nil}, strip_goal_prefix(prompt, pending), issue, opts)
+        retry_fresh_session(
+          session,
+          original_prompt,
+          issue,
+          opts,
+          goal_role,
+          assistant_thread_id,
+          {:resume_session_not_found, stale_id},
+          on_message,
+          session_id
+        )
 
       {:error, {:turn_failed, "claude exited with code 1"}} when session.cli_session_id != nil ->
         # A resumed Claude session can exit non-zero when the local conversation
         # ended outside Symphony. Retry once as a fresh session before failing.
         Logger.warning("Claude resumed session #{inspect(session.cli_session_id)} exited for #{issue_context(issue)}; retrying with a fresh session")
 
-        _ = ClaudeGoal.requeue_set_if_active(session.workspace, goal_role, assistant_thread_id)
-        run_turn(%{session | cli_session_id: nil}, strip_goal_prefix(prompt, pending), issue, opts)
+        retry_fresh_session(
+          session,
+          original_prompt,
+          issue,
+          opts,
+          goal_role,
+          assistant_thread_id,
+          {:turn_failed, "claude exited with code 1"},
+          on_message,
+          session_id
+        )
 
       {:error, reason} ->
         outcome = if reason == :interrupted, do: :interrupted, else: :failed
 
-        maybe_transition_native_goal(
-          session.workspace,
-          goal_role,
-          assistant_thread_id,
-          pending,
-          native_goal_active,
-          outcome
-        )
+        case maybe_transition_native_goal(
+               session.workspace,
+               goal_role,
+               assistant_thread_id,
+               native_goal_active,
+               outcome,
+               goal_revision
+             ) do
+          :ok ->
+            report_turn_error(on_message, session_id, issue, reason)
 
-        Logger.warning("Claude turn failed for #{issue_context(issue)}: #{inspect(reason)}")
-        emit_message(on_message, :turn_ended_with_error, %{session_id: session_id, reason: reason}, %{})
-        {:error, reason}
+          {:error, transition_error} ->
+            combined_error = {:turn_failed_with_goal_transition_failure, reason, transition_error}
+            report_turn_error(on_message, session_id, issue, combined_error)
+        end
     end
   catch
     {:goal_injection_failed, reason} -> {:error, {:goal_injection_failed, reason}}
+    {:goal_state_read_failed, reason} -> {:error, {:goal_state_read_failed, reason}}
   end
 
   @impl true
@@ -193,19 +240,41 @@ defmodule SymphonyElixir.Claude.CodingAgent do
 
   defp acknowledge_goal_inject(workspace, role, {command, revision} = pending, assistant_thread_id)
        when command in [:set, :clear] and is_binary(revision) do
-    _ = ClaudeGoal.acknowledge_inject(workspace, role, pending, assistant_thread_id)
-    :ok
+    case ClaudeGoal.acknowledge_inject(workspace, role, pending, assistant_thread_id) do
+      :ok -> :ok
+      :stale -> :stale
+      {:error, reason} -> {:error, {:goal_acknowledgement_failed, reason}}
+    end
+  end
+
+  defp finalize_goal_inject(
+         workspace,
+         :execution,
+         assistant_thread_id,
+         {:clear, revision},
+         false,
+         :completed,
+         _goal_revision,
+         issue
+       ) do
+    case ClaudeGoal.acknowledge_clear_and_mirror(workspace, revision, assistant_thread_id, issue) do
+      :ok -> :ok
+      :stale -> :ok
+      {:error, reason} -> {:error, {:goal_tracker_mirror_clear_failed, reason}}
+    end
   end
 
   defp finalize_goal_inject(
          workspace,
          role,
          assistant_thread_id,
-         pending,
+         _pending,
          true,
-         :completed
+         :completed,
+         goal_revision,
+         _issue
        ) do
-    maybe_transition_native_goal(workspace, role, assistant_thread_id, pending, true, :completed)
+    maybe_transition_native_goal(workspace, role, assistant_thread_id, true, :completed, goal_revision)
   end
 
   defp finalize_goal_inject(
@@ -214,75 +283,92 @@ defmodule SymphonyElixir.Claude.CodingAgent do
          assistant_thread_id,
          pending,
          false,
-         :completed
+         :completed,
+         _goal_revision,
+         _issue
        ) do
-    acknowledge_goal_inject(workspace, role, pending, assistant_thread_id)
-  end
-
-  defp native_goal_active?(workspace, role, assistant_thread_id) do
-    case GoalStore.read(workspace, role, assistant_thread_id) do
-      {:ok, %{"status" => status, "pending_command" => pending}}
-      when status in ["active", "starting", "running", "paused", "blocked", "failed"] and
-             pending != "clear" ->
-        true
-
-      _ ->
-        false
+    case acknowledge_goal_inject(workspace, role, pending, assistant_thread_id) do
+      :ok -> :ok
+      :stale -> :ok
+      {:error, reason} -> {:error, reason}
     end
   end
+
+  defp read_goal_snapshot(workspace, role, assistant_thread_id) do
+    case GoalStore.read(workspace, role, assistant_thread_id) do
+      {:ok, snapshot} -> {:ok, snapshot}
+      :error -> {:ok, nil}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp native_goal_active?(%{"status" => status, "pending_command" => pending}),
+    do: GoalStore.active_status?(status) and pending != "clear"
+
+  defp native_goal_active?(_snapshot), do: false
+
+  defp goal_snapshot_revision(%{"revision" => revision}) when is_binary(revision) and revision != "",
+    do: revision
+
+  defp goal_snapshot_revision(_snapshot), do: nil
 
   defp maybe_transition_native_goal(
          workspace,
          role,
          assistant_thread_id,
-         pending,
          true,
-         outcome
+         outcome,
+         goal_revision
        ) do
-    _ =
-      GoalStore.transition_native_run(
-        workspace,
-        role,
-        outcome,
-        assistant_thread_id,
-        pending_revision(pending)
-      )
-
-    :ok
+    case GoalStore.transition_native_run(
+           workspace,
+           role,
+           outcome,
+           assistant_thread_id,
+           goal_revision
+         ) do
+      :ok -> :ok
+      :stale -> :ok
+      {:error, reason} -> {:error, {:goal_lifecycle_transition_failed, reason}}
+    end
   end
 
   defp maybe_transition_native_goal(
          _workspace,
          _role,
          _assistant_thread_id,
-         _pending,
          false,
-         _outcome
+         _outcome,
+         _goal_revision
        ),
        do: :ok
 
-  defp pending_revision({_command, revision}) when is_binary(revision), do: revision
-  defp pending_revision(_pending), do: nil
+  defp retry_fresh_session(
+         session,
+         original_prompt,
+         issue,
+         opts,
+         goal_role,
+         assistant_thread_id,
+         runner_error,
+         on_message,
+         session_id
+       ) do
+    case ClaudeGoal.requeue_set_if_active(session.workspace, goal_role, assistant_thread_id) do
+      :ok ->
+        run_turn(%{session | cli_session_id: nil}, original_prompt, issue, opts)
 
-  defp strip_goal_prefix(prompt, :none), do: prompt
-
-  defp strip_goal_prefix(prompt, :set) do
-    case Regex.run(~r/\A\/goal [^\n]*\n\n([\s\S]*)\z/, prompt) do
-      [_, rest] -> rest
-      _ -> prompt
+      {:error, reason} ->
+        restoration_error = {:goal_restoration_failed, runner_error, reason}
+        report_turn_error(on_message, session_id, issue, restoration_error)
     end
   end
 
-  defp strip_goal_prefix(prompt, :clear) do
-    case String.split(prompt, "/goal clear\n\n", parts: 2) do
-      ["/goal clear\n\n", rest] -> rest
-      [rest] -> rest
-      _ -> prompt
-    end
+  defp report_turn_error(on_message, session_id, issue, reason) do
+    Logger.warning("Claude turn failed for #{issue_context(issue)}: #{inspect(reason)}")
+    emit_message(on_message, :turn_ended_with_error, %{session_id: session_id, reason: reason}, %{})
+    {:error, reason}
   end
-
-  defp strip_goal_prefix(prompt, {command, _revision}) when command in [:set, :clear],
-    do: strip_goal_prefix(prompt, command)
 
   defp turn_args(session, prompt, opts) do
     %{
@@ -508,8 +594,10 @@ defmodule SymphonyElixir.Claude.CodingAgent do
     end
   end
 
-  defp resolve_command(opts) do
-    Keyword.get(opts, :claude_command) || SymphonyElixir.Claude.Config.command()
+  defp maybe_preflight_goal_command(workspace, command, opts) do
+    if Keyword.get(opts, :goal_role) in [:execution, :authoring],
+      do: AgentAvailability.claude_goal_preflight(workspace, command),
+      else: :ok
   end
 
   defp generate_uuid do

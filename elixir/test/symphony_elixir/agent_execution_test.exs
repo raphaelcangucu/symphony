@@ -2,6 +2,7 @@ defmodule SymphonyElixir.AgentExecutionTest do
   use ExUnit.Case, async: false
 
   alias SymphonyElixir.AgentExecution
+  alias SymphonyElixir.Claude.GoalStore
   alias SymphonyElixir.Codex.Session, as: CodexStore
   alias SymphonyElixir.SessionEvents
   alias SymphonyElixir.Workspace
@@ -122,6 +123,38 @@ defmodule SymphonyElixir.AgentExecutionTest do
       assert execution.long_running
       assert execution.long_running_kind == "workflow"
       assert execution.long_running_label == "Pursuing workflow"
+    end
+
+    test "projects a cleared Claude sidecar canonically without resurrecting cached workflow" do
+      identifier = "SYM-CLAUDE-CLEARED"
+      issue_ref = %{identifier: identifier, project_slug: nil}
+      workspace = Workspace.path_for_issue(issue_ref)
+      on_exit(fn -> File.rm_rf(workspace) end)
+
+      assert :ok =
+               GoalStore.put(workspace, :execution, %{
+                 "status" => "running",
+                 "objective" => "Native objective",
+                 "pending_command" => "clear"
+               })
+
+      assert {:ok, %{"revision" => revision}} = GoalStore.read(workspace, :execution)
+      assert :ok = GoalStore.acknowledge_pending(workspace, :execution, :clear, revision, nil)
+
+      entry =
+        running_entry(%{
+          identifier: identifier,
+          agent_kind: "claude",
+          agent_goal: "Stale cached workflow",
+          issue: issue_ref
+        })
+
+      assert [execution] = AgentExecution.from_snapshot(%{running: [entry], retrying: []})
+      assert execution.goal.kind == "goal"
+      assert execution.goal.source == "claude"
+      assert execution.goal.status == "completed"
+      assert execution.goal.objective == nil
+      refute execution.goal.kind == "workflow"
     end
 
     test "Codex running entries ignore the cached agent_goal (Codex thread is the source of truth)" do

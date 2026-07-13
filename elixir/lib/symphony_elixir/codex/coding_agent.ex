@@ -227,7 +227,7 @@ defmodule SymphonyElixir.Codex.CodingAgent do
        ) do
     case run_single_turn(session, prompt, issue, opts, on_message, tool_executor) do
       {:ok, turn_session} ->
-        case next_goal_turn_action(goal_active, turn_session, turn_number, max_goal_turns) do
+        case next_goal_turn_action(goal_active, session, turn_session, turn_number, max_goal_turns) do
           :continue ->
             Logger.info("Continuing Codex goal for #{issue_context(issue)} turn=#{turn_number + 1}/#{max_goal_turns}")
 
@@ -246,10 +246,13 @@ defmodule SymphonyElixir.Codex.CodingAgent do
           :budget_exhausted ->
             Logger.info("Codex goal turn budget exhausted for #{issue_context(issue)} max_goal_turns=#{max_goal_turns}")
 
-            {:ok, Map.put(turn_session, :goal_turns, turn_number)}
+            {:ok, complete_goal_turn(turn_session, turn_number)}
 
           :stop ->
-            {:ok, Map.put(turn_session, :goal_turns, turn_number)}
+            {:ok, complete_goal_turn(turn_session, turn_number)}
+
+          {:error, reason} ->
+            {:error, reason}
         end
 
       {:error, reason} ->
@@ -296,17 +299,19 @@ defmodule SymphonyElixir.Codex.CodingAgent do
           pending: %{},
           interactive_user_input: Keyword.get(opts, :interactive_user_input, false),
           turn_error: nil,
-          agent_message?: false
+          agent_message?: false,
+          latest_goal_update: nil
         }
 
         case await_turn_completion(port, on_message, tool_executor, auto_approve_requests, turn_ctx) do
-          {:ok, completion_payload} ->
+          {:ok, %{completion_payload: completion_payload, goal_update: goal_update}} ->
             Logger.info("Codex session completed for #{issue_context(issue)} session_id=#{session_id}")
 
             {:ok,
              %{
                result: :turn_completed,
                completion_payload: completion_payload,
+               goal_update: goal_update,
                session_id: session_id,
                thread_id: thread_id,
                turn_id: turn_id
@@ -342,13 +347,56 @@ defmodule SymphonyElixir.Codex.CodingAgent do
     end
   end
 
-  defp next_goal_turn_action(false, _turn_session, _turn_number, _max_goal_turns), do: :stop
+  defp next_goal_turn_action(false, _session, _turn_session, _turn_number, _max_goal_turns), do: :stop
 
-  defp next_goal_turn_action(true, %{completion_payload: completion_payload}, turn_number, max_goal_turns) do
-    case goal_status_from_completion(completion_payload) do
-      :active when turn_number < max_goal_turns -> :continue
-      :active -> :budget_exhausted
-      _status -> :stop
+  defp next_goal_turn_action(true, _session, _turn_session, turn_number, max_goal_turns)
+       when turn_number >= max_goal_turns,
+       do: :budget_exhausted
+
+  defp next_goal_turn_action(
+         true,
+         %{port: port, thread_id: thread_id},
+         %{goal_update: goal_update},
+         _turn_number,
+         _max_goal_turns
+       ) do
+    with {:ok, status} <- goal_status_after_turn(port, thread_id, goal_update) do
+      case status do
+        :active -> :continue
+        :terminal -> :stop
+      end
+    end
+  end
+
+  defp complete_goal_turn(turn_session, turn_number) do
+    turn_session
+    |> Map.delete(:goal_update)
+    |> Map.put(:goal_turns, turn_number)
+  end
+
+  defp goal_status_after_turn(port, thread_id, goal_update) do
+    case goal_lifecycle_status(goal_update) do
+      status when status in [:active, :terminal] ->
+        {:ok, status}
+
+      :ambiguous ->
+        authoritative_goal_status(port, thread_id)
+    end
+  end
+
+  defp authoritative_goal_status(port, thread_id) do
+    case request_goal_get(port, thread_id) do
+      {:ok, %{} = goal} ->
+        case goal_lifecycle_status(goal) do
+          status when status in [:active, :terminal] -> {:ok, status}
+          :ambiguous -> {:error, {:goal_status_failed, {:ambiguous_status, goal_status_value(goal)}}}
+        end
+
+      {:ok, nil} ->
+        {:error, {:goal_status_failed, :missing_goal}}
+
+      {:error, reason} ->
+        {:error, {:goal_status_failed, reason}}
     end
   end
 
@@ -435,22 +483,25 @@ defmodule SymphonyElixir.Codex.CodingAgent do
     end
   end
 
-  # Supported Codex completion status shapes for goal continuation.
-  defp goal_status_from_completion(payload) when is_map(payload) do
-    [
-      ["params", "goal", "status"],
-      ["params", "goalStatus"],
-      ["goal", "status"],
-      ["goalStatus"]
-    ]
-    |> Enum.find_value(fn path -> payload |> dig(path) |> normalize_goal_status() end)
-    |> case do
-      nil -> :unknown
-      status -> status
+  defp goal_lifecycle_status(goal) when is_map(goal) do
+    case goal |> goal_status_value() |> normalize_goal_lifecycle_status() do
+      :active -> :active
+      :terminal -> :terminal
+      nil -> :ambiguous
     end
   end
 
-  defp goal_status_from_completion(_payload), do: :unknown
+  defp goal_lifecycle_status(_goal), do: :ambiguous
+
+  defp normalize_goal_lifecycle_status(status) when is_binary(status) do
+    case status |> String.trim() |> String.downcase() do
+      value when value in ["active", "running", "starting"] -> :active
+      value when value in ["paused", "completed", "blocked", "failed", "budgetlimited", "usagelimited"] -> :terminal
+      _other -> nil
+    end
+  end
+
+  defp normalize_goal_lifecycle_status(_status), do: nil
 
   defp normalize_goal_status(status) when is_binary(status) do
     status
@@ -1093,7 +1144,12 @@ defmodule SymphonyElixir.Codex.CodingAgent do
         case turn_completion_result(payload, turn_ctx) do
           {:ok, payload} ->
             emit_turn_event(on_message, :turn_completed, payload, payload_string, port, payload)
-            {:ok, payload}
+
+            {:ok,
+             %{
+               completion_payload: payload,
+               goal_update: Map.get(turn_ctx, :latest_goal_update)
+             }}
 
           {:error, {:turn_failed, reason}} ->
             Logger.warning(
@@ -1391,6 +1447,7 @@ defmodule SymphonyElixir.Codex.CodingAgent do
          turn_ctx
        ) do
     metadata = metadata_from_message(port, payload)
+    turn_ctx = record_goal_update(turn_ctx, method, payload)
 
     case maybe_handle_approval_request(
            port,
@@ -1455,6 +1512,12 @@ defmodule SymphonyElixir.Codex.CodingAgent do
         end
     end
   end
+
+  defp record_goal_update(turn_ctx, "thread/goal/updated", %{"params" => %{"goal" => %{} = goal}}) do
+    Map.put(turn_ctx, :latest_goal_update, goal)
+  end
+
+  defp record_goal_update(turn_ctx, _method, _payload), do: turn_ctx
 
   defp maybe_handle_approval_request(
          port,

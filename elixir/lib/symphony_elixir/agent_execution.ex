@@ -14,6 +14,7 @@ defmodule SymphonyElixir.AgentExecution do
   """
 
   alias SymphonyElixir.AgentRouting
+  alias SymphonyElixir.Claude.GoalStore, as: ClaudeGoalStore
   alias SymphonyElixir.Codex.Session, as: CodexStore
   alias SymphonyElixir.LocalTracker.{Context, IssueMapper}
   alias SymphonyElixir.{Orchestrator, StatusDashboard}
@@ -36,7 +37,6 @@ defmodule SymphonyElixir.AgentExecution do
   @paused_last_event "turn_paused"
   @paused_message "Paused — resume when ready"
   @paused_label "Paused"
-
   @type t :: %{
           issue_id: String.t() | nil,
           issue_identifier: String.t(),
@@ -181,9 +181,14 @@ defmodule SymphonyElixir.AgentExecution do
 
   defp running_execution(entry, now) do
     last_event_at = Map.get(entry, :last_codex_timestamp)
-    goal = execution_goal(entry)
     status = running_status(entry, last_event_at, now)
     interruption = if(status == :idle, do: running_entry_interruption(entry), else: nil)
+
+    goal =
+      entry
+      |> execution_goal()
+      |> with_runtime_stop_capability(status, interruption, Map.get(entry, :agent_kind))
+
     aborted? = interruption == :aborted
 
     %{
@@ -700,6 +705,32 @@ defmodule SymphonyElixir.AgentExecution do
     Map.get(entry, :goal) || fallback_goal(entry)
   end
 
+  defp with_runtime_stop_capability(nil, _status, _interruption, _agent_kind), do: nil
+
+  defp with_runtime_stop_capability(goal, status, interruption, agent_kind) when is_map(goal) do
+    capabilities =
+      goal
+      |> goal_value(:capabilities, [])
+      |> List.wrap()
+      |> Enum.reject(&(&1 == "stop"))
+
+    stoppable? =
+      is_nil(interruption) and
+        status in [:live, :waiting, :idle] and
+        goal_value(goal, :kind) == "goal" and
+        native_goal_provider?(goal_value(goal, :source), agent_kind)
+
+    Map.put(goal, :capabilities, if(stoppable?, do: capabilities ++ ["stop"], else: capabilities))
+  end
+
+  defp native_goal_provider?("native", agent_kind) when agent_kind in [nil, "codex"], do: true
+  defp native_goal_provider?("claude", agent_kind) when agent_kind in [nil, "claude"], do: true
+  defp native_goal_provider?(_source, _agent_kind), do: false
+
+  defp goal_value(goal, key, default \\ nil) when is_map(goal) and is_atom(key) do
+    Map.get(goal, key, Map.get(goal, Atom.to_string(key), default))
+  end
+
   # When the orchestrator has no live native goal for a running entry, project
   # from native Codex data: the workspace goal mirror for Codex, or `agent_goal`
   # workflow guidance for Claude/Cursor.
@@ -711,8 +742,8 @@ defmodule SymphonyElixir.AgentExecution do
 
   # Build a UI-facing goal projection. Codex goals are sourced only from the
   # native goal mirror (`.symphony/codex-session.json`). Claude goals come from
-  # `.symphony/claude-goal.json` when active; otherwise Claude/Cursor fall back
-  # to `agent_goal` prompt guidance as workflow.
+  # `.symphony/claude-goal.json` across their canonical lifecycle; otherwise
+  # Claude/Cursor fall back to `agent_goal` prompt guidance as workflow.
   defp build_goal(agent_kind, status, workflow_objective, workspace) do
     case project_goal(agent_kind, status, workflow_objective, workspace) do
       nil -> nil
@@ -782,12 +813,11 @@ defmodule SymphonyElixir.AgentExecution do
   end
 
   defp claude_mirror_goal(workspace) when is_binary(workspace) do
-    case SymphonyElixir.Claude.GoalStore.read(workspace, :execution) do
-      {:ok, %{"status" => "active", "objective" => objective}} ->
-        case normalize_objective(objective) do
-          nil -> nil
-          value -> %{objective: value, status: "active"}
-        end
+    case ClaudeGoalStore.read(workspace, :execution) do
+      {:ok, %{"status" => status, "objective" => objective}} ->
+        if ClaudeGoalStore.native_goal_exists?(status),
+          do: %{objective: normalize_objective(objective), status: status},
+          else: nil
 
       _ ->
         nil

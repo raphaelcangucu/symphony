@@ -44,7 +44,7 @@ defmodule SymphonyElixir.Claude.AppServer.Server do
   @impl GenServer
   def init(opts) do
     sender = Keyword.fetch!(opts, :sender)
-    command = Keyword.get(opts, :command, SymphonyElixir.Claude.Config.command())
+    command = SymphonyElixir.Claude.Config.resolve_command(opts)
 
     state = %{
       sender: sender,

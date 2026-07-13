@@ -90,6 +90,24 @@ function makeExecution(overrides: Partial<AgentExecution> = {}): AgentExecution 
   };
 }
 
+function makeGoal(
+  overrides: Partial<NonNullable<AgentExecution["goal"]>> = {},
+): NonNullable<AgentExecution["goal"]> {
+  return {
+    kind: "goal",
+    source: "native",
+    objective: "Ship Goal Mode",
+    status: "running",
+    capabilities: ["stop", "pause", "resume", "edit", "clear"],
+    tokenBudget: null,
+    tokensUsed: null,
+    timeUsedSeconds: 42,
+    updatedAt: "2026-07-13T12:00:42Z",
+    revision: "3",
+    ...overrides,
+  };
+}
+
 const interruptedExecution = makeExecution({
   status: "idle",
   lastEvent: "turn_aborted",
@@ -716,7 +734,13 @@ describe("ExecutionControlComposer", () => {
     controlIssueGoalMock.mockResolvedValue({
       action: "set_objective",
       cleared: false,
-      goal: { kind: "goal", source: "native", objective: "ship i18n", status: "pending", capabilities: [] },
+      goal: {
+        ...makeGoal({
+          objective: "ship i18n",
+          status: "starting",
+          capabilities: ["edit", "clear"],
+        }),
+      },
     });
     dispatchIssueAgentMock.mockResolvedValue({
       action: "resume",
@@ -835,13 +859,11 @@ describe("ExecutionControlComposer", () => {
         projectSlug="advising"
         issue={issueWithCachedGoal}
         execution={makeExecution({
-          goal: {
-            kind: "goal",
-            source: "native",
+          goal: makeGoal({
             objective: "native objective",
-            status: "active",
+            status: "running",
             capabilities: [],
-          } as unknown as AgentExecution["goal"],
+          }),
         })}
         onSteer={vi.fn()}
       />,
@@ -849,5 +871,118 @@ describe("ExecutionControlComposer", () => {
 
     expect(screen.getByText("native objective")).toBeInTheDocument();
     expect(screen.queryByText("stale cached objective")).not.toBeInTheDocument();
+  });
+
+  it("uses the shared Goal presentation and keeps a blank objective docked", () => {
+    render(
+      <ExecutionControlComposer
+        projectSlug="advising"
+        issue={issue}
+        execution={makeExecution({
+          goal: makeGoal({ objective: "   ", status: "running" }),
+        })}
+        onSteer={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("region", { name: "Goal" })).toBeInTheDocument();
+    expect(screen.getByText("Codex native")).toBeInTheDocument();
+    expect(screen.getByText("Pursuing goal")).toBeInTheDocument();
+    expect(screen.getByText("No objective provided.")).toBeInTheDocument();
+  });
+
+  it("routes stop, pause, edit, and remove through distinct capability-safe callbacks", async () => {
+    dispatchIssueAgentMock.mockResolvedValue({
+      action: "stop",
+      message: "Stopped",
+      issue,
+    });
+    controlIssueGoalMock.mockResolvedValue({});
+    const user = userEvent.setup();
+
+    render(
+      <ExecutionControlComposer
+        projectSlug="advising"
+        issue={issue}
+        execution={makeExecution({ goal: makeGoal() })}
+        onSteer={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Stop goal process" }));
+    await user.click(screen.getByRole("button", { name: "Pause goal" }));
+    await user.click(screen.getByRole("button", { name: "Edit objective" }));
+    await user.clear(screen.getByPlaceholderText("Describe the goal objective…"));
+    await user.type(screen.getByPlaceholderText("Describe the goal objective…"), "Updated objective");
+    await user.click(screen.getByRole("button", { name: "Save objective" }));
+    await user.click(screen.getByRole("button", { name: "Remove goal" }));
+
+    await waitFor(() =>
+      expect(dispatchIssueAgentMock).toHaveBeenCalledWith(
+        "advising",
+        "CDE-1132",
+        expect.objectContaining({ action: "stop" }),
+      ),
+    );
+    expect(controlIssueGoalMock).toHaveBeenCalledWith("advising", "CDE-1132", {
+      action: "pause",
+    });
+    expect(controlIssueGoalMock).toHaveBeenCalledWith("advising", "CDE-1132", {
+      action: "set_objective",
+      objective: "Updated objective",
+    });
+    expect(controlIssueGoalMock).toHaveBeenCalledWith("advising", "CDE-1132", {
+      action: "clear",
+    });
+  });
+
+  it("resumes the current Claude goal when its snapshot grants resume", async () => {
+    controlIssueGoalMock.mockResolvedValue({});
+    const user = userEvent.setup();
+    render(
+      <ExecutionControlComposer
+        projectSlug="advising"
+        issue={issue}
+        execution={makeExecution({
+          agentKind: "claude",
+          status: "paused",
+          lastEvent: "turn_aborted",
+          goal: makeGoal({
+            source: "claude",
+            status: "paused",
+            capabilities: ["resume"],
+          }),
+        })}
+        onSteer={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Claude Code")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Resume goal" }));
+
+    expect(controlIssueGoalMock).toHaveBeenCalledWith("advising", "CDE-1132", {
+      action: "resume",
+    });
+  });
+
+  it("hides Goal controls for unsupported and Cursor executions even if capabilities are advertised", () => {
+    render(
+      <ExecutionControlComposer
+        projectSlug="advising"
+        issue={{ ...issue, agentKind: "cursor" }}
+        execution={makeExecution({
+          agentKind: "cursor",
+          goal: makeGoal({ source: "prompt" }),
+        })}
+        onSteer={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Unsupported provider")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Stop goal process" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Pause goal" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Resume goal" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Edit objective" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Remove goal" })).not.toBeInTheDocument();
   });
 });

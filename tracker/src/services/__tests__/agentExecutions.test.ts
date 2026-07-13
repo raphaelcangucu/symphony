@@ -16,30 +16,55 @@ describe("normalizeAgentExecution", () => {
     const execution = normalizeAgentExecution({
       issue_identifier: "MAC-1",
       status: "live",
-      agent_kind: "codex",
+      agent_kind: "claude",
       long_running: true,
       long_running_kind: "goal",
       long_running_label: "Pursuing goal",
       goal: {
         kind: "goal",
-        source: "native",
+        source: "claude",
         objective: "Ship the issue",
-        status: "active",
-        capabilities: ["get", "edit", "pause", "resume", "clear"],
+        status: "running",
+        capabilities: ["stop", "edit", "pause", "resume", "clear", "pause", " "],
+        token_budget: 200_000,
+        tokens_used: 12_000,
+        time_used_seconds: 81,
+        updated_at: "2026-07-13T12:01:21Z",
+        revision: "44",
       },
     });
 
-    expect(execution.agentKind).toBe("codex");
+    expect(execution.agentKind).toBe("claude");
     expect(execution.longRunning).toBe(true);
     expect(execution.longRunningKind).toBe("goal");
     expect(execution.longRunningLabel).toBe("Pursuing goal");
     expect(execution.goal).toMatchObject({
       kind: "goal",
-      source: "native",
+      source: "claude",
       objective: "Ship the issue",
-      status: "active",
-      capabilities: ["get", "edit", "pause", "resume", "clear"],
+      status: "running",
+      capabilities: ["stop", "edit", "pause", "resume", "clear"],
+      tokenBudget: 200_000,
+      tokensUsed: 12_000,
+      timeUsedSeconds: 81,
+      updatedAt: "2026-07-13T12:01:21Z",
+      revision: "44",
     });
+  });
+
+  it("rejects noncanonical goal kind or provider source", () => {
+    expect(
+      normalizeAgentExecution({
+        issue_identifier: "MAC-2",
+        goal: { kind: "goal", source: "cursor", status: "running" },
+      }).goal,
+    ).toBeNull();
+    expect(
+      normalizeAgentExecution({
+        issue_identifier: "MAC-3",
+        goal: { kind: "task", source: "native", status: "running" },
+      }).goal,
+    ).toBeNull();
   });
 
   it("normalizes error and aborted statuses", () => {

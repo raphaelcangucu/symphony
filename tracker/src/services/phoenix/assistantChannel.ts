@@ -31,43 +31,121 @@ export interface AssistantChannelHandlers {
   onBtwCompleted?: (payload: { btwId: string; message: string }) => void;
   onBtwError?: (payload: { btwId: string; message: string }) => void;
   onGoalStatus?: (status: AuthoringGoalStatus) => void;
-  onGoalRunning?: (running: boolean) => void;
   onTurnStatus?: (status: AssistantTurnStatus) => void;
   onHistorySynced?: (messages: AssistantChatMessage[]) => void;
   onApprovalRequired?: (request: AssistantApprovalRequest) => void;
 }
 
-/**
- * Normalized authoring-goal status pushed by the channel. `goal` carries the
- * native Codex goal (status + timer) when one exists; `enabled`/`objective`
- * mirror the thread metadata so the pill can render before a turn establishes
- * the native goal.
- */
+/** Complete thread-scoped Goal snapshot from durable state plus live process presence. */
 export interface AuthoringGoalStatus {
+  threadId: number | null;
   enabled: boolean;
   objective: string | null;
   native: boolean;
+  status: string | null;
+  provider: string | null;
+  source: string | null;
+  capabilities: string[];
   goal: AgentExecutionGoal | null;
+  tokenBudget: number | null;
+  tokensUsed: number | null;
+  timeUsedSeconds: number | null;
+  processRunning: boolean;
+  processStartedAt: string | null;
+  processElapsedSeconds: number | null;
+  resumable: boolean;
+  interrupted: boolean;
+  revision: string | null;
+  updatedAt: string | null;
+  requestOrder: number | null;
+  eventOrder: number | null;
+  error: string | null;
   running: boolean;
 }
 
 interface BackendGoalStatusPayload {
+  thread_id?: number | string | null;
+  threadId?: number | string | null;
   enabled?: boolean | null;
   objective?: string | null;
   native?: boolean | null;
+  status?: string | null;
+  provider?: string | null;
+  source?: string | null;
+  capabilities?: unknown;
   goal?: Record<string, unknown> | null;
+  token_budget?: number | null;
+  tokenBudget?: number | null;
+  tokens_used?: number | null;
+  tokensUsed?: number | null;
+  time_used_seconds?: number | null;
+  timeUsedSeconds?: number | null;
+  process_running?: boolean | null;
+  processRunning?: boolean | null;
+  process_started_at?: string | null;
+  processStartedAt?: string | null;
+  process_elapsed_seconds?: number | null;
+  processElapsedSeconds?: number | null;
+  resumable?: boolean | null;
+  interrupted?: boolean | null;
+  revision?: string | null;
+  updated_at?: string | null;
+  updatedAt?: string | null;
+  request_order?: number | null;
+  requestOrder?: number | null;
+  event_order?: number | null;
+  eventOrder?: number | null;
+  error?: string | null;
   running?: boolean | null;
 }
 
 export function normalizeGoalStatus(payload: unknown): AuthoringGoalStatus {
   const data = (payload ?? {}) as BackendGoalStatusPayload;
+  const processRunning = data.processRunning ?? data.process_running ?? data.running;
   return {
+    threadId: normalizeThreadId(data.threadId ?? data.thread_id),
     enabled: data.enabled === true,
     objective: typeof data.objective === "string" && data.objective.trim() !== "" ? data.objective : null,
     native: data.native === true,
+    status: nonEmptyString(data.status),
+    provider: nonEmptyString(data.provider),
+    source: nonEmptyString(data.source),
+    capabilities: normalizeGoalCapabilities(data.capabilities),
     goal: normalizeGoal(data.goal ?? null),
-    running: data.running === true,
+    tokenBudget: finiteNumber(data.tokenBudget ?? data.token_budget),
+    tokensUsed: finiteNumber(data.tokensUsed ?? data.tokens_used),
+    timeUsedSeconds: finiteNumber(data.timeUsedSeconds ?? data.time_used_seconds),
+    processRunning: processRunning === true,
+    processStartedAt: nonEmptyString(data.processStartedAt ?? data.process_started_at),
+    processElapsedSeconds: finiteNumber(data.processElapsedSeconds ?? data.process_elapsed_seconds),
+    resumable: data.resumable === true,
+    interrupted: data.interrupted === true,
+    revision: nonEmptyString(data.revision),
+    updatedAt: nonEmptyString(data.updatedAt ?? data.updated_at),
+    requestOrder: finiteNumber(data.requestOrder ?? data.request_order),
+    eventOrder: finiteNumber(data.eventOrder ?? data.event_order),
+    error: nonEmptyString(data.error),
+    running: processRunning === true,
   };
+}
+
+export function readGoalStatus(joinPayload: unknown): AuthoringGoalStatus | null {
+  const data = (joinPayload ?? {}) as { goal_status?: unknown };
+  return data.goal_status ? normalizeGoalStatus(data.goal_status) : null;
+}
+
+export function shouldAcceptGoalStatus(
+  incoming: AuthoringGoalStatus,
+  current: AuthoringGoalStatus | null,
+): boolean {
+  if (!current) return true;
+  if (current.threadId != null && incoming.threadId !== current.threadId) return false;
+
+  const durableComparison = compareGoalDurableRevision(incoming, current);
+  if (durableComparison === null) return false;
+  if (durableComparison > 0) return true;
+  if (durableComparison < 0) return false;
+  return goalRequestOrder(incoming) > goalRequestOrder(current);
 }
 
 /**
@@ -84,6 +162,7 @@ export interface AssistantActiveTool {
 
 export interface AssistantTurnStatus {
   status: string;
+  generation: string | null;
   sessionId: string | null;
   startedAt: string | null;
   finishedAt: string | null;
@@ -112,6 +191,7 @@ interface BackendActiveToolPayload {
 
 interface BackendTurnStatusPayload {
   status?: string | null;
+  generation?: string | null;
   session_id?: string | null;
   started_at?: string | null;
   finished_at?: string | null;
@@ -124,6 +204,7 @@ export function normalizeTurnStatus(payload: unknown): AssistantTurnStatus {
   const data = (payload ?? {}) as BackendTurnStatusPayload;
   return {
     status: typeof data.status === "string" ? data.status : "unknown",
+    generation: typeof data.generation === "string" ? data.generation : null,
     sessionId: typeof data.session_id === "string" ? data.session_id : null,
     startedAt: typeof data.started_at === "string" ? data.started_at : null,
     finishedAt: typeof data.finished_at === "string" ? data.finished_at : null,
@@ -244,7 +325,19 @@ export function assistantIssueTopic(projectSlug: string, identifier: string): st
   return `assistant:issue:${encodeURIComponent(slug)}:${encodeURIComponent(issueIdentifier)}`;
 }
 
-export function bindAssistantEvents(channel: Channel, handlers: AssistantChannelHandlers): void {
+export type GoalStatusAcceptor = (payload: unknown) => boolean;
+
+export function bindAssistantEvents(channel: Channel, handlers: AssistantChannelHandlers): GoalStatusAcceptor {
+  let latestGoalStatus: AuthoringGoalStatus | null = null;
+
+  const acceptGoalStatus = (payload: unknown) => {
+    const status = normalizeGoalStatus(payload as BackendGoalStatusPayload);
+    if (!shouldAcceptGoalStatus(status, latestGoalStatus)) return false;
+    latestGoalStatus = status;
+    handlers.onGoalStatus?.(status);
+    return true;
+  };
+
   channel.on("history_loaded", (payload) => {
     const data = payload as HistoryLoadedPayload & { last_turn?: unknown };
     const messages = (data.messages ?? []).map(normalizeAssistantChatMessage);
@@ -252,6 +345,12 @@ export function bindAssistantEvents(channel: Channel, handlers: AssistantChannel
 
     const joinedLastTurn = readLastTurn(data);
     if (joinedLastTurn) handlers.onTurnStatus?.(joinedLastTurn);
+
+    const joinedGoalStatus = readGoalStatus(data);
+    if (joinedGoalStatus && shouldAcceptGoalStatus(joinedGoalStatus, latestGoalStatus)) {
+      latestGoalStatus = joinedGoalStatus;
+      handlers.onGoalStatus?.(joinedGoalStatus);
+    }
   });
 
   channel.on("history_synced", (payload) => {
@@ -341,16 +440,18 @@ export function bindAssistantEvents(channel: Channel, handlers: AssistantChannel
   });
 
   channel.on("goal_status", (payload) => {
-    handlers.onGoalStatus?.(normalizeGoalStatus(payload as BackendGoalStatusPayload));
+    acceptGoalStatus(payload);
   });
 
-  channel.on("goal_running", (payload) => {
-    handlers.onGoalRunning?.((payload as { running?: boolean | null }).running === true);
+  channel.on("authoring_goal_changed", (payload) => {
+    acceptGoalStatus(payload);
   });
 
   channel.on("turn_status", (payload) => {
     handlers.onTurnStatus?.(normalizeTurnStatus(payload));
   });
+
+  return acceptGoalStatus;
 }
 
 export function requestGoalStatus(channel: Channel): ReturnType<Channel["push"]> {
@@ -452,6 +553,74 @@ function normalizeApprovalRequest(payload: unknown): AssistantApprovalRequest | 
 
 function nonEmptyString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+function finiteNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function normalizeGoalCapabilities(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+
+  return [
+    ...new Set(
+      value.flatMap((capability) => {
+        if (typeof capability !== "string") return [];
+        const normalized = capability.trim();
+        return normalized ? [normalized] : [];
+      }),
+    ),
+  ];
+}
+
+function compareGoalDurableRevision(
+  incoming: AuthoringGoalStatus,
+  current: AuthoringGoalStatus,
+): -1 | 0 | 1 | null {
+  if (incoming.revision && incoming.revision === current.revision) return 0;
+
+  const incomingNumericRevision = numericRevision(incoming.revision);
+  const currentNumericRevision = numericRevision(current.revision);
+  if (incomingNumericRevision != null && currentNumericRevision != null) {
+    if (incomingNumericRevision > currentNumericRevision) return 1;
+    if (incomingNumericRevision < currentNumericRevision) return -1;
+    return 0;
+  }
+
+  const incomingUpdatedAt = timestampRevision(incoming.updatedAt);
+  const currentUpdatedAt = timestampRevision(current.updatedAt);
+  if (incomingUpdatedAt != null && currentUpdatedAt != null) {
+    if (incomingUpdatedAt > currentUpdatedAt) return 1;
+    if (incomingUpdatedAt < currentUpdatedAt) return -1;
+    return incoming.revision === current.revision ? 0 : null;
+  }
+
+  if (!current.revision && !current.updatedAt) return 1;
+  if (!incoming.revision && !incoming.updatedAt) return -1;
+  return null;
+}
+
+function numericRevision(value: string | null): bigint | null {
+  if (!value || !/^\d+$/.test(value)) return null;
+  try {
+    return BigInt(value);
+  } catch {
+    return null;
+  }
+}
+
+function timestampRevision(value: string | null): bigint | null {
+  if (!value) return null;
+  const milliseconds = Date.parse(value);
+  if (!Number.isFinite(milliseconds)) return null;
+
+  const fractionalDigits = value.match(/\.(\d+)/)?.[1] ?? "";
+  const subMillisecondMicros = fractionalDigits.padEnd(6, "0").slice(3, 6);
+  return BigInt(milliseconds) * 1_000n + BigInt(subMillisecondMicros || "0");
+}
+
+function goalRequestOrder(status: AuthoringGoalStatus): number {
+  return status.requestOrder ?? status.eventOrder ?? -1;
 }
 
 function normalizeApprovalAgent(value: unknown): AgentKind | null {

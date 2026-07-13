@@ -2,8 +2,10 @@ defmodule SymphonyElixir.PromptBuilderTest do
   use SymphonyElixir.TestSupport
 
   alias SymphonyElixir.LocalTracker.{Context, ProjectSetup}
+  alias SymphonyElixir.Claude.GoalStore
   alias SymphonyElixir.ProjectConfig
   alias SymphonyElixir.Repo
+  alias SymphonyElixir.Workspace
 
   @default_prompt "Ticket {{ issue.identifier }}"
 
@@ -283,6 +285,33 @@ defmodule SymphonyElixir.PromptBuilderTest do
     prompt = PromptBuilder.build_prompt(issue, agent_kind: "claude")
 
     refute prompt =~ "## Long-running workflow"
+  end
+
+  test "completed Claude sidecar prevents cleared workflow resurrection" do
+    issue = %Issue{
+      identifier: "MAC-9",
+      project_slug: "mac",
+      title: "T",
+      description: "d",
+      state: "In Progress",
+      agent_goal: "Stale cached workflow objective"
+    }
+
+    workspace = Workspace.path_for_issue(issue)
+    File.mkdir_p!(workspace)
+    on_exit(fn -> File.rm_rf!(workspace) end)
+
+    assert :ok =
+             GoalStore.put(workspace, :execution, %{
+               "status" => "completed",
+               "objective" => "Completed native objective",
+               "pending_command" => nil
+             })
+
+    prompt = PromptBuilder.build_prompt(issue, agent_kind: "claude")
+
+    refute prompt =~ "## Long-running workflow"
+    refute prompt =~ "Stale cached workflow objective"
   end
 
   test "builds the prompt from the issue's project template" do

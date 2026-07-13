@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import json
+import os
 import sys
 
 
@@ -22,6 +23,30 @@ for line in sys.stdin:
         continue
     elif method == "thread/start":
         write({"id": request_id, "result": {"thread": {"id": "thread-1"}}})
+    elif method == "thread/resume":
+        write({"id": request_id, "result": {"thread": {"id": message.get("params", {}).get("threadId", "thread-1")}}})
+    elif method == "thread/goal/get":
+        write({"id": request_id, "result": {"goal": None}})
+    elif method == "thread/goal/set":
+        if os.getenv("FAKE_CODEX_GOAL_SET_ERROR") == "1":
+            write({"id": request_id, "error": {"code": -32603, "message": "goal set failed"}})
+        else:
+            params = message.get("params", {})
+            write(
+                {
+                    "id": request_id,
+                    "result": {
+                        "goal": {
+                            "threadId": params.get("threadId"),
+                            "objective": params.get("objective"),
+                            "status": params.get("status", "active"),
+                            "tokenBudget": params.get("tokenBudget"),
+                            "tokensUsed": 0,
+                            "timeUsedSeconds": 0,
+                        }
+                    },
+                }
+            )
     elif method == "turn/start":
         write({"id": request_id, "result": {"turn": {"id": "turn-1"}}})
         print(
@@ -30,5 +55,13 @@ for line in sys.stdin:
             flush=True,
         )
         write({"method": "item/agentMessage/delta", "params": {"delta": "ok"}})
-        write({"method": "turn/completed", "params": {"usage": {"input_tokens": 1, "output_tokens": 1}}})
+        completed_params = {"usage": {"input_tokens": 1, "output_tokens": 1}}
+        if os.getenv("FAKE_CODEX_GOAL_EVENT") == "1":
+            completed_params["goal"] = {
+                "objective": "Audit",
+                "status": "active",
+                "tokensUsed": 12,
+                "timeUsedSeconds": 7,
+            }
+        write({"method": "turn/completed", "params": completed_params})
         break

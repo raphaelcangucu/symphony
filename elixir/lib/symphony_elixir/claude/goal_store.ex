@@ -3,11 +3,27 @@ defmodule SymphonyElixir.Claude.GoalStore do
 
   @execution_file ".symphony/claude-goal.json"
   @max_objective_bytes 4000
-  @active_statuses ["active", "starting", "running", "paused", "blocked", "failed"]
+  @active_statuses ["starting", "running", "paused", "blocked", "failed"]
   @terminal_statuses ["completed", "budgetLimited", "usageLimited"]
-  @stored_statuses @active_statuses ++ @terminal_statuses ++ ["cleared", "achieved"]
+  @stored_statuses @active_statuses ++ @terminal_statuses
 
   @type role :: :execution | :authoring
+
+  @doc "Returns whether a status belongs to the durable Claude goal lifecycle."
+  @spec canonical_status?(term()) :: boolean()
+  def canonical_status?(status), do: status in @stored_statuses
+
+  @doc "Returns whether a canonical status represents a persisted native goal."
+  @spec native_goal_exists?(term()) :: boolean()
+  def native_goal_exists?(status), do: canonical_status?(status)
+
+  @doc "Returns whether a native goal can continue or be retried."
+  @spec active_status?(term()) :: boolean()
+  def active_status?(status), do: status in @active_statuses
+
+  @doc "Returns whether a native goal reached a terminal lifecycle state."
+  @spec terminal_status?(term()) :: boolean()
+  def terminal_status?(status), do: status in @terminal_statuses
 
   @spec path(Path.t(), role()) :: Path.t()
   def path(workspace, :execution) when is_binary(workspace), do: Path.join(workspace, @execution_file)
@@ -82,7 +98,7 @@ defmodule SymphonyElixir.Claude.GoalStore do
   end
 
   @spec acknowledge_pending(Path.t(), role(), :set | :clear, String.t(), integer() | nil) ::
-          :ok | {:error, term()}
+          :ok | :stale | {:error, term()}
   def acknowledge_pending(workspace, role, expected_command, expected_revision, assistant_thread_id)
       when is_binary(workspace) and expected_command in [:set, :clear] and is_binary(expected_revision) do
     expected = Atom.to_string(expected_command)
@@ -93,10 +109,56 @@ defmodule SymphonyElixir.Claude.GoalStore do
           acknowledge_matching(workspace, role, expected_command, assistant_thread_id)
 
         {:ok, _newer_goal} ->
-          :ok
+          :stale
 
         :error ->
-          :ok
+          :stale
+
+        {:error, reason} ->
+          {:error, reason}
+      end
+    end)
+  end
+
+  @doc "Acknowledges a clear while serializing its external mirror mutation."
+  @spec acknowledge_clear_with_mirror(
+          Path.t(),
+          role(),
+          String.t(),
+          integer() | nil,
+          (-> :ok | {:error, term()}),
+          (map() -> :ok | {:error, term()})
+        ) :: :ok | :stale | {:error, term()}
+  def acknowledge_clear_with_mirror(
+        workspace,
+        role,
+        expected_revision,
+        assistant_thread_id,
+        clear_mirror,
+        restore_mirror
+      )
+      when is_binary(workspace) and role in [:execution, :authoring] and
+             is_binary(expected_revision) and expected_revision != "" and
+             is_function(clear_mirror, 0) and is_function(restore_mirror, 1) do
+    locked(workspace, role, assistant_thread_id, fn ->
+      case read_unlocked(workspace, role, assistant_thread_id) do
+        {:ok, %{"pending_command" => "clear", "revision" => ^expected_revision} = clear_goal} ->
+          with :ok <- clear_mirror.() do
+            finalize_locked_clear(
+              workspace,
+              role,
+              expected_revision,
+              assistant_thread_id,
+              clear_goal,
+              restore_mirror
+            )
+          end
+
+        {:ok, _newer_goal} ->
+          :stale
+
+        :error ->
+          :stale
 
         {:error, reason} ->
           {:error, reason}
@@ -126,12 +188,12 @@ defmodule SymphonyElixir.Claude.GoalStore do
   def requeue_set_if_active(workspace, role, assistant_thread_id) when is_binary(workspace) do
     locked(workspace, role, assistant_thread_id, fn ->
       case read_unlocked(workspace, role, assistant_thread_id) do
-        {:ok, %{"status" => status, "objective" => objective} = goal}
-        when status in @active_statuses and is_binary(objective) and objective != "" ->
-          write_goal(workspace, role, stamp(Map.put(goal, "pending_command", "set")), assistant_thread_id)
-
-        {:ok, _goal} ->
-          :ok
+        {:ok, %{"status" => status, "objective" => objective, "pending_command" => pending} = goal} ->
+          if active_status?(status) and pending != "clear" and is_binary(objective) and objective != "" do
+            write_goal(workspace, role, stamp(Map.put(goal, "pending_command", "set")), assistant_thread_id)
+          else
+            :ok
+          end
 
         :error ->
           :ok
@@ -163,28 +225,25 @@ defmodule SymphonyElixir.Claude.GoalStore do
 
   @doc "Persists the provider-owned result of one native Claude Goal invocation."
   @spec transition_native_run(Path.t(), role(), :completed | :interrupted | :failed, integer() | nil) ::
-          :ok | {:error, term()}
-  def transition_native_run(workspace, role, outcome, assistant_thread_id)
-      when is_binary(workspace) and role in [:execution, :authoring] and
-             outcome in [:completed, :interrupted, :failed] do
-    transition_native_run(workspace, role, outcome, assistant_thread_id, nil)
-  end
+          {:error, :goal_revision_required}
+  def transition_native_run(_workspace, _role, _outcome, _assistant_thread_id),
+    do: {:error, :goal_revision_required}
 
   @spec transition_native_run(
           Path.t(),
           role(),
           :completed | :interrupted | :failed,
           integer() | nil,
-          String.t() | nil
-        ) :: :ok | {:error, term()}
+          String.t()
+        ) :: :ok | :stale | {:error, term()}
   def transition_native_run(workspace, role, outcome, assistant_thread_id, expected_revision)
       when is_binary(workspace) and role in [:execution, :authoring] and
              outcome in [:completed, :interrupted, :failed] and
-             (is_nil(expected_revision) or is_binary(expected_revision)) do
+             is_binary(expected_revision) and expected_revision != "" do
     locked(workspace, role, assistant_thread_id, fn ->
       case read_unlocked(workspace, role, assistant_thread_id) do
-        {:ok, %{"revision" => revision}} when is_binary(expected_revision) and revision != expected_revision ->
-          :ok
+        {:ok, %{"revision" => revision}} when revision != expected_revision ->
+          :stale
 
         {:ok, %{"objective" => objective} = goal} when is_binary(objective) and objective != "" ->
           next =
@@ -196,10 +255,10 @@ defmodule SymphonyElixir.Claude.GoalStore do
           write_goal(workspace, role, next, assistant_thread_id)
 
         {:ok, _goal} ->
-          :ok
+          :stale
 
         :error ->
-          :ok
+          :stale
 
         {:error, reason} ->
           {:error, reason}
@@ -212,8 +271,9 @@ defmodule SymphonyElixir.Claude.GoalStore do
     File.mkdir_p!(Path.dirname(file))
 
     temp = file <> ".tmp-#{System.unique_integer([:positive, :monotonic])}"
+    canonical_goal = canonicalize_goal_status(goal)
 
-    with :ok <- File.write(temp, Jason.encode!(%{"goal" => goal}), [:binary]),
+    with :ok <- File.write(temp, Jason.encode!(%{"goal" => canonical_goal}), [:binary]),
          :ok <- File.rename(temp, file) do
       :ok
     else
@@ -241,13 +301,43 @@ defmodule SymphonyElixir.Claude.GoalStore do
       workspace,
       role,
       stamp(%{
-        "status" => "cleared",
+        "status" => "completed",
         "objective" => nil,
         "pending_command" => nil,
         "cli_session_id" => nil
       }),
       assistant_thread_id
     )
+  end
+
+  defp finalize_locked_clear(
+         workspace,
+         role,
+         expected_revision,
+         assistant_thread_id,
+         clear_goal,
+         restore_mirror
+       ) do
+    case read_unlocked(workspace, role, assistant_thread_id) do
+      {:ok, %{"pending_command" => "clear", "revision" => ^expected_revision}} ->
+        acknowledge_matching(workspace, role, :clear, assistant_thread_id)
+
+      {:ok, newer_goal} ->
+        restore_mirror_after_clear(restore_mirror, newer_goal, :stale)
+
+      :error ->
+        :stale
+
+      {:error, reason} ->
+        restore_mirror_after_clear(restore_mirror, clear_goal, {:error, reason})
+    end
+  end
+
+  defp restore_mirror_after_clear(restore_mirror, goal, result) do
+    case restore_mirror.(goal) do
+      :ok -> result
+      {:error, reason} -> {:error, {:goal_mirror_restore_failed, reason}}
+    end
   end
 
   defp locked(workspace, role, assistant_thread_id, operation) when is_function(operation, 0) do
@@ -262,7 +352,8 @@ defmodule SymphonyElixir.Claude.GoalStore do
 
   defp validate_attrs(attrs) when is_map(attrs) do
     objective = attr(attrs, "objective")
-    status = attr(attrs, "status") || "active"
+    status = attrs |> attr("status") |> canonical_status()
+    status = status || "running"
     pending = attr(attrs, "pending_command")
     cli_session_id = attr(attrs, "cli_session_id")
 
@@ -276,7 +367,7 @@ defmodule SymphonyElixir.Claude.GoalStore do
       byte_size(String.trim(objective)) > @max_objective_bytes ->
         {:error, :objective_too_long}
 
-      status not in @stored_statuses ->
+      not canonical_status?(status) ->
         {:error, :invalid_status}
 
       pending not in [nil, "set", "clear"] ->
@@ -300,7 +391,7 @@ defmodule SymphonyElixir.Claude.GoalStore do
 
   defp normalize(goal) when is_map(goal) do
     %{
-      "status" => Map.get(goal, "status"),
+      "status" => goal |> Map.get("status") |> canonical_status(),
       "objective" => Map.get(goal, "objective"),
       "pending_command" => Map.get(goal, "pending_command"),
       "updated_at" => Map.get(goal, "updated_at"),
@@ -316,20 +407,19 @@ defmodule SymphonyElixir.Claude.GoalStore do
          "revision" => revision
        }) do
     cond do
-      status not in @stored_statuses ->
+      not canonical_status?(status) ->
         {:error, :invalid_goal_store}
 
       pending not in [nil, "set", "clear"] ->
         {:error, :invalid_goal_store}
 
-      pending in ["set", "clear"] and
-          (not is_binary(revision) or revision == "" or not is_binary(objective) or objective == "") ->
+      not is_binary(revision) or revision == "" ->
         {:error, :invalid_goal_store}
 
-      status in @active_statuses and pending == nil and (not is_binary(objective) or objective == "") ->
+      pending in ["set", "clear"] and (not is_binary(objective) or objective == "") ->
         {:error, :invalid_goal_store}
 
-      status == "cleared" and not is_nil(objective) ->
+      active_status?(status) and pending == nil and (not is_binary(objective) or objective == "") ->
         {:error, :invalid_goal_store}
 
       true ->
@@ -343,4 +433,13 @@ defmodule SymphonyElixir.Claude.GoalStore do
 
   defp lifecycle_pending(:completed), do: nil
   defp lifecycle_pending(outcome) when outcome in [:interrupted, :failed], do: "set"
+
+  defp canonicalize_goal_status(goal) when is_map(goal) do
+    Map.update(goal, "status", nil, &canonical_status/1)
+  end
+
+  defp canonical_status("active"), do: "running"
+  defp canonical_status("achieved"), do: "completed"
+  defp canonical_status("cleared"), do: "completed"
+  defp canonical_status(status), do: status
 end

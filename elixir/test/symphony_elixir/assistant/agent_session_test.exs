@@ -26,7 +26,7 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
       File.rm_rf!(tmp_dir)
     end)
 
-    %{workspace_root: tmp_dir}
+    %{workspace_root: tmp_dir, workflow_file: workflow_file}
   end
 
   test "runs the exact project thread and persists a runner reply", %{workspace_root: workspace_root} do
@@ -159,8 +159,14 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
   end
 
   test "each persistent scope binds its exact thread into the goal ToolExecutor", %{
-    workspace_root: workspace_root
+    workspace_root: workspace_root,
+    workflow_file: workflow_file
   } do
+    workflow_file
+    |> File.read!()
+    |> String.replace("codex:\n", "codex:\n  goals_enabled: true\n", global: false)
+    |> then(&File.write!(workflow_file, &1))
+
     {:ok, project} = Context.ensure_project(%{name: "Routing", slug: "goal-routing"})
     {:ok, issue_one} = Context.create_issue(project.slug, %{"title" => "One", "status" => "Todo"})
     {:ok, issue_two} = Context.create_issue(project.slug, %{"title" => "Two", "status" => "Todo"})
@@ -676,6 +682,7 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
 
     test "authoring goal injects an authoring (not dispatch) goal section with the objective",
          %{thread: thread} do
+      {:ok, thread} = History.set_thread_agent(thread, "codex")
       {:ok, thread} = History.set_goal_mode(thread, true, "Audit the auth module")
       test_pid = self()
 
