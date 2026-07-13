@@ -44,6 +44,97 @@ defmodule SymphonyElixir.Assistant.TurnManagerTest do
     assert History.current_turn(done)["session_id"] == "ct-tn"
   end
 
+  test "slow goal mutation on one thread does not block another thread", %{thread: thread_a} do
+    {:ok, thread_b} =
+      History.create_project_session_thread("mgr", %{workspace_path: "/tmp/assistant/mgr-b"})
+
+    test_pid = self()
+
+    slow =
+      Task.async(fn ->
+        TurnManager.goal_mutation(thread_a.id, false, fn ->
+          send(test_pid, {:slow_mutation_started, self()})
+          receive do: (:release -> :ok)
+        end)
+      end)
+
+    assert_receive {:slow_mutation_started, slow_worker}
+
+    assert :fast =
+             TurnManager.goal_mutation(thread_b.id, false, fn -> :fast end)
+
+    send(slow_worker, :release)
+    assert :ok = Task.await(slow)
+  end
+
+  test "goal mutations for one thread execute in submission order", %{thread: thread} do
+    test_pid = self()
+
+    first =
+      Task.async(fn ->
+        TurnManager.goal_mutation(thread.id, false, fn ->
+          send(test_pid, {:mutation_started, :first, self()})
+          receive do: (:release -> send(test_pid, {:mutation_applied, :first}))
+          :first
+        end)
+      end)
+
+    assert_receive {:mutation_started, :first, first_worker}
+
+    second =
+      Task.async(fn ->
+        TurnManager.goal_mutation(thread.id, false, fn ->
+          send(test_pid, {:mutation_applied, :second})
+          :second
+        end)
+      end)
+
+    refute_receive {:mutation_applied, :second}, 100
+    send(first_worker, :release)
+    assert_receive {:mutation_applied, :first}
+    assert_receive {:mutation_applied, :second}
+    assert :first = Task.await(first)
+    assert :second = Task.await(second)
+  end
+
+  test "hard mutation worker crash advances the queued mutation", %{thread: thread} do
+    crashing =
+      Task.async(fn ->
+        TurnManager.goal_mutation(thread.id, false, fn -> Process.exit(self(), :kill) end)
+      end)
+
+    queued = Task.async(fn -> TurnManager.goal_mutation(thread.id, false, fn -> :advanced end) end)
+
+    assert {:error, {:goal_mutation_crashed, :killed}} = Task.await(crashing)
+    assert :advanced = Task.await(queued)
+  end
+
+  test "enqueue waits behind an active goal mutation", %{thread: thread} do
+    test_pid = self()
+
+    mutation =
+      Task.async(fn ->
+        TurnManager.goal_mutation(thread.id, false, fn ->
+          send(test_pid, {:mutation_worker, self()})
+          receive do: (:release -> :ok)
+        end)
+      end)
+
+    assert_receive {:mutation_worker, worker}
+
+    TurnManager.enqueue(thread.id, "queued",
+      run: fn ->
+        send(test_pid, :queued_turn_started)
+        {:ok, %{assistant_message: "done", tool_calls: []}}
+      end
+    )
+
+    refute_receive :queued_turn_started, 100
+    send(worker, :release)
+    assert :ok = Task.await(mutation)
+    assert_receive :queued_turn_started
+  end
+
   test "a second start_turn while running returns :turn_in_progress", %{thread: thread} do
     test_pid = self()
 

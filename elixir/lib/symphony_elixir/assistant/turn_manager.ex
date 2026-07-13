@@ -110,6 +110,12 @@ defmodule SymphonyElixir.Assistant.TurnManager do
   @spec running?(integer()) :: boolean()
   def running?(thread_id) when is_integer(thread_id), do: lookup(thread_id) != nil
 
+  @spec goal_mutation(integer(), boolean(), (-> term())) :: term()
+  def goal_mutation(thread_id, allow_running, operation)
+      when is_integer(thread_id) and is_boolean(allow_running) and is_function(operation, 0) do
+    GenServer.call(__MODULE__, {:goal_mutation, thread_id, allow_running, operation}, :infinity)
+  end
+
   @doc "Whole seconds the current turn has been running (from thread metadata), or nil."
   @spec elapsed_seconds(integer()) :: non_neg_integer() | nil
   def elapsed_seconds(thread_id) when is_integer(thread_id) do
@@ -148,8 +154,17 @@ defmodule SymphonyElixir.Assistant.TurnManager do
   end
 
   @impl true
+  def handle_call({:goal_mutation, thread_id, allow_running, operation}, from, state) do
+    if not allow_running and running?(thread_id) do
+      {:reply, {:error, :assistant_busy}, state}
+    else
+      request = %{from: from, operation: operation}
+      {:noreply, enqueue_goal_mutation(state, thread_id, request)}
+    end
+  end
+
   def handle_call({:start_turn, thread_id, prompt, opts}, _from, state) do
-    if running?(thread_id) do
+    if running?(thread_id) or Map.has_key?(state, {:goal_mutation, thread_id}) do
       {:reply, {:error, :turn_in_progress}, state}
     else
       do_start_turn(thread_id, prompt, opts, state)
@@ -222,7 +237,7 @@ defmodule SymphonyElixir.Assistant.TurnManager do
   end
 
   def handle_cast({:enqueue, thread_id, prompt, opts}, state) do
-    if Map.has_key?(state, {:turn, thread_id}) do
+    if Map.has_key?(state, {:turn, thread_id}) or Map.has_key?(state, {:goal_mutation, thread_id}) do
       queued = Map.get(state, {:queue, thread_id}, [])
       {:noreply, Map.put(state, {:queue, thread_id}, queued ++ [%{prompt: prompt, opts: opts}])}
     else
@@ -234,7 +249,35 @@ defmodule SymphonyElixir.Assistant.TurnManager do
   end
 
   @impl true
+  def handle_info({:goal_mutation_done, thread_id, result}, state) do
+    case Map.get(state, {:goal_mutation, thread_id}) do
+      %{current: %{from: from}, queue: queue} ->
+        mutation = Map.fetch!(state, {:goal_mutation, thread_id})
+        Process.demonitor(mutation.monitor_ref, [:flush])
+        GenServer.reply(from, result)
+        state = start_next_goal_mutation(state, thread_id, queue)
+        {:noreply, maybe_drain_after_goal_mutation(thread_id, state)}
+
+      _ ->
+        {:noreply, state}
+    end
+  end
+
   def handle_info({:DOWN, ref, :process, _pid, reason}, state) do
+    case find_goal_mutation_by_ref(state, ref) do
+      {thread_id, %{current: %{from: from}, queue: queue}} ->
+        GenServer.reply(from, {:error, {:goal_mutation_crashed, reason}})
+        state = start_next_goal_mutation(state, thread_id, queue)
+        {:noreply, maybe_drain_after_goal_mutation(thread_id, state)}
+
+      nil ->
+        handle_turn_down(ref, reason, state)
+    end
+  end
+
+  def handle_info(_msg, state), do: {:noreply, state}
+
+  defp handle_turn_down(ref, reason, state) do
     case find_turn_by_ref(state, ref) do
       {thread_id, entry} ->
         maybe_interrupt_running(thread_id, reason)
@@ -250,9 +293,56 @@ defmodule SymphonyElixir.Assistant.TurnManager do
     end
   end
 
-  def handle_info(_msg, state), do: {:noreply, state}
-
   # --- internals -------------------------------------------------------------
+
+  defp enqueue_goal_mutation(state, thread_id, request) do
+    case Map.get(state, {:goal_mutation, thread_id}) do
+      nil -> start_next_goal_mutation(state, thread_id, [request])
+      mutation -> Map.put(state, {:goal_mutation, thread_id}, %{mutation | queue: mutation.queue ++ [request]})
+    end
+  end
+
+  defp start_next_goal_mutation(state, thread_id, []) do
+    Map.delete(state, {:goal_mutation, thread_id})
+  end
+
+  defp start_next_goal_mutation(state, thread_id, [request | rest]) do
+    manager = self()
+
+    {:ok, pid} =
+      Task.start(fn ->
+        result =
+          try do
+            request.operation.()
+          rescue
+            error -> {:error, {:goal_mutation_failed, Exception.message(error)}}
+          catch
+            kind, reason -> {:error, {:goal_mutation_failed, {kind, reason}}}
+          end
+
+        send(manager, {:goal_mutation_done, thread_id, result})
+      end)
+
+    Map.put(state, {:goal_mutation, thread_id}, %{
+      current: request,
+      queue: rest,
+      worker: pid,
+      monitor_ref: Process.monitor(pid)
+    })
+  end
+
+  defp maybe_drain_after_goal_mutation(thread_id, state) do
+    if Map.has_key?(state, {:goal_mutation, thread_id}),
+      do: state,
+      else: drain_queue(thread_id, state)
+  end
+
+  defp find_goal_mutation_by_ref(state, ref) do
+    Enum.find_value(state, fn
+      {{:goal_mutation, thread_id}, %{monitor_ref: ^ref} = mutation} -> {thread_id, mutation}
+      _ -> nil
+    end)
+  end
 
   defp do_start_turn(thread_id, prompt, opts, state) do
     run = Keyword.get(opts, :run)

@@ -580,7 +580,7 @@ export function ExecutionControlComposer({
               <ExecutionModeMenu
                 agent={agent}
                 mode={mode}
-                disabled={controlsDisabled || agentRunActive}
+                disabled={controlsDisabled}
                 onChange={setMode}
               />
               <Button

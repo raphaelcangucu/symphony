@@ -488,10 +488,10 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     fn tool, arguments ->
       name = to_string(tool)
 
-      if name in @dynamic_tools do
-        DynamicTool.execute(name, arguments, opts)
-      else
-        tracker.(tool, arguments)
+      cond do
+        name == "goal" -> tracker.(tool, arguments)
+        name in @dynamic_tools -> DynamicTool.execute(name, arguments, opts)
+        true -> tracker.(tool, arguments)
       end
     end
   end
@@ -505,10 +505,10 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     fn tool, arguments ->
       name = to_string(tool)
 
-      if name in @dynamic_tools do
-        DynamicTool.execute(name, arguments, opts)
-      else
-        tracker.(tool, arguments)
+      cond do
+        name == "goal" -> tracker.(tool, arguments)
+        name in @dynamic_tools -> DynamicTool.execute(name, arguments, opts)
+        true -> tracker.(tool, arguments)
       end
     end
   end
@@ -527,6 +527,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
        ProjectBoardTools.tool_specs() ++
        GitHubTools.tool_specs() ++
        read_specs ++
+       [GoalTools.assistant_tool_spec()] ++
        DynamicTool.tool_specs())
     |> ToolText.localize_specs()
   end
@@ -538,6 +539,9 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
       arguments = if is_map(arguments), do: stringify_keys(arguments), else: %{}
 
       cond do
+        name == "goal" ->
+          wrap_for_codex(GoalTools.execute(nil, arguments, opts))
+
         name in @dynamic_tools ->
           DynamicTool.execute(name, arguments, opts)
 
@@ -1762,6 +1766,18 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
       {:error, %Ecto.Changeset{} = changeset} -> {:error, {:invalid_changeset, changeset}}
       {:error, reason} -> {:error, reason}
     end
+  end
+
+  defp goal_tool_error({:authoring_goal_unavailable, :workspace_not_executable}) do
+    "Authoring Goal Mode requires this assistant thread to have an existing executable workspace. Reopen the session with a persisted workspace and retry."
+  end
+
+  defp goal_tool_error({:authoring_goal_unavailable, {:unsupported_agent, agent}}) do
+    "Authoring Goal Mode requires a native Codex or Claude provider; the current thread uses #{inspect(agent)}."
+  end
+
+  defp goal_tool_error({:authoring_goal_unavailable, :claude_goal_unsupported_version}) do
+    "Authoring Goal Mode requires a Claude Code version with native /goal support. Upgrade Claude Code and retry."
   end
 
   defp goal_tool_error(reason) when is_binary(reason), do: reason

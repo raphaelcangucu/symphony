@@ -222,9 +222,9 @@ defmodule SymphonyElixir.Assistant.History do
   end
 
   @doc """
-  Persists whether the Authoring (chat) goal is enabled for an issue authoring thread.
+  Persists whether the Authoring (chat) goal is enabled for an assistant thread.
 
-  This is the tab-scoped Authoring goal: when enabled, the issue assistant runs Codex native
+  This is the thread-scoped Authoring goal: when enabled, the assistant runs native
   goal mode directly inside this conversation (no orchestrator dispatch, no issue status change).
   The flag lives in the thread metadata map alongside `mode` (no migration). It is independent
   from the Execution goal, which lives on the issue (`agent_goal`) and runs via the orchestrator.

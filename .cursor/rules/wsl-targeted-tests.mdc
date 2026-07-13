@@ -1,0 +1,16 @@
+---
+description: Protect WSL stability by running only narrowly targeted tests
+alwaysApply: true
+---
+
+# WSL Test Execution
+
+When the workspace runs under WSL:
+
+- Never run full, batch, directory-wide, repeated, parallel, or repository-wide test suites.
+- Run one narrowly targeted test file, test case, or filter at a time.
+- Run test commands sequentially and wait for each command to finish.
+- Do not use repetition loops for race tests.
+- Prefer the smallest command that proves the changed behavior.
+- Ask the user before expanding test scope beyond a single targeted file or filter.
+- Apply the same restriction to subagents and include it explicitly in every implementation or review prompt.

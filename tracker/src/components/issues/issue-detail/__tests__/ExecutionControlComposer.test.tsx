@@ -326,6 +326,25 @@ describe("ExecutionControlComposer", () => {
     );
   });
 
+  it("keeps the execution mode menu enabled while an agent run is active", async () => {
+    const user = userEvent.setup();
+    render(
+      <ExecutionControlComposer
+        projectSlug="advising"
+        issue={issue}
+        execution={makeExecution({ status: "live" })}
+        onSteer={vi.fn()}
+      />,
+    );
+
+    const modeTrigger = await screen.findByRole("button", { name: /yolo/i });
+    expect(modeTrigger).not.toBeDisabled();
+
+    await user.click(modeTrigger);
+    await user.click(await screen.findByRole("menuitemradio", { name: /build/i }));
+    expect(screen.getByRole("button", { name: /build/i })).toBeInTheDocument();
+  });
+
   it("forwards the execution mode on resume (defaults to yolo)", async () => {
     dispatchIssueAgentMock.mockResolvedValue({
       action: "resume",

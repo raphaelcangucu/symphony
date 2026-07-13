@@ -1,7 +1,7 @@
 defmodule SymphonyElixir.Claude.CodingAgentTest do
   use ExUnit.Case, async: false
 
-  alias SymphonyElixir.Claude.CodingAgent
+  alias SymphonyElixir.Claude.{CodingAgent, GoalStore}
 
   @fake Path.expand("../../support/fixtures/fake_claude.sh", __DIR__)
   @issue %{id: "1", identifier: "PREF-1", title: "Test issue"}
@@ -43,6 +43,205 @@ defmodule SymphonyElixir.Claude.CodingAgentTest do
     assert :session_started in events
     assert :turn_completed in events
     Agent.stop(collector)
+  end
+
+  test "completing an injected set does not erase a newer queued clear" do
+    {root, ws} = workspace()
+    thread_id = 8003
+
+    assert :ok =
+             GoalStore.put(
+               ws,
+               :authoring,
+               %{"objective" => "Audit", "pending_command" => "set"},
+               thread_id
+             )
+
+    {:ok, session} =
+      CodingAgent.start_session(ws,
+        workspace_root: root,
+        claude_command: "FAKE_CLAUDE_MODE=happy #{@fake}"
+      )
+
+    on_message = fn
+      %{event: :session_started} ->
+        assert :ok =
+                 GoalStore.put(
+                   ws,
+                   :authoring,
+                   %{"objective" => "Audit", "pending_command" => "clear"},
+                   thread_id
+                 )
+
+      _message ->
+        :ok
+    end
+
+    assert {:ok, _result} =
+             CodingAgent.run_turn(session, "continue", @issue,
+               goal_role: :authoring,
+               assistant_thread_id: thread_id,
+               on_message: on_message
+             )
+
+    assert {:ok, %{"pending_command" => "clear"}} =
+             GoalStore.read(ws, :authoring, thread_id)
+  end
+
+  test "completing an injected set does not erase a newer queued set" do
+    {root, ws} = workspace()
+    thread_id = 8004
+
+    assert :ok =
+             GoalStore.put(
+               ws,
+               :authoring,
+               %{"objective" => "First", "pending_command" => "set"},
+               thread_id
+             )
+
+    {:ok, session} =
+      CodingAgent.start_session(ws,
+        workspace_root: root,
+        claude_command: "FAKE_CLAUDE_MODE=happy #{@fake}"
+      )
+
+    on_message = fn
+      %{event: :session_started} ->
+        GoalStore.put(
+          ws,
+          :authoring,
+          %{"objective" => "Second", "pending_command" => "set"},
+          thread_id
+        )
+
+      _message ->
+        :ok
+    end
+
+    assert {:ok, _result} =
+             CodingAgent.run_turn(session, "continue", @issue,
+               goal_role: :authoring,
+               assistant_thread_id: thread_id,
+               on_message: on_message
+             )
+
+    assert {:ok, %{"objective" => "Second", "pending_command" => "set"}} =
+             GoalStore.read(ws, :authoring, thread_id)
+  end
+
+  test "malformed scoped goal fails before launching Claude" do
+    {root, ws} = workspace()
+    thread_id = 8005
+    path = GoalStore.path(ws, :authoring, thread_id)
+    File.mkdir_p!(Path.dirname(path))
+    File.write!(path, "{broken")
+
+    {:ok, session} =
+      CodingAgent.start_session(ws,
+        workspace_root: root,
+        claude_command: "FAKE_CLAUDE_MODE=happy #{@fake}"
+      )
+
+    assert {:error, {:goal_injection_failed, :invalid_goal_store}} =
+             CodingAgent.run_turn(session, "continue", @issue,
+               goal_role: :authoring,
+               assistant_thread_id: thread_id
+             )
+  end
+
+  test "successful headless turn completes an active native authoring goal" do
+    {root, ws} = workspace()
+    thread_id = 8010
+
+    assert :ok =
+             GoalStore.put(
+               ws,
+               :authoring,
+               %{"objective" => "Audit", "status" => "running", "pending_command" => "set"},
+               thread_id
+             )
+
+    {:ok, session} =
+      CodingAgent.start_session(ws,
+        workspace_root: root,
+        claude_command: "FAKE_CLAUDE_MODE=happy #{@fake}"
+      )
+
+    assert {:ok, _result} =
+             CodingAgent.run_turn(session, "continue", @issue,
+               goal_role: :authoring,
+               assistant_thread_id: thread_id
+             )
+
+    assert {:ok, %{"status" => "completed", "pending_command" => nil}} =
+             GoalStore.read(ws, :authoring, thread_id)
+  end
+
+  test "interrupted headless turn preserves an active resumable authoring goal" do
+    {root, ws} = workspace()
+    thread_id = 8011
+
+    assert :ok =
+             GoalStore.put(
+               ws,
+               :authoring,
+               %{"objective" => "Audit", "status" => "running", "pending_command" => "set"},
+               thread_id
+             )
+
+    {:ok, session} =
+      CodingAgent.start_session(ws,
+        workspace_root: root,
+        claude_command: "FAKE_CLAUDE_MODE=hang #{@fake}"
+      )
+
+    task =
+      Task.async(fn ->
+        CodingAgent.run_turn(session, "continue", @issue,
+          goal_role: :authoring,
+          assistant_thread_id: thread_id
+        )
+      end)
+
+    Process.sleep(100)
+    send(task.pid, {:agent_interrupt})
+
+    assert {:error, :interrupted} = Task.await(task, 5_000)
+
+    assert {:ok, %{"status" => "paused", "objective" => "Audit", "pending_command" => "set"}} =
+             GoalStore.read(ws, :authoring, thread_id)
+  end
+
+  test "revisionless pending set and clear fail before launching Claude" do
+    for {thread_id, command} <- [{8006, "set"}, {8007, "clear"}] do
+      {root, ws} = workspace()
+      path = GoalStore.path(ws, :authoring, thread_id)
+      File.mkdir_p!(Path.dirname(path))
+
+      File.write!(
+        path,
+        Jason.encode!(%{
+          "goal" => %{
+            "status" => "active",
+            "objective" => "Audit",
+            "pending_command" => command
+          }
+        })
+      )
+
+      {:ok, session} =
+        CodingAgent.start_session(ws,
+          workspace_root: root,
+          claude_command: "FAKE_CLAUDE_MODE=happy #{@fake}"
+        )
+
+      assert {:error, {:goal_injection_failed, :invalid_goal_store}} =
+               CodingAgent.run_turn(session, "continue", @issue,
+                 goal_role: :authoring,
+                 assistant_thread_id: thread_id
+               )
+    end
   end
 
   test "second turn resumes with the captured cli session id" do

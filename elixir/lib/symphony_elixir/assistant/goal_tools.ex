@@ -13,7 +13,7 @@ defmodule SymphonyElixir.Assistant.GoalTools do
   Codex uses the native thread goal API. Claude Code uses native /goal (completion
   condition) mirrored by Symphony. pause/resume/set_budget are Codex-only.
 
-  Use context "authoring" for the issue assistant conversation goal (spec/plan/analysis work in the chat).
+  Use context "authoring" for the current assistant thread's conversation goal (spec/plan/analysis work in the chat).
   Use context "execution" (default in project chat) for the orchestrator execution goal that dispatch/resume carries.
 
   Actions:
@@ -40,27 +40,29 @@ defmodule SymphonyElixir.Assistant.GoalTools do
   @spec tool_specs() :: [map()]
   def tool_specs, do: [assistant_tool_spec(), issue_bound_tool_spec()]
 
-  @spec execute(String.t(), map(), keyword()) :: {:ok, map()} | {:error, term()}
+  @spec execute(String.t() | nil, map(), keyword()) :: {:ok, map()} | {:error, term()}
   def execute(project_slug, arguments, opts \\ [])
 
-  def execute(project_slug, arguments, opts) when is_binary(project_slug) and is_map(arguments) do
-    with {:ok, project} <- Context.get_project(project_slug),
-         {:ok, identifier} <- resolve_identifier(arguments, opts),
+  def execute(project_slug, arguments, opts)
+      when (is_binary(project_slug) or is_nil(project_slug)) and is_map(arguments) do
+    with {:ok, context} <- resolve_context(arguments, opts),
+         {:ok, project} <- resolve_project(project_slug, context),
+         {:ok, identifier} <- resolve_identifier(arguments, opts, context),
          {:ok, action} <- required_action(arguments),
-         {:ok, context} <- resolve_context(arguments, opts),
-         {:ok, data} <- AgentGoal.execute(project, identifier, action, context, arguments) do
+         {:ok, data} <- AgentGoal.execute(project, identifier, action, context, arguments, opts) do
       {:ok, success_payload(action, context, identifier, data)}
     end
   end
 
   defp success_payload(action, context, identifier, data) when is_map(data) do
     cleared? = Map.get(data, :cleared, false) == true
+    target = if is_binary(identifier), do: identifier, else: "the current assistant thread"
 
     message =
       case {action, cleared?} do
-        {"clear", true} -> "Cleared #{context} goal for #{identifier}."
-        {"get", _} -> "Read #{context} goal for #{identifier}."
-        {other, _} -> "Applied #{other} to #{context} goal for #{identifier}."
+        {"clear", true} -> "Cleared #{context} goal for #{target}."
+        {"get", _} -> "Read #{context} goal for #{target}."
+        {other, _} -> "Applied #{other} to #{context} goal for #{target}."
       end
 
     %{
@@ -78,7 +80,13 @@ defmodule SymphonyElixir.Assistant.GoalTools do
     }
   end
 
-  defp resolve_identifier(arguments, opts) do
+  defp resolve_identifier(_arguments, opts, "authoring") do
+    if valid_thread_id?(Keyword.get(opts, :assistant_thread_id)),
+      do: {:ok, nil},
+      else: {:error, :missing_assistant_thread}
+  end
+
+  defp resolve_identifier(arguments, opts, "execution") do
     case identifier_from_opts(opts) do
       {:ok, identifier} -> {:ok, identifier}
       :error -> required_string(Map.get(arguments, "identifier"), :missing_identifier)
@@ -145,7 +153,7 @@ defmodule SymphonyElixir.Assistant.GoalTools do
     %{
       "type" => "object",
       "additionalProperties" => false,
-      "required" => ["identifier", "action"],
+      "required" => ["action"],
       "properties" => input_properties()
     }
   end
@@ -173,8 +181,7 @@ defmodule SymphonyElixir.Assistant.GoalTools do
       "context" => %{
         "type" => ["string", "null"],
         "enum" => ["authoring", "execution", nil],
-        "description" =>
-          "authoring = chat goal; execution = orchestrator goal. Defaults to authoring in issue chat, execution elsewhere."
+        "description" => "authoring = chat goal; execution = orchestrator goal. Defaults to authoring in issue chat, execution elsewhere."
       },
       "objective" => %{
         "type" => ["string", "null"],
@@ -198,4 +205,10 @@ defmodule SymphonyElixir.Assistant.GoalTools do
       "inputSchema" => input_schema
     }
   end
+
+  defp resolve_project(nil, "authoring"), do: {:ok, nil}
+  defp resolve_project(project_slug, _context) when is_binary(project_slug), do: Context.get_project(project_slug)
+  defp resolve_project(nil, "execution"), do: {:error, :missing_project}
+
+  defp valid_thread_id?(id), do: is_integer(id) and id > 0
 end

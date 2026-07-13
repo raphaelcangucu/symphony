@@ -8,24 +8,40 @@ defmodule SymphonyElixir.AgentGoal do
   """
 
   alias SymphonyElixir.Assistant.AuthoringGoalControl
-  alias SymphonyElixir.Assistant.History
+  alias SymphonyElixir.Assistant.{History, Thread}
   alias SymphonyElixir.Claude.GoalControl, as: ClaudeGoal
   alias SymphonyElixir.Codex.GoalControl, as: CodexGoal
   alias SymphonyElixir.LocalTracker.{Context, Project}
-  alias SymphonyElixir.Workspace
 
   @type context :: String.t()
   @type action :: String.t()
 
-  @spec execute(Project.t(), String.t(), action(), context(), map()) ::
+  @spec execute(Project.t() | nil, String.t() | nil, action(), context(), map(), keyword()) ::
           {:ok, map()} | {:error, term()}
-  def execute(%Project{} = project, identifier, action, context, args \\ %{})
-      when is_binary(identifier) and is_binary(action) and is_binary(context) and is_map(args) do
-    with {:ok, context} <- normalize_context(context),
-         {:ok, agent} <- resolve_agent(project, identifier, args) do
-      dispatch(project, identifier, action, context, agent, args)
+  def execute(project, identifier, action, context, args \\ %{}, opts \\ [])
+      when (is_struct(project, Project) or is_nil(project)) and (is_binary(identifier) or is_nil(identifier)) and
+             is_binary(action) and is_binary(context) and is_map(args) and is_list(opts) do
+    with {:ok, context} <- normalize_context(context) do
+      execute_context(project, identifier, action, context, args, opts)
     end
   end
+
+  defp execute_context(project, _identifier, action, "authoring", args, opts) do
+    with {:ok, thread} <- current_authoring_thread(project, opts),
+         {:ok, agent} <- resolve_authoring_agent(thread, args, opts) do
+      authoring_dispatch(%{thread | agent_kind: agent}, action, args)
+    end
+  end
+
+  defp execute_context(%Project{} = project, identifier, action, "execution", args, _opts)
+       when is_binary(identifier) do
+    with {:ok, agent} <- resolve_agent(project, identifier, args) do
+      dispatch(project, identifier, action, "execution", agent, args)
+    end
+  end
+
+  defp execute_context(_project, _identifier, _action, "execution", _args, _opts),
+    do: {:error, :missing_identifier}
 
   defp dispatch(project, identifier, action, context, "codex", args) do
     codex_dispatch(project, identifier, action, context, args)
@@ -73,37 +89,35 @@ defmodule SymphonyElixir.AgentGoal do
     end
   end
 
-  defp codex_dispatch(project, identifier, action, "authoring", args) do
-    with {:ok, thread} <- ensure_authoring_thread(project, identifier) do
-      case action do
-        "get" ->
-          wrap_authoring(AuthoringGoalControl.status(thread))
+  defp authoring_dispatch(thread, action, args) do
+    case action do
+      "get" ->
+        wrap_authoring(AuthoringGoalControl.status(thread))
 
-        "set_objective" ->
-          with {:ok, objective} <- required_objective(args) do
-            wrap_authoring(AuthoringGoalControl.set_objective(thread, objective))
-          end
+      "set_objective" ->
+        with {:ok, objective} <- required_objective(args) do
+          wrap_authoring(AuthoringGoalControl.set_objective(thread, objective))
+        end
 
-        "pause" ->
-          wrap_authoring(AuthoringGoalControl.pause(thread))
+      "pause" ->
+        wrap_authoring(AuthoringGoalControl.pause(thread))
 
-        "resume" ->
-          wrap_authoring(AuthoringGoalControl.resume(thread))
+      "resume" ->
+        wrap_authoring(AuthoringGoalControl.resume(thread))
 
-        "clear" ->
-          wrap_authoring(AuthoringGoalControl.clear(thread), cleared: true)
+      "clear" ->
+        wrap_authoring(AuthoringGoalControl.clear(thread), cleared: true)
 
-        "set_budget" ->
-          {:error, "token_budget is only supported for execution goals (context: execution)."}
+      "set_budget" ->
+        {:error, "token_budget is only supported for execution goals (context: execution)."}
 
-        other ->
-          {:error, {:invalid_action, other}}
-      end
+      other ->
+        {:error, {:invalid_action, other}}
     end
   end
 
-  defp claude_dispatch(project, identifier, action, context, args) do
-    role = if context == "authoring", do: :authoring, else: :execution
+  defp claude_dispatch(project, identifier, action, _context, args) do
+    role = :execution
 
     case action do
       "get" ->
@@ -111,15 +125,13 @@ defmodule SymphonyElixir.AgentGoal do
 
       "set_objective" ->
         with {:ok, objective} <- required_objective(args),
-             {:ok, goal} <- ClaudeGoal.set_objective(project, identifier, role, objective),
-             :ok <- maybe_enable_authoring_metadata(project, identifier, context, objective) do
+             {:ok, goal} <- ClaudeGoal.set_objective(project, identifier, role, objective) do
           {:ok, %{goal: goal, enabled: true, objective: objective, native: true}}
         end
 
       "clear" ->
         case ClaudeGoal.clear(project, identifier, role) do
           {:ok, :cleared} ->
-            _ = maybe_disable_authoring_metadata(project, identifier, context)
             {:ok, %{goal: nil, cleared: true, enabled: false, objective: nil, native: false}}
 
           {:ok, goal} ->
@@ -195,6 +207,65 @@ defmodule SymphonyElixir.AgentGoal do
     end
   end
 
+  defp resolve_authoring_agent(%Thread{} = thread, args, opts) do
+    explicit = normalize_agent(Map.get(args, "agent") || Map.get(args, :agent))
+
+    current =
+      normalize_agent(Keyword.get(opts, :agent_kind)) ||
+        normalize_agent(thread.agent_kind) ||
+        inferred_thread_agent(thread)
+
+    cond do
+      current not in ["codex", "claude"] ->
+        {:error, {:authoring_goal_unavailable, {:unsupported_agent, current || "unknown"}}}
+
+      is_binary(explicit) and explicit != current ->
+        {:error, {:assistant_thread_agent_mismatch, current, explicit}}
+
+      true ->
+        {:ok, current}
+    end
+  end
+
+  defp inferred_thread_agent(%Thread{} = thread) do
+    cond do
+      is_binary(History.agent_thread_id(thread, "claude")) -> "claude"
+      is_binary(History.agent_thread_id(thread, "codex")) -> "codex"
+      true -> nil
+    end
+  end
+
+  defp current_authoring_thread(project, opts) do
+    with {:ok, thread_id} <- required_thread_id(Keyword.get(opts, :assistant_thread_id)),
+         {:ok, %Thread{} = thread} <- History.get_thread(thread_id),
+         :ok <- validate_active_thread(thread),
+         :ok <- validate_thread_project(thread, project),
+         :ok <- validate_thread_issue(thread, Keyword.get(opts, :bound_issue_identifier)) do
+      {:ok, thread}
+    end
+  end
+
+  defp required_thread_id(id) when is_integer(id) and id > 0, do: {:ok, id}
+  defp required_thread_id(_id), do: {:error, :missing_assistant_thread}
+
+  defp validate_active_thread(%Thread{status: "active"}), do: :ok
+  defp validate_active_thread(%Thread{}), do: {:error, :assistant_thread_not_active}
+
+  defp validate_thread_project(%Thread{project_slug: nil}, nil), do: :ok
+
+  defp validate_thread_project(%Thread{project_slug: slug}, %Project{slug: slug})
+       when is_binary(slug),
+       do: :ok
+
+  defp validate_thread_project(%Thread{}, _project), do: {:error, :assistant_thread_context_mismatch}
+
+  defp validate_thread_issue(%Thread{issue_identifier: identifier}, identifier)
+       when is_binary(identifier) and identifier != "",
+       do: :ok
+
+  defp validate_thread_issue(%Thread{}, nil), do: :ok
+  defp validate_thread_issue(%Thread{}, _identifier), do: {:error, :assistant_thread_context_mismatch}
+
   defp normalize_agent(agent) when is_binary(agent) do
     case String.trim(String.downcase(agent)) do
       "codex" -> "codex"
@@ -235,42 +306,4 @@ defmodule SymphonyElixir.AgentGoal do
   end
 
   defp parse_token_budget(_), do: {:error, :invalid_budget}
-
-  defp ensure_authoring_thread(%Project{} = project, identifier) do
-    issue_ref = %{id: nil, identifier: identifier, project_slug: project.slug}
-
-    History.ensure_issue_thread(project.slug, identifier, %{
-      workspace_path: Workspace.path_for_issue(issue_ref)
-    })
-  end
-
-  defp maybe_enable_authoring_metadata(project, identifier, "authoring", objective) do
-    case ensure_authoring_thread(project, identifier) do
-      {:ok, thread} ->
-        case History.set_goal_mode(thread, true, objective) do
-          {:ok, _} -> :ok
-          {:error, reason} -> {:error, reason}
-        end
-
-      {:error, reason} ->
-        {:error, reason}
-    end
-  end
-
-  defp maybe_enable_authoring_metadata(_project, _identifier, _context, _objective), do: :ok
-
-  defp maybe_disable_authoring_metadata(project, identifier, "authoring") do
-    case ensure_authoring_thread(project, identifier) do
-      {:ok, thread} ->
-        case History.set_goal_mode(thread, false, nil) do
-          {:ok, _} -> :ok
-          {:error, _} -> :ok
-        end
-
-      _ ->
-        :ok
-    end
-  end
-
-  defp maybe_disable_authoring_metadata(_project, _identifier, _context), do: :ok
 end

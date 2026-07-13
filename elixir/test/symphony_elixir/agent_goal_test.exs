@@ -2,6 +2,7 @@ defmodule SymphonyElixir.AgentGoalTest do
   use ExUnit.Case, async: false
 
   alias SymphonyElixir.AgentGoal
+  alias SymphonyElixir.Assistant.History
   alias SymphonyElixir.Claude.GoalStore
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.Repo
@@ -67,14 +68,28 @@ defmodule SymphonyElixir.AgentGoalTest do
     issue: issue,
     workspace: workspace
   } do
-    assert {:ok, %{goal: goal}} =
-             AgentGoal.execute(project, issue.identifier, "set_objective", "authoring", %{
-               "objective" => "draft the plan",
-               "agent" => "claude"
-             })
+    {:ok, thread} =
+      SymphonyElixir.Assistant.History.create_issue_session_thread(project.slug, issue.identifier, %{
+        workspace_path: workspace,
+        agent_kind: "claude"
+      })
 
-    assert goal["objective"] == "draft the plan"
-    assert {:ok, _} = GoalStore.read(workspace, :authoring)
+    assert {:ok, %{goal: goal}} =
+             AgentGoal.execute(
+               project,
+               issue.identifier,
+               "set_objective",
+               "authoring",
+               %{
+                 "objective" => "draft the plan",
+                 "agent" => "claude"
+               },
+               assistant_thread_id: thread.id,
+               bound_issue_identifier: issue.identifier
+             )
+
+    assert goal.objective == "draft the plan"
+    assert {:ok, _} = GoalStore.read(workspace, :authoring, thread.id)
     assert GoalStore.read(workspace, :execution) == :error
   end
 
@@ -96,6 +111,41 @@ defmodule SymphonyElixir.AgentGoalTest do
              })
 
     assert {:ok, %{"objective" => "from settings"}} = GoalStore.read(workspace, :execution)
+  end
+
+  test "authoring rejects an archived current thread", %{workspace: workspace} do
+    {:ok, thread} = History.create_freeform_thread(%{workspace_path: workspace, agent_kind: "codex"})
+    {:ok, archived} = History.archive_thread(thread.id)
+
+    assert {:error, :assistant_thread_not_active} =
+             AgentGoal.execute(
+               nil,
+               nil,
+               "set_objective",
+               "authoring",
+               %{"objective" => "must not activate"},
+               assistant_thread_id: archived.id
+             )
+  end
+
+  test "authoring rejects a thread outside the current project context", %{project: project, workspace: workspace} do
+    {:ok, other_project} = Context.ensure_project(%{name: "Other", slug: "other-agent-goal"})
+
+    {:ok, thread} =
+      History.create_project_session_thread(other_project.slug, %{
+        workspace_path: workspace,
+        agent_kind: "codex"
+      })
+
+    assert {:error, :assistant_thread_context_mismatch} =
+             AgentGoal.execute(
+               project,
+               nil,
+               "set_objective",
+               "authoring",
+               %{"objective" => "wrong project"},
+               assistant_thread_id: thread.id
+             )
   end
 
   defp migrate_repo do

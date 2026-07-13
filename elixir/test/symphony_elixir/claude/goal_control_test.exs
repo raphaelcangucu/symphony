@@ -52,6 +52,19 @@ defmodule SymphonyElixir.Claude.GoalControlTest do
     assert {:ok, :cleared} = GoalControl.clear(project, issue.identifier, :execution)
   end
 
+  test "get and clear return explicit errors for malformed sidecars", %{
+    project: project,
+    issue: issue,
+    workspace: workspace
+  } do
+    path = GoalStore.path(workspace, :execution)
+    File.mkdir_p!(Path.dirname(path))
+    File.write!(path, "{not-json")
+
+    assert {:error, :invalid_goal_store} = GoalControl.get(project, issue.identifier, :execution)
+    assert {:error, :invalid_goal_store} = GoalControl.clear(project, issue.identifier, :execution)
+  end
+
   test "pause resume set_budget are unsupported", %{project: project, issue: issue} do
     assert {:error, :unsupported_for_agent} = GoalControl.pause(project, issue.identifier, :execution)
     assert {:error, :unsupported_for_agent} = GoalControl.resume(project, issue.identifier, :execution)
@@ -74,7 +87,8 @@ defmodule SymphonyElixir.Claude.GoalControlTest do
   } do
     assert {:ok, _} = GoalControl.set_objective(project, issue.identifier, :execution, "tests pass")
     assert {:inject, :set, "tests pass"} = GoalControl.consume_pending(workspace, :execution)
-    assert :ok = GoalControl.acknowledge_inject(workspace, :execution, :set)
+    {_, set_token} = GoalControl.apply_pending_to_prompt("work", workspace, :execution)
+    assert :ok = GoalControl.acknowledge_inject(workspace, :execution, set_token, nil)
     assert {:ok, goal} = GoalStore.read(workspace, :execution)
     assert goal["pending_command"] == nil
     assert goal["status"] == "active"
@@ -84,7 +98,8 @@ defmodule SymphonyElixir.Claude.GoalControlTest do
     assert {:ok, _} = GoalControl.set_objective(project, issue.identifier, :execution, "tests pass")
     assert {:ok, _} = GoalControl.clear(project, issue.identifier, :execution)
     assert {:inject, :clear} = GoalControl.consume_pending(workspace, :execution)
-    assert :ok = GoalControl.acknowledge_inject(workspace, :execution, :clear)
+    {_, clear_token} = GoalControl.apply_pending_to_prompt("work", workspace, :execution)
+    assert :ok = GoalControl.acknowledge_inject(workspace, :execution, clear_token, nil)
     assert {:ok, goal} = GoalStore.read(workspace, :execution)
     assert goal["status"] == "cleared"
     assert goal["objective"] == nil
@@ -96,22 +111,38 @@ defmodule SymphonyElixir.Claude.GoalControlTest do
     workspace: workspace
   } do
     assert {:ok, _} = GoalControl.set_objective(project, issue.identifier, :execution, "tests pass")
-    assert :ok = GoalControl.acknowledge_inject(workspace, :execution, :set)
+    {_, set_token} = GoalControl.apply_pending_to_prompt("work", workspace, :execution)
+    assert :ok = GoalControl.acknowledge_inject(workspace, :execution, set_token, nil)
     assert :ok = GoalControl.requeue_set_if_active(workspace, :execution)
+
     assert {:ok, %{"pending_command" => "set", "objective" => "tests pass"}} =
              GoalStore.read(workspace, :execution)
   end
 
   test "version gate blocks set_objective", %{project: project, issue: issue} do
     Application.put_env(:symphony_elixir, :claude_goal_supported_override, false)
+
     assert {:error, :claude_goal_unsupported_version} =
              GoalControl.set_objective(project, issue.identifier, :execution, "tests pass")
   end
 
-  test "authoring role uses separate sidecar", %{project: project, issue: issue, workspace: workspace} do
-    assert {:ok, _} = GoalControl.set_objective(project, issue.identifier, :authoring, "draft the plan")
-    assert {:ok, %{"objective" => "draft the plan"}} = GoalStore.read(workspace, :authoring)
-    assert GoalStore.read(workspace, :execution) == :error
+  test "issue-keyed and unscoped authoring APIs require an assistant thread", %{
+    project: project,
+    issue: issue,
+    workspace: workspace
+  } do
+    assert {:error, :assistant_thread_id_required} =
+             GoalControl.set_objective(project, issue.identifier, :authoring, "draft the plan")
+
+    assert {:error, :assistant_thread_id_required} =
+             GoalControl.get(project, issue.identifier, :authoring)
+
+    assert {:error, :assistant_thread_id_required} =
+             GoalControl.clear(project, issue.identifier, :authoring)
+
+    assert_raise ArgumentError, ~r/assistant_thread_id/, fn ->
+      GoalControl.apply_pending_to_prompt("Work", workspace, :authoring)
+    end
   end
 
   test "apply_pending_to_prompt prefixes /goal for set and clear", %{
@@ -121,16 +152,20 @@ defmodule SymphonyElixir.Claude.GoalControlTest do
   } do
     assert {:ok, _} = GoalControl.set_objective(project, issue.identifier, :execution, "tests pass")
 
-    assert {"/goal tests pass\n\nDo the work", :set} =
+    assert {"/goal tests pass\n\nDo the work", {:set, set_revision}} =
              GoalControl.apply_pending_to_prompt("Do the work", workspace, :execution)
 
-    assert :ok = GoalControl.acknowledge_inject(workspace, :execution, :set)
+    assert is_binary(set_revision)
+
+    assert :ok = GoalControl.acknowledge_inject(workspace, :execution, {:set, set_revision}, nil)
     assert {:ok, _} = GoalControl.clear(project, issue.identifier, :execution)
 
-    assert {"/goal clear\n\nDo the work", :clear} =
+    assert {"/goal clear\n\nDo the work", {:clear, clear_revision}} =
              GoalControl.apply_pending_to_prompt("Do the work", workspace, :execution)
 
-    assert :ok = GoalControl.acknowledge_inject(workspace, :execution, :clear)
+    assert is_binary(clear_revision)
+
+    assert :ok = GoalControl.acknowledge_inject(workspace, :execution, {:clear, clear_revision}, nil)
     assert {"Do the work", :none} = GoalControl.apply_pending_to_prompt("Do the work", workspace, :execution)
   end
 

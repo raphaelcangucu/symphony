@@ -104,6 +104,8 @@ defmodule SymphonyElixirWeb.AssistantChannel do
       payload = %{
         messages: Enum.map(History.list_messages_for_thread(thread.id), &History.message_payload/1),
         thread_id: thread.id,
+        goal_mode: History.thread_goal_mode(thread),
+        goal_objective: History.thread_goal_objective(thread),
         last_turn: History.turn_payload(thread),
         turn_running: TurnManager.running?(thread.id),
         turn_elapsed_seconds: History.turn_elapsed_seconds(thread),
@@ -147,24 +149,28 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   end
 
   def join("assistant:" <> project_slug, _payload, socket) when project_slug != "" do
-    if authorized?(socket) do
-      case History.list_messages(project_slug) do
-        {:ok, messages} ->
-          socket = assign(socket, :project_slug, project_slug)
-          # No thread record for project-scoped joins — resolve via project tier then operator default.
-          payload = %{
-            messages: Enum.map(messages, &History.message_payload/1),
-            effective_agent: project_agent_kind(project_slug) || Settings.Agents.default_agent_kind()
-          }
+    with true <- authorized?(socket),
+         {:ok, workspace} <- AgentSession.assistant_workspace(project_slug),
+         {:ok, thread} <- History.ensure_thread(project_slug, %{workspace_path: workspace}) do
+      TurnManager.subscribe(thread.id)
 
-          send(self(), {:assistant_history_loaded, payload})
-          {:ok, payload, socket}
+      payload = %{
+        messages: Enum.map(History.list_messages_for_thread(thread.id), &History.message_payload/1),
+        thread_id: thread.id,
+        goal_mode: History.thread_goal_mode(thread),
+        goal_objective: History.thread_goal_objective(thread),
+        last_turn: History.turn_payload(thread),
+        turn_running: TurnManager.running?(thread.id),
+        turn_elapsed_seconds: History.turn_elapsed_seconds(thread),
+        effective_agent: thread_effective_agent(thread)
+      }
 
-        {:error, reason} ->
-          {:error, %{reason: error_reason(reason)}}
-      end
+      socket = socket |> assign(:thread, thread) |> assign(:project_slug, project_slug)
+      send(self(), {:assistant_history_loaded, payload})
+      {:ok, payload, socket}
     else
-      {:error, %{reason: "unauthorized"}}
+      false -> {:error, %{reason: "unauthorized"}}
+      {:error, reason} -> {:error, %{reason: error_reason(reason)}}
     end
   end
 
@@ -174,10 +180,14 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   def handle_in("send_message", %{"message" => message} = payload, socket) when is_binary(message) do
     thread = socket.assigns[:thread]
 
-    if is_nil(thread) and socket.assigns[:turn_status] == :running do
+    if socket.assigns[:turn_status] == :running and
+         (is_nil(thread) or Map.get(thread, :scope) == "project") do
       {:reply, {:error, %{reason: "assistant is busy"}}, socket}
     else
-      do_send_message(message, payload, socket)
+      case assistant_thread(socket) do
+        {:ok, current_thread} -> do_send_message(message, payload, assign(socket, :thread, current_thread))
+        {:error, reason} -> {:reply, {:error, %{reason: error_reason(reason)}}, socket}
+      end
     end
   end
 
@@ -221,26 +231,36 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     do: {:reply, {:error, %{reason: "tool_call_id is required"}}, socket}
 
   def handle_in("set_goal_mode", %{"goal_mode" => false}, socket) do
-    with {:ok, thread} <- issue_thread(socket),
-         {:ok, _payload, updated_thread} <- AuthoringGoalControl.clear(thread) do
-      {:reply, {:ok, %{goal_mode: false, goal_objective: nil}}, assign(socket, :thread, updated_thread)}
-    else
-      {:error, reason} -> {:reply, {:error, %{reason: error_reason(reason)}}, socket}
-    end
+    start_async_goal_mutation(socket, :disable, false, &AuthoringGoalControl.clear/1)
   end
 
   def handle_in("set_goal_mode", %{"goal_mode" => enabled} = payload, socket)
       when is_boolean(enabled) do
     objective = normalize_goal_objective(Map.get(payload, "objective"))
+    turn_was_running = turn_running_for_thread?(socket)
 
-    with {:ok, thread} <- issue_thread(socket),
-         {:ok, updated_thread} <- History.set_goal_mode(thread, enabled, objective) do
+    mutation = fn thread ->
+      if is_binary(objective),
+        do: AuthoringGoalControl.set_objective_metadata(thread, objective),
+        else: AuthoringGoalControl.enable(thread, nil)
+    end
+
+    with {:ok, goal_payload, updated_thread} <- goal_mutation(socket, true, mutation) do
       payload = %{
         goal_mode: enabled,
         goal_objective: History.thread_goal_objective(updated_thread)
       }
 
-      {:reply, {:ok, payload}, assign(socket, :thread, updated_thread)}
+      socket = assign(socket, :thread, updated_thread)
+      publish_authoring_goal_changed(socket, updated_thread, goal_payload)
+
+      if is_binary(objective) and turn_was_running do
+        enqueue_goal_continuation(updated_thread, socket)
+      else
+        if is_binary(objective), do: sync_native_objective_async(socket, updated_thread)
+      end
+
+      {:reply, {:ok, payload}, socket}
     else
       {:error, reason} -> {:reply, {:error, %{reason: error_reason(reason)}}, socket}
     end
@@ -265,65 +285,61 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   end
 
   def handle_in("goal_pause", _payload, socket) do
-    case authoring_goal_thread(socket) do
-      {:ok, thread} ->
-        # Always interrupt an in-flight batch (the native thread id may not be
-        # persisted yet on the very first turn); native pause is best-effort.
-        socket = if socket.assigns[:turn_status] == :running, do: pause_running_turn(socket), else: socket
-        running = goal_running?(socket)
+    socket = if socket.assigns[:turn_status] == :running, do: pause_running_turn(socket), else: socket
+    running = goal_running?(socket)
 
-        payload =
-          case AuthoringGoalControl.pause(thread) do
-            {:ok, payload, _t} -> goal_status_payload(payload, running)
-            _ -> goal_status_payload(metadata_goal_payload(thread, "paused"), running)
-          end
-
-        {:reply, {:ok, payload}, socket}
-
-      {:error, reason} ->
-        {:reply, {:error, %{reason: error_reason(reason)}}, socket}
-    end
+    start_async_goal_mutation(socket, :pause, true, fn thread ->
+      if History.thread_goal_mode(thread) do
+        case AuthoringGoalControl.pause(thread) do
+          {:ok, payload, updated} -> {:ok, goal_status_payload(payload, running), updated}
+          _ -> {:ok, goal_status_payload(metadata_goal_payload(thread, "paused"), running), thread}
+        end
+      else
+        {:error, :goal_mode_disabled}
+      end
+    end)
   end
 
   def handle_in("goal_resume", _payload, socket) do
     if socket.assigns[:turn_status] == :running do
       {:reply, {:error, %{reason: "assistant is busy"}}, socket}
     else
-      case authoring_goal_thread(socket) do
-        {:ok, thread} ->
-          # Flip the native goal back to active (best-effort; may not exist yet)
-          # then kick an autonomous continuation batch that streams into the chat.
+      start_async_goal_mutation(socket, :resume, false, fn thread ->
+        if History.thread_goal_mode(thread) do
           _ = AuthoringGoalControl.resume(thread)
-          {:reply, :ok, start_goal_continuation(thread, socket)}
-
-        {:error, reason} ->
-          {:reply, {:error, %{reason: error_reason(reason)}}, socket}
-      end
+          {:ok, thread}
+        else
+          {:error, :goal_mode_disabled}
+        end
+      end)
     end
   end
 
   def handle_in("goal_clear", _payload, socket) do
-    with_authoring_goal(socket, &AuthoringGoalControl.clear/1, fn payload, socket ->
-      {:reply, {:ok, goal_status_payload(payload, false)}, socket}
+    start_async_goal_mutation(socket, :clear, false, fn thread ->
+      if History.thread_goal_mode(thread),
+        do: AuthoringGoalControl.clear(thread),
+        else: {:error, :goal_mode_disabled}
     end)
   end
 
   def handle_in("goal_set_objective", %{"objective" => objective}, socket) when is_binary(objective) do
-    case authoring_goal_thread(socket) do
-      {:ok, thread} ->
-        # Save the objective to metadata synchronously (fast) and reply right away
-        # so the edit never appears to hang. The native Codex goal is then synced
-        # off the channel process — a `thread/goal/set` is a port round-trip that
-        # can block (and, while a turn holds the thread, fight it).
-        case AuthoringGoalControl.set_objective_metadata(thread, objective) do
-          {:ok, payload, updated_thread} ->
-            socket = assign(socket, :thread, updated_thread)
-            sync_native_objective_async(socket)
-            {:reply, {:ok, goal_status_payload(payload, goal_running?(socket))}, socket}
+    turn_was_running = turn_running_for_thread?(socket)
 
-          {:error, reason} ->
-            {:reply, {:error, %{reason: error_reason(reason)}}, socket}
-        end
+    case goal_mutation(socket, true, fn thread ->
+           if History.thread_goal_mode(thread),
+             do: AuthoringGoalControl.set_objective_metadata(thread, objective),
+             else: {:error, :goal_mode_disabled}
+         end) do
+      {:ok, payload, updated_thread} ->
+        socket = assign(socket, :thread, updated_thread)
+        publish_authoring_goal_changed(socket, updated_thread, payload)
+
+        if turn_was_running,
+          do: enqueue_goal_continuation(updated_thread, socket),
+          else: sync_native_objective_async(socket, updated_thread)
+
+        {:reply, {:ok, goal_status_payload(payload, false)}, socket}
 
       {:error, reason} ->
         {:reply, {:error, %{reason: error_reason(reason)}}, socket}
@@ -471,6 +487,35 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     {:noreply, socket}
   end
 
+  def handle_info({:goal_mutation_finished, ref, :disable, {:ok, _payload, updated}}, socket) do
+    finish_revision_gated(ref, updated, socket, %{goal_mode: false, goal_objective: nil})
+  end
+
+  def handle_info({:goal_mutation_finished, ref, :clear, {:ok, payload, updated}}, socket) do
+    finish_revision_gated(ref, updated, socket, goal_status_payload(payload, false))
+  end
+
+  def handle_info({:goal_mutation_finished, ref, :pause, {:ok, payload, updated}}, socket) do
+    finish_revision_gated(ref, updated, socket, payload)
+  end
+
+  def handle_info({:goal_mutation_finished, ref, :resume, {:ok, thread}}, socket) do
+    case History.get_thread(thread.id) do
+      {:ok, %{updated_at: revision}} when revision == thread.updated_at ->
+        reply(ref, :ok)
+        {:noreply, start_goal_continuation(thread, socket)}
+
+      _ ->
+        reply(ref, {:error, %{reason: "goal mutation was superseded"}})
+        {:noreply, socket}
+    end
+  end
+
+  def handle_info({:goal_mutation_finished, ref, _action, {:error, reason}}, socket) do
+    reply(ref, {:error, %{reason: error_reason(reason)}})
+    {:noreply, socket}
+  end
+
   def handle_info({:assistant_turn_started, turn_id}, socket) do
     if authoring_goal_active?(socket), do: push(socket, "goal_running", %{running: true})
     {:noreply, assign(socket, :codex_turn_id, turn_id)}
@@ -592,6 +637,11 @@ defmodule SymphonyElixirWeb.AssistantChannel do
 
   def handle_info({:authoring_goal_updated, native_goal}, socket) do
     socket = push_live_goal_status(socket, native_goal)
+    {:noreply, socket}
+  end
+
+  def handle_info({:authoring_goal_changed, payload}, socket) do
+    push(socket, "authoring_goal_changed", payload)
     {:noreply, socket}
   end
 
@@ -1136,9 +1186,12 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     AgentSession.send_message_to_kb_thread(thread, trimmed, context, opts)
   end
 
-  defp run_send_turn(_thread, project_slug, trimmed, context, opts) do
-    AgentSession.send_message(project_slug, trimmed, context, opts)
+  defp run_send_turn(%{scope: "project"} = thread, _project_slug, trimmed, context, opts) do
+    AgentSession.send_message_to_project_thread(thread, trimmed, context, opts)
   end
+
+  defp run_send_turn(_thread, _project_slug, _trimmed, _context, _opts),
+    do: {:error, :assistant_thread_required}
 
   defp maybe_push_created_issue(result, %Socket{assigns: %{project_slug: project_slug}} = socket)
        when is_binary(project_slug) do
@@ -1365,45 +1418,76 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   defp issue_thread(%Socket{assigns: %{thread: %{scope: "issue"} = thread}}), do: {:ok, thread}
   defp issue_thread(_socket), do: {:error, :issue_thread_required}
 
-  # Resolves a fresh issue thread (reloaded from the DB so agent_thread_ids written
+  defp assistant_thread(%Socket{assigns: %{thread: %{id: id}}}) when is_integer(id) do
+    case History.get_thread(id) do
+      {:ok, %{status: "active"} = thread} -> {:ok, thread}
+      {:ok, _thread} -> {:error, :assistant_thread_not_active}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp assistant_thread(_socket), do: {:error, :assistant_thread_required}
+
+  defp goal_mutation(%Socket{assigns: %{thread: %{id: id}}} = socket, allow_running, operation)
+       when is_integer(id) and is_boolean(allow_running) and is_function(operation, 1) do
+    TurnManager.goal_mutation(id, allow_running, fn ->
+      if not allow_running and GoalRun.running?(id) do
+        {:error, :assistant_busy}
+      else
+        with {:ok, thread} <- assistant_thread(socket), do: operation.(thread)
+      end
+    end)
+  end
+
+  defp goal_mutation(_socket, _allow_running, _operation), do: {:error, :assistant_thread_required}
+
+  defp finish_revision_gated(ref, updated, socket, payload) do
+    case History.get_thread(updated.id) do
+      {:ok, %{updated_at: revision}} when revision == updated.updated_at ->
+        reply(ref, {:ok, payload})
+        {:noreply, assign(socket, :thread, updated)}
+
+      _ ->
+        reply(ref, {:error, %{reason: "goal mutation was superseded"}})
+        {:noreply, socket}
+    end
+  end
+
+  defp start_async_goal_mutation(socket, action, allow_running, operation) do
+    channel_pid = self()
+    ref = socket_ref(socket)
+
+    Task.Supervisor.start_child(SymphonyElixir.TaskSupervisor, fn ->
+      send(channel_pid, {:goal_mutation_finished, ref, action, goal_mutation(socket, allow_running, operation)})
+    end)
+
+    {:noreply, socket}
+  end
+
+  # Resolves a fresh assistant thread (reloaded from the DB so agent_thread_ids written
   # by a prior turn are visible) that has the Authoring goal enabled.
   defp authoring_goal_thread(socket) do
-    with {:ok, %{id: id}} <- issue_thread(socket),
-         {:ok, thread} <- History.get_thread(id) do
+    with {:ok, thread} <- assistant_thread(socket) do
       if History.thread_goal_mode(thread), do: {:ok, thread}, else: {:error, :goal_mode_disabled}
     else
       {:error, reason} -> {:error, reason}
-      _ -> {:error, :issue_thread_required}
+      _ -> {:error, :assistant_thread_required}
     end
   end
 
-  defp with_authoring_goal(socket, action, on_ok) when is_function(action, 1) and is_function(on_ok, 2) do
-    case authoring_goal_thread(socket) do
-      {:ok, thread} ->
-        case action.(thread) do
-          {:ok, payload, updated_thread} ->
-            on_ok.(payload, assign(socket, :thread, updated_thread))
-
-          {:error, reason} ->
-            {:reply, {:error, %{reason: error_reason(reason)}}, socket}
-        end
-
-      {:error, reason} ->
-        {:reply, {:error, %{reason: error_reason(reason)}}, socket}
-    end
-  end
-
-  # True when the socket's thread is an issue thread with the Authoring goal enabled.
+  # True when the socket's persistent thread has the Authoring goal enabled.
   # Uses the (fresh-on-set_goal_mode) assigns metadata to avoid a DB read per turn.
-  defp authoring_goal_active?(%Socket{assigns: %{thread: %{scope: "issue"} = thread}}),
-    do: History.thread_goal_mode(thread)
+  defp authoring_goal_active?(%Socket{assigns: %{thread: %{id: id} = thread}})
+       when is_integer(id),
+       do: History.thread_goal_mode(thread)
 
   defp authoring_goal_active?(_socket), do: false
 
   # Fetches the native goal off the channel process (a Codex port round-trip can
   # take seconds) and pushes the authoritative status to the client.
   # credo:disable-for-lines:20
-  defp push_goal_status_async(%Socket{assigns: %{thread: %{scope: "issue", id: id} = thread}} = socket, running) do
+  defp push_goal_status_async(%Socket{assigns: %{thread: %{id: id} = thread}} = socket, running)
+       when is_integer(id) do
     if History.thread_goal_mode(thread) do
       elapsed = GoalRun.elapsed_seconds(id)
 
@@ -1422,27 +1506,83 @@ defmodule SymphonyElixirWeb.AssistantChannel do
 
   defp push_goal_status_async(_socket, _running), do: :ok
 
-  # Reflects a freshly-edited objective into the native Codex goal off the channel
-  # process, then pushes the authoritative status. Skipped while a turn runs: a
-  # competing `thread/goal/set` would block on (or clobber) the in-flight turn's
-  # thread, and the metadata is already saved + echoed by the reply.
-  # credo:disable-for-lines:20
-  defp sync_native_objective_async(%Socket{assigns: %{thread: %{scope: "issue", id: id} = thread}} = socket) do
-    if History.thread_goal_mode(thread) and not goal_running?(socket) do
-      Task.Supervisor.start_child(SymphonyElixir.TaskSupervisor, fn ->
-        with {:ok, reloaded} <- History.get_thread(id),
-             {:ok, payload, _t} <- AuthoringGoalControl.sync_native_objective(reloaded) do
-          push(socket, "goal_status", goal_status_payload(payload, false))
-        else
-          _ -> :ok
-        end
-      end)
-    end
+  defp sync_native_objective_async(socket, %{id: id, updated_at: revision}) when is_integer(id) do
+    Task.Supervisor.start_child(SymphonyElixir.TaskSupervisor, fn ->
+      result =
+        TurnManager.goal_mutation(id, false, fn ->
+          with {:ok, %{updated_at: ^revision} = thread} <- History.get_thread(id),
+               {:ok, payload, _updated} <- AuthoringGoalControl.sync_native_objective(thread) do
+            {:ok, payload}
+          else
+            {:ok, _newer_thread} -> :stale
+            {:error, reason} -> {:error, reason}
+            _ -> :stale
+          end
+        end)
+
+      case result do
+        {:ok, payload} ->
+          case History.get_thread(id) do
+            {:ok, %{updated_at: ^revision}} ->
+              push(socket, "goal_status", goal_status_payload(payload, false))
+
+            _ ->
+              :ok
+          end
+
+        {:error, reason} ->
+          push(socket, "assistant_error", %{message: error_reason(reason)})
+
+        _ ->
+          :ok
+      end
+    end)
 
     :ok
   end
 
-  defp sync_native_objective_async(_socket), do: :ok
+  defp publish_authoring_goal_changed(socket, %{id: id} = thread, goal_payload)
+       when is_integer(id) and is_map(goal_payload) do
+    payload = %{
+      thread_id: id,
+      enabled: History.thread_goal_mode(thread),
+      objective: History.thread_goal_objective(thread),
+      status: Map.get(goal_payload, :status),
+      capabilities: Map.get(goal_payload, :capabilities, [])
+    }
+
+    push(socket, "authoring_goal_changed", payload)
+    GoalRun.broadcast_from(self(), id, {:authoring_goal_changed, payload})
+    :ok
+  end
+
+  defp enqueue_goal_continuation(%{id: thread_id} = thread, socket) when is_integer(thread_id) do
+    channel_pid = self()
+    opts = turn_stream_opts(socket, thread, channel_pid, %{})
+
+    run = fn ->
+      GoalRun.track(thread_id)
+      result = AgentSession.continue_thread_goal(thread, %{}, opts)
+      finish_goal_run(thread_id, result, channel_pid)
+      result
+    end
+
+    TurnManager.enqueue(
+      thread_id,
+      "Continue the newly activated native authoring Goal.",
+      [
+        run: run,
+        reply_to: channel_pid,
+        trigger: "authoring_goal_changed",
+        agent_kind: Map.get(thread, :agent_kind)
+      ]
+    )
+  end
+
+  defp turn_running_for_thread?(%Socket{assigns: %{thread: %{id: id}}}) when is_integer(id),
+    do: TurnManager.running?(id)
+
+  defp turn_running_for_thread?(_socket), do: false
 
   defp goal_status_payload(payload, running, elapsed_seconds \\ nil) do
     %{
@@ -1529,7 +1669,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
       end)
       |> maybe_put_ask_user_session(socket, thread, channel_pid, context)
 
-    if goal_thread and match?(%{scope: "issue"}, thread) do
+    if goal_thread and is_integer(thread_id) do
       Keyword.put(opts, :on_goal_updated, fn native_goal ->
         send(channel_pid, {:authoring_goal_updated, native_goal})
       end)
@@ -1561,7 +1701,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     end
   end
 
-  defp push_live_goal_status(%Socket{assigns: %{thread: %{scope: "issue", id: id} = thread}} = socket, native_goal)
+  defp push_live_goal_status(%Socket{assigns: %{thread: %{id: id} = thread}} = socket, native_goal)
        when is_integer(id) and is_map(native_goal) do
     payload = AuthoringGoalControl.payload_from_native_update(thread, native_goal)
     elapsed = GoalRun.elapsed_seconds(id)
@@ -1576,13 +1716,13 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   # The authoritative "is a goal turn executing" signal: either this socket is
   # running the turn, or the durable registry shows a run in flight for the thread
   # (covers a tab that reattached after a refresh).
-  defp goal_running?(%Socket{assigns: %{thread: %{scope: "issue", id: id}}} = socket)
+  defp goal_running?(%Socket{assigns: %{thread: %{id: id}}} = socket)
        when is_integer(id),
        do: socket.assigns[:turn_status] == :running or GoalRun.running?(id)
 
   defp goal_running?(socket), do: socket.assigns[:turn_status] == :running
 
-  defp goal_thread?(%{scope: "issue", id: id} = thread) when is_integer(id),
+  defp goal_thread?(%{id: id} = thread) when is_integer(id),
     do: History.thread_goal_mode(thread)
 
   defp goal_thread?(_thread), do: false
@@ -1732,7 +1872,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
         # refresh: register in the durable run registry, run, then notify reloaded/
         # other tabs over PubSub before handing the result back to this channel.
         GoalRun.track(thread_id)
-        result = AgentSession.continue_issue_goal(thread, %{}, opts)
+        result = AgentSession.continue_thread_goal(thread, %{}, opts)
         GoalRun.untrack(thread_id)
         GoalRun.broadcast_from(channel_pid, thread_id, {:goal_run_finished, finished_message(result)})
         send(channel_pid, {:assistant_turn_finished, result})
@@ -1840,6 +1980,28 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   defp error_reason({:missing_required_field, field}), do: "#{field} is required"
   defp error_reason(:project_not_found), do: "project not found"
   defp error_reason(:issue_thread_required), do: "this action is only supported for issue assistant threads"
+  defp error_reason(:assistant_thread_required), do: "this action requires a persistent assistant thread"
+  defp error_reason(:assistant_thread_not_active), do: "the current assistant thread is not active"
+  defp error_reason(:assistant_busy), do: "assistant is busy"
+
+  defp error_reason({:authoring_goal_unavailable, :workspace_not_executable}) do
+    "authoring Goal Mode requires the thread's persisted executable workspace"
+  end
+
+  defp error_reason({:authoring_goal_unavailable, {:unsupported_agent, agent}}) do
+    "authoring Goal Mode requires a persisted Codex or Claude provider; the current thread uses #{inspect(agent)}"
+  end
+
+  defp error_reason({:authoring_goal_unavailable, :claude_goal_unsupported_version}) do
+    "authoring Goal Mode requires a Claude version with native /goal support"
+  end
+
+  defp error_reason({:goal_store_read_failed, reason}),
+    do: "could not read the native goal state: #{inspect(reason)}"
+
+  defp error_reason({:native_goal_clear_failed, reason}),
+    do: "could not clear the native goal: #{inspect(reason)}"
+
   defp error_reason(:message_required), do: "message is required"
   defp error_reason({:turn_crashed, reason}), do: "assistant turn crashed: #{inspect(reason)}"
   defp error_reason(%Ecto.Changeset{}), do: "failed to persist thread metadata"

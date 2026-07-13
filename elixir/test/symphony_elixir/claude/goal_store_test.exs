@@ -25,7 +25,22 @@ defmodule SymphonyElixir.Claude.GoalStoreTest do
     assert is_binary(goal["updated_at"])
   end
 
-  test "authoring and execution files are independent", %{workspace: workspace} do
+  test "execution storage remains workspace-scoped when an assistant thread id is supplied", %{
+    workspace: workspace
+  } do
+    assert :ok =
+             GoalStore.put(
+               workspace,
+               :execution,
+               %{"objective" => "execute", "pending_command" => "set"},
+               8003
+             )
+
+    assert {:ok, %{"objective" => "execute"}} = GoalStore.read(workspace, :execution, 8004)
+    assert GoalStore.path(workspace, :execution, 8003) == GoalStore.path(workspace, :execution)
+  end
+
+  test "thread-scoped authoring and execution files are independent", %{workspace: workspace} do
     assert :ok =
              GoalStore.put(workspace, :execution, %{
                "status" => "active",
@@ -34,14 +49,45 @@ defmodule SymphonyElixir.Claude.GoalStoreTest do
              })
 
     assert :ok =
+             GoalStore.put(
+               workspace,
+               :authoring,
+               %{
+                 "status" => "active",
+                 "objective" => "auth",
+                 "pending_command" => "set"
+               },
+               8003
+             )
+
+    assert {:ok, %{"objective" => "exec"}} = GoalStore.read(workspace, :execution)
+    assert {:ok, %{"objective" => "auth"}} = GoalStore.read(workspace, :authoring, 8003)
+  end
+
+  test "unscoped authoring storage is impossible", %{workspace: workspace} do
+    assert {:error, :assistant_thread_id_required} =
              GoalStore.put(workspace, :authoring, %{
-               "status" => "active",
-               "objective" => "auth",
+               "objective" => "must not leak",
                "pending_command" => "set"
              })
 
-    assert {:ok, %{"objective" => "exec"}} = GoalStore.read(workspace, :execution)
-    assert {:ok, %{"objective" => "auth"}} = GoalStore.read(workspace, :authoring)
+    assert_raise ArgumentError, ~r/assistant_thread_id/, fn ->
+      GoalStore.path(workspace, :authoring)
+    end
+
+    refute File.exists?(Path.join(workspace, ".symphony/claude-goal-authoring.json"))
+  end
+
+  test "authoring goals are isolated by assistant thread in a shared workspace", %{workspace: workspace} do
+    assert :ok =
+             GoalStore.put(workspace, :authoring, %{"objective" => "first", "pending_command" => "set"}, 8003)
+
+    assert :ok =
+             GoalStore.put(workspace, :authoring, %{"objective" => "second", "pending_command" => "set"}, 8004)
+
+    assert {:ok, %{"objective" => "first"}} = GoalStore.read(workspace, :authoring, 8003)
+    assert {:ok, %{"objective" => "second"}} = GoalStore.read(workspace, :authoring, 8004)
+    assert GoalStore.path(workspace, :authoring, 8003) != GoalStore.path(workspace, :authoring, 8004)
   end
 
   test "clear_pending keeps objective and status", %{workspace: workspace} do
@@ -52,7 +98,8 @@ defmodule SymphonyElixir.Claude.GoalStoreTest do
                "pending_command" => "set"
              })
 
-    assert :ok = GoalStore.clear_pending(workspace, :execution)
+    {:ok, %{"revision" => revision}} = GoalStore.read(workspace, :execution)
+    assert :ok = GoalStore.acknowledge_pending(workspace, :execution, :set, revision, nil)
     assert {:ok, goal} = GoalStore.read(workspace, :execution)
     assert goal["pending_command"] == nil
     assert goal["objective"] == "x"
@@ -78,7 +125,8 @@ defmodule SymphonyElixir.Claude.GoalStoreTest do
                "pending_command" => "clear"
              })
 
-    assert :ok = GoalStore.mark_cleared(workspace, :execution)
+    {:ok, %{"revision" => revision}} = GoalStore.read(workspace, :execution)
+    assert :ok = GoalStore.acknowledge_pending(workspace, :execution, :clear, revision, nil)
     assert {:ok, goal} = GoalStore.read(workspace, :execution)
     assert goal["status"] == "cleared"
     assert goal["objective"] == nil
@@ -101,5 +149,91 @@ defmodule SymphonyElixir.Claude.GoalStoreTest do
                "objective" => String.duplicate("a", 4001),
                "pending_command" => "set"
              })
+  end
+
+  test "concurrent readers never observe partial sidecar JSON", %{workspace: workspace} do
+    writer =
+      Task.async(fn ->
+        for index <- 1..100 do
+          assert :ok =
+                   GoalStore.put(
+                     workspace,
+                     :authoring,
+                     %{
+                       "objective" => "objective-#{index}",
+                       "pending_command" => "set"
+                     },
+                     9001
+                   )
+        end
+      end)
+
+    readers =
+      for _ <- 1..8 do
+        Task.async(fn ->
+          for _ <- 1..200 do
+            result = GoalStore.read(workspace, :authoring, 9001)
+            assert result == :error or match?({:ok, %{"objective" => objective}} when is_binary(objective), result)
+          end
+        end)
+      end
+
+    Task.await(writer)
+    Enum.each(readers, &Task.await/1)
+  end
+
+  test "queue_clear cannot overwrite a concurrent newer set with an old objective", %{workspace: workspace} do
+    for _ <- 1..50 do
+      assert :ok =
+               GoalStore.put(
+                 workspace,
+                 :authoring,
+                 %{
+                   "objective" => "old",
+                   "pending_command" => "set"
+                 },
+                 9002
+               )
+
+      clear = Task.async(fn -> GoalStore.queue_clear(workspace, :authoring, 9002) end)
+
+      set =
+        Task.async(fn ->
+          GoalStore.put(
+            workspace,
+            :authoring,
+            %{
+              "objective" => "new",
+              "pending_command" => "set"
+            },
+            9002
+          )
+        end)
+
+      assert :ok = Task.await(clear)
+      assert :ok = Task.await(set)
+      assert {:ok, %{"objective" => "new"}} = GoalStore.read(workspace, :authoring, 9002)
+    end
+  end
+
+  test "read accepts valid cleared and achieved records without pending revisions", %{workspace: workspace} do
+    for {thread_id, status} <- [{9101, "cleared"}, {9102, "achieved"}] do
+      path = GoalStore.path(workspace, :authoring, thread_id)
+      File.mkdir_p!(Path.dirname(path))
+
+      File.write!(
+        path,
+        Jason.encode!(%{
+          "goal" => %{
+            "status" => status,
+            "objective" => nil,
+            "pending_command" => nil
+          }
+        })
+      )
+
+      assert {:ok, %{"status" => ^status, "pending_command" => nil}} =
+               GoalStore.read(workspace, :authoring, thread_id)
+    end
   end
 end

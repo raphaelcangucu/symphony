@@ -22,69 +22,49 @@ defmodule SymphonyElixir.Codex.CodingAgentTest do
       end)
     end
 
-    test "continues without setting a goal for whitespace-only goal text" do
+    test "rejects a whitespace-only goal before starting an ordinary turn" do
       with_fake_goal_server(fn workspace, issue, trace_file ->
         enable_goals!()
 
-        assert {:ok, _result} =
+        assert {:error, {:goal_activation_failed, :empty_objective}} =
                  AppServer.run(workspace, "Build the feature", issue, goal: " \n\t ")
 
-        messages = outbound_messages(trace_file)
-
-        refute message_with_method(messages, "thread/goal/set")
-        assert message_order(messages) == ["initialize", "initialized", "thread/start", "turn/start"]
+        refute File.exists?(trace_file)
       end)
     end
 
-    test "warns and continues without setting a goal for non-binary goal values" do
+    test "rejects a non-binary goal before starting an ordinary turn" do
       with_fake_goal_server(fn workspace, issue, trace_file ->
         enable_goals!()
 
-        log =
-          capture_log(fn ->
-            assert {:ok, _result} =
-                     AppServer.run(workspace, "Build the feature", issue, goal: false)
-          end)
+        assert {:error, {:goal_activation_failed, :invalid_objective}} =
+                 AppServer.run(workspace, "Build the feature", issue, goal: false)
 
-        messages = outbound_messages(trace_file)
-
-        refute message_with_method(messages, "thread/goal/set")
-        assert message_order(messages) == ["initialize", "initialized", "thread/start", "turn/start"]
-        assert log =~ "Codex goal option must be a string"
+        refute File.exists?(trace_file)
       end)
     end
 
-    test "warns and continues without setting a goal when goals are disabled" do
+    test "fails before an ordinary turn when native goals are disabled" do
       with_fake_goal_server(fn workspace, issue, trace_file ->
-        log =
-          capture_log(fn ->
-            assert {:ok, _result} =
-                     AppServer.run(workspace, "Build the feature", issue, goal: "Ship the feature")
-          end)
+        assert {:error, {:goal_activation_failed, :goals_disabled}} =
+                 AppServer.run(workspace, "Build the feature", issue, goal: "Ship the feature")
 
-        messages = outbound_messages(trace_file)
-
-        refute message_with_method(messages, "thread/goal/set")
-        assert message_order(messages) == ["initialize", "initialized", "thread/start", "turn/start"]
-        assert log =~ "Codex goal provided but goal mode is disabled"
+        refute File.exists?(trace_file)
       end)
     end
 
-    test "warns and continues when Codex rejects the goal-set request" do
+    test "fails before an ordinary turn when Codex rejects native goal activation" do
       with_fake_goal_server(:goal_error, fn workspace, issue, trace_file ->
         enable_goals!()
 
-        log =
-          capture_log(fn ->
-            assert {:ok, _result} =
-                     AppServer.run(workspace, "Build the feature", issue, goal: "Ship the feature")
-          end)
+        assert {:error, {:goal_activation_failed, {:response_error, %{"code" => -32601, "message" => "Method not found"}}}} =
+                 AppServer.run(workspace, "Build the feature", issue, goal: "Ship the feature")
 
         messages = outbound_messages(trace_file)
 
         assert message_with_method(messages, "thread/goal/set")
-        assert message_order(messages) == ["initialize", "initialized", "thread/start", "thread/goal/set", "turn/start"]
-        assert log =~ "Codex failed to set thread goal"
+        assert message_order(messages) == ["initialize", "initialized", "thread/start", "thread/goal/set"]
+        refute message_with_method(messages, "turn/start")
       end)
     end
 
@@ -198,17 +178,15 @@ defmodule SymphonyElixir.Codex.CodingAgentTest do
       end)
     end
 
-    test "starts a fresh thread when goals are disabled even if a sidecar exists" do
+    test "fails preflight without touching the durable thread when goals are disabled" do
       with_fake_resume_server(:present, fn workspace, issue, trace_file ->
         write_session_sidecar!(workspace, "thread-resume")
 
-        assert {:ok, _result} =
+        assert {:error, {:goal_activation_failed, :goals_disabled}} =
                  AppServer.run(workspace, "Build the feature", issue, goal: "Ship the feature")
 
-        messages = outbound_messages(trace_file)
-
-        assert message_with_method(messages, "thread/start")
-        refute message_with_method(messages, "thread/resume")
+        refute File.exists?(trace_file)
+        assert {:ok, "thread-resume"} = SymphonyElixir.Codex.Session.resolve(workspace)
       end)
     end
   end

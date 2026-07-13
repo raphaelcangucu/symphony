@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { StrictMode } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -121,6 +122,7 @@ vi.mock("@/services/knowledgeBase", () => ({
   getProjectOverview: (...args: unknown[]) => getProjectOverviewMock(...args),
   getRepoTree: (...args: unknown[]) => getRepoTreeMock(...args),
   getPage: (...args: unknown[]) => getPageMock(...args),
+  getIssuePage: (...args: unknown[]) => getPageMock(...args),
 }));
 
 beforeAll(async () => {
@@ -194,6 +196,20 @@ describe("ProjectAssistantPanel", () => {
     });
     for (const key of Object.keys(channelHandlers)) delete channelHandlers[key];
     pushReceives.length = 0;
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      writable: true,
+      value: (query: string) => ({
+        matches: query.includes("min-width: 1024px"),
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      }),
+    });
   });
 
   it("uses a compact page header for project assistants", () => {
@@ -840,9 +856,131 @@ describe("ProjectAssistantPanel", () => {
     expect(screen.queryByRole("button", { name: "Approve" })).not.toBeInTheDocument();
   });
 
+  async function selectComposerExecutionMode(label: RegExp) {
+    const user = userEvent.setup();
+    const trigger = await screen.findByTestId(/execution-mode-icon-(yolo|build|plan)/);
+    await user.click(trigger.closest("button") ?? trigger);
+    await user.click(await screen.findByRole("menuitemradio", { name: label }));
+  }
+
+  it("keeps the execution mode menu enabled while a turn is running", async () => {
+    const user = userEvent.setup();
+    render(<ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="page" />);
+
+    const textarea = await screen.findByPlaceholderText("Write a message...");
+    fireEvent.change(textarea, { target: { value: "keep going" } });
+    fireEvent.keyDown(textarea, { key: "Enter", code: "Enter" });
+
+    await waitFor(() => expect(push).toHaveBeenCalledWith("send_message", expect.anything()));
+
+    const modeTrigger = await screen.findByRole("button", { name: /yolo/i });
+    expect(modeTrigger).not.toBeDisabled();
+
+    await user.click(modeTrigger);
+    await user.click(await screen.findByRole("menuitemradio", { name: /build/i }));
+    expect(screen.getByRole("button", { name: /build/i })).toBeInTheDocument();
+  });
+
+  it("auto-approves a pending command when switching to YOLO mid-run", async () => {
+    const user = userEvent.setup();
+    render(<ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="page" />);
+
+    await selectComposerExecutionMode(/build/i);
+    await waitFor(() => expect(channelHandlers["approval_required"]).toEqual(expect.any(Function)));
+
+    act(() => {
+      channelHandlers["approval_required"]({
+        request_id: "cmd-pending",
+        command: "npm test",
+        cwd: "/workspace/app",
+        reason: "unknown",
+      });
+    });
+
+    expect(await screen.findByText("Codex wants to run a command")).toBeInTheDocument();
+    push.mockClear();
+    pushReceives.length = 0;
+
+    await user.click(screen.getByRole("button", { name: /build/i }));
+    await user.click(await screen.findByRole("menuitemradio", { name: /yolo/i }));
+
+    await waitFor(() =>
+      expect(push).toHaveBeenCalledWith("submit_approval", {
+        request_id: "cmd-pending",
+        action: "approve",
+      }),
+    );
+
+    const approvalCallIndex = push.mock.calls.findIndex(([event]) => event === "submit_approval");
+    act(() => {
+      pushReceives[approvalCallIndex]?.ok?.({});
+    });
+
+    await waitFor(() => expect(screen.queryByText("Codex wants to run a command")).not.toBeInTheDocument());
+  });
+
+  it("auto-approves incoming command approvals while YOLO is selected", async () => {
+    render(<ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="page" />);
+
+    await waitFor(() => expect(channelHandlers["approval_required"]).toEqual(expect.any(Function)));
+    expect(await screen.findByRole("button", { name: /yolo/i })).toBeInTheDocument();
+
+    act(() => {
+      channelHandlers["approval_required"]({
+        request_id: "cmd-yolo",
+        command: "npm test",
+        cwd: "/workspace/app",
+        reason: "unknown",
+      });
+    });
+
+    await waitFor(() =>
+      expect(push).toHaveBeenCalledWith("submit_approval", {
+        request_id: "cmd-yolo",
+        action: "approve",
+      }),
+    );
+    expect(screen.queryByText("Codex wants to run a command")).not.toBeInTheDocument();
+  });
+
+  it("submits a pending approval once when switching to YOLO under StrictMode", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <StrictMode>
+        <ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="page" />
+      </StrictMode>,
+    );
+
+    await selectComposerExecutionMode(/build/i);
+    await waitFor(() => expect(channelHandlers["approval_required"]).toEqual(expect.any(Function)));
+
+    act(() => {
+      channelHandlers["approval_required"]({
+        request_id: "strict-command",
+        command: "npm test",
+        cwd: "/workspace/app",
+        reason: "unknown",
+      });
+    });
+
+    await user.click(screen.getByRole("button", { name: /build/i }));
+    await user.click(await screen.findByRole("menuitemradio", { name: /yolo/i }));
+
+    await waitFor(() => {
+      const submissions = push.mock.calls.filter(
+        ([event, payload]) =>
+          event === "submit_approval" &&
+          (payload as { request_id?: string })?.request_id === "strict-command",
+      );
+      expect(submissions).toHaveLength(1);
+    });
+  });
+
   it("renders inline command approval requests and submits approval through the channel", async () => {
     render(<ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="page" />);
 
+    await selectComposerExecutionMode(/build/i);
     await waitFor(() => expect(channelHandlers["approval_required"]).toEqual(expect.any(Function)));
 
     channelHandlers["approval_required"]({
@@ -869,6 +1007,7 @@ describe("ProjectAssistantPanel", () => {
   it("labels the approval card with the requesting agent for Claude approvals", async () => {
     render(<ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="page" />);
 
+    await selectComposerExecutionMode(/build/i);
     await waitFor(() => expect(channelHandlers["approval_required"]).toEqual(expect.any(Function)));
 
     channelHandlers["approval_required"]({
@@ -897,6 +1036,7 @@ describe("ProjectAssistantPanel", () => {
     const user = userEvent.setup();
     render(<ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="page" />);
 
+    await selectComposerExecutionMode(/build/i);
     await waitFor(() => expect(channelHandlers["approval_required"]).toEqual(expect.any(Function)));
 
     channelHandlers["approval_required"]({

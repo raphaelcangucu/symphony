@@ -106,6 +106,32 @@ defmodule SymphonyElixir.AgentAvailability do
     end
   end
 
+  @doc """
+  Verifies that native Claude Goal mode can be activated in `workspace`.
+
+  The version gate proves `/goal` exists. The remaining checks fail fast for
+  headless launches that cannot establish a trusted workspace or load project
+  hooks. Tests may provide an exact result through
+  `:claude_goal_preflight_override`.
+  """
+  @spec claude_goal_preflight(Path.t()) :: :ok | {:error, atom()}
+  def claude_goal_preflight(workspace) when is_binary(workspace) do
+    case Application.get_env(:symphony_elixir, :claude_goal_preflight_override) do
+      :ok ->
+        :ok
+
+      {:error, reason} when is_atom(reason) ->
+        {:error, reason}
+
+      _ ->
+        with true <- claude_goal_supported?() || {:error, :claude_goal_unsupported_version},
+             true <- File.dir?(workspace) || {:error, :claude_workspace_untrusted},
+             :ok <- validate_claude_settings(workspace) do
+          :ok
+        end
+    end
+  end
+
   @spec version_at_least?(String.t() | nil, String.t()) :: boolean()
   def version_at_least?(version, minimum) when is_binary(minimum) do
     case {parse_semver(version), parse_semver(minimum)} do
@@ -152,4 +178,22 @@ defmodule SymphonyElixir.AgentAvailability do
   end
 
   defp now_ms, do: System.monotonic_time(:millisecond)
+
+  defp validate_claude_settings(workspace) do
+    settings = Path.join([workspace, ".claude", "settings.json"])
+
+    case File.read(settings) do
+      {:ok, contents} ->
+        case Jason.decode(contents) do
+          {:ok, decoded} when is_map(decoded) -> :ok
+          _ -> {:error, :claude_hooks_unavailable}
+        end
+
+      {:error, :enoent} ->
+        :ok
+
+      {:error, _reason} ->
+        {:error, :claude_hooks_unavailable}
+    end
+  end
 end

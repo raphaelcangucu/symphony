@@ -61,4 +61,23 @@ defmodule SymphonyElixir.AgentAvailabilityTest do
     Application.put_env(:symphony_elixir, :claude_goal_supported_override, false)
     assert AgentAvailability.claude_goal_supported?() == false
   end
+
+  test "Claude Goal preflight reports version, trust, hooks, and native support failures" do
+    workspace = System.tmp_dir!()
+
+    for reason <- [
+          :claude_goal_unsupported_version,
+          :claude_workspace_untrusted,
+          :claude_hooks_unavailable,
+          :claude_goal_native_support_unavailable
+        ] do
+      Application.put_env(:symphony_elixir, :claude_goal_preflight_override, {:error, reason})
+      assert {:error, ^reason} = AgentAvailability.claude_goal_preflight(workspace)
+    end
+
+    Application.put_env(:symphony_elixir, :claude_goal_preflight_override, :ok)
+    assert :ok = AgentAvailability.claude_goal_preflight(workspace)
+
+    on_exit(fn -> Application.delete_env(:symphony_elixir, :claude_goal_preflight_override) end)
+  end
 end

@@ -7,11 +7,11 @@ defmodule SymphonyElixir.Assistant.AgentSession do
   """
 
   alias SymphonyElixir.Assistant.{
+    AuthoringGoalControl,
     FileActivityPresenter,
     GitHubAuthoring,
     History,
     IssueDocuments,
-    ProjectExploreWorkspace,
     SubtaskAuthoring,
     ThreadDocuments,
     ToolCallPresenter,
@@ -19,6 +19,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
   }
 
   alias SymphonyElixir.Codex.DynamicTool
+  alias SymphonyElixir.Claude.GoalStore, as: ClaudeGoalStore
   alias SymphonyElixir.CodingAgent, as: RootCodingAgent
   alias SymphonyElixir.Config
   alias SymphonyElixir.LocalTracker.Context
@@ -39,10 +40,31 @@ defmodule SymphonyElixir.Assistant.AgentSession do
   @spec send_message(String.t(), String.t(), map(), keyword()) :: {:ok, turn_result()} | {:error, term()}
   def send_message(project_slug, message, context, opts \\ [])
       when is_binary(project_slug) and is_binary(message) and is_map(context) and is_list(opts) do
-    with {:ok, trimmed_message} <- normalize_message(message),
-         {:ok, workspace} <- ensure_workspace(project_slug, opts),
-         {:ok, thread} <- History.ensure_thread(project_slug, %{workspace_path: workspace}),
-         {:ok, history_before_turn} <- History.list_messages(project_slug),
+    with thread_id when is_integer(thread_id) <- Keyword.get(opts, :assistant_thread_id),
+         {:ok, %{scope: "project", project_slug: ^project_slug} = thread} <- active_thread(thread_id) do
+      send_message_to_project_thread(thread, message, context, opts)
+    else
+      nil -> {:error, :assistant_thread_required}
+      {:ok, _thread} -> {:error, :assistant_thread_context_mismatch}
+      {:error, reason} -> {:error, reason}
+      _ -> {:error, :assistant_thread_required}
+    end
+  end
+
+  @spec send_message_to_project_thread(SymphonyElixir.Assistant.Thread.t(), String.t(), map(), keyword()) ::
+          {:ok, turn_result()} | {:error, term()}
+  def send_message_to_project_thread(
+        %{scope: "project", id: thread_id, project_slug: project_slug},
+        message,
+        context,
+        opts \\ []
+      )
+      when is_integer(thread_id) and is_binary(project_slug) and is_binary(message) and is_map(context) and
+             is_list(opts) do
+    with {:ok, thread} <- active_thread(thread_id),
+         {:ok, trimmed_message} <- normalize_message(message),
+         {:ok, workspace} <- persisted_thread_workspace(thread),
+         history_before_turn <- thread_id |> History.list_messages_for_thread() |> Enum.map(&History.message_payload/1),
          {:ok, user_message} <-
            History.append_message(thread, %{
              role: "user",
@@ -53,7 +75,9 @@ defmodule SymphonyElixir.Assistant.AgentSession do
          opts =
            opts
            |> Keyword.put(:agent_kind, agent_kind)
-           |> Keyword.put(:agent_thread_id, History.agent_thread_id(thread, agent_kind)),
+           |> Keyword.put(:agent_thread_id, History.agent_thread_id(thread, agent_kind))
+           |> Keyword.put(:assistant_thread_id, thread.id)
+           |> maybe_put_authoring_goal(thread, agent_kind),
          prompt <- build_prompt(project_slug, trimmed_message, context, history_before_turn),
          :ok <- maybe_call(opts, :on_message_created, History.message_payload(user_message)),
          {:ok, runner_result} <- run_codex_turn(workspace, prompt, project_slug, opts),
@@ -75,21 +99,18 @@ defmodule SymphonyElixir.Assistant.AgentSession do
 
   @spec send_message_to_thread(SymphonyElixir.Assistant.Thread.t(), String.t(), map(), keyword()) ::
           {:ok, turn_result()} | {:error, term()}
-  def send_message_to_thread(%{scope: "freeform", id: thread_id} = thread, message, context, opts \\ [])
+  def send_message_to_thread(%{scope: "freeform", id: thread_id}, message, context, opts \\ [])
       when is_binary(message) and is_map(context) and is_list(opts) do
-    # Reload so that agent_thread_ids written by a prior turn (e.g. the claude cli_session_id)
-    # are visible even when the caller holds a frozen struct from an earlier socket assign.
-    thread = with({:ok, t} <- History.get_thread(thread_id), do: t) || thread
-    agent_kind = resolve_thread_agent(thread, context)
-
-    opts =
-      opts
-      |> Keyword.put(:agent_kind, agent_kind)
-      |> Keyword.put(:agent_thread_id, History.agent_thread_id(thread, agent_kind))
-
-    with {:ok, trimmed} <- normalize_message(message),
-         workspace <- freeform_workspace(thread_id, opts),
-         :ok <- File.mkdir_p(workspace),
+    with {:ok, thread} <- active_thread(thread_id),
+         agent_kind = resolve_thread_agent(thread, context),
+         opts =
+           opts
+           |> Keyword.put(:agent_kind, agent_kind)
+           |> Keyword.put(:agent_thread_id, History.agent_thread_id(thread, agent_kind))
+           |> Keyword.put(:assistant_thread_id, thread.id)
+           |> maybe_put_authoring_goal(thread, agent_kind),
+         {:ok, trimmed} <- normalize_message(message),
+         {:ok, workspace} <- persisted_thread_workspace(thread),
          docs_before <- thread_doc_fingerprint(thread_id),
          history <- thread_id |> History.list_messages_for_thread() |> Enum.map(&History.message_payload/1),
          {:ok, user_message} <-
@@ -115,24 +136,22 @@ defmodule SymphonyElixir.Assistant.AgentSession do
   @spec send_message_to_project_explore_thread(SymphonyElixir.Assistant.Thread.t(), String.t(), map(), keyword()) ::
           {:ok, turn_result()} | {:error, term()}
   def send_message_to_project_explore_thread(
-        %{scope: scope, id: thread_id, project_slug: project_slug} = thread,
+        %{scope: scope, id: thread_id, project_slug: project_slug},
         message,
         context,
         opts \\ []
       )
       when scope in ["project_explore", "project_session"] and is_binary(message) and is_map(context) and
              is_list(opts) do
-    # Reload so that agent_thread_ids written by a prior turn are visible even
-    # when the caller holds a frozen struct from an earlier socket assign.
-    thread = with({:ok, t} <- History.get_thread(thread_id), do: t) || thread
-    agent_kind = resolve_thread_agent(thread, context)
-
-    opts =
-      opts
-      |> Keyword.put(:agent_kind, agent_kind)
-      |> Keyword.put(:agent_thread_id, History.agent_thread_id(thread, agent_kind))
-
-    with {:ok, trimmed} <- normalize_message(message),
+    with {:ok, thread} <- active_thread(thread_id),
+         agent_kind = resolve_thread_agent(thread, context),
+         opts =
+           opts
+           |> Keyword.put(:agent_kind, agent_kind)
+           |> Keyword.put(:agent_thread_id, History.agent_thread_id(thread, agent_kind))
+           |> Keyword.put(:assistant_thread_id, thread.id)
+           |> maybe_put_authoring_goal(thread, agent_kind),
+         {:ok, trimmed} <- normalize_message(message),
          {:ok, workspace} <- ensure_project_explore_workspace(project_slug, thread, opts),
          history <- thread_id |> History.list_messages_for_thread() |> Enum.map(&History.message_payload/1),
          {:ok, user_message} <-
@@ -159,23 +178,21 @@ defmodule SymphonyElixir.Assistant.AgentSession do
   @spec send_message_to_kb_thread(SymphonyElixir.Assistant.Thread.t(), String.t(), map(), keyword()) ::
           {:ok, turn_result()} | {:error, term()}
   def send_message_to_kb_thread(
-        %{scope: "kb", id: thread_id, project_slug: project_slug} = thread,
+        %{scope: "kb", id: thread_id, project_slug: project_slug},
         message,
         context,
         opts \\ []
       )
       when is_binary(message) and is_map(context) and is_list(opts) do
-    # Reload so that agent_thread_ids written by a prior turn are visible even
-    # when the caller holds a frozen struct from an earlier socket assign.
-    thread = with({:ok, t} <- History.get_thread(thread_id), do: t) || thread
-    agent_kind = resolve_thread_agent(thread, context)
-
-    opts =
-      opts
-      |> Keyword.put(:agent_kind, agent_kind)
-      |> Keyword.put(:agent_thread_id, History.agent_thread_id(thread, agent_kind))
-
-    with {:ok, trimmed} <- normalize_message(message),
+    with {:ok, thread} <- active_thread(thread_id),
+         agent_kind = resolve_thread_agent(thread, context),
+         opts =
+           opts
+           |> Keyword.put(:agent_kind, agent_kind)
+           |> Keyword.put(:agent_thread_id, History.agent_thread_id(thread, agent_kind))
+           |> Keyword.put(:assistant_thread_id, thread.id)
+           |> maybe_put_authoring_goal(thread, agent_kind),
+         {:ok, trimmed} <- normalize_message(message),
          workspace <- kb_thread_workspace(thread),
          :ok <- File.mkdir_p(workspace),
          history <- thread_id |> History.list_messages_for_thread() |> Enum.map(&History.message_payload/1),
@@ -203,25 +220,22 @@ defmodule SymphonyElixir.Assistant.AgentSession do
   @spec send_message_to_issue_thread(SymphonyElixir.Assistant.Thread.t(), String.t(), map(), keyword()) ::
           {:ok, turn_result()} | {:error, term()}
   def send_message_to_issue_thread(
-        %{scope: scope, id: thread_id, project_slug: project_slug, issue_identifier: identifier} = thread,
+        %{scope: scope, id: thread_id, project_slug: project_slug, issue_identifier: identifier},
         message,
         context,
         opts \\ []
       )
       when scope in ["issue", "issue_session"] and is_binary(message) and is_map(context) and
              is_list(opts) do
-    # Reload so that agent_thread_ids written by a prior turn are visible even
-    # when the caller holds a frozen struct from an earlier socket assign.
-    thread = with({:ok, t} <- History.get_thread(thread_id), do: t) || thread
-    agent_kind = resolve_thread_agent(thread, context)
-
-    opts =
-      opts
-      |> Keyword.put(:agent_kind, agent_kind)
-      |> Keyword.put(:agent_thread_id, History.agent_thread_id(thread, agent_kind))
-      |> maybe_put_authoring_goal(thread, agent_kind)
-
-    with {:ok, trimmed} <- normalize_message(message),
+    with {:ok, thread} <- active_thread(thread_id),
+         agent_kind = resolve_thread_agent(thread, context),
+         opts =
+           opts
+           |> Keyword.put(:agent_kind, agent_kind)
+           |> Keyword.put(:agent_thread_id, History.agent_thread_id(thread, agent_kind))
+           |> Keyword.put(:assistant_thread_id, thread.id)
+           |> maybe_put_authoring_goal(thread, agent_kind),
+         {:ok, trimmed} <- normalize_message(message),
          {:ok, workspace} <- ensure_issue_workspace(thread),
          docs_before <- doc_fingerprint(identifier),
          history <- thread_id |> History.list_messages_for_thread() |> Enum.map(&History.message_payload/1),
@@ -246,59 +260,38 @@ defmodule SymphonyElixir.Assistant.AgentSession do
   end
 
   @authoring_goal_continuation_prompt "Continue pursuing the authoring goal for this issue. Review the progress so far in this working tree, keep producing the spec/plan/analysis artifacts the objective calls for, and stop when the artifact is ready for review or you are blocked. This is authoring only: do NOT dispatch the orchestrator and do NOT change the issue's status, labels, or execution goal."
+  @generic_goal_continuation_prompt "Continue pursuing the authoring goal for this assistant thread. Review the conversation and current workspace, keep producing the requested analysis or artifacts, and stop when the result is ready for review or you are blocked. This is authoring only: never dispatch execution, change tracker state, or switch to another assistant thread."
 
   @doc """
-  Runs an autonomous authoring-goal continuation batch on an issue thread.
+  Runs an autonomous authoring-goal continuation batch on any persistent thread.
 
-  Unlike `send_message_to_issue_thread/4` this does NOT append a user message: it
-  resumes the thread's Codex goal and continues pursuing the objective, streaming
-  each turn through the same callbacks. Used by the "resume" control so a stalled
-  authoring goal can keep going without the operator typing a prompt.
+  This does not append a user message. Each scope retains its own workspace,
+  prompt context, tools, and persistence behavior.
   """
-  @spec continue_issue_goal(SymphonyElixir.Assistant.Thread.t(), map(), keyword()) ::
+  @spec continue_thread_goal(SymphonyElixir.Assistant.Thread.t(), map(), keyword()) ::
           {:ok, turn_result()} | {:error, term()}
-  def continue_issue_goal(
-        %{scope: "issue", id: thread_id, project_slug: project_slug, issue_identifier: identifier} = thread,
-        context,
-        opts \\ []
-      )
-      when is_map(context) and is_list(opts) do
-    thread = with({:ok, t} <- History.get_thread(thread_id), do: t) || thread
-    agent_kind = resolve_thread_agent(thread, context)
+  def continue_thread_goal(%{id: thread_id} = _thread, context, opts \\ [])
+      when is_integer(thread_id) and is_map(context) and is_list(opts) do
+    with {:ok, thread} <- active_thread(thread_id),
+         true <- History.thread_goal_mode(thread) || {:error, :goal_mode_disabled},
+         {:ok, agent_kind} <- persisted_goal_agent(thread) do
+      opts =
+        opts
+        |> Keyword.put(:agent_kind, agent_kind)
+        |> Keyword.put(:agent_thread_id, History.agent_thread_id(thread, agent_kind))
+        |> Keyword.put(:assistant_thread_id, thread.id)
+        |> maybe_put_authoring_goal(thread, agent_kind)
 
-    cond do
-      not History.thread_goal_mode(thread) ->
-        {:error, :goal_mode_disabled}
-
-      agent_kind not in [nil, "codex", :codex, "claude", :claude] ->
-        {:error, :goal_not_native}
-
-      true ->
-        opts =
-          opts
-          |> Keyword.put(:agent_kind, agent_kind)
-          |> Keyword.put(:agent_thread_id, History.agent_thread_id(thread, agent_kind))
-          |> maybe_put_authoring_goal(thread, agent_kind)
-
-        with {:ok, workspace} <- ensure_issue_workspace(thread),
-             docs_before <- doc_fingerprint(identifier),
-             history <- thread_id |> History.list_messages_for_thread() |> Enum.map(&History.message_payload/1),
-             prompt <- build_issue_prompt(thread, @authoring_goal_continuation_prompt, context, history),
-             {:ok, runner_result} <- run_issue_turn(workspace, prompt, project_slug, identifier, opts),
-             {:ok, updated_thread} <- maybe_update_agent_thread(thread, runner_result, agent_kind),
-             {:ok, assistant_message} <- persist_assistant_message(updated_thread, runner_result),
-             :ok <- maybe_notify_documents(identifier, docs_before, opts) do
-          {:ok,
-           %{
-             assistant_message: assistant_message.content,
-             tool_calls: assistant_message.tool_calls,
-             codex_thread_id: Map.get(runner_result, :codex_thread_id),
-             turn_id: Map.get(runner_result, :turn_id),
-             assistant_chat_message: History.message_payload(assistant_message)
-           }}
-        end
+      continue_goal_turn(thread, context, opts, agent_kind)
     end
   end
+
+  @doc "Compatibility wrapper for issue and issue-session authoring continuations."
+  @spec continue_issue_goal(SymphonyElixir.Assistant.Thread.t(), map(), keyword()) ::
+          {:ok, turn_result()} | {:error, term()}
+  def continue_issue_goal(%{scope: scope} = thread, context, opts \\ [])
+      when scope in ["issue", "issue_session"] and is_map(context) and is_list(opts),
+      do: continue_thread_goal(thread, context, opts)
 
   @spec freeform_workspace(integer() | String.t(), keyword()) :: Path.t()
   def freeform_workspace(thread_id, opts \\ []) do
@@ -360,13 +353,6 @@ defmodule SymphonyElixir.Assistant.AgentSession do
     |> String.trim()
   end
 
-  defp ensure_workspace(project_slug, opts) do
-    with {:ok, workspace} <- assistant_workspace(project_slug, opts),
-         :ok <- File.mkdir_p(workspace) do
-      {:ok, workspace}
-    end
-  end
-
   defp run_codex_turn(workspace, prompt, project_slug, opts) do
     runner = Keyword.get(opts, :runner, &default_runner/4)
 
@@ -374,7 +360,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
       opts
       |> Keyword.put(:project_slug, project_slug)
       |> Keyword.put_new(:dynamic_tools, ToolExecutor.combined_tool_specs())
-      |> Keyword.put_new(:tool_executor, ToolExecutor.combined_codex_tool_executor(project_slug))
+      |> Keyword.put_new(:tool_executor, ToolExecutor.combined_codex_tool_executor(project_slug, opts))
       |> maybe_put_project_codex_config(project_slug)
 
     runner.(workspace, prompt, assistant_issue(project_slug), runner_opts)
@@ -388,7 +374,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
       opts
       |> Keyword.put(:project_slug, project_slug)
       |> Keyword.put_new(:dynamic_tools, ToolExecutor.combined_tool_specs())
-      |> Keyword.put_new(:tool_executor, ToolExecutor.combined_codex_tool_executor(project_slug))
+      |> Keyword.put_new(:tool_executor, ToolExecutor.combined_codex_tool_executor(project_slug, opts))
       |> maybe_put_project_codex_config(project_slug)
 
     runner.(workspace, prompt, project_explore_issue(project_slug), runner_opts)
@@ -401,7 +387,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
     runner_opts =
       opts
       |> Keyword.put_new(:dynamic_tools, ToolExecutor.freeform_tool_specs())
-      |> Keyword.put_new(:tool_executor, ToolExecutor.freeform_codex_tool_executor())
+      |> Keyword.put_new(:tool_executor, ToolExecutor.freeform_codex_tool_executor(opts))
       |> maybe_put_instance_codex_config()
 
     runner.(workspace, prompt, freeform_issue(), runner_opts)
@@ -460,7 +446,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
       |> Keyword.put(:project_slug, project_slug)
       |> Keyword.put_new(:workspace_root, Workspace.workspace_root_for(issue_workspace_ref(project_slug, identifier)))
       |> Keyword.put(:dynamic_tools, ToolExecutor.issue_bound_tool_specs(identifier) ++ DynamicTool.tool_specs())
-      |> Keyword.put(:tool_executor, ToolExecutor.issue_bound_combined_codex_tool_executor(project_slug, identifier))
+      |> Keyword.put(:tool_executor, ToolExecutor.issue_bound_combined_codex_tool_executor(project_slug, identifier, opts))
       |> maybe_put_project_codex_config(project_slug)
 
     runner.(workspace, prompt, assistant_issue(project_slug), runner_opts)
@@ -492,16 +478,120 @@ defmodule SymphonyElixir.Assistant.AgentSession do
   defp project_explore_issue(project_slug),
     do: %{id: "assistant:explore:#{project_slug}", identifier: project_slug, title: "Project explore assistant"}
 
-  defp ensure_project_explore_workspace(project_slug, %{workspace_path: path}, opts)
-       when is_binary(path) and path != "" do
-    case Workspace.ensure_at(path, ProjectExploreWorkspace.path(project_slug)) do
-      {:ok, workspace} -> {:ok, workspace}
-      {:error, _reason} -> ProjectExploreWorkspace.ensure(project_slug, opts)
+  defp ensure_project_explore_workspace(_project_slug, thread, _opts),
+    do: persisted_thread_workspace(thread)
+
+  defp persisted_thread_workspace(%{workspace_path: path}) when is_binary(path) and path != "" do
+    case File.mkdir_p(path) do
+      :ok -> {:ok, path}
+      {:error, _reason} -> {:error, {:authoring_goal_unavailable, :workspace_not_executable}}
     end
   end
 
-  defp ensure_project_explore_workspace(project_slug, _thread, opts),
-    do: ProjectExploreWorkspace.ensure(project_slug, opts)
+  defp persisted_thread_workspace(_thread),
+    do: {:error, {:authoring_goal_unavailable, :workspace_not_executable}}
+
+  defp active_thread(thread_id) when is_integer(thread_id) do
+    case History.get_thread(thread_id) do
+      {:ok, %{status: "active"} = thread} -> {:ok, thread}
+      {:ok, _thread} -> {:error, :assistant_thread_not_active}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp persisted_goal_agent(thread) do
+    cond do
+      thread.agent_kind in ["codex", "claude"] -> {:ok, thread.agent_kind}
+      is_binary(History.agent_thread_id(thread, "claude")) -> {:ok, "claude"}
+      is_binary(History.agent_thread_id(thread, "codex")) -> {:ok, "codex"}
+      true -> {:error, {:authoring_goal_unavailable, {:unsupported_agent, "unknown"}}}
+    end
+  end
+
+  defp continue_goal_turn(%{scope: "project", project_slug: project_slug} = thread, context, opts, agent_kind) do
+    with {:ok, workspace} <- persisted_thread_workspace(thread),
+         history <- thread.id |> History.list_messages_for_thread() |> Enum.map(&History.message_payload/1),
+         prompt <- build_prompt(project_slug, @generic_goal_continuation_prompt, context, history),
+         {:ok, runner_result} <- run_codex_turn(workspace, prompt, project_slug, opts),
+         {:ok, result, _assistant_message} <- persist_continuation(thread, runner_result, agent_kind) do
+      {:ok, result}
+    end
+  end
+
+  defp continue_goal_turn(
+         %{scope: scope, project_slug: project_slug} = thread,
+         context,
+         opts,
+         agent_kind
+       )
+       when scope in ["project_explore", "project_session"] do
+    with {:ok, workspace} <- persisted_thread_workspace(thread),
+         history <- thread.id |> History.list_messages_for_thread() |> Enum.map(&History.message_payload/1),
+         prompt <- build_project_explore_prompt(project_slug, @generic_goal_continuation_prompt, context, history),
+         {:ok, runner_result} <- run_project_explore_turn(workspace, prompt, project_slug, opts),
+         {:ok, result, _assistant_message} <- persist_continuation(thread, runner_result, agent_kind) do
+      {:ok, result}
+    end
+  end
+
+  defp continue_goal_turn(%{scope: "freeform"} = thread, context, opts, agent_kind) do
+    with {:ok, workspace} <- persisted_thread_workspace(thread),
+         history <- thread.id |> History.list_messages_for_thread() |> Enum.map(&History.message_payload/1),
+         prompt <- build_freeform_prompt(@generic_goal_continuation_prompt, context, history),
+         {:ok, runner_result} <- run_freeform_turn(workspace, prompt, opts),
+         {:ok, result, _assistant_message} <- persist_continuation(thread, runner_result, agent_kind) do
+      {:ok, result}
+    end
+  end
+
+  defp continue_goal_turn(
+         %{scope: "kb", project_slug: project_slug} = thread,
+         context,
+         opts,
+         agent_kind
+       ) do
+    with {:ok, workspace} <- persisted_thread_workspace(thread),
+         history <- thread.id |> History.list_messages_for_thread() |> Enum.map(&History.message_payload/1),
+         prompt <- build_kb_prompt(project_slug, @generic_goal_continuation_prompt, context, history),
+         {:ok, runner_result} <- run_codex_turn(workspace, prompt, project_slug, opts),
+         {:ok, result, assistant_message} <- persist_continuation(thread, runner_result, agent_kind) do
+      maybe_notify_kb_documents(assistant_message, context, opts)
+      {:ok, result}
+    end
+  end
+
+  defp continue_goal_turn(
+         %{scope: scope, project_slug: project_slug, issue_identifier: identifier} = thread,
+         context,
+         opts,
+         agent_kind
+       )
+       when scope in ["issue", "issue_session"] do
+    with {:ok, workspace} <- persisted_thread_workspace(thread),
+         docs_before <- doc_fingerprint(identifier),
+         history <- thread.id |> History.list_messages_for_thread() |> Enum.map(&History.message_payload/1),
+         prompt <- build_issue_prompt(thread, @authoring_goal_continuation_prompt, context, history),
+         {:ok, runner_result} <- run_issue_turn(workspace, prompt, project_slug, identifier, opts),
+         {:ok, result, _assistant_message} <- persist_continuation(thread, runner_result, agent_kind),
+         :ok <- maybe_notify_documents(identifier, docs_before, opts) do
+      {:ok, result}
+    end
+  end
+
+  defp persist_continuation(thread, runner_result, agent_kind) do
+    with {:ok, updated_thread} <- maybe_update_agent_thread(thread, runner_result, agent_kind),
+         {:ok, assistant_message} <- persist_assistant_message(updated_thread, runner_result) do
+      result = %{
+        assistant_message: assistant_message.content,
+        tool_calls: assistant_message.tool_calls,
+        codex_thread_id: Map.get(runner_result, :codex_thread_id),
+        turn_id: Map.get(runner_result, :turn_id),
+        assistant_chat_message: History.message_payload(assistant_message)
+      }
+
+      {:ok, result, assistant_message}
+    end
+  end
 
   defp build_project_explore_prompt(project_slug, message, context, history) do
     orchestrator_summary = orchestrator_config_summary(project_slug)
@@ -858,16 +948,21 @@ defmodule SymphonyElixir.Assistant.AgentSession do
   # the `/goal` sidecar (`goal_role: :authoring`) injected by Claude.CodingAgent.
   defp maybe_put_authoring_goal(opts, thread, agent_kind) do
     cond do
+      agent_kind in ["claude", :claude] and claude_authoring_clear_pending?(thread) ->
+        opts
+        |> Keyword.put(:goal_role, :authoring)
+        |> Keyword.delete(:goal)
+
       not History.thread_goal_mode(thread) ->
         opts
 
       agent_kind in [nil, "codex", :codex] ->
-        objective = History.thread_goal_objective(thread) || "Complete the authoring objective for this issue."
+        objective = History.thread_goal_objective(thread) || "Complete the authoring objective for this assistant thread."
         Keyword.put(opts, :goal, objective)
 
       agent_kind in ["claude", :claude] ->
-        objective = History.thread_goal_objective(thread) || "Complete the authoring objective for this issue."
-        _ = maybe_set_claude_authoring_goal(thread, objective)
+        objective = History.thread_goal_objective(thread) || "Complete the authoring objective for this assistant thread."
+        _ = maybe_set_claude_authoring_goal(%{thread | agent_kind: "claude"}, objective)
 
         opts
         |> Keyword.put(:goal_role, :authoring)
@@ -878,25 +973,20 @@ defmodule SymphonyElixir.Assistant.AgentSession do
     end
   end
 
-  defp maybe_set_claude_authoring_goal(%{project_slug: slug, issue_identifier: identifier}, objective)
-       when is_binary(slug) and is_binary(identifier) and is_binary(objective) do
-    case Context.get_project(slug) do
-      {:ok, project} ->
-        case SymphonyElixir.Claude.GoalControl.set_objective(project, identifier, :authoring, objective) do
-          {:ok, _} ->
-            :ok
-
-          {:error, reason} ->
-            Logger.debug("Claude authoring goal set skipped: #{inspect(reason)}")
-            :ok
-        end
-
-      _ ->
-        :ok
-    end
+  defp maybe_set_claude_authoring_goal(thread, _objective) do
+    _ = AuthoringGoalControl.sync_native_objective(thread)
+    :ok
   end
 
-  defp maybe_set_claude_authoring_goal(_thread, _objective), do: :ok
+  defp claude_authoring_clear_pending?(%{id: id, workspace_path: workspace})
+       when is_integer(id) and is_binary(workspace) do
+    match?(
+      {:ok, %{"pending_command" => "clear"}},
+      ClaudeGoalStore.read(workspace, :authoring, id)
+    )
+  end
+
+  defp claude_authoring_clear_pending?(_thread), do: false
 
   defp default_runner(workspace, prompt, issue, opts) do
     agent_kind = Keyword.get(opts, :agent_kind)

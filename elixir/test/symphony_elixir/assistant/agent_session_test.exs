@@ -2,7 +2,7 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
   use ExUnit.Case, async: false
 
   alias Ecto.Adapters.SQL
-  alias SymphonyElixir.Assistant.{AgentSession, History, ToolExecutor}
+  alias SymphonyElixir.Assistant.{AgentSession, History, Thread, ToolExecutor}
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.Repo
   alias SymphonyElixir.Workspace
@@ -29,8 +29,17 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
     %{workspace_root: tmp_dir}
   end
 
-  test "creates a safe project assistant workspace and persists a runner reply", %{workspace_root: workspace_root} do
+  test "runs the exact project thread and persists a runner reply", %{workspace_root: workspace_root} do
     {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+    assert {:ok, expected_workspace} = AgentSession.assistant_workspace("macro-markets", workspace_root: workspace_root)
+    File.mkdir_p!(expected_workspace)
+
+    {:ok, thread} =
+      History.ensure_thread("macro-markets", %{
+        workspace_path: expected_workspace,
+        agent_kind: "codex"
+      })
+
     parent = self()
 
     runner = fn workspace, prompt, issue, opts ->
@@ -46,16 +55,12 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
     end
 
     assert {:ok, result} =
-             AgentSession.send_message("macro-markets", "Quem e vc?", %{view: "board"},
-               runner: runner,
-               workspace_root: workspace_root
-             )
+             AgentSession.send_message_to_project_thread(thread, "Quem e vc?", %{view: "board"}, runner: runner)
 
     assert result.assistant_message == "Oi! Eu sou o assistant do projeto Macro Markets."
     assert result.tool_calls == []
 
     assert_receive {:runner_called, workspace, prompt, issue, opts}
-    assert {:ok, expected_workspace} = AgentSession.assistant_workspace("macro-markets", workspace_root: workspace_root)
     assert workspace == expected_workspace
     assert File.dir?(workspace)
     assert prompt =~ "Project assistant for `macro-markets`"
@@ -78,13 +83,16 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
 
   test "includes recent conversation history in later turns", %{workspace_root: workspace_root} do
     {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+    {:ok, workspace} = AgentSession.assistant_workspace("macro-markets", workspace_root: workspace_root)
+    File.mkdir_p!(workspace)
+    {:ok, thread} = History.ensure_thread("macro-markets", %{workspace_path: workspace, agent_kind: "codex"})
 
     first_runner = fn _workspace, _prompt, _issue, _opts ->
       {:ok, %{assistant_message: "Oi!", codex_thread_id: "thread-1", turn_id: "turn-1", tool_calls: []}}
     end
 
     assert {:ok, _result} =
-             AgentSession.send_message("macro-markets", "Oi", %{}, runner: first_runner, workspace_root: workspace_root)
+             AgentSession.send_message_to_project_thread(thread, "Oi", %{}, runner: first_runner)
 
     parent = self()
 
@@ -94,16 +102,22 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
     end
 
     assert {:ok, _result} =
-             AgentSession.send_message("macro-markets", "Voce lembra?", %{},
-               runner: second_runner,
-               workspace_root: workspace_root
-             )
+             AgentSession.send_message_to_project_thread(thread, "Voce lembra?", %{}, runner: second_runner)
 
     assert_receive {:second_prompt, prompt}
     assert prompt =~ "Recent conversation:"
     assert prompt =~ "user: Oi"
     assert prompt =~ "assistant: Oi!"
     assert prompt =~ "Current user message:\nVoce lembra?"
+  end
+
+  test "legacy project send refuses to resolve or create a thread" do
+    {:ok, _project} = Context.ensure_project(%{name: "Exact", slug: "exact-project"})
+
+    assert {:error, :assistant_thread_required} =
+             AgentSession.send_message("exact-project", "hello", %{}, runner: fn _, _, _, _ -> flunk() end)
+
+    refute Repo.get_by(Thread, project_slug: "exact-project", scope: "project", status: "active")
   end
 
   test "send_message_to_thread/4 runs a freeform turn with project-agnostic tools only" do
@@ -138,8 +152,93 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
     assert "list_issues" in tool_names
     assert "get_issue" in tool_names
     assert "read_workspace_file" in tool_names
+    assert "goal" in tool_names
 
     assert is_function(Keyword.get(opts, :tool_executor), 2)
+    assert Keyword.get(opts, :assistant_thread_id) == thread.id
+  end
+
+  test "each persistent scope binds its exact thread into the goal ToolExecutor", %{
+    workspace_root: workspace_root
+  } do
+    {:ok, project} = Context.ensure_project(%{name: "Routing", slug: "goal-routing"})
+    {:ok, issue_one} = Context.create_issue(project.slug, %{"title" => "One", "status" => "Todo"})
+    {:ok, issue_two} = Context.create_issue(project.slug, %{"title" => "Two", "status" => "Todo"})
+
+    create_thread = fn scope, workspace, issue_identifier ->
+      File.mkdir_p!(workspace)
+
+      attrs = %{
+        scope: scope,
+        status: "active",
+        workspace_path: workspace,
+        agent_kind: "codex",
+        project_slug: if(scope == "freeform", do: nil, else: project.slug),
+        issue_identifier: issue_identifier
+      }
+
+      {:ok, thread} = %Thread{} |> Thread.changeset(attrs) |> Repo.insert()
+      thread
+    end
+
+    project_workspace = Path.join(workspace_root, "project")
+    File.mkdir_p!(project_workspace)
+    {:ok, project_thread} = History.ensure_thread(project.slug, %{workspace_path: project_workspace})
+
+    threads = [
+      project_thread,
+      create_thread.("project_session", Path.join(workspace_root, "project-session"), nil),
+      create_thread.("project_explore", Path.join(workspace_root, "project-explore"), nil),
+      create_thread.("freeform", Path.join(workspace_root, "freeform"), nil),
+      create_thread.("issue", Workspace.path_for_issue(issue_one), issue_one.identifier),
+      create_thread.("issue_session", Workspace.path_for_issue(issue_two), issue_two.identifier),
+      create_thread.("kb", Path.join(workspace_root, "kb"), nil)
+    ]
+
+    Enum.each(threads, fn thread ->
+      objective = "Exact objective for #{thread.scope}"
+      test_pid = self()
+
+      runner = fn _workspace, _prompt, _issue, opts ->
+        executor = Keyword.fetch!(opts, :tool_executor)
+
+        send(
+          test_pid,
+          {:goal_result, thread.id,
+           executor.("goal", %{
+             "action" => "set_objective",
+             "context" => "authoring",
+             "objective" => objective
+           })}
+        )
+
+        {:ok, %{assistant_message: "ok", tool_calls: [], codex_thread_id: "ct-#{thread.id}", turn_id: "turn"}}
+      end
+
+      result =
+        case thread.scope do
+          "project" ->
+            AgentSession.send_message_to_project_thread(thread, "route", %{}, runner: runner)
+
+          scope when scope in ["project_session", "project_explore"] ->
+            AgentSession.send_message_to_project_explore_thread(thread, "route", %{}, runner: runner)
+
+          "freeform" ->
+            AgentSession.send_message_to_thread(thread, "route", %{}, runner: runner)
+
+          scope when scope in ["issue", "issue_session"] ->
+            AgentSession.send_message_to_issue_thread(thread, "route", %{}, runner: runner)
+
+          "kb" ->
+            AgentSession.send_message_to_kb_thread(thread, "route", %{}, runner: runner)
+        end
+
+      assert {:ok, _result} = result
+      assert_receive {:goal_result, thread_id, %{"success" => true}}
+      assert thread_id == thread.id
+      assert {:ok, updated} = History.get_thread(thread.id)
+      assert History.thread_goal_objective(updated) == objective
+    end)
   end
 
   test "send_message_to_thread/4 threads instance codex config for freeform chats" do

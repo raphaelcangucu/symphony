@@ -55,18 +55,19 @@ defmodule SymphonyElixir.Codex.CodingAgent do
   @spec start_session(Path.t(), keyword()) :: {:ok, session()} | {:error, term()}
   def start_session(workspace, opts \\ []) do
     codex_section = codex_section(opts)
+    goals_section = goals_section(opts)
 
-    with :ok <- validate_workspace_cwd(workspace, opts),
+    with :ok <- validate_goal_request(opts, goals_section),
+         :ok <- validate_workspace_cwd(workspace, opts),
          {:ok, port} <- start_port(workspace, codex_section) do
       metadata = port_metadata(port)
       expanded_workspace = Path.expand(workspace)
 
-      goals_section = goals_section(opts)
-
       with {:ok, session_policies} <- session_policies(expanded_workspace, codex_section, opts),
            {:ok, thread_id, origin} <-
-             do_start_session(port, expanded_workspace, session_policies, opts, goals_section) do
-        {goal_state, goal_map} = establish_goal(port, thread_id, origin, opts, goals_section)
+             do_start_session(port, expanded_workspace, session_policies, opts, goals_section),
+           {:ok, goal_state, goal_map} <-
+             establish_goal(port, thread_id, origin, opts, goals_section) do
         Session.write(expanded_workspace, thread_id)
         maybe_mirror_session_goal(expanded_workspace, goal_map)
 
@@ -198,20 +199,19 @@ defmodule SymphonyElixir.Codex.CodingAgent do
         DynamicTool.execute(tool, arguments, issue: issue)
       end)
 
-    goal_active = ensure_goal_active(session, opts)
-    max_goal_turns = max_goal_turns(opts)
-
-    run_goal_turns(
-      session,
-      prompt,
-      issue,
-      opts,
-      on_message,
-      tool_executor,
-      goal_active,
-      max_goal_turns,
-      1
-    )
+    with {:ok, goal_active} <- ensure_goal_active(session, opts) do
+      run_goal_turns(
+        session,
+        prompt,
+        issue,
+        opts,
+        on_message,
+        tool_executor,
+        goal_active,
+        max_goal_turns(opts),
+        1
+      )
+    end
   end
 
   defp run_goal_turns(
@@ -397,16 +397,36 @@ defmodule SymphonyElixir.Codex.CodingAgent do
     }
   end
 
-  defp ensure_goal_active(%{goal_active: true}, _opts), do: true
-  defp ensure_goal_active(%{goal_attempted: true}, _opts), do: false
+  defp ensure_goal_active(%{goal_active: true}, _opts), do: {:ok, true}
+  defp ensure_goal_active(%{goal_attempted: true}, _opts), do: {:ok, false}
 
   defp ensure_goal_active(%{port: port, thread_id: thread_id} = session, opts) do
     section = Map.get(session, :goals_section) || default_goals_section()
-    {goal_state, _goal} = maybe_set_goal(port, thread_id, Keyword.get(opts, :goal), section)
-    goal_state == :active
+
+    case maybe_set_goal(port, thread_id, Keyword.get(opts, :goal), section) do
+      {:ok, goal_state, _goal} -> {:ok, goal_state == :active}
+      {:error, reason} -> {:error, reason}
+    end
   end
 
-  defp ensure_goal_active(_session, _opts), do: false
+  defp ensure_goal_active(_session, _opts), do: {:ok, false}
+
+  defp validate_goal_request(opts, section) do
+    case Keyword.fetch(opts, :goal) do
+      :error ->
+        :ok
+
+      {:ok, objective} when is_binary(objective) ->
+        cond do
+          String.trim(objective) == "" -> {:error, {:goal_activation_failed, :empty_objective}}
+          not CodexConfig.goals_enabled?(section) -> {:error, {:goal_activation_failed, :goals_disabled}}
+          true -> :ok
+        end
+
+      {:ok, _invalid} ->
+        {:error, {:goal_activation_failed, :invalid_objective}}
+    end
+  end
 
   defp max_goal_turns(opts) do
     case Keyword.get(opts, :max_goal_turns, @default_max_goal_turns) do
@@ -732,32 +752,27 @@ defmodule SymphonyElixir.Codex.CodingAgent do
   defp establish_goal(port, thread_id, :resumed, opts, section) do
     case request_goal_get(port, thread_id) do
       {:ok, %{} = goal} ->
-        {goal_state_from_status(goal_status_value(goal)), goal}
+        {:ok, goal_state_from_status(goal_status_value(goal)), goal}
 
       {:ok, nil} ->
         maybe_set_goal(port, thread_id, Keyword.get(opts, :goal), section)
 
       {:error, reason} ->
-        Logger.warning("Codex thread/goal/get failed on resume thread_id=#{thread_id}; falling back to provided goal: #{inspect(reason)}")
-
-        maybe_set_goal(port, thread_id, Keyword.get(opts, :goal), section)
+        {:error, {:goal_status_failed, reason}}
     end
   end
 
-  defp maybe_set_goal(_port, _thread_id, nil, _section), do: {:not_requested, nil}
+  defp maybe_set_goal(_port, _thread_id, nil, _section), do: {:ok, :not_requested, nil}
 
   defp maybe_set_goal(port, thread_id, goal, section) when is_binary(goal) do
     case String.trim(goal) do
-      "" -> {:inactive, nil}
+      "" -> {:error, {:goal_activation_failed, :empty_objective}}
       trimmed -> set_goal(port, thread_id, %{objective: trimmed, status: "active"}, section)
     end
   end
 
-  defp maybe_set_goal(_port, thread_id, _goal, _section) do
-    Logger.warning("Codex goal option must be a string; continuing with single-turn session thread_id=#{thread_id}")
-
-    {:inactive, nil}
-  end
+  defp maybe_set_goal(_port, _thread_id, _goal, _section),
+    do: {:error, {:goal_activation_failed, :invalid_objective}}
 
   # Session-start goal set: gated on `goals_enabled` and reduced to a
   # `{goal_state, goal_map}` pair for the turn loop and sidecar mirror. Control-
@@ -767,17 +782,13 @@ defmodule SymphonyElixir.Codex.CodingAgent do
       case request_goal_set(port, thread_id, attrs) do
         {:ok, goal} ->
           status = goal_status_value(goal) || Map.get(attrs, :status) || "active"
-          {goal_state_from_status(status), goal}
+          {:ok, goal_state_from_status(status), goal}
 
         {:error, reason} ->
-          Logger.warning("Codex failed to set thread goal; continuing with single-turn session thread_id=#{thread_id}: #{inspect(reason)}")
-
-          {:inactive, nil}
+          {:error, {:goal_activation_failed, reason}}
       end
     else
-      Logger.warning("Codex goal provided but goal mode is disabled; continuing with single-turn session thread_id=#{thread_id}")
-
-      {:inactive, nil}
+      {:error, {:goal_activation_failed, :goals_disabled}}
     end
   end
 

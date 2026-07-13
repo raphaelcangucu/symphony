@@ -30,7 +30,7 @@ export function contextRefForApprovalRequest(request: AssistantApprovalRequest, 
   return {
     type: "security",
     id: `permission:${requestId}`,
-    label: t("assistant.panel.commandApproval.title"),
+    label: t("assistant.panel.commandApproval.title", { agent: agentDisplayName(request.agent) }),
     detail: request.cwd ?? request.reason ?? requestId,
     content,
     state: "draft",

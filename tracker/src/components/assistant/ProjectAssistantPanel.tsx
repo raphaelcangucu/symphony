@@ -557,7 +557,17 @@ export function ProjectAssistantPanel({
         setPendingApproval(null);
       },
       onUserInputRequired: (request) => setPendingQuestions(request),
-      onApprovalRequired: (request) => setPendingApproval(request),
+      onApprovalRequired: (request) => {
+        if (executionModeRef.current === "yolo") {
+          const liveChannel = channelRef.current;
+          if (!liveChannel) return;
+          submitApproval(liveChannel, request.requestId, "approve").receive("error", (reason) =>
+            setConnectionError(errorMessage(reason)),
+          );
+          return;
+        }
+        setPendingApproval(request);
+      },
       onAssistantDocumentChanged: (payload) => {
         if (payload.identifier && issueIdentifier && normalizeIssueIdentifier(payload.identifier) === normalizeIssueIdentifier(issueIdentifier)) {
           setChangedDocsRefreshKey((current) => current + 1);
@@ -1293,9 +1303,22 @@ export function ProjectAssistantPanel({
 
       submitApproval(channel, requestId, action)
         .receive("ok", () => setPendingApproval((current) => (current?.requestId === requestId ? null : current)))
-        .receive("error", (reason) => setConnectionError(errorMessage(reason)));
+        .receive("error", (reason) => {
+          setPendingApproval((current) => (current?.requestId === requestId ? null : current));
+          setConnectionError(errorMessage(reason));
+        });
     },
     [],
+  );
+
+  const handleExecutionModeChange = useCallback(
+    (mode: ExecutionMode) => {
+      setExecutionMode(mode);
+      executionModeRef.current = mode;
+      if (mode !== "yolo") return;
+      if (pendingApproval) submitCommandApproval(pendingApproval.requestId, "approve");
+    },
+    [pendingApproval, submitCommandApproval],
   );
 
   const approvalNode = pendingApproval ? (
@@ -1450,8 +1473,8 @@ export function ProjectAssistantPanel({
               <ExecutionModeMenu
                 agent={composerAgent}
                 mode={executionMode}
-                disabled={isRunning || catalogLoading}
-                onChange={setExecutionMode}
+                disabled={catalogLoading}
+                onChange={handleExecutionModeChange}
               />
             ) : null}
             {hasExecutableContext ? (

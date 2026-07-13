@@ -1,7 +1,10 @@
 import { Plus, ShieldAlert } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-import { contextRefForApprovalRequest } from "@/components/assistant/assistantPanelHelpers";
+import {
+  agentDisplayName,
+  contextRefForApprovalRequest,
+} from "@/components/assistant/assistantPanelHelpers";
 import type { ComposerContextChipRef } from "@/components/assistant/contextMentions";
 import { Button } from "@/components/ui/button";
 import type { AssistantApprovalRequest } from "@/services/phoenix/assistantChannel";
@@ -18,12 +21,13 @@ export function CommandApprovalCard({
   onInsertContext?: (ref: ComposerContextChipRef) => void;
 }) {
   const { t } = useTranslation();
+  const title = t("assistant.panel.commandApproval.title", { agent: agentDisplayName(request.agent) });
 
   return (
     <div className="rounded-2xl border border-amber-300/60 bg-amber-50/70 p-3 text-sm shadow-sm dark:border-amber-400/30 dark:bg-amber-950/30">
       <div className="mb-2 flex items-center gap-2 font-semibold text-amber-950 dark:text-amber-100">
         <ShieldAlert className="h-4 w-4 text-amber-600 dark:text-amber-300" />
-        <span>{t("assistant.panel.commandApproval.title")}</span>
+        <span>{title}</span>
       </div>
       {request.command ? (
         <pre className="mb-2 max-h-32 overflow-auto rounded-lg bg-background/80 px-3 py-2 font-mono text-xs text-foreground">
