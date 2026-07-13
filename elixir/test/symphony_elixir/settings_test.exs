@@ -40,6 +40,12 @@ defmodule SymphonyElixir.SettingsTest do
     assert Settings.all() == %{
              "agents" => %{"default_agent_kind" => "claude"},
              "agent_models" => %{"codex" => nil, "claude" => nil, "cursor" => nil},
+             "agent_efforts" => %{
+               "codex" => nil,
+               "claude" => nil,
+               "cursor" => nil,
+               "opencode" => nil
+             },
              "gateways" => %{
                "telegram_allowed_user_ids" => [],
                "telegram_bot_username" => nil,
