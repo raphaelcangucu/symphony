@@ -332,8 +332,15 @@ describe("ExecutionControlComposer", () => {
       />,
     );
 
-    // Let the remote catalog load so the composer resolves codex → gpt-5/high.
+    // Wait until the remote catalog is applied (fallback gpt-5.5 → gpt-5/high).
     await waitFor(() => expect(fetchAssistantCatalogBundleMock).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(updateIssueMock).toHaveBeenCalledWith(
+        "advising",
+        "CDE-1132",
+        expect.objectContaining({ model: "gpt-5", effort: "high" }),
+      ),
+    );
 
     await user.click(screen.getByRole("button", { name: /^resume$/i }));
 

@@ -275,6 +275,11 @@ export function AssistantComposer({
         },
       };
     }
+    // Task-scoped composers must not hydrate from browser storage — the issue
+    // (or catalog defaults after fetch) is the source of truth.
+    if (!persistLocalComposerState) {
+      return { agent: bundle.defaultAgent, byAgent: {} };
+    }
     return loadComposerState(bundle);
   });
   const fileInputRef = useRef<HTMLInputElement>(null);

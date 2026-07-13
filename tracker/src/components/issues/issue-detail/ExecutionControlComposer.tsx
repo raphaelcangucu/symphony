@@ -161,7 +161,11 @@ export function ExecutionControlComposer({
     if (issue.agentKind) setAgent(issue.agentKind);
   }, [issue.agentKind]);
 
+  // Only seed from durable issue pins. Catalog defaults must come from the
+  // fetched bundle remap — seeding fallback defaults locks gpt-5.5/medium and
+  // races the remote catalog used by resume dispatch.
   const settingsSeed = useMemo(() => {
+    if (issue.model == null && issue.effort == null) return null;
     const resolvedAgent = issue.agentKind ?? bundle.defaultAgent;
     const defaults = defaultComposerSettings(catalogFor(bundle, resolvedAgent));
     return {
@@ -171,22 +175,43 @@ export function ExecutionControlComposer({
     };
   }, [bundle, issue.agentKind, issue.model, issue.effort]);
 
-  function persistExecutionSettings(nextAgent: AgentKind, model: string | null, effort: string | null) {
-    if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
-    persistTimerRef.current = setTimeout(() => {
-      void updateIssue(projectSlug, issue.identifier, {
-        agent: nextAgent,
-        model,
-        effort,
-      })
-        .then((updated) => {
-          onIssueUpdated?.(updated);
+  const persistExecutionSettings = useCallback(
+    (nextAgent: AgentKind, model: string | null, effort: string | null) => {
+      if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
+      persistTimerRef.current = setTimeout(() => {
+        void updateIssue(projectSlug, issue.identifier, {
+          agent: nextAgent,
+          model,
+          effort,
         })
-        .catch(() => {
-          toast.error(t("issue.summary.executionSaveFailed", { defaultValue: "Failed to save execution settings" }));
-        });
-    }, 300);
-  }
+          .then((updated) => {
+            onIssueUpdated?.(updated);
+          })
+          .catch(() => {
+            toast.error(
+              t("issue.summary.executionSaveFailed", { defaultValue: "Failed to save execution settings" }),
+            );
+          });
+      }, 300);
+    },
+    [issue.identifier, onIssueUpdated, projectSlug, t],
+  );
+
+  const handleAgentChange = useCallback(
+    (next: AgentKind) => {
+      setAgent(next);
+      persistExecutionSettings(next, composerSettingsRef.current.model, composerSettingsRef.current.effort);
+    },
+    [persistExecutionSettings],
+  );
+
+  const handleSettingsChange = useCallback(
+    (nextAgent: AgentKind, next: { model: string | null; effort: string | null }) => {
+      composerSettingsRef.current = { model: next.model, effort: next.effort };
+      persistExecutionSettings(nextAgent, next.model, next.effort);
+    },
+    [persistExecutionSettings],
+  );
 
   useEffect(() => {
     return () => {
@@ -646,15 +671,9 @@ export function ExecutionControlComposer({
           }}
           onEmptySubmit={handleEmptySubmit}
           onSubmit={handleComposerSubmit}
-          onAgentChange={(next) => {
-            setAgent(next);
-            persistExecutionSettings(next, composerSettingsRef.current.model, composerSettingsRef.current.effort);
-          }}
-          onSettingsChange={(nextAgent, next) => {
-            composerSettingsRef.current = { model: next.model, effort: next.effort };
-            persistExecutionSettings(nextAgent, next.model, next.effort);
-          }}
-          agentSeed={settingsSeed.agent}
+          onAgentChange={handleAgentChange}
+          onSettingsChange={handleSettingsChange}
+          agentSeed={issue.agentKind ?? bundle.defaultAgent}
           settingsSeed={settingsSeed}
           persistLocalComposerState={false}
           toolbarAfterAttach={
