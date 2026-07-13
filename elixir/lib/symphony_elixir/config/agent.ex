@@ -50,6 +50,34 @@ defmodule SymphonyElixir.Config.Agent do
 
   def agent_kind_from_config(_front_matter), do: nil
 
+  @doc """
+  Resolves the project default model from front matter `agent.model`.
+
+  Blank or missing values resolve to `nil` (inherit from user/settings later).
+  """
+  @spec agent_model_from_config(map() | term()) :: String.t() | nil
+  def agent_model_from_config(front_matter) when is_map(front_matter) do
+    front_matter
+    |> Workflow.normalize_keys()
+    |> agent_section_string("model")
+  end
+
+  def agent_model_from_config(_front_matter), do: nil
+
+  @doc """
+  Resolves the project default effort from front matter `agent.effort`.
+
+  Blank or missing values resolve to `nil` (inherit from user/settings later).
+  """
+  @spec agent_effort_from_config(map() | term()) :: String.t() | nil
+  def agent_effort_from_config(front_matter) when is_map(front_matter) do
+    front_matter
+    |> Workflow.normalize_keys()
+    |> agent_section_string("effort")
+  end
+
+  def agent_effort_from_config(_front_matter), do: nil
+
   @doc "Validates that at least one agent is configured and each kind's config."
   @spec validate_configured_agents!() :: :ok | {:error, String.t()}
   def validate_configured_agents! do
@@ -65,6 +93,13 @@ defmodule SymphonyElixir.Config.Agent do
   defp explicit_agent_kind(normalized) do
     case Map.get(normalized, "agent") do
       %{} = section -> SymphonyElixir.AgentPreference.normalize(Map.get(section, "kind"))
+      _ -> nil
+    end
+  end
+
+  defp agent_section_string(normalized, key) when is_map(normalized) and is_binary(key) do
+    case Map.get(normalized, "agent") do
+      %{} = section -> Workflow.trim_string(Map.get(section, key))
       _ -> nil
     end
   end

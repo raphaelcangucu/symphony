@@ -99,6 +99,12 @@ defmodule SymphonyElixir.Config do
   @spec agent_kind_from_config(map() | term()) :: String.t() | nil
   defdelegate agent_kind_from_config(front_matter), to: Agent
 
+  @spec agent_model_from_config(map() | term()) :: String.t() | nil
+  defdelegate agent_model_from_config(front_matter), to: Agent
+
+  @spec agent_effort_from_config(map() | term()) :: String.t() | nil
+  defdelegate agent_effort_from_config(front_matter), to: Agent
+
   # ────────────────────────────────────────────────────────────
   # Local tracker / backups
   # ────────────────────────────────────────────────────────────

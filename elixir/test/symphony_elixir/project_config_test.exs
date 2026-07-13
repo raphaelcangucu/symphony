@@ -125,6 +125,29 @@ defmodule SymphonyElixir.ProjectConfigTest do
     assert config.agent_kind == nil
   end
 
+  test "resolves agent.model and agent.effort from workflow front matter" do
+    {:ok, project} = Context.ensure_project(%{name: "M", slug: "model-proj", tracker_kind: "local"})
+
+    {:ok, _} =
+      Context.upsert_project_setup("model-proj", %{
+        "workflow_markdown" => """
+        ---
+        agent:
+          kind: claude
+          model: claude-opus-4-5
+          effort: high
+        ---
+        Prompt.
+        """
+      })
+
+    config = ProjectConfig.resolve(Repo.get!(Project, project.id) |> Repo.preload(:setup))
+
+    assert config.agent_kind == "claude"
+    assert config.agent_model == "claude-opus-4-5"
+    assert config.agent_effort == "high"
+  end
+
   test "dev_server_auto_start_on/1 returns [] when auto_start_on is omitted" do
     project = project_with_setup("manual-preview", %{"dev_server" => %{"enabled" => true}}, "prompt")
     config = ProjectConfig.resolve(project)
