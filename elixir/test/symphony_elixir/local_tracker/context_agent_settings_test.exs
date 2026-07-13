@@ -68,6 +68,31 @@ defmodule SymphonyElixir.LocalTracker.ContextAgentSettingsTest do
     assert settings.mode == "plan"
   end
 
+  test "put_agent_settings clears a field when attrs has explicit nil" do
+    :ok =
+      Context.put_agent_settings("demo", "DEMO-1", %{
+        agent_kind: "codex",
+        model: "gpt-5.5",
+        effort: "high"
+      })
+
+    :ok = Context.put_agent_settings("demo", "DEMO-1", %{model: nil})
+
+    assert {:ok, settings} = Context.get_agent_settings("demo", "DEMO-1")
+    assert settings.agent_kind == "codex"
+    assert settings.model == nil
+    assert settings.effort == "high"
+  end
+
+  test "put_agent_settings preserves omitted keys" do
+    :ok = Context.put_agent_settings("demo", "DEMO-1", %{model: "gpt-5.5", effort: "high"})
+    :ok = Context.put_agent_settings("demo", "DEMO-1", %{effort: "xhigh"})
+
+    assert {:ok, settings} = Context.get_agent_settings("demo", "DEMO-1")
+    assert settings.model == "gpt-5.5"
+    assert settings.effort == "xhigh"
+  end
+
   defp migrate_repo do
     {:ok, _repo, _apps} =
       Ecto.Migrator.with_repo(Repo, fn repo ->
