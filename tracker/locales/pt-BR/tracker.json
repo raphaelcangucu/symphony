@@ -1114,7 +1114,8 @@
       "agent": "Agente",
       "updated": "Atualizado",
       "labels": "Labels",
-      "noLabels": "Sem labels"
+      "noLabels": "Sem labels",
+      "execution": "Execução"
     },
     "labels": {
       "add": "Adicionar labels",
@@ -1352,7 +1353,8 @@
       "newProjectSession": "Nova sessão do projeto",
       "newIssueSession": "Nova sessão para issue",
       "newProjectTerminal": "Novo terminal do projeto",
-      "quickCreate": "Criação rápida"
+      "quickCreate": "Criação rápida",
+      "execution": "Execução"
     },
     "pullRequest": {
       "refresh": "Atualizar",
