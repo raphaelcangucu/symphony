@@ -1,22 +1,37 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { fireEvent, screen } from "@testing-library/react";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import { ProjectAgentSelect } from "@/components/projects/ProjectAgentSelect";
+import { initTestI18n, renderWithI18n } from "@/i18n/testUtils";
+import { i18n } from "@/i18n";
 
 describe("ProjectAgentSelect", () => {
-  it("shows Inherit with the effective agent and fires null", () => {
-    const onChange = vi.fn();
-    render(<ProjectAgentSelect value="claude" effectiveDefault="codex" onChange={onChange} />);
-
-    fireEvent.click(screen.getByRole("button", { name: /Inherit \(Codex\)/ }));
-    expect(onChange).toHaveBeenCalledWith(null);
+  beforeAll(async () => {
+    await initTestI18n("en");
   });
 
-  it("fires the explicit kind", () => {
+  it("shows Inherit with the effective agent and fires null agent", () => {
     const onChange = vi.fn();
-    render(<ProjectAgentSelect value={null} effectiveDefault="codex" onChange={onChange} />);
+    renderWithI18n(
+      <ProjectAgentSelect
+        value="claude"
+        model={null}
+        effort={null}
+        effectiveDefault="codex"
+        onChange={onChange}
+      />,
+    );
 
-    fireEvent.click(screen.getByRole("button", { name: "Claude Code" }));
-    expect(onChange).toHaveBeenCalledWith("claude");
+    fireEvent.pointerDown(
+      screen.getByRole("button", { name: i18n.t("issue.sessionLog.agentLabels.claude") }),
+    );
+    fireEvent.click(
+      screen.getByRole("menuitemradio", {
+        name: i18n.t("project.wizard.agent.inherit", {
+          agent: i18n.t("issue.sessionLog.agentLabels.codex"),
+        }),
+      }),
+    );
+    expect(onChange).toHaveBeenCalledWith({ agent: null, model: null, effort: null });
   });
 });

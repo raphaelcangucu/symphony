@@ -2,25 +2,33 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
+import { ExecutionSettingsPicker } from "@/components/assistant/ExecutionSettingsPicker";
 import { LanguageCard } from "@/components/settings/LanguageCard";
 import { OrchestrationRulesCard } from "@/components/settings/OrchestrationRulesCard";
 import { PushNotificationsCard } from "@/components/settings/PushNotificationsCard";
-import { AGENT_ICONS, AGENT_KINDS, agentKindLabel, AgentChip } from "@/components/shared/AgentChip";
+import { AGENT_KINDS, agentKindLabel } from "@/components/shared/AgentChip";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { fallbackCatalogBundle, type AssistantCatalogBundle } from "@/lib/assistantSettings";
 import {
   type AgentAvailability,
+  type AgentEffortSettings,
+  type AgentModelSettings,
   type LocalePreference,
   type OrchestratorSettings,
   fetchAgentAvailability,
   fetchSettings,
+  updateAgentEffort,
+  updateAgentModel,
   updateAgentSettings,
 } from "@/services/settings";
 import type { AgentKind } from "@/types/issue";
 
-
 export function SettingsPage() {
   const { t } = useTranslation();
   const [defaultAgent, setDefaultAgent] = useState<AgentKind | null>(null);
+  const [agentModels, setAgentModels] = useState<AgentModelSettings>({});
+  const [agentEfforts, setAgentEfforts] = useState<AgentEffortSettings>({});
+  const [bundle] = useState<AssistantCatalogBundle>(() => fallbackCatalogBundle());
   const [orchestrator, setOrchestrator] = useState<OrchestratorSettings | null>(null);
   const [uiLocale, setUiLocale] = useState<LocalePreference | null>(null);
   const [availability, setAvailability] = useState<AgentAvailability | null>(null);
@@ -34,6 +42,8 @@ export function SettingsPage() {
       .then((settings) => {
         if (!cancelled) {
           setDefaultAgent(settings.agents.default_agent_kind);
+          setAgentModels(settings.agent_models ?? {});
+          setAgentEfforts(settings.agent_efforts ?? {});
           setOrchestrator(settings.orchestrator);
           setUiLocale(settings.ui.locale);
         }
@@ -53,21 +63,35 @@ export function SettingsPage() {
     };
   }, []);
 
-  async function selectAgent(kind: AgentKind) {
-    if (saving || kind === defaultAgent) return;
+  async function persistDefaults(next: {
+    agent: AgentKind;
+    model: string | null;
+    effort: string | null;
+  }) {
+    if (saving) return;
     setSaving(true);
-    const previous = defaultAgent;
-    setDefaultAgent(kind);
+    const previousAgent = defaultAgent;
+    const previousModels = agentModels;
+    const previousEfforts = agentEfforts;
+    setDefaultAgent(next.agent);
+    setAgentModels((current) => ({ ...current, [next.agent]: next.model }));
+    setAgentEfforts((current) => ({ ...current, [next.agent]: next.effort }));
     try {
-      await updateAgentSettings({ default_agent_kind: kind });
-      toast.success(t("settings.codingAgent.saved", { agent: agentKindLabel(kind, t) }));
+      await updateAgentSettings({ default_agent_kind: next.agent });
+      await updateAgentModel(next.agent, next.model);
+      await updateAgentEffort(next.agent, next.effort);
+      toast.success(t("settings.codingAgent.saved", { agent: agentKindLabel(next.agent, t) }));
     } catch {
-      setDefaultAgent(previous);
+      setDefaultAgent(previousAgent);
+      setAgentModels(previousModels);
+      setAgentEfforts(previousEfforts);
       toast.error(t("settings.codingAgent.saveFailed"));
     } finally {
       setSaving(false);
     }
   }
+
+  const activeAgent = defaultAgent ?? bundle.defaultAgent;
 
   return (
     <div className="space-y-6">
@@ -87,25 +111,31 @@ export function SettingsPage() {
           <CardContent className="space-y-4">
             {loadError ? (
               <p className="text-xs text-muted-foreground">{t("settings.loadFailed")}</p>
+            ) : defaultAgent === null ? (
+              <p className="text-xs text-muted-foreground">{t("common.loading")}</p>
             ) : (
-              <div className="flex flex-wrap gap-2">
-                {defaultAgent === null && (
-                  <p className="text-xs text-muted-foreground">{t("common.loading")}</p>
-                )}
-                {AGENT_KINDS.map((kind) => {
-                  const Icon = AGENT_ICONS[kind];
-                  return (
-                    <AgentChip
-                      key={kind}
-                      label={agentKindLabel(kind, t)}
-                      icon={Icon ? <Icon className="h-3.5 w-3.5" /> : undefined}
-                      active={defaultAgent === kind}
-                      disabled={saving || defaultAgent === null}
-                      onClick={() => void selectAgent(kind)}
-                    />
-                  );
-                })}
-              </div>
+              <ExecutionSettingsPicker
+                bundle={bundle}
+                agent={activeAgent}
+                model={agentModels[activeAgent] ?? null}
+                effort={agentEfforts[activeAgent] ?? null}
+                allowInherit={false}
+                disabled={saving}
+                onAgentChange={(agent) => {
+                  if (!agent) return;
+                  void persistDefaults({
+                    agent,
+                    model: agentModels[agent] ?? null,
+                    effort: agentEfforts[agent] ?? null,
+                  });
+                }}
+                onModelChange={(model) => {
+                  void persistDefaults({ agent: activeAgent, model, effort: agentEfforts[activeAgent] ?? null });
+                }}
+                onEffortChange={(effort) => {
+                  void persistDefaults({ agent: activeAgent, model: agentModels[activeAgent] ?? null, effort });
+                }}
+              />
             )}
 
             {availabilityError ? (

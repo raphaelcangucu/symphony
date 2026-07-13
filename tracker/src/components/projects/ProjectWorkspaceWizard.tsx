@@ -606,8 +606,10 @@ export function ProjectWorkspaceWizard({ onCreated, open: controlledOpen, onOpen
             <div className="space-y-3">
               <ProjectAgentSelect
                 value={projectAgent}
+                model={null}
+                effort={null}
                 effectiveDefault={userDefaultAgent}
-                onChange={setProjectAgent}
+                onChange={({ agent }) => setProjectAgent(agent)}
               />
               <div className="space-y-2 rounded-lg border bg-muted/30 p-3 text-sm">
                 <p className="font-medium">{t("project.wizard.suggestedSetup")}</p>
