@@ -503,6 +503,7 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
     |> maybe_put_assignee_ids(params)
     |> maybe_put_label_ids(label_ids)
     |> maybe_put_agent_update(params)
+    |> maybe_put_execution_pins(params)
   end
 
   # Preserve the raw "agent" value (including nil and invalid strings) when the
@@ -511,6 +512,23 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
   defp maybe_put_agent_update(attrs, params) do
     if Map.has_key?(params, "agent") do
       Map.put(attrs, "agent", Map.get(params, "agent"))
+    else
+      attrs
+    end
+  end
+
+  # Forward model/effort into create/update attrs so LocalTracker.Context can
+  # persist pins before PubSub broadcast. Controller still persists after for
+  # pure-remote adapters that do not go through Context.
+  defp maybe_put_execution_pins(attrs, params) do
+    attrs
+    |> maybe_copy_execution_param(params, "model")
+    |> maybe_copy_execution_param(params, "effort")
+  end
+
+  defp maybe_copy_execution_param(attrs, params, key) do
+    if Map.has_key?(params, key) do
+      Map.put(attrs, key, Map.get(params, key))
     else
       attrs
     end
@@ -623,6 +641,7 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
     |> Map.put("assignee_ids", assignee_ids)
     |> maybe_put_agent(Map.get(params, "agent"))
     |> maybe_put_agent_goal(Map.get(params, "agent"), Map.get(params, "goal"))
+    |> maybe_put_execution_pins(params)
   end
 
   defp maybe_put_agent(attrs, agent) when agent in @agent_kinds, do: Map.put(attrs, "agent", agent)

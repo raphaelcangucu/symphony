@@ -6,6 +6,7 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
     Comment,
     IssueRecord,
     IssueRelation,
+    Label,
     Project,
     ProjectSetup,
     Repository,
@@ -143,6 +144,8 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
 
   @spec issue(IssueRecord.t()) :: map()
   def issue(%IssueRecord{} = issue) do
+    label_agent = AgentRouting.label_agent_kind(loaded_label_names(issue))
+
     %{
       id: issue.id,
       identifier: issue.identifier,
@@ -165,7 +168,7 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
       inserted_at: iso8601(issue.inserted_at),
       updated_at: iso8601(issue.updated_at)
     }
-    |> merge_execution_pins(loaded_project_slug(issue), issue.identifier, nil)
+    |> merge_execution_pins(loaded_project_slug(issue), issue.identifier, label_agent)
   end
 
   defp merge_execution_pins(base, slug, identifier, label_agent)
@@ -372,6 +375,16 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
 
   defp loaded_project_slug(%IssueRecord{project: %Project{} = project}), do: project.slug
   defp loaded_project_slug(_issue), do: nil
+
+  defp loaded_label_names(%IssueRecord{labels: labels}) when is_list(labels) do
+    Enum.flat_map(labels, fn
+      %Label{name: name} when is_binary(name) -> [name]
+      name when is_binary(name) -> [name]
+      _label -> []
+    end)
+  end
+
+  defp loaded_label_names(_issue), do: []
 
   defp loaded_issue_identifier(%IssueRecord{} = issue), do: issue.identifier
   defp loaded_issue_identifier(_issue), do: nil

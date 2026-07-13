@@ -1,7 +1,7 @@
 defmodule SymphonyElixirWeb.TrackerPresenterTest do
   use ExUnit.Case, async: true
 
-  alias SymphonyElixir.LocalTracker.IssueRecord
+  alias SymphonyElixir.LocalTracker.{IssueRecord, Label}
   alias SymphonyElixir.Tracker.IssueDTO
   alias SymphonyElixirWeb.TrackerPresenter
 
@@ -85,6 +85,22 @@ defmodule SymphonyElixirWeb.TrackerPresenterTest do
 
     assert payload.identifier == "MAC-5"
     assert payload.display_identifier == "front#547"
+  end
+
+  test "issue/1 for an IssueRecord falls back agent_kind from preloaded symphony labels" do
+    record = %IssueRecord{
+      id: 7,
+      identifier: "MAC-7",
+      title: "Label-routed issue",
+      position: 0,
+      labels: [%Label{name: "symphony:claude"}, %Label{name: "bug"}]
+    }
+
+    payload = TrackerPresenter.issue(record)
+
+    assert payload.agent_kind == "claude"
+    assert payload.model == nil
+    assert payload.effort == nil
   end
 
   test "project/1 includes tracker_kind and tracker_config" do
