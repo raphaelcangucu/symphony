@@ -10,6 +10,7 @@ import {
   restoreIssue,
   updateIssue,
 } from "@/services/issues";
+import { normalizeIssue } from "@/services/mappers";
 
 describe("issues service filters", () => {
   afterEach(() => vi.restoreAllMocks());
@@ -92,22 +93,22 @@ describe("createIssue payload", () => {
     });
   });
 
-  it("omits goal for non-Codex agents", async () => {
+  it("omits goal for agents that do not support goals", async () => {
     const post = vi.spyOn(http, "post").mockResolvedValueOnce({ data: { data: createdDto } });
 
     await createIssue("macro-markets", {
-      title: "Claude cleanup",
+      title: "Cursor cleanup",
       description: null,
       status: "Todo",
-      agent: "claude",
+      agent: "cursor",
       goal: "Do not send this",
     });
 
     expect(post).toHaveBeenCalledWith("/api/tracker/v1/projects/macro-markets/issues", {
-      title: "Claude cleanup",
+      title: "Cursor cleanup",
       description: null,
       status: "Todo",
-      agent: "claude",
+      agent: "cursor",
     });
   });
 
@@ -127,6 +128,44 @@ describe("createIssue payload", () => {
       title: "Social login",
       description: null,
       status: "Todo",
+    });
+  });
+
+  it("sends model and effort when provided", async () => {
+    const post = vi.spyOn(http, "post").mockResolvedValueOnce({ data: { data: createdDto } });
+
+    await createIssue("macro-markets", {
+      title: "Social login",
+      status: "Todo",
+      agent: "codex",
+      model: "gpt-5.5",
+      effort: "high",
+    });
+
+    expect(post).toHaveBeenCalledWith("/api/tracker/v1/projects/macro-markets/issues", {
+      title: "Social login",
+      description: null,
+      status: "Todo",
+      agent: "codex",
+      model: "gpt-5.5",
+      effort: "high",
+    });
+  });
+
+  it("omits model and effort when undefined", async () => {
+    const post = vi.spyOn(http, "post").mockResolvedValueOnce({ data: { data: createdDto } });
+
+    await createIssue("macro-markets", {
+      title: "Social login",
+      status: "Todo",
+      agent: "codex",
+    });
+
+    expect(post).toHaveBeenCalledWith("/api/tracker/v1/projects/macro-markets/issues", {
+      title: "Social login",
+      description: null,
+      status: "Todo",
+      agent: "codex",
     });
   });
 });
@@ -153,6 +192,65 @@ describe("updateIssue payload", () => {
       agent: "claude",
     });
     expect(result.identifier).toBe("517");
+  });
+
+  it("sends null model to clear", async () => {
+    const patch = vi.spyOn(http, "patch").mockResolvedValueOnce({ data: { data: updatedDto } });
+
+    await updateIssue("macro-markets", "517", { model: null });
+
+    expect(patch).toHaveBeenCalledWith("/api/tracker/v1/projects/macro-markets/issues/517", {
+      model: null,
+    });
+  });
+
+  it("sends null effort to clear", async () => {
+    const patch = vi.spyOn(http, "patch").mockResolvedValueOnce({ data: { data: updatedDto } });
+
+    await updateIssue("macro-markets", "517", { effort: null });
+
+    expect(patch).toHaveBeenCalledWith("/api/tracker/v1/projects/macro-markets/issues/517", {
+      effort: null,
+    });
+  });
+
+  it("sends model and effort when provided", async () => {
+    const patch = vi.spyOn(http, "patch").mockResolvedValueOnce({ data: { data: updatedDto } });
+
+    await updateIssue("macro-markets", "517", { model: "gpt-5.5", effort: "xhigh" });
+
+    expect(patch).toHaveBeenCalledWith("/api/tracker/v1/projects/macro-markets/issues/517", {
+      model: "gpt-5.5",
+      effort: "xhigh",
+    });
+  });
+});
+
+describe("normalizeIssue model and effort", () => {
+  it("maps model and effort from camelCase", () => {
+    const issue = normalizeIssue({
+      id: 1,
+      identifier: "MAC-1",
+      title: "Pinned",
+      model: "gpt-5.5",
+      effort: "high",
+    });
+
+    expect(issue.model).toBe("gpt-5.5");
+    expect(issue.effort).toBe("high");
+  });
+
+  it("maps null model and effort", () => {
+    const issue = normalizeIssue({
+      id: 2,
+      identifier: "MAC-2",
+      title: "Cleared",
+      model: null,
+      effort: null,
+    });
+
+    expect(issue.model).toBeNull();
+    expect(issue.effort).toBeNull();
   });
 });
 

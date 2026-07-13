@@ -80,6 +80,8 @@ function serializeCreateInput(input: CreateIssueInput): Record<string, unknown> 
   if ((input.agent === "codex" || input.agent === "claude") && input.goal?.trim()) {
     payload.goal = input.goal.trim();
   }
+  if (input.model !== undefined) payload.model = input.model;
+  if (input.effort !== undefined) payload.effort = input.effort;
 
   return payload;
 }
@@ -106,6 +108,8 @@ function serializeUpdateInput(input: UpdateIssueInput): Record<string, unknown> 
   if (input.priority !== undefined) payload.priority = input.priority;
   if (input.assigneeIds !== undefined) payload.assignee_ids = input.assigneeIds;
   if (input.agent !== undefined) payload.agent = input.agent;
+  if (input.model !== undefined) payload.model = input.model;
+  if (input.effort !== undefined) payload.effort = input.effort;
   return payload;
 }
 
