@@ -144,6 +144,10 @@ export interface ComposerAgentSelectionProps {
   onSettingsChange?: (agent: AgentKind, settings: AssistantComposerSettings) => void;
   /** Initial/server-resolved agent for reopening a persisted session. */
   agentSeed?: AgentKind | null;
+  /** When set, seeds agent/model/effort from task settings instead of sessionStorage. */
+  settingsSeed?: { agent: AgentKind; model: string; effort: string } | null;
+  /** When false, skip writing composer agent/model/effort to sessionStorage (task SoT). */
+  persistLocalComposerState?: boolean;
 }
 
 /** Slots for parent-provided elements rendered inside the composer chrome. */
@@ -237,6 +241,8 @@ export function AssistantComposer({
   onAgentChange,
   onSettingsChange,
   agentSeed = null,
+  settingsSeed = null,
+  persistLocalComposerState = true,
   dropTargetRef,
 }: AssistantComposerProps) {
   const { t } = useTranslation();
@@ -260,7 +266,17 @@ export function AssistantComposer({
     clearAttachments,
   } = useComposerAttachments({ projectSlug, dropTargetRef });
   const [contextRefs, setContextRefs] = useState<ComposerContextChipRef[]>([]);
-  const [composerState, setComposerState] = useState<AssistantComposerState>(() => loadComposerState(bundle));
+  const [composerState, setComposerState] = useState<AssistantComposerState>(() => {
+    if (settingsSeed) {
+      return {
+        agent: settingsSeed.agent,
+        byAgent: {
+          [settingsSeed.agent]: { model: settingsSeed.model, effort: settingsSeed.effort },
+        },
+      };
+    }
+    return loadComposerState(bundle);
+  });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const recordingRef = useRef(false);
@@ -280,7 +296,9 @@ export function AssistantComposer({
     composerState.byAgent[composerState.agent] ?? defaultComposerSettings(catalog);
 
   useEffect(() => {
-    if (!agentSeed) return;
+    // Seed only via initial state (or remount). Avoid resetting mid-interaction when
+    // the parent recomputes settingsSeed after catalog load.
+    if (!agentSeed || settingsSeed) return;
     setComposerState((current) => {
       if (current.agent === agentSeed) return current;
       const nextCatalog = catalogFor(bundle, agentSeed);
@@ -294,12 +312,13 @@ export function AssistantComposer({
         },
       };
     });
-  }, [agentSeed, bundle]);
+  }, [agentSeed, bundle, settingsSeed]);
 
   // Persist on every state change
   useEffect(() => {
+    if (!persistLocalComposerState) return;
     saveComposerState(composerState);
-  }, [composerState]);
+  }, [composerState, persistLocalComposerState]);
 
   // Surface the selected agent so consumers (e.g. the dispatch panel) can mirror it.
   useEffect(() => {

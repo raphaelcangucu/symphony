@@ -32,9 +32,10 @@ import {
 } from "@/components/ui/dialog";
 import { agentEnterHintLabel, canResumeExecution, deriveAgentControl } from "@/lib/agentExecutionDisplay";
 import { enrichGuidanceWithAttachments } from "@/lib/enrichComposerGuidance";
-import { catalogFor, fallbackCatalogBundle } from "@/lib/assistantSettings";
+import { catalogFor, defaultComposerSettings, fallbackCatalogBundle } from "@/lib/assistantSettings";
 import { fetchAssistantCatalogBundle } from "@/services/assistant";
 import { dispatchIssueAgent } from "@/services/issueDispatch";
+import { updateIssue } from "@/services/issues";
 import type { RunPromptTemplateResult } from "@/services/magicCommands";
 import { controlIssueGoal } from "@/services/goalControl";
 import { availableModesFor, cycleMode, DEFAULT_EXECUTION_MODE } from "@/lib/executionMode";
@@ -77,6 +78,7 @@ export function ExecutionControlComposer({
   const [queued, setQueued] = useState<QueuedGuidanceItem[]>([]);
   const [bundle, setBundle] = useState(fallbackCatalogBundle());
   const [agent, setAgent] = useState<AgentKind>(issue.agentKind ?? bundle.defaultAgent);
+  const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [mode, setMode] = useState<ExecutionMode>(DEFAULT_EXECUTION_MODE);
   // Memoized submit handlers may close over a stale render; read mode from a ref
   // so dispatch always forwards the operator's current selection.
@@ -158,6 +160,39 @@ export function ExecutionControlComposer({
   useEffect(() => {
     if (issue.agentKind) setAgent(issue.agentKind);
   }, [issue.agentKind]);
+
+  const settingsSeed = useMemo(() => {
+    const resolvedAgent = issue.agentKind ?? bundle.defaultAgent;
+    const defaults = defaultComposerSettings(catalogFor(bundle, resolvedAgent));
+    return {
+      agent: resolvedAgent,
+      model: issue.model ?? defaults.model,
+      effort: issue.effort ?? defaults.effort,
+    };
+  }, [bundle, issue.agentKind, issue.model, issue.effort]);
+
+  function persistExecutionSettings(nextAgent: AgentKind, model: string | null, effort: string | null) {
+    if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
+    persistTimerRef.current = setTimeout(() => {
+      void updateIssue(projectSlug, issue.identifier, {
+        agent: nextAgent,
+        model,
+        effort,
+      })
+        .then((updated) => {
+          onIssueUpdated?.(updated);
+        })
+        .catch(() => {
+          toast.error(t("issue.summary.executionSaveFailed", { defaultValue: "Failed to save execution settings" }));
+        });
+    }, 300);
+  }
+
+  useEffect(() => {
+    return () => {
+      if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
+    };
+  }, []);
 
   // Keep the selected mode valid for the active agent (cursor has no plan mode).
   useEffect(() => {
@@ -611,10 +646,17 @@ export function ExecutionControlComposer({
           }}
           onEmptySubmit={handleEmptySubmit}
           onSubmit={handleComposerSubmit}
-          onAgentChange={setAgent}
-          onSettingsChange={(_agent, next) => {
-            composerSettingsRef.current = { model: next.model, effort: next.effort };
+          onAgentChange={(next) => {
+            setAgent(next);
+            persistExecutionSettings(next, composerSettingsRef.current.model, composerSettingsRef.current.effort);
           }}
+          onSettingsChange={(nextAgent, next) => {
+            composerSettingsRef.current = { model: next.model, effort: next.effort };
+            persistExecutionSettings(nextAgent, next.model, next.effort);
+          }}
+          agentSeed={settingsSeed.agent}
+          settingsSeed={settingsSeed}
+          persistLocalComposerState={false}
           toolbarAfterAttach={
             <>
               <GitDiffLauncher
