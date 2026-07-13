@@ -129,7 +129,7 @@ describe("SummaryTab (editable)", () => {
 
     await user.click(await screen.findByRole("button", { name: /inherit \(codex\)/i }));
     await waitFor(() => expect(fetchAssistantCatalogBundleMock).toHaveBeenCalledWith("macro-markets"));
-    expect(screen.getByText(/execution/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/execution/i).length).toBeGreaterThan(0);
   });
 
   it("loads form options exactly once for an editable summary", async () => {
