@@ -54,6 +54,20 @@ for line in sys.stdin:
             "failed to refresh available models: timeout waiting for child process to exit",
             flush=True,
         )
+        if os.getenv("FAKE_CODEX_FILE_CHANGE_EVENT"):
+            write(
+                {
+                    "method": "item/completed",
+                    "params": {
+                        "item": {
+                            "id": "fc-1",
+                            "type": "file_change",
+                            "status": "completed",
+                            "changes": [{"path": os.environ["FAKE_CODEX_FILE_CHANGE_EVENT"]}],
+                        }
+                    },
+                }
+            )
         write({"method": "item/agentMessage/delta", "params": {"delta": "ok"}})
         completed_params = {"usage": {"input_tokens": 1, "output_tokens": 1}}
         if os.getenv("FAKE_CODEX_GOAL_EVENT") == "1":

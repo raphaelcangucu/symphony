@@ -80,4 +80,73 @@ defmodule SymphonyElixir.Assistant.FileActivityPresenterTest do
     assert tc.status == "running"
     assert tc.arguments == %{"paths" => ["a.ex", "b.ex"], "file_count" => 2}
   end
+
+  test "normalizes per-change native patches when a top-level diff is absent" do
+    diff_a = "--- a/a.ex\n+++ b/a.ex\n@@\n+one\n+two"
+    diff_b = "--- a/b.ex\n+++ b/b.ex\n@@\n-gone"
+
+    item = %{
+      "id" => "f4",
+      "type" => "file_change",
+      "status" => "completed",
+      "changes" => [
+        %{"path" => "a.ex", "status" => "modified", "diff" => diff_a},
+        %{"path" => "b.ex", "unifiedDiff" => diff_b}
+      ]
+    }
+
+    assert {:completed, tc} = P.from_event(event("item/completed", item))
+
+    assert tc.result["paths"] == ["a.ex", "b.ex"]
+    assert tc.result["additions"] == 2
+    assert tc.result["deletions"] == 1
+
+    assert tc.result["files"] == [
+             %{"path" => "a.ex", "status" => "modified", "patch" => diff_a, "additions" => 2, "deletions" => 0},
+             %{"path" => "b.ex", "status" => "modified", "patch" => diff_b, "additions" => 0, "deletions" => 1}
+           ]
+
+    assert tc.result["diff"] == diff_a <> "\n" <> diff_b
+  end
+
+  test "splits a top-level diff across files when changes carry paths but no native patch" do
+    diff = "--- a/a.ex\n+++ b/a.ex\n@@\n+one\n--- a/b.ex\n+++ b/b.ex\n@@\n-gone\n-also gone"
+
+    item = %{
+      "id" => "f5",
+      "type" => "file_change",
+      "status" => "completed",
+      "unifiedDiff" => diff,
+      "changes" => [%{"path" => "a.ex"}, %{"path" => "b.ex"}]
+    }
+
+    assert {:completed, tc} = P.from_event(event("item/completed", item))
+
+    assert tc.result["paths"] == ["a.ex", "b.ex"]
+    assert tc.result["diff"] == diff
+    assert tc.result["additions"] == 1
+    assert tc.result["deletions"] == 2
+    assert [file_a, file_b] = tc.result["files"]
+    assert file_a["path"] == "a.ex"
+    assert file_a["additions"] == 1
+    assert file_b["path"] == "b.ex"
+    assert file_b["deletions"] == 2
+  end
+
+  test "reports no native files when only bare paths reach the presenter" do
+    item = %{
+      "id" => "f6",
+      "type" => "file_change",
+      "status" => "completed",
+      "changes" => [%{"path" => "a.ex"}, %{"path" => "b.ex"}]
+    }
+
+    assert {:completed, tc} = P.from_event(event("item/completed", item))
+
+    assert tc.result["paths"] == ["a.ex", "b.ex"]
+    assert tc.result["files"] == []
+    assert tc.result["diff"] == nil
+    assert tc.result["additions"] == 0
+    assert tc.result["deletions"] == 0
+  end
 end

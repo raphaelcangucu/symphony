@@ -4,13 +4,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import GitDiffModal from "../GitDiffModal";
 
-const useGitDiffMock = vi.hoisted(() => vi.fn());
+const useGitDiffStatsMock = vi.hoisted(() => vi.fn());
+const useGitDiffFilesMock = vi.hoisted(() => vi.fn());
+const useGitDiffPatchMock = vi.hoisted(() => vi.fn());
 const useIssueCommitEvidenceMock = vi.hoisted(() => vi.fn());
 const toastMessageMock = vi.hoisted(() => vi.fn());
 const toastSuccessMock = vi.hoisted(() => vi.fn());
 const commitGitDiffMock = vi.hoisted(() => vi.fn());
 const commitThreadGitDiffMock = vi.hoisted(() => vi.fn());
-const diffRefetchMock = vi.hoisted(() => vi.fn());
+const statsRefetchMock = vi.hoisted(() => vi.fn());
+const filesRefetchMock = vi.hoisted(() => vi.fn());
 
 vi.mock("sonner", () => ({
   toast: {
@@ -24,8 +27,16 @@ vi.mock("@/services/gitDiff", () => ({
   commitThreadGitDiff: (...args: unknown[]) => commitThreadGitDiffMock(...args),
 }));
 
-vi.mock("@/hooks/useGitDiff", () => ({
-  useGitDiff: (...args: unknown[]) => useGitDiffMock(...args),
+vi.mock("@/hooks/useGitDiffStats", () => ({
+  useGitDiffStats: (...args: unknown[]) => useGitDiffStatsMock(...args),
+}));
+
+vi.mock("@/hooks/useGitDiffFiles", () => ({
+  useGitDiffFiles: (...args: unknown[]) => useGitDiffFilesMock(...args),
+}));
+
+vi.mock("@/hooks/useGitDiffPatch", () => ({
+  useGitDiffPatch: (...args: unknown[]) => useGitDiffPatchMock(...args),
 }));
 
 vi.mock("@/hooks/useIssueCommitEvidence", () => ({
@@ -69,27 +80,53 @@ vi.mock("../GitDiffViewer", () => ({
   ),
 }));
 
+function fileEntry(overrides: Partial<{ repo: string; path: string; additions: number; deletions: number }> = {}) {
+  return {
+    repo: overrides.repo ?? "frontend",
+    path: overrides.path ?? "src/App.tsx",
+    oldPath: null,
+    status: "modified",
+    additions: overrides.additions ?? 1,
+    deletions: overrides.deletions ?? 0,
+    binary: false,
+  };
+}
+
 describe("GitDiffModal", () => {
   beforeEach(() => {
     window.localStorage.clear();
-    useGitDiffMock.mockReset();
+    useGitDiffStatsMock.mockReset();
+    useGitDiffFilesMock.mockReset();
+    useGitDiffPatchMock.mockReset();
     useIssueCommitEvidenceMock.mockReset();
     toastMessageMock.mockReset();
     toastSuccessMock.mockReset();
     commitGitDiffMock.mockReset();
     commitThreadGitDiffMock.mockReset();
-    diffRefetchMock.mockReset();
-    useGitDiffMock.mockReturnValue({
-      repos: [
-        {
-          repo: "frontend",
-          files: [{ path: "src/App.tsx", oldPath: null, status: "modified", patch: "@@\n+a\n" }],
-        },
-      ],
+    statsRefetchMock.mockReset();
+    filesRefetchMock.mockReset();
+
+    useGitDiffStatsMock.mockReturnValue({
+      stats: [{ repo: "frontend", branch: null, base: null, filesChanged: 1, additions: 1, deletions: 0, untracked: 0 }],
       workspace: { path: "/tmp/ws", available: true },
       loading: false,
       error: null,
-      refetch: diffRefetchMock,
+      refetch: statsRefetchMock,
+    });
+    useGitDiffFilesMock.mockReturnValue({
+      files: [fileEntry()],
+      total: 1,
+      loading: false,
+      loadingMore: false,
+      hasMore: false,
+      error: null,
+      loadMore: vi.fn(),
+      refetch: filesRefetchMock,
+    });
+    useGitDiffPatchMock.mockReturnValue({
+      file: { path: "src/App.tsx", oldPath: null, status: "modified", patch: "@@\n+a\n" },
+      loading: false,
+      error: null,
     });
     useIssueCommitEvidenceMock.mockReturnValue({
       commits: [],
@@ -114,21 +151,30 @@ describe("GitDiffModal", () => {
 
   it("shows repository navigation for multi-repo diffs", async () => {
     const user = userEvent.setup();
-    useGitDiffMock.mockReturnValue({
-      repos: [
-        {
-          repo: "frontend",
-          files: [{ path: "src/App.tsx", oldPath: null, status: "modified", patch: "@@\n+a\n" }],
-        },
-        {
-          repo: "backend",
-          files: [{ path: "lib/Service.php", oldPath: null, status: "modified", patch: "@@\n+b\n" }],
-        },
+    useGitDiffStatsMock.mockReturnValue({
+      stats: [
+        { repo: "frontend", branch: null, base: null, filesChanged: 1, additions: 1, deletions: 0, untracked: 0 },
+        { repo: "backend", branch: null, base: null, filesChanged: 1, additions: 1, deletions: 0, untracked: 0 },
       ],
       workspace: { path: "/tmp/ws", available: true },
       loading: false,
       error: null,
-      refetch: vi.fn(),
+      refetch: statsRefetchMock,
+    });
+    useGitDiffFilesMock.mockReturnValue({
+      files: [fileEntry({ repo: "frontend", path: "src/App.tsx" }), fileEntry({ repo: "backend", path: "lib/Service.php" })],
+      total: 2,
+      loading: false,
+      loadingMore: false,
+      hasMore: false,
+      error: null,
+      loadMore: vi.fn(),
+      refetch: filesRefetchMock,
+    });
+    useGitDiffPatchMock.mockReturnValue({
+      file: { path: "lib/Service.php", oldPath: null, status: "modified", patch: "@@\n+b\n" },
+      loading: false,
+      error: null,
     });
 
     render(<GitDiffModal open onOpenChange={vi.fn()} projectSlug="advising" identifier="CDE-1" />);
@@ -137,8 +183,9 @@ describe("GitDiffModal", () => {
     expect(screen.getByRole("button", { name: "frontend" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "backend" }));
 
-    expect(screen.getByTestId("git-diff-viewer")).toHaveTextContent("backend/lib/Service.php");
-    expect(screen.queryByText("frontend/src/App.tsx")).not.toBeInTheDocument();
+    expect(useGitDiffFilesMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ repo: "backend", type: "branch" }),
+    );
   });
 
   it("commits workspace changes from the toolbar action", async () => {
@@ -155,7 +202,8 @@ describe("GitDiffModal", () => {
     await user.click(screen.getByRole("button", { name: /^commit changes$/i }));
 
     expect(commitGitDiffMock).toHaveBeenCalledWith("advising", "CDE-1", "feat: save");
-    expect(diffRefetchMock).toHaveBeenCalled();
+    expect(filesRefetchMock).toHaveBeenCalled();
+    expect(statsRefetchMock).toHaveBeenCalled();
     expect(toastSuccessMock).toHaveBeenCalledWith("Committed 1 repo.");
   });
 
@@ -317,40 +365,41 @@ describe("GitDiffModal", () => {
     expect(screen.getByTestId("git-diff-viewer")).toHaveAttribute("data-comment-count", "0");
   });
 
-  it("shows branch status strip with ahead/behind on Branch tab", () => {
-    useGitDiffMock.mockReturnValue({
-      repos: [
-        {
-          repo: "frontend",
-          branch: "feat/x",
-          base: "main",
-          ahead: 8,
-          behind: 0,
-          files: [{ path: "src/App.tsx", oldPath: null, status: "modified", patch: "@@\n+a\n" }],
-        },
-      ],
+  it("shows branch status strip with branch/base on Branch tab", () => {
+    useGitDiffStatsMock.mockReturnValue({
+      stats: [{ repo: "frontend", branch: "feat/x", base: "main", filesChanged: 1, additions: 1, deletions: 0, untracked: 0 }],
       workspace: { path: "/tmp/ws", available: true },
       loading: false,
       error: null,
-      refetch: vi.fn(),
+      refetch: statsRefetchMock,
     });
 
     render(<GitDiffModal open onOpenChange={vi.fn()} projectSlug="advising" identifier="CDE-1" />);
 
     expect(screen.getByText(/feat\/x/i)).toBeInTheDocument();
     expect(screen.getByText(/main/i)).toBeInTheDocument();
-    expect(screen.getByText(/8 ahead/i)).toBeInTheDocument();
   });
 
   it("shows working-tree strip and empty actions when uncommitted has no files", async () => {
     const user = userEvent.setup();
-    useGitDiffMock.mockReturnValue({
-      repos: [],
+    useGitDiffStatsMock.mockReturnValue({
+      stats: [],
       workspace: { path: "/tmp/ws", available: true },
       loading: false,
       error: null,
-      refetch: diffRefetchMock,
+      refetch: statsRefetchMock,
     });
+    useGitDiffFilesMock.mockReturnValue({
+      files: [],
+      total: 0,
+      loading: false,
+      loadingMore: false,
+      hasMore: false,
+      error: null,
+      loadMore: vi.fn(),
+      refetch: filesRefetchMock,
+    });
+    useGitDiffPatchMock.mockReturnValue({ file: null, loading: false, error: null });
 
     render(<GitDiffModal open onOpenChange={vi.fn()} projectSlug="advising" identifier="CDE-1" />);
     await user.click(screen.getByRole("tab", { name: /uncommitted/i }));
@@ -358,8 +407,29 @@ describe("GitDiffModal", () => {
     expect(screen.getByTestId("uncommitted-summary-strip")).toBeInTheDocument();
     expect(screen.getByText(/no uncommitted changes/i)).toBeInTheDocument();
     await user.click(screen.getByTestId("uncommitted-empty-refresh"));
-    expect(diffRefetchMock).toHaveBeenCalled();
+    expect(filesRefetchMock).toHaveBeenCalled();
+    expect(statsRefetchMock).toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: /view branch/i }));
     expect(screen.getByRole("tab", { name: /^branch$/i })).toHaveAttribute("data-state", "active");
+  });
+
+  it("shows a load-more action when the file list has additional pages", async () => {
+    const user = userEvent.setup();
+    const loadMoreMock = vi.fn();
+    useGitDiffFilesMock.mockReturnValue({
+      files: [fileEntry()],
+      total: 5,
+      loading: false,
+      loadingMore: false,
+      hasMore: true,
+      error: null,
+      loadMore: loadMoreMock,
+      refetch: filesRefetchMock,
+    });
+
+    render(<GitDiffModal open onOpenChange={vi.fn()} projectSlug="advising" identifier="CDE-1" />);
+
+    await user.click(screen.getByRole("button", { name: /load more/i }));
+    expect(loadMoreMock).toHaveBeenCalledTimes(1);
   });
 });

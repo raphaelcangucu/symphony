@@ -1,14 +1,21 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { GitDiffViewer } from "@/components/issues/issue-detail/git-diff/GitDiffViewer";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { ComposerContextChipRef } from "@/components/assistant/contextMentions";
 import { diffStatsFromPatch } from "@/lib/diffStats";
+import { isAbortError } from "@/lib/httpAbort";
 import { loadDiffViewMode } from "@/lib/diffViewMode";
-import { getGitDiff, getThreadGitDiff } from "@/services/gitDiff";
+import {
+  getGitDiffFiles,
+  getGitDiffPatch,
+  getThreadGitDiffFiles,
+  getThreadGitDiffPatch,
+  type GitDiffFilesListOptions,
+} from "@/services/gitDiff";
 import type { AssistantToolCall } from "@/services/assistant";
-import type { GitDiffFileChange, GitDiffRepo } from "@/types/gitDiff";
+import type { GitDiffFileChange, GitDiffFileEntry, GitDiffFilesPage } from "@/types/gitDiff";
 
 interface EditedFilesSummaryProps {
   toolCalls: AssistantToolCall[];
@@ -37,6 +44,7 @@ export function EditedFilesSummary({
   const [resolvedPatches, setResolvedPatches] = useState<Record<string, string>>({});
   const [loadingPath, setLoadingPath] = useState<string | null>(null);
   const [viewMode] = useState(() => loadDiffViewMode());
+  const abortRef = useRef<AbortController | null>(null);
 
   const selected = files.find((file) => file.path === selectedPath) ?? null;
   const selectedPatch = selected ? resolvedPatches[selected.path] ?? selected.patch : "";
@@ -45,46 +53,40 @@ export function EditedFilesSummary({
     : null;
 
   useEffect(() => {
-    if (files.length === 0) return;
-    if (!threadId && (!projectSlug || !issueIdentifier)) return;
-    if (files.every((file) => file.patch)) return;
-
-    let cancelled = false;
-
-    async function loadPatches() {
-      const result = threadId
-        ? await getThreadGitDiff(threadId, "uncommitted")
-        : await getGitDiff(projectSlug, issueIdentifier ?? "", "uncommitted");
-      if (cancelled) return;
-      const patches = patchesForEditedFiles(result.repos, files);
-      if (Object.keys(patches).length > 0) {
-        setResolvedPatches((current) => ({ ...current, ...patches }));
-      }
-    }
-
-    void loadPatches();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [files, issueIdentifier, projectSlug, threadId]);
+    return () => abortRef.current?.abort();
+  }, []);
 
   async function openFile(file: EditedFileEntry) {
     setSelectedPath(file.path);
     if (file.patch || resolvedPatches[file.path] || loadingPath === file.path) return;
     if (!threadId && (!projectSlug || !issueIdentifier)) return;
 
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
     setLoadingPath(file.path);
+
     try {
-      const result = threadId
-        ? await getThreadGitDiff(threadId, "uncommitted")
-        : await getGitDiff(projectSlug, issueIdentifier ?? "", "uncommitted");
-      const patch = findPatchForEditedPath(result.repos, file.path);
-      if (patch) {
-        setResolvedPatches((current) => ({ ...current, [file.path]: patch }));
-      }
+      const listFiles = (params: GitDiffFilesListOptions): Promise<GitDiffFilesPage> =>
+        threadId
+          ? getThreadGitDiffFiles(threadId, "uncommitted", params)
+          : getGitDiffFiles(projectSlug, issueIdentifier ?? "", "uncommitted", params);
+
+      const match = await resolveEditedFileLocation(file.path, listFiles, controller.signal);
+      if (controller.signal.aborted || !match) return;
+
+      const patchResult = threadId
+        ? await getThreadGitDiffPatch(threadId, "uncommitted", match.repo, match.path, { signal: controller.signal })
+        : await getGitDiffPatch(projectSlug, issueIdentifier ?? "", "uncommitted", match.repo, match.path, {
+            signal: controller.signal,
+          });
+      if (controller.signal.aborted) return;
+
+      setResolvedPatches((current) => ({ ...current, [file.path]: patchResult.patch }));
+    } catch (cause) {
+      if (isAbortError(cause)) return;
     } finally {
-      setLoadingPath(null);
+      if (!controller.signal.aborted) setLoadingPath(null);
     }
   }
 
@@ -149,8 +151,18 @@ function editedFilesFromToolCalls(toolCalls: AssistantToolCall[]): EditedFileEnt
   return [...byPath.values()];
 }
 
+/**
+ * Codex tool-call results may already carry native per-file patches (see
+ * `FileActivityPresenter`/`FileChangeCapture` on the backend) via
+ * `result.files`. Those are preferred — no network round-trip needed. Only
+ * tool calls without that native breakdown fall back to splitting the
+ * aggregate `result.diff` string by path.
+ */
 function entriesFromToolCall(call: AssistantToolCall): EditedFileEntry[] {
   const result = (call.result ?? {}) as Record<string, unknown>;
+  const nativeEntries = nativeFileEntries(result);
+  if (nativeEntries.length > 0) return nativeEntries;
+
   const paths = Array.isArray(result.paths) ? result.paths.filter((path): path is string => typeof path === "string") : [];
   const diff = typeof result.diff === "string" ? result.diff : "";
   const patchByPath = splitPatchByPath(diff);
@@ -162,6 +174,27 @@ function entriesFromToolCall(call: AssistantToolCall): EditedFileEntry[] {
     const deletions = stats.deletions > 0 ? stats.deletions : numberOrZero(result.deletions);
     return { path, patch, additions, deletions };
   });
+}
+
+function nativeFileEntries(result: Record<string, unknown>): EditedFileEntry[] {
+  const rawFiles = Array.isArray(result.files) ? result.files : [];
+  const entries: EditedFileEntry[] = [];
+
+  for (const raw of rawFiles) {
+    if (typeof raw !== "object" || raw === null) continue;
+    const entry = raw as Record<string, unknown>;
+    const path = typeof entry.path === "string" ? entry.path : null;
+    if (!path) continue;
+
+    entries.push({
+      path,
+      patch: typeof entry.patch === "string" ? entry.patch : "",
+      additions: numberOrZero(entry.additions),
+      deletions: numberOrZero(entry.deletions),
+    });
+  }
+
+  return entries;
 }
 
 function EditedFileButton({
@@ -258,38 +291,38 @@ function pathFromDiffHeader(patch: string): string | null {
   return match?.[2] ?? null;
 }
 
-function findPatchForEditedPath(repos: GitDiffRepo[], editedPath: string): string | null {
+/**
+ * Resolves a tool-reported (often absolute) edited path to the exact
+ * `{repo, path}` pair the patch API needs, via the paginated/searchable
+ * `/diff/files` metadata endpoint — never the full workspace diff.
+ */
+async function resolveEditedFileLocation(
+  editedPath: string,
+  listFiles: (params: GitDiffFilesListOptions) => Promise<GitDiffFilesPage>,
+  signal: AbortSignal,
+): Promise<{ repo: string; path: string } | null> {
+  const page = await listFiles({ q: baseName(editedPath), limit: 50, signal });
+  return findEntryForEditedPath(page.files, editedPath);
+}
+
+function findEntryForEditedPath(entries: GitDiffFileEntry[], editedPath: string): { repo: string; path: string } | null {
   const normalizedEditedPath = normalizePath(editedPath);
 
-  for (const repo of repos) {
-    for (const file of repo.files) {
-      const repoPath = normalizePath(repo.repo ? `${repo.repo}/${file.path}` : file.path);
-      const filePath = normalizePath(file.path);
+  for (const entry of entries) {
+    const repoPath = normalizePath(entry.repo ? `${entry.repo}/${entry.path}` : entry.path);
+    const filePath = normalizePath(entry.path);
 
-      if (
-        normalizedEditedPath === repoPath ||
-        normalizedEditedPath === filePath ||
-        normalizedEditedPath.endsWith(`/${repoPath}`) ||
-        normalizedEditedPath.endsWith(`/${filePath}`)
-      ) {
-        return file.patch;
-      }
+    if (
+      normalizedEditedPath === repoPath ||
+      normalizedEditedPath === filePath ||
+      normalizedEditedPath.endsWith(`/${repoPath}`) ||
+      normalizedEditedPath.endsWith(`/${filePath}`)
+    ) {
+      return { repo: entry.repo, path: entry.path };
     }
   }
 
   return null;
-}
-
-function patchesForEditedFiles(repos: GitDiffRepo[], files: EditedFileEntry[]): Record<string, string> {
-  const patches: Record<string, string> = {};
-
-  for (const file of files) {
-    if (file.patch) continue;
-    const patch = findPatchForEditedPath(repos, file.path);
-    if (patch) patches[file.path] = patch;
-  }
-
-  return patches;
 }
 
 function normalizePath(path: string): string {

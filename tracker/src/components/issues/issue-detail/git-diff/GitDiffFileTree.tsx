@@ -2,18 +2,32 @@ import { Braces, Code2, Database, FileCode2, FileJson, FileText, Folder, FolderT
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { diffStatsFromPatch } from "@/lib/diffStats";
+import { diffStatsFromPatch, type DiffStats } from "@/lib/diffStats";
 import { buildGitDiffTree, type GitDiffTreeNode } from "@/lib/gitDiffTree";
 import { cn } from "@/lib/utils";
-import type { GitDiffFileChange } from "@/types/gitDiff";
+import type { GitDiffFileTreeEntry } from "@/types/gitDiff";
 
 interface GitDiffFileTreeProps {
-  files: GitDiffFileChange[];
+  files: GitDiffFileTreeEntry[];
   flat: boolean;
   selectedPath: string | null;
-  onSelect: (file: GitDiffFileChange) => void;
+  onSelect: (file: GitDiffFileTreeEntry) => void;
   onToggleFlat: () => void;
   commentCountsByPath?: Record<string, number>;
+  /**
+   * Controlled search query. When provided (with `onQueryChange`), `files` is
+   * assumed to already be filtered server-side and the local substring
+   * filter is skipped — callers own debouncing/fetching. When omitted, the
+   * tree filters `files` locally against its own uncontrolled input state.
+   */
+  query?: string;
+  onQueryChange?: (query: string) => void;
+}
+
+/** Patch text (when loaded) wins for accuracy; otherwise falls back to the file-list metadata. */
+function statsForFile(file: GitDiffFileTreeEntry): DiffStats {
+  if (typeof file.patch === "string") return diffStatsFromPatch(file.patch);
+  return { additions: file.additions ?? 0, deletions: file.deletions ?? 0 };
 }
 
 export function GitDiffFileTree({
@@ -23,15 +37,25 @@ export function GitDiffFileTree({
   onSelect,
   onToggleFlat,
   commentCountsByPath,
+  query: controlledQuery,
+  onQueryChange,
 }: GitDiffFileTreeProps) {
   const { t } = useTranslation();
-  const [query, setQuery] = useState("");
+  const [internalQuery, setInternalQuery] = useState("");
+  const controlled = controlledQuery !== undefined;
+  const effectiveQuery = controlled ? controlledQuery : internalQuery;
   const filteredFiles = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
+    if (controlled) return files;
+    const normalizedQuery = internalQuery.trim().toLowerCase();
     if (!normalizedQuery) return files;
     return files.filter((file) => file.path.toLowerCase().includes(normalizedQuery));
-  }, [files, query]);
+  }, [controlled, files, internalQuery]);
   const tree = buildGitDiffTree(filteredFiles);
+
+  function handleQueryChange(value: string) {
+    if (controlled) onQueryChange?.(value);
+    else setInternalQuery(value);
+  }
 
   return (
     <div className="flex min-h-0 flex-col bg-muted/15">
@@ -54,8 +78,8 @@ export function GitDiffFileTree({
           <Search className="h-3.5 w-3.5 shrink-0" />
           <input
             type="search"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            value={effectiveQuery}
+            onChange={(event) => handleQueryChange(event.target.value)}
             placeholder={t("issue.diff.filterPlaceholder")}
             className="min-w-0 flex-1 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground"
           />
@@ -102,7 +126,7 @@ function TreeNode({
 }: {
   node: GitDiffTreeNode;
   selectedPath: string | null;
-  onSelect: (file: GitDiffFileChange) => void;
+  onSelect: (file: GitDiffFileTreeEntry) => void;
   commentCountsByPath?: Record<string, number>;
   depth?: number;
 }) {
@@ -151,14 +175,14 @@ function FileRow({
   onSelect,
   commentCount = 0,
 }: {
-  file: GitDiffFileChange;
+  file: GitDiffFileTreeEntry;
   name: string;
   depth: number;
   selected: boolean;
-  onSelect: (file: GitDiffFileChange) => void;
+  onSelect: (file: GitDiffFileTreeEntry) => void;
   commentCount?: number;
 }) {
-  const stats = diffStatsFromPatch(file.patch);
+  const stats = statsForFile(file);
 
   return (
     <button

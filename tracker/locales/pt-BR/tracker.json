@@ -872,6 +872,7 @@
       },
       "files": "{{count}} arquivos",
       "filterPlaceholder": "Filtrar arquivos...",
+      "loadMore": "Carregar mais",
       "workspaceUnavailable": "Workspace indisponível",
       "loading": "Carregando diff…",
       "noFiles": "Nenhum arquivo alterado.",
@@ -2182,6 +2183,11 @@
       "turnInterrupted": "O turno anterior foi interrompido.",
       "resume": "Retomar",
       "scrollToBottom": "Ir para as mensagens mais recentes",
+      "workspaceProvision": {
+        "progress": "Preparando o workspace desta issue…",
+        "retry": "Tentar novamente",
+        "retryFailed": "Não foi possível preparar o workspace. Tente novamente."
+      },
       "planApproval": {
         "yolo": "YOLO",
         "yoloTitle": "Aprovar o plano e executar em modo YOLO",

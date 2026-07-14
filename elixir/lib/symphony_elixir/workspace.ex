@@ -4,11 +4,10 @@ defmodule SymphonyElixir.Workspace do
   """
 
   require Logger
-  alias SymphonyElixir.{Config, ProjectConfig, Repo, WorkspaceSkills}
+  alias SymphonyElixir.{Config, ProjectConfig, Repo}
   alias SymphonyElixir.GitHub.Config, as: GitHubConfig
   alias SymphonyElixir.LocalTracker.Context
-
-  @excluded_entries MapSet.new([".elixir_ls", "tmp"])
+  alias SymphonyElixir.Workspace.Provision
 
   @spec create_for_issue(map() | String.t() | nil) :: {:ok, Path.t()} | {:error, term()}
   def create_for_issue(issue_or_identifier) do
@@ -20,7 +19,8 @@ defmodule SymphonyElixir.Workspace do
 
   @doc """
   Ensures the working tree exists at an explicit `workspace` path (validated against the
-  configured workspace root) and runs the after_create hook the first time it is created.
+  configured workspace root), atomically provisioning it (after_create hook, skill links,
+  readiness marker) the first time it is created.
 
   Used by the authoring assistant to honor the path persisted on the issue thread, so reads
   and writes target the same tree regardless of how the path was originally computed.
@@ -31,38 +31,17 @@ defmodule SymphonyElixir.Workspace do
     layout = layout_for(issue_context)
 
     try do
-      with :ok <- validate_workspace_path(workspace, layout.root),
-           {:ok, created?} <- ensure_workspace(workspace),
-           :ok <- maybe_run_after_create_hook(workspace, issue_context, layout, created?),
-           :ok <- WorkspaceSkills.prepare(workspace) do
-        {:ok, workspace}
+      with :ok <- validate_workspace_path(workspace, layout.root) do
+        Provision.ensure(workspace,
+          after_create: layout.after_create_hook,
+          log_context: issue_log_context(issue_context)
+        )
       end
     rescue
       error in [ArgumentError, ErlangError, File.Error] ->
         Logger.error("Workspace ensure failed #{issue_log_context(issue_context)} error=#{Exception.message(error)}")
         {:error, error}
     end
-  end
-
-  defp ensure_workspace(workspace) do
-    cond do
-      File.dir?(workspace) ->
-        clean_tmp_artifacts(workspace)
-        {:ok, false}
-
-      File.exists?(workspace) ->
-        File.rm_rf!(workspace)
-        create_workspace(workspace)
-
-      true ->
-        create_workspace(workspace)
-    end
-  end
-
-  defp create_workspace(workspace) do
-    File.rm_rf!(workspace)
-    File.mkdir_p!(workspace)
-    {:ok, true}
   end
 
   @spec path_for_issue(map() | String.t() | nil) :: Path.t()
@@ -253,21 +232,6 @@ defmodule SymphonyElixir.Workspace do
   defp safe_identifier(identifier) do
     String.replace(identifier || "issue", ~r/[^a-zA-Z0-9._-]/, "_")
   end
-
-  defp clean_tmp_artifacts(workspace) do
-    Enum.each(MapSet.to_list(@excluded_entries), fn entry ->
-      File.rm_rf(Path.join(workspace, entry))
-    end)
-  end
-
-  defp maybe_run_after_create_hook(_workspace, _issue_context, _layout, false), do: :ok
-
-  defp maybe_run_after_create_hook(workspace, issue_context, %{after_create_hook: command}, true)
-       when is_binary(command) and command != "" do
-    run_hook(command, workspace, issue_context, "after_create")
-  end
-
-  defp maybe_run_after_create_hook(_workspace, _issue_context, _layout, true), do: :ok
 
   defp maybe_run_before_remove_hook(workspace) do
     case File.dir?(workspace) do

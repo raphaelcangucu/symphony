@@ -872,6 +872,7 @@
       },
       "files": "{{count}} files",
       "filterPlaceholder": "Filter files...",
+      "loadMore": "Load more",
       "workspaceUnavailable": "Workspace unavailable",
       "loading": "Loading diff…",
       "noFiles": "No changed files.",
@@ -2186,6 +2187,11 @@
       "turnInterrupted": "The previous turn was interrupted.",
       "resume": "Resume",
       "scrollToBottom": "Scroll to latest messages",
+      "workspaceProvision": {
+        "progress": "Setting up this issue's workspace…",
+        "retry": "Try again",
+        "retryFailed": "Could not set up the workspace. Try again."
+      },
       "planApproval": {
         "yolo": "YOLO",
         "yoloTitle": "Approve the plan and implement in this session with full access",

@@ -62,12 +62,18 @@ defmodule SymphonyElixir.Assistant.FileActivityPresenter do
 
   defp file_change_call(item, phase) do
     paths = change_paths(item)
-    diff = diff_of(item)
-    {additions, deletions} = diff_counts(diff)
+    native_files = native_file_entries(item)
+    {diff, additions, deletions} = native_aggregate(item, native_files)
 
     result =
       if phase == :completed do
-        %{"diff" => diff, "additions" => additions, "deletions" => deletions, "paths" => paths}
+        %{
+          "diff" => diff,
+          "additions" => additions,
+          "deletions" => deletions,
+          "paths" => paths,
+          "files" => native_files
+        }
       else
         %{"paths" => paths}
       end
@@ -80,6 +86,103 @@ defmodule SymphonyElixir.Assistant.FileActivityPresenter do
       output: nil,
       result: result
     }
+  end
+
+  # Native per-file patches arrive from Codex in one of two shapes: an aggregate
+  # top-level `unifiedDiff`/`diff` covering every changed file, or a per-change
+  # `unifiedDiff`/`diff`/`patch` attached to each entry in `changes[]`. Callers
+  # (AgentSession) rely on an empty list here to know no native patch reached us
+  # at all, so they can capture the reported paths themselves via targeted git.
+  defp native_file_entries(item) do
+    case per_change_entries(item) do
+      [] -> diff_split_entries(diff_of(item))
+      entries -> entries
+    end
+  end
+
+  defp per_change_entries(item) do
+    case get(item, ["changes", :changes]) do
+      list when is_list(list) and list != [] ->
+        entries = Enum.map(list, &change_entry/1)
+        if Enum.any?(entries, &is_nil/1), do: [], else: entries
+
+      _ ->
+        []
+    end
+  end
+
+  defp change_entry(change) when is_map(change) do
+    path = get(change, ["path", :path])
+    patch = get(change, ["unifiedDiff", :unifiedDiff, "diff", :diff, "patch", :patch])
+
+    case {path, patch} do
+      {path, patch} when is_binary(path) and is_binary(patch) and patch != "" ->
+        {additions, deletions} = diff_counts(patch)
+
+        %{
+          "path" => path,
+          "status" => change_status(change) || status_from_patch(patch),
+          "patch" => patch,
+          "additions" => additions,
+          "deletions" => deletions
+        }
+
+      _ ->
+        nil
+    end
+  end
+
+  defp change_entry(_change), do: nil
+
+  defp change_status(change) do
+    case get(change, ["status", :status, "kind", :kind, "type", :type]) do
+      status when is_binary(status) -> status
+      _ -> nil
+    end
+  end
+
+  defp diff_split_entries(diff) when is_binary(diff) and diff != "" do
+    diff
+    |> String.split(~r/(?=^--- )/m)
+    |> Enum.map(&String.trim_trailing/1)
+    |> Enum.reject(&(&1 == ""))
+    |> Enum.map(&diff_block_entry/1)
+    |> Enum.reject(&is_nil/1)
+  end
+
+  defp diff_split_entries(_diff), do: []
+
+  defp diff_block_entry(block) do
+    case paths_from_diff(block) do
+      [path | _] ->
+        {additions, deletions} = diff_counts(block)
+        %{"path" => path, "status" => status_from_patch(block), "patch" => block, "additions" => additions, "deletions" => deletions}
+
+      [] ->
+        nil
+    end
+  end
+
+  defp status_from_patch(patch) do
+    cond do
+      String.contains?(patch, "--- /dev/null") -> "added"
+      String.contains?(patch, "+++ /dev/null") -> "deleted"
+      true -> "modified"
+    end
+  end
+
+  defp native_aggregate(_item, []), do: {nil, 0, 0}
+
+  defp native_aggregate(item, native_files) do
+    diff =
+      case diff_of(item) do
+        top when is_binary(top) and top != "" -> top
+        _ -> native_files |> Enum.map(&Map.get(&1, "patch")) |> Enum.join("\n")
+      end
+
+    additions = Enum.sum(Enum.map(native_files, &Map.get(&1, "additions", 0)))
+    deletions = Enum.sum(Enum.map(native_files, &Map.get(&1, "deletions", 0)))
+    {diff, additions, deletions}
   end
 
   defp classify(type) when is_binary(type) do

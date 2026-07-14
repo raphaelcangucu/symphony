@@ -24,6 +24,78 @@ defmodule SymphonyElixirWeb.Tracker.WorkspaceDiffController do
     end
   end
 
+  @spec stats(Conn.t(), map()) :: Conn.t()
+  def stats(conn, %{"project_slug" => project_slug, "identifier" => identifier} = params) do
+    with {:ok, type} <- diff_type(Map.get(params, "type", "branch")),
+         {:ok, workspace} <- issue_workspace(project_slug, identifier),
+         {:ok, stats} <- WorkspaceDiff.stats(workspace, type: type) do
+      json(conn, %{data: stats, workspace: workspace_brief(workspace)})
+    else
+      {:error, reason} -> TrackerErrors.render(conn, reason)
+    end
+  end
+
+  @spec stats_thread(Conn.t(), map()) :: Conn.t()
+  def stats_thread(conn, %{"thread_id" => raw_id} = params) do
+    with {:ok, type} <- diff_type(Map.get(params, "type", "branch")),
+         {:ok, workspace} <- thread_workspace(raw_id),
+         {:ok, stats} <- WorkspaceDiff.stats(workspace, type: type) do
+      json(conn, %{data: stats, workspace: workspace_brief(workspace)})
+    else
+      {:error, reason} -> TrackerErrors.render(conn, reason)
+      :no_workspace -> json(conn, %{data: [], workspace: workspace_brief(nil)})
+    end
+  end
+
+  @spec files(Conn.t(), map()) :: Conn.t()
+  def files(conn, %{"project_slug" => project_slug, "identifier" => identifier} = params) do
+    with {:ok, type} <- diff_type(Map.get(params, "type", "branch")),
+         {:ok, workspace} <- issue_workspace(project_slug, identifier),
+         {:ok, page} <- WorkspaceDiff.list_files(workspace, list_files_opts(type, params)) do
+      json(conn, Map.put(page, :workspace, workspace_brief(workspace)))
+    else
+      {:error, reason} -> TrackerErrors.render(conn, reason)
+    end
+  end
+
+  @spec files_thread(Conn.t(), map()) :: Conn.t()
+  def files_thread(conn, %{"thread_id" => raw_id} = params) do
+    with {:ok, type} <- diff_type(Map.get(params, "type", "branch")),
+         {:ok, workspace} <- thread_workspace(raw_id),
+         {:ok, page} <- WorkspaceDiff.list_files(workspace, list_files_opts(type, params)) do
+      json(conn, Map.put(page, :workspace, workspace_brief(workspace)))
+    else
+      {:error, reason} ->
+        TrackerErrors.render(conn, reason)
+
+      :no_workspace ->
+        json(conn, %{files: [], total: 0, limit: 100, next_cursor: nil, workspace: workspace_brief(nil)})
+    end
+  end
+
+  @spec file_patch(Conn.t(), map()) :: Conn.t()
+  def file_patch(conn, %{"project_slug" => project_slug, "identifier" => identifier} = params) do
+    with {:ok, type} <- diff_type(Map.get(params, "type", "branch")),
+         {:ok, workspace} <- issue_workspace(project_slug, identifier),
+         {:ok, patch} <- WorkspaceDiff.patch(workspace, type, patch_opts(params)) do
+      json(conn, %{data: patch, workspace: workspace_brief(workspace)})
+    else
+      {:error, reason} -> TrackerErrors.render(conn, reason)
+    end
+  end
+
+  @spec file_patch_thread(Conn.t(), map()) :: Conn.t()
+  def file_patch_thread(conn, %{"thread_id" => raw_id} = params) do
+    with {:ok, type} <- diff_type(Map.get(params, "type", "branch")),
+         {:ok, workspace} <- thread_workspace(raw_id),
+         {:ok, patch} <- WorkspaceDiff.patch(workspace, type, patch_opts(params)) do
+      json(conn, %{data: patch, workspace: workspace_brief(workspace)})
+    else
+      {:error, reason} -> TrackerErrors.render(conn, reason)
+      :no_workspace -> TrackerErrors.render(conn, :workspace_not_found)
+    end
+  end
+
   @spec commit(Conn.t(), map()) :: Conn.t()
   def commit(conn, %{"project_slug" => project_slug, "identifier" => identifier} = params) do
     with {:ok, message} <- commit_message(params),
@@ -72,6 +144,30 @@ defmodule SymphonyElixirWeb.Tracker.WorkspaceDiffController do
   defp diff_type("branch"), do: {:ok, :branch}
   defp diff_type("uncommitted"), do: {:ok, :uncommitted}
   defp diff_type(_), do: {:error, :invalid_diff_type}
+
+  defp list_files_opts(type, params) do
+    [
+      type: type,
+      repo: Map.get(params, "repo"),
+      q: Map.get(params, "q"),
+      limit: Map.get(params, "limit"),
+      cursor: Map.get(params, "cursor")
+    ]
+  end
+
+  defp patch_opts(params) do
+    [repo: Map.get(params, "repo"), path: Map.get(params, "path")]
+  end
+
+  defp thread_workspace(raw_id) do
+    with {:ok, id} <- parse_thread_id(raw_id),
+         {:ok, thread} <- History.get_thread(id) do
+      case Map.get(thread, :workspace_path) do
+        path when is_binary(path) and path != "" -> {:ok, path}
+        _ -> :no_workspace
+      end
+    end
+  end
 
   defp commit_message(%{"message" => message}) when is_binary(message) do
     case String.trim(message) do

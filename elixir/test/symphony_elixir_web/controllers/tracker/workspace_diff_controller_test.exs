@@ -114,6 +114,105 @@ defmodule SymphonyElixirWeb.Tracker.WorkspaceDiffControllerTest do
     assert %{"error" => %{"code" => "invalid_diff_type"}} = json_response(conn, 422)
   end
 
+  test "stats returns aggregate counters with no files/patches", %{issue: issue} do
+    conn =
+      get(
+        authorized_conn(),
+        "/api/tracker/v1/projects/advising/issues/#{issue.identifier}/diff/stats?type=uncommitted"
+      )
+
+    assert %{"data" => [stat], "workspace" => %{"available" => true}} = json_response(conn, 200)
+    assert stat["repo"] == "advising"
+    assert stat["files_changed"] == 2
+    assert stat["untracked"] == 1
+    refute Map.has_key?(stat, "files")
+  end
+
+  test "stats rejects an invalid diff type", %{issue: issue} do
+    conn =
+      get(
+        authorized_conn(),
+        "/api/tracker/v1/projects/advising/issues/#{issue.identifier}/diff/stats?type=nope"
+      )
+
+    assert %{"error" => %{"code" => "invalid_diff_type"}} = json_response(conn, 422)
+  end
+
+  test "files returns the merged, paged file list", %{issue: issue} do
+    conn =
+      get(
+        authorized_conn(),
+        "/api/tracker/v1/projects/advising/issues/#{issue.identifier}/diff/files?type=uncommitted&limit=1"
+      )
+
+    assert %{"files" => [file], "total" => 2, "limit" => 1, "next_cursor" => cursor} = json_response(conn, 200)
+    assert is_binary(cursor)
+    refute Map.has_key?(file, "patch")
+
+    next_conn =
+      get(
+        authorized_conn(),
+        "/api/tracker/v1/projects/advising/issues/#{issue.identifier}/diff/files?type=uncommitted&limit=1&cursor=#{cursor}"
+      )
+
+    assert %{"files" => [other_file], "next_cursor" => nil} = json_response(next_conn, 200)
+    assert file["path"] != other_file["path"]
+  end
+
+  test "files filters by repo and q", %{issue: issue} do
+    conn =
+      get(
+        authorized_conn(),
+        "/api/tracker/v1/projects/advising/issues/#{issue.identifier}/diff/files?type=uncommitted&repo=advising&q=readme"
+      )
+
+    assert %{"files" => [%{"path" => "README.md"}], "total" => 1} = json_response(conn, 200)
+  end
+
+  test "files rejects an invalid cursor", %{issue: issue} do
+    conn =
+      get(
+        authorized_conn(),
+        "/api/tracker/v1/projects/advising/issues/#{issue.identifier}/diff/files?type=uncommitted&cursor=not-valid!!"
+      )
+
+    assert %{"error" => %{"code" => "invalid_cursor"}} = json_response(conn, 422)
+  end
+
+  test "patch returns the unified diff for exactly one file", %{issue: issue} do
+    conn =
+      get(
+        authorized_conn(),
+        "/api/tracker/v1/projects/advising/issues/#{issue.identifier}/diff/patch?type=uncommitted&repo=advising&path=README.md"
+      )
+
+    assert %{"data" => data} = json_response(conn, 200)
+    assert data["repo"] == "advising"
+    assert data["path"] == "README.md"
+    assert data["status"] == "modified"
+    assert data["patch"] =~ "README.md"
+  end
+
+  test "patch rejects a path outside the repo", %{issue: issue} do
+    conn =
+      get(
+        authorized_conn(),
+        "/api/tracker/v1/projects/advising/issues/#{issue.identifier}/diff/patch?type=uncommitted&repo=advising&path=../../etc/passwd"
+      )
+
+    assert %{"error" => %{"code" => "invalid_file_path"}} = json_response(conn, 422)
+  end
+
+  test "patch reports an unknown repo", %{issue: issue} do
+    conn =
+      get(
+        authorized_conn(),
+        "/api/tracker/v1/projects/advising/issues/#{issue.identifier}/diff/patch?type=uncommitted&repo=nope&path=README.md"
+      )
+
+    assert %{"error" => %{"code" => "repo_not_found"}} = json_response(conn, 404)
+  end
+
   test "commit creates commits for dirty workspace repos", %{issue: issue, workspace: workspace} do
     conn =
       post(
@@ -141,6 +240,39 @@ defmodule SymphonyElixirWeb.Tracker.WorkspaceDiffControllerTest do
       )
 
     assert %{"error" => %{"code" => "invalid_commit_message"}} = json_response(conn, 422)
+  end
+
+  test "stats_thread/files_thread/file_patch_thread proxy to the thread's workspace", %{tmp_dir: tmp_dir} do
+    persisted_workspace = Path.join(tmp_dir, "thread-ws")
+    File.mkdir_p!(persisted_workspace)
+    create_dirty_repo!(persisted_workspace, "backend", "lib/app.ex")
+
+    {:ok, thread} =
+      History.ensure_issue_thread("advising", "THREAD-DIFF-1", %{workspace_path: persisted_workspace})
+
+    stats_conn =
+      get(authorized_conn(), "/api/tracker/v1/assistant/threads/#{thread.id}/diff/stats?type=uncommitted")
+
+    assert %{"data" => [%{"repo" => "backend", "files_changed" => 1}]} = json_response(stats_conn, 200)
+
+    files_conn =
+      get(authorized_conn(), "/api/tracker/v1/assistant/threads/#{thread.id}/diff/files?type=uncommitted")
+
+    assert %{"files" => [%{"repo" => "backend", "path" => "lib/app.ex"}]} = json_response(files_conn, 200)
+
+    patch_conn =
+      get(
+        authorized_conn(),
+        "/api/tracker/v1/assistant/threads/#{thread.id}/diff/patch?type=uncommitted&repo=backend&path=lib/app.ex"
+      )
+
+    assert %{"data" => %{"path" => "lib/app.ex", "status" => "added"}} = json_response(patch_conn, 200)
+  end
+
+  test "stats_thread reports 404 for an unknown thread id" do
+    conn = get(authorized_conn(), "/api/tracker/v1/assistant/threads/999999999/diff/stats?type=uncommitted")
+
+    assert %{"error" => %{"code" => _}} = json_response(conn, 404)
   end
 
   defp authorized_conn do

@@ -9,7 +9,9 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { useGitDiff } from "@/hooks/useGitDiff";
+import { useGitDiffFiles } from "@/hooks/useGitDiffFiles";
+import { useGitDiffPatch } from "@/hooks/useGitDiffPatch";
+import { useGitDiffStats } from "@/hooks/useGitDiffStats";
 import { useIssueCommitEvidence } from "@/hooks/useIssueCommitEvidence";
 import {
   buildDiffReviewPrompt,
@@ -23,7 +25,7 @@ import { cn } from "@/lib/utils";
 import { getCommitEvidence } from "@/services/commitEvidence";
 import { commitGitDiff, commitThreadGitDiff } from "@/services/gitDiff";
 import type { CommitEvidenceDetail, CommitEvidenceSummary } from "@/types/commitEvidence";
-import type { GitDiffFileChange, GitDiffRepo, GitDiffType } from "@/types/gitDiff";
+import type { GitDiffFileChange, GitDiffFileEntry, GitDiffFileTreeEntry, GitDiffRepoStat, GitDiffType } from "@/types/gitDiff";
 
 interface GitDiffModalProps {
   open: boolean;
@@ -34,6 +36,14 @@ interface GitDiffModalProps {
   /** When set, line comments can be collected on the diff and sent back to the agent as one review prompt. */
   onSendReview?: (review: string) => void;
 }
+
+/** A file row for the tree/viewer: repo-prefixed display path plus the original repo/path needed to fetch its patch. */
+interface DiffFileRow extends GitDiffFileTreeEntry {
+  repo: string;
+  originalPath: string;
+}
+
+const SEARCH_DEBOUNCE_MS = 300;
 
 export default function GitDiffModal({
   open,
@@ -49,6 +59,8 @@ export default function GitDiffModal({
   const [viewMode, setViewMode] = useState<DiffViewMode>(() => loadDiffViewMode());
   const [flat, setFlat] = useState(false);
   const [activeRepo, setActiveRepo] = useState("all");
+  const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [selectedCommitKey, setSelectedCommitKey] = useState<string | null>(null);
   const [commitDetail, setCommitDetail] = useState<CommitEvidenceDetail | null>(null);
@@ -57,7 +69,23 @@ export default function GitDiffModal({
   const [commitMessage, setCommitMessage] = useState("");
   const [commitPending, setCommitPending] = useState(false);
   const diffType: GitDiffType = activeTab === "uncommitted" ? "uncommitted" : "branch";
-  const diff = useGitDiff({ projectSlug, identifier, threadId, type: diffType, enabled: open && activeTab !== "commits" });
+  const diffActive = open && activeTab !== "commits";
+
+  useEffect(() => {
+    const handle = window.setTimeout(() => setDebouncedQuery(query.trim()), SEARCH_DEBOUNCE_MS);
+    return () => window.clearTimeout(handle);
+  }, [query]);
+
+  const repoStats = useGitDiffStats({ projectSlug, identifier, threadId, type: diffType, enabled: diffActive });
+  const files = useGitDiffFiles({
+    projectSlug,
+    identifier,
+    threadId,
+    type: diffType,
+    repo: activeRepo,
+    query: debouncedQuery,
+    enabled: diffActive,
+  });
   const commits = useIssueCommitEvidence({ projectSlug, identifier, enabled: open && activeTab === "commits" && supportsCommits });
   const selectedCommit =
     commits.commits.find((commit) => commitKey(commit) === selectedCommitKey) ?? commits.commits[0] ?? null;
@@ -69,24 +97,44 @@ export default function GitDiffModal({
         : [],
     [commitDetail, selectedCommit?.repo],
   );
-  const diffFiles = useMemo(() => flattenFiles(diff.repos), [diff.repos]);
-  const repoNames = useMemo(
-    () => [...new Set(diffFiles.map((entry) => entry.repo).filter((repo): repo is string => Boolean(repo)))],
-    [diffFiles],
-  );
-  const repoScopedDiffFiles = useMemo(
-    () => (activeRepo === "all" ? diffFiles : diffFiles.filter((entry) => entry.repo === activeRepo)),
-    [activeRepo, diffFiles],
-  );
-  const files = activeTab === "commits" ? commitFiles : repoScopedDiffFiles;
-  const selected = files.find((file) => file.key === selectedKey)?.file ?? files[0]?.file ?? null;
-  const stats = combineDiffStats(files.map(({ file }) => diffStatsFromPatch(file.patch)));
+  const diffRows = useMemo(() => toDiffFileRows(files.files), [files.files]);
+  const repoNames = useMemo(() => repoStats.stats.map((stat) => stat.repo).filter(Boolean), [repoStats.stats]);
+  const patchTarget = activeTab !== "commits" ? diffRows.find((row) => rowKey(row) === selectedKey) ?? diffRows[0] ?? null : null;
+  const patch = useGitDiffPatch({
+    projectSlug,
+    identifier,
+    threadId,
+    type: diffType,
+    repo: patchTarget?.repo ?? null,
+    path: patchTarget?.originalPath ?? null,
+    enabled: diffActive && patchTarget != null,
+  });
+  const selectedCommitEntry =
+    commitFiles.find((entry) => entry.key === selectedKey) ?? commitFiles[0] ?? null;
+  const selectedDisplayPath = activeTab === "commits" ? selectedCommitEntry?.file.path ?? null : patchTarget?.path ?? null;
+  // The patch API returns a repo-relative path; swap in the repo-prefixed display path
+  // (matching the tree/header) while keeping the fetched patch content and status.
+  const viewerFile: GitDiffFileChange | null =
+    activeTab === "commits"
+      ? selectedCommitEntry?.file ?? null
+      : patch.file && patchTarget
+        ? { ...patch.file, path: patchTarget.path, oldPath: patchTarget.oldPath }
+        : null;
+  const fileCount = activeTab === "commits" ? commitFiles.length : files.total;
+  const stats = useMemo(() => diffStatsSummary(activeTab, activeRepo, repoStats.stats, commitFiles), [
+    activeTab,
+    activeRepo,
+    repoStats.stats,
+    commitFiles,
+  ]);
   const statusRepo = useMemo(() => {
     if (activeTab !== "branch") return null;
-    const scoped = activeRepo === "all" ? diff.repos : diff.repos.filter((repo) => repo.repo === activeRepo);
+    const scoped = activeRepo === "all" ? repoStats.stats : repoStats.stats.filter((stat) => stat.repo === activeRepo);
     return scoped.length === 1 ? scoped[0] : null;
-  }, [activeRepo, activeTab, diff.repos]);
-  const showUncommittedEmpty = activeTab === "uncommitted" && !diff.loading && files.length === 0;
+  }, [activeRepo, activeTab, repoStats.stats]);
+  const diffLoading = files.loading || repoStats.loading;
+  const diffError = files.error ?? repoStats.error;
+  const showUncommittedEmpty = activeTab === "uncommitted" && !diffLoading && files.total === 0;
 
   // Review comments and commit notes are keyed by source so the same file
   // path can carry independent annotations across branch/uncommitted/commit tabs.
@@ -94,9 +142,9 @@ export default function GitDiffModal({
   const [commitNotes, setCommitNotes] = useState<CommitNote[]>([]);
   const reviewEnabled = Boolean(onSendReview);
   const selectedFileComments = useMemo(() => {
-    if (!selected) return [];
+    if (!selectedDisplayPath) return [];
     return reviewComments.filter((comment) => {
-      if (comment.filePath !== selected.path) return false;
+      if (comment.filePath !== selectedDisplayPath) return false;
       if (activeTab !== "commits") return true;
       return (
         comment.source === "commit" &&
@@ -104,7 +152,7 @@ export default function GitDiffModal({
         comment.commitRepo === selectedCommit?.repo
       );
     });
-  }, [activeTab, reviewComments, selected, selectedCommit]);
+  }, [activeTab, reviewComments, selectedDisplayPath, selectedCommit]);
   const selectedCommitNote =
     selectedCommit?.repo && selectedCommit?.sha
       ? commitNotes.find((note) => note.repo === selectedCommit.repo && note.sha === selectedCommit.sha)
@@ -133,7 +181,7 @@ export default function GitDiffModal({
   );
 
   function saveReviewComment(input: SaveDiffCommentInput) {
-    if (!selected) return;
+    if (!selectedDisplayPath) return;
     setReviewComments((current) => {
       if (input.id) {
         return current.map((comment) =>
@@ -142,7 +190,7 @@ export default function GitDiffModal({
       }
       const base = {
         id: newDiffReviewCommentId(),
-        filePath: selected.path,
+        filePath: selectedDisplayPath,
         side: input.side,
         lineNumber: input.lineNumber,
         lineText: input.lineText,
@@ -194,6 +242,10 @@ export default function GitDiffModal({
     setCommitDialogOpen(true);
   }
 
+  async function refetchDiff() {
+    await Promise.all([files.refetch(), repoStats.refetch()]);
+  }
+
   async function submitCommit() {
     const message = commitMessage.trim();
     if (!message) return;
@@ -206,7 +258,7 @@ export default function GitDiffModal({
       toast.success(t("issue.diff.commit.success", { count: result.commits.length }));
       setCommitDialogOpen(false);
       setCommitMessage("");
-      await diff.refetch();
+      await refetchDiff();
       if (supportsCommits) await commits.refetch();
     } catch (cause) {
       toast.error(cause instanceof Error ? cause.message : t("issue.diff.commit.failed"));
@@ -217,12 +269,16 @@ export default function GitDiffModal({
 
   useEffect(() => {
     setSelectedKey(null);
-  }, [activeRepo, activeTab, identifier, selectedCommitKey]);
+  }, [activeRepo, activeTab, identifier, selectedCommitKey, debouncedQuery]);
 
   useEffect(() => {
     setSelectedCommitKey(null);
     setCommitDetail(null);
   }, [identifier]);
+
+  useEffect(() => {
+    setQuery("");
+  }, [activeTab, identifier]);
 
   useEffect(() => {
     if (!open || activeTab !== "commits" || !selectedCommit || !projectSlug || !identifier) return;
@@ -260,7 +316,7 @@ export default function GitDiffModal({
         <DialogHeader className="min-h-11 border-b bg-background px-3 py-2">
           <DialogTitle className="text-sm font-semibold">{t("issue.diff.title")}</DialogTitle>
           <DialogDescription className="truncate text-[11px]">
-            {(identifier ?? (threadId ? `thread #${threadId}` : ""))} · {diff.workspace?.available ? diff.workspace.path : t("issue.diff.workspaceUnavailable")}
+            {(identifier ?? (threadId ? `thread #${threadId}` : ""))} · {repoStats.workspace?.available ? repoStats.workspace.path : t("issue.diff.workspaceUnavailable")}
           </DialogDescription>
         </DialogHeader>
 
@@ -284,7 +340,7 @@ export default function GitDiffModal({
             </TabsList>
           </Tabs>
           <div className="flex items-center gap-2 text-xs tabular-nums">
-            <span className="text-[11px] text-muted-foreground">{t("issue.diff.files", { count: files.length })}</span>
+            <span className="text-[11px] text-muted-foreground">{t("issue.diff.files", { count: fileCount })}</span>
             <span className="text-[11px] text-emerald-600">+{stats.additions}</span>
             <span className="text-[11px] text-rose-600">-{stats.deletions}</span>
             <ViewModeToggle viewMode={viewMode} onChange={handleViewModeChange} />
@@ -317,8 +373,8 @@ export default function GitDiffModal({
               size="sm"
               variant="outline"
               className="h-7 gap-1 px-2 text-[11px]"
-              onClick={() => (activeTab === "commits" ? void commits.refetch() : void diff.refetch())}
-              disabled={activeTab === "commits" ? commits.loading : diff.loading}
+              onClick={() => (activeTab === "commits" ? void commits.refetch() : void refetchDiff())}
+              disabled={activeTab === "commits" ? commits.loading : diffLoading}
             >
               <RefreshCw className="h-3.5 w-3.5" />
               {t("issue.diff.refresh")}
@@ -329,20 +385,20 @@ export default function GitDiffModal({
         {activeTab === "commits" && commits.error ? (
           <p className="border-b px-4 py-2 text-sm text-destructive">{commits.error}</p>
         ) : null}
-        {activeTab !== "commits" && diff.error ? <p className="border-b px-4 py-2 text-sm text-destructive">{diff.error}</p> : null}
+        {activeTab !== "commits" && diffError ? <p className="border-b px-4 py-2 text-sm text-destructive">{diffError}</p> : null}
         {activeTab !== "commits" && repoNames.length > 1 ? (
           <RepoNav repos={repoNames} activeRepo={activeRepo} onChange={setActiveRepo} />
         ) : null}
-        {activeTab === "branch" ? <BranchStatusStrip repo={statusRepo} fileCount={files.length} stats={stats} /> : null}
+        {activeTab === "branch" ? <BranchStatusStrip repo={statusRepo} fileCount={fileCount} stats={stats} /> : null}
         {activeTab === "uncommitted" ? (
-          <UncommittedSummaryStrip fileCount={files.length} stats={stats} reviewCount={uncommittedReviewCount} />
+          <UncommittedSummaryStrip fileCount={fileCount} stats={stats} reviewCount={uncommittedReviewCount} />
         ) : null}
 
         {showUncommittedEmpty ? (
-          <UncommittedEmptyState onRefresh={() => void diff.refetch()} onViewBranch={() => setActiveTab("branch")} />
+          <UncommittedEmptyState onRefresh={() => void refetchDiff()} onViewBranch={() => setActiveTab("branch")} />
         ) : (
           <div className="grid min-h-0 flex-1 grid-cols-[20rem_minmax(0,1fr)] bg-background">
-            <aside className="min-h-0 overflow-hidden border-r">
+            <aside className="flex min-h-0 flex-col overflow-hidden border-r">
               {activeTab === "commits" ? (
                 <CommitList
                   commits={commits.commits}
@@ -355,14 +411,32 @@ export default function GitDiffModal({
                   }}
                 />
               ) : (
-                <GitDiffFileTree
-                  files={files.map((entry) => entry.file)}
-                  flat={flat}
-                  selectedPath={selected?.path ?? null}
-                  onSelect={(file) => setSelectedKey(fileKey(file))}
-                  onToggleFlat={() => setFlat((current) => !current)}
-                  commentCountsByPath={commentCountsByPath}
-                />
+                <div className="flex min-h-0 flex-1 flex-col">
+                  <GitDiffFileTree
+                    files={diffRows}
+                    flat={flat}
+                    selectedPath={patchTarget?.path ?? null}
+                    onSelect={(file) => setSelectedKey(rowKey(file as DiffFileRow))}
+                    onToggleFlat={() => setFlat((current) => !current)}
+                    commentCountsByPath={commentCountsByPath}
+                    query={query}
+                    onQueryChange={setQuery}
+                  />
+                  {files.hasMore ? (
+                    <div className="border-t p-1.5">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-7 w-full gap-1 text-[11px]"
+                        disabled={files.loadingMore}
+                        onClick={() => void files.loadMore()}
+                      >
+                        {files.loadingMore ? t("issue.diff.loading") : t("issue.diff.loadMore")}
+                      </Button>
+                    </div>
+                  ) : null}
+                </div>
               )}
             </aside>
             <section className="flex min-h-0 flex-col overflow-hidden">
@@ -381,11 +455,13 @@ export default function GitDiffModal({
                 </div>
               ) : null}
               <div className="min-h-0 flex-1 overflow-hidden">
-                {(activeTab === "commits" ? commits.loading || commitLoading : diff.loading) && files.length === 0 ? (
+                {(activeTab === "commits" ? commits.loading || commitLoading : diffLoading) && fileCount === 0 ? (
+                  <div className="flex h-full items-center justify-center text-sm text-muted-foreground">{t("issue.diff.loading")}</div>
+                ) : activeTab !== "commits" && patchTarget && patch.loading ? (
                   <div className="flex h-full items-center justify-center text-sm text-muted-foreground">{t("issue.diff.loading")}</div>
                 ) : (
                   <GitDiffViewer
-                    file={selected}
+                    file={viewerFile}
                     viewMode={viewMode}
                     comments={reviewEnabled ? selectedFileComments : undefined}
                     onSaveComment={reviewEnabled ? saveReviewComment : undefined}
@@ -498,7 +574,7 @@ function BranchStatusStrip({
   fileCount,
   stats,
 }: {
-  repo: GitDiffRepo | null;
+  repo: GitDiffRepoStat | null;
   fileCount: number;
   stats: DiffStats;
 }) {
@@ -516,13 +592,6 @@ function BranchStatusStrip({
         ) : (
           <span className="truncate text-muted-foreground">{t("issue.diff.status.branchUnknown")}</span>
         )}
-        {hasBranch ? (
-          <span className="truncate text-muted-foreground">
-            {repo!.behind === null || repo!.behind === undefined
-              ? t("issue.diff.status.aheadBehindUnknown", { ahead: repo!.ahead ?? 0 })
-              : t("issue.diff.status.aheadBehind", { ahead: repo!.ahead ?? 0, behind: repo!.behind })}
-          </span>
-        ) : null}
       </div>
       <div className="flex shrink-0 items-center gap-2 tabular-nums">
         <span className="text-muted-foreground">{t("issue.diff.files", { count: fileCount })}</span>
@@ -681,27 +750,41 @@ function CommitList({
   );
 }
 
-function flattenFiles(repos: GitDiffRepo[]): Array<{ key: string; repo: string | null; file: GitDiffFileChange }> {
-  return repos.flatMap((repo) =>
-    repo.files.map((file) => {
-      const prefixedFile = prefixFileWithRepo(repo.repo, file);
-      return { key: fileKey(prefixedFile), repo: repo.repo || null, file: prefixedFile };
-    }),
-  );
+function diffStatsSummary(
+  activeTab: GitDiffType | "commits",
+  activeRepo: string,
+  stats: GitDiffRepoStat[],
+  commitFiles: Array<{ file: GitDiffFileChange }>,
+): DiffStats {
+  if (activeTab === "commits") {
+    return combineDiffStats(commitFiles.map(({ file }) => diffStatsFromPatch(file.patch)));
+  }
+  const scoped = activeRepo === "all" ? stats : stats.filter((stat) => stat.repo === activeRepo);
+  return combineDiffStats(scoped.map((stat) => ({ additions: stat.additions, deletions: stat.deletions })));
+}
+
+function toDiffFileRows(files: GitDiffFileEntry[]): DiffFileRow[] {
+  return files.map((file) => {
+    const prefix = file.repo.trim() ? `${file.repo}/` : "";
+    return {
+      repo: file.repo,
+      originalPath: file.path,
+      path: `${prefix}${file.path}`,
+      oldPath: file.oldPath ? `${prefix}${file.oldPath}` : null,
+      status: file.status,
+      additions: file.additions,
+      deletions: file.deletions,
+      binary: file.binary,
+    };
+  });
+}
+
+function rowKey(row: { repo: string; originalPath: string }): string {
+  return `${row.repo}:${row.originalPath}`;
 }
 
 function fileKey(file: GitDiffFileChange): string {
   return `${file.path}:${file.oldPath ?? ""}`;
-}
-
-function prefixFileWithRepo(repo: string, file: GitDiffFileChange): GitDiffFileChange {
-  const prefix = repo.trim();
-  if (!prefix) return file;
-  return {
-    ...file,
-    path: `${prefix}/${file.path}`,
-    oldPath: file.oldPath ? `${prefix}/${file.oldPath}` : null,
-  };
 }
 
 function commitKey(commit: CommitEvidenceSummary): string {

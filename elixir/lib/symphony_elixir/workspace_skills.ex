@@ -92,22 +92,38 @@ defmodule SymphonyElixir.WorkspaceSkills do
   end
 
   defp prepare_agent_roots(workspace) do
-    workspace
-    |> agent_roots()
-    |> Enum.reduce_while(:ok, fn root, :ok ->
-      root
-      |> prepare_agent_root(mirror_root(workspace))
-      |> continue_or_halt()
-    end)
+    with {:ok, roots} <- agent_roots(workspace) do
+      Enum.reduce_while(roots, :ok, fn root, :ok ->
+        root
+        |> prepare_agent_root(mirror_root(workspace))
+        |> continue_or_halt()
+      end)
+    end
   end
 
+  # Editor roots are looked up by lstat (not File.dir?/1) so a symlinked
+  # editor root is rejected outright instead of silently traversed: following
+  # it would let workspace preparation write agent scaffolding through the
+  # link into whatever it points at.
   defp agent_roots(workspace) do
-    nested_roots =
-      @editor_root_names
-      |> Enum.map(&Path.join(workspace, &1))
-      |> Enum.filter(&File.dir?/1)
+    case collect_nested_roots(@editor_root_names, workspace, []) do
+      {:ok, nested_roots} -> {:ok, [workspace | nested_roots]}
+      {:error, reason} -> {:error, reason}
+    end
+  end
 
-    [workspace | nested_roots]
+  defp collect_nested_roots([], _workspace, acc), do: {:ok, Enum.reverse(acc)}
+
+  defp collect_nested_roots([name | rest], workspace, acc) do
+    path = Path.join(workspace, name)
+
+    case File.lstat(path) do
+      {:ok, %File.Stat{type: :directory}} -> collect_nested_roots(rest, workspace, [path | acc])
+      {:ok, %File.Stat{type: :symlink}} -> {:error, {:blocked_path, path}}
+      {:ok, _stat} -> collect_nested_roots(rest, workspace, acc)
+      {:error, :enoent} -> collect_nested_roots(rest, workspace, acc)
+      {:error, reason} -> {:error, {:file_error, path, reason}}
+    end
   end
 
   defp prepare_agent_root(root, mirror) do
@@ -131,34 +147,72 @@ defmodule SymphonyElixir.WorkspaceSkills do
     end)
   end
 
+  # Dispatches to the workspace-internal (relative) linking path used for
+  # everything that points at the in-workspace mirror, as opposed to
+  # `ensure_symlink/2` below, which links mirror entries to their external
+  # skill sources and is intentionally left absolute.
   defp ensure_skills_path(path, mirror) do
     case File.lstat(path) do
       {:ok, %File.Stat{type: :directory}} -> populate_existing_skills_directory(path, mirror)
-      _other -> ensure_symlink(path, mirror)
+      _other -> ensure_workspace_relative_link(path, mirror)
     end
   end
 
   defp populate_existing_skills_directory(path, mirror) do
     case File.ls(mirror) do
-      {:ok, entries} -> link_missing_skill_entries(path, mirror, entries)
+      {:ok, entries} -> link_skill_entries(path, mirror, entries)
       {:error, reason} -> {:error, {:file_error, mirror, reason}}
     end
   end
 
-  defp link_missing_skill_entries(path, mirror, entries) do
+  defp link_skill_entries(path, mirror, entries) do
     Enum.reduce_while(entries, :ok, fn entry, :ok ->
-      destination = Path.join(path, entry)
-
-      if File.exists?(destination) do
-        {:cont, :ok}
-      else
-        mirror
-        |> Path.join(entry)
-        |> File.ln_s(destination)
-        |> normalize_file_result(destination)
-        |> continue_or_halt()
-      end
+      path
+      |> Path.join(entry)
+      |> ensure_workspace_relative_link(Path.join(mirror, entry))
+      |> continue_or_halt()
     end)
+  end
+
+  # Creates (or normalizes) a link to a target inside the same workspace tree
+  # as a *relative* symlink, so it survives the atomic staging-to-final
+  # rename intact instead of resolving through a now-vanished staging path.
+  # A link whose current target does not resolve to `target` is left
+  # untouched: it was pointed elsewhere on purpose (a custom skill/mirror
+  # override) and preparation must not clobber it.
+  defp ensure_workspace_relative_link(path, target) do
+    case File.lstat(path) do
+      {:ok, %File.Stat{type: :symlink}} -> ensure_relative_symlink_target(path, target)
+      {:ok, _stat} -> {:error, {:blocked_path, path}}
+      {:error, :enoent} -> create_relative_symlink(path, target)
+      {:error, reason} -> {:error, {:file_error, path, reason}}
+    end
+  end
+
+  defp ensure_relative_symlink_target(path, target) do
+    case File.read_link(path) do
+      {:ok, existing_target} -> ensure_relative_form(path, existing_target, target)
+      {:error, reason} -> {:error, {:file_error, path, reason}}
+    end
+  end
+
+  defp ensure_relative_form(path, existing_target, target) do
+    cond do
+      not same_target?(path, existing_target, target) -> :ok
+      Path.type(existing_target) == :relative -> :ok
+      true -> replace_symlink(path, relative_target(path, target))
+    end
+  end
+
+  defp create_relative_symlink(path, target) do
+    path
+    |> relative_target(target)
+    |> File.ln_s(path)
+    |> normalize_file_result(path)
+  end
+
+  defp relative_target(path, target) do
+    Path.relative_to(target, Path.dirname(path), force: true)
   end
 
   # Agent scratch dirs (`/.codex/`, `/.claude/`) and Symphony's generated
@@ -171,17 +225,23 @@ defmodule SymphonyElixir.WorkspaceSkills do
   defp maybe_append_git_excludes(root) do
     info_dir = Path.join([root, ".git", "info"])
 
-    if File.dir?(info_dir) do
-      exclude_file = Path.join(info_dir, "exclude")
-
-      Enum.reduce_while(@git_exclude_entries, :ok, fn entry, :ok ->
-        exclude_file
-        |> ensure_exclude_entry(entry)
-        |> continue_or_halt()
-      end)
-    else
-      :ok
+    case File.lstat(info_dir) do
+      {:ok, %File.Stat{type: :directory}} -> append_git_excludes(info_dir)
+      {:ok, %File.Stat{type: :symlink}} -> {:error, {:blocked_path, info_dir}}
+      {:ok, _stat} -> :ok
+      {:error, :enoent} -> :ok
+      {:error, reason} -> {:error, {:file_error, info_dir, reason}}
     end
+  end
+
+  defp append_git_excludes(info_dir) do
+    exclude_file = Path.join(info_dir, "exclude")
+
+    Enum.reduce_while(@git_exclude_entries, :ok, fn entry, :ok ->
+      exclude_file
+      |> ensure_exclude_entry(entry)
+      |> continue_or_halt()
+    end)
   end
 
   defp ensure_exclude_entry(file, entry) do
@@ -298,14 +358,16 @@ defmodule SymphonyElixir.WorkspaceSkills do
   end
 
   defp prune_skill_directories(workspace) do
-    agent_skill_dirs =
-      workspace
-      |> agent_roots()
-      |> Enum.flat_map(fn root ->
-        Enum.map(@agent_dirs, &Path.join([root, &1, "skills"]))
-      end)
+    case agent_roots(workspace) do
+      {:ok, roots} ->
+        agent_skill_dirs =
+          Enum.flat_map(roots, fn root -> Enum.map(@agent_dirs, &Path.join([root, &1, "skills"])) end)
 
-    [mirror_root(workspace) | agent_skill_dirs]
+        [mirror_root(workspace) | agent_skill_dirs]
+
+      {:error, _reason} ->
+        [mirror_root(workspace)]
+    end
   end
 
   defp prune_authoring_entries(skills_dir) do
@@ -323,19 +385,22 @@ defmodule SymphonyElixir.WorkspaceSkills do
     end
   end
 
+  # Only a symlink is ever a managed pointer we created; a real directory at
+  # an authoring-only skill name is a user's own custom skill and must survive
+  # pruning untouched.
   defp remove_if_present(path) do
     case File.lstat(path) do
-      {:ok, _stat} ->
-        case File.rm_rf(path) do
-          {:ok, _files} -> :ok
-          {:error, reason, failed} -> {:error, {:file_error, failed, reason}}
-        end
+      {:ok, %File.Stat{type: :symlink}} -> remove_symlink(path)
+      {:ok, _stat} -> :ok
+      {:error, :enoent} -> :ok
+      {:error, reason} -> {:error, {:file_error, path, reason}}
+    end
+  end
 
-      {:error, :enoent} ->
-        :ok
-
-      {:error, reason} ->
-        {:error, {:file_error, path, reason}}
+  defp remove_symlink(path) do
+    case File.rm_rf(path) do
+      {:ok, _files} -> :ok
+      {:error, reason, failed} -> {:error, {:file_error, failed, reason}}
     end
   end
 

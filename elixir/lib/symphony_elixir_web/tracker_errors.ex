@@ -3,11 +3,12 @@ defmodule SymphonyElixirWeb.TrackerErrors do
 
   use Gettext, backend: SymphonyElixirWeb.Gettext
 
-  import Phoenix.Controller
+  import Phoenix.Controller, except: [render: 2]
   import Plug.Conn
 
   alias Gettext, as: GettextCore
   alias Plug.Conn
+  alias SymphonyElixir.Workspace.Provision
 
   @spec render(Conn.t(), Ecto.Changeset.t() | atom() | String.t()) :: Conn.t()
   def render(conn, %Ecto.Changeset{} = changeset) do
@@ -57,6 +58,24 @@ defmodule SymphonyElixirWeb.TrackerErrors do
 
   def render(conn, :invalid_diff_type),
     do: error(conn, 422, "invalid_diff_type", dgettext("errors", "Diff type must be branch or uncommitted."))
+
+  def render(conn, :invalid_cursor),
+    do: error(conn, 422, "invalid_cursor", dgettext("errors", "Invalid pagination cursor."))
+
+  def render(conn, :invalid_file_path),
+    do: error(conn, 422, "invalid_file_path", dgettext("errors", "File path must stay within the repository."))
+
+  def render(conn, :file_not_found),
+    do: not_found(conn, "file_not_found", dgettext("errors", "File not found in this diff."))
+
+  def render(conn, :repo_required),
+    do: error(conn, 422, "repo_required", dgettext("errors", "A repo name is required."))
+
+  def render(conn, :path_required),
+    do: error(conn, 422, "path_required", dgettext("errors", "A file path is required."))
+
+  def render(conn, :workspace_not_found),
+    do: not_found(conn, "workspace_not_found", dgettext("errors", "Workspace not found for this thread."))
 
   def render(conn, :invalid_commit_message),
     do: error(conn, 422, "invalid_commit_message", dgettext("errors", "Commit message is required."))
@@ -370,6 +389,41 @@ defmodule SymphonyElixirWeb.TrackerErrors do
         dgettext("errors", "workspace setup failed: %{reason}", reason: format_terminal_reason(reason))
       )
 
+  def render(conn, %Provision.Error{} = error), do: render(conn, Provision.classify_error(error))
+
+  def render(conn, {:workspace_provision_incomplete, %Provision.Error{} = provision_error}),
+    do:
+      error(
+        conn,
+        409,
+        "workspace_provision_incomplete",
+        dgettext(
+          "errors",
+          "The workspace was left incomplete by a previous attempt. Retry provisioning to repair it."
+        ),
+        provision_error_details(provision_error)
+      )
+
+  def render(conn, {:workspace_provision_failed, %Provision.Error{retryable: retryable} = provision_error}),
+    do:
+      error(
+        conn,
+        if(retryable, do: 503, else: 422),
+        "workspace_provision_failed",
+        dgettext("errors", "Workspace provisioning failed. Try again in a moment."),
+        provision_error_details(provision_error)
+      )
+
+  def render(conn, {:workspace_provision_failed, reason}),
+    do:
+      error(
+        conn,
+        422,
+        "workspace_provision_failed",
+        dgettext("errors", "Workspace provisioning failed. Try again in a moment."),
+        %{retryable: false, reason: inspect(reason)}
+      )
+
   def render(conn, :cannot_group_with_self),
     do: error(conn, 422, "cannot_group_with_self", dgettext("errors", "An issue cannot be grouped with itself."))
 
@@ -634,4 +688,8 @@ defmodule SymphonyElixirWeb.TrackerErrors do
 
   defp format_terminal_reason(reason) when is_atom(reason), do: Atom.to_string(reason)
   defp format_terminal_reason(reason), do: inspect(reason)
+
+  defp provision_error_details(%Provision.Error{stage: stage, reason: reason, retryable: retryable}) do
+    %{retryable: retryable, stage: Atom.to_string(stage), reason: inspect(reason)}
+  end
 end

@@ -128,6 +128,8 @@ const searchWorkspaceFilesMock = vi.hoisted(() => vi.fn());
 const listPullRequestsMock = vi.hoisted(() => vi.fn());
 const getThreadGitDiffMock = vi.hoisted(() => vi.fn());
 const getGitDiffMock = vi.hoisted(() => vi.fn());
+const getThreadGitDiffStatsMock = vi.hoisted(() => vi.fn());
+const getGitDiffStatsMock = vi.hoisted(() => vi.fn());
 const getProjectOverviewMock = vi.hoisted(() => vi.fn());
 const getRepoTreeMock = vi.hoisted(() => vi.fn());
 const getPageMock = vi.hoisted(() => vi.fn());
@@ -149,6 +151,8 @@ vi.mock("@/services/pullRequests", async (importOriginal) => ({
 vi.mock("@/services/gitDiff", () => ({
   getThreadGitDiff: (...args: unknown[]) => getThreadGitDiffMock(...args),
   getGitDiff: (...args: unknown[]) => getGitDiffMock(...args),
+  getThreadGitDiffStats: (...args: unknown[]) => getThreadGitDiffStatsMock(...args),
+  getGitDiffStats: (...args: unknown[]) => getGitDiffStatsMock(...args),
 }));
 
 vi.mock("@/services/knowledgeBase", () => ({
@@ -177,6 +181,8 @@ describe("ProjectAssistantPanel", () => {
     listPullRequestsMock.mockResolvedValue({ data: [] });
     getThreadGitDiffMock.mockResolvedValue({ repos: [], workspace: { path: "", available: false } });
     getGitDiffMock.mockResolvedValue({ repos: [], workspace: { path: "", available: false } });
+    getThreadGitDiffStatsMock.mockResolvedValue({ stats: [], workspace: { path: "", available: false } });
+    getGitDiffStatsMock.mockResolvedValue({ stats: [], workspace: { path: "", available: false } });
     getProjectOverviewMock.mockResolvedValue({
       project: { slug: "macro-markets", name: "Macro Markets" },
       repositories: [
@@ -382,26 +388,18 @@ describe("ProjectAssistantPanel", () => {
   });
 
   it("shows uncommitted diff totals in the session header", async () => {
-    getThreadGitDiffMock.mockResolvedValue({
-      repos: [
-        {
-          repo: "front",
-          files: [
-            {
-              path: "src/App.tsx",
-              oldPath: null,
-              status: "modified",
-              patch: "diff --git a/src/App.tsx b/src/App.tsx\n-old\n+new\n+another\n",
-            },
-          ],
-        },
+    getThreadGitDiffStatsMock.mockResolvedValue({
+      stats: [
+        { repo: "front", branch: null, base: null, filesChanged: 1, additions: 2, deletions: 1, untracked: 0 },
       ],
       workspace: { path: "/tmp/ws", available: true },
     });
 
     render(<ProjectAssistantPanel projectSlug="macro-markets" threadId={7990} view="board" mode="page" />);
 
-    await waitFor(() => expect(getThreadGitDiffMock).toHaveBeenCalledWith(7990, "uncommitted"));
+    await waitFor(() =>
+      expect(getThreadGitDiffStatsMock).toHaveBeenCalledWith(7990, "uncommitted", { signal: expect.any(AbortSignal) }),
+    );
     expect(await screen.findByText("+2")).toBeInTheDocument();
     expect(screen.getByText("-1")).toBeInTheDocument();
   });

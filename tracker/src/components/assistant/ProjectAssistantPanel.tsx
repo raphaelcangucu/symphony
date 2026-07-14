@@ -5,7 +5,7 @@ import {
   type ThreadMessageLike,
 } from "@assistant-ui/react";
 import type { Channel } from "phoenix";
-import { Bot, BookOpen, ChevronDown, ListChecks, Sparkles } from "lucide-react";
+import { Bot, BookOpen, ChevronDown, ListChecks, Loader2, Sparkles } from "lucide-react";
 import { i18n } from "@/i18n";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -92,6 +92,7 @@ import {
   type UserQuestionsRequest,
 } from "@/services/assistant";
 import { WorkspaceDiffStatsChip } from "@/components/sessions/WorkspaceDiffStatsChip";
+import { provisionWorkspace } from "@/services/workspaceProvision";
 import { useIssueChangedDocPaths } from "@/hooks/useIssueChangedDocPaths";
 import { useWorkspaceDiffStats } from "@/hooks/useWorkspaceDiffStats";
 import { UserQuestionsCard } from "@/components/assistant/UserQuestionsCard";
@@ -332,6 +333,8 @@ export function ProjectAssistantPanel({
   const [pendingQuestions, setPendingQuestions] = useState<UserQuestionsRequest | null>(null);
   const [pendingApproval, setPendingApproval] = useState<AssistantApprovalRequest | null>(null);
   const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [workspaceProvisionRetrying, setWorkspaceProvisionRetrying] = useState(false);
+  const [workspaceProvisionRetryError, setWorkspaceProvisionRetryError] = useState<string | null>(null);
   const [bundle, setBundle] = useState<AssistantCatalogBundle | null>(null);
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const [channelReady, setChannelReady] = useState(false);
@@ -1349,6 +1352,37 @@ export function ProjectAssistantPanel({
     Number.isFinite(Date.parse(lastTurn.lastActivityAt)) &&
     nowMs - Date.parse(lastTurn.lastActivityAt) >= STALE_ACTIVITY_MS;
 
+  // Workspace provisioning failures surface as a plain connection-error message
+  // (see error_reason/1 in AssistantChannel and ErrorMessages.localize/2 for
+  // TerminalController). Matching on that wording lets the composer offer a
+  // "Try again" affordance that hits the idempotent provisioning endpoint
+  // directly, instead of leaving the user stuck re-sending the same message.
+  const workspaceProvisioningError =
+    connectionError && /workspace (provisioning|setup)/i.test(connectionError) ? connectionError : null;
+
+  const retryWorkspaceProvisioning = useCallback(() => {
+    if (!projectSlug || !issueIdentifier || workspaceProvisionRetrying) return;
+
+    setWorkspaceProvisionRetrying(true);
+    setWorkspaceProvisionRetryError(null);
+
+    provisionWorkspace(projectSlug, issueIdentifier)
+      .then(() => {
+        setWorkspaceProvisionRetrying(false);
+        setConnectionError(null);
+      })
+      .catch((cause) => {
+        setWorkspaceProvisionRetrying(false);
+        setWorkspaceProvisionRetryError(
+          cause instanceof Error ? cause.message : t("assistant.panel.workspaceProvision.retryFailed"),
+        );
+      });
+  }, [projectSlug, issueIdentifier, workspaceProvisionRetrying, t]);
+
+  useEffect(() => {
+    if (!workspaceProvisioningError) setWorkspaceProvisionRetryError(null);
+  }, [workspaceProvisioningError]);
+
   const handleStopTurn = useCallback(() => {
     const channel = channelRef.current;
     if (!channel) return;
@@ -1414,7 +1448,7 @@ export function ProjectAssistantPanel({
       runningStartedAt={runningStartedAt}
       activeToolDetail={activeToolDetail}
       stale={stale}
-      connectionError={connectionError}
+      connectionError={workspaceProvisioningError ? null : connectionError}
       channelReady={channelReady}
       planApprovalMessageId={planApprovalMessageId}
       onOpenDocumentPath={onOpenDocumentPath}
@@ -1499,6 +1533,35 @@ export function ProjectAssistantPanel({
         onInsertContext={insertContextRef}
         disabled={!channelReady}
       />
+    </div>
+  ) : null;
+
+  // Stays visible (does not auto-dismiss) until provisioning succeeds or the
+  // user navigates away, since a stuck workspace otherwise silently blocks
+  // every subsequent turn on this issue.
+  const workspaceProvisionBanner = workspaceProvisioningError ? (
+    <div className="px-4 pb-2">
+      <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+        {workspaceProvisionRetrying ? (
+          <>
+            <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
+            <span className="min-w-0 flex-1">{t("assistant.panel.workspaceProvision.progress")}</span>
+          </>
+        ) : (
+          <>
+            <span className="min-w-0 flex-1">{workspaceProvisionRetryError ?? workspaceProvisioningError}</span>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7 shrink-0 px-2 text-xs"
+              onClick={retryWorkspaceProvisioning}
+            >
+              {t("assistant.panel.workspaceProvision.retry")}
+            </Button>
+          </>
+        )}
+      </div>
     </div>
   ) : null;
 
@@ -1821,6 +1884,7 @@ export function ProjectAssistantPanel({
                   )}
                 >
                   {resumeBanner}
+                  {workspaceProvisionBanner}
                   {queuedChips}
                   {questionsNode}
                   {approvalNode}
@@ -1844,6 +1908,7 @@ export function ProjectAssistantPanel({
                 )}
               >
                 {resumeBanner}
+                {workspaceProvisionBanner}
                 {queuedChips}
                 {questionsNode}
                 {approvalNode}
@@ -1913,6 +1978,7 @@ export function ProjectAssistantPanel({
           <div className="flex min-h-0 flex-1 flex-col">
             <div className="min-h-0 flex-1 space-y-3 overflow-auto px-6 py-4">{messageItems}</div>
             {resumeBanner}
+            {workspaceProvisionBanner}
             {queuedChips}
             {questionsNode}
             {composerNode ?? (

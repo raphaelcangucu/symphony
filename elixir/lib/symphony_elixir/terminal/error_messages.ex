@@ -5,6 +5,7 @@ defmodule SymphonyElixir.Terminal.ErrorMessages do
 
   alias Gettext, as: GettextCore
   alias SymphonyElixir.Settings.Ui
+  alias SymphonyElixir.Workspace.Provision
 
   @default_locale "en"
 
@@ -20,9 +21,11 @@ defmodule SymphonyElixir.Terminal.ErrorMessages do
   end
 
   def localize({:workspace_setup_failed, reason}, locale) do
-    with_locale(locale, fn ->
-      dgettext("errors", "workspace setup failed: %{reason}", reason: format_reason(reason))
-    end)
+    case Provision.classify_error(reason) do
+      {:workspace_provision_incomplete, error} -> localize_provision_incomplete(error, locale)
+      {:workspace_provision_failed, %Provision.Error{} = error} -> localize_provision_failed(error, locale)
+      {:workspace_provision_failed, other} -> localize_workspace_setup_failed(other, locale)
+    end
   end
 
   def localize(message, _locale) when is_binary(message), do: message
@@ -30,6 +33,31 @@ defmodule SymphonyElixir.Terminal.ErrorMessages do
   def localize(reason, _locale) when is_atom(reason), do: Atom.to_string(reason)
 
   def localize(reason, locale), do: with_locale(locale, fn -> inspect(reason) end)
+
+  defp localize_provision_incomplete(_error, locale) do
+    with_locale(locale, fn ->
+      dgettext(
+        "errors",
+        "workspace provisioning incomplete: a previous attempt left the workspace unusable. Retry provisioning."
+      )
+    end)
+  end
+
+  defp localize_provision_failed(%Provision.Error{reason: reason}, locale) do
+    with_locale(locale, fn ->
+      dgettext(
+        "errors",
+        "workspace provisioning failed: %{reason}. Retry provisioning.",
+        reason: format_reason(reason)
+      )
+    end)
+  end
+
+  defp localize_workspace_setup_failed(reason, locale) do
+    with_locale(locale, fn ->
+      dgettext("errors", "workspace setup failed: %{reason}", reason: format_reason(reason))
+    end)
+  end
 
   defp with_locale(nil, fun), do: with_locale(Ui.effective_gettext_locale(), fun)
 

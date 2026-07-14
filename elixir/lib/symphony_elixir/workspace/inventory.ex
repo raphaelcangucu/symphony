@@ -23,6 +23,7 @@ defmodule SymphonyElixir.Workspace.Inventory do
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.RunContract
   alias SymphonyElixir.Workspace
+  alias SymphonyElixir.Workspace.Provision
   alias SymphonyElixir.Workspace.Worktree
 
   @parallel_suffix_regex ~r/^(?<base>.+)__p(?<index>\d+)$/
@@ -255,6 +256,9 @@ defmodule SymphonyElixir.Workspace.Inventory do
     basename = Path.basename(path)
 
     cond do
+      basename == Provision.reserved_container_name() ->
+        nil
+
       git_repo_root?(path) ->
         # Direct repo clone at the segment root belongs to the shared project
         # workspace; it is folded into the :project entry afterwards.

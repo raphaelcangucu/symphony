@@ -1,4 +1,4 @@
-import type { GitDiffFileChange } from "@/types/gitDiff";
+import type { GitDiffFileTreeEntry } from "@/types/gitDiff";
 
 export interface GitDiffTreeNode {
   id: string;
@@ -6,10 +6,10 @@ export interface GitDiffTreeNode {
   path: string;
   type: "folder" | "file";
   children: GitDiffTreeNode[];
-  file?: GitDiffFileChange;
+  file?: GitDiffFileTreeEntry;
 }
 
-export function buildGitDiffTree(files: GitDiffFileChange[]): GitDiffTreeNode[] {
+export function buildGitDiffTree(files: GitDiffFileTreeEntry[]): GitDiffTreeNode[] {
   const root = new Map<string, GitDiffTreeNode>();
 
   for (const file of files) {

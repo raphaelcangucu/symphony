@@ -9,6 +9,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
   alias SymphonyElixir.Assistant.{
     AuthoringGoalControl,
     FileActivityPresenter,
+    FileChangeCapture,
     GitHubAuthoring,
     History,
     IssueDocuments,
@@ -1165,7 +1166,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
       try do
         on_message = fn message ->
           maybe_forward_turn_started(message, opts)
-          relay_codex_event(message, collector, opts)
+          relay_codex_event(message, collector, workspace, opts)
 
           case Keyword.get(opts, :on_message) do
             callback when is_function(callback, 1) -> callback.(message)
@@ -1194,7 +1195,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
 
   # credo:disable-for-lines:120
   # credo:disable-for-next-line Credo.Check.Refactor.CyclomaticComplexity
-  defp relay_codex_event(message, collector, opts) when is_map(message) do
+  defp relay_codex_event(message, collector, workspace, opts) when is_map(message) do
     payload = event_payload(message)
     method = Map.get(payload, "method") || Map.get(payload, :method)
     file_activity = FileActivityPresenter.from_event(message)
@@ -1206,6 +1207,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
 
       match?({:completed, _}, file_activity) ->
         {:completed, tool_call} = file_activity
+        tool_call = maybe_capture_file_patches(tool_call, workspace)
 
         Agent.update(collector, fn state ->
           tool_calls =
@@ -1338,7 +1340,48 @@ defmodule SymphonyElixir.Assistant.AgentSession do
     end
   end
 
-  defp relay_codex_event(_message, _collector, _opts), do: :ok
+  defp relay_codex_event(_message, _collector, _workspace, _opts), do: :ok
+
+  # Codex reports file_change items with the affected paths, but a native patch is
+  # only present when Codex's own event embeds one (see FileActivityPresenter). When
+  # it doesn't, capture ONLY the reported paths via targeted, single-file git diffs
+  # (FileChangeCapture) rather than ever computing a full workspace diff.
+  defp maybe_capture_file_patches(%{name: "apply_patch", result: result} = tool_call, workspace)
+       when is_binary(workspace) and is_map(result) do
+    case {Map.get(result, "files"), Map.get(result, "paths")} do
+      {files, paths} when files in [nil, []] and is_list(paths) and paths != [] ->
+        captured = FileChangeCapture.capture(workspace, paths)
+        {diff, additions, deletions} = captured_aggregate(captured)
+
+        updated_result =
+          result
+          |> Map.put("files", captured)
+          |> Map.put("diff", diff)
+          |> Map.put("additions", additions)
+          |> Map.put("deletions", deletions)
+
+        %{tool_call | result: updated_result}
+
+      _ ->
+        tool_call
+    end
+  end
+
+  defp maybe_capture_file_patches(tool_call, _workspace), do: tool_call
+
+  defp captured_aggregate([]), do: {nil, 0, 0}
+
+  defp captured_aggregate(captured) do
+    diff =
+      captured
+      |> Enum.map(&Map.get(&1, "patch"))
+      |> Enum.reject(&(&1 in [nil, ""]))
+      |> Enum.join("\n")
+
+    additions = Enum.sum(Enum.map(captured, &Map.get(&1, "additions", 0)))
+    deletions = Enum.sum(Enum.map(captured, &Map.get(&1, "deletions", 0)))
+    {if(diff == "", do: nil, else: diff), additions, deletions}
+  end
 
   defp event_payload(message) when is_map(message) do
     case Map.get(message, :payload) || Map.get(message, "payload") do
