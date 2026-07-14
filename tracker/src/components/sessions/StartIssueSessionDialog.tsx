@@ -18,10 +18,12 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { createIssueSession, issueSessionStartErrorMessage } from "@/lib/createIssueSession";
-import { DEFAULT_EXECUTION_MODE } from "@/lib/executionMode";
 import { projectSessionPath, type WorkspaceView } from "@/lib/workspaceRoutes";
 import type { AgentKind, ExecutionMode } from "@/types/issue";
 import type { AssistantThread } from "@/types/assistant-thread";
+
+/** Parallel issue sessions default to Build (writable with approvals). */
+const DEFAULT_ISSUE_SESSION_MODE: ExecutionMode = "build";
 
 export type WorkspaceTarget = "issue" | "parent" | "isolated";
 
@@ -58,7 +60,7 @@ export function StartIssueSessionDialog({
 }: StartIssueSessionDialogProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const [mode, setMode] = useState<ExecutionMode>(DEFAULT_EXECUTION_MODE);
+  const [mode, setMode] = useState<ExecutionMode>(DEFAULT_ISSUE_SESSION_MODE);
   const [agent, setAgent] = useState<AgentKind>("codex");
   const [title, setTitle] = useState("");
   const [instructions, setInstructions] = useState("");
@@ -80,7 +82,7 @@ export function StartIssueSessionDialog({
     if (initializedForRef.current === resetKey) return;
 
     initializedForRef.current = resetKey;
-    setMode(DEFAULT_EXECUTION_MODE);
+    setMode(DEFAULT_ISSUE_SESSION_MODE);
     setAgent(resolveDefaultAgent(issue));
     setTitle("");
     setInstructions("");

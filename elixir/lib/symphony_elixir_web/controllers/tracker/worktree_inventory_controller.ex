@@ -10,21 +10,22 @@ defmodule SymphonyElixirWeb.Tracker.WorktreeInventoryController do
   alias Plug.Conn
   alias SymphonyElixir.Assistant.History
   alias SymphonyElixir.LocalTracker.Context
-  alias SymphonyElixir.Workspace.Inventory
+  alias SymphonyElixir.Workspace.{DisplayName, Inventory}
   alias SymphonyElixir.Workspace.Standalone
   alias SymphonyElixirWeb.{TrackerErrors, TrackerPresenter, WorktreeInventoryEventStream, WorktreeInventoryPresenter}
 
+  @display_name_module_env :worktree_inventory_display_name_module
+
   @spec index(Conn.t(), map()) :: Conn.t()
   def index(conn, %{"project_slug" => project_slug}) do
-    case Inventory.scan(project_slug) do
-      {:ok, scan} ->
-        json(conn, %{
-          data: Enum.map(scan.workspaces, &WorktreeInventoryPresenter.entry_json/1),
-          totals: WorktreeInventoryPresenter.totals_json(scan.totals)
-        })
-
-      {:error, reason} ->
-        TrackerErrors.render(conn, reason)
+    with {:ok, scan} <- Inventory.scan(project_slug),
+         {:ok, aliases} <- display_name_module().map_for_project(project_slug) do
+      json(conn, %{
+        data: Enum.map(scan.workspaces, &WorktreeInventoryPresenter.entry_json(&1, aliases)),
+        totals: WorktreeInventoryPresenter.totals_json(scan.totals)
+      })
+    else
+      {:error, reason} -> TrackerErrors.render(conn, reason)
     end
   end
 
@@ -32,7 +33,7 @@ defmodule SymphonyElixirWeb.Tracker.WorktreeInventoryController do
   def events(conn, %{"project_slug" => project_slug}) do
     case Context.get_project(project_slug) do
       {:ok, _project} ->
-        WorktreeInventoryEventStream.stream(conn, project_slug)
+        WorktreeInventoryEventStream.stream(conn, project_slug, display_name_module())
 
       {:error, reason} ->
         TrackerErrors.render(conn, reason)
@@ -112,4 +113,8 @@ defmodule SymphonyElixirWeb.Tracker.WorktreeInventoryController do
 
   defp normalize_agent(agent) when agent in ["codex", "claude", "cursor", "opencode"], do: agent
   defp normalize_agent(_agent), do: nil
+
+  defp display_name_module do
+    Application.get_env(:symphony_elixir, @display_name_module_env, DisplayName)
+  end
 end

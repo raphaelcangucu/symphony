@@ -38,19 +38,10 @@ defmodule SymphonyElixirWeb.AssistantChannel do
       # "executing" with a live timer immediately, without waiting for a turn.
       TurnManager.subscribe(thread.id)
 
-      payload = %{
-        messages: Enum.map(History.list_messages_for_thread(thread.id), &History.message_payload/1),
-        thread_id: thread.id,
-        goal_mode: History.thread_goal_mode(thread),
-        goal_objective: History.thread_goal_objective(thread),
-        last_turn: History.turn_payload(thread),
-        turn_running: TurnManager.running?(thread.id),
-        turn_elapsed_seconds: History.turn_elapsed_seconds(thread),
-        goal_status: joined_authoritative_goal_status(thread),
-        # Issue task labels are NOT consulted here (would need a tracker fetch at join);
-        # dispatch resolves them — composer badge may differ for label-pinned issues.
-        effective_agent: thread_effective_agent(thread)
-      }
+      payload =
+        thread
+        |> join_history_payload()
+        |> Map.put(:effective_agent, thread_effective_agent(thread))
 
       socket =
         socket
@@ -75,17 +66,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
          {:ok, thread} <- History.ensure_project_explore_thread(project_slug) do
       TurnManager.subscribe(thread.id)
 
-      payload = %{
-        messages: Enum.map(History.list_messages_for_thread(thread.id), &History.message_payload/1),
-        thread_id: thread.id,
-        goal_mode: History.thread_goal_mode(thread),
-        goal_objective: History.thread_goal_objective(thread),
-        last_turn: History.turn_payload(thread),
-        turn_running: TurnManager.running?(thread.id),
-        turn_elapsed_seconds: History.turn_elapsed_seconds(thread),
-        goal_status: joined_authoritative_goal_status(thread),
-        effective_agent: thread_effective_agent(thread)
-      }
+      payload = join_history_payload(thread)
 
       socket =
         socket
@@ -109,17 +90,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
          {:ok, thread} <- History.ensure_kb_thread(project_slug, repo_slug, page_path) do
       TurnManager.subscribe(thread.id)
 
-      payload = %{
-        messages: Enum.map(History.list_messages_for_thread(thread.id), &History.message_payload/1),
-        thread_id: thread.id,
-        goal_mode: History.thread_goal_mode(thread),
-        goal_objective: History.thread_goal_objective(thread),
-        last_turn: History.turn_payload(thread),
-        turn_running: TurnManager.running?(thread.id),
-        turn_elapsed_seconds: History.turn_elapsed_seconds(thread),
-        goal_status: joined_authoritative_goal_status(thread),
-        effective_agent: thread_effective_agent(thread)
-      }
+      payload = join_history_payload(thread)
 
       socket =
         socket
@@ -143,17 +114,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
          {:ok, thread} <- History.get_thread(id) do
       TurnManager.subscribe(thread.id)
 
-      payload = %{
-        messages: Enum.map(History.list_messages_for_thread(thread.id), &History.message_payload/1),
-        thread_id: thread.id,
-        goal_mode: History.thread_goal_mode(thread),
-        goal_objective: History.thread_goal_objective(thread),
-        last_turn: History.turn_payload(thread),
-        turn_running: TurnManager.running?(thread.id),
-        turn_elapsed_seconds: History.turn_elapsed_seconds(thread),
-        goal_status: joined_authoritative_goal_status(thread),
-        effective_agent: thread_effective_agent(thread)
-      }
+      payload = join_history_payload(thread)
 
       socket =
         socket
@@ -177,17 +138,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
          {:ok, thread} <- History.ensure_thread(project_slug, %{workspace_path: workspace}) do
       TurnManager.subscribe(thread.id)
 
-      payload = %{
-        messages: Enum.map(History.list_messages_for_thread(thread.id), &History.message_payload/1),
-        thread_id: thread.id,
-        goal_mode: History.thread_goal_mode(thread),
-        goal_objective: History.thread_goal_objective(thread),
-        last_turn: History.turn_payload(thread),
-        turn_running: TurnManager.running?(thread.id),
-        turn_elapsed_seconds: History.turn_elapsed_seconds(thread),
-        goal_status: joined_authoritative_goal_status(thread),
-        effective_agent: thread_effective_agent(thread)
-      }
+      payload = join_history_payload(thread)
 
       socket =
         socket
@@ -306,6 +257,36 @@ defmodule SymphonyElixirWeb.AssistantChannel do
 
   # Thread-scoped Authoring Goal controls. Durable thread/provider state is the
   # source of truth; GoalRun contributes only live process presence.
+
+  def handle_in("set_turn_preferences", payload, socket) when is_map(payload) do
+    case assistant_thread(socket) do
+      {:ok, thread} ->
+        attrs = %{
+          execution_mode: Map.get(payload, "execution_mode"),
+          skill_profile: Map.get(payload, "skill_profile")
+        }
+
+        case History.set_turn_preferences(thread, attrs) do
+          {:ok, updated} ->
+            socket = assign(socket, :thread, updated)
+
+            reply = %{
+              execution_mode: History.thread_execution_mode(updated),
+              skill_profile: History.thread_skill_profile(updated)
+            }
+
+            push(socket, "turn_preferences_changed", reply)
+            {:reply, {:ok, reply}, socket}
+
+          {:error, reason} ->
+            {:reply, {:error, %{reason: error_reason(reason)}}, socket}
+        end
+
+      {:error, reason} ->
+        {:reply, {:error, %{reason: error_reason(reason)}}, socket}
+    end
+  end
+
 
   def handle_in("goal_status", _payload, socket) do
     case assistant_thread(socket) do
@@ -1747,6 +1728,23 @@ defmodule SymphonyElixirWeb.AssistantChannel do
        do: History.thread_goal_mode(thread)
 
   defp authoring_goal_active?(_socket), do: false
+
+  defp join_history_payload(thread) do
+    %{
+      messages: Enum.map(History.list_messages_for_thread(thread.id), &History.message_payload/1),
+      thread_id: thread.id,
+      goal_mode: History.thread_goal_mode(thread),
+      goal_objective: History.thread_goal_objective(thread),
+      last_turn: History.turn_payload(thread),
+      turn_running: TurnManager.running?(thread.id),
+      turn_elapsed_seconds: History.turn_elapsed_seconds(thread),
+      goal_status: joined_authoritative_goal_status(thread),
+      effective_agent: thread_effective_agent(thread),
+      execution_mode: History.thread_execution_mode(thread),
+      skill_profile: History.thread_skill_profile(thread),
+      scope: thread.scope
+    }
+  end
 
   defp joined_authoritative_goal_status(%{id: id} = thread) when is_integer(id) do
     operation = fn ->

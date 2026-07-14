@@ -1,25 +1,54 @@
+defmodule SymphonyElixirWeb.Tracker.AssistantThreadPathOwnershipInventory do
+  @moduledoc false
+
+  @spec scan(String.t()) :: {:ok, map()} | {:error, term()}
+  def scan(_project_slug) do
+    Application.fetch_env!(:symphony_elixir, :assistant_thread_path_ownership_scan_result)
+  end
+end
+
 defmodule SymphonyElixirWeb.Tracker.AssistantThreadControllerTest do
   use ExUnit.Case, async: false
 
   import Phoenix.ConnTest
   import Plug.Conn
 
-  alias SymphonyElixir.Assistant.{AgentSession, History}
+  alias SymphonyElixir.Assistant.{AgentSession, History, ProjectExploreWorkspace}
   alias SymphonyElixir.LocalTracker.Context
+  alias SymphonyElixir.Repo
+  alias SymphonyElixir.Workflow
+  alias SymphonyElixirWeb.Tracker.AssistantThreadController
 
   @endpoint SymphonyElixirWeb.Endpoint
   @token_env "SYMPHONY_TRACKER_TOKEN"
+  @inventory_module_env :workspace_display_name_inventory_module
+  @scan_result_env :assistant_thread_path_ownership_scan_result
 
   setup do
     start_supervised!(SymphonyElixirWeb.Endpoint)
     migrate_repo()
+    clean_threads()
 
     previous_token = System.get_env(@token_env)
+    previous_inventory_module = Application.get_env(:symphony_elixir, @inventory_module_env)
     System.put_env(@token_env, "secret")
 
-    on_exit(fn -> restore_env(@token_env, previous_token) end)
+    tmp = Path.join(System.tmp_dir!(), "assistant-thread-controller-#{System.unique_integer([:positive])}")
+    workspace_root = Path.join(tmp, "workspaces")
+    File.mkdir_p!(workspace_root)
+    workflow_file = Path.join(tmp, "WORKFLOW.md")
+    SymphonyElixir.TestSupport.write_workflow_file!(workflow_file, tracker_kind: "local", workspace_root: workspace_root)
+    Workflow.set_workflow_file_path(workflow_file)
 
-    :ok
+    on_exit(fn ->
+      restore_env(@token_env, previous_token)
+      restore_inventory_module(previous_inventory_module)
+      Application.delete_env(:symphony_elixir, @scan_result_env)
+      Application.delete_env(:symphony_elixir, :workflow_file_path)
+      File.rm_rf(tmp)
+    end)
+
+    {:ok, tmp: tmp, workspace_root: workspace_root}
   end
 
   test "POST creates a freeform thread" do
@@ -64,12 +93,461 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadControllerTest do
     refute Enum.any?(History.list_threads(scope: "freeform"), &(&1.id == id))
   end
 
+  test "PATCH updates title labels and review state" do
+    workspace_path = Path.join(System.tmp_dir!(), "assistant-thread-update")
+    {:ok, thread} = History.create_freeform_thread(%{title: "Old", workspace_path: workspace_path})
+
+    conn =
+      authorize()
+      |> patch("/api/tracker/v1/assistant/threads/#{thread.id}", %{
+        title: "  New title  ",
+        labels: [" idea ", "idea", "wip"],
+        needs_review: true
+      })
+
+    assert %{
+             "data" => %{
+               "id" => id,
+               "title" => "New title",
+               "workspace_path" => ^workspace_path,
+               "labels" => ["idea", "wip"],
+               "needs_review" => true
+             }
+           } = json_response(conn, 200)
+
+    assert id == thread.id
+  end
+
+  test "GET with include_archived=true includes archived threads" do
+    {:ok, thread} = History.create_freeform_thread(%{title: "Archived", workspace_path: System.tmp_dir!()})
+    {:ok, _archived} = History.archive_thread(thread.id)
+
+    conn = get(authorize(), "/api/tracker/v1/assistant/threads?scope=freeform&include_archived=true")
+
+    assert %{"data" => rows} = json_response(conn, 200)
+    assert Enum.any?(rows, &(&1["id"] == thread.id and &1["status"] == "archived"))
+  end
+
+  test "GET excludes archived threads unless include_archived is strictly true" do
+    {:ok, thread} = History.create_freeform_thread(%{title: "Archived", workspace_path: System.tmp_dir!()})
+    {:ok, _archived} = History.archive_thread(thread.id)
+
+    excluded_params = [
+      %{"scope" => "freeform"},
+      %{"scope" => "freeform", "include_archived" => false},
+      %{"scope" => "freeform", "include_archived" => "false"},
+      %{"scope" => "freeform", "include_archived" => "anything"}
+    ]
+
+    for params <- excluded_params do
+      refute thread.id in index_thread_ids(params)
+    end
+
+    assert thread.id in index_thread_ids(%{"scope" => "freeform", "include_archived" => true})
+    assert thread.id in index_thread_ids(%{"scope" => "freeform", "include_archived" => "true"})
+  end
+
+  test "DELETE removes an archived eligible local thread" do
+    {:ok, thread} = History.create_freeform_thread(%{title: "Delete", workspace_path: System.tmp_dir!()})
+    {:ok, _archived} = History.archive_thread(thread.id)
+
+    conn = delete(authorize(), "/api/tracker/v1/assistant/threads/#{thread.id}")
+
+    assert response(conn, 204) == ""
+    assert {:error, :not_found} = History.get_thread(thread.id)
+  end
+
+  test "PATCH rejects a blank title" do
+    {:ok, thread} = History.create_freeform_thread(%{title: "Keep", workspace_path: System.tmp_dir!()})
+
+    conn = patch(authorize(), "/api/tracker/v1/assistant/threads/#{thread.id}", %{title: "   "})
+
+    assert %{"error" => %{"code" => "validation_failed"}} = json_response(conn, 422)
+  end
+
+  test "PATCH rejects invalid labels" do
+    {:ok, thread} = History.create_freeform_thread(%{title: "Keep", workspace_path: System.tmp_dir!()})
+
+    conn = patch(authorize(), "/api/tracker/v1/assistant/threads/#{thread.id}", %{labels: "idea"})
+
+    assert %{"error" => %{"code" => "validation_failed"}} = json_response(conn, 422)
+  end
+
+  test "PATCH rejects invalid needs_review without crashing" do
+    {:ok, thread} = History.create_freeform_thread(%{title: "Keep", workspace_path: System.tmp_dir!()})
+
+    conn = patch(authorize(), "/api/tracker/v1/assistant/threads/#{thread.id}", %{needs_review: "true"})
+
+    assert %{"error" => %{"code" => "validation_failed"}} = json_response(conn, 422)
+  end
+
+  test "DELETE rejects an active thread with conflict" do
+    {:ok, thread} = History.create_freeform_thread(%{title: "Active", workspace_path: System.tmp_dir!()})
+
+    conn = delete(authorize(), "/api/tracker/v1/assistant/threads/#{thread.id}")
+
+    assert %{"error" => %{"code" => "thread_active"}} = json_response(conn, 409)
+    assert {:ok, _thread} = History.get_thread(thread.id)
+  end
+
+  test "PATCH rejects an invalid thread id" do
+    conn = patch(authorize(), "/api/tracker/v1/assistant/threads/not-an-id", %{title: "Nope"})
+
+    assert %{"error" => %{"code" => "validation_failed"}} = json_response(conn, 422)
+  end
+
+  test "PATCH maps a missing thread through tracker errors" do
+    conn = patch(authorize(), "/api/tracker/v1/assistant/threads/2147483647", %{title: "Missing"})
+
+    assert %{"error" => %{"code" => "thread_not_found"}} = json_response(conn, 404)
+  end
+
+  test "DELETE maps not-found and invalid thread ids through tracker errors" do
+    not_found_conn = delete(authorize(), "/api/tracker/v1/assistant/threads/2147483647")
+    invalid_id_conn = delete(authorize(), "/api/tracker/v1/assistant/threads/not-an-id")
+
+    assert %{"error" => %{"code" => "thread_not_found"}} = json_response(not_found_conn, 404)
+    assert %{"error" => %{"code" => "validation_failed"}} = json_response(invalid_id_conn, 422)
+  end
+
+  test "DELETE maps unsupported scope and non-deletable status to validation responses" do
+    {:ok, _project} = Context.ensure_project(%{name: "Delete Mapping", slug: "delete-mapping"})
+    {:ok, project_thread} = History.ensure_thread("delete-mapping", %{workspace_path: "/tmp/delete-mapping"})
+    {:ok, archived_project_thread} = History.archive_thread(project_thread.id)
+
+    unsupported_scope_conn =
+      delete(authorize(), "/api/tracker/v1/assistant/threads/#{archived_project_thread.id}")
+
+    {:ok, freeform_thread} =
+      History.create_freeform_thread(%{title: "Errored", workspace_path: "/tmp/delete-status-mapping"})
+
+    {:ok, errored_thread} = History.update_thread(freeform_thread, %{status: "error"})
+    unsupported_status_conn = delete(authorize(), "/api/tracker/v1/assistant/threads/#{errored_thread.id}")
+
+    assert %{"error" => %{"code" => "validation_failed"}} = json_response(unsupported_scope_conn, 422)
+    assert %{"error" => %{"code" => "validation_failed"}} = json_response(unsupported_status_conn, 422)
+  end
+
   test "POST with unsupported scope returns 422" do
     conn =
       authorize()
       |> post("/api/tracker/v1/assistant/threads", %{scope: "project"})
 
     assert %{"error" => %{"message" => _}} = json_response(conn, 422)
+  end
+
+  test "POST creates a project_session pinned to an owned standalone workspace", ctx do
+    workspace_path = owned_workspace!(ctx, "explicit-project", :standalone)
+
+    conn =
+      authorize()
+      |> post("/api/tracker/v1/assistant/threads", %{
+        scope: "project_session",
+        project_slug: "explicit-project",
+        workspace_path: "  #{workspace_path}  ",
+        title: "Standalone follow-up",
+        agent_kind: "cursor"
+      })
+
+    assert %{
+             "data" => %{
+               "id" => id,
+               "scope" => "project_session",
+               "project_slug" => "explicit-project",
+               "workspace_path" => ^workspace_path,
+               "title" => "Standalone follow-up",
+               "agent_kind" => "cursor"
+             }
+           } = json_response(conn, 201)
+
+    assert {:ok, %{workspace_path: ^workspace_path}} = History.get_thread(id)
+  end
+
+  test "POST legacy project_session uses the explore workspace without inventory ownership", _ctx do
+    {:ok, _project} = Context.ensure_project(%{name: "Legacy Project", slug: "legacy-project"})
+    use_inventory_error(:ownership_must_not_be_called)
+    expected_path = ProjectExploreWorkspace.path("legacy-project")
+
+    conn =
+      authorize()
+      |> post("/api/tracker/v1/assistant/threads", %{
+        scope: "project_session",
+        project_slug: "legacy-project",
+        title: "Legacy session"
+      })
+
+    assert %{
+             "data" => %{
+               "id" => id,
+               "scope" => "project_session",
+               "project_slug" => "legacy-project",
+               "workspace_path" => ^expected_path
+             }
+           } = json_response(conn, 201)
+
+    assert expected_path != ""
+    assert {:ok, %{scope: "project_session", workspace_path: ^expected_path}} = History.get_thread(id)
+  end
+
+  test "POST creates issue_session threads pinned to canonical and parallel issue workspaces", ctx do
+    {:ok, _project} = Context.ensure_project(%{name: "Issue Paths", slug: "issue-paths"})
+    {:ok, issue} = Context.create_issue("issue-paths", %{"title" => "Pinned issue", "status" => "Todo"})
+
+    canonical_path = Path.join([ctx.workspace_root, "issue-paths", issue.identifier])
+    parallel_path = canonical_path <> "__p1"
+    File.mkdir_p!(canonical_path)
+    File.mkdir_p!(parallel_path)
+
+    use_inventory([
+      inventory_entry(canonical_path, :issue, issue.identifier),
+      inventory_entry(parallel_path, :issue_parallel, issue.identifier)
+    ])
+
+    for {workspace_path, title, agent_kind, workspace_kind} <- [
+          {canonical_path, "Canonical pass", "claude", "shared"},
+          {parallel_path, "Parallel pass", "cursor", "isolated"}
+        ] do
+      conn =
+        authorize()
+        |> post("/api/tracker/v1/assistant/threads", %{
+          scope: "issue_session",
+          project_slug: "issue-paths",
+          issue_identifier: issue.identifier,
+          workspace_path: workspace_path,
+          title: title,
+          agent_kind: agent_kind,
+          execution_mode: "plan"
+        })
+
+      assert %{
+               "data" => %{
+                 "id" => id,
+                 "scope" => "issue_session",
+                 "issue_identifier" => issue_identifier,
+                 "workspace_path" => ^workspace_path,
+                 "title" => ^title,
+                 "agent_kind" => ^agent_kind
+               }
+             } = json_response(conn, 201)
+
+      assert issue_identifier == issue.identifier
+      assert {:ok, thread} = History.get_thread(id)
+      assert thread.issue_identifier == issue.identifier
+      assert History.thread_execution_mode(thread) == "plan"
+      assert thread.metadata["workspace_kind"] == workspace_kind
+    end
+  end
+
+  test "POST rejects an issue workspace owned by another issue", ctx do
+    {:ok, _project} = Context.ensure_project(%{name: "Mismatch", slug: "mismatch"})
+    {:ok, requested_issue} = Context.create_issue("mismatch", %{"title" => "Requested", "status" => "Todo"})
+    {:ok, owner_issue} = Context.create_issue("mismatch", %{"title" => "Owner", "status" => "Todo"})
+    workspace_path = Path.join([ctx.workspace_root, "mismatch", owner_issue.identifier])
+    File.mkdir_p!(workspace_path)
+    use_inventory([inventory_entry(workspace_path, :issue, owner_issue.identifier)])
+
+    conn =
+      authorize()
+      |> post("/api/tracker/v1/assistant/threads", %{
+        scope: "issue_session",
+        project_slug: "mismatch",
+        issue_identifier: requested_issue.identifier,
+        workspace_path: workspace_path
+      })
+
+    assert %{"error" => %{"code" => "validation_failed"}} = json_response(conn, 422)
+  end
+
+  test "POST explicit issue_session requires issue_identifier", ctx do
+    workspace_path = owned_workspace!(ctx, "missing-identifier", :issue)
+
+    conn =
+      authorize()
+      |> post("/api/tracker/v1/assistant/threads", %{
+        scope: "issue_session",
+        project_slug: "missing-identifier",
+        workspace_path: workspace_path
+      })
+
+    assert %{"error" => %{"code" => "validation_failed"}} = json_response(conn, 422)
+  end
+
+  test "POST explicit issue_session rejects project and standalone workspace kinds", ctx do
+    {:ok, _project} = Context.ensure_project(%{name: "Wrong Kinds", slug: "wrong-kinds"})
+    {:ok, issue} = Context.create_issue("wrong-kinds", %{"title" => "Requested", "status" => "Todo"})
+
+    for kind <- [:project, :standalone] do
+      workspace_path = Path.join([ctx.workspace_root, "wrong-kinds", "#{kind}"])
+      File.mkdir_p!(workspace_path)
+      use_inventory([inventory_entry(workspace_path, kind, nil)])
+
+      conn =
+        authorize()
+        |> post("/api/tracker/v1/assistant/threads", %{
+          scope: "issue_session",
+          project_slug: "wrong-kinds",
+          issue_identifier: issue.identifier,
+          workspace_path: workspace_path
+        })
+
+      assert %{"error" => %{"code" => "validation_failed"}} = json_response(conn, 422)
+    end
+  end
+
+  test "POST explicit issue_session rejects a child-worktree-only path", ctx do
+    {:ok, _project} = Context.ensure_project(%{name: "Child Path", slug: "child-path"})
+    {:ok, issue} = Context.create_issue("child-path", %{"title" => "Requested", "status" => "Todo"})
+    workspace_path = Path.join([ctx.workspace_root, "child-path", issue.identifier])
+    child_path = Path.join(workspace_path, ".worktrees/child")
+    File.mkdir_p!(child_path)
+
+    parent_entry =
+      inventory_entry(workspace_path, :issue, issue.identifier)
+      |> Map.put(:child_worktrees, [%{path: child_path, repo_name: "app", slug: "child"}])
+
+    use_inventory([parent_entry])
+
+    conn =
+      authorize()
+      |> post("/api/tracker/v1/assistant/threads", %{
+        scope: "issue_session",
+        project_slug: "child-path",
+        issue_identifier: issue.identifier,
+        workspace_path: child_path
+      })
+
+    assert %{"error" => %{"code" => "validation_failed"}} = json_response(conn, 422)
+  end
+
+  test "POST explicit issue_session rejects invalid and non-owned paths", ctx do
+    {:ok, _project} = Context.ensure_project(%{name: "Invalid Issue Paths", slug: "invalid-issue-paths"})
+
+    {:ok, issue} =
+      Context.create_issue("invalid-issue-paths", %{"title" => "Requested", "status" => "Todo"})
+
+    owned_path = Path.join([ctx.workspace_root, "invalid-issue-paths", issue.identifier])
+    File.mkdir_p!(owned_path)
+    use_inventory([inventory_entry(owned_path, :issue, issue.identifier)])
+
+    for workspace_path <- ["relative/path", owned_path <> <<0>>, Path.join(ctx.tmp, "outside-issue")] do
+      conn =
+        authorize()
+        |> post("/api/tracker/v1/assistant/threads", %{
+          scope: "issue_session",
+          project_slug: "invalid-issue-paths",
+          issue_identifier: issue.identifier,
+          workspace_path: workspace_path
+        })
+
+      assert %{"error" => %{"code" => "validation_failed"}} = json_response(conn, 422)
+    end
+  end
+
+  test "POST explicit issue_session maps inventory failures to 500", ctx do
+    {:ok, _project} = Context.ensure_project(%{name: "Issue Inventory Error", slug: "issue-inventory-error"})
+
+    {:ok, issue} =
+      Context.create_issue("issue-inventory-error", %{"title" => "Requested", "status" => "Todo"})
+
+    workspace_path = Path.join([ctx.workspace_root, "issue-inventory-error", issue.identifier])
+    File.mkdir_p!(workspace_path)
+    use_inventory_error(:scan_failed)
+
+    conn =
+      authorize()
+      |> post("/api/tracker/v1/assistant/threads", %{
+        scope: "issue_session",
+        project_slug: "issue-inventory-error",
+        issue_identifier: issue.identifier,
+        workspace_path: workspace_path
+      })
+
+    assert %{"error" => %{"code" => "request_failed"}} = json_response(conn, 500)
+  end
+
+  test "POST rejects invalid and non-owned explicit workspace paths", ctx do
+    {:ok, _project} = Context.ensure_project(%{name: "Invalid Paths", slug: "invalid-paths"})
+    owned_path = Path.join([ctx.workspace_root, "invalid-paths", "__ws_owned"])
+    File.mkdir_p!(owned_path)
+    use_inventory([inventory_entry(owned_path, :standalone, nil)])
+
+    for workspace_path <- ["relative/path", owned_path <> <<0>>, Path.join(ctx.tmp, "outside")] do
+      conn =
+        authorize()
+        |> post("/api/tracker/v1/assistant/threads", %{
+          scope: "project_session",
+          project_slug: "invalid-paths",
+          workspace_path: workspace_path
+        })
+
+      assert %{"error" => %{"code" => "validation_failed"}} = json_response(conn, 422)
+    end
+  end
+
+  test "POST explicit workspace paths preserve missing project and issue conventions", ctx do
+    missing_project_path = Path.join([ctx.workspace_root, "missing-project", "__ws_path"])
+    File.mkdir_p!(missing_project_path)
+    use_inventory([inventory_entry(missing_project_path, :standalone, nil)])
+
+    project_conn =
+      authorize()
+      |> post("/api/tracker/v1/assistant/threads", %{
+        scope: "project_session",
+        project_slug: "missing-project",
+        workspace_path: missing_project_path
+      })
+
+    assert %{"error" => %{"code" => "project_not_found"}} = json_response(project_conn, 404)
+
+    {:ok, _project} = Context.ensure_project(%{name: "Missing Issue", slug: "missing-issue"})
+
+    {:ok, deleted_issue} =
+      Context.create_issue("missing-issue", %{"title" => "Deleted issue", "status" => "Todo"})
+
+    missing_issue_path = Path.join([ctx.workspace_root, "missing-issue", deleted_issue.identifier])
+    File.mkdir_p!(missing_issue_path)
+    use_inventory([inventory_entry(missing_issue_path, :issue, deleted_issue.identifier)])
+    {:ok, _deleted} = Context.delete_issue("missing-issue", deleted_issue.identifier)
+
+    issue_conn =
+      authorize()
+      |> post("/api/tracker/v1/assistant/threads", %{
+        scope: "issue_session",
+        project_slug: "missing-issue",
+        issue_identifier: deleted_issue.identifier,
+        workspace_path: missing_issue_path
+      })
+
+    assert %{"error" => %{"code" => "issue_not_found"}} = json_response(issue_conn, 404)
+  end
+
+  test "POST maps explicit workspace inventory failures to 500", ctx do
+    {:ok, _project} = Context.ensure_project(%{name: "Inventory Error", slug: "inventory-error"})
+    workspace_path = Path.join([ctx.workspace_root, "inventory-error", "__ws_path"])
+    File.mkdir_p!(workspace_path)
+    use_inventory_error(:scan_failed)
+
+    conn =
+      authorize()
+      |> post("/api/tracker/v1/assistant/threads", %{
+        scope: "project_session",
+        project_slug: "inventory-error",
+        workspace_path: workspace_path
+      })
+
+    assert %{"error" => %{"code" => "request_failed"}} = json_response(conn, 500)
+  end
+
+  test "POST freeform rejects workspace_path" do
+    conn =
+      authorize()
+      |> post("/api/tracker/v1/assistant/threads", %{
+        scope: "freeform",
+        title: "Unsafe",
+        workspace_path: "/tmp/client-selected"
+      })
+
+    assert %{"error" => %{"code" => "validation_failed"}} = json_response(conn, 422)
   end
 
   test "POST creates multiple issue_session threads for the same issue" do
@@ -103,9 +581,7 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadControllerTest do
 
     conn =
       authorize()
-      |> get(
-        "/api/tracker/v1/assistant/threads?project_slug=macro-markets&issue_identifier=MAC-510&scopes=issue_session"
-      )
+      |> get("/api/tracker/v1/assistant/threads?project_slug=macro-markets&issue_identifier=MAC-510&scopes=issue_session")
 
     assert %{"data" => rows} = json_response(conn, 200)
     assert length(rows) == 2
@@ -117,6 +593,12 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadControllerTest do
     |> put_req_header("authorization", "Bearer secret")
   end
 
+  defp index_thread_ids(params) do
+    conn = AssistantThreadController.index(authorize(), params)
+    %{"data" => rows} = json_response(conn, 200)
+    Enum.map(rows, & &1["id"])
+  end
+
   defp migrate_repo do
     alias SymphonyElixir.Repo
 
@@ -126,10 +608,52 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadControllerTest do
       end)
   end
 
+  defp clean_threads do
+    Ecto.Adapters.SQL.query!(Repo, "DELETE FROM assistant_messages", [])
+    Ecto.Adapters.SQL.query!(Repo, "DELETE FROM assistant_threads", [])
+  end
+
+  defp owned_workspace!(ctx, project_slug, kind) do
+    {:ok, _project} = Context.ensure_project(%{name: project_slug, slug: project_slug})
+    workspace_path = Path.join([ctx.workspace_root, project_slug, "__ws_selected"])
+    File.mkdir_p!(workspace_path)
+    use_inventory([inventory_entry(workspace_path, kind, nil)])
+    workspace_path
+  end
+
+  defp inventory_entry(path, kind, issue_identifier) do
+    %{path: path, kind: kind, issue_identifier: issue_identifier, child_worktrees: []}
+  end
+
+  defp use_inventory(entries) do
+    Application.put_env(
+      :symphony_elixir,
+      @inventory_module_env,
+      SymphonyElixirWeb.Tracker.AssistantThreadPathOwnershipInventory
+    )
+
+    Application.put_env(:symphony_elixir, @scan_result_env, {:ok, %{workspaces: entries}})
+  end
+
+  defp use_inventory_error(reason) do
+    Application.put_env(
+      :symphony_elixir,
+      @inventory_module_env,
+      SymphonyElixirWeb.Tracker.AssistantThreadPathOwnershipInventory
+    )
+
+    Application.put_env(:symphony_elixir, @scan_result_env, {:error, reason})
+  end
+
   defp restore_env(key, value) do
     case value do
       nil -> System.delete_env(key)
       val -> System.put_env(key, val)
     end
   end
+
+  defp restore_inventory_module(nil), do: Application.delete_env(:symphony_elixir, @inventory_module_env)
+
+  defp restore_inventory_module(module),
+    do: Application.put_env(:symphony_elixir, @inventory_module_env, module)
 end

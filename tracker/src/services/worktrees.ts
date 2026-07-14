@@ -1,4 +1,9 @@
 import { requireNonBlank, requireProjectSlug } from "@/lib/serviceValidation";
+import {
+  graphemeCount,
+  normalizeNonBlankString,
+  normalizeNullableString,
+} from "@/lib/serviceNormalization";
 import type { AssistantThread } from "@/types/assistant-thread";
 import type {
   WorkspaceInventory,
@@ -35,6 +40,8 @@ interface BackendChildWorktreeDto {
 
 interface BackendWorkspaceEntryDto {
   path: string;
+  display_name?: unknown;
+  displayName?: unknown;
   kind: string;
   issue_identifier?: string | null;
   name?: string | null;
@@ -100,6 +107,7 @@ function normalizeChildWorktree(dto: BackendChildWorktreeDto): WorkspaceChildWor
 function normalizeEntry(dto: BackendWorkspaceEntryDto): WorkspaceInventoryEntry {
   return {
     path: dto.path,
+    displayName: normalizeNullableString(dto.displayName, dto.display_name),
     kind: normalizeKind(dto.kind),
     issueIdentifier: dto.issue_identifier ?? null,
     name: dto.name ?? null,
@@ -125,6 +133,67 @@ export async function fetchWorkspaceInventory(projectSlug: string): Promise<Work
       sizeBytes: response.data.totals.size_bytes,
       reclaimableBytes: response.data.totals.reclaimable_bytes,
     },
+  };
+}
+
+const MAX_WORKSPACE_DISPLAY_NAME_GRAPHEMES = 120;
+
+export async function updateWorkspaceDisplayName(
+  projectSlug: string,
+  workspacePath: string,
+  displayName: string,
+): Promise<{ workspacePath: string; displayName: string }> {
+  const slug = encodeURIComponent(requireProjectSlug(projectSlug));
+  const path = requireNonBlank(workspacePath, "workspacePath");
+  const name = requireNonBlank(displayName, "displayName");
+
+  if (path.includes("\0")) {
+    throw new Error("workspacePath must not contain a NUL character");
+  }
+  if (!path.startsWith("/")) {
+    throw new Error("workspacePath must be an absolute path");
+  }
+  if (graphemeCount(name) > MAX_WORKSPACE_DISPLAY_NAME_GRAPHEMES) {
+    throw new Error(
+      `displayName must not exceed ${MAX_WORKSPACE_DISPLAY_NAME_GRAPHEMES} graphemes`,
+    );
+  }
+
+  const response = await http.put<{
+    data?: {
+      workspace_path?: unknown;
+      workspacePath?: unknown;
+      display_name?: unknown;
+      displayName?: unknown;
+    };
+  }>(trackerPath(`/projects/${slug}/workspaces/display_names`), {
+    path,
+    display_name: name,
+  });
+
+  const responseWorkspacePath = normalizeNonBlankString(
+    response.data.data?.workspacePath,
+    response.data.data?.workspace_path,
+  );
+  if (responseWorkspacePath === null) {
+    throw new Error(
+      "Malformed workspace display name response: workspacePath must be a nonblank string",
+    );
+  }
+
+  const responseDisplayName = normalizeNonBlankString(
+    response.data.data?.displayName,
+    response.data.data?.display_name,
+  );
+  if (responseDisplayName === null) {
+    throw new Error(
+      "Malformed workspace display name response: displayName must be a nonblank string",
+    );
+  }
+
+  return {
+    workspacePath: responseWorkspacePath,
+    displayName: responseDisplayName,
   };
 }
 

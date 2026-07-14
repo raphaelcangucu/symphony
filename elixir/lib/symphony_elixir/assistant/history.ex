@@ -11,6 +11,11 @@ defmodule SymphonyElixir.Assistant.History do
   @type attrs :: map()
 
   @current_turn_key "current_turn"
+  @sidebar_title_max_graphemes 160
+  @sidebar_label_max_graphemes 40
+  @sidebar_label_count_max 12
+  @deletable_scopes ~w(freeform project_session issue_session)
+  @deletable_statuses ~w(archived closed)
 
   @spec ensure_thread(String.t(), attrs()) :: {:ok, Thread.t()} | {:error, term()}
   def ensure_thread(project_slug, attrs \\ %{}) when is_binary(project_slug) and is_map(attrs) do
@@ -222,12 +227,59 @@ defmodule SymphonyElixir.Assistant.History do
   end
 
   @doc """
-  Persists whether the Authoring (chat) goal is enabled for an assistant thread.
+  Persists agent mode + skill toolkit selection on the thread metadata.
 
-  This is the thread-scoped Authoring goal: when enabled, the assistant runs native
+  Used by the interactive session composer so the next join rehydrates the operator's
+  Plan/Build/Yolo mode and Auto/Custom toolkit without requiring a migration.
+  """
+  @spec set_turn_preferences(Thread.t(), map()) :: {:ok, Thread.t()} | {:error, Ecto.Changeset.t()}
+  def set_turn_preferences(%Thread{metadata: metadata} = thread, attrs) when is_map(attrs) do
+    next =
+      (metadata || %{})
+      |> maybe_put_meta_string("execution_mode", Map.get(attrs, :execution_mode) || Map.get(attrs, "execution_mode"))
+      |> maybe_put_meta_string("skill_profile", Map.get(attrs, :skill_profile) || Map.get(attrs, "skill_profile"))
+
+    update_thread(thread, %{metadata: next})
+  end
+
+  @spec thread_execution_mode(Thread.t()) :: String.t() | nil
+  def thread_execution_mode(%Thread{metadata: %{"execution_mode" => mode}}) when is_binary(mode) do
+    case String.trim(mode) do
+      "" -> nil
+      trimmed -> trimmed
+    end
+  end
+
+  def thread_execution_mode(_thread), do: nil
+
+  @spec thread_skill_profile(Thread.t()) :: String.t() | nil
+  def thread_skill_profile(%Thread{metadata: %{"skill_profile" => profile}}) when is_binary(profile) do
+    case String.trim(profile) do
+      "" -> nil
+      trimmed -> trimmed
+    end
+  end
+
+  def thread_skill_profile(_thread), do: nil
+
+  defp maybe_put_meta_string(metadata, _key, nil), do: metadata
+
+  defp maybe_put_meta_string(metadata, key, value) when is_binary(value) do
+    case String.trim(value) do
+      "" -> Map.delete(metadata, key)
+      trimmed -> Map.put(metadata, key, trimmed)
+    end
+  end
+
+  defp maybe_put_meta_string(metadata, _key, _value), do: metadata
+
+  @doc """
+  Persists whether the chat goal is enabled for an assistant thread.
+
+  This is the thread-scoped chat goal: when enabled, the assistant runs native
   goal mode directly inside this conversation (no orchestrator dispatch, no issue status change).
   The flag lives in the thread metadata map alongside `mode` (no migration). It is independent
-  from the Execution goal, which lives on the issue (`agent_goal`) and runs via the orchestrator.
+  from the run objective, which lives on the issue (`agent_goal`) and runs via the orchestrator.
   """
   @spec set_goal_mode(Thread.t(), boolean()) :: {:ok, Thread.t()} | {:error, Ecto.Changeset.t()}
   def set_goal_mode(%Thread{metadata: metadata} = thread, enabled) when is_boolean(enabled) do
@@ -560,6 +612,47 @@ defmodule SymphonyElixir.Assistant.History do
     end
   end
 
+  @spec update_thread_sidebar_metadata(integer(), map()) ::
+          {:ok, Thread.t()}
+          | {:error,
+             :not_found
+             | :invalid_thread_id
+             | :invalid_attrs
+             | :invalid_title
+             | :invalid_labels
+             | :invalid_needs_review
+             | Ecto.Changeset.t()}
+  def update_thread_sidebar_metadata(id, attrs) when is_integer(id) and id > 0 and is_map(attrs) do
+    with {:ok, title_attrs} <- normalize_sidebar_title(attrs),
+         {:ok, metadata_patch} <- normalize_sidebar_metadata_patch(attrs),
+         {:ok, metadata_patch_json} <- Jason.encode(metadata_patch) do
+      persist_sidebar_update(id, title_attrs, metadata_patch_json)
+    end
+  end
+
+  def update_thread_sidebar_metadata(id, _attrs) when not is_integer(id) or id <= 0,
+    do: {:error, :invalid_thread_id}
+
+  def update_thread_sidebar_metadata(_id, _attrs), do: {:error, :invalid_attrs}
+
+  @spec delete_thread(integer()) ::
+          {:ok, Thread.t()}
+          | {:error,
+             :not_found
+             | :invalid_thread_id
+             | :thread_active
+             | :unsupported_scope
+             | :unsupported_status
+             | Ecto.Changeset.t()}
+  def delete_thread(id) when is_integer(id) and id > 0 do
+    with {:ok, thread} <- get_thread(id),
+         :ok <- validate_thread_deletion(thread) do
+      Repo.delete(thread, allow_stale: true)
+    end
+  end
+
+  def delete_thread(_id), do: {:error, :invalid_thread_id}
+
   @spec list_messages(String.t()) :: {:ok, [Message.t()]} | {:error, term()}
   def list_messages(project_slug) when is_binary(project_slug) do
     with {:ok, normalized_slug} <- normalize_required_string(project_slug, :project_slug),
@@ -672,6 +765,51 @@ defmodule SymphonyElixir.Assistant.History do
       |> Map.put(:issue_identifier, identifier)
       |> Map.put_new(:title, "Issue session")
       |> Map.put(:workspace_path, workspace_path)
+      |> Map.put_new(:status, "active")
+      |> Map.put(:metadata, metadata)
+      |> then(&Thread.changeset(%Thread{}, &1))
+      |> Repo.insert()
+    end
+  end
+
+  @doc """
+  Creates an issue session pinned to an already-existing explicit workspace.
+
+  The caller is responsible for workspace ownership validation. This function
+  only persists the supplied path and never creates, moves, or removes a
+  workspace.
+  """
+  @spec create_issue_workspace_session_thread(String.t(), String.t(), String.t(), attrs()) ::
+          {:ok, Thread.t()} | {:error, term()}
+  def create_issue_workspace_session_thread(project_slug, issue_identifier, workspace_path, attrs \\ %{})
+      when is_binary(project_slug) and is_binary(issue_identifier) and is_binary(workspace_path) and is_map(attrs) do
+    with {:ok, slug} <- normalize_required_string(project_slug, :project_slug),
+         {:ok, identifier} <- normalize_required_string(issue_identifier, :issue_identifier),
+         {:ok, path} <- normalize_required_string(workspace_path, :workspace_path),
+         {:ok, workspace_kind} <- explicit_workspace_kind(attrs),
+         {:ok, _project} <- Context.get_project(slug),
+         {:ok, _issue} <- Context.get_issue(slug, identifier) do
+      execution_mode = normalize_execution_mode(Map.get(attrs, :execution_mode) || Map.get(attrs, "execution_mode"))
+
+      metadata =
+        attrs
+        |> Map.get(:metadata, Map.get(attrs, "metadata", %{}))
+        |> Map.new()
+        |> Map.put("execution_mode", execution_mode)
+        |> Map.put("workspace_kind", workspace_kind)
+
+      attrs
+      |> Map.drop([
+        :isolated_workspace,
+        "isolated_workspace",
+        :use_parent_workspace,
+        "use_parent_workspace"
+      ])
+      |> Map.put(:scope, "issue_session")
+      |> Map.put(:project_slug, slug)
+      |> Map.put(:issue_identifier, identifier)
+      |> Map.put_new(:title, "Issue session")
+      |> Map.put(:workspace_path, path)
       |> Map.put_new(:status, "active")
       |> Map.put(:metadata, metadata)
       |> then(&Thread.changeset(%Thread{}, &1))
@@ -1115,6 +1253,143 @@ defmodule SymphonyElixir.Assistant.History do
   defp filter_archived(query, true), do: query
   defp filter_archived(query, _), do: where(query, [t], t.status != "archived")
 
+  defp normalize_sidebar_title(attrs) do
+    case fetch_sidebar_attr(attrs, :title) do
+      :missing ->
+        {:ok, %{}}
+
+      {:ok, title} when is_binary(title) ->
+        normalized_title = String.trim(title)
+
+        if normalized_title != "" and String.length(normalized_title) <= @sidebar_title_max_graphemes,
+          do: {:ok, %{title: normalized_title}},
+          else: {:error, :invalid_title}
+
+      {:ok, _title} ->
+        {:error, :invalid_title}
+    end
+  end
+
+  defp normalize_sidebar_metadata_patch(attrs) do
+    with {:ok, patch} <- put_sidebar_labels(%{}, attrs),
+         {:ok, patch} <- put_sidebar_needs_review(patch, attrs) do
+      {:ok, patch}
+    end
+  end
+
+  defp persist_sidebar_update(id, %{title: title}, metadata_patch_json) do
+    updated_at = DateTime.utc_now()
+
+    query =
+      from(thread in Thread,
+        where: thread.id == ^id,
+        update: [
+          set: [
+            title: ^title,
+            metadata:
+              fragment(
+                "json_patch(COALESCE(?, '{}'), json(?))",
+                thread.metadata,
+                ^metadata_patch_json
+              ),
+            updated_at: ^updated_at
+          ]
+        ]
+      )
+
+    execute_sidebar_update(query, id)
+  end
+
+  defp persist_sidebar_update(id, %{}, metadata_patch_json) do
+    updated_at = DateTime.utc_now()
+
+    query =
+      from(thread in Thread,
+        where: thread.id == ^id,
+        update: [
+          set: [
+            metadata:
+              fragment(
+                "json_patch(COALESCE(?, '{}'), json(?))",
+                thread.metadata,
+                ^metadata_patch_json
+              ),
+            updated_at: ^updated_at
+          ]
+        ]
+      )
+
+    execute_sidebar_update(query, id)
+  end
+
+  defp execute_sidebar_update(query, id) do
+    case Repo.update_all(query, []) do
+      {1, _rows} -> get_thread(id)
+      {0, _rows} -> {:error, :not_found}
+    end
+  end
+
+  defp put_sidebar_labels(metadata, attrs) do
+    case fetch_sidebar_attr(attrs, :labels) do
+      :missing ->
+        {:ok, metadata}
+
+      {:ok, labels} when is_list(labels) ->
+        normalize_sidebar_labels(labels)
+        |> case do
+          {:ok, normalized_labels} -> {:ok, Map.put(metadata, "sidebar_labels", normalized_labels)}
+          {:error, :invalid_labels} = error -> error
+        end
+
+      {:ok, _labels} ->
+        {:error, :invalid_labels}
+    end
+  end
+
+  defp normalize_sidebar_labels(labels) do
+    if Enum.all?(labels, &is_binary/1) do
+      normalized_labels =
+        labels
+        |> Enum.map(&String.trim/1)
+        |> Enum.reject(&(&1 == ""))
+        |> Enum.uniq()
+
+      valid? =
+        length(normalized_labels) <= @sidebar_label_count_max and
+          Enum.all?(normalized_labels, &(String.length(&1) <= @sidebar_label_max_graphemes))
+
+      if valid?, do: {:ok, normalized_labels}, else: {:error, :invalid_labels}
+    else
+      {:error, :invalid_labels}
+    end
+  end
+
+  defp put_sidebar_needs_review(metadata, attrs) do
+    case fetch_sidebar_attr(attrs, :needs_review) do
+      :missing -> {:ok, metadata}
+      {:ok, needs_review} when is_boolean(needs_review) -> {:ok, Map.put(metadata, "sidebar_needs_review", needs_review)}
+      {:ok, _needs_review} -> {:error, :invalid_needs_review}
+    end
+  end
+
+  defp fetch_sidebar_attr(attrs, key) do
+    cond do
+      Map.has_key?(attrs, key) -> {:ok, Map.get(attrs, key)}
+      Map.has_key?(attrs, Atom.to_string(key)) -> {:ok, Map.get(attrs, Atom.to_string(key))}
+      true -> :missing
+    end
+  end
+
+  defp validate_thread_deletion(%Thread{status: "active"}), do: {:error, :thread_active}
+
+  defp validate_thread_deletion(%Thread{scope: scope}) when scope not in @deletable_scopes,
+    do: {:error, :unsupported_scope}
+
+  defp validate_thread_deletion(%Thread{status: status}) when status not in @deletable_statuses,
+    do: {:error, :unsupported_status}
+
+  defp validate_thread_deletion(%Thread{}), do: :ok
+
   defp append_message_with_retry(thread, attrs, attempts_left) do
     case catch_append_message_once(thread, attrs) do
       {:error, reason} when attempts_left > 1 ->
@@ -1275,6 +1550,13 @@ defmodule SymphonyElixir.Assistant.History do
   defp normalize_required_string(_value, field), do: {:error, {:missing_required_field, field}}
 
   defp normalize_execution_mode(mode), do: ExecutionMode.normalize(mode)
+
+  defp explicit_workspace_kind(attrs) do
+    case Map.get(attrs, :workspace_kind, Map.get(attrs, "workspace_kind")) do
+      kind when kind in ["shared", "isolated"] -> {:ok, kind}
+      _kind -> {:error, {:invalid_field, :workspace_kind}}
+    end
+  end
 
   # Default: the session shares the issue's canonical working tree
   # (`…/<issue>`). Options:

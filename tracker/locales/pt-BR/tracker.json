@@ -482,18 +482,21 @@
       "dispatchStop": "Interrompendo agente…",
       "dispatchFailed": "Falha no dispatch",
       "executionMode": {
-        "title": "Modo de execução",
+        "title": "Mode",
         "plan": {
           "label": "Plan",
-          "desc": "Somente leitura — analisa e planeja, sem editar"
+          "desc": "Somente leitura — analisa e planeja, sem editar",
+          "permission": "Somente leitura"
         },
         "build": {
           "label": "Build",
-          "desc": "Edita o workspace — pede aprovação antes de rodar comandos"
+          "desc": "Edita o workspace — pede aprovação antes de rodar comandos",
+          "permission": "Edições + aprovações"
         },
         "yolo": {
           "label": "Yolo",
-          "desc": "Acesso total, aprovações ignoradas (padrão)"
+          "desc": "Acesso total, aprovações ignoradas",
+          "permission": "Acesso total"
         }
       },
       "mentions": {
@@ -639,21 +642,21 @@
       }
     },
     "agentTabs": {
-      "authoringHint": "Rascunhe o brief e o plano, depois despache o agente.",
-      "executionHint": "Acompanhe a execução ao vivo, direcione com /infer e pause ou retome.",
-      "sectionsAria": "Seções do agente",
-      "authoring": "Authoring",
-      "execution": "Execução",
+      "authoringHint": "Planeje, faça build ou yolo nesta sessão interativa. Despache de forma autônoma só quando quiser.",
+      "executionHint": "Acompanhe o run autônomo, direcione com /infer e pause ou retome.",
+      "sectionsAria": "Superfícies do agente",
+      "authoring": "Sessão",
+      "execution": "Autônomo",
       "newSession": "Nova sessão",
       "newSessionTitle": "Iniciar uma sessão nova do agente para esta issue"
     },
     "sessions": {
-      "hint": "Crie sessões em modo build para esta issue. As sessões abrem na página de Sessões do projeto.",
+      "hint": "Crie sessões interativas para esta issue. As sessões abrem na página de Workspaces do projeto.",
       "newSession": "Nova sessão",
-      "empty": "Nenhuma sessão para esta issue ainda. Inicie uma em modo build para começar.",
+      "empty": "Nenhuma sessão para esta issue ainda. Inicie uma para começar.",
       "defaultSessionTitle": "Sessão da issue",
-      "issueSessionBadge": "Sessão build",
-      "authoringBadge": "Authoring"
+      "issueSessionBadge": "Sessão da issue",
+      "authoringBadge": "Sessão"
     },
     "toolCall": {
       "status": {
@@ -2162,9 +2165,9 @@
       "requestFailed": "Falha na requisição do assistente",
       "modeUpdateTimeout": "Atualização de modo do assistente expirou",
       "goalModeUpdateTimeout": "Atualização de modo goal do assistente expirou",
-      "goalRequiresIssue": "O goal de authoring requer uma sessão persistente do assistente.",
-      "goalCommandWithObjective": "Persiga este goal de authoring direto na nossa conversa usando o modo goal nativo do agente selecionado. Objetivo: {{objective}}. Continue trabalhando nele ao longo dos turnos até o artefato estar pronto para revisão ou você ficar bloqueado. Isto é apenas authoring — não despache o orquestrador nem altere o status da issue.",
-      "goalCommandDefault": "Persiga um goal de authoring direto na nossa conversa usando o modo goal nativo do agente selecionado. Derive o objetivo a partir do spec/plano/handoff existentes e continue trabalhando nele ao longo dos turnos até o artefato estar pronto para revisão ou você ficar bloqueado. Isto é apenas authoring — não despache o orquestrador nem altere o status da issue.",
+      "goalRequiresIssue": "O goal de chat requer uma sessão persistente do assistente.",
+      "goalCommandWithObjective": "Persiga este goal de chat direto na nossa conversa usando o modo goal nativo do agente selecionado. Objetivo: {{objective}}. Continue trabalhando nele ao longo dos turnos até o artefato estar pronto para revisão ou você ficar bloqueado. Fique nesta sessão — não despache o orquestrador nem altere o status da issue, salvo se eu pedir.",
+      "goalCommandDefault": "Persiga um goal de chat direto na nossa conversa usando o modo goal nativo do agente selecionado. Derive o objetivo a partir do spec/plano/handoff existentes e continue trabalhando nele ao longo dos turnos até o artefato estar pronto para revisão ou você ficar bloqueado. Fique nesta sessão — não despache o orquestrador nem altere o status da issue, salvo se eu pedir.",
       "dispatchedTo": "Dispatch para {{agent}}.",
       "dispatchTimeout": "Dispatch de {{agent}} expirou",
       "btwFailed": "Falha ao iniciar pergunta paralela.",
@@ -2199,7 +2202,11 @@
         "image": "Imagem: {{name}}",
         "audio": "Áudio: {{name}}",
         "default": "anexo"
-      }
+      },
+      "exitPlanImplement": "Saia do plan mode. Implemente o plano aprovado nesta sessão em modo {{mode}}. Crie e edite arquivos conforme necessário; não despache o orquestrador a menos que eu peça para rodar de forma autônoma.",
+      "modeAppliesNextTurn": "Mudanças de mode e toolkit valem no próximo turn.",
+      "runAutonomously": "Rodar de forma autônoma",
+      "runAutonomouslyTitle": "Despachar esta issue para o orquestrador"
     },
     "speech": {
       "errors": {
@@ -2232,8 +2239,8 @@
       "noMatch": "Nenhum modelo corresponde."
     },
     "slash": {
-      "goal": "Rode um goal de authoring direto neste chat (sem despachar o orquestrador)",
-      "goalExecution": "Defina um goal de execução e despache via o orquestrador",
+      "goal": "Rodar um goal de chat direto nesta sessão (sem despachar o orquestrador)",
+      "goalExecution": "Definir um objetivo de run e despachar via orquestrador",
       "infer": "Direcione o agente em execução sem esperar",
       "btw": "Faça uma pergunta rápida (somente leitura, não salva)",
       "newThread": "Inicie uma nova thread Codex no workspace existente",
@@ -2345,16 +2352,16 @@
       "objectivePlaceholder": "Descreva o objetivo da goal…"
     },
     "authoring": {
-      "chatAria": "Chat de authoring da issue",
-      "documentsAria": "Documentos de authoring da issue",
-      "documentsDrawerTitle": "Documentos de authoring",
+      "chatAria": "Chat da sessão da issue",
+      "documentsAria": "Documentos da sessão da issue",
+      "documentsDrawerTitle": "Documentos da sessão",
       "documentsDrawerDescription": "Specs, planos e handoffs vinculados a esta issue.",
       "openDocuments": "Documentos",
       "documentsEmpty": "Documentos de rascunho aparecem aqui depois que o assistente cria ou vincula uma issue. Peça ao assistente do projeto para rascunhar a issue e abra a rota de authoring quando houver um identificador.",
       "taskLabel": "Tarefa",
       "titleLoading": "Carregando título da issue…",
       "openIssueDetails": "Abrir detalhe da issue",
-      "goalBannerAria": "Goal de authoring",
+      "goalBannerAria": "Goal de chat",
       "goalProviderCodex": "Codex nativo",
       "goalProviderClaude": "Claude Code",
       "goalProviderUnsupported": "Provedor sem suporte",
@@ -2370,7 +2377,7 @@
       "goalBudgetLimited": "Limite de orçamento da goal atingido",
       "goalUsageLimited": "Limite de uso da goal atingido",
       "goalPending": "Goal pronta",
-      "goalNoObjective": "Perseguindo o objetivo de authoring.",
+      "goalNoObjective": "Perseguindo o objetivo do chat.",
       "goalStop": "Interromper processo da goal",
       "goalPause": "Pausar goal",
       "goalResume": "Retomar goal",
@@ -2378,9 +2385,9 @@
       "goalRemove": "Remover goal",
       "goalEditSave": "Salvar objetivo",
       "goalEditCancel": "Cancelar",
-      "goalObjectivePlaceholder": "Descreva o objetivo de authoring…",
-      "titleNew": "Novo authoring de issue",
-      "hintNoId": "Comece pedindo ao assistente para rascunhar uma issue; documentos aparecem quando houver identificador. Diga se quer um brief simples ou fazer um brainstorm de spec, e use /goal para rodar um goal de authoring long-running direto no chat."
+      "goalObjectivePlaceholder": "Descreva o objetivo do chat…",
+      "titleNew": "Criar issue",
+      "hintNoId": "Peça ao assistente para rascunhar uma issue; os documentos aparecem quando existir um identifier. Diga se quer um brief simples ou brainstorm de spec, e use /goal para um goal longo direto na sessão."
     },
     "btw": {
       "ariaLabel": "Pergunta paralela",
@@ -2506,6 +2513,36 @@
       "loadError": "Não foi possível carregar este arquivo.",
       "retry": "Tentar novamente",
       "noContent": "Nenhum conteúdo para exibir."
+    },
+    "skillProfile": {
+      "label": "Skills",
+      "auto": {
+        "label": "Auto",
+        "desc": "Segue o mode e o contexto da sessão"
+      },
+      "planning": {
+        "label": "Planning",
+        "desc": "Brainstorming e writing-plans"
+      },
+      "implementation": {
+        "label": "Implementation",
+        "desc": "TDD e verificação enquanto codifica"
+      },
+      "debugging": {
+        "label": "Debugging",
+        "desc": "Toolkit de debugging sistemático"
+      },
+      "delivery": {
+        "label": "Delivery",
+        "desc": "Review, verificação e finish da branch"
+      },
+      "explore": {
+        "label": "Explore",
+        "desc": "Exploração do projeto com foco em leitura"
+      },
+      "active": "Ativas",
+      "custom": "Custom",
+      "menuAria": "Toolkit de skills"
     }
   },
   "issueSessionPicker": {
@@ -2547,8 +2584,8 @@
     "resuming": "Retomando…",
     "resumeStarted": "Retomando {{identifier}}",
     "resumeFailed": "Não foi possível retomar {{identifier}}",
-    "openExecutionAria": "Abrir sessão de execução {{identifier}}",
-    "openAuthoringAria": "Abrir sessão de authoring {{identifier}}",
+    "openExecutionAria": "Abrir run autônomo {{identifier}}",
+    "openAuthoringAria": "Abrir sessão {{identifier}}",
     "issueThreadHint": "Working tree da issue {{identifier}}",
     "openIssueAria": "Abrir issue {{identifier}}",
     "executionUnavailable": "Os detalhes da execução de {{identifier}} não estão disponíveis agora.",
@@ -2653,6 +2690,189 @@
         "jira": "Jira"
       },
       "workspaces": "Workspaces"
+    },
+    "sidebar": {
+      "tree": {
+        "label": "Projetos",
+        "collapseNode": "Recolher {{label}}",
+        "expandNode": "Expandir {{label}}",
+        "openNode": "Abrir {{label}}",
+        "moreActions": "Mais ações para {{label}}",
+        "loadingWorkspaces": "Carregando workspaces de {{project}}",
+        "projectError": "Não foi possível carregar: {{error}}",
+        "retryProject": "Tentar novamente {{project}}",
+        "stale": "Dados desatualizados",
+        "emptyProject": "Nenhum workspace em {{project}}",
+        "createWorkspace": "Criar workspace em {{project}}",
+        "emptyWorkspace": "Nenhuma sessão em {{workspace}}",
+        "createSession": "Criar sessão em {{workspace}}",
+        "unassigned": "Sem workspace",
+        "unread": "Não lida",
+        "needsReview": "Revisão",
+        "projectWorkspaceCount_one": "{{count}} workspace",
+        "projectWorkspaceCount_other": "{{count}} workspaces",
+        "sessionCount_one": "{{count}} sessão",
+        "sessionCount_other": "{{count}} sessões",
+        "moreWorkspaces_one": "Mais {{count}} workspace",
+        "moreWorkspaces_other": "Mais {{count}} workspaces",
+        "moreSessions_one": "Mais {{count}} sessão",
+        "moreSessions_other": "Mais {{count}} sessões",
+        "workspaceKind": {
+          "project": "Projeto",
+          "issue": "Issue",
+          "standalone": "Avulso",
+          "parallel": "Paralelo",
+          "orphan": "Órfão"
+        },
+        "sessionKind": {
+          "chat": "Chat",
+          "authoring": "Autoria",
+          "execution": "Execução"
+        },
+        "aggregateStatus": {
+          "idle": "Inativo",
+          "active": "Ativo",
+          "attention": "Requer atenção",
+          "error": "Erro",
+          "stale": "Desatualizado"
+        }
+      },
+      "utility": {
+        "label": "Utilitários da barra lateral",
+        "newSession": "Nova sessão",
+        "search": "Buscar",
+        "automations": "Automações",
+        "settings": "Configurações"
+      },
+      "search": {
+        "title": "Buscar na barra lateral",
+        "description": "Busque projetos, workspaces e sessões carregados.",
+        "placeholder": "Buscar projetos e sessões…",
+        "loading": "Carregando…",
+        "empty": "Nenhum resultado encontrado.",
+        "types": {
+          "project": "Projeto",
+          "workspace": "Workspace",
+          "session": "Sessão"
+        }
+      },
+      "newSession": {
+        "title": "Nova sessão",
+        "description": "Confirme o projeto e o workspace antes de criar uma sessão.",
+        "project": "Projeto",
+        "workspace": "Workspace",
+        "selectProject": "Selecione um projeto",
+        "selectWorkspace": "Selecione um workspace",
+        "createWorkspace": "Criar novo workspace",
+        "sessionTitle": "Título da sessão",
+        "agent": "Agente",
+        "defaultAgent": "Padrão do projeto",
+        "retry": "Tentar novamente",
+        "loading": "Carregando workspaces…",
+        "loadError": "Não foi possível carregar os workspaces.",
+        "cancel": "Cancelar",
+        "create": "Criar sessão",
+        "creating": "Criando…",
+        "requireProject": "Selecione um projeto.",
+        "requireReadyProject": "Aguarde o carregamento dos workspaces do projeto.",
+        "requireWorkspace": "Selecione um workspace.",
+        "unsupportedWorkspace": "Não é possível criar uma sessão neste workspace.",
+        "missingWorkspacePath": "O caminho do workspace não está disponível.",
+        "missingIssue": "A issue vinculada não está disponível.",
+        "serviceError": "Não foi possível criar a sessão."
+      },
+      "filters": {
+        "button": "Filtros",
+        "activeCount": "{{count}} ativos",
+        "sort": "Ordenar",
+        "sortActivity": "Atividade recente",
+        "sortName": "Nome",
+        "group": "Agrupar",
+        "groupNone": "Sem agrupamento",
+        "groupWorkspaceKind": "Tipo de workspace",
+        "groupStatus": "Status",
+        "statuses": "Status",
+        "agents": "Agentes",
+        "activityOnly": "Somente ativos",
+        "showArchived": "Mostrar arquivados",
+        "reset": "Redefinir filtros",
+        "collapseAll": "Recolher tudo",
+        "markRead": "Marcar chats visíveis como lidos"
+      },
+      "actions": {
+        "new-workspace": "Novo workspace",
+        "new-session": "Nova sessão",
+        "open-board": "Abrir quadro",
+        "open-docs": "Abrir documentos",
+        "open-settings": "Abrir configurações",
+        "open-editor": "Abrir no editor",
+        "open-terminal": "Abrir terminal",
+        "pin": "Fixar",
+        "unpin": "Desafixar",
+        "rename": "Renomear",
+        "copy-branch": "Copiar branch",
+        "copy-path": "Copiar caminho",
+        "manage-labels": "Gerenciar etiquetas",
+        "toggle-review": "Marcar para revisão",
+        "markForReview": "Marcar para revisão",
+        "removeReviewMarker": "Remover marca de revisão",
+        "copy-resume-link": "Copiar link de retomada",
+        "archive": "Arquivar",
+        "restore": "Restaurar",
+        "remove": "Remover",
+        "remove-workspace": "Remover workspace",
+        "delete": "Excluir",
+        "renameTitle": "Renomear {{type}}",
+        "renameDescription": "Escolha um novo nome para {{name}}.",
+        "metadataTitle": "Metadados da sessão",
+        "metadataDescription": "Atualize etiquetas e o estado de revisão.",
+        "archiveEffect": "Arquivar oculta este item das visualizações ativas. Ele poderá ser restaurado.",
+        "removeProjectEffect": "Remove permanentemente este projeto e seus dados do rastreador da barra lateral.",
+        "removeWorkspaceEffect": "Remove este workspace e seus arquivos. O projeto e a issue permanecem.",
+        "deleteThreadEffect": "Exclui permanentemente esta thread local e seu histórico."
+      },
+      "dialog": {
+        "name": "Nome",
+        "labels": "Etiquetas",
+        "needsReview": "Precisa de revisão",
+        "cancel": "Cancelar",
+        "save": "Salvar",
+        "saving": "Salvando…",
+        "working": "Processando…",
+        "maximumLength": "Não pode exceder {{count}} caracteres.",
+        "typeToConfirm": "Digite {{name}} para confirmar",
+        "loadingMetadata": "Carregando metadados…"
+      },
+      "errors": {
+        "metadataUnavailable": "Os metadados da thread não foram carregados. Recarregue o projeto e tente novamente.",
+        "issueLabelsUnavailable": "As etiquetas atuais da issue não foram carregadas. Recarregue o projeto e tente novamente.",
+        "issueLabelMappingFailed": "Não foi possível associar com segurança as etiquetas atuais da issue.",
+        "issueOptionsFailed": "Não foi possível carregar as opções de etiqueta. Tente novamente.",
+        "metadataUpdateFailed": "Falha ao atualizar os metadados.",
+        "renameFailed": "Falha ao renomear.",
+        "renameUnavailable": "Não é possível renomear este item.",
+        "confirmFailed": "A ação confirmada falhou.",
+        "directActionFailed": "A ação falhou. Tente novamente.",
+        "labelCount": "As etiquetas devem conter no máximo {{count}} itens.",
+        "labelLength": "As etiquetas não podem exceder {{count}} caracteres.",
+        "actionPending": "A ação já está em andamento.",
+        "committedRefreshWarning": "A alteração foi salva, mas a barra lateral não pôde ser atualizada: {{detail}}",
+        "projectArchivedRemovalFailed": "O projeto foi arquivado, mas a remoção falhou: {{detail}}",
+        "issueLabelsReviewFailed": "As etiquetas da issue foram salvas, mas o estado de revisão falhou: {{detail}}",
+        "workspacePartiallyRemoved": "O workspace foi removido apenas parcialmente.",
+        "workspaceRemoveFailed": "Não foi possível remover o workspace.",
+        "clipboardFailed": "Não foi possível copiar o valor.",
+        "projectArchiveRequired": "A remoção do projeto requer permissão para arquivar.",
+        "mainWorkspaceRename": "O workspace principal não pode ser renomeado.",
+        "mainWorkspaceRemove": "O workspace principal não pode ser removido.",
+        "workspaceNotRemovable": "Este workspace não pode ser removido.",
+        "executionThreadDelete": "Uma sessão de execução não pode excluir uma thread.",
+        "localThreadDelete": "Somente threads locais podem ser excluídas.",
+        "threadDeleteState": "A thread deve estar arquivada ou fechada antes da exclusão.",
+        "activeExecutionArchive": "Uma execução ativa não pode ser arquivada.",
+        "reviewUnauthorized": "Alterações de revisão não são autorizadas.",
+        "threadArchiveUnauthorized": "É necessária permissão para arquivar a thread."
+      }
     },
     "recents": {
       "title": "Recentes",
@@ -3075,8 +3295,8 @@
       "isolatedHint": "Cria uma tree irmã limpa (…/issue__pN) para esta sessão não conflitar com outra execução da mesma issue."
     },
     "sessionRows": {
-      "execution": "Execution",
-      "authoring": "Authoring",
+      "execution": "Autônomo",
+      "authoring": "Sessão",
       "open": "Abrir",
       "remove": "Remover"
     }

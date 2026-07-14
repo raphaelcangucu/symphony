@@ -5,6 +5,7 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
 
   alias Plug.Conn
   alias SymphonyElixir.Assistant.{AgentSession, History}
+  alias SymphonyElixir.Workspace.PathOwnership
   alias SymphonyElixirWeb.{TrackerErrors, TrackerPresenter}
 
   @default_limit 50
@@ -21,6 +22,7 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
       |> put_opt(:scopes, parse_scopes(params["scopes"]))
       |> put_opt(:project_slug, params["project_slug"])
       |> put_opt(:issue_identifier, params["issue_identifier"])
+      |> Keyword.put(:include_archived, include_archived?(params["include_archived"]))
       |> Keyword.put(:limit, clamp_limit(params["limit"]))
 
     data =
@@ -33,6 +35,10 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
   end
 
   @spec create(Conn.t(), map()) :: Conn.t()
+  def create(conn, %{"scope" => "freeform", "workspace_path" => _workspace_path}) do
+    TrackerErrors.validation_msg(conn, "workspace_path is not supported for freeform threads")
+  end
+
   def create(conn, %{"scope" => "freeform"} = params) do
     # workspace_path is NOT NULL, but the canonical per-thread directory depends on
     # the autoincrement id we only learn after insert. Seed with the freeform root
@@ -52,6 +58,23 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
     end
   end
 
+  def create(
+        conn,
+        %{"scope" => "project_session", "project_slug" => project_slug, "workspace_path" => workspace_path} = params
+      ) do
+    attrs = %{
+      title: params["title"],
+      agent_kind: normalize_agent(params["agent_kind"])
+    }
+
+    with {:ok, %{path: normalized_path}} <- PathOwnership.validate(project_slug, workspace_path),
+         {:ok, thread} <- History.create_workspace_session_thread(project_slug, normalized_path, attrs) do
+      render_created_thread(conn, thread)
+    else
+      {:error, reason} -> render_create_error(conn, reason)
+    end
+  end
+
   def create(conn, %{"scope" => "project_session", "project_slug" => project_slug} = params) do
     attrs = %{
       title: params["title"],
@@ -59,9 +82,7 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
     }
 
     with {:ok, thread} <- History.create_project_session_thread(project_slug, attrs) do
-      conn
-      |> put_status(:created)
-      |> json(%{data: TrackerPresenter.assistant_thread(with_preview(thread))})
+      render_created_thread(conn, thread)
     else
       {:error, %Ecto.Changeset{} = changeset} ->
         TrackerErrors.render(conn, changeset)
@@ -71,19 +92,40 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
     end
   end
 
+  def create(
+        conn,
+        %{
+          "scope" => "issue_session",
+          "project_slug" => project_slug,
+          "issue_identifier" => issue_identifier,
+          "workspace_path" => workspace_path
+        } = params
+      ) do
+    with {:ok, ownership} <-
+           PathOwnership.validate_issue(project_slug, workspace_path, issue_identifier),
+         attrs <- Map.put(issue_session_attrs(params), :workspace_kind, ownership.workspace_kind),
+         {:ok, thread} <-
+           History.create_issue_workspace_session_thread(
+             project_slug,
+             issue_identifier,
+             ownership.path,
+             attrs
+           ) do
+      render_created_thread(conn, thread)
+    else
+      {:error, reason} -> render_create_error(conn, reason)
+    end
+  end
+
+  def create(conn, %{"scope" => "issue_session", "project_slug" => _project_slug, "workspace_path" => _workspace_path}) do
+    TrackerErrors.validation_msg(conn, "issue_identifier is required")
+  end
+
   def create(conn, %{"scope" => "issue_session", "project_slug" => project_slug, "issue_identifier" => issue_identifier} = params) do
-    attrs = %{
-      title: params["title"],
-      agent_kind: normalize_agent(params["agent_kind"]),
-      execution_mode: params["execution_mode"] || params["mode"],
-      isolated_workspace: params["isolated_workspace"] == true,
-      use_parent_workspace: params["use_parent_workspace"] == true
-    }
+    attrs = issue_session_attrs(params)
 
     with {:ok, thread} <- History.create_issue_session_thread(project_slug, issue_identifier, attrs) do
-      conn
-      |> put_status(:created)
-      |> json(%{data: TrackerPresenter.assistant_thread(with_preview(thread))})
+      render_created_thread(conn, thread)
     else
       {:error, %Ecto.Changeset{} = changeset} ->
         TrackerErrors.render(conn, changeset)
@@ -96,6 +138,73 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
   def create(conn, _params) do
     TrackerErrors.validation_msg(conn, "scope must be freeform, project_session, or issue_session")
   end
+
+  @spec update(Conn.t(), map()) :: Conn.t()
+  def update(conn, %{"thread_id" => raw_id} = params) do
+    attrs = Map.take(params, ["title", "labels", "needs_review"])
+
+    with {:ok, id} <- parse_thread_id(raw_id),
+         {:ok, thread} <- History.update_thread_sidebar_metadata(id, attrs) do
+      json(conn, %{data: TrackerPresenter.assistant_thread(with_preview(thread))})
+    else
+      {:error, :not_found} ->
+        TrackerErrors.render(conn, :thread_not_found)
+
+      {:error, :invalid_thread_id} ->
+        TrackerErrors.render(conn, :invalid_thread_id)
+
+      {:error, :invalid_title} ->
+        TrackerErrors.validation_msg(conn, "title must be between 1 and 160 characters")
+
+      {:error, :invalid_labels} ->
+        TrackerErrors.validation_msg(conn, "labels must contain at most 12 strings of up to 40 characters")
+
+      {:error, :invalid_needs_review} ->
+        TrackerErrors.validation_msg(conn, "needs_review must be a boolean")
+
+      {:error, :invalid_attrs} ->
+        TrackerErrors.validation_msg(conn, "invalid assistant thread attributes")
+
+      {:error, %Ecto.Changeset{} = changeset} ->
+        TrackerErrors.render(conn, changeset)
+
+      {:error, reason} ->
+        TrackerErrors.render(conn, reason)
+    end
+  end
+
+  def update(conn, _params), do: TrackerErrors.validation_msg(conn, "thread id is required")
+
+  @spec delete(Conn.t(), map()) :: Conn.t()
+  def delete(conn, %{"thread_id" => raw_id}) do
+    with {:ok, id} <- parse_thread_id(raw_id),
+         {:ok, _thread} <- History.delete_thread(id) do
+      Conn.send_resp(conn, :no_content, "")
+    else
+      {:error, :not_found} ->
+        TrackerErrors.render(conn, :thread_not_found)
+
+      {:error, :invalid_thread_id} ->
+        TrackerErrors.render(conn, :invalid_thread_id)
+
+      {:error, :thread_active} ->
+        thread_active_error(conn)
+
+      {:error, :unsupported_scope} ->
+        TrackerErrors.validation_msg(conn, "thread scope does not support deletion")
+
+      {:error, :unsupported_status} ->
+        TrackerErrors.validation_msg(conn, "thread must be archived or closed before deletion")
+
+      {:error, %Ecto.Changeset{} = changeset} ->
+        TrackerErrors.render(conn, changeset)
+
+      {:error, reason} ->
+        TrackerErrors.render(conn, reason)
+    end
+  end
+
+  def delete(conn, _params), do: TrackerErrors.validation_msg(conn, "thread id is required")
 
   @spec archive(Conn.t(), map()) :: Conn.t()
   def archive(conn, %{"thread_id" => raw_id}) do
@@ -149,8 +258,42 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
   defp parse_scopes(scopes) when is_list(scopes), do: scopes
   defp parse_scopes(_), do: nil
 
+  defp include_archived?(value), do: value in [true, "true"]
+
   defp normalize_agent(agent) when agent in @agent_kinds, do: agent
   defp normalize_agent(_agent), do: nil
+
+  defp issue_session_attrs(params) do
+    %{
+      title: params["title"],
+      agent_kind: normalize_agent(params["agent_kind"]),
+      execution_mode: params["execution_mode"] || params["mode"],
+      isolated_workspace: params["isolated_workspace"] == true,
+      use_parent_workspace: params["use_parent_workspace"] == true
+    }
+  end
+
+  defp render_created_thread(conn, thread) do
+    conn
+    |> put_status(:created)
+    |> json(%{data: TrackerPresenter.assistant_thread(with_preview(thread))})
+  end
+
+  defp render_create_error(conn, {:validation, :invalid_workspace_path}) do
+    TrackerErrors.validation_msg(conn, "workspace_path must be an absolute owned workspace path")
+  end
+
+  defp render_create_error(conn, {:validation, :workspace_path_not_owned}) do
+    TrackerErrors.validation_msg(conn, "workspace_path does not belong to this project")
+  end
+
+  defp render_create_error(conn, {:validation, :workspace_issue_mismatch}) do
+    TrackerErrors.validation_msg(conn, "workspace_path does not belong to issue_identifier")
+  end
+
+  defp render_create_error(conn, {:inventory, _reason}), do: TrackerErrors.render(conn, :request_failed)
+  defp render_create_error(conn, %Ecto.Changeset{} = changeset), do: TrackerErrors.render(conn, changeset)
+  defp render_create_error(conn, reason), do: TrackerErrors.render(conn, reason)
 
   defp clamp_limit(nil), do: @default_limit
 
@@ -171,4 +314,15 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
 
   defp preview_text(nil), do: nil
   defp preview_text(%{content: content}), do: content
+
+  defp thread_active_error(conn) do
+    conn
+    |> Conn.put_status(:conflict)
+    |> json(%{
+      error: %{
+        code: "thread_active",
+        message: "Assistant thread must be archived or closed before deletion"
+      }
+    })
+  end
 end

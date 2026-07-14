@@ -482,18 +482,21 @@
       "dispatchStop": "Stopping agent…",
       "dispatchFailed": "Dispatch failed",
       "executionMode": {
-        "title": "Execution mode",
+        "title": "Mode",
         "plan": {
           "label": "Plan",
-          "desc": "Read-only — analyze and plan, no edits"
+          "desc": "Read-only — analyze and plan, no edits",
+          "permission": "Read-only"
         },
         "build": {
           "label": "Build",
-          "desc": "Edit the workspace — asks for approval before running commands"
+          "desc": "Edit the workspace — asks for approval before running commands",
+          "permission": "Edits + approvals"
         },
         "yolo": {
           "label": "Yolo",
-          "desc": "Full access, approvals bypassed (default)"
+          "desc": "Full access, approvals bypassed",
+          "permission": "Full access"
         }
       },
       "mentions": {
@@ -639,21 +642,21 @@
       }
     },
     "agentTabs": {
-      "authoringHint": "Draft the brief and plan, then dispatch the agent.",
-      "executionHint": "Watch the live run, steer with /infer, and pause or resume.",
-      "sectionsAria": "Agent sections",
-      "authoring": "Authoring",
-      "execution": "Execution",
+      "authoringHint": "Plan, build, or yolo in this interactive session. Dispatch autonomously only when you choose.",
+      "executionHint": "Watch the autonomous run, steer with /infer, and pause or resume.",
+      "sectionsAria": "Agent surfaces",
+      "authoring": "Session",
+      "execution": "Autonomous",
       "newSession": "New session",
       "newSessionTitle": "Start a fresh agent session for this issue"
     },
     "sessions": {
-      "hint": "Create build-mode sessions for this issue. Sessions open on the project Sessions page.",
+      "hint": "Create interactive sessions for this issue. Sessions open on the project Workspaces page.",
       "newSession": "New session",
-      "empty": "No sessions for this issue yet. Start one in build mode to begin.",
+      "empty": "No sessions for this issue yet. Start one to begin.",
       "defaultSessionTitle": "Issue session",
-      "issueSessionBadge": "Build session",
-      "authoringBadge": "Authoring"
+      "issueSessionBadge": "Issue session",
+      "authoringBadge": "Session"
     },
     "toolCall": {
       "status": {
@@ -2162,9 +2165,13 @@
       "requestFailed": "Assistant request failed",
       "modeUpdateTimeout": "Assistant mode update timed out",
       "goalModeUpdateTimeout": "Assistant goal mode update timed out",
-      "goalRequiresIssue": "Authoring goal requires a persistent assistant session.",
-      "goalCommandWithObjective": "Pursue this authoring goal directly in our conversation using the selected agent's native goal mode. Objective: {{objective}}. Keep working toward it across turns until the artifact is ready for review or you are blocked. This is authoring only — do not dispatch the orchestrator or change the issue status.",
-      "goalCommandDefault": "Pursue an authoring goal directly in our conversation using the selected agent's native goal mode. Derive the objective from the existing spec/plan/handoff, then keep working toward it across turns until the artifact is ready for review or you are blocked. This is authoring only — do not dispatch the orchestrator or change the issue status.",
+      "goalRequiresIssue": "Chat goal requires a persistent assistant session.",
+      "goalCommandWithObjective": "Pursue this chat goal directly in our conversation using the selected agent's native goal mode. Objective: {{objective}}. Keep working toward it across turns until the artifact is ready for review or you are blocked. Stay in this session — do not dispatch the orchestrator or change the issue status unless asked.",
+      "goalCommandDefault": "Pursue a chat goal directly in our conversation using the selected agent's native goal mode. Derive the objective from the existing spec/plan/handoff, then keep working toward it across turns until the artifact is ready for review or you are blocked. Stay in this session — do not dispatch the orchestrator or change the issue status unless asked.",
+      "exitPlanImplement": "Exit plan mode. Implement the approved plan in this session under {{mode}} mode. Create and edit files as needed; do not dispatch the orchestrator unless I explicitly ask to run autonomously.",
+      "modeAppliesNextTurn": "Mode and toolkit changes apply on the next turn.",
+      "runAutonomously": "Run autonomously",
+      "runAutonomouslyTitle": "Dispatch this issue to the orchestrator",
       "dispatchedTo": "Dispatched to {{agent}}.",
       "dispatchTimeout": "{{agent}} dispatch timed out",
       "btwFailed": "Failed to start side question.",
@@ -2179,9 +2186,9 @@
       "scrollToBottom": "Scroll to latest messages",
       "planApproval": {
         "yolo": "YOLO",
-        "yoloTitle": "Approve the plan and execute in YOLO mode",
+        "yoloTitle": "Approve the plan and implement in this session with full access",
         "approve": "Approve",
-        "approveTitle": "Approve the plan and execute in build mode"
+        "approveTitle": "Approve the plan and implement in this session (Build mode)"
       },
       "commandApproval": {
         "title": "{{agent}} wants to run a command",
@@ -2207,8 +2214,8 @@
       "noMatch": "No models match."
     },
     "slash": {
-      "goal": "Run an authoring goal directly in this chat (no orchestrator dispatch)",
-      "goalExecution": "Set an execution goal and dispatch via the orchestrator",
+      "goal": "Run a chat goal directly in this session (no orchestrator dispatch)",
+      "goalExecution": "Set a run objective and dispatch via the orchestrator",
       "infer": "Steer the running agent without waiting",
       "btw": "Ask a quick side question (read-only, not saved)",
       "newThread": "Start a new Codex thread in the existing workspace",
@@ -2345,16 +2352,16 @@
       "objectivePlaceholder": "Describe the goal objective…"
     },
     "authoring": {
-      "chatAria": "Issue authoring chat",
-      "documentsAria": "Issue authoring documents",
-      "documentsDrawerTitle": "Authoring documents",
+      "chatAria": "Issue session chat",
+      "documentsAria": "Issue session documents",
+      "documentsDrawerTitle": "Session documents",
       "documentsDrawerDescription": "Specs, plans, and handoffs linked to this issue.",
       "openDocuments": "Documents",
-      "documentsEmpty": "Draft documents appear here after the assistant creates or links an issue. Start by asking the project assistant to draft the issue, then open the issue authoring route once an identifier exists.",
+      "documentsEmpty": "Draft documents appear here after the assistant creates or links an issue. Start by asking the project assistant to draft the issue, then open the issue session once an identifier exists.",
       "taskLabel": "Task",
       "titleLoading": "Loading issue title…",
       "openIssueDetails": "Open issue details",
-      "goalBannerAria": "Authoring goal",
+      "goalBannerAria": "Chat goal",
       "goalProviderCodex": "Codex native",
       "goalProviderClaude": "Claude Code",
       "goalProviderUnsupported": "Unsupported provider",
@@ -2370,7 +2377,7 @@
       "goalBudgetLimited": "Goal budget limit reached",
       "goalUsageLimited": "Goal usage limit reached",
       "goalPending": "Goal ready",
-      "goalNoObjective": "Pursuing the authoring objective.",
+      "goalNoObjective": "Pursuing the chat objective.",
       "goalStop": "Stop goal process",
       "goalPause": "Pause goal",
       "goalResume": "Resume goal",
@@ -2378,9 +2385,9 @@
       "goalRemove": "Remove goal",
       "goalEditSave": "Save objective",
       "goalEditCancel": "Cancel",
-      "goalObjectivePlaceholder": "Describe the authoring objective…",
-      "titleNew": "New issue authoring",
-      "hintNoId": "Start by asking the assistant to draft an issue; documents appear once an identifier exists. Tell it whether you want a simple brief or to brainstorm a spec, and use /goal to run a long-running authoring goal directly in the chat."
+      "goalObjectivePlaceholder": "Describe the chat objective…",
+      "titleNew": "Create issue",
+      "hintNoId": "Start by asking the assistant to draft an issue; documents appear once an identifier exists. Tell it whether you want a simple brief or to brainstorm a spec, and use /goal to run a long-running chat goal directly in the session."
     },
     "btw": {
       "ariaLabel": "Side question",
@@ -2506,6 +2513,36 @@
       "loadError": "Could not load this file.",
       "retry": "Retry",
       "noContent": "No content to display."
+    },
+    "skillProfile": {
+      "label": "Skills",
+      "auto": {
+        "label": "Auto",
+        "desc": "Follows the current mode and session context"
+      },
+      "planning": {
+        "label": "Planning",
+        "desc": "Brainstorming and writing plans"
+      },
+      "implementation": {
+        "label": "Implementation",
+        "desc": "TDD and verification while coding"
+      },
+      "debugging": {
+        "label": "Debugging",
+        "desc": "Systematic debugging toolkit"
+      },
+      "delivery": {
+        "label": "Delivery",
+        "desc": "Review, verify, and finish the branch"
+      },
+      "explore": {
+        "label": "Explore",
+        "desc": "Read-heavy project exploration"
+      },
+      "active": "Active",
+      "custom": "Custom",
+      "menuAria": "Skill toolkit"
     }
   },
   "issueSessionPicker": {
@@ -2547,8 +2584,8 @@
     "resuming": "Resuming…",
     "resumeStarted": "Resuming {{identifier}}",
     "resumeFailed": "Could not resume {{identifier}}",
-    "openExecutionAria": "Open execution session {{identifier}}",
-    "openAuthoringAria": "Open authoring session {{identifier}}",
+    "openExecutionAria": "Open autonomous run {{identifier}}",
+    "openAuthoringAria": "Open session {{identifier}}",
     "issueThreadHint": "Issue {{identifier}} working tree",
     "openIssueAria": "Open issue {{identifier}}",
     "executionUnavailable": "Execution details for {{identifier}} are not available right now.",
@@ -2653,6 +2690,189 @@
         "jira": "Jira"
       },
       "workspaces": "Workspaces"
+    },
+    "sidebar": {
+      "tree": {
+        "label": "Projects",
+        "collapseNode": "Collapse {{label}}",
+        "expandNode": "Expand {{label}}",
+        "openNode": "Open {{label}}",
+        "moreActions": "More actions for {{label}}",
+        "loadingWorkspaces": "Loading workspaces for {{project}}",
+        "projectError": "Could not load: {{error}}",
+        "retryProject": "Retry {{project}}",
+        "stale": "Stale data",
+        "emptyProject": "No workspaces in {{project}}",
+        "createWorkspace": "Create workspace in {{project}}",
+        "emptyWorkspace": "No sessions in {{workspace}}",
+        "createSession": "Create session in {{workspace}}",
+        "unassigned": "No workspace",
+        "unread": "Unread",
+        "needsReview": "Review",
+        "projectWorkspaceCount_one": "{{count}} workspace",
+        "projectWorkspaceCount_other": "{{count}} workspaces",
+        "sessionCount_one": "{{count}} session",
+        "sessionCount_other": "{{count}} sessions",
+        "moreWorkspaces_one": "{{count}} more workspace",
+        "moreWorkspaces_other": "{{count}} more workspaces",
+        "moreSessions_one": "{{count}} more session",
+        "moreSessions_other": "{{count}} more sessions",
+        "workspaceKind": {
+          "project": "Project",
+          "issue": "Issue",
+          "standalone": "Standalone",
+          "parallel": "Parallel",
+          "orphan": "Orphan"
+        },
+        "sessionKind": {
+          "chat": "Chat",
+          "authoring": "Authoring",
+          "execution": "Execution"
+        },
+        "aggregateStatus": {
+          "idle": "Idle",
+          "active": "Active",
+          "attention": "Needs attention",
+          "error": "Error",
+          "stale": "Stale"
+        }
+      },
+      "utility": {
+        "label": "Sidebar utilities",
+        "newSession": "New session",
+        "search": "Search",
+        "automations": "Automations",
+        "settings": "Settings"
+      },
+      "search": {
+        "title": "Search sidebar",
+        "description": "Search loaded projects, workspaces, and sessions.",
+        "placeholder": "Search projects and sessions…",
+        "loading": "Loading…",
+        "empty": "No results found.",
+        "types": {
+          "project": "Project",
+          "workspace": "Workspace",
+          "session": "Session"
+        }
+      },
+      "newSession": {
+        "title": "New session",
+        "description": "Confirm the project and workspace before creating a session.",
+        "project": "Project",
+        "workspace": "Workspace",
+        "selectProject": "Select a project",
+        "selectWorkspace": "Select a workspace",
+        "createWorkspace": "Create new workspace",
+        "sessionTitle": "Session title",
+        "agent": "Agent",
+        "defaultAgent": "Project default",
+        "retry": "Retry",
+        "loading": "Loading workspaces…",
+        "loadError": "Could not load workspaces.",
+        "cancel": "Cancel",
+        "create": "Create session",
+        "creating": "Creating…",
+        "requireProject": "Select a project.",
+        "requireReadyProject": "Wait for the project workspaces to load.",
+        "requireWorkspace": "Select a workspace.",
+        "unsupportedWorkspace": "This workspace cannot create a session.",
+        "missingWorkspacePath": "The workspace path is unavailable.",
+        "missingIssue": "The linked issue is unavailable.",
+        "serviceError": "Could not create the session."
+      },
+      "filters": {
+        "button": "Filters",
+        "activeCount": "{{count}} active",
+        "sort": "Sort",
+        "sortActivity": "Recent activity",
+        "sortName": "Name",
+        "group": "Group",
+        "groupNone": "No grouping",
+        "groupWorkspaceKind": "Workspace kind",
+        "groupStatus": "Status",
+        "statuses": "Statuses",
+        "agents": "Agents",
+        "activityOnly": "Active only",
+        "showArchived": "Show archived",
+        "reset": "Reset filters",
+        "collapseAll": "Collapse all",
+        "markRead": "Mark all visible chats read"
+      },
+      "actions": {
+        "new-workspace": "New workspace",
+        "new-session": "New session",
+        "open-board": "Open board",
+        "open-docs": "Open docs",
+        "open-settings": "Open settings",
+        "open-editor": "Open in editor",
+        "open-terminal": "Open terminal",
+        "pin": "Pin",
+        "unpin": "Unpin",
+        "rename": "Rename",
+        "copy-branch": "Copy branch",
+        "copy-path": "Copy path",
+        "manage-labels": "Manage labels",
+        "toggle-review": "Mark for review",
+        "markForReview": "Mark for review",
+        "removeReviewMarker": "Remove review marker",
+        "copy-resume-link": "Copy resume link",
+        "archive": "Archive",
+        "restore": "Restore",
+        "remove": "Remove",
+        "remove-workspace": "Remove workspace",
+        "delete": "Delete",
+        "renameTitle": "Rename {{type}}",
+        "renameDescription": "Choose a new name for {{name}}.",
+        "metadataTitle": "Session metadata",
+        "metadataDescription": "Update labels and review state.",
+        "archiveEffect": "Archive hides this item from active views. It can be restored later.",
+        "removeProjectEffect": "Permanently remove this project and its tracker data from the sidebar.",
+        "removeWorkspaceEffect": "Remove this workspace and its files. The project and issue remain.",
+        "deleteThreadEffect": "Permanently delete this local thread and its history."
+      },
+      "dialog": {
+        "name": "Name",
+        "labels": "Labels",
+        "needsReview": "Needs review",
+        "cancel": "Cancel",
+        "save": "Save",
+        "saving": "Saving…",
+        "working": "Working…",
+        "maximumLength": "Must not exceed {{count}} characters.",
+        "typeToConfirm": "Type {{name}} to confirm",
+        "loadingMetadata": "Loading metadata…"
+      },
+      "errors": {
+        "metadataUnavailable": "Thread metadata is not loaded. Reload the project and try again.",
+        "issueLabelsUnavailable": "Current issue labels are not loaded. Reload the project and try again.",
+        "issueLabelMappingFailed": "Current issue labels could not be matched safely.",
+        "issueOptionsFailed": "Issue label options could not be loaded. Try again.",
+        "metadataUpdateFailed": "Metadata update failed.",
+        "renameFailed": "Rename failed.",
+        "renameUnavailable": "Rename is unavailable.",
+        "confirmFailed": "The confirmed action failed.",
+        "directActionFailed": "Action failed. Try again.",
+        "labelCount": "Labels must contain at most {{count}} entries.",
+        "labelLength": "Labels must not exceed {{count}} characters.",
+        "actionPending": "Action is already pending.",
+        "committedRefreshWarning": "The change was saved, but the sidebar could not refresh: {{detail}}",
+        "projectArchivedRemovalFailed": "The project was archived, but removal failed: {{detail}}",
+        "issueLabelsReviewFailed": "Issue labels were saved, but review state failed: {{detail}}",
+        "workspacePartiallyRemoved": "The workspace was only partially removed.",
+        "workspaceRemoveFailed": "Workspace could not be removed.",
+        "clipboardFailed": "Could not copy the value to the clipboard.",
+        "projectArchiveRequired": "Project removal requires archive capability.",
+        "mainWorkspaceRename": "The main workspace cannot be renamed.",
+        "mainWorkspaceRemove": "The main workspace cannot be removed.",
+        "workspaceNotRemovable": "Workspace is not removable.",
+        "executionThreadDelete": "An execution session cannot be thread-deleted.",
+        "localThreadDelete": "Only local thread scopes can be deleted.",
+        "threadDeleteState": "A thread must be archived or closed before deletion.",
+        "activeExecutionArchive": "An active execution cannot be archived.",
+        "reviewUnauthorized": "Review changes are not authorized.",
+        "threadArchiveUnauthorized": "Thread archive capability is required."
+      }
     },
     "recents": {
       "title": "Recents",
@@ -3075,8 +3295,8 @@
       "isolatedHint": "Creates a clean sibling tree (…/issue__pN) so this session cannot conflict with another run of the same issue."
     },
     "sessionRows": {
-      "execution": "Execution",
-      "authoring": "Authoring",
+      "execution": "Autonomous",
+      "authoring": "Session",
       "open": "Open",
       "remove": "Remove"
     }

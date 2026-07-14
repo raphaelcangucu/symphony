@@ -272,6 +272,9 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
       agent_kind: Map.get(thread, :agent_kind),
       title: thread.title,
       status: thread.status,
+      workspace_path: Map.get(thread, :workspace_path),
+      labels: sidebar_labels(Map.get(thread, :metadata)),
+      needs_review: sidebar_needs_review(Map.get(thread, :metadata)),
       preview: Map.get(thread, :preview),
       updated_at: iso8601(thread.updated_at)
     }
@@ -347,6 +350,14 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
 
   defp loaded_issue_identifier(%IssueRecord{} = issue), do: issue.identifier
   defp loaded_issue_identifier(_issue), do: nil
+
+  defp sidebar_labels(%{"sidebar_labels" => labels}) when is_list(labels), do: labels
+  defp sidebar_labels(_metadata), do: []
+
+  defp sidebar_needs_review(%{"sidebar_needs_review" => needs_review}) when is_boolean(needs_review),
+    do: needs_review
+
+  defp sidebar_needs_review(_metadata), do: false
 
   defp iso8601(%DateTime{} = datetime) do
     datetime

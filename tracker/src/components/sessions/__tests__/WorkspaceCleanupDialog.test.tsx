@@ -11,6 +11,7 @@ vi.mock("@/services/worktrees", () => ({ removeWorkspaces: vi.fn() }));
 function entry(overrides: Partial<WorkspaceInventoryEntry>): WorkspaceInventoryEntry {
   return {
     path: "/ws/demo/DEMO-1",
+    displayName: null,
     kind: "issue",
     issueIdentifier: "DEMO-1",
     name: null,

@@ -16,7 +16,7 @@ import type { AgentExecutionGoal } from "@/types/agent-execution";
 import type { AgentKind, ExecutionMode } from "@/types/issue";
 
 export interface AssistantChannelHandlers {
-  onHistoryLoaded: (messages: AssistantChatMessage[]) => void;
+  onHistoryLoaded: (messages: AssistantChatMessage[], meta?: AssistantHistoryMeta) => void;
   onMessageCreated: (message: AssistantChatMessage) => void;
   onAssistantDelta: (delta: string) => void;
   onToolCallStarted: (toolCall: AssistantToolCall) => void;
@@ -34,6 +34,13 @@ export interface AssistantChannelHandlers {
   onTurnStatus?: (status: AssistantTurnStatus) => void;
   onHistorySynced?: (messages: AssistantChatMessage[]) => void;
   onApprovalRequired?: (request: AssistantApprovalRequest) => void;
+}
+
+export interface AssistantHistoryMeta {
+  executionMode?: string | null;
+  skillProfile?: string | null;
+  scope?: string | null;
+  threadId?: number | null;
 }
 
 /** Complete thread-scoped Goal snapshot from durable state plus live process presence. */
@@ -253,6 +260,10 @@ export interface AssistantIssueCreatedPayload {
 
 interface HistoryLoadedPayload {
   messages?: BackendAssistantChatMessageDto[] | null;
+  execution_mode?: string | null;
+  skill_profile?: string | null;
+  scope?: string | null;
+  thread_id?: number | string | null;
 }
 
 interface MessagePayload {
@@ -341,7 +352,12 @@ export function bindAssistantEvents(channel: Channel, handlers: AssistantChannel
   channel.on("history_loaded", (payload) => {
     const data = payload as HistoryLoadedPayload & { last_turn?: unknown };
     const messages = (data.messages ?? []).map(normalizeAssistantChatMessage);
-    handlers.onHistoryLoaded(messages);
+    handlers.onHistoryLoaded(messages, {
+      executionMode: typeof data.execution_mode === "string" ? data.execution_mode : null,
+      skillProfile: typeof data.skill_profile === "string" ? data.skill_profile : null,
+      scope: typeof data.scope === "string" ? data.scope : null,
+      threadId: normalizeThreadId(data.thread_id),
+    });
 
     const joinedLastTurn = readLastTurn(data);
     if (joinedLastTurn) handlers.onTurnStatus?.(joinedLastTurn);
@@ -526,6 +542,20 @@ export function dispatchCodingAgent(
     payload.mode = options.mode;
   }
   return channel.push("dispatch_coding_agent", payload);
+}
+
+export function setTurnPreferences(
+  channel: Channel,
+  preferences: { executionMode?: ExecutionMode | null; skillProfile?: string | null },
+): ReturnType<Channel["push"]> {
+  const payload: Record<string, unknown> = {};
+  if (preferences.executionMode != null) {
+    payload.execution_mode = preferences.executionMode;
+  }
+  if (preferences.skillProfile != null) {
+    payload.skill_profile = preferences.skillProfile;
+  }
+  return channel.push("set_turn_preferences", payload);
 }
 
 function normalizeThreadId(value: number | string | null | undefined): number | null {

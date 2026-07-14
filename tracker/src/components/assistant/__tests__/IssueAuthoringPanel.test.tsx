@@ -58,7 +58,7 @@ describe("IssueAuthoringPanel", () => {
     expect(screen.getByTestId("project-assistant-panel")).toHaveTextContent(
       "Assistant macro-markets:MAC-1:list:embedded",
     );
-    expect(screen.getByRole("region", { name: /issue authoring chat/i })).toHaveClass(
+    expect(screen.getByRole("region", { name: /issue session chat/i })).toHaveClass(
       "flex",
       "min-h-0",
       "flex-1",
@@ -132,7 +132,7 @@ describe("IssueAuthoringPanel", () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByText("New issue authoring")).toBeTruthy();
+    expect(screen.getByText("Create issue")).toBeTruthy();
     expect(screen.getByText(/Start by asking the assistant to draft an issue/i)).toBeTruthy();
     expect(screen.getByRole("region", { name: /knowledge base documents/i })).toHaveTextContent(
       "KB macro-markets:none:none",

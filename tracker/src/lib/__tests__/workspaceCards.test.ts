@@ -73,6 +73,7 @@ function session(overrides: Partial<RecentSession>): RecentSession {
 function inventoryEntry(overrides: Partial<WorkspaceInventoryEntry>): WorkspaceInventoryEntry {
   return {
     path: "/ws/demo/DEMO-1",
+    displayName: null,
     kind: "issue",
     issueIdentifier: "DEMO-1",
     name: null,

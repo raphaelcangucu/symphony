@@ -3,8 +3,15 @@ import type { TFunction } from "i18next";
 import type { AssistantComposerSubmitKind } from "@/components/assistant/AssistantComposer";
 import { i18n } from "@/i18n";
 import { matchesPickerSearch } from "@/lib/pickerOptions";
+import type { SkillProfileId } from "@/lib/skillProfiles";
 
-export type SlashCommandContext = "authoring" | "execution";
+/** Legacy authoring/execution aliases plus skill-profile ids. */
+export type SlashCommandContext =
+  | "authoring"
+  | "execution"
+  | SkillProfileId;
+
+type BuiltinSlashBucket = "authoring" | "execution";
 
 export interface SlashCommandDef {
   name: `/${string}`;
@@ -30,8 +37,8 @@ type BuiltinSlashCommandSpec = {
   name: `/${string}`;
   kind: Exclude<AssistantComposerSubmitKind, "message">;
   category: string;
-  contexts: readonly SlashCommandContext[];
-  descriptionKeys: Record<SlashCommandContext, string>;
+  contexts: readonly BuiltinSlashBucket[];
+  descriptionKeys: Record<BuiltinSlashBucket, string>;
 };
 
 const SLASH_COMMAND_SPECS: readonly BuiltinSlashCommandSpec[] = [
@@ -40,6 +47,20 @@ const SLASH_COMMAND_SPECS: readonly BuiltinSlashCommandSpec[] = [
   { name: "/btw", kind: "btw", category: BUILTIN_CATEGORY, contexts: ["authoring", "execution"], descriptionKeys: { authoring: "assistant.slash.btw", execution: "assistant.slash.btw" } },
   { name: "/new-thread", kind: "new_thread", category: BUILTIN_CATEGORY, contexts: ["execution"], descriptionKeys: { authoring: "assistant.slash.newThread", execution: "assistant.slash.newThread" } },
 ] as const;
+
+/** Maps profile / legacy context onto the authoring vs execution slash buckets. */
+export function slashBucketForContext(context: SlashCommandContext): BuiltinSlashBucket {
+  if (context === "execution") return "execution";
+  if (context === "authoring") return "authoring";
+  if (
+    context === "implementation" ||
+    context === "debugging" ||
+    context === "delivery"
+  ) {
+    return "execution";
+  }
+  return "authoring";
+}
 
 export const SLASH_COMMAND_NAMES = SLASH_COMMAND_SPECS.map((spec) => spec.name);
 
@@ -64,7 +85,7 @@ export function defaultSkillCommands(
   t: Translate = i18n.t.bind(i18n) as Translate,
   context: SlashCommandContext = "authoring",
 ): SlashCommandDef[] {
-  if (context !== "execution") return [];
+  if (slashBucketForContext(context) !== "execution") return [];
   return SKILL_COMMAND_SPECS.map((spec) => {
     const skill = spec.name.slice(1);
     return {
@@ -82,11 +103,12 @@ function resolveSlashCommands(
   context: SlashCommandContext = "authoring",
   extras: SlashCommandDef[] = [],
 ): SlashCommandDef[] {
+  const bucket = slashBucketForContext(context);
   const builtins = SLASH_COMMAND_SPECS.map((spec) => ({
     ...spec,
-    descriptionKey: spec.descriptionKeys[context] ?? spec.descriptionKeys.authoring ?? spec.descriptionKeys.execution,
+    descriptionKey: spec.descriptionKeys[bucket] ?? spec.descriptionKeys.authoring ?? spec.descriptionKeys.execution,
   }))
-    .filter((spec) => !spec.contexts || spec.contexts.includes(context))
+    .filter((spec) => !spec.contexts || spec.contexts.includes(bucket))
     .map((spec) => ({
       name: spec.name,
       kind: spec.kind,

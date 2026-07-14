@@ -9,11 +9,107 @@ export type IssueTab = (typeof ISSUE_TABS)[number];
 
 export const DEFAULT_ISSUE_TAB: IssueTab = "summary";
 
+export const SESSION_SURFACES = ["session", "autonomous"] as const;
+
+export type SessionSurface = (typeof SESSION_SURFACES)[number];
+
+export const DEFAULT_SESSION_SURFACE: SessionSurface = "session";
+
+/** @deprecated Prefer SessionSurface. Kept for legacy URL/API aliases. */
 export const AGENT_SECTIONS = ["authoring", "execution"] as const;
 
+/** @deprecated Prefer SessionSurface */
 export type AgentSection = (typeof AGENT_SECTIONS)[number];
 
+/** @deprecated Prefer DEFAULT_SESSION_SURFACE */
 export const DEFAULT_AGENT_SECTION: AgentSection = "authoring";
+
+const SURFACE_ALIASES: Record<string, SessionSurface> = {
+  session: "session",
+  autonomous: "autonomous",
+  authoring: "session",
+  execution: "autonomous",
+  plan: "session",
+};
+
+export function isSessionSurface(value: string | undefined | null): value is SessionSurface {
+  return typeof value === "string" && (SESSION_SURFACES as readonly string[]).includes(value);
+}
+
+export function normalizeSessionSurface(value: string | undefined | null): SessionSurface {
+  if (!value) return DEFAULT_SESSION_SURFACE;
+  return SURFACE_ALIASES[value.trim().toLowerCase()] ?? DEFAULT_SESSION_SURFACE;
+}
+
+export function isAgentSection(value: string | undefined | null): value is AgentSection {
+  return typeof value === "string" && (AGENT_SECTIONS as readonly string[]).includes(value);
+}
+
+export function agentSectionFromSearchParams(params: URLSearchParams): AgentSection {
+  const surface = sessionSurfaceFromSearchParams(params);
+  return surface === "autonomous" ? "execution" : "authoring";
+}
+
+export function sessionSurfaceFromSearchParams(params: URLSearchParams): SessionSurface {
+  const surface = params.get("surface");
+  if (surface) return normalizeSessionSurface(surface);
+  const agent = params.get("agent");
+  return normalizeSessionSurface(agent);
+}
+
+export function withSessionSurface(pathname: string, search: string, surface: SessionSurface): string {
+  const params = new URLSearchParams(search);
+  // Prefer modern `surface=` while clearing legacy `agent=`.
+  params.delete("agent");
+  if (surface === DEFAULT_SESSION_SURFACE) {
+    params.delete("surface");
+  } else {
+    params.set("surface", surface);
+  }
+  const query = params.toString();
+  return query ? `${pathname}?${query}` : pathname;
+}
+
+export function withAgentSection(pathname: string, search: string, section: AgentSection): string {
+  return withSessionSurface(pathname, search, section === "execution" ? "autonomous" : "session");
+}
+
+/**
+ * Deep-linkable URL for an issue-bound interactive session opened inline on the
+ * Workspaces page. Prefer `surface=session`; legacy `agent=authoring` still works.
+ */
+export function projectAuthoringSessionPath(projectSlug: string, issueIdentifier: string): string {
+  return projectSessionSurfacePath(projectSlug, issueIdentifier, "session");
+}
+
+export function projectExecutionSessionPath(projectSlug: string, issueIdentifier: string): string {
+  return projectSessionSurfacePath(projectSlug, issueIdentifier, "autonomous");
+}
+
+export function projectSessionSurfacePath(
+  projectSlug: string,
+  issueIdentifier: string,
+  surface: SessionSurface,
+): string {
+  const identifier = requireNonBlank(issueIdentifier, "issueIdentifier");
+  const params = new URLSearchParams();
+  params.set("exec", identifier);
+  if (surface !== DEFAULT_SESSION_SURFACE) {
+    params.set("surface", surface);
+  }
+  return `${projectSessionsPath(projectSlug)}?${params.toString()}`;
+}
+
+export function issueAgentTabPath(
+  projectSlug: string,
+  view: WorkspaceView,
+  identifier: string,
+  section: AgentSection | SessionSurface = "session",
+): string {
+  const pathname = issuePath(projectSlug, view, identifier, "sessions");
+  const surface = normalizeSessionSurface(section);
+  return withSessionSurface(pathname, "", surface);
+}
 
 const WORKSPACE_VIEWS: readonly WorkspaceView[] = ["board", "list"];
 
@@ -71,28 +167,6 @@ export function projectTerminalPath(projectSlug: string): string {
 export function projectSessionPath(projectSlug: string, threadId: number | string): string {
   const id = encodeURIComponent(requireNonBlank(String(threadId), "threadId"));
   return `${projectSessionsPath(projectSlug)}/${id}`;
-}
-
-/**
- * Deep-linkable URL for an issue-bound execution session opened inline on the
- * Sessions page. The issue identifier lives in the `exec` query param so the tab
- * can be restored on reload or when the link is shared, while `agent=execution`
- * focuses the execution (chat) section of the inline Agent view.
- */
-export function projectAuthoringSessionPath(projectSlug: string, issueIdentifier: string): string {
-  const identifier = requireNonBlank(issueIdentifier, "issueIdentifier");
-  const params = new URLSearchParams();
-  params.set("exec", identifier);
-  params.set("agent", "authoring");
-  return `${projectSessionsPath(projectSlug)}?${params.toString()}`;
-}
-
-export function projectExecutionSessionPath(projectSlug: string, issueIdentifier: string): string {
-  const identifier = requireNonBlank(issueIdentifier, "issueIdentifier");
-  const params = new URLSearchParams();
-  params.set("exec", identifier);
-  params.set("agent", "execution");
-  return `${projectSessionsPath(projectSlug)}?${params.toString()}`;
 }
 
 export function newIssueAssistantPath(projectSlug: string): string {
@@ -208,34 +282,4 @@ export function isBoardPath(pathname: string): boolean {
   if (index === -1) return false;
   const after = normalized.slice(index + marker.length);
   return after === "" || after.startsWith("/");
-}
-
-export function isAgentSection(value: string | undefined | null): value is AgentSection {
-  return typeof value === "string" && (AGENT_SECTIONS as readonly string[]).includes(value);
-}
-
-export function agentSectionFromSearchParams(params: URLSearchParams): AgentSection {
-  const value = params.get("agent");
-  return isAgentSection(value) ? value : DEFAULT_AGENT_SECTION;
-}
-
-export function withAgentSection(pathname: string, search: string, section: AgentSection): string {
-  const params = new URLSearchParams(search);
-  if (section === DEFAULT_AGENT_SECTION) {
-    params.delete("agent");
-  } else {
-    params.set("agent", section);
-  }
-  const query = params.toString();
-  return query ? `${pathname}?${query}` : pathname;
-}
-
-export function issueAgentTabPath(
-  projectSlug: string,
-  view: WorkspaceView,
-  identifier: string,
-  section: AgentSection = "authoring",
-): string {
-  const pathname = issuePath(projectSlug, view, identifier, "sessions");
-  return withAgentSection(pathname, "", section);
 }

@@ -1,6 +1,7 @@
 defmodule SymphonyElixir.AssistantCommands do
   @moduledoc "Lists slash-command palette entries (built-ins + workspace skills)."
 
+  alias SymphonyElixir.Assistant.SkillProfiles
   alias SymphonyElixir.Skills
 
   @skill_file "SKILL.md"
@@ -8,8 +9,6 @@ defmodule SymphonyElixir.AssistantCommands do
   @execution_context "execution"
   @authoring_context "authoring"
   @frontmatter_regex ~r/\A---\r?\n(?<yaml>.*?)\r?\n---(?:\r?\n|$)/s
-
-  @authoring_only_skills ~w(brainstorming using-superpowers writing-plans writing-skills)
 
   @builtin_commands [
     %{
@@ -87,14 +86,25 @@ defmodule SymphonyElixir.AssistantCommands do
     root
     |> Path.join(@superpowers_dir)
     |> child_skill_paths("superpowers")
-    |> maybe_reject_authoring_only(context)
+    |> maybe_filter_by_profile(context)
   end
 
-  defp maybe_reject_authoring_only(skill_paths, context) do
-    if context == @authoring_context do
-      skill_paths
-    else
-      Enum.reject(skill_paths, fn {slug, _path, _category} -> slug in @authoring_only_skills end)
+  defp maybe_filter_by_profile(skill_paths, context) do
+    profile_id = SkillProfiles.normalize(context)
+
+    cond do
+      # Legacy authoring context and planning toolkit keep design skills.
+      context == @authoring_context or profile_id in ["planning", "explore", "auto"] ->
+        skill_paths
+
+      profile_id in ["implementation", "debugging", "delivery", "orchestrator"] or
+          context == @execution_context ->
+        Enum.reject(skill_paths, fn {slug, _path, _category} ->
+          slug in SkillProfiles.planning_only_skills()
+        end)
+
+      true ->
+        skill_paths
     end
   end
 

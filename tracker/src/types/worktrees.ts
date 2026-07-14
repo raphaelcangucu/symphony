@@ -24,6 +24,7 @@ export interface WorkspaceChildWorktree {
 
 export interface WorkspaceInventoryEntry {
   path: string;
+  displayName: string | null;
   kind: WorkspaceInventoryKind;
   issueIdentifier: string | null;
   name: string | null;

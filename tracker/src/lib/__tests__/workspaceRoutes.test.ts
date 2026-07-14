@@ -138,10 +138,10 @@ describe("workspaceRoutes", () => {
 
   it("builds a deep-linkable execution session path with the issue identifier", () => {
     expect(projectExecutionSessionPath("acme", "MAC-13")).toBe(
-      "/projects/acme/workspaces?exec=MAC-13&agent=execution",
+      "/projects/acme/workspaces?exec=MAC-13&surface=autonomous",
     );
     expect(projectAuthoringSessionPath("acme", "MAC-13")).toBe(
-      "/projects/acme/workspaces?exec=MAC-13&agent=authoring",
+      "/projects/acme/workspaces?exec=MAC-13",
     );
   });
 
@@ -175,18 +175,19 @@ describe("workspaceRoutes", () => {
   it("builds the issue sessions tab path with an optional section", () => {
     expect(issueAgentTabPath("macro-markets", "board", "510")).toBe("/projects/macro-markets/board/issues/510/sessions");
     expect(issueAgentTabPath("macro-markets", "board", "510", "execution")).toBe(
-      "/projects/macro-markets/board/issues/510/sessions?agent=execution",
+      "/projects/macro-markets/board/issues/510/sessions?surface=autonomous",
     );
   });
 
   it("reads and writes the agent sub-tab search param", () => {
     expect(agentSectionFromSearchParams(new URLSearchParams())).toBe("authoring");
     expect(agentSectionFromSearchParams(new URLSearchParams("agent=execution"))).toBe("execution");
+    expect(agentSectionFromSearchParams(new URLSearchParams("surface=autonomous"))).toBe("execution");
     expect(withAgentSection("/projects/acme/board/issues/1/sessions", "", "execution")).toBe(
-      "/projects/acme/board/issues/1/sessions?agent=execution",
+      "/projects/acme/board/issues/1/sessions?surface=autonomous",
     );
     expect(withAgentSection("/projects/acme/board/issues/1/sessions", "q=test", "execution")).toBe(
-      "/projects/acme/board/issues/1/sessions?q=test&agent=execution",
+      "/projects/acme/board/issues/1/sessions?q=test&surface=autonomous",
     );
     expect(withAgentSection("/projects/acme/board/issues/1/sessions", "agent=execution", "authoring")).toBe(
       "/projects/acme/board/issues/1/sessions",

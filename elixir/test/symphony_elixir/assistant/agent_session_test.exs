@@ -1,3 +1,36 @@
+defmodule SymphonyElixir.Assistant.AgentSessionPathOwnershipInventory do
+  @moduledoc false
+
+  alias SymphonyElixir.Assistant.History
+
+  @spec scan(String.t()) :: {:ok, map()} | {:error, term()}
+  def scan(project_slug) do
+    case Application.get_env(:symphony_elixir, :agent_session_path_ownership_scan_result) do
+      nil -> {:ok, %{workspaces: inventory_entries(project_slug)}}
+      result -> result
+    end
+  end
+
+  defp inventory_entries(project_slug) do
+    History.list_threads(project_slug: project_slug, include_archived: true, limit: 100)
+    |> Enum.flat_map(fn
+      %{scope: "project_session", workspace_path: path} ->
+        [entry(path, :project, nil)]
+
+      %{scope: "issue_session", workspace_path: path, issue_identifier: identifier} = thread ->
+        kind = if thread.metadata["workspace_kind"] == "isolated", do: :issue_parallel, else: :issue
+        [entry(path, kind, identifier)]
+
+      _thread ->
+        []
+    end)
+  end
+
+  defp entry(path, kind, issue_identifier) do
+    %{path: path, kind: kind, issue_identifier: issue_identifier, child_worktrees: []}
+  end
+end
+
 defmodule SymphonyElixir.Assistant.AgentSessionTest do
   use ExUnit.Case, async: false
 
@@ -9,6 +42,8 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
   alias SymphonyElixir.Workflow
 
   @fake_codex_app_server Path.expand("../../support/fixtures/fake_codex_app_server.py", __DIR__)
+  @inventory_module_env :workspace_display_name_inventory_module
+  @inventory_result_env :agent_session_path_ownership_scan_result
 
   setup do
     migrate_repo()
@@ -20,9 +55,18 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
     workflow_file = Path.join(tmp_dir, "WORKFLOW.md")
     SymphonyElixir.TestSupport.write_workflow_file!(workflow_file, tracker_kind: "local", workspace_root: tmp_dir)
     Workflow.set_workflow_file_path(workflow_file)
+    previous_inventory_module = Application.get_env(:symphony_elixir, @inventory_module_env)
+
+    Application.put_env(
+      :symphony_elixir,
+      @inventory_module_env,
+      SymphonyElixir.Assistant.AgentSessionPathOwnershipInventory
+    )
 
     on_exit(fn ->
       Workflow.clear_workflow_file_path()
+      restore_inventory_module(previous_inventory_module)
+      Application.delete_env(:symphony_elixir, @inventory_result_env)
       File.rm_rf!(tmp_dir)
     end)
 
@@ -193,7 +237,7 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
 
     threads = [
       project_thread,
-      create_thread.("project_session", Path.join(workspace_root, "project-session"), nil),
+      create_thread.("project_session", Path.join([workspace_root, project.slug, "project-session"]), nil),
       create_thread.("project_explore", Path.join(workspace_root, "project-explore"), nil),
       create_thread.("freeform", Path.join(workspace_root, "freeform"), nil),
       create_thread.("issue", Workspace.path_for_issue(issue_one), issue_one.identifier),
@@ -353,6 +397,44 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
 
       assert result.assistant_message == "ack"
       assert_receive {:session_workspace, ^thread_workspace}
+    end
+
+    test "revalidates an explicit issue session before every runner invocation", %{
+      workspace_root: workspace_root
+    } do
+      thread_workspace = Workspace.path_for_issue("MAC-1")
+      File.mkdir_p!(thread_workspace)
+
+      {:ok, session_thread} =
+        History.create_issue_workspace_session_thread(
+          "macro",
+          "MAC-1",
+          thread_workspace,
+          %{workspace_kind: "shared", agent_kind: "codex"}
+        )
+
+      test_pid = self()
+
+      runner = fn workspace, _prompt, _issue, _opts ->
+        send(test_pid, {:explicit_session_runner, workspace})
+        {:ok, %{assistant_message: "ack", tool_calls: [], codex_thread_id: "ct", turn_id: "t1"}}
+      end
+
+      assert {:ok, _result} =
+               AgentSession.send_message_to_issue_thread(session_thread, "valid", %{}, runner: runner)
+
+      assert_receive {:explicit_session_runner, ^thread_workspace}
+
+      outside = Path.join(workspace_root, "outside-session")
+      File.mkdir_p!(outside)
+      File.rm_rf!(thread_workspace)
+      File.ln_s!(outside, thread_workspace)
+
+      assert {:error, {:authoring_goal_unavailable, :workspace_not_executable}} =
+               AgentSession.send_message_to_issue_thread(session_thread, "blocked", %{}, runner: runner)
+
+      refute_receive {:explicit_session_runner, _workspace}
+      assert File.lstat!(thread_workspace).type == :symlink
     end
 
     test "resolves the per-project workspace root from the thread project, not the bare identifier" do
@@ -580,7 +662,7 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
       assert prompt =~ "live investigation log"
     end
 
-    test "issue prompt includes superpowers methodology for all turns", %{thread: thread} do
+    test "issue prompt includes planning methodology by default", %{thread: thread} do
       test_pid = self()
 
       runner = fn _workspace, prompt, _issue, _opts ->
@@ -592,18 +674,64 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
                AgentSession.send_message_to_issue_thread(thread, "build X", %{}, runner: runner)
 
       assert_receive {:prompt, prompt}
+      assert prompt =~ "MODE: PLAN"
       assert prompt =~ "brainstorming"
       assert prompt =~ "docs/superpowers/specs"
       assert prompt =~ "choose a git repository"
       assert prompt =~ "Never write to the workspace-root"
-      assert prompt =~ "Codex is a coding agent"
-      assert prompt =~ "may proceed directly to code"
       assert prompt =~ "choose depth from the conversation"
       refute prompt =~ "MODE: COMPLEX"
       refute prompt =~ "MODE: SIMPLE"
       refute prompt =~ "MODE: TRIAGE"
       refute prompt =~ "<HARD-GATE>"
       refute prompt =~ "Do not start writing feature code"
+    end
+
+    test "build mode prompt authorizes real implementation in session", %{thread: thread} do
+      test_pid = self()
+
+      runner = fn _workspace, prompt, _issue, _opts ->
+        send(test_pid, {:prompt, prompt})
+        {:ok, %{assistant_message: "ok", tool_calls: [], codex_thread_id: "ct", turn_id: "t1"}}
+      end
+
+      assert {:ok, _result} =
+               AgentSession.send_message_to_issue_thread(
+                 thread,
+                 "implement the plan",
+                 %{"execution_mode" => "build"},
+                 runner: runner
+               )
+
+      assert_receive {:prompt, prompt}
+      assert prompt =~ "MODE: BUILD"
+      assert prompt =~ "Exit plan mode"
+      assert prompt =~ "Implement in this session"
+      assert prompt =~ "test-driven-development"
+      refute prompt =~ "MODE: PLAN (read-only)"
+      refute prompt =~ "authoring only"
+    end
+
+    test "pinned debugging toolkit stays independent from yolo mode", %{thread: thread} do
+      test_pid = self()
+
+      runner = fn _workspace, prompt, _issue, _opts ->
+        send(test_pid, {:prompt, prompt})
+        {:ok, %{assistant_message: "ok", tool_calls: [], codex_thread_id: "ct", turn_id: "t1"}}
+      end
+
+      assert {:ok, _result} =
+               AgentSession.send_message_to_issue_thread(
+                 thread,
+                 "debug this",
+                 %{"execution_mode" => "yolo", "skill_profile" => "debugging"},
+                 runner: runner
+               )
+
+      assert_receive {:prompt, prompt}
+      assert prompt =~ "MODE: YOLO"
+      assert prompt =~ "Skill toolkit: `debugging`"
+      assert prompt =~ "systematic-debugging"
     end
 
     test "brainstorm messages load methodology without persisting a mode", %{thread: thread} do
@@ -624,7 +752,7 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
       refute prompt =~ "MODE: COMPLEX"
     end
 
-    test "plain chat includes unified authoring guidance", %{thread: thread} do
+    test "plain chat includes unified planning guidance", %{thread: thread} do
       test_pid = self()
 
       runner = fn _workspace, prompt, _issue, _opts ->
@@ -674,7 +802,7 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
       assert prompt =~ "docs/superpowers/handoff.md"
       assert prompt =~ "update_issue"
       assert prompt_text =~ "executive summary"
-      assert prompt_text =~ "links to spec/plan files"
+      assert prompt_text =~ "links to spec/plan"
       assert prompt_text =~ "spec/plan"
       assert prompt_text =~ "key decisions"
       assert prompt_text =~ "current state"
@@ -695,12 +823,12 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
                AgentSession.send_message_to_issue_thread(thread, "ship it", %{}, runner: runner)
 
       assert_receive {:prompt, prompt, opts}
-      # Authoring goal runs Codex goal mode directly in the conversation...
-      assert prompt =~ "AUTHORING GOAL: ACTIVE"
+      # Chat goal runs Codex goal mode directly in the conversation...
+      assert prompt =~ "CHAT GOAL: ACTIVE"
       assert prompt =~ "Audit the auth module"
       # ...and never frames the turn as an orchestrator dispatch.
       refute prompt =~ "GOAL MODE: ENABLED"
-      assert prompt =~ "do NOT dispatch the orchestrator"
+      assert prompt =~ "Do NOT dispatch the orchestrator"
 
       # Codex sessions receive the objective as the native :goal opt. agent_kind
       # arrives as the string "codex" from AgentPreference.normalize/1, so the
@@ -788,6 +916,29 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
     end
   end
 
+  test "goal continuation rejects a project session absent from current inventory", %{
+    workspace_root: workspace_root
+  } do
+    {:ok, _project} = Context.ensure_project(%{name: "Goal Session", slug: "goal-session"})
+    workspace_path = Path.join([workspace_root, "goal-session", "workspace"])
+    File.mkdir_p!(workspace_path)
+
+    {:ok, thread} =
+      History.create_workspace_session_thread("goal-session", workspace_path, %{
+        agent_kind: "codex"
+      })
+
+    {:ok, thread} = History.set_goal_mode(thread, true, "Continue safely")
+    Application.put_env(:symphony_elixir, @inventory_result_env, {:ok, %{workspaces: []}})
+
+    assert {:error, {:authoring_goal_unavailable, :workspace_not_executable}} =
+             AgentSession.continue_thread_goal(
+               thread,
+               %{},
+               runner: fn _workspace, _prompt, _issue, _opts -> flunk("runner must not be called") end
+             )
+  end
+
   defp tmp_dir do
     dir = Path.join(System.tmp_dir!(), "symphony-assistant-test-#{System.unique_integer([:positive])}")
     File.mkdir_p!(dir)
@@ -801,6 +952,12 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
         Ecto.Migrator.run(repo, :up, all: true)
       end)
   end
+
+  defp restore_inventory_module(nil),
+    do: Application.delete_env(:symphony_elixir, @inventory_module_env)
+
+  defp restore_inventory_module(module),
+    do: Application.put_env(:symphony_elixir, @inventory_module_env, module)
 
   defp clean_repo do
     for table <- [

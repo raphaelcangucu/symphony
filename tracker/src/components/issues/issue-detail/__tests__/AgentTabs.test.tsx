@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -178,9 +178,10 @@ describe("AgentTabs documents drawer", () => {
 
     await user.click(screen.getByRole("button", { name: /new session/i }));
 
-    expect(await screen.findByRole("dialog")).toBeInTheDocument();
-    expect(screen.getByText(/DIS-6/i)).toBeInTheDocument();
-    expect(screen.getByTestId("execution-mode-icon-yolo")).toBeInTheDocument();
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toBeInTheDocument();
+    expect(within(dialog).getAllByText(/DIS-6/i).length).toBeGreaterThan(0);
+    expect(screen.getByTestId("execution-mode-icon-build")).toBeInTheDocument();
   });
 
   it("shows the view-issue, terminal, and code shortcuts when hrefs are provided", () => {

@@ -33,9 +33,8 @@ defmodule SymphonyElixir.ExecutionMode do
   the operator (see `claude_interactive_approval?/2`); autonomous `build` and every
   `yolo` run use `bypassPermissions`; only `plan` stays read-only.
 
-  `cursor-agent` has no read-only mode, so `plan` is not offered for cursor
-  (see `available_for/1`); callers that still pass `plan` for cursor should fall
-  back to `build`.
+  `cursor-agent` supports `--mode plan`, so `plan` is offered for every agent
+  including cursor (see `available_for/1`).
 
   The default is `yolo` (full access, no approval prompts) because non-interactive
   agent runs cannot recover from a mid-run approval request. Any unknown / nil mode
@@ -173,10 +172,9 @@ defmodule SymphonyElixir.ExecutionMode do
   @doc """
   Modes selectable for `agent_kind`.
 
-  `cursor` excludes `plan` because `cursor-agent` has no read-only execution mode.
+  All agents including cursor support `plan` (Cursor CLI `--mode plan`).
   """
   @spec available_for(String.t()) :: [t()]
-  def available_for("cursor"), do: [@build, @yolo]
   def available_for(_agent_kind), do: @modes
 
   @spec codex_sandbox(t()) :: String.t()

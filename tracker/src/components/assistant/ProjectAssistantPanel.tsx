@@ -72,14 +72,20 @@ import {
 } from "@/components/assistant/assistantPanelHelpers";
 import { KnowledgeBaseModal } from "@/components/kb/KnowledgeBaseModal";
 import { ExecutionModeMenu } from "@/components/issues/issue-detail/ExecutionModeMenu";
+import { SkillProfileMenu, resolvedSkillProfileForUi } from "@/components/assistant/SkillProfileMenu";
 import { GitDiffLauncher } from "@/components/issues/issue-detail/git-diff/GitDiffLauncher";
 import { GoalPill } from "@/components/shared/GoalPill";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { deriveAgentTasksFromAssistantMessages } from "@/lib/agentTasks";
 import { catalogFor, defaultComposerSettings, fallbackCatalogBundle, type AssistantCatalogBundle } from "@/lib/assistantSettings";
-import { DEFAULT_EXECUTION_MODE } from "@/lib/executionMode";
+import { DEFAULT_INTERACTIVE_MODE, normalizeAgentMode } from "@/lib/agentModes";
 import { normalizeIssueIdentifier } from "@/lib/issueIdentifiers";
+import {
+  normalizeSkillProfileId,
+  resolveSkillProfile,
+  type SkillProfileId,
+} from "@/lib/skillProfiles";
 import {
   fetchAssistantCatalogBundle,
   type AssistantChatMessage,
@@ -107,6 +113,7 @@ import {
   isTerminalTurnStatus,
   killTool,
   setAuthoringGoalObjective,
+  setTurnPreferences,
   stopTurn,
   submitApproval,
   submitUserInput,
@@ -238,6 +245,32 @@ type PlanApprovalMode = Parameters<AssistantChatPlanApprovalAction["onApprove"]>
 
 const TASKS_DOCK_STORAGE_KEY = "symphony.assistantTasksDock.open";
 
+function defaultInteractiveModeForPanel(args: {
+  threadId?: number | null;
+  issueIdentifier?: string;
+  isExplore: boolean;
+}): ExecutionMode {
+  if (args.isExplore) return "plan";
+  // Parallel/workspace sessions default to Build; canonical issue chat defaults to Plan.
+  if (args.threadId != null) return "build";
+  if (args.issueIdentifier) return "plan";
+  return DEFAULT_INTERACTIVE_MODE;
+}
+
+function inferScopeForPanel(args: {
+  threadId?: number | null;
+  issueIdentifier?: string;
+  isExplore: boolean;
+  isKb: boolean;
+}): string | null {
+  if (args.isKb) return "kb";
+  if (args.isExplore) return "project_explore";
+  if (args.threadId != null && args.issueIdentifier) return "issue_session";
+  if (args.threadId != null) return "project_session";
+  if (args.issueIdentifier) return "issue";
+  return "project";
+}
+
 const convertMessage = (message: AssistantChatMessage): ThreadMessageLike => ({
   id: message.id,
   role: message.role === "user" ? "user" : "assistant",
@@ -347,14 +380,42 @@ export function ProjectAssistantPanel({
     setComposerAgent(routeAgentSeed);
     setServerAgentSeed(routeAgentSeed);
   }, [routeAgentSeed]);
-  const [executionMode, setExecutionMode] = useState<ExecutionMode>(DEFAULT_EXECUTION_MODE);
-  const executionModeRef = useRef<ExecutionMode>(DEFAULT_EXECUTION_MODE);
+  const [executionMode, setExecutionMode] = useState<ExecutionMode>(() =>
+    defaultInteractiveModeForPanel({
+      threadId,
+      issueIdentifier,
+      isExplore: assistantMode === "explore",
+    }),
+  );
+  const executionModeRef = useRef<ExecutionMode>(executionMode);
+  const [skillProfileSelection, setSkillProfileSelection] = useState<SkillProfileId>("auto");
+  const skillProfileSelectionRef = useRef<SkillProfileId>("auto");
+  const [threadScope, setThreadScope] = useState<string | null>(() =>
+    inferScopeForPanel({
+      threadId,
+      issueIdentifier,
+      isExplore: assistantMode === "explore",
+      isKb: assistantMode === "kb",
+    }),
+  );
+  const [prefsApplyNextTurn, setPrefsApplyNextTurn] = useState(false);
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   // Mentions work anywhere with a project context: issues are always searchable,
   // while file/PR sources self-disable when there is no bound issue identifier.
   const mentionsEnabled = Boolean(projectSlug);
   const hasExecutableContext = Boolean(issueIdentifier || threadId);
-  const slashContext = hasExecutableContext ? "execution" : "authoring";
+  const modeLocked = assistantMode === "explore" || threadScope === "project_explore";
+  const resolvedSkillProfile = useMemo(
+    () =>
+      resolveSkillProfile({
+        selection: skillProfileSelection,
+        scope: threadScope,
+        mode: executionMode,
+        runtime: "interactive",
+      }),
+    [skillProfileSelection, threadScope, executionMode],
+  );
+  const slashContext = resolvedSkillProfile;
   const mentionOptions = useContextMentionData(
     projectSlug ?? "",
     issueIdentifier ?? "",
@@ -379,6 +440,17 @@ export function ProjectAssistantPanel({
   useEffect(() => {
     executionModeRef.current = executionMode;
   }, [executionMode]);
+
+  useEffect(() => {
+    skillProfileSelectionRef.current = skillProfileSelection;
+  }, [skillProfileSelection]);
+
+  useEffect(() => {
+    if (modeLocked) {
+      setExecutionMode("plan");
+      executionModeRef.current = "plan";
+    }
+  }, [modeLocked]);
 
   const { rememberMention, expandMentions } = useComposerMentions();
 
@@ -528,8 +600,21 @@ export function ProjectAssistantPanel({
     channelRef.current = channel;
 
     goalStatusAcceptorRef.current = bindAssistantEvents(channel, {
-      onHistoryLoaded: (history) =>
-        setMessagesPreservingScroll(scrollRef.current, stickToBottomRef, history, setMessages),
+      onHistoryLoaded: (history, meta) => {
+        if (meta?.scope) setThreadScope(meta.scope);
+        if (meta?.executionMode) {
+          const mode = normalizeAgentMode(meta.executionMode, executionModeRef.current);
+          setExecutionMode(mode);
+          executionModeRef.current = mode;
+        }
+        if (meta?.skillProfile) {
+          const profile = normalizeSkillProfileId(meta.skillProfile, skillProfileSelectionRef.current);
+          setSkillProfileSelection(profile);
+          skillProfileSelectionRef.current = profile;
+        }
+        setPrefsApplyNextTurn(false);
+        setMessagesPreservingScroll(scrollRef.current, stickToBottomRef, history, setMessages);
+      },
       onHistorySynced: (history) => {
         setMessagesPreservingScroll(scrollRef.current, stickToBottomRef, history, setMessages);
       },
@@ -743,10 +828,49 @@ export function ProjectAssistantPanel({
     });
   }, [active, channelReady, issueIdentifier, dispatchRequestId, issueGoalMode, onDispatchSucceeded, onDispatchError, t]);
 
+  const persistTurnPreferences = useCallback(
+    (next: { mode?: ExecutionMode; skillProfile?: SkillProfileId }) => {
+      const channel = channelRef.current;
+      if (!channel || !channelReady) return;
+      if (turnRunning) setPrefsApplyNextTurn(true);
+      setTurnPreferences(channel, {
+        executionMode: next.mode ?? executionModeRef.current,
+        skillProfile: next.skillProfile ?? skillProfileSelectionRef.current,
+      });
+    },
+    [channelReady, turnRunning],
+  );
+
+  const runAutonomously = useCallback(() => {
+    if (!issueIdentifier) return;
+
+    const channel = channelRef.current;
+    if (!channel) {
+      setConnectionError(t("assistant.panel.channelNotConnected"));
+      return;
+    }
+
+    setConnectionError(null);
+    const agent = composerAgentRef.current;
+    const agentName = agentDisplayName(agent);
+    const pushResult = dispatchCodingAgent(channel, {
+      goalMode: issueGoalMode === true,
+      agent,
+      mode: executionModeRef.current === "plan" ? "yolo" : executionModeRef.current,
+    });
+    pushResult.receive("ok", (response) => {
+      onDispatchSucceeded?.(messageFromResponse(response) ?? t("assistant.panel.dispatchedTo", { agent: agentName }));
+    });
+    pushResult.receive("error", (reason) => {
+      onDispatchError?.(errorMessage(reason));
+    });
+    pushResult.receive("timeout", () => {
+      onDispatchError?.(t("assistant.panel.dispatchTimeout", { agent: agentName }));
+    });
+  }, [issueGoalMode, issueIdentifier, onDispatchError, onDispatchSucceeded, t]);
+
   const dispatchApprovedPlan = useCallback(
     (messageId: string, mode: PlanApprovalMode) => {
-      if (!issueIdentifier) return;
-
       const channel = channelRef.current;
       if (!channel) {
         setConnectionError(t("assistant.panel.channelNotConnected"));
@@ -757,31 +881,34 @@ export function ProjectAssistantPanel({
       setExecutionMode(mode);
       executionModeRef.current = mode;
       setApprovedPlanMessageIds((current) => new Set(current).add(messageId));
+      persistTurnPreferences({ mode });
 
-      const agent = composerAgentRef.current;
-      const agentName = agentDisplayName(agent);
-      const pushResult = dispatchCodingAgent(channel, { goalMode: issueGoalMode === true, agent, mode });
-      pushResult.receive("ok", (response) => {
-        onDispatchSucceeded?.(messageFromResponse(response) ?? t("assistant.panel.dispatchedTo", { agent: agentName }));
-      });
-      pushResult.receive("error", (reason) => {
-        setApprovedPlanMessageIds((current) => {
-          const next = new Set(current);
-          next.delete(messageId);
-          return next;
+      const framed = t("assistant.panel.exitPlanImplement", { mode });
+      stickToBottomRef.current = true;
+      pinnedScrollTopRef.current = null;
+      setIsAtBottom(true);
+      setTurnRunning(true);
+      channel
+        .push("send_message", {
+          message: framed,
+          context: {
+            view,
+            agent: composerAgentRef.current,
+            execution_mode: mode,
+            skill_profile: skillProfileSelectionRef.current,
+          },
+        })
+        .receive("error", (reason) => {
+          setApprovedPlanMessageIds((current) => {
+            const next = new Set(current);
+            next.delete(messageId);
+            return next;
+          });
+          setConnectionError(errorMessage(reason));
+          setTurnRunning(false);
         });
-        onDispatchError?.(errorMessage(reason));
-      });
-      pushResult.receive("timeout", () => {
-        setApprovedPlanMessageIds((current) => {
-          const next = new Set(current);
-          next.delete(messageId);
-          return next;
-        });
-        onDispatchError?.(t("assistant.panel.dispatchTimeout", { agent: agentName }));
-      });
     },
-    [issueGoalMode, issueIdentifier, onDispatchError, onDispatchSucceeded, t],
+    [persistTurnPreferences, t, view],
   );
 
   const dispatchSend = useCallback(
@@ -806,7 +933,12 @@ export function ProjectAssistantPanel({
           agent: submit.agent,
           model: submit.settings.model,
           effort: submit.settings.effort,
-          ...(hasExecutableContext ? { execution_mode: executionModeRef.current } : {}),
+          ...(hasExecutableContext || isExploreMode
+            ? {
+                execution_mode: executionModeRef.current,
+                skill_profile: skillProfileSelectionRef.current,
+              }
+            : {}),
           ...extraContext,
         },
         attachments: submit.attachments,
@@ -835,7 +967,7 @@ export function ProjectAssistantPanel({
         setTurnRunning(false);
       });
     },
-    [view, t, expandMentions, hasExecutableContext],
+    [view, t, expandMentions, hasExecutableContext, isExploreMode],
   );
 
   const steerTurn = useCallback(
@@ -911,19 +1043,47 @@ export function ProjectAssistantPanel({
       });
   }, [onIssueGoalModeError, t]);
 
+  const reportGoalError = useCallback(
+    (reason: unknown) => {
+      const message = errorMessage(reason, t);
+      toast.error(message);
+      onIssueGoalModeError?.(message);
+    },
+    [onIssueGoalModeError, t],
+  );
+
+  const applyClearedGoal = useCallback(
+    (response: unknown) => {
+      goalStatusAcceptorRef.current(response);
+      if (goalModeFromResponse(response) === false) {
+        lastConfirmedGoalModeRef.current = false;
+        onIssueGoalModeChanged?.(false);
+      }
+    },
+    [onIssueGoalModeChanged],
+  );
+
   const removeGoal = useCallback(() => {
     const channel = channelRef.current;
     if (!channel) return;
-    clearAuthoringGoal(channel)
-      .receive("ok", (response) => {
-        goalStatusAcceptorRef.current(response);
-        if (goalModeFromResponse(response) === false) {
-          lastConfirmedGoalModeRef.current = false;
-          onIssueGoalModeChanged?.(false);
-        }
-      })
-      .receive("error", (reason) => onIssueGoalModeError?.(errorMessage(reason, t)));
-  }, [onIssueGoalModeChanged, onIssueGoalModeError, t]);
+
+    const clearOnce = (allowBusyRetry: boolean) => {
+      clearAuthoringGoal(channel)
+        .receive("ok", (response) => applyClearedGoal(response))
+        .receive("error", (reason) => {
+          if (allowBusyRetry && errorMessage(reason, t) === "assistant is busy") {
+            stopTurn(channel)
+              .receive("ok", () => clearOnce(false))
+              .receive("error", (stopReason) => reportGoalError(stopReason));
+            return;
+          }
+
+          reportGoalError(reason);
+        });
+    };
+
+    clearOnce(true);
+  }, [applyClearedGoal, reportGoalError, t]);
 
   const editGoalObjective = useCallback(
     (objective: string) => {
@@ -952,6 +1112,10 @@ export function ProjectAssistantPanel({
       if (!trimmed && !hasAttachments && !hasContextRefs) return;
 
       if (submit.kind === "infer") {
+        if (turnRunning) {
+          steerTurn({ ...submit, kind: "message" });
+          return;
+        }
         if (submissionBlocked) {
           setQueued((current) => [
             ...current,
@@ -990,7 +1154,7 @@ export function ProjectAssistantPanel({
 
       dispatchSend(submit);
     },
-    [dispatchSend, enableGoalCommand, submissionBlocked, t],
+    [dispatchSend, enableGoalCommand, steerTurn, submissionBlocked, t, turnRunning],
   );
 
   const queueBlocked = submissionBlocked;
@@ -1009,7 +1173,7 @@ export function ProjectAssistantPanel({
   const forceSendQueued = useCallback(
     (id: string) => {
       const item = queued.find((entry) => entry.id === id);
-      if (!item || goalQueueHeld) return;
+      if (!item) return;
 
       setQueued((current) => current.filter((entry) => entry.id !== id));
 
@@ -1019,7 +1183,7 @@ export function ProjectAssistantPanel({
         dispatchSend(item.payload);
       }
     },
-    [queued, goalQueueHeld, turnRunning, steerTurn, dispatchSend],
+    [queued, turnRunning, steerTurn, dispatchSend],
   );
 
   const forceSendOldestQueued = useCallback(() => {
@@ -1308,12 +1472,23 @@ export function ProjectAssistantPanel({
 
   const handleExecutionModeChange = useCallback(
     (mode: ExecutionMode) => {
+      if (modeLocked) return;
       setExecutionMode(mode);
       executionModeRef.current = mode;
+      persistTurnPreferences({ mode });
       if (mode !== "yolo") return;
       if (pendingApproval) submitCommandApproval(pendingApproval.requestId, "approve");
     },
-    [pendingApproval, submitCommandApproval],
+    [modeLocked, pendingApproval, persistTurnPreferences, submitCommandApproval],
+  );
+
+  const handleSkillProfileChange = useCallback(
+    (profile: SkillProfileId) => {
+      setSkillProfileSelection(profile);
+      skillProfileSelectionRef.current = profile;
+      persistTurnPreferences({ skillProfile: profile });
+    },
+    [persistTurnPreferences],
   );
 
   const approvalNode = pendingApproval ? (
@@ -1431,7 +1606,13 @@ export function ProjectAssistantPanel({
       magicPaletteRequestId={magicPaletteRequestId}
       header={authoringGoalPill}
       contextInsertRequest={contextInsertRequest}
-      hint={catalogLoading ? t("assistant.panel.loadingModels") : undefined}
+      hint={
+        catalogLoading
+          ? t("assistant.panel.loadingModels")
+          : prefsApplyNextTurn
+            ? t("assistant.panel.modeAppliesNextTurn")
+            : undefined
+      }
       mentionsEnabled={mentionsEnabled}
       mentionOptions={mentionOptions}
       onMentionQueryChange={setMentionQuery}
@@ -1493,13 +1674,41 @@ export function ProjectAssistantPanel({
                 ) : null}
               </Button>
             ) : null}
-            {hasExecutableContext ? (
+            {hasExecutableContext || isExploreMode ? (
               <ExecutionModeMenu
                 agent={composerAgent}
                 mode={executionMode}
                 disabled={catalogLoading}
+                locked={modeLocked}
                 onChange={handleExecutionModeChange}
               />
+            ) : null}
+            {hasExecutableContext || isExploreMode ? (
+              <SkillProfileMenu
+                selection={skillProfileSelection}
+                resolvedProfile={resolvedSkillProfileForUi({
+                  selection: skillProfileSelection,
+                  scope: threadScope,
+                  mode: executionMode,
+                })}
+                disabled={catalogLoading}
+                onChange={handleSkillProfileChange}
+              />
+            ) : null}
+            {issueIdentifier ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 gap-1 px-2 text-xs"
+                disabled={catalogLoading || !channelReady}
+                title={t("assistant.panel.runAutonomouslyTitle")}
+                onClick={runAutonomously}
+                data-testid="run-autonomously"
+              >
+                <Bot className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">{t("assistant.panel.runAutonomously")}</span>
+              </Button>
             ) : null}
             {hasExecutableContext ? (
               <Button

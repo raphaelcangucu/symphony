@@ -88,9 +88,13 @@ describe("execution skill commands", () => {
     expect(names).not.toContain("/plan");
   });
 
-  it("skill commands carry insert text and a message kind", () => {
-    const plan = defaultSkillCommands(undefined, "execution").find((c) => c.name === "/plan");
-    expect(plan?.kind).toBe("message");
-    expect(plan?.insertText).toBeTruthy();
+  it("treats implementation profiles like the execution slash bucket", () => {
+    const names = matchingSlashCommands("/pl", undefined, "implementation").map((c) => c.name);
+    expect(names).toContain("/plan");
+  });
+
+  it("treats planning profiles like the authoring slash bucket", () => {
+    const names = matchingSlashCommands("/pl", undefined, "planning").map((c) => c.name);
+    expect(names).not.toContain("/plan");
   });
 });

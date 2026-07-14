@@ -87,7 +87,7 @@ defmodule SymphonyElixir.ExecutionModeTest do
     assert "plan" in ExecutionMode.available_for("codex")
     assert "build" in ExecutionMode.available_for("codex")
     assert "yolo" in ExecutionMode.available_for("codex")
-    refute "plan" in ExecutionMode.available_for("cursor")
+    assert "plan" in ExecutionMode.available_for("cursor")
     assert "build" in ExecutionMode.available_for("cursor")
     assert "yolo" in ExecutionMode.available_for("cursor")
   end

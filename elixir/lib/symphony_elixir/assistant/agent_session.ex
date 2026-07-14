@@ -12,10 +12,12 @@ defmodule SymphonyElixir.Assistant.AgentSession do
     GitHubAuthoring,
     History,
     IssueDocuments,
+    SkillProfiles,
     SubtaskAuthoring,
     ThreadDocuments,
     ToolCallPresenter,
-    ToolExecutor
+    ToolExecutor,
+    TurnConfiguration
   }
 
   alias SymphonyElixir.Codex.DynamicTool
@@ -25,6 +27,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.{AgentPreference, InstanceConfig, ProjectConfig, Repo, Settings, Skills, Workspace}
   alias SymphonyElixir.Settings.Orchestration
+  alias SymphonyElixir.Workspace.PathOwnership
 
   require Logger
 
@@ -158,6 +161,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
            History.append_message(thread, %{role: "user", content: trimmed, metadata: stringify_map(context)}),
          prompt <- build_project_explore_prompt(project_slug, trimmed, context, history),
          :ok <- maybe_call(opts, :on_message_created, History.message_payload(user_message)),
+         :ok <- revalidate_session_workspace(thread, workspace),
          {:ok, runner_result} <- run_project_explore_turn(workspace, prompt, project_slug, opts),
          {:ok, updated_thread} <- maybe_update_agent_thread(thread, runner_result, agent_kind),
          {:ok, assistant_message} <- persist_assistant_message(updated_thread, runner_result) do
@@ -243,6 +247,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
            History.append_message(thread, %{role: "user", content: trimmed, metadata: stringify_map(context)}),
          prompt <- build_issue_prompt(thread, trimmed, context, history),
          :ok <- maybe_call(opts, :on_message_created, History.message_payload(user_message)),
+         :ok <- revalidate_session_workspace(thread, workspace),
          {:ok, runner_result} <- run_issue_turn(workspace, prompt, project_slug, identifier, opts),
          {:ok, updated_thread} <- maybe_update_agent_thread(thread, runner_result, agent_kind),
          {:ok, assistant_message} <- persist_assistant_message(updated_thread, runner_result),
@@ -259,8 +264,8 @@ defmodule SymphonyElixir.Assistant.AgentSession do
     end
   end
 
-  @authoring_goal_continuation_prompt "Continue pursuing the authoring goal for this issue. Review the progress so far in this working tree, keep producing the spec/plan/analysis artifacts the objective calls for, and stop when the artifact is ready for review or you are blocked. This is authoring only: do NOT dispatch the orchestrator and do NOT change the issue's status, labels, or execution goal."
-  @generic_goal_continuation_prompt "Continue pursuing the authoring goal for this assistant thread. Review the conversation and current workspace, keep producing the requested analysis or artifacts, and stop when the result is ready for review or you are blocked. This is authoring only: never dispatch execution, change tracker state, or switch to another assistant thread."
+  @authoring_goal_continuation_prompt "Continue pursuing the chat goal for this issue. Review the progress so far in this working tree, keep working toward the objective, and stop when the result is ready for review or you are blocked. Do NOT dispatch the orchestrator and do NOT change the issue's status, labels, or run objective unless the user explicitly asks."
+  @generic_goal_continuation_prompt "Continue pursuing the chat goal for this assistant thread. Review the conversation and current workspace, keep producing the requested analysis or artifacts, and stop when the result is ready for review or you are blocked. Never dispatch autonomous execution, change tracker state, or switch to another assistant thread unless the user explicitly asks."
 
   @doc """
   Runs an autonomous authoring-goal continuation batch on any persistent thread.
@@ -393,7 +398,10 @@ defmodule SymphonyElixir.Assistant.AgentSession do
     |> normalize_runner_result()
   end
 
-  # Honor the working tree persisted on the issue thread so the authoring turn writes where the
+  defp ensure_issue_workspace(%{scope: "issue_session"} = thread),
+    do: session_workspace_path(thread)
+
+  # Honor the working tree persisted on the legacy issue thread so the authoring turn writes where the
   # document viewer reads. If that path is unusable (e.g. a thread created while a divergent serve
   # pointed at another workspace root), recompute the canonical issue tree, repair the thread so
   # reads and writes realign, and continue instead of failing the turn.
@@ -477,8 +485,17 @@ defmodule SymphonyElixir.Assistant.AgentSession do
   defp project_explore_issue(project_slug),
     do: %{id: "assistant:explore:#{project_slug}", identifier: project_slug, title: "Project explore assistant"}
 
+  defp ensure_project_explore_workspace(_project_slug, %{scope: "project_session"} = thread, _opts),
+    do: session_workspace_path(thread)
+
   defp ensure_project_explore_workspace(_project_slug, thread, _opts),
     do: persisted_thread_workspace(thread)
+
+  defp session_workspace_path(%{workspace_path: path}) when is_binary(path) and path != "",
+    do: {:ok, path}
+
+  defp session_workspace_path(_thread),
+    do: {:error, {:authoring_goal_unavailable, :workspace_not_executable}}
 
   defp persisted_thread_workspace(%{workspace_path: path}) when is_binary(path) and path != "" do
     case File.mkdir_p(path) do
@@ -488,6 +505,34 @@ defmodule SymphonyElixir.Assistant.AgentSession do
   end
 
   defp persisted_thread_workspace(_thread),
+    do: {:error, {:authoring_goal_unavailable, :workspace_not_executable}}
+
+  # This check intentionally sits immediately before each runner call. A filesystem
+  # TOCTOU window still exists after validation; the coding-agent runner's cwd/root
+  # guards remain the final boundary if the path changes during process launch.
+  defp revalidate_session_workspace(
+         %{scope: "project_session", project_slug: project_slug},
+         workspace
+       ) do
+    project_slug
+    |> PathOwnership.validate(workspace)
+    |> executable_workspace_result()
+  end
+
+  defp revalidate_session_workspace(
+         %{scope: "issue_session", project_slug: project_slug, issue_identifier: identifier},
+         workspace
+       ) do
+    project_slug
+    |> PathOwnership.validate_issue(workspace, identifier)
+    |> executable_workspace_result()
+  end
+
+  defp revalidate_session_workspace(_thread, _workspace), do: :ok
+
+  defp executable_workspace_result({:ok, _ownership}), do: :ok
+
+  defp executable_workspace_result({:error, _reason}),
     do: {:error, {:authoring_goal_unavailable, :workspace_not_executable}}
 
   defp active_thread(thread_id) when is_integer(thread_id) do
@@ -524,9 +569,10 @@ defmodule SymphonyElixir.Assistant.AgentSession do
          agent_kind
        )
        when scope in ["project_explore", "project_session"] do
-    with {:ok, workspace} <- persisted_thread_workspace(thread),
+    with {:ok, workspace} <- ensure_project_explore_workspace(project_slug, thread, opts),
          history <- thread.id |> History.list_messages_for_thread() |> Enum.map(&History.message_payload/1),
          prompt <- build_project_explore_prompt(project_slug, @generic_goal_continuation_prompt, context, history),
+         :ok <- revalidate_session_workspace(thread, workspace),
          {:ok, runner_result} <- run_project_explore_turn(workspace, prompt, project_slug, opts),
          {:ok, result, _assistant_message} <- persist_continuation(thread, runner_result, agent_kind) do
       {:ok, result}
@@ -566,16 +612,22 @@ defmodule SymphonyElixir.Assistant.AgentSession do
          agent_kind
        )
        when scope in ["issue", "issue_session"] do
-    with {:ok, workspace} <- persisted_thread_workspace(thread),
+    with {:ok, workspace} <- goal_issue_workspace(thread),
          docs_before <- doc_fingerprint(identifier),
          history <- thread.id |> History.list_messages_for_thread() |> Enum.map(&History.message_payload/1),
          prompt <- build_issue_prompt(thread, @authoring_goal_continuation_prompt, context, history),
+         :ok <- revalidate_session_workspace(thread, workspace),
          {:ok, runner_result} <- run_issue_turn(workspace, prompt, project_slug, identifier, opts),
          {:ok, result, _assistant_message} <- persist_continuation(thread, runner_result, agent_kind),
          :ok <- maybe_notify_documents(identifier, docs_before, opts) do
       {:ok, result}
     end
   end
+
+  defp goal_issue_workspace(%{scope: "issue_session"} = thread),
+    do: session_workspace_path(thread)
+
+  defp goal_issue_workspace(thread), do: persisted_thread_workspace(thread)
 
   defp persist_continuation(thread, runner_result, agent_kind) do
     with {:ok, updated_thread} <- maybe_update_agent_thread(thread, runner_result, agent_kind),
@@ -838,26 +890,33 @@ defmodule SymphonyElixir.Assistant.AgentSession do
     |> String.trim()
   end
 
-  defp build_issue_prompt(%{metadata: metadata, issue_identifier: identifier, project_slug: project_slug}, message, context, history) do
+  defp build_issue_prompt(
+         %{metadata: metadata, issue_identifier: identifier, project_slug: project_slug, scope: scope} = thread,
+         message,
+         context,
+         history
+       ) do
     goal_mode = Map.get(metadata || %{}, "goal_mode", false) == true
     goal_objective = Map.get(metadata || %{}, "goal_objective")
     github_create = github_create_issue_guidance(project_slug)
+    turn_config = issue_turn_configuration(thread, context)
 
     base = """
-    You are the Symphony issue authoring assistant for `#{project_slug}`, working on issue `#{identifier}`.
+    You are the Symphony issue session assistant for `#{project_slug}`, working on issue `#{identifier}`.
     You are running inside the issue's working tree (the project repositories are cloned here).
+    Current agent mode: `#{turn_config.mode}`. Skill toolkit: `#{turn_config.skill_profile}`.
     In this issue chat, knowledge-base page reads/writes (`kb_read_page`, `kb_create_page`, `kb_update_page`, `kb_link_task`) target the issue working tree so docs changed for this task are kept with the task branch.
     Answer in the user's language.
-    Dispatching happens through this chat: only when the user explicitly asks to dispatch, start, or hand off the work, call the dispatch_codex tool for `#{identifier}` with concrete instructions. That moves the issue to In Progress so the orchestrator executes it (the orchestrator carries the issue's execution goal). Never dispatch on your own.
+    Autonomous dispatch happens only when the user explicitly asks to dispatch, start an autonomous run, or hand off the work — then call the dispatch_codex tool for `#{identifier}` with concrete instructions. That moves the issue to In Progress so the orchestrator executes it (the orchestrator carries the issue's run objective). Never dispatch on your own.
     Dispatch automatically assigns the issue to the connected GitHub user and applies the resolved agent's `symphony:*` label when missing, including child_run subtasks listed in the execution bundle — you do not need to set assignee or symphony labels manually before dispatch.
-    Use goal (context authoring) to set, adjust, pause, resume, or clear the chat goal; use context execution only when the user explicitly asks to change the orchestrator execution goal.
+    Use goal (context authoring/plan) to set, adjust, pause, resume, or clear the chat goal; use context execution only when the user explicitly asks to change the orchestrator run objective.
     Do not mirror normal chat replies as issue comments — your replies are shown to the user directly in this chat.
     Use add_comment only when the user explicitly asks to post a comment on the issue; use update_issue for title, description, status, and assignee changes.
 
     When to call update_issue:
     - Plan or acceptance criteria are defined and stable
     - A discovery changes the implementation approach
-    - Final enrichment when authoring is complete (executive summary + links to spec/plan/handoff)
+    - Final enrichment when planning/implementation is complete (executive summary + links to spec/plan/handoff)
     - The user explicitly asks to save something to the issue
 
     Do NOT call update_issue during:
@@ -885,12 +944,56 @@ defmodule SymphonyElixir.Assistant.AgentSession do
     #{message}
     """
 
-    methodology_section = """
+    String.trim(
+      base <>
+        mode_methodology_section(turn_config, identifier, scope) <>
+        goal_mode_section(goal_mode, identifier, goal_objective, turn_config)
+    )
+  end
 
-    Authoring methodology — choose depth from the conversation (no fixed mode):
-    #{Skills.load(["brainstorming", "writing-plans"])}
+  defp issue_turn_configuration(%{scope: scope, metadata: metadata}, context) when is_map(context) do
+    mode =
+      pick_context_string(context, ["execution_mode", :execution_mode]) ||
+        Map.get(metadata || %{}, "execution_mode")
 
-    Decide the authoring depth from what the user asks for:
+    skill_profile =
+      pick_context_string(context, ["skill_profile", :skill_profile]) ||
+        Map.get(metadata || %{}, "skill_profile") ||
+        SkillProfiles.auto()
+
+    TurnConfiguration.resolve(%{
+      scope: scope,
+      mode: mode,
+      skill_profile: skill_profile,
+      runtime: "interactive"
+    })
+  end
+
+  defp pick_context_string(context, keys) when is_map(context) and is_list(keys) do
+    Enum.find_value(keys, fn key ->
+      case Map.get(context, key) do
+        value when is_binary(value) ->
+          case String.trim(value) do
+            "" -> nil
+            trimmed -> trimmed
+          end
+
+        _ ->
+          nil
+      end
+    end)
+  end
+
+  defp mode_methodology_section(%{mode: "plan"} = config, identifier, _scope) do
+    preload = Skills.load(config.preload_slugs)
+
+    """
+
+    MODE: PLAN (read-only). Do NOT implement code changes, create application source files, or run mutating commands.
+    Planning methodology — choose depth from the conversation:
+    #{preload}
+
+    Decide the planning depth from what the user asks for:
     - Quick brief or enriched description only: search the repositories in this working tree for relevant
       context (README, code, conventions) and call update_issue for `#{identifier}` once the description is
       stable and agreed in chat — not while still exploring or confirming hypotheses. Do not create spec/plan files.
@@ -899,21 +1002,40 @@ defmodule SymphonyElixir.Assistant.AgentSession do
       `<repo>/docs/superpowers/plans/` inside that repo. Prefer the repo that owns the change (or the same
       repo as related existing specs); ask the user which repo if unclear. Never write to the workspace-root
       `docs/` folder — it is outside git and will not appear in Diff / changed-docs. Use section-by-section
-      approval in chat. Codex is a coding agent; when the user explicitly asks to skip spec/plan work or
-      authorizes implementation, acknowledge that direction and you may proceed directly to code.
+      approval in chat.
     - When the task is ready for handoff: write a concise `<repo>/docs/superpowers/handoff.md` (key decisions +
       current state) in the same chosen repo and enrich the issue description (executive summary + links to
       spec/plan files) via update_issue — not before.
     Do not call update_issue while still exploring or before spec/plan sections are agreed in chat (when doing design work).
     State which depth you are taking and proceed.
+    If the user asks to implement, remind them to switch to Build or Yolo mode (or approve the plan) so this session can edit files.
     """
-
-    String.trim(base <> methodology_section <> goal_mode_section(goal_mode, identifier, goal_objective))
   end
 
-  defp goal_mode_section(false, _identifier, _objective), do: ""
+  defp mode_methodology_section(%{mode: mode} = config, identifier, _scope) when mode in ["build", "yolo"] do
+    preload = Skills.load(config.preload_slugs)
+    access = if mode == "yolo", do: "full access without approval prompts", else: "workspace write with command approvals"
 
-  defp goal_mode_section(true, _identifier, objective) do
+    """
+
+    MODE: #{String.upcase(mode)} (#{access}).
+    Exit plan mode. Implement in this session: create, edit, and delete files in the issue working tree as needed.
+    Do NOT wait for orchestrator dispatch unless the user explicitly asks to run autonomously.
+    Implementation methodology:
+    #{preload}
+
+    Follow the approved spec/plan/handoff for `#{identifier}` when present. Prefer test-driven changes and verify before claiming completion.
+    You may proceed directly to code. Keep the chat goal / run objective unchanged unless the user asks.
+    """
+  end
+
+  defp mode_methodology_section(config, identifier, scope) do
+    mode_methodology_section(%{config | mode: "plan"}, identifier, scope)
+  end
+
+  defp goal_mode_section(false, _identifier, _objective, _turn_config), do: ""
+
+  defp goal_mode_section(true, _identifier, objective, turn_config) do
     objective_line =
       case normalize_goal_objective(objective) do
         nil ->
@@ -924,13 +1046,19 @@ defmodule SymphonyElixir.Assistant.AgentSession do
           "Objective: #{text}"
       end
 
+    mode_hint =
+      case turn_config.mode do
+        "plan" -> "Stay in Plan mode: produce analysis/spec/plan artifacts."
+        mode when mode in ["build", "yolo"] -> "You may implement in this session under #{mode} mode."
+        _ -> "Follow the current agent mode."
+      end
+
     """
 
-    AUTHORING GOAL: ACTIVE (Codex long-running, in this conversation). You are pursuing a chat
-    goal directly inside this authoring thread — keep working toward the objective across turns
-    until the artifact is ready for review or you are blocked. #{objective_line}
-    This is authoring only: do NOT dispatch the orchestrator and do NOT change the issue's status,
-    labels, or execution goal. Produce the spec/plan/analysis artifacts the objective calls for.
+    CHAT GOAL: ACTIVE (long-running, in this conversation). Keep working toward the objective across turns
+    until the artifact or implementation is ready for review or you are blocked. #{objective_line}
+    #{mode_hint}
+    Do NOT dispatch the orchestrator and do NOT change the issue's status, labels, or run objective unless the user explicitly asks.
     """
   end
 

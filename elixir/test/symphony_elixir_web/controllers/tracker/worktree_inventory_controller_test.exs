@@ -1,3 +1,21 @@
+defmodule SymphonyElixirWeb.Tracker.FailingWorktreeInventoryDisplayName do
+  @moduledoc false
+
+  def map_for_project(_project_slug), do: {:error, :workspace_alias_lookup_failed}
+end
+
+defmodule SymphonyElixirWeb.Tracker.StatefulWorktreeInventoryDisplayName do
+  @moduledoc false
+
+  def map_for_project(_project_slug) do
+    agent = Application.fetch_env!(:symphony_elixir, :worktree_inventory_display_name_fake_agent)
+
+    Agent.get_and_update(agent, fn %{calls: calls, snapshots: [snapshot | remaining]} ->
+      {snapshot, %{calls: calls + 1, snapshots: remaining}}
+    end)
+  end
+end
+
 defmodule SymphonyElixirWeb.Tracker.WorktreeInventoryControllerTest do
   use ExUnit.Case, async: false
 
@@ -8,10 +26,13 @@ defmodule SymphonyElixirWeb.Tracker.WorktreeInventoryControllerTest do
   alias SymphonyElixir.GitFixtures
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.Repo
+  alias SymphonyElixir.Workspace.DisplayName
   alias SymphonyElixir.Workflow
 
   @endpoint SymphonyElixirWeb.Endpoint
   @token_env "SYMPHONY_TRACKER_TOKEN"
+  @display_name_module_env :worktree_inventory_display_name_module
+  @display_name_fake_agent_env :worktree_inventory_display_name_fake_agent
 
   setup do
     start_supervised!(SymphonyElixirWeb.Endpoint)
@@ -19,7 +40,11 @@ defmodule SymphonyElixirWeb.Tracker.WorktreeInventoryControllerTest do
     SymphonyElixir.TestSupport.truncate_tracker!(Repo)
 
     previous_token = System.get_env(@token_env)
+    previous_display_name_module = Application.get_env(:symphony_elixir, @display_name_module_env)
+    previous_display_name_fake_agent = Application.get_env(:symphony_elixir, @display_name_fake_agent_env)
     System.put_env(@token_env, "secret")
+    Application.delete_env(:symphony_elixir, @display_name_module_env)
+    Application.delete_env(:symphony_elixir, @display_name_fake_agent_env)
 
     tmp = Path.join(System.tmp_dir!(), "wt-api-#{System.unique_integer([:positive])}")
     root = Path.join(tmp, "workspaces")
@@ -43,6 +68,8 @@ defmodule SymphonyElixirWeb.Tracker.WorktreeInventoryControllerTest do
 
     on_exit(fn ->
       restore_env(@token_env, previous_token)
+      restore_display_name_module(previous_display_name_module)
+      restore_display_name_fake_agent(previous_display_name_fake_agent)
       Application.delete_env(:symphony_elixir, :workflow_file_path)
       File.rm_rf(tmp)
     end)
@@ -68,6 +95,87 @@ defmodule SymphonyElixirWeb.Tracker.WorktreeInventoryControllerTest do
     assert is_integer(totals["size_bytes"])
   end
 
+  test "GET /worktrees includes a nil display name on every entry without aliases", ctx do
+    {:ok, issue} = Context.create_issue("wtapi", %{"title" => "No alias"})
+    workspace_path = Path.join(ctx.segment_root, issue.identifier)
+    File.mkdir_p!(workspace_path)
+
+    conn = get(authorize(), "/api/tracker/v1/projects/wtapi/worktrees")
+
+    assert %{"data" => entries} = json_response(conn, 200)
+    assert entries != []
+    assert Enum.all?(entries, &Map.has_key?(&1, "display_name"))
+    assert Enum.all?(entries, &is_nil(&1["display_name"]))
+  end
+
+  test "GET /worktrees includes an alias for the exact workspace path", ctx do
+    {:ok, issue} = Context.create_issue("wtapi", %{"title" => "Aliased"})
+    workspace_path = Path.join(ctx.segment_root, issue.identifier)
+    File.mkdir_p!(workspace_path)
+    assert {:ok, _alias} = DisplayName.put("wtapi", workspace_path, "Review API")
+
+    conn = get(authorize(), "/api/tracker/v1/projects/wtapi/worktrees")
+
+    assert %{"data" => entries} = json_response(conn, 200)
+    assert %{"display_name" => "Review API"} = Enum.find(entries, &(&1["path"] == workspace_path))
+  end
+
+  test "GET /worktrees loads one alias snapshot for every entry", ctx do
+    workspace_paths =
+      for title <- ["First snapshot", "Second snapshot"] do
+        {:ok, issue} = Context.create_issue("wtapi", %{"title" => title})
+        workspace_path = Path.join(ctx.segment_root, issue.identifier)
+        File.mkdir_p!(workspace_path)
+        workspace_path
+      end
+
+    [first_path, second_path] = workspace_paths
+
+    fake_agent =
+      use_stateful_display_name_fake([
+        {:ok, %{first_path => "First alias", second_path => "Second alias"}},
+        {:ok, %{first_path => "Changed first", second_path => "Changed second"}}
+      ])
+
+    conn = get(authorize(), "/api/tracker/v1/projects/wtapi/worktrees")
+
+    assert %{"data" => entries} = json_response(conn, 200)
+    entries_by_path = Map.new(entries, &{&1["path"], &1})
+    assert entries_by_path[first_path]["display_name"] == "First alias"
+    assert entries_by_path[second_path]["display_name"] == "Second alias"
+    assert %{calls: 1} = Agent.get(fake_agent, & &1)
+  end
+
+  test "GET /worktrees does not attach sibling-prefix or normalized-near-match aliases", ctx do
+    {:ok, issue} = Context.create_issue("wtapi", %{"title" => "Exact only"})
+    workspace_path = Path.join(ctx.segment_root, issue.identifier)
+    File.mkdir_p!(workspace_path)
+    assert {:ok, project} = Context.get_project("wtapi")
+    assert {:ok, _alias} = DisplayName.put("wtapi", workspace_path <> "-copy", "Sibling")
+
+    Repo.insert!(%DisplayName{
+      project_id: project.id,
+      project_slug: project.slug,
+      workspace_path: workspace_path <> "/.",
+      display_name: "Normalized near match"
+    })
+
+    conn = get(authorize(), "/api/tracker/v1/projects/wtapi/worktrees")
+
+    assert %{"data" => entries} = json_response(conn, 200)
+    assert %{"display_name" => nil} = Enum.find(entries, &(&1["path"] == workspace_path))
+  end
+
+  test "GET /worktrees ignores a stale alias whose workspace is absent", ctx do
+    stale_path = Path.join(ctx.segment_root, "missing-workspace")
+    assert {:ok, _alias} = DisplayName.put("wtapi", stale_path, "Removed workspace")
+
+    conn = get(authorize(), "/api/tracker/v1/projects/wtapi/worktrees")
+
+    assert %{"data" => entries} = json_response(conn, 200)
+    refute Enum.any?(entries, &(&1["path"] == stale_path))
+  end
+
   test "GET /worktrees returns 404 for unknown project" do
     conn = get(authorize(), "/api/tracker/v1/projects/nope/worktrees")
     assert json_response(conn, 404)
@@ -86,6 +194,69 @@ defmodule SymphonyElixirWeb.Tracker.WorktreeInventoryControllerTest do
     assert conn.resp_body =~ issue.identifier
     assert conn.resp_body =~ "event: totals"
     assert conn.resp_body =~ "event: done"
+  end
+
+  test "GET /worktrees/events includes the GET display name in its entry event", ctx do
+    {:ok, issue} = Context.create_issue("wtapi", %{"title" => "Stream alias"})
+    workspace_path = Path.join(ctx.segment_root, issue.identifier)
+    File.mkdir_p!(workspace_path)
+    assert {:ok, _alias} = DisplayName.put("wtapi", workspace_path, "Streaming API")
+
+    get_conn = get(authorize(), "/api/tracker/v1/projects/wtapi/worktrees")
+    assert %{"data" => entries} = json_response(get_conn, 200)
+    assert %{"display_name" => display_name} = Enum.find(entries, &(&1["path"] == workspace_path))
+
+    stream_conn = get(authorize(), "/api/tracker/v1/projects/wtapi/worktrees/events")
+
+    assert stream_conn.resp_body =~ "event: entry"
+    assert stream_conn.resp_body =~ Jason.encode!(display_name)
+    assert stream_conn.resp_body =~ Jason.encode!(workspace_path)
+  end
+
+  test "GET /worktrees/events loads one immutable alias snapshot for all entry events", ctx do
+    workspace_paths =
+      for title <- ["First stream snapshot", "Second stream snapshot"] do
+        {:ok, issue} = Context.create_issue("wtapi", %{"title" => title})
+        workspace_path = Path.join(ctx.segment_root, issue.identifier)
+        File.mkdir_p!(workspace_path)
+        workspace_path
+      end
+
+    [first_path, second_path] = workspace_paths
+
+    fake_agent =
+      use_stateful_display_name_fake([
+        {:ok, %{first_path => "First stream alias", second_path => "Second stream alias"}},
+        {:ok, %{first_path => "Changed first", second_path => "Changed second"}}
+      ])
+
+    conn = get(authorize(), "/api/tracker/v1/projects/wtapi/worktrees/events")
+
+    entries_by_path =
+      conn.resp_body
+      |> sse_entry_data()
+      |> Map.new(&{&1["path"], &1})
+
+    assert entries_by_path[first_path]["display_name"] == "First stream alias"
+    assert entries_by_path[second_path]["display_name"] == "Second stream alias"
+    assert %{calls: 1} = Agent.get(fake_agent, & &1)
+  end
+
+  test "alias lookup failures use existing GET and SSE inventory error conventions" do
+    Application.put_env(
+      :symphony_elixir,
+      @display_name_module_env,
+      SymphonyElixirWeb.Tracker.FailingWorktreeInventoryDisplayName
+    )
+
+    get_conn = get(authorize(), "/api/tracker/v1/projects/wtapi/worktrees")
+    assert %{"error" => %{"code" => "request_failed"}} = json_response(get_conn, 500)
+
+    stream_conn = get(authorize(), "/api/tracker/v1/projects/wtapi/worktrees/events")
+    assert stream_conn.status == 200
+    assert stream_conn.resp_body =~ "event: failure"
+    assert stream_conn.resp_body =~ "workspace_alias_lookup_failed"
+    refute stream_conn.resp_body =~ "event: done"
   end
 
   test "GET /worktrees/events accepts token query param for EventSource auth", ctx do
@@ -255,4 +426,45 @@ defmodule SymphonyElixirWeb.Tracker.WorktreeInventoryControllerTest do
 
   defp restore_env(key, nil), do: System.delete_env(key)
   defp restore_env(key, value), do: System.put_env(key, value)
+
+  defp restore_display_name_module(nil),
+    do: Application.delete_env(:symphony_elixir, @display_name_module_env)
+
+  defp restore_display_name_module(module),
+    do: Application.put_env(:symphony_elixir, @display_name_module_env, module)
+
+  defp use_stateful_display_name_fake(snapshots) do
+    {:ok, agent} = Agent.start_link(fn -> %{calls: 0, snapshots: snapshots} end)
+
+    Application.put_env(
+      :symphony_elixir,
+      @display_name_module_env,
+      SymphonyElixirWeb.Tracker.StatefulWorktreeInventoryDisplayName
+    )
+
+    Application.put_env(:symphony_elixir, @display_name_fake_agent_env, agent)
+    agent
+  end
+
+  defp sse_entry_data(body) do
+    body
+    |> String.split("\n\n", trim: true)
+    |> Enum.flat_map(fn event ->
+      lines = String.split(event, "\n")
+
+      if "event: entry" in lines do
+        data_line = Enum.find(lines, &String.starts_with?(&1, "data: "))
+        [%{"data" => data}] = [data_line |> String.replace_prefix("data: ", "") |> Jason.decode!()]
+        [data]
+      else
+        []
+      end
+    end)
+  end
+
+  defp restore_display_name_fake_agent(nil),
+    do: Application.delete_env(:symphony_elixir, @display_name_fake_agent_env)
+
+  defp restore_display_name_fake_agent(agent),
+    do: Application.put_env(:symphony_elixir, @display_name_fake_agent_env, agent)
 end

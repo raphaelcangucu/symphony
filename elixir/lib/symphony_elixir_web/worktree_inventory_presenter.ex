@@ -2,9 +2,13 @@ defmodule SymphonyElixirWeb.WorktreeInventoryPresenter do
   @moduledoc false
 
   @spec entry_json(map()) :: map()
-  def entry_json(entry) do
+  def entry_json(entry), do: entry_json(entry, %{})
+
+  @spec entry_json(map(), %{optional(String.t()) => String.t()}) :: map()
+  def entry_json(entry, aliases) when is_map(aliases) do
     %{
       path: entry.path,
+      display_name: Map.get(aliases, entry.path),
       kind: Atom.to_string(entry.kind),
       issue_identifier: entry.issue_identifier,
       name: entry.name,

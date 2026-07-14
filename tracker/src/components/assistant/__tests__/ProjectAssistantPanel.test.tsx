@@ -2,9 +2,12 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import userEvent from "@testing-library/user-event";
 import { StrictMode } from "react";
 import { MemoryRouter } from "react-router-dom";
+import { toast } from "sonner";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { fetchAssistantCatalogBundle } from "@/services/assistant";
+
+vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 let ProjectAssistantPanel: typeof import("@/components/assistant/ProjectAssistantPanel").ProjectAssistantPanel;
 
@@ -226,6 +229,8 @@ describe("ProjectAssistantPanel", () => {
     });
     for (const key of Object.keys(channelHandlers)) delete channelHandlers[key];
     pushReceives.length = 0;
+    vi.mocked(toast.error).mockClear();
+    vi.mocked(toast.success).mockClear();
     Object.defineProperty(window, "matchMedia", {
       configurable: true,
       writable: true,
@@ -465,6 +470,49 @@ describe("ProjectAssistantPanel", () => {
     await waitFor(() => expect(screen.queryByText("send me now")).toBeNull());
   });
 
+  it("force-sends a queued message even when the authoring goal queue is held", async () => {
+    join.mockImplementation(() => ({
+      receive: (status: string, callback: (response: unknown) => void) =>
+        status === "ok"
+          ? callback({
+              thread_id: 1,
+              goal_status: goalSnapshot({
+                status: "interrupted",
+                process_running: false,
+                resumable: true,
+                interrupted: true,
+                capabilities: ["resume", "clear", "edit"],
+              }),
+            })
+          : undefined,
+    }));
+
+    render(
+      <ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="page" />,
+    );
+    await screen.findByRole("region", { name: "Goal" });
+
+    const textarea = await screen.findByPlaceholderText("Write a message...");
+    fireEvent.change(textarea, { target: { value: "send despite hold" } });
+    fireEvent.keyDown(textarea, { key: "Enter", code: "Enter" });
+
+    expect(await screen.findByText("send despite hold")).toBeInTheDocument();
+    expect(push).not.toHaveBeenCalledWith(
+      "send_message",
+      expect.objectContaining({ message: "send despite hold" }),
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /send queued message now/i }));
+
+    await waitFor(() =>
+      expect(push).toHaveBeenCalledWith(
+        "send_message",
+        expect.objectContaining({ message: "send despite hold" }),
+      ),
+    );
+    await waitFor(() => expect(screen.queryByText("send despite hold")).toBeNull());
+  });
+
   it("steers a running turn when /infer is submitted, and falls back to queue on steer_failed", async () => {
     render(<ProjectAssistantPanel projectSlug="macro-markets" view="board" mode="page" />);
     const textarea = await screen.findByPlaceholderText("Write a message...");
@@ -523,7 +571,7 @@ describe("ProjectAssistantPanel", () => {
         (payload as { message: string }).message.includes("ship the feature"),
     );
     const goalSendMessage = (goalSend?.[1] as { message: string }).message;
-    expect(goalSendMessage).toMatch(/authoring goal/i);
+    expect(goalSendMessage).toMatch(/chat goal/i);
     expect(goalSendMessage).toMatch(/do not dispatch the orchestrator/i);
 
     const banner = await screen.findByRole("region", { name: "Goal" });
@@ -739,6 +787,87 @@ describe("ProjectAssistantPanel", () => {
     // Remove: clears the goal entirely.
     fireEvent.click(await screen.findByRole("button", { name: "Remove goal" }));
     expect(push).toHaveBeenCalledWith("goal_clear", {});
+  });
+
+  it("stops the turn and retries goal_clear when remove is blocked as busy", async () => {
+    join.mockImplementation(() => ({
+      receive: (status: string, callback: (response: unknown) => void) =>
+        status === "ok"
+          ? callback({
+              thread_id: 1,
+              goal_status: goalSnapshot({
+                process_running: false,
+                resumable: true,
+                interrupted: true,
+                capabilities: ["resume", "clear", "edit"],
+              }),
+            })
+          : undefined,
+    }));
+
+    render(
+      <ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="page" />,
+    );
+    await screen.findByRole("region", { name: "Goal" });
+
+    fireEvent.click(await screen.findByRole("button", { name: "Remove goal" }));
+
+    const firstClearIndex = push.mock.calls.findIndex(([event]) => event === "goal_clear");
+    expect(firstClearIndex).toBeGreaterThanOrEqual(0);
+    act(() => pushReceives[firstClearIndex]?.error?.({ reason: "assistant is busy" }));
+
+    await waitFor(() => expect(push).toHaveBeenCalledWith("stop_turn", {}));
+    const stopIndex = push.mock.calls.findIndex(([event]) => event === "stop_turn");
+    act(() => pushReceives[stopIndex]?.ok?.({}));
+
+    await waitFor(() => {
+      expect(push.mock.calls.filter(([event]) => event === "goal_clear")).toHaveLength(2);
+    });
+
+    const secondClearIndex = push.mock.calls.map(([event]) => event).lastIndexOf("goal_clear");
+    act(() =>
+      pushReceives[secondClearIndex]?.ok?.(
+        goalSnapshot({
+          enabled: false,
+          objective: null,
+          process_running: false,
+          resumable: false,
+          interrupted: false,
+          revision: "11",
+          request_order: 11,
+        }),
+      ),
+    );
+
+    await waitFor(() => expect(screen.queryByRole("region", { name: "Goal" })).not.toBeInTheDocument());
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  it("toasts when removing the goal fails for a non-busy reason", async () => {
+    join.mockImplementation(() => ({
+      receive: (status: string, callback: (response: unknown) => void) =>
+        status === "ok"
+          ? callback({
+              thread_id: 1,
+              goal_status: goalSnapshot({
+                process_running: false,
+                capabilities: ["clear", "edit"],
+              }),
+            })
+          : undefined,
+    }));
+
+    render(
+      <ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="page" />,
+    );
+    await screen.findByRole("region", { name: "Goal" });
+
+    fireEvent.click(await screen.findByRole("button", { name: "Remove goal" }));
+    const clearIndex = push.mock.calls.findIndex(([event]) => event === "goal_clear");
+    act(() => pushReceives[clearIndex]?.error?.({ reason: "native goal clear failed" }));
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("native goal clear failed"));
+    expect(screen.getByRole("region", { name: "Goal" })).toBeInTheDocument();
   });
 
   it("keeps turn state independent from Goal state and treats history sync as transcript-only", async () => {
@@ -1061,7 +1190,7 @@ describe("ProjectAssistantPanel", () => {
     expect(onDispatchSucceeded).toHaveBeenCalledWith("Requested Codex work on MAC-1");
   });
 
-  it("renders plan approval actions in issue chat and dispatches the selected execution mode", async () => {
+  it("renders plan approval actions and continues in-session under the selected mode", async () => {
     render(<ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="page" />);
 
     await waitFor(() => expect(channelHandlers["history_loaded"]).toEqual(expect.any(Function)));
@@ -1092,10 +1221,25 @@ describe("ProjectAssistantPanel", () => {
 
     await waitFor(() =>
       expect(push).toHaveBeenCalledWith(
-        "dispatch_coding_agent",
-        expect.objectContaining({ goal_mode: false, mode: "yolo" }),
+        "send_message",
+        expect.objectContaining({
+          message: expect.stringMatching(/Exit plan mode/i),
+          context: expect.objectContaining({ execution_mode: "yolo" }),
+        }),
       ),
     );
+    expect(push).not.toHaveBeenCalledWith("dispatch_coding_agent", expect.anything());
+
+    // Finish the in-session implementation turn so a later plan can offer approval again.
+    act(() => {
+      channelHandlers["assistant_completed"]?.({
+        id: 100,
+        role: "assistant",
+        content: "Implemented under YOLO.",
+        tool_calls: [],
+      });
+      channelHandlers["turn_status"]?.({ status: "completed", can_resume: false });
+    });
 
     push.mockClear();
 
@@ -1120,10 +1264,14 @@ describe("ProjectAssistantPanel", () => {
 
     await waitFor(() =>
       expect(push).toHaveBeenCalledWith(
-        "dispatch_coding_agent",
-        expect.objectContaining({ goal_mode: false, mode: "build" }),
+        "send_message",
+        expect.objectContaining({
+          message: expect.stringMatching(/Exit plan mode/i),
+          context: expect.objectContaining({ execution_mode: "build" }),
+        }),
       ),
     );
+    expect(push).not.toHaveBeenCalledWith("dispatch_coding_agent", expect.anything());
   });
 
   it("hides stale plan approval actions once the user has followed up", async () => {
@@ -1156,8 +1304,8 @@ describe("ProjectAssistantPanel", () => {
 
   async function selectComposerExecutionMode(label: RegExp) {
     const user = userEvent.setup();
-    const trigger = await screen.findByTestId(/execution-mode-icon-(yolo|build|plan)/);
-    await user.click(trigger.closest("button") ?? trigger);
+    const trigger = await screen.findByTestId("execution-mode-menu");
+    await user.click(trigger);
     await user.click(await screen.findByRole("menuitemradio", { name: label }));
   }
 
@@ -1171,12 +1319,13 @@ describe("ProjectAssistantPanel", () => {
 
     await waitFor(() => expect(push).toHaveBeenCalledWith("send_message", expect.anything()));
 
-    const modeTrigger = await screen.findByRole("button", { name: /yolo/i });
+    const modeTrigger = await screen.findByTestId("execution-mode-menu");
     expect(modeTrigger).not.toBeDisabled();
+    expect(modeTrigger).toHaveTextContent(/plan/i);
 
     await user.click(modeTrigger);
     await user.click(await screen.findByRole("menuitemradio", { name: /build/i }));
-    expect(screen.getByRole("button", { name: /build/i })).toBeInTheDocument();
+    expect(screen.getByTestId("execution-mode-menu")).toHaveTextContent(/build/i);
   });
 
   it("auto-approves a pending command when switching to YOLO mid-run", async () => {
@@ -1199,7 +1348,7 @@ describe("ProjectAssistantPanel", () => {
     push.mockClear();
     pushReceives.length = 0;
 
-    await user.click(screen.getByRole("button", { name: /build/i }));
+    await user.click(screen.getByTestId("execution-mode-menu"));
     await user.click(await screen.findByRole("menuitemradio", { name: /yolo/i }));
 
     await waitFor(() =>
@@ -1220,8 +1369,9 @@ describe("ProjectAssistantPanel", () => {
   it("auto-approves incoming command approvals while YOLO is selected", async () => {
     render(<ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="page" />);
 
+    await selectComposerExecutionMode(/yolo/i);
     await waitFor(() => expect(channelHandlers["approval_required"]).toEqual(expect.any(Function)));
-    expect(await screen.findByRole("button", { name: /yolo/i })).toBeInTheDocument();
+    expect(await screen.findByTestId("execution-mode-menu")).toHaveTextContent(/yolo/i);
 
     act(() => {
       channelHandlers["approval_required"]({
@@ -1262,7 +1412,7 @@ describe("ProjectAssistantPanel", () => {
       });
     });
 
-    await user.click(screen.getByRole("button", { name: /build/i }));
+    await user.click(screen.getByTestId("execution-mode-menu"));
     await user.click(await screen.findByRole("menuitemradio", { name: /yolo/i }));
 
     await waitFor(() => {
@@ -1633,7 +1783,7 @@ describe("ProjectAssistantPanel", () => {
       <ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-2" view="board" mode="page" />,
     );
 
-    expect(await screen.findByRole("button", { name: /yolo/i })).toBeInTheDocument();
+    expect(await screen.findByTestId("execution-mode-menu")).toHaveTextContent(/plan/i);
 
     const textarea = screen.getByPlaceholderText("Write a message...");
     fireEvent.change(textarea, { target: { value: "@mac" } });
@@ -1650,7 +1800,7 @@ describe("ProjectAssistantPanel", () => {
         expect.objectContaining({
           message: "ship it",
           context: expect.objectContaining({
-            execution_mode: "yolo",
+            execution_mode: "plan",
           }),
         }),
       ),
@@ -1660,7 +1810,7 @@ describe("ProjectAssistantPanel", () => {
   it("opens the Magic command palette as a modal on project session routes", async () => {
     render(<ProjectAssistantPanel projectSlug="macro-markets" threadId={7990} view="board" mode="page" />);
 
-    expect(await screen.findByRole("button", { name: /yolo/i })).toBeInTheDocument();
+    expect(await screen.findByTestId("execution-mode-menu")).toHaveTextContent(/build/i);
     const magicButton = screen.getByRole("button", { name: /magic/i });
     await waitFor(() => expect(magicButton).not.toBeDisabled());
 
@@ -1686,7 +1836,7 @@ describe("ProjectAssistantPanel", () => {
         expect.objectContaining({
           message: "translate the docs",
           context: expect.objectContaining({
-            execution_mode: "yolo",
+            execution_mode: "build",
           }),
         }),
       ),

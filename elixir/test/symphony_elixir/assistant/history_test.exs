@@ -6,6 +6,16 @@ defmodule SymphonyElixir.Assistant.HistoryTest do
   alias SymphonyElixir.Repo
   alias SymphonyElixir.Workflow
 
+  defmodule GitStub do
+    @behaviour SymphonyElixir.LocalTracker.Git
+
+    @impl true
+    def clone(_url, destination, _opts) do
+      File.mkdir_p!(destination)
+      {:ok, "history-test-sha"}
+    end
+  end
+
   setup do
     migrate_repo()
     clean_repo()
@@ -44,6 +54,81 @@ defmodule SymphonyElixir.Assistant.HistoryTest do
     assert same_thread.id == thread.id
     assert same_thread.codex_thread_id == "thread-1"
     assert same_thread.workspace_path == "/tmp/assistant/macro-markets"
+  end
+
+  test "creates an explicit issue workspace session with trusted metadata" do
+    {:ok, _project} = Context.ensure_project(%{name: "Explicit History", slug: "explicit-history"})
+
+    {:ok, issue} =
+      Context.create_issue("explicit-history", %{"title" => "Explicit issue", "status" => "Todo"})
+
+    workspace_path = Path.join(System.tmp_dir!(), "explicit-history/#{issue.identifier}__p1")
+
+    assert {:ok, %Thread{} = thread} =
+             History.create_issue_workspace_session_thread(
+               "explicit-history",
+               issue.identifier,
+               workspace_path,
+               %{
+                 title: "Pinned parallel session",
+                 agent_kind: "claude",
+                 execution_mode: "plan",
+                 workspace_kind: "isolated",
+                 metadata: %{"custom" => "preserved"}
+               }
+             )
+
+    assert thread.scope == "issue_session"
+    assert thread.project_slug == "explicit-history"
+    assert thread.issue_identifier == issue.identifier
+    assert thread.workspace_path == workspace_path
+    assert thread.title == "Pinned parallel session"
+    assert thread.agent_kind == "claude"
+    assert thread.status == "active"
+    assert thread.metadata["execution_mode"] == "plan"
+    assert thread.metadata["workspace_kind"] == "isolated"
+    assert thread.metadata["custom"] == "preserved"
+  end
+
+  test "explicit issue workspace constructor validates path, kind, project, and issue" do
+    {:ok, _project} = Context.ensure_project(%{name: "Defensive History", slug: "defensive-history"})
+
+    {:ok, issue} =
+      Context.create_issue("defensive-history", %{"title" => "Defensive issue", "status" => "Todo"})
+
+    attrs = %{workspace_kind: "shared"}
+
+    assert {:error, {:missing_required_field, :workspace_path}} =
+             History.create_issue_workspace_session_thread(
+               "defensive-history",
+               issue.identifier,
+               "   ",
+               attrs
+             )
+
+    assert {:error, {:invalid_field, :workspace_kind}} =
+             History.create_issue_workspace_session_thread(
+               "defensive-history",
+               issue.identifier,
+               "/tmp/defensive-history",
+               %{workspace_kind: "client-supplied"}
+             )
+
+    assert {:error, :project_not_found} =
+             History.create_issue_workspace_session_thread(
+               "missing-project",
+               issue.identifier,
+               "/tmp/missing-project",
+               attrs
+             )
+
+    assert {:error, :issue_not_found} =
+             History.create_issue_workspace_session_thread(
+               "defensive-history",
+               "DEF-404",
+               "/tmp/missing-issue",
+               attrs
+             )
   end
 
   test "append_message survives sqlite write lock contention" do
@@ -169,7 +254,7 @@ defmodule SymphonyElixir.Assistant.HistoryTest do
 
     assert {:ok, thread} =
              History.ensure_project_explore_thread(project.slug, %{
-               git: SymphonyElixir.Assistant.ProjectExploreWorkspaceTest.GitStub
+               git: GitStub
              })
 
     assert thread.scope == "project_explore"
@@ -179,7 +264,7 @@ defmodule SymphonyElixir.Assistant.HistoryTest do
 
     assert {:ok, same} =
              History.ensure_project_explore_thread("explore-demo", %{
-               git: SymphonyElixir.Assistant.ProjectExploreWorkspaceTest.GitStub
+               git: GitStub
              })
 
     assert same.id == thread.id
@@ -197,6 +282,186 @@ defmodule SymphonyElixir.Assistant.HistoryTest do
     assert archived.status == "archived"
     refute Enum.any?(History.list_threads(scope: "freeform"), &(&1.id == thread.id))
     assert Enum.any?(History.list_threads(scope: "freeform", include_archived: true), &(&1.id == thread.id))
+  end
+
+  test "update_thread_sidebar_metadata normalizes title labels and review state" do
+    {:ok, thread} =
+      History.create_freeform_thread(%{
+        title: "Ideas",
+        workspace_path: "/tmp/sidebar",
+        metadata: %{"unrelated" => "preserved"}
+      })
+
+    assert {:ok, updated} =
+             History.update_thread_sidebar_metadata(thread.id, %{
+               title: "  New title  ",
+               labels: [" idea ", "idea", "wip"],
+               needs_review: true
+             })
+
+    assert updated.title == "New title"
+    assert updated.metadata["sidebar_labels"] == ["idea", "wip"]
+    assert updated.metadata["sidebar_needs_review"] == true
+    assert updated.metadata["unrelated"] == "preserved"
+  end
+
+  test "update_thread_sidebar_metadata enforces title grapheme boundaries" do
+    {:ok, thread} = History.create_freeform_thread(%{title: "Ideas", workspace_path: "/tmp/title-limits"})
+
+    title_at_limit = String.duplicate("é", 160)
+    title_over_limit = title_at_limit <> "é"
+
+    assert {:ok, updated} = History.update_thread_sidebar_metadata(thread.id, %{title: title_at_limit})
+    assert updated.title == title_at_limit
+    assert {:error, :invalid_title} = History.update_thread_sidebar_metadata(thread.id, %{title: title_over_limit})
+  end
+
+  test "update_thread_sidebar_metadata enforces label grapheme boundaries" do
+    {:ok, thread} = History.create_freeform_thread(%{title: "Ideas", workspace_path: "/tmp/label-limits"})
+
+    label_at_limit = String.duplicate("é", 40)
+    label_over_limit = label_at_limit <> "é"
+
+    assert {:ok, updated} = History.update_thread_sidebar_metadata(thread.id, %{labels: [label_at_limit]})
+    assert updated.metadata["sidebar_labels"] == [label_at_limit]
+    assert {:error, :invalid_labels} = History.update_thread_sidebar_metadata(thread.id, %{labels: [label_over_limit]})
+  end
+
+  test "update_thread_sidebar_metadata enforces normalized label count boundaries" do
+    {:ok, thread} = History.create_freeform_thread(%{title: "Ideas", workspace_path: "/tmp/label-count"})
+    labels_at_limit = Enum.map(1..12, &"label-#{&1}")
+
+    assert {:ok, updated} = History.update_thread_sidebar_metadata(thread.id, %{labels: labels_at_limit})
+    assert updated.metadata["sidebar_labels"] == labels_at_limit
+
+    assert {:error, :invalid_labels} =
+             History.update_thread_sidebar_metadata(thread.id, %{labels: labels_at_limit ++ ["label-13"]})
+  end
+
+  test "update_thread_sidebar_metadata rejects malformed labels and review state" do
+    {:ok, thread} = History.create_freeform_thread(%{title: "Ideas", workspace_path: "/tmp/sidebar-invalid"})
+
+    assert {:error, :invalid_labels} = History.update_thread_sidebar_metadata(thread.id, %{labels: "idea"})
+    assert {:error, :invalid_labels} = History.update_thread_sidebar_metadata(thread.id, %{labels: ["idea", 7]})
+    assert {:error, :invalid_needs_review} = History.update_thread_sidebar_metadata(thread.id, %{needs_review: "true"})
+  end
+
+  test "update_thread_sidebar_metadata preserves omitted sidebar fields and unrelated metadata" do
+    {:ok, thread} =
+      History.create_freeform_thread(%{
+        title: "Original",
+        workspace_path: "/tmp/sidebar-partial",
+        metadata: %{
+          "sidebar_labels" => ["idea"],
+          "sidebar_needs_review" => true,
+          "unrelated" => %{"keep" => true}
+        }
+      })
+
+    assert {:ok, updated} = History.update_thread_sidebar_metadata(thread.id, %{title: "Renamed"})
+    assert updated.title == "Renamed"
+    assert updated.metadata["sidebar_labels"] == ["idea"]
+    assert updated.metadata["sidebar_needs_review"] == true
+    assert updated.metadata["unrelated"] == %{"keep" => true}
+  end
+
+  test "update_thread_sidebar_metadata atomically preserves metadata written after an initial read" do
+    {:ok, initially_read} =
+      History.create_freeform_thread(%{
+        title: "Original",
+        workspace_path: "/tmp/sidebar-atomic",
+        metadata: %{"existing" => true}
+      })
+
+    concurrent_turn = %{"status" => "running", "generation" => "later"}
+
+    assert {:ok, _concurrent_update} =
+             History.update_thread(initially_read, %{
+               metadata: %{"existing" => true, "current_turn" => concurrent_turn}
+             })
+
+    handler_id = {__MODULE__, self(), :sidebar_atomic_update}
+
+    :ok =
+      :telemetry.attach(
+        handler_id,
+        [:symphony_elixir, :repo, :query],
+        fn _event, _measurements, metadata, test_pid ->
+          send(test_pid, {:sidebar_repo_query, metadata.query})
+        end,
+        self()
+      )
+
+    on_exit(fn -> :telemetry.detach(handler_id) end)
+
+    assert {:ok, updated} =
+             History.update_thread_sidebar_metadata(initially_read.id, %{
+               title: "Renamed",
+               labels: ["atomic"],
+               needs_review: true
+             })
+
+    assert_receive {:sidebar_repo_query, update_query}
+    assert update_query =~ "UPDATE"
+    assert update_query =~ "json_patch"
+    assert updated.metadata["existing"] == true
+    assert updated.metadata["current_turn"] == concurrent_turn
+    assert updated.metadata["sidebar_labels"] == ["atomic"]
+    assert updated.metadata["sidebar_needs_review"] == true
+  end
+
+  test "delete_thread refuses active threads and deletes archived threads" do
+    {:ok, thread} = History.create_freeform_thread(%{title: "Delete me", workspace_path: "/tmp/delete"})
+
+    assert {:error, :thread_active} = History.delete_thread(thread.id)
+    assert {:ok, archived} = History.archive_thread(thread.id)
+    assert {:ok, deleted} = History.delete_thread(archived.id)
+    assert deleted.id == archived.id
+    assert {:error, :not_found} = History.get_thread(thread.id)
+  end
+
+  test "delete_thread rejects unsupported scopes and non-deletable statuses" do
+    {:ok, _project} = Context.ensure_project(%{name: "Delete Scope", slug: "delete-scope"})
+    {:ok, project_thread} = History.ensure_thread("delete-scope", %{workspace_path: "/tmp/delete-scope"})
+    {:ok, archived_project_thread} = History.archive_thread(project_thread.id)
+
+    assert {:error, :unsupported_scope} = History.delete_thread(archived_project_thread.id)
+
+    {:ok, freeform_thread} =
+      History.create_freeform_thread(%{title: "Errored", workspace_path: "/tmp/delete-status"})
+
+    {:ok, errored_thread} = History.update_thread(freeform_thread, %{status: "error"})
+    assert {:error, :unsupported_status} = History.delete_thread(errored_thread.id)
+  end
+
+  test "delete_thread returns not_found" do
+    assert {:error, :not_found} = History.delete_thread(2_147_483_647)
+  end
+
+  test "delete_thread treats a concurrent stale delete as successful" do
+    {:ok, thread} = History.create_freeform_thread(%{title: "Stale", workspace_path: "/tmp/delete-stale"})
+    {:ok, archived} = History.archive_thread(thread.id)
+
+    Ecto.Adapters.SQL.query!(
+      Repo,
+      """
+      CREATE TEMP TRIGGER simulate_concurrent_thread_delete
+      BEFORE DELETE ON assistant_threads
+      WHEN OLD.id = #{archived.id}
+      BEGIN
+        DELETE FROM assistant_threads WHERE id = OLD.id;
+      END
+      """,
+      []
+    )
+
+    on_exit(fn ->
+      Ecto.Adapters.SQL.query!(Repo, "DROP TRIGGER IF EXISTS simulate_concurrent_thread_delete", [])
+    end)
+
+    assert {:ok, deleted} = History.delete_thread(archived.id)
+    assert deleted.id == archived.id
+    assert {:error, :not_found} = History.get_thread(archived.id)
   end
 
   test "list_threads/1 returns freeform threads newest first" do

@@ -132,6 +132,7 @@ describe("useProjectSessions", () => {
     vi.mocked(subscribeWorkspaceInventory).mockImplementation((_slug, handlers) => {
       const entry: WorkspaceInventoryEntry = {
         path: "/tmp/demo-workspace",
+        displayName: null,
         kind: "issue",
         issueIdentifier: "DEMO-1",
         name: null,

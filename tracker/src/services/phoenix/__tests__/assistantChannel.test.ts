@@ -119,7 +119,15 @@ describe("assistant channel binding", () => {
     handlers["assistant_issue_created"]({ identifier: "MAC-7", thread_id: 42 });
 
     expect(assistantTopic("macro-markets")).toBe("assistant:macro-markets");
-    expect(onHistoryLoaded).toHaveBeenCalledWith([expect.objectContaining({ id: "1", role: "user", content: "Oi" })]);
+    expect(onHistoryLoaded).toHaveBeenCalledWith(
+      [expect.objectContaining({ id: "1", role: "user", content: "Oi" })],
+      expect.objectContaining({
+        executionMode: null,
+        skillProfile: null,
+        scope: null,
+        threadId: null,
+      }),
+    );
     expect(onMessageCreated).toHaveBeenCalledWith(expect.objectContaining({ role: "user", content: "Oi" }));
     expect(onAssistantDelta).toHaveBeenCalledWith("Olá");
     expect(onToolCallStarted).toHaveBeenCalledWith(expect.objectContaining({ name: "list_issues", status: "running" }));

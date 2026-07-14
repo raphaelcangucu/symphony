@@ -3,11 +3,15 @@ defmodule SymphonyElixirWeb.WorktreeInventoryEventStream do
 
   import Plug.Conn
 
-  alias SymphonyElixir.Workspace.Inventory
+  alias SymphonyElixir.Workspace.{DisplayName, Inventory}
   alias SymphonyElixirWeb.WorktreeInventoryPresenter
 
   @spec stream(Plug.Conn.t(), String.t()) :: Plug.Conn.t()
-  def stream(conn, project_slug) when is_binary(project_slug) do
+  def stream(conn, project_slug) when is_binary(project_slug), do: stream(conn, project_slug, DisplayName)
+
+  @spec stream(Plug.Conn.t(), String.t(), module()) :: Plug.Conn.t()
+  def stream(conn, project_slug, display_name_module)
+      when is_binary(project_slug) and is_atom(display_name_module) do
     conn =
       conn
       |> put_resp_header("content-type", "text/event-stream; charset=utf-8")
@@ -18,14 +22,20 @@ defmodule SymphonyElixirWeb.WorktreeInventoryEventStream do
     {:ok, conn_agent} = Agent.start_link(fn -> conn end)
 
     result =
-      Inventory.scan_stream(project_slug, fn event ->
-        Agent.get_and_update(conn_agent, fn current_conn ->
-          case push_event(current_conn, event) do
-            {:ok, updated_conn} -> {:ok, updated_conn}
-            _ -> {:halt, current_conn}
-          end
-        end)
-      end)
+      case display_name_module.map_for_project(project_slug) do
+        {:ok, aliases} ->
+          Inventory.scan_stream(project_slug, fn event ->
+            Agent.get_and_update(conn_agent, fn current_conn ->
+              case push_event(current_conn, event, aliases) do
+                {:ok, updated_conn} -> {:ok, updated_conn}
+                _ -> {:halt, current_conn}
+              end
+            end)
+          end)
+
+        {:error, reason} ->
+          {:error, reason}
+      end
 
     conn = Agent.get(conn_agent, & &1)
     Agent.stop(conn_agent)
@@ -45,12 +55,12 @@ defmodule SymphonyElixirWeb.WorktreeInventoryEventStream do
     end
   end
 
-  defp push_event(conn, {:entry, entry}) do
-    payload = %{data: WorktreeInventoryPresenter.entry_json(entry)}
+  defp push_event(conn, {:entry, entry}, aliases) do
+    payload = %{data: WorktreeInventoryPresenter.entry_json(entry, aliases)}
     chunk(conn, encode_event("entry", payload))
   end
 
-  defp push_event(conn, {:totals, totals}) do
+  defp push_event(conn, {:totals, totals}, _aliases) do
     payload = %{totals: WorktreeInventoryPresenter.totals_json(totals)}
     chunk(conn, encode_event("totals", payload))
   end

@@ -51,7 +51,7 @@ describe("StartIssueSessionDialog", () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByTestId("execution-mode-icon-yolo")).toBeInTheDocument();
+    expect(screen.getByTestId("execution-mode-icon-build")).toBeInTheDocument();
     expect(screen.getByTestId("workspace-target-issue")).toBeInTheDocument();
     expect(screen.queryByTestId("workspace-target-parent")).not.toBeInTheDocument();
 
@@ -62,7 +62,7 @@ describe("StartIssueSessionDialog", () => {
       expect(createIssueSessionThreadMock).toHaveBeenCalledWith("macro-markets", "MAC-510", {
         title: "Build pass 2",
         agentKind: "codex",
-        executionMode: "yolo",
+        executionMode: "build",
         isolatedWorkspace: false,
         useParentWorkspace: false,
       }),
