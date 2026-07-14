@@ -1,5 +1,7 @@
 import type { AssistantChatMessage, AssistantToolCall } from "@/services/assistant";
 
+import { appendTextBlock, pushToolBlock } from "./contentBlocks";
+
 export const STREAMING_ASSISTANT_ID = "assistant-streaming";
 
 export function assistantMessage(id: string, content: string): AssistantChatMessage {
@@ -16,10 +18,19 @@ export function appendMessage(
 
 export function appendAssistantDelta(messages: AssistantChatMessage[], delta: string): AssistantChatMessage[] {
   const existing = messages.find((message) => message.id === STREAMING_ASSISTANT_ID);
-  if (!existing) return [...messages, assistantMessage(STREAMING_ASSISTANT_ID, delta)];
+  if (!existing) {
+    const streamingMessage = assistantMessage(STREAMING_ASSISTANT_ID, delta);
+    return [...messages, { ...streamingMessage, contentBlocks: appendTextBlock(undefined, delta) }];
+  }
 
   return messages.map((message) =>
-    message.id === STREAMING_ASSISTANT_ID ? { ...message, content: `${message.content}${delta}` } : message,
+    message.id === STREAMING_ASSISTANT_ID
+      ? {
+          ...message,
+          content: `${message.content}${delta}`,
+          contentBlocks: appendTextBlock(message.contentBlocks ?? appendTextBlock(undefined, message.content), delta),
+        }
+      : message,
   );
 }
 
@@ -41,7 +52,18 @@ export function updateStreamingToolCall(
 ): AssistantChatMessage[] {
   const existing = messages.find((message) => message.id === STREAMING_ASSISTANT_ID);
   const target = existing ?? assistantMessage(STREAMING_ASSISTANT_ID, "");
-  const nextTarget = { ...target, toolCalls: upsertToolCall(target.toolCalls, toolCall) };
+  const toolCalls = upsertToolCall(target.toolCalls, toolCall);
+  const nextTarget =
+    typeof toolCall.id === "string" && toolCall.id.trim() !== ""
+      ? {
+          ...target,
+          toolCalls,
+          contentBlocks: pushToolBlock(
+            target.contentBlocks ?? appendTextBlock(undefined, target.content),
+            toolCall.id,
+          ),
+        }
+      : { ...target, toolCalls };
 
   if (!existing) return [...messages, nextTarget];
   return messages.map((message) => (message.id === STREAMING_ASSISTANT_ID ? nextTarget : message));

@@ -164,9 +164,18 @@ defmodule SymphonyElixir.KnowledgeBase.IssueWorkspace do
       repo_slug: Paths.repo_slug(repo.workspace_path),
       workspace_path: repo.workspace_path,
       github_full_name: repo.github_full_name,
+      default_branch: configured_branch(repo),
       role: repo.role,
       docs_present?: true
     }
+  end
+
+  defp configured_branch(repo) do
+    cond do
+      is_binary(repo.selected_branch) and repo.selected_branch != "" -> repo.selected_branch
+      is_binary(repo.default_branch) and repo.default_branch != "" -> repo.default_branch
+      true -> "main"
+    end
   end
 
   defp ensure_regular_file(abs), do: if(File.regular?(abs), do: :ok, else: {:error, :kb_page_not_found})

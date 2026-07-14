@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
 
+import type { ActivityDisclosureStateProps } from "@/components/agent-activity/ActivityDisclosure";
 import { AgentTaskInlineCard } from "@/components/agent-activity/AgentTaskInlineCard";
 import { FileActivityCard } from "@/components/assistant/FileActivityCard";
 import type { FileActivityView } from "@/components/assistant/fileActivity";
@@ -8,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { isAgentTaskTool } from "@/lib/agentTasks";
 import type { AgentTaskSnapshot } from "@/types/agentTasks";
 
-export interface ToolActivityItemProps {
+export interface ToolActivityItemProps extends ActivityDisclosureStateProps {
   toolName: string;
   toolCallId?: string | null;
   view: ToolCallView;
@@ -25,18 +26,42 @@ export function ToolActivityItem({
   taskSnapshot,
   fileActivity,
   onKillTool,
+  expanded,
+  onExpandedChange,
 }: ToolActivityItemProps) {
   const { t } = useTranslation();
 
   if (taskSnapshot && isAgentTaskTool(toolName)) {
-    return <AgentTaskInlineCard snapshot={taskSnapshot} />;
+    return (
+      <AgentTaskInlineCard
+        snapshot={taskSnapshot}
+        expanded={expanded}
+        onExpandedChange={onExpandedChange}
+      />
+    );
   }
-  if (fileActivity) return <FileActivityCard view={fileActivity} />;
+  if (fileActivity) {
+    return (
+      <FileActivityCard
+        view={fileActivity}
+        expanded={expanded}
+        onExpandedChange={onExpandedChange}
+      />
+    );
+  }
 
   const killId = typeof toolCallId === "string" ? toolCallId.trim() : "";
   const showKill = view.status === "running" && Boolean(onKillTool) && killId.length > 0;
 
-  if (!showKill) return <ToolCallBlock view={view} />;
+  if (!showKill) {
+    return (
+      <ToolCallBlock
+        view={view}
+        expanded={expanded}
+        onExpandedChange={onExpandedChange}
+      />
+    );
+  }
 
   return (
     <div className="space-y-1">
@@ -51,7 +76,11 @@ export function ToolActivityItem({
           {t("assistant.working.kill")}
         </Button>
       </div>
-      <ToolCallBlock view={view} />
+      <ToolCallBlock
+        view={view}
+        expanded={expanded}
+        onExpandedChange={onExpandedChange}
+      />
     </div>
   );
 }

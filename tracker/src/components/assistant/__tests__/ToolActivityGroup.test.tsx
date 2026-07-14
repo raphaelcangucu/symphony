@@ -22,15 +22,45 @@ function readGroup(status: ToolCallGroup["status"] = "complete"): ToolCallGroup 
   };
 }
 
+function actionGroup(status: ToolCallGroup["status"] = "complete"): ToolCallGroup {
+  return {
+    kind: "action",
+    status,
+    calls: [
+      call({
+        id: "action-1",
+        name: "move_issue",
+        status,
+        arguments: { identifier: "SYM-1" },
+        output: "Moved SYM-1",
+      }),
+      call({
+        id: "action-2",
+        name: "move_issue",
+        status: "complete",
+        arguments: { identifier: "SYM-2" },
+        output: "Moved SYM-2",
+      }),
+    ],
+  };
+}
+
 describe("ToolActivityGroup", () => {
   beforeEach(async () => {
     await initTestI18n("en");
   });
 
-  it("renders a count label and is collapsed by default for reads", () => {
-    renderWithI18n(<ToolActivityGroup group={readGroup()} />);
-    expect(screen.getByText("Read 3 files")).toBeInTheDocument();
-    expect(screen.queryByText("a.ex")).not.toBeInTheDocument();
+  it.each([
+    ["reads", readGroup()],
+    ["actions", actionGroup()],
+    ["errors", actionGroup("error")],
+    ["running work", actionGroup("running")],
+  ])("keeps %s closed initially", (_label, group) => {
+    renderWithI18n(<ToolActivityGroup group={group} />);
+
+    const summary = screen.getByTestId("tool-activity-group");
+    expect(summary).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText(group.kind === "read" ? "a.ex" : "IN")).not.toBeInTheDocument();
   });
 
   it("expands to show individual rows when clicked", () => {
@@ -38,13 +68,35 @@ describe("ToolActivityGroup", () => {
     fireEvent.click(screen.getByTestId("tool-activity-group"));
     expect(screen.getByText("a.ex")).toBeInTheDocument();
     expect(screen.getByText("c.ex")).toBeInTheDocument();
+    expect(screen.getByTestId("tool-activity-group").parentElement).not.toHaveClass(
+      "rounded-xl",
+      "border",
+    );
+    expect(screen.getByText("a.ex").closest("button")).toHaveAttribute("aria-expanded", "false");
   });
 
-  it("is expanded by default and shows a failed badge when the group errored", () => {
+  it("shows failed status without opening errored details", () => {
     const group = readGroup("error");
     group.calls[1] = call({ id: "2", status: "error", arguments: { path: "b.ex" } });
     renderWithI18n(<ToolActivityGroup group={group} />);
+
     expect(screen.getByText("failed")).toBeInTheDocument();
-    expect(screen.getByText("b.ex")).toBeInTheDocument();
+    expect(screen.queryByText("b.ex")).not.toBeInTheDocument();
+  });
+
+  it("shows running status without dumping output", () => {
+    const group = readGroup("running");
+    group.calls[0] = call({
+      id: "1",
+      status: "running",
+      arguments: { path: "running.ex" },
+      output: "partial output",
+    });
+    renderWithI18n(<ToolActivityGroup group={group} />);
+
+    const summary = screen.getByTestId("tool-activity-group");
+    expect(summary).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByText("running")).toBeInTheDocument();
+    expect(screen.queryByText("partial output")).not.toBeInTheDocument();
   });
 });

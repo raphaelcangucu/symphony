@@ -85,7 +85,7 @@ export function ProjectNavigationTree(props: ProjectNavigationTreeProps) {
     (node: SidebarSyntheticNode, trigger: HTMLElement) => {
       const project = projectById.get(node.projectId);
       if (!project) return;
-      if (node.syntheticKind === "error") {
+      if (node.syntheticKind === "error" || node.syntheticKind === "stale") {
         retryProject(project.id);
         return;
       }
@@ -203,6 +203,10 @@ export function ProjectNavigationTree(props: ProjectNavigationTreeProps) {
     row: SidebarVisibleRow,
     label: string,
     actionLabel: string,
+    options?: {
+      variant?: "boxed" | "soft";
+      actionAriaLabel?: string;
+    },
   ) => (
     <SidebarPseudoTreeItem
       key={row.id}
@@ -210,6 +214,8 @@ export function ProjectNavigationTree(props: ProjectNavigationTreeProps) {
       level={row.level === 2 ? 2 : 3}
       label={label}
       actionLabel={actionLabel}
+      actionAriaLabel={options?.actionAriaLabel}
+      variant={options?.variant}
       {...commonRowProps(row)}
       onActivate={(trigger) => {
         if (row.node.kind === "synthetic") activateSynthetic(row.node, trigger);
@@ -223,13 +229,20 @@ export function ProjectNavigationTree(props: ProjectNavigationTreeProps) {
     const expanded = expandedWorkspaceIds.has(workspace.id);
     const emptyId = syntheticRowId("empty-workspace", project.id, workspace.id);
     const moreId = syntheticRowId("more-sessions", project.id, workspace.id);
+    const rowProps = commonRowProps(row);
     return (
       <WorkspaceTreeItem
         key={workspace.id}
         node={workspace}
         expanded={expanded}
-        {...commonRowProps(row)}
-        onOpen={() => openNode(workspace.href)}
+        {...rowProps}
+        onOpen={() => {
+          if (expanded && rowProps.selected) {
+            toggleWorkspace(workspace.id);
+            return;
+          }
+          openNode(workspace.href);
+        }}
         onToggle={() => toggleWorkspace(workspace.id)}
         renderContextMenu={(trigger) => renderContextMenu(workspace, trigger)}
       >
@@ -240,13 +253,18 @@ export function ProjectNavigationTree(props: ProjectNavigationTreeProps) {
               ? renderSyntheticAction(
                   rowById.get(emptyId)!,
                   t("layout.sidebar.tree.emptyWorkspace", {
-                    workspace: workspace.title,
-                    defaultValue: "No sessions in {{workspace}}",
+                    defaultValue: "No sessions",
                   }),
                   t("layout.sidebar.tree.createSession", {
-                    workspace: workspace.title,
-                    defaultValue: "Create session in {{workspace}}",
+                    defaultValue: "Create",
                   }),
+                  {
+                    variant: "soft",
+                    actionAriaLabel: t("layout.sidebar.tree.createSessionNamed", {
+                      workspace: workspace.title,
+                      defaultValue: "Create session in {{workspace}}",
+                    }),
+                  },
                 )
               : null}
             {rowById.has(moreId)
@@ -274,7 +292,7 @@ export function ProjectNavigationTree(props: ProjectNavigationTreeProps) {
       aria-label={ariaLabel ?? t("layout.sidebar.tree.label", { defaultValue: "Projects" })}
       onFocusCapture={focus.onTreeFocusCapture}
       onBlurCapture={focus.onTreeBlurCapture}
-      className={cn("min-h-0 overflow-y-auto px-1 py-1", SCROLLBAR_THIN)}
+      className={cn("min-h-0 flex-1 overflow-y-auto px-0.5 py-1 [contain:layout]", SCROLLBAR_THIN)}
       data-sidebar-tree-scroll-container="true"
     >
       {projects.map((project) => {
@@ -333,9 +351,10 @@ export function ProjectNavigationTree(props: ProjectNavigationTreeProps) {
                     level={2}
                     label={t("layout.sidebar.tree.unassigned", { defaultValue: "No workspace" })}
                     expanded
+                    tone="default"
                     {...commonRowProps(unassignedRow)}
                   >
-                    <div role="group">
+                    <div role="group" className="mb-2">
                       {project.unassignedSessions.map(({ id }) => renderSession(id))}
                     </div>
                   </SidebarPseudoTreeItem>

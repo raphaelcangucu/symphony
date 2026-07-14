@@ -1,3 +1,4 @@
+import { Loader2 } from "lucide-react";
 import type { KeyboardEvent, ReactNode, Ref } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -45,6 +46,8 @@ export function ProjectTreeItem({
     count: workspaceCount,
     defaultValue: "{{count}} workspaces",
   });
+  const loading =
+    node.loadState === "loading" || (expanded && node.loadState === "idle");
 
   return (
     <SidebarTreeRow
@@ -52,14 +55,27 @@ export function ProjectTreeItem({
       id={node.id}
       level={1}
       label={node.title}
-      description={workspaceCountLabel}
+      description={null}
       selected={selected}
       expandable
       expanded={expanded}
-      statusLabel={statusLabel}
-      trailingLabel={null}
+      busy={loading}
+      statusLabel={[statusLabel, workspaceCountLabel].filter(Boolean).join(", ")}
+      trailingLabel={String(workspaceCount)}
       tabIndex={tabIndex}
-      statusIndicator={<RecentStatusDot statusKind={aggregateStatusKind(node.aggregateStatus)} />}
+      leadingIcon={
+        loading ? (
+          <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground/70" aria-hidden="true" />
+        ) : undefined
+      }
+      statusIndicator={
+        loading ? null : (
+          <RecentStatusDot
+            statusKind={aggregateStatusKind(node.aggregateStatus)}
+            className="h-1.5 w-1.5"
+          />
+        )
+      }
       onFocus={onFocus}
       onOpen={onOpen}
       onToggle={onToggle}

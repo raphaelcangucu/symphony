@@ -41,12 +41,64 @@ describe("FileActivityCard", () => {
   it("is collapsed by default and expands the body on click", () => {
     renderWithI18n(<FileActivityCard view={view({ body: { value: "hello body", language: "text" } })} />);
     expect(screen.queryByText("hello body")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button"));
+    const summary = screen.getByRole("button");
+    expect(summary).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(summary);
     expect(screen.getByText("hello body")).toBeInTheDocument();
   });
 
-  it("shows a running indicator", () => {
-    renderWithI18n(<FileActivityCard view={view({ status: "running" })} />);
-    expect(screen.getByRole("button")).toHaveAttribute("aria-busy", "true");
+  it("does not render a dead toggle without detail content", () => {
+    renderWithI18n(<FileActivityCard view={view({ body: null })} />);
+
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    expect(screen.getByText("front/README.md").closest("[aria-expanded]")).toBeNull();
+  });
+
+  it("keeps running output closed and exposes busy status", () => {
+    renderWithI18n(
+      <FileActivityCard
+        view={view({
+          status: "running",
+          body: { value: "partial output", language: "text" },
+        })}
+      />,
+    );
+
+    const summary = screen.getByRole("button", { name: /running/i });
+    expect(summary).toHaveAttribute("aria-busy", "true");
+    expect(summary).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("partial output")).not.toBeInTheDocument();
+  });
+
+  it("keeps failed output closed and makes failure obvious", () => {
+    renderWithI18n(
+      <FileActivityCard
+        view={view({
+          status: "error",
+          body: { value: "permission denied", language: "text" },
+        })}
+      />,
+    );
+
+    expect(screen.getByText("failed")).toHaveClass("text-destructive");
+    expect(screen.queryByText("permission denied")).not.toBeInTheDocument();
+  });
+
+  it("preserves diff colors after expansion", () => {
+    renderWithI18n(
+      <FileActivityCard
+        view={view({
+          kind: "edit",
+          body: {
+            value: "@@ -1 +1 @@\n-removed\n+added",
+            language: "diff",
+          },
+        })}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button"));
+    expect(screen.getByText("+added")).toHaveClass("text-emerald-300");
+    expect(screen.getByText("-removed")).toHaveClass("text-rose-300");
   });
 });

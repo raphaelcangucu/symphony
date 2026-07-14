@@ -146,8 +146,7 @@ defmodule SymphonyElixir.Cursor.CliRunnerTest do
         _ -> []
       end)
 
-    assert "Hello wor" in created_texts
-    assert "Hello world" in created_texts
+    assert created_texts == ["Hello wor", "ld"]
 
     # Typed tool call (readToolCall) is unwrapped
     tool_item =
@@ -158,6 +157,82 @@ defmodule SymphonyElixir.Cursor.CliRunnerTest do
 
     assert tool_item["name"] == "Read"
     assert tool_item["input"] == %{"path" => "file.txt"}
+  end
+
+  test "a later independent flush remains a full text segment" do
+    {result, events} = run("ordered-timeline")
+    assert {:ok, %{cli_session_id: "chat-ordered", status: :completed}} = result
+
+    created_texts =
+      Enum.flat_map(events, fn
+        %{"method" => "item/created", "params" => %{"item" => %{"type" => "text", "text" => text}}} -> [text]
+        _other -> []
+      end)
+
+    assert created_texts == ["Before", " \n"]
+  end
+
+  test "independent repeated segments are not discarded" do
+    {result, events} = run("repeat-segments")
+    assert {:ok, %{cli_session_id: "chat-repeat", status: :completed}} = result
+
+    created_texts =
+      Enum.flat_map(events, fn
+        %{"method" => "item/created", "params" => %{"item" => %{"type" => "text", "text" => text}}} -> [text]
+        _other -> []
+      end)
+
+    assert created_texts == ["foo", "foo"]
+    assert Enum.join(created_texts) == "foofoo"
+  end
+
+  test "independent prefix-sharing segments remain complete" do
+    {result, events} = run("prefix-segments")
+    assert {:ok, %{cli_session_id: "chat-prefix", status: :completed}} = result
+
+    created_texts =
+      Enum.flat_map(events, fn
+        %{"method" => "item/created", "params" => %{"item" => %{"type" => "text", "text" => text}}} -> [text]
+        _other -> []
+      end)
+
+    assert created_texts == ["foo", "foobar"]
+    assert Enum.join(created_texts) == "foofoobar"
+  end
+
+  test "multiple tool boundaries conserve exact text order and final aggregate" do
+    {result, events} = run("multi-tools")
+    assert {:ok, %{cli_session_id: "chat-multi-tools", status: :completed}} = result
+
+    ordered_items =
+      Enum.flat_map(events, fn
+        %{"method" => "item/created", "params" => %{"item" => %{"type" => "text", "text" => text}}} ->
+          [{:text, text}]
+
+        %{
+          "method" => "item/created",
+          "params" => %{"item" => %{"type" => "tool_call", "tool_use_id" => tool_id}}
+        } ->
+          [{:tool, tool_id}]
+
+        _other ->
+          []
+      end)
+
+    assert ordered_items == [
+             {:text, "one"},
+             {:tool, "tool-1"},
+             {:text, " two"},
+             {:tool, "tool-2"},
+             {:text, " three"}
+           ]
+
+    assert ordered_items
+           |> Enum.flat_map(fn
+             {:text, text} -> [text]
+             {:tool, _tool_id} -> []
+           end)
+           |> Enum.join() == "one two three"
   end
 
   test "glob error completed event preserves the tool name and error flag" do

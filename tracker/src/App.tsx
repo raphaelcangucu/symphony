@@ -35,6 +35,9 @@ import { AppearanceSettingsPage } from "@/pages/AppearanceSettingsPage";
 import { ExperimentalSettingsPage } from "@/pages/ExperimentalSettingsPage";
 import { ProvidersSettingsPage } from "@/pages/ProvidersSettingsPage";
 import { SettingsPlaceholderRoute } from "@/pages/SettingsPlaceholderRoute";
+import { SidebarTreeLayoutProposalsPage } from "@/pages/SidebarTreeLayoutProposalsPage";
+import { AssistantSessionLayoutProposalsPage } from "@/pages/AssistantSessionLayoutProposalsPage";
+import { WorkspacesPageLayoutProposalsPage } from "@/pages/WorkspacesPageLayoutProposalsPage";
 import { UsageSettingsPage } from "@/pages/UsageSettingsPage";
 import { GatewaysSettingsPage } from "@/pages/GatewaysSettingsPage";
 import { TemplateListPage } from "@/pages/TemplateListPage";
@@ -141,6 +144,18 @@ export function App() {
               <Route path="assistant" element={<AssistantPage />} />
               <Route path="assistant/:threadId" element={<AssistantPage />} />
               <Route path="kb/*" element={<KbGeneralPage />} />
+              <Route
+                path="dev/sidebar-tree-proposals"
+                element={<SidebarTreeLayoutProposalsPage />}
+              />
+              <Route
+                path="dev/workspaces-page-proposals"
+                element={<WorkspacesPageLayoutProposalsPage />}
+              />
+              <Route
+                path="dev/assistant-session-proposals"
+                element={<AssistantSessionLayoutProposalsPage />}
+              />
             </Route>
           </Route>
           <Route path="*" element={<Navigate to="/projects" replace />} />

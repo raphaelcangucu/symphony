@@ -99,6 +99,21 @@ describe("AssistantSessionTabContent", () => {
     expect(screen.getByText("-3")).toBeInTheDocument();
   });
 
+  it("does not wrap the assistant in a bordered scrolling card", async () => {
+    render(
+      <MemoryRouter>
+        <SessionTerminalDockContext.Provider value={{ openIssueIdentifier: null, toggleTerminal: vi.fn() }}>
+          <AssistantSessionTabContent projectSlug="macro-markets" threadId={7996} view="board" />
+        </SessionTerminalDockContext.Provider>
+      </MemoryRouter>,
+    );
+    await screen.findByTestId("assistant-panel");
+    expect(document.querySelector("section.rounded-xl.border.shadow-sm")).toBeNull();
+    const root = screen.getByTestId("assistant-session-tab");
+    expect(root).toHaveClass("overflow-hidden", "bg-background");
+    expect(root).not.toHaveClass("rounded-xl", "shadow-sm");
+  });
+
   it("opens the composer's diff modal from the toolbar diff button", async () => {
     const user = userEvent.setup();
 

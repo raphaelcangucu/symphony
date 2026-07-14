@@ -20,7 +20,7 @@ export function ResumeSessionButton({ onResume, pending = false, className }: Re
 
   return (
     <SessionRowActionButton label={label} onClick={onResume} disabled={pending} className={className}>
-      <Play className="h-4 w-4" />
+      <Play className="h-3 w-3" strokeWidth={1.5} />
     </SessionRowActionButton>
   );
 }

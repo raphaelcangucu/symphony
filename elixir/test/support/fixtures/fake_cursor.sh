@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Fake `cursor-agent --print --output-format stream-json --stream-partial-output` for tests.
-# Modes via FAKE_CURSOR_MODE: happy (default) | error | hang | multi | silent | resume-aware
+# Modes via FAKE_CURSOR_MODE: happy (default) | error | hang | multi | repeat-segments |
+# prefix-segments | multi-tools | silent | whitespace-only | ordered-timeline | resume-aware
 prompt="$(cat)"
 case "${FAKE_CURSOR_MODE:-happy}" in
   happy)
@@ -29,10 +30,52 @@ case "${FAKE_CURSOR_MODE:-happy}" in
     echo '{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Hello world"}]},"session_id":"chat-multi"}'
     echo '{"type":"result","subtype":"success","is_error":false,"result":"Hello world","session_id":"chat-multi","usage":{"inputTokens":50,"outputTokens":25,"totalTokens":75}}'
     ;;
+  repeat-segments)
+    echo '{"type":"system","subtype":"init","session_id":"chat-repeat"}'
+    echo '{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"foo"}]},"session_id":"chat-repeat"}'
+    echo '{"type":"tool_call","subtype":"started","call_id":"repeat-tool","tool_call":{"function":{"name":"Read","arguments":"{}"}},"session_id":"chat-repeat"}'
+    echo '{"type":"tool_call","subtype":"completed","call_id":"repeat-tool","tool_call":{"function":{"name":"Read","arguments":"{}","result":"ok"}},"session_id":"chat-repeat"}'
+    echo '{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"foo"}]},"session_id":"chat-repeat"}'
+    echo '{"type":"result","subtype":"success","is_error":false,"result":"foofoo","session_id":"chat-repeat"}'
+    ;;
+  prefix-segments)
+    echo '{"type":"system","subtype":"init","session_id":"chat-prefix"}'
+    echo '{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"foo"}]},"session_id":"chat-prefix"}'
+    echo '{"type":"tool_call","subtype":"started","call_id":"prefix-tool","tool_call":{"function":{"name":"Read","arguments":"{}"}},"session_id":"chat-prefix"}'
+    echo '{"type":"tool_call","subtype":"completed","call_id":"prefix-tool","tool_call":{"function":{"name":"Read","arguments":"{}","result":"ok"}},"session_id":"chat-prefix"}'
+    echo '{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"foobar"}]},"session_id":"chat-prefix"}'
+    echo '{"type":"result","subtype":"success","is_error":false,"result":"foofoobar","session_id":"chat-prefix"}'
+    ;;
+  multi-tools)
+    echo '{"type":"system","subtype":"init","session_id":"chat-multi-tools"}'
+    echo '{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"one"}]},"session_id":"chat-multi-tools","timestamp_ms":1}'
+    echo '{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"one"}]},"session_id":"chat-multi-tools","timestamp_ms":2,"model_call_id":"mc1"}'
+    echo '{"type":"tool_call","subtype":"started","call_id":"tool-1","tool_call":{"function":{"name":"Read","arguments":"{}"}},"session_id":"chat-multi-tools"}'
+    echo '{"type":"tool_call","subtype":"completed","call_id":"tool-1","tool_call":{"function":{"name":"Read","arguments":"{}","result":"ok"}},"session_id":"chat-multi-tools"}'
+    echo '{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":" two"}]},"session_id":"chat-multi-tools","timestamp_ms":3}'
+    echo '{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"one two"}]},"session_id":"chat-multi-tools","timestamp_ms":4,"model_call_id":"mc2"}'
+    echo '{"type":"tool_call","subtype":"started","call_id":"tool-2","tool_call":{"function":{"name":"Read","arguments":"{}"}},"session_id":"chat-multi-tools"}'
+    echo '{"type":"tool_call","subtype":"completed","call_id":"tool-2","tool_call":{"function":{"name":"Read","arguments":"{}","result":"ok"}},"session_id":"chat-multi-tools"}'
+    echo '{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"one two three"}]},"session_id":"chat-multi-tools"}'
+    echo '{"type":"result","subtype":"success","is_error":false,"result":"one two three","session_id":"chat-multi-tools"}'
+    ;;
   silent)
     # Turn completes successfully but emits no assistant text (exercises the empty-reply fallback).
     echo '{"type":"system","subtype":"init","session_id":"chat-silent"}'
     echo '{"type":"result","subtype":"success","is_error":false,"result":"","session_id":"chat-silent"}'
+    ;;
+  whitespace-only)
+    echo '{"type":"system","subtype":"init","session_id":"chat-whitespace"}'
+    echo '{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":" \n "}]},"session_id":"chat-whitespace"}'
+    echo '{"type":"result","subtype":"success","is_error":false,"result":" \n ","session_id":"chat-whitespace"}'
+    ;;
+  ordered-timeline)
+    echo '{"type":"system","subtype":"init","session_id":"chat-ordered"}'
+    echo '{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Before"}]},"session_id":"chat-ordered"}'
+    echo '{"type":"tool_call","subtype":"started","call_id":"tc-ordered","tool_call":{"function":{"name":"mcp__symphony__list_issues","arguments":"{\"limit\":1}"}},"session_id":"chat-ordered"}'
+    echo '{"type":"tool_call","subtype":"completed","call_id":"tc-ordered","tool_call":{"function":{"name":"mcp__symphony__list_issues","arguments":"{\"limit\":1}","result":"ok"}},"session_id":"chat-ordered"}'
+    echo '{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":" \n"}]},"session_id":"chat-ordered"}'
+    echo '{"type":"result","subtype":"success","is_error":false,"result":"Before \n","session_id":"chat-ordered"}'
     ;;
   resume-aware)
     # Mimic the real cursor-agent CLI: a `--resume <id>` to a non-existent chat prints

@@ -45,7 +45,7 @@ export function AssistantSessionTabContent({
   });
 
   return (
-    <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border/60 bg-background px-3 pb-2 pt-2 shadow-sm">
+    <section className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background" data-testid="assistant-session-tab">
       {issueIdentifier ? (
         <IssueSessionSplitLayout
           projectSlug={projectSlug}

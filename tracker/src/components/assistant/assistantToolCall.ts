@@ -26,8 +26,6 @@ export function isShellTool(name: string): boolean {
 }
 
 export function assistantToolCallToView(toolCall: AssistantToolCall): ToolCallView {
-  const action = isActionTool(toolCall.name);
-  const shellRunning = isShellTool(toolCall.name) && toolCall.status === "running";
   const input = serializeArguments(toolCall.arguments);
   const output = toolCall.output ? formatToolOutput(toolCall.output) : null;
 
@@ -37,7 +35,7 @@ export function assistantToolCallToView(toolCall: AssistantToolCall): ToolCallVi
     status: mapStatus(toolCall.status),
     input: input ? { value: input, language: isShellTool(toolCall.name) ? "bash" : "json" } : null,
     output: output ? { value: output, language: "text" } : null,
-    defaultCollapsed: !(action || shellRunning),
+    defaultCollapsed: true,
   };
 }
 

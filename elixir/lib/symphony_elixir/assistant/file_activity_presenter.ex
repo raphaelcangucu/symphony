@@ -9,12 +9,12 @@ defmodule SymphonyElixir.Assistant.FileActivityPresenter do
   """
 
   @type tool_call :: %{
-          id: String.t() | nil,
-          name: String.t(),
-          status: String.t(),
-          arguments: map() | nil,
-          output: String.t() | nil,
-          result: map()
+          required(:id) => String.t() | nil,
+          required(:name) => String.t(),
+          required(:status) => String.t(),
+          required(:result) => map(),
+          optional(:arguments) => map(),
+          optional(:output) => String.t()
         }
 
   @spec from_event(term()) :: {:started, tool_call()} | {:completed, tool_call()} | :ignore
@@ -50,14 +50,16 @@ defmodule SymphonyElixir.Assistant.FileActivityPresenter do
   defp from_item(_params, _phase), do: :ignore
 
   defp command_call(item, phase) do
+    command = command_text(item)
+
     %{
       id: get(item, ["id", :id]),
       name: "shell",
       status: phase_status(phase, item),
-      arguments: %{"command" => command_text(item)},
-      output: if(phase == :completed, do: command_output(item), else: nil),
       result: command_result(item, phase)
     }
+    |> put_if_present(:arguments, if(present_string?(command), do: %{"command" => command}))
+    |> put_if_present(:output, if(phase == :completed, do: command_output(item)))
   end
 
   defp file_change_call(item, phase) do
@@ -65,27 +67,13 @@ defmodule SymphonyElixir.Assistant.FileActivityPresenter do
     native_files = native_file_entries(item)
     {diff, additions, deletions} = native_aggregate(item, native_files)
 
-    result =
-      if phase == :completed do
-        %{
-          "diff" => diff,
-          "additions" => additions,
-          "deletions" => deletions,
-          "paths" => paths,
-          "files" => native_files
-        }
-      else
-        %{"paths" => paths}
-      end
-
     %{
       id: get(item, ["id", :id]),
       name: "apply_patch",
       status: phase_status(phase, item),
-      arguments: %{"paths" => paths, "file_count" => length(paths)},
-      output: nil,
-      result: result
+      result: file_change_result(paths, diff, additions, deletions, native_files, phase)
     }
+    |> put_if_present(:arguments, file_change_arguments(paths))
   end
 
   # Native per-file patches arrive from Codex in one of two shapes: an aggregate
@@ -171,7 +159,19 @@ defmodule SymphonyElixir.Assistant.FileActivityPresenter do
     end
   end
 
-  defp native_aggregate(_item, []), do: {nil, 0, 0}
+  # No per-file patches were recovered, but Codex may still have reported a
+  # top-level diff we can't split into per-file entries (e.g. missing +++/---
+  # markers). Fall back to that raw diff/counts instead of reporting nothing.
+  defp native_aggregate(item, []) do
+    case diff_of(item) do
+      top when is_binary(top) and top != "" ->
+        {additions, deletions} = diff_counts(top)
+        {top, additions, deletions}
+
+      _ ->
+        {nil, 0, 0}
+    end
+  end
 
   defp native_aggregate(item, native_files) do
     diff =
@@ -235,6 +235,33 @@ defmodule SymphonyElixir.Assistant.FileActivityPresenter do
 
   defp command_result(_item, :started), do: %{}
 
+  defp file_change_arguments([]), do: nil
+  defp file_change_arguments(paths), do: %{"paths" => paths, "file_count" => length(paths)}
+
+  defp file_change_result(paths, _diff, _additions, _deletions, _native_files, :started),
+    do: put_paths_if_present(%{}, paths)
+
+  # No native per-file entries: keep the legacy aggregate-only shape (no "files" key)
+  # so sparse start/complete merges against pre-existing timelines stay unchanged.
+  defp file_change_result(paths, diff, additions, deletions, [], :completed)
+       when is_binary(diff) and diff != "" do
+    %{"diff" => diff, "additions" => additions, "deletions" => deletions}
+    |> put_paths_if_present(paths)
+  end
+
+  defp file_change_result(paths, _diff, _additions, _deletions, [], :completed) do
+    %{"diff" => nil, "additions" => 0, "deletions" => 0, "files" => []}
+    |> put_paths_if_present(paths)
+  end
+
+  defp file_change_result(paths, diff, additions, deletions, native_files, :completed) do
+    %{"diff" => diff, "additions" => additions, "deletions" => deletions, "files" => native_files}
+    |> put_paths_if_present(paths)
+  end
+
+  defp put_paths_if_present(result, []), do: result
+  defp put_paths_if_present(result, paths), do: Map.put(result, "paths", paths)
+
   defp change_paths(item) do
     from_changes =
       case get(item, ["changes", :changes]) do
@@ -271,6 +298,13 @@ defmodule SymphonyElixir.Assistant.FileActivityPresenter do
   end
 
   defp diff_counts(_diff), do: {0, 0}
+
+  defp put_if_present(map, _key, nil), do: map
+  defp put_if_present(map, _key, ""), do: map
+  defp put_if_present(map, _key, []), do: map
+  defp put_if_present(map, key, value), do: Map.put(map, key, value)
+
+  defp present_string?(value), do: is_binary(value) and value != ""
 
   defp get(map, keys) when is_map(map), do: Enum.find_value(keys, fn key -> Map.get(map, key) end)
   defp get(_map, _keys), do: nil

@@ -1,8 +1,30 @@
 import {
+  Archive,
+  Bookmark,
+  BookmarkCheck,
+  ClipboardCopy,
+  Copy,
+  ExternalLink,
+  FileText,
+  FolderKanban,
+  FolderPlus,
+  FolderTree,
+  MessageSquarePlus,
+  Pencil,
+  Pin,
+  PinOff,
+  Settings,
+  Tags,
+  Terminal,
+  Trash2,
+} from "lucide-react";
+import {
   cloneElement,
   Fragment,
+  type ComponentType,
   type KeyboardEvent,
   type MouseEvent,
+  type SVGProps,
   useId,
   useRef,
   useState,
@@ -46,6 +68,30 @@ import type {
   SidebarNode,
 } from "@/types/sidebar";
 
+type LucideIcon = ComponentType<SVGProps<SVGSVGElement> & { className?: string }>;
+
+const SIDEBAR_ACTION_ICONS: Readonly<Record<SidebarMenuActionId, LucideIcon>> = {
+  "new-workspace": FolderPlus,
+  "new-session": MessageSquarePlus,
+  "open-board": FolderKanban,
+  "open-docs": FileText,
+  "open-settings": Settings,
+  "open-editor": ExternalLink,
+  "open-terminal": Terminal,
+  pin: Pin,
+  unpin: PinOff,
+  rename: Pencil,
+  "copy-branch": Copy,
+  "copy-path": ClipboardCopy,
+  "manage-labels": Tags,
+  "toggle-review": Bookmark,
+  "copy-resume-link": ClipboardCopy,
+  archive: Archive,
+  restore: FolderTree,
+  remove: Trash2,
+  "remove-workspace": Trash2,
+  delete: Trash2,
+};
 type DialogState =
   | { type: "rename"; targetType: "project" | "workspace" | "thread" | "issue" }
   | { type: "metadata"; target: SidebarSessionMetadataTarget }
@@ -431,12 +477,16 @@ export function SidebarContextMenu({
                     ? t(action.disabledReason)
                     : undefined
                 }
-                className={cn(action.destructive && "text-destructive focus:text-destructive")}
+                className={cn(
+                  "gap-2",
+                  action.destructive && "text-destructive focus:text-destructive",
+                )}
                 onSelect={(event) => {
                   event.preventDefault();
                   selectAction(action);
                 }}
               >
+                {renderActionIcon(action, node)}
                 {action.id === "toggle-review" && node.kind === "session"
                   ? t(
                       node.needsReview
@@ -562,5 +612,21 @@ export function SidebarContextMenu({
         />
       ) : null}
     </>
+  );
+}
+
+function renderActionIcon(action: SidebarMenuAction, node: SidebarNode) {
+  const Icon =
+    action.id === "toggle-review" && node.kind === "session" && node.needsReview
+      ? BookmarkCheck
+      : SIDEBAR_ACTION_ICONS[action.id];
+  return (
+    <Icon
+      className={cn(
+        "h-4 w-4 shrink-0",
+        action.destructive ? "text-destructive" : "text-muted-foreground",
+      )}
+      aria-hidden="true"
+    />
   );
 }

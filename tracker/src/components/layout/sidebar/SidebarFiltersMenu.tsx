@@ -1,4 +1,15 @@
-import { SlidersHorizontal } from "lucide-react";
+import {
+  Activity,
+  Archive,
+  ArrowUpDown,
+  Bot,
+  CheckCheck,
+  CircleDot,
+  FoldVertical,
+  Layers,
+  RotateCcw,
+  SlidersHorizontal,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
@@ -7,7 +18,6 @@ import {
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
@@ -36,6 +46,8 @@ const AGENT_OPTIONS: readonly SidebarFilterAgent[] = [
   "cursor",
   "opencode",
 ];
+
+const FILTER_ICON_CLASS = "h-3.5 w-3.5 shrink-0 text-muted-foreground";
 
 export type SidebarFilterAction =
   | { readonly type: "sort"; readonly value: SidebarSortMode }
@@ -163,9 +175,9 @@ export function SidebarFiltersMenu({
           variant="ghost"
           size="sm"
           aria-label={buttonLabel}
-          className="h-7 gap-1.5 px-2 text-xs"
+          className="h-6 gap-1 px-1.5 text-[11px] font-normal text-muted-foreground hover:text-foreground"
         >
-          <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden />
+          <SlidersHorizontal className="h-3 w-3" strokeWidth={1.5} aria-hidden />
           {t("layout.sidebar.filters.button")}
           {activeCount > 0 ? (
             <span aria-hidden className="rounded bg-muted px-1 text-[10px]">
@@ -176,13 +188,12 @@ export function SidebarFiltersMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuSub>
-          <DropdownMenuSubTrigger>
+          <DropdownMenuSubTrigger className="gap-2">
+            <ArrowUpDown className={FILTER_ICON_CLASS} aria-hidden />
             {t("layout.sidebar.filters.sort")}
           </DropdownMenuSubTrigger>
           <DropdownMenuSubContent>
-            <DropdownMenuRadioGroup
-              value={normalized.sort}
-            >
+            <DropdownMenuRadioGroup value={normalized.sort}>
               <DropdownMenuRadioItem
                 value="activity"
                 onSelect={() => apply({ type: "sort", value: "activity" })}
@@ -200,13 +211,12 @@ export function SidebarFiltersMenu({
         </DropdownMenuSub>
 
         <DropdownMenuSub>
-          <DropdownMenuSubTrigger>
+          <DropdownMenuSubTrigger className="gap-2">
+            <Layers className={FILTER_ICON_CLASS} aria-hidden />
             {t("layout.sidebar.filters.group")}
           </DropdownMenuSubTrigger>
           <DropdownMenuSubContent>
-            <DropdownMenuRadioGroup
-              value={normalized.group}
-            >
+            <DropdownMenuRadioGroup value={normalized.group}>
               <DropdownMenuRadioItem
                 value="none"
                 onSelect={() => apply({ type: "group", value: "none" })}
@@ -230,7 +240,8 @@ export function SidebarFiltersMenu({
         </DropdownMenuSub>
 
         <DropdownMenuSub>
-          <DropdownMenuSubTrigger>
+          <DropdownMenuSubTrigger className="gap-2">
+            <CircleDot className={FILTER_ICON_CLASS} aria-hidden />
             {t("layout.sidebar.filters.statuses")}
           </DropdownMenuSubTrigger>
           <DropdownMenuSubContent>
@@ -247,7 +258,8 @@ export function SidebarFiltersMenu({
         </DropdownMenuSub>
 
         <DropdownMenuSub>
-          <DropdownMenuSubTrigger>
+          <DropdownMenuSubTrigger className="gap-2">
+            <Bot className={FILTER_ICON_CLASS} aria-hidden />
             {t("layout.sidebar.filters.agents")}
           </DropdownMenuSubTrigger>
           <DropdownMenuSubContent>
@@ -268,23 +280,38 @@ export function SidebarFiltersMenu({
           checked={normalized.filters.activityOnly}
           onCheckedChange={() => apply({ type: "toggle-activity" })}
         >
-          {t("layout.sidebar.filters.activityOnly")}
+          <span className="inline-flex items-center gap-2">
+            <Activity className={FILTER_ICON_CLASS} aria-hidden />
+            {t("layout.sidebar.filters.activityOnly")}
+          </span>
         </DropdownMenuCheckboxItem>
         <DropdownMenuCheckboxItem
           checked={normalized.filters.showArchived}
           onCheckedChange={() => apply({ type: "toggle-archived" })}
         >
-          {t("layout.sidebar.filters.showArchived")}
+          <span className="inline-flex items-center gap-2">
+            <Archive className={FILTER_ICON_CLASS} aria-hidden />
+            {t("layout.sidebar.filters.showArchived")}
+          </span>
         </DropdownMenuCheckboxItem>
 
         <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={() => apply({ type: "reset-filters" })}>
+        <DropdownMenuItem
+          className="gap-2"
+          onSelect={() => apply({ type: "reset-filters" })}
+        >
+          <RotateCcw className={FILTER_ICON_CLASS} aria-hidden />
           {t("layout.sidebar.filters.reset")}
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => apply({ type: "collapse-all" })}>
+        <DropdownMenuItem
+          className="gap-2"
+          onSelect={() => apply({ type: "collapse-all" })}
+        >
+          <FoldVertical className={FILTER_ICON_CLASS} aria-hidden />
           {t("layout.sidebar.filters.collapseAll")}
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={markRead}>
+        <DropdownMenuItem className="gap-2" onSelect={markRead}>
+          <CheckCheck className={FILTER_ICON_CLASS} aria-hidden />
           {t("layout.sidebar.filters.markRead")}
         </DropdownMenuItem>
       </DropdownMenuContent>

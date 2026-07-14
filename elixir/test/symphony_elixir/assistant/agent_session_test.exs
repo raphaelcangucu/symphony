@@ -342,6 +342,95 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
     assert result.assistant_message == "ok"
   end
 
+  test "default Codex runner persists and reloads text tool text order", %{workspace_root: workspace_root} do
+    {:ok, thread} =
+      History.create_freeform_thread(%{
+        title: "Ordered timeline",
+        workspace_path: Path.join(workspace_root, "ordered-timeline")
+      })
+
+    test_pid = self()
+
+    assert {:ok, result} =
+             AgentSession.send_message_to_thread(
+               thread,
+               "show ordered activity",
+               %{"agent" => "codex"},
+               codex_config: %{
+                 "command" => "FAKE_CODEX_ORDERED_TIMELINE=1 python3 #{@fake_codex_app_server}",
+                 "approval_policy" => "never",
+                 "thread_sandbox" => "danger-full-access"
+               },
+               dynamic_tools: [],
+               workspace_root: workspace_root,
+               on_tool_call_started: fn tool_call -> send(test_pid, {:tool_started, tool_call}) end,
+               on_tool_call_completed: fn tool_call -> send(test_pid, {:tool_completed, tool_call}) end
+             )
+
+    assert result.assistant_message == " \nBefore after"
+
+    assert [
+             %{id: "provider-shell-1", name: "shell", status: "complete"},
+             %{id: "dynamic-tool-request-1", name: "missing_dynamic_tool", status: "error"}
+           ] = result.tool_calls
+
+    assert_received {:tool_started, %{id: "provider-shell-1", status: "running"}}
+    assert_received {:tool_completed, %{id: "provider-shell-1", status: "complete"}}
+    assert_received {:tool_started, %{id: "dynamic-tool-request-1", status: "running"}}
+    assert_received {:tool_completed, %{id: "dynamic-tool-request-1", status: "error"}}
+
+    expected_blocks = [
+      %{"type" => "text", "text" => " \nBefore "},
+      %{"type" => "tool", "tool_call_id" => "provider-shell-1"},
+      %{"type" => "tool", "tool_call_id" => "dynamic-tool-request-1"},
+      %{"type" => "text", "text" => "after"}
+    ]
+
+    assistant_payload =
+      thread.id
+      |> History.list_messages_for_thread()
+      |> List.last()
+      |> History.message_payload()
+
+    assert assistant_payload.content_blocks == expected_blocks
+    assert assistant_payload.metadata["content_blocks"] == expected_blocks
+  end
+
+  test "does not persist runner content blocks that disagree with content and tool calls", %{
+    workspace_root: workspace_root
+  } do
+    {:ok, thread} =
+      History.create_freeform_thread(%{
+        title: "Mismatched runner blocks",
+        workspace_path: Path.join(workspace_root, "mismatched-runner-blocks")
+      })
+
+    runner = fn _workspace, _prompt, _issue, _opts ->
+      {:ok,
+       %{
+         assistant_message: "Actual",
+         tool_calls: [%{id: "tool-1", name: "list_issues", status: "complete"}],
+         content_blocks: [
+           %{"type" => "text", "text" => "Wrong"},
+           %{"type" => "tool", "tool_call_id" => "tool-1"}
+         ],
+         codex_thread_id: "thread-mismatch",
+         turn_id: "turn-mismatch"
+       }}
+    end
+
+    assert {:ok, result} =
+             AgentSession.send_message_to_thread(
+               thread,
+               "persist safely",
+               %{"agent" => "codex"},
+               runner: runner
+             )
+
+    assert result.assistant_chat_message.content_blocks == []
+    refute Map.has_key?(result.assistant_chat_message.metadata, "content_blocks")
+  end
+
   describe "send_message_to_issue_thread/4" do
     setup do
       {:ok, _project} = Context.ensure_project(%{name: "Macro", slug: "macro"})
@@ -582,6 +671,10 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
       messages = thread.id |> History.list_messages_for_thread() |> Enum.map(&History.message_payload/1)
       assert Enum.map(messages, & &1.role) == ["user", "assistant"]
       assert Enum.map(messages, & &1.content) == ["hi", "updated"]
+
+      legacy_runner_payload = List.last(messages)
+      assert legacy_runner_payload.content_blocks == []
+      refute Map.has_key?(legacy_runner_payload.metadata, "content_blocks")
     end
 
     test "overrides caller-supplied dynamic tools and tool executor for issue safety", %{thread: thread} do

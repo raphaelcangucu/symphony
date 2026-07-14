@@ -25,7 +25,9 @@ import {
 
 import { useKbEditorPaste, type KbEditorPasteHandlers } from "@/hooks/useKbEditorPaste";
 import { type KbAssetContext, editorizeKbMarkdown, persistKbMarkdown } from "@/lib/kbAssets";
+import { downloadTextFile } from "@/lib/downloadTextFile";
 import type { KbGalleryAsset } from "@/lib/kbGallery";
+import { kbPageDownloadFilename, serializeKbPageMarkdown } from "@/lib/kbPageMarkdown";
 import { cn } from "@/lib/utils";
 import { KbAssetNameDialog } from "./KbAssetNameDialog";
 import { KbCodeBlock } from "./KbCodeBlock";
@@ -33,6 +35,7 @@ import { KbImage } from "./KbImageExtension";
 import { KbImagePickerDialog } from "./KbImagePickerDialog";
 import { KbSpacerParagraph } from "./KbSpacerParagraph";
 import { KbBlockHandle } from "./KbBlockHandle";
+import { KbCopyGitHubLinkButton } from "./KbCopyGitHubLinkButton";
 import { KbTableOfContents } from "./KbTableOfContents";
 import { KbPageActionsMenu } from "./KbPageActionsMenu";
 import { KbSyncBadge } from "./KbSyncBadge";
@@ -72,6 +75,11 @@ interface Props {
    * always sees the latest content without re-rendering on every keystroke.
    */
   onRegisterContext?: (getter: () => KbEditorLiveContext) => void;
+  /** GitHub blob URL for this page's source file, when the repo is linked. */
+  githubFileUrl?: string | null;
+  /** Docs-relative path used as the downloaded file name. */
+  pagePath?: string | null;
+  frontmatter?: Record<string, unknown>;
 }
 
 function readMarkdown(editor: Editor): string {
@@ -130,6 +138,9 @@ export function KbEditor({
   assistantActive = false,
   onToggleAssistant,
   onRegisterContext,
+  githubFileUrl = null,
+  pagePath = null,
+  frontmatter = {},
 }: Props) {
   const { t } = useTranslation();
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -290,6 +301,14 @@ export function KbEditor({
     [editor, onSave, serializeForSave],
   );
 
+  const handleDownloadMarkdown = useCallback(() => {
+    if (!editor || !pagePath) return;
+    const body = serializeForSave(editor);
+    const markdown = serializeKbPageMarkdown(frontmatter, body);
+    downloadTextFile(markdown, kbPageDownloadFilename(pagePath));
+    toast.success(t("kb.actions.downloadMarkdownSuccess"));
+  }, [editor, frontmatter, pagePath, serializeForSave, t]);
+
   // Force-save handler read lazily by the global Ctrl/Cmd+S listener. Keeping it
   // in a ref lets the listener register once while always seeing the latest
   // guards (saving/uploading) and persist closure without re-binding.
@@ -384,12 +403,15 @@ export function KbEditor({
   return (
     <div className="flex h-full flex-col">
       <header className="flex items-center justify-between gap-3 px-6 py-2 md:px-12">
-        <span
-          data-testid="kb-editor-title"
-          className="truncate text-xs font-medium text-muted-foreground"
-        >
-          {title}
-        </span>
+        <div className="flex min-w-0 items-center gap-1">
+          <span
+            data-testid="kb-editor-title"
+            className="truncate text-xs font-medium text-muted-foreground"
+          >
+            {title}
+          </span>
+          {githubFileUrl ? <KbCopyGitHubLinkButton url={githubFileUrl} /> : null}
+        </div>
         <div className="flex items-center gap-3">
           {status && (
             <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -428,6 +450,7 @@ export function KbEditor({
               onDelete={onDelete}
               onSync={onSync}
               syncing={syncLoading || syncState?.status === "syncing"}
+              onDownload={pagePath ? handleDownloadMarkdown : undefined}
             />
           ) : null}
           <button

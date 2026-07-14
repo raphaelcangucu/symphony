@@ -2,6 +2,7 @@ export interface KbRepositorySummary {
   repoSlug: string;
   workspacePath: string;
   githubFullName: string | null;
+  defaultBranch: string | null;
   role: string | null;
   docsPresent: boolean;
 }

@@ -45,7 +45,7 @@ export function ArchiveChatButton({
       disabled={archiving}
       className={className}
     >
-      <Archive className="h-4 w-4" />
+      <Archive className="h-3 w-3" strokeWidth={1.5} />
     </SessionRowActionButton>
   );
 }

@@ -27,9 +27,11 @@ export interface SidebarTreeRowProps {
   selected: boolean;
   expandable: boolean;
   expanded: boolean;
+  busy?: boolean;
   statusLabel: string | null;
   trailingLabel: string | null;
   tabIndex: 0 | -1;
+  leadingIcon?: ReactNode;
   statusIndicator?: ReactNode;
   metadata?: ReactNode;
   children?: ReactNode;
@@ -51,9 +53,11 @@ export const SidebarTreeRow = forwardRef<HTMLDivElement, SidebarTreeRowProps>(
       selected,
       expandable,
       expanded,
+      busy = false,
       statusLabel,
       trailingLabel,
       tabIndex,
+      leadingIcon,
       statusIndicator,
       metadata,
       children,
@@ -85,6 +89,7 @@ export const SidebarTreeRow = forwardRef<HTMLDivElement, SidebarTreeRowProps>(
       event.preventDefault();
       onPreserveFocus();
     };
+    const isLeaf = level >= 3;
 
     return (
       <div
@@ -95,6 +100,7 @@ export const SidebarTreeRow = forwardRef<HTMLDivElement, SidebarTreeRowProps>(
         aria-level={level}
         aria-selected={selected}
         aria-expanded={expandable ? expanded : undefined}
+        aria-busy={busy || undefined}
         tabIndex={tabIndex}
         title={accessibleLabel}
         onFocus={onFocus}
@@ -104,9 +110,11 @@ export const SidebarTreeRow = forwardRef<HTMLDivElement, SidebarTreeRowProps>(
       >
         <div
           className={cn(
-            "group flex min-h-9 items-center gap-1 rounded-md pr-1 text-sm text-foreground",
-            "focus-within:bg-accent/70 hover:bg-accent/60",
-            selected && "bg-accent text-accent-foreground",
+            "group mx-0.5 flex min-h-7 items-center gap-0.5 rounded-md py-0.5 pr-1 text-xs text-foreground",
+            "hover:bg-black/[0.04] dark:hover:bg-white/[0.06]",
+            "focus-within:bg-black/[0.05] dark:focus-within:bg-white/[0.08]",
+            selected &&
+              "bg-black/[0.07] text-foreground shadow-none dark:bg-white/[0.1]",
           )}
           style={{ paddingLeft: `${sidebarTreeIndent(level)}px` }}
         >
@@ -132,17 +140,15 @@ export const SidebarTreeRow = forwardRef<HTMLDivElement, SidebarTreeRowProps>(
               onClick={stopAndToggle}
               onMouseDown={preserveTreeItemFocus}
               onKeyDown={stopEmbeddedKeyDown}
-              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="inline-flex h-5 w-3.5 shrink-0 items-center justify-center rounded text-muted-foreground/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               {expanded ? (
-                <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+                <ChevronDown className="h-3 w-3" strokeWidth={1.5} aria-hidden="true" />
               ) : (
-                <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+                <ChevronRight className="h-3 w-3" strokeWidth={1.5} aria-hidden="true" />
               )}
             </button>
-          ) : (
-            <span className="h-7 w-7 shrink-0" aria-hidden="true" />
-          )}
+          ) : null}
           <button
             type="button"
             tabIndex={-1}
@@ -155,24 +161,46 @@ export const SidebarTreeRow = forwardRef<HTMLDivElement, SidebarTreeRowProps>(
             onClick={onOpen}
             onMouseDown={preserveTreeItemFocus}
             onKeyDown={stopEmbeddedKeyDown}
-            className="flex min-w-0 flex-1 items-center gap-2 rounded py-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
-            {statusIndicator ? <span aria-hidden="true">{statusIndicator}</span> : null}
+            {leadingIcon ? (
+              <span
+                aria-hidden="true"
+                className="relative inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center text-muted-foreground"
+              >
+                {leadingIcon}
+                {statusIndicator ? (
+                  <span className="absolute -right-0.5 -top-0.5">{statusIndicator}</span>
+                ) : null}
+              </span>
+            ) : statusIndicator ? (
+              <span aria-hidden="true" className="shrink-0">
+                {statusIndicator}
+              </span>
+            ) : null}
             <span className="min-w-0 flex-1">
-              <span className="block truncate font-medium">{label}</span>
-              {description ? (
-                <span className="block truncate text-xs text-muted-foreground">
-                  {description}
+              <span className="flex min-w-0 items-center gap-1.5">
+                <span
+                  className={cn(
+                    "min-w-0 flex-1 truncate leading-4",
+                    isLeaf ? "font-normal" : "font-medium",
+                    selected && "text-foreground",
+                  )}
+                >
+                  {label}
                 </span>
-              ) : null}
-              {metadata ? (
-                <span aria-hidden="true" className="flex flex-wrap gap-1 pt-1">
-                  {metadata}
-                </span>
-              ) : null}
+                {trailingLabel ? (
+                  <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground/80">
+                    {trailingLabel}
+                  </span>
+                ) : null}
+              </span>
+              {description ? <span className="sr-only">{description}</span> : null}
             </span>
-            {trailingLabel ? (
-              <span className="shrink-0 text-xs text-muted-foreground">{trailingLabel}</span>
+            {metadata ? (
+              <span aria-hidden="true" className="flex shrink-0 items-center gap-1">
+                {metadata}
+              </span>
             ) : null}
             {statusLabel ? <span className="sr-only">{statusLabel}</span> : null}
           </button>
@@ -193,9 +221,9 @@ export const SidebarTreeRow = forwardRef<HTMLDivElement, SidebarTreeRowProps>(
               onClick={(event) => event.stopPropagation()}
               onMouseDown={preserveTreeItemFocus}
               onKeyDown={stopEmbeddedKeyDown}
-              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-muted-foreground/50 opacity-0 hover:bg-black/[0.06] hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover:opacity-100 dark:hover:bg-white/[0.08]"
             >
-              <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
+              <MoreHorizontal className="h-3.5 w-3.5" strokeWidth={1.5} aria-hidden="true" />
             </button>,
           )}
         </div>

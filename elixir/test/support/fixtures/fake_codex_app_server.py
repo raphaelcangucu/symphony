@@ -68,7 +68,50 @@ for line in sys.stdin:
                     },
                 }
             )
-        write({"method": "item/agentMessage/delta", "params": {"delta": "ok"}})
+        if os.getenv("FAKE_CODEX_ORDERED_TIMELINE") == "1":
+            write({"method": "item/agentMessage/delta", "params": {"delta": " \n"}})
+            write({"method": "item/agentMessage/delta", "params": {"delta": "Before "}})
+            write(
+                {
+                    "method": "item/started",
+                    "params": {
+                        "item": {
+                            "id": "provider-shell-1",
+                            "type": "commandExecution",
+                            "command": "pwd",
+                        }
+                    },
+                }
+            )
+            write(
+                {
+                    "method": "item/completed",
+                    "params": {
+                        "item": {
+                            "id": "provider-shell-1",
+                            "type": "commandExecution",
+                            "command": "pwd",
+                            "status": "completed",
+                            "aggregatedOutput": "/tmp/project\n",
+                            "exitCode": 0,
+                        }
+                    },
+                }
+            )
+            write(
+                {
+                    "id": "dynamic-tool-request-1",
+                    "method": "item/tool/call",
+                    "params": {
+                        "name": "missing_dynamic_tool",
+                        "arguments": {"query": "status"},
+                    },
+                }
+            )
+            sys.stdin.readline()
+            write({"method": "item/agentMessage/delta", "params": {"delta": "after"}})
+        else:
+            write({"method": "item/agentMessage/delta", "params": {"delta": "ok"}})
         completed_params = {"usage": {"input_tokens": 1, "output_tokens": 1}}
         if os.getenv("FAKE_CODEX_GOAL_EVENT") == "1":
             completed_params["goal"] = {

@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { useKbAllRepoTrees } from "@/hooks/useKbAllRepoTrees";
 import { useKbPage } from "@/hooks/useKbPage";
 import { isKbImageAssetPath } from "@/lib/kbAssets";
+import { buildKbGitHubFileUrl } from "@/lib/kbGitHubUrl";
 import { kbPagePath as buildKbPagePath } from "@/lib/kbRoutes";
 import {
   createChildPage,
@@ -103,6 +104,21 @@ export function KnowledgeBaseModal({
     activeRepo,
     activePath && !selectedIsAsset ? activePath : null,
     loadPage,
+  );
+  const activeRepository = useMemo(
+    () => overview?.repositories.find((repo) => repo.repoSlug === activeRepo) ?? null,
+    [activeRepo, overview],
+  );
+  const githubFileUrl = useMemo(
+    () =>
+      activePath && !selectedIsAsset
+        ? buildKbGitHubFileUrl(
+            activeRepository?.githubFullName,
+            activePath,
+            activeRepository?.defaultBranch,
+          )
+        : null,
+    [activePath, activeRepository, selectedIsAsset],
   );
 
   useEffect(() => {
@@ -473,6 +489,7 @@ export function KnowledgeBaseModal({
                   isAsset={selectedIsAsset}
                   saving={saving}
                   treeCollapsed={treeCollapsed}
+                  githubFileUrl={githubFileUrl}
                   onSave={handleSavePage}
                   onRename={selectedPage ? handlePageRename : undefined}
                   onToggleFavorite={selectedPage ? handlePageFavorite : undefined}
@@ -498,6 +515,7 @@ function KnowledgeBaseModalPreview({
   isAsset,
   saving,
   treeCollapsed,
+  githubFileUrl = null,
   onSave,
   onRename,
   onToggleFavorite,
@@ -513,6 +531,7 @@ function KnowledgeBaseModalPreview({
   isAsset: boolean;
   saving: boolean;
   treeCollapsed: boolean;
+  githubFileUrl?: string | null;
   onSave: (markdown: string) => Promise<void> | void;
   onRename?: () => void;
   onToggleFavorite?: () => void;
@@ -576,6 +595,9 @@ function KnowledgeBaseModalPreview({
             onRename={onRename}
             onToggleFavorite={onToggleFavorite}
             onDelete={onDelete}
+            githubFileUrl={githubFileUrl}
+            pagePath={pagePath}
+            frontmatter={page.frontmatter}
           />
         ) : (
           <div className="flex h-full items-center justify-center text-sm text-muted-foreground">

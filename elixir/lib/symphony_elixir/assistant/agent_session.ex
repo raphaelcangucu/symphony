@@ -18,7 +18,8 @@ defmodule SymphonyElixir.Assistant.AgentSession do
     ThreadDocuments,
     ToolCallPresenter,
     ToolExecutor,
-    TurnConfiguration
+    TurnConfiguration,
+    TurnTimeline
   }
 
   alias SymphonyElixir.Codex.DynamicTool
@@ -37,6 +38,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
   @type turn_result :: %{
           required(:assistant_message) => String.t(),
           required(:tool_calls) => [map()],
+          optional(:content_blocks) => [map()],
           optional(:codex_thread_id) => String.t(),
           optional(:turn_id) => String.t()
         }
@@ -1161,7 +1163,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
           _ -> session
         end
 
-      {:ok, collector} = Agent.start_link(fn -> %{assistant_message: "", tool_calls: []} end)
+      {:ok, collector} = Agent.start_link(&TurnTimeline.new/0)
 
       try do
         on_message = fn message ->
@@ -1176,12 +1178,20 @@ defmodule SymphonyElixir.Assistant.AgentSession do
 
         case RootCodingAgent.run_turn(session, prompt, issue, Keyword.put(opts, :on_message, on_message)) do
           {:ok, result} ->
-            collected = Agent.get(collector, & &1)
+            timeline = Agent.get(collector, & &1)
+            collected_text = TurnTimeline.assistant_text(timeline)
+            assistant_message = fallback_assistant_message(collected_text, agent_kind)
+
+            timeline =
+              if collected_text == "",
+                do: TurnTimeline.append_text(timeline, assistant_message),
+                else: timeline
 
             {:ok,
              result
-             |> Map.put(:assistant_message, fallback_assistant_message(collected.assistant_message, agent_kind))
-             |> Map.put(:tool_calls, collected.tool_calls)}
+             |> Map.put(:assistant_message, assistant_message)
+             |> Map.put(:tool_calls, TurnTimeline.tool_calls(timeline))
+             |> Map.put(:content_blocks, TurnTimeline.content_blocks(timeline))}
 
           {:error, reason} ->
             {:error, reason}
@@ -1203,31 +1213,24 @@ defmodule SymphonyElixir.Assistant.AgentSession do
     cond do
       match?({:started, _}, file_activity) ->
         {:started, tool_call} = file_activity
-        maybe_call(opts, :on_tool_call_started, tool_call)
+        normalized = collect_tool_call(collector, tool_call)
+        maybe_call(opts, :on_tool_call_started, normalized)
 
       match?({:completed, _}, file_activity) ->
         {:completed, tool_call} = file_activity
         tool_call = maybe_capture_file_patches(tool_call, workspace)
-
-        Agent.update(collector, fn state ->
-          tool_calls =
-            upsert_tool_call_by_id(
-              state.tool_calls,
-              Map.get(tool_call, :id),
-              tool_call,
-              fn -> Map.get(tool_call, :name) end
-            )
-
-          %{state | tool_calls: tool_calls}
-        end)
-
-        maybe_call(opts, :on_tool_call_completed, tool_call)
+        normalized = collect_tool_call(collector, tool_call)
+        maybe_call(opts, :on_tool_call_completed, normalized)
 
       method == "item/agentMessage/delta" ->
         case extract_delta(payload) do
-          delta when is_binary(delta) and delta != "" ->
-            Agent.update(collector, fn state -> %{state | assistant_message: state.assistant_message <> delta} end)
-            maybe_call(opts, :on_assistant_delta, delta)
+          delta when is_binary(delta) ->
+            if delta == "" do
+              :ok
+            else
+              Agent.update(collector, &TurnTimeline.append_text(&1, delta))
+              maybe_call(opts, :on_assistant_delta, delta)
+            end
 
           _ ->
             :ok
@@ -1235,12 +1238,13 @@ defmodule SymphonyElixir.Assistant.AgentSession do
 
       Map.get(message, :event) == :tool_call_started ->
         tool_call = tool_call_from_payload(payload, :tool_call_started, %{})
-        maybe_call(opts, :on_tool_call_started, tool_call)
+        normalized = collect_tool_call(collector, tool_call)
+        maybe_call(opts, :on_tool_call_started, normalized)
 
       Map.get(message, :event) in [:tool_call_completed, :tool_call_failed, :unsupported_tool_call] ->
         tool_call = tool_call_from_payload(payload, Map.get(message, :event), Map.get(message, :result) || %{})
-        Agent.update(collector, fn state -> %{state | tool_calls: upsert_tool_call(state.tool_calls, tool_call)} end)
-        maybe_call(opts, :on_tool_call_completed, tool_call)
+        normalized = collect_tool_call(collector, tool_call)
+        maybe_call(opts, :on_tool_call_completed, normalized)
 
       Map.get(message, :event) == :user_input_required ->
         maybe_call(opts, :on_user_input_required, %{
@@ -1281,13 +1285,8 @@ defmodule SymphonyElixir.Assistant.AgentSession do
             input = Map.get(item, "input") || Map.get(item, :input) || %{}
             tool_call = %{name: name, status: "running", arguments: input, output: nil, result: %{}, id: id}
 
-            # Upsert by tool_use_id, not name: a turn can issue many same-named calls
-            # (e.g. several Bash commands) and each must keep its own row.
-            Agent.update(collector, fn state ->
-              %{state | tool_calls: upsert_tool_call_by_id(state.tool_calls, id, tool_call, fn -> name end)}
-            end)
-
-            maybe_call(opts, :on_tool_call_started, tool_call)
+            normalized = collect_tool_call(collector, tool_call)
+            maybe_call(opts, :on_tool_call_started, normalized)
 
           item_type == "tool_result" ->
             id = Map.get(item, "tool_use_id") || Map.get(item, :tool_use_id)
@@ -1306,18 +1305,11 @@ defmodule SymphonyElixir.Assistant.AgentSession do
               |> put_present(:arguments, Map.get(item, "input") || Map.get(item, :input))
 
             merged =
-              Agent.get_and_update(collector, fn state ->
-                tool_calls =
-                  upsert_tool_call_by_id(state.tool_calls, id, update, fn -> infer_cursor_tool_name(content) end)
+              collector
+              |> collect_tool_call(update)
+              |> maybe_apply_inferred_tool_name(collector, content)
 
-                {Enum.find(tool_calls, &(Map.get(&1, :id) == id)), %{state | tool_calls: tool_calls}}
-              end)
-
-            maybe_call(
-              opts,
-              :on_tool_call_completed,
-              merged || ensure_tool_name(update, fn -> infer_cursor_tool_name(content) end)
-            )
+            maybe_call(opts, :on_tool_call_completed, merged)
 
           # The Claude adapter delivers finalized assistant text as an item/created
           # "text" item (the authoritative full text of a message block). Accumulate it
@@ -1328,7 +1320,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
             text = Map.get(item, "text") || Map.get(item, :text) || ""
 
             if is_binary(text) and text != "" do
-              Agent.update(collector, fn state -> %{state | assistant_message: state.assistant_message <> text} end)
+              Agent.update(collector, &TurnTimeline.append_text(&1, text))
             end
 
           true ->
@@ -1381,6 +1373,31 @@ defmodule SymphonyElixir.Assistant.AgentSession do
     additions = Enum.sum(Enum.map(captured, &Map.get(&1, "additions", 0)))
     deletions = Enum.sum(Enum.map(captured, &Map.get(&1, "deletions", 0)))
     {if(diff == "", do: nil, else: diff), additions, deletions}
+  end
+
+  defp collect_tool_call(collector, tool_call) do
+    Agent.get_and_update(collector, fn timeline ->
+      {updated_timeline, normalized} = TurnTimeline.upsert_tool_call(timeline, tool_call)
+      {normalized, updated_timeline}
+    end)
+  end
+
+  defp maybe_apply_inferred_tool_name(tool_call, _collector, _content)
+       when is_binary(tool_call.name) and tool_call.name not in ["", "unknown"],
+       do: tool_call
+
+  defp maybe_apply_inferred_tool_name(tool_call, collector, content) do
+    case infer_cursor_tool_name(content) do
+      "unknown" ->
+        tool_call
+
+      inferred_name ->
+        collect_tool_call(collector, %{
+          id: tool_call.id,
+          name: inferred_name,
+          status: tool_call.status
+        })
+    end
   end
 
   defp event_payload(message) when is_map(message) do
@@ -1471,6 +1488,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
     name = String.replace_prefix(raw_name, "mcp__symphony__", "")
 
     %{
+      id: provider_tool_call_id(payload),
       name: name,
       status: tool_call_status(event),
       arguments: ToolCallPresenter.arguments(payload),
@@ -1479,44 +1497,19 @@ defmodule SymphonyElixir.Assistant.AgentSession do
     }
   end
 
+  defp provider_tool_call_id(payload) do
+    case Map.get(payload, "id") || Map.get(payload, :id) do
+      nil -> nil
+      id when is_binary(id) -> id
+      id when is_integer(id) -> Integer.to_string(id)
+      id -> id
+    end
+  end
+
   defp tool_call_status(:tool_call_started), do: "running"
   defp tool_call_status(:tool_call_failed), do: "error"
   defp tool_call_status(:unsupported_tool_call), do: "error"
   defp tool_call_status(_event), do: "complete"
-
-  defp upsert_tool_call(tool_calls, tool_call) do
-    [tool_call | Enum.reject(tool_calls, &(Map.get(&1, :name) == Map.get(tool_call, :name)))]
-    |> Enum.reverse()
-  end
-
-  # Upsert by tool_use_id for claude/cursor notification-based tool results, merging into
-  # the existing started entry so the tool name and arguments captured at start survive.
-  # `fallback_name_fun` supplies a name only when the merged entry still lacks a real one
-  # (e.g. a result with no started entry), so a real name is never overwritten by "unknown".
-  defp upsert_tool_call_by_id(tool_calls, id, update, fallback_name_fun) when is_binary(id) do
-    {matched, rest} = Enum.split_with(tool_calls, &(Map.get(&1, :id) == id))
-
-    merged =
-      (List.first(matched) || %{})
-      |> Map.merge(Map.reject(update, fn {_k, v} -> is_nil(v) end))
-      |> ensure_tool_name(fallback_name_fun)
-
-    Enum.reverse([merged | Enum.reverse(rest)])
-  end
-
-  defp upsert_tool_call_by_id(tool_calls, _id, update, fallback_name_fun) do
-    cleaned = Map.reject(update, fn {_k, v} -> is_nil(v) end)
-    upsert_tool_call(tool_calls, ensure_tool_name(cleaned, fallback_name_fun))
-  end
-
-  # Keeps an existing, meaningful tool name; only applies the fallback when the name is
-  # missing, blank, or the placeholder "unknown".
-  defp ensure_tool_name(tool_call, fallback_name_fun) do
-    case Map.get(tool_call, :name) do
-      name when is_binary(name) and name != "" and name != "unknown" -> tool_call
-      _ -> Map.put(tool_call, :name, fallback_name_fun.())
-    end
-  end
 
   defp put_present(map, _key, nil), do: map
   defp put_present(map, key, value), do: Map.put(map, key, value)
@@ -1618,9 +1611,9 @@ defmodule SymphonyElixir.Assistant.AgentSession do
   end
 
   defp fallback_assistant_message(message, agent_kind) do
-    case String.trim(message) do
+    case message do
       "" -> "#{agent_label(agent_kind)} completed the turn without returning assistant text."
-      trimmed -> trimmed
+      collected -> collected
     end
   end
 
@@ -1633,15 +1626,21 @@ defmodule SymphonyElixir.Assistant.AgentSession do
   defp normalize_runner_result({:ok, result}) when is_map(result) do
     assistant_message = Map.get(result, :assistant_message) || Map.get(result, "assistant_message")
 
-    if is_binary(assistant_message) and String.trim(assistant_message) != "" do
+    if is_binary(assistant_message) and assistant_message != "" do
+      normalized = %{
+        assistant_message: assistant_message,
+        tool_calls: Map.get(result, :tool_calls) || Map.get(result, "tool_calls") || [],
+        codex_thread_id: Map.get(result, :codex_thread_id) || Map.get(result, "codex_thread_id") || Map.get(result, :thread_id),
+        cli_session_id: Map.get(result, :cli_session_id) || Map.get(result, "cli_session_id"),
+        turn_id: Map.get(result, :turn_id) || Map.get(result, "turn_id")
+      }
+
       {:ok,
-       %{
-         assistant_message: assistant_message,
-         tool_calls: Map.get(result, :tool_calls) || Map.get(result, "tool_calls") || [],
-         codex_thread_id: Map.get(result, :codex_thread_id) || Map.get(result, "codex_thread_id") || Map.get(result, :thread_id),
-         cli_session_id: Map.get(result, :cli_session_id) || Map.get(result, "cli_session_id"),
-         turn_id: Map.get(result, :turn_id) || Map.get(result, "turn_id")
-       }}
+       cond do
+         Map.has_key?(result, :content_blocks) -> Map.put(normalized, :content_blocks, Map.get(result, :content_blocks))
+         Map.has_key?(result, "content_blocks") -> Map.put(normalized, :content_blocks, Map.get(result, "content_blocks"))
+         true -> normalized
+       end}
     else
       {:error, :assistant_message_required}
     end
@@ -1706,12 +1705,29 @@ defmodule SymphonyElixir.Assistant.AgentSession do
   end
 
   defp persist_assistant_message(thread, runner_result) do
-    History.append_message(thread, %{
+    attrs = %{
       role: "assistant",
       content: Map.fetch!(runner_result, :assistant_message),
       turn_id: Map.get(runner_result, :turn_id),
       tool_calls: Map.get(runner_result, :tool_calls, [])
-    })
+    }
+
+    attrs =
+      case Map.fetch(runner_result, :content_blocks) do
+        {:ok, content_blocks} ->
+          if TurnTimeline.valid_content_blocks?(
+               content_blocks,
+               attrs.content,
+               attrs.tool_calls
+             ),
+             do: Map.put(attrs, :metadata, %{"content_blocks" => content_blocks}),
+             else: attrs
+
+        :error ->
+          attrs
+      end
+
+    History.append_message(thread, attrs)
   end
 
   defp assistant_issue(project_slug), do: %{id: "assistant:#{project_slug}", identifier: project_slug, title: "Project assistant chat"}

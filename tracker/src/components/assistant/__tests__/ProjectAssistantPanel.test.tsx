@@ -1866,4 +1866,98 @@ describe("ProjectAssistantPanel", () => {
     expect(await screen.findByRole("listbox")).toBeInTheDocument();
     expect(await screen.findByText("Related task")).toBeInTheDocument();
   });
+
+  it("renders the scroll-to-bottom control outside the feed scroller when scrolled away from the bottom", async () => {
+    render(
+      <ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="page" />,
+    );
+
+    await waitFor(() => expect(channelHandlers["history_loaded"]).toEqual(expect.any(Function)));
+
+    await act(async () => {
+      channelHandlers["history_loaded"]({
+        messages: [
+          { id: 1, role: "user", content: "hello", tool_calls: [] },
+          { id: 2, role: "assistant", content: "initial reply", tool_calls: [] },
+        ],
+      });
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+    });
+
+    const feed = screen.getByTestId("assistant-session-feed");
+    Object.defineProperty(feed, "scrollHeight", { configurable: true, value: 2000 });
+    Object.defineProperty(feed, "clientHeight", { configurable: true, value: 400 });
+    feed.scrollTop = 0;
+
+    await act(async () => {
+      fireEvent.scroll(feed);
+      feed.dispatchEvent(new WheelEvent("wheel", { deltaY: -1, bubbles: true }));
+    });
+
+    const scrollToBottomButton = await screen.findByRole("button", { name: "Scroll to latest messages" });
+    expect(feed).not.toContainElement(scrollToBottomButton);
+    // The scroll-to-bottom control sits alongside the feed scroller, not
+    // above the composer, so it must live outside the dock/composer as well.
+    expect(screen.getByTestId("assistant-session-composer")).not.toContainElement(scrollToBottomButton);
+  });
+
+  it("shows environment dock toggle for issue-bound threads and opens the dock", async () => {
+    getGitDiffMock.mockResolvedValue({
+      repos: [
+        {
+          repo: "front",
+          files: [
+            {
+              path: "src/App.tsx",
+              oldPath: null,
+              status: "modified",
+              patch: "diff --git a/src/App.tsx b/src/App.tsx\n-old\n+new\n+another\n",
+            },
+          ],
+        },
+      ],
+      workspace: { path: "/tmp/ws", available: true },
+    });
+
+    render(
+      <MemoryRouter>
+        <ProjectAssistantPanel
+          projectSlug="macro-markets"
+          issueIdentifier="MAC-7"
+          view="board"
+          mode="page"
+          hideHeader
+        />
+      </MemoryRouter>,
+    );
+
+    const toggle = await screen.findByRole("button", { name: /toggle environment/i });
+
+    // Issue-bound sessions default the dock open.
+    expect(await screen.findByTestId("environment-floating-dock")).toBeInTheDocument();
+
+    fireEvent.click(toggle);
+    await waitFor(() => expect(screen.queryByTestId("environment-floating-dock")).not.toBeInTheDocument());
+
+    fireEvent.click(toggle);
+    expect(await screen.findByTestId("environment-floating-dock")).toBeInTheDocument();
+  });
+
+  it("does not show the environment dock toggle for freeform threads without an issue", async () => {
+    render(<ProjectAssistantPanel projectSlug="macro-markets" view="board" mode="page" />);
+
+    await screen.findByPlaceholderText("Write a message...");
+    expect(screen.queryByRole("button", { name: /environment/i })).not.toBeInTheDocument();
+    expect(screen.queryByTestId("environment-floating-dock")).not.toBeInTheDocument();
+  });
+
+  it("page mode uses AssistantSessionShell with a single feed scroller", async () => {
+    render(<ProjectAssistantPanel projectSlug="macro-markets" view="board" mode="page" />);
+    expect(await screen.findByTestId("assistant-session-shell")).toBeInTheDocument();
+    const feed = screen.getByTestId("assistant-session-feed");
+    expect(feed.className).toMatch(/overflow-y-auto/);
+    // No nested overflow-y-auto descendants inside feed
+    const nested = feed.querySelectorAll(".overflow-y-auto");
+    expect(nested.length).toBe(0);
+  });
 });

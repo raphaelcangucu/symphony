@@ -3,7 +3,7 @@ defmodule SymphonyElixir.Assistant.History do
 
   import Ecto.Query
 
-  alias SymphonyElixir.Assistant.{Message, ProjectExploreWorkspace, Thread}
+  alias SymphonyElixir.Assistant.{Message, ProjectExploreWorkspace, Thread, TurnTimeline}
   alias SymphonyElixir.{ExecutionMode, Workspace}
   alias SymphonyElixir.LocalTracker.{Context, IssueAdapter}
   alias SymphonyElixir.Repo
@@ -894,10 +894,21 @@ defmodule SymphonyElixir.Assistant.History do
       sequence: message.sequence,
       turn_id: message.turn_id,
       tool_calls: tool_calls(message),
+      content_blocks: message_content_blocks(message),
       metadata: message.metadata || %{},
       inserted_at: message.inserted_at
     }
   end
+
+  defp message_content_blocks(%Message{metadata: metadata} = message) when is_map(metadata) do
+    blocks = Map.get(metadata, "content_blocks") || Map.get(metadata, :content_blocks)
+
+    if TurnTimeline.valid_content_blocks?(blocks, message.content, tool_calls(message)),
+      do: blocks,
+      else: []
+  end
+
+  defp message_content_blocks(_message), do: []
 
   defp patch_current_turn(%Thread{metadata: metadata} = thread, fun) do
     case current_turn(thread) do
@@ -1538,6 +1549,7 @@ defmodule SymphonyElixir.Assistant.History do
 
   defp tool_calls(%Message{tool_calls: %{"calls" => calls}}) when is_list(calls), do: calls
   defp tool_calls(%Message{tool_calls: %{calls: calls}}) when is_list(calls), do: calls
+  defp tool_calls(%Message{tool_calls: calls}) when is_list(calls), do: calls
   defp tool_calls(_message), do: []
 
   defp normalize_required_string(value, field) when is_binary(value) do

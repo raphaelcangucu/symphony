@@ -21,25 +21,33 @@ interface MarkdownProps {
   children: string;
   className?: string;
   linkRenderer?: (props: MarkdownLinkProps) => ReactElement | undefined;
+  variant?: "default" | "assistant";
 }
 
-export function Markdown({ children, className, linkRenderer }: MarkdownProps) {
+export function Markdown({
+  children,
+  className,
+  linkRenderer,
+  variant = "default",
+}: MarkdownProps) {
   const { t } = useTranslation();
+  const assistant = variant === "assistant";
 
   return (
-    <div className={cn("markdown-body text-sm leading-6 text-foreground/90", className)}>
+    <div
+      className={cn(
+        "markdown-body",
+        assistant
+          ? "markdown-body--assistant"
+          : "text-sm leading-6 text-foreground/90",
+        className,
+      )}
+    >
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
-          a: ({ children: linkChildren, href }) => {
-            const custom = linkRenderer?.({ href, children: linkChildren });
-            if (custom) return custom;
-
-            if (isAssistantWorkspaceMarkdownHref(href)) {
-              return <span className="font-medium text-primary underline underline-offset-2">{linkChildren}</span>;
-            }
-
-            if (href && isTrackerAuthenticatedMediaUrl(href) && isVideoAttachmentSource(href)) {
+          a: ({ children: linkChildren, href, node }) => {
+            if (isAuthenticatedVideoHref(href)) {
               const label = linkText(linkChildren) || t("issue.attachments.defaultVideo");
               return (
                 <AttachmentVideo
@@ -48,6 +56,15 @@ export function Markdown({ children, className, linkRenderer }: MarkdownProps) {
                   className="my-2 max-h-80 w-auto max-w-full rounded-lg border object-contain"
                 />
               );
+            }
+
+            if (containsBlockMedia(node)) return <>{linkChildren}</>;
+
+            const custom = linkRenderer?.({ href, children: linkChildren });
+            if (custom) return custom;
+
+            if (isAssistantWorkspaceMarkdownHref(href)) {
+              return <span className="font-medium text-primary underline underline-offset-2">{linkChildren}</span>;
             }
 
             return (
@@ -82,6 +99,20 @@ export function Markdown({ children, className, linkRenderer }: MarkdownProps) {
               />
             );
           },
+          p: ({ children: paragraphChildren, node }) =>
+            containsBlockMedia(node) ? (
+              <div className="markdown-media-block">{paragraphChildren}</div>
+            ) : (
+              <p>{paragraphChildren}</p>
+            ),
+          table: ({ children: tableChildren }) =>
+            assistant ? (
+              <div className="assistant-markdown-table">
+                <table>{tableChildren}</table>
+              </div>
+            ) : (
+              <table>{tableChildren}</table>
+            ),
         }}
       >
         {children}
@@ -99,4 +130,40 @@ function linkText(children: ReactNode): string {
     return linkText(props?.children);
   }
   return "";
+}
+
+function containsBlockMedia(node: unknown): boolean {
+  if (!isRecord(node)) return false;
+  const tagName = node.tagName;
+  if (tagName === "img") {
+    return isTrackerAuthenticatedMediaUrl(nodeProperty(node, "src"));
+  }
+  if (tagName === "a" && isAuthenticatedVideoHref(nodeProperty(node, "href"))) {
+    return true;
+  }
+  if (!Array.isArray(node.children)) return false;
+  return node.children.some(containsBlockMedia);
+}
+
+function isAuthenticatedVideoHref(
+  href: string | null | undefined,
+): href is string {
+  return Boolean(
+    href &&
+      isTrackerAuthenticatedMediaUrl(href) &&
+      isVideoAttachmentSource(href),
+  );
+}
+
+function nodeProperty(
+  node: Record<string, unknown>,
+  propertyName: string,
+): string | null {
+  if (!isRecord(node.properties)) return null;
+  const value = node.properties[propertyName];
+  return typeof value === "string" ? value : null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

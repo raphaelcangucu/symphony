@@ -1,13 +1,23 @@
-import { ChevronDown, FileText, Loader2, Pencil, TerminalSquare } from "lucide-react";
-import { useState } from "react";
+import { FileText, Loader2, Pencil, TerminalSquare } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
+import {
+  ActivityDisclosure,
+  type ActivityDisclosureStateProps,
+} from "@/components/agent-activity/ActivityDisclosure";
 import type { FileActivityView } from "@/components/assistant/fileActivity";
 import { cn } from "@/lib/utils";
 
-export function FileActivityCard({ view }: { view: FileActivityView }) {
+interface FileActivityCardProps extends ActivityDisclosureStateProps {
+  view: FileActivityView;
+}
+
+export function FileActivityCard({
+  view,
+  expanded,
+  onExpandedChange,
+}: FileActivityCardProps) {
   const { t } = useTranslation();
-  const [open, setOpen] = useState(false);
   const running = view.status === "running";
   const failed = view.status === "error";
   const verb =
@@ -16,45 +26,56 @@ export function FileActivityCard({ view }: { view: FileActivityView }) {
       : view.kind === "edit"
         ? t("issue.toolCall.fileActivity.edited")
         : t("issue.toolCall.fileActivity.command");
+  const statusLabel = failed
+    ? t("issue.toolCall.status.failed")
+    : running
+      ? t("issue.toolCall.status.running")
+      : undefined;
 
   return (
-    <article
-      className={cn(
-        "overflow-hidden rounded-xl border",
-        failed ? "border-destructive/40 bg-destructive/5" : "border-border/60 bg-muted/30",
-      )}
-    >
-      <button
-        type="button"
-        className="flex w-full items-center gap-2 px-3 py-2 text-left"
-        onClick={() => setOpen((value) => !value)}
-        aria-expanded={open}
-        aria-busy={running}
-      >
-        <span className="shrink-0 text-muted-foreground">
-          {running ? <Loader2 className="size-3.5 animate-spin" /> : <ActivityIcon kind={view.kind} />}
+    <ActivityDisclosure
+      icon={
+        running ? (
+          <Loader2 className="size-3.5 animate-spin" />
+        ) : (
+          <ActivityIcon kind={view.kind} />
+        )
+      }
+      label={
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            {verb}
+          </span>
+          <span className="min-w-0 truncate font-mono font-normal" title={view.title}>
+            {view.title}
+          </span>
         </span>
-        <span className="shrink-0 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{verb}</span>
-        <span className="min-w-0 flex-1 truncate font-mono text-xs text-foreground" title={view.title}>
-          {view.title}
+      }
+      metadata={
+        <span className="flex items-center gap-1.5 font-mono">
+          {view.lineRange ? <span>{view.lineRange}</span> : null}
+          {view.additions != null && view.additions > 0 ? (
+            <span className="font-semibold text-emerald-500">+{view.additions}</span>
+          ) : null}
+          {view.deletions != null && view.deletions > 0 ? (
+            <span className="font-semibold text-rose-500">−{view.deletions}</span>
+          ) : null}
         </span>
-        {view.lineRange ? <span className="shrink-0 font-mono text-[11px] text-muted-foreground">{view.lineRange}</span> : null}
-        {view.additions != null && view.additions > 0 ? (
-          <span className="shrink-0 font-mono text-[11px] font-semibold text-emerald-500">+{view.additions}</span>
-        ) : null}
-        {view.deletions != null && view.deletions > 0 ? (
-          <span className="shrink-0 font-mono text-[11px] font-semibold text-rose-500">−{view.deletions}</span>
-        ) : null}
-        {view.body ? (
-          <ChevronDown className={cn("size-4 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")} />
-        ) : null}
-      </button>
-      {open && view.body ? (
-        <div className="border-t border-border/60 px-3 py-2.5">
-          {view.body.language === "diff" ? <DiffBody value={view.body.value} /> : <PlainBody value={view.body.value} />}
-        </div>
-      ) : null}
-    </article>
+      }
+      status={failed ? "failed" : running ? "running" : null}
+      statusLabel={statusLabel}
+      details={
+        view.body ? (
+          view.body.language === "diff" ? (
+            <DiffBody value={view.body.value} />
+          ) : (
+            <PlainBody value={view.body.value} />
+          )
+        ) : null
+      }
+      expanded={expanded}
+      onExpandedChange={onExpandedChange}
+    />
   );
 }
 

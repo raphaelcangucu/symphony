@@ -327,12 +327,19 @@ describe("ProjectSidebar", () => {
     );
   });
 
-  it("keeps a single scroll region for the project tree", async () => {
+  it("contains sidebar overflow while keeping Projects as the sole scroll region", async () => {
     vi.mocked(listProjects).mockResolvedValue([activeProject]);
 
     renderProjectSidebar();
     await screen.findByRole("treeitem", { name: /^Active Project,/ });
 
+    const projectsTree = screen.getByRole("tree", { name: "Projects" });
+    const sidebar = projectsTree.closest("aside");
+    if (!sidebar) throw new Error("Expected the Projects tree to be inside the sidebar");
+
+    expect(sidebar).toHaveClass("min-h-0", "overflow-hidden");
+    expect(projectsTree).toHaveClass("overflow-y-auto");
+    expect([...sidebar.querySelectorAll(".overflow-y-auto")]).toEqual([projectsTree]);
     expect(document.querySelectorAll("[data-sidebar-tree-scroll-container='true']")).toHaveLength(
       1,
     );

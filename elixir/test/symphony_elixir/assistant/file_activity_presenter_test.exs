@@ -2,6 +2,7 @@ defmodule SymphonyElixir.Assistant.FileActivityPresenterTest do
   use ExUnit.Case, async: true
 
   alias SymphonyElixir.Assistant.FileActivityPresenter, as: P
+  alias SymphonyElixir.Assistant.TurnTimeline
 
   defp event(method, item) do
     %{event: :notification, payload: %{"method" => method, "params" => %{"item" => item}}}
@@ -148,5 +149,65 @@ defmodule SymphonyElixir.Assistant.FileActivityPresenterTest do
     assert tc.result["diff"] == nil
     assert tc.result["additions"] == 0
     assert tc.result["deletions"] == 0
+  end
+
+  test "sparse command completion retains start arguments and applies real completion fields" do
+    started_item = %{
+      "id" => "command-sparse",
+      "type" => "command_execution",
+      "command" => "mix test test/example_test.exs"
+    }
+
+    completed_item = %{
+      "id" => "command-sparse",
+      "type" => "command_execution",
+      "status" => "completed",
+      "aggregatedOutput" => "1 test, 0 failures",
+      "exitCode" => 0
+    }
+
+    assert {:started, started} = P.from_event(event("item/started", started_item))
+    assert {:completed, completed} = P.from_event(event("item/completed", completed_item))
+
+    {timeline, _started} = TurnTimeline.upsert_tool_call(TurnTimeline.new(), started)
+    {_timeline, merged} = TurnTimeline.upsert_tool_call(timeline, completed)
+
+    assert merged.arguments == %{"command" => "mix test test/example_test.exs"}
+    assert merged.status == "complete"
+    assert merged.output == "1 test, 0 failures"
+    assert merged.result == %{"exit_code" => 0}
+  end
+
+  test "sparse file completion retains start paths and merges diff counts into the start result" do
+    started_item = %{
+      "id" => "file-sparse",
+      "type" => "file_change",
+      "changes" => [%{"path" => "lib/a.ex"}, %{"path" => "lib/b.ex"}]
+    }
+
+    diff = "@@\n+added"
+
+    completed_item = %{
+      "id" => "file-sparse",
+      "type" => "file_change",
+      "status" => "completed",
+      "unifiedDiff" => diff
+    }
+
+    assert {:started, started} = P.from_event(event("item/started", started_item))
+    assert {:completed, completed} = P.from_event(event("item/completed", completed_item))
+
+    {timeline, _started} = TurnTimeline.upsert_tool_call(TurnTimeline.new(), started)
+    {_timeline, merged} = TurnTimeline.upsert_tool_call(timeline, completed)
+
+    expected_paths = ["lib/a.ex", "lib/b.ex"]
+    assert merged.arguments == %{"paths" => expected_paths, "file_count" => 2}
+
+    assert merged.result == %{
+             "paths" => expected_paths,
+             "diff" => diff,
+             "additions" => 1,
+             "deletions" => 0
+           }
   end
 end

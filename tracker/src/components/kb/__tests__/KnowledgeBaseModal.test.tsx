@@ -12,7 +12,7 @@ await initI18n("en");
 const overview: KbProjectOverview = {
   project: { slug: "macro-markets", name: "Macro Markets" },
   repositories: [
-    { repoSlug: "back", workspacePath: "back", githubFullName: "clouapp/back", role: "backend", docsPresent: true },
+    { repoSlug: "back", workspacePath: "back", githubFullName: "clouapp/back", defaultBranch: "main", role: "backend", docsPresent: true },
   ],
 };
 

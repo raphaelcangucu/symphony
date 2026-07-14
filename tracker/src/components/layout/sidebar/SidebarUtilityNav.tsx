@@ -25,16 +25,16 @@ export function SidebarUtilityNav({
 }: SidebarUtilityNavProps) {
   const { t } = useTranslation();
   const actionClass =
-    "h-8 w-full justify-start gap-2 px-2 text-xs font-normal text-muted-foreground";
+    "h-9 w-full justify-start gap-2.5 rounded-lg px-2.5 text-sm font-normal text-foreground/80 hover:bg-black/[0.04] hover:text-foreground dark:hover:bg-white/[0.06]";
   const shortcut = searchShortcutLabel();
 
   return (
     <nav
       aria-label={t("layout.sidebar.utility.label")}
-      className={cn("grid gap-0.5", className)}
+      className={cn("grid gap-1", className)}
     >
       <Button type="button" variant="ghost" className={actionClass} onClick={onNewSession}>
-        <Plus className="h-3.5 w-3.5" aria-hidden />
+        <Plus className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
         <span>{t("layout.sidebar.utility.newSession")}</span>
       </Button>
       <Button
@@ -44,21 +44,21 @@ export function SidebarUtilityNav({
         aria-label={t("layout.sidebar.utility.search")}
         onClick={onSearch}
       >
-        <Search className="h-3.5 w-3.5" aria-hidden />
+        <Search className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
         <span>{t("layout.sidebar.utility.search")}</span>
-        <kbd className="ml-auto rounded border px-1 text-[10px] leading-4 opacity-70">
+        <kbd className="ml-auto rounded-md border bg-background/80 px-1.5 py-0.5 text-[10px] leading-4 text-muted-foreground">
           {shortcut}
         </kbd>
       </Button>
       <Button asChild variant="ghost" className={actionClass}>
         <Link to="/settings/templates">
-          <Bot className="h-3.5 w-3.5" aria-hidden />
+          <Bot className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
           <span>{t("layout.sidebar.utility.automations")}</span>
         </Link>
       </Button>
       <Button asChild variant="ghost" className={actionClass}>
         <Link to="/settings">
-          <Settings className="h-3.5 w-3.5" aria-hidden />
+          <Settings className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
           <span>{t("layout.sidebar.utility.settings")}</span>
         </Link>
       </Button>
