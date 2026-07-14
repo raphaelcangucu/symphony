@@ -5,7 +5,8 @@ import { describe, expect, it, vi } from "vitest";
 import { SkillProfileMenu } from "@/components/assistant/SkillProfileMenu";
 
 describe("SkillProfileMenu", () => {
-  it("shows Auto alongside the resolved toolkit", () => {
+  it("shows Auto alongside the resolved toolkit", async () => {
+    const user = userEvent.setup();
     render(
       <SkillProfileMenu
         selection="auto"
@@ -16,8 +17,12 @@ describe("SkillProfileMenu", () => {
 
     expect(screen.getByTestId("skill-profile-menu")).toHaveTextContent(/Planning/i);
     expect(screen.getByTestId("skill-profile-menu")).toHaveTextContent(/Auto/i);
-    expect(screen.getByTestId("skill-profile-active-chips")).toHaveTextContent(/Brainstorming/i);
-    expect(screen.getByTestId("skill-profile-active-chips")).toHaveTextContent(/Writing Plans/i);
+    expect(screen.queryByTestId("skill-profile-active-chips")).not.toBeInTheDocument();
+
+    await user.click(screen.getByTestId("skill-profile-menu"));
+    const activeChips = await screen.findByTestId("skill-profile-active-chips");
+    expect(activeChips).toHaveTextContent(/Brainstorming/i);
+    expect(activeChips).toHaveTextContent(/Writing Plans/i);
   });
 
   it("reports a pinned profile selection", async () => {
