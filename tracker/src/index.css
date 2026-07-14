@@ -804,3 +804,11 @@ textarea {
   opacity: 0 !important;
   z-index: 10;
 }
+
+.assistant-chat-typography {
+  --chat-body: 12.5px;
+  --chat-meta: 10.5px;
+  --chat-mono: 10.5px;
+  --chat-title: 12px;
+  --chat-body-leading: 1.45;
+}
