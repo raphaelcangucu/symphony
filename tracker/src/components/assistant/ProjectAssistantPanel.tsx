@@ -19,6 +19,7 @@ import {
 import type { AssistantChatPlanApprovalAction } from "@/components/assistant/AssistantChatMessageBubble";
 import { AssistantMessageList } from "@/components/assistant/AssistantMessageList";
 import { AssistantPanelHeader } from "@/components/assistant/AssistantPanelHeader";
+import { AssistantSessionShell } from "@/components/assistant/AssistantSessionShell";
 import { CommandApprovalCard } from "@/components/assistant/CommandApprovalCard";
 import { QueuedMessageChips } from "@/components/assistant/QueuedMessageChips";
 import { assistantCommandsToSlashDefs } from "@/components/assistant/assistantCommandDefs";
@@ -127,7 +128,7 @@ import {
 import { createTrackerSocket } from "@/services/phoenix/socket";
 import type { AgentKind, ExecutionMode } from "@/types/issue";
 import type { WorkspaceView } from "@/lib/workspaceRoutes";
-import { cn, SCROLLBAR_THIN } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { useAssistantCommands } from "@/hooks/useAssistantCommands";
 
 export type { DraftIssueCreated } from "@/components/assistant/assistantPanelHelpers";
@@ -338,7 +339,6 @@ export function ProjectAssistantPanel({
   const channelRef = useRef<Channel | null>(null);
   const goalStatusAcceptorRef = useRef<GoalStatusAcceptor>(() => false);
   const bundleRef = useRef<AssistantCatalogBundle | null>(null);
-  const composerDockRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const scrollBehaviorRef = useRef<"initial" | "smooth">("initial");
   const stickToBottomRef = useRef(true);
@@ -454,7 +454,6 @@ export function ProjectAssistantPanel({
 
   const { rememberMention, expandMentions } = useComposerMentions();
 
-  const [composerHeight, setComposerHeight] = useState(0);
   const isPageMode = mode === "page";
   const isEmbeddedMode = mode === "embedded";
   const isPanelMode = isPageMode || isEmbeddedMode;
@@ -1292,19 +1291,6 @@ export function ProjectAssistantPanel({
   }, [kbDocumentReferences, kbDocumentReferencesKey, onKbDocumentReferencesChanged]);
 
   useEffect(() => {
-    if (!isFullPageProjectAssistant) return;
-    const dock = composerDockRef.current;
-    if (!dock) return;
-
-    const updateHeight = () => setComposerHeight(dock.offsetHeight);
-    updateHeight();
-
-    const observer = new ResizeObserver(updateHeight);
-    observer.observe(dock);
-    return () => observer.disconnect();
-  }, [isFullPageProjectAssistant, bundle, catalogError]);
-
-  useEffect(() => {
     if (!isPanelMode || !stickToBottomRef.current) return undefined;
     const scroller = scrollRef.current;
     if (!scroller) return undefined;
@@ -1780,97 +1766,69 @@ export function ProjectAssistantPanel({
           )}
           aria-label={t("assistant.panel.ariaLabel")}
         >
-          <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
-          {isEmbeddedMode || hideHeader ? null : (
-            <AssistantPanelHeader
-              title={panelTitle}
-              isPageMode={isPageMode}
-              projectSlug={projectSlug}
-              diffStats={workspaceDiffStats}
-              modelCommand={panelModelCommand}
-            />
-          )}
-
-          <div className="relative min-h-0 flex-1">
-            <div ref={setScrollContainerRef} className={cn("h-full overflow-y-auto", SCROLLBAR_THIN)}>
-              <div
-                className={cn(
-                  "flex w-full flex-col",
-                  isPageMode
-                    ? widePageContent
-                      ? "mx-auto max-w-[min(100%,80rem)] gap-4 px-4 pt-4 lg:px-6"
-                      : "mx-auto max-w-4xl gap-4 px-4 pt-4"
-                    : cn("gap-4 py-4", embeddedPanelInset),
-                )}
-                style={isFullPageProjectAssistant ? { paddingBottom: composerHeight + 16 } : undefined}
-              >
-                {messageItems}
-              </div>
-            </div>
-            {scrollToBottomButton}
-          </div>
-
-          {isFullPageProjectAssistant ? (
-            <div ref={composerDockRef} className="pointer-events-none absolute inset-x-0 bottom-0">
-              <div className="pointer-events-none h-10 bg-gradient-to-t from-background to-transparent" />
-              <div className="pointer-events-auto bg-background">
+          <AssistantSessionShell
+            className="min-w-0 flex-1"
+            feedRef={setScrollContainerRef}
+            toolbar={
+              isEmbeddedMode || hideHeader ? null : (
+                <AssistantPanelHeader
+                  title={panelTitle}
+                  isPageMode={isPageMode}
+                  projectSlug={projectSlug}
+                  diffStats={workspaceDiffStats}
+                  modelCommand={panelModelCommand}
+                />
+              )
+            }
+            feed={
+              <>
                 <div
                   className={cn(
-                    "mx-auto w-full px-4 pb-2 pt-1",
-                    widePageContent ? "max-w-[min(100%,80rem)] lg:px-6" : "max-w-4xl",
+                    "flex w-full flex-col",
+                    isPageMode
+                      ? widePageContent
+                        ? "mx-auto max-w-[min(100%,80rem)] gap-4 px-4 pt-4 lg:px-6"
+                        : "mx-auto max-w-4xl gap-4 px-4 pt-4"
+                      : cn("gap-4 py-4", embeddedPanelInset),
                   )}
                 >
-                  {resumeBanner}
-                  {queuedChips}
-                  {questionsNode}
-                  {approvalNode}
-                  {composerNode ?? (
-                    <div className="rounded-2xl border bg-card px-4 py-6 text-sm text-muted-foreground shadow-lg">
-                      {t("assistant.panel.loadingModels")}
-                    </div>
-                  )}
-                  {catalogError ? (
-                    <p className="mt-2 text-xs text-amber-700 dark:text-amber-400">{catalogError}</p>
-                  ) : null}
+                  {messageItems}
                 </div>
-              </div>
-            </div>
-          ) : isPageMode ? (
-            <div ref={composerDockRef} className="shrink-0 bg-background pr-2.5">
-              <div
-                className={cn(
-                  "mx-auto w-full px-4 py-2",
-                  widePageContent ? "max-w-[min(100%,80rem)] lg:px-6" : "max-w-4xl",
-                )}
-              >
+                {scrollToBottomButton}
+              </>
+            }
+            dock={
+              <>
                 {resumeBanner}
                 {queuedChips}
                 {questionsNode}
                 {approvalNode}
-                {composerNode ?? (
-                  <div className="rounded-2xl border bg-card px-4 py-6 text-sm text-muted-foreground shadow-sm">
-                    {t("assistant.panel.loadingModels")}
-                  </div>
-                )}
                 {catalogError ? (
-                  <p className="mt-2 text-xs text-amber-700 dark:text-amber-400">{catalogError}</p>
+                  <p className="px-4 pb-2 text-xs text-amber-700 dark:text-amber-400">{catalogError}</p>
                 ) : null}
+              </>
+            }
+            composer={
+              <div className={cn("bg-background", isPageMode ? "pr-2.5" : cn("pb-2 pt-2", embeddedPanelInset))}>
+                <div
+                  className={cn(
+                    isPageMode &&
+                      cn(
+                        "mx-auto w-full px-4 py-2",
+                        widePageContent ? "max-w-[min(100%,80rem)] lg:px-6" : "max-w-4xl",
+                      ),
+                  )}
+                >
+                  {composerNode ?? (
+                    <div className="rounded-2xl border bg-card px-4 py-6 text-sm text-muted-foreground shadow-sm">
+                      {t("assistant.panel.loadingModels")}
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          ) : (
-            <div className={cn("shrink-0 bg-background pb-2 pt-2", embeddedPanelInset)}>
-              {queuedChips}
-              {questionsNode}
-              {approvalNode}
-              {composerNode ?? (
-                <div className="border-t px-4 py-6 text-sm text-muted-foreground">{t("assistant.panel.loadingModels")}</div>
-              )}
-              {catalogError ? (
-                <p className="border-t px-4 pb-3 text-xs text-amber-700 dark:text-amber-400">{catalogError}</p>
-              ) : null}
-            </div>
-          )}
-          </div>
+            }
+            environment={null}
+          />
           {showTasksDock && taskSnapshot ? (
             <AssistantTasksDock snapshot={taskSnapshot} onClose={toggleTasksDock} />
           ) : null}

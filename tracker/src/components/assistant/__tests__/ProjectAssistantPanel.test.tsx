@@ -1868,4 +1868,14 @@ describe("ProjectAssistantPanel", () => {
     expect(await screen.findByRole("listbox")).toBeInTheDocument();
     expect(await screen.findByText("Related task")).toBeInTheDocument();
   });
+
+  it("page mode uses AssistantSessionShell with a single feed scroller", async () => {
+    render(<ProjectAssistantPanel projectSlug="macro-markets" view="board" mode="page" />);
+    expect(await screen.findByTestId("assistant-session-shell")).toBeInTheDocument();
+    const feed = screen.getByTestId("assistant-session-feed");
+    expect(feed.className).toMatch(/overflow-y-auto/);
+    // No nested overflow-y-auto descendants inside feed
+    const nested = feed.querySelectorAll(".overflow-y-auto");
+    expect(nested.length).toBe(0);
+  });
 });
