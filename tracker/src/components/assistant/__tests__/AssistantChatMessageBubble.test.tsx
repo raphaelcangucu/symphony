@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { AssistantChatMessageBubble } from "@/components/assistant/AssistantChatMessageBubble";
@@ -28,6 +28,56 @@ function toolCall(overrides: Partial<AssistantToolCall>): AssistantToolCall {
 }
 
 describe("AssistantChatMessageBubble", () => {
+  it("does not apply the legacy text-sm size class to either bubble", () => {
+    render(<AssistantChatMessageBubble message={message({ role: "user", content: "Sized note" })} />);
+    const userArticle = screen.getByTestId("assistant-chat-message").querySelector("article");
+    expect(userArticle?.className.split(/\s+/) ?? []).not.toContain("text-sm");
+
+    cleanup();
+
+    render(<AssistantChatMessageBubble message={message({ role: "assistant", content: "Sized reply" })} />);
+    const assistantArticle = screen.getByTestId("assistant-chat-message").querySelector("article");
+    expect(assistantArticle?.className.split(/\s+/) ?? []).not.toContain("text-sm");
+  });
+
+  it("uses a soft tinted bubble for user messages instead of a heavy dark card", () => {
+    render(<AssistantChatMessageBubble message={message({ role: "user", content: "Soft bubble" })} />);
+    const article = screen.getByTestId("assistant-chat-message").querySelector("article");
+    const classes = article?.className.split(/\s+/) ?? [];
+
+    expect(classes).not.toContain("bg-slate-950");
+    expect(classes).not.toContain("text-white");
+    expect(classes).toContain("rounded-2xl");
+    expect(classes.some((className) => className.startsWith("bg-violet-500"))).toBe(true);
+  });
+
+  it("does not wrap the assistant article in heavy card chrome", () => {
+    render(<AssistantChatMessageBubble message={message({ role: "assistant", content: "Plain response" })} />);
+    const article = screen.getByTestId("assistant-chat-message").querySelector("article");
+    const classes = article?.className.split(/\s+/) ?? [];
+
+    expect(classes).not.toContain("border");
+    expect(classes).not.toContain("bg-card");
+    expect(classes.some((className) => className.startsWith("bg-muted"))).toBe(false);
+  });
+
+  it("sizes user and assistant bubble text with the shared chat CSS variables", () => {
+    render(<AssistantChatMessageBubble message={message({ role: "user", content: "Leading note" })} />);
+    const userArticle = screen.getByTestId("assistant-chat-message").querySelector("article");
+    const userClasses = userArticle?.className.split(/\s+/) ?? [];
+    expect(userClasses).not.toContain("leading-6");
+    expect(userClasses.some((className) => className.includes("text-[length:var(--chat-body)]"))).toBe(true);
+    expect(userClasses.some((className) => className.includes("leading-[var(--chat-body-leading)]"))).toBe(true);
+
+    cleanup();
+
+    render(<AssistantChatMessageBubble message={message({ role: "assistant", content: "Leading reply" })} />);
+    const assistantArticle = screen.getByTestId("assistant-chat-message").querySelector("article");
+    const assistantClasses = assistantArticle?.className.split(/\s+/) ?? [];
+    expect(assistantClasses.some((className) => className.includes("text-[length:var(--chat-body)]"))).toBe(true);
+    expect(assistantClasses.some((className) => className.includes("leading-[var(--chat-body-leading)]"))).toBe(true);
+  });
+
   it("renders assistant messages with the shared chat marker", () => {
     render(<AssistantChatMessageBubble message={message({ role: "assistant" })} />);
 

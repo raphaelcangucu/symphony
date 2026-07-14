@@ -76,10 +76,10 @@ export function AssistantChatMessageBubble({
     >
       <article
         className={cn(
-          "text-sm",
+          "text-[length:var(--chat-body)] leading-[var(--chat-body-leading)]",
           isUser
-            ? "w-fit max-w-[85%] rounded-3xl bg-slate-950 px-4 py-2.5 text-white shadow-sm dark:bg-primary dark:text-primary-foreground"
-            : "assistant-response-content w-full text-foreground",
+            ? "w-fit max-w-[85%] rounded-2xl bg-violet-500/10 px-3 py-1.5 text-foreground/90"
+            : "assistant-response-content w-full text-foreground/90",
         )}
       >
         {attachments.length > 0 ? (
@@ -95,7 +95,7 @@ export function AssistantChatMessageBubble({
           </div>
         ) : null}
         {isUser ? (
-          <p className="whitespace-pre-wrap leading-6">{message.content}</p>
+          <p className="whitespace-pre-wrap">{message.content}</p>
         ) : assistantContentBlocks ? (
           <AssistantTurnTimeline
             contentBlocks={assistantContentBlocks}
@@ -109,7 +109,7 @@ export function AssistantChatMessageBubble({
           <AssistantMarkdown content={message.content} onOpenDocumentPath={onOpenDocumentPath} />
         )}
         {!assistantContentBlocks && message.toolCalls.length ? (
-          <div className={cn("mt-3 border-t pt-2", isUser && "border-white/20")}>
+          <div className={cn("mt-3 border-t pt-2", isUser && "border-violet-500/20")}>
             <ToolActivityTimeline
               toolCalls={message.toolCalls}
               taskSnapshot={taskSnapshot}
