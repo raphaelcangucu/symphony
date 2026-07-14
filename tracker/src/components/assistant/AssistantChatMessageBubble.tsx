@@ -176,7 +176,7 @@ function UserQuestionsReceipt({ message }: { message: AssistantChatMessage }) {
 
   return (
     <div className="flex w-full justify-start">
-      <article className="w-full max-w-none rounded-2xl border bg-muted/30 p-3 text-sm">
+      <article className="w-full max-w-none rounded-2xl border bg-muted/30 p-3 text-[length:var(--chat-body)] leading-[var(--chat-body-leading)]">
         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           {t("assistant.panel.clarifyingQuestions")}
         </p>

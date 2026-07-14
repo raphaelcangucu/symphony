@@ -251,8 +251,8 @@ textarea {
   width: 100%;
   min-width: 0;
   color: hsl(var(--foreground));
-  font-size: 0.975rem;
-  line-height: 1.72;
+  font-size: var(--chat-body, 12.5px);
+  line-height: var(--chat-body-leading, 1.45);
   overflow-wrap: anywhere;
   -webkit-font-smoothing: antialiased;
 }
