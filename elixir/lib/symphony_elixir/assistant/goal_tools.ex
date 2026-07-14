@@ -13,8 +13,17 @@ defmodule SymphonyElixir.Assistant.GoalTools do
   Codex uses the native thread goal API. Claude Code uses native /goal (completion
   condition) mirrored by Symphony. pause/resume/set_budget are Codex-only.
 
-  Use context "authoring" for the current assistant thread's conversation goal (spec/plan/analysis work in the chat).
-  Use context "execution" (default in project chat) for the orchestrator execution goal that dispatch/resume carries.
+  Never invent or auto-enable a goal. Call set_objective / pause / resume / clear /
+  set_budget only when the user activated goal mode via `/goal` or an explicit
+  natural-language request (for example: "ative o goal", "use goal mode",
+  "liga o goal mode para fazer X"). Ordinary task requests are not enough.
+  `get` may be used to inspect state without enabling a goal.
+
+  Use context "authoring" for the current assistant thread's conversation goal
+  (spec/plan/analysis work in the chat).
+  Use context "execution" (default in project chat) for the orchestrator execution
+  goal that dispatch/resume carries — only when the user explicitly asks to change
+  the orchestrator run objective.
 
   Actions:
   - get: read current goal state
@@ -180,11 +189,13 @@ defmodule SymphonyElixir.Assistant.GoalTools do
       "context" => %{
         "type" => ["string", "null"],
         "enum" => ["authoring", "execution", nil],
-        "description" => "authoring = chat goal; execution = orchestrator goal. Defaults to authoring in issue chat, execution elsewhere."
+        "description" =>
+          "authoring = chat goal; execution = orchestrator goal. Defaults to authoring in issue chat, execution elsewhere. Mutating actions require `/goal` or an explicit user request to use goal mode."
       },
       "objective" => %{
         "type" => ["string", "null"],
-        "description" => "Required for set_objective."
+        "description" =>
+          "Required for set_objective. Only set when the user activated goal mode via `/goal` or an explicit request."
       },
       "token_budget" => %{
         "type" => ["integer", "null"],
