@@ -1,12 +1,13 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useRef } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AssistantComposer } from "@/components/assistant/AssistantComposer";
 import { uploadAssistantAttachment } from "@/services/assistant";
 import { i18n } from "@/i18n";
 import { mockAssistantCodexCatalog } from "@/test-fixtures/assistantCatalog";
 import { fallbackCatalogBundle } from "@/lib/assistantSettings";
+import { LG_MEDIA_QUERY } from "@/hooks/useMediaQuery";
 
 const mockBundle = fallbackCatalogBundle();
 // Override codex catalog with the mock for predictable model/effort names
@@ -45,6 +46,26 @@ vi.mock("@/services/assistant", async () => {
   };
 });
 
+const originalMatchMedia = window.matchMedia;
+
+/** Forces `useIsLgUp()` to a fixed value so the split-minimal overflow behavior is testable regardless of viewport. */
+function mockLgUp(matches: boolean) {
+  Object.defineProperty(window, "matchMedia", {
+    writable: true,
+    configurable: true,
+    value: vi.fn((query: string) => ({
+      matches: query === LG_MEDIA_QUERY ? matches : false,
+      media: query,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+      addListener: () => undefined,
+      removeListener: () => undefined,
+      dispatchEvent: () => true,
+      onchange: null,
+    })),
+  });
+}
+
 describe("AssistantComposer", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -52,6 +73,10 @@ describe("AssistantComposer", () => {
     speechMock.start.mockImplementation((onTranscript: (text: string, isFinal: boolean) => void) => {
       onTranscript("texto ditado", true);
     });
+  });
+
+  afterEach(() => {
+    Object.defineProperty(window, "matchMedia", { writable: true, configurable: true, value: originalMatchMedia });
   });
 
   it("sends on Enter and exposes model and effort controls", () => {
@@ -586,5 +611,32 @@ describe("AssistantComposer", () => {
         ],
       }),
     );
+  });
+
+  it("split-minimal: collapses toolbarMore into the overflow (⋯) menu even at lg+ widths", () => {
+    mockLgUp(true);
+
+    render(
+      <AssistantComposer
+        projectSlug="macro-markets"
+        bundle={mockBundle}
+        onSubmit={vi.fn()}
+        toolbarMore={
+          <>
+            <button type="button">Diff</button>
+            <button type="button">KB</button>
+            <button type="button">Yolo</button>
+          </>
+        }
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: "Diff" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: i18n.t("assistant.composer.moreToolsAria") }));
+
+    expect(screen.getByRole("button", { name: "Diff" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "KB" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Yolo" })).toBeInTheDocument();
   });
 });

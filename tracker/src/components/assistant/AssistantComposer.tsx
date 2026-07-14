@@ -851,7 +851,7 @@ export function AssistantComposer({
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
           placeholder={placeholder ?? t("assistant.composer.placeholder")}
-          className="min-h-[4.5rem] resize-none border-0 bg-transparent px-4 py-3 shadow-none focus-visible:ring-0"
+          className="min-h-[2.75rem] resize-none border-0 bg-transparent px-3 py-2 text-[length:var(--chat-body)] leading-[var(--chat-body-leading)] shadow-none focus-visible:ring-0"
         />
 
         <div className="flex flex-wrap items-center justify-between gap-2 px-3 pb-3">
@@ -875,7 +875,9 @@ export function AssistantComposer({
               <Plus className="h-4 w-4" />
             </Button>
             {toolbarAfterAttach}
-            {toolbarMore ? (isLgUp ? toolbarMore : <ComposerMoreMenu disabled={disabled || composerDisabled}>{toolbarMore}</ComposerMoreMenu>) : null}
+            {toolbarMore ? (
+              <ComposerMoreMenu disabled={disabled || composerDisabled}>{toolbarMore}</ComposerMoreMenu>
+            ) : null}
           </div>
 
           <div className="flex flex-wrap items-center justify-end gap-1">
