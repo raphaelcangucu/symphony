@@ -39,6 +39,8 @@ export interface BackendIssueDto {
   agentKind?: string | null;
   agent_goal?: string | null;
   agentGoal?: string | null;
+  model?: string | null;
+  effort?: string | null;
   repository_full_name?: string | null;
   repositoryFullName?: string | null;
   parent_identifier?: string | null;
@@ -100,6 +102,8 @@ export function normalizeIssue(dto: BackendIssueDto): Issue {
     branchName: dto.branchName ?? dto.branch_name ?? null,
     agentKind,
     agentGoal: normalizeAgentGoal(dto.agentGoal ?? dto.agent_goal),
+    model: dto.model ?? null,
+    effort: dto.effort ?? null,
     attachments: (dto.attachments ?? []).flatMap(normalizeIssueAttachment),
     repositoryFullName: dto.repositoryFullName ?? dto.repository_full_name ?? null,
     parentIdentifier: dto.parentIdentifier ?? dto.parent_identifier ?? null,

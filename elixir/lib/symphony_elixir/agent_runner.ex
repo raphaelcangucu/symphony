@@ -10,6 +10,7 @@ defmodule SymphonyElixir.AgentRunner do
     CodingAgent,
     Config,
     ExecutionMode,
+    ExecutionSettings,
     InstanceConfig,
     Issue,
     ProjectConfig,
@@ -18,6 +19,7 @@ defmodule SymphonyElixir.AgentRunner do
     RunContract,
     SessionEvents,
     SessionLog,
+    Settings,
     Tracker,
     Workspace
   }
@@ -246,22 +248,30 @@ defmodule SymphonyElixir.AgentRunner do
 
   @spec issue_agent_kind(SymphonyElixir.Issue.t()) :: String.t()
   def issue_agent_kind(%Issue{} = issue) do
-    task_kind = AgentPreference.normalize(issue.agent_kind)
-    AgentPreference.resolve(task_labels(task_kind), project_agent_kind(issue))
+    ExecutionSettings.resolve_agent(%{
+      settings_agent: settings_agent_kind(issue),
+      label_agent: AgentPreference.normalize(issue.agent_kind),
+      project_agent: project_agent_kind(issue),
+      user_agent: Settings.Agents.default_agent_kind()
+    })
   end
 
-  def issue_agent_kind(_issue), do: AgentPreference.resolve([], nil)
+  def issue_agent_kind(_issue), do: ExecutionSettings.resolve_agent(%{})
 
-  defp task_labels(nil), do: []
-  defp task_labels(kind), do: ["symphony:" <> kind]
+  defp settings_agent_kind(%Issue{project_slug: slug, identifier: identifier})
+       when is_binary(slug) and is_binary(identifier) do
+    case Context.get_agent_settings(slug, identifier) do
+      {:ok, settings} -> AgentPreference.normalize(settings.agent_kind)
+      {:error, :not_found} -> nil
+    end
+  end
+
+  defp settings_agent_kind(_issue), do: nil
 
   defp project_agent_kind(%Issue{project_slug: slug}) when is_binary(slug) and slug != "" do
-    case Context.get_project(slug) do
-      {:ok, project} ->
-        project |> Repo.preload(:setup) |> ProjectConfig.resolve() |> Map.get(:agent_kind)
-
-      {:error, _reason} ->
-        nil
+    case resolve_project_config(%Issue{project_slug: slug}) do
+      %ProjectConfig{agent_kind: kind} -> kind
+      _ -> nil
     end
   end
 
@@ -290,16 +300,47 @@ defmodule SymphonyElixir.AgentRunner do
   @doc false
   @spec agent_settings_opts(map()) :: keyword()
   def agent_settings_opts(issue) do
+    settings = load_agent_settings(issue)
+    project = resolve_project_config(issue)
+    agent = issue_agent_kind_for_opts(issue)
+
+    model =
+      ExecutionSettings.resolve_model(%{
+        settings_model: settings && settings.model,
+        project_model: project && project.agent_model,
+        user_model: Settings.AgentModels.selected(agent)
+      })
+
+    effort =
+      ExecutionSettings.resolve_effort(%{
+        settings_effort: settings && settings.effort,
+        project_effort: project && project.agent_effort,
+        user_effort: Settings.AgentEfforts.selected(agent)
+      })
+
+    []
+    |> put_if_present(:model, model)
+    |> put_if_present(:effort, effort)
+    |> put_if_present(:execution_mode, settings && settings.mode)
+  end
+
+  defp load_agent_settings(issue) do
     with slug when is_binary(slug) <- Map.get(issue, :project_slug),
          identifier when is_binary(identifier) <- Map.get(issue, :identifier),
          {:ok, settings} <- Context.get_agent_settings(slug, identifier) do
-      []
-      |> put_if_present(:model, settings.model)
-      |> put_if_present(:effort, settings.effort)
-      |> put_if_present(:execution_mode, settings.mode)
+      settings
     else
-      _no_overrides -> []
+      _ -> nil
     end
+  end
+
+  defp issue_agent_kind_for_opts(%Issue{} = issue), do: issue_agent_kind(issue)
+  defp issue_agent_kind_for_opts(issue) when is_map(issue) do
+    issue_agent_kind(%Issue{
+      project_slug: Map.get(issue, :project_slug),
+      identifier: Map.get(issue, :identifier),
+      agent_kind: Map.get(issue, :agent_kind)
+    })
   end
 
   defp put_if_present(opts, _key, nil), do: opts

@@ -1,45 +1,60 @@
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { AGENT_ICONS, AGENT_KINDS, agentKindLabel, AgentChip } from "@/components/shared/AgentChip";
+import { ExecutionSettingsPicker } from "@/components/assistant/ExecutionSettingsPicker";
+import { agentKindLabel } from "@/components/shared/AgentChip";
+import { fallbackCatalogBundle, type AssistantCatalogBundle } from "@/lib/assistantSettings";
+import { fetchAssistantCatalogBundle } from "@/services/assistant";
 import type { AgentKind } from "@/types/issue";
 
 export function ProjectAgentSelect({
+  projectSlug,
   value,
+  model,
+  effort,
   effectiveDefault,
   onChange,
   disabled,
 }: {
+  projectSlug?: string;
   value: AgentKind | null;
+  model: string | null;
+  effort: string | null;
   effectiveDefault: AgentKind;
-  onChange: (kind: AgentKind | null) => void;
+  onChange: (next: { agent: AgentKind | null; model: string | null; effort: string | null }) => void;
   disabled?: boolean;
 }) {
   const { t } = useTranslation();
+  const [bundle, setBundle] = useState<AssistantCatalogBundle>(() => fallbackCatalogBundle());
+
+  useEffect(() => {
+    if (!projectSlug) return;
+    let cancelled = false;
+    void fetchAssistantCatalogBundle(projectSlug).then((next) => {
+      if (!cancelled) setBundle(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectSlug]);
 
   return (
     <div className="space-y-1 text-sm">
       <span className="text-xs font-medium text-muted-foreground">{t("project.wizard.agent.label")}</span>
-      <div className="flex flex-wrap gap-1.5">
-        <AgentChip
-          label={t("project.wizard.agent.inherit", { agent: agentKindLabel(effectiveDefault, t) })}
-          active={value === null}
-          disabled={disabled}
-          onClick={() => onChange(null)}
-        />
-        {AGENT_KINDS.map((kind) => {
-          const Icon = AGENT_ICONS[kind];
-          return (
-            <AgentChip
-              key={kind}
-              label={agentKindLabel(kind, t)}
-              icon={Icon ? <Icon className="h-3.5 w-3.5" /> : undefined}
-              active={value === kind}
-              disabled={disabled}
-              onClick={() => onChange(kind)}
-            />
-          );
+      <ExecutionSettingsPicker
+        bundle={bundle}
+        agent={value}
+        model={model}
+        effort={effort}
+        allowInherit
+        inheritAgentLabel={t("project.wizard.agent.inherit", {
+          agent: agentKindLabel(effectiveDefault, t),
         })}
-      </div>
+        disabled={disabled}
+        onAgentChange={(agent) => onChange({ agent, model, effort })}
+        onModelChange={(nextModel) => onChange({ agent: value, model: nextModel, effort })}
+        onEffortChange={(nextEffort) => onChange({ agent: value, model, effort: nextEffort })}
+      />
       <p className="text-xs text-muted-foreground">{t("project.wizard.agent.hint")}</p>
     </div>
   );

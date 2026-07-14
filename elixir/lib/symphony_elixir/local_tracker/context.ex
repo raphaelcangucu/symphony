@@ -383,6 +383,7 @@ defmodule SymphonyElixir.LocalTracker.Context do
          {:ok, status} <- fetch_status(project.id, attr(attrs, :status, @default_issue_status)) do
       position = attr(attrs, :position, next_issue_position(project.id, status.id))
       agent = attr(attrs, :agent)
+      execution_settings = extract_execution_settings(attrs)
 
       attrs
       |> normalize_assignee_attrs(project.id)
@@ -394,7 +395,7 @@ defmodule SymphonyElixir.LocalTracker.Context do
         position: position,
         agent: agent
       })
-      |> insert_issue()
+      |> insert_issue(execution_settings)
     end
   end
 
@@ -407,6 +408,7 @@ defmodule SymphonyElixir.LocalTracker.Context do
          {:ok, issue} <- fetch_project_issue(project.id, identifier),
          {:ok, status} <- fetch_move_status(project.id, attrs, issue.status_id) do
       previous_assignee = assignee_snapshot(issue)
+      execution_settings = extract_execution_settings(attrs)
 
       changes =
         attrs
@@ -424,6 +426,8 @@ defmodule SymphonyElixir.LocalTracker.Context do
            {:ok, _routed} <-
              sync_agent_routing_label_result({:ok, updated}, project.id, fetch_agent_attr(attrs)),
            {:ok, issue} <- fetch_issue_by_id(updated.id) do
+        maybe_persist_execution_settings(project.slug, issue.identifier, execution_settings)
+
         tap_issue_event({:ok, issue}, "issue_updated", %{
           status: status.name,
           previous_assignee: previous_assignee
@@ -1532,13 +1536,27 @@ defmodule SymphonyElixir.LocalTracker.Context do
 
   defp tap_roll_up_parent(result), do: result
 
-  defp insert_issue(attrs) do
-    %IssueRecord{}
-    |> IssueRecord.changeset(attrs)
-    |> Repo.insert()
-    |> sync_agent_routing_label_result(Map.get(attrs, :project_id), attr(attrs, :agent))
-    |> preload_issue_result()
-    |> tap_issue_event("issue_created", %{})
+  defp insert_issue(attrs, execution_settings) when is_map(execution_settings) do
+    result =
+      %IssueRecord{}
+      |> IssueRecord.changeset(attrs)
+      |> Repo.insert()
+      |> sync_agent_routing_label_result(Map.get(attrs, :project_id), attr(attrs, :agent))
+      |> preload_issue_result()
+
+    case result do
+      {:ok, %IssueRecord{} = issue} ->
+        maybe_persist_execution_settings(
+          project_slug_for_issue(issue),
+          issue.identifier,
+          execution_settings
+        )
+
+        tap_issue_event({:ok, issue}, "issue_created", %{})
+
+      other ->
+        other
+    end
   end
 
   # SQLite serializes writers, so a concurrent burst can make a losing
@@ -2173,6 +2191,52 @@ defmodule SymphonyElixir.LocalTracker.Context do
   defp attr(attrs, key, default \\ nil) do
     Map.get(attrs, key, Map.get(attrs, Atom.to_string(key), default))
   end
+
+  # Persist pins before PubSub so Broadcaster/TrackerPresenter payloads include them.
+  defp extract_execution_settings(attrs) when is_map(attrs) do
+    %{}
+    |> maybe_put_execution_agent_kind(attrs)
+    |> maybe_put_execution_field(attrs, :model)
+    |> maybe_put_execution_field(attrs, :effort)
+  end
+
+  defp maybe_put_execution_agent_kind(settings, attrs) do
+    cond do
+      Map.has_key?(attrs, :agent) or Map.has_key?(attrs, "agent") ->
+        case attr(attrs, :agent) do
+          nil -> Map.put(settings, :agent_kind, nil)
+          agent when is_binary(agent) -> Map.put(settings, :agent_kind, agent)
+          _invalid -> settings
+        end
+
+      Map.has_key?(attrs, :agent_kind) or Map.has_key?(attrs, "agent_kind") ->
+        Map.put(settings, :agent_kind, attr(attrs, :agent_kind))
+
+      true ->
+        settings
+    end
+  end
+
+  defp maybe_put_execution_field(settings, attrs, key) do
+    if Map.has_key?(attrs, key) or Map.has_key?(attrs, Atom.to_string(key)) do
+      Map.put(settings, key, attr(attrs, key))
+    else
+      settings
+    end
+  end
+
+  defp maybe_persist_execution_settings(slug, identifier, settings)
+       when is_binary(slug) and is_binary(identifier) and is_map(settings) and settings != %{} do
+    case put_agent_settings(slug, identifier, settings) do
+      :ok -> :ok
+      {:error, _reason} -> :ok
+    end
+  end
+
+  defp maybe_persist_execution_settings(_slug, _identifier, _settings), do: :ok
+
+  defp project_slug_for_issue(%IssueRecord{project: %Project{slug: slug}}) when is_binary(slug), do: slug
+  defp project_slug_for_issue(_issue), do: nil
 
   # --- Per-issue agent settings (model / effort / mode overrides) ---------------
 

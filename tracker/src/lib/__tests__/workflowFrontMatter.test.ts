@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { readAgentKind, writeAgentKind } from "@/lib/workflowFrontMatter";
+import {
+  readAgentEffort,
+  readAgentKind,
+  readAgentModel,
+  writeAgentEffort,
+  writeAgentKind,
+  writeAgentModel,
+} from "@/lib/workflowFrontMatter";
 
 const BASE = `---
 tracker:
@@ -78,5 +85,33 @@ describe("writeAgentKind", () => {
     const updated = writeAgentKind(md, "codex");
     expect(updated).toContain("kind: codex # pinned");
     expect(readAgentKind(updated)).toBe("codex");
+  });
+});
+
+describe("agent.model and agent.effort front matter", () => {
+  it("round-trips model and effort under agent:", () => {
+    let md = writeAgentModel(BASE, "claude-opus-4-5");
+    md = writeAgentEffort(md, "high");
+
+    expect(readAgentModel(md)).toBe("claude-opus-4-5");
+    expect(readAgentEffort(md)).toBe("high");
+    expect(md).toContain("max_turns: 20");
+  });
+
+  it("clears model/effort to null and preserves sibling keys", () => {
+    let md = writeAgentModel(BASE, "gpt-5-codex");
+    md = writeAgentEffort(md, "medium");
+    md = writeAgentModel(md, null);
+    md = writeAgentEffort(md, null);
+
+    expect(readAgentModel(md)).toBeNull();
+    expect(readAgentEffort(md)).toBeNull();
+    expect(md).toContain("max_turns: 20");
+  });
+
+  it("creates agent section for model when missing", () => {
+    const md = writeAgentModel("---\ntracker:\n  active_states: []\n---\nBody.", "claude-sonnet-4-5");
+    expect(readAgentModel(md)).toBe("claude-sonnet-4-5");
+    expect(md).toContain("agent:\n  model: claude-sonnet-4-5");
   });
 });

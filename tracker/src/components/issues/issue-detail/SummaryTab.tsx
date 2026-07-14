@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next";
 import { getStatusMeta } from "@/components/board/status-meta";
 import { AssigneeAvatar } from "@/components/issues/AssigneeAvatar";
 import { agentKindLabel } from "@/components/shared/AgentChip";
-import { InlineAgentEditor } from "@/components/issues/inline/InlineAgentEditor";
+import { InlineExecutionSettingsEditor } from "@/components/issues/inline/InlineExecutionSettingsEditor";
 import { InlineAssigneeEditor } from "@/components/issues/inline/InlineAssigneeEditor";
 import { InlineEditableMarkdown } from "@/components/issues/inline/InlineEditableMarkdown";
 import { InlineIssuePicker } from "@/components/issues/inline/InlineIssuePicker";
@@ -24,7 +24,6 @@ import type { AgentExecution } from "@/types/agent-execution";
 import type { Comment } from "@/types/comment";
 import type {
   AgentKind,
-  AgentOption,
   Issue,
   IssueAssigneeOption,
   IssueDevServer,
@@ -59,7 +58,11 @@ interface SummaryTabProps {
   onSaveStatus?: (status: WorkflowStatusName) => Promise<boolean>;
   onSavePriority?: (priority: IssuePriority | null) => Promise<boolean>;
   onSaveAssignee?: (assigneeIds: string[]) => Promise<boolean>;
-  onSaveAgent?: (agent: AgentKind | null) => Promise<boolean>;
+  onSaveExecutionSettings?: (settings: {
+    agent: AgentKind | null;
+    model: string | null;
+    effort: string | null;
+  }) => Promise<boolean>;
   onRemoveAttachment?: (attachmentId: string) => Promise<boolean>;
   onCreateSubtask?: (title: string) => Promise<boolean>;
   onSetParent?: (parentIdentifier: string) => Promise<boolean>;
@@ -91,7 +94,7 @@ export function SummaryTab({
   onSaveStatus,
   onSavePriority,
   onSaveAssignee,
-  onSaveAgent,
+  onSaveExecutionSettings,
   onRemoveAttachment,
   onCreateSubtask,
   onSetParent,
@@ -118,7 +121,12 @@ export function SummaryTab({
     childPullRequests.length > 0 ||
     hasPreviewSummary;
   const editable = Boolean(
-    onSaveDescription || onSaveLabels || onSaveStatus || onSavePriority || onSaveAssignee || onSaveAgent,
+    onSaveDescription ||
+      onSaveLabels ||
+      onSaveStatus ||
+      onSavePriority ||
+      onSaveAssignee ||
+      onSaveExecutionSettings,
   );
 
   const { options: formOptions, loading: labelOptionsLoading } = useIssueFormOptions(projectSlug, {
@@ -127,7 +135,6 @@ export function SummaryTab({
   const labelOptions = formOptions.labels;
   const assigneeOptions = formOptions.assignees;
   const statusOptions = formOptions.statuses;
-  const agentOptions = formOptions.agents;
   const effectiveAgent = formOptions.effectiveAgent;
 
   return (
@@ -290,21 +297,30 @@ export function SummaryTab({
               </span>
             )}
           </Field>
-          <Field label={t("issue.summary.agent")}>
-            {onSaveAgent ? (
-              <InlineAgentEditor
-                agent={issue.agentKind ?? null}
+          <Field label={t("issue.summary.execution")}>
+            {onSaveExecutionSettings ? (
+              <InlineExecutionSettingsEditor
+                projectSlug={projectSlug}
+                value={{
+                  agent: issue.agentKind ?? null,
+                  model: issue.model ?? null,
+                  effort: issue.effort ?? null,
+                }}
                 effectiveAgent={effectiveAgent}
-                options={agentOptions}
-                optionsLoading={labelOptionsLoading}
                 saving={saving}
-                onSave={onSaveAgent}
+                onSave={onSaveExecutionSettings}
               />
             ) : (
-              <span className="inline-flex items-center gap-1.5">
-                {issue.agentKind
-                  ? agentKindLabel(issue.agentKind, t)
-                  : t("issue.create.inherit", { agent: agentKindLabel(effectiveAgent, t) })}
+              <span className="inline-flex items-center gap-1.5 text-sm">
+                {[
+                  issue.agentKind
+                    ? agentKindLabel(issue.agentKind, t)
+                    : t("issue.create.inherit", { agent: agentKindLabel(effectiveAgent, t) }),
+                  issue.model,
+                  issue.effort,
+                ]
+                  .filter((part): part is string => Boolean(part))
+                  .join(" · ")}
               </span>
             )}
           </Field>

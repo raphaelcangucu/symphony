@@ -9,6 +9,8 @@ import { SummaryTab } from "../SummaryTab";
 
 const getIssueFormOptionsMock = vi.hoisted(() => vi.fn());
 
+const fetchAssistantCatalogBundleMock = vi.hoisted(() => vi.fn());
+
 vi.mock("@/hooks/useIssueDevServers", () => ({
   useIssueDevServers: vi.fn(),
 }));
@@ -19,6 +21,10 @@ vi.mock("@/hooks/useMeIdentities", () => ({
 
 vi.mock("@/services/issues", () => ({
   getIssueFormOptions: (...args: unknown[]) => getIssueFormOptionsMock(...args),
+}));
+
+vi.mock("@/services/assistant", () => ({
+  fetchAssistantCatalogBundle: (...args: unknown[]) => fetchAssistantCatalogBundleMock(...args),
 }));
 
 const formOptions: IssueFormOptions = {
@@ -61,13 +67,28 @@ const editableHandlers = {
   onSaveStatus: async () => true,
   onSavePriority: async () => true,
   onSaveAssignee: async () => true,
-  onSaveAgent: async () => true,
+  onSaveExecutionSettings: async () => true,
 };
 
 describe("SummaryTab (editable)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     getIssueFormOptionsMock.mockResolvedValue(formOptions);
+    fetchAssistantCatalogBundleMock.mockResolvedValue({
+      defaultAgent: "codex",
+      agents: [
+        {
+          agent: "codex",
+          models: [{ id: "gpt-5.3-codex", model: "gpt-5.3-codex", label: "gpt-5.3-codex", defaultEffort: "medium", efforts: [{ id: "medium", label: "Medium" }] }],
+          defaultModel: "gpt-5.3-codex",
+        },
+        {
+          agent: "claude",
+          models: [{ id: "claude-sonnet", model: "claude-sonnet", label: "claude-sonnet", defaultEffort: "high", efforts: [{ id: "high", label: "High" }] }],
+          defaultModel: "claude-sonnet",
+        },
+      ],
+    });
     vi.mocked(useIssueDevServers).mockReturnValue({
       data: null,
       error: null,
@@ -95,8 +116,7 @@ describe("SummaryTab (editable)", () => {
     await waitFor(() => expect(getIssueFormOptionsMock).toHaveBeenCalledTimes(1));
   });
 
-  it("saves an explicit agent selection from the sidebar", async () => {
-    const onSaveAgent = vi.fn(async () => true);
+  it("opens execution settings editor and loads the assistant catalog", async () => {
     const user = userEvent.setup();
 
     render(
@@ -104,15 +124,12 @@ describe("SummaryTab (editable)", () => {
         issue={issue({ agentKind: null })}
         projectSlug="macro-markets"
         {...editableHandlers}
-        onSaveAgent={onSaveAgent}
       />,
     );
 
     await user.click(await screen.findByRole("button", { name: /inherit \(codex\)/i }));
-    await user.click(screen.getByRole("button", { name: /^claude$/i }));
-    await user.click(screen.getByRole("button", { name: /^save$/i }));
-
-    expect(onSaveAgent).toHaveBeenCalledWith("claude");
+    await waitFor(() => expect(fetchAssistantCatalogBundleMock).toHaveBeenCalledWith("macro-markets"));
+    expect(screen.getAllByText(/execution/i).length).toBeGreaterThan(0);
   });
 
   it("loads form options exactly once for an editable summary", async () => {

@@ -9,9 +9,12 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { AGENT_ICONS, agentKindLabel, AgentChip } from "@/components/shared/AgentChip";
+import { ExecutionSettingsPicker } from "@/components/assistant/ExecutionSettingsPicker";
+import { agentKindLabel } from "@/components/shared/AgentChip";
 import { useIssueFormOptions } from "@/hooks/useIssueFormOptions";
+import { fallbackCatalogBundle, type AssistantCatalogBundle } from "@/lib/assistantSettings";
 import { cn } from "@/lib/utils";
+import { fetchAssistantCatalogBundle } from "@/services/assistant";
 import { createIssue } from "@/services/issues";
 import type {
   AgentKind,
@@ -117,7 +120,10 @@ export function IssueCreateDialog({
   const [priority, setPriority] = useState("");
   const [selectedLabels, setSelectedLabels] = useState<string[]>([]);
   const [selectedAssignees, setSelectedAssignees] = useState<string[]>([]);
-  const [agent, setAgent] = useState<AgentKind | "">("");
+  const [agent, setAgent] = useState<AgentKind | null>(null);
+  const [model, setModel] = useState<string | null>(null);
+  const [effort, setEffort] = useState<string | null>(null);
+  const [catalogBundle, setCatalogBundle] = useState<AssistantCatalogBundle>(() => fallbackCatalogBundle());
   const [codexGoalMode, setCodexGoalMode] = useState(false);
   const [codexGoal, setCodexGoal] = useState("");
   const [codexGoalEdited, setCodexGoalEdited] = useState(false);
@@ -129,18 +135,28 @@ export function IssueCreateDialog({
   const statusOptions = options.statuses.length > 0 ? options.statuses : fallbackStatuses;
   const visibleLabels = options.labels.filter((label) => !SYMPHONY_LABEL_PATTERN.test(label.name));
   const assigneeOptions = options.assignees;
-  const agentOptions = options.agents;
 
   useEffect(() => {
     if (open) setStatus(defaultStatus);
   }, [open, defaultStatus]);
 
   useEffect(() => {
-    if (concreteAgent(agent) === null) setCodexGoalMode(false);
+    if (!open) return;
+    let cancelled = false;
+    void fetchAssistantCatalogBundle(projectSlug).then((bundle) => {
+      if (!cancelled) setCatalogBundle(bundle);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, projectSlug]);
+
+  useEffect(() => {
+    if (concreteAgent(agent ?? "") === null) setCodexGoalMode(false);
   }, [agent]);
 
   useEffect(() => {
-    if (concreteAgent(agent) !== null && codexGoalMode && !codexGoalEdited) {
+    if (concreteAgent(agent ?? "") !== null && codexGoalMode && !codexGoalEdited) {
       setCodexGoal(buildAgentGoal(title, description, t));
     }
   }, [agent, codexGoalEdited, codexGoalMode, description, t, title]);
@@ -157,7 +173,9 @@ export function IssueCreateDialog({
     setStatus(defaultStatus);
     setSelectedLabels([]);
     setSelectedAssignees([]);
-    setAgent("");
+    setAgent(null);
+    setModel(null);
+    setEffort(null);
     setCodexGoalMode(false);
     setCodexGoal("");
     setCodexGoalEdited(false);
@@ -176,7 +194,7 @@ export function IssueCreateDialog({
       toast.error(validationMessage(parsed.error.issues[0]?.message, t));
       return;
     }
-    const goalAgent = concreteAgent(agent);
+    const goalAgent = concreteAgent(agent ?? "");
     if (goalAgent !== null && codexGoalMode && !codexGoal.trim()) {
       const term = longRunningModeTerm(goalAgent, t);
       toast.error(t("issue.create.goalModeRequired", { termCapitalized: capitalize(term), term }));
@@ -192,7 +210,9 @@ export function IssueCreateDialog({
         priority: parsed.data.priority as IssuePriority | undefined,
         labelIds: selectedLabels,
         assigneeIds: selectedAssignees,
-        agent: agent || null,
+        agent,
+        model,
+        effort,
         goal: goalAgent !== null && codexGoalMode ? codexGoal.trim() || null : null,
       });
       onCreated?.(issue);
@@ -263,32 +283,25 @@ export function IssueCreateDialog({
             </label>
           </div>
 
-          {agentOptions.length > 0 ? (
-            <div className="space-y-1 text-sm">
-              <span className="text-xs font-medium text-muted-foreground">{t("issue.create.agent")}</span>
-              <div className="flex flex-wrap gap-1.5">
-                <AgentChip
-                  label={t("issue.create.inherit", { agent: agentKindLabel(options.effectiveAgent, t) })}
-                  active={agent === ""}
-                  onClick={() => setAgent("")}
-                />
-                {agentOptions.map((item) => {
-                  const Icon = AGENT_ICONS[item.value];
-                  return (
-                    <AgentChip
-                      key={item.value}
-                      label={item.label}
-                      icon={Icon ? <Icon className="h-3.5 w-3.5" /> : undefined}
-                      active={agent === item.value}
-                      onClick={() => setAgent(item.value)}
-                    />
-                  );
-                })}
-              </div>
-            </div>
-          ) : null}
+          <div className="space-y-1 text-sm">
+            <span className="text-xs font-medium text-muted-foreground">{t("issue.create.execution")}</span>
+            <ExecutionSettingsPicker
+              bundle={catalogBundle}
+              agent={agent}
+              model={model}
+              effort={effort}
+              allowInherit
+              inheritAgentLabel={t("issue.create.inherit", {
+                agent: agentKindLabel(options.effectiveAgent, t),
+              })}
+              disabled={submitting || optionsLoading}
+              onAgentChange={setAgent}
+              onModelChange={setModel}
+              onEffortChange={setEffort}
+            />
+          </div>
 
-          {concreteAgent(agent) !== null ? (
+          {concreteAgent(agent ?? "") !== null ? (
             <div className="space-y-2 rounded-lg border bg-muted/20 p-3 text-sm">
               <label className="flex items-center gap-2 text-xs font-medium text-foreground">
                 <input
@@ -298,14 +311,14 @@ export function IssueCreateDialog({
                   className="h-4 w-4 rounded border-input"
                 />
                 {t("issue.create.longRunningMode", {
-                  termCapitalized: capitalize(longRunningModeTerm(concreteAgent(agent) as AgentKind, t)),
+                  termCapitalized: capitalize(longRunningModeTerm(concreteAgent(agent ?? "") as AgentKind, t)),
                 })}
               </label>
               {codexGoalMode ? (
                 <label className="block space-y-1">
                   <span className="text-xs font-medium text-muted-foreground">
-                    {agentKindLabel(concreteAgent(agent) as AgentKind, t)}{" "}
-                    {longRunningModeTerm(concreteAgent(agent) as AgentKind, t)}
+                    {agentKindLabel(concreteAgent(agent ?? "") as AgentKind, t)}{" "}
+                    {longRunningModeTerm(concreteAgent(agent ?? "") as AgentKind, t)}
                   </span>
                   <Textarea
                     value={codexGoal}
@@ -315,8 +328,8 @@ export function IssueCreateDialog({
                     }}
                     className="min-h-28"
                     aria-label={t("issue.create.goalAria", {
-                      agent: agentKindLabel(concreteAgent(agent) as AgentKind, t),
-                      term: longRunningModeTerm(concreteAgent(agent) as AgentKind, t),
+                      agent: agentKindLabel(concreteAgent(agent ?? "") as AgentKind, t),
+                      term: longRunningModeTerm(concreteAgent(agent ?? "") as AgentKind, t),
                     })}
                   />
                 </label>

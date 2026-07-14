@@ -24,10 +24,12 @@ export interface UiSettings {
 }
 
 export type AgentModelSettings = Partial<Record<AgentKind, string | null>>;
+export type AgentEffortSettings = Partial<Record<AgentKind, string | null>>;
 
 export interface AllSettings {
   agents: AgentSettings;
   agent_models?: AgentModelSettings;
+  agent_efforts?: AgentEffortSettings;
   gateways?: GatewaySettings;
   lab: LabSettings;
   orchestrator: OrchestratorSettings;
@@ -109,6 +111,14 @@ export async function updateAgentModel(
 ): Promise<AgentModelSettings> {
   const response = await http.put(trackerPath("/settings/agent_models"), { [agent]: model });
   return unwrapData<AgentModelSettings>(response);
+}
+
+export async function updateAgentEffort(
+  agent: AgentKind,
+  effort: string | null,
+): Promise<AgentEffortSettings> {
+  const response = await http.put(trackerPath("/settings/agent_efforts"), { [agent]: effort });
+  return unwrapData<AgentEffortSettings>(response);
 }
 
 export async function updateOrchestratorSettings(

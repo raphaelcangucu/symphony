@@ -418,8 +418,8 @@ export function IssueDrawer({
                       const updated = await issueUpdater.save({ assigneeIds });
                       return updated !== null;
                     }}
-                    onSaveAgent={async (agent) => {
-                      const updated = await issueUpdater.save({ agent });
+                    onSaveExecutionSettings={async ({ agent, model, effort }) => {
+                      const updated = await issueUpdater.save({ agent, model, effort });
                       return updated !== null;
                     }}
                     onRemoveAttachment={onRemoveAttachment}

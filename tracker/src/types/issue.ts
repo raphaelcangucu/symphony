@@ -81,6 +81,8 @@ export interface Issue {
   updatedAt: string;
   agentKind?: AgentKind | null;
   agentGoal?: string | null;
+  model?: string | null;
+  effort?: string | null;
   attachments: IssueAttachment[];
   repositoryFullName?: string | null;
   parentIdentifier?: string | null;
@@ -129,6 +131,8 @@ export interface CreateIssueInput {
   assigneeIds?: string[];
   agent?: AgentKind | null;
   goal?: string | null;
+  model?: string | null;
+  effort?: string | null;
 }
 
 export interface MoveIssueInput {
@@ -143,4 +147,6 @@ export interface UpdateIssueInput {
   priority?: IssuePriority | null;
   assigneeIds?: string[];
   agent?: AgentKind | null;
+  model?: string | null;
+  effort?: string | null;
 }

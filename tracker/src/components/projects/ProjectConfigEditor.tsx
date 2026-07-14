@@ -18,7 +18,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { orderStepsByRepository } from "@/lib/devEnvGroups";
 import { initialWorkflowMarkdown } from "@/lib/workflowMarkdown";
-import { readAgentKind, writeAgentKind } from "@/lib/workflowFrontMatter";
+import { readAgentEffort, readAgentKind, readAgentModel, writeAgentEffort, writeAgentKind, writeAgentModel } from "@/lib/workflowFrontMatter";
 import { buildWarmUpBootstrapPrompt, stashProjectAssistantHandoff } from "@/lib/previewAssistantHandoff";
 import { assistantPath, DEFAULT_PROJECT_SETTINGS_TAB, type ProjectSettingsTab } from "@/lib/workspaceRoutes";
 import { listDevEnvSteps, saveDevEnvSteps } from "@/services/devEnv";
@@ -254,9 +254,16 @@ export function ProjectConfigEditor({ project, onSaved, onCancel, activeTab, onT
             <Card>
               <CardContent className="space-y-4 pt-6">
                 <ProjectAgentSelect
+                  projectSlug={project.slug}
                   value={readAgentKind(workflowMarkdown)}
+                  model={readAgentModel(workflowMarkdown)}
+                  effort={readAgentEffort(workflowMarkdown)}
                   effectiveDefault={userDefaultAgent}
-                  onChange={(kind) => setWorkflowMarkdown((current) => writeAgentKind(current, kind))}
+                  onChange={({ agent, model, effort }) =>
+                    setWorkflowMarkdown((current) =>
+                      writeAgentEffort(writeAgentModel(writeAgentKind(current, agent), model), effort),
+                    )
+                  }
                 />
                 <WorkflowMarkdownEditor value={workflowMarkdown} onChange={setWorkflowMarkdown} />
               </CardContent>

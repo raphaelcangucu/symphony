@@ -62,33 +62,93 @@ export function readAgentKind(markdown: string): AgentKind | null {
  * Passing null removes the key and prunes the `agent:` section entirely when kind was its only key.
  */
 export function writeAgentKind(markdown: string, kind: AgentKind | null): string {
+  return writeAgentStringKey(markdown, "kind", kind);
+}
+
+/**
+ * Reads the `agent.model` value from the document's front matter.
+ * Returns null when the key is absent or blank (inherit from user/settings default).
+ */
+export function readAgentModel(markdown: string): string | null {
+  return readAgentStringKey(markdown, "model");
+}
+
+/**
+ * Writes (or removes) the `agent.model` key in the document's front matter.
+ * Passing null removes the key and prunes the `agent:` section when model was its only key.
+ */
+export function writeAgentModel(markdown: string, model: string | null): string {
+  return writeAgentStringKey(markdown, "model", model);
+}
+
+/**
+ * Reads the `agent.effort` value from the document's front matter.
+ * Returns null when the key is absent or blank (inherit from user/settings default).
+ */
+export function readAgentEffort(markdown: string): string | null {
+  return readAgentStringKey(markdown, "effort");
+}
+
+/**
+ * Writes (or removes) the `agent.effort` key in the document's front matter.
+ * Passing null removes the key and prunes the `agent:` section when effort was its only key.
+ */
+export function writeAgentEffort(markdown: string, effort: string | null): string {
+  return writeAgentStringKey(markdown, "effort", effort);
+}
+
+function readAgentStringKey(markdown: string, key: string): string | null {
+  const { lines } = split(markdown);
+  const section = agentSection(lines);
+  if (!section) return null;
+
+  const keyPattern = new RegExp(`^\\s+${escapeRegExp(key)}:\\s*["']?([\\w.-]+)["']?\\s*(#.*)?$`);
+  for (let i = section[0] + 1; i < section[1]; i += 1) {
+    const match = lines[i].match(keyPattern);
+    if (match) {
+      const value = match[1]?.trim() ?? "";
+      return value === "" ? null : value;
+    }
+  }
+  return null;
+}
+
+function writeAgentStringKey(markdown: string, key: string, value: string | null): string {
   const { lines, body, crlf } = split(markdown);
   const section = agentSection(lines);
+  const keyLine = new RegExp(`^\\s+${escapeRegExp(key)}:`);
 
-  if (kind === null) {
+  if (value === null) {
     if (!section) return markdown;
-    const inner = lines.slice(section[0] + 1, section[1]).filter((l) => !/^\s+kind:/.test(l));
+    const inner = lines.slice(section[0] + 1, section[1]).filter((l) => !keyLine.test(l));
     const next = [...lines.slice(0, section[0])];
     if (inner.some((l) => l.trim() !== "")) next.push(lines[section[0]], ...inner);
     next.push(...lines.slice(section[1]));
     return join(next, body, crlf);
   }
 
+  const trimmed = value.trim();
+  if (trimmed === "") return writeAgentStringKey(markdown, key, null);
+
   if (!section) {
-    return join([...lines, "agent:", `  kind: ${kind}`], body, crlf);
+    return join([...lines, "agent:", `  ${key}: ${trimmed}`], body, crlf);
   }
 
   const inner = lines.slice(section[0] + 1, section[1]);
-  const kindIndex = inner.findIndex((l) => /^\s+kind:/.test(l));
+  const keyIndex = inner.findIndex((l) => keyLine.test(l));
   const nextInner =
-    kindIndex >= 0
+    keyIndex >= 0
       ? inner.map((l, i) => {
-          if (i !== kindIndex) return l;
+          if (i !== keyIndex) return l;
           const trailingComment = l.match(/#.*$/)?.[0] ?? "";
-          return `  kind: ${kind}${trailingComment ? ` ${trailingComment}` : ""}`;
+          return `  ${key}: ${trimmed}${trailingComment ? ` ${trailingComment}` : ""}`;
         })
-      : [`  kind: ${kind}`, ...inner];
+      : [`  ${key}: ${trimmed}`, ...inner];
 
   const next = [...lines.slice(0, section[0]), lines[section[0]], ...nextInner, ...lines.slice(section[1])];
   return join(next, body, crlf);
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

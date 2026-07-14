@@ -7,6 +7,8 @@ import { IssueCreateDialog } from "@/components/issues/IssueCreateDialog";
 import { i18n } from "@/i18n";
 import { createIssue, getIssueFormOptions } from "@/services/issues";
 import type { Issue, IssueFormOptions } from "@/types/issue";
+import { fallbackCatalogBundle } from "@/lib/assistantSettings";
+import { mockAssistantCodexCatalog } from "@/test-fixtures/assistantCatalog";
 
 vi.mock("sonner", () => ({
   toast: {
@@ -15,13 +17,38 @@ vi.mock("sonner", () => ({
   },
 }));
 
+const fetchAssistantCatalogBundleMock = vi.hoisted(() => vi.fn());
+
 vi.mock("@/services/issues", () => ({
   createIssue: vi.fn(),
   getIssueFormOptions: vi.fn(),
 }));
 
+vi.mock("@/services/assistant", () => ({
+  fetchAssistantCatalogBundle: (...args: unknown[]) => fetchAssistantCatalogBundleMock(...args),
+}));
+
 const mockCreateIssue = vi.mocked(createIssue);
 const mockGetIssueFormOptions = vi.mocked(getIssueFormOptions);
+
+function catalogBundle() {
+  const bundle = fallbackCatalogBundle();
+  bundle.agents = [
+    { ...mockAssistantCodexCatalog },
+    ...bundle.agents.filter((agent) => agent.agent !== "codex"),
+  ];
+  return bundle;
+}
+
+async function selectAgent(user: ReturnType<typeof userEvent.setup>, kind: "codex" | "claude") {
+  const inheritLabel = i18n.t("issue.create.inherit", {
+    agent: i18n.t("issue.sessionLog.agentLabels.codex"),
+  });
+  const trigger = await screen.findByRole("button", { name: inheritLabel });
+  await user.click(trigger);
+  const itemLabel = i18n.t(`issue.sessionLog.agentLabels.${kind}`);
+  await user.click(await screen.findByRole("menuitemradio", { name: itemLabel }));
+}
 
 const createdIssue: Issue = {
   id: "issue-1",
@@ -59,6 +86,7 @@ describe("IssueCreateDialog Codex goal mode", () => {
     vi.clearAllMocks();
     mockCreateIssue.mockResolvedValue(createdIssue);
     mockGetIssueFormOptions.mockResolvedValue(formOptions);
+    fetchAssistantCatalogBundleMock.mockResolvedValue(catalogBundle());
   });
 
   it("shows Codex goal mode and sends an edited goal when checked", async () => {
@@ -69,8 +97,8 @@ describe("IssueCreateDialog Codex goal mode", () => {
     await user.type(screen.getByPlaceholderText("Issue title"), "Social login");
     await user.type(screen.getByPlaceholderText("Description"), "Add OAuth and session handling.");
 
-    // Dialog now defaults to "inherit"; select Codex explicitly to reveal goal mode
-    await user.click(await screen.findByRole("button", { name: "Codex" }));
+    await waitFor(() => expect(fetchAssistantCatalogBundleMock).toHaveBeenCalled());
+    await selectAgent(user, "codex");
 
     const goalMode = await screen.findByRole("checkbox", { name: /goal mode/i });
     expect(goalMode).toBeInTheDocument();
@@ -111,7 +139,8 @@ describe("IssueCreateDialog Codex goal mode", () => {
     render(<IssueCreateDialog projectSlug="macro-markets" open onOpenChange={vi.fn()} />);
 
     await user.type(screen.getByPlaceholderText("Issue title"), "Claude task");
-    await user.click(await screen.findByRole("button", { name: "Claude" }));
+    await waitFor(() => expect(fetchAssistantCatalogBundleMock).toHaveBeenCalled());
+    await selectAgent(user, "claude");
 
     const goalMode = await screen.findByRole("checkbox", { name: /goal mode/i });
     expect(goalMode).toBeInTheDocument();
@@ -150,8 +179,8 @@ describe("IssueCreateDialog Codex goal mode", () => {
 
     render(<IssueCreateDialog projectSlug="macro-markets" open onOpenChange={vi.fn()} />);
 
-    // Select Codex explicitly first
-    await user.click(await screen.findByRole("button", { name: "Codex" }));
+    await waitFor(() => expect(fetchAssistantCatalogBundleMock).toHaveBeenCalled());
+    await selectAgent(user, "codex");
     await screen.findByRole("checkbox", { name: /goal mode/i });
     await user.type(screen.getByPlaceholderText("Issue title"), "Regular Codex task");
     await user.click(screen.getByRole("button", { name: "Create" }));
@@ -169,8 +198,8 @@ describe("IssueCreateDialog Codex goal mode", () => {
     render(<IssueCreateDialog projectSlug="macro-markets" open onOpenChange={vi.fn()} />);
 
     await user.type(screen.getByPlaceholderText("Issue title"), "Social login");
-    // Select Codex explicitly first to reveal goal mode checkbox
-    await user.click(await screen.findByRole("button", { name: "Codex" }));
+    await waitFor(() => expect(fetchAssistantCatalogBundleMock).toHaveBeenCalled());
+    await selectAgent(user, "codex");
     await user.click(await screen.findByRole("checkbox", { name: /goal mode/i }));
 
     const goal = await screen.findByRole("textbox", {

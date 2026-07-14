@@ -4,6 +4,12 @@ defmodule SymphonyElixir.LocalTracker.Context.AgentSettings do
   `mode`), keyed by `project_slug` + `identifier`. Split out of
   `LocalTracker.Context` so the read/upsert rules for agent settings live behind
   a focused API.
+
+  `put/3` treats attrs as a partial patch:
+
+  - key absent from attrs → leave the stored column unchanged
+  - key present with `nil` or a blank string → write DB `NULL` (clear override)
+  - key present with a value → write that value
   """
 
   alias SymphonyElixir.LocalTracker.IssueAgentSettings
@@ -26,9 +32,10 @@ defmodule SymphonyElixir.LocalTracker.Context.AgentSettings do
   end
 
   @doc """
-  Upserts the per-issue agent overrides. Only the keys present in `attrs`
-  (`agent_kind`, `model`, `effort`, `mode`) are written; nil/blank values are
-  dropped and omitted keys preserve their previously stored value.
+  Upserts the per-issue agent overrides. Only keys present in `attrs`
+  (`agent_kind`, `model`, `effort`, `mode`) are written. Explicit `nil` or blank
+  values clear the column to DB `NULL`; omitted keys preserve their previously
+  stored value.
   """
   @spec put(String.t(), String.t(), map()) ::
           :ok | {:error, Ecto.Changeset.t()}
@@ -59,11 +66,15 @@ defmodule SymphonyElixir.LocalTracker.Context.AgentSettings do
 
   defp clean_agent_settings(attrs) do
     Enum.reduce(@agent_settings_keys, %{}, fn key, acc ->
-      raw = Map.get(attrs, key, Map.get(attrs, Atom.to_string(key)))
+      cond do
+        Map.has_key?(attrs, key) ->
+          Map.put(acc, key, blank_to_nil(Map.get(attrs, key)))
 
-      case blank_to_nil(raw) do
-        nil -> acc
-        value -> Map.put(acc, key, value)
+        Map.has_key?(attrs, Atom.to_string(key)) ->
+          Map.put(acc, key, blank_to_nil(Map.get(attrs, Atom.to_string(key))))
+
+        true ->
+          acc
       end
     end)
   end

@@ -37,12 +37,14 @@ vi.mock("@/services/assistant", () => ({
 }));
 
 const listIssuesMock = vi.hoisted(() => vi.fn());
+const updateIssueMock = vi.hoisted(() => vi.fn());
 const searchWorkspaceFilesMock = vi.hoisted(() => vi.fn());
 const listPullRequestsMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/services/issues", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/services/issues")>()),
   listIssues: (...args: unknown[]) => listIssuesMock(...args),
+  updateIssue: (...args: unknown[]) => updateIssueMock(...args),
 }));
 
 vi.mock("@/services/workspaceFiles", () => ({
@@ -124,16 +126,20 @@ describe("ExecutionControlComposer", () => {
     uploadAssistantAttachmentMock.mockReset();
     listIssuesMock.mockReset();
     listIssuesMock.mockResolvedValue([]);
+    updateIssueMock.mockReset();
+    updateIssueMock.mockResolvedValue(issue);
     searchWorkspaceFilesMock.mockReset();
     searchWorkspaceFilesMock.mockResolvedValue([]);
     listPullRequestsMock.mockReset();
     listPullRequestsMock.mockResolvedValue({ data: [], supported: false, available: false });
     fetchAssistantCatalogBundleMock.mockResolvedValue({
+      defaultAgent: "codex",
       agents: [
         {
           agent: "codex",
           agentLabel: "Codex",
           command: "codex",
+          defaultModel: "gpt-5",
           models: [
             {
               id: "gpt-5",
@@ -326,8 +332,15 @@ describe("ExecutionControlComposer", () => {
       />,
     );
 
-    // Let the remote catalog load so the composer resolves codex → gpt-5/high.
+    // Wait until the remote catalog is applied (fallback gpt-5.5 → gpt-5/high).
     await waitFor(() => expect(fetchAssistantCatalogBundleMock).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(updateIssueMock).toHaveBeenCalledWith(
+        "advising",
+        "CDE-1132",
+        expect.objectContaining({ model: "gpt-5", effort: "high" }),
+      ),
+    );
 
     await user.click(screen.getByRole("button", { name: /^resume$/i }));
 

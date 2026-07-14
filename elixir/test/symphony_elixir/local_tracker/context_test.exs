@@ -240,6 +240,46 @@ defmodule SymphonyElixir.LocalTracker.ContextTest do
     assert Enum.map(reloaded.labels, & &1.name) == ["symphony:codex"]
   end
 
+  test "create_issue persists execution settings before issue_created broadcast" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+    :ok = Phoenix.PubSub.subscribe(SymphonyElixir.PubSub, "project:macro-markets")
+
+    assert {:ok, _issue} =
+             Context.create_issue("macro-markets", %{
+               title: "Pinned before notify",
+               status: "Todo",
+               agent: "codex",
+               model: "gpt-5.5",
+               effort: "high"
+             })
+
+    assert_receive {:tracker_event, "issue_created", %{issue: payload}}, 1_000
+    assert payload.agent_kind == "codex"
+    assert payload.model == "gpt-5.5"
+    assert payload.effort == "high"
+  end
+
+  test "update_issue persists execution settings before issue_updated broadcast" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+
+    assert {:ok, _issue} =
+             Context.create_issue("macro-markets", %{title: "Later pin", status: "Todo"})
+
+    :ok = Phoenix.PubSub.subscribe(SymphonyElixir.PubSub, "project:macro-markets")
+
+    assert {:ok, _updated} =
+             Context.update_issue("macro-markets", "MAC-1", %{
+               "agent" => "claude",
+               "model" => "sonnet",
+               "effort" => "xhigh"
+             })
+
+    assert_receive {:tracker_event, "issue_updated", %{issue: payload}}, 1_000
+    assert payload.agent_kind == "claude"
+    assert payload.model == "sonnet"
+    assert payload.effort == "xhigh"
+  end
+
   test "move_issue updates the agent routing label" do
     {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
     {:ok, _issue} = Context.create_issue("macro-markets", %{title: "Move me", status: "Todo", agent: "claude"})

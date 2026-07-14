@@ -553,6 +553,98 @@ defmodule SymphonyElixirWeb.Tracker.IssueControllerTest do
     assert issue.agent_goal == "Ship the Claude workflow"
   end
 
+  test "create issue accepts model and effort and persists agent settings" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+
+    conn =
+      post(authorized_conn(), "/api/tracker/v1/projects/macro-markets/issues", %{
+        "title" => "Pinned execution",
+        "status" => "Todo",
+        "agent" => "codex",
+        "model" => "gpt-5.5",
+        "effort" => "high"
+      })
+
+    assert %{
+             "data" => %{
+               "identifier" => "MAC-1",
+               "agent_kind" => "codex",
+               "model" => "gpt-5.5",
+               "effort" => "high"
+             }
+           } = json_response(conn, 201)
+
+    assert {:ok, settings} = Context.get_agent_settings("macro-markets", "MAC-1")
+    assert settings.agent_kind == "codex"
+    assert settings.model == "gpt-5.5"
+    assert settings.effort == "high"
+  end
+
+  test "patch issue clears model with explicit null" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+
+    create_conn =
+      post(authorized_conn(), "/api/tracker/v1/projects/macro-markets/issues", %{
+        "title" => "Clear model",
+        "status" => "Todo",
+        "agent" => "claude",
+        "model" => "gpt-5.5",
+        "effort" => "high"
+      })
+
+    assert %{"data" => %{"identifier" => "MAC-1"}} = json_response(create_conn, 201)
+
+    patch_conn =
+      patch(authorized_conn(), "/api/tracker/v1/projects/macro-markets/issues/MAC-1", %{
+        "model" => nil
+      })
+
+    assert %{
+             "data" => %{
+               "agent_kind" => "claude",
+               "model" => nil,
+               "effort" => "high"
+             }
+           } = json_response(patch_conn, 200)
+
+    assert {:ok, settings} = Context.get_agent_settings("macro-markets", "MAC-1")
+    assert settings.agent_kind == "claude"
+    assert settings.model == nil
+    assert settings.effort == "high"
+  end
+
+  test "patch agent writes settings and mirrors symphony label" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+
+    create_conn =
+      post(authorized_conn(), "/api/tracker/v1/projects/macro-markets/issues", %{
+        "title" => "Switch agent",
+        "status" => "Todo"
+      })
+
+    assert %{"data" => %{"identifier" => "MAC-1"}} = json_response(create_conn, 201)
+
+    patch_conn =
+      patch(authorized_conn(), "/api/tracker/v1/projects/macro-markets/issues/MAC-1", %{
+        "agent" => "cursor"
+      })
+
+    assert %{
+             "data" => %{
+               "agent_kind" => "cursor",
+               "labels" => labels
+             }
+           } = json_response(patch_conn, 200)
+
+    assert "symphony:cursor" in labels
+
+    assert {:ok, settings} = Context.get_agent_settings("macro-markets", "MAC-1")
+    assert settings.agent_kind == "cursor"
+
+    {:ok, issue} = Context.get_issue("macro-markets", "MAC-1")
+    assert "symphony:cursor" in Enum.map(issue.labels, & &1.name)
+  end
+
   defp authorized_conn do
     build_conn()
     |> put_req_header("authorization", "Bearer secret")

@@ -81,7 +81,14 @@ export function ComposerToolbar({
 
   return (
     <>
-      <AgentMenu bundle={bundle} agent={agent} disabled={disabled || agentMenuDisabled} onChange={onAgentChange} />
+      <AgentMenu
+        bundle={bundle}
+        agent={agent}
+        disabled={disabled || agentMenuDisabled}
+        onChange={(next) => {
+          if (next != null) onAgentChange(next);
+        }}
+      />
       <ModelMenu
         catalog={catalog}
         model={settings.model}
@@ -95,7 +102,9 @@ export function ComposerToolbar({
           effort={settings.effort}
           options={effortOptions}
           disabled={disabled || composerDisabled}
-          onChange={onEffortChange}
+          onChange={(next) => {
+            if (next != null) onEffortChange(next);
+          }}
         />
       ) : (
         <DerivedThinkingMenu
@@ -376,32 +385,56 @@ function CompactModelChip({
   );
 }
 
-function AgentMenu({
+const AGENT_INHERIT_VALUE = "__inherit__";
+
+export function AgentMenu({
   bundle,
   agent,
   disabled,
+  allowInherit = false,
+  inheritLabel,
   onChange,
 }: {
   bundle: AssistantCatalogBundle;
-  agent: AgentKind;
+  agent: AgentKind | null;
   disabled?: boolean;
-  onChange: (agent: AgentKind) => void;
+  allowInherit?: boolean;
+  inheritLabel?: string;
+  onChange: (agent: AgentKind | null) => void;
 }) {
   const { t } = useTranslation();
-  const current = catalogFor(bundle, agent);
+  const fallbackAgent = agent ?? bundle.defaultAgent;
+  const current = catalogFor(bundle, fallbackAgent);
+  const resolvedInheritLabel =
+    inheritLabel ?? t("issue.create.inherit", { agent: agentKindLabel(current.agent, t) });
+  const triggerLabel = agent == null && allowInherit ? resolvedInheritLabel : agentKindLabel(current.agent, t);
+  const radioValue = agent == null && allowInherit ? AGENT_INHERIT_VALUE : (agent ?? fallbackAgent);
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button type="button" variant="ghost" size="sm" className="h-8 gap-1 px-2 text-xs" disabled={disabled}>
           <Bot className="h-3.5 w-3.5 shrink-0 text-emerald-500" />
-          {agentKindLabel(current.agent, t)}
+          {triggerLabel}
           <ChevronDown className="h-3 w-3 opacity-60" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuLabel>{t("assistant.composer.agentMenu")}</DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuRadioGroup value={agent} onValueChange={(v) => onChange(v as AgentKind)}>
+        <DropdownMenuRadioGroup
+          value={radioValue}
+          onValueChange={(value) => {
+            if (value === AGENT_INHERIT_VALUE) {
+              onChange(null);
+              return;
+            }
+            onChange(value as AgentKind);
+          }}
+        >
+          {allowInherit ? (
+            <DropdownMenuRadioItem value={AGENT_INHERIT_VALUE}>{resolvedInheritLabel}</DropdownMenuRadioItem>
+          ) : null}
           {bundle.agents.map((catalog) => (
             <DropdownMenuRadioItem key={catalog.agent} value={catalog.agent}>
               {agentKindLabel(catalog.agent, t)}
@@ -451,7 +484,7 @@ interface DerivedThinkingOption {
   label: string;
 }
 
-function DerivedThinkingMenu({
+export function DerivedThinkingMenu({
   catalog,
   model,
   disabled,
@@ -605,36 +638,59 @@ function findCatalogModel(catalog: AssistantAgentCatalog, modelId: string): Assi
   return catalog.models.find((entry) => entry.model === modelId || entry.id === modelId);
 }
 
-function EffortMenu({
+const EFFORT_INHERIT_VALUE = "__inherit__";
+
+export function EffortMenu({
   catalog,
   model,
   effort,
   options,
   disabled,
+  allowInherit = false,
+  inheritLabel = "Default",
   onChange,
 }: {
   catalog: AssistantAgentCatalog;
   model: string;
-  effort: AssistantEffort;
+  effort: AssistantEffort | null;
   options: ReturnType<typeof effortsForModel>;
   disabled?: boolean;
-  onChange: (effort: AssistantEffort) => void;
+  allowInherit?: boolean;
+  inheritLabel?: string;
+  onChange: (effort: AssistantEffort | null) => void;
 }) {
   const { t } = useTranslation();
+  const fallbackEffort = effort ?? (options[0]?.id as AssistantEffort | undefined) ?? "medium";
+  const triggerEffort = effort ?? fallbackEffort;
+  const triggerLabel =
+    effort == null && allowInherit ? inheritLabel : effortLabel(catalog, model, triggerEffort, t);
+  const radioValue = effort == null && allowInherit ? EFFORT_INHERIT_VALUE : triggerEffort;
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button type="button" variant="ghost" size="sm" className="h-8 gap-1 px-2 text-xs" disabled={disabled}>
-          {effortIconElement(effort, "effort-trigger-icon")}
-          {effortLabel(catalog, model, effort)}
+          {effortIconElement(triggerEffort, "effort-trigger-icon")}
+          {triggerLabel}
           <ChevronDown className="h-3 w-3 opacity-60" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuLabel>{t("assistant.composer.reasoningEffort")}</DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuRadioGroup value={effort} onValueChange={onChange}>
+        <DropdownMenuRadioGroup
+          value={radioValue}
+          onValueChange={(value) => {
+            if (value === EFFORT_INHERIT_VALUE) {
+              onChange(null);
+              return;
+            }
+            onChange(value as AssistantEffort);
+          }}
+        >
+          {allowInherit ? (
+            <DropdownMenuRadioItem value={EFFORT_INHERIT_VALUE}>{inheritLabel}</DropdownMenuRadioItem>
+          ) : null}
           {options.map((option) => (
             <DropdownMenuRadioItem key={option.id} value={option.id} className="gap-2">
               {effortIconElement(option.id, `effort-icon-${option.id}`)}
