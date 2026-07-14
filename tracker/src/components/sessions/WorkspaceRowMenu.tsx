@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { canResumeExecution } from "@/lib/agentExecutionDisplay";
 import type { ProjectSessionRow } from "@/lib/projectSessions";
-import type { WorkspaceListItem } from "@/lib/workspaceCards";
+import { isWorkspaceRemovable, type WorkspaceListItem } from "@/lib/workspaceCards";
 import type { RecentSession } from "@/types/recents";
 
 export interface WorkspaceRowMenuProps {
@@ -223,13 +223,7 @@ function buildActions({
     });
   }
 
-  const removable =
-    card.inventory?.removable &&
-    onRemove &&
-    card.kind !== "issue" &&
-    card.kind !== "project";
-
-  if (removable) {
+  if (onRemove && isWorkspaceRemovable(card)) {
     if (actions.length > 0) actions.push({ key: "sep-remove", separator: true });
     actions.push({
       key: "remove",

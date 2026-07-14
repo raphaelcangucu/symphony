@@ -367,3 +367,16 @@ export function formatBytes(bytes: number): string {
   const formatted = value >= 100 || exponent === 0 ? Math.round(value).toString() : value.toFixed(1);
   return `${formatted} ${units[exponent]}`;
 }
+
+/** Disk trees that may be removed from the Workspaces UI (never the project root). */
+export function isWorkspaceRemovable(card: WorkspaceCard): boolean {
+  return Boolean(card.inventory?.removable && card.kind !== "project");
+}
+
+export function linkedSessionThreadIds(card: WorkspaceCard): number[] {
+  const ids = new Set<number>();
+  for (const session of card.sessions) {
+    if (session.threadId != null) ids.add(session.threadId);
+  }
+  return [...ids];
+}

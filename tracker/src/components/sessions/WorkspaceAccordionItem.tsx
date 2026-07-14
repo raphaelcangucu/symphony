@@ -1,11 +1,16 @@
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, Trash2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
+import {
+  WorkspaceIconButton,
+  workspaceMenuIconProps,
+} from "@/components/sessions/WorkspaceActionButton";
 import { WorkspaceDetailPane } from "@/components/sessions/WorkspaceDetailPane";
 import { WorkspaceListRow } from "@/components/sessions/WorkspaceListRow";
 import { WorkspaceRowMenu } from "@/components/sessions/WorkspaceRowMenu";
 import { cn } from "@/lib/utils";
 import type { ProjectSessionRow } from "@/lib/projectSessions";
-import type { WorkspaceListItem } from "@/lib/workspaceCards";
+import { isWorkspaceRemovable, type WorkspaceListItem } from "@/lib/workspaceCards";
 import type { RecentSession } from "@/types/recents";
 
 interface WorkspaceAccordionItemProps {
@@ -41,9 +46,13 @@ export function WorkspaceAccordionItem({
   onRemove,
   onArchive,
 }: WorkspaceAccordionItemProps) {
+  const { t } = useTranslation();
+  const removable =
+    item.kind === "card" && onRemove && isWorkspaceRemovable(item.card);
+
   return (
     <div className="space-y-0.5">
-      <div className="flex items-stretch gap-0.5">
+      <div className="group flex items-stretch gap-0.5">
         <button
           type="button"
           tabIndex={-1}
@@ -72,7 +81,25 @@ export function WorkspaceAccordionItem({
             }
           />
         </div>
-        <div className="flex shrink-0 items-center self-center pr-0.5">
+        <div className="flex shrink-0 items-center gap-0.5 self-center pr-0.5">
+          {removable ? (
+            <WorkspaceIconButton
+              label={t("workspacesPage.removeWorkspace.aria", {
+                defaultValue: "Remove workspace",
+              })}
+              className={cn(
+                "text-muted-foreground/70 opacity-0 hover:bg-destructive/10 hover:text-destructive",
+                "focus-visible:opacity-100 group-hover:opacity-100 group-focus-within:opacity-100",
+              )}
+              onClick={(event) => {
+                event.stopPropagation();
+                onRemove(item.card.inventory!.path);
+              }}
+              onPointerDown={(event) => event.stopPropagation()}
+            >
+              <Trash2 {...workspaceMenuIconProps} className="h-3.5 w-3.5" aria-hidden />
+            </WorkspaceIconButton>
+          ) : null}
           <WorkspaceRowMenu
             item={item}
             issueHref={issueHref}

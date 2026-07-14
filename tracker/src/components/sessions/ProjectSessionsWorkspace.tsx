@@ -25,6 +25,10 @@ import {
   workspaceActionIconProps,
 } from "@/components/sessions/WorkspaceActionButton";
 import { WorkspaceCleanupDialog } from "@/components/sessions/WorkspaceCleanupDialog";
+import {
+  WorkspaceRemoveDialog,
+  type WorkspaceRemoveTarget,
+} from "@/components/sessions/WorkspaceRemoveDialog";
 import { EmptyState } from "@/components/ui/empty-state";
 import { WorkspaceTabBar } from "@/components/workspace/WorkspaceTabBar";
 import { useArchiveChat } from "@/hooks/useArchiveChat";
@@ -35,7 +39,10 @@ import {
   buildWorkspaceCards,
   flattenWorkspaceCardsByRecency,
   formatBytes,
+  isWorkspaceRemovable,
+  linkedSessionThreadIds,
 } from "@/lib/workspaceCards";
+import { archiveAssistantThread } from "@/services/assistantThreads";
 import { cn, SCROLLBAR_THIN } from "@/lib/utils";
 import {
   SESSIONS_LIST_TAB_ID,
@@ -82,6 +89,7 @@ export function ProjectSessionsWorkspace({
   const [resumePending, setResumePending] = useState<string | null>(null);
   const [cleanupOpen, setCleanupOpen] = useState(false);
   const [newWorkspaceOpen, setNewWorkspaceOpen] = useState(false);
+  const [removeTarget, setRemoveTarget] = useState<WorkspaceRemoveTarget | null>(null);
   const [newSessionIssue, setNewSessionIssue] = useState<StartIssueSessionDialogIssue | null>(null);
   const { archiving, archiveChat } = useArchiveChat(() => void refetch());
 
@@ -357,17 +365,57 @@ export function ProjectSessionsWorkspace({
     return projectEntry?.repos ?? [];
   }, [inventory]);
 
-  const handleRemoveWorkspace = useCallback(
-    async (path: string) => {
+  const requestRemoveWorkspace = useCallback(
+    (path: string) => {
+      const item = listItems.find(
+        (entry) => entry.kind === "card" && entry.card.inventory?.path === path,
+      );
+      if (!item || item.kind !== "card" || !isWorkspaceRemovable(item.card)) {
+        toast.warning(t("workspacesPage.cleanup.blockedExecution"));
+        return;
+      }
+      const inventory = item.card.inventory!;
+      setRemoveTarget({
+        path: inventory.path,
+        title:
+          item.card.title ||
+          item.card.issueIdentifier ||
+          inventory.path,
+        sizeBytes: inventory.sizeBytes,
+        workPresent: inventory.workPresent,
+        threadIds: linkedSessionThreadIds(item.card),
+      });
+    },
+    [listItems, t],
+  );
+
+  const confirmRemoveWorkspace = useCallback(
+    async (target: WorkspaceRemoveTarget) => {
       try {
-        const results = await removeWorkspaces(projectSlug, [path]);
+        const results = await removeWorkspaces(projectSlug, [target.path]);
         const skipped = results.find((result) => result.status === "skipped");
         if (skipped) {
           toast.warning(skipped.reason ?? t("workspacesPage.cleanup.failed"));
+          return;
         }
+        await Promise.all(
+          target.threadIds.map(async (threadId) => {
+            try {
+              await archiveAssistantThread(threadId);
+            } catch {
+              // Tree removal already succeeded; session archive is best-effort.
+            }
+          }),
+        );
+        toast.success(
+          t("workspacesPage.removeWorkspace.done", {
+            defaultValue: "Workspace removed",
+          }),
+        );
         await refetch();
       } catch (cause) {
         toast.error(cause instanceof Error ? cause.message : t("workspacesPage.cleanup.failed"));
+        throw cause;
       }
     },
     [projectSlug, refetch, t],
@@ -422,7 +470,7 @@ export function ProjectSessionsWorkspace({
         {error ? <p className="shrink-0 px-1 text-sm text-destructive">{error}</p> : null}
 
         {activeTab?.kind === "sessions-list" ? (
-          <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden">
+          <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col gap-2 overflow-hidden xl:max-w-4xl">
             <div className="flex shrink-0 items-start justify-between gap-3 px-1">
               <div className="min-w-0 flex-1">
                 <p className="text-base font-medium text-foreground">{t("workspacesPage.title")}</p>
@@ -499,7 +547,7 @@ export function ProjectSessionsWorkspace({
                         onOpenAssistantSession={openAssistantSession}
                         onResume={handleResume}
                         onNewSession={handleNewSession}
-                        onRemove={handleRemoveWorkspace}
+                        onRemove={requestRemoveWorkspace}
                         onArchive={handleArchive}
                       />
                     </li>
@@ -588,6 +636,15 @@ export function ProjectSessionsWorkspace({
         view={view}
         navigateToProjectSession
         onCreated={() => void refetch()}
+      />
+
+      <WorkspaceRemoveDialog
+        target={removeTarget}
+        open={removeTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setRemoveTarget(null);
+        }}
+        onConfirm={confirmRemoveWorkspace}
       />
 
       {inventory ? (

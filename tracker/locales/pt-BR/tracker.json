@@ -3312,6 +3312,7 @@
     "standaloneBadge": "Avulso",
     "parallelBadge": "Tree isolada",
     "orphanBadge": "Órfão",
+    "dirtyBadge": "dirty",
     "workPresentWarning": "Trabalho não publicado",
     "issueGone": "Issue removida ou arquivada",
     "reposDirty": "{{count}} arquivos alterados",
@@ -3331,7 +3332,7 @@
     "totalsLoading": "{{count}} trees carregadas · {{size}}…",
     "inventoryLoading": "Escaneando working trees…",
     "cleanup": {
-      "button": "Limpar…",
+      "button": "Limpar",
       "title": "Limpar working trees",
       "description": "Trees órfãs sem trabalho não publicado vêm pré-selecionadas. A remoção apaga o diretório inteiro.",
       "sizeColumn": "Tamanho",
@@ -3344,6 +3345,15 @@
       "blockedExecution": "Execução ativa",
       "cancel": "Cancelar"
     },
+    "removeWorkspace": {
+      "title": "Remover workspace",
+      "aria": "Remover workspace",
+      "description": "Isso apaga o working tree do disco e arquiva as sessões ligadas. Não pode ser desfeito.",
+      "sessionCount": "{{count}} sessões ligadas",
+      "removing": "Removendo…",
+      "done": "Workspace removido"
+    },
+    "removeSessionAria": "Remover sessão",
     "newWorkspace": {
       "button": "Novo workspace",
       "title": "Novo workspace avulso",

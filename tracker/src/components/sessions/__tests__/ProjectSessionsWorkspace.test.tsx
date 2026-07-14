@@ -12,6 +12,8 @@ import { ProjectSessionsWorkspace } from "@/components/sessions/ProjectSessionsW
 import { useProjectSessions } from "@/hooks/useProjectSessions";
 import { initTestI18n, renderWithI18n } from "@/i18n/testUtils";
 import { emptyProjectSessionGroups } from "@/lib/projectSessions";
+import { archiveAssistantThread } from "@/services/assistantThreads";
+import { removeWorkspaces } from "@/services/worktrees";
 
 const projectAssistantPanel = vi.fn((props: { contentMaxWidth?: string }) => (
   <div aria-label="mock assistant panel" data-content-max-width={props.contentMaxWidth} />
@@ -20,6 +22,10 @@ const projectAssistantPanel = vi.fn((props: { contentMaxWidth?: string }) => (
 vi.mock("@/hooks/useProjectSessions", () => ({ useProjectSessions: vi.fn() }));
 vi.mock("@/services/assistantThreads", () => ({
   listAssistantThreads: vi.fn(async () => []),
+  archiveAssistantThread: vi.fn(async () => ({ id: 99 })),
+}));
+vi.mock("@/services/worktrees", () => ({
+  removeWorkspaces: vi.fn(),
 }));
 vi.mock("@/components/assistant/ProjectAssistantPanel", () => ({
   ProjectAssistantPanel: (props: { contentMaxWidth?: string }) => projectAssistantPanel(props),
@@ -170,6 +176,7 @@ describe("ProjectSessionsWorkspace", () => {
     expect(screen.getByText("1 trees · 1.0 KB")).toBeVisible();
     const list = screen.getByRole("list", { name: "Workspaces" });
     expect(list).toBeVisible();
+    expect(list.parentElement).toHaveClass("mx-auto", "max-w-3xl");
     expect(screen.queryByRole("button", { name: "Session" })).not.toBeInTheDocument();
 
     await user.click(within(list).getByRole("button", { name: /Fix login race/ }));
@@ -181,6 +188,183 @@ describe("ProjectSessionsWorkspace", () => {
     await user.keyboard("{Escape}");
     await user.click(within(list).getByRole("button", { name: /Fix login race/ }));
     expect(screen.queryByRole("button", { name: "Session" })).not.toBeInTheDocument();
+  });
+
+  it("confirms issue workspace removal, removes the tree, and archives linked sessions", async () => {
+    const user = userEvent.setup();
+    vi.mocked(removeWorkspaces).mockResolvedValue([
+      { path: "/ws/demo/DEMO-1", status: "removed", reason: null },
+    ]);
+    vi.mocked(useProjectSessions).mockReturnValue({
+      groups: emptyProjectSessionGroups(),
+      relatedSessions: [
+        {
+          id: "chat-99",
+          kind: "chat",
+          scope: "issue_session",
+          agentKind: null,
+          projectSlug: "demo",
+          projectName: "Demo",
+          title: "Spike notes",
+          identifier: "DEMO-1",
+          threadId: 99,
+          status: "active",
+          statusKind: "active",
+          preview: null,
+          updatedAt: "2026-07-02T11:00:00Z",
+        },
+      ],
+      issues: [
+        {
+          id: "1",
+          identifier: "DEMO-1",
+          projectSlug: "demo",
+          status: "Todo",
+          title: "Fix login race",
+          description: null,
+          priority: null,
+          position: 0,
+          labels: [],
+          blockedBy: [],
+          assignee: null,
+          creator: null,
+          url: null,
+          branchName: null,
+          createdAt: "2026-07-01T00:00:00Z",
+          updatedAt: "2026-07-01T00:00:00Z",
+          attachments: [],
+        },
+      ],
+      executions: new Map(),
+      inventory: {
+        totals: { count: 1, sizeBytes: 2048, reclaimableBytes: 0 },
+        entries: [
+          {
+            path: "/ws/demo/DEMO-1",
+            displayName: null,
+            kind: "issue",
+            issueIdentifier: "DEMO-1",
+            name: null,
+            classification: "active",
+            reclaimable: false,
+            workPresent: false,
+            executionStatus: null,
+            removable: true,
+            sizeBytes: 2048,
+            repos: [],
+            childWorktrees: [],
+          },
+        ],
+      },
+      isLoading: false,
+      isInventoryLoading: false,
+      error: null,
+      refetch,
+    });
+
+    renderWithI18n(
+      <MemoryRouter initialEntries={["/projects/demo/workspaces"]}>
+        <ProjectSessionsWorkspace projectSlug="demo" />
+      </MemoryRouter>,
+    );
+
+    const list = screen.getByRole("list", { name: "Workspaces" });
+    expect(within(list).getByRole("button", { name: /Remove workspace/i })).toBeInTheDocument();
+
+    await user.click(within(list).getByRole("button", { name: "More actions" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Remove" }));
+
+    expect(await screen.findByRole("heading", { name: /Remove workspace/i })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: /^Remove$/ }));
+
+    await waitFor(() =>
+      expect(removeWorkspaces).toHaveBeenCalledWith("demo", ["/ws/demo/DEMO-1"]),
+    );
+    await waitFor(() => expect(archiveAssistantThread).toHaveBeenCalledWith(99));
+    expect(refetch).toHaveBeenCalled();
+  });
+
+  it("archives a nested session without confirmation", async () => {
+    const user = userEvent.setup();
+    vi.mocked(useProjectSessions).mockReturnValue({
+      groups: emptyProjectSessionGroups(),
+      relatedSessions: [
+        {
+          id: "chat-99",
+          kind: "chat",
+          scope: "issue_session",
+          agentKind: null,
+          projectSlug: "demo",
+          projectName: "Demo",
+          title: "Spike notes",
+          identifier: "DEMO-1",
+          threadId: 99,
+          status: "active",
+          statusKind: "active",
+          preview: null,
+          updatedAt: "2026-07-02T11:00:00Z",
+        },
+      ],
+      issues: [
+        {
+          id: "1",
+          identifier: "DEMO-1",
+          projectSlug: "demo",
+          status: "Todo",
+          title: "Fix login race",
+          description: null,
+          priority: null,
+          position: 0,
+          labels: [],
+          blockedBy: [],
+          assignee: null,
+          creator: null,
+          url: null,
+          branchName: null,
+          createdAt: "2026-07-01T00:00:00Z",
+          updatedAt: "2026-07-01T00:00:00Z",
+          attachments: [],
+        },
+      ],
+      executions: new Map(),
+      inventory: {
+        totals: { count: 1, sizeBytes: 2048, reclaimableBytes: 0 },
+        entries: [
+          {
+            path: "/ws/demo/DEMO-1",
+            displayName: null,
+            kind: "issue",
+            issueIdentifier: "DEMO-1",
+            name: null,
+            classification: "active",
+            reclaimable: false,
+            workPresent: false,
+            executionStatus: null,
+            removable: true,
+            sizeBytes: 2048,
+            repos: [],
+            childWorktrees: [],
+          },
+        ],
+      },
+      isLoading: false,
+      isInventoryLoading: false,
+      error: null,
+      refetch,
+    });
+
+    renderWithI18n(
+      <MemoryRouter initialEntries={["/projects/demo/workspaces"]}>
+        <ProjectSessionsWorkspace projectSlug="demo" />
+      </MemoryRouter>,
+    );
+
+    const list = screen.getByRole("list", { name: "Workspaces" });
+    await user.click(within(list).getByRole("button", { name: /Fix login race/ }));
+
+    await user.click(within(list).getByRole("button", { name: /Remove session/i }));
+    await waitFor(() => expect(archiveAssistantThread).toHaveBeenCalledWith(99));
+    expect(screen.queryByRole("heading", { name: /Remove workspace/i })).not.toBeInTheDocument();
   });
 
   it("selects an active thread tab from the route", async () => {

@@ -96,11 +96,22 @@ defmodule SymphonyElixir.Workspace do
     |> Kernel.||("#{base}__p#{System.unique_integer([:positive])}")
   end
 
+  @doc """
+  Removes a workspace directory after validating it stays under an allowed root.
+
+  The optional second argument is the allowed root (defaults to the process-level
+  `Config.workspace_root/0`). Callers that operate on a project-specific layout
+  (e.g. inventory cleanup) must pass that project's root/segment root so trees
+  under a custom `workspace.root` are not rejected as outside the process root.
+  """
   @spec remove(Path.t()) :: {:ok, [String.t()]} | {:error, term(), String.t()}
-  def remove(workspace) do
+  @spec remove(Path.t(), Path.t()) :: {:ok, [String.t()]} | {:error, term(), String.t()}
+  def remove(workspace), do: remove(workspace, Config.workspace_root())
+
+  def remove(workspace, allowed_root) when is_binary(workspace) and is_binary(allowed_root) do
     case File.exists?(workspace) do
       true ->
-        case validate_workspace_path(workspace) do
+        case validate_workspace_path(workspace, allowed_root) do
           :ok ->
             maybe_run_before_remove_hook(workspace)
             File.rm_rf(workspace)
@@ -304,8 +315,6 @@ defmodule SymphonyElixir.Workspace do
         binary_part(binary_output, 0, max_bytes) <> "... (truncated)"
     end
   end
-
-  defp validate_workspace_path(workspace), do: validate_workspace_path(workspace, Config.workspace_root())
 
   defp validate_workspace_path(workspace, root_value) when is_binary(workspace) do
     expanded_workspace = Path.expand(workspace)

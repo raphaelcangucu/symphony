@@ -3312,6 +3312,7 @@
     "standaloneBadge": "Standalone",
     "parallelBadge": "Isolated tree",
     "orphanBadge": "Orphan",
+    "dirtyBadge": "dirty",
     "workPresentWarning": "Unpublished work",
     "issueGone": "Issue removed or archived",
     "reposDirty": "{{count}} changed files",
@@ -3331,7 +3332,7 @@
     "totalsLoading": "{{count}} trees loaded · {{size}}…",
     "inventoryLoading": "Scanning working trees…",
     "cleanup": {
-      "button": "Clean up…",
+      "button": "Clean up",
       "title": "Clean up working trees",
       "description": "Orphaned trees with no unpublished work are pre-selected. Removal deletes the whole directory.",
       "sizeColumn": "Size",
@@ -3344,6 +3345,15 @@
       "blockedExecution": "Live execution",
       "cancel": "Cancel"
     },
+    "removeWorkspace": {
+      "title": "Remove workspace",
+      "aria": "Remove workspace",
+      "description": "This deletes the working tree from disk and archives linked sessions. It cannot be undone.",
+      "sessionCount": "{{count}} linked sessions",
+      "removing": "Removing…",
+      "done": "Workspace removed"
+    },
+    "removeSessionAria": "Remove session",
     "newWorkspace": {
       "button": "New workspace",
       "title": "New standalone workspace",

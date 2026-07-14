@@ -5,6 +5,7 @@ import {
 import { useTranslation } from "react-i18next";
 
 import { ChatStatusIcon } from "@/components/shared/ChatStatusIcon";
+import { StatusPill } from "@/components/ui/status-pill";
 import { executionStatusDotClass } from "@/lib/statusPresentation";
 import { formatBytes, type WorkspaceCard, type WorkspaceListItem } from "@/lib/workspaceCards";
 import { cn, formatRelativeTime } from "@/lib/utils";
@@ -103,7 +104,9 @@ export function WorkspaceListRow({
             <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-600" strokeWidth={2} aria-hidden />
           ) : null}
           {dirty ? (
-            <span className="shrink-0 text-xs text-amber-700 dark:text-amber-400">dirty</span>
+            <StatusPill tone="warning" size="sm" className="shrink-0">
+              {t("workspacesPage.dirtyBadge", { defaultValue: "dirty" })}
+            </StatusPill>
           ) : null}
         </span>
         <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">

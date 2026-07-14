@@ -187,6 +187,37 @@ defmodule SymphonyElixir.Workspace.InventoryTest do
     refute File.exists?(ws)
   end
 
+  test "remove deletes workspace under project-specific root outside process workspace root", ctx do
+    global_root = Path.join(ctx.tmp, "process-workspaces")
+    project_root = Path.join(ctx.tmp, "project-workspaces")
+    File.mkdir_p!(global_root)
+    File.mkdir_p!(project_root)
+
+    workflow_file = Path.join(ctx.tmp, "WORKFLOW-global.md")
+    SymphonyElixir.TestSupport.write_workflow_file!(workflow_file,
+      tracker_kind: "local",
+      workspace_root: global_root
+    )
+    Workflow.set_workflow_file_path(workflow_file)
+
+    markdown = Workflow.to_markdown(%{"workspace" => %{"root" => project_root}}, "")
+    assert {:ok, _} = Context.upsert_project_setup("invproj", %{"workflow_markdown" => markdown})
+
+    segment_root = Path.join(project_root, "invproj")
+    issue = create_issue!("Custom root work")
+    ws = workspace_dir!(segment_root, issue.identifier)
+    _repo = GitFixtures.make_repo!(ctx.tmp, ws, "backend")
+
+    assert Path.expand(SymphonyElixir.Config.workspace_root()) == Path.expand(global_root)
+    refute String.starts_with?(Path.expand(ws) <> "/", Path.expand(global_root) <> "/")
+
+    {:ok, results} = Inventory.remove("invproj", [ws], executions: [])
+    expanded = Path.expand(ws)
+
+    assert [%{path: ^expanded, status: :removed, reason: nil}] = results
+    refute File.exists?(ws)
+  end
+
   defp workspace_dir!(segment_root, name) do
     path = Path.join(segment_root, name)
     File.mkdir_p!(path)

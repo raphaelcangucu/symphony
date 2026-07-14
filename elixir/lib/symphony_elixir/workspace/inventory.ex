@@ -554,7 +554,7 @@ defmodule SymphonyElixir.Workspace.Inventory do
         remove_child_worktree(path)
 
       true ->
-        remove_workspace(path)
+        remove_workspace(path, segment_root)
     end
   end
 
@@ -597,8 +597,8 @@ defmodule SymphonyElixir.Workspace.Inventory do
     %{path: path, status: :removed, reason: nil}
   end
 
-  defp remove_workspace(path) do
-    case Workspace.remove(path) do
+  defp remove_workspace(path, allowed_root) do
+    case Workspace.remove(path, allowed_root) do
       {:ok, _files} ->
         %{path: path, status: :removed, reason: nil}
 

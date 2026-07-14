@@ -9,7 +9,7 @@ import { SessionAgentBadge, SessionTypeBadge } from "@/components/shared/Session
 import { Button } from "@/components/ui/button";
 import { canResumeExecution } from "@/lib/agentExecutionDisplay";
 import { executionStatusDotClass } from "@/lib/statusPresentation";
-import { formatBytes, type WorkspaceCard } from "@/lib/workspaceCards";
+import { formatBytes, isWorkspaceRemovable, type WorkspaceCard } from "@/lib/workspaceCards";
 import type { ProjectSessionRow } from "@/lib/projectSessions";
 import { cn, formatDateTime, formatRelativeTime } from "@/lib/utils";
 import type { AgentExecutionStatus } from "@/types/agent-execution";
@@ -149,13 +149,13 @@ export function WorkspaceCardItem({
               </Link>
             </Button>
           ) : null}
-          {inventory?.removable && onRemove && card.kind !== "issue" && card.kind !== "project" ? (
+          {onRemove && isWorkspaceRemovable(card) ? (
             <Button
               type="button"
               variant="ghost"
               size="sm"
               className="text-muted-foreground hover:text-destructive"
-              onClick={() => onRemove(inventory.path)}
+              onClick={() => onRemove(card.inventory!.path)}
             >
               {t("workspacesPage.sessionRows.remove")}
             </Button>
