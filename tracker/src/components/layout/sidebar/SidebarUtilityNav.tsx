@@ -11,6 +11,13 @@ export interface SidebarUtilityNavProps {
   readonly className?: string;
 }
 
+function searchShortcutLabel(): string {
+  if (typeof navigator === "undefined") return "Ctrl+K";
+  const platform = navigator.platform ?? "";
+  const isApple = /Mac|iPhone|iPad|iPod/i.test(platform);
+  return isApple ? "⌘K" : "Ctrl+K";
+}
+
 export function SidebarUtilityNav({
   onNewSession,
   onSearch,
@@ -19,6 +26,7 @@ export function SidebarUtilityNav({
   const { t } = useTranslation();
   const actionClass =
     "h-8 w-full justify-start gap-2 px-2 text-xs font-normal text-muted-foreground";
+  const shortcut = searchShortcutLabel();
 
   return (
     <nav
@@ -38,7 +46,9 @@ export function SidebarUtilityNav({
       >
         <Search className="h-3.5 w-3.5" aria-hidden />
         <span>{t("layout.sidebar.utility.search")}</span>
-        <kbd className="ml-auto rounded border px-1 text-[10px] leading-4 opacity-70">⌘K</kbd>
+        <kbd className="ml-auto rounded border px-1 text-[10px] leading-4 opacity-70">
+          {shortcut}
+        </kbd>
       </Button>
       <Button asChild variant="ghost" className={actionClass}>
         <Link to="/settings/templates">

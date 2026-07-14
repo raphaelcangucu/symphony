@@ -38,6 +38,8 @@ function session(
     unread: false,
     needsReview: false,
     pinned: false,
+    labels: null,
+    issueLabelNames: null,
   };
 }
 

@@ -32,6 +32,13 @@ export function useMediaQuery(query: string): boolean {
   return matches;
 }
 
+/** Tailwind `md` breakpoint — desktop sidebar shell is available. */
+export const MD_MEDIA_QUERY = "(min-width: 768px)";
+
+export function useIsMdUp(): boolean {
+  return useMediaQuery(MD_MEDIA_QUERY);
+}
+
 /** Tailwind `lg` breakpoint — side-by-side assistant chrome is available. */
 export const LG_MEDIA_QUERY = "(min-width: 1024px)";
 

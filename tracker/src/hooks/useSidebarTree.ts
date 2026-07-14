@@ -38,7 +38,8 @@ export const SIDEBAR_INVENTORY_COMPLETION_TIMEOUT_MS = 15_000;
 export const SIDEBAR_CORE_SOURCE_TIMEOUT_MS = 20_000;
 export const SIDEBAR_HTTP_REQUEST_TIMEOUT_MS = 20_000;
 const SIDEBAR_PREFERENCES_STORAGE_ERROR =
-  "Sidebar preferences could not be saved.";
+  "layout.sidebar.errors.preferencesStorage";
+const SIDEBAR_PROJECTS_LOAD_ERROR = "layout.sidebar.errors.projectsLoad";
 const UNLIMITED_SIDEBAR_NODES = Number.MAX_SAFE_INTEGER;
 const ASSISTANT_THREAD_SCOPES = [
   "project_session",
@@ -94,6 +95,7 @@ export interface UseSidebarTreeResult {
   tree: readonly SidebarProjectNode[];
   projectsLoading: boolean;
   projectsError: string | null;
+  projectsErrorDetail: string | null;
   preferences: SidebarPreferences;
   preferencesStorageError: string | null;
   toggleProjectExpanded(slug: string): void;
@@ -254,6 +256,9 @@ export function useSidebarTree(): UseSidebarTreeResult {
   const projectsRef = useRef<readonly Project[]>([]);
   const [projectsLoading, setProjectsLoading] = useState(true);
   const [projectsError, setProjectsError] = useState<string | null>(null);
+  const [projectsErrorDetail, setProjectsErrorDetail] = useState<string | null>(
+    null,
+  );
   const [preferences, setPreferences] = useState<SidebarPreferences>(() =>
     readSidebarPreferences(),
   );
@@ -694,6 +699,7 @@ export function useSidebarTree(): UseSidebarTreeResult {
     if (mountedRef.current) {
       setProjectsLoading(true);
       setProjectsError(null);
+      setProjectsErrorDetail(null);
     }
     try {
       const rootRequest = logicalRequest(
@@ -746,10 +752,11 @@ export function useSidebarTree(): UseSidebarTreeResult {
       }
       if (!mountedRef.current || generation !== rootGenerationRef.current) return;
       setProjectsLoading(false);
-      setProjectsError(
-        `Could not load sidebar projects: ${
-          error instanceof Error ? error.message : "unknown error"
-        }. Retry loading projects.`,
+      setProjectsError(SIDEBAR_PROJECTS_LOAD_ERROR);
+      setProjectsErrorDetail(
+        error instanceof Error && error.message.trim().length > 0
+          ? error.message.trim()
+          : "unknown error",
       );
     }
   }, [closeBranch, updatePreferences]);
@@ -889,7 +896,10 @@ export function useSidebarTree(): UseSidebarTreeResult {
     const pinnedWorkspaceIds = new Set(preferences.pinnedWorkspaceIds);
     const pinnedSessionIds = new Set(preferences.pinnedSessionIds);
     const nextCache = new Map<string, SidebarProjectNodeCacheEntry>();
-    const tree = projects.map((project) => {
+    const visibleProjects = preferences.filters.showArchived
+      ? projects
+      : projects.filter((project) => project.archivedAt == null);
+    const tree = visibleProjects.map((project) => {
       const branch = branchStates.get(project.slug);
       const cached = projectNodeCacheRef.current.get(project.slug);
       if (
@@ -928,6 +938,13 @@ export function useSidebarTree(): UseSidebarTreeResult {
           pinnedSessionIds,
           lastReadAtBySession: preferences.lastReadAtBySession,
           sortMode: preferences.sort,
+          groupMode: preferences.group,
+          filters: {
+            statuses: preferences.filters.statuses,
+            agents: preferences.filters.agents,
+            showArchived: preferences.filters.showArchived,
+            activityOnly: preferences.filters.activityOnly,
+          },
           workspaceLimit: preferences.revealedProjectIds.includes(project.slug)
             ? UNLIMITED_SIDEBAR_NODES
             : undefined,
@@ -973,6 +990,7 @@ export function useSidebarTree(): UseSidebarTreeResult {
     tree,
     projectsLoading,
     projectsError,
+    projectsErrorDetail,
     preferences,
     preferencesStorageError,
     toggleProjectExpanded,

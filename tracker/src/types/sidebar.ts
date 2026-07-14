@@ -9,6 +9,15 @@ export type SidebarAggregateStatus = "idle" | "active" | "attention" | "error" |
 export type SidebarWorkspaceKind = "project" | "issue" | "standalone" | "parallel" | "orphan";
 export type SidebarSessionKind = "chat" | "authoring" | "execution";
 export type SidebarSortMode = "activity" | "name";
+export type SidebarGroupMode = "none" | "workspaceKind" | "status";
+export type SidebarFilterAgent = "codex" | "claude" | "cursor" | "opencode";
+
+export interface SidebarTreeFilters {
+  readonly statuses: readonly string[];
+  readonly agents: readonly SidebarFilterAgent[];
+  readonly showArchived: boolean;
+  readonly activityOnly: boolean;
+}
 
 export interface SidebarSessionNode {
   kind: "session";
@@ -132,6 +141,8 @@ export interface SidebarTreeBuildOptions {
   pinnedSessionIds: ReadonlySet<string>;
   lastReadAtBySession: ReadonlyMap<string, string> | Readonly<Record<string, string>>;
   sortMode: SidebarSortMode;
+  groupMode?: SidebarGroupMode;
+  filters?: Partial<SidebarTreeFilters>;
   workspaceLimit?: number;
   sessionLimit?: number;
 }

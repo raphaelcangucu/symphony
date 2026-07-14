@@ -442,7 +442,8 @@ describe("useSidebarTree", () => {
 
     expect(reloadSettled).toBe(true);
     expect(result.current.projectsLoading).toBe(false);
-    expect(result.current.projectsError).toContain("timed out");
+    expect(result.current.projectsError).toBe("layout.sidebar.errors.projectsLoad");
+    expect(result.current.projectsErrorDetail).toContain("timed out");
     const timedOutTree = result.current.tree;
     await act(async () => roots.resolve([project("alpha")]));
     expect(result.current.tree).toBe(timedOutTree);
@@ -818,7 +819,8 @@ describe("useSidebarTree", () => {
     vi.mocked(listProjects).mockRejectedValueOnce(new Error("projects offline"));
     await act(async () => result.current.reloadProjects());
 
-    expect(result.current.projectsError).toContain("projects offline");
+    expect(result.current.projectsError).toBe("layout.sidebar.errors.projectsLoad");
+    expect(result.current.projectsErrorDetail).toContain("projects offline");
     expect(result.current.tree).toBe(previousTree);
     expect(result.current.tree.map((node) => node.projectSlug)).toEqual(["alpha", "beta"]);
     expect(result.current.tree[0].workspaces[0].inventory?.path).toBe("/alpha");
@@ -905,7 +907,7 @@ describe("useSidebarTree", () => {
     expect(result.current.preferences.revealedWorkspaceIds).toContain("workspace:alpha:/alpha");
     expect(result.current.preferences.sort).toBe("name");
     expect(result.current.preferencesStorageError).toBe(
-      "Sidebar preferences could not be saved.",
+      "layout.sidebar.errors.preferencesStorage",
     );
     setItem.mockRestore();
   });

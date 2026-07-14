@@ -12,6 +12,8 @@ import type { AssistantThread } from "@/types/assistant-thread";
 import type { RecentSession, RecentStatusKind } from "@/types/recents";
 import type {
   SidebarAggregateStatus,
+  SidebarFilterAgent,
+  SidebarGroupMode,
   SidebarLoadState,
   SidebarProjectBranchInput,
   SidebarProjectNode,
@@ -19,6 +21,7 @@ import type {
   SidebarSortMode,
   SidebarSortableNode,
   SidebarTreeBuildOptions,
+  SidebarTreeFilters,
   SidebarVisiblePartition,
   SidebarWorkspaceKind,
   SidebarWorkspaceNode,
@@ -27,6 +30,29 @@ import type { WorkspaceInventoryEntry } from "@/types/worktrees";
 
 export const SIDEBAR_DEFAULT_WORKSPACE_LIMIT = 8;
 export const SIDEBAR_DEFAULT_SESSION_LIMIT = 6;
+
+const DEFAULT_TREE_FILTERS: SidebarTreeFilters = {
+  statuses: [],
+  agents: [],
+  showArchived: true,
+  activityOnly: false,
+};
+
+const ACTIVITY_STATUSES = new Set<SidebarAggregateStatus>(["active", "attention", "error"]);
+const VALID_GROUP_MODES = new Set<SidebarGroupMode>(["none", "workspaceKind", "status"]);
+const VALID_FILTER_AGENTS = new Set<SidebarFilterAgent>([
+  "codex",
+  "claude",
+  "cursor",
+  "opencode",
+]);
+const WORKSPACE_KIND_ORDER: Readonly<Record<SidebarWorkspaceKind, number>> = {
+  project: 0,
+  issue: 1,
+  standalone: 2,
+  parallel: 3,
+  orphan: 4,
+};
 
 const STATUS_PRECEDENCE: Readonly<Record<SidebarAggregateStatus, number>> = {
   idle: 0,
@@ -42,10 +68,12 @@ const ACTIVE_STATUSES = new Set(["live", "running", "active", "in_progress"]);
 
 export type NormalizedSidebarTreeBuildOptions = Omit<
   SidebarTreeBuildOptions,
-  "workspaceLimit" | "sessionLimit"
+  "workspaceLimit" | "sessionLimit" | "groupMode" | "filters"
 > & {
   workspaceLimit: number;
   sessionLimit: number;
+  groupMode: SidebarGroupMode;
+  filters: SidebarTreeFilters;
 };
 
 export type NormalizedSidebarProjectBranchInput = Omit<
@@ -113,20 +141,26 @@ export function buildSidebarProjectTree(input: SidebarProjectBranchInput): Sideb
   const completedWorkspaces = workspaceEntries.map(({ node }) =>
     completeWorkspace(node, normalized.options),
   );
-  const sortedWorkspaces = sortNodes(completedWorkspaces, normalized.options.sortMode);
+  const filtered = applySidebarTreeFilters(
+    completedWorkspaces,
+    unassignedSessions,
+    normalized.options.filters,
+  );
+  const sortedWorkspaces = sortNodes(filtered.workspaces, normalized.options.sortMode);
+  const groupedWorkspaces = groupWorkspaces(sortedWorkspaces, normalized.options.groupMode);
   const workspacePartition = partitionVisibleNodes(
-    sortedWorkspaces,
+    groupedWorkspaces,
     normalized.options.workspaceLimit,
   );
-  const sortedUnassigned = sortNodes(unassignedSessions, normalized.options.sortMode);
+  const sortedUnassigned = sortNodes(filtered.unassignedSessions, normalized.options.sortMode);
   const branchStatus = loadStateStatus(normalized.loadState, normalized.error);
   const projectAggregateStatus = aggregateStatus([
     branchStatus,
-    ...completedWorkspaces.map((workspace) => workspace.aggregateStatus),
+    ...filtered.workspaces.map((workspace) => workspace.aggregateStatus),
     ...sortedUnassigned.map((session) => session.aggregateStatus),
   ]);
   const updatedAt = newestTimestamp([
-    ...completedWorkspaces.map((workspace) => workspace.updatedAt),
+    ...filtered.workspaces.map((workspace) => workspace.updatedAt),
     ...sortedUnassigned.map((session) => session.updatedAt),
   ]);
 
@@ -135,7 +169,7 @@ export function buildSidebarProjectTree(input: SidebarProjectBranchInput): Sideb
     id: normalized.projectSlug,
     projectSlug: normalized.projectSlug,
     title: normalized.projectTitle,
-    subtitle: `${completedWorkspaces.length} workspace${completedWorkspaces.length === 1 ? "" : "s"}`,
+    subtitle: `${filtered.workspaces.length} workspace${filtered.workspaces.length === 1 ? "" : "s"}`,
     href: workspaceBasePath(normalized.projectSlug, "board"),
     archived: normalized.archived,
     aggregateStatus: projectAggregateStatus,
@@ -147,6 +181,108 @@ export function buildSidebarProjectTree(input: SidebarProjectBranchInput): Sideb
     unassignedSessions: sortedUnassigned,
     pinned: normalized.options.pinnedProjectIds.has(normalized.projectSlug),
   };
+}
+
+export function applySidebarTreeFilters(
+  workspaces: readonly SidebarWorkspaceNode[],
+  unassignedSessions: readonly SidebarSessionNode[],
+  filters: SidebarTreeFilters,
+): {
+  workspaces: SidebarWorkspaceNode[];
+  unassignedSessions: SidebarSessionNode[];
+} {
+  const nextWorkspaces: SidebarWorkspaceNode[] = [];
+  for (const workspace of workspaces) {
+    const sessions = workspace.sessions.filter((session) => sessionMatchesFilters(session, filters));
+    const overflowSessions = workspace.overflowSessions.filter((session) =>
+      sessionMatchesFilters(session, filters),
+    );
+    if (!shouldKeepWorkspace(workspace, sessions, overflowSessions, filters)) {
+      continue;
+    }
+    const allSessions = [...sessions, ...overflowSessions];
+    nextWorkspaces.push({
+      ...workspace,
+      sessions,
+      overflowSessions,
+      aggregateStatus: aggregateStatus([
+        inventoryStatus(workspace.inventory),
+        ...allSessions.map((session) => session.aggregateStatus),
+      ]),
+      updatedAt: newestTimestamp([
+        workspace.updatedAt,
+        ...allSessions.map((session) => session.updatedAt),
+      ]),
+    });
+  }
+  return {
+    workspaces: nextWorkspaces,
+    unassignedSessions: unassignedSessions.filter((session) =>
+      sessionMatchesFilters(session, filters),
+    ),
+  };
+}
+
+function shouldKeepWorkspace(
+  workspace: SidebarWorkspaceNode,
+  sessions: readonly SidebarSessionNode[],
+  overflowSessions: readonly SidebarSessionNode[],
+  filters: SidebarTreeFilters,
+): boolean {
+  if (sessions.length + overflowSessions.length > 0) return true;
+  if (filters.agents.length > 0) return false;
+  if (filters.statuses.length === 0 && !filters.activityOnly) return true;
+  return workspaceMatchesFilters(workspace, filters);
+}
+
+export function groupWorkspaces(
+  workspaces: readonly SidebarWorkspaceNode[],
+  groupMode: SidebarGroupMode,
+): SidebarWorkspaceNode[] {
+  if (groupMode === "none") return [...workspaces];
+  return [...workspaces].sort((left, right) => {
+    const groupDifference =
+      groupMode === "workspaceKind"
+        ? WORKSPACE_KIND_ORDER[left.workspaceKind] - WORKSPACE_KIND_ORDER[right.workspaceKind]
+        : STATUS_PRECEDENCE[right.aggregateStatus] - STATUS_PRECEDENCE[left.aggregateStatus];
+    if (groupDifference !== 0) return groupDifference;
+    return 0;
+  });
+}
+
+function sessionMatchesFilters(
+  session: SidebarSessionNode,
+  filters: SidebarTreeFilters,
+): boolean {
+  if (!filters.showArchived && session.archived) return false;
+  if (filters.activityOnly && !ACTIVITY_STATUSES.has(session.aggregateStatus)) return false;
+  if (
+    filters.statuses.length > 0 &&
+    !filters.statuses.includes(session.aggregateStatus)
+  ) {
+    return false;
+  }
+  if (filters.agents.length > 0) {
+    const agent = session.agentKind;
+    if (agent == null || !filters.agents.includes(agent as SidebarFilterAgent)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function workspaceMatchesFilters(
+  workspace: SidebarWorkspaceNode,
+  filters: SidebarTreeFilters,
+): boolean {
+  if (filters.activityOnly && !ACTIVITY_STATUSES.has(workspace.aggregateStatus)) return false;
+  if (
+    filters.statuses.length > 0 &&
+    !filters.statuses.includes(workspace.aggregateStatus)
+  ) {
+    return false;
+  }
+  return true;
 }
 
 function attachProjectSessions({
@@ -375,15 +511,59 @@ function assertSidebarTreeBuildOptions(options: unknown): asserts options is Sid
   if (options.sortMode !== "activity" && options.sortMode !== "name") {
     throw new TypeError("sortMode must be one of activity, name");
   }
+  if (options.groupMode !== undefined && !VALID_GROUP_MODES.has(options.groupMode as SidebarGroupMode)) {
+    throw new TypeError("groupMode must be one of none, workspaceKind, status");
+  }
+  if (options.filters !== undefined) {
+    if (!isRecord(options.filters)) {
+      throw new TypeError("filters must be an object");
+    }
+    if (
+      options.filters.statuses !== undefined &&
+      (!Array.isArray(options.filters.statuses) ||
+        options.filters.statuses.some((status) => typeof status !== "string"))
+    ) {
+      throw new TypeError("filters.statuses must be an array of strings");
+    }
+    if (
+      options.filters.agents !== undefined &&
+      (!Array.isArray(options.filters.agents) ||
+        options.filters.agents.some(
+          (agent) => typeof agent !== "string" || !VALID_FILTER_AGENTS.has(agent as SidebarFilterAgent),
+        ))
+    ) {
+      throw new TypeError("filters.agents must be an array of known agent kinds");
+    }
+    if (
+      options.filters.showArchived !== undefined &&
+      typeof options.filters.showArchived !== "boolean"
+    ) {
+      throw new TypeError("filters.showArchived must be a boolean");
+    }
+    if (
+      options.filters.activityOnly !== undefined &&
+      typeof options.filters.activityOnly !== "boolean"
+    ) {
+      throw new TypeError("filters.activityOnly must be a boolean");
+    }
+  }
   assertOptionalLimit(options.workspaceLimit, "workspaceLimit");
   assertOptionalLimit(options.sessionLimit, "sessionLimit");
 }
 
 function normalizeOptions(options: SidebarTreeBuildOptions): NormalizedSidebarTreeBuildOptions {
+  const filters = options.filters ?? {};
   return {
     ...options,
     workspaceLimit: options.workspaceLimit ?? SIDEBAR_DEFAULT_WORKSPACE_LIMIT,
     sessionLimit: options.sessionLimit ?? SIDEBAR_DEFAULT_SESSION_LIMIT,
+    groupMode: options.groupMode ?? "none",
+    filters: {
+      statuses: [...(filters.statuses ?? DEFAULT_TREE_FILTERS.statuses)],
+      agents: [...(filters.agents ?? DEFAULT_TREE_FILTERS.agents)],
+      showArchived: filters.showArchived ?? DEFAULT_TREE_FILTERS.showArchived,
+      activityOnly: filters.activityOnly ?? DEFAULT_TREE_FILTERS.activityOnly,
+    },
   };
 }
 
@@ -969,10 +1149,11 @@ function unreadFromLastRead(
   options: SidebarTreeBuildOptions,
   unreadWhenMissing: boolean,
 ): boolean {
+  const lastReadLookup = options.lastReadAtBySession;
   const lastReadAt =
-    options.lastReadAtBySession instanceof Map
-      ? options.lastReadAtBySession.get(id)
-      : options.lastReadAtBySession[id];
+    lastReadLookup instanceof Map
+      ? lastReadLookup.get(id)
+      : lastReadLookup[id as keyof typeof lastReadLookup];
   if (!lastReadAt) return unreadWhenMissing;
   const lastReadTimestamp = timestampValue(lastReadAt);
   if (lastReadTimestamp === Number.NEGATIVE_INFINITY) return unreadWhenMissing;

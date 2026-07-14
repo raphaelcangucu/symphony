@@ -61,7 +61,9 @@ export function SidebarRenameDialog({
         <DialogHeader>
           <DialogTitle>
             {t("layout.sidebar.actions.renameTitle", {
-              type: targetType,
+              type: t(`layout.sidebar.types.${targetType}`, {
+                defaultValue: targetType,
+              }),
               defaultValue: "Rename {{type}}",
             })}
           </DialogTitle>

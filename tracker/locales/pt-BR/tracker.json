@@ -2692,6 +2692,9 @@
       "workspaces": "Workspaces"
     },
     "sidebar": {
+      "collapsed": {
+        "label": "Barra lateral recolhida"
+      },
       "tree": {
         "label": "Projetos",
         "collapseNode": "Recolher {{label}}",
@@ -2750,10 +2753,18 @@
         "placeholder": "Buscar projetos e sessões…",
         "loading": "Carregando…",
         "empty": "Nenhum resultado encontrado.",
+        "unknownStatus": "Status desconhecido",
         "types": {
           "project": "Projeto",
           "workspace": "Workspace",
           "session": "Sessão"
+        },
+        "loadState": {
+          "idle": "Ocioso",
+          "loading": "Carregando",
+          "ready": "Pronto",
+          "error": "Erro",
+          "stale": "Desatualizado"
         }
       },
       "newSession": {
@@ -2767,6 +2778,8 @@
         "sessionTitle": "Título da sessão",
         "agent": "Agente",
         "defaultAgent": "Padrão do projeto",
+        "change": "Alterar",
+        "review": "Revisar sessão",
         "retry": "Tentar novamente",
         "loading": "Carregando workspaces…",
         "loadError": "Não foi possível carregar os workspaces.",
@@ -2776,6 +2789,7 @@
         "requireProject": "Selecione um projeto.",
         "requireReadyProject": "Aguarde o carregamento dos workspaces do projeto.",
         "requireWorkspace": "Selecione um workspace.",
+        "workspaceGone": "O workspace selecionado não está mais disponível.",
         "unsupportedWorkspace": "Não é possível criar uma sessão neste workspace.",
         "missingWorkspacePath": "O caminho do workspace não está disponível.",
         "missingIssue": "A issue vinculada não está disponível.",
@@ -2844,6 +2858,10 @@
         "loadingMetadata": "Carregando metadados…"
       },
       "errors": {
+        "preferencesStorage": "Não foi possível salvar as preferências da barra lateral.",
+        "projectsLoad": "Não foi possível carregar os projetos da barra lateral: {{detail}}. Tente carregar os projetos novamente.",
+        "retryProjects": "Tentar novamente",
+        "unknownDetail": "erro desconhecido",
         "metadataUnavailable": "Os metadados da thread não foram carregados. Recarregue o projeto e tente novamente.",
         "issueLabelsUnavailable": "As etiquetas atuais da issue não foram carregadas. Recarregue o projeto e tente novamente.",
         "issueLabelMappingFailed": "Não foi possível associar com segurança as etiquetas atuais da issue.",
@@ -2872,6 +2890,23 @@
         "activeExecutionArchive": "Uma execução ativa não pode ser arquivada.",
         "reviewUnauthorized": "Alterações de revisão não são autorizadas.",
         "threadArchiveUnauthorized": "É necessária permissão para arquivar a thread."
+      },
+      "disabled": {
+        "unavailable": "Esta ação não está disponível para o item selecionado.",
+        "editorTarget": "Nenhum destino de editor está disponível para este workspace.",
+        "terminalTarget": "Nenhum destino de terminal está disponível para este workspace.",
+        "activeExecution": "Não é possível arquivar enquanto a execução está ativa ou aguardando continuidade."
+      },
+      "types": {
+        "project": "projeto",
+        "workspace": "workspace",
+        "thread": "thread",
+        "issue": "issue"
+      },
+      "mobile": {
+        "open": "Abrir navegação do projeto",
+        "title": "Navegação do projeto",
+        "close": "Fechar navegação do projeto"
       }
     },
     "recents": {

@@ -81,10 +81,10 @@ function workspace(overrides: Partial<SidebarWorkspaceNode> = {}): SidebarWorksp
     inventory: {
       path: "/work/acme",
       displayName: null,
-      kind: "main",
+      kind: "project",
       issueIdentifier: null,
       name: null,
-      classification: "managed",
+      classification: "active",
       reclaimable: false,
       workPresent: true,
       executionStatus: null,
@@ -150,6 +150,10 @@ describe("sidebar utility navigation", () => {
       "/settings/templates",
     );
     expect(screen.getByRole("link", { name: "Settings" })).toHaveAttribute("href", "/settings");
+    const expectedShortcut = /Mac|iPhone|iPad|iPod/i.test(navigator.platform ?? "")
+      ? "⌘K"
+      : "Ctrl+K";
+    expect(screen.getByText(expectedShortcut)).toBeInTheDocument();
 
     await initTestI18n("pt-BR");
     rerender(
@@ -542,6 +546,114 @@ describe("sidebar utility navigation", () => {
     );
     expect(screen.getByLabelText("Session title")).toHaveValue("");
     expect(within(screen.getByRole("dialog")).getByLabelText("Agent")).toHaveValue("");
+  });
+
+  it("ignores stale create resolution after close while pending", async () => {
+    const user = userEvent.setup();
+    let resolveCreate!: (value: { id: number }) => void;
+    createProjectSessionThread.mockImplementation(
+      () => new Promise<{ id: number }>((done) => (resolveCreate = done)),
+    );
+    const onCreated = vi.fn();
+    const onOpenChange = vi.fn();
+    const selection = {
+      projectSlug: "acme",
+      workspaceId: "workspace:main",
+      sessionId: null,
+    };
+    const { rerender } = render(
+      <SidebarNewSessionFlow
+        open
+        selection={selection}
+        tree={[project()]}
+        onOpenChange={onOpenChange}
+        onCreated={onCreated}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Create session" }));
+    expect(createProjectSessionThread).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "Creating…" })).toBeDisabled();
+
+    rerender(
+      <SidebarNewSessionFlow
+        open={false}
+        selection={selection}
+        tree={[project()]}
+        onOpenChange={onOpenChange}
+        onCreated={onCreated}
+      />,
+    );
+    resolveCreate({ id: 99 });
+    await Promise.resolve();
+    expect(onCreated).not.toHaveBeenCalled();
+
+    createProjectSessionThread.mockImplementation(
+      () => new Promise<{ id: number }>((done) => (resolveCreate = done)),
+    );
+    rerender(
+      <SidebarNewSessionFlow
+        open
+        selection={selection}
+        tree={[project()]}
+        onOpenChange={onOpenChange}
+        onCreated={onCreated}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "Create session" }));
+    expect(createProjectSessionThread).toHaveBeenCalledTimes(2);
+    resolveCreate({ id: 100 });
+    await waitFor(() => expect(onCreated).toHaveBeenCalledWith("acme", 100));
+    expect(onCreated).toHaveBeenCalledTimes(1);
+  });
+
+  it("blocks dismiss while submit is in flight", async () => {
+    const user = userEvent.setup();
+    let resolveCreate!: (value: { id: number }) => void;
+    createProjectSessionThread.mockImplementation(
+      () => new Promise<{ id: number }>((done) => (resolveCreate = done)),
+    );
+    const onCreated = vi.fn();
+    const onOpenChange = vi.fn();
+    render(
+      <SidebarNewSessionFlow
+        open
+        selection={{ projectSlug: "acme", workspaceId: "workspace:main", sessionId: null }}
+        tree={[project()]}
+        onOpenChange={onOpenChange}
+        onCreated={onCreated}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Create session" }));
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled();
+    await user.keyboard("{Escape}");
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
+
+    resolveCreate({ id: 61 });
+    await waitFor(() => expect(onCreated).toHaveBeenCalledWith("acme", 61));
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it("hides the session dialog while the create-workspace dialog is open", async () => {
+    const user = userEvent.setup();
+    const onCreated = vi.fn();
+    render(
+      <SidebarNewSessionFlow
+        open
+        selection={{ projectSlug: "acme", workspaceId: null, sessionId: null }}
+        tree={[project()]}
+        onOpenChange={() => {}}
+        onCreated={onCreated}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Create new workspace" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByText("Finish workspace")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("Finish workspace"));
+    expect(onCreated).toHaveBeenCalledWith("acme", 91);
   });
 
   it("keeps service rejection visible and allows one retry", async () => {

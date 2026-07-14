@@ -9,6 +9,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
+import { i18n } from "@/i18n";
 import type {
   SidebarProjectNode,
   SidebarSessionNode,
@@ -140,7 +141,8 @@ export function SidebarSearchLauncher({
               </span>
             </span>
             <span className="shrink-0 text-[10px] uppercase text-muted-foreground">
-              {typeLabel(result.kind, t)} · {result.status}
+              {typeLabel(result.kind, t)} ·{" "}
+              {localizeSidebarSearchStatus(result.kind, result.status)}
             </span>
           </CommandItem>
         ))}
@@ -229,4 +231,32 @@ function typeLabel(
   t: ReturnType<typeof useTranslation>["t"],
 ): string {
   return t(`layout.sidebar.search.types.${kind}`);
+}
+
+export function localizeSidebarSearchStatus(
+  kind: SidebarSearchResultKind,
+  status: string,
+): string {
+  const unknown = i18n.t("layout.sidebar.search.unknownStatus");
+  if (!status.trim()) return unknown;
+
+  if (kind === "session") {
+    const key = `layout.recents.status.${status}`;
+    const label = i18n.t(key);
+    return label === key ? unknown : label;
+  }
+
+  if (kind === "workspace") {
+    const key = `layout.sidebar.tree.aggregateStatus.${status}`;
+    const label = i18n.t(key);
+    return label === key ? unknown : label;
+  }
+
+  const loadKey = `layout.sidebar.search.loadState.${status}`;
+  const loadLabel = i18n.t(loadKey);
+  if (loadLabel !== loadKey) return loadLabel;
+
+  const aggregateKey = `layout.sidebar.tree.aggregateStatus.${status}`;
+  const aggregateLabel = i18n.t(aggregateKey);
+  return aggregateLabel === aggregateKey ? unknown : aggregateLabel;
 }

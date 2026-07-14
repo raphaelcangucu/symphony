@@ -10,11 +10,10 @@ import type {
   SidebarWorkspaceNode,
 } from "@/types/sidebar";
 
-const REASON_UNAVAILABLE = "This action is unavailable for the selected item.";
-const REASON_EDITOR_TARGET = "No editor target is available for this workspace.";
-const REASON_TERMINAL_TARGET = "No terminal target is available for this workspace.";
-const REASON_ACTIVE_EXECUTION =
-  "Archive is unavailable while the execution is active or waiting to continue.";
+const REASON_UNAVAILABLE = "layout.sidebar.disabled.unavailable";
+const REASON_EDITOR_TARGET = "layout.sidebar.disabled.editorTarget";
+const REASON_TERMINAL_TARGET = "layout.sidebar.disabled.terminalTarget";
+const REASON_ACTIVE_EXECUTION = "layout.sidebar.disabled.activeExecution";
 const ACTIVE_EXECUTION_STATUSES = new Set(["active", "running", "waiting", "retrying"]);
 const AGGREGATE_STATUSES = new Set(["idle", "active", "attention", "error", "stale"]);
 const LOAD_STATES = new Set(["idle", "loading", "ready", "error", "stale"]);

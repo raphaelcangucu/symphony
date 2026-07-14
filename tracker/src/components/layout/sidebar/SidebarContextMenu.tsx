@@ -421,8 +421,16 @@ export function SidebarContextMenu({
               <DropdownMenuItem
                 disabled={!action.enabled || pendingDirectAction !== null}
                 aria-disabled={!action.enabled}
-                title={!action.enabled ? action.disabledReason : undefined}
-                aria-description={!action.enabled ? action.disabledReason : undefined}
+                title={
+                  !action.enabled && action.disabledReason
+                    ? t(action.disabledReason)
+                    : undefined
+                }
+                aria-description={
+                  !action.enabled && action.disabledReason
+                    ? t(action.disabledReason)
+                    : undefined
+                }
                 className={cn(action.destructive && "text-destructive focus:text-destructive")}
                 onSelect={(event) => {
                   event.preventDefault();

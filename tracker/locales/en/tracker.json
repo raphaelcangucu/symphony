@@ -2692,6 +2692,9 @@
       "workspaces": "Workspaces"
     },
     "sidebar": {
+      "collapsed": {
+        "label": "Collapsed sidebar"
+      },
       "tree": {
         "label": "Projects",
         "collapseNode": "Collapse {{label}}",
@@ -2750,10 +2753,18 @@
         "placeholder": "Search projects and sessions…",
         "loading": "Loading…",
         "empty": "No results found.",
+        "unknownStatus": "Unknown status",
         "types": {
           "project": "Project",
           "workspace": "Workspace",
           "session": "Session"
+        },
+        "loadState": {
+          "idle": "Idle",
+          "loading": "Loading",
+          "ready": "Ready",
+          "error": "Error",
+          "stale": "Stale"
         }
       },
       "newSession": {
@@ -2767,6 +2778,8 @@
         "sessionTitle": "Session title",
         "agent": "Agent",
         "defaultAgent": "Project default",
+        "change": "Change",
+        "review": "Review session",
         "retry": "Retry",
         "loading": "Loading workspaces…",
         "loadError": "Could not load workspaces.",
@@ -2776,6 +2789,7 @@
         "requireProject": "Select a project.",
         "requireReadyProject": "Wait for the project workspaces to load.",
         "requireWorkspace": "Select a workspace.",
+        "workspaceGone": "The selected workspace is no longer available.",
         "unsupportedWorkspace": "This workspace cannot create a session.",
         "missingWorkspacePath": "The workspace path is unavailable.",
         "missingIssue": "The linked issue is unavailable.",
@@ -2844,6 +2858,10 @@
         "loadingMetadata": "Loading metadata…"
       },
       "errors": {
+        "preferencesStorage": "Sidebar preferences could not be saved.",
+        "projectsLoad": "Could not load sidebar projects: {{detail}}. Retry loading projects.",
+        "retryProjects": "Retry",
+        "unknownDetail": "unknown error",
         "metadataUnavailable": "Thread metadata is not loaded. Reload the project and try again.",
         "issueLabelsUnavailable": "Current issue labels are not loaded. Reload the project and try again.",
         "issueLabelMappingFailed": "Current issue labels could not be matched safely.",
@@ -2872,6 +2890,23 @@
         "activeExecutionArchive": "An active execution cannot be archived.",
         "reviewUnauthorized": "Review changes are not authorized.",
         "threadArchiveUnauthorized": "Thread archive capability is required."
+      },
+      "disabled": {
+        "unavailable": "This action is unavailable for the selected item.",
+        "editorTarget": "No editor target is available for this workspace.",
+        "terminalTarget": "No terminal target is available for this workspace.",
+        "activeExecution": "Archive is unavailable while the execution is active or waiting to continue."
+      },
+      "types": {
+        "project": "project",
+        "workspace": "workspace",
+        "thread": "thread",
+        "issue": "issue"
+      },
+      "mobile": {
+        "open": "Open project navigation",
+        "title": "Project navigation",
+        "close": "Close project navigation"
       }
     },
     "recents": {

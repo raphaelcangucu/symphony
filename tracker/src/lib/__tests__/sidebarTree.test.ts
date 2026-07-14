@@ -1020,6 +1020,137 @@ describe("sidebar tree helpers", () => {
       overflow: nodes.slice(3),
     });
   });
+
+  it("applies archive, status, agent, activity, and group preferences to tree output", () => {
+    const collectSessionIds = (project: ReturnType<typeof buildSidebarProjectTree>) =>
+      [
+        ...project.workspaces.flatMap((workspace) => [
+          ...workspace.sessions,
+          ...workspace.overflowSessions,
+        ]),
+        ...project.overflowWorkspaces.flatMap((workspace) => [
+          ...workspace.sessions,
+          ...workspace.overflowSessions,
+        ]),
+        ...project.unassignedSessions,
+      ].map((session) => session.id);
+
+    const base = fixtureInput({
+      relatedSessions: [
+        recent("idle-claude", {
+          threadId: 40,
+          title: "Idle Claude",
+          agentKind: "claude",
+          status: "idle",
+          statusKind: "idle",
+          updatedAt: "2026-07-01T00:00:00Z",
+        }),
+        recent("active-codex", {
+          threadId: 41,
+          title: "Active Codex",
+          agentKind: "codex",
+          status: "active",
+          statusKind: "active",
+          updatedAt: "2026-07-12T00:00:00Z",
+        }),
+        recent("archived-codex", {
+          threadId: 99,
+          title: "Archived chat",
+          agentKind: "codex",
+          status: "archived",
+          statusKind: "idle",
+          updatedAt: "2026-07-11T00:00:00Z",
+        }),
+      ],
+      assistantThreads: [
+        thread(40, {
+          title: "Idle Claude",
+          agentKind: "claude",
+          status: "idle",
+        }),
+        thread(41, {
+          title: "Active Codex",
+          agentKind: "codex",
+          status: "active",
+        }),
+        thread(99, {
+          title: "Archived chat",
+          agentKind: "codex",
+          status: "archived",
+        }),
+      ],
+      executions: new Map(),
+      issues: [],
+      inventory: [
+        inventory(PROJECT_PATH, { kind: "project", name: "demo", removable: false }),
+        inventory("/repos/demo/experiments", { kind: "standalone", name: "experiments" }),
+      ],
+    });
+
+    const shownArchived = buildSidebarProjectTree({
+      ...base,
+      options: {
+        ...base.options,
+        filters: { showArchived: true },
+      },
+    });
+    expect(collectSessionIds(shownArchived)).toEqual(
+      expect.arrayContaining(["thread:40", "thread:41", "thread:99"]),
+    );
+
+    const hiddenArchived = buildSidebarProjectTree({
+      ...base,
+      options: {
+        ...base.options,
+        filters: { showArchived: false },
+      },
+    });
+    expect(collectSessionIds(hiddenArchived)).toEqual(
+      expect.arrayContaining(["thread:40", "thread:41"]),
+    );
+    expect(collectSessionIds(hiddenArchived)).not.toContain("thread:99");
+
+    const activityOnly = buildSidebarProjectTree({
+      ...base,
+      options: {
+        ...base.options,
+        filters: { showArchived: false, activityOnly: true },
+      },
+    });
+    expect(collectSessionIds(activityOnly)).toEqual(["thread:41"]);
+
+    const agentFiltered = buildSidebarProjectTree({
+      ...base,
+      options: {
+        ...base.options,
+        filters: { showArchived: false, agents: ["claude"] },
+      },
+    });
+    expect(collectSessionIds(agentFiltered)).toEqual(["thread:40"]);
+
+    const statusFiltered = buildSidebarProjectTree({
+      ...base,
+      options: {
+        ...base.options,
+        filters: { showArchived: false, statuses: ["idle"] },
+      },
+    });
+    expect(collectSessionIds(statusFiltered)).toEqual(["thread:40"]);
+
+    const grouped = buildSidebarProjectTree({
+      ...base,
+      options: {
+        ...base.options,
+        sortMode: "name",
+        groupMode: "workspaceKind",
+        filters: { showArchived: false },
+      },
+    });
+    expect(grouped.workspaces.map((workspace) => workspace.workspaceKind)).toEqual([
+      "project",
+      "standalone",
+    ]);
+  });
 });
 
 function workspaceNode(
