@@ -2400,6 +2400,7 @@
     },
     "environment": {
       "title": "Environment",
+      "toggleAria": "Toggle environment panel",
       "close": "Close environment panel",
       "changes": "Changes",
       "local": "Local workspace",

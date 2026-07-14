@@ -2400,6 +2400,7 @@
     },
     "environment": {
       "title": "Ambiente",
+      "toggleAria": "Alternar painel de ambiente",
       "close": "Fechar painel de ambiente",
       "changes": "Alterações",
       "local": "Área de trabalho local",

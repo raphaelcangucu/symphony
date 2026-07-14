@@ -1903,6 +1903,56 @@ describe("ProjectAssistantPanel", () => {
     expect(screen.getByTestId("assistant-session-composer")).not.toContainElement(scrollToBottomButton);
   });
 
+  it("shows environment dock toggle for issue-bound threads and opens the dock", async () => {
+    getGitDiffMock.mockResolvedValue({
+      repos: [
+        {
+          repo: "front",
+          files: [
+            {
+              path: "src/App.tsx",
+              oldPath: null,
+              status: "modified",
+              patch: "diff --git a/src/App.tsx b/src/App.tsx\n-old\n+new\n+another\n",
+            },
+          ],
+        },
+      ],
+      workspace: { path: "/tmp/ws", available: true },
+    });
+
+    render(
+      <MemoryRouter>
+        <ProjectAssistantPanel
+          projectSlug="macro-markets"
+          issueIdentifier="MAC-7"
+          view="board"
+          mode="page"
+          hideHeader
+        />
+      </MemoryRouter>,
+    );
+
+    const toggle = await screen.findByRole("button", { name: /toggle environment/i });
+
+    // Issue-bound sessions default the dock open.
+    expect(await screen.findByTestId("environment-floating-dock")).toBeInTheDocument();
+
+    fireEvent.click(toggle);
+    await waitFor(() => expect(screen.queryByTestId("environment-floating-dock")).not.toBeInTheDocument());
+
+    fireEvent.click(toggle);
+    expect(await screen.findByTestId("environment-floating-dock")).toBeInTheDocument();
+  });
+
+  it("does not show the environment dock toggle for freeform threads without an issue", async () => {
+    render(<ProjectAssistantPanel projectSlug="macro-markets" view="board" mode="page" />);
+
+    await screen.findByPlaceholderText("Write a message...");
+    expect(screen.queryByRole("button", { name: /environment/i })).not.toBeInTheDocument();
+    expect(screen.queryByTestId("environment-floating-dock")).not.toBeInTheDocument();
+  });
+
   it("page mode uses AssistantSessionShell with a single feed scroller", async () => {
     render(<ProjectAssistantPanel projectSlug="macro-markets" view="board" mode="page" />);
     expect(await screen.findByTestId("assistant-session-shell")).toBeInTheDocument();

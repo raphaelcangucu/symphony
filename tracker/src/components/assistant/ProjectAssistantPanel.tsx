@@ -5,11 +5,11 @@ import {
   type ThreadMessageLike,
 } from "@assistant-ui/react";
 import type { Channel } from "phoenix";
-import { Bot, BookOpen, ChevronDown, ListChecks, Sparkles } from "lucide-react";
+import { Bot, BookOpen, ChevronDown, ListChecks, PanelRight, Sparkles } from "lucide-react";
 import { i18n } from "@/i18n";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import {
   AssistantComposer,
@@ -21,6 +21,7 @@ import { AssistantMessageList } from "@/components/assistant/AssistantMessageLis
 import { AssistantPanelHeader } from "@/components/assistant/AssistantPanelHeader";
 import { AssistantSessionShell } from "@/components/assistant/AssistantSessionShell";
 import { CommandApprovalCard } from "@/components/assistant/CommandApprovalCard";
+import { EnvironmentFloatingDock } from "@/components/assistant/EnvironmentFloatingDock";
 import { QueuedMessageChips } from "@/components/assistant/QueuedMessageChips";
 import { assistantCommandsToSlashDefs } from "@/components/assistant/assistantCommandDefs";
 import { type ComposerContextChipRef } from "@/components/assistant/contextMentions";
@@ -127,7 +128,7 @@ import {
 } from "@/services/phoenix/assistantChannel";
 import { createTrackerSocket } from "@/services/phoenix/socket";
 import type { AgentKind, ExecutionMode } from "@/types/issue";
-import type { WorkspaceView } from "@/lib/workspaceRoutes";
+import { issuePath, type WorkspaceView } from "@/lib/workspaceRoutes";
 import { cn } from "@/lib/utils";
 import { useAssistantCommands } from "@/hooks/useAssistantCommands";
 
@@ -312,7 +313,14 @@ export function ProjectAssistantPanel({
 }: ProjectAssistantPanelProps) {
   const { t } = useTranslation();
   const location = useLocation();
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
+  // Issue-bound sessions default the Environment dock open; freeform/project
+  // chats never show the toggle or dock at all.
+  const [environmentOpen, setEnvironmentOpen] = useState<boolean>(() => Boolean(issueIdentifier));
+  // Bumping this counter reuses the same "open the diff modal" path as the
+  // Diff toolbar button, just triggered from the dock's Compare action.
+  const [envCompareRequestId, setEnvCompareRequestId] = useState(0);
   const [turnRunning, setTurnRunning] = useState(false);
   const [runningStartedAt, setRunningStartedAt] = useState<number | null>(null);
   const [queued, setQueued] = useState<QueuedMessage[]>([]);
@@ -1562,6 +1570,51 @@ export function ProjectAssistantPanel({
     setKnowledgeBaseOpen(true);
   }, [projectSlug]);
 
+  const openEnvironmentCompare = useCallback(() => {
+    setEnvCompareRequestId((current) => current + 1);
+  }, []);
+
+  // No commit/PR trigger exists yet inside this panel; land on the issue's
+  // sessions tab as the smallest useful destination until one is wired up.
+  const openEnvironmentCommitPush = useCallback(() => {
+    if (!projectSlug || !issueIdentifier) return;
+    navigate(issuePath(projectSlug, view, issueIdentifier, "sessions"));
+  }, [navigate, projectSlug, issueIdentifier, view]);
+
+  const toggleEnvironmentOpen = useCallback(() => {
+    setEnvironmentOpen((current) => !current);
+  }, []);
+
+  const environmentToggleButton = issueIdentifier ? (
+    <Button
+      type="button"
+      variant={environmentOpen ? "secondary" : "ghost"}
+      size="icon"
+      className="h-7 w-7 rounded-full"
+      aria-pressed={environmentOpen}
+      aria-label={t("assistant.environment.toggleAria")}
+      title={t("assistant.environment.toggleAria")}
+      onClick={toggleEnvironmentOpen}
+      data-testid="environment-dock-toggle"
+    >
+      <PanelRight className="h-4 w-4" />
+    </Button>
+  ) : null;
+
+  const environmentDock =
+    issueIdentifier && environmentOpen ? (
+      <EnvironmentFloatingDock
+        open={environmentOpen}
+        onClose={() => setEnvironmentOpen(false)}
+        additions={workspaceDiffStats?.additions ?? 0}
+        deletions={workspaceDiffStats?.deletions ?? 0}
+        branch={null}
+        sourceLabel={projectSlug ?? null}
+        onCompare={openEnvironmentCompare}
+        onCommitPush={openEnvironmentCommitPush}
+      />
+    ) : null;
+
   useEffect(() => {
     if (!projectSlug || catalogLoading) return;
 
@@ -1634,7 +1687,7 @@ export function ProjectAssistantPanel({
                 threadId={threadId ?? null}
                 disabled={catalogLoading}
                 onSendReview={sendDiffReview}
-                openRequestId={diffRequestId}
+                openRequestId={diffRequestId + envCompareRequestId}
               />
             ) : null}
             {hideHeader ? <WorkspaceDiffStatsChip stats={workspaceDiffStats} /> : null}
@@ -1770,14 +1823,31 @@ export function ProjectAssistantPanel({
             className="min-w-0 flex-1"
             feedRef={setScrollContainerRef}
             toolbar={
-              isEmbeddedMode || hideHeader ? null : (
-                <AssistantPanelHeader
-                  title={panelTitle}
-                  isPageMode={isPageMode}
-                  projectSlug={projectSlug}
-                  diffStats={workspaceDiffStats}
-                  modelCommand={panelModelCommand}
-                />
+              isEmbeddedMode ? (
+                environmentToggleButton ? (
+                  <div className="flex items-center justify-end px-3 py-1.5">{environmentToggleButton}</div>
+                ) : null
+              ) : hideHeader ? (
+                environmentToggleButton ? (
+                  <div className="flex items-center justify-end border-b bg-background/95 px-4 py-1.5 lg:px-6">
+                    {environmentToggleButton}
+                  </div>
+                ) : null
+              ) : (
+                <>
+                  <AssistantPanelHeader
+                    title={panelTitle}
+                    isPageMode={isPageMode}
+                    projectSlug={projectSlug}
+                    diffStats={workspaceDiffStats}
+                    modelCommand={panelModelCommand}
+                  />
+                  {environmentToggleButton ? (
+                    <div className="flex items-center justify-end border-b bg-background/95 px-4 py-1 lg:px-6">
+                      {environmentToggleButton}
+                    </div>
+                  ) : null}
+                </>
               )
             }
             feed={
@@ -1835,7 +1905,7 @@ export function ProjectAssistantPanel({
                 </div>
               </div>
             }
-            environment={null}
+            environment={environmentDock}
           />
           {showTasksDock && taskSnapshot ? (
             <AssistantTasksDock snapshot={taskSnapshot} onClose={toggleTasksDock} />
