@@ -2707,10 +2707,12 @@
         "projectError": "Could not load: {{error}}",
         "retryProject": "Retry {{project}}",
         "stale": "Stale data",
-        "emptyProject": "No workspaces in {{project}}",
-        "createWorkspace": "Create workspace in {{project}}",
-        "emptyWorkspace": "No sessions in {{workspace}}",
-        "createSession": "Create session in {{workspace}}",
+        "emptyProject": "No workspaces",
+        "createWorkspace": "Create",
+        "createWorkspaceNamed": "Create workspace in {{project}}",
+        "emptyWorkspace": "No sessions",
+        "createSession": "Create",
+        "createSessionNamed": "Create session in {{workspace}}",
         "unassigned": "No workspace",
         "unread": "Unread",
         "needsReview": "Review",
@@ -3046,7 +3048,9 @@
       "deleteConfirm": "Move “{{title}}” to trash?",
       "deleted": "Page deleted",
       "renamed": "Page renamed",
-      "add": "Add"
+      "add": "Add",
+      "downloadMarkdown": "Download Markdown",
+      "downloadMarkdownSuccess": "Markdown downloaded"
     },
     "editor": {
       "save": "Save",
@@ -3055,6 +3059,9 @@
       "unsaved": "Unsaved changes",
       "askAi": "Ask AI",
       "closeAssistant": "Close assistant",
+      "copyGitHubLink": "Copy link",
+      "copyGitHubLinkCopied": "GitHub link copied",
+      "copyGitHubLinkFailed": "Could not copy the GitHub link",
       "toc": {
         "button": "Contents",
         "label": "On this page",

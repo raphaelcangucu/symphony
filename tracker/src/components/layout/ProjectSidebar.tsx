@@ -247,23 +247,23 @@ export function ProjectSidebar({ variant = "desktop" }: ProjectSidebarProps) {
     <aside
       data-sidebar-variant={variant}
       className={cn(
-        "flex flex-col bg-muted/20",
+        "flex min-h-0 flex-col overflow-hidden bg-muted/20",
         isDrawer
           ? "h-full w-full p-4"
           : "hidden h-screen shrink-0 border-r transition-[width] duration-200 md:flex",
-        !isDrawer && (collapsed ? "w-16 p-2" : "w-72 p-4"),
+        !isDrawer && (collapsed ? "w-16 p-2" : "w-80 p-3"),
       )}
     >
-      <div className={cn("mb-4 flex items-center gap-2", collapsed && "mb-3 flex-col gap-3")}>
+      <div className={cn("mb-5 flex items-center gap-2.5 px-1", collapsed && "mb-3 flex-col gap-3")}>
         <img
           src={TRACKER_BRAND_ICON_SRC}
           alt={t(TRACKER_BRAND_ICON_ALT_KEY)}
-          className="h-9 w-9 rounded-lg shadow-sm"
+          className="h-8 w-8 rounded-lg shadow-sm"
           decoding="async"
         />
         {collapsed ? null : (
           <div className="min-w-0 flex-1">
-            <div className="truncate text-sm font-semibold">{t("nav.brandTitle")}</div>
+            <div className="truncate text-sm font-semibold tracking-tight">{t("nav.brandTitle")}</div>
             <div className="truncate text-xs text-muted-foreground">{t("nav.brandSubtitle")}</div>
           </div>
         )}
@@ -296,13 +296,13 @@ export function ProjectSidebar({ variant = "desktop" }: ProjectSidebarProps) {
       ) : (
         <>
           <SidebarUtilityNav
-            className="mb-3"
+            className="mb-5"
             onNewSession={() => openNewSession()}
             onSearch={openSearch}
           />
 
-          <div className="mb-2 flex items-center gap-1 px-1">
-            <h2 className="min-w-0 flex-1 truncate text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+          <div className="mb-2 flex items-center gap-1 px-2">
+            <h2 className="min-w-0 flex-1 truncate text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
               {t("layout.sidebar.tree.label", { defaultValue: "Projects" })}
             </h2>
             <SidebarFiltersMenu
@@ -353,26 +353,28 @@ export function ProjectSidebar({ variant = "desktop" }: ProjectSidebarProps) {
             </div>
           ) : null}
 
-          <ProjectNavigationTree
-            tree={tree}
-            expandedProjectIds={expandedProjectIds}
-            expandedWorkspaceIds={expandedWorkspaceIds}
-            currentSelection={selection}
-            toggleProject={toggleProjectExpanded}
-            toggleWorkspace={toggleWorkspaceExpanded}
-            openNode={openNode}
-            renderContextMenu={renderContextMenu}
-            onRequestNodeAction={onRequestNodeAction}
-            retryProject={(projectId) => {
-              void reloadProjectBranch(projectId);
-            }}
-            showAllWorkspaces={showAllWorkspaces}
-            showAllSessions={showAllSessions}
-          />
+          <div className="flex min-h-0 flex-1 flex-col">
+            <ProjectNavigationTree
+              tree={tree}
+              expandedProjectIds={expandedProjectIds}
+              expandedWorkspaceIds={expandedWorkspaceIds}
+              currentSelection={selection}
+              toggleProject={toggleProjectExpanded}
+              toggleWorkspace={toggleWorkspaceExpanded}
+              openNode={openNode}
+              renderContextMenu={renderContextMenu}
+              onRequestNodeAction={onRequestNodeAction}
+              retryProject={(projectId) => {
+                void reloadProjectBranch(projectId);
+              }}
+              showAllWorkspaces={showAllWorkspaces}
+              showAllSessions={showAllSessions}
+            />
+          </div>
         </>
       )}
 
-      <div className={cn("mt-4 flex items-center gap-2", collapsed && "flex-col")}>
+      <div className={cn("mt-auto flex items-center gap-2 pt-3", collapsed && "flex-col")}>
         <ThemeToggle />
         {collapsed ? (
           <Button

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Fake `claude --print --output-format stream-json` for tests.
-# Modes via FAKE_CLAUDE_MODE: happy (default) | error | hang | multi | silent | resume-aware
+# Modes via FAKE_CLAUDE_MODE: happy (default) | error | hang | multi | silent | tool-only | resume-aware
 prompt="$(cat)"
 case "${FAKE_CLAUDE_MODE:-happy}" in
   happy)
@@ -31,6 +31,12 @@ case "${FAKE_CLAUDE_MODE:-happy}" in
     # Turn completes successfully but emits no assistant text (exercises the empty-reply fallback).
     echo '{"type":"system","subtype":"init","session_id":"sess-silent"}'
     echo '{"type":"result","subtype":"success","session_id":"sess-silent","usage":{"input_tokens":1,"output_tokens":0},"total_cost_usd":0.0}'
+    ;;
+  tool-only)
+    echo '{"type":"system","subtype":"init","session_id":"sess-tool-only"}'
+    echo '{"type":"assistant","message":{"id":"m1","content":[{"type":"tool_use","id":"tu-only","name":"mcp__symphony__list_issues","input":{"limit":1}}]}}'
+    echo '{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"tu-only","content":[{"type":"text","text":"ok"}],"is_error":false}]}}'
+    echo '{"type":"result","subtype":"success","session_id":"sess-tool-only","usage":{"input_tokens":2,"output_tokens":0},"total_cost_usd":0.0}'
     ;;
   resume-aware)
     # Mimic the real claude CLI: a `--resume <id>` to a non-existent session prints

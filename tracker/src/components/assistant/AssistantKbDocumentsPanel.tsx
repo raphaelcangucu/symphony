@@ -456,6 +456,8 @@ export function AssistantKbDocumentsPanel({
             syncState={syncState}
             syncLoading={syncLoading}
             onSync={() => void triggerSync()}
+            pagePath={selectedPage.path}
+            frontmatter={page.frontmatter}
           />
         ) : null}
         {!isAssetPath && !pageLoading && !pageError && !page ? (

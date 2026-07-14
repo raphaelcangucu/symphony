@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   STREAMING_ASSISTANT_ID,
   appendAssistantDelta,
+  replaceStreamingMessage,
   toolCallIdentity,
   updateStreamingToolCall,
   upsertToolCall,
@@ -18,9 +19,24 @@ describe("appendAssistantDelta", () => {
     const once = appendAssistantDelta([], "Hel");
     expect(once).toHaveLength(1);
     expect(once[0].id).toBe(STREAMING_ASSISTANT_ID);
+    expect(once[0].contentBlocks).toEqual([{ type: "text", text: "Hel" }]);
 
     const twice = appendAssistantDelta(once, "lo");
     expect(twice[0].content).toBe("Hello");
+    expect(twice[0].contentBlocks).toEqual([{ type: "text", text: "Hello" }]);
+  });
+
+  it("preserves text, tool, text arrival order", () => {
+    const withOpeningText = appendAssistantDelta([], "Before");
+    const withTool = updateStreamingToolCall(withOpeningText, call({ id: "call-1" }));
+    const withClosingText = appendAssistantDelta(withTool, "After");
+
+    expect(withClosingText[0].content).toBe("BeforeAfter");
+    expect(withClosingText[0].contentBlocks).toEqual([
+      { type: "text", text: "Before" },
+      { type: "tool", toolCallId: "call-1" },
+      { type: "text", text: "After" },
+    ]);
   });
 });
 
@@ -56,5 +72,38 @@ describe("updateStreamingToolCall", () => {
     const afterSecond = updateStreamingToolCall(afterFirst, call({ id: "b", name: "shell" }));
     const streaming = afterSecond.find((m) => m.id === STREAMING_ASSISTANT_ID);
     expect(streaming?.toolCalls.map((c) => c.name)).toEqual(["read_file", "shell"]);
+  });
+
+  it("does not duplicate a tool block when its status changes", () => {
+    const running = updateStreamingToolCall([], call({ id: "call-1", status: "running" }));
+    const complete = updateStreamingToolCall(running, call({ id: "call-1", status: "complete" }));
+
+    expect(complete[0].toolCalls).toHaveLength(1);
+    expect(complete[0].toolCalls[0].status).toBe("complete");
+    expect(complete[0].contentBlocks).toEqual([{ type: "tool", toolCallId: "call-1" }]);
+  });
+
+  it("keeps ID-less legacy calls without inventing an ordered tool block", () => {
+    const messages = updateStreamingToolCall([], call({ id: null, name: "shell" }));
+
+    expect(messages[0].toolCalls).toHaveLength(1);
+    expect(messages[0].contentBlocks).toBeUndefined();
+  });
+});
+
+describe("replaceStreamingMessage", () => {
+  it("uses the final server message as authoritative content and blocks", () => {
+    const withText = appendAssistantDelta([], "Transient");
+    const streaming = updateStreamingToolCall(withText, call({ id: "transient-tool" }));
+    const finalMessage: AssistantChatMessage = {
+      id: "server-message",
+      role: "assistant",
+      content: "Final",
+      contentBlocks: [{ type: "text", text: "Final" }],
+      toolCalls: [],
+      metadata: {},
+    };
+
+    expect(replaceStreamingMessage(streaming, finalMessage)).toEqual([finalMessage]);
   });
 });

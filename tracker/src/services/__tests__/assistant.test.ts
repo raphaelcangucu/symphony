@@ -1,7 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { i18n } from "@/i18n";
-import { fetchAssistantCodexCatalog, normalizeAssistantCodexCatalog, normalizeToolCall, sendAssistantMessage } from "@/services/assistant";
+import {
+  fetchAssistantCodexCatalog,
+  normalizeAssistantChatMessage,
+  normalizeAssistantCodexCatalog,
+  normalizeToolCall,
+  sendAssistantMessage,
+} from "@/services/assistant";
 import { http } from "@/services/http";
 
 describe("assistant service", () => {
@@ -225,5 +231,127 @@ describe("normalizeToolCall id", () => {
 
   it("is null when no id is present", () => {
     expect(normalizeToolCall({ name: "shell" }).id).toBeNull();
+  });
+});
+
+describe("normalizeAssistantChatMessage content blocks", () => {
+  it("normalizes camel- and snake-case top-level blocks", () => {
+    const camelDto = {
+      id: "camel",
+      contentBlocks: [
+        { type: "text", text: "Camel" },
+        { type: "tool", toolCallId: "camel-tool" },
+      ],
+    };
+    const snakeDto = {
+      id: "snake",
+      content_blocks: [
+        { type: "text", text: "Snake" },
+        { type: "tool", tool_call_id: "snake-tool" },
+      ],
+    };
+
+    expect(normalizeAssistantChatMessage(camelDto).contentBlocks).toEqual([
+      { type: "text", text: "Camel" },
+      { type: "tool", toolCallId: "camel-tool" },
+    ]);
+    expect(normalizeAssistantChatMessage(snakeDto).contentBlocks).toEqual([
+      { type: "text", text: "Snake" },
+      { type: "tool", toolCallId: "snake-tool" },
+    ]);
+  });
+
+  it("falls back to camel- and snake-case metadata blocks", () => {
+    const camelDto = {
+      id: "camel-metadata",
+      metadata: { contentBlocks: [{ type: "text", text: "Camel metadata" }] },
+    };
+    const snakeDto = {
+      id: "snake-metadata",
+      metadata: { content_blocks: [{ type: "tool", tool_call_id: "metadata-tool" }] },
+    };
+
+    expect(normalizeAssistantChatMessage(camelDto).contentBlocks).toEqual([
+      { type: "text", text: "Camel metadata" },
+    ]);
+    expect(normalizeAssistantChatMessage(snakeDto).contentBlocks).toEqual([
+      { type: "tool", toolCallId: "metadata-tool" },
+    ]);
+  });
+
+  it("falls back to metadata when top-level blocks are invalid", () => {
+    const dto = {
+      id: "invalid-top-level",
+      contentBlocks: "not-an-array",
+      metadata: { content_blocks: [{ type: "text", text: "Fallback" }] },
+    };
+
+    expect(normalizeAssistantChatMessage(dto).contentBlocks).toEqual([{ type: "text", text: "Fallback" }]);
+  });
+
+  it("discards malformed rows and returns undefined when none remain", () => {
+    const malformedRows = [
+      null,
+      "text",
+      {},
+      { type: "unknown", text: "Unknown" },
+      { type: "text", text: "" },
+      { type: "text", text: 7 },
+      { type: "tool", toolCallId: " \t" },
+      { type: "tool", tool_call_id: 7 },
+    ];
+    const withValidRow = { id: "some-valid", content_blocks: [...malformedRows, { type: "text", text: "Valid" }] };
+    const withoutValidRows = { id: "none-valid", content_blocks: malformedRows };
+
+    expect(normalizeAssistantChatMessage(withValidRow).contentBlocks).toEqual([{ type: "text", text: "Valid" }]);
+    expect(normalizeAssistantChatMessage(withoutValidRows).contentBlocks).toBeUndefined();
+  });
+
+  it("merges adjacent text and deduplicates tool IDs at their first position", () => {
+    const dto = {
+      id: "merged",
+      content_blocks: [
+        { type: "text", text: "A" },
+        { type: "text", text: "B" },
+        { type: "tool", tool_call_id: "tool-1" },
+        { type: "tool", toolCallId: "tool-1" },
+        { type: "text", text: "C" },
+        { type: "text", text: "D" },
+      ],
+    };
+
+    expect(normalizeAssistantChatMessage(dto).contentBlocks).toEqual([
+      { type: "text", text: "AB" },
+      { type: "tool", toolCallId: "tool-1" },
+      { type: "text", text: "CD" },
+    ]);
+  });
+
+  it("preserves non-empty whitespace text", () => {
+    const dto = { id: "whitespace", contentBlocks: [{ type: "text", text: " \t" }] };
+
+    expect(normalizeAssistantChatMessage(dto).contentBlocks).toEqual([{ type: "text", text: " \t" }]);
+  });
+
+  it("does not mutate DTO or metadata block data", () => {
+    const topLevelBlock = Object.freeze({ type: "text", text: "Top level" });
+    const topLevelBlocks = Object.freeze([topLevelBlock]);
+    const topLevelDto = Object.freeze({ id: "immutable-top-level", content_blocks: topLevelBlocks });
+    const metadataBlock = Object.freeze({ type: "text", text: "Metadata" });
+    const metadataBlocks = Object.freeze([metadataBlock]);
+    const metadata = Object.freeze({ content_blocks: metadataBlocks });
+    const metadataDto = Object.freeze({ id: "immutable-metadata", metadata });
+
+    const normalizedTopLevel = normalizeAssistantChatMessage(topLevelDto);
+    const normalizedMetadata = normalizeAssistantChatMessage(metadataDto);
+
+    expect(topLevelDto.content_blocks).toEqual([{ type: "text", text: "Top level" }]);
+    expect(metadataDto.metadata).toEqual({ content_blocks: [{ type: "text", text: "Metadata" }] });
+    expect(normalizedTopLevel.contentBlocks).toEqual([{ type: "text", text: "Top level" }]);
+    expect(normalizedTopLevel.contentBlocks).not.toBe(topLevelBlocks);
+    expect(normalizedTopLevel.contentBlocks?.[0]).not.toBe(topLevelBlock);
+    expect(normalizedMetadata.contentBlocks).toEqual([{ type: "text", text: "Metadata" }]);
+    expect(normalizedMetadata.contentBlocks).not.toBe(metadataBlocks);
+    expect(normalizedMetadata.contentBlocks?.[0]).not.toBe(metadataBlock);
   });
 });

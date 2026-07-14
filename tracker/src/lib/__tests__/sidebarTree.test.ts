@@ -646,7 +646,7 @@ describe("buildSidebarProjectTree", () => {
     ]);
   });
 
-  it("sorts by pinned, error, attention, active, recency, title, and stable id", () => {
+  it("sorts by pinned, recency, then error, attention, active, title, and stable id", () => {
     const nodes = [
       workspaceNode("alpha-b", "Alpha", "idle", "2026-01-01T00:00:00Z"),
       workspaceNode("active", "Zulu", "active", "2026-01-01T00:00:00Z"),
@@ -659,10 +659,10 @@ describe("buildSidebarProjectTree", () => {
 
     expect([...nodes].sort(compareSidebarNodes).map((node) => node.id)).toEqual([
       "pinned",
+      "recent",
       "error",
       "attention",
       "active",
-      "recent",
       "alpha-a",
       "alpha-b",
     ]);

@@ -62,7 +62,8 @@ export function WorkspaceTreeItem({
     count: sessionCount,
     defaultValue: "{{count}} sessions",
   });
-  const description = [kindLabel, node.branchSummary, sessionCountLabel]
+  const branchLabel = node.branchSummary?.trim() || null;
+  const description = [kindLabel, sessionCountLabel, branchLabel]
     .filter(Boolean)
     .join(" · ");
 
@@ -72,14 +73,21 @@ export function WorkspaceTreeItem({
       id={node.id}
       level={2}
       label={node.title}
-      description={description}
+      description={null}
       selected={selected}
       expandable
       expanded={expanded}
-      statusLabel={aggregateStatusLabel(node.aggregateStatus, t)}
-      trailingLabel={null}
+      statusLabel={[aggregateStatusLabel(node.aggregateStatus, t), description]
+        .filter(Boolean)
+        .join(", ")}
+      trailingLabel={sessionCount > 0 ? String(sessionCount) : null}
       tabIndex={tabIndex}
-      statusIndicator={<RecentStatusDot statusKind={aggregateStatusKind(node.aggregateStatus)} />}
+      statusIndicator={
+        <RecentStatusDot
+          statusKind={aggregateStatusKind(node.aggregateStatus)}
+          className="h-1.5 w-1.5"
+        />
+      }
       onFocus={onFocus}
       onOpen={onOpen}
       onToggle={onToggle}

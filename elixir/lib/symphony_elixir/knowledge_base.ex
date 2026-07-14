@@ -420,6 +420,7 @@ defmodule SymphonyElixir.KnowledgeBase do
       repo_slug: Paths.general_repo_slug(),
       workspace_path: @general_repo_workspace,
       github_full_name: nil,
+      default_branch: "main",
       role: nil
     }
   end
@@ -507,6 +508,7 @@ defmodule SymphonyElixir.KnowledgeBase do
       repo_slug: Paths.repo_slug(repo.workspace_path),
       workspace_path: repo.workspace_path,
       github_full_name: repo.github_full_name,
+      default_branch: configured_branch(repo) || "main",
       role: repo.role
     }
   end

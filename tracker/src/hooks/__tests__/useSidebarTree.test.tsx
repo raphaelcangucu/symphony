@@ -779,6 +779,50 @@ describe("useSidebarTree", () => {
     );
   });
 
+  it("keeps a manually collapsed route-ancestor workspace collapsed after tree refresh", async () => {
+    vi.mocked(listAssistantThreads).mockResolvedValue([thread("alpha", 7, "/alpha")]);
+    const { result } = renderHook(() => useSidebarTree(), {
+      wrapper: wrapper("/projects/alpha/sessions/7"),
+    });
+    await waitFor(() => expect(listIssues).toHaveBeenCalledWith("alpha"));
+    act(() => handlersFor("alpha").onEntry(inventory("/alpha", "ALPHA-1")));
+    act(() => handlersFor("alpha").onDone?.());
+
+    const workspaceId = "workspace:alpha:/alpha";
+    await waitFor(() =>
+      expect(result.current.preferences.expandedWorkspaceIds).toContain(workspaceId),
+    );
+
+    act(() => {
+      result.current.toggleWorkspaceExpanded(workspaceId);
+    });
+    expect(result.current.preferences.expandedWorkspaceIds).not.toContain(workspaceId);
+
+    act(() => handlersFor("alpha").onEntry(inventory("/alpha", "ALPHA-1")));
+    act(() => handlersFor("alpha").onDone?.());
+
+    await waitFor(() =>
+      expect(result.current.tree[0]?.loadState).toBe("ready"),
+    );
+    expect(result.current.preferences.expandedWorkspaceIds).not.toContain(workspaceId);
+  });
+
+  it("orders projects by recent activity with empty projects last", async () => {
+    vi.mocked(listAssistantThreads).mockResolvedValue([thread("beta", 5, "/beta")]);
+    const { result } = renderHook(() => useSidebarTree(), { wrapper: wrapper() });
+    await loadRoots(result);
+    expect(result.current.tree.map((node) => node.id)).toEqual(["alpha", "beta"]);
+
+    act(() => result.current.toggleProjectExpanded("beta"));
+    act(() => {
+      handlersFor("beta").onEntry(inventory("/beta", "BETA-1"));
+      handlersFor("beta").onDone?.();
+    });
+
+    await waitFor(() => expect(result.current.tree[0]?.id).toBe("beta"));
+    expect(result.current.tree.map((node) => node.id)).toEqual(["beta", "alpha"]);
+  });
+
   it("keeps other projects and prior snapshots when one branch refresh fails", async () => {
     const { result } = renderHook(() => useSidebarTree(), { wrapper: wrapper() });
     await loadRoots(result);

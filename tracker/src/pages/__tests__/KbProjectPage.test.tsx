@@ -29,11 +29,11 @@ describe("KbProjectPage", () => {
     vi.spyOn(service, "getProjectOverview").mockResolvedValue({
       project: { slug: "acme", name: "Acme" },
       repositories: [
-        { repoSlug: "web", workspacePath: "web", githubFullName: "acme/web", role: "frontend", docsPresent: true },
+        { repoSlug: "web", workspacePath: "web", githubFullName: "acme/web", defaultBranch: "main", role: "frontend", docsPresent: true },
       ],
     });
     vi.spyOn(service, "getRepoTree").mockResolvedValue({
-      repository: { repoSlug: "web", workspacePath: "web", githubFullName: "acme/web", role: "frontend", docsPresent: true },
+      repository: { repoSlug: "web", workspacePath: "web", githubFullName: "acme/web", defaultBranch: "main", role: "frontend", docsPresent: true },
       docsPresent: true,
       tree: [{ type: "page", name: "index.md", path: "index.md", title: "Home", order: null, favorite: false, children: [] }],
     });
@@ -69,11 +69,11 @@ describe("KbProjectPage", () => {
     vi.spyOn(service, "getProjectOverview").mockResolvedValue({
       project: { slug: "acme", name: "Acme" },
       repositories: [
-        { repoSlug: "web", workspacePath: "web", githubFullName: "acme/web", role: "frontend", docsPresent: true },
+        { repoSlug: "web", workspacePath: "web", githubFullName: "acme/web", defaultBranch: "main", role: "frontend", docsPresent: true },
       ],
     });
     vi.spyOn(service, "getRepoTree").mockResolvedValue({
-      repository: { repoSlug: "web", workspacePath: "web", githubFullName: "acme/web", role: "frontend", docsPresent: true },
+      repository: { repoSlug: "web", workspacePath: "web", githubFullName: "acme/web", defaultBranch: "main", role: "frontend", docsPresent: true },
       docsPresent: true,
       tree: [{ type: "page", name: "index.md", path: "index.md", title: "Home", order: null, favorite: false, children: [] }],
     });

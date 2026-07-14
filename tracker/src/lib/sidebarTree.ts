@@ -146,13 +146,13 @@ export function buildSidebarProjectTree(input: SidebarProjectBranchInput): Sideb
     unassignedSessions,
     normalized.options.filters,
   );
-  const sortedWorkspaces = sortNodes(filtered.workspaces, normalized.options.sortMode);
+  const sortedWorkspaces = sortSidebarNodes(filtered.workspaces, normalized.options.sortMode);
   const groupedWorkspaces = groupWorkspaces(sortedWorkspaces, normalized.options.groupMode);
   const workspacePartition = partitionVisibleNodes(
     groupedWorkspaces,
     normalized.options.workspaceLimit,
   );
-  const sortedUnassigned = sortNodes(filtered.unassignedSessions, normalized.options.sortMode);
+  const sortedUnassigned = sortSidebarNodes(filtered.unassignedSessions, normalized.options.sortMode);
   const branchStatus = loadStateStatus(normalized.loadState, normalized.error);
   const projectAggregateStatus = aggregateStatus([
     branchStatus,
@@ -392,13 +392,13 @@ export function compareSidebarNodes(
 ): number {
   if (left.pinned !== right.pinned) return left.pinned ? -1 : 1;
 
-  const statusDifference =
-    STATUS_PRECEDENCE[right.aggregateStatus] - STATUS_PRECEDENCE[left.aggregateStatus];
-  if (statusDifference !== 0) return statusDifference;
-
   const leftTimestamp = timestampValue(left.updatedAt);
   const rightTimestamp = timestampValue(right.updatedAt);
   if (leftTimestamp !== rightTimestamp) return rightTimestamp > leftTimestamp ? 1 : -1;
+
+  const statusDifference =
+    STATUS_PRECEDENCE[right.aggregateStatus] - STATUS_PRECEDENCE[left.aggregateStatus];
+  if (statusDifference !== 0) return statusDifference;
 
   const titleDifference = deterministicStringCompare(left.title, right.title);
   if (titleDifference !== 0) return titleDifference;
@@ -1033,7 +1033,7 @@ function completeWorkspace(
   workspace: SidebarWorkspaceNode,
   options: NormalizedSidebarTreeBuildOptions,
 ): SidebarWorkspaceNode {
-  const sortedSessions = sortNodes(workspace.sessions, options.sortMode);
+  const sortedSessions = sortSidebarNodes(workspace.sessions, options.sortMode);
   const partition = partitionVisibleNodes(sortedSessions, options.sessionLimit);
   const workspaceAggregateStatus = aggregateStatus([
     workspace.aggregateStatus,
@@ -1048,7 +1048,7 @@ function completeWorkspace(
   };
 }
 
-function sortNodes<T extends SidebarSortableNode>(
+export function sortSidebarNodes<T extends SidebarSortableNode>(
   nodes: readonly T[],
   sortMode: SidebarSortMode,
 ): T[] {

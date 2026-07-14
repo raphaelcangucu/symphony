@@ -13,7 +13,7 @@ import {
   ancestorIdsForSelection,
   resolveSidebarRouteSelection,
 } from "@/lib/sidebarRouteResolution";
-import { buildSidebarProjectTree } from "@/lib/sidebarTree";
+import { buildSidebarProjectTree, sortSidebarNodes } from "@/lib/sidebarTree";
 import { listAssistantThreads } from "@/services/assistantThreads";
 import { listIssues } from "@/services/issues";
 import { listProjects } from "@/services/projects";
@@ -960,7 +960,7 @@ export function useSidebarTree(): UseSidebarTreeResult {
       });
       return node;
     });
-    return { tree, nextCache };
+    return { tree: sortSidebarNodes(tree, preferences.sort), nextCache };
   }, [branchStates, executions, preferences, projects]);
   const tree = treeComputation.tree;
 
@@ -968,15 +968,72 @@ export function useSidebarTree(): UseSidebarTreeResult {
     projectNodeCacheRef.current = treeComputation.nextCache;
   }, [treeComputation]);
 
+  const routeAncestorExpandKey = useMemo(() => {
+    if (!routeSelection.projectSlug) return "";
+    return [
+      routeSelection.projectSlug,
+      routeSelection.workspaceId ?? "",
+      routeSelection.sessionId ?? "",
+    ].join("\0");
+  }, [
+    routeSelection.projectSlug,
+    routeSelection.sessionId,
+    routeSelection.workspaceId,
+  ]);
+  const handledRouteAncestorKeyRef = useRef<string | null>(null);
+
   useEffect(() => {
+    if (!routeAncestorExpandKey) {
+      handledRouteAncestorKeyRef.current = null;
+      return;
+    }
+    if (handledRouteAncestorKeyRef.current === routeAncestorExpandKey) {
+      return;
+    }
+
     const ancestors = ancestorIdsForSelection(routeSelection, tree);
-    if (ancestors.workspaceIds.length === 0) return;
+    const projectReady = tree.some(
+      (project) => project.id === routeSelection.projectSlug,
+    );
+    if (!projectReady) return;
+
+    if (
+      routeSelection.workspaceId &&
+      ancestors.workspaceIds.length === 0 &&
+      routeSelection.sessionId == null
+    ) {
+      // Workspace route before branch data can resolve the id — wait.
+      return;
+    }
+    if (
+      routeSelection.sessionId &&
+      ancestors.workspaceIds.length === 0 &&
+      tree.find((project) => project.id === routeSelection.projectSlug)
+        ?.loadState !== "ready"
+    ) {
+      return;
+    }
+
+    handledRouteAncestorKeyRef.current = routeAncestorExpandKey;
+
+    const missingProjectIds = ancestors.projectIds.filter(
+      (id) => !preferencesRef.current.expandedProjectIds.includes(id),
+    );
     const missingWorkspaceIds = ancestors.workspaceIds.filter(
       (id) => !preferencesRef.current.expandedWorkspaceIds.includes(id),
     );
-    if (missingWorkspaceIds.length === 0) return;
+    if (missingProjectIds.length === 0 && missingWorkspaceIds.length === 0) {
+      return;
+    }
+
     updatePreferences((current) => ({
       ...current,
+      expandedProjectIds: [
+        ...current.expandedProjectIds,
+        ...missingProjectIds.filter(
+          (id) => !current.expandedProjectIds.includes(id),
+        ),
+      ],
       expandedWorkspaceIds: [
         ...current.expandedWorkspaceIds,
         ...missingWorkspaceIds.filter(
@@ -984,7 +1041,7 @@ export function useSidebarTree(): UseSidebarTreeResult {
         ),
       ],
     }));
-  }, [routeSelection, tree, updatePreferences]);
+  }, [routeAncestorExpandKey, routeSelection, tree, updatePreferences]);
 
   return {
     tree,

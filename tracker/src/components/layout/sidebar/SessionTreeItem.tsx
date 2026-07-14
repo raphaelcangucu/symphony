@@ -1,3 +1,4 @@
+import { MessageSquare } from "lucide-react";
 import type { KeyboardEvent, Ref } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -6,12 +7,7 @@ import {
   SidebarTreeRow,
   type SidebarContextMenuRenderer,
 } from "@/components/layout/sidebar/SidebarTreeRow";
-import {
-  SessionAgentBadge,
-  SessionBadgeShell,
-  SessionStatusKindBadge,
-  SessionTypeBadge,
-} from "@/components/shared/SessionBadge";
+import { SessionBadgeShell } from "@/components/shared/SessionBadge";
 import { formatRelativeTime } from "@/lib/utils";
 import type { SidebarSessionNode } from "@/types/sidebar";
 
@@ -51,6 +47,16 @@ export function SessionTreeItem({
           : "Chat",
   });
   const relativeTime = formatRelativeTime(node.updatedAt);
+  const agentLabel = node.agentKind
+    ? t(`layout.sidebar.tree.agent.${node.agentKind}`, {
+        defaultValue: agentDefault(node.agentKind),
+      })
+    : null;
+  const descriptionParts = [
+    typeLabel,
+    agentLabel,
+    node.subtitle?.trim() || null,
+  ].filter((value): value is string => Boolean(value));
 
   return (
     <SidebarTreeRow
@@ -58,34 +64,31 @@ export function SessionTreeItem({
       id={node.id}
       level={3}
       label={node.title}
-      description={node.subtitle}
+      description={descriptionParts.join(" · ") || null}
       selected={selected}
       expandable={false}
       expanded={false}
       statusLabel={statusLabel}
       trailingLabel={relativeTime}
       tabIndex={tabIndex}
-      statusIndicator={<RecentStatusDot statusKind={node.statusKind} />}
+      leadingIcon={<MessageSquare className="h-3.5 w-3.5" aria-hidden="true" />}
+      statusIndicator={<RecentStatusDot statusKind={node.statusKind} className="h-1.5 w-1.5" />}
       metadata={
-        <>
-          {node.sessionKind === "chat" || node.sessionKind === "execution" ? (
-            <SessionTypeBadge kind={node.sessionKind} />
-          ) : (
-            <SessionBadgeShell label={typeLabel} />
-          )}
-          {node.agentKind ? <SessionAgentBadge kind={node.agentKind} /> : null}
-          <SessionStatusKindBadge statusKind={node.statusKind} label={statusLabel} />
-          {node.unread ? (
-            <SessionBadgeShell
-              label={t("layout.sidebar.tree.unread", { defaultValue: "Unread" })}
-            />
-          ) : null}
-          {node.needsReview ? (
-            <SessionBadgeShell
-              label={t("layout.sidebar.tree.needsReview", { defaultValue: "Review" })}
-            />
-          ) : null}
-        </>
+        node.unread || node.needsReview ? (
+          <>
+            {node.unread ? (
+              <span
+                title={t("layout.sidebar.tree.unread", { defaultValue: "Unread" })}
+                className="inline-block h-1.5 w-1.5 rounded-full bg-sky-500"
+              />
+            ) : null}
+            {node.needsReview ? (
+              <SessionBadgeShell
+                label={t("layout.sidebar.tree.needsReview", { defaultValue: "Review" })}
+              />
+            ) : null}
+          </>
+        ) : null
       }
       onFocus={onFocus}
       onOpen={onOpen}
@@ -112,4 +115,14 @@ function statusDefault(status: SidebarSessionNode["statusKind"]): string {
     aborted: "Aborted",
   };
   return defaults[status];
+}
+
+function agentDefault(agent: NonNullable<SidebarSessionNode["agentKind"]>): string {
+  const defaults: Readonly<Record<NonNullable<SidebarSessionNode["agentKind"]>, string>> = {
+    codex: "Codex",
+    claude: "Claude",
+    cursor: "Cursor",
+    opencode: "OpenCode",
+  };
+  return defaults[agent] ?? agent;
 }

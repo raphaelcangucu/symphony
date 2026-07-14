@@ -1,3 +1,4 @@
+import { Loader2 } from "lucide-react";
 import { type KeyboardEvent, type ReactNode, type Ref } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -39,22 +40,21 @@ export function SidebarBranchState({
       defaultValue: "Loading workspaces for {{project}}",
     });
     return (
-      <SidebarPseudoTreeItem
-        id={id}
-        level={2}
-        label={label}
+      <div
+        ref={rowRef}
+        role="treeitem"
+        aria-level={2}
+        aria-label={label}
+        aria-busy="true"
         tabIndex={tabIndex}
-        rowRef={rowRef}
+        title={label}
         onFocus={onFocus}
         onKeyDown={onKeyDown}
-        onPreserveFocus={onPreserveFocus}
+        className="sr-only"
+        data-sidebar-tree-row-id={id}
       >
-        <div aria-hidden="true" className="space-y-1 py-1">
-          {[0, 1, 2].map((index) => (
-            <div key={index} className="h-5 animate-pulse rounded bg-muted" />
-          ))}
-        </div>
-      </SidebarPseudoTreeItem>
+        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+      </div>
     );
   }
 
@@ -85,31 +85,43 @@ export function SidebarBranchState({
   }
 
   const stale = kind === "stale";
-  const label = stale
-    ? t("layout.sidebar.tree.stale", { defaultValue: "Stale data" })
-    : t("layout.sidebar.tree.emptyProject", {
-        project: project.title,
-        defaultValue: "No workspaces in {{project}}",
-      });
-  const actionLabel = stale
-    ? undefined
-    : t("layout.sidebar.tree.createWorkspace", {
-        project: project.title,
-        defaultValue: "Create workspace in {{project}}",
-      });
+  if (stale) {
+    return (
+      <SidebarPseudoTreeItem
+        id={id}
+        level={2}
+        label={t("layout.sidebar.tree.stale", { defaultValue: "Stale data" })}
+        tabIndex={tabIndex}
+        rowRef={rowRef}
+        onFocus={onFocus}
+        onKeyDown={onKeyDown}
+        onPreserveFocus={onPreserveFocus}
+        tone="stale"
+      />
+    );
+  }
+
   return (
     <SidebarPseudoTreeItem
       id={id}
       level={2}
-      label={label}
-      actionLabel={actionLabel}
+      label={t("layout.sidebar.tree.emptyProject", {
+        defaultValue: "No workspaces",
+      })}
+      actionLabel={t("layout.sidebar.tree.createWorkspace", {
+        defaultValue: "Create",
+      })}
+      actionAriaLabel={t("layout.sidebar.tree.createWorkspaceNamed", {
+        project: project.title,
+        defaultValue: "Create workspace in {{project}}",
+      })}
       tabIndex={tabIndex}
       rowRef={rowRef}
       onFocus={onFocus}
       onKeyDown={onKeyDown}
-      onActivate={stale ? undefined : onActivate}
+      onActivate={onActivate}
       onPreserveFocus={onPreserveFocus}
-      tone={stale ? "stale" : "default"}
+      variant="soft"
     />
   );
 }
@@ -122,7 +134,9 @@ export interface SidebarPseudoTreeItemProps {
   rowRef: Ref<HTMLDivElement>;
   expanded?: boolean;
   actionLabel?: string;
+  actionAriaLabel?: string;
   tone?: "default" | "error" | "stale";
+  variant?: "boxed" | "soft";
   children?: ReactNode;
   onFocus(): void;
   onKeyDown(event: KeyboardEvent<HTMLDivElement>): void;
@@ -138,7 +152,9 @@ export function SidebarPseudoTreeItem({
   rowRef,
   expanded,
   actionLabel,
+  actionAriaLabel,
   tone = "default",
+  variant = "boxed",
   children,
   onFocus,
   onKeyDown,
@@ -157,12 +173,16 @@ export function SidebarPseudoTreeItem({
       onKeyDown(event as unknown as KeyboardEvent<HTMLDivElement>);
     }
   };
+
+  const actionName = actionAriaLabel ?? actionLabel;
+  const soft = variant === "soft";
+
   return (
     <div
       ref={rowRef}
       role="treeitem"
       aria-level={level}
-      aria-label={label}
+      aria-label={soft && actionName ? `${label}, ${actionName}` : label}
       aria-expanded={expanded}
       tabIndex={tabIndex}
       title={label}
@@ -171,34 +191,72 @@ export function SidebarPseudoTreeItem({
       className="outline-none"
       data-sidebar-tree-row-id={id}
     >
-      <div
-        className={cn(
-          "mx-1 my-0.5 rounded px-2 py-1 text-xs text-muted-foreground",
-          tone === "error" && "border border-destructive/30 text-destructive",
-          tone === "stale" && "text-amber-700 dark:text-amber-300",
-        )}
-        style={{ paddingLeft: `${sidebarTreeIndent(level)}px` }}
-      >
-        <span>{label}</span>
-        {actionLabel && onActivate ? (
-          <button
-            type="button"
-            tabIndex={-1}
-            title={actionLabel}
-            aria-label={actionLabel}
-            onMouseDown={(event) => {
-              event.preventDefault();
-              onPreserveFocus();
-            }}
-            onKeyDown={handleEmbeddedKeyDown}
-            onClick={(event) => onActivate(event.currentTarget)}
-            className="ml-2 rounded px-1.5 py-1 font-medium text-foreground hover:bg-muted"
-          >
-            {actionLabel}
-          </button>
-        ) : null}
-        {children}
-      </div>
+      {soft ? (
+        <div
+          className="mx-0.5 flex min-h-8 items-center gap-1.5 py-0.5 pr-1 text-sm"
+          style={{ paddingLeft: `${sidebarTreeIndent(level) + 16}px` }}
+        >
+          <span className="text-muted-foreground/80">{label}</span>
+          {actionLabel && onActivate ? (
+            <>
+              <span className="text-muted-foreground/40" aria-hidden="true">
+                ·
+              </span>
+              <button
+                type="button"
+                tabIndex={-1}
+                title={actionName}
+                aria-label={actionName}
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  onPreserveFocus();
+                }}
+                onKeyDown={handleEmbeddedKeyDown}
+                onClick={(event) => onActivate(event.currentTarget)}
+                className="rounded px-0.5 font-medium text-foreground/80 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                {actionLabel}
+              </button>
+            </>
+          ) : null}
+        </div>
+      ) : (
+        <div
+          className={cn(
+            "mx-2 my-2 rounded-lg px-2.5 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground",
+            tone === "error" && "border border-destructive/30 text-destructive",
+            tone === "stale" && "text-amber-700 dark:text-amber-300",
+            tone === "default" && "bg-black/[0.03] dark:bg-white/[0.04]",
+          )}
+          style={{ paddingLeft: `${sidebarTreeIndent(level)}px` }}
+        >
+          <span className="flex min-w-0 flex-wrap items-center gap-2">
+            {actionLabel && onActivate && actionLabel === label ? null : <span>{label}</span>}
+            {actionLabel && onActivate ? (
+              <button
+                type="button"
+                tabIndex={-1}
+                title={actionName}
+                aria-label={actionName}
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  onPreserveFocus();
+                }}
+                onKeyDown={handleEmbeddedKeyDown}
+                onClick={(event) => onActivate(event.currentTarget)}
+                className={cn(
+                  "rounded px-1.5 py-1 font-medium text-foreground hover:bg-muted",
+                  actionLabel === label &&
+                    "w-full justify-start px-0 text-left text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {actionLabel}
+              </button>
+            ) : null}
+          </span>
+        </div>
+      )}
+      {children}
     </div>
   );
 }

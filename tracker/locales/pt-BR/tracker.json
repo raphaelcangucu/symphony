@@ -2707,10 +2707,12 @@
         "projectError": "Não foi possível carregar: {{error}}",
         "retryProject": "Tentar novamente {{project}}",
         "stale": "Dados desatualizados",
-        "emptyProject": "Nenhum workspace em {{project}}",
-        "createWorkspace": "Criar workspace em {{project}}",
-        "emptyWorkspace": "Nenhuma sessão em {{workspace}}",
-        "createSession": "Criar sessão em {{workspace}}",
+        "emptyProject": "Sem workspaces",
+        "createWorkspace": "Criar",
+        "createWorkspaceNamed": "Criar workspace em {{project}}",
+        "emptyWorkspace": "Sem sessões",
+        "createSession": "Criar",
+        "createSessionNamed": "Criar sessão em {{workspace}}",
         "unassigned": "Sem workspace",
         "unread": "Não lida",
         "needsReview": "Revisão",
@@ -3046,7 +3048,9 @@
       "deleteConfirm": "Mover “{{title}}” para a lixeira?",
       "deleted": "Página excluída",
       "renamed": "Página renomeada",
-      "add": "Adicionar"
+      "add": "Adicionar",
+      "downloadMarkdown": "Baixar Markdown",
+      "downloadMarkdownSuccess": "Markdown baixado"
     },
     "editor": {
       "save": "Salvar",
@@ -3055,6 +3059,9 @@
       "unsaved": "Alterações não salvas",
       "askAi": "Perguntar à IA",
       "closeAssistant": "Fechar assistente",
+      "copyGitHubLink": "Copiar link",
+      "copyGitHubLinkCopied": "Link do GitHub copiado",
+      "copyGitHubLinkFailed": "Não foi possível copiar o link do GitHub",
       "toc": {
         "button": "Índice",
         "label": "Nesta página",

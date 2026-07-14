@@ -9,6 +9,7 @@ defmodule SymphonyElixir.KnowledgeBase.RepoDocs do
           repo_slug: String.t(),
           workspace_path: String.t(),
           github_full_name: String.t() | nil,
+          default_branch: String.t(),
           role: String.t() | nil,
           docs_present?: boolean()
         }
@@ -40,8 +41,17 @@ defmodule SymphonyElixir.KnowledgeBase.RepoDocs do
       repo_slug: Paths.repo_slug(repo.workspace_path),
       workspace_path: repo.workspace_path,
       github_full_name: repo.github_full_name,
+      default_branch: configured_branch(repo),
       role: repo.role,
       docs_present?: File.dir?(Paths.docs_root(project_slug, repo.workspace_path))
     }
+  end
+
+  defp configured_branch(%Repository{} = repo) do
+    cond do
+      is_binary(repo.selected_branch) and repo.selected_branch != "" -> repo.selected_branch
+      is_binary(repo.default_branch) and repo.default_branch != "" -> repo.default_branch
+      true -> "main"
+    end
   end
 end

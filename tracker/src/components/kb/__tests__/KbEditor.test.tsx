@@ -1,6 +1,11 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { KbEditor } from "@/components/kb/KbEditor";
+import { copyTextToClipboard } from "@/lib/clipboard";
+
+vi.mock("@/lib/clipboard", () => ({
+  copyTextToClipboard: vi.fn(),
+}));
 
 // Mermaid is heavy and needs real layout to render; mock the helper so the node
 // view's wiring (toggle + preview injection) can be asserted deterministically.
@@ -34,6 +39,26 @@ describe("KbEditor", () => {
     expect(prevented).toBe(true);
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
     expect(typeof onSave.mock.calls[0]?.[0]).toBe("string");
+  });
+
+  it("copies the GitHub file link from the title bar", async () => {
+    vi.mocked(copyTextToClipboard).mockResolvedValue(true);
+    render(
+      <KbEditor
+        title="Vibe"
+        markdown={"# Vibe\n\nbody"}
+        onSave={vi.fn()}
+        saving={false}
+        githubFileUrl="https://github.com/civitaslearning/advising/blob/main/docs/VIBE.md"
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId("kb-copy-github-link"));
+    await waitFor(() =>
+      expect(copyTextToClipboard).toHaveBeenCalledWith(
+        "https://github.com/civitaslearning/advising/blob/main/docs/VIBE.md",
+      ),
+    );
   });
 
   it("renders a mermaid code block as a live diagram with a source toggle", async () => {

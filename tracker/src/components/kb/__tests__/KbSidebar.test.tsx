@@ -13,11 +13,12 @@ await initI18n("en");
 const overview: KbProjectOverview = {
   project: { slug: "acme", name: "Acme" },
   repositories: [
-    { repoSlug: "web", workspacePath: "web", githubFullName: "acme/web", role: "frontend", docsPresent: true },
+    { repoSlug: "web", workspacePath: "web", githubFullName: "acme/web", defaultBranch: "main", role: "frontend", docsPresent: true },
     {
       repoSlug: "services~api",
       workspacePath: "services/api",
       githubFullName: "acme/api",
+      defaultBranch: "main",
       role: "backend",
       docsPresent: false,
     },

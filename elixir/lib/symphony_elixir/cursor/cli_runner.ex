@@ -77,7 +77,10 @@ defmodule SymphonyElixir.Cursor.CliRunner do
       usage: nil,
       cost_usd: nil,
       error: nil,
-      resume_invalid: false
+      resume_invalid: false,
+      committed_text: "",
+      progress_text: "",
+      pending_flush: nil
     }
 
     handlers = [
@@ -222,20 +225,19 @@ defmodule SymphonyElixir.Cursor.CliRunner do
           "params" => %{"delta" => %{"type" => "text", "text" => text}}
         })
 
-      true ->
-        # Buffered flush (before a tool call) or final flush at end of turn:
-        # contains the complete message segment text.
-        on_event.(%{
-          "method" => "item/created",
-          "params" => %{"item" => %{"type" => "text", "text" => text}}
-        })
-    end
+        %{state | progress_text: state.progress_text <> text}
 
-    state
+      timestamp? and model_call_id? ->
+        commit_intermediate_flush(state, text, on_event)
+
+      true ->
+        buffer_terminal_flush(state, text, on_event)
+    end
   end
 
   defp process_event(%{"type" => "tool_call", "subtype" => "started", "call_id" => call_id} = payload, on_event, state) do
     {name, input} = tool_call_details(Map.get(payload, "tool_call") || %{})
+    state = flush_pending_before_tool(state, on_event)
 
     on_event.(%{
       "method" => "item/created",
@@ -273,7 +275,9 @@ defmodule SymphonyElixir.Cursor.CliRunner do
     state
   end
 
-  defp process_event(%{"type" => "result"} = payload, _on_event, state) do
+  defp process_event(%{"type" => "result"} = payload, on_event, state) do
+    error? = Map.get(payload, "is_error", false) or Map.get(payload, "subtype") == "error"
+    state = if error?, do: state, else: flush_terminal_result(Map.get(payload, "result"), on_event, state)
     new_cli_session_id = Map.get(payload, "session_id") || state.cli_session_id
     new_usage = Map.get(payload, "usage") || state.usage
 
@@ -282,7 +286,7 @@ defmodule SymphonyElixir.Cursor.CliRunner do
 
     new_state = %{state | cli_session_id: new_cli_session_id, usage: new_usage, cost_usd: new_cost}
 
-    if Map.get(payload, "is_error", false) or Map.get(payload, "subtype") == "error" do
+    if error? do
       %{new_state | error: Map.get(payload, "error") || Map.get(payload, "result") || "unknown error"}
     else
       new_state
@@ -299,6 +303,76 @@ defmodule SymphonyElixir.Cursor.CliRunner do
       %{"type" => "text", "text" => text} -> text
       _ -> ""
     end)
+  end
+
+  defp commit_intermediate_flush(state, raw_flush, on_event) do
+    segment =
+      if state.progress_text != "" and
+           raw_flush in [state.progress_text, state.committed_text <> state.progress_text],
+         do: state.progress_text,
+         else: raw_flush
+
+    state
+    |> Map.put(:progress_text, "")
+    |> emit_created_text(segment, on_event)
+  end
+
+  defp buffer_terminal_flush(%{pending_flush: nil} = state, text, _on_event),
+    do: %{state | pending_flush: text}
+
+  defp buffer_terminal_flush(state, text, on_event) do
+    state
+    |> flush_pending_before_tool(on_event)
+    |> Map.put(:pending_flush, text)
+  end
+
+  defp flush_pending_before_tool(%{pending_flush: nil} = state, _on_event), do: state
+
+  defp flush_pending_before_tool(state, on_event) do
+    raw_flush = state.pending_flush
+
+    state
+    |> Map.put(:pending_flush, nil)
+    |> commit_intermediate_flush(raw_flush, on_event)
+  end
+
+  defp flush_terminal_result(aggregate, on_event, state) when is_binary(aggregate) do
+    segment =
+      if String.starts_with?(aggregate, state.committed_text) do
+        binary_part(
+          aggregate,
+          byte_size(state.committed_text),
+          byte_size(aggregate) - byte_size(state.committed_text)
+        )
+      else
+        state.pending_flush || state.progress_text
+      end
+
+    state
+    |> Map.put(:pending_flush, nil)
+    |> Map.put(:progress_text, "")
+    |> emit_created_text(segment, on_event)
+  end
+
+  defp flush_terminal_result(_aggregate, on_event, state) do
+    segment = state.pending_flush || state.progress_text
+
+    state
+    |> Map.put(:pending_flush, nil)
+    |> Map.put(:progress_text, "")
+    |> emit_created_text(segment, on_event)
+  end
+
+  defp emit_created_text(state, "", _on_event), do: state
+  defp emit_created_text(state, nil, _on_event), do: state
+
+  defp emit_created_text(state, text, on_event) do
+    on_event.(%{
+      "method" => "item/created",
+      "params" => %{"item" => %{"type" => "text", "text" => text}}
+    })
+
+    %{state | committed_text: state.committed_text <> text}
   end
 
   # cursor-agent encodes the tool either as a typed key (`readToolCall`,

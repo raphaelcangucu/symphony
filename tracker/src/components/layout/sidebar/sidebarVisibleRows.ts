@@ -128,7 +128,7 @@ export function syntheticRowId(
 }
 
 export function sidebarTreeIndent(level: 1 | 2 | 3): number {
-  return (level - 1) * 12 + 4;
+  return (level - 1) * 12 + 2;
 }
 
 function row(

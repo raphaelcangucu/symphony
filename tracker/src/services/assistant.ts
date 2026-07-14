@@ -63,10 +63,13 @@ export interface AssistantMessageResponse {
 
 export type AssistantChatRole = "user" | "assistant" | "tool" | "system";
 
+export type AssistantContentBlock = { type: "text"; text: string } | { type: "tool"; toolCallId: string };
+
 export interface AssistantChatMessage {
   id: string;
   role: AssistantChatRole;
   content: string;
+  contentBlocks?: AssistantContentBlock[];
   toolCalls: AssistantToolCall[];
   turnId?: string | null;
   sequence?: number | null;
@@ -165,6 +168,8 @@ export interface BackendAssistantChatMessageDto {
   id?: string | number | null;
   role?: string | null;
   content?: string | null;
+  content_blocks?: unknown;
+  contentBlocks?: unknown;
   tool_calls?: BackendAssistantToolCallDto[] | null;
   toolCalls?: BackendAssistantToolCallDto[] | null;
   turn_id?: string | null;
@@ -438,16 +443,84 @@ export function normalizeAssistantMessage(dto: BackendAssistantMessageDto): Assi
 }
 
 export function normalizeAssistantChatMessage(dto: BackendAssistantChatMessageDto): AssistantChatMessage {
+  const metadata = isObjectRecord(dto.metadata) ? dto.metadata : {};
+
   return {
     id: String(dto.id ?? `assistant-message-${dto.sequence ?? cryptoRandomId()}`),
     role: normalizeRole(dto.role),
     content: dto.content ?? "",
+    contentBlocks: normalizeAssistantContentBlocks(dto, metadata),
     toolCalls: (dto.toolCalls ?? dto.tool_calls ?? []).map(normalizeToolCall),
     turnId: dto.turnId ?? dto.turn_id ?? null,
     sequence: dto.sequence ?? null,
     insertedAt: dto.insertedAt ?? dto.inserted_at ?? null,
-    metadata: dto.metadata ?? {},
+    metadata,
   };
+}
+
+function normalizeAssistantContentBlocks(
+  dto: BackendAssistantChatMessageDto,
+  metadata: Record<string, unknown>,
+): AssistantContentBlock[] | undefined {
+  return (
+    normalizeContentBlockCandidates([dto.contentBlocks, dto.content_blocks]) ??
+    normalizeContentBlockCandidates([metadata.contentBlocks, metadata.content_blocks])
+  );
+}
+
+function normalizeContentBlockCandidates(candidates: readonly unknown[]): AssistantContentBlock[] | undefined {
+  for (const candidate of candidates) {
+    if (!Array.isArray(candidate)) continue;
+
+    const contentBlocks = normalizeContentBlockRows(candidate);
+    if (contentBlocks) return contentBlocks;
+  }
+
+  return undefined;
+}
+
+function normalizeContentBlockRows(rows: readonly unknown[]): AssistantContentBlock[] | undefined {
+  const contentBlocks: AssistantContentBlock[] = [];
+  const seenToolCallIds = new Set<string>();
+
+  for (const row of rows) {
+    if (!isObjectRecord(row)) continue;
+
+    if (row.type === "text") {
+      if (typeof row.text !== "string" || row.text.length === 0) continue;
+
+      const previousBlock = contentBlocks[contentBlocks.length - 1];
+      if (previousBlock?.type === "text") {
+        contentBlocks[contentBlocks.length - 1] = { type: "text", text: `${previousBlock.text}${row.text}` };
+      } else {
+        contentBlocks.push({ type: "text", text: row.text });
+      }
+      continue;
+    }
+
+    if (row.type !== "tool") continue;
+
+    const toolCallId = readContentBlockToolCallId(row);
+    if (!toolCallId || seenToolCallIds.has(toolCallId)) continue;
+
+    seenToolCallIds.add(toolCallId);
+    contentBlocks.push({ type: "tool", toolCallId });
+  }
+
+  return contentBlocks.length > 0 ? contentBlocks : undefined;
+}
+
+function readContentBlockToolCallId(row: Record<string, unknown>): string | undefined {
+  const camelToolCallId = row.toolCallId;
+  if (typeof camelToolCallId === "string" && camelToolCallId.trim() !== "") return camelToolCallId;
+
+  const snakeToolCallId = row.tool_call_id;
+  if (typeof snakeToolCallId === "string" && snakeToolCallId.trim() !== "") return snakeToolCallId;
+  return undefined;
+}
+
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 export function normalizeToolCall(dto: BackendAssistantToolCallDto): AssistantToolCall {

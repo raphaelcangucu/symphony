@@ -192,6 +192,81 @@ defmodule SymphonyElixir.Assistant.HistoryTest do
     assert List.last(messages).tool_calls == [%{"name" => "list_issues", "status" => "complete"}]
   end
 
+  test "message payload exposes valid persisted content blocks and safely handles legacy metadata" do
+    {:ok, thread} =
+      History.create_freeform_thread(%{
+        title: "Ordered blocks",
+        workspace_path: "/tmp/assistant/ordered-blocks"
+      })
+
+    content_blocks = [
+      %{"type" => "text", "text" => "Before"},
+      %{"type" => "tool", "tool_call_id" => "tool-1"},
+      %{"type" => "text", "text" => "After"}
+    ]
+
+    tool_calls = [%{"id" => "tool-1", "name" => "list_issues", "status" => "complete"}]
+
+    assert {:ok, persisted} =
+             History.append_message(thread, %{
+               role: "assistant",
+               content: "BeforeAfter",
+               tool_calls: tool_calls,
+               metadata: %{"content_blocks" => content_blocks, "source" => "test"}
+             })
+
+    payload = History.message_payload(persisted)
+    assert payload.content_blocks == content_blocks
+    assert payload.metadata == %{"content_blocks" => content_blocks, "source" => "test"}
+
+    mismatch_cases = [
+      [
+        %{"type" => "text", "text" => "Wrong"},
+        %{"type" => "tool", "tool_call_id" => "tool-1"}
+      ],
+      [
+        %{"type" => "text", "text" => "Before"},
+        %{"type" => "tool", "tool_call_id" => "missing-tool"},
+        %{"type" => "text", "text" => "After"}
+      ],
+      [
+        %{"type" => "text", "text" => "Before"},
+        %{"type" => "tool", "tool_call_id" => "tool-1"},
+        %{"type" => "tool", "tool_call_id" => "tool-1"},
+        %{"type" => "text", "text" => "After"}
+      ],
+      [%{"type" => "text", "text" => "BeforeAfter"}]
+    ]
+
+    Enum.each(mismatch_cases, fn mismatched_blocks ->
+      assert {:ok, mismatched} =
+               History.append_message(thread, %{
+                 role: "assistant",
+                 content: "BeforeAfter",
+                 tool_calls: tool_calls,
+                 metadata: %{"content_blocks" => mismatched_blocks}
+               })
+
+      assert History.message_payload(mismatched).content_blocks == []
+    end)
+
+    assert {:ok, legacy} =
+             History.append_message(thread, %{role: "assistant", content: "Legacy response"})
+
+    assert History.message_payload(legacy).content_blocks == []
+
+    assert {:ok, malformed} =
+             History.append_message(thread, %{
+               role: "assistant",
+               content: "Malformed metadata",
+               metadata: %{"content_blocks" => [%{"type" => "text", "text" => ""}]}
+             })
+
+    malformed_payload = History.message_payload(malformed)
+    assert malformed_payload.content_blocks == []
+    assert malformed_payload.metadata == %{"content_blocks" => [%{"type" => "text", "text" => ""}]}
+  end
+
   test "project history ignores issue-scoped threads for the same project" do
     {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
     {:ok, project_thread} = History.ensure_thread("macro-markets", %{workspace_path: "/tmp/assistant/macro-markets"})

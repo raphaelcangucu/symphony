@@ -1,4 +1,4 @@
-import { MoreHorizontal, Pencil, RefreshCw, Star, Trash2 } from "lucide-react";
+import { Download, MoreHorizontal, Pencil, RefreshCw, Star, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import {
@@ -18,6 +18,7 @@ interface Props {
   onDelete: () => void;
   onSync?: () => void;
   syncing?: boolean;
+  onDownload?: () => void;
 }
 
 export function KbPageActionsMenu({
@@ -28,6 +29,7 @@ export function KbPageActionsMenu({
   onDelete,
   onSync,
   syncing = false,
+  onDownload,
 }: Props) {
   const { t } = useTranslation();
 
@@ -71,6 +73,12 @@ export function KbPageActionsMenu({
             <DropdownMenuItem onClick={onSync} disabled={syncing}>
               <RefreshCw className={cn("mr-2 h-4 w-4", syncing && "animate-spin")} />
               {t("kb.sync.now")}
+            </DropdownMenuItem>
+          ) : null}
+          {onDownload ? (
+            <DropdownMenuItem onClick={onDownload}>
+              <Download className="mr-2 h-4 w-4" />
+              {t("kb.actions.downloadMarkdown")}
             </DropdownMenuItem>
           ) : null}
           <DropdownMenuSeparator />

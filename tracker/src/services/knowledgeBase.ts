@@ -20,6 +20,7 @@ interface RepoDto {
   repo_slug: string;
   workspace_path: string;
   github_full_name: string | null;
+  default_branch?: string | null;
   role: string | null;
   // Overview emits an Elixir map key with a trailing `?`.
   "docs_present?"?: boolean;
@@ -72,6 +73,7 @@ function mapRepo(dto: RepoDto): KbRepositorySummary {
     repoSlug: dto.repo_slug,
     workspacePath: dto.workspace_path,
     githubFullName: dto.github_full_name ?? null,
+    defaultBranch: dto.default_branch ?? null,
     role: dto.role ?? null,
     docsPresent: dto["docs_present?"] ?? dto.docs_present ?? false,
   };

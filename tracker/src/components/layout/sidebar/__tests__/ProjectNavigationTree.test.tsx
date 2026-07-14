@@ -199,8 +199,9 @@ describe("ProjectNavigationTree", () => {
     expect(rows[2]).toHaveAccessibleName(/Inflation review.*(Running|Em execução)/i);
     expect(rows[2]).toHaveAttribute("title", expect.stringContaining("Inflation review"));
     expect(screen.getAllByText(/Running|Em execução/).length).toBeGreaterThan(0);
-    expect(screen.getByText("Cursor")).toBeVisible();
-    expect(screen.getByText("Unread")).toBeVisible();
+    expect(rows[2]).toHaveAttribute("title", expect.stringMatching(/Cursor/i));
+    expect(screen.getByText(/Cursor/)).toBeVisible();
+    expect(screen.getByTitle("Unread")).toBeInTheDocument();
     expect(screen.getByText("Review")).toBeVisible();
   });
 
@@ -210,7 +211,7 @@ describe("ProjectNavigationTree", () => {
     const projectRow = screen.getByRole("treeitem", { name: /Macro Markets/ });
     expect(projectRow).toHaveAccessibleName(/1 workspace/);
     expect(projectRow).toHaveAccessibleName(/Ativo|Active/);
-    expect(within(projectRow).getByText("1 workspace")).toBeVisible();
+    expect(within(projectRow).getAllByText("1").length).toBeGreaterThan(0);
 
     const workspaceRow = screen.getByRole("treeitem", { name: /main/ });
     expect(workspaceRow).toHaveAccessibleName(/Project/);
@@ -568,12 +569,22 @@ describe("ProjectNavigationTree", () => {
     ];
     render(<StatefulTree initialTree={states} initialProjects={states.map((item) => item.id)} spies={spies} />);
 
-    expect(screen.getByLabelText("Loading workspaces for Loading")).toBeVisible();
+    const loadingProject = screen.getByRole("treeitem", {
+      name: (_accessibleName, element) =>
+        element.getAttribute("aria-level") === "1" &&
+        (element.getAttribute("aria-label") ?? "").includes("Loading"),
+    });
+    expect(loadingProject).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByLabelText("Loading workspaces for Loading")).toBeInTheDocument();
     expect(screen.getByText(/offline/)).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Retry Broken" }));
     expect(spies.retryProject).toHaveBeenCalledWith("error");
     expect(screen.getByText("Stale data")).toBeVisible();
     expect(screen.getByRole("button", { name: "Create workspace in Empty" })).toBeVisible();
+    expect(screen.getByText("No workspaces")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Create workspace in Empty" })).toHaveTextContent(
+      "Create",
+    );
   });
 
   it("renders the unassigned group and overflow controls with exact counts", async () => {
@@ -764,9 +775,9 @@ describe("ProjectNavigationTree", () => {
     expect(syntheticRowId("empty-workspace", "a:b", "c")).not.toBe(
       syntheticRowId("empty-workspace", "a", "b:c"),
     );
-    expect(sidebarTreeIndent(1)).toBe(4);
-    expect(sidebarTreeIndent(2)).toBe(16);
-    expect(sidebarTreeIndent(3)).toBe(28);
+    expect(sidebarTreeIndent(1)).toBe(2);
+    expect(sidebarTreeIndent(2)).toBe(14);
+    expect(sidebarTreeIndent(3)).toBe(26);
   });
 
   it("fails fast for malformed callback contracts", () => {
@@ -801,6 +812,10 @@ describe("ProjectNavigationTree", () => {
       expect.objectContaining({ id: emptyWorkspace.id }),
     );
     expect(spies.openNode).not.toHaveBeenCalled();
+    expect(screen.getByText("No sessions")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Create session in main" })).toHaveTextContent(
+      "Create",
+    );
   });
 
   it("handles empty and invalid trees safely", () => {

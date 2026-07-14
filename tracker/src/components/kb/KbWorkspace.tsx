@@ -24,6 +24,7 @@ import {
 } from "@/lib/kbTreeActions";
 import { isKbImageAssetPath, type KbAssetContext } from "@/lib/kbAssets";
 import { collectKbImageAssets } from "@/lib/kbGallery";
+import { buildKbGitHubFileUrl } from "@/lib/kbGitHubUrl";
 import { deleteAsset, deleteFolder, renameAsset, savePage } from "@/services/knowledgeBase";
 import type { KbSearchResult, KbTreeNode } from "@/types/knowledgeBase";
 import type { KbInlineEdit, KbPageDraft, KbRenameTarget } from "@/types/kbPageDraft";
@@ -163,6 +164,21 @@ export function KbWorkspace({
   const activeTree = useMemo(
     () => (repoSlug ? (treesByRepo[repoSlug] ?? []) : []),
     [repoSlug, treesByRepo],
+  );
+  const activeRepository = useMemo(
+    () => overview?.repositories.find((repo) => repo.repoSlug === repoSlug) ?? null,
+    [overview, repoSlug],
+  );
+  const githubFileUrl = useMemo(
+    () =>
+      pagePath && !isAssetPath
+        ? buildKbGitHubFileUrl(
+            activeRepository?.githubFullName,
+            pagePath,
+            activeRepository?.defaultBranch,
+          )
+        : null,
+    [activeRepository, pagePath, isAssetPath],
   );
   const galleryAssets = useMemo(() => collectKbImageAssets(activeTree), [activeTree]);
 
@@ -433,6 +449,9 @@ export function KbWorkspace({
                 assistantActive={assistantOpen}
                 onToggleAssistant={toggleAssistant}
                 onRegisterContext={handleRegisterContext}
+                githubFileUrl={githubFileUrl}
+                pagePath={pagePath}
+                frontmatter={page.frontmatter}
               />
             ) : (
               <p className="p-8 text-sm text-muted-foreground">
