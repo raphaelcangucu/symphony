@@ -2398,6 +2398,16 @@
       "thinking": "Thinking…",
       "footer": "Esc to dismiss · not saved to the conversation"
     },
+    "environment": {
+      "title": "Environment",
+      "close": "Close environment panel",
+      "changes": "Changes",
+      "local": "Local workspace",
+      "branch": "Branch",
+      "commitPush": "Commit & push",
+      "compare": "Compare",
+      "sources": "Sources"
+    },
     "toolGroup": {
       "read": "Read {{n}} files",
       "edit": "Edited {{n}} files",

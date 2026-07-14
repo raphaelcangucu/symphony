@@ -2398,6 +2398,16 @@
       "thinking": "Pensando…",
       "footer": "Esc para fechar · não salvo na conversa"
     },
+    "environment": {
+      "title": "Ambiente",
+      "close": "Fechar painel de ambiente",
+      "changes": "Alterações",
+      "local": "Área de trabalho local",
+      "branch": "Branch",
+      "commitPush": "Commit e push",
+      "compare": "Comparar",
+      "sources": "Fontes"
+    },
     "toolGroup": {
       "read": "Leu {{n}} arquivos",
       "edit": "Editou {{n}} arquivos",
