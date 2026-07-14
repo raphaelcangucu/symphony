@@ -1869,6 +1869,40 @@ describe("ProjectAssistantPanel", () => {
     expect(await screen.findByText("Related task")).toBeInTheDocument();
   });
 
+  it("renders the scroll-to-bottom control outside the feed scroller when scrolled away from the bottom", async () => {
+    render(
+      <ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="page" />,
+    );
+
+    await waitFor(() => expect(channelHandlers["history_loaded"]).toEqual(expect.any(Function)));
+
+    await act(async () => {
+      channelHandlers["history_loaded"]({
+        messages: [
+          { id: 1, role: "user", content: "hello", tool_calls: [] },
+          { id: 2, role: "assistant", content: "initial reply", tool_calls: [] },
+        ],
+      });
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+    });
+
+    const feed = screen.getByTestId("assistant-session-feed");
+    Object.defineProperty(feed, "scrollHeight", { configurable: true, value: 2000 });
+    Object.defineProperty(feed, "clientHeight", { configurable: true, value: 400 });
+    feed.scrollTop = 0;
+
+    await act(async () => {
+      fireEvent.scroll(feed);
+      feed.dispatchEvent(new WheelEvent("wheel", { deltaY: -1, bubbles: true }));
+    });
+
+    const scrollToBottomButton = await screen.findByRole("button", { name: "Scroll to latest messages" });
+    expect(feed).not.toContainElement(scrollToBottomButton);
+    // The scroll-to-bottom control sits alongside the feed scroller, not
+    // above the composer, so it must live outside the dock/composer as well.
+    expect(screen.getByTestId("assistant-session-composer")).not.toContainElement(scrollToBottomButton);
+  });
+
   it("page mode uses AssistantSessionShell with a single feed scroller", async () => {
     render(<ProjectAssistantPanel projectSlug="macro-markets" view="board" mode="page" />);
     expect(await screen.findByTestId("assistant-session-shell")).toBeInTheDocument();

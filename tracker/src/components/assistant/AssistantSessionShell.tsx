@@ -8,6 +8,12 @@ import { cn, SCROLLBAR_THIN } from "@/lib/utils";
 export interface AssistantSessionShellProps {
   toolbar?: ReactNode;
   feed: ReactNode;
+  /**
+   * Rendered as a sibling overlay positioned over the feed viewport, outside
+   * the scrolling element (e.g. a scroll-to-bottom button). Unlike `feed`,
+   * this is not part of the scrollable content.
+   */
+  feedOverlay?: ReactNode;
   dock?: ReactNode;
   composer: ReactNode;
   environment?: ReactNode;
@@ -18,6 +24,7 @@ export interface AssistantSessionShellProps {
 export function AssistantSessionShell({
   toolbar = null,
   feed,
+  feedOverlay = null,
   dock = null,
   composer,
   environment = null,
@@ -35,12 +42,15 @@ export function AssistantSessionShell({
       style={chatTypographyStyle()}
     >
       {toolbar ? <div className="shrink-0">{toolbar}</div> : null}
-      <div
-        ref={feedRef}
-        data-testid="assistant-session-feed"
-        className={cn("min-h-0 flex-1 overflow-y-auto", SCROLLBAR_THIN)}
-      >
-        {feed}
+      <div className="relative min-h-0 flex-1">
+        <div
+          ref={feedRef}
+          data-testid="assistant-session-feed"
+          className={cn("h-full overflow-y-auto", SCROLLBAR_THIN)}
+        >
+          {feed}
+        </div>
+        {feedOverlay}
       </div>
       {dock ? <div className="shrink-0">{dock}</div> : null}
       <div data-testid="assistant-session-composer" className="shrink-0">

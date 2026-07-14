@@ -26,6 +26,21 @@ describe("AssistantSessionShell", () => {
     expect(screen.getByTestId("assistant-session-composer").className).toMatch(/shrink-0/);
   });
 
+  it("renders feedOverlay as a sibling of the feed scroller, not inside it", () => {
+    render(
+      <AssistantSessionShell
+        feed={<div>feed-body</div>}
+        feedOverlay={<div data-testid="scroll-to-bottom">overlay</div>}
+        composer={<div>composer-body</div>}
+      />,
+    );
+
+    const feed = screen.getByTestId("assistant-session-feed");
+    const overlay = screen.getByTestId("scroll-to-bottom");
+    expect(feed).not.toContainElement(overlay);
+    expect(overlay).toBeInTheDocument();
+  });
+
   it("renders optional environment overlay without creating a second page scroller on root", () => {
     render(
       <AssistantSessionShell

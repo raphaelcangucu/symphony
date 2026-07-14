@@ -1781,32 +1781,37 @@ export function ProjectAssistantPanel({
               )
             }
             feed={
-              <>
+              <div
+                className={cn(
+                  "flex w-full flex-col",
+                  isPageMode
+                    ? widePageContent
+                      ? "mx-auto max-w-[min(100%,80rem)] gap-4 px-4 pt-4 lg:px-6"
+                      : "mx-auto max-w-4xl gap-4 px-4 pt-4"
+                    : cn("gap-4 py-4", embeddedPanelInset),
+                )}
+              >
+                {messageItems}
+              </div>
+            }
+            feedOverlay={scrollToBottomButton}
+            dock={
+              <div className={cn(!isPageMode && embeddedPanelInset)}>
                 <div
                   className={cn(
-                    "flex w-full flex-col",
-                    isPageMode
-                      ? widePageContent
-                        ? "mx-auto max-w-[min(100%,80rem)] gap-4 px-4 pt-4 lg:px-6"
-                        : "mx-auto max-w-4xl gap-4 px-4 pt-4"
-                      : cn("gap-4 py-4", embeddedPanelInset),
+                    isPageMode &&
+                      cn(
+                        "mx-auto w-full px-4",
+                        widePageContent ? "max-w-[min(100%,80rem)] lg:px-6" : "max-w-4xl",
+                      ),
                   )}
                 >
-                  {messageItems}
+                  {!isEmbeddedMode ? resumeBanner : null}
+                  {queuedChips}
+                  {questionsNode}
+                  {approvalNode}
                 </div>
-                {scrollToBottomButton}
-              </>
-            }
-            dock={
-              <>
-                {resumeBanner}
-                {queuedChips}
-                {questionsNode}
-                {approvalNode}
-                {catalogError ? (
-                  <p className="px-4 pb-2 text-xs text-amber-700 dark:text-amber-400">{catalogError}</p>
-                ) : null}
-              </>
+              </div>
             }
             composer={
               <div className={cn("bg-background", isPageMode ? "pr-2.5" : cn("pb-2 pt-2", embeddedPanelInset))}>
@@ -1824,6 +1829,9 @@ export function ProjectAssistantPanel({
                       {t("assistant.panel.loadingModels")}
                     </div>
                   )}
+                  {catalogError ? (
+                    <p className="mt-2 text-xs text-amber-700 dark:text-amber-400">{catalogError}</p>
+                  ) : null}
                 </div>
               </div>
             }
