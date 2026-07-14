@@ -1,6 +1,7 @@
 import { ExternalLink, GitBranch, Play, Plus } from "lucide-react";
-import type { ReactNode } from "react";
+import type { KeyboardEvent, ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router-dom";
 
 import { ArchiveChatButton } from "@/components/assistant/ArchiveChatButton";
 import { recentSessionPath, recentSessionSubtitle } from "@/components/layout/recentSessionPath";
@@ -53,7 +54,7 @@ export function WorkspaceDetailPane({
   if (!item) {
     if (embedded) return null;
     return (
-      <div className="flex h-full min-h-[12rem] items-center justify-center px-4 text-xs text-muted-foreground">
+      <div className="flex h-full min-h-[12rem] items-center justify-center px-4 text-sm text-muted-foreground">
         {t("workspacesPage.selectWorkspace", { defaultValue: "Select a workspace" })}
       </div>
     );
@@ -69,13 +70,13 @@ export function WorkspaceDetailPane({
     };
 
     return (
-      <div className="space-y-2">
+      <div className="space-y-1.5">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             {!embedded ? (
-              <p className="truncate text-xs font-semibold text-foreground">{session.title}</p>
+              <p className="truncate text-sm font-semibold text-foreground">{session.title}</p>
             ) : null}
-            <p className="truncate text-[10px] text-muted-foreground">
+            <p className="truncate text-xs text-muted-foreground">
               {recentSessionSubtitle(session, t)}
             </p>
           </div>
@@ -153,11 +154,11 @@ function CardDetail({
     Boolean(card.execution && onResume && canResumeExecution(card.execution.execution));
 
   return (
-    <div className={cn(embedded ? "space-y-2" : "space-y-2.5")}>
+    <div className={cn(embedded ? "space-y-1.5" : "space-y-2")}>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="truncate text-xs font-semibold text-foreground">{title}</p>
-          <p className="truncate font-mono text-[10px] text-muted-foreground">
+          <p className="truncate text-sm font-semibold text-foreground">{title}</p>
+          <p className="truncate font-mono text-xs text-muted-foreground">
             {card.issueIdentifier ?? card.kind}
             {card.kind === "standalone" ? ` · ${t("workspacesPage.standaloneBadge")}` : null}
             {card.kind === "issue_parallel" ? ` · ${t("workspacesPage.parallelBadge")}` : null}
@@ -200,7 +201,10 @@ function CardDetail({
                 <WorkspaceActionButton
                   icon={<Play {...workspaceActionIconProps} aria-hidden />}
                   disabled={resumePending}
-                  onClick={() => onResume!(card.execution!)}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onResume!(card.execution!);
+                  }}
                 >
                   {resumePending
                     ? t("sessions.resuming", { defaultValue: "Resuming…" })
@@ -231,13 +235,11 @@ function CardDetail({
           />
         ))}
         {branch || size ? (
-          <DetailSession
-            icon={
-              <GitBranch className="h-3 w-3 text-muted-foreground" strokeWidth={1.5} aria-hidden />
-            }
-            label={branch ?? "—"}
-            meta={size ?? ""}
-          />
+          <div className="flex items-center gap-1.5 px-1.5 py-0.5 text-xs text-muted-foreground">
+            <GitBranch className="h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden />
+            <span className="min-w-0 flex-1 truncate font-mono">{branch ?? "—"}</span>
+            {size ? <span className="shrink-0 tabular-nums">{size}</span> : null}
+          </div>
         ) : null}
         {!card.execution && !card.authoring && card.sessions.length === 0 ? (
           <DetailSession
@@ -249,7 +251,7 @@ function CardDetail({
                 ? () => onNewSession(card.issueIdentifier!)
                 : undefined
             }
-            openLabel={t("workspacesPage.createSessionShort", { defaultValue: "Create" })}
+            openAriaLabel={t("workspacesPage.createSessionShort", { defaultValue: "Create" })}
           />
         ) : null}
       </div>
@@ -270,7 +272,6 @@ function DetailSession({
   absoluteTitle,
   trailing = null,
   openAriaLabel,
-  openLabel,
   onOpen,
   href,
 }: {
@@ -280,32 +281,58 @@ function DetailSession({
   absoluteTitle?: string;
   trailing?: ReactNode;
   openAriaLabel?: string;
-  openLabel?: string;
   onOpen?: () => void;
   href?: string;
 }) {
-  const { t } = useTranslation();
-  const openText = openLabel ?? t("workspacesPage.sessionRows.open");
-
-  return (
-    <div className="flex items-center gap-1.5 rounded-md px-1.5 py-1 text-xs hover:bg-background/80">
-      <span className="shrink-0 text-muted-foreground">{icon}</span>
-      <span className="min-w-0 flex-1 truncate leading-4 text-foreground/90">{label}</span>
+  const interactive = Boolean(href || onOpen);
+  const content = (
+    <>
+      <span className="shrink-0 text-foreground/70">{icon}</span>
+      <span className="min-w-0 flex-1 truncate text-sm leading-5 text-foreground">{label}</span>
       {meta ? (
-        <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground" title={absoluteTitle}>
+        <span className="shrink-0 text-xs tabular-nums text-muted-foreground" title={absoluteTitle}>
           {meta}
         </span>
       ) : null}
-      {href || onOpen ? (
-        <WorkspaceActionButton
-          href={href}
-          aria-label={openAriaLabel}
-          onClick={onOpen}
-        >
-          {openText}
-        </WorkspaceActionButton>
-      ) : null}
       {trailing}
-    </div>
+    </>
   );
+
+  const rowClass = cn(
+    "flex w-full items-center gap-2 rounded-md px-1.5 py-1 text-left",
+    interactive &&
+      "cursor-pointer hover:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
+  );
+
+  if (href) {
+    return (
+      <Link to={href} className={rowClass} aria-label={openAriaLabel} title={openAriaLabel}>
+        {content}
+      </Link>
+    );
+  }
+
+  if (onOpen) {
+    const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        onOpen();
+      }
+    };
+    return (
+      <div
+        role="button"
+        tabIndex={0}
+        className={rowClass}
+        aria-label={openAriaLabel ?? label}
+        title={openAriaLabel ?? label}
+        onClick={onOpen}
+        onKeyDown={onKeyDown}
+      >
+        {content}
+      </div>
+    );
+  }
+
+  return <div className={rowClass}>{content}</div>;
 }

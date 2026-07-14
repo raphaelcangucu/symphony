@@ -9,25 +9,39 @@ import { executionStatusDotClass } from "@/lib/statusPresentation";
 import { formatBytes, type WorkspaceCard, type WorkspaceListItem } from "@/lib/workspaceCards";
 import { cn, formatRelativeTime } from "@/lib/utils";
 import type { AgentExecutionStatus } from "@/types/agent-execution";
+import type { RecentSession } from "@/types/recents";
 
 interface WorkspaceListRowProps {
   item: WorkspaceListItem;
   selected: boolean;
   onSelect(): void;
+  onOpenChat?(session: RecentSession): void;
 }
 
-export function WorkspaceListRow({ item, selected, onSelect }: WorkspaceListRowProps) {
+export function WorkspaceListRow({
+  item,
+  selected,
+  onSelect,
+  onOpenChat,
+}: WorkspaceListRowProps) {
   const { t } = useTranslation();
 
   if (item.kind === "chat") {
     const { session } = item;
+    const openable = session.threadId != null && onOpenChat;
     return (
       <button
         type="button"
-        onClick={onSelect}
+        onClick={() => {
+          if (openable) {
+            onOpenChat(session);
+            return;
+          }
+          onSelect();
+        }}
         aria-pressed={selected}
         className={cn(
-          "flex w-full items-center gap-2 rounded-md px-1.5 py-1.5 text-left outline-none",
+          "flex w-full items-center gap-2 rounded-md px-1.5 py-1 text-left outline-none",
           "hover:bg-black/[0.04] dark:hover:bg-white/[0.06]",
           "focus-visible:ring-2 focus-visible:ring-ring/40",
           selected && "bg-black/[0.06] dark:bg-white/[0.08]",
@@ -36,13 +50,13 @@ export function WorkspaceListRow({ item, selected, onSelect }: WorkspaceListRowP
         <ChatStatusIcon statusKind={session.statusKind} />
         <span className="min-w-0 flex-1">
           <span className="flex min-w-0 items-center gap-1.5">
-            <span className="truncate text-xs font-medium text-foreground">{session.title}</span>
+            <span className="truncate text-sm font-medium text-foreground">{session.title}</span>
           </span>
-          <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[10px] text-muted-foreground">
+          <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
             <span className="truncate">{t("workspacesPage.sections.chats")}</span>
           </span>
         </span>
-        <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">
+        <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
           {formatRelativeTime(session.updatedAt)}
         </span>
       </button>
@@ -66,7 +80,7 @@ export function WorkspaceListRow({ item, selected, onSelect }: WorkspaceListRowP
       onClick={onSelect}
       aria-pressed={selected}
       className={cn(
-        "flex w-full items-center gap-2 rounded-md px-1.5 py-1.5 text-left outline-none",
+        "flex w-full items-center gap-2 rounded-md px-1.5 py-1 text-left outline-none",
         "hover:bg-black/[0.04] dark:hover:bg-white/[0.06]",
         "focus-visible:ring-2 focus-visible:ring-ring/40",
         selected && "bg-black/[0.06] dark:bg-white/[0.08]",
@@ -80,20 +94,22 @@ export function WorkspaceListRow({ item, selected, onSelect }: WorkspaceListRowP
       <span className="min-w-0 flex-1">
         <span className="flex min-w-0 items-center gap-1.5">
           {card.issueIdentifier ? (
-            <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
+            <span className="shrink-0 font-mono text-xs text-muted-foreground">
               {card.issueIdentifier}
             </span>
           ) : null}
-          <span className="truncate text-xs font-medium text-foreground">{title}</span>
-          {orphan ? <AlertTriangle className="h-3 w-3 shrink-0 text-amber-600" strokeWidth={1.5} aria-hidden /> : null}
+          <span className="truncate text-sm font-medium text-foreground">{title}</span>
+          {orphan ? (
+            <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-600" strokeWidth={2} aria-hidden />
+          ) : null}
           {dirty ? (
-            <span className="shrink-0 text-[10px] text-amber-700 dark:text-amber-400">dirty</span>
+            <span className="shrink-0 text-xs text-amber-700 dark:text-amber-400">dirty</span>
           ) : null}
         </span>
-        <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[10px] text-muted-foreground">
+        <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
           {branch ? (
             <>
-              <GitBranch className="h-3 w-3 shrink-0 opacity-60" strokeWidth={1.5} aria-hidden />
+              <GitBranch className="h-3.5 w-3.5 shrink-0 opacity-70" strokeWidth={2} aria-hidden />
               <span className="truncate font-mono">{branch}</span>
             </>
           ) : null}
@@ -111,7 +127,7 @@ export function WorkspaceListRow({ item, selected, onSelect }: WorkspaceListRowP
           ) : null}
         </span>
       </span>
-      <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">
+      <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
         {relativeActivity(card)}
       </span>
     </button>
@@ -152,7 +168,7 @@ function StatusDot({ tone }: { tone: "active" | "waiting" | "idle" | "error" }) 
   return (
     <span
       className={cn(
-        "h-1.5 w-1.5 shrink-0 rounded-full",
+        "h-2 w-2 shrink-0 rounded-full",
         tone === "active" && "bg-emerald-500",
         tone === "waiting" && "bg-amber-500",
         tone === "idle" && "bg-muted-foreground/40",
@@ -166,7 +182,7 @@ function StatusDot({ tone }: { tone: "active" | "waiting" | "idle" | "error" }) 
 function ExecutionDot({ status }: { status: AgentExecutionStatus }) {
   return (
     <span
-      className={cn("inline-block h-1.5 w-1.5 shrink-0 rounded-full", executionStatusDotClass(status))}
+      className={cn("inline-block h-2 w-2 shrink-0 rounded-full", executionStatusDotClass(status))}
       aria-hidden
     />
   );

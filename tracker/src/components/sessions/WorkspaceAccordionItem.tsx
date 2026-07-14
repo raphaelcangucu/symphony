@@ -49,16 +49,28 @@ export function WorkspaceAccordionItem({
           tabIndex={-1}
           aria-label={expanded ? "Collapse" : "Expand"}
           onClick={onToggle}
-          className="inline-flex h-[auto] w-4 shrink-0 items-center justify-center self-center text-muted-foreground/60 hover:text-foreground"
+          className="inline-flex h-auto w-4 shrink-0 items-center justify-center self-center text-muted-foreground hover:text-foreground"
         >
           {expanded ? (
-            <ChevronDown className="h-3 w-3" strokeWidth={1.5} aria-hidden />
+            <ChevronDown className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
           ) : (
-            <ChevronRight className="h-3 w-3" strokeWidth={1.5} aria-hidden />
+            <ChevronRight className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
           )}
         </button>
         <div className="min-w-0 flex-1">
-          <WorkspaceListRow item={item} selected={expanded} onSelect={onToggle} />
+          <WorkspaceListRow
+            item={item}
+            selected={expanded}
+            onSelect={onToggle}
+            onOpenChat={
+              onOpenAssistantSession
+                ? (session) => {
+                    if (session.threadId == null) return;
+                    onOpenAssistantSession(session.threadId, session.title);
+                  }
+                : undefined
+            }
+          />
         </div>
         <div className="flex shrink-0 items-center self-center pr-0.5">
           <WorkspaceRowMenu
@@ -79,7 +91,7 @@ export function WorkspaceAccordionItem({
       {expanded ? (
         <div
           id={`workspace-accordion-${item.key}`}
-          className={cn("ml-4 rounded-md border border-border/60 bg-muted/20 p-3")}
+          className={cn("ml-4 rounded-md border border-border/60 bg-muted/20 p-2")}
         >
           <WorkspaceDetailPane
             item={item}

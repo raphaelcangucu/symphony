@@ -1,10 +1,18 @@
-import { ExternalLink, MoreHorizontal, Play, Plus, Trash2 } from "lucide-react";
+import {
+  Archive,
+  ExternalLink,
+  MessageSquare,
+  MoreHorizontal,
+  Play,
+  Plus,
+  Trash2,
+} from "lucide-react";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 
 import {
-  workspaceActionIconProps,
+  workspaceMenuIconProps,
   WorkspaceIconButton,
 } from "@/components/sessions/WorkspaceActionButton";
 import {
@@ -72,10 +80,10 @@ export function WorkspaceRowMenu({
           onClick={(event) => event.stopPropagation()}
           onPointerDown={(event) => event.stopPropagation()}
         >
-          <MoreHorizontal {...workspaceActionIconProps} aria-hidden />
+          <MoreHorizontal {...workspaceMenuIconProps} aria-hidden />
         </WorkspaceIconButton>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="min-w-[10rem]" onClick={(event) => event.stopPropagation()}>
+      <DropdownMenuContent align="end" className="min-w-[11rem]" onClick={(event) => event.stopPropagation()}>
         {actions.map((action) =>
           action.separator ? (
             <DropdownMenuSeparator key={action.key} />
@@ -133,6 +141,8 @@ function buildActions({
   onArchive,
 }: WorkspaceRowMenuProps & { t: Translate }): MenuAction[] {
   const actions: MenuAction[] = [];
+  const openIcon = <ExternalLink {...workspaceMenuIconProps} aria-hidden />;
+  const sessionIcon = <MessageSquare {...workspaceMenuIconProps} aria-hidden />;
 
   if (item.kind === "chat") {
     const session = item.session;
@@ -140,7 +150,7 @@ function buildActions({
       actions.push({
         key: "open",
         label: t("workspacesPage.sessionRows.open"),
-        icon: <ExternalLink {...workspaceActionIconProps} aria-hidden />,
+        icon: openIcon,
         onSelect: () => onOpenAssistantSession(session.threadId!, session.title),
       });
     }
@@ -148,6 +158,7 @@ function buildActions({
       actions.push({
         key: "archive",
         label: t("assistant.archive.label", { defaultValue: "Archive" }),
+        icon: <Archive {...workspaceMenuIconProps} aria-hidden />,
         danger: true,
         onSelect: () => onArchive(session.threadId!),
       });
@@ -163,7 +174,7 @@ function buildActions({
       label: t("workspacesPage.rowMenu.openIssue", {
         defaultValue: "Open issue",
       }),
-      icon: <ExternalLink {...workspaceActionIconProps} aria-hidden />,
+      icon: openIcon,
       href: issueHref,
     });
   }
@@ -172,18 +183,21 @@ function buildActions({
     actions.push({
       key: "open-execution",
       label: t("workspacesPage.sessionRows.open"),
+      icon: sessionIcon,
       onSelect: () => onOpenExecution(card.execution!),
     });
   } else if (card.authoring && card.issueIdentifier && onOpenAuthoring) {
     actions.push({
       key: "open-authoring",
       label: t("workspacesPage.sessionRows.open"),
+      icon: sessionIcon,
       onSelect: () => onOpenAuthoring(card.issueIdentifier!),
     });
   } else if (card.sessions[0] && onOpenSession) {
     actions.push({
       key: "open-session",
       label: t("workspacesPage.sessionRows.open"),
+      icon: sessionIcon,
       onSelect: () => onOpenSession(card.sessions[0]!),
     });
   }
@@ -192,7 +206,7 @@ function buildActions({
     actions.push({
       key: "new-session",
       label: t("workspacesPage.sessionAction", { defaultValue: "Session" }),
-      icon: <Plus {...workspaceActionIconProps} aria-hidden />,
+      icon: <Plus {...workspaceMenuIconProps} aria-hidden />,
       onSelect: () => onNewSession(card.issueIdentifier!),
     });
   }
@@ -203,7 +217,7 @@ function buildActions({
       label: resumePending
         ? t("sessions.resuming", { defaultValue: "Resuming…" })
         : t("sessions.resume", { defaultValue: "Resume" }),
-      icon: <Play {...workspaceActionIconProps} aria-hidden />,
+      icon: <Play {...workspaceMenuIconProps} aria-hidden />,
       disabled: resumePending,
       onSelect: () => onResume(card.execution!),
     });
@@ -220,7 +234,7 @@ function buildActions({
     actions.push({
       key: "remove",
       label: t("workspacesPage.sessionRows.remove"),
-      icon: <Trash2 {...workspaceActionIconProps} aria-hidden />,
+      icon: <Trash2 {...workspaceMenuIconProps} aria-hidden />,
       danger: true,
       onSelect: () => onRemove(card.inventory!.path),
     });

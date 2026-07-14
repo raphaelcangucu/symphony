@@ -7,9 +7,9 @@ import type { AgentExecutionStatus } from "@/types/agent-execution";
 import type { RecentStatusKind } from "@/types/recents";
 
 /** Shared chat glyph + status bolinha used by sidebar sessions and Workspaces detail. */
-export const CHAT_STATUS_ICON_SIZE = "h-3 w-3";
+export const CHAT_STATUS_ICON_SIZE = "h-3.5 w-3.5";
 export const CHAT_STATUS_DOT_SIZE = "h-1.5 w-1.5";
-export const CHAT_STATUS_STROKE = 1.5;
+export const CHAT_STATUS_STROKE = 2;
 
 interface ChatStatusIconProps {
   statusKind?: RecentStatusKind | null;
@@ -26,7 +26,7 @@ export function ChatStatusIcon({
     <span
       aria-hidden="true"
       className={cn(
-        "relative inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center text-muted-foreground",
+        "relative inline-flex h-4 w-4 shrink-0 items-center justify-center text-foreground/70",
         className,
       )}
     >
