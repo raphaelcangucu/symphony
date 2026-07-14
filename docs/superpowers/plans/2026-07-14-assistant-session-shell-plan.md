@@ -826,23 +826,29 @@ EOF
 - Verify: `tracker/src/pages/AssistantSessionLayoutProposalsPage.tsx` defaults remain the five final IDs
 - Build: `elixir/Makefile` `tracker-build`
 
-- [ ] **Step 1: Run one smoke test file for project assistant route**
+- [x] **Step 1: Run one smoke test file for project assistant route**
 
 Run: `cd /home/raphaelcangucu/symphony/tracker && npx vitest run src/components/workspace/__tests__/ProjectAssistantRoute.test.tsx`
 
 Expected: PASS (update mocks only if shell testids break assertions)
 
-- [ ] **Step 2: Confirm sandbox IDs**
+Result: PASS as-is (1/1), no shell testid fixes needed.
+
+- [x] **Step 2: Confirm sandbox IDs**
 
 Open defaults in `AssistantSessionLayoutProposalsPage.tsx` — must be:
 
 `codex-chat` + `single-feed` + `borderless` + `split-minimal` + `floating-dock`
 
-- [ ] **Step 3: Rebuild static tracker assets**
+Result: already locked correctly; no change needed.
+
+- [x] **Step 3: Rebuild static tracker assets**
 
 Run: `cd /home/raphaelcangucu/symphony/elixir && make tracker-build`
 
 Expected: exit 0
+
+Result: exit 0, assets rebuilt under `elixir/priv/static/tracker/`.
 
 - [ ] **Step 4: Manual checklist (human)**
 
@@ -851,7 +857,9 @@ Expected: exit 0
 - `/projects/macro-markets/assistant`: shell without env (or Sources-only)  
 - Hard-refresh after build (asset hash changes)
 
-- [ ] **Step 5: Commit build + any test fixes**
+- [x] **Step 5: Commit build + any test fixes**
+
+Result: nothing to commit — `elixir/priv/static/tracker/` is gitignored (`elixir/.gitignore:18`), and no source/test fixes were required.
 
 ```bash
 git add tracker/ elixir/priv/static/tracker
