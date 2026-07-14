@@ -1,12 +1,11 @@
-import { MessageSquare } from "lucide-react";
 import type { KeyboardEvent, Ref } from "react";
 import { useTranslation } from "react-i18next";
 
-import { RecentStatusDot } from "@/components/layout/RecentStatusDot";
 import {
   SidebarTreeRow,
   type SidebarContextMenuRenderer,
 } from "@/components/layout/sidebar/SidebarTreeRow";
+import { ChatStatusIcon } from "@/components/shared/ChatStatusIcon";
 import { SessionBadgeShell } from "@/components/shared/SessionBadge";
 import { formatRelativeTime } from "@/lib/utils";
 import type { SidebarSessionNode } from "@/types/sidebar";
@@ -71,8 +70,7 @@ export function SessionTreeItem({
       statusLabel={statusLabel}
       trailingLabel={relativeTime}
       tabIndex={tabIndex}
-      leadingIcon={<MessageSquare className="h-3.5 w-3.5" aria-hidden="true" />}
-      statusIndicator={<RecentStatusDot statusKind={node.statusKind} className="h-1.5 w-1.5" />}
+      leadingIcon={<ChatStatusIcon statusKind={node.statusKind} />}
       metadata={
         node.unread || node.needsReview ? (
           <>

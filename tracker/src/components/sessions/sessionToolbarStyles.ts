@@ -18,3 +18,9 @@ export const sessionToolbarChipClassName = cn(
 export const sessionToolbarLabeledButtonClassName = cn(
   "h-7 shrink-0 gap-1 px-2 text-xs",
 );
+
+/** @deprecated Prefer WorkspaceActionButton / workspaceActionButtonClassName */
+export {
+  workspaceActionButtonClassName as workspaceCompactActionClassName,
+  workspaceActionIconProps as workspaceCompactActionIconProps,
+} from "@/components/sessions/WorkspaceActionButton";

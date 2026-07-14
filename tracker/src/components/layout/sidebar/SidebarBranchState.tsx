@@ -86,17 +86,25 @@ export function SidebarBranchState({
 
   const stale = kind === "stale";
   if (stale) {
+    const label = t("layout.sidebar.tree.stale", { defaultValue: "Could not refresh" });
+    const actionLabel = t("layout.sidebar.tree.retryProject", {
+      project: project.title,
+      defaultValue: "Retry {{project}}",
+    });
     return (
       <SidebarPseudoTreeItem
         id={id}
         level={2}
-        label={t("layout.sidebar.tree.stale", { defaultValue: "Stale data" })}
+        label={label}
+        actionLabel={t("layout.sidebar.tree.retryShort", { defaultValue: "Retry" })}
+        actionAriaLabel={actionLabel}
         tabIndex={tabIndex}
         rowRef={rowRef}
         onFocus={onFocus}
         onKeyDown={onKeyDown}
+        onActivate={onActivate}
         onPreserveFocus={onPreserveFocus}
-        tone="stale"
+        variant="soft"
       />
     );
   }
@@ -193,7 +201,7 @@ export function SidebarPseudoTreeItem({
     >
       {soft ? (
         <div
-          className="mx-0.5 flex min-h-8 items-center gap-1.5 py-0.5 pr-1 text-sm"
+          className="mx-0.5 flex min-h-7 items-center gap-1.5 py-0.5 pr-1 text-xs"
           style={{ paddingLeft: `${sidebarTreeIndent(level) + 16}px` }}
         >
           <span className="text-muted-foreground/80">{label}</span>

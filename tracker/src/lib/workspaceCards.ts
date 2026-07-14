@@ -213,6 +213,69 @@ export function buildWorkspaceCards(input: WorkspaceCardsInput): WorkspaceCardsR
   };
 }
 
+export type WorkspaceListItem =
+  | {
+      readonly kind: "card";
+      readonly key: string;
+      readonly sortValue: number;
+      readonly card: WorkspaceCard;
+    }
+  | {
+      readonly kind: "chat";
+      readonly key: string;
+      readonly sortValue: number;
+      readonly session: RecentSession;
+    };
+
+/**
+ * Single recency-ordered list for the master-detail workspaces page.
+ * Project/standalone/orphan cards use activity timestamps instead of section pins.
+ */
+export function flattenWorkspaceCardsByRecency(
+  cards: WorkspaceCardsResult,
+): readonly WorkspaceListItem[] {
+  const items: WorkspaceListItem[] = [];
+
+  for (const card of [
+    ...cards.projectCards,
+    ...cards.activeCards,
+    ...cards.waitingCards,
+    ...cards.orphanCards,
+  ]) {
+    items.push({
+      kind: "card",
+      key: card.key,
+      sortValue: workspaceCardRecency(card),
+      card,
+    });
+  }
+
+  for (const session of cards.chatSessions) {
+    items.push({
+      kind: "chat",
+      key: `chat:${session.id}`,
+      sortValue: timestampValue(session.updatedAt),
+      session,
+    });
+  }
+
+  items.sort((a, b) => {
+    if (b.sortValue !== a.sortValue) return b.sortValue - a.sortValue;
+    return a.key.localeCompare(b.key);
+  });
+  return items;
+}
+
+function workspaceCardRecency(card: WorkspaceCard): number {
+  const values = [
+    card.sortValue === Number.MAX_SAFE_INTEGER ? 0 : card.sortValue,
+    timestampValue(card.execution?.lastEventAt ?? card.execution?.startedAt ?? null),
+    timestampValue(card.authoring?.updatedAt ?? null),
+    ...card.sessions.map((session) => timestampValue(session.updatedAt)),
+  ];
+  return Math.max(0, ...values);
+}
+
 function issueSection(execution: ProjectSessionRow | null): WorkspaceCardSection {
   if (!execution) return "waiting";
   return execution.bucket === "active" ? "active" : "waiting";

@@ -47,7 +47,7 @@ const AGENT_OPTIONS: readonly SidebarFilterAgent[] = [
   "opencode",
 ];
 
-const FILTER_ICON_CLASS = "h-4 w-4 shrink-0 text-muted-foreground";
+const FILTER_ICON_CLASS = "h-3.5 w-3.5 shrink-0 text-muted-foreground";
 
 export type SidebarFilterAction =
   | { readonly type: "sort"; readonly value: SidebarSortMode }
@@ -175,9 +175,9 @@ export function SidebarFiltersMenu({
           variant="ghost"
           size="sm"
           aria-label={buttonLabel}
-          className="h-7 gap-1.5 px-2 text-xs"
+          className="h-6 gap-1 px-1.5 text-[11px] font-normal text-muted-foreground hover:text-foreground"
         >
-          <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden />
+          <SlidersHorizontal className="h-3 w-3" strokeWidth={1.5} aria-hidden />
           {t("layout.sidebar.filters.button")}
           {activeCount > 0 ? (
             <span aria-hidden className="rounded bg-muted px-1 text-[10px]">

@@ -32,7 +32,7 @@ export function SessionRowActionButton({
       disabled={disabled}
       aria-label={label}
       title={label}
-      className={cn("h-8 w-8 shrink-0 text-muted-foreground", className)}
+      className={cn("h-5 w-5 shrink-0 text-muted-foreground", className)}
       onClick={(event) => {
         event.preventDefault();
         event.stopPropagation();

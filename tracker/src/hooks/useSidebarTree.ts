@@ -423,7 +423,7 @@ export function useSidebarTree(): UseSidebarTreeResult {
         inventorySettled: false,
         draftInventoryByPath: null,
         draftTotals: null,
-        loadState: current.hasSnapshot ? "stale" : "loading",
+        loadState: "loading",
         error: null,
         sourceErrors: {},
       }));

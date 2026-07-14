@@ -675,7 +675,7 @@ describe("useSidebarTree", () => {
     act(() => oldHandlers.onEntry(inventory("/late", "ALPHA-1")));
 
     act(() => result.current.toggleProjectExpanded("alpha"));
-    expect(result.current.tree[0].loadState).toBe("stale");
+    expect(result.current.tree[0].loadState).toBe("loading");
     expect(result.current.tree[0].workspaces[0].inventory?.path).toBe("/cached");
     expect(listIssues).toHaveBeenCalledTimes(2);
     expect(subscribeWorkspaceInventory).toHaveBeenCalledTimes(2);

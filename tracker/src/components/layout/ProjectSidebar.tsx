@@ -302,7 +302,7 @@ export function ProjectSidebar({ variant = "desktop" }: ProjectSidebarProps) {
           />
 
           <div className="mb-2 flex items-center gap-1 px-2">
-            <h2 className="min-w-0 flex-1 truncate text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+            <h2 className="min-w-0 flex-1 truncate text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
               {t("layout.sidebar.tree.label", { defaultValue: "Projects" })}
             </h2>
             <SidebarFiltersMenu

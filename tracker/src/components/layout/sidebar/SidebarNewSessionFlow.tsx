@@ -21,6 +21,7 @@ import {
 import type { SidebarProjectNode, SidebarWorkspaceNode } from "@/types/sidebar";
 
 const MAX_TITLE_LENGTH = 160;
+const SELECT_CLASS = "h-9 w-full min-w-0 rounded-md border bg-background px-2";
 const SUPPORTED_AGENT_KINDS = ["codex", "claude", "cursor"] as const;
 type SupportedAgentKind = (typeof SUPPORTED_AGENT_KINDS)[number];
 type FlowPhase = "confirm" | "edit" | "select";
@@ -333,7 +334,7 @@ export function SidebarNewSessionFlow({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-3">
+          <div className="min-w-0 space-y-3">
             {phase === "confirm" && selectedProject && selectedWorkspace ? (
               <div
                 data-testid="new-session-confirmation"
@@ -376,7 +377,7 @@ export function SidebarNewSessionFlow({
                   <span>{t("layout.sidebar.newSession.project")}</span>
                   <select
                     aria-label={t("layout.sidebar.newSession.project")}
-                    className="h-9 rounded-md border bg-background px-2"
+                    className={SELECT_CLASS}
                     value={projectId}
                     disabled={submitting}
                     onChange={(event) => changeProject(event.target.value)}
@@ -394,7 +395,7 @@ export function SidebarNewSessionFlow({
                   <span>{t("layout.sidebar.newSession.workspace")}</span>
                   <select
                     aria-label={t("layout.sidebar.newSession.workspace")}
-                    className="h-9 rounded-md border bg-background px-2"
+                    className={SELECT_CLASS}
                     value={workspaceId}
                     disabled={
                       !selectedProject ||
@@ -441,7 +442,7 @@ export function SidebarNewSessionFlow({
               <span>{t("layout.sidebar.newSession.agent")}</span>
               <select
                 aria-label={t("layout.sidebar.newSession.agent")}
-                className="h-9 rounded-md border bg-background px-2"
+                className={SELECT_CLASS}
                 value={agentKind}
                 disabled={submitting}
                 onChange={(event) =>

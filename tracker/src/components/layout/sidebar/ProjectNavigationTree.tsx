@@ -85,7 +85,7 @@ export function ProjectNavigationTree(props: ProjectNavigationTreeProps) {
     (node: SidebarSyntheticNode, trigger: HTMLElement) => {
       const project = projectById.get(node.projectId);
       if (!project) return;
-      if (node.syntheticKind === "error") {
+      if (node.syntheticKind === "error" || node.syntheticKind === "stale") {
         retryProject(project.id);
         return;
       }
@@ -292,7 +292,7 @@ export function ProjectNavigationTree(props: ProjectNavigationTreeProps) {
       aria-label={ariaLabel ?? t("layout.sidebar.tree.label", { defaultValue: "Projects" })}
       onFocusCapture={focus.onTreeFocusCapture}
       onBlurCapture={focus.onTreeBlurCapture}
-      className={cn("min-h-0 flex-1 overflow-y-auto px-0.5 py-1", SCROLLBAR_THIN)}
+      className={cn("min-h-0 flex-1 overflow-y-auto px-0.5 py-1 [contain:layout]", SCROLLBAR_THIN)}
       data-sidebar-tree-scroll-container="true"
     >
       {projects.map((project) => {

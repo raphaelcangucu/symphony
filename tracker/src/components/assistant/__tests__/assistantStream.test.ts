@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   STREAMING_ASSISTANT_ID,
   appendAssistantDelta,
+  assistantMessage,
   replaceStreamingMessage,
   toolCallIdentity,
   updateStreamingToolCall,
@@ -66,6 +67,17 @@ describe("upsertToolCall", () => {
 });
 
 describe("updateStreamingToolCall", () => {
+  it("backfills existing content before inserting the first stable tool block", () => {
+    const target = assistantMessage(STREAMING_ASSISTANT_ID, "Before");
+
+    const messages = updateStreamingToolCall([target], call({ id: "call-1" }));
+
+    expect(messages[0].contentBlocks).toEqual([
+      { type: "text", text: "Before" },
+      { type: "tool", toolCallId: "call-1" },
+    ]);
+  });
+
   it("attaches tool calls to the streaming message preserving arrival order", () => {
     const base: AssistantChatMessage[] = [];
     const afterFirst = updateStreamingToolCall(base, call({ id: "a", name: "read_file" }));

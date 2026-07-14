@@ -181,6 +181,15 @@ function StatefulTree({
 }
 
 describe("ProjectNavigationTree", () => {
+  it("establishes layout containment on the project tree scroll region", () => {
+    render(<StatefulTree />);
+
+    const scrollContainer = document.querySelector(
+      "[data-sidebar-tree-scroll-container='true']",
+    );
+    expect(scrollContainer).toHaveClass("[contain:layout]");
+  });
+
   it("renders nested accessible levels, selection, status text, and one roving tab stop", () => {
     render(<StatefulTree />);
 
@@ -579,7 +588,8 @@ describe("ProjectNavigationTree", () => {
     expect(screen.getByText(/offline/)).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Retry Broken" }));
     expect(spies.retryProject).toHaveBeenCalledWith("error");
-    expect(screen.getByText("Stale data")).toBeVisible();
+    expect(screen.getByText("Could not refresh")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Retry Cached" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Create workspace in Empty" })).toBeVisible();
     expect(screen.getByText("No workspaces")).toBeVisible();
     expect(screen.getByRole("button", { name: "Create workspace in Empty" })).toHaveTextContent(

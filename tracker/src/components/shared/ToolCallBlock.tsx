@@ -1,8 +1,11 @@
-import { ChevronDown, Loader2, TerminalSquare, Wrench } from "lucide-react";
+import { Loader2, TerminalSquare, Wrench } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { cn } from "@/lib/utils";
+import {
+  ActivityDisclosure,
+  type ActivityDisclosureStateProps,
+} from "@/components/agent-activity/ActivityDisclosure";
 
 export type ToolBlockLanguage = "bash" | "json" | "diff" | "markdown" | "text";
 
@@ -25,58 +28,59 @@ export interface ToolCallView {
 const MAX_LINES = 20;
 const MAX_CHARS = 2048;
 
-export function ToolCallBlock({ view }: { view: ToolCallView }) {
+interface ToolCallBlockProps extends ActivityDisclosureStateProps {
+  view: ToolCallView;
+}
+
+export function ToolCallBlock({
+  view,
+  expanded,
+  onExpandedChange,
+}: ToolCallBlockProps) {
   const { t } = useTranslation();
-  const [open, setOpen] = useState(!view.defaultCollapsed);
   const failed = view.status === "failed";
   const running = view.status === "running";
   const statusLabel = view.status ? t(`issue.toolCall.status.${view.status}`) : null;
+  const details =
+    view.input || view.output ? (
+      <div className="min-w-0 space-y-2">
+        {view.input ? (
+          <Section
+            label={t("issue.toolCall.input")}
+            section={view.input}
+            showMore={t("issue.toolCall.showMore")}
+          />
+        ) : null}
+        {view.output ? (
+          <Section
+            label={t("issue.toolCall.output")}
+            section={view.output}
+            showMore={t("issue.toolCall.showMore")}
+          />
+        ) : null}
+      </div>
+    ) : null;
 
   return (
-    <article
-      className={cn(
-        "overflow-hidden rounded-xl border",
-        failed ? "border-destructive/40 bg-destructive/5" : "border-sky-500/20 bg-sky-500/5",
-      )}
-    >
-      <button
-        type="button"
-        className="flex w-full items-start gap-2 px-3 py-2.5 text-left"
-        onClick={() => setOpen((value) => !value)}
-        aria-expanded={open}
-      >
-        <span className="mt-0.5 text-muted-foreground">
-          {running ? (
-            <Loader2 className="size-3.5 animate-spin" />
-          ) : view.toolType === "Bash" ? (
-            <TerminalSquare className="size-3.5" />
-          ) : (
-            <Wrench className="size-3.5" />
-          )}
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="font-mono text-xs font-semibold text-foreground">{view.toolType}</span>
-          {view.description ? <span className="ml-2 text-[11px] text-muted-foreground">{view.description}</span> : null}
-        </span>
-        {statusLabel ? (
-          <span
-            className={cn(
-              "rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wide",
-              failed ? "border-destructive/40 text-destructive" : "border-border/60 text-muted-foreground",
-            )}
-          >
-            {statusLabel}
-          </span>
-        ) : null}
-        <ChevronDown className={cn("mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")} />
-      </button>
-      {open ? (
-        <div className="space-y-2 border-t border-border/60 px-3 py-2.5">
-          {view.input ? <Section label={t("issue.toolCall.input")} section={view.input} showMore={t("issue.toolCall.showMore")} /> : null}
-          {view.output ? <Section label={t("issue.toolCall.output")} section={view.output} showMore={t("issue.toolCall.showMore")} /> : null}
-        </div>
-      ) : null}
-    </article>
+    <ActivityDisclosure
+      icon={
+        running ? (
+          <Loader2 className="size-3.5 animate-spin" />
+        ) : view.toolType === "Bash" ? (
+          <TerminalSquare className="size-3.5" />
+        ) : (
+          <Wrench className="size-3.5" />
+        )
+      }
+      label={<span className="font-mono font-semibold">{view.toolType}</span>}
+      metadata={view.description}
+      status={failed ? "failed" : running ? "running" : view.status}
+      statusLabel={statusLabel ?? undefined}
+      details={details}
+      defaultExpanded={!view.defaultCollapsed}
+      expanded={expanded}
+      onExpandedChange={onExpandedChange}
+    />
   );
 }
 

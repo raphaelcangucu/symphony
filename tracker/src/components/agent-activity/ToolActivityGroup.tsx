@@ -1,24 +1,17 @@
-import { ChevronDown, Loader2 } from "lucide-react";
-import { useState } from "react";
+import { Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
+import {
+  ActivityDisclosure,
+  type ActivityDisclosureStateProps,
+} from "@/components/agent-activity/ActivityDisclosure";
 import { ToolActivityItem } from "@/components/agent-activity/ToolActivityItem";
 import { TOOL_GROUP_ICON } from "@/components/agent-activity/toolGroupIcons";
 import { assistantToolCallToView } from "@/components/assistant/assistantToolCall";
 import { fileActivityFromToolCall } from "@/components/assistant/fileActivity";
 import { summarizeGroup, type ToolCallGroup, type ToolGroupSummary } from "@/lib/toolCallGroups";
-import { cn } from "@/lib/utils";
 import type { AgentTaskSnapshot } from "@/types/agentTasks";
 import type { AssistantToolCall } from "@/services/assistant";
-
-function defaultOpen(group: ToolCallGroup): boolean {
-  if (group.status === "error") return true;
-  return group.kind === "action";
-}
-
-function rowKey(call: AssistantToolCall, index: number): string {
-  return call.id && call.id.trim() !== "" ? `tc-${call.id}` : `tc-${call.name}-${index}`;
-}
 
 function groupLabel(
   group: ToolCallGroup,
@@ -35,61 +28,54 @@ function groupLabel(
   return t(`assistant.toolGroup.${group.kind}`, { n: summary.count });
 }
 
-interface ToolActivityGroupProps {
+interface ToolActivityGroupProps extends ActivityDisclosureStateProps {
   group: ToolCallGroup;
   taskSnapshot?: AgentTaskSnapshot | null;
   onKillTool?: (toolCallId: string) => void;
+  callKeys?: readonly string[];
 }
 
 export function ToolActivityGroup({
   group,
   taskSnapshot = null,
   onKillTool,
+  callKeys,
+  expanded,
+  onExpandedChange,
 }: ToolActivityGroupProps) {
   const { t } = useTranslation();
   const summary = summarizeGroup(group);
-  const [open, setOpen] = useState(() => defaultOpen(group));
   const running = group.status === "running";
   const failed = group.status === "error";
   const Icon = TOOL_GROUP_ICON[group.kind];
+  const rowKeys = resolveRowKeys(group.calls, callKeys);
 
   return (
-    <article
-      className={cn(
-        "overflow-hidden rounded-xl border",
-        failed ? "border-destructive/40 bg-destructive/5" : "border-border/60 bg-muted/30",
-      )}
-    >
-      <button
-        type="button"
-        className="flex w-full items-center gap-2 px-3 py-2 text-left"
-        onClick={() => setOpen((value) => !value)}
-        aria-expanded={open}
-        aria-busy={running}
-        data-testid="tool-activity-group"
-      >
-        <span className="shrink-0 text-muted-foreground">
-          {running ? <Loader2 className="size-3.5 animate-spin" /> : <Icon className="size-3.5" />}
-        </span>
-        <span className="min-w-0 flex-1 truncate text-xs font-medium text-foreground">
-          {groupLabel(group, summary, t)}
-        </span>
-        {failed ? (
-          <span className="shrink-0 rounded-full border border-destructive/40 px-2 py-0.5 text-[10px] uppercase tracking-wide text-destructive">
-            {t("assistant.toolGroup.failed")}
-          </span>
-        ) : running ? (
-          <span className="shrink-0 rounded-full border border-border/60 px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
-            {t("assistant.toolGroup.running")}
-          </span>
-        ) : null}
-        <ChevronDown className={cn("size-4 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")} />
-      </button>
-      {open ? (
-        <div className="space-y-2 border-t border-border/60 px-3 py-2.5">
+    <ActivityDisclosure
+      icon={
+        running ? (
+          <Loader2 className="size-3.5 animate-spin" />
+        ) : (
+          <Icon className="size-3.5" />
+        )
+      }
+      label={groupLabel(group, summary, t)}
+      status={failed ? "failed" : running ? "running" : null}
+      statusLabel={
+        failed
+          ? t("assistant.toolGroup.failed")
+          : running
+            ? t("assistant.toolGroup.running")
+            : undefined
+      }
+      testId="tool-activity-group"
+      expanded={expanded}
+      onExpandedChange={onExpandedChange}
+      details={
+        <div className="space-y-0.5">
           {group.calls.map((call, index) => (
             <ToolActivityItem
-              key={rowKey(call, index)}
+              key={rowKeys[index]}
               toolName={call.name}
               toolCallId={call.id}
               view={assistantToolCallToView(call)}
@@ -99,7 +85,28 @@ export function ToolActivityGroup({
             />
           ))}
         </div>
-      ) : null}
-    </article>
+      }
+    />
   );
+}
+
+function resolveRowKeys(
+  calls: readonly AssistantToolCall[],
+  suppliedKeys: readonly string[] | undefined,
+): string[] {
+  if (suppliedKeys) {
+    if (suppliedKeys.length !== calls.length) {
+      throw new TypeError("callKeys must match the grouped tool-call count");
+    }
+    return [...suppliedKeys];
+  }
+
+  const idlessOccurrencesByName = new Map<string, number>();
+  return calls.map((call) => {
+    const stableId = call.id?.trim();
+    if (stableId) return JSON.stringify(["tool-call", "id", stableId]);
+    const occurrence = idlessOccurrencesByName.get(call.name) ?? 0;
+    idlessOccurrencesByName.set(call.name, occurrence + 1);
+    return JSON.stringify(["tool-call", "name", call.name, "occurrence", occurrence]);
+  });
 }

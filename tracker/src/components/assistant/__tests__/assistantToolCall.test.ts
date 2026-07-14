@@ -22,7 +22,7 @@ describe("assistant tool call adapter", () => {
     expect(isActionTool("get_issue")).toBe(false);
   });
 
-  it("expands action tools and shows arguments + output", () => {
+  it("keeps action tools closed while preserving arguments and output", () => {
     const view = assistantToolCallToView(
       toolCall({
         name: "move_issue",
@@ -34,7 +34,7 @@ describe("assistant tool call adapter", () => {
 
     expect(view.toolType).toBe(i18n.t("issue.toolCall.tools.move_issue"));
     expect(view.status).toBe("completed");
-    expect(view.defaultCollapsed).toBe(false);
+    expect(view.defaultCollapsed).toBe(true);
     expect(view.input?.language).toBe("json");
     expect(view.input?.value).toContain("MAC-1");
     expect(view.output?.value).toBe("Moved issue MAC-1 to In Progress.");
@@ -45,7 +45,7 @@ describe("assistant tool call adapter", () => {
     expect(view.defaultCollapsed).toBe(true);
   });
 
-  it("does not default-collapse running Bash tools", () => {
+  it("keeps running Bash details closed by default", () => {
     const view = assistantToolCallToView(
       toolCall({
         id: "t1",
@@ -54,7 +54,7 @@ describe("assistant tool call adapter", () => {
         arguments: { command: "pest --parallel" },
       }),
     );
-    expect(view.defaultCollapsed).toBe(false);
+    expect(view.defaultCollapsed).toBe(true);
     expect(view.input?.language).toBe("bash");
   });
 

@@ -1,4 +1,5 @@
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { useState, type ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -81,6 +82,105 @@ describe("ProjectSessionsWorkspace", () => {
     );
 
     expect(await screen.findByTestId("sessions-chrome-count")).toHaveTextContent("0");
+  });
+
+  it("renders a minimal toolbar and expands workspace rows as an accordion", async () => {
+    const user = userEvent.setup();
+    vi.mocked(useProjectSessions).mockReturnValue({
+      groups: emptyProjectSessionGroups(),
+      relatedSessions: [],
+      issues: [
+        {
+          id: "1",
+          identifier: "DEMO-1",
+          projectSlug: "demo",
+          status: "Todo",
+          title: "Fix login race",
+          description: null,
+          priority: null,
+          position: 0,
+          labels: [],
+          blockedBy: [],
+          assignee: null,
+          creator: null,
+          url: null,
+          branchName: null,
+          createdAt: "2026-07-01T00:00:00Z",
+          updatedAt: "2026-07-01T00:00:00Z",
+          attachments: [],
+        },
+      ],
+      executions: new Map([
+        [
+          "DEMO-1",
+          {
+            issueIdentifier: "DEMO-1",
+            status: "live",
+            agentKind: "codex",
+            sessionId: "sess-1",
+            lastEvent: null,
+            lastMessage: null,
+            lastEventAt: "2026-07-02T10:00:00Z",
+            turnCount: 3,
+            runtimeSeconds: 120,
+            startedAt: "2026-07-02T09:58:00Z",
+            retryAttempt: 0,
+            error: null,
+            goal: null,
+            longRunning: false,
+            longRunningKind: null,
+            longRunningLabel: null,
+            tokens: null,
+          },
+        ],
+      ]),
+      inventory: {
+        totals: { count: 1, sizeBytes: 1024, reclaimableBytes: 0 },
+        entries: [
+          {
+            path: "/ws/demo",
+            displayName: null,
+            kind: "project",
+            issueIdentifier: null,
+            name: null,
+            classification: "active",
+            reclaimable: false,
+            workPresent: false,
+            executionStatus: null,
+            removable: false,
+            sizeBytes: 1024,
+            repos: [],
+            childWorktrees: [],
+          },
+        ],
+      },
+      isLoading: false,
+      isInventoryLoading: false,
+      error: null,
+      refetch,
+    });
+
+    renderWithI18n(
+      <MemoryRouter initialEntries={["/projects/demo/workspaces"]}>
+        <ProjectSessionsWorkspace projectSlug="demo" />
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByText("Inventory")).not.toBeInTheDocument();
+    expect(screen.getByText("1 trees · 1.0 KB")).toBeVisible();
+    const list = screen.getByRole("list", { name: "Workspaces" });
+    expect(list).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Session" })).not.toBeInTheDocument();
+
+    await user.click(within(list).getByRole("button", { name: /Fix login race/ }));
+    expect(screen.getByRole("button", { name: "Session" })).toBeVisible();
+
+    await user.click(within(list).getByRole("button", { name: "More actions" }));
+    expect(await screen.findByRole("menuitem", { name: "Session" })).toBeVisible();
+
+    await user.keyboard("{Escape}");
+    await user.click(within(list).getByRole("button", { name: /Fix login race/ }));
+    expect(screen.queryByRole("button", { name: "Session" })).not.toBeInTheDocument();
   });
 
   it("selects an active thread tab from the route", async () => {

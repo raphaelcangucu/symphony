@@ -225,6 +225,43 @@ describe("normalizeToolCall id", () => {
     expect(normalizeToolCall({ name: "shell", tool_use_id: "tu3" }).id).toBe("tu3");
   });
 
+  it.each([
+    ["an empty id", { name: "shell", id: "", call_id: "c2" }, "c2"],
+    ["a whitespace id and NaN call_id", { name: "shell", id: " \t", call_id: Number.NaN, callId: "c3" }, "c3"],
+    [
+      "wrong-type and non-finite candidates",
+      { name: "shell", id: false as unknown as string, call_id: Number.POSITIVE_INFINITY, callId: 7 },
+      "7",
+    ],
+    [
+      "invalid candidates before toolUseId",
+      {
+        name: "shell",
+        id: "",
+        call_id: " ",
+        callId: Number.NEGATIVE_INFINITY,
+        tool_use_id: Number.NaN,
+        toolUseId: "tu5",
+      },
+      "tu5",
+    ],
+  ])("skips %s and uses the next valid alias", (_description, dto, expected) => {
+    expect(normalizeToolCall(dto).id).toBe(expected);
+  });
+
+  it("uses the first valid alias in priority order", () => {
+    expect(
+      normalizeToolCall({
+        name: "shell",
+        id: "primary",
+        call_id: "snake-call",
+        callId: "camel-call",
+        tool_use_id: "snake-tool",
+        toolUseId: "camel-tool",
+      }).id,
+    ).toBe("primary");
+  });
+
   it("coerces a numeric id to string", () => {
     expect(normalizeToolCall({ name: "shell", id: 7 }).id).toBe("7");
   });
@@ -261,7 +298,7 @@ describe("normalizeAssistantChatMessage content blocks", () => {
     ]);
   });
 
-  it("falls back to camel- and snake-case metadata blocks", () => {
+  it("falls back to camel- and snake-case metadata blocks only when top-level keys are absent", () => {
     const camelDto = {
       id: "camel-metadata",
       metadata: { contentBlocks: [{ type: "text", text: "Camel metadata" }] },
@@ -279,14 +316,41 @@ describe("normalizeAssistantChatMessage content blocks", () => {
     ]);
   });
 
-  it("falls back to metadata when top-level blocks are invalid", () => {
+  it("treats an explicit empty top-level array as authoritative over mismatched metadata", () => {
+    const dto = {
+      id: "empty-top-level",
+      content: "Server-approved content",
+      content_blocks: [],
+      metadata: {
+        content_blocks: [
+          { type: "text", text: "Stale metadata content" },
+          { type: "tool", tool_call_id: "unmatched-tool" },
+        ],
+      },
+    };
+
+    expect(normalizeAssistantChatMessage(dto).contentBlocks).toBeUndefined();
+  });
+
+  it("does not resurrect metadata when top-level blocks are malformed", () => {
     const dto = {
       id: "invalid-top-level",
       contentBlocks: "not-an-array",
       metadata: { content_blocks: [{ type: "text", text: "Fallback" }] },
     };
 
-    expect(normalizeAssistantChatMessage(dto).contentBlocks).toEqual([{ type: "text", text: "Fallback" }]);
+    expect(normalizeAssistantChatMessage(dto).contentBlocks).toBeUndefined();
+  });
+
+  it("gives an explicit camel top-level field precedence over snake-case and metadata fields", () => {
+    const dto = {
+      id: "camel-precedence",
+      contentBlocks: null,
+      content_blocks: [{ type: "text", text: "Snake top level" }],
+      metadata: { contentBlocks: [{ type: "text", text: "Metadata" }] },
+    };
+
+    expect(normalizeAssistantChatMessage(dto).contentBlocks).toBeUndefined();
   });
 
   it("discards malformed rows and returns undefined when none remain", () => {

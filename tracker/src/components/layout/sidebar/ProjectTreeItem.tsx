@@ -65,7 +65,7 @@ export function ProjectTreeItem({
       tabIndex={tabIndex}
       leadingIcon={
         loading ? (
-          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground/70" aria-hidden="true" />
+          <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground/70" aria-hidden="true" />
         ) : undefined
       }
       statusIndicator={

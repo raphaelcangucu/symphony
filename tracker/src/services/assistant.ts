@@ -462,21 +462,29 @@ function normalizeAssistantContentBlocks(
   dto: BackendAssistantChatMessageDto,
   metadata: Record<string, unknown>,
 ): AssistantContentBlock[] | undefined {
-  return (
-    normalizeContentBlockCandidates([dto.contentBlocks, dto.content_blocks]) ??
-    normalizeContentBlockCandidates([metadata.contentBlocks, metadata.content_blocks])
-  );
+  const topLevelField = selectPresentContentBlocksFieldCamelFirst(dto);
+  if (topLevelField.isPresent) return normalizeContentBlockValue(topLevelField.value);
+
+  const legacyMetadataField = selectPresentContentBlocksFieldCamelFirst(metadata);
+  return legacyMetadataField.isPresent ? normalizeContentBlockValue(legacyMetadataField.value) : undefined;
 }
 
-function normalizeContentBlockCandidates(candidates: readonly unknown[]): AssistantContentBlock[] | undefined {
-  for (const candidate of candidates) {
-    if (!Array.isArray(candidate)) continue;
+type SelectedContentBlocksField = { isPresent: true; value: unknown } | { isPresent: false };
 
-    const contentBlocks = normalizeContentBlockRows(candidate);
-    if (contentBlocks) return contentBlocks;
+function selectPresentContentBlocksFieldCamelFirst(
+  source: { contentBlocks?: unknown; content_blocks?: unknown },
+): SelectedContentBlocksField {
+  if (Object.prototype.hasOwnProperty.call(source, "contentBlocks")) {
+    return { isPresent: true, value: source.contentBlocks };
   }
+  if (Object.prototype.hasOwnProperty.call(source, "content_blocks")) {
+    return { isPresent: true, value: source.content_blocks };
+  }
+  return { isPresent: false };
+}
 
-  return undefined;
+function normalizeContentBlockValue(value: unknown): AssistantContentBlock[] | undefined {
+  return Array.isArray(value) ? normalizeContentBlockRows(value) : undefined;
 }
 
 function normalizeContentBlockRows(rows: readonly unknown[]): AssistantContentBlock[] | undefined {
@@ -543,9 +551,12 @@ export function normalizeToolCall(dto: BackendAssistantToolCallDto): AssistantTo
 }
 
 function normalizeToolCallId(dto: BackendAssistantToolCallDto): string | null {
-  const raw = dto.id ?? dto.call_id ?? dto.callId ?? dto.tool_use_id ?? dto.toolUseId;
-  if (typeof raw === "string" && raw.trim() !== "") return raw;
-  if (typeof raw === "number" && Number.isFinite(raw)) return String(raw);
+  const candidates = [dto.id, dto.call_id, dto.callId, dto.tool_use_id, dto.toolUseId];
+  for (const candidate of candidates) {
+    if (typeof candidate === "string" && candidate.trim() !== "") return candidate;
+    if (typeof candidate === "number" && Number.isFinite(candidate)) return String(candidate);
+  }
+
   return null;
 }
 

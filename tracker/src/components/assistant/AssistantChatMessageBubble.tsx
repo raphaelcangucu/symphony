@@ -1,18 +1,17 @@
-import { AudioLines, Check, FileText, ImageIcon, Plus, Zap } from "lucide-react";
+import { AudioLines, Check, FileText, ImageIcon, Zap } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
+import { AssistantMarkdown } from "@/components/assistant/AssistantMarkdown";
+import { AssistantTurnTimeline } from "@/components/assistant/AssistantTurnTimeline";
 import { EditedFilesSummary } from "@/components/assistant/EditedFilesSummary";
 import { ToolActivityTimeline } from "@/components/assistant/ToolActivityTimeline";
-import { UserQuestionsCard } from "@/components/assistant/UserQuestionsCard";
 import type { ComposerContextChipRef } from "@/components/assistant/contextMentions";
 import { AttachmentFileChip } from "@/components/shared/AttachmentFileChip";
 import { AttachmentImage } from "@/components/shared/AttachmentImage";
 import { AttachmentVideo } from "@/components/shared/AttachmentVideo";
 import { Button } from "@/components/ui/button";
-import { Markdown } from "@/components/ui/markdown";
 import { cn } from "@/lib/utils";
 import { isVideoAttachmentSource, isVideoMediaType, projectAttachmentUrl } from "@/services/attachments";
-import { normalizeAssistantDocumentHref } from "@/services/threadDocuments";
 import type { AssistantChatMessage, UserQuestion } from "@/services/assistant";
 import type { AgentTaskSnapshot } from "@/types/agentTasks";
 
@@ -49,6 +48,21 @@ export function AssistantChatMessageBubble({
 }: AssistantChatMessageBubbleProps) {
   const isUser = message.role === "user";
   const attachments = Array.isArray(message.metadata.attachments) ? message.metadata.attachments : [];
+  const assistantContentBlocks =
+    message.role === "assistant" &&
+    Array.isArray(message.contentBlocks) &&
+    message.contentBlocks.length > 0
+      ? message.contentBlocks
+      : null;
+  const editedFilesSummary = isUser ? null : (
+    <EditedFilesSummary
+      toolCalls={message.toolCalls}
+      projectSlug={projectSlug}
+      issueIdentifier={issueIdentifier}
+      threadId={threadId}
+      onInsertContext={onInsertContext}
+    />
+  );
 
   if (isUserQuestionsMessage(message)) {
     return <UserQuestionsReceipt message={message} />;
@@ -65,7 +79,7 @@ export function AssistantChatMessageBubble({
           "text-sm",
           isUser
             ? "w-fit max-w-[85%] rounded-3xl bg-slate-950 px-4 py-2.5 text-white shadow-sm dark:bg-primary dark:text-primary-foreground"
-            : "w-full max-w-none text-foreground",
+            : "assistant-response-content w-full text-foreground",
         )}
       >
         {attachments.length > 0 ? (
@@ -82,27 +96,30 @@ export function AssistantChatMessageBubble({
         ) : null}
         {isUser ? (
           <p className="whitespace-pre-wrap leading-6">{message.content}</p>
+        ) : assistantContentBlocks ? (
+          <AssistantTurnTimeline
+            contentBlocks={assistantContentBlocks}
+            toolCalls={message.toolCalls}
+            fallbackContent={message.content}
+            onOpenDocumentPath={onOpenDocumentPath}
+            taskSnapshot={taskSnapshot}
+            onKillTool={onKillTool}
+          />
         ) : (
           <AssistantMarkdown content={message.content} onOpenDocumentPath={onOpenDocumentPath} />
         )}
-        {message.toolCalls.length ? (
+        {!assistantContentBlocks && message.toolCalls.length ? (
           <div className={cn("mt-3 border-t pt-2", isUser && "border-white/20")}>
             <ToolActivityTimeline
               toolCalls={message.toolCalls}
               taskSnapshot={taskSnapshot}
               onKillTool={onKillTool}
             />
-            {!isUser ? (
-              <EditedFilesSummary
-                toolCalls={message.toolCalls}
-                projectSlug={projectSlug}
-                issueIdentifier={issueIdentifier}
-                threadId={threadId}
-                onInsertContext={onInsertContext}
-              />
-            ) : null}
+            {editedFilesSummary}
           </div>
-        ) : null}
+        ) : (
+          editedFilesSummary
+        )}
         {planApprovalAction ? <PlanApprovalButtons action={planApprovalAction} /> : null}
       </article>
     </div>
@@ -267,36 +284,4 @@ function AttachmentPreview({
   }
 
   return null;
-}
-
-function AssistantMarkdown({
-  content,
-  onOpenDocumentPath,
-}: {
-  content: string;
-  onOpenDocumentPath?: (path: string) => void;
-}) {
-  return (
-    <Markdown
-      className="max-w-none text-sm leading-7 text-inherit"
-      linkRenderer={({ href, children }) => {
-        const documentPath = normalizeAssistantDocumentHref(href);
-        if (documentPath && onOpenDocumentPath) {
-          return (
-            <button
-              type="button"
-              className="font-medium text-primary underline underline-offset-2 hover:text-primary/80"
-              onClick={() => onOpenDocumentPath(documentPath)}
-            >
-              {children}
-            </button>
-          );
-        }
-
-        return undefined;
-      }}
-    >
-      {content}
-    </Markdown>
-  );
 }

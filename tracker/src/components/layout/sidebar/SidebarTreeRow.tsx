@@ -110,8 +110,7 @@ export const SidebarTreeRow = forwardRef<HTMLDivElement, SidebarTreeRowProps>(
       >
         <div
           className={cn(
-            "group mx-0.5 flex items-center gap-0.5 rounded-md pr-1 text-sm text-foreground",
-            isLeaf ? "min-h-8 py-0.5" : "min-h-9 py-1",
+            "group mx-0.5 flex min-h-7 items-center gap-0.5 rounded-md py-0.5 pr-1 text-xs text-foreground",
             "hover:bg-black/[0.04] dark:hover:bg-white/[0.06]",
             "focus-within:bg-black/[0.05] dark:focus-within:bg-white/[0.08]",
             selected &&
@@ -141,12 +140,12 @@ export const SidebarTreeRow = forwardRef<HTMLDivElement, SidebarTreeRowProps>(
               onClick={stopAndToggle}
               onMouseDown={preserveTreeItemFocus}
               onKeyDown={stopEmbeddedKeyDown}
-              className="inline-flex h-6 w-4 shrink-0 items-center justify-center rounded text-muted-foreground/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="inline-flex h-5 w-3.5 shrink-0 items-center justify-center rounded text-muted-foreground/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               {expanded ? (
-                <ChevronDown className="h-3 w-3" aria-hidden="true" />
+                <ChevronDown className="h-3 w-3" strokeWidth={1.5} aria-hidden="true" />
               ) : (
-                <ChevronRight className="h-3 w-3" aria-hidden="true" />
+                <ChevronRight className="h-3 w-3" strokeWidth={1.5} aria-hidden="true" />
               )}
             </button>
           ) : null}
@@ -162,12 +161,12 @@ export const SidebarTreeRow = forwardRef<HTMLDivElement, SidebarTreeRowProps>(
             onClick={onOpen}
             onMouseDown={preserveTreeItemFocus}
             onKeyDown={stopEmbeddedKeyDown}
-            className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             {leadingIcon ? (
               <span
                 aria-hidden="true"
-                className="relative inline-flex h-4 w-4 shrink-0 items-center justify-center text-muted-foreground"
+                className="relative inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center text-muted-foreground"
               >
                 {leadingIcon}
                 {statusIndicator ? (
@@ -180,10 +179,10 @@ export const SidebarTreeRow = forwardRef<HTMLDivElement, SidebarTreeRowProps>(
               </span>
             ) : null}
             <span className="min-w-0 flex-1">
-              <span className="flex min-w-0 items-center gap-2">
+              <span className="flex min-w-0 items-center gap-1.5">
                 <span
                   className={cn(
-                    "min-w-0 flex-1 truncate leading-5",
+                    "min-w-0 flex-1 truncate leading-4",
                     isLeaf ? "font-normal" : "font-medium",
                     selected && "text-foreground",
                   )}
@@ -191,7 +190,7 @@ export const SidebarTreeRow = forwardRef<HTMLDivElement, SidebarTreeRowProps>(
                   {label}
                 </span>
                 {trailingLabel ? (
-                  <span className="shrink-0 text-xs tabular-nums text-muted-foreground/80">
+                  <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground/80">
                     {trailingLabel}
                   </span>
                 ) : null}
@@ -222,9 +221,9 @@ export const SidebarTreeRow = forwardRef<HTMLDivElement, SidebarTreeRowProps>(
               onClick={(event) => event.stopPropagation()}
               onMouseDown={preserveTreeItemFocus}
               onKeyDown={stopEmbeddedKeyDown}
-              className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 hover:bg-black/[0.06] hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover:opacity-100 dark:hover:bg-white/[0.08]"
+              className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-muted-foreground/50 opacity-0 hover:bg-black/[0.06] hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover:opacity-100 dark:hover:bg-white/[0.08]"
             >
-              <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
+              <MoreHorizontal className="h-3.5 w-3.5" strokeWidth={1.5} aria-hidden="true" />
             </button>,
           )}
         </div>

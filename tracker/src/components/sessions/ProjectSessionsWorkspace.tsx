@@ -1,4 +1,4 @@
-import { Clock, FolderPlus, MessageSquare, Trash2 } from "lucide-react";
+import { FolderPlus, Trash2 } from "lucide-react";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
 import { IssuePreviewDock } from "@/components/sessions/IssuePreviewDock";
@@ -6,13 +6,10 @@ import { IssueTerminalDock } from "@/components/sessions/IssueTerminalDock";
 import { SessionPreviewDockContext } from "@/components/sessions/sessionPreviewDockContext";
 import { SessionTerminalDockContext } from "@/components/sessions/sessionTerminalDockContext";
 import { useTranslation } from "react-i18next";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
-import { ArchiveChatButton } from "@/components/assistant/ArchiveChatButton";
-import { RecentStatusDot } from "@/components/layout/RecentStatusDot";
 import { ProjectSessionsChromeSetterContext } from "@/components/layout/ProjectSessionsChromeContext";
-import { recentSessionPath, recentSessionSubtitle } from "@/components/layout/recentSessionPath";
 import { useWorkspace } from "@/components/layout/WorkspaceContext";
 import { AssistantSessionTabContent } from "@/components/sessions/AssistantSessionTabContent";
 import { IssueAuthoringSessionPanel } from "@/components/issues/issue-detail/IssueAuthoringSessionPanel";
@@ -20,18 +17,24 @@ import { IssueExecutionSessionPanel } from "@/components/issues/issue-detail/Iss
 import { NewStandaloneWorkspaceDialog } from "@/components/sessions/NewStandaloneWorkspaceDialog";
 import { type AuthoringSessionRow } from "@/components/sessions/SessionListItem";
 import { StartIssueSessionDialog, type StartIssueSessionDialogIssue } from "@/components/sessions/StartIssueSessionDialog";
-import { WorkspaceCardItem } from "@/components/sessions/WorkspaceCardItem";
+import { WorkspaceAccordionItem } from "@/components/sessions/WorkspaceAccordionItem";
+import {
+  WorkspaceActionButton,
+  workspaceActionIconProps,
+} from "@/components/sessions/WorkspaceActionButton";
 import { WorkspaceCleanupDialog } from "@/components/sessions/WorkspaceCleanupDialog";
-import { RecentSessionBadges } from "@/components/shared/SessionBadge";
-import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { WorkspaceTabBar } from "@/components/workspace/WorkspaceTabBar";
 import { useArchiveChat } from "@/hooks/useArchiveChat";
 import { useProjectSessions } from "@/hooks/useProjectSessions";
 import { useWorkspaceTabs } from "@/hooks/useWorkspaceTabs";
 import { type ProjectSessionRow } from "@/lib/projectSessions";
-import { buildWorkspaceCards, formatBytes, type WorkspaceCard } from "@/lib/workspaceCards";
-import { cn, formatDateTime, SCROLLBAR_THIN } from "@/lib/utils";
+import {
+  buildWorkspaceCards,
+  flattenWorkspaceCardsByRecency,
+  formatBytes,
+} from "@/lib/workspaceCards";
+import { cn, SCROLLBAR_THIN } from "@/lib/utils";
 import {
   SESSIONS_LIST_TAB_ID,
   authoringSessionTabId,
@@ -309,12 +312,23 @@ export function ProjectSessionsWorkspace({
       }),
     [executions, inventory, issues, relatedSessions],
   );
-  const total =
-    cards.projectCards.length +
-    cards.activeCards.length +
-    cards.waitingCards.length +
-    cards.orphanCards.length +
-    cards.chatSessions.length;
+  const listItems = useMemo(() => flattenWorkspaceCardsByRecency(cards), [cards]);
+  const total = listItems.length;
+  const [expandedKey, setExpandedKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (listItems.length === 0) {
+      setExpandedKey(null);
+      return;
+    }
+    setExpandedKey((current) =>
+      current && listItems.some((item) => item.key === current) ? current : null,
+    );
+  }, [listItems]);
+
+  function toggleExpanded(key: string) {
+    setExpandedKey((current) => (current === key ? null : key));
+  }
 
   const projectRepos = useMemo(() => {
     const projectEntry = inventory?.entries.find((entry) => entry.kind === "project");
@@ -363,7 +377,7 @@ export function ProjectSessionsWorkspace({
   return (
     <SessionTerminalDockContext.Provider value={terminalDockControls}>
     <SessionPreviewDockContext.Provider value={previewDockControls}>
-    <main className="box-border flex h-[calc(100vh-4rem)] min-h-0 flex-col overflow-hidden bg-gradient-to-br from-muted/40 via-background to-muted/20 p-2 sm:p-3">
+    <main className="box-border flex h-[calc(100vh-4rem)] min-h-0 flex-col overflow-hidden bg-background p-2 sm:p-3">
       <div
         ref={splitContainerRef}
         className="flex h-full min-h-0 w-full gap-3 overflow-hidden"
@@ -385,49 +399,43 @@ export function ProjectSessionsWorkspace({
         {error ? <p className="shrink-0 px-1 text-sm text-destructive">{error}</p> : null}
 
         {activeTab?.kind === "sessions-list" ? (
-          <div className={cn("min-h-0 flex-1 overflow-y-auto", SCROLLBAR_THIN)}>
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border/60 bg-card/70 px-3 py-2 shadow-sm">
-              <div className="flex flex-wrap items-center gap-1.5">
-                <span className="text-[11px] font-semibold tracking-wide text-muted-foreground">
-                  {t("workspacesPage.inventoryLabel")}
-                </span>
-                {inventory ? (
-                  <>
-                    <span className="rounded-full border border-border/60 bg-muted/40 px-2 py-0.5 text-[11px] text-foreground/80">
-                      {isInventoryLoading
-                        ? t("workspacesPage.totalsLoading", {
-                            count: inventory.totals.count,
-                            size: formatBytes(inventory.totals.sizeBytes),
-                          })
-                        : t("workspacesPage.totalsTrees", { count: inventory.totals.count })}
-                    </span>
-                    {!isInventoryLoading ? (
-                      <span className="rounded-full border border-border/60 bg-muted/40 px-2 py-0.5 text-[11px] text-foreground/80">
-                        {t("workspacesPage.totalsSize", { size: formatBytes(inventory.totals.sizeBytes) })}
-                      </span>
-                    ) : null}
-                    {!isInventoryLoading && inventory.totals.reclaimableBytes > 0 ? (
-                      <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-700 dark:text-emerald-400">
-                        {t("workspacesPage.totalsReclaimable", {
-                          reclaimable: formatBytes(inventory.totals.reclaimableBytes),
+          <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden">
+            <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 px-0.5">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-foreground">{t("workspacesPage.title")}</p>
+                <p className="text-[11px] text-muted-foreground">
+                  {inventory
+                    ? isInventoryLoading
+                      ? t("workspacesPage.totalsLoading", {
+                          count: inventory.totals.count,
+                          size: formatBytes(inventory.totals.sizeBytes),
+                        })
+                      : t("workspacesPage.toolbarSummary", {
+                          count: inventory.totals.count,
+                          size: formatBytes(inventory.totals.sizeBytes),
+                          defaultValue: "{{count}} trees · {{size}}",
+                        })
+                    : isInventoryLoading
+                      ? t("workspacesPage.inventoryLoading")
+                      : t("workspacesPage.toolbarSummaryEmpty", {
+                          defaultValue: "No inventory yet",
                         })}
-                      </span>
-                    ) : null}
-                  </>
-                ) : isInventoryLoading ? (
-                  <span className="text-xs text-muted-foreground">{t("workspacesPage.inventoryLoading")}</span>
-                ) : null}
+                </p>
               </div>
-              <div className="flex items-center gap-2">
-                <Button type="button" variant="outline" size="sm" onClick={() => setNewWorkspaceOpen(true)}>
-                  <FolderPlus className="h-3.5 w-3.5" />
+              <div className="flex items-center gap-1.5">
+                <WorkspaceActionButton
+                  icon={<FolderPlus {...workspaceActionIconProps} aria-hidden />}
+                  onClick={() => setNewWorkspaceOpen(true)}
+                >
                   {t("workspacesPage.newWorkspace.button")}
-                </Button>
+                </WorkspaceActionButton>
                 {inventory && !isInventoryLoading ? (
-                  <Button type="button" variant="outline" size="sm" onClick={() => setCleanupOpen(true)}>
-                    <Trash2 className="h-3.5 w-3.5" />
+                  <WorkspaceActionButton
+                    icon={<Trash2 {...workspaceActionIconProps} aria-hidden />}
+                    onClick={() => setCleanupOpen(true)}
+                  >
                     {t("workspacesPage.cleanup.button")}
-                  </Button>
+                  </WorkspaceActionButton>
                 ) : null}
               </div>
             </div>
@@ -440,79 +448,42 @@ export function ProjectSessionsWorkspace({
               <EmptyState variant="simple">{t("sessions.empty")}</EmptyState>
             ) : null}
 
-            <div className="space-y-4">
-              <WorkspaceCardSection
-                title={t("workspacesPage.sections.project")}
-                cards={cards.projectCards}
-                projectSlug={projectSlug}
-                view={view}
-                resumePending={resumePending}
-                onOpenExecution={openExecutionSession}
-                onOpenAuthoring={openAuthoringByIdentifier}
-                onOpenSession={openRecentSession}
-                onResume={handleResume}
-                onNewSession={handleNewSession}
-                onRemove={handleRemoveWorkspace}
-              />
-              <WorkspaceCardSection
-                title={t("workspacesPage.sections.active")}
-                cards={cards.activeCards}
-                projectSlug={projectSlug}
-                view={view}
-                resumePending={resumePending}
-                onOpenExecution={openExecutionSession}
-                onOpenAuthoring={openAuthoringByIdentifier}
-                onOpenSession={openRecentSession}
-                onResume={handleResume}
-                onNewSession={handleNewSession}
-                onRemove={handleRemoveWorkspace}
-              />
-              <WorkspaceCardSection
-                title={t("workspacesPage.sections.waiting")}
-                cards={cards.waitingCards}
-                projectSlug={projectSlug}
-                view={view}
-                resumePending={resumePending}
-                onOpenExecution={openExecutionSession}
-                onOpenAuthoring={openAuthoringByIdentifier}
-                onOpenSession={openRecentSession}
-                onResume={handleResume}
-                onNewSession={handleNewSession}
-                onRemove={handleRemoveWorkspace}
-              />
-              <WorkspaceCardSection
-                title={t("workspacesPage.sections.orphans")}
-                cards={cards.orphanCards}
-                projectSlug={projectSlug}
-                view={view}
-                resumePending={resumePending}
-                onOpenExecution={openExecutionSession}
-                onOpenAuthoring={openAuthoringByIdentifier}
-                onOpenSession={openRecentSession}
-                onResume={handleResume}
-                onNewSession={handleNewSession}
-                onRemove={handleRemoveWorkspace}
-              />
-
-              {cards.chatSessions.length > 0 ? (
-                <section>
-                  <h2 className="mb-2 px-1 text-xs font-semibold tracking-wide text-muted-foreground">
-                    {t("workspacesPage.sections.chats")}
-                  </h2>
-                  <ul className="grid gap-2 md:grid-cols-2">
-                    {cards.chatSessions.map((session) => (
-                      <RelatedSessionCard
-                        key={session.id}
-                        session={session}
+            {total > 0 ? (
+              <div
+                className={cn("min-h-0 flex-1 overflow-y-auto p-0.5", SCROLLBAR_THIN)}
+                role="list"
+                aria-label={t("workspacesPage.title")}
+              >
+                <ul className="w-full space-y-0.5">
+                  {listItems.map((item) => (
+                    <li key={item.key}>
+                      <WorkspaceAccordionItem
+                        item={item}
+                        expanded={item.key === expandedKey}
+                        issueHref={
+                          item.kind === "card" && item.card.issueIdentifier
+                            ? issuePath(projectSlug, view, item.card.issueIdentifier, "sessions")
+                            : null
+                        }
+                        resumePending={
+                          item.kind === "card" ? resumePending === item.card.issueIdentifier : false
+                        }
                         archiving={archiving}
-                        onArchive={handleArchive}
+                        onToggle={() => toggleExpanded(item.key)}
+                        onOpenExecution={openExecutionSession}
+                        onOpenAuthoring={openAuthoringByIdentifier}
+                        onOpenSession={openRecentSession}
                         onOpenAssistantSession={openAssistantSession}
+                        onResume={handleResume}
+                        onNewSession={handleNewSession}
+                        onRemove={handleRemoveWorkspace}
+                        onArchive={handleArchive}
                       />
-                    ))}
-                  </ul>
-                </section>
-              ) : null}
-            </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
           </div>
         ) : null}
 
@@ -612,58 +583,6 @@ export function ProjectSessionsWorkspace({
   );
 }
 
-function WorkspaceCardSection({
-  title,
-  cards,
-  projectSlug,
-  view,
-  resumePending,
-  onOpenExecution,
-  onOpenAuthoring,
-  onOpenSession,
-  onResume,
-  onNewSession,
-  onRemove,
-}: {
-  title: string;
-  cards: WorkspaceCard[];
-  projectSlug: string;
-  view: WorkspaceView;
-  resumePending: string | null;
-  onOpenExecution: (session: ProjectSessionRow) => void;
-  onOpenAuthoring: (issueIdentifier: string) => void;
-  onOpenSession: (session: RecentSession) => void;
-  onResume: (session: ProjectSessionRow) => void;
-  onNewSession: (issueIdentifier: string) => void;
-  onRemove: (path: string) => void;
-}) {
-  if (cards.length === 0) return null;
-
-  return (
-    <section>
-      <h2 className="mb-2 px-1 text-xs font-semibold tracking-wide text-muted-foreground">{title}</h2>
-      <ul className="grid gap-2">
-        {cards.map((card) => (
-          <WorkspaceCardItem
-            key={card.key}
-            card={card}
-            issueHref={
-              card.issueIdentifier ? issuePath(projectSlug, view, card.issueIdentifier, "sessions") : null
-            }
-            resumePending={resumePending === card.issueIdentifier}
-            onOpenExecution={onOpenExecution}
-            onOpenAuthoring={onOpenAuthoring}
-            onOpenSession={onOpenSession}
-            onResume={onResume}
-            onNewSession={onNewSession}
-            onRemove={onRemove}
-          />
-        ))}
-      </ul>
-    </section>
-  );
-}
-
 function AuthoringSessionTabContent({
   projectSlug,
   issueIdentifier,
@@ -736,95 +655,5 @@ function ExecutionSessionTabContent({
       />
     </section>
   );
-}
-
-function RelatedSessionCard({
-  session,
-  archiving,
-  onArchive,
-  onOpenAssistantSession,
-}: {
-  session: RecentSession;
-  archiving: boolean;
-  onArchive: (threadId: number) => void;
-  onOpenAssistantSession: (threadId: number, title: string) => void;
-}) {
-  const { t } = useTranslation();
-  const subtitle = recentSessionSubtitle(session, t);
-  const canOpenAsTab =
-    (session.scope === "project_session" ||
-      session.scope === "project" ||
-      session.scope === "issue" ||
-      session.scope === "issue_session") &&
-    session.threadId != null &&
-    session.projectSlug;
-
-  if (canOpenAsTab && session.threadId != null) {
-    return (
-      <li className="rounded-lg border border-border/60 bg-card/70 px-4 py-3 shadow-sm">
-        <div className="flex items-start justify-between gap-3">
-          <button
-            type="button"
-            className="flex min-w-0 flex-1 items-start gap-3 text-left"
-            onClick={() => onOpenAssistantSession(session.threadId!, session.title)}
-          >
-            <RecentStatusDot statusKind={session.statusKind} className="mt-1.5" />
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <span className="truncate text-sm font-medium text-foreground">{session.title}</span>
-                <SessionKindBadge session={session} />
-              </div>
-              <p className="mt-1 truncate text-xs text-muted-foreground">{subtitle}</p>
-              <p className="mt-1 inline-flex items-center gap-1 text-xs text-muted-foreground">
-                <Clock className="h-3.5 w-3.5" />
-                {formatDateTime(session.updatedAt)}
-              </p>
-              {session.preview ? (
-                <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">
-                  <MessageSquare className="mr-1 inline h-3.5 w-3.5 align-text-bottom" />
-                  {session.preview}
-                </p>
-              ) : null}
-            </div>
-          </button>
-          <ArchiveChatButton threadId={session.threadId} archiving={archiving} onArchive={onArchive} />
-        </div>
-      </li>
-    );
-  }
-
-  return (
-    <li className="rounded-lg border border-border/60 bg-card/70 px-4 py-3 shadow-sm">
-      <div className="flex items-start justify-between gap-3">
-        <Link to={recentSessionPath(session)} className="flex min-w-0 flex-1 items-start gap-3">
-          <RecentStatusDot statusKind={session.statusKind} className="mt-1.5" />
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <span className="truncate text-sm font-medium text-foreground">{session.title}</span>
-              <SessionKindBadge session={session} />
-            </div>
-            <p className="mt-1 truncate text-xs text-muted-foreground">{subtitle}</p>
-            <p className="mt-1 inline-flex items-center gap-1 text-xs text-muted-foreground">
-              <Clock className="h-3.5 w-3.5" />
-              {formatDateTime(session.updatedAt)}
-            </p>
-            {session.preview ? (
-              <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">
-                <MessageSquare className="mr-1 inline h-3.5 w-3.5 align-text-bottom" />
-                {session.preview}
-              </p>
-            ) : null}
-          </div>
-        </Link>
-        {session.threadId != null ? (
-          <ArchiveChatButton threadId={session.threadId} archiving={archiving} onArchive={onArchive} />
-        ) : null}
-      </div>
-    </li>
-  );
-}
-
-function SessionKindBadge({ session }: { session: RecentSession }) {
-  return <RecentSessionBadges session={session} />;
 }
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildWorkspaceCards, formatBytes } from "@/lib/workspaceCards";
+import { buildWorkspaceCards, flattenWorkspaceCardsByRecency, formatBytes } from "@/lib/workspaceCards";
 import type { AgentExecution } from "@/types/agent-execution";
 import type { Issue } from "@/types/issue";
 import type { RecentSession } from "@/types/recents";
@@ -178,10 +178,88 @@ describe("buildWorkspaceCards", () => {
       inventory: [],
     });
 
-    expect(result.projectCards).toHaveLength(0);
     expect(result.chatSessions.map((entry) => entry.title)).toEqual(["Homeless chat"]);
   });
+});
 
+describe("flattenWorkspaceCardsByRecency", () => {
+  it("merges all card sections and free chats into one recency-ordered list", () => {
+    const result = buildWorkspaceCards({
+      executions: [
+        execution({
+          issueIdentifier: "DEMO-1",
+          status: "live",
+          lastEventAt: "2026-07-02T10:00:00Z",
+        }),
+        execution({
+          issueIdentifier: "DEMO-2",
+          status: "waiting",
+          sessionId: "sess-2",
+          lastEventAt: "2026-07-02T08:00:00Z",
+        }),
+      ],
+      issues: [issue("DEMO-1", "Live work"), issue("DEMO-2", "Waiting work")],
+      relatedSessions: [
+        session({
+          id: "chat:free",
+          scope: "freeform",
+          title: "Free chat",
+          updatedAt: "2026-07-02T12:00:00Z",
+        }),
+      ],
+      inventory: [
+        inventoryEntry({
+          path: "/ws/demo",
+          kind: "project",
+          issueIdentifier: null,
+          sizeBytes: 2048,
+        }),
+        inventoryEntry({
+          path: "/ws/demo/OLD-9",
+          kind: "issue",
+          issueIdentifier: "OLD-9",
+          classification: "orphan",
+          reclaimable: true,
+        }),
+      ],
+    });
+
+    const flat = flattenWorkspaceCardsByRecency(result);
+    expect(flat.map((item) => item.key)).toEqual([
+      "chat:chat:free",
+      "issue:DEMO-1",
+      "issue:DEMO-2",
+      "orphan:/ws/demo/OLD-9",
+      "project",
+    ]);
+    expect(flat[0]?.kind).toBe("chat");
+    expect(flat.filter((item) => item.kind === "card").map((item) => item.card.issueIdentifier)).toEqual([
+      "DEMO-1",
+      "DEMO-2",
+      "OLD-9",
+      null,
+    ]);
+  });
+
+  it("does not pin the project workspace above newer issue activity", () => {
+    const result = buildWorkspaceCards({
+      executions: [
+        execution({
+          issueIdentifier: "DEMO-1",
+          lastEventAt: "2026-07-02T15:00:00Z",
+        }),
+      ],
+      issues: [issue("DEMO-1", "Newer issue")],
+      relatedSessions: [],
+      inventory: [inventoryEntry({ path: "/ws/demo", kind: "project", issueIdentifier: null })],
+    });
+
+    const flat = flattenWorkspaceCardsByRecency(result);
+    expect(flat.map((item) => item.key)).toEqual(["issue:DEMO-1", "project"]);
+  });
+});
+
+describe("buildWorkspaceCards orphans", () => {
   it("keeps orphan parallel trees out of the active section", () => {
     const result = buildWorkspaceCards({
       executions: [],

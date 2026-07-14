@@ -55,7 +55,14 @@ export function updateStreamingToolCall(
   const toolCalls = upsertToolCall(target.toolCalls, toolCall);
   const nextTarget =
     typeof toolCall.id === "string" && toolCall.id.trim() !== ""
-      ? { ...target, toolCalls, contentBlocks: pushToolBlock(target.contentBlocks, toolCall.id) }
+      ? {
+          ...target,
+          toolCalls,
+          contentBlocks: pushToolBlock(
+            target.contentBlocks ?? appendTextBlock(undefined, target.content),
+            toolCall.id,
+          ),
+        }
       : { ...target, toolCalls };
 
   if (!existing) return [...messages, nextTarget];
