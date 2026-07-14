@@ -1901,24 +1901,7 @@ describe("ProjectAssistantPanel", () => {
     expect(screen.getByTestId("assistant-session-composer")).not.toContainElement(scrollToBottomButton);
   });
 
-  it("shows environment dock toggle for issue-bound threads and opens the dock", async () => {
-    getGitDiffMock.mockResolvedValue({
-      repos: [
-        {
-          repo: "front",
-          files: [
-            {
-              path: "src/App.tsx",
-              oldPath: null,
-              status: "modified",
-              patch: "diff --git a/src/App.tsx b/src/App.tsx\n-old\n+new\n+another\n",
-            },
-          ],
-        },
-      ],
-      workspace: { path: "/tmp/ws", available: true },
-    });
-
+  it("does not show an in-panel environment dock for issue-bound threads", async () => {
     render(
       <MemoryRouter>
         <ProjectAssistantPanel
@@ -1931,16 +1914,10 @@ describe("ProjectAssistantPanel", () => {
       </MemoryRouter>,
     );
 
-    const toggle = await screen.findByRole("button", { name: /toggle environment/i });
-
-    // Issue-bound sessions default the dock open.
-    expect(await screen.findByTestId("environment-floating-dock")).toBeInTheDocument();
-
-    fireEvent.click(toggle);
-    await waitFor(() => expect(screen.queryByTestId("environment-floating-dock")).not.toBeInTheDocument());
-
-    fireEvent.click(toggle);
-    expect(await screen.findByTestId("environment-floating-dock")).toBeInTheDocument();
+    await screen.findByPlaceholderText("Write a message...");
+    expect(screen.queryByRole("button", { name: /toggle environment/i })).not.toBeInTheDocument();
+    expect(screen.queryByTestId("environment-floating-dock")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("environment-dock")).not.toBeInTheDocument();
   });
 
   it("does not show the environment dock toggle for freeform threads without an issue", async () => {

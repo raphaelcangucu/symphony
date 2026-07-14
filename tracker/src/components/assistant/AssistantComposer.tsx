@@ -30,6 +30,7 @@ import {
   revokeAttachmentPreviews,
   serializeAttachments,
 } from "@/components/assistant/assistantAttachments";
+import { ASSISTANT_CHAT_MESSAGE_TEXT_CLASS } from "@/components/assistant/chatTypography";
 import { ComposerMoreMenu, ComposerToolbar } from "@/components/assistant/ComposerToolbar";
 import { useIsLgUp } from "@/hooks/useMediaQuery";
 import {
@@ -851,7 +852,10 @@ export function AssistantComposer({
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
           placeholder={placeholder ?? t("assistant.composer.placeholder")}
-          className="min-h-[2.75rem] resize-none border-0 bg-transparent px-3 py-2 text-[length:var(--chat-body)] leading-[var(--chat-body-leading)] shadow-none focus-visible:ring-0"
+          className={cn(
+            ASSISTANT_CHAT_MESSAGE_TEXT_CLASS,
+            "min-h-[2.75rem] resize-none border-0 bg-transparent px-3 py-2 shadow-none focus-visible:ring-0",
+          )}
         />
 
         <div className="flex flex-wrap items-center justify-between gap-2 px-3 pb-3">

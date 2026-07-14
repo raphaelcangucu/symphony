@@ -16,6 +16,8 @@ interface GitDiffLauncherProps {
   onSendReview?: (review: string) => void;
   /** External open trigger: incrementing this counter opens the modal (like other requestId props). */
   openRequestId?: number;
+  /** When false, only the modal + shortcut/requestId path remain (e.g. Environment dock Compare). */
+  showTrigger?: boolean;
 }
 
 export function GitDiffLauncher({
@@ -25,6 +27,7 @@ export function GitDiffLauncher({
   disabled,
   onSendReview,
   openRequestId = 0,
+  showTrigger = true,
 }: GitDiffLauncherProps) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
@@ -43,18 +46,20 @@ export function GitDiffLauncher({
 
   return (
     <>
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        className="h-8 gap-1 px-2 text-xs"
-        disabled={launcherDisabled}
-        onClick={openModal}
-        title={t("issue.diff.shortcutHint")}
-      >
-        <GitCompare className="h-3.5 w-3.5" />
-        <span className="hidden sm:inline">{t("issue.diff.button")}</span>
-      </Button>
+      {showTrigger ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-8 gap-1 px-2 text-xs"
+          disabled={launcherDisabled}
+          onClick={openModal}
+          title={t("issue.diff.shortcutHint")}
+        >
+          <GitCompare className="h-3.5 w-3.5" />
+          <span className="hidden sm:inline">{t("issue.diff.button")}</span>
+        </Button>
+      ) : null}
       {open ? (
         <Suspense fallback={null}>
           <GitDiffModal

@@ -5,6 +5,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { IssueSessionSplitLayout } from "@/components/sessions/IssueSessionSplitLayout";
 import {
+  SessionEnvironmentDockContext,
+  type SessionEnvironmentDockControls,
+} from "@/components/sessions/sessionEnvironmentDockContext";
+import {
   SessionPreviewDockContext,
   type SessionPreviewDockControls,
 } from "@/components/sessions/sessionPreviewDockContext";
@@ -25,19 +29,22 @@ vi.mock("@/hooks/useIssueEditor", () => ({
 function renderLayout(
   dock: SessionTerminalDockControls | null,
   previewDock: SessionPreviewDockControls | null = null,
+  environmentDock: SessionEnvironmentDockControls | null = null,
 ) {
   return render(
     <MemoryRouter>
       <SessionTerminalDockContext.Provider value={dock}>
         <SessionPreviewDockContext.Provider value={previewDock}>
-          <IssueSessionSplitLayout
-            projectSlug="macro-markets"
-            issueIdentifier="510"
-            view="board"
-            headerStart={<p>Issue session</p>}
-          >
-            <div data-testid="session-content">Session body</div>
-          </IssueSessionSplitLayout>
+          <SessionEnvironmentDockContext.Provider value={environmentDock}>
+            <IssueSessionSplitLayout
+              projectSlug="macro-markets"
+              issueIdentifier="510"
+              view="board"
+              headerStart={<p>Issue session</p>}
+            >
+              <div data-testid="session-content">Session body</div>
+            </IssueSessionSplitLayout>
+          </SessionEnvironmentDockContext.Provider>
         </SessionPreviewDockContext.Provider>
       </SessionTerminalDockContext.Provider>
     </MemoryRouter>,
@@ -104,5 +111,34 @@ describe("IssueSessionSplitLayout", () => {
     renderLayout(null);
 
     expect(screen.queryByRole("button", { name: "Preview for 510" })).not.toBeInTheDocument();
+  });
+
+  it("toggles the workspace environment dock from the toolbar button", async () => {
+    const user = userEvent.setup();
+    const toggleEnvironment = vi.fn();
+
+    renderLayout(null, null, { openIssueIdentifier: null, toggleEnvironment });
+
+    const environmentButton = screen.getByRole("button", { name: "Environment for 510" });
+    expect(environmentButton).toHaveAttribute("aria-pressed", "false");
+
+    await user.click(environmentButton);
+
+    expect(toggleEnvironment).toHaveBeenCalledWith("510");
+  });
+
+  it("marks the environment button as pressed when the dock is open for this issue", () => {
+    renderLayout(null, null, { openIssueIdentifier: "510", toggleEnvironment: vi.fn() });
+
+    expect(screen.getByRole("button", { name: "Environment for 510" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
+
+  it("hides the environment control without an environment-dock-aware workspace", () => {
+    renderLayout(null);
+
+    expect(screen.queryByRole("button", { name: "Environment for 510" })).not.toBeInTheDocument();
   });
 });

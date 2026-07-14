@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { AssistantMarkdown } from "@/components/assistant/AssistantMarkdown";
 import { AssistantTurnTimeline } from "@/components/assistant/AssistantTurnTimeline";
+import { ASSISTANT_CHAT_MESSAGE_TEXT_CLASS, CHAT_USER_BUBBLE_MAX_WIDTH_CLASS } from "@/components/assistant/chatTypography";
 import { EditedFilesSummary } from "@/components/assistant/EditedFilesSummary";
 import { ToolActivityTimeline } from "@/components/assistant/ToolActivityTimeline";
 import type { ComposerContextChipRef } from "@/components/assistant/contextMentions";
@@ -76,10 +77,15 @@ export function AssistantChatMessageBubble({
     >
       <article
         className={cn(
-          "text-[length:var(--chat-body)] leading-[var(--chat-body-leading)]",
+          ASSISTANT_CHAT_MESSAGE_TEXT_CLASS,
           isUser
-            ? "w-fit max-w-[85%] rounded-2xl bg-violet-500/10 px-3 py-1.5 text-foreground/90"
-            : "assistant-response-content w-full text-foreground/90",
+            ? // Same type tokens as assistant; bubble chrome kept light so it doesn't read larger.
+              cn(
+                "w-fit rounded-2xl bg-slate-950 px-3 py-1.5 text-white dark:bg-primary dark:text-primary-foreground",
+                CHAT_USER_BUBBLE_MAX_WIDTH_CLASS,
+              )
+            : // Same face/measure as user — full foreground so it doesn't look thinner.
+              "assistant-response-content w-full text-foreground",
         )}
       >
         {attachments.length > 0 ? (
@@ -109,7 +115,7 @@ export function AssistantChatMessageBubble({
           <AssistantMarkdown content={message.content} onOpenDocumentPath={onOpenDocumentPath} />
         )}
         {!assistantContentBlocks && message.toolCalls.length ? (
-          <div className={cn("mt-3 border-t pt-2", isUser && "border-violet-500/20")}>
+          <div className={cn("mt-3 border-t pt-2", isUser && "border-white/20")}>
             <ToolActivityTimeline
               toolCalls={message.toolCalls}
               taskSnapshot={taskSnapshot}

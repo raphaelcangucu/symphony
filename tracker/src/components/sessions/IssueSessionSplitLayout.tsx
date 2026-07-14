@@ -1,6 +1,7 @@
 import { type ReactNode } from "react";
 
 import { IssueWorkingTreeToolbar } from "@/components/sessions/IssueWorkingTreeToolbar";
+import { useSessionEnvironmentDock } from "@/components/sessions/sessionEnvironmentDockContext";
 import { useSessionPreviewDock } from "@/components/sessions/sessionPreviewDockContext";
 import { useSessionTerminalDock } from "@/components/sessions/sessionTerminalDockContext";
 import type { WorkspaceView } from "@/lib/workspaceRoutes";
@@ -18,9 +19,9 @@ interface IssueSessionSplitLayoutProps {
 }
 
 /**
- * Header + toolbar wrapper for issue-bound session tabs. The terminal button
- * toggles the workspace-level terminal dock (rendered beside the sessions
- * panel by ProjectSessionsWorkspace) instead of navigating to the issue drawer.
+ * Header + toolbar wrapper for issue-bound session tabs. Terminal / Preview /
+ * Environment buttons toggle workspace-level docks (rendered beside the sessions
+ * panel by ProjectSessionsWorkspace) instead of navigating away.
  */
 export function IssueSessionSplitLayout({
   projectSlug,
@@ -37,6 +38,8 @@ export function IssueSessionSplitLayout({
   const terminalOpen = dock?.openIssueIdentifier === issueIdentifier;
   const previewDock = useSessionPreviewDock();
   const previewOpen = previewDock?.openIssueIdentifier === issueIdentifier;
+  const environmentDock = useSessionEnvironmentDock();
+  const environmentOpen = environmentDock?.openIssueIdentifier === issueIdentifier;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -52,6 +55,10 @@ export function IssueSessionSplitLayout({
           onTerminalToggle={dock ? () => dock.toggleTerminal(issueIdentifier) : undefined}
           previewOpen={previewOpen}
           onPreviewToggle={previewDock ? () => previewDock.togglePreview(issueIdentifier) : undefined}
+          environmentOpen={environmentOpen}
+          onEnvironmentToggle={
+            environmentDock ? () => environmentDock.toggleEnvironment(issueIdentifier) : undefined
+          }
           onOpenKnowledgeBase={onOpenKnowledgeBase}
           changedDocCount={changedDocCount}
         />

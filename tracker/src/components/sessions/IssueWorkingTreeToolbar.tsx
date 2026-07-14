@@ -1,4 +1,4 @@
-import { AppWindow, ExternalLink, TerminalSquare } from "lucide-react";
+import { AppWindow, ExternalLink, PanelRight, TerminalSquare } from "lucide-react";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
@@ -26,6 +26,9 @@ interface IssueWorkingTreeToolbarProps {
   /** When set, shows a preview control toggling the inline dev-server preview dock. */
   previewOpen?: boolean;
   onPreviewToggle?: () => void;
+  /** When set, shows an environment control toggling the workspace environment dock. */
+  environmentOpen?: boolean;
+  onEnvironmentToggle?: () => void;
   /** Opens the shared issue KB modal owned by the assistant panel. */
   onOpenKnowledgeBase?: () => void;
   changedDocCount?: number;
@@ -41,6 +44,8 @@ export function IssueWorkingTreeToolbar({
   onTerminalToggle,
   previewOpen = false,
   onPreviewToggle,
+  environmentOpen = false,
+  onEnvironmentToggle,
   onOpenKnowledgeBase,
   changedDocCount,
 }: IssueWorkingTreeToolbarProps) {
@@ -54,6 +59,10 @@ export function IssueWorkingTreeToolbar({
   const previewActionClassName = cn(
     sessionToolbarIconButtonClassName,
     previewOpen && sessionToolbarIconButtonActiveClassName,
+  );
+  const environmentActionClassName = cn(
+    sessionToolbarIconButtonClassName,
+    environmentOpen && sessionToolbarIconButtonActiveClassName,
   );
 
   return (
@@ -98,6 +107,18 @@ export function IssueWorkingTreeToolbar({
           className={previewActionClassName}
         >
           <AppWindow className="h-4 w-4" />
+        </button>
+      ) : null}
+      {onEnvironmentToggle ? (
+        <button
+          type="button"
+          aria-label={t("workspace.environment.ariaLabel", { identifier: issueIdentifier })}
+          title={t("workspace.environment.ariaLabel", { identifier: issueIdentifier })}
+          aria-pressed={environmentOpen}
+          onClick={onEnvironmentToggle}
+          className={environmentActionClassName}
+        >
+          <PanelRight className="h-4 w-4" />
         </button>
       ) : null}
       <IssueEditorMenu projectSlug={projectSlug} identifier={issueIdentifier} compact />

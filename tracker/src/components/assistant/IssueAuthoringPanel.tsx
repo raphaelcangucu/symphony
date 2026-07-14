@@ -70,11 +70,7 @@ export const IssueAuthoringPanel = memo(function IssueAuthoringPanel({
   );
 
   const assistantPanel = (
-    <div
-      className={cn(
-        "flex h-full min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border/60 bg-background shadow-[0_1px_3px_rgba(0,0,0,0.04),0_8px_24px_-12px_rgba(0,0,0,0.12)] ring-1 ring-black/[0.02]",
-      )}
-    >
+    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-background">
       <ProjectAssistantPanel
         projectSlug={projectSlug}
         threadId={threadId}
@@ -160,7 +156,7 @@ export const IssueAuthoringPanel = memo(function IssueAuthoringPanel({
 
   if (compact) {
     return (
-      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gradient-to-b from-muted/30 to-muted/10 p-2">
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
         <section className="flex min-h-0 flex-1 overflow-hidden" aria-label={t("assistant.authoring.chatAria")}>
           {assistantPanel}
         </section>
@@ -171,7 +167,7 @@ export const IssueAuthoringPanel = memo(function IssueAuthoringPanel({
   return (
     <main
       className={cn(
-        "grid h-[calc(100vh-4rem)] max-h-[calc(100vh-4rem)] gap-5 overflow-hidden bg-gradient-to-br from-muted/40 via-background to-muted/20 p-5",
+        "grid h-[calc(100vh-4rem)] max-h-[calc(100vh-4rem)] gap-5 overflow-hidden bg-background p-5",
         "grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(26rem,0.82fr)] xl:grid-rows-1",
       )}
     >

@@ -78,8 +78,18 @@ describe("ExecutionChatPanel", () => {
     renderPanel({ execution: makeExecution({ status: "live" }) });
 
     expect(screen.queryByText("Run status")).not.toBeInTheDocument();
+    expect(screen.getByTestId("assistant-session-shell")).toBeInTheDocument();
     expect(screen.getByLabelText("Chat history for CDE-1132")).toBeInTheDocument();
     expect(screen.getByTestId("execution-composer")).toBeInTheDocument();
+  });
+
+  it("uses the shared centered reading column for feed and composer", () => {
+    renderPanel({ execution: makeExecution({ status: "live" }) });
+
+    const feed = screen.getByTestId("assistant-session-feed");
+    const composer = screen.getByTestId("assistant-session-composer");
+    expect(feed.firstElementChild?.className).toContain("max-w-3xl");
+    expect(composer.firstElementChild?.className).toContain("max-w-3xl");
   });
 
   it("renders execution status when the parent toggle is open", () => {

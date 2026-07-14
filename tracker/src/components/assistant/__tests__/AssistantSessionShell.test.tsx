@@ -41,17 +41,15 @@ describe("AssistantSessionShell", () => {
     expect(overlay).toBeInTheDocument();
   });
 
-  it("renders optional environment overlay without creating a second page scroller on root", () => {
+  it("keeps root overflow hidden without a second page scroller", () => {
     render(
       <AssistantSessionShell
         feed={<div>feed</div>}
         composer={<div>composer</div>}
-        environment={<div data-testid="env-panel">env</div>}
       />,
     );
     const root = screen.getByTestId("assistant-session-shell");
     expect(root.className).toMatch(/overflow-hidden/);
     expect(root.className).not.toMatch(/overflow-y-auto/);
-    expect(screen.getByTestId("env-panel")).toBeInTheDocument();
   });
 });

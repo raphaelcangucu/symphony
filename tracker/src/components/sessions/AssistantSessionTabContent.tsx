@@ -86,7 +86,7 @@ export function AssistantSessionTabContent({
             mode="page"
             hideHeader
             diffRequestId={diffRequestId}
-            contentMaxWidth="wide"
+            contentMaxWidth="default"
             onTasksDockControlChange={setTasksControl}
             onKnowledgeBaseControlChange={setKbControl}
           />
@@ -100,7 +100,7 @@ export function AssistantSessionTabContent({
             mode="page"
             hideHeader
             diffRequestId={diffRequestId}
-            contentMaxWidth="wide"
+            contentMaxWidth="default"
             onTasksDockControlChange={setTasksControl}
           />
         </div>

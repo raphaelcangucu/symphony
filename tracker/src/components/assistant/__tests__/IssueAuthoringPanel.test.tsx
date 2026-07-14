@@ -67,6 +67,18 @@ describe("IssueAuthoringPanel", () => {
     expect(screen.queryByRole("button", { name: /documents/i })).not.toBeInTheDocument();
   });
 
+  it("keeps compact authoring chrome borderless", () => {
+    const { container } = render(
+      <MemoryRouter>
+        <IssueAuthoringPanel projectSlug="macro-markets" identifier="MAC-1" view="list" compact />
+      </MemoryRouter>,
+    );
+
+    expect(container.querySelector(".rounded-2xl.border")).toBeNull();
+    expect(container.querySelector(".bg-gradient-to-b")).toBeNull();
+    expect(container.querySelector("[class*='shadow-[']")).toBeNull();
+  });
+
   it("uses the full-page layout when not compact", () => {
     render(
       <MemoryRouter>

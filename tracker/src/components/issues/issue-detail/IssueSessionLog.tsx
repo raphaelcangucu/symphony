@@ -20,7 +20,12 @@ interface IssueSessionLogProps {
   error: string | null;
   logAgentKind?: string | null;
   preferredAgentKind?: string | null;
-  /** Grow to fill the available height (chat layout) instead of a fixed max. */
+  /**
+   * `standalone` owns its scroller (tests / embedded callers).
+   * `shell-feed` renders transcript only — parent `AssistantSessionShell` scrolls.
+   */
+  variant?: "standalone" | "shell-feed";
+  /** @deprecated Prefer `variant="shell-feed"` inside AssistantSessionShell. */
   fill?: boolean;
 }
 
@@ -28,15 +33,20 @@ export function IssueSessionLog({
   issueIdentifier,
   entries,
   error,
+  variant,
   fill = false,
 }: IssueSessionLogProps) {
   const { t } = useTranslation();
+  const resolvedVariant = variant ?? (fill ? "shell-feed" : "standalone");
+  const isShellFeed = resolvedVariant === "shell-feed";
   const containerRef = useRef<HTMLDivElement | null>(null);
   const stickToBottomRef = useRef(true);
   const [isAtBottom, setIsAtBottom] = useState(true);
   const taskSnapshot = deriveAgentTasks(entries);
 
   useEffect(() => {
+    if (isShellFeed) return undefined;
+
     const container = containerRef.current;
     if (!container) return undefined;
 
@@ -50,13 +60,14 @@ export function IssueSessionLog({
     updateStickiness();
     container.addEventListener("scroll", updateStickiness, { passive: true });
     return () => container.removeEventListener("scroll", updateStickiness);
-  }, []);
+  }, [isShellFeed]);
 
   useEffect(() => {
+    if (isShellFeed) return;
     const container = containerRef.current;
     if (!container || !stickToBottomRef.current) return;
     container.scrollTop = container.scrollHeight;
-  }, [entries]);
+  }, [entries, isShellFeed]);
 
   const scrollToBottom = useCallback(() => {
     const container = containerRef.current;
@@ -66,28 +77,38 @@ export function IssueSessionLog({
     container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
   }, []);
 
+  const transcript = error ? (
+    <p className="rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+      {error}
+    </p>
+  ) : entries.length > 0 ? (
+    <SessionLogTranscript entries={entries} taskSnapshot={taskSnapshot} />
+  ) : (
+    <p className="px-2 py-6 text-center text-sm text-muted-foreground">{t("issue.sessionLog.waiting")}</p>
+  );
+
+  if (isShellFeed) {
+    return (
+      <section
+        aria-label={t("issue.sessionLog.chatHistoryAriaLabel", { identifier: issueIdentifier })}
+        className="flex min-h-0 flex-col gap-3"
+      >
+        <AgentTaskPinnedPanel snapshot={taskSnapshot} />
+        <div className="space-y-4">{transcript}</div>
+      </section>
+    );
+  }
+
   return (
-    <section className={cn("relative min-h-0", fill && "flex flex-1 flex-col")}>
+    <section className="relative min-h-0">
       <AgentTaskPinnedPanel snapshot={taskSnapshot} />
-      {error ? (
-        <p className="rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">{error}</p>
-      ) : (
-        <div
-          ref={containerRef}
-          aria-label={t("issue.sessionLog.chatHistoryAriaLabel", { identifier: issueIdentifier })}
-          className={cn(
-            "space-y-4 overflow-auto px-1 py-2",
-            SCROLLBAR_THIN,
-            fill ? "min-h-0 flex-1" : "max-h-[520px]",
-          )}
-        >
-          {entries.length > 0 ? (
-            <SessionLogTranscript entries={entries} taskSnapshot={taskSnapshot} />
-          ) : (
-            <p className="px-2 py-6 text-center text-sm text-muted-foreground">{t("issue.sessionLog.waiting")}</p>
-          )}
-        </div>
-      )}
+      <div
+        ref={containerRef}
+        aria-label={t("issue.sessionLog.chatHistoryAriaLabel", { identifier: issueIdentifier })}
+        className={cn("max-h-[520px] space-y-4 overflow-auto px-1 py-2", SCROLLBAR_THIN)}
+      >
+        {transcript}
+      </div>
       {!error && entries.length > 0 && !isAtBottom ? (
         <div className="pointer-events-none absolute inset-x-0 bottom-2 z-10 flex justify-center">
           <Button

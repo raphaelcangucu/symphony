@@ -196,6 +196,6 @@ describe("ProjectSessionsWorkspace", () => {
     expect(screen.getByLabelText("mock assistant panel")).toBeInTheDocument();
     expect(container.querySelector("main > div")).toHaveClass("w-full");
     expect(container.querySelector("main > div")).not.toHaveClass("max-w-[min(100%,96rem)]");
-    expect(screen.getByLabelText("mock assistant panel")).toHaveAttribute("data-content-max-width", "wide");
+    expect(screen.getByLabelText("mock assistant panel")).toHaveAttribute("data-content-max-width", "default");
   });
 });

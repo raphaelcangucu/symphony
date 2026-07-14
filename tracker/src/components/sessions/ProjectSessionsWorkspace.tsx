@@ -1,8 +1,10 @@
 import { FolderPlus, Trash2 } from "lucide-react";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
+import { IssueEnvironmentDock } from "@/components/sessions/IssueEnvironmentDock";
 import { IssuePreviewDock } from "@/components/sessions/IssuePreviewDock";
 import { IssueTerminalDock } from "@/components/sessions/IssueTerminalDock";
+import { SessionEnvironmentDockContext } from "@/components/sessions/sessionEnvironmentDockContext";
 import { SessionPreviewDockContext } from "@/components/sessions/sessionPreviewDockContext";
 import { SessionTerminalDockContext } from "@/components/sessions/sessionTerminalDockContext";
 import { useTranslation } from "react-i18next";
@@ -90,6 +92,7 @@ export function ProjectSessionsWorkspace({
   const [terminalFullscreen, setTerminalFullscreen] = useState(false);
   const [previewDockIssue, setPreviewDockIssue] = useState<string | null>(null);
   const [previewFullscreen, setPreviewFullscreen] = useState(false);
+  const [environmentDockIssue, setEnvironmentDockIssue] = useState<string | null>(null);
 
   const toggleTerminalDock = useCallback((issueIdentifier: string) => {
     setTerminalDockIssue((current) => {
@@ -100,6 +103,7 @@ export function ProjectSessionsWorkspace({
     // Only one dock at a time keeps the split layout readable.
     setPreviewDockIssue(null);
     setPreviewFullscreen(false);
+    setEnvironmentDockIssue(null);
   }, []);
 
   const closeTerminalDock = useCallback(() => {
@@ -119,6 +123,7 @@ export function ProjectSessionsWorkspace({
     });
     setTerminalDockIssue(null);
     setTerminalFullscreen(false);
+    setEnvironmentDockIssue(null);
   }, []);
 
   const closePreviewDock = useCallback(() => {
@@ -130,6 +135,18 @@ export function ProjectSessionsWorkspace({
     setPreviewFullscreen((current) => !current);
   }, []);
 
+  const toggleEnvironmentDock = useCallback((issueIdentifier: string) => {
+    setEnvironmentDockIssue((current) => (current === issueIdentifier ? null : issueIdentifier));
+    setTerminalDockIssue(null);
+    setTerminalFullscreen(false);
+    setPreviewDockIssue(null);
+    setPreviewFullscreen(false);
+  }, []);
+
+  const closeEnvironmentDock = useCallback(() => {
+    setEnvironmentDockIssue(null);
+  }, []);
+
   const terminalDockControls = useMemo(
     () => ({ openIssueIdentifier: terminalDockIssue, toggleTerminal: toggleTerminalDock }),
     [terminalDockIssue, toggleTerminalDock],
@@ -138,6 +155,11 @@ export function ProjectSessionsWorkspace({
   const previewDockControls = useMemo(
     () => ({ openIssueIdentifier: previewDockIssue, togglePreview: togglePreviewDock }),
     [previewDockIssue, togglePreviewDock],
+  );
+
+  const environmentDockControls = useMemo(
+    () => ({ openIssueIdentifier: environmentDockIssue, toggleEnvironment: toggleEnvironmentDock }),
+    [environmentDockIssue, toggleEnvironmentDock],
   );
 
   const { tabs, activeTabId, activeTab, selectTab, openTab, closeTab } = useWorkspaceTabs({
@@ -377,6 +399,7 @@ export function ProjectSessionsWorkspace({
   return (
     <SessionTerminalDockContext.Provider value={terminalDockControls}>
     <SessionPreviewDockContext.Provider value={previewDockControls}>
+    <SessionEnvironmentDockContext.Provider value={environmentDockControls}>
     <main className="box-border flex h-[calc(100vh-4rem)] min-h-0 flex-col overflow-hidden bg-background p-2 sm:p-3">
       <div
         ref={splitContainerRef}
@@ -543,6 +566,16 @@ export function ProjectSessionsWorkspace({
           onClose={closePreviewDock}
         />
       ) : null}
+
+      {environmentDockIssue ? (
+        <IssueEnvironmentDock
+          projectSlug={projectSlug}
+          issueIdentifier={environmentDockIssue}
+          view={view}
+          splitContainerRef={splitContainerRef}
+          onClose={closeEnvironmentDock}
+        />
+      ) : null}
       </div>
 
       <StartIssueSessionDialog
@@ -578,6 +611,7 @@ export function ProjectSessionsWorkspace({
         }}
       />
     </main>
+    </SessionEnvironmentDockContext.Provider>
     </SessionPreviewDockContext.Provider>
     </SessionTerminalDockContext.Provider>
   );
@@ -600,14 +634,14 @@ function AuthoringSessionTabContent({
 
   if (!issue) {
     return (
-      <section className="flex min-h-0 flex-1 items-center justify-center rounded-xl border border-border/60 bg-background p-6 text-center text-sm text-muted-foreground shadow-sm">
+      <section className="flex min-h-0 flex-1 items-center justify-center bg-background p-6 text-center text-sm text-muted-foreground">
         {isLoading ? t("sessions.loading") : t("sessions.executionUnavailable", { identifier: issueIdentifier })}
       </section>
     );
   }
 
   return (
-    <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border/60 bg-background p-3 shadow-sm">
+    <section className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
       <IssueAuthoringSessionPanel issue={issue} projectSlug={projectSlug} view={view} />
     </section>
   );
@@ -637,14 +671,14 @@ function ExecutionSessionTabContent({
 
   if (!issue) {
     return (
-      <section className="flex min-h-0 flex-1 items-center justify-center rounded-xl border border-border/60 bg-background p-6 text-center text-sm text-muted-foreground shadow-sm">
+      <section className="flex min-h-0 flex-1 items-center justify-center bg-background p-6 text-center text-sm text-muted-foreground">
         {isLoading ? t("sessions.loading") : t("sessions.executionUnavailable", { identifier: issueIdentifier })}
       </section>
     );
   }
 
   return (
-    <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border/60 bg-background p-3 shadow-sm">
+    <section className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
       <IssueExecutionSessionPanel
         issue={issue}
         projectSlug={projectSlug}

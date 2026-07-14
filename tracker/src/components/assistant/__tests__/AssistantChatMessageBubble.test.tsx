@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { AssistantChatMessageBubble } from "@/components/assistant/AssistantChatMessageBubble";
@@ -28,27 +28,22 @@ function toolCall(overrides: Partial<AssistantToolCall>): AssistantToolCall {
 }
 
 describe("AssistantChatMessageBubble", () => {
-  it("does not apply the legacy text-sm size class to either bubble", () => {
-    render(<AssistantChatMessageBubble message={message({ role: "user", content: "Sized note" })} />);
-    const userArticle = screen.getByTestId("assistant-chat-message").querySelector("article");
-    expect(userArticle?.className.split(/\s+/) ?? []).not.toContain("text-sm");
-
-    cleanup();
-
-    render(<AssistantChatMessageBubble message={message({ role: "assistant", content: "Sized reply" })} />);
-    const assistantArticle = screen.getByTestId("assistant-chat-message").querySelector("article");
-    expect(assistantArticle?.className.split(/\s+/) ?? []).not.toContain("text-sm");
-  });
-
-  it("uses a soft tinted bubble for user messages instead of a heavy dark card", () => {
-    render(<AssistantChatMessageBubble message={message({ role: "user", content: "Soft bubble" })} />);
+  it("keeps a compact dark slate user bubble that does not dominate the column", () => {
+    render(<AssistantChatMessageBubble message={message({ role: "user", content: "Dark bubble" })} />);
     const article = screen.getByTestId("assistant-chat-message").querySelector("article");
     const classes = article?.className.split(/\s+/) ?? [];
 
-    expect(classes).not.toContain("bg-slate-950");
-    expect(classes).not.toContain("text-white");
+    expect(classes).toContain("assistant-chat-message-text");
+    expect(classes).toContain("bg-slate-950");
+    expect(classes).toContain("text-white");
     expect(classes).toContain("rounded-2xl");
-    expect(classes.some((className) => className.startsWith("bg-violet-500"))).toBe(true);
+    expect(classes).toContain("max-w-[min(92%,48rem)]");
+    expect(classes).not.toContain("text-base");
+    expect(classes).not.toContain("text-sm");
+    expect(classes).not.toContain("max-w-full");
+    expect(classes).not.toContain("shadow-sm");
+    expect(classes).not.toContain("rounded-3xl");
+    expect(classes.some((className) => className.startsWith("bg-violet-500"))).toBe(false);
   });
 
   it("does not wrap the assistant article in heavy card chrome", () => {
@@ -61,21 +56,29 @@ describe("AssistantChatMessageBubble", () => {
     expect(classes.some((className) => className.startsWith("bg-muted"))).toBe(false);
   });
 
-  it("sizes user and assistant bubble text with the shared chat CSS variables", () => {
-    render(<AssistantChatMessageBubble message={message({ role: "user", content: "Leading note" })} />);
-    const userArticle = screen.getByTestId("assistant-chat-message").querySelector("article");
-    const userClasses = userArticle?.className.split(/\s+/) ?? [];
-    expect(userClasses).not.toContain("leading-6");
-    expect(userClasses.some((className) => className.includes("text-[length:var(--chat-body)]"))).toBe(true);
-    expect(userClasses.some((className) => className.includes("leading-[var(--chat-body-leading)]"))).toBe(true);
-
-    cleanup();
-
+  it("uses the shared message-text class for assistant replies", () => {
     render(<AssistantChatMessageBubble message={message({ role: "assistant", content: "Leading reply" })} />);
     const assistantArticle = screen.getByTestId("assistant-chat-message").querySelector("article");
     const assistantClasses = assistantArticle?.className.split(/\s+/) ?? [];
-    expect(assistantClasses.some((className) => className.includes("text-[length:var(--chat-body)]"))).toBe(true);
-    expect(assistantClasses.some((className) => className.includes("leading-[var(--chat-body-leading)]"))).toBe(true);
+    expect(assistantClasses).toContain("assistant-chat-message-text");
+    expect(assistantClasses).toContain("assistant-response-content");
+    expect(assistantClasses).toContain("text-foreground");
+    expect(assistantClasses).not.toContain("text-foreground/90");
+  });
+
+  it("keeps user and assistant on the same shared message-text class", () => {
+    const { rerender } = render(
+      <AssistantChatMessageBubble message={message({ role: "user", content: "Typed note" })} />,
+    );
+    const userClasses =
+      screen.getByTestId("assistant-chat-message").querySelector("article")?.className.split(/\s+/) ?? [];
+
+    rerender(<AssistantChatMessageBubble message={message({ role: "assistant", content: "Agent reply" })} />);
+    const assistantClasses =
+      screen.getByTestId("assistant-chat-message").querySelector("article")?.className.split(/\s+/) ?? [];
+
+    expect(userClasses).toContain("assistant-chat-message-text");
+    expect(assistantClasses).toContain("assistant-chat-message-text");
   });
 
   it("renders assistant messages with the shared chat marker", () => {

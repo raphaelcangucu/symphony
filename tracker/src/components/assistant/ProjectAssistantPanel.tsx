@@ -5,11 +5,11 @@ import {
   type ThreadMessageLike,
 } from "@assistant-ui/react";
 import type { Channel } from "phoenix";
-import { Bot, BookOpen, ChevronDown, ListChecks, Loader2, PanelRight, Sparkles } from "lucide-react";
+import { Bot, BookOpen, ChevronDown, ListChecks, Loader2, Sparkles } from "lucide-react";
 import { i18n } from "@/i18n";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 
 import {
   AssistantComposer,
@@ -20,8 +20,11 @@ import type { AssistantChatPlanApprovalAction } from "@/components/assistant/Ass
 import { AssistantMessageList } from "@/components/assistant/AssistantMessageList";
 import { AssistantPanelHeader } from "@/components/assistant/AssistantPanelHeader";
 import { AssistantSessionShell } from "@/components/assistant/AssistantSessionShell";
+import {
+  CHAT_READING_COLUMN_CLASS,
+  CHAT_READING_COLUMN_WIDE_CLASS,
+} from "@/components/assistant/chatTypography";
 import { CommandApprovalCard } from "@/components/assistant/CommandApprovalCard";
-import { EnvironmentFloatingDock } from "@/components/assistant/EnvironmentFloatingDock";
 import { QueuedMessageChips } from "@/components/assistant/QueuedMessageChips";
 import { assistantCommandsToSlashDefs } from "@/components/assistant/assistantCommandDefs";
 import { type ComposerContextChipRef } from "@/components/assistant/contextMentions";
@@ -314,14 +317,7 @@ export function ProjectAssistantPanel({
 }: ProjectAssistantPanelProps) {
   const { t } = useTranslation();
   const location = useLocation();
-  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
-  // Issue-bound sessions default the Environment dock open; freeform/project
-  // chats never show the toggle or dock at all.
-  const [environmentOpen, setEnvironmentOpen] = useState<boolean>(() => Boolean(issueIdentifier));
-  // Bumping this counter reuses the same "open the diff modal" path as the
-  // Diff toolbar button, just triggered from the dock's Compare action.
-  const [envCompareRequestId, setEnvCompareRequestId] = useState(0);
   const [turnRunning, setTurnRunning] = useState(false);
   const [runningStartedAt, setRunningStartedAt] = useState<number | null>(null);
   const [queued, setQueued] = useState<QueuedMessage[]>([]);
@@ -471,6 +467,7 @@ export function ProjectAssistantPanel({
   const embeddedPanelInset = "pl-5 pr-4";
   const isFullPageProjectAssistant = isPageMode && Boolean(projectSlug) && !issueIdentifier && threadId == null;
   const widePageContent = contentMaxWidth === "wide";
+  const chatReadingColumn = widePageContent ? CHAT_READING_COLUMN_WIDE_CLASS : CHAT_READING_COLUMN_CLASS;
   const active = isPanelMode || open;
   const resolvedAssistantMode: ProjectAssistantMode =
     assistantMode ?? (projectSlug ? (issueIdentifier ? "project" : "project") : "freeform");
@@ -1633,51 +1630,6 @@ export function ProjectAssistantPanel({
     setKnowledgeBaseOpen(true);
   }, [projectSlug]);
 
-  const openEnvironmentCompare = useCallback(() => {
-    setEnvCompareRequestId((current) => current + 1);
-  }, []);
-
-  // No commit/PR trigger exists yet inside this panel; land on the issue's
-  // sessions tab as the smallest useful destination until one is wired up.
-  const openEnvironmentCommitPush = useCallback(() => {
-    if (!projectSlug || !issueIdentifier) return;
-    navigate(issuePath(projectSlug, view, issueIdentifier, "sessions"));
-  }, [navigate, projectSlug, issueIdentifier, view]);
-
-  const toggleEnvironmentOpen = useCallback(() => {
-    setEnvironmentOpen((current) => !current);
-  }, []);
-
-  const environmentToggleButton = issueIdentifier ? (
-    <Button
-      type="button"
-      variant={environmentOpen ? "secondary" : "ghost"}
-      size="icon"
-      className="h-7 w-7 rounded-full"
-      aria-pressed={environmentOpen}
-      aria-label={t("assistant.environment.toggleAria")}
-      title={t("assistant.environment.toggleAria")}
-      onClick={toggleEnvironmentOpen}
-      data-testid="environment-dock-toggle"
-    >
-      <PanelRight className="h-4 w-4" />
-    </Button>
-  ) : null;
-
-  const environmentDock =
-    issueIdentifier && environmentOpen ? (
-      <EnvironmentFloatingDock
-        open={environmentOpen}
-        onClose={() => setEnvironmentOpen(false)}
-        additions={workspaceDiffStats?.additions ?? 0}
-        deletions={workspaceDiffStats?.deletions ?? 0}
-        branch={null}
-        sourceLabel={projectSlug ?? null}
-        onCompare={openEnvironmentCompare}
-        onCommitPush={openEnvironmentCommitPush}
-      />
-    ) : null;
-
   useEffect(() => {
     if (!projectSlug || catalogLoading) return;
 
@@ -1750,7 +1702,7 @@ export function ProjectAssistantPanel({
                 threadId={threadId ?? null}
                 disabled={catalogLoading}
                 onSendReview={sendDiffReview}
-                openRequestId={diffRequestId + envCompareRequestId}
+                openRequestId={diffRequestId}
               />
             ) : null}
             {hideHeader ? <WorkspaceDiffStatsChip stats={workspaceDiffStats} /> : null}
@@ -1886,59 +1838,25 @@ export function ProjectAssistantPanel({
             className="min-w-0 flex-1"
             feedRef={setScrollContainerRef}
             toolbar={
-              isEmbeddedMode ? (
-                environmentToggleButton ? (
-                  <div className="flex items-center justify-end px-3 py-1.5">{environmentToggleButton}</div>
-                ) : null
-              ) : hideHeader ? (
-                environmentToggleButton ? (
-                  <div className="flex items-center justify-end border-b bg-background/95 px-4 py-1.5 lg:px-6">
-                    {environmentToggleButton}
-                  </div>
-                ) : null
-              ) : (
-                <>
-                  <AssistantPanelHeader
-                    title={panelTitle}
-                    isPageMode={isPageMode}
-                    projectSlug={projectSlug}
-                    diffStats={workspaceDiffStats}
-                    modelCommand={panelModelCommand}
-                  />
-                  {environmentToggleButton ? (
-                    <div className="flex items-center justify-end border-b bg-background/95 px-4 py-1 lg:px-6">
-                      {environmentToggleButton}
-                    </div>
-                  ) : null}
-                </>
+              isEmbeddedMode || hideHeader ? null : (
+                <AssistantPanelHeader
+                  title={panelTitle}
+                  isPageMode={isPageMode}
+                  projectSlug={projectSlug}
+                  diffStats={workspaceDiffStats}
+                  modelCommand={panelModelCommand}
+                />
               )
             }
             feed={
-              <div
-                className={cn(
-                  "flex w-full flex-col",
-                  isPageMode
-                    ? widePageContent
-                      ? "mx-auto max-w-[min(100%,80rem)] gap-4 px-4 pt-4 lg:px-6"
-                      : "mx-auto max-w-4xl gap-4 px-4 pt-4"
-                    : cn("gap-4 py-4", embeddedPanelInset),
-                )}
-              >
+              <div className={cn("flex w-full flex-col gap-4 py-4", chatReadingColumn)}>
                 {messageItems}
               </div>
             }
             feedOverlay={scrollToBottomButton}
             dock={
-              <div className={cn(!isPageMode && embeddedPanelInset)}>
-                <div
-                  className={cn(
-                    isPageMode &&
-                      cn(
-                        "mx-auto w-full px-4",
-                        widePageContent ? "max-w-[min(100%,80rem)] lg:px-6" : "max-w-4xl",
-                      ),
-                  )}
-                >
+              <div>
+                <div className={chatReadingColumn}>
                   {!isEmbeddedMode ? resumeBanner : null}
                   {workspaceProvisionBanner}
                   {queuedChips}
@@ -1948,16 +1866,8 @@ export function ProjectAssistantPanel({
               </div>
             }
             composer={
-              <div className={cn("bg-background", isPageMode ? "pr-2.5" : cn("pb-2 pt-2", embeddedPanelInset))}>
-                <div
-                  className={cn(
-                    isPageMode &&
-                      cn(
-                        "mx-auto w-full px-4 py-2",
-                        widePageContent ? "max-w-[min(100%,80rem)] lg:px-6" : "max-w-4xl",
-                      ),
-                  )}
-                >
+              <div className={cn("bg-background", isPageMode ? "pr-2.5" : "pb-2 pt-2")}>
+                <div className={cn("py-2", chatReadingColumn)}>
                   {composerNode ?? (
                     <div className="rounded-2xl border bg-card px-4 py-6 text-sm text-muted-foreground shadow-sm">
                       {t("assistant.panel.loadingModels")}
@@ -1969,7 +1879,6 @@ export function ProjectAssistantPanel({
                 </div>
               </div>
             }
-            environment={environmentDock}
           />
 
           {showTasksDock && taskSnapshot ? (

@@ -16,7 +16,6 @@ export interface AssistantSessionShellProps {
   feedOverlay?: ReactNode;
   dock?: ReactNode;
   composer: ReactNode;
-  environment?: ReactNode;
   className?: string;
   feedRef?: (node: HTMLDivElement | null) => void;
 }
@@ -27,7 +26,6 @@ export function AssistantSessionShell({
   feedOverlay = null,
   dock = null,
   composer,
-  environment = null,
   className,
   feedRef,
 }: AssistantSessionShellProps) {
@@ -56,7 +54,6 @@ export function AssistantSessionShell({
       <div data-testid="assistant-session-composer" className="shrink-0">
         {composer}
       </div>
-      {environment}
     </section>
   );
 }

@@ -2673,6 +2673,11 @@
       "serverTabsAria": "Dev servers",
       "serverTabAria": "Preview {{slug}} ({{status}})"
     },
+    "environment": {
+      "ariaLabel": "Environment for {{identifier}}",
+      "resizeHandleAria": "Resize environment panel",
+      "closeDock": "Close environment panel"
+    },
     "sessions": {
       "tabsAria": "Project session tabs"
     }
