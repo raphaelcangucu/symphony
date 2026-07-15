@@ -767,6 +767,21 @@ defmodule SymphonyElixir.LocalTracker.ContextTest do
     refute "old-label" in label_names
   end
 
+  test "update_issue clears all labels when label_ids is empty" do
+    {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
+    {:ok, _issue} = Context.create_issue("macro-markets", %{title: "Clear labels", status: "Todo"})
+
+    assert {:ok, _} = Context.add_issue_label("macro-markets", "MAC-1", "bug")
+    assert {:ok, _} = Context.add_issue_label("macro-markets", "MAC-1", "frontend")
+
+    assert {:ok, updated} =
+             Context.update_issue("macro-markets", "MAC-1", %{
+               "label_ids" => []
+             })
+
+    assert Enum.map(updated.labels, & &1.name) == []
+  end
+
   test "set_issue_parent records a sub_issue_of relation surfaced as parent_identifier" do
     {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
     {:ok, _parent} = Context.create_issue("macro-markets", %{title: "Parent", status: "Todo"})

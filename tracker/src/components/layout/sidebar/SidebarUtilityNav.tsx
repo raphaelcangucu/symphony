@@ -1,4 +1,4 @@
-import { Bot, Plus, Search, Settings } from "lucide-react";
+import { Activity, Plus, Search, Settings } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 
@@ -51,9 +51,9 @@ export function SidebarUtilityNav({
         </kbd>
       </Button>
       <Button asChild variant="ghost" className={actionClass}>
-        <Link to="/settings/templates">
-          <Bot className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-          <span>{t("layout.sidebar.utility.automations")}</span>
+        <Link to="/observability">
+          <Activity className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+          <span>{t("nav.observability")}</span>
         </Link>
       </Button>
       <Button asChild variant="ghost" className={actionClass}>

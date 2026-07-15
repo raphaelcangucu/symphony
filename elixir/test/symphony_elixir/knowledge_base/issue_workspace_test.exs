@@ -84,6 +84,19 @@ defmodule SymphonyElixir.KnowledgeBase.IssueWorkspaceTest do
     assert page.body == "# Edited in task\n"
   end
 
+  test "repo_tree returns repo_not_checked_out when the worktree has no git checkout" do
+    issue_root = Path.join(System.tmp_dir!(), "issue-kb-missing-git-#{System.unique_integer([:positive])}")
+    repo_root = Path.join(issue_root, "back")
+    File.mkdir_p!(Path.join(repo_root, "docs"))
+    File.write!(Path.join(repo_root, "docs/staged.md"), "# Staged\n")
+
+    {:ok, _thread} = History.ensure_issue_thread("macro", "MAC-NO-GIT", %{workspace_path: issue_root})
+
+    assert IssueWorkspace.repo_tree("macro", "MAC-NO-GIT", "back") == {:error, :repo_not_checked_out}
+
+    on_exit(fn -> File.rm_rf(issue_root) end)
+  end
+
   defp flatten_paths(nodes) do
     Enum.flat_map(nodes, fn
       %{type: :folder, children: children} -> flatten_paths(children)

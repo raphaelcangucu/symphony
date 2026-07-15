@@ -78,6 +78,55 @@ defmodule SymphonyElixir.EditorTest do
       assert Editor.editor_target("project", "MAC-REPO") == {:ok, expected_url}
     end
 
+    test "opens the configured project repository root for issue workspaces" do
+      slug = "editor-issue-repo-#{System.unique_integer([:positive])}"
+
+      {:ok, _project} =
+        SymphonyElixir.LocalTracker.Context.create_workspace_project(%{
+          name: "Editor Issue Repo",
+          slug: slug,
+          repositories: [
+            %{
+              github_full_name: "acme/advising",
+              workspace_path: "advising",
+              role: "app"
+            }
+          ]
+        })
+
+      load_workflow_with_front_matter(editor_front_matter())
+      enable_editor!()
+      put_status_fun(fn -> :ready end)
+
+      workspace = SymphonyElixir.Workspace.path_for_issue("MAC-ADV")
+      repo = Path.join(workspace, "advising")
+      File.mkdir_p!(repo)
+      File.mkdir_p!(Path.join(repo, ".git"))
+      on_exit(fn -> File.rm_rf(workspace) end)
+
+      expected_url =
+        SymphonyElixir.Config.editor_base_url() <> "/?folder=" <> URI.encode_www_form(repo)
+
+      assert Editor.editor_target(slug, "MAC-ADV") == {:ok, expected_url}
+    end
+
+    test "falls back to a git subdirectory when no project repositories are configured" do
+      load_workflow_with_front_matter(editor_front_matter())
+      enable_editor!()
+      put_status_fun(fn -> :ready end)
+
+      workspace = SymphonyElixir.Workspace.path_for_issue("MAC-GIT")
+      repo = Path.join(workspace, "advising")
+      File.mkdir_p!(repo)
+      File.mkdir_p!(Path.join(repo, ".git"))
+      on_exit(fn -> File.rm_rf(workspace) end)
+
+      expected_url =
+        SymphonyElixir.Config.editor_base_url() <> "/?folder=" <> URI.encode_www_form(repo)
+
+      assert Editor.editor_target("project", "MAC-GIT") == {:ok, expected_url}
+    end
+
     test "opens a multi-root .code-workspace file when front and back exist" do
       load_workflow_with_front_matter(editor_front_matter())
       enable_editor!()
@@ -228,6 +277,38 @@ defmodule SymphonyElixir.EditorTest do
       expected_url = "cursor://file/" <> URI.encode(expanded)
 
       assert Editor.cursor_desktop_target("project", "MAC-EXISTS") == {:ok, expected_url}
+    end
+
+    test "returns a cursor:// URL for the configured project repository root" do
+      slug = "editor-cursor-repo-#{System.unique_integer([:positive])}"
+
+      {:ok, _project} =
+        SymphonyElixir.LocalTracker.Context.create_workspace_project(%{
+          name: "Editor Cursor Repo",
+          slug: slug,
+          repositories: [
+            %{
+              github_full_name: "acme/advising",
+              workspace_path: "advising",
+              role: "app"
+            }
+          ]
+        })
+
+      workspace = SymphonyElixir.Workspace.path_for_issue("MAC-CURSOR")
+      repo = Path.join(workspace, "advising")
+      File.mkdir_p!(repo)
+      File.mkdir_p!(Path.join(repo, ".git"))
+      on_exit(fn -> File.rm_rf(workspace) end)
+
+      expanded = Path.expand(repo)
+      previous_wsl = System.get_env("WSL_DISTRO_NAME")
+      System.delete_env("WSL_DISTRO_NAME")
+      on_exit(fn -> restore_env("WSL_DISTRO_NAME", previous_wsl) end)
+
+      expected_url = "cursor://file/" <> URI.encode(expanded)
+
+      assert Editor.cursor_desktop_target(slug, "MAC-CURSOR") == {:ok, expected_url}
     end
 
     test "returns a vscode-remote WSL URL when running inside WSL" do

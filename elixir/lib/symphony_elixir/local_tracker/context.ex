@@ -2061,15 +2061,15 @@ defmodule SymphonyElixir.LocalTracker.Context do
   defp resolve_assignee_login(_project_id, _value), do: nil
 
   defp label_names_from_attrs(attrs) do
-    case normalize_label_name_list(Map.get(attrs, "label_ids") || Map.get(attrs, :label_ids)) do
-      [] ->
-        case normalize_label_name_list(Map.get(attrs, "labels") || Map.get(attrs, :labels)) do
-          [] -> nil
-          names -> names
-        end
+    cond do
+      Map.has_key?(attrs, "label_ids") or Map.has_key?(attrs, :label_ids) ->
+        normalize_label_name_list(Map.get(attrs, "label_ids") || Map.get(attrs, :label_ids))
 
-      names ->
-        names
+      Map.has_key?(attrs, "labels") or Map.has_key?(attrs, :labels) ->
+        normalize_label_name_list(Map.get(attrs, "labels") || Map.get(attrs, :labels))
+
+      true ->
+        nil
     end
   end
 

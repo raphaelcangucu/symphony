@@ -474,6 +474,23 @@ defmodule SymphonyElixirWeb.TrackerErrors do
         dgettext("errors", "Repository checkout is not available yet")
       )
 
+  def render(conn, :workspace_missing),
+    do:
+      not_found(
+        conn,
+        "workspace_missing",
+        dgettext("errors", "Workspace not found for this issue")
+      )
+
+  def render(conn, {:git_failed, _reason}),
+    do:
+      error(
+        conn,
+        503,
+        "kb_git_unavailable",
+        dgettext("errors", "Could not read docs changes from the issue workspace")
+      )
+
   def render(conn, :kb_invalid_path),
     do:
       error(

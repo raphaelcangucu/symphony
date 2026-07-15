@@ -145,9 +145,9 @@ describe("sidebar utility navigation", () => {
     await user.click(screen.getByRole("button", { name: "Search" }));
     expect(onNewSession).toHaveBeenCalledOnce();
     expect(onSearch).toHaveBeenCalledOnce();
-    expect(screen.getByRole("link", { name: "Automations" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Observability" })).toHaveAttribute(
       "href",
-      "/settings/templates",
+      "/observability",
     );
     expect(screen.getByRole("link", { name: "Settings" })).toHaveAttribute("href", "/settings");
     const expectedShortcut = /Mac|iPhone|iPad|iPod/i.test(navigator.platform ?? "")
@@ -162,7 +162,7 @@ describe("sidebar utility navigation", () => {
       </MemoryRouter>,
     );
     expect(screen.getByRole("button", { name: "Nova sessão" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Automações" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Observabilidade" })).toBeInTheDocument();
   });
 
   it("normalizes search, includes overflow and unassigned, and deduplicates malformed nodes", () => {

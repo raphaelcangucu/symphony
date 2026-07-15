@@ -24,17 +24,17 @@ defmodule SymphonyElixir.Editor do
           | :workspace_skills_unavailable
 
   @spec editor_target(String.t(), String.t()) :: {:ok, String.t()} | {:error, reason()}
-  def editor_target(_project_slug, issue_identifier) when is_binary(issue_identifier) do
+  def editor_target(project_slug, issue_identifier) when is_binary(issue_identifier) do
     with :ok <- ensure_enabled(),
          :ok <- ensure_ready(),
-         {:ok, path} <- ensure_browser_workspace(issue_identifier) do
+         {:ok, path} <- ensure_browser_workspace(project_slug, issue_identifier) do
       {:ok, build_browser_url(path)}
     end
   end
 
   @spec cursor_desktop_target(String.t(), String.t()) :: {:ok, String.t()} | {:error, reason()}
-  def cursor_desktop_target(_project_slug, issue_identifier) when is_binary(issue_identifier) do
-    case ensure_workspace_path(issue_identifier) do
+  def cursor_desktop_target(project_slug, issue_identifier) when is_binary(issue_identifier) do
+    case ensure_workspace_path(project_slug, issue_identifier) do
       {:ok, path} -> {:ok, build_cursor_url(path)}
       {:error, _} = error -> error
     end
@@ -69,11 +69,11 @@ defmodule SymphonyElixir.Editor do
     end
   end
 
-  defp ensure_workspace_path(issue_identifier) do
+  defp ensure_workspace_path(project_slug, issue_identifier) do
     workspace_path = Workspace.path_for_issue(workspace_identifier(issue_identifier))
 
     if File.dir?(workspace_path) do
-      {:ok, resolve_editor_folder(workspace_path)}
+      {:ok, resolve_issue_editor_folder(project_slug, workspace_path)}
     else
       {:error, :workspace_missing}
     end
@@ -90,7 +90,7 @@ defmodule SymphonyElixir.Editor do
     end
   end
 
-  defp ensure_browser_workspace(issue_identifier) do
+  defp ensure_browser_workspace(project_slug, issue_identifier) do
     workspace_path = Workspace.path_for_issue(workspace_identifier(issue_identifier))
 
     cond do
@@ -98,7 +98,7 @@ defmodule SymphonyElixir.Editor do
         {:error, :workspace_missing}
 
       WorkspaceSkills.prepare(workspace_path) == :ok ->
-        {:ok, resolve_editor_folder(workspace_path)}
+        {:ok, resolve_issue_editor_folder(project_slug, workspace_path)}
 
       true ->
         Logger.warning("Editor workspace skills preparation failed workspace=#{workspace_path}")
@@ -121,6 +121,13 @@ defmodule SymphonyElixir.Editor do
         Logger.warning("Editor project workspace skills preparation failed workspace=#{workspace_path}")
         {:error, :workspace_skills_unavailable}
     end
+  end
+
+  # Issue workspaces clone repositories into configured subdirectories (e.g.
+  # `advising/`). Prefer the project's repository layout, then legacy dev-root
+  # names, then any immediate child that contains a `.git` directory.
+  defp resolve_issue_editor_folder(project_slug, workspace_path) do
+    resolve_project_editor_folder(project_slug, workspace_path)
   end
 
   # Opens the buildable repo root inside a task workspace when hooks clone into
@@ -150,7 +157,16 @@ defmodule SymphonyElixir.Editor do
         write_multi_root_workspace(workspace_path, multiple)
 
       [] ->
-        workspace_path
+        case git_roots(workspace_path) do
+          [{_name, single_path}] ->
+            single_path
+
+          multiple when length(multiple) > 1 ->
+            write_multi_root_workspace(workspace_path, multiple)
+
+          [] ->
+            workspace_path
+        end
     end
   end
 
@@ -184,6 +200,26 @@ defmodule SymphonyElixir.Editor do
   defp dev_root?(path) do
     File.regular?(Path.join(path, "package.json")) or
       File.regular?(Path.join(path, "composer.json"))
+  end
+
+  defp git_roots(workspace_path) do
+    case File.ls(workspace_path) do
+      {:ok, names} ->
+        names
+        |> Enum.reject(&ignored_workspace_entry?/1)
+        |> Enum.filter(fn name ->
+          sub = Path.join(workspace_path, name)
+          File.dir?(sub) and File.dir?(Path.join(sub, ".git"))
+        end)
+        |> Enum.map(fn name -> {name, Path.join(workspace_path, name)} end)
+
+      {:error, _} ->
+        []
+    end
+  end
+
+  defp ignored_workspace_entry?(name) do
+    name in [".git", ".symphony", ".claude", ".codex", ".cursor", ".vscode"]
   end
 
   defp write_multi_root_workspace(workspace_path, named_paths) do

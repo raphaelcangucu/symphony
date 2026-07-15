@@ -134,6 +134,14 @@ defmodule SymphonyElixirWeb.Tracker.IssueControllerTest do
     assert %{"data" => %{"labels" => labels}} = json_response(label_update_conn, 200)
     assert Enum.sort(labels) == ["bug", "frontend"]
 
+    clear_labels_conn =
+      authorized_conn()
+      |> patch("/api/tracker/v1/projects/macro-markets/issues/MAC-1", %{
+        "label_ids" => []
+      })
+
+    assert %{"data" => %{"labels" => []}} = json_response(clear_labels_conn, 200)
+
     move_conn =
       authorized_conn()
       |> post("/api/tracker/v1/projects/macro-markets/issues/MAC-1/move", %{"status" => "In Progress"})

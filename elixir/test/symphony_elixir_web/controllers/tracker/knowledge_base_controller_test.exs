@@ -85,6 +85,27 @@ defmodule SymphonyElixirWeb.Tracker.KnowledgeBaseControllerTest do
     assert json_response(conn, 422)["error"]["code"] == "kb_invalid_path"
   end
 
+  test "GET issue repo tree returns 404 when the worktree has no git checkout" do
+    issue_root = Path.join(System.tmp_dir!(), "kb-issue-no-git-#{System.unique_integer([:positive])}")
+    repo_root = Path.join(issue_root, "web")
+    File.mkdir_p!(Path.join(repo_root, "docs"))
+    File.write!(Path.join(repo_root, "docs/index.md"), "# Index\n")
+
+    alias SymphonyElixir.Assistant.History
+
+    {:ok, _thread} = History.ensure_issue_thread("acme", "MAC-NO-GIT", %{workspace_path: issue_root})
+
+    conn =
+      get(
+        authorized_conn(),
+        "/api/tracker/v1/projects/acme/issues/MAC-NO-GIT/kb/repos/web"
+      )
+
+    assert json_response(conn, 404)["error"]["code"] == "repo_not_checked_out"
+
+    on_exit(fn -> File.rm_rf(issue_root) end)
+  end
+
   defp authorized_conn, do: build_conn() |> put_req_header("authorization", "Bearer secret")
 
   defp migrate_repo do

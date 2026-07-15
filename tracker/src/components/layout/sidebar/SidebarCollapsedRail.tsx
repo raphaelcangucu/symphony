@@ -1,4 +1,4 @@
-import { Bot, FolderKanban, Plus, Search, Settings } from "lucide-react";
+import { Activity, FolderKanban, Plus, Search, Settings } from "lucide-react";
 import { useMemo, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
@@ -63,10 +63,10 @@ export function SidebarCollapsedRail({
           <Search className="h-4 w-4" aria-hidden />
         </RailIconButton>
         <RailIconLink
-          label={t("layout.sidebar.utility.automations")}
-          to="/settings/templates"
+          label={t("nav.observability")}
+          to="/observability"
         >
-          <Bot className="h-4 w-4" aria-hidden />
+          <Activity className="h-4 w-4" aria-hidden />
         </RailIconLink>
         <RailIconLink label={t("layout.sidebar.utility.settings")} to="/settings">
           <Settings className="h-4 w-4" aria-hidden />

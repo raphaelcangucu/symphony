@@ -194,6 +194,16 @@ describe("updateIssue payload", () => {
     expect(result.identifier).toBe("517");
   });
 
+  it("sends empty label_ids to clear all labels", async () => {
+    const patch = vi.spyOn(http, "patch").mockResolvedValueOnce({ data: { data: updatedDto } });
+
+    await updateIssue("macro-markets", "517", { labelIds: [] });
+
+    expect(patch).toHaveBeenCalledWith("/api/tracker/v1/projects/macro-markets/issues/517", {
+      label_ids: [],
+    });
+  });
+
   it("sends null model to clear", async () => {
     const patch = vi.spyOn(http, "patch").mockResolvedValueOnce({ data: { data: updatedDto } });
 

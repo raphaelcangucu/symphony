@@ -15,6 +15,7 @@ defmodule SymphonyElixir.KnowledgeBase.IssueWorkspace do
   @type error ::
           :project_not_found
           | :repo_not_found
+          | :repo_not_checked_out
           | :workspace_missing
           | :kb_invalid_path
           | :kb_page_not_found
@@ -107,6 +108,14 @@ defmodule SymphonyElixir.KnowledgeBase.IssueWorkspace do
   end
 
   defp changed_doc_paths(repo_root, repo) do
+    unless git_repo?(repo_root) do
+      {:error, :repo_not_checked_out}
+    else
+      changed_doc_paths_in_git_repo(repo_root, repo)
+    end
+  end
+
+  defp changed_doc_paths_in_git_repo(repo_root, repo) do
     base = base_ref(repo_root, repo)
 
     with {:ok, committed} <- git_lines(repo_root, ["diff", "--name-only", "#{base}...HEAD", "--", "docs"]),
@@ -137,6 +146,13 @@ defmodule SymphonyElixir.KnowledgeBase.IssueWorkspace do
       git_ref?(repo_root, branch) -> branch
       true -> "HEAD"
     end
+  end
+
+  defp git_repo?(repo_root) do
+    match?(
+      {_out, 0},
+      System.cmd("git", ["rev-parse", "--is-inside-work-tree"], cd: repo_root, stderr_to_stdout: true)
+    )
   end
 
   defp git_ref?(repo_root, ref) do

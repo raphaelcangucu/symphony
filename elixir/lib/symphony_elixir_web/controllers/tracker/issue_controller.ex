@@ -491,17 +491,11 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
   defp resolve_me(value) when is_binary(value), do: {:ok, value}
 
   defp normalize_update_attrs(params, %{} = project) do
-    label_ids =
-      params
-      |> Map.get("label_ids", Map.get(params, "labels"))
-      |> normalize_string_list()
-      |> then(&LabelResolver.resolve_names(project, &1))
-
     params
     |> Map.take(["title", "description", "status"])
     |> maybe_put_priority(params)
     |> maybe_put_assignee_ids(params)
-    |> maybe_put_label_ids(label_ids)
+    |> maybe_put_label_ids(params, project)
     |> maybe_put_agent_update(params)
     |> maybe_put_execution_pins(params)
   end
@@ -623,8 +617,18 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
     end
   end
 
-  defp maybe_put_label_ids(attrs, []), do: attrs
-  defp maybe_put_label_ids(attrs, label_ids), do: Map.put(attrs, "label_ids", label_ids)
+  defp maybe_put_label_ids(attrs, params, project) do
+    if Map.has_key?(params, "label_ids") or Map.has_key?(params, "labels") do
+      label_ids =
+        (Map.get(params, "label_ids") || Map.get(params, "labels"))
+        |> normalize_string_list()
+        |> then(&LabelResolver.resolve_names(project, &1))
+
+      Map.put(attrs, "label_ids", label_ids)
+    else
+      attrs
+    end
+  end
 
   defp normalize_create_attrs(params, %{} = project) do
     label_ids =
