@@ -12,6 +12,7 @@ defmodule SymphonyElixirWeb.UserSocket do
   channel("terminal:*", SymphonyElixirWeb.TerminalChannel)
   channel("session_log:*", SymphonyElixirWeb.SessionLogChannel)
   channel("observability:global", SymphonyElixirWeb.ObservabilityChannel)
+  channel("agent_executions", SymphonyElixirWeb.AgentExecutionChannel)
 
   @impl true
   def connect(%{"token" => token} = params, socket, _connect_info) when is_binary(token) do
