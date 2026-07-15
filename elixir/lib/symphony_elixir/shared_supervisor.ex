@@ -25,6 +25,7 @@ defmodule SymphonyElixir.SharedSupervisor do
   def child_specs do
     [
       {Phoenix.PubSub, name: SymphonyElixir.PubSub},
+      SymphonyElixir.AgentExecution.Broadcaster,
       SymphonyElixir.Assistant.GoalRun.registry_child_spec(),
       SymphonyElixir.Claude.ApprovalBroker.registry_child_spec(),
       SymphonyElixir.Assistant.UserInputBroker.registry_child_spec(),

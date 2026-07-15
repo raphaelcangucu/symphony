@@ -8,7 +8,7 @@ defmodule SymphonyElixir.StatusDashboard do
 
   alias Gettext, as: GettextCore
 
-  alias SymphonyElixir.{Config, HttpServer, Settings, SubagentRegistry, Tracker}
+  alias SymphonyElixir.{AgentExecution.Broadcaster, Config, HttpServer, Settings, SubagentRegistry, Tracker}
   alias SymphonyElixir.EventHumanizer.Text, as: EventText
   alias SymphonyElixir.GitHub.ProjectMetadata
   alias SymphonyElixir.Orchestrator
@@ -87,6 +87,7 @@ defmodule SymphonyElixir.StatusDashboard do
   @spec notify_update(GenServer.name()) :: :ok
   def notify_update(server \\ __MODULE__) do
     ObservabilityPubSub.broadcast_update()
+    Broadcaster.notify()
 
     case GenServer.whereis(server) do
       pid when is_pid(pid) ->
