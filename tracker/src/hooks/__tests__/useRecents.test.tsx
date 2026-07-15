@@ -1,11 +1,12 @@
-import { act, renderHook, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { renderHook } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useRecents } from "@/hooks/useRecents";
-import * as recentsService from "@/services/recents";
 import type { RecentSession } from "@/types/recents";
 
-vi.mock("@/services/recents", () => ({ listRecents: vi.fn() }));
+const { useRecentsContext } = vi.hoisted(() => ({ useRecentsContext: vi.fn() }));
+
+vi.mock("@/hooks/RecentsProvider", () => ({ useRecentsContext }));
 
 const sample: RecentSession = {
   id: "chat:1",
@@ -26,31 +27,21 @@ const sample: RecentSession = {
 describe("useRecents", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.spyOn(document, "hasFocus").mockReturnValue(true);
+    useRecentsContext.mockReturnValue({ sessions: [sample], loading: false });
   });
 
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
+  it("reads the shared provider snapshot", () => {
+    const { result } = renderHook(() => useRecents({ intervalMs: 8_000, limit: 100 }));
 
-  it("loads recent sessions on mount", async () => {
-    vi.mocked(recentsService.listRecents).mockResolvedValue([sample]);
-    const { result } = renderHook(() => useRecents());
-    await waitFor(() => expect(result.current.sessions).toHaveLength(1));
     expect(result.current.sessions[0].id).toBe("chat:1");
+    expect(result.current.loading).toBe(false);
+    expect(useRecentsContext).toHaveBeenCalledOnce();
   });
 
-  it("keeps last known state when a later fetch fails", async () => {
-    vi.mocked(recentsService.listRecents).mockResolvedValueOnce([sample]);
+  it("keeps the legacy refetch API as a no-op", async () => {
     const { result } = renderHook(() => useRecents());
-    await waitFor(() => expect(result.current.sessions).toHaveLength(1));
 
-    vi.mocked(recentsService.listRecents).mockRejectedValueOnce(new Error("boom"));
-    await act(async () => {
-      await result.current.refetch();
-    });
-
-    expect(result.current.sessions).toEqual([sample]);
-    expect(result.current.loading).toBe(false);
+    await expect(result.current.refetch()).resolves.toBeUndefined();
+    expect(useRecentsContext).toHaveBeenCalledOnce();
   });
 });

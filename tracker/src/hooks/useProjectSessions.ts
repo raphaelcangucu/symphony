@@ -1,11 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useAgentExecutions } from "@/hooks/useAgentExecutions";
-import {
-  DEFAULT_PROJECT_SESSIONS_LIMIT,
-  fetchProjectSessions,
-  projectSessionsToRecents,
-} from "@/hooks/projectSessionsCache";
+import { useRecents } from "@/hooks/useRecents";
 import { emptyProjectSessionGroups, groupProjectSessions, type ProjectSessionGroups } from "@/lib/projectSessions";
 import { listIssues } from "@/services/issues";
 import type { AgentExecution } from "@/types/agent-execution";
@@ -32,16 +28,16 @@ export interface UseProjectSessionsResult {
 
 export function useProjectSessions(projectSlug: string): UseProjectSessionsResult {
   const { executions } = useAgentExecutions();
+  const { sessions: recents, loading: recentsLoading } = useRecents();
+  const normalizedProjectSlug = projectSlug.trim();
   const [issues, setIssues] = useState<Issue[]>([]);
-  const [recents, setRecents] = useState<RecentSession[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const loadProjectData = useCallback(async () => {
-    const slug = projectSlug.trim();
+    const slug = normalizedProjectSlug;
     if (!slug) {
       setIssues([]);
-      setRecents([]);
       setIsLoading(false);
       setError("missing-project");
       return;
@@ -49,23 +45,14 @@ export function useProjectSessions(projectSlug: string): UseProjectSessionsResul
 
     setIsLoading(true);
     try {
-      const [nextIssues, sessionsPage] = await Promise.all([
-        listIssues(slug),
-        fetchProjectSessions({
-          projectSlug: slug,
-          limit: DEFAULT_PROJECT_SESSIONS_LIMIT,
-          includeArchived: false,
-        }),
-      ]);
-      setIssues(nextIssues);
-      setRecents(projectSessionsToRecents(sessionsPage, slug));
+      setIssues(await listIssues(slug));
       setError(null);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "load-failed");
     } finally {
       setIsLoading(false);
     }
-  }, [projectSlug]);
+  }, [normalizedProjectSlug]);
 
   useEffect(() => {
     void loadProjectData();
@@ -83,10 +70,11 @@ export function useProjectSessions(projectSlug: string): UseProjectSessionsResul
   const relatedSessions = useMemo(
     () =>
       recents.filter((session) => {
+        if (session.projectSlug !== normalizedProjectSlug) return false;
         if (session.kind !== "codex" || !session.identifier) return true;
         return !executions.has(session.identifier);
       }),
-    [executions, recents],
+    [executions, normalizedProjectSlug, recents],
   );
 
   return {
@@ -95,7 +83,7 @@ export function useProjectSessions(projectSlug: string): UseProjectSessionsResul
     issues,
     executions,
     inventory: null,
-    isLoading,
+    isLoading: isLoading || recentsLoading,
     isInventoryLoading: false,
     error,
     refetch,

@@ -4,18 +4,19 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { resetProjectSessionsCacheForTests } from "@/hooks/projectSessionsCache";
 import { useAgentExecutions } from "@/hooks/useAgentExecutions";
 import { useProjectSessions } from "@/hooks/useProjectSessions";
+import { useRecents } from "@/hooks/useRecents";
 import { listIssues } from "@/services/issues";
 import { listProjectSessions } from "@/services/projectSessions";
-import { listRecents } from "@/services/recents";
 import { fetchWorkspaceInventory, subscribeWorkspaceInventory } from "@/services/worktrees";
 import type { AgentExecution } from "@/types/agent-execution";
 import type { Issue } from "@/types/issue";
 import type { ProjectSessionsPage } from "@/types/project-session";
+import type { RecentSession } from "@/types/recents";
 
 vi.mock("@/hooks/useAgentExecutions", () => ({ useAgentExecutions: vi.fn() }));
+vi.mock("@/hooks/useRecents", () => ({ useRecents: vi.fn() }));
 vi.mock("@/services/issues", () => ({ listIssues: vi.fn() }));
 vi.mock("@/services/projectSessions", () => ({ listProjectSessions: vi.fn() }));
-vi.mock("@/services/recents", () => ({ listRecents: vi.fn() }));
 vi.mock("@/services/worktrees", () => ({
   fetchWorkspaceInventory: vi.fn(),
   subscribeWorkspaceInventory: vi.fn(),
@@ -69,18 +70,37 @@ function emptySessionsPage(): ProjectSessionsPage {
   return { sessions: [], nextCursor: null, projectActivityAt: null };
 }
 
-describe("useProjectSessions", () => {
-  const refetchExecutions = vi.fn();
+function recent(projectSlug: string, id = "thread:1"): RecentSession {
+  return {
+    id,
+    kind: "chat",
+    scope: "project_session",
+    agentKind: "cursor",
+    projectSlug,
+    projectName: projectSlug.toUpperCase(),
+    title: "Issue chat",
+    identifier: null,
+    threadId: 1,
+    status: "Active",
+    statusKind: "active",
+    preview: null,
+    updatedAt: "2026-07-02T10:00:00Z",
+  };
+}
 
+describe("useProjectSessions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     resetProjectSessionsCacheForTests();
     vi.mocked(useAgentExecutions).mockReturnValue({
       executions: new Map([["DEMO-1", execution("DEMO-1")]]),
-      refetch: refetchExecutions,
+    });
+    vi.mocked(useRecents).mockReturnValue({
+      sessions: [],
+      loading: false,
+      refetch: vi.fn().mockResolvedValue(undefined),
     });
     vi.mocked(listProjectSessions).mockResolvedValue(emptySessionsPage());
-    vi.mocked(listRecents).mockResolvedValue([]);
     vi.mocked(subscribeWorkspaceInventory).mockImplementation((_slug, handlers) => {
       handlers.onDone?.();
       return () => undefined;
@@ -100,62 +120,24 @@ describe("useProjectSessions", () => {
     expect(result.current.groups.saved).toMatchObject([
       { issueIdentifier: "DEMO-1", title: "Saved launcher work" },
     ]);
-    expect(listProjectSessions).toHaveBeenCalledWith({
-      projectSlug: "demo",
-      limit: 20,
-      includeArchived: false,
-    });
-    expect(listRecents).not.toHaveBeenCalled();
+    expect(listProjectSessions).not.toHaveBeenCalled();
     expect(subscribeWorkspaceInventory).not.toHaveBeenCalled();
   });
 
-  it("dedupes in-flight project sessions fetches for the same slug", async () => {
-    vi.mocked(listIssues).mockResolvedValue([]);
-    let resolve!: (value: ProjectSessionsPage) => void;
-    const pending = new Promise<ProjectSessionsPage>((resolvePromise) => {
-      resolve = resolvePromise;
-    });
-    vi.mocked(listProjectSessions).mockReturnValue(pending);
-
-    const first = renderHook(() => useProjectSessions("demo"));
-    const second = renderHook(() => useProjectSessions("demo"));
-
-    expect(listProjectSessions).toHaveBeenCalledOnce();
-
-    resolve(emptySessionsPage());
-    await waitFor(() => expect(first.result.current.isLoading).toBe(false));
-    await waitFor(() => expect(second.result.current.isLoading).toBe(false));
-  });
-
-  it("includes chat sessions from the paginated sessions API", async () => {
-    vi.mocked(useAgentExecutions).mockReturnValue({ executions: new Map(), refetch: refetchExecutions });
+  it("includes related sessions from the shared recents snapshot", async () => {
+    vi.mocked(useAgentExecutions).mockReturnValue({ executions: new Map() });
     vi.mocked(listIssues).mockResolvedValue([issue("DEMO-1", "Saved launcher work")]);
-    vi.mocked(listProjectSessions).mockResolvedValue({
-      sessions: [
-        {
-          id: "thread:1",
-          title: "Issue chat",
-          kind: "chat",
-          href: "/projects/demo/workspaces/1",
-          updatedAt: "2026-07-02T10:00:00Z",
-          aggregateStatus: "active",
-          agentKind: "cursor",
-          issueIdentifier: "DEMO-2",
-          workspacePath: "/tmp/demo",
-          workspaceId: "1",
-          pinned: false,
-          archived: false,
-        },
-      ],
-      nextCursor: null,
-      projectActivityAt: null,
+    vi.mocked(useRecents).mockReturnValue({
+      sessions: [recent("demo"), recent("other", "thread:2")],
+      loading: false,
+      refetch: vi.fn().mockResolvedValue(undefined),
     });
 
     const { result } = renderHook(() => useProjectSessions("demo"));
 
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     expect(result.current.relatedSessions.map((session) => session.title)).toEqual(["Issue chat"]);
-    expect(listRecents).not.toHaveBeenCalled();
+    expect(listProjectSessions).not.toHaveBeenCalled();
   });
 
   it("does not open workspace inventory on initial load", async () => {
