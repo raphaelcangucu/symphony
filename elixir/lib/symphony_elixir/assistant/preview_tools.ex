@@ -10,10 +10,10 @@ defmodule SymphonyElixir.Assistant.PreviewTools do
   @tool "manage_preview"
 
   @tool_description """
-  Inspect or control the issue dev-server preview.
+  Inspect or control the issue Preview dock (preferred ports/URLs for this issue).
   Actions: status|start|stop|restart|output.
   Optional `server` (slug or id) scopes start/stop/restart/status/output to one process.
-  On failure, read `reason`, `output_tail`, and `next_steps` to self-heal (fix code, manage_dev_env, restart).
+  Prefer these ports while Preview is healthy. On failure, read `reason`, `output_tail`, and `next_steps` to self-heal (fix code, manage_dev_env, restart); if Preview still cannot reach ready, fall back to a convenient project bring-up path (dock may lag).
   """
 
   @output_tail_max_lines 100
@@ -31,7 +31,8 @@ defmodule SymphonyElixir.Assistant.PreviewTools do
   @recoverable_start_errors [:crashed, :no_free_port, :lock_unavailable]
 
   @starting_next_steps "Poll `manage_preview` with `status` until servers report `ready`. Meanwhile keep writing tests and run the unit suite — do not block on the preview or retry it in a tight loop."
-  @not_ready_next_steps "Preview is not ready. Do not block the run: write/run tests, record the blocker in your `## Codex Workpad`, then retry `manage_preview` `restart`/`status` later or proceed without UI e2e."
+  @preferred_ports_next_steps "These ports/URLs match the Preview dock — prefer them while Preview is healthy. Before citing ports mid-turn, re-call manage_preview status."
+  @not_ready_next_steps "Preview is not ready. Self-heal with manage_preview output/restart/status and manage_dev_env if needed. If it still cannot reach ready, fall back to a convenient project bring-up path, cite the ports actually in use, and note the dock may be stale. Do not block the run; retry later or proceed without UI e2e — do not tight-loop retries."
   @lock_next_steps "A preview start is already in progress for this issue. Poll `manage_preview status` shortly and keep working meanwhile — do not block."
 
   @spec assistant_tool_spec() :: map()
@@ -89,7 +90,7 @@ defmodule SymphonyElixir.Assistant.PreviewTools do
       {:ok,
        %{
          tool: @tool,
-         message: "Preview status for #{identifier}.",
+         message: "Preview status for #{identifier} (preferred Preview dock ports).",
          data: data
        }}
     end
@@ -141,7 +142,7 @@ defmodule SymphonyElixir.Assistant.PreviewTools do
              data: %{
                available: Map.get(view, :available) || Map.get(view, "available"),
                reason: status_reason(server_status(server)),
-               server: enrich_server(server),
+               server: enrich_server(server, []),
                output_tail: tail_output(output),
                next_steps: output_next_steps(server_status(server))
              }
@@ -158,7 +159,7 @@ defmodule SymphonyElixir.Assistant.PreviewTools do
              data: %{
                ok: false,
                reason: "output_unavailable",
-               server: enrich_server(server),
+               server: enrich_server(server, []),
                output_tail: nil,
                next_steps: "Retry manage_preview output, or inspect the Preview dock logs. Error: #{message}"
              }
@@ -335,33 +336,68 @@ defmodule SymphonyElixir.Assistant.PreviewTools do
 
   @spec enrich_view(String.t(), map(), (String.t() -> list())) :: map()
   def enrich_view(project_slug, view, list_serve_steps \\ &DevEnv.list_serve_steps/1) when is_map(view) do
-    serve_steps_configured = list_serve_steps.(project_slug) != []
+    serve_steps = list_serve_steps.(project_slug)
+    serve_steps_configured = serve_steps != []
     reason = Map.get(view, :reason)
+
+    next_steps =
+      case next_steps_hint(reason, serve_steps_configured) do
+        nil -> preferred_next_steps(view)
+        hint -> hint
+      end
 
     view
     |> Map.put(:serve_steps_configured, serve_steps_configured)
     |> Map.put(:reason, present_reason(reason))
-    |> Map.put(:next_steps, next_steps_hint(reason, serve_steps_configured))
-    |> Map.put(:servers, enrich_servers(Map.get(view, :servers, [])))
+    |> Map.put(:next_steps, next_steps)
+    |> Map.put(:servers, enrich_servers(Map.get(view, :servers, []), serve_steps))
   end
 
-  defp enrich_servers(servers) when is_list(servers) do
-    Enum.map(servers, &enrich_server/1)
+  defp preferred_next_steps(view) do
+    available = Map.get(view, :available) || Map.get(view, "available")
+    reason = Map.get(view, :reason)
+    servers = Map.get(view, :servers) || Map.get(view, "servers") || []
+
+    if available == true and is_nil(reason) and not Enum.any?(servers, &(server_status(&1) == "crashed")) do
+      @preferred_ports_next_steps
+    else
+      nil
+    end
   end
 
-  defp enrich_servers(_), do: []
+  defp enrich_servers(servers, serve_steps) when is_list(servers) do
+    Enum.map(servers, &enrich_server(&1, serve_steps))
+  end
 
-  defp enrich_server(server) when is_map(server) do
+  defp enrich_servers(_, _serve_steps), do: []
+
+  defp enrich_server(server, serve_steps) when is_map(server) do
     port = Map.get(server, :port) || Map.get(server, "port")
     slug = to_string(Map.get(server, :slug) || Map.get(server, "slug") || "")
-    public_url = Map.get(server, :public_url) || Map.get(server, "public_url") || Map.get(server, :url) || Map.get(server, "url")
+    step = find_serve_step(serve_steps, slug)
+    ready_path = step_field(step, :ready_path)
+    url_path = step_field(step, :url_path)
+
+    public_url =
+      Map.get(server, :public_url) || Map.get(server, "public_url") || Map.get(server, :url) ||
+        Map.get(server, "url")
 
     local_url =
-      if is_integer(port) and port > 0 do
-        path = if String.contains?(slug, "admin"), do: "/", else: "/api/health"
-        "http://127.0.0.1:#{port}#{path}"
-      else
-        nil
+      cond do
+        not is_integer(port) or port <= 0 ->
+          nil
+
+        is_binary(ready_path) and ready_path != "" ->
+          "http://127.0.0.1:#{port}#{normalize_path(ready_path)}"
+
+        is_binary(url_path) and url_path != "" ->
+          "http://127.0.0.1:#{port}#{normalize_path(url_path)}"
+
+        String.contains?(slug, "admin") ->
+          "http://127.0.0.1:#{port}/"
+
+        true ->
+          "http://127.0.0.1:#{port}/api/health"
       end
 
     server
@@ -369,7 +405,26 @@ defmodule SymphonyElixir.Assistant.PreviewTools do
     |> maybe_put_public_url(public_url)
   end
 
-  defp enrich_server(server), do: server
+  defp enrich_server(server, _serve_steps), do: server
+
+  defp find_serve_step(steps, slug) when is_list(steps) and is_binary(slug) do
+    Enum.find(steps, fn step ->
+      step_slug = step_field(step, :slug)
+      is_binary(step_slug) and step_slug == slug
+    end)
+  end
+
+  defp find_serve_step(_steps, _slug), do: nil
+
+  defp step_field(nil, _key), do: nil
+
+  defp step_field(step, key) when is_map(step) do
+    Map.get(step, key) || Map.get(step, Atom.to_string(key))
+  end
+
+  defp normalize_path("/" <> _ = path), do: path
+  defp normalize_path(path) when is_binary(path), do: "/" <> path
+  defp normalize_path(_), do: "/"
 
   defp maybe_put_public_url(server, public_url) when is_binary(public_url) and public_url != "",
     do: Map.put(server, :public_url, public_url)

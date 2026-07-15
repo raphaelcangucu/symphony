@@ -85,7 +85,7 @@ defmodule SymphonyElixir.Assistant.PreviewToolsTest do
              )
 
     assert result.data.available == true
-    assert result.data.next_steps == nil
+    assert result.data.next_steps =~ "Preview dock"
   end
 
   test "start passes the bounded ready timeout and gives non-blocking guidance while booting" do
@@ -163,7 +163,7 @@ defmodule SymphonyElixir.Assistant.PreviewToolsTest do
 
     assert result.message =~ "all servers are ready"
     refute result.message =~ "non-blocking"
-    assert result.data.next_steps == nil
+    assert result.data.next_steps =~ "Preview dock"
   end
 
   test "start converts a crashed dev server into structured non-blocking guidance, not a bare error" do
@@ -258,5 +258,75 @@ defmodule SymphonyElixir.Assistant.PreviewToolsTest do
              PreviewTools.execute("demo", %{"action" => "output"}, issue: issue)
 
     assert message =~ "server"
+  end
+
+  test "tool description prefers Preview ports and allows fallback" do
+    for spec <- PreviewTools.tool_specs() do
+      desc = spec["description"]
+      assert desc =~ ~r/prefer/i
+      assert desc =~ ~r/fall\s*back/i
+    end
+  end
+
+  test "status next_steps or message mention preferred dock ports when healthy" do
+    issue = %Issue{id: "1", identifier: "DEMO-1", project_slug: "demo"}
+
+    assert {:ok, result} =
+             PreviewTools.execute("demo", %{"action" => "status"},
+               issue: issue,
+               issue_targets: fn _slug, _id ->
+                 {:ok,
+                  %{
+                    available: true,
+                    reason: nil,
+                    servers: [%{slug: "web", status: "ready", port: 4300, primary: true}]
+                  }}
+               end,
+               list_serve_steps: fn _slug ->
+                 [%{role: "serve", slug: "web", ready_path: "/health", url_path: "/"}]
+               end
+             )
+
+    combined = result.message <> " " <> to_string(result.data.next_steps)
+    assert combined =~ ~r/prefer/i or combined =~ ~r/dock/i
+    assert combined =~ "Preview" or combined =~ "preview"
+  end
+
+  test "crashed next_steps allow project-script fallback" do
+    issue = %Issue{id: "1", identifier: "DEMO-1", project_slug: "demo"}
+
+    assert {:ok, result} =
+             PreviewTools.execute("demo", %{"action" => "start"},
+               issue: issue,
+               start_for_issue: fn _slug, _id, _opts -> {:error, :crashed} end,
+               issue_targets: fn _slug, _id ->
+                 {:ok,
+                  %{
+                    available: true,
+                    reason: nil,
+                    servers: [%{slug: "web", status: "crashed", port: 4300, primary: true}]
+                  }}
+               end,
+               list_serve_steps: fn _slug -> [%{role: "serve"}] end,
+               capture_output: fn _, _, _ -> {:ok, %{output: ""}} end
+             )
+
+    assert result.data.next_steps =~ ~r/fall\s*back/i
+  end
+
+  test "enrich_view local_url uses serve step ready_path" do
+    view = %{
+      available: true,
+      reason: nil,
+      servers: [%{slug: "web", status: "ready", port: 4300, primary: true}]
+    }
+
+    enriched =
+      PreviewTools.enrich_view("demo", view, fn _slug ->
+        [%{role: "serve", slug: "web", ready_path: "/health", url_path: "/"}]
+      end)
+
+    [server] = enriched.servers
+    assert server.local_url == "http://127.0.0.1:4300/health"
   end
 end
