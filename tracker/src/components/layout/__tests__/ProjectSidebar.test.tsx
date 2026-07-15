@@ -14,12 +14,12 @@ import {
 } from "@/lib/sidebarPreferences";
 import { listAssistantThreads } from "@/services/assistantThreads";
 import { listIssues } from "@/services/issues";
+import { listProjectSessions } from "@/services/projectSessions";
 import { listProjects } from "@/services/projects";
 import { listRecents } from "@/services/recents";
 import { fetchWorkspaceInventory, subscribeWorkspaceInventory } from "@/services/worktrees";
-import type { Issue } from "@/types/issue";
 import type { Project } from "@/types/project";
-import type { WorkspaceInventoryEntry } from "@/types/worktrees";
+import type { ProjectSessionRow } from "@/types/project-session";
 
 vi.mock("@/components/theme/ThemeToggle", () => ({
   ThemeToggle: () => <button type="button">Theme toggle</button>,
@@ -28,6 +28,7 @@ vi.mock("@/components/theme/ThemeToggle", () => ({
 vi.mock("@/hooks/useAgentExecutions", () => ({ useAgentExecutions: vi.fn() }));
 vi.mock("@/services/assistantThreads", () => ({ listAssistantThreads: vi.fn() }));
 vi.mock("@/services/issues", () => ({ listIssues: vi.fn() }));
+vi.mock("@/services/projectSessions", () => ({ listProjectSessions: vi.fn() }));
 vi.mock("@/services/projects", () => ({ listProjects: vi.fn() }));
 vi.mock("@/services/recents", () => ({ listRecents: vi.fn() }));
 vi.mock("@/services/worktrees", () => ({
@@ -77,52 +78,24 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-function issue(slug: string, identifier = `${slug.toUpperCase()}-1`): Issue {
+function sidebarSession(
+  issueIdentifier: string,
+  aggregateStatus: string | null = "active",
+): ProjectSessionRow {
   return {
-    id: identifier,
-    identifier,
-    projectSlug: slug,
-    status: "Todo",
-    title: identifier,
-    description: null,
-    priority: null,
-    position: 0,
-    labels: [],
-    blockedBy: [],
-    assignee: null,
-    creator: null,
-    url: null,
-    branchName: null,
-    createdAt: "2026-07-13T12:00:00Z",
+    id: `execution:${issueIdentifier}`,
+    title: issueIdentifier,
+    kind: "execution",
+    href: `/projects/active-project/sessions/${issueIdentifier}`,
     updatedAt: "2026-07-13T12:00:00Z",
-    attachments: [],
-  };
-}
-
-function inventory(path: string, issueIdentifier: string): WorkspaceInventoryEntry {
-  return {
-    path,
-    displayName: null,
-    kind: "issue",
+    aggregateStatus,
+    agentKind: "codex",
     issueIdentifier,
-    name: null,
-    classification: "active",
-    reclaimable: false,
-    workPresent: true,
-    executionStatus: null,
-    removable: true,
-    sizeBytes: 10,
-    repos: [],
-    childWorktrees: [],
+    workspacePath: "/active",
+    workspaceId: "workspace:active",
+    pinned: false,
+    archived: false,
   };
-}
-
-function handlersFor(slug: string) {
-  const call = [...vi.mocked(subscribeWorkspaceInventory).mock.calls]
-    .reverse()
-    .find(([value]) => value === slug);
-  if (!call) throw new Error(`No inventory subscription for ${slug}`);
-  return call[1];
 }
 
 function renderProjectSidebar(initialEntry = "/projects") {
@@ -148,9 +121,13 @@ describe("ProjectSidebar", () => {
     window.localStorage.clear();
     vi.mocked(useAgentExecutions).mockReturnValue({
       executions: new Map(),
-      refetch: vi.fn().mockResolvedValue(undefined),
     });
     vi.mocked(listIssues).mockResolvedValue([]);
+    vi.mocked(listProjectSessions).mockResolvedValue({
+      sessions: [],
+      nextCursor: null,
+      projectActivityAt: null,
+    });
     vi.mocked(listRecents).mockResolvedValue([]);
     vi.mocked(listAssistantThreads).mockResolvedValue([]);
     vi.mocked(fetchWorkspaceInventory).mockResolvedValue({
@@ -246,12 +223,23 @@ describe("ProjectSidebar", () => {
 
   it("expands the route-selected project", async () => {
     vi.mocked(listProjects).mockResolvedValue([activeProject, removedProject]);
-    vi.mocked(listIssues).mockResolvedValue([issue("active-project")]);
+    vi.mocked(listProjectSessions).mockResolvedValue({
+      sessions: [sidebarSession("ACTIVE-PROJECT-1")],
+      nextCursor: null,
+      projectActivityAt: null,
+    });
 
     renderProjectSidebar("/projects/active-project/board");
 
     const selected = await screen.findByRole("treeitem", { name: /^Active Project,/ });
     await waitFor(() => expect(selected).toHaveAttribute("aria-expanded", "true"));
+    expect(listProjectSessions).toHaveBeenCalledWith({
+      projectSlug: "active-project",
+      limit: 20,
+      includeArchived: false,
+    });
+    expect(listIssues).not.toHaveBeenCalled();
+    expect(subscribeWorkspaceInventory).not.toHaveBeenCalled();
     expect(screen.getByRole("treeitem", { name: /^Removed Project,/ })).toHaveAttribute(
       "aria-expanded",
       "false",
@@ -299,16 +287,17 @@ describe("ProjectSidebar", () => {
   it("keeps the current project and activity accessible through collapsed rail tooltips", async () => {
     const user = userEvent.setup();
     vi.mocked(listProjects).mockResolvedValue([activeProject]);
-    vi.mocked(listIssues).mockResolvedValue([issue("active-project", "ACTIVE-1")]);
+    vi.mocked(listProjectSessions).mockResolvedValue({
+      sessions: [sidebarSession("ACTIVE-1")],
+      nextCursor: null,
+      projectActivityAt: null,
+    });
 
     renderProjectSidebar("/projects/active-project/board");
     await screen.findByRole("treeitem", { name: /^Active Project,/ });
-    await waitFor(() => expect(listIssues).toHaveBeenCalled());
-
-    act(() => {
-      handlersFor("active-project").onEntry(inventory("/active", "ACTIVE-1"));
-      handlersFor("active-project").onDone?.();
-    });
+    await waitFor(() => expect(listProjectSessions).toHaveBeenCalled());
+    expect(listIssues).not.toHaveBeenCalled();
+    expect(subscribeWorkspaceInventory).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: "Collapse sidebar" }));
 
@@ -347,16 +336,17 @@ describe("ProjectSidebar", () => {
 
   it("does not clear loaded branch snapshots when projects reload", async () => {
     vi.mocked(listProjects).mockResolvedValue([activeProject]);
-    vi.mocked(listIssues).mockResolvedValue([issue("active-project", "ACTIVE-1")]);
+    vi.mocked(listProjectSessions).mockResolvedValue({
+      sessions: [sidebarSession("ACTIVE-1")],
+      nextCursor: null,
+      projectActivityAt: null,
+    });
 
     renderProjectSidebar("/projects/active-project/board");
     await screen.findByRole("treeitem", { name: /^Active Project,/ });
-    await waitFor(() => expect(subscribeWorkspaceInventory).toHaveBeenCalled());
-
-    act(() => {
-      handlersFor("active-project").onEntry(inventory("/active", "ACTIVE-1"));
-      handlersFor("active-project").onDone?.();
-    });
+    await waitFor(() => expect(listProjectSessions).toHaveBeenCalled());
+    expect(listIssues).not.toHaveBeenCalled();
+    expect(subscribeWorkspaceInventory).not.toHaveBeenCalled();
 
     await waitFor(() => {
       expect(screen.getByRole("treeitem", { name: /^ACTIVE-1,/ })).toBeTruthy();
@@ -367,7 +357,7 @@ describe("ProjectSidebar", () => {
     await waitFor(() => expect(listProjects).toHaveBeenCalledTimes(2));
 
     expect(screen.getByRole("treeitem", { name: /^ACTIVE-1,/ })).toBeTruthy();
-    expect(listIssues).toHaveBeenCalledTimes(1);
+    expect(listProjectSessions).toHaveBeenCalledTimes(1);
   });
 });
 

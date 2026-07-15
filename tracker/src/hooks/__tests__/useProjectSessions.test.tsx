@@ -70,6 +70,23 @@ function emptySessionsPage(): ProjectSessionsPage {
   return { sessions: [], nextCursor: null, projectActivityAt: null };
 }
 
+function session(issueIdentifier: string, title: string): ProjectSessionsPage["sessions"][number] {
+  return {
+    id: `execution:${issueIdentifier}`,
+    title,
+    kind: "execution",
+    href: `/projects/demo/executions/${issueIdentifier}`,
+    updatedAt: "2026-07-02T10:00:00Z",
+    aggregateStatus: "saved",
+    agentKind: "codex",
+    issueIdentifier,
+    workspacePath: null,
+    workspaceId: null,
+    pinned: false,
+    archived: false,
+  };
+}
+
 function recent(projectSlug: string, id = "thread:1"): RecentSession {
   return {
     id,
@@ -100,6 +117,7 @@ describe("useProjectSessions", () => {
       loading: false,
       refetch: vi.fn().mockResolvedValue(undefined),
     });
+    vi.mocked(listIssues).mockResolvedValue([]);
     vi.mocked(listProjectSessions).mockResolvedValue(emptySessionsPage());
     vi.mocked(subscribeWorkspaceInventory).mockImplementation((_slug, handlers) => {
       handlers.onDone?.();
@@ -111,8 +129,11 @@ describe("useProjectSessions", () => {
     });
   });
 
-  it("joins project issues with execution snapshots", async () => {
-    vi.mocked(listIssues).mockResolvedValue([issue("DEMO-1", "Saved launcher work")]);
+  it("joins session-row titles with execution snapshots", async () => {
+    vi.mocked(listProjectSessions).mockResolvedValue({
+      ...emptySessionsPage(),
+      sessions: [session("DEMO-1", "Saved launcher work")],
+    });
 
     const { result } = renderHook(() => useProjectSessions("demo"));
 
@@ -120,13 +141,21 @@ describe("useProjectSessions", () => {
     expect(result.current.groups.saved).toMatchObject([
       { issueIdentifier: "DEMO-1", title: "Saved launcher work" },
     ]);
-    expect(listProjectSessions).not.toHaveBeenCalled();
+    expect(listProjectSessions).toHaveBeenCalledWith({
+      projectSlug: "demo",
+      limit: 20,
+      includeArchived: false,
+    });
+    expect(listIssues).not.toHaveBeenCalled();
     expect(subscribeWorkspaceInventory).not.toHaveBeenCalled();
   });
 
   it("includes related sessions from the shared recents snapshot", async () => {
     vi.mocked(useAgentExecutions).mockReturnValue({ executions: new Map() });
-    vi.mocked(listIssues).mockResolvedValue([issue("DEMO-1", "Saved launcher work")]);
+    vi.mocked(listProjectSessions).mockResolvedValue({
+      ...emptySessionsPage(),
+      sessions: [session("DEMO-1", "Saved launcher work")],
+    });
     vi.mocked(useRecents).mockReturnValue({
       sessions: [recent("demo"), recent("other", "thread:2")],
       loading: false,
@@ -137,17 +166,22 @@ describe("useProjectSessions", () => {
 
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     expect(result.current.relatedSessions.map((session) => session.title)).toEqual(["Issue chat"]);
-    expect(listProjectSessions).not.toHaveBeenCalled();
+    expect(listProjectSessions).toHaveBeenCalledOnce();
+    expect(listIssues).not.toHaveBeenCalled();
   });
 
   it("does not open workspace inventory on initial load", async () => {
-    vi.mocked(listIssues).mockResolvedValue([issue("DEMO-1", "Saved launcher work")]);
+    vi.mocked(listProjectSessions).mockResolvedValue({
+      ...emptySessionsPage(),
+      sessions: [session("DEMO-1", "Saved launcher work")],
+    });
 
     const { result } = renderHook(() => useProjectSessions("demo"));
 
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     expect(result.current.inventory).toBeNull();
     expect(result.current.isInventoryLoading).toBe(false);
+    expect(listIssues).not.toHaveBeenCalled();
     expect(subscribeWorkspaceInventory).not.toHaveBeenCalled();
     expect(fetchWorkspaceInventory).not.toHaveBeenCalled();
   });

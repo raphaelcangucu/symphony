@@ -1,19 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useAgentExecutions } from "@/hooks/useAgentExecutions";
+import { DEFAULT_PROJECT_SESSIONS_LIMIT, fetchProjectSessions } from "@/hooks/projectSessionsCache";
 import { useRecents } from "@/hooks/useRecents";
 import { emptyProjectSessionGroups, groupProjectSessions, type ProjectSessionGroups } from "@/lib/projectSessions";
-import { listIssues } from "@/services/issues";
 import type { AgentExecution } from "@/types/agent-execution";
 import type { Issue } from "@/types/issue";
+import type { ProjectSessionRow } from "@/types/project-session";
 import type { RecentSession } from "@/types/recents";
 import type { WorkspaceInventory } from "@/types/worktrees";
 
 export interface UseProjectSessionsResult {
   groups: ProjectSessionGroups;
   relatedSessions: RecentSession[];
-  /** Full project issues, so inline session views can resolve an issue by identifier. */
-  issues: Issue[];
+  /** Lightweight issue records derived from the limited sessions response. */
+  issues: readonly Issue[];
   /** Live execution snapshots keyed by issue identifier. */
   executions: ReadonlyMap<string, AgentExecution>;
   /** Working-tree inventory (git + disk state per workspace); null when unavailable. */
@@ -30,14 +31,14 @@ export function useProjectSessions(projectSlug: string): UseProjectSessionsResul
   const { executions } = useAgentExecutions();
   const { sessions: recents, loading: recentsLoading } = useRecents();
   const normalizedProjectSlug = projectSlug.trim();
-  const [issues, setIssues] = useState<Issue[]>([]);
+  const [sessions, setSessions] = useState<readonly ProjectSessionRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const loadProjectData = useCallback(async () => {
     const slug = normalizedProjectSlug;
     if (!slug) {
-      setIssues([]);
+      setSessions([]);
       setIsLoading(false);
       setError("missing-project");
       return;
@@ -45,7 +46,12 @@ export function useProjectSessions(projectSlug: string): UseProjectSessionsResul
 
     setIsLoading(true);
     try {
-      setIssues(await listIssues(slug));
+      const page = await fetchProjectSessions({
+        projectSlug: slug,
+        limit: DEFAULT_PROJECT_SESSIONS_LIMIT,
+        includeArchived: false,
+      });
+      setSessions(page.sessions);
       setError(null);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "load-failed");
@@ -61,6 +67,35 @@ export function useProjectSessions(projectSlug: string): UseProjectSessionsResul
   const refetch = useCallback(async () => {
     await loadProjectData();
   }, [loadProjectData]);
+
+  const issues = useMemo((): readonly Issue[] => {
+    const issuesByIdentifier = new Map<string, Issue>();
+    for (const session of sessions) {
+      const identifier = session.issueIdentifier?.trim();
+      const title = session.title.trim();
+      if (!identifier || !title || issuesByIdentifier.has(identifier)) continue;
+      issuesByIdentifier.set(identifier, {
+        id: identifier,
+        identifier,
+        projectSlug: normalizedProjectSlug,
+        status: "Todo",
+        title,
+        description: null,
+        priority: null,
+        position: 0,
+        labels: [],
+        blockedBy: [],
+        assignee: null,
+        creator: null,
+        url: null,
+        branchName: null,
+        createdAt: session.updatedAt,
+        updatedAt: session.updatedAt,
+        attachments: [],
+      });
+    }
+    return [...issuesByIdentifier.values()];
+  }, [normalizedProjectSlug, sessions]);
 
   const groups = useMemo(() => {
     if (issues.length === 0 || executions.size === 0) return emptyProjectSessionGroups();

@@ -13,6 +13,7 @@ import {
 import { resolveSidebarRouteSelection } from "@/lib/sidebarRouteResolution";
 import { fetchProjectSessions } from "@/hooks/projectSessionsCache";
 import { listProjects } from "@/services/projects";
+import type { AgentExecution } from "@/types/agent-execution";
 import type { Project } from "@/types/project";
 import type { ProjectSessionRow } from "@/types/project-session";
 import type { SidebarLoadState, SidebarProjectNode } from "@/types/sidebar";
@@ -85,6 +86,18 @@ function appendSessions(
   return [...previous, ...next.filter(({ id }) => !seen.has(id))];
 }
 
+function overlayExecutionStatuses(
+  sessions: readonly ProjectSessionRow[],
+  executions: ReadonlyMap<string, AgentExecution>,
+): readonly ProjectSessionRow[] {
+  if (sessions.length === 0 || executions.size === 0) return sessions;
+  return sessions.map((session) => {
+    if (!session.issueIdentifier) return session;
+    const execution = executions.get(session.issueIdentifier);
+    return execution ? { ...session, aggregateStatus: execution.status } : session;
+  });
+}
+
 function errorDetail(error: unknown): string {
   return error instanceof Error && error.message.trim()
     ? error.message.trim()
@@ -93,7 +106,7 @@ function errorDetail(error: unknown): string {
 
 export function useSidebarTree(): UseSidebarTreeResult {
   const location = useLocation();
-  useAgentExecutions();
+  const { executions } = useAgentExecutions();
   const [projects, setProjects] = useState<readonly Project[]>([]);
   const projectsRef = useRef<readonly Project[]>([]);
   const [projectsLoading, setProjectsLoading] = useState(true);
@@ -110,6 +123,7 @@ export function useSidebarTree(): UseSidebarTreeResult {
   const branchStatesRef = useRef<ReadonlyMap<string, SidebarBranchState>>(new Map());
   const branchResourcesRef = useRef(new Map<string, BranchResource>());
   const mountedRef = useRef(false);
+  const projectsGenerationRef = useRef(0);
 
   const updateBranchState = useCallback(
     (
@@ -226,6 +240,7 @@ export function useSidebarTree(): UseSidebarTreeResult {
   );
 
   const reloadProjects = useCallback(async () => {
+    const generation = ++projectsGenerationRef.current;
     if (mountedRef.current) {
       setProjectsLoading(true);
       setProjectsError(null);
@@ -233,12 +248,12 @@ export function useSidebarTree(): UseSidebarTreeResult {
     }
     try {
       const nextProjects = await listProjects({ includeArchived: true });
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || generation !== projectsGenerationRef.current) return;
       projectsRef.current = nextProjects;
       setProjects(nextProjects);
       setProjectsLoading(false);
     } catch (error) {
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || generation !== projectsGenerationRef.current) return;
       setProjectsLoading(false);
       setProjectsError(SIDEBAR_PROJECTS_LOAD_ERROR);
       setProjectsErrorDetail(errorDetail(error));
@@ -346,7 +361,7 @@ export function useSidebarTree(): UseSidebarTreeResult {
           projectSlug: project.slug,
           projectTitle: project.name,
           archived: project.archivedAt != null,
-          sessions: branch.sessions,
+          sessions: overlayExecutionStatuses(branch.sessions, executions),
           nextCursor: branch.nextCursor,
           loadState: branch.loadState,
           error: branch.error,
@@ -367,7 +382,7 @@ export function useSidebarTree(): UseSidebarTreeResult {
           ?? right.updatedAt;
         return timestamp(rightActivity) - timestamp(leftActivity) || left.title.localeCompare(right.title);
       });
-  }, [branchStates, preferences, projects]);
+  }, [branchStates, executions, preferences, projects]);
 
   return {
     tree,

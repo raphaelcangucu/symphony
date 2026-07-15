@@ -10,6 +10,7 @@ import { listProjects } from "@/services/projects";
 import { listProjectSessions } from "@/services/projectSessions";
 import { listRecents } from "@/services/recents";
 import { subscribeWorkspaceInventory } from "@/services/worktrees";
+import type { AgentExecution } from "@/types/agent-execution";
 import type { Project } from "@/types/project";
 import type { ProjectSessionRow } from "@/types/project-session";
 
@@ -49,6 +50,28 @@ function session(id: string): ProjectSessionRow {
   };
 }
 
+function execution(issueIdentifier: string): AgentExecution {
+  return {
+    issueIdentifier,
+    status: "live",
+    agentKind: "codex",
+    sessionId: `session-${issueIdentifier}`,
+    lastEvent: null,
+    lastMessage: null,
+    lastEventAt: "2026-07-14T12:00:00Z",
+    turnCount: 1,
+    runtimeSeconds: null,
+    startedAt: "2026-07-14T12:00:00Z",
+    retryAttempt: 0,
+    error: null,
+    goal: null,
+    longRunning: false,
+    longRunningKind: null,
+    longRunningLabel: null,
+    tokens: null,
+  };
+}
+
 function wrapper({ children }: { children: ReactNode }) {
   return <MemoryRouter>{children}</MemoryRouter>;
 }
@@ -59,7 +82,6 @@ describe("useSidebarTree", () => {
     localStorage.clear();
     vi.mocked(useAgentExecutions).mockReturnValue({
       executions: new Map(),
-      refetch: vi.fn().mockResolvedValue(undefined),
     });
     vi.mocked(listProjects).mockResolvedValue([project("alpha"), project("beta")]);
     vi.mocked(listProjectSessions).mockResolvedValue({
@@ -101,6 +123,27 @@ describe("useSidebarTree", () => {
     await waitFor(() => expect(result.current.tree[0].loadState).toBe("ready"));
     expect(result.current.tree[0].sessions.map(({ id }) => id)).toEqual(["thread:1"]);
     expect(result.current.tree[0].workspaces).toEqual([]);
+  });
+
+  it("overlays live execution status onto sessions with the same issue identifier", async () => {
+    vi.mocked(useAgentExecutions).mockReturnValue({
+      executions: new Map([["ALPHA-1", execution("ALPHA-1")]]),
+    });
+    vi.mocked(listProjectSessions).mockResolvedValue({
+      sessions: [{ ...session("thread:1"), issueIdentifier: "ALPHA-1" }],
+      nextCursor: null,
+      projectActivityAt: "2026-07-14T12:00:00Z",
+    });
+    const { result } = renderHook(() => useSidebarTree(), { wrapper });
+    await waitFor(() => expect(result.current.projectsLoading).toBe(false));
+
+    act(() => result.current.toggleProjectExpanded("alpha"));
+
+    await waitFor(() => expect(result.current.tree[0].loadState).toBe("ready"));
+    expect(result.current.tree[0].sessions[0]).toMatchObject({
+      issueIdentifier: "ALPHA-1",
+      aggregateStatus: "active",
+    });
   });
 
   it("sorts unpinned roots by updated activity before branches load", async () => {
