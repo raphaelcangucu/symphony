@@ -7,7 +7,7 @@ defmodule SymphonyElixir.Assistant.ListPreviewTools do
 
   @tool "list_previews"
   @unhealthy_statuses ~w(crashed pending provisioning starting stopped unknown)
-  @next_steps "Inspect unhealthy entries with manage_preview status/output, then restart or fix via manage_dev_env."
+  @next_steps "Inspect unhealthy entries with manage_preview status/output, then restart or fix via manage_dev_env. If Preview still cannot reach ready, fall back to a convenient project bring-up path (dock may lag)."
 
   @spec tool_specs() :: [map()]
   def tool_specs, do: [assistant_tool_spec()]
@@ -16,7 +16,8 @@ defmodule SymphonyElixir.Assistant.ListPreviewTools do
   def assistant_tool_spec do
     %{
       "name" => @tool,
-      "description" => "List active issue previews for the current project (status, ports, URLs, tunnel). Use manage_preview to act.",
+      "description" =>
+        "List active issue previews for the current project (preferred Preview dock status, ports, URLs, tunnel). Use manage_preview to act; if Preview cannot be healed, fall back to project bring-up is allowed.",
       "inputSchema" => %{
         "type" => "object",
         "additionalProperties" => false,

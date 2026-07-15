@@ -16,6 +16,33 @@ defmodule SymphonyElixir.Assistant.ListPreviewToolsTest do
            }
   end
 
+  test "tool description prefers manage_preview ports and mentions fallback" do
+    spec = ListPreviewTools.assistant_tool_spec()
+    desc = spec["description"]
+    assert desc =~ "manage_preview"
+    assert desc =~ ~r/prefer/i or desc =~ "Preview"
+    assert desc =~ ~r/fall\s*back/i
+  end
+
+  test "next_steps allow fallback when previews are unhealthy" do
+    assert {:ok, result} =
+             ListPreviewTools.execute("demo", %{},
+               running_issue_keys: fn -> [{"demo", "DEMO-1"}] end,
+               issue_targets: fn _slug, _id ->
+                 {:ok,
+                  %{
+                    available: true,
+                    reason: nil,
+                    servers: [%{slug: "web", status: "crashed", port: 4300}]
+                  }}
+               end,
+               tunnel_summary: fn _ -> %{enabled: false, running: false} end
+             )
+
+    assert result.data.next_steps =~ "manage_preview"
+    assert result.data.next_steps =~ ~r/fall\s*back/i
+  end
+
   test "lists running preview issues for a project" do
     assert {:ok, result} =
              ListPreviewTools.execute("demo", %{},
