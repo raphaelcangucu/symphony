@@ -97,6 +97,10 @@ export function ProjectNavigationTree(props: ProjectNavigationTreeProps) {
         showAllWorkspaces(project.id);
         return;
       }
+      if (node.syntheticKind === "more-sessions" && !node.workspaceId) {
+        showAllSessions(project.id);
+        return;
+      }
       const workspace = node.workspaceId
         ? project.workspaces.find(({ id }) => id === node.workspaceId)
         : undefined;
@@ -192,6 +196,7 @@ export function ProjectNavigationTree(props: ProjectNavigationTreeProps) {
       <SessionTreeItem
         key={row.id}
         node={row.node}
+        level={row.level}
         {...commonRowProps(row)}
         onOpen={() => openNode(row.node.kind === "session" ? row.node.href : "")}
         renderContextMenu={(trigger) => renderContextMenu(row.node as SidebarNode, trigger)}
@@ -308,6 +313,7 @@ export function ProjectNavigationTree(props: ProjectNavigationTreeProps) {
             ),
         );
         const moreId = syntheticRowId("more-workspaces", project.id, null);
+        const moreSessionsId = syntheticRowId("more-sessions", project.id, null);
         const unassignedId = syntheticRowId("unassigned", project.id, null);
         const unassignedRow = rowById.get(unassignedId);
         return (
@@ -331,6 +337,20 @@ export function ProjectNavigationTree(props: ProjectNavigationTreeProps) {
                     onActivate={(trigger) => activateSynthetic(branchRow.node as SidebarSyntheticNode, trigger)}
                   />
                 ) : null}
+                {project.sessions.map(({ id }) => renderSession(id))}
+                {rowById.has(moreSessionsId)
+                  ? renderSyntheticAction(
+                      rowById.get(moreSessionsId)!,
+                      t("layout.sidebar.tree.moreSessions", {
+                        count: project.overflowSessions.length,
+                        defaultValue: "More sessions",
+                      }),
+                      t("layout.sidebar.tree.moreSessions", {
+                        count: project.overflowSessions.length,
+                        defaultValue: "More sessions",
+                      }),
+                    )
+                  : null}
                 {project.workspaces.map((workspace) => renderWorkspace(project, workspace))}
                 {rowById.has(moreId)
                   ? renderSyntheticAction(

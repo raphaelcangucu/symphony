@@ -91,6 +91,13 @@ export function buildSidebarVisibleRows(
     const branchKind = branchSyntheticKind(project);
     if (branchKind) rows.push(syntheticRow(branchKind, project.id, null, project.id, 2));
 
+    for (const session of project.sessions) {
+      rows.push(row(session, project.id, 2, false, false));
+    }
+    if (project.nextCursor) {
+      rows.push(syntheticRow("more-sessions", project.id, null, project.id, 2));
+    }
+
     for (const workspace of project.workspaces) {
       const workspaceExpanded = expandedWorkspaceIds.has(workspace.id);
       rows.push(row(workspace, project.id, 2, true, workspaceExpanded));
@@ -164,7 +171,11 @@ function branchSyntheticKind(project: SidebarProjectNode): SidebarSyntheticKind 
   if (project.loadState === "idle" || project.loadState === "loading") return "loading";
   if (project.loadState === "error") return "error";
   if (project.loadState === "stale") return "stale";
-  if (project.workspaces.length === 0 && project.unassignedSessions.length === 0) {
+  if (
+    project.sessions.length === 0 &&
+    project.workspaces.length === 0 &&
+    project.unassignedSessions.length === 0
+  ) {
     return "empty-project";
   }
   return null;

@@ -104,6 +104,8 @@ export interface BackendProjectDto {
   createdAt?: string | null;
   updated_at?: string | null;
   updatedAt?: string | null;
+  last_activity_at?: string | null;
+  lastActivityAt?: string | null;
   archived_at?: string | null;
   archivedAt?: string | null;
   warm_up_status?: string | null;
@@ -148,6 +150,7 @@ export function normalizeProject(dto: BackendProjectDto): Project {
     syncState: normalizeProjectSyncState(dto.syncState ?? dto.sync_state),
     createdAt: dto.createdAt ?? dto.created_at ?? dto.inserted_at ?? undefined,
     updatedAt: dto.updatedAt ?? dto.updated_at ?? dto.inserted_at ?? undefined,
+    lastActivityAt: dto.lastActivityAt ?? dto.last_activity_at ?? null,
     archivedAt: dto.archivedAt ?? dto.archived_at ?? null,
     warmUpStatus: (dto.warmUpStatus ?? dto.warm_up_status ?? "never") as Project["warmUpStatus"],
     warmedAt: dto.warmedAt ?? dto.warmed_at ?? null,

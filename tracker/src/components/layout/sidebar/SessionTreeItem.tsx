@@ -12,6 +12,7 @@ import type { SidebarSessionNode } from "@/types/sidebar";
 
 export interface SessionTreeItemProps {
   node: SidebarSessionNode;
+  level?: 2 | 3;
   selected: boolean;
   tabIndex: 0 | -1;
   rowRef: Ref<HTMLDivElement>;
@@ -24,6 +25,7 @@ export interface SessionTreeItemProps {
 
 export function SessionTreeItem({
   node,
+  level = 3,
   selected,
   tabIndex,
   rowRef,
@@ -61,7 +63,7 @@ export function SessionTreeItem({
     <SidebarTreeRow
       ref={rowRef}
       id={node.id}
-      level={3}
+      level={level}
       label={node.title}
       description={descriptionParts.join(" · ") || null}
       selected={selected}

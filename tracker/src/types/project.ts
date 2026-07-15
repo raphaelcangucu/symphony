@@ -33,6 +33,7 @@ export interface Project {
   syncState?: ProjectSyncState | null;
   createdAt?: string;
   updatedAt?: string;
+  lastActivityAt?: string | null;
   archivedAt?: string | null;
   warmUpStatus?: "never" | "running" | "succeeded" | "failed";
   warmedAt?: string | null;
