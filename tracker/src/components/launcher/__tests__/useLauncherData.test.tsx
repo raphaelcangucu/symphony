@@ -61,4 +61,38 @@ describe("useLauncherData", () => {
     renderHook(() => useLauncherData({ projectSlug: "demo", open: false, activeTab: "prs", query: "" }));
     expect(spy).not.toHaveBeenCalled();
   });
+
+  it("sends server search for issues/prs/branches only when query has 3+ chars", async () => {
+    const issues = vi.spyOn(issuesService, "listIssues").mockResolvedValue([]);
+    const prs = vi.spyOn(prService, "listProjectPullRequests").mockResolvedValue([]);
+    const branches = vi.spyOn(branchService, "listProjectBranches").mockResolvedValue([]);
+
+    const { rerender } = renderHook(
+      ({ tab, query }: { tab: "issues" | "prs" | "branches"; query: string }) =>
+        useLauncherData({ projectSlug: "demo", open: true, activeTab: tab, query }),
+      { initialProps: { tab: "issues" as "issues" | "prs" | "branches", query: "ab" } },
+    );
+
+    await waitFor(() => expect(issues).toHaveBeenCalled());
+    expect(issues).toHaveBeenCalledWith("demo", { search: undefined });
+
+    rerender({ tab: "issues", query: "abc" });
+    await waitFor(() => expect(issues).toHaveBeenCalledWith("demo", { search: "abc" }));
+
+    rerender({ tab: "prs", query: "91" });
+    await waitFor(() => expect(prs).toHaveBeenCalledWith("demo", { search: undefined }));
+
+    rerender({ tab: "prs", query: "9174" });
+    await waitFor(() => expect(prs).toHaveBeenCalledWith("demo", { search: "9174" }));
+
+    rerender({ tab: "branches", query: "fe" });
+    await waitFor(() =>
+      expect(branches).toHaveBeenCalledWith("demo", { query: undefined }),
+    );
+
+    rerender({ tab: "branches", query: "feature" });
+    await waitFor(() =>
+      expect(branches).toHaveBeenCalledWith("demo", { query: "feature" }),
+    );
+  });
 });

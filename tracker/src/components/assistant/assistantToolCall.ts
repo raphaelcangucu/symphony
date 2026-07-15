@@ -11,9 +11,10 @@ const ACTION_TOOLS = new Set<string>([
   "dispatch_coding_agent",
   "dispatch_codex",
   "add_comment",
+  "delete_comment",
 ]);
 
-const ACTION_PREFIXES = ["create_", "update_", "move_", "dispatch_", "provision_", "add_"];
+const ACTION_PREFIXES = ["create_", "update_", "move_", "dispatch_", "provision_", "add_", "delete_"];
 const SHELL_TOOLS = new Set(["Bash", "bash", "shell", "Shell"]);
 
 export function isActionTool(name: string): boolean {

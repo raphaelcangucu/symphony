@@ -188,14 +188,8 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
       {:error, :invalid_thread_id} ->
         TrackerErrors.render(conn, :invalid_thread_id)
 
-      {:error, :thread_active} ->
-        thread_active_error(conn)
-
       {:error, :unsupported_scope} ->
         TrackerErrors.validation_msg(conn, "thread scope does not support deletion")
-
-      {:error, :unsupported_status} ->
-        TrackerErrors.validation_msg(conn, "thread must be archived or closed before deletion")
 
       {:error, %Ecto.Changeset{} = changeset} ->
         TrackerErrors.render(conn, changeset)
@@ -292,8 +286,12 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
       title: params["title"],
       agent_kind: normalize_agent(params["agent_kind"]),
       execution_mode: params["execution_mode"] || params["mode"],
+      model: params["model"],
+      effort: params["effort"],
       isolated_workspace: params["isolated_workspace"] == true,
-      use_parent_workspace: params["use_parent_workspace"] == true
+      use_parent_workspace: params["use_parent_workspace"] == true,
+      clone_branches: params["clone_branches"],
+      clone_branch: params["clone_branch"]
     }
   end
 
@@ -338,15 +336,4 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
 
   defp preview_text(nil), do: nil
   defp preview_text(%{content: content}), do: content
-
-  defp thread_active_error(conn) do
-    conn
-    |> Conn.put_status(:conflict)
-    |> json(%{
-      error: %{
-        code: "thread_active",
-        message: "Assistant thread must be archived or closed before deletion"
-      }
-    })
-  end
 end

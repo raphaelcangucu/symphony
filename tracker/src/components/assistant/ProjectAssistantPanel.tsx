@@ -65,6 +65,7 @@ import {
   displayMessages,
   draftIssueCreatedFromMessage,
   effectiveAgentFromResponse,
+  effortFromResponse,
   errorMessage,
   extractKbDocumentReferencesFromMessage,
   fallbackAttachmentMessage,
@@ -72,6 +73,7 @@ import {
   isTextEntryTarget,
   latestPendingPlanMessageId,
   messageFromResponse,
+  modelFromResponse,
   normalizeAgentSeed,
   type DraftIssueCreated,
 } from "@/components/assistant/assistantPanelHelpers";
@@ -370,6 +372,9 @@ export function ProjectAssistantPanel({
     [location.search],
   );
   const [serverAgentSeed, setServerAgentSeed] = useState<AgentKind | null>(routeAgentSeed);
+  const [settingsSeed, setSettingsSeed] = useState<{ agent: AgentKind; model: string; effort: string } | null>(
+    null,
+  );
   const contextInsertRequestIdRef = useRef(0);
   const [contextInsertRequest, setContextInsertRequest] = useState<ComposerContextInsertRequest | null>(null);
   const [magicPaletteRequestId, setMagicPaletteRequestId] = useState(0);
@@ -765,6 +770,11 @@ export function ProjectAssistantPanel({
         setComposerAgent(agent);
         setServerAgentSeed(agent);
         onEffectiveAgentResolvedRef.current?.(agent);
+      }
+      const model = modelFromResponse(response);
+      const effort = effortFromResponse(response);
+      if (agent && model && effort) {
+        setSettingsSeed({ agent, model, effort });
       }
     });
     joinPush.receive("error", (reason) => {
@@ -1678,6 +1688,7 @@ export function ProjectAssistantPanel({
       onMentionQueryChange={setMentionQuery}
       onMentionSelect={rememberMention}
       agentSeed={serverAgentSeed}
+      settingsSeed={settingsSeed}
       toolbarAfterAttach={
         isPageMode && hasTasks ? (
           <Button

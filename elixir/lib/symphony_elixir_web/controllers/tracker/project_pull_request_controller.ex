@@ -10,7 +10,7 @@ defmodule SymphonyElixirWeb.Tracker.ProjectPullRequestController do
   alias SymphonyElixirWeb.TrackerErrors
 
   @spec index(Conn.t(), map()) :: Conn.t()
-  def index(conn, %{"project_slug" => project_slug}) do
+  def index(conn, %{"project_slug" => project_slug} = params) do
     case Context.get_project(project_slug) do
       {:ok, project} ->
         repos = IssueRepo.candidate_repos(project, "")
@@ -18,8 +18,15 @@ defmodule SymphonyElixirWeb.Tracker.ProjectPullRequestController do
         if repos == [] do
           json(conn, %{data: [], supported: false})
         else
-          case ReadCache.fetch({:project_open_prs, project.slug}, fn ->
-                 {:ok, ProjectPullRequests.list_open(repos, marker_key: marker_key(project))}
+          query = normalize_query(Map.get(params, "q"))
+          cache_key = {:project_open_prs, project.slug, query || :all}
+
+          case ReadCache.fetch(cache_key, fn ->
+                 {:ok,
+                  ProjectPullRequests.list_open(repos,
+                    marker_key: marker_key(project),
+                    q: query
+                  )}
                end) do
             {:ok, data} ->
               json(conn, %{data: Enum.map(data, &present/1), supported: true})
@@ -33,6 +40,15 @@ defmodule SymphonyElixirWeb.Tracker.ProjectPullRequestController do
         TrackerErrors.render(conn, reason)
     end
   end
+
+  defp normalize_query(query) when is_binary(query) do
+    case String.trim(query) do
+      "" -> nil
+      trimmed -> trimmed
+    end
+  end
+
+  defp normalize_query(_), do: nil
 
   defp present(pr) do
     %{

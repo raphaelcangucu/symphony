@@ -23,6 +23,23 @@ defmodule SymphonyElixirWeb.Tracker.BranchControllerTest do
          ]
        }}
     end
+
+    def rest_get("/repos/o/r/git/matching-refs/heads/feature/graphql", _opts) do
+      {:ok,
+       %{
+         status: 200,
+         body: [
+           %{
+             "ref" => "refs/heads/feature/graphql-go-api-CDE-1075",
+             "object" => %{"sha" => "ggg"}
+           }
+         ]
+       }}
+    end
+
+    def rest_get("/repos/o/r/git/matching-refs/heads/" <> _rest, _opts) do
+      {:ok, %{status: 200, body: []}}
+    end
   end
 
   setup do
@@ -69,6 +86,16 @@ defmodule SymphonyElixirWeb.Tracker.BranchControllerTest do
     names = Enum.map(data, & &1["name"])
     assert "codex/adv-2" in names
     assert "main" in names
+  end
+
+  test "searches branches with q via matching-refs" do
+    conn =
+      get(authorized_conn(), "/api/tracker/v1/projects/advising-branches/branches", %{
+        "q" => "feature/graphql"
+      })
+
+    assert %{"data" => data, "supported" => true} = json_response(conn, 200)
+    assert [%{"name" => "feature/graphql-go-api-CDE-1075", "repo" => "o/r"}] = data
   end
 
   defp authorized_conn do

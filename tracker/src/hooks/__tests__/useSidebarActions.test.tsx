@@ -180,7 +180,7 @@ describe("useSidebarActions", () => {
         threadId: 7,
         sessionKind: "chat",
         local: true,
-        archived: true,
+        archived: false,
         closed: false,
       },
       services.deleteAssistantThread,
@@ -467,18 +467,6 @@ describe("useSidebarActions", () => {
         closed: true,
       },
       /local/,
-    ],
-    [
-      {
-        action: "delete-thread",
-        projectSlug: "acme",
-        threadId: 7,
-        sessionKind: "chat",
-        local: true,
-        archived: false,
-        closed: false,
-      },
-      /archived or closed/,
     ],
     [
       {

@@ -38,23 +38,34 @@ interface TabData {
 
 const EMPTY_DATA: TabData = { issues: [], prs: [], branches: [], branchIssues: [] };
 
+/** Debounced launcher queries only hit the server from this length upward. */
+const LAUNCHER_SERVER_SEARCH_MIN_CHARS = 3;
+
+function serverSearchQuery(query: string): string | undefined {
+  const trimmed = query.trim();
+  if (trimmed.length < LAUNCHER_SERVER_SEARCH_MIN_CHARS) return undefined;
+  return trimmed;
+}
+
 function branchTreeUrl(repo: string | null, branch: string): string | null {
   if (!repo) return null;
   return `https://github.com/${repo}/tree/${branch}`;
 }
 
 async function fetchForTab(projectSlug: string, tab: LauncherTabId, query: string): Promise<TabData> {
+  const search = serverSearchQuery(query);
+
   if (tab === "issues") {
-    const issues = await listIssues(projectSlug, { search: query });
+    const issues = await listIssues(projectSlug, { search });
     return { ...EMPTY_DATA, issues };
   }
   if (tab === "prs") {
-    const prs = await listProjectPullRequests(projectSlug);
+    const prs = await listProjectPullRequests(projectSlug, { search });
     return { ...EMPTY_DATA, prs };
   }
   if (tab === "branches") {
     const [branches, branchIssues] = await Promise.all([
-      listProjectBranches(projectSlug),
+      listProjectBranches(projectSlug, { query: search }),
       listIssues(projectSlug),
     ]);
     return { ...EMPTY_DATA, branches, branchIssues };

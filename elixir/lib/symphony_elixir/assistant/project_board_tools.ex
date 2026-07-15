@@ -11,6 +11,9 @@ defmodule SymphonyElixir.Assistant.ProjectBoardTools do
     update_issue
     move_issue
     add_comment
+    list_comments
+    update_comment
+    delete_comment
     get_project
     list_project_repositories
     get_workflow

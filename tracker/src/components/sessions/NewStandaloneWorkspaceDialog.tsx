@@ -3,6 +3,11 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
+import {
+  ExecutionModeField,
+  ExecutionSettingsFields,
+} from "@/components/assistant/ExecutionSettingsFields";
+import { WorkspaceCloneBranchesFields } from "@/components/sessions/WorkspaceCloneBranchesFields";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -14,13 +19,24 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import {
+  catalogFor,
+  defaultComposerSettings,
+  fallbackCatalogBundle,
+  type AssistantCatalogBundle,
+} from "@/lib/assistantSettings";
+import { resolveCloneBranchApiPayload, type WorkspaceCloneRepoOption } from "@/lib/workspaceCloneRepos";
+import { fetchAssistantCatalogBundle } from "@/services/assistant";
 import { createStandaloneWorkspace } from "@/services/worktrees";
-import type { WorkspaceRepoState } from "@/types/worktrees";
+import type { AgentKind, ExecutionMode } from "@/types/issue";
+
+const DEFAULT_MODE: ExecutionMode = "build";
+const DEFAULT_AGENT: AgentKind = "codex";
 
 interface NewStandaloneWorkspaceDialogProps {
   projectSlug: string;
-  /** Repos of the shared project workspace, used to offer per-repo branch overrides. */
-  projectRepos: WorkspaceRepoState[];
+  /** Repos for optional per-directory branch overrides at workspace creation. */
+  cloneRepos?: WorkspaceCloneRepoOption[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onCreated: (workspacePath: string, threadId: number) => void;
@@ -28,7 +44,7 @@ interface NewStandaloneWorkspaceDialogProps {
 
 export function NewStandaloneWorkspaceDialog({
   projectSlug,
-  projectRepos,
+  cloneRepos = [],
   open,
   onOpenChange,
   onCreated,
@@ -36,26 +52,57 @@ export function NewStandaloneWorkspaceDialog({
   const { t } = useTranslation();
   const [name, setName] = useState("");
   const [branches, setBranches] = useState<Record<string, string>>({});
+  const [agent, setAgent] = useState<AgentKind>(DEFAULT_AGENT);
+  const [mode, setMode] = useState<ExecutionMode>(DEFAULT_MODE);
+  const [model, setModel] = useState<string | null>(null);
+  const [effort, setEffort] = useState<string | null>(null);
+  const [bundle, setBundle] = useState<AssistantCatalogBundle>(() => fallbackCatalogBundle());
   const [creating, setCreating] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     setName("");
     setBranches({});
+    setAgent(DEFAULT_AGENT);
+    setMode(DEFAULT_MODE);
+    setModel(null);
+    setEffort(null);
     setCreating(false);
   }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    void fetchAssistantCatalogBundle(projectSlug).then((next) => {
+      if (!cancelled) setBundle(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, projectSlug]);
+
+  useEffect(() => {
+    if (!open) return;
+    const defaults = defaultComposerSettings(catalogFor(bundle, agent));
+    setModel((current) => current ?? defaults.model);
+    setEffort((current) => current ?? defaults.effort);
+  }, [open, bundle, agent]);
 
   async function handleCreate() {
     const trimmed = name.trim();
     if (!trimmed || creating) return;
     setCreating(true);
     try {
-      const overrides = Object.fromEntries(
-        Object.entries(branches).filter(([, branch]) => branch.trim() !== ""),
-      );
+      const payload = resolveCloneBranchApiPayload(branches);
       const result = await createStandaloneWorkspace(projectSlug, {
         name: trimmed,
-        branches: Object.keys(overrides).length > 0 ? overrides : undefined,
+        agentKind: agent,
+        executionMode: mode,
+        model: model?.trim() || undefined,
+        effort: effort?.trim() || undefined,
+        branches:
+          payload.cloneBranches ??
+          (payload.cloneBranch ? { __default__: payload.cloneBranch } : undefined),
       });
       toast.success(t("workspacesPage.newWorkspace.created", { name: trimmed }));
       onOpenChange(false);
@@ -91,26 +138,29 @@ export function NewStandaloneWorkspaceDialog({
             />
           </div>
 
-          {projectRepos.length > 0 ? (
-            <div className="space-y-1.5">
-              <p className="text-sm font-medium text-foreground">{t("workspacesPage.newWorkspace.branchesLabel")}</p>
-              <div className="space-y-1.5">
-                {projectRepos.map((repo) => (
-                  <div key={repo.name} className="flex items-center gap-2">
-                    <span className="w-32 shrink-0 truncate text-xs text-muted-foreground">{repo.name}</span>
-                    <Input
-                      value={branches[repo.name] ?? ""}
-                      placeholder={repo.defaultBranch ?? t("workspacesPage.newWorkspace.branchPlaceholder")}
-                      className="h-8 text-xs"
-                      onChange={(event) =>
-                        setBranches((current) => ({ ...current, [repo.name]: event.target.value }))
-                      }
-                    />
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : null}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <ExecutionSettingsFields
+              bundle={bundle}
+              agent={agent}
+              model={model}
+              effort={effort}
+              disabled={creating}
+              onAgentChange={(next) => setAgent(next ?? DEFAULT_AGENT)}
+              onModelChange={setModel}
+              onEffortChange={setEffort}
+            />
+            <ExecutionModeField agent={agent} mode={mode} disabled={creating} onChange={setMode} />
+          </div>
+
+          <WorkspaceCloneBranchesFields
+            projectSlug={projectSlug}
+            active={open}
+            repos={cloneRepos}
+            value={branches}
+            onChange={setBranches}
+            disabled={creating}
+            allowGlobalFallback
+          />
         </div>
 
         <DialogFooter>

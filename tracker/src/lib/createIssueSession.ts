@@ -10,12 +10,16 @@ import type { AssistantThread } from "@/types/assistant-thread";
 export interface CreateIssueSessionInput {
   mode?: ExecutionMode;
   agent?: AgentKind | null;
+  model?: string | null;
+  effort?: string | null;
   title?: string | null;
   instructions?: string | null;
   /** When true the session gets its own clean sibling working tree. */
   isolatedWorkspace?: boolean;
   /** When true the session reuses the parent issue's canonical working tree. */
   useParentWorkspace?: boolean;
+  cloneBranches?: Record<string, string>;
+  cloneBranch?: string;
 }
 
 export async function createIssueSession(
@@ -28,11 +32,15 @@ export async function createIssueSession(
     title: input.title?.trim() || undefined,
     agentKind: input.agent === "opencode" ? undefined : (input.agent ?? undefined),
     executionMode: input.mode ?? "build",
+    model: input.model?.trim() || undefined,
+    effort: input.effort?.trim() || undefined,
     isolatedWorkspace: input.isolatedWorkspace === true,
     useParentWorkspace: input.useParentWorkspace === true,
+    cloneBranches: input.cloneBranches,
+    cloneBranch: input.cloneBranch,
   });
 
-  if (input.isolatedWorkspace === true) {
+  if (input.isolatedWorkspace === true || input.cloneBranch || input.cloneBranches) {
     void provisionThreadWorkspace(thread.id).catch(() => {
       // Provisioning also runs on the first assistant turn; ignore background failures here.
     });

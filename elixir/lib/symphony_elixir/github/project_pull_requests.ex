@@ -4,7 +4,8 @@ defmodule SymphonyElixir.GitHub.ProjectPullRequests do
 
   Runs one GitHub search per configured repo (`repo:<owner>/<name> is:pr
   is:open`) and annotates each hit with a best-effort tracker issue identifier
-  derived from the `Symphony-Issue:` marker in the PR body. Read-only; capped.
+  derived from the `Symphony-Issue:` marker in the PR body. Optional `q:` opts
+  append a free-text/number needle to the search. Read-only; capped.
   """
 
   alias SymphonyElixir.GitHub.{Client, IssueMarker, RepoSpec}
@@ -26,16 +27,17 @@ defmodule SymphonyElixir.GitHub.ProjectPullRequests do
   @spec list_open([String.t()], keyword()) :: [pull_request()]
   def list_open(repos, opts \\ []) when is_list(repos) do
     marker_key = Keyword.get(opts, :marker_key, IssueMarker.default_key())
+    needle = normalize_query(Keyword.get(opts, :q))
 
     repos
-    |> Enum.flat_map(&search_repo(&1, marker_key, opts))
+    |> Enum.flat_map(&search_repo(&1, marker_key, needle, opts))
     |> Enum.uniq_by(& &1.url)
     |> Enum.sort_by(& &1.updated_at, &>=/2)
   end
 
-  defp search_repo(repo, marker_key, opts) do
+  defp search_repo(repo, marker_key, needle, opts) do
     with {:ok, {owner, name}} <- RepoSpec.split(repo),
-         query = ~s(repo:#{owner}/#{name} is:pr is:open),
+         query = github_search_query(owner, name, needle),
          path = "/search/issues?" <> URI.encode_query(%{"q" => query, "per_page" => "#{@per_repo_limit}"}),
          {:ok, %{body: %{"items" => items}}} when is_list(items) <- rest_get(path, opts) do
       Enum.flat_map(items, &normalize(&1, repo, marker_key))
@@ -48,6 +50,20 @@ defmodule SymphonyElixir.GitHub.ProjectPullRequests do
         []
     end
   end
+
+  defp github_search_query(owner, name, nil), do: ~s(repo:#{owner}/#{name} is:pr is:open)
+
+  defp github_search_query(owner, name, needle),
+    do: ~s(repo:#{owner}/#{name} is:pr is:open #{needle})
+
+  defp normalize_query(query) when is_binary(query) do
+    case String.trim(query) do
+      "" -> nil
+      trimmed -> trimmed
+    end
+  end
+
+  defp normalize_query(_), do: nil
 
   defp normalize(%{"number" => number} = item, repo, marker_key)
        when is_integer(number) and number > 0 do

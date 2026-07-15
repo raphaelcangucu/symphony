@@ -311,6 +311,25 @@ defmodule SymphonyElixirWeb.Tracker.WorktreeInventoryControllerTest do
     assert persisted.workspace_path == path
   end
 
+  test "POST /workspaces persists agent, mode, model, and effort on the session", _ctx do
+    conn =
+      authorize()
+      |> post("/api/tracker/v1/projects/wtapi/workspaces", %{
+        name: "exec settings",
+        agent_kind: "claude",
+        execution_mode: "yolo",
+        model: "claude-sonnet",
+        effort: "high"
+      })
+
+    assert %{"data" => %{"thread" => thread}} = json_response(conn, 201)
+    {:ok, persisted} = History.get_thread(thread["id"])
+    assert persisted.agent_kind == "claude"
+    assert History.thread_execution_mode(persisted) == "yolo"
+    assert History.thread_model(persisted) == "claude-sonnet"
+    assert History.thread_effort(persisted) == "high"
+  end
+
   test "POST /workspaces rejects a duplicate name", ctx do
     File.mkdir_p!(Path.join(ctx.segment_root, "__ws_dup"))
 

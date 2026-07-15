@@ -63,7 +63,10 @@ defmodule SymphonyElixirWeb.Tracker.WorktreeInventoryController do
          {:ok, thread} <-
            History.create_workspace_session_thread(project_slug, path, %{
              title: session_title(params, name),
-             agent_kind: normalize_agent(params["agent_kind"])
+             agent_kind: normalize_agent(params["agent_kind"]),
+             execution_mode: params["execution_mode"],
+             model: params["model"],
+             effort: params["effort"]
            }) do
       conn
       |> put_status(:created)

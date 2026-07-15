@@ -49,7 +49,7 @@ defmodule SymphonyElixir.Workspace.Standalone do
          {:ok, path} <- path_for(project_slug, name),
          :ok <- ensure_absent(path) do
       case Context.list_repositories(project_slug) do
-        [] -> materialize_via_hook(path, project_slug, name)
+        [] -> materialize_via_hook(path, project_slug, name, branches)
         repos -> materialize_clones(path, repos, branches, opts)
       end
     end
@@ -63,8 +63,12 @@ defmodule SymphonyElixir.Workspace.Standalone do
     end
   end
 
-  defp materialize_via_hook(path, project_slug, name) do
-    Workspace.ensure_at(path, %{identifier: "standalone:" <> name, project_slug: project_slug})
+  defp materialize_via_hook(path, project_slug, name, branches) do
+    Workspace.ensure_at(
+      path,
+      %{identifier: "standalone:" <> name, project_slug: project_slug},
+      clone_branches: branches
+    )
   end
 
   defp materialize_clones(path, repos, branches, opts) do

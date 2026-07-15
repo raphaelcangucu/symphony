@@ -212,11 +212,17 @@ export async function createIssueSessionThread(
     title?: string;
     agentKind?: "codex" | "claude" | "cursor" | null;
     executionMode?: "plan" | "build" | "yolo";
+    model?: string;
+    effort?: string;
     /** When true the session gets its own clean sibling working tree instead of sharing the issue's. */
     isolatedWorkspace?: boolean;
     /** When true the session reuses the parent issue's canonical working tree. */
     useParentWorkspace?: boolean;
     workspacePath?: string;
+    /** Per-repo clone branch overrides (repo workspace path → branch). */
+    cloneBranches?: Record<string, string>;
+    /** Single default clone branch for hook-based projects. */
+    cloneBranch?: string;
   } = {},
 ): Promise<AssistantThread> {
   const workspacePath = normalizeOptionalWorkspacePath(input.workspacePath);
@@ -228,11 +234,31 @@ export async function createIssueSessionThread(
     title: input.title,
     agent_kind: input.agentKind ?? undefined,
     execution_mode: input.executionMode ?? "build",
+    model: input.model ?? undefined,
+    effort: input.effort ?? undefined,
     isolated_workspace: input.isolatedWorkspace === true ? true : undefined,
     use_parent_workspace: input.useParentWorkspace === true ? true : undefined,
     ...(workspacePath === undefined ? {} : { workspace_path: workspacePath }),
+    ...(normalizeCloneBranches(input.cloneBranches, input.cloneBranch) ?? {}),
   });
   return normalizeAssistantThread(unwrapData<BackendAssistantThreadDto>(response));
+}
+
+function normalizeCloneBranches(
+  cloneBranches: Record<string, string> | undefined,
+  cloneBranch: string | undefined,
+): { clone_branches?: Record<string, string>; clone_branch?: string } | undefined {
+  const overrides = Object.fromEntries(
+    Object.entries(cloneBranches ?? {}).filter(([, branch]) => branch.trim() !== ""),
+  );
+
+  if (Object.keys(overrides).length > 0) {
+    return { clone_branches: overrides };
+  }
+
+  const trimmed = cloneBranch?.trim();
+  if (trimmed) return { clone_branch: trimmed };
+  return undefined;
 }
 
 function normalizeOptionalWorkspacePath(value: string | undefined): string | undefined {

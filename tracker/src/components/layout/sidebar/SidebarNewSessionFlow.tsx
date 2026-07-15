@@ -18,6 +18,9 @@ import {
   createIssueSessionThread,
   createProjectSessionThread,
 } from "@/services/assistantThreads";
+import { workspaceCloneRepoOptions } from "@/lib/workspaceCloneRepos";
+import { getProject } from "@/services/projects";
+import type { WorkspaceRepository } from "@/types/repository";
 import type { SidebarProjectNode, SidebarWorkspaceNode } from "@/types/sidebar";
 
 const MAX_TITLE_LENGTH = 160;
@@ -57,6 +60,7 @@ export function SidebarNewSessionFlow({
   const [submitting, setSubmitting] = useState(false);
   const [serviceError, setServiceError] = useState<string | null>(null);
   const [newWorkspaceOpen, setNewWorkspaceOpen] = useState(false);
+  const [configuredRepos, setConfiguredRepos] = useState<WorkspaceRepository[]>([]);
   const loadedRequests = useRef(new Set<string>());
   const successDelivered = useRef(false);
   const submissionInFlight = useRef(false);
@@ -70,6 +74,10 @@ export function SidebarNewSessionFlow({
   openRef.current = open;
 
   const selectedProject = projects.find((project) => project.id === projectId) ?? null;
+  const standaloneCloneRepos = useMemo(() => {
+    if (!selectedProject) return [];
+    return workspaceCloneRepoOptions(projectRepos(selectedProject), configuredRepos);
+  }, [configuredRepos, selectedProject]);
   const workspaces = selectedProject
     ? [...selectedProject.workspaces, ...selectedProject.overflowWorkspaces]
     : [];
@@ -300,7 +308,23 @@ export function SidebarNewSessionFlow({
 
   function handleWorkspaceDialogOpenChange(next: boolean) {
     setNewWorkspaceOpen(next);
+    if (!next) setConfiguredRepos([]);
   }
+
+  useEffect(() => {
+    if (!newWorkspaceOpen || !selectedProject) return;
+    let active = true;
+    void getProject(selectedProject.projectSlug)
+      .then((project) => {
+        if (active) setConfiguredRepos(project.repositories ?? []);
+      })
+      .catch(() => {
+        if (active) setConfiguredRepos([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [newWorkspaceOpen, selectedProject]);
 
   function retryProject() {
     if (!selectedProject || !ensureProjectExpanded) return;
@@ -536,7 +560,7 @@ export function SidebarNewSessionFlow({
       {selectedProject ? (
         <NewStandaloneWorkspaceDialog
           projectSlug={selectedProject.projectSlug}
-          projectRepos={projectRepos(selectedProject)}
+          cloneRepos={standaloneCloneRepos}
           open={newWorkspaceOpen}
           onOpenChange={handleWorkspaceDialogOpenChange}
           onCreated={(_workspacePath, threadId) =>

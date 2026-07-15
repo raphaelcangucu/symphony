@@ -44,6 +44,7 @@ import {
   linkedSessionThreadIds,
 } from "@/lib/workspaceCards";
 import { archiveAssistantThread } from "@/services/assistantThreads";
+import { workspaceCloneRepoOptions } from "@/lib/workspaceCloneRepos";
 import { cn, SCROLLBAR_THIN } from "@/lib/utils";
 import {
   SESSIONS_LIST_TAB_ID,
@@ -83,7 +84,7 @@ export function ProjectSessionsWorkspace({
 }: ProjectSessionsWorkspaceProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { view } = useWorkspace();
+  const { view, project } = useWorkspace();
   const { relatedSessions, issues, executions, inventory, isLoading, isInventoryLoading, error, refetch } =
     useProjectSessions(projectSlug);
   const setSessionsChrome = useContext(ProjectSessionsChromeSetterContext);
@@ -362,10 +363,10 @@ export function ProjectSessionsWorkspace({
     setExpandedKey((current) => (current === key ? null : key));
   }
 
-  const projectRepos = useMemo(() => {
+  const cloneRepos = useMemo(() => {
     const projectEntry = inventory?.entries.find((entry) => entry.kind === "project");
-    return projectEntry?.repos ?? [];
-  }, [inventory]);
+    return workspaceCloneRepoOptions(projectEntry?.repos ?? [], project?.repositories);
+  }, [inventory, project?.repositories]);
 
   const requestRemoveWorkspace = useCallback(
     (path: string) => {
@@ -637,6 +638,7 @@ export function ProjectSessionsWorkspace({
       <StartIssueSessionDialog
         projectSlug={projectSlug}
         issue={newSessionIssue}
+        cloneRepos={cloneRepos}
         open={newSessionIssue !== null}
         onOpenChange={(open) => {
           if (!open) setNewSessionIssue(null);
@@ -674,7 +676,7 @@ export function ProjectSessionsWorkspace({
 
       <NewStandaloneWorkspaceDialog
         projectSlug={projectSlug}
-        projectRepos={projectRepos}
+        cloneRepos={cloneRepos}
         open={newWorkspaceOpen}
         onOpenChange={setNewWorkspaceOpen}
         onCreated={(_, threadId) => {

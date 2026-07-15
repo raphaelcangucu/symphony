@@ -485,17 +485,23 @@ defmodule SymphonyElixir.Assistant.HistoryTest do
     assert updated.metadata["sidebar_needs_review"] == true
   end
 
-  test "delete_thread refuses active threads and deletes archived threads" do
+  test "delete_thread deletes active threads and archived threads" do
     {:ok, thread} = History.create_freeform_thread(%{title: "Delete me", workspace_path: "/tmp/delete"})
 
-    assert {:error, :thread_active} = History.delete_thread(thread.id)
-    assert {:ok, archived} = History.archive_thread(thread.id)
-    assert {:ok, deleted} = History.delete_thread(archived.id)
-    assert deleted.id == archived.id
+    assert {:ok, deleted} = History.delete_thread(thread.id)
+    assert deleted.id == thread.id
     assert {:error, :not_found} = History.get_thread(thread.id)
+
+    {:ok, archived_thread} =
+      History.create_freeform_thread(%{title: "Archived", workspace_path: "/tmp/delete-archived"})
+
+    {:ok, archived} = History.archive_thread(archived_thread.id)
+    assert {:ok, deleted_archived} = History.delete_thread(archived.id)
+    assert deleted_archived.id == archived.id
+    assert {:error, :not_found} = History.get_thread(archived_thread.id)
   end
 
-  test "delete_thread rejects unsupported scopes and non-deletable statuses" do
+  test "delete_thread rejects unsupported scopes and deletes errored threads" do
     {:ok, _project} = Context.ensure_project(%{name: "Delete Scope", slug: "delete-scope"})
     {:ok, project_thread} = History.ensure_thread("delete-scope", %{workspace_path: "/tmp/delete-scope"})
     {:ok, archived_project_thread} = History.archive_thread(project_thread.id)
@@ -506,7 +512,9 @@ defmodule SymphonyElixir.Assistant.HistoryTest do
       History.create_freeform_thread(%{title: "Errored", workspace_path: "/tmp/delete-status"})
 
     {:ok, errored_thread} = History.update_thread(freeform_thread, %{status: "error"})
-    assert {:error, :unsupported_status} = History.delete_thread(errored_thread.id)
+    assert {:ok, deleted_errored} = History.delete_thread(errored_thread.id)
+    assert deleted_errored.id == errored_thread.id
+    assert {:error, :not_found} = History.get_thread(errored_thread.id)
   end
 
   test "delete_thread returns not_found" do

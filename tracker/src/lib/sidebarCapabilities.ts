@@ -169,9 +169,7 @@ function canDeleteThread(
     node.threadId !== null &&
     capabilities !== null &&
     capabilities.canDelete === true &&
-    capabilities.local === true &&
-    capabilities.active === false &&
-    (node.archived || capabilities.closed)
+    capabilities.local === true
   );
 }
 

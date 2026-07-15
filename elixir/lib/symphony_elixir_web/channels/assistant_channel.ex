@@ -1741,6 +1741,8 @@ defmodule SymphonyElixirWeb.AssistantChannel do
       goal_status: joined_authoritative_goal_status(thread),
       effective_agent: thread_effective_agent(thread),
       execution_mode: History.thread_execution_mode(thread),
+      model: History.thread_model(thread),
+      effort: History.thread_effort(thread),
       skill_profile: History.thread_skill_profile(thread),
       scope: thread.scope
     }

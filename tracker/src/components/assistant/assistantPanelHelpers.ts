@@ -178,6 +178,16 @@ export function effectiveAgentFromResponse(response: unknown): AgentKind | null 
   return normalizeAgentSeed(value);
 }
 
+export function modelFromResponse(response: unknown): string | null {
+  if (!response || typeof response !== "object") return null;
+  return stringFromRecord(response as Record<string, unknown>, "model");
+}
+
+export function effortFromResponse(response: unknown): string | null {
+  if (!response || typeof response !== "object") return null;
+  return stringFromRecord(response as Record<string, unknown>, "effort");
+}
+
 export function normalizeAgentSeed(value: unknown): AgentKind | null {
   if (value === "claude" || value === "codex" || value === "cursor") return value;
   return null;

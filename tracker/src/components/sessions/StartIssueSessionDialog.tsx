@@ -4,8 +4,10 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
-import { ExecutionModeMenu } from "@/components/issues/issue-detail/ExecutionModeMenu";
-import { AGENT_ICONS, AGENT_KINDS, agentKindLabel, AgentChip } from "@/components/shared/AgentChip";
+import {
+  ExecutionModeField,
+  ExecutionSettingsFields,
+} from "@/components/assistant/ExecutionSettingsFields";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -17,10 +19,22 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
+import { WorkspaceCloneBranchesFields } from "@/components/sessions/WorkspaceCloneBranchesFields";
 import { createIssueSession, issueSessionStartErrorMessage } from "@/lib/createIssueSession";
+import {
+  catalogFor,
+  defaultComposerSettings,
+  fallbackCatalogBundle,
+  type AssistantCatalogBundle,
+} from "@/lib/assistantSettings";
 import { projectSessionPath, type WorkspaceView } from "@/lib/workspaceRoutes";
+import { fetchAssistantCatalogBundle } from "@/services/assistant";
 import type { AgentKind, ExecutionMode } from "@/types/issue";
 import type { AssistantThread } from "@/types/assistant-thread";
+import { resolveCloneBranchApiPayload, type WorkspaceCloneRepoOption } from "@/lib/workspaceCloneRepos";
+
+/** Default integration branch for advising-style hook-based workspaces. */
+const DEFAULT_CLONE_BRANCH = "pre-release";
 
 /** Parallel issue sessions default to Build (writable with approvals). */
 const DEFAULT_ISSUE_SESSION_MODE: ExecutionMode = "build";
@@ -37,6 +51,8 @@ export interface StartIssueSessionDialogIssue {
 interface StartIssueSessionDialogProps {
   projectSlug: string;
   issue: StartIssueSessionDialogIssue | null;
+  /** Repos for optional per-directory branch overrides when provisioning a working tree. */
+  cloneRepos?: WorkspaceCloneRepoOption[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
   view?: WorkspaceView;
@@ -52,6 +68,7 @@ function resolveDefaultAgent(issue: StartIssueSessionDialogIssue): AgentKind {
 export function StartIssueSessionDialog({
   projectSlug,
   issue,
+  cloneRepos = [],
   open,
   onOpenChange,
   view = "board",
@@ -62,9 +79,13 @@ export function StartIssueSessionDialog({
   const navigate = useNavigate();
   const [mode, setMode] = useState<ExecutionMode>(DEFAULT_ISSUE_SESSION_MODE);
   const [agent, setAgent] = useState<AgentKind>("codex");
+  const [model, setModel] = useState<string | null>(null);
+  const [effort, setEffort] = useState<string | null>(null);
+  const [bundle, setBundle] = useState<AssistantCatalogBundle>(() => fallbackCatalogBundle());
   const [title, setTitle] = useState("");
   const [instructions, setInstructions] = useState("");
   const [workspaceTarget, setWorkspaceTarget] = useState<WorkspaceTarget>("issue");
+  const [cloneBranches, setCloneBranches] = useState<Record<string, string>>({});
   const [starting, setStarting] = useState(false);
   const initializedForRef = useRef<string | null>(null);
 
@@ -84,11 +105,32 @@ export function StartIssueSessionDialog({
     initializedForRef.current = resetKey;
     setMode(DEFAULT_ISSUE_SESSION_MODE);
     setAgent(resolveDefaultAgent(issue));
+    setModel(null);
+    setEffort(null);
     setTitle("");
     setInstructions("");
     setWorkspaceTarget("issue");
+    setCloneBranches({});
     setStarting(false);
   }, [open, issue?.identifier, issue?.agentKind, parentIdentifier]);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    void fetchAssistantCatalogBundle(projectSlug).then((next) => {
+      if (!cancelled) setBundle(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, projectSlug]);
+
+  useEffect(() => {
+    if (!open) return;
+    const defaults = defaultComposerSettings(catalogFor(bundle, agent));
+    setModel((current) => current ?? defaults.model);
+    setEffort((current) => current ?? defaults.effort);
+  }, [open, bundle, agent]);
 
   useEffect(() => {
     if (!hasParent && workspaceTarget === "parent") {
@@ -100,16 +142,23 @@ export function StartIssueSessionDialog({
     if (!issue || starting) return;
     setStarting(true);
     try {
+      const { cloneBranches: branchOverrides, cloneBranch } = resolveCloneBranchApiPayload(cloneBranches, {
+        defaultCloneBranch: workspaceTarget === "isolated" ? DEFAULT_CLONE_BRANCH : null,
+      });
       const thread = await createIssueSession(
         projectSlug,
         issue.identifier,
         {
           mode,
           agent,
+          model,
+          effort,
           title: title.trim() || t("issue.sessions.defaultSessionTitle"),
           instructions: instructions.trim() || null,
           isolatedWorkspace: workspaceTarget === "isolated",
           useParentWorkspace: workspaceTarget === "parent",
+          cloneBranches: branchOverrides,
+          cloneBranch,
         },
         t,
       );
@@ -153,30 +202,18 @@ export function StartIssueSessionDialog({
               />
             </div>
 
-            <div className="space-y-2">
-              <span className="text-xs font-medium text-muted-foreground">{t("issueSession.dialog.agentLabel")}</span>
-              <div className="flex flex-wrap gap-1.5">
-                {AGENT_KINDS.map((kind) => {
-                  const Icon = AGENT_ICONS[kind];
-                  return (
-                    <AgentChip
-                      key={kind}
-                      label={agentKindLabel(kind, t)}
-                      icon={Icon ? <Icon className="h-3.5 w-3.5" /> : undefined}
-                      active={agent === kind}
-                      disabled={starting}
-                      onClick={() => setAgent(kind)}
-                    />
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <span className="text-xs font-medium text-muted-foreground">{t("issueSession.dialog.modeLabel")}</span>
-              <div>
-                <ExecutionModeMenu agent={agent} mode={mode} disabled={starting} onChange={setMode} />
-              </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <ExecutionSettingsFields
+                bundle={bundle}
+                agent={agent}
+                model={model}
+                effort={effort}
+                disabled={starting}
+                onAgentChange={(next) => setAgent(next ?? "codex")}
+                onModelChange={setModel}
+                onEffortChange={setEffort}
+              />
+              <ExecutionModeField agent={agent} mode={mode} disabled={starting} onChange={setMode} />
             </div>
 
             <div className="space-y-2">
@@ -215,6 +252,17 @@ export function StartIssueSessionDialog({
                 />
               </div>
             </div>
+
+            <WorkspaceCloneBranchesFields
+              projectSlug={projectSlug}
+              active={open}
+              repos={cloneRepos}
+              value={cloneBranches}
+              onChange={setCloneBranches}
+              disabled={starting}
+              allowGlobalFallback
+              globalDefault={DEFAULT_CLONE_BRANCH}
+            />
 
             <div className="space-y-2">
               <label htmlFor="issue-session-instructions" className="text-xs font-medium text-muted-foreground">
@@ -289,3 +337,4 @@ function WorkspaceTargetOption({
     </label>
   );
 }
+

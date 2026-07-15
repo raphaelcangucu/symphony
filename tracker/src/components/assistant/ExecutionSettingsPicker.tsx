@@ -1,8 +1,7 @@
 import { Bot, ChevronDown } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-import { AgentMenu, DerivedThinkingMenu, EffortMenu } from "@/components/assistant/ComposerToolbar";
-import { ModelMenu } from "@/components/assistant/ModelMenu";
+import { ExecutionSettingsFields } from "@/components/assistant/ExecutionSettingsFields";
 import { agentKindLabel } from "@/components/shared/AgentChip";
 import { Button } from "@/components/ui/button";
 import {
@@ -63,22 +62,8 @@ export function ExecutionSettingsPicker({
 }: ExecutionSettingsPickerProps) {
   const { t } = useTranslation();
   const resolvedAgent = agent ?? bundle.defaultAgent;
-  const catalog = catalogFor(bundle, resolvedAgent);
-  const defaults = defaultComposerSettings(catalog);
-  const effectiveModel = model ?? defaults.model;
-  const effortOptions = effortsForModel(catalog, effectiveModel);
-  const effectiveEffort = effort ?? defaults.effort;
   const resolvedInheritAgentLabel =
     inheritAgentLabel ?? t("issue.create.inherit", { agent: agentKindLabel(resolvedAgent, t) });
-
-  function handleAgentChange(next: AgentKind | null) {
-    onAgentChange(next);
-    // Parent owns persist; suggest catalog defaults when pinning a concrete agent.
-    if (next == null) return;
-    const nextDefaults = defaultComposerSettings(catalogFor(bundle, next));
-    onModelChange(nextDefaults.model);
-    onEffortChange(nextDefaults.effort);
-  }
 
   if (compact) {
     return (
@@ -90,7 +75,13 @@ export function ExecutionSettingsPicker({
         allowInherit={allowInherit}
         inheritAgentLabel={resolvedInheritAgentLabel}
         disabled={disabled}
-        onAgentChange={handleAgentChange}
+        onAgentChange={(next) => {
+          onAgentChange(next);
+          if (next == null) return;
+          const nextDefaults = defaultComposerSettings(catalogFor(bundle, next));
+          onModelChange(nextDefaults.model);
+          onEffortChange(nextDefaults.effort);
+        }}
         onModelChange={onModelChange}
         onEffortChange={onEffortChange}
       />
@@ -98,102 +89,18 @@ export function ExecutionSettingsPicker({
   }
 
   return (
-    <>
-      <AgentMenu
-        bundle={bundle}
-        agent={agent}
-        disabled={disabled}
-        allowInherit={allowInherit}
-        inheritLabel={resolvedInheritAgentLabel}
-        onChange={handleAgentChange}
-      />
-      {allowInherit ? (
-        <InheritableModelMenu
-          catalog={catalog}
-          model={model}
-          disabled={disabled}
-          onChange={onModelChange}
-        />
-      ) : (
-        <ModelMenu
-          catalog={catalog}
-          model={effectiveModel}
-          disabled={disabled}
-          onChange={(next) => onModelChange(next)}
-        />
-      )}
-      {effortOptions.length > 0 ? (
-        <EffortMenu
-          catalog={catalog}
-          model={effectiveModel}
-          effort={effort}
-          options={effortOptions}
-          disabled={disabled}
-          allowInherit={allowInherit}
-          inheritLabel={DEFAULT_INHERIT_LABEL}
-          onChange={onEffortChange}
-        />
-      ) : agent != null || !allowInherit ? (
-        <DerivedThinkingMenu
-          catalog={catalog}
-          model={effectiveModel}
-          disabled={disabled}
-          onModelChange={(next) => onModelChange(next)}
-        />
-      ) : null}
-    </>
-  );
-}
-
-function InheritableModelMenu({
-  catalog,
-  model,
-  disabled,
-  onChange,
-}: {
-  catalog: ReturnType<typeof catalogFor>;
-  model: string | null;
-  disabled?: boolean;
-  onChange: (model: string | null) => void;
-}) {
-  const { t } = useTranslation();
-  const defaults = defaultComposerSettings(catalog);
-  const effectiveModel = model ?? defaults.model;
-
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button type="button" variant="ghost" size="sm" className="h-8 gap-1 px-2 text-xs" disabled={disabled}>
-          {model == null ? DEFAULT_INHERIT_LABEL : modelLabel(catalog, effectiveModel)}
-          <ChevronDown className="h-3 w-3 opacity-60" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-64 p-1">
-        <DropdownMenuLabel>
-          {agentKindLabel(catalog.agent, t)} · {t("assistant.modelMenu.modelSuffix")}
-        </DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        <ScrollArea className="max-h-60" onWheel={(event) => event.stopPropagation()}>
-          <DropdownMenuRadioGroup
-            value={model == null ? MODEL_INHERIT_VALUE : effectiveModel}
-            onValueChange={(value) => {
-              if (value === MODEL_INHERIT_VALUE) {
-                onChange(null);
-                return;
-              }
-              onChange(value);
-            }}
-          >
-            <DropdownMenuRadioItem value={MODEL_INHERIT_VALUE}>{DEFAULT_INHERIT_LABEL}</DropdownMenuRadioItem>
-            {catalog.models.map((entry) => (
-              <DropdownMenuRadioItem key={entry.id ?? entry.model} value={entry.model} className="gap-2">
-                <span className="truncate">{entry.label || entry.model}</span>
-              </DropdownMenuRadioItem>
-            ))}
-          </DropdownMenuRadioGroup>
-        </ScrollArea>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <ExecutionSettingsFields
+      bundle={bundle}
+      agent={agent}
+      model={model}
+      effort={effort}
+      allowInherit={allowInherit}
+      inheritAgentLabel={resolvedInheritAgentLabel}
+      disabled={disabled}
+      onAgentChange={onAgentChange}
+      onModelChange={onModelChange}
+      onEffortChange={onEffortChange}
+    />
   );
 }
 

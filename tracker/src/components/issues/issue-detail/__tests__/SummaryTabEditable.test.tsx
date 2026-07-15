@@ -116,9 +116,7 @@ describe("SummaryTab (editable)", () => {
     await waitFor(() => expect(getIssueFormOptionsMock).toHaveBeenCalledTimes(1));
   });
 
-  it("opens execution settings editor and loads the assistant catalog", async () => {
-    const user = userEvent.setup();
-
+  it("renders separate agent, model, and effort fields and loads the catalog", async () => {
     render(
       <SummaryTab
         issue={issue({ agentKind: null })}
@@ -127,9 +125,12 @@ describe("SummaryTab (editable)", () => {
       />,
     );
 
-    await user.click(await screen.findByRole("button", { name: /inherit \(codex\)/i }));
+    expect(await screen.findByText(/^agent$/i)).toBeInTheDocument();
+    expect(screen.getByText(/^model$/i)).toBeInTheDocument();
+    expect(screen.getByText(/^effort$/i)).toBeInTheDocument();
+    expect(screen.queryByText(/^execution$/i)).not.toBeInTheDocument();
     await waitFor(() => expect(fetchAssistantCatalogBundleMock).toHaveBeenCalledWith("macro-markets"));
-    expect(screen.getAllByText(/execution/i).length).toBeGreaterThan(0);
+    expect(await screen.findByRole("button", { name: /inherit \(codex\)/i })).toBeInTheDocument();
   });
 
   it("loads form options exactly once for an editable summary", async () => {

@@ -181,13 +181,23 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadControllerTest do
     assert %{"error" => %{"code" => "validation_failed"}} = json_response(conn, 422)
   end
 
-  test "DELETE rejects an active thread with conflict" do
+  test "DELETE removes an active eligible local thread" do
     {:ok, thread} = History.create_freeform_thread(%{title: "Active", workspace_path: System.tmp_dir!()})
 
     conn = delete(authorize(), "/api/tracker/v1/assistant/threads/#{thread.id}")
 
-    assert %{"error" => %{"code" => "thread_active"}} = json_response(conn, 409)
-    assert {:ok, _thread} = History.get_thread(thread.id)
+    assert response(conn, 204) == ""
+    assert {:error, :not_found} = History.get_thread(thread.id)
+  end
+
+  test "DELETE removes an active issue-scoped thread" do
+    {:ok, _project} = Context.ensure_project(%{name: "Delete Issue", slug: "delete-issue"})
+    {:ok, thread} = History.promote_project_thread_to_issue("delete-issue", "CDE-1", %{workspace_path: "/tmp/delete-issue"})
+
+    conn = delete(authorize(), "/api/tracker/v1/assistant/threads/#{thread.id}")
+
+    assert response(conn, 204) == ""
+    assert {:error, :not_found} = History.get_thread(thread.id)
   end
 
   test "PATCH rejects an invalid thread id" do
@@ -210,7 +220,7 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadControllerTest do
     assert %{"error" => %{"code" => "validation_failed"}} = json_response(invalid_id_conn, 422)
   end
 
-  test "DELETE maps unsupported scope and non-deletable status to validation responses" do
+  test "DELETE maps unsupported scope to validation responses" do
     {:ok, _project} = Context.ensure_project(%{name: "Delete Mapping", slug: "delete-mapping"})
     {:ok, project_thread} = History.ensure_thread("delete-mapping", %{workspace_path: "/tmp/delete-mapping"})
     {:ok, archived_project_thread} = History.archive_thread(project_thread.id)
@@ -222,10 +232,11 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadControllerTest do
       History.create_freeform_thread(%{title: "Errored", workspace_path: "/tmp/delete-status-mapping"})
 
     {:ok, errored_thread} = History.update_thread(freeform_thread, %{status: "error"})
-    unsupported_status_conn = delete(authorize(), "/api/tracker/v1/assistant/threads/#{errored_thread.id}")
+    errored_delete_conn = delete(authorize(), "/api/tracker/v1/assistant/threads/#{errored_thread.id}")
 
     assert %{"error" => %{"code" => "validation_failed"}} = json_response(unsupported_scope_conn, 422)
-    assert %{"error" => %{"code" => "validation_failed"}} = json_response(unsupported_status_conn, 422)
+    assert response(errored_delete_conn, 204) == ""
+    assert {:error, :not_found} = History.get_thread(errored_thread.id)
   end
 
   test "POST with unsupported scope returns 422" do

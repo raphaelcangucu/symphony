@@ -32,6 +32,7 @@ defmodule SymphonyElixir.Codex.DynamicTool do
   @add_comment_tool "add_comment"
   @list_comments_tool "list_comments"
   @update_comment_tool "update_comment"
+  @delete_comment_tool "delete_comment"
   @update_acceptance_criteria_tool "update_acceptance_criteria"
   @check_handoff_gate_tool "check_handoff_gate"
   @get_evidence_status_tool "get_evidence_status"
@@ -134,6 +135,18 @@ defmodule SymphonyElixir.Codex.DynamicTool do
     }
   }
 
+  @delete_comment_input_schema %{
+    "type" => "object",
+    "additionalProperties" => false,
+    "required" => ["comment_id"],
+    "properties" => %{
+      "comment_id" => %{
+        "type" => ["string", "integer"],
+        "description" => "Id of the comment to delete, as returned by `list_comments` / `add_comment`."
+      }
+    }
+  }
+
   @add_comment_description """
   Add a comment to the issue you are currently working on, on Symphony's local-first board.
 
@@ -143,13 +156,19 @@ defmodule SymphonyElixir.Codex.DynamicTool do
   @list_comments_description """
   List the existing comments on the issue you are currently working on (Symphony's local-first board).
 
-  Use this to find the `id` of an existing `## Codex Workpad` comment before editing it in place with `update_comment`, so you never post a duplicate workpad.
+  Use this to find the `id` of an existing comment before `update_comment` or `delete_comment`. For the workpad, find the `## Codex Workpad` comment and edit it in place with `update_comment` so you never post a duplicate.
   """
 
   @update_comment_description """
   Edit an existing comment (by `id`) on the issue you are currently working on, on Symphony's local-first board.
 
   The edit is written locally immediately and synced to the project's tracker in the background. Use this to keep a single `## Codex Workpad` comment updated in place instead of posting duplicates.
+  """
+
+  @delete_comment_description """
+  Delete one existing comment (by `id`) on the issue you are currently working on, on Symphony's local-first board.
+
+  The delete is written locally immediately and synced to the project's tracker in the background. Use only when the user explicitly asks to remove a comment. Call `list_comments` first to obtain the `comment_id`.
   """
 
   @update_acceptance_criteria_input_schema %{
@@ -210,6 +229,9 @@ defmodule SymphonyElixir.Codex.DynamicTool do
 
       @update_comment_tool ->
         execute_update_comment(arguments, opts)
+
+      @delete_comment_tool ->
+        execute_delete_comment(arguments, opts)
 
       @update_acceptance_criteria_tool ->
         execute_update_acceptance_criteria(arguments, opts)
@@ -295,6 +317,11 @@ defmodule SymphonyElixir.Codex.DynamicTool do
           "name" => @update_comment_tool,
           "description" => @update_comment_description,
           "inputSchema" => @update_comment_input_schema
+        },
+        %{
+          "name" => @delete_comment_tool,
+          "description" => @delete_comment_description,
+          "inputSchema" => @delete_comment_input_schema
         },
         %{
           "name" => @update_acceptance_criteria_tool,
@@ -513,6 +540,19 @@ defmodule SymphonyElixir.Codex.DynamicTool do
     end
   end
 
+  defp execute_delete_comment(arguments, opts) do
+    with {:ok, issue} <- fetch_bound_issue(opts),
+         {:ok, comment_id} <- normalize_comment_id(arguments),
+         {:ok, project} <- Context.get_project(issue.project_slug),
+         {:ok, result} <-
+           IssueAdapter.dispatch(project, :delete_comment, [issue.identifier, comment_id]) do
+      deleted_id = deleted_comment_id(result, comment_id)
+      delete_comment_success(issue.identifier, deleted_id)
+    else
+      {:error, reason} -> failure_response(comment_tool_error_payload(reason))
+    end
+  end
+
   defp execute_update_acceptance_criteria(arguments, opts) do
     with {:ok, issue} <- fetch_bound_issue(opts),
          {:ok, marks} <- normalize_criteria_marks(arguments),
@@ -704,6 +744,28 @@ defmodule SymphonyElixir.Codex.DynamicTool do
       ]
     }
   end
+
+  defp delete_comment_success(identifier, comment_id) do
+    %{
+      "success" => true,
+      "contentItems" => [
+        %{
+          "type" => "inputText",
+          "text" =>
+            encode_payload(%{
+              "status" => "ok",
+              "tool" => @delete_comment_tool,
+              "identifier" => identifier,
+              "comment_id" => comment_id
+            })
+        }
+      ]
+    }
+  end
+
+  defp deleted_comment_id(%{id: id}, _fallback) when not is_nil(id), do: id
+  defp deleted_comment_id(%{"id" => id}, _fallback) when not is_nil(id), do: id
+  defp deleted_comment_id(_result, comment_id), do: comment_id
 
   defp normalize_status(arguments) when is_map(arguments) do
     case Map.get(arguments, "status") || Map.get(arguments, :status) do
@@ -1034,7 +1096,8 @@ defmodule SymphonyElixir.Codex.DynamicTool do
   defp comment_tool_error_payload(:missing_comment_id) do
     %{
       "error" => %{
-        "message" => "`update_comment` requires a `comment_id`. Call `list_comments` first to find the existing workpad comment id."
+        "message" =>
+          "`update_comment` / `delete_comment` require a `comment_id`. Call `list_comments` first to find the comment id."
       }
     }
   end

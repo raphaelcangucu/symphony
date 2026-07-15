@@ -537,9 +537,6 @@ function normalizeByAction(
         throw new Error(i18n.t("layout.sidebar.errors.executionThreadDelete"));
       }
       if (!local) throw new Error(i18n.t("layout.sidebar.errors.localThreadDelete"));
-      if (!archived && !closed) {
-        throw new Error(i18n.t("layout.sidebar.errors.threadDeleteState"));
-      }
       return {
         action,
         projectSlug: projectSlug(),

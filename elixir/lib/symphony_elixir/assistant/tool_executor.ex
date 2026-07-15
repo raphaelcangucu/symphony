@@ -57,6 +57,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     add_comment
     list_comments
     update_comment
+    delete_comment
     list_pull_requests
     manage_preview
     list_previews
@@ -230,7 +231,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
       ),
       tool_spec(
         "list_comments",
-        "List comments on a tracker issue (use to find workpad comment ids before update_comment).",
+        "List comments on a tracker issue (use to find comment ids before update_comment or delete_comment).",
         %{
           "type" => "object",
           "additionalProperties" => false,
@@ -254,6 +255,22 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
               "description" => "Comment id from list_comments."
             },
             "body" => string_schema("Replacement comment body markdown/text.")
+          }
+        }
+      ),
+      tool_spec(
+        "delete_comment",
+        "Delete one issue comment by id (use only when the user explicitly asks to remove a comment; call list_comments first).",
+        %{
+          "type" => "object",
+          "additionalProperties" => false,
+          "required" => ["identifier", "comment_id"],
+          "properties" => %{
+            "identifier" => string_schema("Issue identifier, for example MAC-1."),
+            "comment_id" => %{
+              "type" => ["string", "integer"],
+              "description" => "Comment id from list_comments."
+            }
           }
         }
       ),
@@ -862,6 +879,21 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
          tool: "update_comment",
          message: "Updated comment on #{identifier}.",
          data: %{comment: TrackerPresenter.comment(comment)}
+       }}
+    end
+  end
+
+  defp do_execute(project, "delete_comment", arguments, _opts) do
+    with {:ok, identifier} <- normalize_required_string(Map.get(arguments, "identifier"), :identifier),
+         {:ok, comment_id} <- normalize_comment_id(Map.get(arguments, "comment_id")),
+         {:ok, result} <- IssueAdapter.dispatch(project, :delete_comment, [identifier, comment_id]) do
+      deleted_id = deleted_comment_id(result, comment_id)
+
+      {:ok,
+       %{
+         tool: "delete_comment",
+         message: "Deleted comment on #{identifier}.",
+         data: %{comment_id: deleted_id}
        }}
     end
   end
@@ -2139,6 +2171,10 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
   end
 
   defp normalize_required_string(_value, field), do: {:error, {:missing_required_field, field}}
+
+  defp deleted_comment_id(%{id: id}, _fallback) when not is_nil(id), do: id
+  defp deleted_comment_id(%{"id" => id}, _fallback) when not is_nil(id), do: id
+  defp deleted_comment_id(_result, comment_id), do: comment_id
 
   defp normalize_comment_id(id) when is_integer(id), do: {:ok, id}
 

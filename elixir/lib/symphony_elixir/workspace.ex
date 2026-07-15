@@ -25,16 +25,19 @@ defmodule SymphonyElixir.Workspace do
   Used by the authoring assistant to honor the path persisted on the issue thread, so reads
   and writes target the same tree regardless of how the path was originally computed.
   """
-  @spec ensure_at(Path.t(), map() | String.t() | nil) :: {:ok, Path.t()} | {:error, term()}
-  def ensure_at(workspace, issue_or_identifier) when is_binary(workspace) do
+  @spec ensure_at(Path.t(), map() | String.t() | nil, keyword()) :: {:ok, Path.t()} | {:error, term()}
+  def ensure_at(workspace, issue_or_identifier, opts \\ []) when is_binary(workspace) do
     issue_context = issue_context(issue_or_identifier)
     layout = layout_for(issue_context)
+    project_slug = Map.get(issue_context, :project_slug)
 
     try do
       with :ok <- validate_workspace_path(workspace, layout.root) do
         Provision.ensure(workspace,
           after_create: layout.after_create_hook,
-          log_context: issue_log_context(issue_context)
+          log_context: issue_log_context(issue_context),
+          project_slug: project_slug,
+          clone_branches: Keyword.get(opts, :clone_branches, %{})
         )
       end
     rescue

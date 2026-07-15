@@ -4,16 +4,34 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { StartIssueSessionDialog } from "@/components/sessions/StartIssueSessionDialog";
+import { fallbackCatalogBundle } from "@/lib/assistantSettings";
+import { mockAssistantCodexCatalog } from "@/test-fixtures/assistantCatalog";
 
 const createIssueSessionThreadMock = vi.hoisted(() => vi.fn());
+const fetchAssistantCatalogBundleMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/services/assistantThreads", () => ({
   createIssueSessionThread: (...args: unknown[]) => createIssueSessionThreadMock(...args),
 }));
 
+vi.mock("@/services/assistant", () => ({
+  fetchAssistantCatalogBundle: (...args: unknown[]) => fetchAssistantCatalogBundleMock(...args),
+}));
+
+const catalogBundle = (() => {
+  const bundle = fallbackCatalogBundle();
+  bundle.agents = [
+    { ...mockAssistantCodexCatalog },
+    ...bundle.agents.filter((agent) => agent.agent !== "codex"),
+  ];
+  return bundle;
+})();
+
 describe("StartIssueSessionDialog", () => {
   beforeEach(() => {
     createIssueSessionThreadMock.mockReset();
+    fetchAssistantCatalogBundleMock.mockReset();
+    fetchAssistantCatalogBundleMock.mockResolvedValue(catalogBundle);
     createIssueSessionThreadMock.mockResolvedValue({
       id: 42,
       scope: "issue_session",
@@ -25,6 +43,9 @@ describe("StartIssueSessionDialog", () => {
       status: "active",
       preview: null,
       updatedAt: "2026-07-04T00:00:00.000Z",
+      workspacePath: null,
+      labels: [],
+      needsReview: false,
     });
   });
 
@@ -59,13 +80,19 @@ describe("StartIssueSessionDialog", () => {
     await user.click(screen.getByRole("button", { name: /start session/i }));
 
     await waitFor(() =>
-      expect(createIssueSessionThreadMock).toHaveBeenCalledWith("macro-markets", "MAC-510", {
-        title: "Build pass 2",
-        agentKind: "codex",
-        executionMode: "build",
-        isolatedWorkspace: false,
-        useParentWorkspace: false,
-      }),
+      expect(createIssueSessionThreadMock).toHaveBeenCalledWith(
+        "macro-markets",
+        "MAC-510",
+        expect.objectContaining({
+          title: "Build pass 2",
+          agentKind: "codex",
+          executionMode: "build",
+          isolatedWorkspace: false,
+          useParentWorkspace: false,
+          model: expect.any(String),
+          effort: expect.any(String),
+        }),
+      ),
     );
     expect(onCreated).toHaveBeenCalledWith(expect.objectContaining({ id: 42 }));
   });
@@ -171,7 +198,8 @@ describe("StartIssueSessionDialog", () => {
     );
 
     await user.type(screen.getByLabelText(/session title/i), "Build pass 2");
-    await user.click(screen.getByRole("button", { name: /claude code/i }));
+    await user.click(await screen.findByRole("button", { name: /codex/i }));
+    await user.click(screen.getByRole("menuitemradio", { name: /claude/i }));
 
     rerender(
       <MemoryRouter initialEntries={["/projects/macro-markets/board"]}>
@@ -192,6 +220,6 @@ describe("StartIssueSessionDialog", () => {
     );
 
     expect(screen.getByLabelText(/session title/i)).toHaveValue("Build pass 2");
-    expect(screen.getByRole("button", { name: /claude code/i })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: /^claude code$/i })).toBeInTheDocument();
   });
 });

@@ -128,6 +128,7 @@ defmodule SymphonyElixir.Codex.DynamicToolTest do
     assert "add_comment" in names
     assert "list_comments" in names
     assert "update_comment" in names
+    assert "delete_comment" in names
 
     add = Enum.find(specs, &(&1["name"] == "add_comment"))
     assert add["inputSchema"]["required"] == ["body"]
@@ -137,6 +138,9 @@ defmodule SymphonyElixir.Codex.DynamicToolTest do
 
     update = Enum.find(specs, &(&1["name"] == "update_comment"))
     assert update["inputSchema"]["required"] == ["comment_id", "body"]
+
+    delete = Enum.find(specs, &(&1["name"] == "delete_comment"))
+    assert delete["inputSchema"]["required"] == ["comment_id"]
   end
 
   test "coding_agent_tool_specs advertises update_acceptance_criteria, kept off the assistant surface" do
@@ -166,11 +170,12 @@ defmodule SymphonyElixir.Codex.DynamicToolTest do
     refute "add_comment" in names
     refute "list_comments" in names
     refute "update_comment" in names
+    refute "delete_comment" in names
   end
 
   test "comment tools fail when no issue is bound to the session" do
-    for tool <- ["add_comment", "list_comments", "update_comment"] do
-      response = DynamicTool.execute(tool, %{"body" => "## Codex Workpad"})
+    for tool <- ["add_comment", "list_comments", "update_comment", "delete_comment"] do
+      response = DynamicTool.execute(tool, %{"body" => "## Codex Workpad", "comment_id" => 1})
 
       assert response["success"] == false
       text = hd(response["contentItems"])["text"]
@@ -249,6 +254,37 @@ defmodule SymphonyElixir.Codex.DynamicToolTest do
       assert response["success"] == false
       text = hd(response["contentItems"])["text"]
       assert Jason.decode!(text)["error"]["message"] =~ "No comment with that id"
+    end
+
+    test "delete_comment removes an existing comment by id", %{issue: issue} do
+      created =
+        DynamicTool.execute(
+          "add_comment",
+          %{"body" => "temporary note"},
+          issue: issue
+        )
+
+      assert created["success"] == true
+      comment_id =
+        created["contentItems"]
+        |> hd()
+        |> Map.fetch!("text")
+        |> Jason.decode!()
+        |> get_in(["comment", "id"])
+
+      deleted =
+        DynamicTool.execute(
+          "delete_comment",
+          %{"comment_id" => comment_id},
+          issue: issue
+        )
+
+      assert deleted["success"] == true
+      payload = deleted["contentItems"] |> hd() |> Map.fetch!("text") |> Jason.decode!()
+      assert payload["tool"] == "delete_comment"
+      assert payload["comment_id"] == comment_id
+
+      assert {:ok, []} = Context.list_comments("macro-markets", issue.identifier)
     end
 
     test "link_pull_request links a PR to the bound issue", %{issue: issue} do
@@ -420,6 +456,7 @@ defmodule SymphonyElixir.Codex.DynamicToolTest do
                  "add_comment",
                  "list_comments",
                  "update_comment",
+                 "delete_comment",
                  "update_acceptance_criteria",
                  "check_handoff_gate",
                  "get_evidence_status",

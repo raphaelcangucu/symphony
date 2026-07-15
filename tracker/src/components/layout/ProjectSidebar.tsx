@@ -481,7 +481,8 @@ function workspaceCapabilityContext(node: SidebarWorkspaceNode): SidebarCapabili
 }
 
 function sessionCapabilityContext(node: SidebarSessionNode): SidebarCapabilityContext {
-  const localThread = node.threadId != null && node.sessionKind === "chat";
+  const localThread =
+    node.threadId != null && (node.sessionKind === "chat" || node.sessionKind === "authoring");
   return {
     editorTarget: null,
     terminalTarget: null,

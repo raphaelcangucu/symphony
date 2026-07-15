@@ -18,6 +18,7 @@ describe("assistant tool call adapter", () => {
     expect(isActionTool("move_issue")).toBe(true);
     expect(isActionTool("dispatch_codex")).toBe(true);
     expect(isActionTool("create_issue")).toBe(true);
+    expect(isActionTool("delete_comment")).toBe(true);
     expect(isActionTool("list_issues")).toBe(false);
     expect(isActionTool("get_issue")).toBe(false);
   });

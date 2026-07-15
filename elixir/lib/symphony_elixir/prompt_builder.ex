@@ -351,7 +351,8 @@ defmodule SymphonyElixir.PromptBuilder do
     - Do not fetch the issue from GitHub to discover scope, and do not look up a
       same-numbered issue in another repository — the canonical scope is embedded above.
     - Use the issue-bound comment tools (`add_comment` / `list_comments` /
-      `update_comment`); keep exactly one workpad and edit it in place.
+      `update_comment` / `delete_comment`); keep exactly one workpad and edit it in place.
+      Use `delete_comment` only when the user explicitly asks to remove a comment.
 
     Self-correct instead of stalling: if you conclude there is "no scope", "no
     issue description", or "no plan artifact", you are looking in the wrong place

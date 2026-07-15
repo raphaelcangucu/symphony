@@ -34,6 +34,37 @@ defmodule SymphonyElixirWeb.Tracker.ProjectPullRequestControllerTest do
     end
   end
 
+  defmodule FakeSearchClient do
+    @moduledoc false
+
+    def rest_get("/search/issues?" <> qs, _opts) do
+      case Process.whereis(__MODULE__.Calls) do
+        nil -> :ok
+        pid -> Agent.update(pid, fn calls -> [qs | calls] end)
+      end
+
+      number = if String.contains?(qs, "9174"), do: 9174, else: 9
+
+      {:ok,
+       %{
+         status: 200,
+         body: %{
+           "items" => [
+             %{
+               "number" => number,
+               "title" => "Hit",
+               "html_url" => "https://github.com/o/r/pull/#{number}",
+               "pull_request" => %{"html_url" => "https://github.com/o/r/pull/#{number}"},
+               "user" => %{"login" => "dev"},
+               "updated_at" => "2026-07-14T10:00:00Z",
+               "body" => "Symphony-Issue: ADV-9"
+             }
+           ]
+         }
+       }}
+    end
+  end
+
   setup do
     start_supervised!(SymphonyElixirWeb.Endpoint)
     migrate_repo()
@@ -78,6 +109,29 @@ defmodule SymphonyElixirWeb.Tracker.ProjectPullRequestControllerTest do
     assert pr["number"] == 9
     assert pr["repo"] == "o/r"
     assert pr["issue_identifier"] == "ADV-2"
+  end
+
+  test "forwards q to the open-PR search and caches per query" do
+    {:ok, _} = Agent.start_link(fn -> [] end, name: FakeSearchClient.Calls)
+    Application.put_env(:symphony_elixir, :github_client_module, FakeSearchClient)
+    ReadCache.invalidate_all()
+
+    conn =
+      get(authorized_conn(), "/api/tracker/v1/projects/advising-pr-list/pull_requests", %{
+        "q" => "9174"
+      })
+
+    assert %{"data" => [pr], "supported" => true} = json_response(conn, 200)
+    assert pr["number"] == 9174
+    assert [qs] = Agent.get(FakeSearchClient.Calls, & &1)
+    assert qs =~ "9174"
+
+    _ =
+      get(authorized_conn(), "/api/tracker/v1/projects/advising-pr-list/pull_requests", %{
+        "q" => "9174"
+      })
+
+    assert length(Agent.get(FakeSearchClient.Calls, & &1)) == 1
   end
 
   test "returns supported: false for projects with no repos" do

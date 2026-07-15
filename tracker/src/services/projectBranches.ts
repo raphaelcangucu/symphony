@@ -17,9 +17,22 @@ interface BackendProjectBranchDto {
   commitSha?: string | null;
 }
 
-export async function listProjectBranches(projectSlug: string): Promise<ProjectBranch[]> {
+export interface ListProjectBranchesOptions {
+  /** Prefix/search query — uses GitHub matching-refs when long enough. */
+  query?: string;
+}
+
+export async function listProjectBranches(
+  projectSlug: string,
+  options: ListProjectBranchesOptions = {},
+): Promise<ProjectBranch[]> {
   const slug = requireProjectSlug(projectSlug);
-  const response = await http.get(trackerPath(`/projects/${encodeURIComponent(slug)}/branches`));
+  const query = options.query?.trim();
+  const path =
+    query && query.length > 0
+      ? trackerPath(`/projects/${encodeURIComponent(slug)}/branches?q=${encodeURIComponent(query)}`)
+      : trackerPath(`/projects/${encodeURIComponent(slug)}/branches`);
+  const response = await http.get(path);
   return unwrapData<BackendProjectBranchDto[]>(response).map(normalize);
 }
 

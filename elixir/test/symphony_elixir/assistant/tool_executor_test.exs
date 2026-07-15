@@ -335,6 +335,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutorTest do
     assert Enum.any?(ToolExecutor.tool_specs(), &(&1["name"] == "add_comment"))
     assert Enum.any?(ToolExecutor.tool_specs(), &(&1["name"] == "list_comments"))
     assert Enum.any?(ToolExecutor.tool_specs(), &(&1["name"] == "update_comment"))
+    assert Enum.any?(ToolExecutor.tool_specs(), &(&1["name"] == "delete_comment"))
     assert Enum.any?(ToolExecutor.tool_specs(), &(&1["name"] == "list_pull_requests"))
     assert Enum.any?(ToolExecutor.tool_specs(), &(&1["name"] == "manage_preview"))
     assert Enum.any?(ToolExecutor.tool_specs(), &(&1["name"] == "list_previews"))
@@ -411,6 +412,27 @@ defmodule SymphonyElixir.Assistant.ToolExecutorTest do
                })
 
       assert result.data.comment.body == "Updated workpad"
+    end
+
+    test "delete_comment removes an existing comment" do
+      assert {:ok, listed} =
+               ToolExecutor.execute("macro-markets", "list_comments", %{"identifier" => "MAC-1"})
+
+      comment_id = hd(listed.data.comments).id
+
+      assert {:ok, result} =
+               ToolExecutor.execute("macro-markets", "delete_comment", %{
+                 "identifier" => "MAC-1",
+                 "comment_id" => comment_id
+               })
+
+      assert result.tool == "delete_comment"
+      assert result.data.comment_id == comment_id
+
+      assert {:ok, listed_after} =
+               ToolExecutor.execute("macro-markets", "list_comments", %{"identifier" => "MAC-1"})
+
+      assert listed_after.data.comments == []
     end
 
     test "get_project returns setup and statuses without listing issues" do

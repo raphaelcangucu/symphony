@@ -235,7 +235,8 @@ defmodule SymphonyElixir.Assistant.AgentSession do
   def provision_thread_workspace(%{scope: scope} = thread) when scope in ["issue", "issue_session"] do
     with {:ok, path} <- persisted_thread_workspace_path(thread),
          issue_ref <- issue_workspace_ref(Map.get(thread, :project_slug), thread.issue_identifier),
-         {:ok, workspace} <- Workspace.ensure_at(path, issue_ref),
+         clone_branches <- clone_branches_from_thread(thread),
+         {:ok, workspace} <- Workspace.ensure_at(path, issue_ref, clone_branches: clone_branches),
          :ok <- maybe_ensure_isolated_branches(thread, workspace) do
       {:ok, workspace}
     end
@@ -356,7 +357,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
     For orchestrator/dispatch questions: call get_workflow and read tracker.dispatch_states (queue for new auto-runs), active_states (polled), terminal_states, wait_states in data.config — not board status categories from get_project. Follow the workflow skill when editing workflow YAML.
     #{tracker_summary}
     Do not mirror normal chat replies as issue comments. Use add_comment when the user wants a comment on the issue; use update_issue for title/description/status changes.
-    Board tools: list_issues, create_issue, get_issue, update_issue, move_issue, add_comment, list_comments, update_comment, list_pull_requests, link_pull_request, check_handoff_gate, get_evidence_status, manage_preview (status|start|stop|restart|output; optional server), list_previews, manage_tunnel (status|start), manage_dev_env, scan_project_setup, suggest_project_setup, update_project_workflow, update_project_repositories, dispatch_codex, get_agent_executions, get_issue_orchestrator_state, explain_dispatch_eligibility, list_running_agents, steer_agent, goal, manage_blockers, sync_issue, get_project, get_issue_form_options, list_project_repositories, get_workflow, read_workspace_file.
+    Board tools: list_issues, create_issue, get_issue, update_issue, move_issue, add_comment, list_comments, update_comment, delete_comment, list_pull_requests, link_pull_request, check_handoff_gate, get_evidence_status, manage_preview (status|start|stop|restart|output; optional server), list_previews, manage_tunnel (status|start), manage_dev_env, scan_project_setup, suggest_project_setup, update_project_workflow, update_project_repositories, dispatch_codex, get_agent_executions, get_issue_orchestrator_state, explain_dispatch_eligibility, list_running_agents, steer_agent, goal, manage_blockers, sync_issue, get_project, get_issue_form_options, list_project_repositories, get_workflow, read_workspace_file.
     Knowledge base tools (docs/ in each repo): kb_list_repositories, kb_search_pages, kb_read_page, kb_create_page, kb_update_page, kb_delete_page, kb_delete_asset, kb_delete_folder, kb_link_task, kb_sync. Projects can span multiple repositories; KB pages are addressed by (repository, path-within-docs). When the project has more than one repository and the user does not name one, the tool returns a remediation asking which repository — ASK the user, then retry with the `repository` argument (owner/name, workspace path, or slug). Use kb_search_pages before creating pages to avoid duplicates, kb_create_page for new pages and kb_update_page for existing ones, and kb_link_task to reference a tracker issue inside a page. KB writes save directly to the active working tree; kb_sync is a no-op compatibility hook. The delete tools (kb_delete_page, kb_delete_asset, kb_delete_folder) are destructive — kb_delete_folder removes a directory and everything inside it — so confirm the exact target with the user before calling them.
     Before moving an issue to a handoff/wait status, call check_handoff_gate. After writing evidence, call get_evidence_status. For preview: list_previews to discover; manage_preview status/output on crash (optional server); manage_tunnel start for public URLs; manage_dev_env when no_serve_step, then manage_preview start|status.
     To explain why an issue is or isn't auto-dispatched, call explain_dispatch_eligibility; for live running/retry/idle state call get_issue_orchestrator_state. To see every agent executing right now call list_running_agents, and steer_agent to inject a message into a running agent's turn. After opening a PR call link_pull_request. Manage dependencies with manage_blockers; pull external tracker edits with sync_issue.
@@ -482,6 +483,15 @@ defmodule SymphonyElixir.Assistant.AgentSession do
   end
 
   defp maybe_ensure_isolated_branches(_thread, _workspace), do: :ok
+
+  defp clone_branches_from_thread(%{metadata: metadata}) when is_map(metadata) do
+    case Map.get(metadata, "clone_branches") do
+      branches when is_map(branches) -> branches
+      _ -> %{}
+    end
+  end
+
+  defp clone_branches_from_thread(_thread), do: %{}
 
   defp run_issue_turn(workspace, prompt, project_slug, identifier, opts) do
     runner = Keyword.get(opts, :runner, &default_runner/4)
@@ -893,7 +903,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
     Create projects: create_tracker_project (local only), create_github_tracker_project, provision_github_project.
 
     Board / issues (require project_slug): list_issues, create_issue, get_issue, update_issue, move_issue, add_comment,
-    list_comments, update_comment, list_pull_requests, link_pull_request, check_handoff_gate, get_evidence_status,
+    list_comments, update_comment, delete_comment, list_pull_requests, link_pull_request, check_handoff_gate, get_evidence_status,
     manage_preview (action: status|start|stop|restart|output; optional server), list_previews, manage_tunnel (status|start), manage_dev_env, scan_project_setup, suggest_project_setup,
     dispatch_codex, get_agent_executions, get_issue_orchestrator_state, explain_dispatch_eligibility,
     list_running_agents, steer_agent, goal, manage_blockers,

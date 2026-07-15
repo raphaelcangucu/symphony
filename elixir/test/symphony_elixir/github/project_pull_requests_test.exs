@@ -47,4 +47,44 @@ defmodule SymphonyElixir.GitHub.ProjectPullRequestsTest do
     failing = fn _path, _opts -> {:error, :boom} end
     assert ProjectPullRequests.list_open(["o/r"], rest_get_fun: failing) == []
   end
+
+  test "appends trimmed search query to the GitHub open-PR search" do
+    rest_get = fn path, _opts ->
+      assert path =~ "q="
+      assert path =~ URI.encode_www_form("repo:o/r is:pr is:open 9174")
+      send(self(), {:searched, path})
+
+      {:ok,
+       %{
+         status: 200,
+         body: %{
+           "items" => [
+             %{
+               "number" => 9174,
+               "title" => "GraphQL Go API",
+               "html_url" => "https://github.com/o/r/pull/9174",
+               "pull_request" => %{"html_url" => "https://github.com/o/r/pull/9174"},
+               "user" => %{"login" => "dev"},
+               "updated_at" => "2026-07-14T10:00:00Z",
+               "body" => ""
+             }
+           ]
+         }
+       }}
+    end
+
+    prs = ProjectPullRequests.list_open(["o/r"], rest_get_fun: rest_get, q: "  9174  ")
+    assert [%{number: 9174}] = prs
+    assert_received {:searched, _}
+  end
+
+  test "ignores blank search queries and keeps the default open-PR search" do
+    rest_get = fn path, _opts ->
+      assert path =~ URI.encode_www_form("repo:o/r is:pr is:open")
+      refute path =~ "9174"
+      {:ok, %{status: 200, body: %{"items" => []}}}
+    end
+
+    assert ProjectPullRequests.list_open(["o/r"], rest_get_fun: rest_get, q: "  ") == []
+  end
 end

@@ -278,7 +278,7 @@ describe("sidebar capabilities", () => {
     expect(actions.at(-1)).toMatchObject({ destructive: true, enabled: true });
   });
 
-  it("returns thread-backed actions and prevents deleting active threads", () => {
+  it("returns thread-backed actions and allows deleting active threads", () => {
     const actions = resolveSidebarCapabilities(session({ statusKind: "active" }), {
       ...BASE_CONTEXT,
       threadCapabilities: {
@@ -293,12 +293,18 @@ describe("sidebar capabilities", () => {
       },
     });
 
-    expect(ids(actions)).toEqual(["rename", "manage-labels", "toggle-review", "pin", "archive"]);
-    expect(ids(actions)).not.toContain("delete");
+    expect(ids(actions)).toEqual([
+      "rename",
+      "manage-labels",
+      "toggle-review",
+      "pin",
+      "archive",
+      "delete",
+    ]);
     expect(actions.at(-1)).toMatchObject({ destructive: true, enabled: true });
   });
 
-  it("allows delete only for archived or closed eligible local threads", () => {
+  it("allows delete for eligible local threads regardless of archive state", () => {
     const capabilities = {
       canRename: true,
       canManageLabels: true,

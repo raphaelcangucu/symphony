@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next";
 import { getStatusMeta } from "@/components/board/status-meta";
 import { AssigneeAvatar } from "@/components/issues/AssigneeAvatar";
 import { agentKindLabel } from "@/components/shared/AgentChip";
-import { InlineExecutionSettingsEditor } from "@/components/issues/inline/InlineExecutionSettingsEditor";
+import { InlineExecutionSettingsFields } from "@/components/issues/inline/InlineExecutionSettingsFields";
 import { InlineAssigneeEditor } from "@/components/issues/inline/InlineAssigneeEditor";
 import { InlineEditableMarkdown } from "@/components/issues/inline/InlineEditableMarkdown";
 import { InlineIssuePicker } from "@/components/issues/inline/InlineIssuePicker";
@@ -297,33 +297,36 @@ export function SummaryTab({
               </span>
             )}
           </Field>
-          <Field label={t("issue.summary.execution")}>
-            {onSaveExecutionSettings ? (
-              <InlineExecutionSettingsEditor
-                projectSlug={projectSlug}
-                value={{
-                  agent: issue.agentKind ?? null,
-                  model: issue.model ?? null,
-                  effort: issue.effort ?? null,
-                }}
-                effectiveAgent={effectiveAgent}
-                saving={saving}
-                onSave={onSaveExecutionSettings}
-              />
-            ) : (
-              <span className="inline-flex items-center gap-1.5 text-sm">
-                {[
-                  issue.agentKind
+          {onSaveExecutionSettings ? (
+            <InlineExecutionSettingsFields
+              projectSlug={projectSlug}
+              value={{
+                agent: issue.agentKind ?? null,
+                model: issue.model ?? null,
+                effort: issue.effort ?? null,
+              }}
+              effectiveAgent={effectiveAgent}
+              saving={saving}
+              onSave={onSaveExecutionSettings}
+              renderField={(label, control) => <Field label={label}>{control}</Field>}
+            />
+          ) : (
+            <>
+              <Field label={t("issue.summary.agent")}>
+                <span className="text-sm">
+                  {issue.agentKind
                     ? agentKindLabel(issue.agentKind, t)
-                    : t("issue.create.inherit", { agent: agentKindLabel(effectiveAgent, t) }),
-                  issue.model,
-                  issue.effort,
-                ]
-                  .filter((part): part is string => Boolean(part))
-                  .join(" · ")}
-              </span>
-            )}
-          </Field>
+                    : t("issue.create.inherit", { agent: agentKindLabel(effectiveAgent, t) })}
+                </span>
+              </Field>
+              <Field label={t("issue.summary.model")}>
+                <span className="text-sm">{issue.model ?? "Default"}</span>
+              </Field>
+              <Field label={t("issue.summary.effort")}>
+                <span className="text-sm">{issue.effort ?? "Default"}</span>
+              </Field>
+            </>
+          )}
           {onSetParent ? (
             <Field label={t("issue.summary.relations.parent")}>
               <InlineIssuePicker

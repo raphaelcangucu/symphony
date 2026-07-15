@@ -18,6 +18,7 @@ defmodule SymphonyElixir.Workspace.Provision do
 
   require Logger
 
+  alias SymphonyElixir.Workspace.Clone
   alias SymphonyElixir.WorkspaceSkills
 
   @after_create_hook_name "after_create"
@@ -55,6 +56,8 @@ defmodule SymphonyElixir.Workspace.Provision do
   @type option ::
           {:after_create, String.t() | nil}
           | {:log_context, String.t()}
+          | {:project_slug, String.t() | nil}
+          | {:clone_branches, map()}
           | {:validator, validator()}
           | {:publish_runner, publish_runner()}
           | {:container_mkdir, container_mkdir()}
@@ -519,6 +522,8 @@ defmodule SymphonyElixir.Workspace.Provision do
     allowed_options = [
       :after_create,
       :log_context,
+      :project_slug,
+      :clone_branches,
       :validator,
       :publish_runner,
       :container_mkdir
@@ -529,6 +534,8 @@ defmodule SymphonyElixir.Workspace.Provision do
     if unknown_options == [] do
       with {:ok, after_create} <- validate_after_create(Keyword.get(options, :after_create)),
            {:ok, log_context} <- validate_log_context(Keyword.get(options, :log_context)),
+           {:ok, project_slug} <- validate_project_slug(Keyword.get(options, :project_slug)),
+           {:ok, clone_branches} <- validate_clone_branches(Keyword.get(options, :clone_branches, %{})),
            {:ok, validator} <-
              validate_validator(Keyword.get(options, :validator, &validate_staging/1)),
            {:ok, publish_runner} <-
@@ -539,6 +546,8 @@ defmodule SymphonyElixir.Workspace.Provision do
          %{
            after_create: after_create,
            log_context: log_context,
+           project_slug: project_slug,
+           clone_branches: clone_branches,
            validator: validator,
            publish_runner: publish_runner,
            container_mkdir: container_mkdir
@@ -557,6 +566,37 @@ defmodule SymphonyElixir.Workspace.Provision do
   defp validate_log_context(nil), do: {:ok, @default_log_context}
   defp validate_log_context(context) when is_binary(context) and context != "", do: {:ok, context}
   defp validate_log_context(context), do: {:error, {:invalid_log_context, context}}
+
+  defp validate_project_slug(nil), do: {:ok, nil}
+  defp validate_project_slug(""), do: {:ok, nil}
+
+  defp validate_project_slug(slug) when is_binary(slug) do
+    case String.trim(slug) do
+      "" -> {:ok, nil}
+      trimmed -> {:ok, trimmed}
+    end
+  end
+
+  defp validate_project_slug(slug), do: {:error, {:invalid_project_slug, slug}}
+
+  defp validate_clone_branches(branches) when is_map(branches) do
+    normalized =
+      branches
+      |> Enum.reduce(%{}, fn
+        {key, value}, acc when is_binary(key) and is_binary(value) ->
+          case String.trim(value) do
+            "" -> acc
+            branch -> Map.put(acc, String.trim(key), branch)
+          end
+
+        _, acc ->
+          acc
+      end)
+
+    {:ok, normalized}
+  end
+
+  defp validate_clone_branches(branches), do: {:error, {:invalid_clone_branches, branches}}
 
   defp validate_validator(validator) when is_function(validator, 1), do: {:ok, validator}
   defp validate_validator(validator), do: {:error, {:invalid_validator, validator}}
@@ -884,12 +924,16 @@ defmodule SymphonyElixir.Workspace.Provision do
   defp run_provisioning_stages(workspace, attempt, settings) do
     with :ok <-
            run_flight_stage(settings, :after_create, fn ->
-             run_after_create(
-               settings.after_create,
-               workspace,
-               attempt.staging,
-               settings.log_context
-             )
+             with :ok <- maybe_clone_repositories(attempt.staging, settings),
+                  :ok <-
+                    run_after_create(
+                      settings.after_create,
+                      workspace,
+                      attempt.staging,
+                      settings
+                    ) do
+               :ok
+             end
            end),
          :ok <- run_flight_stage(settings, :claim_staging, fn -> claim_payload(attempt) end),
          :ok <-
@@ -1313,17 +1357,45 @@ defmodule SymphonyElixir.Workspace.Provision do
     {:error, {:git_repository_unusable, repository, check, status, String.trim_trailing(output)}}
   end
 
-  defp run_after_create(nil, _workspace, _staging, _log_context), do: :ok
+  defp maybe_clone_repositories(staging, %{project_slug: slug, clone_branches: branches})
+       when is_binary(slug) and is_map(branches) and map_size(branches) > 0 do
+    Clone.materialize(staging, slug, branches)
+  end
 
-  defp run_after_create(command, workspace, staging, log_context) do
+  defp maybe_clone_repositories(_staging, _settings), do: :ok
+
+  defp run_after_create(nil, _workspace, _staging, _settings), do: :ok
+
+  defp run_after_create(command, workspace, staging, settings) do
     Logger.info(
-      "Running workspace hook hook=#{@after_create_hook_name} #{log_context} " <>
+      "Running workspace hook hook=#{@after_create_hook_name} #{settings.log_context} " <>
         "workspace=#{workspace} staging=#{staging}"
     )
 
     command
-    |> then(&System.cmd("sh", ["-e", "-lc", &1], cd: staging, stderr_to_stdout: true))
-    |> handle_hook_result(workspace, log_context)
+    |> then(
+      &System.cmd("sh", ["-e", "-lc", &1],
+        cd: staging,
+        stderr_to_stdout: true,
+        env: clone_branch_env(settings.clone_branches)
+      )
+    )
+    |> handle_hook_result(workspace, settings.log_context)
+  end
+
+  defp clone_branch_env(branches) when is_map(branches) do
+    case default_clone_branch(branches) do
+      branch when is_binary(branch) -> [{"SYMPHONY_CLONE_BRANCH", branch}]
+      _ -> []
+    end
+  end
+
+  defp default_clone_branch(branches) do
+    Map.get(branches, "__default__") ||
+      case branches |> Map.delete("__default__") |> Map.values() do
+        [single] -> single
+        _ -> nil
+      end
   end
 
   defp handle_hook_result({_output, 0}, _workspace, _log_context), do: :ok

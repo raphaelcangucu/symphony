@@ -14,8 +14,7 @@ defmodule SymphonyElixir.Assistant.History do
   @sidebar_title_max_graphemes 160
   @sidebar_label_max_graphemes 40
   @sidebar_label_count_max 12
-  @deletable_scopes ~w(freeform project_session issue_session)
-  @deletable_statuses ~w(archived closed)
+  @deletable_scopes ~w(freeform project_session issue_session issue)
 
   @spec ensure_thread(String.t(), attrs()) :: {:ok, Thread.t()} | {:error, term()}
   def ensure_thread(project_slug, attrs \\ %{}) when is_binary(project_slug) and is_map(attrs) do
@@ -252,6 +251,26 @@ defmodule SymphonyElixir.Assistant.History do
 
   def thread_execution_mode(_thread), do: nil
 
+  @spec thread_model(Thread.t()) :: String.t() | nil
+  def thread_model(%Thread{metadata: %{"model" => model}}) when is_binary(model) do
+    case String.trim(model) do
+      "" -> nil
+      trimmed -> trimmed
+    end
+  end
+
+  def thread_model(_thread), do: nil
+
+  @spec thread_effort(Thread.t()) :: String.t() | nil
+  def thread_effort(%Thread{metadata: %{"effort" => effort}}) when is_binary(effort) do
+    case String.trim(effort) do
+      "" -> nil
+      trimmed -> trimmed
+    end
+  end
+
+  def thread_effort(_thread), do: nil
+
   @spec thread_skill_profile(Thread.t()) :: String.t() | nil
   def thread_skill_profile(%Thread{metadata: %{"skill_profile" => profile}}) when is_binary(profile) do
     case String.trim(profile) do
@@ -261,6 +280,12 @@ defmodule SymphonyElixir.Assistant.History do
   end
 
   def thread_skill_profile(_thread), do: nil
+
+  defp put_session_model_effort(metadata, attrs) when is_map(metadata) and is_map(attrs) do
+    metadata
+    |> maybe_put_meta_string("model", Map.get(attrs, :model) || Map.get(attrs, "model"))
+    |> maybe_put_meta_string("effort", Map.get(attrs, :effort) || Map.get(attrs, "effort"))
+  end
 
   defp maybe_put_meta_string(metadata, _key, nil), do: metadata
 
@@ -640,9 +665,7 @@ defmodule SymphonyElixir.Assistant.History do
           | {:error,
              :not_found
              | :invalid_thread_id
-             | :thread_active
              | :unsupported_scope
-             | :unsupported_status
              | Ecto.Changeset.t()}
   def delete_thread(id) when is_integer(id) and id > 0 do
     with {:ok, thread} <- get_thread(id),
@@ -751,14 +774,26 @@ defmodule SymphonyElixir.Assistant.History do
         |> Map.get(:metadata, Map.get(attrs, "metadata", %{}))
         |> Map.new()
         |> Map.put("execution_mode", execution_mode)
+        |> put_session_model_effort(attrs)
         |> Map.merge(workspace_meta)
+        |> maybe_put_clone_branches(attrs)
 
       attrs
       |> Map.drop([
         :isolated_workspace,
         "isolated_workspace",
         :use_parent_workspace,
-        "use_parent_workspace"
+        "use_parent_workspace",
+        :clone_branches,
+        "clone_branches",
+        :clone_branch,
+        "clone_branch",
+        :model,
+        "model",
+        :effort,
+        "effort",
+        :execution_mode,
+        "execution_mode"
       ])
       |> Map.put(:scope, "issue_session")
       |> Map.put(:project_slug, slug)
@@ -796,6 +831,7 @@ defmodule SymphonyElixir.Assistant.History do
         |> Map.get(:metadata, Map.get(attrs, "metadata", %{}))
         |> Map.new()
         |> Map.put("execution_mode", execution_mode)
+        |> put_session_model_effort(attrs)
         |> Map.put("workspace_kind", workspace_kind)
 
       attrs
@@ -803,7 +839,13 @@ defmodule SymphonyElixir.Assistant.History do
         :isolated_workspace,
         "isolated_workspace",
         :use_parent_workspace,
-        "use_parent_workspace"
+        "use_parent_workspace",
+        :model,
+        "model",
+        :effort,
+        "effort",
+        :execution_mode,
+        "execution_mode"
       ])
       |> Map.put(:scope, "issue_session")
       |> Map.put(:project_slug, slug)
@@ -832,12 +874,30 @@ defmodule SymphonyElixir.Assistant.History do
     with {:ok, slug} <- normalize_required_string(project_slug, :project_slug),
          {:ok, path} <- normalize_required_string(workspace_path, :workspace_path),
          {:ok, _project} <- Context.get_project(slug) do
+      execution_mode = normalize_execution_mode(Map.get(attrs, :execution_mode) || Map.get(attrs, "execution_mode"))
+
+      metadata =
+        attrs
+        |> Map.get(:metadata, Map.get(attrs, "metadata", %{}))
+        |> Map.new()
+        |> Map.put("execution_mode", execution_mode)
+        |> put_session_model_effort(attrs)
+
       attrs
+      |> Map.drop([
+        :model,
+        "model",
+        :effort,
+        "effort",
+        :execution_mode,
+        "execution_mode"
+      ])
       |> Map.put(:scope, "project_session")
       |> Map.put(:project_slug, slug)
       |> Map.put_new(:title, "Workspace session")
       |> Map.put(:workspace_path, path)
       |> Map.put_new(:status, "active")
+      |> Map.put(:metadata, metadata)
       |> then(&Thread.changeset(%Thread{}, &1))
       |> Repo.insert()
     end
@@ -1391,13 +1451,8 @@ defmodule SymphonyElixir.Assistant.History do
     end
   end
 
-  defp validate_thread_deletion(%Thread{status: "active"}), do: {:error, :thread_active}
-
   defp validate_thread_deletion(%Thread{scope: scope}) when scope not in @deletable_scopes,
     do: {:error, :unsupported_scope}
-
-  defp validate_thread_deletion(%Thread{status: status}) when status not in @deletable_statuses,
-    do: {:error, :unsupported_status}
 
   defp validate_thread_deletion(%Thread{}), do: :ok
 
@@ -1610,5 +1665,41 @@ defmodule SymphonyElixir.Assistant.History do
 
   defp use_parent_workspace?(attrs) do
     Map.get(attrs, :use_parent_workspace, Map.get(attrs, "use_parent_workspace")) == true
+  end
+
+  defp maybe_put_clone_branches(metadata, attrs) do
+    case normalize_clone_branches(attrs) do
+      branches when map_size(branches) > 0 -> Map.put(metadata, "clone_branches", branches)
+      _ -> metadata
+    end
+  end
+
+  defp normalize_clone_branches(attrs) when is_map(attrs) do
+    case Map.get(attrs, :clone_branches, Map.get(attrs, "clone_branches")) do
+      branches when is_map(branches) ->
+        branches
+        |> Enum.reduce(%{}, fn
+          {key, value}, acc when is_binary(key) and is_binary(value) ->
+            case String.trim(value) do
+              "" -> acc
+              branch -> Map.put(acc, String.trim(key), branch)
+            end
+
+          _, acc ->
+            acc
+        end)
+
+      _ ->
+        case Map.get(attrs, :clone_branch, Map.get(attrs, "clone_branch")) do
+          branch when is_binary(branch) ->
+            case String.trim(branch) do
+              "" -> %{}
+              trimmed -> %{"__default__" => trimmed}
+            end
+
+          _ ->
+            %{}
+        end
+    end
   end
 end

@@ -24,9 +24,17 @@ interface BackendProjectPullRequestDto {
   issueIdentifier?: string | null;
 }
 
-export async function listProjectPullRequests(projectSlug: string): Promise<ProjectPullRequest[]> {
+export async function listProjectPullRequests(
+  projectSlug: string,
+  options: { search?: string } = {},
+): Promise<ProjectPullRequest[]> {
   const slug = requireProjectSlug(projectSlug);
-  const response = await http.get(trackerPath(`/projects/${encodeURIComponent(slug)}/pull_requests`));
+  const search = options.search?.trim();
+  const path = trackerPath(`/projects/${encodeURIComponent(slug)}/pull_requests`);
+  const response =
+    search && search.length > 0
+      ? await http.get(path, { params: { q: search } })
+      : await http.get(path);
   return unwrapData<BackendProjectPullRequestDto[]>(response).map(normalize);
 }
 

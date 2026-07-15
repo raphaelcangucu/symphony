@@ -306,7 +306,10 @@ export async function removeWorkspaces(
 export interface CreateStandaloneWorkspaceInput {
   name: string;
   title?: string;
-  agentKind?: "codex" | "claude" | "cursor" | null;
+  agentKind?: "codex" | "claude" | "cursor" | "opencode" | null;
+  executionMode?: "plan" | "build" | "yolo";
+  model?: string;
+  effort?: string;
   /** Repo directory name -> branch to clone. Missing repos use their default branch. */
   branches?: Record<string, string>;
 }
@@ -329,6 +332,9 @@ export async function createStandaloneWorkspace(
     name,
     title: input.title,
     agent_kind: input.agentKind ?? undefined,
+    execution_mode: input.executionMode ?? undefined,
+    model: input.model ?? undefined,
+    effort: input.effort ?? undefined,
     branches: input.branches ?? undefined,
   });
 
