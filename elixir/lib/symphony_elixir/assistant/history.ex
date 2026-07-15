@@ -6,6 +6,7 @@ defmodule SymphonyElixir.Assistant.History do
   alias SymphonyElixir.Assistant.{Message, ProjectExploreWorkspace, Thread, TurnTimeline}
   alias SymphonyElixir.{ExecutionMode, Workspace}
   alias SymphonyElixir.LocalTracker.{Context, IssueAdapter}
+  alias SymphonyElixir.Recents.Broadcaster, as: RecentsBroadcaster
   alias SymphonyElixir.Repo
 
   @type attrs :: map()
@@ -45,6 +46,7 @@ defmodule SymphonyElixir.Assistant.History do
           |> Map.put_new(:status, "active")
           |> then(&Thread.changeset(%Thread{}, &1))
           |> Repo.insert()
+          |> notify_recents()
       end
     end
   end
@@ -83,6 +85,7 @@ defmodule SymphonyElixir.Assistant.History do
           |> Map.put_new(:title, kb_thread_title(path))
           |> then(&Thread.changeset(%Thread{}, &1))
           |> Repo.insert()
+          |> notify_recents()
       end
     end
   end
@@ -596,6 +599,7 @@ defmodule SymphonyElixir.Assistant.History do
     thread
     |> Thread.changeset(attrs)
     |> Repo.update()
+    |> notify_recents()
   end
 
   @doc """
@@ -670,7 +674,9 @@ defmodule SymphonyElixir.Assistant.History do
   def delete_thread(id) when is_integer(id) and id > 0 do
     with {:ok, thread} <- get_thread(id),
          :ok <- validate_thread_deletion(thread) do
-      Repo.delete(thread, allow_stale: true)
+      thread
+      |> Repo.delete(allow_stale: true)
+      |> notify_recents()
     end
   end
 
@@ -714,6 +720,7 @@ defmodule SymphonyElixir.Assistant.History do
     |> Map.put_new(:status, "active")
     |> then(&Thread.changeset(%Thread{}, &1))
     |> Repo.insert()
+    |> notify_recents()
   end
 
   @spec create_gateway_freeform_thread(attrs()) :: {:ok, Thread.t()} | {:error, Ecto.Changeset.t()}
@@ -735,6 +742,7 @@ defmodule SymphonyElixir.Assistant.History do
       |> Map.put_new(:status, "active")
       |> then(&Thread.changeset(%Thread{}, &1))
       |> Repo.insert()
+      |> notify_recents()
     end
   end
 
@@ -751,6 +759,7 @@ defmodule SymphonyElixir.Assistant.History do
       |> Map.put_new(:status, "active")
       |> then(&Thread.changeset(%Thread{}, &1))
       |> Repo.insert()
+      |> notify_recents()
     end
   end
 
@@ -804,6 +813,7 @@ defmodule SymphonyElixir.Assistant.History do
       |> Map.put(:metadata, metadata)
       |> then(&Thread.changeset(%Thread{}, &1))
       |> Repo.insert()
+      |> notify_recents()
     end
   end
 
@@ -856,6 +866,7 @@ defmodule SymphonyElixir.Assistant.History do
       |> Map.put(:metadata, metadata)
       |> then(&Thread.changeset(%Thread{}, &1))
       |> Repo.insert()
+      |> notify_recents()
     end
   end
 
@@ -900,6 +911,7 @@ defmodule SymphonyElixir.Assistant.History do
       |> Map.put(:metadata, metadata)
       |> then(&Thread.changeset(%Thread{}, &1))
       |> Repo.insert()
+      |> notify_recents()
     end
   end
 
@@ -1158,6 +1170,7 @@ defmodule SymphonyElixir.Assistant.History do
     |> Map.put_new(:status, "active")
     |> then(&Thread.changeset(%Thread{}, &1))
     |> Repo.insert()
+    |> notify_recents()
   end
 
   defp promote_active_project_thread(slug, identifier, attrs) do
@@ -1195,12 +1208,14 @@ defmodule SymphonyElixir.Assistant.History do
       workspace_path: workspace_path
     })
     |> Repo.update()
+    |> notify_recents()
   end
 
   defp close_thread(%Thread{} = thread) do
     thread
     |> Thread.changeset(%{status: "closed"})
     |> Repo.update()
+    |> notify_recents()
   end
 
   defp draft_identifier_from_thread(thread_id) when is_integer(thread_id) do
@@ -1395,7 +1410,7 @@ defmodule SymphonyElixir.Assistant.History do
 
   defp execute_sidebar_update(query, id) do
     case Repo.update_all(query, []) do
-      {1, _rows} -> get_thread(id)
+      {1, _rows} -> get_thread(id) |> notify_recents()
       {0, _rows} -> {:error, :not_found}
     end
   end
@@ -1504,6 +1519,7 @@ defmodule SymphonyElixir.Assistant.History do
     |> Map.put_new(:status, "active")
     |> then(&Thread.changeset(%Thread{}, &1))
     |> Repo.insert()
+    |> notify_recents()
   end
 
   defp messages_for_thread(thread_id) do
@@ -1530,10 +1546,17 @@ defmodule SymphonyElixir.Assistant.History do
     |> Message.changeset(attrs)
     |> Repo.insert()
     |> case do
-      {:ok, message} -> {:ok, public_message(message)}
+      {:ok, message} -> {:ok, public_message(message)} |> notify_recents()
       {:error, changeset} -> {:error, changeset}
     end
   end
+
+  defp notify_recents({:ok, _result} = result) do
+    :ok = RecentsBroadcaster.notify()
+    result
+  end
+
+  defp notify_recents(result), do: result
 
   defp public_message(%Message{} = message), do: %{message | tool_calls: tool_calls(message)}
 
