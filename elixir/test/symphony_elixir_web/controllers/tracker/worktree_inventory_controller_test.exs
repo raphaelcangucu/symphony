@@ -208,6 +208,8 @@ defmodule SymphonyElixirWeb.Tracker.WorktreeInventoryControllerTest do
 
     assert conn.status == 200
     assert get_resp_header(conn, "content-type") == ["text/event-stream; charset=utf-8"]
+    assert conn.resp_body =~ "event: entry"
+    assert conn.resp_body =~ "event: totals"
     assert conn.resp_body =~ "event: done"
   end
 

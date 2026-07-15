@@ -12,57 +12,49 @@ defmodule SymphonyElixirWeb.WorktreeInventoryEventStream do
   @spec stream(Plug.Conn.t(), String.t(), module()) :: Plug.Conn.t()
   def stream(conn, project_slug, display_name_module)
       when is_binary(project_slug) and is_atom(display_name_module) do
-    conn =
-      conn
-      |> put_resp_header("content-type", "text/event-stream; charset=utf-8")
-      |> put_resp_header("cache-control", "no-cache")
-      |> put_resp_header("connection", "keep-alive")
-      |> send_chunked(200)
+    conn = prepare_sse_headers(conn)
 
-    {:ok, conn_agent} = Agent.start_link(fn -> conn end)
+    with {:ok, aliases} <- fetch_aliases(display_name_module, project_slug),
+         {:ok, %{workspaces: workspaces, totals: totals}} <- Inventory.scan(project_slug) do
+      conn =
+        Enum.reduce_while(workspaces, conn, fn entry, acc ->
+          payload = %{data: WorktreeInventoryPresenter.entry_json(entry, aliases)}
 
-    result =
-      case display_name_module.map_for_project(project_slug) do
-        {:ok, aliases} ->
-          Inventory.scan_stream(project_slug, fn event ->
-            Agent.get_and_update(conn_agent, fn current_conn ->
-              case push_event(current_conn, event, aliases) do
-                {:ok, updated_conn} -> {:ok, updated_conn}
-                _ -> {:halt, current_conn}
-              end
-            end)
-          end)
+          case chunk(acc, encode_event("entry", payload)) do
+            {:ok, next} -> {:cont, next}
+            _ -> {:halt, acc}
+          end
+        end)
 
-        {:error, reason} ->
-          {:error, reason}
+      with {:ok, conn} <-
+             chunk(conn, encode_event("totals", %{totals: WorktreeInventoryPresenter.totals_json(totals)})),
+           {:ok, conn} <- chunk(conn, encode_event("done", %{})) do
+        conn
+      else
+        _ -> conn
       end
-
-    conn = Agent.get(conn_agent, & &1)
-    Agent.stop(conn_agent)
-
-    case result do
-      {:ok, _scan} ->
-        case chunk(conn, encode_event("done", %{})) do
-          {:ok, conn} -> conn
-          _ -> conn
-        end
-
-      {:error, reason} ->
-        case chunk(conn, encode_event("failure", %{error: format_error(reason)})) do
-          {:ok, conn} -> conn
-          _ -> conn
-        end
+    else
+      {:error, reason} -> chunk_failure(conn, reason)
     end
   end
 
-  defp push_event(conn, {:entry, entry}, aliases) do
-    payload = %{data: WorktreeInventoryPresenter.entry_json(entry, aliases)}
-    chunk(conn, encode_event("entry", payload))
+  defp prepare_sse_headers(conn) do
+    conn
+    |> put_resp_header("content-type", "text/event-stream; charset=utf-8")
+    |> put_resp_header("cache-control", "no-cache")
+    |> put_resp_header("connection", "keep-alive")
+    |> send_chunked(200)
   end
 
-  defp push_event(conn, {:totals, totals}, _aliases) do
-    payload = %{totals: WorktreeInventoryPresenter.totals_json(totals)}
-    chunk(conn, encode_event("totals", payload))
+  defp fetch_aliases(display_name_module, project_slug) do
+    display_name_module.map_for_project(project_slug)
+  end
+
+  defp chunk_failure(conn, reason) do
+    case chunk(conn, encode_event("failure", %{error: format_error(reason)})) do
+      {:ok, conn} -> conn
+      _ -> conn
+    end
   end
 
   defp encode_event(event, payload) when is_binary(event) and is_map(payload) do
