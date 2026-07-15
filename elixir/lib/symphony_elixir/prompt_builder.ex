@@ -499,16 +499,13 @@ defmodule SymphonyElixir.PromptBuilder do
 
     #{availability}
 
-    Use the **`manage_preview`** tool (`action`: `status` | `start` | `restart`) before UI e2e evidence.
-    Do **not** run bare `npx playwright test` on random ports — use the project's configured
-    e2e command (see the `evidence` config / project workflow), which reuses the preview ports
-    below and the project's isolated e2e database.
+    **Preferred path:** when Preview is available, prefer `manage_preview` (`status` | `start` | `restart`) to bring up this issue's app so chat stays aligned with the Preview dock. Do not invent ports while still on the Preview path.
 
-    Preview is **best-effort**: `manage_preview start` returns quickly even while a server is still
-    booting or after it crashed (read the result's `status`/`next_steps`). If preview does not reach
-    `ready`, do **not** block the run on it — keep writing the tests, run the unit suite, record the
-    preview blocker in your `## Codex Workpad`, and either poll `manage_preview status`/`restart` later
-    or proceed without UI e2e (CI can run it). Never retry a failing preview in a tight loop.
+    **Mid-turn:** before citing a port or running HTTP checks while using Preview, call `manage_preview` with `action: status` again (or trust the latest `start`/`restart` tool result).
+
+    **Fallback:** if Preview fails, stays crashed, or never reaches `ready` after reasonable `status`/`restart`/`output` self-heal, fall back to a convenient project bring-up path, cite the ports actually serving traffic, and note the dock may be stale until a later best-effort `manage_preview restart`. Do not block the run on Preview. Never retry a failing preview in a tight loop.
+
+    Do **not** run bare `npx playwright test` on random ports — use the project's configured e2e command (see the `evidence` config / project workflow), which reuses the preview ports below when Preview is healthy.
 
     #{if server_lines == "", do: "_No preview servers registered yet — call `manage_preview` with `start`._", else: server_lines}
 
@@ -530,13 +527,25 @@ defmodule SymphonyElixir.PromptBuilder do
 
   defp preview_server_line(_), do: ""
 
+  @doc false
+  @spec local_preview_url_for_tests(map()) :: String.t()
+  def local_preview_url_for_tests(server) when is_map(server), do: local_preview_url(server)
+
   defp local_preview_url(server) when is_map(server) do
     port = Map.get(server, :port) || Map.get(server, "port")
     slug = to_string(Map.get(server, :slug) || Map.get(server, "slug") || "")
+    ready_path = Map.get(server, :ready_path) || Map.get(server, "ready_path")
+    url_path = Map.get(server, :url_path) || Map.get(server, "url_path")
 
     cond do
       not is_integer(port) or port <= 0 ->
         "n/a"
+
+      is_binary(ready_path) and ready_path != "" ->
+        "http://127.0.0.1:#{port}#{normalize_preview_path(ready_path)}"
+
+      is_binary(url_path) and url_path != "" ->
+        "http://127.0.0.1:#{port}#{normalize_preview_path(url_path)}"
 
       String.contains?(slug, "admin") ->
         "http://127.0.0.1:#{port}/"
@@ -545,6 +554,10 @@ defmodule SymphonyElixir.PromptBuilder do
         "http://127.0.0.1:#{port}/api/health"
     end
   end
+
+  defp normalize_preview_path("/" <> _ = path), do: path
+  defp normalize_preview_path(path) when is_binary(path), do: "/" <> path
+  defp normalize_preview_path(_), do: "/"
 
   defp local_preview_url(_), do: "n/a"
 

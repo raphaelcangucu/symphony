@@ -324,6 +324,43 @@ defmodule SymphonyElixir.PromptBuilderTest do
     assert prompt =~ "ALPHA A-1"
   end
 
+  test "preview_context_section prefers manage_preview, mid-turn status, and fallback" do
+    issue = %Issue{
+      identifier: "#1",
+      project_slug: "mac",
+      title: "T",
+      description: "d",
+      state: "In Progress"
+    }
+
+    section = PromptBuilder.preview_context_section(issue)
+
+    assert section =~ "## Issue preview (Symphony)"
+    assert section =~ "prefer"
+    assert section =~ "manage_preview"
+    assert section =~ ~r/fall\s*back/i
+    assert section =~ "status"
+    refute section =~ "run-e2e.sh"
+  end
+
+  test "local_preview_url uses ready_path when present on server map" do
+    assert PromptBuilder.local_preview_url_for_tests(%{
+             slug: "advising",
+             port: 4300,
+             ready_path: "/health"
+           }) == "http://127.0.0.1:4300/health"
+
+    assert PromptBuilder.local_preview_url_for_tests(%{
+             slug: "api",
+             port: 4200
+           }) == "http://127.0.0.1:4200/api/health"
+
+    assert PromptBuilder.local_preview_url_for_tests(%{
+             slug: "distributionmachine-admin",
+             port: 4201
+           }) == "http://127.0.0.1:4201/"
+  end
+
   test "preview_context_section includes guidance when preview is disabled" do
     issue = %Issue{
       identifier: "#1",
