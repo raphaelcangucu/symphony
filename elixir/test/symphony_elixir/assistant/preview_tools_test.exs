@@ -314,6 +314,49 @@ defmodule SymphonyElixir.Assistant.PreviewToolsTest do
     assert result.data.next_steps =~ ~r/fall\s*back/i
   end
 
+  test "status with crashed server sets fallback next_steps" do
+    issue = %Issue{id: "1", identifier: "DEMO-1", project_slug: "demo"}
+
+    assert {:ok, result} =
+             PreviewTools.execute("demo", %{"action" => "status"},
+               issue: issue,
+               issue_targets: fn _slug, _id ->
+                 {:ok,
+                  %{
+                    available: true,
+                    reason: nil,
+                    servers: [%{slug: "web", status: "crashed", port: 4300, primary: true}]
+                  }}
+               end,
+               list_serve_steps: fn _slug -> [%{role: "serve"}] end
+             )
+
+    assert result.data.next_steps =~ ~r/fall\s*back/i
+    refute result.data.next_steps =~ "while Preview is healthy"
+  end
+
+  test "status with starting server does not set preferred healthy dock next_steps" do
+    issue = %Issue{id: "1", identifier: "DEMO-1", project_slug: "demo"}
+
+    assert {:ok, result} =
+             PreviewTools.execute("demo", %{"action" => "status"},
+               issue: issue,
+               issue_targets: fn _slug, _id ->
+                 {:ok,
+                  %{
+                    available: true,
+                    reason: nil,
+                    servers: [%{slug: "web", status: "starting", port: 4300, primary: true}]
+                  }}
+               end,
+               list_serve_steps: fn _slug -> [%{role: "serve"}] end
+             )
+
+    next_steps = result.data.next_steps
+
+    assert is_nil(next_steps) or not (next_steps =~ "while Preview is healthy")
+  end
+
   test "enrich_view local_url uses serve step ready_path" do
     view = %{
       available: true,

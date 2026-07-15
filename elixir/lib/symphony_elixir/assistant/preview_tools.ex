@@ -342,7 +342,7 @@ defmodule SymphonyElixir.Assistant.PreviewTools do
 
     next_steps =
       case next_steps_hint(reason, serve_steps_configured) do
-        nil -> preferred_next_steps(view)
+        nil -> preferred_next_steps(view) || crashed_servers_next_steps(view)
         hint -> hint
       end
 
@@ -358,8 +358,24 @@ defmodule SymphonyElixir.Assistant.PreviewTools do
     reason = Map.get(view, :reason)
     servers = Map.get(view, :servers) || Map.get(view, "servers") || []
 
-    if available == true and is_nil(reason) and not Enum.any?(servers, &(server_status(&1) == "crashed")) do
+    if available == true and is_nil(reason) and servers_ready_or_empty?(servers) do
       @preferred_ports_next_steps
+    else
+      nil
+    end
+  end
+
+  defp servers_ready_or_empty?(servers) when is_list(servers) do
+    servers == [] or Enum.all?(servers, &(server_status(&1) == "ready"))
+  end
+
+  defp servers_ready_or_empty?(_servers), do: false
+
+  defp crashed_servers_next_steps(view) do
+    servers = Map.get(view, :servers) || Map.get(view, "servers") || []
+
+    if Enum.any?(servers, &(server_status(&1) == "crashed")) do
+      @not_ready_next_steps
     else
       nil
     end
