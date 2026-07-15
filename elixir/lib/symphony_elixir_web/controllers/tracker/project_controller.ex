@@ -15,13 +15,16 @@ defmodule SymphonyElixirWeb.Tracker.ProjectController do
   def index(conn, params) do
     include_archived? = Map.get(params, "include_archived") == "true"
     projects = Context.list_projects(include_archived: include_archived?)
-    counts = Context.count_issues_by_project_ids(Enum.map(projects, & &1.id))
+    project_ids = Enum.map(projects, & &1.id)
+    counts = Context.count_issues_by_project_ids(project_ids)
+    activity_at = Context.max_activity_at_by_projects(projects)
 
     data =
       Enum.map(projects, fn project ->
         project
         |> TrackerPresenter.project()
         |> Map.put(:issue_count, Map.get(counts, project.id, 0))
+        |> Map.put(:last_activity_at, TrackerPresenter.datetime_iso8601(Map.get(activity_at, project.id)))
       end)
 
     json(conn, %{data: data})

@@ -10,6 +10,8 @@ defmodule SymphonyElixir.LocalTracker.Context do
   alias SymphonyElixir.ProjectConfig
   alias SymphonyElixir.Tracker.ExternalUrl
 
+  alias SymphonyElixir.Assistant.Thread
+
   alias SymphonyElixir.LocalTracker.{
     ActivityEvent,
     Broadcaster,
@@ -25,6 +27,8 @@ defmodule SymphonyElixir.LocalTracker.Context do
     Seeds,
     WorkflowStatus
   }
+
+  @session_thread_scopes ~w(project_session project_explore issue issue_session workspace_session)
 
   alias SymphonyElixir.LocalTracker.Context.AgentSettings
 
@@ -306,6 +310,51 @@ defmodule SymphonyElixir.LocalTracker.Context do
         |> select([issue], {issue.project_id, count(issue.id)})
         |> Repo.all()
         |> Map.new()
+    end
+  end
+
+  @spec max_activity_at_by_projects([Project.t()]) :: %{integer() => DateTime.t() | nil}
+  def max_activity_at_by_projects(projects) when is_list(projects) do
+    case projects do
+      [] ->
+        %{}
+
+      _ ->
+        ids = Enum.map(projects, & &1.id)
+        slugs = Enum.map(projects, & &1.slug)
+        slug_to_id = Map.new(projects, &{&1.slug, &1.id})
+
+        issue_activity =
+          IssueRecord
+          |> where([issue], issue.project_id in ^ids)
+          |> group_by([issue], issue.project_id)
+          |> select([issue], {issue.project_id, max(issue.updated_at)})
+          |> Repo.all()
+          |> Map.new()
+
+        thread_activity =
+          Thread
+          |> where([thread], thread.project_slug in ^slugs and thread.scope in ^@session_thread_scopes)
+          |> group_by([thread], thread.project_slug)
+          |> select([thread], {thread.project_slug, max(thread.updated_at)})
+          |> Repo.all()
+          |> Enum.map(fn {slug, updated_at} -> {Map.fetch!(slug_to_id, slug), updated_at} end)
+          |> Map.new()
+
+        Map.new(ids, fn id ->
+          {id, max_datetime(Map.get(issue_activity, id), Map.get(thread_activity, id))}
+        end)
+    end
+  end
+
+  defp max_datetime(nil, nil), do: nil
+  defp max_datetime(nil, datetime), do: datetime
+  defp max_datetime(datetime, nil), do: datetime
+
+  defp max_datetime(%DateTime{} = left, %DateTime{} = right) do
+    case DateTime.compare(left, right) do
+      :gt -> left
+      _ -> right
     end
   end
 

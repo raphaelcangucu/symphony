@@ -22,6 +22,9 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
   alias SymphonyElixir.Tracker.IssueDTO
   alias SymphonyElixir.Tracker.Sync.StateRecord
 
+  @spec datetime_iso8601(DateTime.t() | nil) :: String.t() | nil
+  def datetime_iso8601(datetime), do: iso8601(datetime)
+
   @spec project(Project.t(), [WorkflowStatus.t()] | nil, [Repository.t()] | nil, ProjectSetup.t() | nil) :: map()
   def project(%Project{} = project, statuses \\ nil, repositories \\ nil, setup \\ nil) do
     %{
