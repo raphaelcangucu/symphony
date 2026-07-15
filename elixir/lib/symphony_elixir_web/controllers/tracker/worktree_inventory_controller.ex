@@ -31,6 +31,8 @@ defmodule SymphonyElixirWeb.Tracker.WorktreeInventoryController do
 
   @spec events(Conn.t(), map()) :: Conn.t()
   def events(conn, %{"project_slug" => project_slug}) do
+    conn = Plug.Conn.put_private(conn, :phoenix_format, "json")
+
     case Context.get_project(project_slug) do
       {:ok, _project} ->
         WorktreeInventoryEventStream.stream(conn, project_slug, display_name_module())

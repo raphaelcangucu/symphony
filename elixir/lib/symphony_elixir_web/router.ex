@@ -48,6 +48,8 @@ defmodule SymphonyElixirWeb.Router do
       DevServerController,
       :output_events
     )
+
+    get("/projects/:project_slug/worktrees/events", WorktreeInventoryController, :events)
   end
 
   scope "/api/tracker/v1", SymphonyElixirWeb.Tracker do
@@ -184,7 +186,6 @@ defmodule SymphonyElixirWeb.Router do
       :artifact
     )
 
-    get("/projects/:project_slug/worktrees/events", WorktreeInventoryController, :events)
     get("/projects/:project_slug/worktrees", WorktreeInventoryController, :index)
     delete("/projects/:project_slug/worktrees", WorktreeInventoryController, :remove)
     post("/projects/:project_slug/workspaces", WorktreeInventoryController, :create_workspace)

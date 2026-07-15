@@ -196,6 +196,21 @@ defmodule SymphonyElixirWeb.Tracker.WorktreeInventoryControllerTest do
     assert conn.resp_body =~ "event: done"
   end
 
+  test "GET /worktrees/events accepts text/event-stream Accept header", ctx do
+    {:ok, issue} = Context.create_issue("wtapi", %{"title" => "SSE Accept"})
+    ws = Path.join(ctx.segment_root, issue.identifier)
+    File.mkdir_p!(ws)
+
+    conn =
+      authorize()
+      |> put_req_header("accept", "text/event-stream")
+      |> get("/api/tracker/v1/projects/wtapi/worktrees/events")
+
+    assert conn.status == 200
+    assert get_resp_header(conn, "content-type") == ["text/event-stream; charset=utf-8"]
+    assert conn.resp_body =~ "event: done"
+  end
+
   test "GET /worktrees/events includes the GET display name in its entry event", ctx do
     {:ok, issue} = Context.create_issue("wtapi", %{"title" => "Stream alias"})
     workspace_path = Path.join(ctx.segment_root, issue.identifier)
