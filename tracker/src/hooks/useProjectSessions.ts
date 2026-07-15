@@ -1,25 +1,17 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useAgentExecutions } from "@/hooks/useAgentExecutions";
+import {
+  DEFAULT_PROJECT_SESSIONS_LIMIT,
+  fetchProjectSessions,
+  projectSessionsToRecents,
+} from "@/hooks/projectSessionsCache";
 import { emptyProjectSessionGroups, groupProjectSessions, type ProjectSessionGroups } from "@/lib/projectSessions";
 import { listIssues } from "@/services/issues";
-import { listRecents } from "@/services/recents";
-import {
-  fetchWorkspaceInventory,
-  subscribeWorkspaceInventory,
-} from "@/services/worktrees";
 import type { AgentExecution } from "@/types/agent-execution";
 import type { Issue } from "@/types/issue";
 import type { RecentSession } from "@/types/recents";
-import type { WorkspaceInventory, WorkspaceInventoryEntry } from "@/types/worktrees";
-
-const RECENT_SESSIONS_LIMIT = 100;
-
-const EMPTY_INVENTORY_TOTALS: WorkspaceInventory["totals"] = {
-  count: 0,
-  sizeBytes: 0,
-  reclaimableBytes: 0,
-};
+import type { WorkspaceInventory } from "@/types/worktrees";
 
 export interface UseProjectSessionsResult {
   groups: ProjectSessionGroups;
@@ -38,62 +30,35 @@ export interface UseProjectSessionsResult {
   refetch: () => Promise<void>;
 }
 
-function upsertInventoryEntry(
-  entries: WorkspaceInventoryEntry[],
-  entry: WorkspaceInventoryEntry,
-): WorkspaceInventoryEntry[] {
-  const index = entries.findIndex((candidate) => candidate.path === entry.path);
-  if (index < 0) {
-    return [...entries, entry];
-  }
-
-  const next = [...entries];
-  next[index] = entry;
-  return next;
-}
-
-function provisionalTotals(entries: readonly WorkspaceInventoryEntry[]): WorkspaceInventory["totals"] {
-  return {
-    count: entries.length,
-    sizeBytes: entries.reduce((sum, entry) => sum + entry.sizeBytes, 0),
-    reclaimableBytes: entries
-      .filter((entry) => entry.reclaimable)
-      .reduce((sum, entry) => sum + entry.sizeBytes, 0),
-  };
-}
-
 export function useProjectSessions(projectSlug: string): UseProjectSessionsResult {
   const { executions, refetch: refetchExecutions } = useAgentExecutions();
   const [issues, setIssues] = useState<Issue[]>([]);
   const [recents, setRecents] = useState<RecentSession[]>([]);
-  const [inventory, setInventory] = useState<WorkspaceInventory | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isInventoryLoading, setIsInventoryLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [inventoryRefreshKey, setInventoryRefreshKey] = useState(0);
-  const inventoryGenerationRef = useRef(0);
-  const fallbackStartedRef = useRef(false);
 
   const loadProjectData = useCallback(async () => {
     const slug = projectSlug.trim();
     if (!slug) {
       setIssues([]);
       setRecents([]);
-      setInventory(null);
       setIsLoading(false);
-      setIsInventoryLoading(false);
       setError("missing-project");
       return;
     }
 
     setIsLoading(true);
     try {
-      const [nextIssues, nextRecents] = await Promise.all([
+      const [nextIssues, sessionsPage] = await Promise.all([
         listIssues(slug),
-        listRecents(RECENT_SESSIONS_LIMIT),
+        fetchProjectSessions({
+          projectSlug: slug,
+          limit: DEFAULT_PROJECT_SESSIONS_LIMIT,
+          includeArchived: false,
+        }),
       ]);
       setIssues(nextIssues);
-      setRecents(nextRecents.filter((session) => session.projectSlug === slug));
+      setRecents(projectSessionsToRecents(sessionsPage, slug));
       setError(null);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "load-failed");
@@ -106,93 +71,8 @@ export function useProjectSessions(projectSlug: string): UseProjectSessionsResul
     void loadProjectData();
   }, [loadProjectData]);
 
-  useEffect(() => {
-    const slug = projectSlug.trim();
-    if (!slug) {
-      return undefined;
-    }
-
-    const generation = ++inventoryGenerationRef.current;
-    fallbackStartedRef.current = false;
-    setIsInventoryLoading(true);
-    setInventory({ entries: [], totals: EMPTY_INVENTORY_TOTALS });
-
-    const applyEntry = (entry: WorkspaceInventoryEntry) => {
-      if (generation !== inventoryGenerationRef.current || fallbackStartedRef.current) {
-        return;
-      }
-
-      setInventory((current) => {
-        const entries = upsertInventoryEntry(current?.entries ?? [], entry);
-        return {
-          entries,
-          totals: provisionalTotals(entries),
-        };
-      });
-    };
-
-    const finishInventory = () => {
-      if (generation !== inventoryGenerationRef.current || fallbackStartedRef.current) {
-        return;
-      }
-
-      setIsInventoryLoading(false);
-    };
-
-    const loadInventoryFallback = () => {
-      if (generation !== inventoryGenerationRef.current || fallbackStartedRef.current) {
-        return;
-      }
-
-      fallbackStartedRef.current = true;
-
-      void fetchWorkspaceInventory(slug)
-        .then((nextInventory) => {
-          if (generation !== inventoryGenerationRef.current) {
-            return;
-          }
-
-          setInventory(nextInventory);
-          setIsInventoryLoading(false);
-        })
-        .catch(() => {
-          if (generation !== inventoryGenerationRef.current) {
-            return;
-          }
-
-          setInventory(null);
-          setIsInventoryLoading(false);
-        });
-    };
-
-    const unsubscribe = subscribeWorkspaceInventory(slug, {
-      onEntry: applyEntry,
-      onTotals: (totals) => {
-        if (generation !== inventoryGenerationRef.current || fallbackStartedRef.current) {
-          return;
-        }
-
-        setInventory((current) => ({
-          entries: current?.entries ?? [],
-          totals,
-        }));
-      },
-      onDone: finishInventory,
-      onError: () => {
-        if (generation !== inventoryGenerationRef.current || fallbackStartedRef.current) {
-          return;
-        }
-
-        loadInventoryFallback();
-      },
-    });
-
-    return unsubscribe;
-  }, [inventoryRefreshKey, projectSlug]);
-
   const refetch = useCallback(async () => {
     await Promise.all([loadProjectData(), refetchExecutions()]);
-    setInventoryRefreshKey((current) => current + 1);
   }, [loadProjectData, refetchExecutions]);
 
   const groups = useMemo(() => {
@@ -214,9 +94,9 @@ export function useProjectSessions(projectSlug: string): UseProjectSessionsResul
     relatedSessions,
     issues,
     executions,
-    inventory,
+    inventory: null,
     isLoading,
-    isInventoryLoading,
+    isInventoryLoading: false,
     error,
     refetch,
   };

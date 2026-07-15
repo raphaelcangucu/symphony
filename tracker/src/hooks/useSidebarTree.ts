@@ -11,8 +11,8 @@ import {
   writeSidebarPreferences,
 } from "@/lib/sidebarPreferences";
 import { resolveSidebarRouteSelection } from "@/lib/sidebarRouteResolution";
+import { fetchProjectSessions } from "@/hooks/projectSessionsCache";
 import { listProjects } from "@/services/projects";
-import { listProjectSessions } from "@/services/projectSessions";
 import type { Project } from "@/types/project";
 import type { ProjectSessionRow } from "@/types/project-session";
 import type { SidebarLoadState, SidebarProjectNode } from "@/types/sidebar";
@@ -176,7 +176,7 @@ export function useSidebarTree(): UseSidebarTreeResult {
       }));
 
       try {
-        const page = await listProjectSessions({
+        const page = await fetchProjectSessions({
           projectSlug,
           limit: SIDEBAR_PROJECT_SESSIONS_LIMIT,
           ...(cursor ? { cursor } : {}),
