@@ -1,6 +1,7 @@
 import type { AgentExecution } from "@/types/agent-execution";
 import type { AssistantThread } from "@/types/assistant-thread";
 import type { AgentKind, Issue } from "@/types/issue";
+import type { ProjectSessionRow } from "@/types/project-session";
 import type { RecentSession, RecentStatusKind } from "@/types/recents";
 import type { WorkspaceInventoryEntry } from "@/types/worktrees";
 
@@ -72,10 +73,27 @@ export interface SidebarProjectNode {
   updatedAt: string;
   loadState: SidebarLoadState;
   error: string | null;
+  /** Flat nav: visible sessions for this project (replaces workspace hierarchy). */
+  sessions: readonly SidebarSessionNode[];
+  overflowSessions: readonly SidebarSessionNode[];
+  nextCursor: string | null;
+  /** @deprecated Empty in flat nav; kept for legacy tree builders. */
   workspaces: readonly SidebarWorkspaceNode[];
   overflowWorkspaces: readonly SidebarWorkspaceNode[];
+  /** @deprecated Empty in flat nav; kept for legacy tree builders. */
   unassignedSessions: readonly SidebarSessionNode[];
   pinned: boolean;
+}
+
+export interface SidebarFlatProjectBranchInput {
+  readonly projectSlug: string;
+  readonly projectTitle: string;
+  readonly archived: boolean;
+  readonly sessions: readonly ProjectSessionRow[];
+  readonly nextCursor: string | null;
+  readonly loadState: SidebarLoadState;
+  readonly error: string | null;
+  readonly options: SidebarTreeBuildOptions;
 }
 
 export type SidebarNode = SidebarProjectNode | SidebarWorkspaceNode | SidebarSessionNode;

@@ -264,6 +264,9 @@ function isSidebarNode(value: unknown): value is SidebarNode {
       typeof value.loadState === "string" &&
       LOAD_STATES.has(value.loadState) &&
       (value.error === null || typeof value.error === "string") &&
+      Array.isArray(value.sessions) &&
+      Array.isArray(value.overflowSessions) &&
+      (value.nextCursor === null || typeof value.nextCursor === "string") &&
       Array.isArray(value.workspaces) &&
       Array.isArray(value.overflowWorkspaces) &&
       Array.isArray(value.unassignedSessions)

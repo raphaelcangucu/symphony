@@ -182,11 +182,15 @@ function normalizeProject(value: unknown, usedIds: Set<string>): SidebarProjectN
   if (
     !Array.isArray(value.workspaces) ||
     !Array.isArray(value.overflowWorkspaces) ||
-    !Array.isArray(value.unassignedSessions)
+    !Array.isArray(value.unassignedSessions) ||
+    !Array.isArray(value.sessions) ||
+    !Array.isArray(value.overflowSessions)
   ) {
     return null;
   }
   usedIds.add(id);
+  const sessions = normalizeSessions(value.sessions, usedIds, null);
+  const overflowSessions = normalizeSessions(value.overflowSessions, usedIds, null);
   const workspaces = normalizeWorkspaces(value.workspaces, usedIds);
   const overflowWorkspaces = normalizeWorkspaces(value.overflowWorkspaces, usedIds);
   const unassignedSessions = normalizeSessions(value.unassignedSessions, usedIds, null);
@@ -201,6 +205,9 @@ function normalizeProject(value: unknown, usedIds: Set<string>): SidebarProjectN
     updatedAt: timestamp(value.updatedAt),
     loadState: value.loadState as SidebarLoadState,
     error: nullableString(value.error),
+    sessions,
+    overflowSessions,
+    nextCursor: nullableString(value.nextCursor),
     workspaces,
     overflowWorkspaces,
     unassignedSessions,
