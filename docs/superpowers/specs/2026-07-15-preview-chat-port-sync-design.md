@@ -1,8 +1,8 @@
-# Preview ↔ chat port sync + optional GraphQL serve
+# Preview ↔ chat port sync
 
 **Date:** 2026-07-15  
-**Status:** Draft for review  
-**Surfaces:** Issue Preview dock / Preview tab, `manage_preview` / `list_previews`, coding-agent prompt (`PromptBuilder`), DevEnv serve steps  
+**Status:** Approved for planning  
+**Surfaces:** Issue Preview dock / Preview tab, `manage_preview` / `list_previews`, coding-agent prompt (`PromptBuilder`)  
 **Related:**  
 `2026-05-30-issue-dev-server-preview-design.md`,  
 `2026-06-15-smart-preview-port-scheme-design.md`,  
@@ -26,13 +26,9 @@ Chat and Preview already share one persistence source (`local_tracker_dev_server
    `preview_context_section` at build time. After `start` / `restart` / port
    drift, the model may keep quoting the snapshot instead of re-calling
    `manage_preview status`.
-3. **Optional GraphQL** — Some project branches ship a GraphQL binary/API;
-   others do not. A hard-coded second serve step crashes preview on branches
-   where the path is missing. Symphony already stores `optional` on DevEnv
-   steps but **does not skip** optional serve steps at start.
 
-Observed shape (Advising CDE-1131): chat finished GraphQL reload on `:4301`
-after `vibe` recreate; Preview dock still showed `:4300 · crashed`.
+Observed shape (Advising CDE-1131): chat finished bring-up / health checks on
+`:4301` after `vibe` recreate; Preview dock still showed `:4300 · crashed`.
 
 ## Goals
 
@@ -45,19 +41,22 @@ after `vibe` recreate; Preview dock still showed `:4300 · crashed`.
    the dock; fallback is allowed after clear failure.
 3. Keep chat and Preview aligned on ports when the preferred path works,
    without a live SSE→LLM channel (v1).
-4. Support an **optional GraphQL (or any) serve step** gated by workspace path
-   presence (`exists:`), so missing-on-branch does not crash the primary app
-   preview.
 
 ## Non-goals
 
 - Pushing DevServer PubSub/SSE into the LLM context mid-token.
 - Auto-rewriting `DevServerRecord.port` from Docker publish / `INSPIRE_PORT`
   when the agent bypasses Symphony.
-- Hard-coding Advising `graphql-reload` or Inspire Compose into Symphony core.
+- General Symphony features for optional/branch-conditional serve steps
+  (`exists:` gates, skipping optional serves, GraphQL serve discovery).
+- Hard-coding Advising GraphQL / `graphql-reload` / Inspire Compose into
+  Symphony core — any GraphQL or branch-specific serve behavior belongs in
+  **Advising’s own serve scripts** (e.g. `.symphony` / `vibe` / project
+  `serve` helpers), not in Symphony.
 - Changing the smart port lease formula (bands/slots/offsets).
 - Making warm-up (`DevEnv.warm_up` / `*-warmup` Compose) the issue preview
   path (warm-up stays separate).
+- Changing DevEnv schema, migrations, or Tracker DevEnv UI for this work.
 
 ## Decisions
 
@@ -67,8 +66,7 @@ after `vibe` recreate; Preview dock still showed `:4300 · crashed`.
 | Port priority | Prefer `DevServerRecord` / `manage_preview` (same as Preview dock SSE); **not sole** — fallback allowed after preview failure |
 | Bring-up path | Try `manage_preview start` first when `available: true`; on failure, agent may choose another convenient path |
 | Mid-turn freshness (B) | Prefer re-calling `manage_preview status` before citing ports/HTTP checks while using Preview; after fallback, cite the ports actually in use and note dock may be stale |
-| GraphQL / optional services | Serve step with `optional: true` + new `exists` path gate (**detection A**) |
-| Field name | `exists` (relative path under the issue workspace root) |
+| Advising GraphQL / branch-specific serve | **Out of Symphony** — adjust only Advising project serve scripts; do not generalize in core |
 
 ## Design
 
@@ -120,7 +118,6 @@ On every successful status/start/restart view payload:
 | --- | --- |
 | Per-server port, status, local/public URLs | Unchanged contract |
 | Preferred-path copy | Document in `message` / `next_steps` that these ports match Preview when healthy |
-| `skipped` optional servers (see §3) | So agents do not invent GraphQL reload when gated out |
 | Unhealthy `next_steps` | Point at `output` / `restart` / `manage_dev_env`, then **allow fallback** if still failing |
 
 **Out of light-2 scope:** scanning Docker for a different published port and
@@ -129,130 +126,52 @@ updating the record; live push into chat; forcing fallback ports into
 
 ### 2. “Preview available → bring the project up”
 
-Availability gate (evaluated with the issue workspace root when present):
+Availability gate stays as today:
 
-`dev_server.enabled` ∧ workspace exists ∧ at least one **effective** serve
-step after the same optional/`exists` / missing-`working_dir` filter used at
-start.
-
-Today `issue_targets/2` only checks `DevEnv.list_serve_steps/1 != []`. This
-spec **changes** that check to use effective steps so a workspace whose only
-serve steps are optional-and-missing is not advertised as available.
+`dev_server.enabled` ∧ workspace exists ∧ `DevEnv.list_serve_steps != []`.
 
 When `available: true`:
 
 - Prompt and `status` tell the agent to **prefer** `manage_preview start`,
   with fallback allowed after failure.
 - Primary UI CTA remains Start preview (existing dock behavior).
-- Skipped optionals (if any configured siblings failed `exists`) are listed
-  in the status enrichment, not as live servers.
 
 When `available: false`, surface `reason`
 (`disabled` | `workspace_missing` | `no_serve_step`) with actionable
-`next_steps` (existing pattern). Reuse `:no_serve_step` when configured steps
-exist but **none** are effective after the presence filter (no new reason atom
-in v1).
+`next_steps` (existing pattern).
 
-### 3. Optional serve steps + `exists` gate
+No change to how serve steps are filtered or started for this spec.
 
-#### Schema
+### 3. Advising-only note (not Symphony)
 
-Add `exists` to DevEnv serve/setup steps:
-
-| Layer | Change |
-| --- | --- |
-| YAML (`.symphony/devenv.yaml`) | Optional string `exists: relative/path` |
-| `DevEnv.Step` + changeset | `field(:exists, :string)` nullable |
-| Convention reader / proposed step / project YAML export | Round-trip `exists` |
-| Migration | Nullable string column on `local_tracker_dev_env_steps` |
-| Tracker DevEnv UI | Optional path field when editing a step |
-| Presenter / types | Expose `exists` to the UI |
-
-Semantics:
-
-- Path is relative to the **issue workspace root** (same root used for
-  `working_dir` resolution).
-- Presence = file **or** directory exists (`File.exists?/1` equivalent).
-- Empty / nil `exists` → no path gate (only `optional` + cwd rules apply).
-
-#### Start-time filtering (`DevServer.Manager`)
-
-Before port reservation / instance start:
-
-```
-for each serve step:
-  if optional and missing?(exists_path or working_dir as configured):
-    skip (do not allocate port, do not start, do not mark crashed)
-  else:
-    start as today
-```
-
-Rules:
-
-| `optional` | `exists` / cwd | Result |
-| --- | --- | --- |
-| `true` | path missing | **Skip** — no crash |
-| `true` | path present | Start; use normal ready probe |
-| `false` | path missing | Current failure behavior (do not silently skip) |
-| `false` | path present | Start |
-
-Also: if `optional: true` and `working_dir` is set but that directory is
-absent (even without `exists`), skip rather than crash — same spirit as the
-path gate. Prefer documenting that authors set `exists` explicitly for
-GraphQL markers.
-
-Skipped steps appear in tool/prompt views as:
-
-```text
-graphql: status=skipped, reason=missing_exists, exists=path/to/marker
-```
-
-No `DevServerRecord` row required for a skipped start (or a terminal
-`skipped` row if the UI needs a stable slot — prefer **no row** in v1 to
-avoid fake ports; list skipped only in the enriched status payload from
-configured steps).
-
-#### GraphQL (project config, not Symphony hardcode)
-
-Projects that have a branch-conditional GraphQL service declare a second serve
-step in their own `.symphony/devenv.yaml`, for example:
-
-```yaml
-- role: serve
-  description: GraphQL API
-  command: <project-specific start>
-  working_dir: <dir-or-empty>
-  optional: true
-  exists: <path that only exists on GraphQL branches>
-  port_env: PORT   # or project-specific env if already supported
-  ready_probe: http
-  ready_path: /graphql/health   # project-chosen
-  primary: false
-```
-
-Symphony core only honors `optional` + `exists` + ready probes. Reload helpers
-(`graphql-reload`) stay in the project repo / serve command.
+Branch-conditional GraphQL (or any Advising-specific sidecar) must be handled
+**inside Advising’s serve scripts** — e.g. the command(s) already used by that
+project’s DevEnv serve step / `vibe` helpers — so missing GraphQL on a branch
+does not break bring-up. That work is **project-local** and is **not** part of
+this Symphony design (no core `exists:` field, no Manager skip logic, no
+tracker DevEnv UI for optional GraphQL).
 
 ### 4. Data flow (target)
 
 ```
-DevEnv serve steps (+ optional/exists)
+DevEnv serve steps (unchanged)
         │
         ▼
-Manager.start_for_issue ── filter skips ──► PortPlan / Instance
-        │                                        │
-        │                                        ▼
-        │                               DevServerRecord + SSE ──► Preview dock
-        │                                        │
-        └──────── manage_preview status ◄────────┘
+Manager.start_for_issue ──► PortPlan / Instance
+        │                        │
+        │                        ▼
+        │               DevServerRecord + SSE ──► Preview dock
+        │                        │
+        └──── manage_preview status ◄────────────┘
                         │
                         ▼
-              Agent cites ports / HTTP checks
+          Agent prefers these ports / HTTP checks
+          (fallback → project scripts if Preview fails)
 ```
 
 Chat and Preview stay in sync when the agent uses the preferred side of this
-diagram. Fallback (left of Symphony Preview) is allowed after failure; the
-dock may lag until a later best-effort `manage_preview restart`.
+diagram. Fallback is allowed after failure; the dock may lag until a later
+best-effort `manage_preview restart`.
 
 ### 5. Surfaces / file map (implementation guidance)
 
@@ -260,10 +179,8 @@ dock may lag until a later best-effort `manage_preview restart`.
 | --- | --- |
 | Prompt | `elixir/lib/symphony_elixir/prompt_builder.ex` |
 | Tools | `assistant/preview_tools.ex`, `list_preview_tools.ex` |
-| Start filter | `dev_server/manager.ex` (+ small helper for presence) |
-| Schema | `dev_env/step.ex`, convention_reader, proposed_step, migration |
-| API/UI | DevEnv presenter, tracker DevEnv types/forms |
-| Tests | Manager skip tests; PreviewTools status skipped; PromptBuilder section |
+| Tests | PromptBuilder section; PreviewTools preferred-path / fallback `next_steps` |
+| Advising GraphQL / serve scripts | **Advising repo only** — out of Symphony PR scope |
 
 ### 6. Success criteria
 
@@ -275,11 +192,8 @@ dock may lag until a later best-effort `manage_preview restart`.
    re-query.
 3. When Preview fails after self-heal attempts, the agent may fall back to a
    convenient project path and continue (dock staleness is acceptable).
-4. Branch **without** the GraphQL `exists` path: GraphQL step skipped; primary
-   app preview still starts.
-5. Branch **with** the path: GraphQL starts, becomes `ready` via `ready_path`,
-   and appears in status + dock.
-6. No live SSE→LLM; no Symphony hardcode of Advising GraphQL scripts.
+4. No live SSE→LLM; no Symphony hardcode or general optional-GraphQL serve
+   machinery.
 
 ### 7. Risks / open follow-ups
 
@@ -287,21 +201,16 @@ dock may lag until a later best-effort `manage_preview restart`.
 | --- | --- |
 | Agents skip Preview and go straight to `vibe` | Prompt: try Preview first; fallback only after failure |
 | Agents never fall back and block forever | Unhealthy `next_steps` explicitly allow fallback |
-| Wrong `exists` path | Project authoring; document in README / DevEnv UI help |
-| Availability when all steps skipped | Reuse `:no_serve_step`; do not claim available |
-| UI wants a row for skipped GraphQL | v1: tool/prompt only; optional later dock “skipped” chip |
 
 **Out of scope follow-up (not this spec):** binding-process rediscovery that
-updates `DevServerRecord` when Compose republishes a different host port.
+updates `DevServerRecord` when Compose republishes a different host port;
+general optional serve-step gates in Symphony.
 
 ## Spec self-review
 
-- No TBD placeholders for core behavior; GraphQL command/path remain
-  **project-authored** by design.
+- No GraphQL / `exists` / optional-serve generalization in Symphony core.
+- Advising-specific GraphQL/serve script tweaks called out as project-local only.
 - Does not contradict 2026-07-09 (extends tools lightly; no new SSE-to-agent).
 - Does not change port lease math from 2026-06-15.
-- Preferred ≠ sole: Preview is priority; fallback after failure is first-class
-  (warm-up / project scripts remain valid escape hatches).
-- Availability vs start filter: same presence rules; `:no_serve_step` reused
-  when every step is skipped (no new reason atom in v1).
-- Skipped servers: tool/prompt only in v1 (no fake `DevServerRecord` port).
+- Preferred ≠ sole: Preview is priority; fallback after failure is first-class.
+- Availability gate unchanged from current `issue_targets/2` behavior.
