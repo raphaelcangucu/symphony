@@ -6,7 +6,7 @@ defmodule SymphonyElixir.Tracker.ProjectSessions do
   import Ecto.Query
 
   alias SymphonyElixir.Assistant.History
-  alias SymphonyElixir.LocalTracker.{IssueRecord, Project, WorkflowStatus}
+  alias SymphonyElixir.LocalTracker.{Context, IssueRecord, Project, WorkflowStatus}
   alias SymphonyElixir.Repo
 
   @default_limit 20
@@ -33,12 +33,15 @@ defmodule SymphonyElixir.Tracker.ProjectSessions do
 
   def list(project_slug, opts) when is_binary(project_slug) and is_list(opts) do
     with {:ok, normalized_slug} <- normalize_project_slug(project_slug),
+         {:ok, _project} <- Context.get_project(normalized_slug),
          {:ok, limit} <- normalize_limit(Keyword.get(opts, :limit, @default_limit)),
          {:ok, cursor} <- decode_cursor(Keyword.get(opts, :cursor)),
          {:ok, include_archived?} <- normalize_boolean(Keyword.get(opts, :include_archived, false), :include_archived) do
+      fetch_limit = fetch_window(limit)
+
       rows =
         normalized_slug
-        |> session_rows(include_archived?)
+        |> session_rows(include_archived?, fetch_limit)
         |> dedupe_by_id()
         |> sort_rows()
 
@@ -58,26 +61,31 @@ defmodule SymphonyElixir.Tracker.ProjectSessions do
 
   def list(_project_slug, _opts), do: {:error, :invalid_arguments}
 
-  defp session_rows(project_slug, include_archived?) do
-    thread_rows(project_slug, include_archived?) ++ issue_rows(project_slug, include_archived?)
+  defp fetch_window(limit), do: min(limit * 3, @max_limit * 3)
+
+  defp session_rows(project_slug, include_archived?, fetch_limit) do
+    thread_rows(project_slug, include_archived?, fetch_limit) ++
+      issue_rows(project_slug, include_archived?, fetch_limit)
   end
 
-  defp thread_rows(project_slug, include_archived?) do
+  defp thread_rows(project_slug, include_archived?, fetch_limit) do
     History.list_threads(
       project_slug: project_slug,
       scopes: @thread_scopes,
       include_archived: include_archived?,
-      limit: 1_000_000
+      limit: fetch_limit
     )
     |> Enum.map(&thread_row/1)
   end
 
-  defp issue_rows(project_slug, include_archived?) do
+  defp issue_rows(project_slug, include_archived?, fetch_limit) do
     IssueRecord
     |> join(:inner, [issue], project in Project, on: issue.project_id == project.id)
     |> join(:left, [issue], status in WorkflowStatus, on: issue.status_id == status.id)
     |> where([_issue, project], project.slug == ^project_slug)
     |> maybe_exclude_archived_issues(include_archived?)
+    |> order_by([issue], desc: issue.updated_at, desc: issue.id)
+    |> limit(^fetch_limit)
     |> select([issue, _project, status], %{
       id: issue.id,
       title: issue.title,
