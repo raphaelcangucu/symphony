@@ -83,7 +83,7 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
 
     Application.put_env(:symphony_elixir, :assistant_runner, runner)
 
-    {:ok, %{messages: []}, socket} =
+    {:ok, _reply, socket} =
       socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
       |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, "assistant:macro-markets")
 
@@ -96,11 +96,52 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
     assert_push("assistant_delta", %{delta: "Oi"})
     assert_push("assistant_completed", %{message: %{role: "assistant", content: "Oi! Sou o assistant do projeto."}})
 
-    {:ok, %{messages: messages}, _socket} =
+    {:ok, join_reply, _socket} =
       socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
       |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, "assistant:macro-markets")
 
+    refute Map.has_key?(join_reply, :messages)
+
+    assert_push("history_loaded", %{messages: messages})
     assert Enum.map(messages, & &1.role) == ["user", "assistant"]
+  end
+
+  test "join reply omits the message window and pushes it once via history_loaded" do
+    runner = fn _workspace, _prompt, _issue, opts ->
+      Keyword.fetch!(opts, :on_assistant_delta).("hola")
+
+      {:ok,
+       %{
+         assistant_message: "history reply",
+         codex_thread_id: "thread-hist",
+         turn_id: "turn-hist",
+         tool_calls: []
+       }}
+    end
+
+    Application.put_env(:symphony_elixir, :assistant_runner, runner)
+
+    {:ok, _reply, socket} =
+      socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
+      |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, "assistant:macro-markets")
+
+    assert_push("history_loaded", %{messages: []})
+
+    ref = push(socket, "send_message", %{"message" => "hola"})
+    assert_reply(ref, :ok, %{})
+    assert_push("assistant_completed", %{message: %{role: "assistant"}})
+
+    {:ok, join_reply, _socket} =
+      socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
+      |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, "assistant:macro-markets")
+
+    # The join reply is lightweight thread metadata; the transcript window is
+    # transferred exactly once, through the deferred history_loaded push.
+    refute Map.has_key?(join_reply, :messages)
+    assert Map.has_key?(join_reply, :thread_id)
+
+    assert_push("history_loaded", %{messages: pushed_messages})
+    assert Enum.map(pushed_messages, & &1.role) == ["user", "assistant"]
   end
 
   test "runs the turn asynchronously and rejects a concurrent send while running" do
@@ -121,7 +162,7 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
 
     Application.put_env(:symphony_elixir, :assistant_runner, runner)
 
-    {:ok, %{messages: []}, socket} =
+    {:ok, _reply, socket} =
       socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
       |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, "assistant:macro-markets")
 
@@ -500,7 +541,7 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
     Application.put_env(:symphony_elixir, :assistant_side_runner, side_runner)
     on_exit(fn -> Application.delete_env(:symphony_elixir, :assistant_side_runner) end)
 
-    {:ok, %{messages: []}, socket} =
+    {:ok, _reply, socket} =
       socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
       |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, "assistant:macro-markets")
 
@@ -513,15 +554,16 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
     assert_push("btw_delta", %{btw_id: ^btw_id, delta: "Yes"})
     assert_push("btw_completed", %{btw_id: ^btw_id, message: "Yes, useMemo memoizes values."})
 
-    {:ok, %{messages: messages}, _socket} =
+    {:ok, _reply, _socket} =
       socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
       |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, "assistant:macro-markets")
 
+    assert_push("history_loaded", %{messages: messages})
     assert messages == []
   end
 
   test "steer_turn replies error when no turn is running" do
-    {:ok, %{messages: []}, socket} =
+    {:ok, _reply, socket} =
       socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
       |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, "assistant:macro-markets")
 
@@ -814,7 +856,7 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
        }}
     end)
 
-    {:ok, %{messages: []}, socket} =
+    {:ok, _reply, socket} =
       socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
       |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, "assistant:macro-markets")
 
@@ -832,18 +874,20 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
     assert Enum.map(copied_messages, & &1.content) == ["Draft a billing issue", "Drafted MAC-7 for billing work."]
     assert List.last(copied_messages).turn_id == "turn-draft-7"
 
-    {:ok, %{messages: issue_history, thread_id: ^issue_thread_id}, _socket} =
+    {:ok, %{thread_id: ^issue_thread_id}, _socket} =
       socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
       |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, "assistant:issue:macro-markets:MAC-7")
 
+    assert_push("history_loaded", %{messages: issue_history})
     assert Enum.map(issue_history, & &1.content) == ["Draft a billing issue", "Drafted MAC-7 for billing work."]
 
     assert {:ok, %{scope: "issue", issue_identifier: "MAC-7"}} = History.get_thread(issue_thread_id)
 
-    {:ok, %{messages: project_history}, _socket} =
+    {:ok, _reply, _socket} =
       socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
       |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, "assistant:macro-markets")
 
+    assert_push("history_loaded", %{messages: project_history})
     assert project_history == []
   end
 
@@ -866,7 +910,7 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
        }}
     end)
 
-    {:ok, %{messages: []}, socket} =
+    {:ok, _reply, socket} =
       socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
       |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, "assistant:macro-markets")
 
@@ -891,7 +935,9 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
 
     {:ok, payload, _socket} = subscribe_and_join(socket, "assistant:explore:macro-markets", %{})
 
-    assert %{messages: [], thread_id: thread_id} = payload
+    assert %{thread_id: thread_id} = payload
+    refute Map.has_key?(payload, :messages)
+    assert_push("history_loaded", %{messages: []})
     assert {:ok, thread} = History.get_thread(thread_id)
     assert thread.scope == "project_explore"
     assert thread.project_slug == "macro-markets"
@@ -903,13 +949,16 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
     {:ok, _} = History.append_message(thread, %{role: "user", content: "hello freeform"})
 
     {:ok, payload, _socket} = subscribe_and_join(socket, "assistant:thread:#{thread.id}", %{})
-    assert [%{content: "hello freeform"}] = payload.messages
+    refute Map.has_key?(payload, :messages)
+    assert_push("history_loaded", %{messages: [%{content: "hello freeform"}]})
   end
 
   test "join assistant:issue:<project>:<identifier> creates and loads an issue thread", %{socket: socket} do
     {:ok, payload, _socket} = subscribe_and_join(socket, "assistant:issue:macro-markets:MAC-1", %{})
 
-    assert %{messages: [], thread_id: thread_id} = payload
+    assert %{thread_id: thread_id} = payload
+    refute Map.has_key?(payload, :messages)
+    assert_push("history_loaded", %{messages: []})
     assert {:ok, thread} = History.get_thread(thread_id)
     assert thread.scope == "issue"
     assert thread.project_slug == "macro-markets"
@@ -2040,7 +2089,10 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
       socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
       |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, "assistant:thread:#{thread.id}")
 
-    [joined_call] = List.last(join_payload.messages).tool_calls
+    refute Map.has_key?(join_payload, :messages)
+
+    assert_push("history_loaded", %{messages: history_messages})
+    [joined_call] = List.last(history_messages).tool_calls
     assert joined_call["output_truncated"] == true
     assert joined_call["output_byte_size"] == 20_000
     assert byte_size(joined_call["output"]) < 20_000
@@ -2066,8 +2118,9 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
       socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
       |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, "assistant:thread:#{thread.id}")
 
-    assert join_payload.has_more_before == false
-    assert join_payload.oldest_sequence == 1
+    refute Map.has_key?(join_payload, :has_more_before)
+
+    assert_push("history_loaded", %{has_more_before: false, oldest_sequence: 1})
 
     ref = push(socket, "load_older_messages", %{"before_sequence" => 2})
     assert_reply(ref, :ok, %{messages: older, has_more_before: false, oldest_sequence: 1})

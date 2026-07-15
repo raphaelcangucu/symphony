@@ -7,7 +7,7 @@ import {
   SlidersHorizontal,
   X,
 } from "lucide-react";
-import { type RefObject, useEffect, useState } from "react";
+import { type KeyboardEvent, type RefObject, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { PreviewPanel } from "@/components/issues/issue-detail/PreviewTab";
@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { useHorizontalPanelResize } from "@/hooks/useHorizontalPanelResize";
 import { useIssueDevServers } from "@/hooks/useIssueDevServers";
 import { openablePreviewUrl, selectPrimaryServer } from "@/lib/devServerUrls";
+import { resolvePreviewNavigationUrl } from "@/lib/previewNavigationUrl";
 import { cn } from "@/lib/utils";
 import type { WorkspaceView } from "@/lib/workspaceRoutes";
 import type { AgentExecution } from "@/types/agent-execution";
@@ -58,6 +59,8 @@ export function IssuePreviewDock({
   const [detailsOpen, setDetailsOpen] = useState(false);
   // Bumping the key forces the iframe to reload with the same URL.
   const [reloadKey, setReloadKey] = useState(0);
+  const [committedUrl, setCommittedUrl] = useState<string | null>(null);
+  const [draftUrl, setDraftUrl] = useState("");
   const { width, isResizing, onResizePointerDown, onResizePointerUp } = useHorizontalPanelResize({
     containerRef: splitContainerRef,
     storageKey: PREVIEW_DOCK_WIDTH_STORAGE_KEY,
@@ -67,7 +70,7 @@ export function IssuePreviewDock({
   useEffect(() => {
     if (!fullscreen) return;
 
-    function handleKeyDown(event: KeyboardEvent) {
+    function handleKeyDown(event: globalThis.KeyboardEvent) {
       if (event.key !== "Escape") return;
       event.preventDefault();
       onToggleFullscreen();
@@ -80,10 +83,39 @@ export function IssuePreviewDock({
   const servers = devServers.data?.servers ?? [];
   const selectedServer = servers.find((server) => server.id === selectedServerId) ?? selectPrimaryServer(servers);
   const tunnelRunning = devServers.data?.tunnel?.running ?? false;
-  const previewUrl = openablePreviewUrl(selectedServer, tunnelRunning);
+  const serverPreviewUrl = openablePreviewUrl(selectedServer, tunnelRunning);
   // Without a ready URL the iframe has nothing to show, so the management panel
   // (with start/restart, logs and assistant handoff) takes over automatically.
-  const showDetails = detailsOpen || !previewUrl;
+  const showDetails = detailsOpen || !serverPreviewUrl;
+  const previewUrl = committedUrl ?? serverPreviewUrl;
+
+  useEffect(() => {
+    if (!serverPreviewUrl) {
+      setCommittedUrl(null);
+      setDraftUrl("");
+      return;
+    }
+
+    setCommittedUrl(serverPreviewUrl);
+    setDraftUrl(serverPreviewUrl);
+  }, [serverPreviewUrl]);
+
+  function commitDraftUrl() {
+    if (!previewUrl) return;
+
+    const resolved = resolvePreviewNavigationUrl(draftUrl, previewUrl);
+    if (!resolved) return;
+
+    setCommittedUrl(resolved);
+    setDraftUrl(resolved);
+  }
+
+  function handleUrlKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    commitDraftUrl();
+  }
+
   const fullscreenLabel = fullscreen
     ? t("workspace.preview.exitFullscreen")
     : t("workspace.preview.expandFullscreen");
@@ -244,9 +276,17 @@ export function IssuePreviewDock({
         )}
         {!showDetails && previewUrl ? (
           <footer className="flex shrink-0 items-center border-t border-border/50 px-3 py-1">
-            <span className="truncate font-mono text-[10px] text-muted-foreground" title={previewUrl}>
-              {previewUrl}
-            </span>
+            <input
+              type="text"
+              value={draftUrl}
+              onChange={(event) => setDraftUrl(event.target.value)}
+              onKeyDown={handleUrlKeyDown}
+              spellCheck={false}
+              autoComplete="off"
+              aria-label={t("workspace.preview.urlInputAria")}
+              title={draftUrl}
+              className="w-full min-w-0 truncate border-0 bg-transparent font-mono text-[10px] text-muted-foreground outline-none focus:text-foreground"
+            />
           </footer>
         ) : null}
       </div>

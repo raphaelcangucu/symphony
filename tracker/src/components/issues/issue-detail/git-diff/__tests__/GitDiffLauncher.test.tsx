@@ -43,4 +43,19 @@ describe("GitDiffLauncher", () => {
     await user.keyboard("{Control>}g{/Control}");
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
   });
+
+  it("opens from openRequestId without a visible trigger", async () => {
+    const { rerender } = render(
+      <GitDiffLauncher projectSlug="advising" identifier="CDE-1" showTrigger={false} openRequestId={0} />,
+    );
+
+    expect(screen.queryByRole("button", { name: /diff/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+    rerender(
+      <GitDiffLauncher projectSlug="advising" identifier="CDE-1" showTrigger={false} openRequestId={1} />,
+    );
+
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+  });
 });

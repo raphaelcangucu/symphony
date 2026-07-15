@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { memo, useState } from "react";
 
 import { assistantToolCallToView } from "@/components/assistant/assistantToolCall";
 import { fileActivityFromToolCall } from "@/components/assistant/fileActivity";
@@ -26,7 +26,7 @@ interface TimelineGroup {
   callKeys: string[];
 }
 
-export function ToolActivityTimeline({
+function ToolActivityTimelineComponent({
   toolCalls,
   taskSnapshot = null,
   onKillTool,
@@ -52,6 +52,9 @@ export function ToolActivityTimeline({
     </div>
   );
 }
+
+// Memoized so a streaming sibling does not rerender settled tool timelines.
+export const ToolActivityTimeline = memo(ToolActivityTimelineComponent);
 
 function ToolActivityEntry({
   group,

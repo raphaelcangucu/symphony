@@ -136,6 +136,49 @@ defmodule SymphonyElixir.Workspace.InventoryTest do
     assert {:totals, %{count: 1}} = List.last(emitted)
   end
 
+  test "scan omits a workspace whose probe exceeds the per-scan deadline", ctx do
+    slow = create_issue!("Slow probe")
+    fast = create_issue!("Fast probe")
+    slow_ws = workspace_dir!(ctx.segment_root, slow.identifier)
+    fast_ws = workspace_dir!(ctx.segment_root, fast.identifier)
+    _slow_repo = GitFixtures.make_repo!(ctx.tmp, slow_ws, "backend")
+    _fast_repo = GitFixtures.make_repo!(ctx.tmp, fast_ws, "backend")
+
+    slow_size_fun = fn path ->
+      if String.starts_with?(path, slow_ws) do
+        Process.sleep(3_000)
+        1_000
+      else
+        1_000
+      end
+    end
+
+    {:ok, scan} =
+      Inventory.scan("invproj", executions: [], size_fun: slow_size_fun, scan_timeout: 500)
+
+    paths = Enum.map(scan.workspaces, & &1.path)
+    refute slow_ws in paths
+    assert fast_ws in paths
+  end
+
+  test "scan returns {:error, :timeout} when the overall gather deadline is exceeded", ctx do
+    issue = create_issue!("Hangs forever")
+    ws = workspace_dir!(ctx.segment_root, issue.identifier)
+    _repo = GitFixtures.make_repo!(ctx.tmp, ws, "backend")
+
+    hanging_size_fun = fn _path ->
+      Process.sleep(3_000)
+      1_000
+    end
+
+    assert {:error, :timeout} =
+             Inventory.scan("invproj",
+               executions: [],
+               size_fun: hanging_size_fun,
+               overall_timeout: 0
+             )
+  end
+
   test "scan lists child worktrees nested under a workspace repo", ctx do
     issue = create_issue!("Bundle parent")
     ws = workspace_dir!(ctx.segment_root, issue.identifier)

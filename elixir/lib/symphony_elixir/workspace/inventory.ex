@@ -21,6 +21,7 @@ defmodule SymphonyElixir.Workspace.Inventory do
   alias SymphonyElixir.AgentExecution
   alias SymphonyElixir.Assistant.History
   alias SymphonyElixir.LocalTracker.Context
+  alias SymphonyElixir.Observability.Metrics
   alias SymphonyElixir.RunContract
   alias SymphonyElixir.Workspace
   alias SymphonyElixir.Workspace.Provision
@@ -30,7 +31,10 @@ defmodule SymphonyElixir.Workspace.Inventory do
   @standalone_prefix "__ws_"
   @worktrees_dir ".worktrees"
   @blocking_execution_statuses [:live, :retrying]
-  @scan_timeout :infinity
+  # Finite per-probe deadline so a stuck `du`/`git`/filesystem call is killed
+  # instead of blocking the caller forever (the previous `:infinity` could hang a
+  # scan indefinitely). Overridable per call via the `:scan_timeout` option.
+  @scan_timeout 30_000
 
   @type repo_entry :: %{
           name: String.t(),
@@ -88,6 +92,12 @@ defmodule SymphonyElixir.Workspace.Inventory do
     * `:size_fun` — replaces the `du`-based directory size probe.
     * `:max_concurrency` — caps parallel workspace/repo probes (default:
       `max(System.schedulers_online(), 4)`).
+    * `:scan_timeout` — per-probe deadline in ms (default: `#{@scan_timeout}`). A
+      probe that exceeds it is killed and its workspace is omitted, so one stuck
+      tree never blocks the whole scan.
+    * `:overall_timeout` — deadline in ms for gathering the concurrent results
+      (default: `scan_timeout * 2`). Exceeding it returns `{:error, :timeout}`
+      instead of blocking indefinitely.
   """
   @spec scan(String.t(), keyword()) :: {:ok, scan_result()} | {:error, term()}
   def scan(project_slug, opts \\ []) when is_binary(project_slug) and is_list(opts) do
@@ -98,6 +108,8 @@ defmodule SymphonyElixir.Workspace.Inventory do
       executions_by_issue = executions_by_issue(opts)
       size_fun = Keyword.get(opts, :size_fun, &directory_size_bytes/1)
       concurrency = scan_concurrency(opts)
+      scan_timeout = scan_timeout(opts)
+      overall = overall_timeout(opts, scan_timeout)
 
       build_entry_fn = fn path ->
         build_entry(path, issues_by_safe_id, executions_by_issue, size_fun, concurrency)
@@ -107,15 +119,38 @@ defmodule SymphonyElixir.Workspace.Inventory do
         Task.async(fn ->
           segment_root
           |> candidate_dirs()
-          |> async_map(build_entry_fn, concurrency)
+          |> async_map(build_entry_fn, concurrency, scan_timeout)
           |> Enum.reject(&is_nil/1)
         end)
 
       project_task = Task.async(fn -> project_workspace_entry(segment_root, size_fun, concurrency) end)
 
-      workspaces = Task.await(candidate_task, @scan_timeout)
-      project_entry = Task.await(project_task, @scan_timeout)
+      start = Metrics.monotonic_start()
+      result = gather_scan_result([candidate_task, project_task], overall)
+      emit_scan_telemetry(project_slug, result, start)
+      result
+    end
+  end
 
+  defp emit_scan_telemetry(project_slug, {:ok, %{workspaces: workspaces}}, start) do
+    Metrics.emit(
+      [:inventory, :scan],
+      %{duration_ms: Metrics.duration_ms(start), workspace_count: length(workspaces)},
+      %{project_slug: project_slug, result: :ok}
+    )
+  end
+
+  defp emit_scan_telemetry(project_slug, {:error, _reason}, start) do
+    Metrics.emit(
+      [:inventory, :scan],
+      %{duration_ms: Metrics.duration_ms(start), workspace_count: 0},
+      %{project_slug: project_slug, result: :timeout}
+    )
+  end
+
+  defp gather_scan_result([candidate_task, project_task] = tasks, overall) do
+    with {:ok, workspaces} <- await_scan_result(candidate_task, overall),
+         {:ok, project_entry} <- await_scan_result(project_task, overall) do
       workspaces =
         case project_entry do
           nil -> workspaces
@@ -123,7 +158,22 @@ defmodule SymphonyElixir.Workspace.Inventory do
         end
 
       {:ok, %{workspaces: workspaces, totals: totals(workspaces)}}
+    else
+      :timeout ->
+        shutdown_scan_tasks(tasks)
+        {:error, :timeout}
     end
+  end
+
+  defp await_scan_result(task, overall) do
+    case Task.yield(task, overall) || Task.shutdown(task, :brutal_kill) do
+      {:ok, value} -> {:ok, value}
+      _ -> :timeout
+    end
+  end
+
+  defp shutdown_scan_tasks(tasks) do
+    Enum.each(tasks, fn task -> Task.shutdown(task, :brutal_kill) end)
   end
 
   @doc """
@@ -143,6 +193,8 @@ defmodule SymphonyElixir.Workspace.Inventory do
       executions_by_issue = executions_by_issue(opts)
       size_fun = Keyword.get(opts, :size_fun, &directory_size_bytes/1)
       concurrency = scan_concurrency(opts)
+      scan_timeout = scan_timeout(opts)
+      overall = overall_timeout(opts, scan_timeout)
 
       build_entry_fn = fn path ->
         build_entry(path, issues_by_safe_id, executions_by_issue, size_fun, concurrency)
@@ -153,18 +205,21 @@ defmodule SymphonyElixir.Workspace.Inventory do
       workspaces =
         segment_root
         |> candidate_dirs()
-        |> stream_map(build_entry_fn, concurrency, emit)
+        |> stream_map(build_entry_fn, concurrency, emit, scan_timeout)
 
       workspaces =
-        case Task.await(project_task, @scan_timeout) do
-          nil ->
+        case await_scan_result(project_task, overall) do
+          {:ok, nil} ->
             workspaces
 
-          entry ->
+          {:ok, entry} ->
             case emit.({:entry, entry}) do
               :halt -> workspaces
               :ok -> [entry | workspaces]
             end
+
+          :timeout ->
+            workspaces
         end
 
       totals = totals(workspaces)
@@ -413,6 +468,7 @@ defmodule SymphonyElixir.Workspace.Inventory do
       end,
       concurrency
     )
+    |> Enum.reject(&is_nil/1)
   end
 
   defp raw_repo_states(workspace) do
@@ -443,6 +499,7 @@ defmodule SymphonyElixir.Workspace.Inventory do
 
     child_targets
     |> async_map(fn {path, repo_name} -> child_worktree_entry(path, repo_name, size_fun) end, concurrency)
+    |> Enum.reject(&is_nil/1)
   end
 
   defp child_worktree_entry(path, repo_name, size_fun) do
@@ -631,22 +688,43 @@ defmodule SymphonyElixir.Workspace.Inventory do
     max(System.schedulers_online(), 4)
   end
 
-  defp async_map(items, fun, concurrency) when is_function(fun, 1) do
+  defp scan_timeout(opts) do
+    Keyword.get(opts, :scan_timeout, @scan_timeout)
+  end
+
+  defp overall_timeout(opts, scan_timeout) do
+    Keyword.get(opts, :overall_timeout, overall_default(scan_timeout))
+  end
+
+  defp overall_default(:infinity), do: :infinity
+  defp overall_default(scan_timeout) when is_integer(scan_timeout), do: scan_timeout * 2
+
+  defp async_map(items, fun, concurrency), do: async_map(items, fun, concurrency, @scan_timeout)
+
+  defp async_map(items, fun, concurrency, timeout) when is_function(fun, 1) do
     items
     |> Task.async_stream(fun,
       max_concurrency: concurrency,
       ordered: true,
-      timeout: @scan_timeout
+      timeout: timeout,
+      on_timeout: :kill_task
     )
-    |> Enum.map(fn {:ok, result} -> result end)
+    |> Enum.map(&async_map_value/1)
   end
 
-  defp stream_map(items, fun, concurrency, emit) when is_function(fun, 1) and is_function(emit, 1) do
+  # A killed/timed-out probe becomes `nil`; callers already reject nils, so a
+  # single stuck tree drops out instead of crashing the whole scan.
+  defp async_map_value({:ok, result}), do: result
+  defp async_map_value({:exit, _reason}), do: nil
+
+  defp stream_map(items, fun, concurrency, emit, timeout)
+       when is_function(fun, 1) and is_function(emit, 1) do
     items
     |> Task.async_stream(fun,
       max_concurrency: concurrency,
       ordered: false,
-      timeout: @scan_timeout
+      timeout: timeout,
+      on_timeout: :kill_task
     )
     |> Enum.reduce_while([], fn
       {:ok, nil}, acc ->

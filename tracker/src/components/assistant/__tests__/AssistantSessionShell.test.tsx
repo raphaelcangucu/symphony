@@ -19,6 +19,7 @@ describe("AssistantSessionShell", () => {
 
     const feed = screen.getByTestId("assistant-session-feed");
     expect(feed.className).toMatch(/overflow-y-auto/);
+    expect(feed.className).toMatch(/overflow-x-hidden/);
     expect(feed).toHaveTextContent("feed-body");
     expect(feed).not.toHaveTextContent("composer-body");
 

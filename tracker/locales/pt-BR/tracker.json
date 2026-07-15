@@ -2169,6 +2169,9 @@
       "addToContext": "Adicionar ao contexto",
       "loadingModels": "Carregando modelos do assistente...",
       "catalogLoadFailed": "Falha ao carregar modelos do assistente.",
+      "renderErrorTitle": "Esta conversa encontrou um erro de renderização.",
+      "renderErrorDescription": "A navegação e o compositor continuam funcionando. Tente novamente para redesenhar o histórico.",
+      "renderErrorRetry": "Recarregar conversa",
       "noConnectionTarget": "Assistente não tem thread ou projeto para conectar.",
       "channelNotConnected": "Canal do assistente ainda não está conectado.",
       "requestFailed": "Falha na requisição do assistente",
@@ -2681,8 +2684,10 @@
       "showDetails": "Mostrar detalhes dos dev servers",
       "hideDetails": "Ocultar detalhes dos dev servers",
       "serverTabsAria": "Dev servers",
-      "serverTabAria": "Preview de {{slug}} ({{status}})"
+      "serverTabAria": "Preview de {{slug}} ({{status}})",
+      "urlInputAria": "URL do preview"
     },
+
     "environment": {
       "ariaLabel": "Ambiente de {{identifier}}",
       "resizeHandleAria": "Redimensionar painel de ambiente",

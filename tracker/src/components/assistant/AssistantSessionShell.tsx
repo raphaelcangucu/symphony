@@ -40,11 +40,11 @@ export function AssistantSessionShell({
       style={chatTypographyStyle()}
     >
       {toolbar ? <div className="shrink-0">{toolbar}</div> : null}
-      <div className="relative min-h-0 flex-1">
+      <div className="relative min-h-0 min-w-0 flex-1">
         <div
           ref={feedRef}
           data-testid="assistant-session-feed"
-          className={cn("h-full overflow-y-auto", SCROLLBAR_THIN)}
+          className={cn("h-full min-w-0 overflow-y-auto overflow-x-hidden", SCROLLBAR_THIN)}
         >
           {feed}
         </div>

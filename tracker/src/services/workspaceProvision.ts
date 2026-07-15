@@ -3,7 +3,7 @@ import axios from "axios";
 import { i18n } from "@/i18n";
 import { requireNonBlank, requireProjectSlug } from "@/lib/serviceValidation";
 
-import { http, trackerPath, unwrapData } from "./http";
+import { LONG_RUNNING_HTTP_TIMEOUT_MS, http, trackerPath, unwrapData } from "./http";
 
 export interface WorkspaceProvisionResult {
   workspacePath: string;
@@ -23,6 +23,8 @@ export async function provisionThreadWorkspace(threadId: number): Promise<Worksp
   try {
     const response = await http.post(
       trackerPath(`/assistant/threads/${encodeURIComponent(String(threadId))}/workspace/provision`),
+      undefined,
+      { timeout: LONG_RUNNING_HTTP_TIMEOUT_MS },
     );
 
     const dto = unwrapData<BackendWorkspaceProvisionDto>(response);
@@ -47,6 +49,8 @@ export async function provisionWorkspace(
   try {
     const response = await http.post(
       trackerPath(`/projects/${encodeURIComponent(slug)}/issues/${encodeURIComponent(identifier)}/workspace/provision`),
+      undefined,
+      { timeout: LONG_RUNNING_HTTP_TIMEOUT_MS },
     );
 
     const dto = unwrapData<BackendWorkspaceProvisionDto>(response);

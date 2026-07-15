@@ -102,6 +102,26 @@ describe("AssistantChatMessageBubble", () => {
     expect(screen.getByText("User note")).toBeInTheDocument();
   });
 
+  it("linkifies bare http(s) URLs in user messages and opens them in a new tab", () => {
+    const url =
+      "http://mtu.localhost:4301/advisor/33555202/go/student_profile/33555204#/overview";
+
+    render(
+      <AssistantChatMessageBubble
+        message={message({
+          role: "user",
+          content: `me passe a tela em go: ${url}.`,
+        })}
+      />,
+    );
+
+    const link = screen.getByRole("link", { name: url });
+    expect(link).toHaveAttribute("href", url);
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link).toHaveAttribute("rel", "noreferrer noopener");
+    expect(screen.getByText(/me passe a tela em go:/)).toBeInTheDocument();
+  });
+
   it("renders assistant content blocks as one interleaved timeline", () => {
     const readCall = toolCall({
       id: "read-1",

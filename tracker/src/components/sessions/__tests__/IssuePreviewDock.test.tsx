@@ -190,4 +190,71 @@ describe("IssuePreviewDock", () => {
 
     expect(onToggleFullscreen).toHaveBeenCalledTimes(1);
   });
+
+  it("lets the user navigate the iframe by editing the URL and pressing Enter", async () => {
+    const user = userEvent.setup();
+    useIssueDevServersMock.mockReturnValue(devServersResult({ data: response([server({ port: 4300 })]) }));
+
+    renderDock();
+
+    const urlInput = screen.getByRole("textbox", { name: "Preview URL" });
+    expect(urlInput).toHaveValue("http://localhost:4300/");
+    expect(screen.getByTitle("Dev server preview for 510")).toHaveAttribute("src", "http://localhost:4300/");
+
+    await user.clear(urlInput);
+    await user.type(
+      urlInput,
+      "http://mtu.localhost:4301/advisor/32555201/student-advising-note#/Advising%20Notes{Enter}",
+    );
+
+    expect(urlInput).toHaveValue(
+      "http://mtu.localhost:4301/advisor/32555201/student-advising-note#/Advising%20Notes",
+    );
+    expect(screen.getByTitle("Dev server preview for 510")).toHaveAttribute(
+      "src",
+      "http://mtu.localhost:4301/advisor/32555201/student-advising-note#/Advising%20Notes",
+    );
+    expect(screen.getByRole("link", { name: "Open preview in new tab" })).toHaveAttribute(
+      "href",
+      "http://mtu.localhost:4301/advisor/32555201/student-advising-note#/Advising%20Notes",
+    );
+  });
+
+  it("resolves relative paths against the current preview URL on Enter", async () => {
+    const user = userEvent.setup();
+    useIssueDevServersMock.mockReturnValue(devServersResult({ data: response([server({ port: 4300 })]) }));
+
+    renderDock();
+
+    const urlInput = screen.getByRole("textbox", { name: "Preview URL" });
+    await user.clear(urlInput);
+    await user.type(urlInput, "/dashboard{Enter}");
+
+    expect(urlInput).toHaveValue("http://localhost:4300/dashboard");
+    expect(screen.getByTitle("Dev server preview for 510")).toHaveAttribute("src", "http://localhost:4300/dashboard");
+  });
+
+  it("resets the URL bar when switching server tabs", async () => {
+    const user = userEvent.setup();
+    useIssueDevServersMock.mockReturnValue(
+      devServersResult({
+        data: response([
+          server({ port: 4300 }),
+          server({ id: 2, slug: "api", working_dir: "api", port: 8080, url: "http://myhost:8080/", primary: false }),
+        ]),
+      }),
+    );
+
+    renderDock();
+
+    const urlInput = screen.getByRole("textbox", { name: "Preview URL" });
+    await user.clear(urlInput);
+    await user.type(urlInput, "http://mtu.localhost:4301/advisor{Enter}");
+    expect(screen.getByTitle("Dev server preview for 510")).toHaveAttribute("src", "http://mtu.localhost:4301/advisor");
+
+    await user.click(screen.getByRole("tab", { name: "Preview api (ready)" }));
+
+    expect(urlInput).toHaveValue("http://localhost:8080/");
+    expect(screen.getByTitle("Dev server preview for 510")).toHaveAttribute("src", "http://localhost:8080/");
+  });
 });

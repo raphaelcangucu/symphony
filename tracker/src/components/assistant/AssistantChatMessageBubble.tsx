@@ -1,10 +1,12 @@
 import { AudioLines, Check, FileText, ImageIcon, Zap } from "lucide-react";
+import { memo } from "react";
 import { useTranslation } from "react-i18next";
 
 import { AssistantMarkdown } from "@/components/assistant/AssistantMarkdown";
 import { AssistantTurnTimeline } from "@/components/assistant/AssistantTurnTimeline";
 import { ASSISTANT_CHAT_MESSAGE_TEXT_CLASS, CHAT_USER_BUBBLE_MAX_WIDTH_CLASS } from "@/components/assistant/chatTypography";
 import { EditedFilesSummary } from "@/components/assistant/EditedFilesSummary";
+import { LinkifiedText } from "@/components/assistant/LinkifiedText";
 import { ToolActivityTimeline } from "@/components/assistant/ToolActivityTimeline";
 import type { ComposerContextChipRef } from "@/components/assistant/contextMentions";
 import { AttachmentFileChip } from "@/components/shared/AttachmentFileChip";
@@ -37,7 +39,7 @@ interface AssistantChatMessageBubbleProps {
   onFetchToolOutput?: (messageId: string, toolCallId: string) => Promise<string>;
 }
 
-export function AssistantChatMessageBubble({
+function AssistantChatMessageBubbleComponent({
   message,
   projectSlug,
   issueIdentifier,
@@ -109,7 +111,7 @@ export function AssistantChatMessageBubble({
           </div>
         ) : null}
         {isUser ? (
-          <p className="whitespace-pre-wrap">{message.content}</p>
+          <LinkifiedText text={message.content} />
         ) : assistantContentBlocks ? (
           <AssistantTurnTimeline
             contentBlocks={assistantContentBlocks}
@@ -141,6 +143,13 @@ export function AssistantChatMessageBubble({
     </div>
   );
 }
+
+/**
+ * Memoized so one streaming message's re-render does not rerender unchanged
+ * history bubbles. Effective only while the panel keeps message objects and
+ * callbacks referentially stable (and stabilizes the task snapshot).
+ */
+export const AssistantChatMessageBubble = memo(AssistantChatMessageBubbleComponent);
 
 function PlanApprovalButtons({ action }: { action: AssistantChatPlanApprovalAction }) {
   const { t } = useTranslation();

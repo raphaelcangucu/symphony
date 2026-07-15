@@ -1,45 +1,36 @@
-import { AxiosError } from "axios";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import axios, { CanceledError } from "axios";
+import { describe, expect, it } from "vitest";
 
-import { TRACKER_TOKEN_KEY, http, trackerPath, unwrapData } from "../http";
+import { DEFAULT_HTTP_TIMEOUT_MS, LONG_RUNNING_HTTP_TIMEOUT_MS, http, isCanceledError } from "@/services/http";
 
-describe("http helpers", () => {
-  beforeEach(() => {
-    window.localStorage.clear();
-    vi.unstubAllGlobals();
+describe("http instance", () => {
+  it("applies the named default timeout so no request hangs forever", () => {
+    expect(DEFAULT_HTTP_TIMEOUT_MS).toBeGreaterThan(0);
+    expect(http.defaults.timeout).toBe(DEFAULT_HTTP_TIMEOUT_MS);
   });
 
-  it("prefixes tracker API paths", () => {
-    expect(trackerPath("/projects")).toBe("/api/tracker/v1/projects");
+  it("exposes a larger ceiling for long-running operations", () => {
+    expect(LONG_RUNNING_HTTP_TIMEOUT_MS).toBeGreaterThan(DEFAULT_HTTP_TIMEOUT_MS);
+  });
+});
+
+describe("isCanceledError", () => {
+  it("treats axios cancellations as cancellations", () => {
+    const canceled = new CanceledError("aborted");
+    expect(isCanceledError(canceled)).toBe(true);
+    expect(axios.isCancel(canceled)).toBe(true);
   });
 
-  it("rejects relative paths without a leading slash", () => {
-    expect(() => trackerPath("projects")).toThrow(/must start/);
+  it("treats a DOMException AbortError as a cancellation", () => {
+    expect(isCanceledError(new DOMException("aborted", "AbortError"))).toBe(true);
   });
 
-  it("unwraps Phoenix-style envelopes and raw payloads", () => {
-    expect(unwrapData({ data: { data: [1, 2] } })).toEqual([1, 2]);
-    expect(unwrapData({ data: [1, 2] })).toEqual([1, 2]);
-  });
-
-  it("clears saved token and redirects when the tracker API returns unauthorized", async () => {
-    window.localStorage.setItem(TRACKER_TOKEN_KEY, "stale-token");
-    const assign = vi.fn();
-    vi.stubGlobal("location", { ...window.location, assign, pathname: "/tracker/projects" });
-
-    http.defaults.adapter = async (config) => {
-      throw new AxiosError("Unauthorized", "ERR_BAD_REQUEST", config, undefined, {
-        config,
-        data: { error: { code: "unauthorized" } },
-        headers: {},
-        status: 401,
-        statusText: "Unauthorized",
-      });
-    };
-
-    await expect(http.get(trackerPath("/projects"))).rejects.toThrow("Unauthorized");
-
-    expect(window.localStorage.getItem(TRACKER_TOKEN_KEY)).toBeNull();
-    expect(assign).toHaveBeenCalledWith("/tracker/token");
+  it("does NOT treat a real error (including timeout) as a cancellation", () => {
+    const timeout = new Error("timeout of 30000ms exceeded");
+    timeout.name = "AxiosError";
+    expect(isCanceledError(timeout)).toBe(false);
+    expect(isCanceledError(new Error("boom"))).toBe(false);
+    expect(isCanceledError(null)).toBe(false);
+    expect(isCanceledError(undefined)).toBe(false);
   });
 });

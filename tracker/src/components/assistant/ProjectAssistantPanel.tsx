@@ -5,7 +5,7 @@ import {
   type ThreadMessageLike,
 } from "@assistant-ui/react";
 import type { Channel } from "phoenix";
-import { Bot, BookOpen, ChevronDown, ListChecks, Loader2, Sparkles } from "lucide-react";
+import { Bot, BookOpen, ChevronDown, GitCompare, ListChecks, Loader2, Sparkles } from "lucide-react";
 import { i18n } from "@/i18n";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -18,6 +18,7 @@ import {
 } from "@/components/assistant/AssistantComposer";
 import type { AssistantChatPlanApprovalAction } from "@/components/assistant/AssistantChatMessageBubble";
 import { AssistantMessageList, type LoadOlderControl } from "@/components/assistant/AssistantMessageList";
+import { AssistantSessionErrorBoundary } from "@/components/assistant/AssistantSessionErrorBoundary";
 import { getCurrentPromptWindow, mergeOlderMessages } from "@/components/assistant/compactHistoryWindow";
 import { AssistantPanelHeader } from "@/components/assistant/AssistantPanelHeader";
 import { AssistantSessionShell } from "@/components/assistant/AssistantSessionShell";
@@ -40,8 +41,10 @@ import {
   replaceStreamingMessage,
   updateStreamingToolCall,
 } from "@/components/assistant/assistantStream";
+import { createAssistantDeltaBuffer, type AssistantDeltaBuffer } from "@/components/assistant/assistantDeltaBuffer";
 import type { WorkingActiveToolDetail } from "@/components/assistant/WorkingIndicator";
 import { useNowTick } from "@/hooks/useNowTick";
+import { useStableValue } from "@/hooks/useStableValue";
 import { toast } from "sonner";
 import { BtwOverlay, type BtwStatus } from "@/components/assistant/BtwOverlay";
 import {
@@ -99,6 +102,7 @@ import {
   type AssistantChatMessage,
   type UserQuestionsRequest,
 } from "@/services/assistant";
+import { isCanceledError } from "@/services/http";
 import { WorkspaceDiffStatsChip } from "@/components/sessions/WorkspaceDiffStatsChip";
 import { provisionThreadWorkspace, provisionWorkspace } from "@/services/workspaceProvision";
 import { useIssueChangedDocPaths } from "@/hooks/useIssueChangedDocPaths";
@@ -323,6 +327,10 @@ export function ProjectAssistantPanel({
   const { t } = useTranslation();
   const location = useLocation();
   const [open, setOpen] = useState(false);
+  // Composer More-menu Diff bumps this; session toolbar bumps `diffRequestId`.
+  // Both feed the always-mounted GitDiffLauncher so the modal survives menu close.
+  const [composerDiffRequestId, setComposerDiffRequestId] = useState(0);
+  const gitDiffOpenRequestId = diffRequestId + composerDiffRequestId;
   const [turnRunning, setTurnRunning] = useState(false);
   const [runningStartedAt, setRunningStartedAt] = useState<number | null>(null);
   const [queued, setQueued] = useState<QueuedMessage[]>([]);
@@ -331,6 +339,16 @@ export function ProjectAssistantPanel({
   );
   const [messages, setMessages] = useState<AssistantChatMessage[]>([]);
   const messagesRef = useRef<AssistantChatMessage[]>([]);
+  // Coalesces streaming deltas to one render per frame so a fast turn cannot
+  // flood the main thread and freeze navigation/composer. Any non-delta event
+  // (tool call, completion, error) flushes it first to keep block order intact.
+  const deltaBufferRef = useRef<AssistantDeltaBuffer | null>(null);
+  if (deltaBufferRef.current === null) {
+    deltaBufferRef.current = createAssistantDeltaBuffer({
+      onFlush: (coalesced) => setMessages((current) => appendAssistantDelta(current, coalesced)),
+    });
+  }
+  useEffect(() => () => deltaBufferRef.current?.dispose(), []);
   // Compact-history window: by default only the current run is rendered; the
   // user expands in-memory prompts first, then fetches older server pages.
   const [expandedHistory, setExpandedHistory] = useState(false);
@@ -568,25 +586,24 @@ export function ProjectAssistantPanel({
       return;
     }
 
-    let cancelled = false;
+    const controller = new AbortController();
     setBundle(null);
     setCatalogError(null);
 
-    void fetchAssistantCatalogBundle(projectSlug)
+    void fetchAssistantCatalogBundle(projectSlug, controller.signal)
       .then((nextBundle) => {
-        if (!cancelled) {
-          setBundle(nextBundle);
-          setCatalogError(null);
-        }
+        if (controller.signal.aborted) return;
+        setBundle(nextBundle);
+        setCatalogError(null);
       })
       .catch((cause) => {
-        if (!cancelled) {
-          setCatalogError(cause instanceof Error ? cause.message : t("assistant.panel.catalogLoadFailed"));
-        }
+        // A cancellation from unmount/route change is expected, not an error.
+        if (controller.signal.aborted || isCanceledError(cause)) return;
+        setCatalogError(cause instanceof Error ? cause.message : t("assistant.panel.catalogLoadFailed"));
       });
 
     return () => {
-      cancelled = true;
+      controller.abort();
     };
   }, [active, projectSlug, t]);
 
@@ -627,6 +644,9 @@ export function ProjectAssistantPanel({
 
     goalStatusAcceptorRef.current = bindAssistantEvents(channel, {
       onHistoryLoaded: (history, meta) => {
+        // A full transcript replacement supersedes any half-buffered delta from a
+        // previous thread/turn; drop it so stale tokens never leak into the join.
+        deltaBufferRef.current?.dispose();
         if (meta?.scope) setThreadScope(meta.scope);
         if (meta?.executionMode) {
           const mode = normalizeAgentMode(meta.executionMode, executionModeRef.current);
@@ -649,14 +669,24 @@ export function ProjectAssistantPanel({
         setHistoryHasMoreBefore(meta?.hasMoreBefore ?? false);
         setHistoryOldestSequence(meta?.oldestSequence ?? null);
       },
-      onMessageCreated: (message) => setMessages((current) => appendMessage(current, message)),
+      onMessageCreated: (message) => {
+        deltaBufferRef.current?.flush();
+        setMessages((current) => appendMessage(current, message));
+      },
       onAssistantDelta: (delta) => {
         setTurnRunning(true);
-        setMessages((current) => appendAssistantDelta(current, delta));
+        deltaBufferRef.current?.push(delta);
       },
-      onToolCallStarted: (toolCall) => setMessages((current) => updateStreamingToolCall(current, toolCall)),
-      onToolCallCompleted: (toolCall) => setMessages((current) => updateStreamingToolCall(current, toolCall)),
+      onToolCallStarted: (toolCall) => {
+        deltaBufferRef.current?.flush();
+        setMessages((current) => updateStreamingToolCall(current, toolCall));
+      },
+      onToolCallCompleted: (toolCall) => {
+        deltaBufferRef.current?.flush();
+        setMessages((current) => updateStreamingToolCall(current, toolCall));
+      },
       onAssistantCompleted: (message) => {
+        deltaBufferRef.current?.flush();
         setMessages((current) => replaceStreamingMessage(current, message));
         setTurnRunning(false);
         setPendingQuestions(null);
@@ -665,6 +695,7 @@ export function ProjectAssistantPanel({
         if (createdIssue) onDraftIssueCreatedRef.current?.(createdIssue);
       },
       onAssistantError: (message) => {
+        deltaBufferRef.current?.flush();
         setMessages((current) => appendMessage(current, assistantMessage("assistant-error", message)));
         setConnectionError(message);
         setTurnRunning(false);
@@ -805,6 +836,9 @@ export function ProjectAssistantPanel({
       setChannelReady(false);
       channelRef.current = null;
       goalStatusAcceptorRef.current = () => false;
+      // Drop any buffered streaming delta so it cannot flush against the next
+      // thread's transcript after this channel goes away.
+      deltaBufferRef.current?.dispose();
       channel.leave();
       socket.disconnect();
     };
@@ -1332,9 +1366,11 @@ export function ProjectAssistantPanel({
     () => latestPendingPlanMessageId(visibleMessages, approvedPlanMessageIds),
     [visibleMessages, approvedPlanMessageIds],
   );
-  const taskSnapshot = useMemo(
-    () => deriveAgentTasksFromAssistantMessages(visibleMessages),
-    [visibleMessages],
+  // Derived every render from the (changing) message list; stabilize its
+  // reference so it does not defeat React.memo on every message bubble during
+  // streaming, since it is passed down to all of them.
+  const taskSnapshot = useStableValue(
+    useMemo(() => deriveAgentTasksFromAssistantMessages(visibleMessages), [visibleMessages]),
   );
   const hasTasks = (taskSnapshot?.tasks.length ?? 0) > 0;
   const tasksDone = taskSnapshot ? completedTaskCount(taskSnapshot) : 0;
@@ -1534,28 +1570,38 @@ export function ProjectAssistantPanel({
   }, []);
 
   const messageItems = (
-    <AssistantMessageList
-      messages={renderedMessages}
-      loadOlder={loadOlderControl}
-      taskSnapshot={taskSnapshot}
-      hidePinnedPanel={showTasksDock}
-      projectSlug={projectSlug}
-      issueIdentifier={issueIdentifier}
-      threadId={threadId}
-      isRunning={turnRunning}
-      runningStartedAt={runningStartedAt}
-      activeToolDetail={activeToolDetail}
-      stale={stale}
-      connectionError={workspaceProvisioningError ? null : connectionError}
-      channelReady={channelReady}
-      planApprovalMessageId={planApprovalMessageId}
-      onOpenDocumentPath={onOpenDocumentPath}
-      onInsertContext={insertContextRef}
-      onApprovePlan={dispatchApprovedPlan}
-      onStop={handleStopTurn}
-      onKillTool={handleKillTool}
-      onFetchToolOutput={handleFetchToolOutput}
-    />
+    <AssistantSessionErrorBoundary
+      title={t("assistant.panel.renderErrorTitle")}
+      description={t("assistant.panel.renderErrorDescription")}
+      retryLabel={t("assistant.panel.renderErrorRetry")}
+      onReset={() => {
+        const channel = channelRef.current;
+        if (channel) requestHistorySync(channel);
+      }}
+    >
+      <AssistantMessageList
+        messages={renderedMessages}
+        loadOlder={loadOlderControl}
+        taskSnapshot={taskSnapshot}
+        hidePinnedPanel={showTasksDock}
+        projectSlug={projectSlug}
+        issueIdentifier={issueIdentifier}
+        threadId={threadId}
+        isRunning={turnRunning}
+        runningStartedAt={runningStartedAt}
+        activeToolDetail={activeToolDetail}
+        stale={stale}
+        connectionError={workspaceProvisioningError ? null : connectionError}
+        channelReady={channelReady}
+        planApprovalMessageId={planApprovalMessageId}
+        onOpenDocumentPath={onOpenDocumentPath}
+        onInsertContext={insertContextRef}
+        onApprovePlan={dispatchApprovedPlan}
+        onStop={handleStopTurn}
+        onKillTool={handleKillTool}
+        onFetchToolOutput={handleFetchToolOutput}
+      />
+    </AssistantSessionErrorBoundary>
   );
 
   const removeQueued = useCallback(
@@ -1805,14 +1851,18 @@ export function ProjectAssistantPanel({
         projectSlug || issueIdentifier || threadId ? (
           <>
             {issueIdentifier || threadId ? (
-              <GitDiffLauncher
-                projectSlug={projectSlug ?? undefined}
-                identifier={issueIdentifier ?? null}
-                threadId={threadId ?? null}
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 gap-1 px-2 text-xs"
                 disabled={catalogLoading}
-                onSendReview={sendDiffReview}
-                openRequestId={diffRequestId}
-              />
+                title={t("issue.diff.shortcutHint")}
+                onClick={() => setComposerDiffRequestId((current) => current + 1)}
+              >
+                <GitCompare className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">{t("issue.diff.button")}</span>
+              </Button>
             ) : null}
             {hideHeader ? <WorkspaceDiffStatsChip stats={workspaceDiffStats} /> : null}
             {projectSlug ? (
@@ -2005,6 +2055,17 @@ export function ProjectAssistantPanel({
           <BtwOverlay question={btw.question} answer={btw.answer} status={btw.status} onClose={() => setBtw(null)} />
         ) : null}
         {knowledgeBaseDialog}
+        {issueIdentifier || threadId ? (
+          <GitDiffLauncher
+            projectSlug={projectSlug ?? undefined}
+            identifier={issueIdentifier ?? null}
+            threadId={threadId ?? null}
+            disabled={catalogLoading}
+            onSendReview={sendDiffReview}
+            openRequestId={gitDiffOpenRequestId}
+            showTrigger={false}
+          />
+        ) : null}
       </AssistantRuntimeProvider>
     );
   }
@@ -2048,6 +2109,17 @@ export function ProjectAssistantPanel({
         <BtwOverlay question={btw.question} answer={btw.answer} status={btw.status} onClose={() => setBtw(null)} />
       ) : null}
       {knowledgeBaseDialog}
+      {issueIdentifier || threadId ? (
+        <GitDiffLauncher
+          projectSlug={projectSlug ?? undefined}
+          identifier={issueIdentifier ?? null}
+          threadId={threadId ?? null}
+          disabled={catalogLoading}
+          onSendReview={sendDiffReview}
+          openRequestId={gitDiffOpenRequestId}
+          showTrigger={false}
+        />
+      ) : null}
     </AssistantRuntimeProvider>
   );
 }

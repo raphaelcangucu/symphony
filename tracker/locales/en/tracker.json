@@ -2169,6 +2169,9 @@
       "addToContext": "Add to context",
       "loadingModels": "Loading assistant models...",
       "catalogLoadFailed": "Failed to load assistant models.",
+      "renderErrorTitle": "This conversation hit a rendering error.",
+      "renderErrorDescription": "Navigation and the composer still work. Retry to redraw the transcript.",
+      "renderErrorRetry": "Reload conversation",
       "noConnectionTarget": "Assistant has no thread or project to connect to.",
       "channelNotConnected": "Assistant channel is not connected yet.",
       "requestFailed": "Assistant request failed",
@@ -2681,8 +2684,10 @@
       "showDetails": "Show dev server details",
       "hideDetails": "Hide dev server details",
       "serverTabsAria": "Dev servers",
-      "serverTabAria": "Preview {{slug}} ({{status}})"
+      "serverTabAria": "Preview {{slug}} ({{status}})",
+      "urlInputAria": "Preview URL"
     },
+
     "environment": {
       "ariaLabel": "Environment for {{identifier}}",
       "resizeHandleAria": "Resize environment panel",

@@ -1,3 +1,5 @@
+import { memo } from "react";
+
 import { AssistantMarkdown } from "@/components/assistant/AssistantMarkdown";
 import { ToolActivityTimeline } from "@/components/assistant/ToolActivityTimeline";
 import { buildAssistantTimelineItems } from "@/components/assistant/assistantTimelineItems";
@@ -14,7 +16,7 @@ interface AssistantTurnTimelineProps {
   onLoadFullOutput?: (toolCallId: string) => Promise<string>;
 }
 
-export function AssistantTurnTimeline({
+function AssistantTurnTimelineComponent({
   contentBlocks,
   toolCalls,
   fallbackContent = "",
@@ -66,3 +68,6 @@ export function AssistantTurnTimeline({
     </>
   );
 }
+
+// Memoized so a streaming sibling message does not rerender settled turn timelines.
+export const AssistantTurnTimeline = memo(AssistantTurnTimelineComponent);

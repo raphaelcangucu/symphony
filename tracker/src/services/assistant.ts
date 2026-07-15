@@ -254,21 +254,24 @@ export async function uploadAssistantAttachment(
   };
 }
 
-export async function fetchAssistantCatalogBundle(projectSlug: string): Promise<AssistantCatalogBundle> {
+export async function fetchAssistantCatalogBundle(
+  projectSlug: string,
+  signal?: AbortSignal,
+): Promise<AssistantCatalogBundle> {
   const slug = requireProjectSlug(projectSlug);
   const cached = loadCachedCatalogBundle();
 
   if (cached) {
-    void refreshAssistantCatalogBundle(slug).catch(() => undefined);
+    void refreshAssistantCatalogBundle(slug, signal).catch(() => undefined);
     return cached;
   }
 
-  return refreshAssistantCatalogBundle(slug);
+  return refreshAssistantCatalogBundle(slug, signal);
 }
 
-async function refreshAssistantCatalogBundle(slug: string): Promise<AssistantCatalogBundle> {
+async function refreshAssistantCatalogBundle(slug: string, signal?: AbortSignal): Promise<AssistantCatalogBundle> {
   try {
-    const response = await http.get(trackerPath(`/projects/${encodeURIComponent(slug)}/assistant/config`));
+    const response = await http.get(trackerPath(`/projects/${encodeURIComponent(slug)}/assistant/config`), { signal });
     const raw = unwrapData<BackendAssistantCatalogBundleDto>(response);
     const bundle = normalizeAssistantCatalogBundle(raw);
     saveCachedCatalogBundle(bundle);

@@ -19,6 +19,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
 
   alias SymphonyElixir.{AgentPreference, Config, LocalTracker.Context, ProjectConfig, Repo, Settings, Workspace}
   alias SymphonyElixir.Claude.ApprovalBroker
+  alias SymphonyElixir.Observability.Metrics
   alias SymphonyElixirWeb.TrackerAuth
 
   @issue_authoring_tools ~w(create_draft_issue create_issue)
@@ -47,7 +48,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
 
       payload =
         thread
-        |> join_history_payload()
+        |> join_metadata_payload()
         |> Map.put(:effective_agent, thread_effective_agent(thread))
 
       socket =
@@ -58,7 +59,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
         |> assign(:turn_generation, current_turn_generation(thread))
         |> remember_goal_status(payload.goal_status)
 
-      send(self(), {:assistant_history_loaded, payload})
+      send(self(), {:assistant_history_loaded, thread, payload})
       {:ok, payload, socket}
     else
       false -> {:error, %{reason: "unauthorized"}}
@@ -73,7 +74,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
          {:ok, thread} <- History.ensure_project_explore_thread(project_slug) do
       TurnManager.subscribe(thread.id)
 
-      payload = join_history_payload(thread)
+      payload = join_metadata_payload(thread)
 
       socket =
         socket
@@ -82,7 +83,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
         |> assign(:turn_generation, current_turn_generation(thread))
         |> remember_goal_status(payload.goal_status)
 
-      send(self(), {:assistant_history_loaded, payload})
+      send(self(), {:assistant_history_loaded, thread, payload})
       {:ok, payload, socket}
     else
       false -> {:error, %{reason: "unauthorized"}}
@@ -97,7 +98,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
          {:ok, thread} <- History.ensure_kb_thread(project_slug, repo_slug, page_path) do
       TurnManager.subscribe(thread.id)
 
-      payload = join_history_payload(thread)
+      payload = join_metadata_payload(thread)
 
       socket =
         socket
@@ -106,7 +107,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
         |> assign(:turn_generation, current_turn_generation(thread))
         |> remember_goal_status(payload.goal_status)
 
-      send(self(), {:assistant_history_loaded, payload})
+      send(self(), {:assistant_history_loaded, thread, payload})
       {:ok, payload, socket}
     else
       false -> {:error, %{reason: "unauthorized"}}
@@ -121,7 +122,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
          {:ok, thread} <- History.get_thread(id) do
       TurnManager.subscribe(thread.id)
 
-      payload = join_history_payload(thread)
+      payload = join_metadata_payload(thread)
 
       socket =
         socket
@@ -130,7 +131,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
         |> assign(:turn_generation, current_turn_generation(thread))
         |> remember_goal_status(payload.goal_status)
 
-      send(self(), {:assistant_history_loaded, payload})
+      send(self(), {:assistant_history_loaded, thread, payload})
       {:ok, payload, socket}
     else
       false -> {:error, %{reason: "unauthorized"}}
@@ -145,7 +146,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
          {:ok, thread} <- History.ensure_thread(project_slug, %{workspace_path: workspace}) do
       TurnManager.subscribe(thread.id)
 
-      payload = join_history_payload(thread)
+      payload = join_metadata_payload(thread)
 
       socket =
         socket
@@ -154,7 +155,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
         |> assign(:turn_generation, current_turn_generation(thread))
         |> remember_goal_status(payload.goal_status)
 
-      send(self(), {:assistant_history_loaded, payload})
+      send(self(), {:assistant_history_loaded, thread, payload})
       {:ok, payload, socket}
     else
       false -> {:error, %{reason: "unauthorized"}}
@@ -189,27 +190,15 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   def handle_in("load_older_messages", payload, socket) when is_map(payload) do
     with thread_id when is_integer(thread_id) <- thread_id_from_socket(socket),
          {:ok, before_sequence} <- parse_before_sequence(payload) do
-      records =
-        History.list_messages_for_thread(thread_id,
-          limit: @history_page_limit,
-          before_sequence: before_sequence
+      page =
+        Metrics.span(
+          [:assistant, :history],
+          %{thread_id: thread_id, source: :older},
+          fn -> older_messages_page(thread_id, before_sequence) end,
+          &history_measurements/1
         )
 
-      messages =
-        Enum.map(
-          records,
-          &History.message_payload(&1, cap_tool_output_bytes: @history_tool_output_cap_bytes)
-        )
-
-      {oldest_sequence, has_more_before} = older_page_meta(thread_id, records)
-
-      {:reply,
-       {:ok,
-        %{
-          messages: messages,
-          has_more_before: has_more_before,
-          oldest_sequence: oldest_sequence
-        }}, socket}
+      {:reply, {:ok, page}, socket}
     else
       nil -> {:reply, {:error, %{reason: "thread is required"}}, socket}
       :error -> {:reply, {:error, %{reason: "before_sequence is required"}}, socket}
@@ -578,7 +567,18 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   end
 
   @impl true
-  def handle_info({:assistant_history_loaded, payload}, socket) do
+  def handle_info({:assistant_history_loaded, thread, metadata}, socket) do
+    # Defer the capped/paginated transcript window out of the synchronous join
+    # path so the join reply stays lightweight and the heavy history query never
+    # blocks the socket handshake. The window is transferred exactly once, here.
+    payload =
+      Metrics.span(
+        [:assistant, :history],
+        %{thread_id: thread.id, source: :join},
+        fn -> merge_history_window(metadata, thread.id) end,
+        &history_measurements/1
+      )
+
     push(socket, "history_loaded", payload)
     {:noreply, socket}
   end
@@ -1122,20 +1122,71 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   defp push_history_sync(%Socket{} = socket) do
     case thread_id_from_socket(socket) do
       id when is_integer(id) ->
-        {messages, has_more_before, oldest_sequence} = history_message_window(id)
+        payload =
+          Metrics.span(
+            [:assistant, :history],
+            %{thread_id: id, source: :sync},
+            fn ->
+              {messages, has_more_before, oldest_sequence} = history_message_window(id)
 
-        push(socket, "history_synced", %{
-          messages: messages,
-          has_more_before: has_more_before,
-          oldest_sequence: oldest_sequence
-        })
+              %{
+                messages: messages,
+                has_more_before: has_more_before,
+                oldest_sequence: oldest_sequence
+              }
+            end,
+            &history_measurements/1
+          )
 
+        push(socket, "history_synced", payload)
         socket
 
       _ ->
         socket
     end
   end
+
+  # Older-messages page reusing the same tool-output cap and page limit budgets as
+  # join/sync so pagination never ships an unbounded window.
+  defp older_messages_page(thread_id, before_sequence) do
+    records =
+      History.list_messages_for_thread(thread_id,
+        limit: @history_page_limit,
+        before_sequence: before_sequence
+      )
+
+    messages =
+      Enum.map(
+        records,
+        &History.message_payload(&1, cap_tool_output_bytes: @history_tool_output_cap_bytes)
+      )
+
+    {oldest_sequence, has_more_before} = older_page_meta(thread_id, records)
+
+    %{
+      messages: messages,
+      has_more_before: has_more_before,
+      oldest_sequence: oldest_sequence
+    }
+  end
+
+  # Merge the freshly queried transcript window into the already-computed join
+  # metadata for the single "history_loaded" push.
+  defp merge_history_window(metadata, thread_id) do
+    {messages, has_more_before, oldest_sequence} = history_message_window(thread_id)
+
+    Map.merge(metadata, %{
+      messages: messages,
+      has_more_before: has_more_before,
+      oldest_sequence: oldest_sequence
+    })
+  end
+
+  defp history_measurements(%{messages: messages}) when is_list(messages) do
+    %{payload_bytes: Metrics.payload_bytes(messages), message_count: length(messages)}
+  end
+
+  defp history_measurements(_payload), do: %{}
 
   # Newest page of the transcript with capped tool outputs, plus the metadata the
   # client needs to offer "load older".
@@ -1847,13 +1898,13 @@ defmodule SymphonyElixirWeb.AssistantChannel do
 
   defp authoring_goal_active?(_socket), do: false
 
-  defp join_history_payload(thread) do
-    {messages, has_more_before, oldest_sequence} = history_message_window(thread.id)
-
+  # Lightweight thread metadata for the synchronous join reply. Deliberately
+  # excludes the transcript window (messages/has_more_before/oldest_sequence);
+  # that is transferred exactly once via the deferred "history_loaded" push so a
+  # heavy thread (e.g. 8006) never duplicates megabytes of tool output between
+  # the join reply and the follow-up push.
+  defp join_metadata_payload(thread) do
     %{
-      messages: messages,
-      has_more_before: has_more_before,
-      oldest_sequence: oldest_sequence,
       thread_id: thread.id,
       goal_mode: History.thread_goal_mode(thread),
       goal_objective: History.thread_goal_objective(thread),

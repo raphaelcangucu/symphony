@@ -178,7 +178,9 @@ describe("assistant service", () => {
 
     const catalog = await fetchAssistantCodexCatalog("macro-markets");
 
-    expect(get).toHaveBeenCalledWith("/api/tracker/v1/projects/macro-markets/assistant/config");
+    expect(get).toHaveBeenCalledWith("/api/tracker/v1/projects/macro-markets/assistant/config", {
+      signal: undefined,
+    });
     expect(catalog.models[0]?.model).toBe("gpt-5.3-codex");
   });
 
