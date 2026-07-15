@@ -41,7 +41,6 @@ interface BackendChildWorktreeDto {
 interface BackendWorkspaceEntryDto {
   path: string;
   display_name?: unknown;
-  displayName?: unknown;
   kind: string;
   issue_identifier?: string | null;
   name?: string | null;
@@ -107,7 +106,7 @@ function normalizeChildWorktree(dto: BackendChildWorktreeDto): WorkspaceChildWor
 function normalizeEntry(dto: BackendWorkspaceEntryDto): WorkspaceInventoryEntry {
   return {
     path: dto.path,
-    displayName: normalizeNullableString(dto.displayName, dto.display_name),
+    displayName: normalizeNullableString(dto.display_name),
     kind: normalizeKind(dto.kind),
     issueIdentifier: dto.issue_identifier ?? null,
     name: dto.name ?? null,
@@ -162,29 +161,21 @@ export async function updateWorkspaceDisplayName(
   const response = await http.put<{
     data?: {
       workspace_path?: unknown;
-      workspacePath?: unknown;
       display_name?: unknown;
-      displayName?: unknown;
     };
   }>(trackerPath(`/projects/${slug}/workspaces/display_names`), {
     path,
     display_name: name,
   });
 
-  const responseWorkspacePath = normalizeNonBlankString(
-    response.data.data?.workspacePath,
-    response.data.data?.workspace_path,
-  );
+  const responseWorkspacePath = normalizeNonBlankString(response.data.data?.workspace_path);
   if (responseWorkspacePath === null) {
     throw new Error(
       "Malformed workspace display name response: workspacePath must be a nonblank string",
     );
   }
 
-  const responseDisplayName = normalizeNonBlankString(
-    response.data.data?.displayName,
-    response.data.data?.display_name,
-  );
+  const responseDisplayName = normalizeNonBlankString(response.data.data?.display_name);
   if (responseDisplayName === null) {
     throw new Error(
       "Malformed workspace display name response: displayName must be a nonblank string",

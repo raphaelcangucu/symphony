@@ -28,9 +28,12 @@ defmodule SymphonyElixir.Cursor.ModelCatalog do
 
   require Logger
 
+  alias SymphonyElixir.HotpathCache
   alias SymphonyElixir.InstanceConfig
 
   @default_model "auto"
+  @cache_key :cursor_model_catalog
+  @cache_ttl_ms 10 * 60 * 1_000
 
   @fallback_models [
     %{id: "auto", label: "Auto", default: true},
@@ -59,22 +62,51 @@ defmodule SymphonyElixir.Cursor.ModelCatalog do
 
   @spec list_models(keyword()) :: {:ok, catalog()}
   def list_models(opts \\ []) do
-    list_models_fun = Keyword.get(opts, :list_models_fun, &run_list_models/0)
+    case Keyword.fetch(opts, :list_models_fun) do
+      {:ok, list_models_fun} ->
+        {:ok, present_catalog(models_from_fun(list_models_fun))}
 
-    models =
-      case fetch_cli_models(list_models_fun) do
-        {:ok, [_ | _] = parsed} -> parsed
-        _ -> @fallback_models
-      end
+      :error ->
+        list_models_cached()
+    end
+  end
 
-    {:ok,
-     %{
-       agent: "cursor",
-       agent_label: "Cursor Agent",
-       command: InstanceConfig.cursor_command(),
-       default_model: @default_model,
-       models: Enum.map(models, &present_model/1)
-     }}
+  defp list_models_cached do
+    case HotpathCache.fetch(@cache_key) do
+      {:ok, catalog} ->
+        {:ok, catalog}
+
+      :miss ->
+        refresh_cache_async()
+        {:ok, present_catalog(@fallback_models)}
+    end
+  end
+
+  defp models_from_fun(list_models_fun) do
+    case fetch_cli_models(list_models_fun) do
+      {:ok, [_ | _] = parsed} -> parsed
+      _ -> @fallback_models
+    end
+  end
+
+  defp present_catalog(models) do
+    %{
+      agent: "cursor",
+      agent_label: "Cursor Agent",
+      command: InstanceConfig.cursor_command(),
+      default_model: @default_model,
+      models: Enum.map(models, &present_model/1)
+    }
+  end
+
+  defp refresh_cache_async do
+    Task.start(fn ->
+      catalog = present_catalog(models_from_fun(&run_list_models/0))
+      HotpathCache.put(@cache_key, catalog, @cache_ttl_ms)
+      SymphonyElixir.Assistant.CatalogBundle.invalidate()
+    end)
+
+    :ok
   end
 
   defp fetch_cli_models(list_models_fun) do

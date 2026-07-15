@@ -7,21 +7,15 @@ export interface BackendRecentItemDto {
   kind: string;
   scope?: string | null;
   project_slug?: string | null;
-  projectSlug?: string | null;
   project_name?: string | null;
-  projectName?: string | null;
   agent_kind?: string | null;
-  agentKind?: string | null;
   title: string;
   identifier?: string | null;
   thread_id?: number | null;
-  threadId?: number | null;
   status: string;
   status_kind?: string | null;
-  statusKind?: string | null;
   preview?: string | null;
   updated_at?: string | null;
-  updatedAt?: string | null;
 }
 
 const KNOWN_STATUS_KINDS: readonly RecentStatusKind[] = [
@@ -59,16 +53,16 @@ export function normalizeRecentSession(dto: BackendRecentItemDto): RecentSession
     id: dto.id,
     kind: normalizeKind(dto.kind),
     scope: normalizeScope(dto.scope),
-    agentKind: normalizeAgentKind(dto.agentKind ?? dto.agent_kind),
-    projectSlug: dto.projectSlug ?? dto.project_slug ?? null,
-    projectName: dto.projectName ?? dto.project_name ?? null,
+    agentKind: normalizeAgentKind(dto.agent_kind),
+    projectSlug: dto.project_slug ?? null,
+    projectName: dto.project_name ?? null,
     title: dto.title,
     identifier: dto.identifier ?? null,
-    threadId: dto.threadId ?? dto.thread_id ?? null,
+    threadId: dto.thread_id ?? null,
     status: dto.status,
-    statusKind: normalizeStatusKind(dto.statusKind ?? dto.status_kind),
+    statusKind: normalizeStatusKind(dto.status_kind),
     preview: dto.preview ?? null,
-    updatedAt: dto.updatedAt ?? dto.updated_at ?? "",
+    updatedAt: dto.updated_at ?? "",
   };
 }
 

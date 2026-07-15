@@ -34,6 +34,7 @@ interface AssistantChatMessageBubbleProps {
   taskSnapshot?: AgentTaskSnapshot | null;
   planApprovalAction?: AssistantChatPlanApprovalAction;
   onKillTool?: (toolCallId: string) => void;
+  onFetchToolOutput?: (messageId: string, toolCallId: string) => Promise<string>;
 }
 
 export function AssistantChatMessageBubble({
@@ -46,8 +47,15 @@ export function AssistantChatMessageBubble({
   taskSnapshot = null,
   planApprovalAction,
   onKillTool,
+  onFetchToolOutput,
 }: AssistantChatMessageBubbleProps) {
   const isUser = message.role === "user";
+  // Bind the enclosing message id so tool rows only need a tool-call id to fetch
+  // the full (server-truncated) output.
+  const messageId = message.id;
+  const loadFullOutput = onFetchToolOutput
+    ? (toolCallId: string) => onFetchToolOutput(messageId, toolCallId)
+    : undefined;
   const attachments = Array.isArray(message.metadata.attachments) ? message.metadata.attachments : [];
   const assistantContentBlocks =
     message.role === "assistant" &&
@@ -110,6 +118,7 @@ export function AssistantChatMessageBubble({
             onOpenDocumentPath={onOpenDocumentPath}
             taskSnapshot={taskSnapshot}
             onKillTool={onKillTool}
+            onLoadFullOutput={loadFullOutput}
           />
         ) : (
           <AssistantMarkdown content={message.content} onOpenDocumentPath={onOpenDocumentPath} />
@@ -120,6 +129,7 @@ export function AssistantChatMessageBubble({
               toolCalls={message.toolCalls}
               taskSnapshot={taskSnapshot}
               onKillTool={onKillTool}
+              onLoadFullOutput={loadFullOutput}
             />
             {editedFilesSummary}
           </div>

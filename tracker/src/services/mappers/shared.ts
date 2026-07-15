@@ -8,7 +8,6 @@ export interface BackendWorkflowStatusDto {
   category?: string | null;
   position?: number | null;
   is_terminal?: boolean | null;
-  isTerminal?: boolean | null;
 }
 
 export function normalizeStatusName(status: BackendWorkflowStatusDto | string | null | undefined): WorkflowStatusName {
@@ -25,7 +24,7 @@ export function normalizeWorkflowStatus(dto: BackendWorkflowStatusDto): Workflow
     name: normalizeStatusName(dto.name ?? null),
     category: normalizeWorkflowStatusCategory(dto.category),
     position: dto.position ?? 0,
-    isTerminal: dto.isTerminal ?? dto.is_terminal ?? false,
+    isTerminal: dto.is_terminal ?? false,
   };
 }
 

@@ -11,6 +11,7 @@ interface AssistantTurnTimelineProps {
   onOpenDocumentPath?: (path: string) => void;
   taskSnapshot?: AgentTaskSnapshot | null;
   onKillTool?: (toolCallId: string) => void;
+  onLoadFullOutput?: (toolCallId: string) => Promise<string>;
 }
 
 export function AssistantTurnTimeline({
@@ -20,6 +21,7 @@ export function AssistantTurnTimeline({
   onOpenDocumentPath,
   taskSnapshot = null,
   onKillTool,
+  onLoadFullOutput,
 }: AssistantTurnTimelineProps) {
   const timelineItems = buildAssistantTimelineItems(contentBlocks, toolCalls);
 
@@ -56,6 +58,7 @@ export function AssistantTurnTimeline({
               toolCalls={item.toolCalls}
               taskSnapshot={taskSnapshot}
               onKillTool={onKillTool}
+              onLoadFullOutput={onLoadFullOutput}
             />
           </div>
         );

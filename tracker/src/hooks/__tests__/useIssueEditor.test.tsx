@@ -1,11 +1,14 @@
 import { renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
-import { useIssueEditor } from "@/hooks/useIssueEditor";
+import { clearIssueEditorTargetCache, useIssueEditor } from "@/hooks/useIssueEditor";
 import * as editorService from "@/services/editor";
 
 describe("useIssueEditor", () => {
-  beforeEach(() => vi.restoreAllMocks());
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    clearIssueEditorTargetCache();
+  });
 
   it("loads an available browser editor target", async () => {
     vi.spyOn(editorService, "fetchEditorTargets").mockResolvedValue({

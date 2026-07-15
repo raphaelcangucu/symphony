@@ -6,10 +6,8 @@ import type { Viewer } from "@/types/viewer";
 
 interface BackendViewerDto {
   github_login?: string | null;
-  githubLogin?: string | null;
   name?: string | null;
   avatar_url?: string | null;
-  avatarUrl?: string | null;
 }
 
 export class ViewerNotConfiguredError extends Error {
@@ -23,7 +21,7 @@ export class ViewerNotConfiguredError extends Error {
 }
 
 export function normalizeViewer(dto: BackendViewerDto): Viewer {
-  const login = dto.githubLogin ?? dto.github_login ?? "";
+  const login = dto.github_login ?? "";
   if (!login.trim()) {
     throw new Error(i18n.t("auth.viewerErrors.missingLogin"));
   }
@@ -31,7 +29,7 @@ export function normalizeViewer(dto: BackendViewerDto): Viewer {
   return {
     githubLogin: login,
     name: dto.name ?? null,
-    avatarUrl: dto.avatarUrl ?? dto.avatar_url ?? null,
+    avatarUrl: dto.avatar_url ?? null,
   };
 }
 

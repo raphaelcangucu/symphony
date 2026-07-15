@@ -707,6 +707,9 @@
       "input": "IN",
       "output": "OUT",
       "showMore": "… show more",
+      "loadFullOutput": "Load full output ({{size}})",
+      "loadingFullOutput": "Loading full output…",
+      "loadFullOutputFailed": "Could not load the full output.",
       "fileActivity": {
         "read": "Read",
         "edited": "Edited",
@@ -2190,6 +2193,9 @@
       "turnInterrupted": "The previous turn was interrupted.",
       "resume": "Resume",
       "scrollToBottom": "Scroll to latest messages",
+      "loadOldPrompts": "↑ Load old prompts ({{count}})",
+      "loadOlderMessages": "↑ Load older messages",
+      "loadingOlder": "Loading older messages…",
       "workspaceProvision": {
         "progress": "Setting up this issue's workspace…",
         "retry": "Try again",

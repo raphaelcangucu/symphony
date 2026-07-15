@@ -25,30 +25,29 @@ vi.mock("@/hooks/useIssueEditor", () => ({
   }),
 }));
 
-const listAssistantThreadsMock = vi.hoisted(() => vi.fn());
+const getAssistantThreadMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/services/assistantThreads", () => ({
-  listAssistantThreads: (...args: unknown[]) => listAssistantThreadsMock(...args),
+  getAssistantThread: (...args: unknown[]) => getAssistantThreadMock(...args),
+  listAssistantThreads: vi.fn(),
 }));
 
 describe("AssistantSessionTabContent", () => {
   beforeEach(async () => {
     await initTestI18n("en");
-    listAssistantThreadsMock.mockReset();
-    listAssistantThreadsMock.mockResolvedValue([
-      {
-        id: 7996,
-        scope: "issue_session",
-        agentKind: "codex",
-        projectSlug: "macro-markets",
-        projectName: "Macro Markets",
-        issueIdentifier: "510",
-        title: "Build pass",
-        status: "active",
-        preview: null,
-        updatedAt: "2026-07-07T00:00:00Z",
-      },
-    ]);
+    getAssistantThreadMock.mockReset();
+    getAssistantThreadMock.mockResolvedValue({
+      id: 7996,
+      scope: "issue_session",
+      agentKind: "codex",
+      projectSlug: "macro-markets",
+      projectName: "Macro Markets",
+      issueIdentifier: "510",
+      title: "Build pass",
+      status: "active",
+      preview: null,
+      updatedAt: "2026-07-07T00:00:00Z",
+    });
   });
 
   it("shows issue working-tree actions for issue-bound assistant sessions", async () => {

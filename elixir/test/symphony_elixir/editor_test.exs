@@ -225,7 +225,7 @@ defmodule SymphonyElixir.EditorTest do
              ]
     end
 
-    test "prepares workspace skills before returning the editor URL" do
+    test "prepares workspace skills asynchronously after returning the editor URL" do
       previous_skills_root = Application.get_env(:symphony_elixir, :skills_root)
       load_workflow_with_front_matter(editor_front_matter())
       enable_editor!()
@@ -247,10 +247,11 @@ defmodule SymphonyElixir.EditorTest do
 
       assert Editor.editor_target("project", "MAC-SKILLS") == {:ok, expected_url}
 
-      assert File.regular?(Path.join([path, ".codex", "skills", "subagent-driven-development", "SKILL.md"]))
+      assert wait_until(fn ->
+               File.regular?(Path.join([path, ".codex", "skills", "subagent-driven-development", "SKILL.md"]))
+             end)
 
       assert File.regular?(Path.join([path, ".claude", "skills", "subagent-driven-development", "SKILL.md"]))
-
       refute File.exists?(Path.join([path, ".codex", "skills", "brainstorming", "SKILL.md"]))
     end
   end
@@ -370,6 +371,16 @@ defmodule SymphonyElixir.EditorTest do
 
   defp restore_skills_root(nil), do: Application.delete_env(:symphony_elixir, :skills_root)
   defp restore_skills_root(value), do: Application.put_env(:symphony_elixir, :skills_root, value)
+
+  defp wait_until(fun, attempts \\ 50) do
+    cond do
+      fun.() -> true
+      attempts <= 0 -> false
+      true ->
+        Process.sleep(20)
+        wait_until(fun, attempts - 1)
+    end
+  end
 
   defp load_workflow_with_front_matter(front_matter) do
     content = "---\n" <> front_matter <> "---\n"

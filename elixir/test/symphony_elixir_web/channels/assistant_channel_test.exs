@@ -2019,6 +2019,64 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
     assert_reply(ref, :error, %{reason: _})
   end
 
+  test "join caps oversized tool output and fetch_tool_output returns the full value" do
+    {:ok, thread} =
+      History.ensure_issue_thread("macro-markets", "MAC-1", %{
+        workspace_path: Workspace.path_for_issue("MAC-1")
+      })
+
+    big_output = String.duplicate("z", 20_000)
+
+    {:ok, message} =
+      History.append_message(thread, %{
+        role: "assistant",
+        content: "ran shell",
+        tool_calls: [
+          %{"id" => "call-big", "name" => "shell", "output" => big_output, "status" => "complete"}
+        ]
+      })
+
+    {:ok, join_payload, socket} =
+      socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
+      |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, "assistant:thread:#{thread.id}")
+
+    [joined_call] = List.last(join_payload.messages).tool_calls
+    assert joined_call["output_truncated"] == true
+    assert joined_call["output_byte_size"] == 20_000
+    assert byte_size(joined_call["output"]) < 20_000
+
+    ref = push(socket, "fetch_tool_output", %{"message_id" => message.id, "tool_call_id" => "call-big"})
+    assert_reply(ref, :ok, %{output: ^big_output, output_byte_size: 20_000})
+
+    ref = push(socket, "fetch_tool_output", %{"message_id" => message.id, "tool_call_id" => "missing"})
+    assert_reply(ref, :error, %{reason: _})
+  end
+
+  test "load_older_messages returns an older page with pagination metadata" do
+    {:ok, thread} =
+      History.ensure_issue_thread("macro-markets", "MAC-1", %{
+        workspace_path: Workspace.path_for_issue("MAC-1")
+      })
+
+    for n <- 1..3 do
+      {:ok, _} = History.append_message(thread, %{role: "user", content: "m#{n}"})
+    end
+
+    {:ok, join_payload, socket} =
+      socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
+      |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, "assistant:thread:#{thread.id}")
+
+    assert join_payload.has_more_before == false
+    assert join_payload.oldest_sequence == 1
+
+    ref = push(socket, "load_older_messages", %{"before_sequence" => 2})
+    assert_reply(ref, :ok, %{messages: older, has_more_before: false, oldest_sequence: 1})
+    assert Enum.map(older, & &1.content) == ["m1"]
+
+    ref = push(socket, "load_older_messages", %{})
+    assert_reply(ref, :error, %{reason: _})
+  end
+
   defp enable_codex_goals! do
     root =
       Path.join(

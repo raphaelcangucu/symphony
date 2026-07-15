@@ -34,25 +34,19 @@ describe("workspace inventory display names", () => {
     vi.unstubAllGlobals();
   });
 
-  it("normalizes GET display names with first-valid camelCase precedence", async () => {
+  it("normalizes GET display names from snake_case wire format", async () => {
     vi.mocked(http.get).mockResolvedValue({
       data: {
         data: [
           inventoryEntry({ display_name: "Primary" }),
-          inventoryEntry({ path: "/workspaces/second", displayName: "Second" }),
+          inventoryEntry({ path: "/workspaces/second", display_name: "Second" }),
           inventoryEntry({ path: "/workspaces/unnamed" }),
           inventoryEntry({
-            path: "/workspaces/fallback",
-            displayName: 42,
-            display_name: "Snake fallback",
-          }),
-          inventoryEntry({
-            path: "/workspaces/preferred",
-            displayName: "Camel preferred",
-            display_name: "Snake ignored",
+            path: "/workspaces/malformed",
+            display_name: 42,
           }),
         ],
-        totals: { count: 5, size_bytes: 50, reclaimable_bytes: 0 },
+        totals: { count: 4, size_bytes: 50, reclaimable_bytes: 0 },
       },
     });
 
@@ -62,12 +56,11 @@ describe("workspace inventory display names", () => {
       "Primary",
       "Second",
       null,
-      "Snake fallback",
-      "Camel preferred",
+      null,
     ]);
   });
 
-  it("normalizes snake_case, camelCase, missing, and malformed SSE display names", () => {
+  it("normalizes snake_case, missing, and malformed SSE display names", () => {
     const listeners = new Map<string, (event: MessageEvent<string>) => void>();
     class MockEventSource {
       addEventListener = vi.fn((event: string, handler: (event: MessageEvent<string>) => void) => {
@@ -82,7 +75,6 @@ describe("workspace inventory display names", () => {
     subscribeWorkspaceInventory("acme", { onEntry, onTotals: vi.fn() });
     [
       inventoryEntry({ display_name: "Streamed" }),
-      inventoryEntry({ displayName: "Camel stream" }),
       inventoryEntry(),
       inventoryEntry({ display_name: 42 }),
     ].forEach((entry) => {
@@ -93,7 +85,6 @@ describe("workspace inventory display names", () => {
 
     expect(onEntry.mock.calls.map(([entry]) => entry.displayName)).toEqual([
       "Streamed",
-      "Camel stream",
       null,
       null,
     ]);
@@ -119,16 +110,6 @@ describe("updateWorkspaceDisplayName", () => {
       { path: "/workspaces/acme", display_name: "My workspace" },
     );
     expect(result).toEqual({ workspacePath: "/workspaces/acme", displayName: "My workspace" });
-  });
-
-  it("normalizes and trims camelCase response aliases", async () => {
-    vi.mocked(http.put).mockResolvedValue({
-      data: { data: { workspacePath: " /workspaces/camel ", displayName: " Camel name " } },
-    });
-
-    const result = await updateWorkspaceDisplayName("acme", "/workspaces/acme", "Name");
-
-    expect(result).toEqual({ workspacePath: "/workspaces/camel", displayName: "Camel name" });
   });
 
   it.each([

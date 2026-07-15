@@ -376,6 +376,7 @@ describe("ProjectAssistantPanel", () => {
       </MemoryRouter>,
     );
 
+    await openComposerMoreMenu();
     const kbButton = await screen.findByRole("button", { name: /knowledge base/i });
     await waitFor(() => expect(kbButton).not.toBeDisabled());
     fireEvent.click(kbButton);
@@ -1300,8 +1301,23 @@ describe("ProjectAssistantPanel", () => {
     expect(screen.queryByRole("button", { name: "Approve" })).not.toBeInTheDocument();
   });
 
+  /**
+   * Secondary composer tools (execution mode, KB, Magic, diff) live behind the
+   * ⋯ overflow menu at every width, so tests must open it before reaching them.
+   */
+  async function openComposerMoreMenu() {
+    const user = userEvent.setup();
+    const trigger = await screen.findByRole("button", { name: "More composer tools" });
+    await waitFor(() => expect(trigger).not.toBeDisabled());
+    if (trigger.getAttribute("aria-expanded") !== "true") {
+      await user.click(trigger);
+    }
+    return trigger;
+  }
+
   async function selectComposerExecutionMode(label: RegExp) {
     const user = userEvent.setup();
+    await openComposerMoreMenu();
     const trigger = await screen.findByTestId("execution-mode-menu");
     await user.click(trigger);
     await user.click(await screen.findByRole("menuitemradio", { name: label }));
@@ -1317,6 +1333,7 @@ describe("ProjectAssistantPanel", () => {
 
     await waitFor(() => expect(push).toHaveBeenCalledWith("send_message", expect.anything()));
 
+    await openComposerMoreMenu();
     const modeTrigger = await screen.findByTestId("execution-mode-menu");
     expect(modeTrigger).not.toBeDisabled();
     expect(modeTrigger).toHaveTextContent(/plan/i);
@@ -1523,6 +1540,7 @@ describe("ProjectAssistantPanel", () => {
       </MemoryRouter>,
     );
 
+    await openComposerMoreMenu();
     const kbButton = await screen.findByRole("button", { name: "Knowledge Base" });
     await waitFor(() => expect(kbButton).not.toBeDisabled());
     await user.click(kbButton);
@@ -1781,6 +1799,7 @@ describe("ProjectAssistantPanel", () => {
       <ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-2" view="board" mode="page" />,
     );
 
+    await openComposerMoreMenu();
     expect(await screen.findByTestId("execution-mode-menu")).toHaveTextContent(/plan/i);
 
     const textarea = screen.getByPlaceholderText("Write a message...");
@@ -1808,6 +1827,7 @@ describe("ProjectAssistantPanel", () => {
   it("opens the Magic command palette as a modal on project session routes", async () => {
     render(<ProjectAssistantPanel projectSlug="macro-markets" threadId={7990} view="board" mode="page" />);
 
+    await openComposerMoreMenu();
     expect(await screen.findByTestId("execution-mode-menu")).toHaveTextContent(/build/i);
     const magicButton = screen.getByRole("button", { name: /magic/i });
     await waitFor(() => expect(magicButton).not.toBeDisabled());

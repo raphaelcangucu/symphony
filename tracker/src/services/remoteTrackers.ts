@@ -27,7 +27,6 @@ interface GitHubProjectDto {
 interface LinearProjectDto {
   id: string;
   slugId?: string | null;
-  slug_id?: string | null;
   name: string;
   state?: string | null;
   team: { id: string; name: string };
@@ -51,7 +50,7 @@ export async function discoverLinearProjects(): Promise<LinearProjectSummary[]> 
   const response = await http.post(trackerPath("/linear/projects/discover"), {});
   return unwrapData<LinearProjectDto[]>(response).map((dto) => ({
     id: dto.id,
-    slugId: dto.slugId ?? dto.slug_id ?? "",
+    slugId: dto.slugId ?? "",
     name: dto.name,
     state: dto.state ?? "",
     team: { id: dto.team.id, name: dto.team.name },

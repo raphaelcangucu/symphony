@@ -10,7 +10,6 @@ interface BackendIssueDocumentDto {
   path?: string | null;
   title?: string | null;
   updated_at?: string | null;
-  updatedAt?: string | null;
 }
 
 interface BackendIssueDocumentListDto {
@@ -29,7 +28,7 @@ export function normalizeIssueDocument(dto: BackendIssueDocumentDto): IssueDocum
     kind,
     path: dto.path ?? "",
     title: dto.title ?? dto.path ?? "Untitled",
-    updatedAt: dto.updatedAt ?? dto.updated_at ?? null,
+    updatedAt: dto.updated_at ?? null,
   };
 }
 

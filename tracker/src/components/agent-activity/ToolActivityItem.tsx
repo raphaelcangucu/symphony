@@ -16,6 +16,7 @@ export interface ToolActivityItemProps extends ActivityDisclosureStateProps {
   taskSnapshot?: AgentTaskSnapshot | null;
   fileActivity?: FileActivityView | null;
   onKillTool?: (toolCallId: string) => void;
+  onLoadFullOutput?: (toolCallId: string) => Promise<string>;
 }
 
 /** Renders one tool invocation: task marker, file-activity card, or the standard tool block. */
@@ -26,6 +27,7 @@ export function ToolActivityItem({
   taskSnapshot,
   fileActivity,
   onKillTool,
+  onLoadFullOutput,
   expanded,
   onExpandedChange,
 }: ToolActivityItemProps) {
@@ -57,6 +59,8 @@ export function ToolActivityItem({
     return (
       <ToolCallBlock
         view={view}
+        toolCallId={toolCallId}
+        onLoadFullOutput={onLoadFullOutput}
         expanded={expanded}
         onExpandedChange={onExpandedChange}
       />
@@ -78,6 +82,8 @@ export function ToolActivityItem({
       </div>
       <ToolCallBlock
         view={view}
+        toolCallId={toolCallId}
+        onLoadFullOutput={onLoadFullOutput}
         expanded={expanded}
         onExpandedChange={onExpandedChange}
       />

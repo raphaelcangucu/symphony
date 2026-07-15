@@ -17,7 +17,8 @@ import {
   type ComposerContextInsertRequest,
 } from "@/components/assistant/AssistantComposer";
 import type { AssistantChatPlanApprovalAction } from "@/components/assistant/AssistantChatMessageBubble";
-import { AssistantMessageList } from "@/components/assistant/AssistantMessageList";
+import { AssistantMessageList, type LoadOlderControl } from "@/components/assistant/AssistantMessageList";
+import { getCurrentPromptWindow, mergeOlderMessages } from "@/components/assistant/compactHistoryWindow";
 import { AssistantPanelHeader } from "@/components/assistant/AssistantPanelHeader";
 import { AssistantSessionShell } from "@/components/assistant/AssistantSessionShell";
 import {
@@ -112,6 +113,8 @@ import {
   bindAssistantEvents,
   clearAuthoringGoal,
   dispatchCodingAgent,
+  fetchToolOutput,
+  loadOlderMessages,
   pauseAuthoringGoal,
   readGoalStatus,
   readLastTurn,
@@ -327,6 +330,13 @@ export function ProjectAssistantPanel({
     null,
   );
   const [messages, setMessages] = useState<AssistantChatMessage[]>([]);
+  const messagesRef = useRef<AssistantChatMessage[]>([]);
+  // Compact-history window: by default only the current run is rendered; the
+  // user expands in-memory prompts first, then fetches older server pages.
+  const [expandedHistory, setExpandedHistory] = useState(false);
+  const [historyHasMoreBefore, setHistoryHasMoreBefore] = useState(false);
+  const [historyOldestSequence, setHistoryOldestSequence] = useState<number | null>(null);
+  const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
   const [approvedPlanMessageIds, setApprovedPlanMessageIds] = useState<Set<string>>(() => new Set());
   // Tab-scoped Authoring Goal state is durable and independent from both the
   // issue's Execution goal and the lifecycle of an ordinary assistant turn.
@@ -594,6 +604,10 @@ export function ProjectAssistantPanel({
     goalEnabledRef.current = false;
     setGoalQueuePermitted(false);
     setLastTurn(null);
+    setExpandedHistory(false);
+    setHistoryHasMoreBefore(false);
+    setHistoryOldestSequence(null);
+    setLoadingOlderMessages(false);
 
     const socket = createTrackerSocket();
     socket.connect();
@@ -626,9 +640,14 @@ export function ProjectAssistantPanel({
         }
         setPrefsApplyNextTurn(false);
         setMessagesPreservingScroll(scrollRef.current, stickToBottomRef, history, setMessages);
+        setExpandedHistory(false);
+        setHistoryHasMoreBefore(meta?.hasMoreBefore ?? false);
+        setHistoryOldestSequence(meta?.oldestSequence ?? null);
       },
-      onHistorySynced: (history) => {
+      onHistorySynced: (history, meta) => {
         setMessagesPreservingScroll(scrollRef.current, stickToBottomRef, history, setMessages);
+        setHistoryHasMoreBefore(meta?.hasMoreBefore ?? false);
+        setHistoryOldestSequence(meta?.oldestSequence ?? null);
       },
       onMessageCreated: (message) => setMessages((current) => appendMessage(current, message)),
       onAssistantDelta: (delta) => {
@@ -963,6 +982,8 @@ export function ProjectAssistantPanel({
       };
 
       setConnectionError(null);
+      // Re-compact history to the new current run (spec 2026-07-10 §2 re-compact rule).
+      setExpandedHistory(false);
       stickToBottomRef.current = true;
       pinnedScrollTopRef.current = null;
       setIsAtBottom(true);
@@ -1238,6 +1259,75 @@ export function ProjectAssistantPanel({
   );
 
   const visibleMessages = useMemo(() => displayMessages(messages, t), [messages, t]);
+  // `renderedMessages` is the compacted slice actually painted; `visibleMessages`
+  // stays the full list so derivations (tasks, KB refs, runtime) keep full context.
+  const promptWindow = useMemo(() => getCurrentPromptWindow(visibleMessages), [visibleMessages]);
+  const renderedMessages = useMemo(
+    () => (expandedHistory ? visibleMessages : visibleMessages.slice(promptWindow.startIndex)),
+    [visibleMessages, expandedHistory, promptWindow.startIndex],
+  );
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
+  const handleLoadOlderMessages = useCallback(() => {
+    if (loadingOlderMessages) return;
+
+    // First click reveals in-memory prompts before hitting the server (spec §2).
+    const hasHiddenInMemory = !expandedHistory && getCurrentPromptWindow(messagesRef.current).startIndex > 0;
+    if (hasHiddenInMemory) {
+      setExpandedHistory(true);
+      return;
+    }
+
+    if (!historyHasMoreBefore || historyOldestSequence == null) return;
+    const channel = channelRef.current;
+    if (!channel) return;
+
+    setExpandedHistory(true);
+    setLoadingOlderMessages(true);
+    loadOlderMessages(channel, historyOldestSequence)
+      .then((page) => {
+        const merged = mergeOlderMessages(page.messages, messagesRef.current);
+        setMessagesPreservingScroll(scrollRef.current, stickToBottomRef, merged, setMessages);
+        setHistoryHasMoreBefore(page.hasMoreBefore);
+        setHistoryOldestSequence(page.oldestSequence);
+      })
+      .catch((error) => setConnectionError(errorMessage(error)))
+      .finally(() => setLoadingOlderMessages(false));
+  }, [expandedHistory, historyHasMoreBefore, historyOldestSequence, loadingOlderMessages]);
+
+  const loadOlderControl = useMemo<LoadOlderControl | null>(() => {
+    const hasHiddenInMemory = !expandedHistory && promptWindow.startIndex > 0;
+    if (!hasHiddenInMemory && !historyHasMoreBefore) return null;
+
+    const label = loadingOlderMessages
+      ? t("assistant.panel.loadingOlder")
+      : hasHiddenInMemory && promptWindow.hiddenPromptCount > 0
+        ? t("assistant.panel.loadOldPrompts", { count: promptWindow.hiddenPromptCount })
+        : t("assistant.panel.loadOlderMessages");
+
+    return { label, disabled: loadingOlderMessages, onLoad: handleLoadOlderMessages };
+  }, [
+    expandedHistory,
+    promptWindow.startIndex,
+    promptWindow.hiddenPromptCount,
+    historyHasMoreBefore,
+    loadingOlderMessages,
+    t,
+    handleLoadOlderMessages,
+  ]);
+
+  const handleFetchToolOutput = useCallback(
+    (messageId: string, toolCallId: string): Promise<string> => {
+      const channel = channelRef.current;
+      if (!channel) return Promise.reject(new Error(t("assistant.panel.channelNotConnected")));
+      return fetchToolOutput(channel, messageId, toolCallId);
+    },
+    [t],
+  );
+
   const planApprovalMessageId = useMemo(
     () => latestPendingPlanMessageId(visibleMessages, approvedPlanMessageIds),
     [visibleMessages, approvedPlanMessageIds],
@@ -1445,7 +1535,8 @@ export function ProjectAssistantPanel({
 
   const messageItems = (
     <AssistantMessageList
-      messages={visibleMessages}
+      messages={renderedMessages}
+      loadOlder={loadOlderControl}
       taskSnapshot={taskSnapshot}
       hidePinnedPanel={showTasksDock}
       projectSlug={projectSlug}
@@ -1463,6 +1554,7 @@ export function ProjectAssistantPanel({
       onApprovePlan={dispatchApprovedPlan}
       onStop={handleStopTurn}
       onKillTool={handleKillTool}
+      onFetchToolOutput={handleFetchToolOutput}
     />
   );
 

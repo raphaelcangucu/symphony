@@ -9,13 +9,13 @@ defmodule SymphonyElixirWeb.Tracker.EditorController do
   alias Plug.Conn
   alias SymphonyElixir.Editor
   alias SymphonyElixir.LocalTracker.Context
-  alias SymphonyElixir.Tracker.IssueAdapter
   alias SymphonyElixirWeb.TrackerErrors
 
   @spec show(Conn.t(), map()) :: Conn.t()
   def show(conn, %{"project_slug" => project_slug, "identifier" => identifier}) do
-    with {:ok, project} <- Context.get_project(project_slug),
-         {:ok, _issue} <- IssueAdapter.dispatch(project, :get_issue, [identifier]) do
+    # Do not load the full issue through IssueAdapter here: remote trackers make
+    # get_issue hundreds of ms, and the editor URL only needs the workspace path.
+    with {:ok, _project} <- Context.get_project(project_slug) do
       render_target(conn, project_slug, identifier)
     else
       {:error, reason} -> TrackerErrors.render(conn, reason)

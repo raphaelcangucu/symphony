@@ -7,14 +7,14 @@ describe("gateway services", () => {
     const settings = normalizeGatewaySettings({
       telegram: {
         enabled: true,
-        bot_username: "sym_bot",
-        bot_token_configured: true,
-        group_chat_id: "-100123",
-        allowed_user_ids: ["777"],
-        dm_policy: "allowlist",
-        dm_allowed_user_ids: ["777"],
-        require_mention: true,
-        polling_enabled: true,
+        botUsername: "sym_bot",
+        botTokenConfigured: true,
+        groupChatId: "-100123",
+        allowedUserIds: ["777"],
+        dmPolicy: "allowlist",
+        dmAllowedUserIds: ["777"],
+        requireMention: true,
+        pollingEnabled: true,
       },
     });
 
@@ -25,15 +25,15 @@ describe("gateway services", () => {
 
   it("normalizes project telegram binding", () => {
     const result = normalizeProjectTelegramGateway({
-      global_configured: true,
+      globalConfigured: true,
       binding: {
         id: 1,
-        project_slug: "macro-markets",
-        conversation_id: "-100123:topic:42",
-        thread_id: "42",
-        default_agent_kind: "codex",
-        default_mode: "explore",
-        active_mode: "explore",
+        projectSlug: "macro-markets",
+        conversationId: "-100123:topic:42",
+        threadId: "42",
+        defaultAgentKind: "codex",
+        defaultMode: "explore",
+        activeMode: "explore",
       },
     });
 

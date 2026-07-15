@@ -30,8 +30,8 @@ function executionItem(payload: unknown): AgentExecution | null {
 
 function removedIssueIdentifier(payload: unknown): string | null {
   if (!payload || typeof payload !== "object") return null;
-  const record = payload as { issue_identifier?: unknown; issueIdentifier?: unknown };
-  const identifier = record.issueIdentifier ?? record.issue_identifier;
+  const record = payload as { issue_identifier?: unknown };
+  const identifier = record.issue_identifier;
   if (typeof identifier !== "string" || identifier.trim() === "") return null;
   return normalizeIssueIdentifier(identifier);
 }

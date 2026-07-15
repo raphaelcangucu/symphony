@@ -61,13 +61,7 @@ defmodule SymphonyElixir.Tracker.ExternalUrlTest do
     assert ExternalUrl.for(project) == "https://github.com/clouapp/front/issues"
   end
 
-  test "resolves github board urls from project_id via discovery cache" do
-    Process.put({SymphonyElixir.Tracker.ExternalUrl, :github_urls}, %{
-      "PVT_test" => "https://github.com/orgs/GambaLabs/projects/2"
-    })
-
-    on_exit(fn -> Process.delete({SymphonyElixir.Tracker.ExternalUrl, :github_urls}) end)
-
+  test "falls back to github repo issues when only project_id is known (no network lookup)" do
     project = %Project{
       tracker_kind: "github",
       tracker_config: %{
@@ -76,19 +70,13 @@ defmodule SymphonyElixir.Tracker.ExternalUrlTest do
       }
     }
 
-    assert ExternalUrl.for(project) == "https://github.com/orgs/GambaLabs/projects/2"
+    assert ExternalUrl.for(project) == "https://github.com/GambaLabs/frontend/issues"
   end
 
-  test "does not fall back to repo issues when project_id is configured but unresolved" do
-    Process.put({SymphonyElixir.Tracker.ExternalUrl, :github_urls}, %{})
-    on_exit(fn -> Process.delete({SymphonyElixir.Tracker.ExternalUrl, :github_urls}) end)
-
+  test "returns nil when github config has neither project_url nor repo" do
     project = %Project{
       tracker_kind: "github",
-      tracker_config: %{
-        "project_id" => "PVT_unknown",
-        "repo" => "GambaLabs/frontend"
-      }
+      tracker_config: %{"project_id" => "PVT_unknown"}
     }
 
     assert ExternalUrl.for(project) == nil

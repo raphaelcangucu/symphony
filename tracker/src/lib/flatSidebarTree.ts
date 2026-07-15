@@ -100,7 +100,7 @@ function sessionNodeFromRow(
     threadId: parseThreadId(id),
     issueIdentifier: row.issueIdentifier,
     archived: row.archived,
-    unread: unreadFromLastRead(id, updatedAt, options, true),
+    unread: unreadFromLastRead(id, updatedAt, options, statusKind !== "idle" && statusKind !== "done" && statusKind !== "closed"),
     needsReview: false,
     labels: null,
     issueLabelNames: null,

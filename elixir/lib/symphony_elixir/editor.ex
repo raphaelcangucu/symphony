@@ -93,16 +93,11 @@ defmodule SymphonyElixir.Editor do
   defp ensure_browser_workspace(project_slug, issue_identifier) do
     workspace_path = Workspace.path_for_issue(workspace_identifier(issue_identifier))
 
-    cond do
-      not File.dir?(workspace_path) ->
-        {:error, :workspace_missing}
-
-      WorkspaceSkills.prepare(workspace_path) == :ok ->
-        {:ok, resolve_issue_editor_folder(project_slug, workspace_path)}
-
-      true ->
-        Logger.warning("Editor workspace skills preparation failed workspace=#{workspace_path}")
-        {:error, :workspace_skills_unavailable}
+    if File.dir?(workspace_path) do
+      prepare_workspace_skills_async(workspace_path)
+      {:ok, resolve_issue_editor_folder(project_slug, workspace_path)}
+    else
+      {:error, :workspace_missing}
     end
   end
 
@@ -110,17 +105,28 @@ defmodule SymphonyElixir.Editor do
     slug = String.trim(project_slug)
     workspace_path = ProjectExploreWorkspace.path(slug)
 
-    cond do
-      not File.dir?(workspace_path) ->
-        {:error, :workspace_missing}
-
-      WorkspaceSkills.prepare(workspace_path) == :ok ->
-        {:ok, resolve_project_editor_folder(slug, workspace_path)}
-
-      true ->
-        Logger.warning("Editor project workspace skills preparation failed workspace=#{workspace_path}")
-        {:error, :workspace_skills_unavailable}
+    if File.dir?(workspace_path) do
+      prepare_workspace_skills_async(workspace_path)
+      {:ok, resolve_project_editor_folder(slug, workspace_path)}
+    else
+      {:error, :workspace_missing}
     end
+  end
+
+  defp prepare_workspace_skills_async(workspace_path) do
+    Task.start(fn ->
+      case WorkspaceSkills.prepare(workspace_path) do
+        :ok ->
+          :ok
+
+        {:error, reason} ->
+          Logger.warning(
+            "Editor workspace skills preparation failed workspace=#{workspace_path} reason=#{inspect(reason)}"
+          )
+      end
+    end)
+
+    :ok
   end
 
   # Issue workspaces clone repositories into configured subdirectories (e.g.

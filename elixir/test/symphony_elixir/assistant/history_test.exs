@@ -856,6 +856,92 @@ defmodule SymphonyElixir.Assistant.HistoryTest do
     end
   end
 
+  describe "transcript payload guards" do
+    test "message_payload/2 caps oversized tool output and annotates truncation" do
+      {:ok, thread} = History.create_freeform_thread(%{title: "Cap", workspace_path: "/tmp/cap"})
+      big_output = String.duplicate("x", 20_000)
+
+      {:ok, message} =
+        History.append_message(thread, %{
+          role: "assistant",
+          content: "ran a shell command",
+          tool_calls: [
+            %{"id" => "call-1", "name" => "shell", "output" => big_output, "status" => "complete"}
+          ]
+        })
+
+      [uncapped_call] = History.message_payload(message).tool_calls
+      assert uncapped_call["output"] == big_output
+      refute Map.has_key?(uncapped_call, "output_truncated")
+
+      [capped_call] = History.message_payload(message, cap_tool_output_bytes: 8_192).tool_calls
+      assert capped_call["output_truncated"] == true
+      assert capped_call["output_byte_size"] == 20_000
+      assert byte_size(capped_call["output"]) < 20_000
+      assert String.starts_with?(capped_call["output"], String.duplicate("x", 8_192))
+    end
+
+    test "message_payload/2 leaves small tool output untouched" do
+      {:ok, thread} = History.create_freeform_thread(%{title: "Small", workspace_path: "/tmp/small"})
+
+      {:ok, message} =
+        History.append_message(thread, %{
+          role: "assistant",
+          content: "quick",
+          tool_calls: [%{"id" => "c", "name" => "shell", "output" => "tiny", "status" => "complete"}]
+        })
+
+      [call] = History.message_payload(message, cap_tool_output_bytes: 8_192).tool_calls
+      assert call["output"] == "tiny"
+      refute Map.has_key?(call, "output_truncated")
+    end
+
+    test "tool_call_output/3 returns the full output and errors for unknown ids" do
+      {:ok, thread} = History.create_freeform_thread(%{title: "Fetch", workspace_path: "/tmp/fetch"})
+      big_output = String.duplicate("y", 12_000)
+
+      {:ok, message} =
+        History.append_message(thread, %{
+          role: "assistant",
+          content: "x",
+          tool_calls: [
+            %{"id" => "call-9", "name" => "shell", "output" => big_output, "status" => "complete"}
+          ]
+        })
+
+      assert {:ok, %{output: ^big_output, output_byte_size: 12_000}} =
+               History.tool_call_output(thread.id, message.id, "call-9")
+
+      assert {:error, :not_found} = History.tool_call_output(thread.id, message.id, "missing")
+      assert {:error, :not_found} = History.tool_call_output(thread.id, message.id + 999, "call-9")
+    end
+
+    test "list_messages_for_thread/2 limits to newest messages in ascending order" do
+      {:ok, thread} = History.create_freeform_thread(%{title: "Page", workspace_path: "/tmp/page"})
+
+      for n <- 1..5 do
+        {:ok, _} = History.append_message(thread, %{role: "user", content: "m#{n}"})
+      end
+
+      newest_two = History.list_messages_for_thread(thread.id, limit: 2)
+      assert Enum.map(newest_two, & &1.content) == ["m4", "m5"]
+
+      older =
+        History.list_messages_for_thread(thread.id, limit: 2, before_sequence: hd(newest_two).sequence)
+
+      assert Enum.map(older, & &1.content) == ["m2", "m3"]
+    end
+
+    test "has_messages_before?/2 reflects older messages" do
+      {:ok, thread} = History.create_freeform_thread(%{title: "Before", workspace_path: "/tmp/before"})
+      {:ok, first} = History.append_message(thread, %{role: "user", content: "first"})
+      {:ok, second} = History.append_message(thread, %{role: "user", content: "second"})
+
+      assert History.has_messages_before?(thread.id, second.sequence)
+      refute History.has_messages_before?(thread.id, first.sequence)
+    end
+  end
+
   defp migrate_repo do
     {:ok, _repo, _apps} =
       Ecto.Migrator.with_repo(Repo, fn repo ->

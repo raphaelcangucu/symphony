@@ -1,5 +1,5 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 
 import { ToolCallBlock, type ToolCallView } from "@/components/shared/ToolCallBlock";
 
@@ -84,5 +84,54 @@ describe("ToolCallBlock", () => {
     render(<ToolCallBlock view={{ ...baseView, status: "failed" }} />);
     expect(screen.getByText(/failed/i)).toBeInTheDocument();
     expect(screen.getByText(/failed/i)).toHaveClass("text-destructive");
+  });
+
+  const truncatedView: ToolCallView = {
+    ...baseView,
+    output: { value: "preview…", language: "text" },
+    outputTruncated: true,
+    outputByteSize: 1_048_576,
+  };
+
+  it("does not offer a full-output control when the output is not truncated", () => {
+    render(<ToolCallBlock view={baseView} toolCallId="call-1" onLoadFullOutput={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: /Bash/i }));
+    expect(screen.queryByRole("button", { name: /load full output/i })).not.toBeInTheDocument();
+  });
+
+  it("does not offer a full-output control without a handler or tool-call id", () => {
+    const { rerender } = render(<ToolCallBlock view={truncatedView} toolCallId="call-1" />);
+    fireEvent.click(screen.getByRole("button", { name: /Bash/i }));
+    expect(screen.queryByRole("button", { name: /load full output/i })).not.toBeInTheDocument();
+
+    rerender(<ToolCallBlock view={truncatedView} toolCallId="  " onLoadFullOutput={vi.fn()} />);
+    expect(screen.queryByRole("button", { name: /load full output/i })).not.toBeInTheDocument();
+  });
+
+  it("fetches and reveals the full output when the control is clicked", async () => {
+    const onLoadFullOutput = vi.fn().mockResolvedValue("FULL OUTPUT BODY");
+    render(<ToolCallBlock view={truncatedView} toolCallId="call-1" onLoadFullOutput={onLoadFullOutput} />);
+    fireEvent.click(screen.getByRole("button", { name: /Bash/i }));
+
+    const loadButton = screen.getByRole("button", { name: /load full output \(1\.0 MB\)/i });
+    fireEvent.click(loadButton);
+
+    expect(onLoadFullOutput).toHaveBeenCalledWith("call-1");
+    expect(await screen.findByText("FULL OUTPUT BODY")).toBeInTheDocument();
+    expect(screen.queryByText("preview…")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /load full output/i })).not.toBeInTheDocument();
+  });
+
+  it("surfaces an error and keeps the control when the fetch fails", async () => {
+    const onLoadFullOutput = vi.fn().mockRejectedValue(new Error("not found"));
+    render(<ToolCallBlock view={truncatedView} toolCallId="call-1" onLoadFullOutput={onLoadFullOutput} />);
+    fireEvent.click(screen.getByRole("button", { name: /Bash/i }));
+
+    fireEvent.click(screen.getByRole("button", { name: /load full output/i }));
+
+    expect(await screen.findByText(/could not load the full output/i)).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /load full output/i })).not.toBeDisabled(),
+    );
   });
 });

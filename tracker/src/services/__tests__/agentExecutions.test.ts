@@ -1,6 +1,27 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { normalizeAgentExecution } from "@/services/agentExecutions";
+import { http } from "@/services/http";
+import { listAgentExecutions, normalizeAgentExecution } from "@/services/agentExecutions";
+
+vi.mock("@/services/http", () => ({
+  http: { get: vi.fn() },
+  trackerPath: (path: string) => `/api/tracker/v1${path}`,
+  unwrapData: (response: { data: unknown }) => response.data,
+}));
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
+
+describe("listAgentExecutions", () => {
+  it("loads the global execution snapshot used by the shared provider", async () => {
+    vi.mocked(http.get).mockResolvedValue({ data: [] });
+
+    await listAgentExecutions();
+
+    expect(http.get).toHaveBeenCalledWith("/api/tracker/v1/agent_executions");
+  });
+});
 
 describe("normalizeAgentExecution", () => {
   it("strips leading hashes from issue identifiers", () => {

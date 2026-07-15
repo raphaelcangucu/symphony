@@ -122,7 +122,6 @@ describe("SidebarMobileDrawer", () => {
     installMatchMediaMock();
     vi.mocked(useAgentExecutions).mockReturnValue({
       executions: new Map(),
-      refetch: vi.fn().mockResolvedValue(undefined),
     });
     vi.mocked(listIssues).mockResolvedValue([]);
     vi.mocked(listRecents).mockResolvedValue([]);

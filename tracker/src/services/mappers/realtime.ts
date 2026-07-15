@@ -8,8 +8,8 @@ type BackendRealtimePayloadByEvent = {
   issue_created: { issue: BackendIssueDto };
   issue_updated: { issue: BackendIssueDto };
   issue_moved: { issue: BackendIssueDto };
-  comment_created: { issue_identifier?: string | null; issueIdentifier?: string | null; comment: BackendCommentDto };
-  blocker_changed: { issue_identifier?: string | null; issueIdentifier?: string | null; blocker: BackendBlockerDto };
+  comment_created: { issue_identifier?: string | null; comment: BackendCommentDto };
+  blocker_changed: { issue_identifier?: string | null; blocker: BackendBlockerDto };
 };
 
 export function normalizeProjectRealtimePayload<TEvent extends ProjectRealtimeEventName>(
@@ -18,7 +18,7 @@ export function normalizeProjectRealtimePayload<TEvent extends ProjectRealtimeEv
 ): ProjectRealtimePayloadByEvent[TEvent] {
   if (event === "comment_created") {
     const commentPayload = payload as BackendRealtimePayloadByEvent["comment_created"];
-    const issueIdentifier = normalizeIssueIdentifier(commentPayload.issueIdentifier ?? commentPayload.issue_identifier ?? "");
+    const issueIdentifier = normalizeIssueIdentifier(commentPayload.issue_identifier ?? "");
     return {
       issueIdentifier,
       comment: normalizeComment(commentPayload.comment, issueIdentifier),
@@ -27,7 +27,7 @@ export function normalizeProjectRealtimePayload<TEvent extends ProjectRealtimeEv
 
   if (event === "blocker_changed") {
     const blockerPayload = payload as BackendRealtimePayloadByEvent["blocker_changed"];
-    const issueIdentifier = normalizeIssueIdentifier(blockerPayload.issueIdentifier ?? blockerPayload.issue_identifier ?? "");
+    const issueIdentifier = normalizeIssueIdentifier(blockerPayload.issue_identifier ?? "");
     return {
       issueIdentifier,
       blocker: normalizeBlocker(blockerPayload.blocker, issueIdentifier),

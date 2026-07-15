@@ -9,10 +9,13 @@ defmodule SymphonyElixir.OpenCode.ModelCatalog do
 
   require Logger
 
+  alias SymphonyElixir.HotpathCache
   alias SymphonyElixir.InstanceConfig
   alias SymphonyElixir.OpenCode.Config
 
   @default_model "opencode/gpt-5.5"
+  @cache_key :opencode_model_catalog
+  @cache_ttl_ms 10 * 60 * 1_000
 
   @fallback_models [
     %{id: "opencode/gpt-5.5", label: "GPT-5.5 (OpenCode)", default: true},
@@ -41,22 +44,51 @@ defmodule SymphonyElixir.OpenCode.ModelCatalog do
 
   @spec list_models(keyword()) :: {:ok, catalog()}
   def list_models(opts \\ []) do
-    list_models_fun = Keyword.get(opts, :list_models_fun, &run_models/0)
+    case Keyword.fetch(opts, :list_models_fun) do
+      {:ok, list_models_fun} ->
+        {:ok, present_catalog(models_from_fun(list_models_fun))}
 
-    models =
-      case fetch_cli_models(list_models_fun) do
-        {:ok, [_ | _] = parsed} -> parsed
-        _ -> @fallback_models
-      end
+      :error ->
+        list_models_cached()
+    end
+  end
 
-    {:ok,
-     %{
-       agent: "opencode",
-       agent_label: "OpenCode",
-       command: Config.command(),
-       default_model: @default_model,
-       models: Enum.map(models, &present_model/1)
-     }}
+  defp list_models_cached do
+    case HotpathCache.fetch(@cache_key) do
+      {:ok, catalog} ->
+        {:ok, catalog}
+
+      :miss ->
+        refresh_cache_async()
+        {:ok, present_catalog(@fallback_models)}
+    end
+  end
+
+  defp models_from_fun(list_models_fun) do
+    case fetch_cli_models(list_models_fun) do
+      {:ok, [_ | _] = parsed} -> parsed
+      _ -> @fallback_models
+    end
+  end
+
+  defp present_catalog(models) do
+    %{
+      agent: "opencode",
+      agent_label: "OpenCode",
+      command: Config.command(),
+      default_model: @default_model,
+      models: Enum.map(models, &present_model/1)
+    }
+  end
+
+  defp refresh_cache_async do
+    Task.start(fn ->
+      catalog = present_catalog(models_from_fun(&run_models/0))
+      HotpathCache.put(@cache_key, catalog, @cache_ttl_ms)
+      SymphonyElixir.Assistant.CatalogBundle.invalidate()
+    end)
+
+    :ok
   end
 
   defp fetch_cli_models(list_models_fun) do

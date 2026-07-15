@@ -196,7 +196,7 @@ export function ProjectNavigationTree(props: ProjectNavigationTreeProps) {
       <SessionTreeItem
         key={row.id}
         node={row.node}
-        level={row.level}
+        level={row.level <= 2 ? 2 : 3}
         {...commonRowProps(row)}
         onOpen={() => openNode(row.node.kind === "session" ? row.node.href : "")}
         renderContextMenu={(trigger) => renderContextMenu(row.node as SidebarNode, trigger)}

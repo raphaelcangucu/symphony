@@ -36,10 +36,58 @@ export interface UpdateProjectSetupInput {
 }
 
 export async function listProjects(options: { includeArchived?: boolean } = {}): Promise<Project[]> {
-  const response = options.includeArchived
-    ? await http.get(trackerPath("/projects"), { params: { include_archived: "true" } })
-    : await http.get(trackerPath("/projects"));
-  return unwrapData<BackendProjectDto[]>(response).map(normalizeProject);
+  const cacheKey = options.includeArchived ? "include_archived" : "active";
+  const cached = readProjectsCache(cacheKey);
+  if (cached) {
+    void refreshProjects(cacheKey, options).catch(() => undefined);
+    return cached;
+  }
+  return refreshProjects(cacheKey, options);
+}
+
+const PROJECTS_CACHE_TTL_MS = 30_000;
+type ProjectsCacheEntry = { value: Project[]; at: number };
+const projectsCache = new Map<string, ProjectsCacheEntry>();
+const projectsInFlight = new Map<string, Promise<Project[]>>();
+
+function readProjectsCache(cacheKey: string): Project[] | null {
+  const entry = projectsCache.get(cacheKey);
+  if (!entry) return null;
+  if (Date.now() - entry.at > PROJECTS_CACHE_TTL_MS) {
+    projectsCache.delete(cacheKey);
+    return null;
+  }
+  return entry.value;
+}
+
+async function refreshProjects(
+  cacheKey: string,
+  options: { includeArchived?: boolean },
+): Promise<Project[]> {
+  const existing = projectsInFlight.get(cacheKey);
+  if (existing) return existing;
+
+  const request = (options.includeArchived
+    ? http.get(trackerPath("/projects"), { params: { include_archived: "true" } })
+    : http.get(trackerPath("/projects"))
+  )
+    .then((response) => {
+      const projects = unwrapData<BackendProjectDto[]>(response).map(normalizeProject);
+      projectsCache.set(cacheKey, { value: projects, at: Date.now() });
+      return projects;
+    })
+    .finally(() => {
+      projectsInFlight.delete(cacheKey);
+    });
+
+  projectsInFlight.set(cacheKey, request);
+  return request;
+}
+
+/** @internal test helper */
+export function clearProjectsRequestCaches(): void {
+  projectsCache.clear();
+  projectsInFlight.clear();
 }
 
 export async function createProject(input: CreateProjectInput): Promise<Project> {

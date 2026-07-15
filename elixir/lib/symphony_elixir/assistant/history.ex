@@ -950,26 +950,177 @@ defmodule SymphonyElixir.Assistant.History do
   end
 
   @spec list_messages_for_thread(integer()) :: [Message.t()]
-  def list_messages_for_thread(thread_id) when is_integer(thread_id) do
-    Message
-    |> where([m], m.thread_id == ^thread_id)
-    |> order_by([m], asc: m.sequence)
-    |> Repo.all()
+  def list_messages_for_thread(thread_id) when is_integer(thread_id),
+    do: list_messages_for_thread(thread_id, [])
+
+  @doc """
+  Lists a thread's messages in ascending `sequence` order.
+
+  Options:
+
+    * `:limit` — when a positive integer, returns only the newest `limit`
+      messages (still ascending). Defaults to all messages.
+    * `:before_sequence` — when an integer, restricts to messages with
+      `sequence < before_sequence` (used to page older messages).
+  """
+  @spec list_messages_for_thread(integer(), keyword()) :: [Message.t()]
+  def list_messages_for_thread(thread_id, opts) when is_integer(thread_id) and is_list(opts) do
+    base =
+      Message
+      |> where([m], m.thread_id == ^thread_id)
+      |> maybe_before_sequence(Keyword.get(opts, :before_sequence))
+
+    case Keyword.get(opts, :limit) do
+      limit when is_integer(limit) and limit > 0 ->
+        base
+        |> order_by([m], desc: m.sequence)
+        |> limit(^limit)
+        |> Repo.all()
+        |> Enum.reverse()
+
+      _ ->
+        base
+        |> order_by([m], asc: m.sequence)
+        |> Repo.all()
+    end
   end
 
+  @doc """
+  Returns true when the thread has at least one message older than `sequence`.
+  """
+  @spec has_messages_before?(integer(), integer()) :: boolean()
+  def has_messages_before?(thread_id, sequence)
+      when is_integer(thread_id) and is_integer(sequence) do
+    Message
+    |> where([m], m.thread_id == ^thread_id and m.sequence < ^sequence)
+    |> Repo.exists?()
+  end
+
+  defp maybe_before_sequence(query, before_sequence) when is_integer(before_sequence),
+    do: where(query, [m], m.sequence < ^before_sequence)
+
+  defp maybe_before_sequence(query, _before_sequence), do: query
+
   @spec message_payload(Message.t()) :: map()
-  def message_payload(%Message{} = message) do
+  def message_payload(%Message{} = message), do: message_payload(message, [])
+
+  @doc """
+  Builds a channel/REST payload for a single message.
+
+  Options:
+
+    * `:cap_tool_output_bytes` — when a positive integer, oversized tool-call
+      `output` strings are truncated to that many bytes (on a valid UTF-8
+      boundary) and annotated with `"output_truncated" => true` plus
+      `"output_byte_size" => original_size`. The full output stays fetchable via
+      `tool_call_output/2`. Defaults to no cap so REST and live pushes are
+      unchanged.
+  """
+  @spec message_payload(Message.t(), keyword()) :: map()
+  def message_payload(%Message{} = message, opts) when is_list(opts) do
     %{
       id: message.id,
       role: message.role,
       content: message.content,
       sequence: message.sequence,
       turn_id: message.turn_id,
-      tool_calls: tool_calls(message),
+      tool_calls: payload_tool_calls(message, opts),
       content_blocks: message_content_blocks(message),
       metadata: message.metadata || %{},
       inserted_at: message.inserted_at
     }
+  end
+
+  @doc """
+  Returns the full (uncapped) `output` string for a single tool call within a
+  thread's message, or `{:error, :not_found}` when the message/tool call does
+  not exist for that thread.
+  """
+  @spec tool_call_output(integer(), integer(), String.t()) ::
+          {:ok, %{output: String.t(), output_byte_size: non_neg_integer()}}
+          | {:error, :not_found}
+  def tool_call_output(thread_id, message_id, tool_call_id)
+      when is_integer(thread_id) and is_integer(message_id) and is_binary(tool_call_id) do
+    message =
+      Message
+      |> where([m], m.thread_id == ^thread_id and m.id == ^message_id)
+      |> Repo.one()
+
+    with %Message{} = message <- message,
+         %{} = call <- find_tool_call(tool_calls(message), tool_call_id) do
+      output = tool_call_output_string(call)
+      {:ok, %{output: output, output_byte_size: byte_size(output)}}
+    else
+      _ -> {:error, :not_found}
+    end
+  end
+
+  defp payload_tool_calls(message, opts) do
+    calls = tool_calls(message)
+
+    case Keyword.get(opts, :cap_tool_output_bytes) do
+      cap when is_integer(cap) and cap > 0 -> Enum.map(calls, &cap_tool_call_output(&1, cap))
+      _ -> calls
+    end
+  end
+
+  defp find_tool_call(calls, tool_call_id) when is_list(calls) do
+    Enum.find(calls, fn call ->
+      is_map(call) and (Map.get(call, "id") == tool_call_id or Map.get(call, :id) == tool_call_id)
+    end)
+  end
+
+  defp tool_call_output_string(call) do
+    case Map.get(call, "output", Map.get(call, :output)) do
+      value when is_binary(value) -> value
+      _ -> ""
+    end
+  end
+
+  # Truncate oversized tool outputs so the transcript payload stays small on
+  # reload; the untruncated output remains fetchable via `tool_call_output/2`.
+  defp cap_tool_call_output(call, cap) when is_map(call) do
+    cond do
+      is_binary(Map.get(call, "output")) -> cap_output_key(call, "output", cap)
+      is_binary(Map.get(call, :output)) -> cap_output_key(call, :output, cap)
+      true -> call
+    end
+  end
+
+  defp cap_tool_call_output(call, _cap), do: call
+
+  defp cap_output_key(call, key, cap) do
+    output = Map.fetch!(call, key)
+    size = byte_size(output)
+
+    if size > cap do
+      call
+      |> Map.put(key, truncate_utf8(output, cap) <> tool_output_truncation_marker(size))
+      |> Map.put("output_truncated", true)
+      |> Map.put("output_byte_size", size)
+    else
+      call
+    end
+  end
+
+  defp tool_output_truncation_marker(size) do
+    "\n\n… (output truncated; #{size} bytes total — load full output to see the rest)"
+  end
+
+  defp truncate_utf8(binary, cap) when byte_size(binary) <= cap, do: binary
+
+  defp truncate_utf8(binary, cap) do
+    binary
+    |> binary_part(0, cap)
+    |> valid_utf8_prefix()
+  end
+
+  defp valid_utf8_prefix(binary) do
+    cond do
+      String.valid?(binary) -> binary
+      byte_size(binary) == 0 -> ""
+      true -> valid_utf8_prefix(binary_part(binary, 0, byte_size(binary) - 1))
+    end
   end
 
   defp message_content_blocks(%Message{metadata: metadata} = message) when is_map(metadata) do

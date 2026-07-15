@@ -8,40 +8,33 @@ export interface BackendAssistantThreadDto {
   id: number;
   scope: string;
   project_slug?: string | null;
-  projectSlug?: string | null;
   project_name?: string | null;
-  projectName?: string | null;
   agent_kind?: string | null;
-  agentKind?: string | null;
   issue_identifier?: string | null;
-  issueIdentifier?: string | null;
   workspace_path?: unknown;
-  workspacePath?: unknown;
   labels?: unknown;
   needs_review?: unknown;
-  needsReview?: unknown;
   title?: string | null;
   status: string;
   preview?: string | null;
   updated_at?: string | null;
-  updatedAt?: string | null;
 }
 
 export function normalizeAssistantThread(dto: BackendAssistantThreadDto): AssistantThread {
   return {
     id: dto.id,
     scope: dto.scope,
-    agentKind: normalizeAgentKind(dto.agentKind ?? dto.agent_kind),
-    projectSlug: dto.projectSlug ?? dto.project_slug ?? null,
-    projectName: dto.projectName ?? dto.project_name ?? null,
-    issueIdentifier: dto.issueIdentifier ?? dto.issue_identifier ?? null,
-    workspacePath: normalizeNullableString(dto.workspacePath, dto.workspace_path),
+    agentKind: normalizeAgentKind(dto.agent_kind),
+    projectSlug: dto.project_slug ?? null,
+    projectName: dto.project_name ?? null,
+    issueIdentifier: dto.issue_identifier ?? null,
+    workspacePath: normalizeNullableString(dto.workspace_path),
     labels: normalizeStringArray(dto.labels),
-    needsReview: (dto.needsReview ?? dto.needs_review) === true,
+    needsReview: dto.needs_review === true,
     title: dto.title ?? null,
     status: dto.status,
     preview: dto.preview ?? null,
-    updatedAt: dto.updatedAt ?? dto.updated_at ?? "",
+    updatedAt: dto.updated_at ?? "",
   };
 }
 
@@ -53,6 +46,33 @@ function normalizeStringArray(value: unknown): string[] {
 
 function normalizeAgentKind(value: string | null | undefined): AssistantThread["agentKind"] {
   return value === "codex" || value === "claude" || value === "cursor" ? value : null;
+}
+
+const LIST_CACHE_TTL_MS = 15_000;
+const GET_CACHE_TTL_MS = 30_000;
+
+type CacheEntry<T> = { value: T; at: number };
+const listInFlight = new Map<string, Promise<AssistantThread[]>>();
+const listCache = new Map<string, CacheEntry<AssistantThread[]>>();
+const getInFlight = new Map<number, Promise<AssistantThread>>();
+const getCache = new Map<number, CacheEntry<AssistantThread>>();
+
+function readCache<T>(cache: Map<string | number, CacheEntry<T>>, key: string | number, ttlMs: number): T | null {
+  const entry = cache.get(key);
+  if (!entry) return null;
+  if (Date.now() - entry.at > ttlMs) {
+    cache.delete(key);
+    return null;
+  }
+  return entry.value;
+}
+
+/** @internal test helper */
+export function clearAssistantThreadRequestCaches(): void {
+  listInFlight.clear();
+  listCache.clear();
+  getInFlight.clear();
+  getCache.clear();
 }
 
 export async function listAssistantThreads(
@@ -70,8 +90,26 @@ export async function listAssistantThreads(
     if (scopeOrOptions.includeArchived === true) params.set("include_archived", "true");
   }
 
-  const response = await http.get(trackerPath(`/assistant/threads?${params.toString()}`));
-  return unwrapData<BackendAssistantThreadDto[]>(response).map(normalizeAssistantThread);
+  const cacheKey = params.toString();
+  const cached = readCache(listCache, cacheKey, LIST_CACHE_TTL_MS);
+  if (cached) return cached;
+
+  const existing = listInFlight.get(cacheKey);
+  if (existing) return existing;
+
+  const request = http
+    .get(trackerPath(`/assistant/threads?${cacheKey}`))
+    .then((response) => {
+      const threads = unwrapData<BackendAssistantThreadDto[]>(response).map(normalizeAssistantThread);
+      listCache.set(cacheKey, { value: threads, at: Date.now() });
+      return threads;
+    })
+    .finally(() => {
+      listInFlight.delete(cacheKey);
+    });
+
+  listInFlight.set(cacheKey, request);
+  return request;
 }
 
 export interface ListAssistantThreadsOptions {
@@ -94,6 +132,30 @@ const MAX_THREAD_LABELS = 12;
 const MAX_THREAD_LABEL_GRAPHEMES = 40;
 const UPDATE_THREAD_KEYS = ["title", "labels", "needsReview"] as const;
 
+export async function getAssistantThread(threadId: number): Promise<AssistantThread> {
+  requirePositiveInteger(threadId, "threadId");
+
+  const cached = readCache(getCache, threadId, GET_CACHE_TTL_MS);
+  if (cached) return cached;
+
+  const existing = getInFlight.get(threadId);
+  if (existing) return existing;
+
+  const request = http
+    .get(trackerPath(`/assistant/threads/${encodeURIComponent(String(threadId))}`))
+    .then((response) => {
+      const thread = normalizeAssistantThread(unwrapData<BackendAssistantThreadDto>(response));
+      getCache.set(threadId, { value: thread, at: Date.now() });
+      return thread;
+    })
+    .finally(() => {
+      getInFlight.delete(threadId);
+    });
+
+  getInFlight.set(threadId, request);
+  return request;
+}
+
 export async function updateAssistantThread(
   threadId: number,
   input: UpdateAssistantThreadInput,
@@ -104,12 +166,17 @@ export async function updateAssistantThread(
     trackerPath(`/assistant/threads/${encodeURIComponent(String(threadId))}`),
     payload,
   );
-  return normalizeAssistantThread(unwrapData<BackendAssistantThreadDto>(response));
+  const thread = normalizeAssistantThread(unwrapData<BackendAssistantThreadDto>(response));
+  getCache.set(threadId, { value: thread, at: Date.now() });
+  listCache.clear();
+  return thread;
 }
 
 export async function deleteAssistantThread(threadId: number): Promise<void> {
   requirePositiveInteger(threadId, "threadId");
   await http.delete(trackerPath(`/assistant/threads/${encodeURIComponent(String(threadId))}`));
+  getCache.delete(threadId);
+  listCache.clear();
 }
 
 function normalizeUpdateAssistantThreadInput(input: UpdateAssistantThreadInput): {

@@ -8,9 +8,12 @@ defmodule SymphonyElixir.KnowledgeBase.IssueWorkspace do
   """
 
   alias SymphonyElixir.Assistant.History
+  alias SymphonyElixir.HotpathCache
   alias SymphonyElixir.KnowledgeBase.{Frontmatter, MarkdownPage, Paths, RepoDocs, Tree}
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.Workspace
+
+  @tree_ttl_ms 15_000
 
   @type error ::
           :project_not_found
@@ -24,6 +27,21 @@ defmodule SymphonyElixir.KnowledgeBase.IssueWorkspace do
 
   @spec repo_tree(String.t(), String.t(), String.t()) :: {:ok, map()} | {:error, error()}
   def repo_tree(project_slug, identifier, repo_slug) do
+    cache_key = {:kb_issue_repo_tree, project_slug, identifier, repo_slug}
+
+    case HotpathCache.fetch(cache_key) do
+      {:ok, tree} ->
+        {:ok, tree}
+
+      :miss ->
+        with {:ok, tree} <- build_repo_tree(project_slug, identifier, repo_slug) do
+          HotpathCache.put(cache_key, tree, @tree_ttl_ms)
+          {:ok, tree}
+        end
+    end
+  end
+
+  defp build_repo_tree(project_slug, identifier, repo_slug) do
     with {:ok, repo, repo_root, docs_root} <- resolve_repo(project_slug, identifier, repo_slug),
          {:ok, paths} <- changed_doc_paths(repo_root, repo) do
       {:ok,
@@ -68,6 +86,7 @@ defmodule SymphonyElixir.KnowledgeBase.IssueWorkspace do
          {:ok, page_rel} <- Paths.safe_relative_path(rel),
          :ok <- File.mkdir_p(Path.dirname(abs)),
          :ok <- File.write(abs, Frontmatter.serialize(fm, body)) do
+      HotpathCache.invalidate({:kb_issue_repo_tree, project_slug, identifier, repo_slug})
       {:ok, %{path: page_rel, commit: :workspace, pushed: false}}
     end
   end
@@ -118,10 +137,19 @@ defmodule SymphonyElixir.KnowledgeBase.IssueWorkspace do
   defp changed_doc_paths_in_git_repo(repo_root, repo) do
     base = base_ref(repo_root, repo)
 
-    with {:ok, committed} <- git_lines(repo_root, ["diff", "--name-only", "#{base}...HEAD", "--", "docs"]),
-         {:ok, unstaged} <- git_lines(repo_root, ["diff", "--name-only", "--", "docs"]),
-         {:ok, staged} <- git_lines(repo_root, ["diff", "--cached", "--name-only", "--", "docs"]),
-         {:ok, untracked} <- git_lines(repo_root, ["ls-files", "--others", "--exclude-standard", "--", "docs"]) do
+    tasks = [
+      Task.async(fn -> git_lines(repo_root, ["diff", "--name-only", "#{base}...HEAD", "--", "docs"]) end),
+      Task.async(fn -> git_lines(repo_root, ["diff", "--name-only", "--", "docs"]) end),
+      Task.async(fn -> git_lines(repo_root, ["diff", "--cached", "--name-only", "--", "docs"]) end),
+      Task.async(fn -> git_lines(repo_root, ["ls-files", "--others", "--exclude-standard", "--", "docs"]) end)
+    ]
+
+    results = Task.await_many(tasks, 15_000)
+
+    with {:ok, committed} <- Enum.at(results, 0),
+         {:ok, unstaged} <- Enum.at(results, 1),
+         {:ok, staged} <- Enum.at(results, 2),
+         {:ok, untracked} <- Enum.at(results, 3) do
       paths =
         (committed ++ unstaged ++ staged ++ untracked)
         |> Enum.map(&docs_relative/1)
@@ -130,6 +158,9 @@ defmodule SymphonyElixir.KnowledgeBase.IssueWorkspace do
         |> Enum.sort()
 
       {:ok, paths}
+    else
+      {:error, _} = error -> error
+      other -> {:error, {:git_failed, other}}
     end
   end
 

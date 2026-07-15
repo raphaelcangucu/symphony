@@ -1,15 +1,38 @@
 import { useEffect, useState } from "react";
 
-import { listAssistantThreads } from "@/services/assistantThreads";
+import { getAssistantThread } from "@/services/assistantThreads";
 import type { AssistantThread } from "@/types/assistant-thread";
 import type { RecentSession } from "@/types/recents";
+
+function threadFromRecent(threadId: number, relatedSessions: readonly RecentSession[]): AssistantThread | null {
+  const recent = relatedSessions.find((session) => session.threadId === threadId);
+  if (!recent) return null;
+
+  return {
+    id: threadId,
+    scope: recent.scope ?? "project_session",
+    agentKind: recent.agentKind === "opencode" ? null : recent.agentKind,
+    projectSlug: recent.projectSlug,
+    projectName: recent.projectName,
+    issueIdentifier: recent.identifier,
+    workspacePath: null,
+    labels: [],
+    needsReview: false,
+    title: recent.title,
+    status: recent.status,
+    preview: recent.preview,
+    updatedAt: recent.updatedAt,
+  };
+}
 
 export function useAssistantThreadMetadata(
   projectSlug: string,
   threadId: number | null,
   relatedSessions: readonly RecentSession[] = [],
 ): AssistantThread | null {
-  const [thread, setThread] = useState<AssistantThread | null>(null);
+  const [thread, setThread] = useState<AssistantThread | null>(() =>
+    threadId != null && threadId > 0 ? threadFromRecent(threadId, relatedSessions) : null,
+  );
 
   useEffect(() => {
     if (threadId == null || threadId <= 0) {
@@ -18,41 +41,29 @@ export function useAssistantThreadMetadata(
     }
 
     let active = true;
+    const optimistic = threadFromRecent(threadId, relatedSessions);
+    if (optimistic) setThread(optimistic);
 
-    const recent = relatedSessions.find((session) => session.threadId === threadId);
-    if (recent) {
-      setThread({
-        id: threadId,
-        scope: recent.scope ?? "project_session",
-        agentKind: recent.agentKind === "opencode" ? null : recent.agentKind,
-        projectSlug: recent.projectSlug,
-        projectName: recent.projectName,
-        issueIdentifier: recent.identifier,
-        workspacePath: null,
-        labels: [],
-        needsReview: false,
-        title: recent.title,
-        status: recent.status,
-        preview: recent.preview,
-        updatedAt: recent.updatedAt,
-      });
-    }
-
-    void listAssistantThreads({ projectSlug, limit: 100 })
-      .then((threads) => {
+    void getAssistantThread(threadId)
+      .then((match) => {
         if (!active) return;
-        const match = threads.find((entry) => entry.id === threadId);
-        if (match) setThread(match);
+        if (projectSlug && match.projectSlug && match.projectSlug !== projectSlug) {
+          setThread(optimistic);
+          return;
+        }
+        setThread(match);
       })
       .catch(() => {
-        if (!active || recent) return;
+        if (!active || optimistic) return;
         setThread(null);
       });
 
     return () => {
       active = false;
     };
-  }, [projectSlug, relatedSessions, threadId]);
+    // relatedSessions is only an optimistic seed — identity churn must not re-hit the API.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: seed once per threadId
+  }, [projectSlug, threadId]);
 
   return thread;
 }

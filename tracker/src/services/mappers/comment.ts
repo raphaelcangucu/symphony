@@ -7,50 +7,42 @@ import { maybeString, type BackendId } from "./shared";
 export interface BackendCommentDto {
   id: BackendId;
   issue_identifier?: string | null;
-  issueIdentifier?: string | null;
   issue_id?: BackendId | null;
   body: string;
   author?: string | null;
   kind?: string | null;
   url?: string | null;
   sync_status?: string | null;
-  syncStatus?: string | null;
   inserted_at?: string | null;
   created_at?: string | null;
-  createdAt?: string | null;
   updated_at?: string | null;
-  updatedAt?: string | null;
 }
 
 export interface BackendBlockerDto {
   id: BackendId;
   type?: string | null;
   source_identifier?: string | null;
-  sourceIdentifier?: string | null;
   target_identifier?: string | null;
-  targetIdentifier?: string | null;
   state?: BlockerState | string | null;
   reason?: string | null;
   inserted_at?: string | null;
   created_at?: string | null;
-  createdAt?: string | null;
   updated_at?: string | null;
-  updatedAt?: string | null;
 }
 
 export function normalizeComment(dto: BackendCommentDto, fallbackIssueIdentifier?: string | null): Comment {
   return {
     id: String(dto.id),
     issueIdentifier: normalizeIssueIdentifier(
-      dto.issueIdentifier ?? dto.issue_identifier ?? fallbackIssueIdentifier ?? maybeString(dto.issue_id) ?? "",
+      dto.issue_identifier ?? fallbackIssueIdentifier ?? maybeString(dto.issue_id) ?? "",
     ),
     author: dto.author ?? null,
     body: dto.body,
     kind: dto.kind ?? null,
     url: dto.url ?? null,
-    syncStatus: normalizeCommentSyncStatus(dto.syncStatus ?? dto.sync_status),
-    createdAt: dto.createdAt ?? dto.created_at ?? dto.inserted_at ?? "",
-    updatedAt: dto.updatedAt ?? dto.updated_at ?? dto.inserted_at ?? "",
+    syncStatus: normalizeCommentSyncStatus(dto.sync_status),
+    createdAt: dto.created_at ?? dto.inserted_at ?? "",
+    updatedAt: dto.updated_at ?? dto.inserted_at ?? "",
   };
 }
 
@@ -61,16 +53,16 @@ function normalizeCommentSyncStatus(value?: string | null): CommentSyncStatus | 
 }
 
 export function normalizeBlocker(dto: BackendBlockerDto, fallbackIssueIdentifier?: string | null): Blocker {
-  const createdAt = dto.createdAt ?? dto.created_at ?? dto.inserted_at ?? "";
+  const createdAt = dto.created_at ?? dto.inserted_at ?? "";
 
   return {
     id: String(dto.id),
-    issueIdentifier: normalizeIssueIdentifier(dto.sourceIdentifier ?? dto.source_identifier ?? fallbackIssueIdentifier ?? ""),
-    blockingIssueIdentifier: normalizeOptionalIssueIdentifier(dto.targetIdentifier ?? dto.target_identifier),
+    issueIdentifier: normalizeIssueIdentifier(dto.source_identifier ?? fallbackIssueIdentifier ?? ""),
+    blockingIssueIdentifier: normalizeOptionalIssueIdentifier(dto.target_identifier),
     reason: dto.reason ?? dto.type ?? "blocked_by",
     state: normalizeBlockerState(dto.state),
     createdAt,
-    updatedAt: dto.updatedAt ?? dto.updated_at ?? createdAt,
+    updatedAt: dto.updated_at ?? createdAt,
   };
 }
 

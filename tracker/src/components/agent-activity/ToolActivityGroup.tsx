@@ -32,6 +32,7 @@ interface ToolActivityGroupProps extends ActivityDisclosureStateProps {
   group: ToolCallGroup;
   taskSnapshot?: AgentTaskSnapshot | null;
   onKillTool?: (toolCallId: string) => void;
+  onLoadFullOutput?: (toolCallId: string) => Promise<string>;
   callKeys?: readonly string[];
 }
 
@@ -39,6 +40,7 @@ export function ToolActivityGroup({
   group,
   taskSnapshot = null,
   onKillTool,
+  onLoadFullOutput,
   callKeys,
   expanded,
   onExpandedChange,
@@ -82,6 +84,7 @@ export function ToolActivityGroup({
               taskSnapshot={taskSnapshot}
               fileActivity={fileActivityFromToolCall(call)}
               onKillTool={onKillTool}
+              onLoadFullOutput={onLoadFullOutput}
             />
           ))}
         </div>

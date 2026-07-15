@@ -4,25 +4,13 @@ defmodule SymphonyElixirWeb.Tracker.AssistantController do
   use Phoenix.Controller, formats: [:json]
 
   alias Plug.Conn
-  alias SymphonyElixir.Assistant.{AttachmentStore, SessionManager}
-  alias SymphonyElixir.Codex.ModelCatalog
-  alias SymphonyElixir.Settings
+  alias SymphonyElixir.Assistant.{AttachmentStore, CatalogBundle, SessionManager}
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixirWeb.TrackerErrors
 
   @spec config(Conn.t(), map()) :: Conn.t()
   def config(conn, _params) do
-    {:ok, codex} = ModelCatalog.list_models()
-    {:ok, claude} = SymphonyElixir.Claude.ModelCatalog.list_models()
-    {:ok, cursor} = SymphonyElixir.Cursor.ModelCatalog.list_models()
-    {:ok, opencode} = SymphonyElixir.OpenCode.ModelCatalog.list_models()
-
-    json(conn, %{
-      data: %{
-        agents: [codex, claude, cursor, opencode],
-        default_agent: Settings.Agents.default_agent_kind()
-      }
-    })
+    json(conn, %{data: CatalogBundle.fetch()})
   end
 
   @spec upload_attachment(Conn.t(), map()) :: Conn.t()

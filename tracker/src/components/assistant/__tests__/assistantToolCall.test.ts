@@ -70,4 +70,37 @@ describe("assistant tool call adapter", () => {
     const view = assistantToolCallToView(toolCall({ name: "move_issue", status: "complete" }));
     expect(view.toolType).toBe("Mover issue");
   });
+
+  it("memoizes the view per tool-call identity to avoid reprocessing output each render", () => {
+    const call = toolCall({ id: "t1", name: "shell", status: "complete", output: "1 passed" });
+
+    const first = assistantToolCallToView(call);
+    const second = assistantToolCallToView(call);
+
+    expect(second).toBe(first);
+  });
+
+  it("recomputes when the tool call is replaced by a new object (status/output change)", () => {
+    const running = toolCall({ id: "t1", name: "shell", status: "running" });
+    const complete = toolCall({ id: "t1", name: "shell", status: "complete", output: "done" });
+
+    const runningView = assistantToolCallToView(running);
+    const completeView = assistantToolCallToView(complete);
+
+    expect(completeView).not.toBe(runningView);
+    expect(completeView.status).toBe("completed");
+    expect(completeView.output?.value).toBe("done");
+  });
+
+  it("propagates server truncation flags so the block can offer a full-output fetch", () => {
+    const truncated = assistantToolCallToView(
+      toolCall({ id: "t2", name: "shell", status: "complete", output: "preview…", outputTruncated: true, outputByteSize: 1048576 }),
+    );
+    expect(truncated.outputTruncated).toBe(true);
+    expect(truncated.outputByteSize).toBe(1048576);
+
+    const untruncated = assistantToolCallToView(toolCall({ id: "t3", name: "shell", status: "complete", output: "done" }));
+    expect(untruncated.outputTruncated).toBe(false);
+    expect(untruncated.outputByteSize).toBeNull();
+  });
 });

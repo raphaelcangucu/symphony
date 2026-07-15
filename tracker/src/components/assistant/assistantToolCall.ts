@@ -26,7 +26,23 @@ export function isShellTool(name: string): boolean {
   return SHELL_TOOLS.has(name);
 }
 
+// `assistantToolCallToView` runs `JSON.parse`/`JSON.stringify` over potentially
+// large tool payloads. Streaming + normalization always produce a NEW
+// `AssistantToolCall` object whenever a call changes, so caching by object
+// identity is safe: an unchanged call returns the cached view (skipping the
+// per-render parse), while a changed call is a distinct object and recomputes.
+const toolCallViewCache = new WeakMap<AssistantToolCall, ToolCallView>();
+
 export function assistantToolCallToView(toolCall: AssistantToolCall): ToolCallView {
+  const cached = toolCallViewCache.get(toolCall);
+  if (cached) return cached;
+
+  const view = buildToolCallView(toolCall);
+  toolCallViewCache.set(toolCall, view);
+  return view;
+}
+
+function buildToolCallView(toolCall: AssistantToolCall): ToolCallView {
   const input = serializeArguments(toolCall.arguments);
   const output = toolCall.output ? formatToolOutput(toolCall.output) : null;
 
@@ -37,6 +53,8 @@ export function assistantToolCallToView(toolCall: AssistantToolCall): ToolCallVi
     input: input ? { value: input, language: isShellTool(toolCall.name) ? "bash" : "json" } : null,
     output: output ? { value: output, language: "text" } : null,
     defaultCollapsed: true,
+    outputTruncated: toolCall.outputTruncated === true,
+    outputByteSize: toolCall.outputByteSize ?? null,
   };
 }
 

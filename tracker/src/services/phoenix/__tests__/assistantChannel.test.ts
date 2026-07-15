@@ -6,8 +6,10 @@ import {
   assistantTopic,
   bindAssistantEvents,
   clearAuthoringGoal,
+  fetchToolOutput,
   isTerminalTurnStatus,
   killTool,
+  loadOlderMessages,
   normalizeGoalStatus,
   normalizeTurnStatus,
   pauseAuthoringGoal,
@@ -21,6 +23,18 @@ import {
   shouldAcceptGoalStatus,
   stopTurn,
 } from "../assistantChannel";
+
+function mockReceiveChannel() {
+  const responders: Record<string, (payload: unknown) => void> = {};
+  const chain = {
+    receive: (status: string, callback: (payload: unknown) => void) => {
+      responders[status] = callback;
+      return chain;
+    },
+  };
+  const push = vi.fn(() => chain);
+  return { channel: { push } as never, push, responders };
+}
 
 describe("assistantThreadTopic", () => {
   it("builds a thread topic from a numeric id", () => {
@@ -543,11 +557,14 @@ describe("turn status channel", () => {
 
     handlers["history_synced"]({
       messages: [{ id: 1, role: "assistant", content: "synced", tool_calls: [] }],
+      has_more_before: true,
+      oldest_sequence: 5,
     });
 
-    expect(onHistorySynced).toHaveBeenCalledWith([
-      expect.objectContaining({ role: "assistant", content: "synced" }),
-    ]);
+    expect(onHistorySynced).toHaveBeenCalledWith(
+      [expect.objectContaining({ role: "assistant", content: "synced" })],
+      { hasMoreBefore: true, oldestSequence: 5 },
+    );
   });
 
   it("pushes sync_history with an empty payload", () => {
@@ -564,5 +581,71 @@ describe("turn status channel", () => {
     expect(isTerminalTurnStatus("failed")).toBe(true);
     expect(isTerminalTurnStatus("interrupted")).toBe(true);
     expect(isTerminalTurnStatus("running")).toBe(false);
+  });
+});
+
+describe("fetchToolOutput", () => {
+  it("pushes fetch_tool_output and resolves with the full output string", async () => {
+    const { channel, push, responders } = mockReceiveChannel();
+
+    const promise = fetchToolOutput(channel, 12, " call-1 ");
+    responders.ok({ output: "full output", output_byte_size: 11 });
+
+    await expect(promise).resolves.toBe("full output");
+    expect(push).toHaveBeenCalledWith("fetch_tool_output", { message_id: 12, tool_call_id: "call-1" });
+  });
+
+  it("resolves with an empty string when the payload output is missing", async () => {
+    const { channel, responders } = mockReceiveChannel();
+
+    const promise = fetchToolOutput(channel, 12, "call-1");
+    responders.ok({});
+
+    await expect(promise).resolves.toBe("");
+  });
+
+  it("rejects with the server reason on error", async () => {
+    const { channel, responders } = mockReceiveChannel();
+
+    const promise = fetchToolOutput(channel, 12, "call-1");
+    responders.error({ reason: "not found" });
+
+    await expect(promise).rejects.toThrow("not found");
+  });
+
+  it("rejects for a blank tool call id without pushing", async () => {
+    const { channel, push } = mockReceiveChannel();
+
+    await expect(fetchToolOutput(channel, 12, "  ")).rejects.toThrow();
+    expect(push).not.toHaveBeenCalled();
+  });
+});
+
+describe("loadOlderMessages", () => {
+  it("pushes load_older_messages and resolves with normalized messages and page meta", async () => {
+    const { channel, push, responders } = mockReceiveChannel();
+
+    const promise = loadOlderMessages(channel, 42);
+    responders.ok({
+      messages: [{ id: 1, role: "user", content: "old", tool_calls: [] }],
+      has_more_before: true,
+      oldest_sequence: 3,
+    });
+
+    await expect(promise).resolves.toEqual({
+      messages: [expect.objectContaining({ id: "1", role: "user", content: "old" })],
+      hasMoreBefore: true,
+      oldestSequence: 3,
+    });
+    expect(push).toHaveBeenCalledWith("load_older_messages", { before_sequence: 42 });
+  });
+
+  it("rejects with the server reason on error", async () => {
+    const { channel, responders } = mockReceiveChannel();
+
+    const promise = loadOlderMessages(channel, 42);
+    responders.error({ reason: "invalid cursor" });
+
+    await expect(promise).rejects.toThrow("invalid cursor");
   });
 });

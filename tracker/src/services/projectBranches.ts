@@ -14,7 +14,6 @@ interface BackendProjectBranchDto {
   repo?: string | null;
   protected?: boolean | null;
   commit_sha?: string | null;
-  commitSha?: string | null;
 }
 
 export interface ListProjectBranchesOptions {
@@ -41,6 +40,6 @@ function normalize(dto: BackendProjectBranchDto): ProjectBranch {
     name: dto.name,
     repo: dto.repo ?? null,
     protected: dto.protected === true,
-    commitSha: dto.commit_sha ?? dto.commitSha ?? null,
+    commitSha: dto.commit_sha ?? null,
   };
 }

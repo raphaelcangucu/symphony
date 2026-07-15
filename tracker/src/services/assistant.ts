@@ -47,6 +47,10 @@ export interface AssistantToolCall {
   status: AssistantToolStatus;
   arguments?: Record<string, unknown> | null;
   output?: string | null;
+  /** True when `output` is a server-truncated preview; full text is fetchable on demand. */
+  outputTruncated?: boolean;
+  /** Original (untruncated) output size in bytes, when the server capped it. */
+  outputByteSize?: number | null;
   result: {
     issue?: Issue;
     issues?: Issue[];
@@ -98,10 +102,9 @@ export interface UserQuestionsRequest {
 
 export function normalizeUserQuestionsRequest(payload: {
   request_id?: string | number | null;
-  requestId?: string | number | null;
   questions?: unknown;
 }): UserQuestionsRequest | null {
-  const requestId = payload.requestId ?? payload.request_id;
+  const requestId = payload.request_id;
   if (requestId == null) return null;
 
   const rawQuestions = Array.isArray(payload.questions) ? payload.questions : [];
@@ -137,31 +140,31 @@ export function normalizeUserQuestionsRequest(payload: {
   return { requestId, questions };
 }
 
+// Backend DTOs mirror the Elixir/Phoenix wire format, which is snake_case over
+// both HTTP and the assistant channel. `id`, `call_id`, and `tool_use_id` are
+// distinct provider-specific keys (not case variants).
 interface BackendAssistantToolCallDto {
   id?: string | number | null;
   call_id?: string | number | null;
-  callId?: string | number | null;
   tool_use_id?: string | number | null;
-  toolUseId?: string | number | null;
   name?: string | null;
   status?: string | null;
   arguments?: Record<string, unknown> | null;
   output?: string | null;
+  output_truncated?: boolean | null;
+  output_byte_size?: number | null;
   result?: {
     issue?: BackendIssueDto | null;
     issues?: BackendIssueDto[] | null;
     comment?: BackendCommentDto | null;
     agent_executions?: unknown[] | null;
-    agentExecutions?: unknown[] | null;
     [key: string]: unknown;
   } | null;
 }
 
 interface BackendAssistantMessageDto {
   assistant_message?: string | null;
-  assistantMessage?: string | null;
   tool_calls?: BackendAssistantToolCallDto[] | null;
-  toolCalls?: BackendAssistantToolCallDto[] | null;
 }
 
 export interface BackendAssistantChatMessageDto {
@@ -169,14 +172,10 @@ export interface BackendAssistantChatMessageDto {
   role?: string | null;
   content?: string | null;
   content_blocks?: unknown;
-  contentBlocks?: unknown;
   tool_calls?: BackendAssistantToolCallDto[] | null;
-  toolCalls?: BackendAssistantToolCallDto[] | null;
   turn_id?: string | null;
-  turnId?: string | null;
   sequence?: number | null;
   inserted_at?: string | null;
-  insertedAt?: string | null;
   metadata?: Record<string, unknown> | null;
 }
 
@@ -192,28 +191,22 @@ interface BackendAssistantModelDto {
   label?: string | null;
   description?: string | null;
   is_default?: boolean | null;
-  isDefault?: boolean | null;
   default_effort?: string | null;
-  defaultEffort?: string | null;
   efforts?: BackendAssistantEffortDto[] | null;
   input_modalities?: string[] | null;
-  inputModalities?: string[] | null;
 }
 
 interface BackendAssistantCodexCatalogDto {
   agent?: string | null;
   agent_label?: string | null;
-  agentLabel?: string | null;
   command?: string | null;
   default_model?: string | null;
-  defaultModel?: string | null;
   models?: BackendAssistantModelDto[] | null;
 }
 
 interface BackendAssistantCatalogBundleDto {
   agents?: BackendAssistantCodexCatalogDto[] | null;
   default_agent?: string | null;
-  defaultAgent?: string | null;
 }
 
 interface BackendUploadedAttachmentDto {
@@ -221,10 +214,8 @@ interface BackendUploadedAttachmentDto {
   type?: string | null;
   name?: string | null;
   media_type?: string | null;
-  mediaType?: string | null;
   path?: string | null;
   size_bytes?: number | null;
-  sizeBytes?: number | null;
 }
 
 export interface UploadedAssistantAttachment {
@@ -257,15 +248,25 @@ export async function uploadAssistantAttachment(
     id: dto.id ?? path,
     type: dto.type === "file" ? "file" : "image",
     name: dto.name ?? file.name,
-    mediaType: dto.mediaType ?? dto.media_type ?? file.type,
+    mediaType: dto.media_type ?? file.type,
     path,
-    sizeBytes: dto.sizeBytes ?? dto.size_bytes ?? undefined,
+    sizeBytes: dto.size_bytes ?? undefined,
   };
 }
 
 export async function fetchAssistantCatalogBundle(projectSlug: string): Promise<AssistantCatalogBundle> {
   const slug = requireProjectSlug(projectSlug);
+  const cached = loadCachedCatalogBundle();
 
+  if (cached) {
+    void refreshAssistantCatalogBundle(slug).catch(() => undefined);
+    return cached;
+  }
+
+  return refreshAssistantCatalogBundle(slug);
+}
+
+async function refreshAssistantCatalogBundle(slug: string): Promise<AssistantCatalogBundle> {
   try {
     const response = await http.get(trackerPath(`/projects/${encodeURIComponent(slug)}/assistant/config`));
     const raw = unwrapData<BackendAssistantCatalogBundleDto>(response);
@@ -323,9 +324,9 @@ export function normalizeAssistantCodexCatalog(dto: BackendAssistantCodexCatalog
 
   return {
     agent: "codex",
-    agentLabel: dto.agentLabel ?? dto.agent_label ?? catalogAgentLabel("codex"),
+    agentLabel: dto.agent_label ?? catalogAgentLabel("codex"),
     command: dto.command ?? "codex app-server",
-    defaultModel: dto.defaultModel ?? dto.default_model ?? null,
+    defaultModel: dto.default_model ?? null,
     models,
   };
 }
@@ -355,9 +356,9 @@ export function normalizeAssistantCatalogBundle(dto: BackendAssistantCatalogBund
 
       return {
         agent: agentKind as AgentKind,
-        agentLabel: agentDto.agentLabel ?? agentDto.agent_label ?? catalogAgentLabel(agentKind),
+        agentLabel: agentDto.agent_label ?? catalogAgentLabel(agentKind),
         command: agentDto.command ?? fallbackCommands[agentKind],
-        defaultModel: agentDto.defaultModel ?? agentDto.default_model ?? null,
+        defaultModel: agentDto.default_model ?? null,
         models,
       };
     })
@@ -367,7 +368,7 @@ export function normalizeAssistantCatalogBundle(dto: BackendAssistantCatalogBund
     return fallbackCatalogBundle();
   }
 
-  const rawDefault = dto.defaultAgent ?? dto.default_agent;
+  const rawDefault = dto.default_agent;
   const defaultAgent: AgentKind =
     rawDefault === "codex" || rawDefault === "claude" || rawDefault === "cursor"
       ? rawDefault
@@ -379,17 +380,17 @@ export function normalizeAssistantCatalogBundle(dto: BackendAssistantCatalogBund
 function normalizeAssistantModel(dto: BackendAssistantModelDto): AssistantModelOption {
   const model = dto.model ?? dto.id ?? "";
   const efforts = (dto.efforts ?? []).map(normalizeAssistantEffort).filter((effort) => effort.id.length > 0);
-  const defaultEffort = dto.defaultEffort ?? dto.default_effort ?? efforts[0]?.id ?? "medium";
+  const defaultEffort = dto.default_effort ?? efforts[0]?.id ?? "medium";
 
   return {
     id: dto.id ?? model,
     model,
     label: dto.label ?? model,
     description: dto.description ?? undefined,
-    isDefault: dto.isDefault ?? dto.is_default ?? false,
+    isDefault: dto.is_default ?? false,
     defaultEffort,
     efforts: efforts.length > 0 ? efforts : defaultEffort ? [{ id: defaultEffort, label: defaultEffort }] : [],
-    inputModalities: dto.inputModalities ?? dto.input_modalities ?? undefined,
+    inputModalities: dto.input_modalities ?? undefined,
   };
 }
 
@@ -437,8 +438,8 @@ export async function sendAssistantMessage(
 
 export function normalizeAssistantMessage(dto: BackendAssistantMessageDto): AssistantMessageResponse {
   return {
-    assistantMessage: dto.assistantMessage ?? dto.assistant_message ?? "",
-    toolCalls: (dto.toolCalls ?? dto.tool_calls ?? []).map(normalizeToolCall),
+    assistantMessage: dto.assistant_message ?? "",
+    toolCalls: (dto.tool_calls ?? []).map(normalizeToolCall),
   };
 }
 
@@ -450,10 +451,10 @@ export function normalizeAssistantChatMessage(dto: BackendAssistantChatMessageDt
     role: normalizeRole(dto.role),
     content: dto.content ?? "",
     contentBlocks: normalizeAssistantContentBlocks(dto, metadata),
-    toolCalls: (dto.toolCalls ?? dto.tool_calls ?? []).map(normalizeToolCall),
-    turnId: dto.turnId ?? dto.turn_id ?? null,
+    toolCalls: (dto.tool_calls ?? []).map(normalizeToolCall),
+    turnId: dto.turn_id ?? null,
     sequence: dto.sequence ?? null,
-    insertedAt: dto.insertedAt ?? dto.inserted_at ?? null,
+    insertedAt: dto.inserted_at ?? null,
     metadata,
   };
 }
@@ -462,21 +463,18 @@ function normalizeAssistantContentBlocks(
   dto: BackendAssistantChatMessageDto,
   metadata: Record<string, unknown>,
 ): AssistantContentBlock[] | undefined {
-  const topLevelField = selectPresentContentBlocksFieldCamelFirst(dto);
+  const topLevelField = selectPresentContentBlocksField(dto);
   if (topLevelField.isPresent) return normalizeContentBlockValue(topLevelField.value);
 
-  const legacyMetadataField = selectPresentContentBlocksFieldCamelFirst(metadata);
+  const legacyMetadataField = selectPresentContentBlocksField(metadata);
   return legacyMetadataField.isPresent ? normalizeContentBlockValue(legacyMetadataField.value) : undefined;
 }
 
 type SelectedContentBlocksField = { isPresent: true; value: unknown } | { isPresent: false };
 
-function selectPresentContentBlocksFieldCamelFirst(
-  source: { contentBlocks?: unknown; content_blocks?: unknown },
+function selectPresentContentBlocksField(
+  source: { content_blocks?: unknown },
 ): SelectedContentBlocksField {
-  if (Object.prototype.hasOwnProperty.call(source, "contentBlocks")) {
-    return { isPresent: true, value: source.contentBlocks };
-  }
   if (Object.prototype.hasOwnProperty.call(source, "content_blocks")) {
     return { isPresent: true, value: source.content_blocks };
   }
@@ -519,11 +517,8 @@ function normalizeContentBlockRows(rows: readonly unknown[]): AssistantContentBl
 }
 
 function readContentBlockToolCallId(row: Record<string, unknown>): string | undefined {
-  const camelToolCallId = row.toolCallId;
-  if (typeof camelToolCallId === "string" && camelToolCallId.trim() !== "") return camelToolCallId;
-
-  const snakeToolCallId = row.tool_call_id;
-  if (typeof snakeToolCallId === "string" && snakeToolCallId.trim() !== "") return snakeToolCallId;
+  const toolCallId = row.tool_call_id;
+  if (typeof toolCallId === "string" && toolCallId.trim() !== "") return toolCallId;
   return undefined;
 }
 
@@ -540,18 +535,20 @@ export function normalizeToolCall(dto: BackendAssistantToolCallDto): AssistantTo
     status: normalizeToolStatus(dto.status),
     arguments: dto.arguments ?? null,
     output: typeof dto.output === "string" ? dto.output : null,
+    outputTruncated: dto.output_truncated === true,
+    outputByteSize: typeof dto.output_byte_size === "number" ? dto.output_byte_size : null,
     result: {
       ...result,
       issue: result.issue ? normalizeIssue(result.issue) : undefined,
       issues: Array.isArray(result.issues) ? result.issues.map(normalizeIssue) : undefined,
       comment: result.comment ? normalizeComment(result.comment) : undefined,
-      agentExecutions: result.agentExecutions ?? result.agent_executions ?? undefined,
+      agentExecutions: result.agent_executions ?? undefined,
     },
   };
 }
 
 function normalizeToolCallId(dto: BackendAssistantToolCallDto): string | null {
-  const candidates = [dto.id, dto.call_id, dto.callId, dto.tool_use_id, dto.toolUseId];
+  const candidates = [dto.id, dto.call_id, dto.tool_use_id];
   for (const candidate of candidates) {
     if (typeof candidate === "string" && candidate.trim() !== "") return candidate;
     if (typeof candidate === "number" && Number.isFinite(candidate)) return String(candidate);

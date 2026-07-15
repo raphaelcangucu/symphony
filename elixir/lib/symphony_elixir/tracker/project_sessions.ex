@@ -3,11 +3,8 @@ defmodule SymphonyElixir.Tracker.ProjectSessions do
   Produces lightweight, cursor-paginated session rows for a tracker project.
   """
 
-  import Ecto.Query
-
   alias SymphonyElixir.Assistant.History
-  alias SymphonyElixir.LocalTracker.{Context, IssueRecord, Project, WorkflowStatus}
-  alias SymphonyElixir.Repo
+  alias SymphonyElixir.LocalTracker.Context
 
   @default_limit 20
   @max_limit 50
@@ -64,8 +61,10 @@ defmodule SymphonyElixir.Tracker.ProjectSessions do
   defp fetch_window(limit), do: min(limit * 3, @max_limit * 3)
 
   defp session_rows(project_slug, include_archived?, fetch_limit) do
-    thread_rows(project_slug, include_archived?, fetch_limit) ++
-      issue_rows(project_slug, include_archived?, fetch_limit)
+    # Sidebar sessions are assistant/chat threads only. Board issues are not
+    # sessions — including them flooded Advising with Jira tickets and broke
+    # click-to-open (wrong destinations).
+    thread_rows(project_slug, include_archived?, fetch_limit)
   end
 
   defp thread_rows(project_slug, include_archived?, fetch_limit) do
@@ -78,30 +77,6 @@ defmodule SymphonyElixir.Tracker.ProjectSessions do
     |> Enum.map(&thread_row/1)
   end
 
-  defp issue_rows(project_slug, include_archived?, fetch_limit) do
-    IssueRecord
-    |> join(:inner, [issue], project in Project, on: issue.project_id == project.id)
-    |> join(:left, [issue], status in WorkflowStatus, on: issue.status_id == status.id)
-    |> where([_issue, project], project.slug == ^project_slug)
-    |> maybe_exclude_archived_issues(include_archived?)
-    |> order_by([issue], desc: issue.updated_at, desc: issue.id)
-    |> limit(^fetch_limit)
-    |> select([issue, _project, status], %{
-      id: issue.id,
-      title: issue.title,
-      identifier: issue.identifier,
-      project_slug: ^project_slug,
-      updated_at: issue.updated_at,
-      aggregate_status: status.name,
-      archived_at: issue.archived_at
-    })
-    |> Repo.all()
-    |> Enum.map(&issue_row/1)
-  end
-
-  defp maybe_exclude_archived_issues(query, true), do: query
-  defp maybe_exclude_archived_issues(query, false), do: where(query, [issue], is_nil(issue.archived_at))
-
   defp thread_row(thread) do
     metadata = thread.metadata || %{}
 
@@ -109,7 +84,7 @@ defmodule SymphonyElixir.Tracker.ProjectSessions do
       id: "thread:#{thread.id}",
       title: thread.title,
       kind: thread_kind(thread.scope),
-      href: "/tracker/projects/#{thread.project_slug}/workspaces/#{thread.id}",
+      href: "/projects/#{thread.project_slug}/workspaces/#{thread.id}",
       updated_at: format_datetime(thread.updated_at),
       aggregate_status: thread.status,
       agent_kind: thread.agent_kind,
@@ -119,24 +94,6 @@ defmodule SymphonyElixir.Tracker.ProjectSessions do
       pinned: metadata_boolean(metadata, "pinned"),
       archived: thread.status == "archived",
       _cursor_updated_at: thread.updated_at
-    }
-  end
-
-  defp issue_row(issue) do
-    %{
-      id: "issue:#{issue.id}",
-      title: issue.title,
-      kind: "issue",
-      href: "/tracker/projects/#{issue.project_slug}/board/issues/#{issue.identifier}",
-      updated_at: format_datetime(issue.updated_at),
-      aggregate_status: issue.aggregate_status,
-      agent_kind: nil,
-      issue_identifier: issue.identifier,
-      workspace_path: nil,
-      workspace_id: nil,
-      pinned: false,
-      archived: not is_nil(issue.archived_at),
-      _cursor_updated_at: issue.updated_at
     }
   end
 

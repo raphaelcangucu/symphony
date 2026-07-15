@@ -18,44 +18,27 @@ interface BackendAgentExecutionTokensDto {
 
 export interface BackendAgentExecutionDto {
   issue_identifier?: string | null;
-  issueIdentifier?: string | null;
   agent_kind?: string | null;
-  agentKind?: string | null;
   status?: string | null;
   session_id?: string | null;
-  sessionId?: string | null;
   last_event?: string | null;
-  lastEvent?: string | null;
   last_message?: string | null;
-  lastMessage?: string | null;
   last_event_at?: string | null;
-  lastEventAt?: string | null;
   turn_count?: number | null;
-  turnCount?: number | null;
   runtime_seconds?: number | null;
-  runtimeSeconds?: number | null;
   started_at?: string | null;
-  startedAt?: string | null;
   retry_attempt?: number | null;
-  retryAttempt?: number | null;
   error?: string | null;
   goal?: Record<string, unknown> | null;
   long_running?: boolean | null;
-  longRunning?: boolean | null;
   long_running_kind?: string | null;
-  longRunningKind?: string | null;
   long_running_label?: string | null;
-  longRunningLabel?: string | null;
   tokens?: BackendAgentExecutionTokensDto | null;
   parent_identifier?: string | null;
-  parentIdentifier?: string | null;
   bundle_role?: string | null;
-  bundleRole?: string | null;
   unit_id?: string | null;
-  unitId?: string | null;
   repo?: string | null;
   child_identifiers?: string[] | null;
-  childIdentifiers?: string[] | null;
 }
 
 const KNOWN_STATUSES: readonly AgentExecutionStatus[] = [
@@ -146,36 +129,36 @@ export function normalizeAgentExecution(dto: BackendAgentExecutionDto): AgentExe
     : null;
 
   const goal = normalizeGoal(dto.goal);
-  const longRunningKind = normalizeGoalKind(dto.longRunningKind ?? dto.long_running_kind);
+  const longRunningKind = normalizeGoalKind(dto.long_running_kind);
 
   return reconcileExecutionStatus({
-    issueIdentifier: normalizeIssueIdentifier(dto.issueIdentifier ?? dto.issue_identifier ?? ""),
+    issueIdentifier: normalizeIssueIdentifier(dto.issue_identifier ?? ""),
     status: normalizeStatus(dto.status),
-    agentKind: normalizeAgentKind(dto.agentKind ?? dto.agent_kind),
-    sessionId: dto.sessionId ?? dto.session_id ?? null,
-    lastEvent: dto.lastEvent ?? dto.last_event ?? null,
-    lastMessage: dto.lastMessage ?? dto.last_message ?? null,
-    lastEventAt: dto.lastEventAt ?? dto.last_event_at ?? null,
-    turnCount: dto.turnCount ?? dto.turn_count ?? 0,
-    runtimeSeconds: dto.runtimeSeconds ?? dto.runtime_seconds ?? null,
-    startedAt: dto.startedAt ?? dto.started_at ?? null,
-    retryAttempt: dto.retryAttempt ?? dto.retry_attempt ?? 0,
+    agentKind: normalizeAgentKind(dto.agent_kind),
+    sessionId: dto.session_id ?? null,
+    lastEvent: dto.last_event ?? null,
+    lastMessage: dto.last_message ?? null,
+    lastEventAt: dto.last_event_at ?? null,
+    turnCount: dto.turn_count ?? 0,
+    runtimeSeconds: dto.runtime_seconds ?? null,
+    startedAt: dto.started_at ?? null,
+    retryAttempt: dto.retry_attempt ?? 0,
     error: dto.error ?? null,
     goal,
-    longRunning: dto.longRunning ?? dto.long_running ?? goal !== null,
+    longRunning: dto.long_running ?? goal !== null,
     longRunningKind,
-    longRunningLabel: dto.longRunningLabel ?? dto.long_running_label ?? null,
+    longRunningLabel: dto.long_running_label ?? null,
     tokens,
     parentIdentifier: bundleParentIdentifier(dto),
-    bundleRole: normalizeBundleRole(dto.bundleRole ?? dto.bundle_role),
-    unitId: dto.unitId ?? dto.unit_id ?? null,
+    bundleRole: normalizeBundleRole(dto.bundle_role),
+    unitId: dto.unit_id ?? null,
     repo: dto.repo ?? null,
-    childIdentifiers: (dto.childIdentifiers ?? dto.child_identifiers ?? []).map((id) => normalizeIssueIdentifier(id)),
+    childIdentifiers: (dto.child_identifiers ?? []).map((id) => normalizeIssueIdentifier(id)),
   });
 }
 
 function bundleParentIdentifier(dto: BackendAgentExecutionDto): string | null {
-  const raw = dto.parentIdentifier ?? dto.parent_identifier;
+  const raw = dto.parent_identifier;
   return raw ? normalizeIssueIdentifier(raw) : null;
 }
 
@@ -183,5 +166,5 @@ export async function listAgentExecutions(): Promise<AgentExecution[]> {
   const response = await http.get(trackerPath("/agent_executions"));
   return unwrapData<BackendAgentExecutionDto[]>(response)
     .map(normalizeAgentExecution)
-    .filter((execution) => execution.issueIdentifier.trim() !== "");
+    .filter((execution) => execution.issueIdentifier !== "");
 }

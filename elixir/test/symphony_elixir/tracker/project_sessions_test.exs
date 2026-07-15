@@ -25,7 +25,7 @@ defmodule SymphonyElixir.Tracker.ProjectSessionsTest do
 
     assert row.id == "thread:#{newer.id}"
     assert row.title == "Newer title"
-    assert row.href == "/tracker/projects/sessions/workspaces/#{newer.id}"
+    assert row.href == "/projects/sessions/workspaces/#{newer.id}"
     assert is_binary(row.updated_at)
     assert is_binary(next_cursor)
     assert activity_at == row.updated_at
@@ -47,15 +47,13 @@ defmodule SymphonyElixir.Tracker.ProjectSessionsTest do
     assert older_row.title == "Older title"
   end
 
-  test "never includes huge issue descriptions in its payload" do
+  test "does not include board issues as sidebar sessions" do
     huge_description = String.duplicate("x", 50_000)
     {:ok, issue} = Context.create_issue("sessions", %{title: "Huge description issue", description: huge_description})
 
     assert {:ok, %{data: rows}} = ProjectSessions.list("sessions", limit: 20)
 
-    issue_row = Enum.find(rows, &(&1.id == "issue:#{issue.id}"))
-    assert issue_row.title == "Huge description issue"
-    refute Map.has_key?(issue_row, :description)
+    refute Enum.any?(rows, &(&1.id == "issue:#{issue.id}"))
     refute inspect(rows) =~ huge_description
   end
 

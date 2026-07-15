@@ -7,8 +7,6 @@ defmodule SymphonyElixir.Tracker.ExternalUrl do
   alias SymphonyElixir.Jira.Config, as: JiraConfig
   alias SymphonyElixir.LocalTracker.Project
 
-  @github_urls_key {__MODULE__, :github_urls}
-
   @spec for(Project.t()) :: String.t() | nil
   def for(%Project{tracker_kind: "local"}), do: nil
 
@@ -76,19 +74,18 @@ defmodule SymphonyElixir.Tracker.ExternalUrl do
   defp github_fallback_url(config) do
     repo = config_string(config, "repo")
     number = config_integer(config, "project_number")
-    project_id = config_string(config, "project_id")
 
     cond do
       is_binary(repo) and is_integer(number) ->
         github_board_url_from_repo(repo, config_string(config, "owner_kind"), number)
 
-      is_binary(project_id) ->
-        github_url_from_project_id(project_id)
-
       is_binary(repo) ->
         "https://github.com/#{repo}/issues"
 
       true ->
+        # Never call the GitHub API from request-time URL rendering — listing
+        # projects blocked the whole tracker UI for seconds whenever a project
+        # only had a GraphQL project_id and no cached project_url.
         nil
     end
   end
@@ -106,38 +103,6 @@ defmodule SymphonyElixir.Tracker.ExternalUrl do
       "https://github.com/#{scope}/#{owner}/projects/#{number}"
     else
       nil
-    end
-  end
-
-  defp github_url_from_project_id(project_id) do
-    case Map.get(github_urls_by_project_id(), project_id) do
-      url when is_binary(url) ->
-        url
-
-      _ ->
-        GitHubDiscovery.url_for_project_id(project_id)
-    end
-  end
-
-  defp github_urls_by_project_id do
-    case Process.get(@github_urls_key) do
-      urls when is_map(urls) ->
-        urls
-
-      _ ->
-        urls =
-          case GitHubDiscovery.list_projects() do
-            {:ok, projects} ->
-              Map.new(projects, fn project ->
-                {project.id, GitHubDiscovery.board_url(project)}
-              end)
-
-            _ ->
-              %{}
-          end
-
-        Process.put(@github_urls_key, urls)
-        urls
     end
   end
 

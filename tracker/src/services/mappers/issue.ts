@@ -18,9 +18,7 @@ export interface BackendIssueDto {
   id: BackendId;
   identifier: string;
   display_identifier?: string | null;
-  displayIdentifier?: string | null;
   project_slug?: string | null;
-  projectSlug?: string | null;
   status?: BackendWorkflowStatusDto | string | null;
   title: string;
   description?: string | null;
@@ -28,45 +26,33 @@ export interface BackendIssueDto {
   position?: number | null;
   labels?: string[] | null;
   blocked_by?: BackendBlockerSummaryDto[] | null;
-  blockedBy?: BackendBlockerSummaryDto[] | null;
   assignee?: string | null;
   assignee_id?: string | null;
   creator?: string | null;
   url?: string | null;
   branch_name?: string | null;
-  branchName?: string | null;
   agent_kind?: string | null;
-  agentKind?: string | null;
   agent_goal?: string | null;
-  agentGoal?: string | null;
   model?: string | null;
   effort?: string | null;
   repository_full_name?: string | null;
-  repositoryFullName?: string | null;
   parent_identifier?: string | null;
-  parentIdentifier?: string | null;
   sub_issue_summary?: { total: number; completed: number; percent_completed: number } | null;
-  subIssueSummary?: { total: number; completed: number; percentCompleted: number } | null;
   attachments?: BackendIssueAttachmentDto[] | null;
   inserted_at?: string | null;
   created_at?: string | null;
-  createdAt?: string | null;
   updated_at?: string | null;
-  updatedAt?: string | null;
 }
 
 interface BackendIssueAttachmentDto {
   id?: BackendId | null;
   filename?: string | null;
   mime_type?: string | null;
-  mimeType?: string | null;
   size?: number | null;
   created?: string | null;
   created_at?: string | null;
-  createdAt?: string | null;
   author?: string | null;
   is_image?: boolean | null;
-  isImage?: boolean | null;
 }
 
 interface BackendBlockerSummaryDto {
@@ -78,44 +64,40 @@ interface BackendBlockerSummaryDto {
 }
 
 export function normalizeIssue(dto: BackendIssueDto): Issue {
-  const rawAgentKind = dto.agentKind ?? dto.agent_kind ?? null;
+  const rawAgentKind = dto.agent_kind ?? null;
   const agentKind: AgentKind | null =
     (AGENT_KINDS as readonly string[]).includes(rawAgentKind ?? "") ? (rawAgentKind as AgentKind) : null;
 
   return {
     id: String(dto.id),
     identifier: normalizeIssueIdentifier(dto.identifier),
-    displayIdentifier: normalizeIssueIdentifier(
-      dto.displayIdentifier ?? dto.display_identifier ?? dto.identifier,
-    ),
-    projectSlug: dto.projectSlug ?? dto.project_slug ?? "",
+    displayIdentifier: normalizeIssueIdentifier(dto.display_identifier ?? dto.identifier),
+    projectSlug: dto.project_slug ?? "",
     status: normalizeStatusName(dto.status),
     title: dto.title,
     description: dto.description ?? null,
     priority: dto.priority ?? null,
     position: dto.position ?? 0,
     labels: dto.labels ?? [],
-    blockedBy: (dto.blockedBy ?? dto.blocked_by ?? []).map(normalizeBlockerSummary),
+    blockedBy: (dto.blocked_by ?? []).map(normalizeBlockerSummary),
     assignee: dto.assignee ?? dto.assignee_id ?? null,
     creator: dto.creator ?? null,
     url: dto.url ?? null,
-    branchName: dto.branchName ?? dto.branch_name ?? null,
+    branchName: dto.branch_name ?? null,
     agentKind,
-    agentGoal: normalizeAgentGoal(dto.agentGoal ?? dto.agent_goal),
+    agentGoal: normalizeAgentGoal(dto.agent_goal),
     model: dto.model ?? null,
     effort: dto.effort ?? null,
     attachments: (dto.attachments ?? []).flatMap(normalizeIssueAttachment),
-    repositoryFullName: dto.repositoryFullName ?? dto.repository_full_name ?? null,
-    parentIdentifier: dto.parentIdentifier ?? dto.parent_identifier ?? null,
+    repositoryFullName: dto.repository_full_name ?? null,
+    parentIdentifier: dto.parent_identifier ?? null,
     subIssueSummary: normalizeSubIssueSummary(dto),
-    createdAt: dto.createdAt ?? dto.created_at ?? dto.inserted_at ?? "",
-    updatedAt: dto.updatedAt ?? dto.updated_at ?? dto.inserted_at ?? "",
+    createdAt: dto.created_at ?? dto.inserted_at ?? "",
+    updatedAt: dto.updated_at ?? dto.inserted_at ?? "",
   };
 }
 
 function normalizeSubIssueSummary(dto: BackendIssueDto): Issue["subIssueSummary"] {
-  const camel = dto.subIssueSummary;
-  if (camel) return camel;
   const snake = dto.sub_issue_summary;
   if (!snake) return null;
   return { total: snake.total, completed: snake.completed, percentCompleted: snake.percent_completed };
@@ -135,11 +117,11 @@ function normalizeIssueAttachment(dto: BackendIssueAttachmentDto): IssueAttachme
     {
       id,
       filename: dto.filename?.trim() || id,
-      mimeType: dto.mimeType ?? dto.mime_type ?? null,
+      mimeType: dto.mime_type ?? null,
       size: typeof dto.size === "number" ? dto.size : null,
-      createdAt: dto.createdAt ?? dto.created_at ?? dto.created ?? null,
+      createdAt: dto.created_at ?? dto.created ?? null,
       author: dto.author ?? null,
-      isImage: dto.isImage ?? dto.is_image ?? false,
+      isImage: dto.is_image ?? false,
     },
   ];
 }
@@ -163,7 +145,6 @@ interface BackendAssigneeOptionDto {
   login?: string | null;
   name?: string | null;
   avatar_url?: string | null;
-  avatarUrl?: string | null;
 }
 
 interface BackendAgentOptionDto {
@@ -178,11 +159,10 @@ export interface BackendIssueFormOptionsDto {
   statuses?: BackendWorkflowStatusDto[] | null;
   agents?: BackendAgentOptionDto[] | null;
   effective_agent?: string | null;
-  effectiveAgent?: string | null;
 }
 
 export function normalizeIssueFormOptions(dto: BackendIssueFormOptionsDto): IssueFormOptions {
-  const rawEffective = dto.effectiveAgent ?? dto.effective_agent ?? null;
+  const rawEffective = dto.effective_agent ?? null;
   const effectiveAgent: AgentKind =
     (AGENT_KINDS as readonly string[]).includes(rawEffective ?? "") ? (rawEffective as AgentKind) : "codex";
 
@@ -206,7 +186,7 @@ function normalizeAssigneeOption(dto: BackendAssigneeOptionDto): IssueAssigneeOp
     id: dto.id ?? null,
     login: dto.login ?? null,
     name: dto.name ?? null,
-    avatarUrl: dto.avatarUrl ?? dto.avatar_url ?? null,
+    avatarUrl: dto.avatar_url ?? null,
   };
 }
 

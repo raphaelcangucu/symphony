@@ -49,6 +49,9 @@ defmodule SymphonyElixirWeb.Tracker.AssistantControllerTest do
       ]
     })
 
+    SymphonyElixir.Assistant.CatalogBundle.invalidate()
+    SymphonyElixir.HotpathCache.invalidate_all()
+
     :ok
   end
 

@@ -23,7 +23,7 @@ describe("normalizeProjectSessionRow", () => {
       id: "thread:123",
       title: "Fix login",
       kind: "execution",
-      href: "/tracker/projects/advising/workspaces/123",
+      href: "/projects/advising/workspaces/123",
       updatedAt: "2026-07-14T12:00:00.000000Z",
       aggregateStatus: "live",
       agentKind: "codex",
@@ -35,24 +35,25 @@ describe("normalizeProjectSessionRow", () => {
     });
   });
 
-  it("accepts camelCase fields and normalizes unknown agent kinds to null", () => {
+  it("normalizes unknown agent kinds to null", () => {
     const row = normalizeProjectSessionRow({
       id: "issue:42",
       title: "Backlog item",
       kind: "issue",
       href: "/tracker/projects/demo/board/issues/DEMO-1",
-      updatedAt: "2026-07-14T10:00:00.000000Z",
-      aggregateStatus: "Todo",
-      agentKind: "unknown",
-      issueIdentifier: "DEMO-1",
-      workspacePath: null,
-      workspaceId: null,
+      updated_at: "2026-07-14T10:00:00.000000Z",
+      aggregate_status: "Todo",
+      agent_kind: "unknown",
+      issue_identifier: "DEMO-1",
+      workspace_path: null,
+      workspace_id: null,
       pinned: false,
       archived: true,
     });
 
     expect(row.agentKind).toBeNull();
     expect(row.archived).toBe(true);
+    expect(row.href).toBe("/projects/demo/board/issues/DEMO-1");
   });
 });
 
@@ -64,7 +65,7 @@ describe("normalizeProjectSessionsPage", () => {
           id: "thread:1",
           title: "Session A",
           kind: "workspace_session",
-          href: "/tracker/projects/demo/workspaces/1",
+          href: "/projects/demo/workspaces/1",
           updated_at: "2026-07-14T11:00:00.000000Z",
           aggregate_status: "active",
           agent_kind: "cursor",
@@ -87,7 +88,7 @@ describe("normalizeProjectSessionsPage", () => {
           id: "thread:1",
           title: "Session A",
           kind: "workspace_session",
-          href: "/tracker/projects/demo/workspaces/1",
+          href: "/projects/demo/workspaces/1",
           updatedAt: "2026-07-14T11:00:00.000000Z",
           aggregateStatus: "active",
           agentKind: "cursor",

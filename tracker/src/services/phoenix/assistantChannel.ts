@@ -32,7 +32,7 @@ export interface AssistantChannelHandlers {
   onBtwError?: (payload: { btwId: string; message: string }) => void;
   onGoalStatus?: (status: AuthoringGoalStatus) => void;
   onTurnStatus?: (status: AssistantTurnStatus) => void;
-  onHistorySynced?: (messages: AssistantChatMessage[]) => void;
+  onHistorySynced?: (messages: AssistantChatMessage[], meta?: AssistantHistoryMeta) => void;
   onApprovalRequired?: (request: AssistantApprovalRequest) => void;
 }
 
@@ -41,6 +41,14 @@ export interface AssistantHistoryMeta {
   skillProfile?: string | null;
   scope?: string | null;
   threadId?: number | null;
+  hasMoreBefore?: boolean;
+  oldestSequence?: number | null;
+}
+
+export interface OlderMessagesPage {
+  messages: AssistantChatMessage[];
+  hasMoreBefore: boolean;
+  oldestSequence: number | null;
 }
 
 /** Complete thread-scoped Goal snapshot from durable state plus live process presence. */
@@ -72,7 +80,6 @@ export interface AuthoringGoalStatus {
 
 interface BackendGoalStatusPayload {
   thread_id?: number | string | null;
-  threadId?: number | string | null;
   enabled?: boolean | null;
   objective?: string | null;
   native?: boolean | null;
@@ -82,35 +89,26 @@ interface BackendGoalStatusPayload {
   capabilities?: unknown;
   goal?: Record<string, unknown> | null;
   token_budget?: number | null;
-  tokenBudget?: number | null;
   tokens_used?: number | null;
-  tokensUsed?: number | null;
   time_used_seconds?: number | null;
-  timeUsedSeconds?: number | null;
   process_running?: boolean | null;
-  processRunning?: boolean | null;
   process_started_at?: string | null;
-  processStartedAt?: string | null;
   process_elapsed_seconds?: number | null;
-  processElapsedSeconds?: number | null;
   resumable?: boolean | null;
   interrupted?: boolean | null;
   revision?: string | null;
   updated_at?: string | null;
-  updatedAt?: string | null;
   request_order?: number | null;
-  requestOrder?: number | null;
   event_order?: number | null;
-  eventOrder?: number | null;
   error?: string | null;
   running?: boolean | null;
 }
 
 export function normalizeGoalStatus(payload: unknown): AuthoringGoalStatus {
   const data = (payload ?? {}) as BackendGoalStatusPayload;
-  const processRunning = data.processRunning ?? data.process_running ?? data.running;
+  const processRunning = data.process_running ?? data.running;
   return {
-    threadId: normalizeThreadId(data.threadId ?? data.thread_id),
+    threadId: normalizeThreadId(data.thread_id),
     enabled: data.enabled === true,
     objective: typeof data.objective === "string" && data.objective.trim() !== "" ? data.objective : null,
     native: data.native === true,
@@ -119,18 +117,18 @@ export function normalizeGoalStatus(payload: unknown): AuthoringGoalStatus {
     source: nonEmptyString(data.source),
     capabilities: normalizeGoalCapabilities(data.capabilities),
     goal: normalizeGoal(data.goal ?? null),
-    tokenBudget: finiteNumber(data.tokenBudget ?? data.token_budget),
-    tokensUsed: finiteNumber(data.tokensUsed ?? data.tokens_used),
-    timeUsedSeconds: finiteNumber(data.timeUsedSeconds ?? data.time_used_seconds),
+    tokenBudget: finiteNumber(data.token_budget),
+    tokensUsed: finiteNumber(data.tokens_used),
+    timeUsedSeconds: finiteNumber(data.time_used_seconds),
     processRunning: processRunning === true,
-    processStartedAt: nonEmptyString(data.processStartedAt ?? data.process_started_at),
-    processElapsedSeconds: finiteNumber(data.processElapsedSeconds ?? data.process_elapsed_seconds),
+    processStartedAt: nonEmptyString(data.process_started_at),
+    processElapsedSeconds: finiteNumber(data.process_elapsed_seconds),
     resumable: data.resumable === true,
     interrupted: data.interrupted === true,
     revision: nonEmptyString(data.revision),
-    updatedAt: nonEmptyString(data.updatedAt ?? data.updated_at),
-    requestOrder: finiteNumber(data.requestOrder ?? data.request_order),
-    eventOrder: finiteNumber(data.eventOrder ?? data.event_order),
+    updatedAt: nonEmptyString(data.updated_at),
+    requestOrder: finiteNumber(data.request_order),
+    eventOrder: finiteNumber(data.event_order),
     error: nonEmptyString(data.error),
     running: processRunning === true,
   };
@@ -191,9 +189,7 @@ interface BackendActiveToolPayload {
   id?: string | null;
   name?: string | null;
   arguments_summary?: string | null;
-  argumentsSummary?: string | null;
   started_at?: string | null;
-  startedAt?: string | null;
 }
 
 interface BackendTurnStatusPayload {
@@ -229,8 +225,8 @@ function normalizeActiveTools(tools: BackendActiveToolPayload[] | null | undefin
     const name = typeof tool?.name === "string" ? tool.name.trim() : "";
     if (!id || !name) return [];
 
-    const summary = tool.arguments_summary ?? tool.argumentsSummary;
-    const started = tool.started_at ?? tool.startedAt;
+    const summary = tool.arguments_summary;
+    const started = tool.started_at;
 
     return [
       {
@@ -264,6 +260,8 @@ interface HistoryLoadedPayload {
   skill_profile?: string | null;
   scope?: string | null;
   thread_id?: number | string | null;
+  has_more_before?: boolean | null;
+  oldest_sequence?: number | null;
 }
 
 interface MessagePayload {
@@ -276,7 +274,6 @@ interface DeltaPayload {
 
 interface ToolCallPayload {
   tool_call?: Parameters<typeof normalizeToolCall>[0] | null;
-  toolCall?: Parameters<typeof normalizeToolCall>[0] | null;
 }
 
 interface ErrorPayload {
@@ -285,25 +282,21 @@ interface ErrorPayload {
 
 interface ApprovalRequiredPayload {
   request_id?: string | number | null;
-  requestId?: string | number | null;
   command?: string | null;
   cwd?: string | null;
   reason?: string | null;
   tool_name?: string | null;
-  toolName?: string | null;
   agent?: string | null;
 }
 
 interface DocumentChangedPayload {
   identifier?: string | null;
   thread_id?: number | string | null;
-  threadId?: number | string | null;
 }
 
 interface IssueCreatedPayload {
   identifier?: string | null;
   thread_id?: number | string | null;
-  threadId?: number | string | null;
 }
 
 export function assistantTopic(projectSlug: string): string {
@@ -357,6 +350,7 @@ export function bindAssistantEvents(channel: Channel, handlers: AssistantChannel
       skillProfile: typeof data.skill_profile === "string" ? data.skill_profile : null,
       scope: typeof data.scope === "string" ? data.scope : null,
       threadId: normalizeThreadId(data.thread_id),
+      ...readHistoryPageMeta(data),
     });
 
     const joinedLastTurn = readLastTurn(data);
@@ -372,7 +366,7 @@ export function bindAssistantEvents(channel: Channel, handlers: AssistantChannel
   channel.on("history_synced", (payload) => {
     const data = payload as HistoryLoadedPayload;
     const messages = (data.messages ?? []).map(normalizeAssistantChatMessage);
-    handlers.onHistorySynced?.(messages);
+    handlers.onHistorySynced?.(messages, readHistoryPageMeta(data));
   });
 
   channel.on("message_created", (payload) => {
@@ -386,12 +380,12 @@ export function bindAssistantEvents(channel: Channel, handlers: AssistantChannel
   });
 
   channel.on("tool_call_started", (payload) => {
-    const toolCall = (payload as ToolCallPayload).toolCall ?? (payload as ToolCallPayload).tool_call;
+    const toolCall = (payload as ToolCallPayload).tool_call;
     if (toolCall) handlers.onToolCallStarted(normalizeToolCall(toolCall));
   });
 
   channel.on("tool_call_completed", (payload) => {
-    const toolCall = (payload as ToolCallPayload).toolCall ?? (payload as ToolCallPayload).tool_call;
+    const toolCall = (payload as ToolCallPayload).tool_call;
     if (toolCall) handlers.onToolCallCompleted(normalizeToolCall(toolCall));
   });
 
@@ -407,7 +401,7 @@ export function bindAssistantEvents(channel: Channel, handlers: AssistantChannel
   channel.on("assistant_document_changed", (payload) => {
     const data = payload as DocumentChangedPayload;
     const identifier = data.identifier?.trim();
-    const threadId = normalizeThreadId(data.threadId ?? data.thread_id);
+    const threadId = normalizeThreadId(data.thread_id);
 
     if (!identifier && threadId == null) return;
 
@@ -419,7 +413,7 @@ export function bindAssistantEvents(channel: Channel, handlers: AssistantChannel
     const identifier = created.identifier?.trim();
     if (!identifier) return;
 
-    handlers.onAssistantIssueCreated?.({ identifier, threadId: normalizeThreadId(created.threadId ?? created.thread_id) });
+    handlers.onAssistantIssueCreated?.({ identifier, threadId: normalizeThreadId(created.thread_id) });
   });
 
   channel.on("user_input_required", (payload) => {
@@ -506,6 +500,70 @@ export function requestHistorySync(channel: Channel): ReturnType<Channel["push"]
   return channel.push("sync_history", {});
 }
 
+function readHistoryPageMeta(data: HistoryLoadedPayload): {
+  hasMoreBefore: boolean;
+  oldestSequence: number | null;
+} {
+  return {
+    hasMoreBefore: data.has_more_before === true,
+    oldestSequence: typeof data.oldest_sequence === "number" ? data.oldest_sequence : null,
+  };
+}
+
+/** Requests the full (untruncated) output for a single tool call. Resolves to the output string. */
+export function fetchToolOutput(
+  channel: Channel,
+  messageId: number | string,
+  toolCallId: string,
+): Promise<string> {
+  const trimmedId = String(toolCallId).trim();
+  if (trimmedId === "") return Promise.reject(new Error("toolCallId is required"));
+
+  return new Promise((resolve, reject) => {
+    channel
+      .push("fetch_tool_output", { message_id: messageId, tool_call_id: trimmedId })
+      .receive("ok", (response: unknown) => {
+        const payload = response as { output?: string | null };
+        resolve(typeof payload?.output === "string" ? payload.output : "");
+      })
+      .receive("error", (response: unknown) => {
+        reject(new Error(readReceiveErrorReason(response) ?? "fetch_tool_output failed"));
+      })
+      .receive("timeout", () => reject(new Error("fetch_tool_output timed out")));
+  });
+}
+
+/** Loads an older page of messages (sequence &lt; beforeSequence), newest-first window, ascending. */
+export function loadOlderMessages(channel: Channel, beforeSequence: number): Promise<OlderMessagesPage> {
+  if (!Number.isInteger(beforeSequence) || beforeSequence <= 0) {
+    return Promise.reject(new Error("beforeSequence must be a positive integer"));
+  }
+
+  return new Promise((resolve, reject) => {
+    channel
+      .push("load_older_messages", { before_sequence: beforeSequence })
+      .receive("ok", (response: unknown) => {
+        const payload = (response ?? {}) as HistoryLoadedPayload;
+        resolve({
+          messages: (payload.messages ?? []).map(normalizeAssistantChatMessage),
+          ...readHistoryPageMeta(payload),
+        });
+      })
+      .receive("error", (response: unknown) => {
+        reject(new Error(readReceiveErrorReason(response) ?? "load_older_messages failed"));
+      })
+      .receive("timeout", () => reject(new Error("load_older_messages timed out")));
+  });
+}
+
+function readReceiveErrorReason(response: unknown): string | null {
+  if (typeof response === "object" && response !== null && "reason" in response) {
+    const reason = (response as { reason?: unknown }).reason;
+    return typeof reason === "string" && reason.trim() !== "" ? reason : null;
+  }
+  return null;
+}
+
 export function isTerminalTurnStatus(status: string): boolean {
   return status === "completed" || status === "failed" || status === "interrupted";
 }
@@ -568,7 +626,7 @@ function normalizeThreadId(value: number | string | null | undefined): number | 
 
 function normalizeApprovalRequest(payload: unknown): AssistantApprovalRequest | null {
   const data = (payload ?? {}) as ApprovalRequiredPayload;
-  const requestId = data.requestId ?? data.request_id;
+  const requestId = data.request_id;
   if (typeof requestId !== "string" && typeof requestId !== "number") return null;
 
   return {
@@ -576,7 +634,7 @@ function normalizeApprovalRequest(payload: unknown): AssistantApprovalRequest | 
     command: nonEmptyString(data.command),
     cwd: nonEmptyString(data.cwd),
     reason: nonEmptyString(data.reason),
-    toolName: nonEmptyString(data.tool_name ?? data.toolName),
+    toolName: nonEmptyString(data.tool_name),
     agent: normalizeApprovalAgent(data.agent),
   };
 }

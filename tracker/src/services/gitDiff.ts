@@ -19,7 +19,6 @@ import { http, trackerPath } from "./http";
 interface BackendGitDiffFileDto {
   path?: string | null;
   old_path?: string | null;
-  oldPath?: string | null;
   status?: string | null;
   patch?: string | null;
 }
@@ -74,7 +73,6 @@ interface BackendGitDiffFileEntryDto {
   repo?: string | null;
   path?: string | null;
   old_path?: string | null;
-  oldPath?: string | null;
   status?: string | null;
   additions?: number | null;
   deletions?: number | null;
@@ -320,7 +318,7 @@ function normalizeCount(value: unknown): number {
 function normalizeFile(dto: BackendGitDiffFileDto): GitDiffFileChange {
   return {
     path: dto.path ?? "",
-    oldPath: dto.oldPath ?? dto.old_path ?? null,
+    oldPath: dto.old_path ?? null,
     status: dto.status ?? "modified",
     patch: dto.patch ?? "",
   };
@@ -342,7 +340,7 @@ function normalizeFileEntry(dto: BackendGitDiffFileEntryDto): GitDiffFileEntry {
   return {
     repo: dto.repo ?? "",
     path: dto.path ?? "",
-    oldPath: dto.oldPath ?? dto.old_path ?? null,
+    oldPath: dto.old_path ?? null,
     status: dto.status ?? "modified",
     additions: normalizeOptionalNumber(dto.additions),
     deletions: normalizeOptionalNumber(dto.deletions),

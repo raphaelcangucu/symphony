@@ -6,18 +6,16 @@ import { http, trackerPath, unwrapData } from "./http";
 interface BackendActivityEventDto {
   id: string | number;
   event_type?: string | null;
-  eventType?: string | null;
   metadata?: Record<string, unknown> | null;
   inserted_at?: string | null;
-  insertedAt?: string | null;
 }
 
 function normalizeActivityEvent(dto: BackendActivityEventDto): ActivityEvent {
   return {
     id: String(dto.id),
-    eventType: dto.event_type ?? dto.eventType ?? "unknown",
+    eventType: dto.event_type ?? "unknown",
     metadata: dto.metadata ?? {},
-    insertedAt: dto.inserted_at ?? dto.insertedAt ?? "",
+    insertedAt: dto.inserted_at ?? "",
   };
 }
 

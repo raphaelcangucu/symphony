@@ -24,6 +24,13 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   @issue_authoring_tools ~w(create_draft_issue create_issue)
   @tool_arguments_summary_max_length 200
 
+  # Reload transcript guards: keep opening a workspace cheap by capping oversized
+  # tool outputs and paging the message history instead of shipping the whole
+  # thread at once. Full tool output stays fetchable via "fetch_tool_output";
+  # older messages via "load_older_messages".
+  @history_tool_output_cap_bytes 8_192
+  @history_page_limit 40
+
   @impl true
   def join("assistant:issue:" <> raw_issue_topic, _payload, socket) do
     with true <- authorized?(socket),
@@ -178,6 +185,60 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     push_history_sync(socket)
     {:reply, :ok, socket}
   end
+
+  def handle_in("load_older_messages", payload, socket) when is_map(payload) do
+    with thread_id when is_integer(thread_id) <- thread_id_from_socket(socket),
+         {:ok, before_sequence} <- parse_before_sequence(payload) do
+      records =
+        History.list_messages_for_thread(thread_id,
+          limit: @history_page_limit,
+          before_sequence: before_sequence
+        )
+
+      messages =
+        Enum.map(
+          records,
+          &History.message_payload(&1, cap_tool_output_bytes: @history_tool_output_cap_bytes)
+        )
+
+      {oldest_sequence, has_more_before} = older_page_meta(thread_id, records)
+
+      {:reply,
+       {:ok,
+        %{
+          messages: messages,
+          has_more_before: has_more_before,
+          oldest_sequence: oldest_sequence
+        }}, socket}
+    else
+      nil -> {:reply, {:error, %{reason: "thread is required"}}, socket}
+      :error -> {:reply, {:error, %{reason: "before_sequence is required"}}, socket}
+    end
+  end
+
+  def handle_in("fetch_tool_output", %{"message_id" => message_id, "tool_call_id" => tool_call_id}, socket)
+      when is_binary(tool_call_id) do
+    with thread_id when is_integer(thread_id) <- thread_id_from_socket(socket),
+         {:ok, parsed_message_id} <- parse_message_id(message_id),
+         {:ok, tool_call_id} <- require_tool_call_id(tool_call_id),
+         {:ok, result} <- History.tool_call_output(thread_id, parsed_message_id, tool_call_id) do
+      {:reply,
+       {:ok,
+        %{
+          message_id: parsed_message_id,
+          tool_call_id: tool_call_id,
+          output: result.output,
+          output_byte_size: result.output_byte_size
+        }}, socket}
+    else
+      nil -> {:reply, {:error, %{reason: "thread is required"}}, socket}
+      :error -> {:reply, {:error, %{reason: "message_id and tool_call_id are required"}}, socket}
+      {:error, :not_found} -> {:reply, {:error, %{reason: "tool call not found"}}, socket}
+    end
+  end
+
+  def handle_in("fetch_tool_output", _payload, socket),
+    do: {:reply, {:error, %{reason: "message_id and tool_call_id are required"}}, socket}
 
   def handle_in("stop_turn", _payload, socket) do
     case thread_id_from_socket(socket) do
@@ -1061,12 +1122,69 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   defp push_history_sync(%Socket{} = socket) do
     case thread_id_from_socket(socket) do
       id when is_integer(id) ->
-        messages = id |> History.list_messages_for_thread() |> Enum.map(&History.message_payload/1)
-        push(socket, "history_synced", %{messages: messages})
+        {messages, has_more_before, oldest_sequence} = history_message_window(id)
+
+        push(socket, "history_synced", %{
+          messages: messages,
+          has_more_before: has_more_before,
+          oldest_sequence: oldest_sequence
+        })
+
         socket
 
       _ ->
         socket
+    end
+  end
+
+  # Newest page of the transcript with capped tool outputs, plus the metadata the
+  # client needs to offer "load older".
+  defp history_message_window(thread_id) do
+    records = History.list_messages_for_thread(thread_id, limit: @history_page_limit)
+
+    messages =
+      Enum.map(
+        records,
+        &History.message_payload(&1, cap_tool_output_bytes: @history_tool_output_cap_bytes)
+      )
+
+    {oldest_sequence, has_more_before} = older_page_meta(thread_id, records)
+    {messages, has_more_before, oldest_sequence}
+  end
+
+  defp older_page_meta(thread_id, records) do
+    case records do
+      [%{sequence: oldest_sequence} | _] when is_integer(oldest_sequence) ->
+        {oldest_sequence, History.has_messages_before?(thread_id, oldest_sequence)}
+
+      _ ->
+        {nil, false}
+    end
+  end
+
+  defp parse_before_sequence(payload) do
+    case Map.get(payload, "before_sequence") do
+      value when is_integer(value) and value > 0 -> {:ok, value}
+      value when is_binary(value) -> parse_positive_integer(value)
+      _ -> :error
+    end
+  end
+
+  defp parse_message_id(value) when is_integer(value) and value > 0, do: {:ok, value}
+  defp parse_message_id(value) when is_binary(value), do: parse_positive_integer(value)
+  defp parse_message_id(_value), do: :error
+
+  defp parse_positive_integer(value) when is_binary(value) do
+    case Integer.parse(String.trim(value)) do
+      {parsed, ""} when parsed > 0 -> {:ok, parsed}
+      _ -> :error
+    end
+  end
+
+  defp require_tool_call_id(tool_call_id) do
+    case normalize_tool_call_id(tool_call_id) do
+      nil -> :error
+      trimmed -> {:ok, trimmed}
     end
   end
 
@@ -1730,8 +1848,12 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   defp authoring_goal_active?(_socket), do: false
 
   defp join_history_payload(thread) do
+    {messages, has_more_before, oldest_sequence} = history_message_window(thread.id)
+
     %{
-      messages: Enum.map(History.list_messages_for_thread(thread.id), &History.message_payload/1),
+      messages: messages,
+      has_more_before: has_more_before,
+      oldest_sequence: oldest_sequence,
       thread_id: thread.id,
       goal_mode: History.thread_goal_mode(thread),
       goal_objective: History.thread_goal_objective(thread),

@@ -38,7 +38,7 @@ defmodule SymphonyElixirWeb.Tracker.ProjectSessionControllerTest do
     assert row["id"] == "thread:#{newer.id}"
     assert row["title"] == "Newer title"
     assert row["kind"] == "workspace_session"
-    assert row["href"] == "/tracker/projects/sessions/workspaces/#{newer.id}"
+    assert row["href"] == "/projects/sessions/workspaces/#{newer.id}"
     assert is_binary(row["updated_at"])
     assert row["aggregate_status"] == "active"
     assert row["agent_kind"] == "codex"

@@ -9,7 +9,7 @@ function sessionRow(overrides: Partial<ProjectSessionRow> = {}): ProjectSessionR
     id: "thread:1",
     title: "Session one",
     kind: "chat",
-    href: "/tracker/projects/demo/workspaces/1",
+    href: "/projects/demo/workspaces/1",
     updatedAt: "2026-07-14T12:00:00.000000Z",
     aggregateStatus: "active",
     agentKind: "codex",
@@ -81,7 +81,7 @@ describe("buildFlatSidebarProject", () => {
       sessionKind: "execution",
       issueIdentifier: "DEMO-2",
       workspaceId: "1",
-      href: "/tracker/projects/demo/workspaces/1",
+      href: "/projects/demo/workspaces/1",
     } satisfies Partial<SidebarSessionNode>);
   });
 

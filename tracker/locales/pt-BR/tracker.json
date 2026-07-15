@@ -707,6 +707,9 @@
       "input": "ENT",
       "output": "SAÍ",
       "showMore": "… mostrar mais",
+      "loadFullOutput": "Carregar saída completa ({{size}})",
+      "loadingFullOutput": "Carregando saída completa…",
+      "loadFullOutputFailed": "Não foi possível carregar a saída completa.",
       "fileActivity": {
         "read": "Leu",
         "edited": "Editou",
@@ -2186,6 +2189,9 @@
       "turnInterrupted": "O turno anterior foi interrompido.",
       "resume": "Retomar",
       "scrollToBottom": "Ir para as mensagens mais recentes",
+      "loadOldPrompts": "↑ Carregar prompts anteriores ({{count}})",
+      "loadOlderMessages": "↑ Carregar mensagens anteriores",
+      "loadingOlder": "Carregando mensagens anteriores…",
       "workspaceProvision": {
         "progress": "Preparando o workspace desta issue…",
         "retry": "Tentar novamente",

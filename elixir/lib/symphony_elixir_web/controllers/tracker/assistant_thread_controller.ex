@@ -35,6 +35,18 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
     json(conn, %{data: data})
   end
 
+  @spec show(Conn.t(), map()) :: Conn.t()
+  def show(conn, %{"thread_id" => raw_id}) do
+    with {id, ""} <- Integer.parse(to_string(raw_id)),
+         {:ok, thread} <- History.get_thread(id) do
+      json(conn, %{data: TrackerPresenter.assistant_thread(with_preview(thread))})
+    else
+      :error -> TrackerErrors.validation_msg(conn, "thread_id must be an integer")
+      {:error, :not_found} -> TrackerErrors.render(conn, :thread_not_found)
+      {:error, reason} -> TrackerErrors.render(conn, reason)
+    end
+  end
+
   @spec create(Conn.t(), map()) :: Conn.t()
   def create(conn, %{"scope" => "freeform", "workspace_path" => _workspace_path}) do
     TrackerErrors.validation_msg(conn, "workspace_path is not supported for freeform threads")

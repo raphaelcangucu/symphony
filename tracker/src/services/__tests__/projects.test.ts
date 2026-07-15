@@ -4,6 +4,7 @@ import { http } from "@/services/http";
 import { normalizeProject, type BackendProjectDto } from "@/services/mappers";
 import {
   archiveProject,
+  clearProjectsRequestCaches,
   createProject,
   createWorkspaceProject,
   deleteProject,
@@ -17,6 +18,7 @@ import {
 
 describe("project service", () => {
   afterEach(() => {
+    clearProjectsRequestCaches();
     vi.restoreAllMocks();
   });
 

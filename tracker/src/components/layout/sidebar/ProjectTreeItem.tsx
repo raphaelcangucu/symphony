@@ -41,10 +41,10 @@ export function ProjectTreeItem({
 }: ProjectTreeItemProps) {
   const { t } = useTranslation();
   const statusLabel = aggregateStatusLabel(node.aggregateStatus, t);
-  const workspaceCount = node.workspaces.length + node.overflowWorkspaces.length;
-  const workspaceCountLabel = t("layout.sidebar.tree.projectWorkspaceCount", {
-    count: workspaceCount,
-    defaultValue: "{{count}} workspaces",
+  const sessionCount = node.sessions.length + node.overflowSessions.length;
+  const sessionCountLabel = t("layout.sidebar.tree.projectSessionCount", {
+    count: sessionCount,
+    defaultValue: "{{count}} sessions",
   });
   const loading =
     node.loadState === "loading" || (expanded && node.loadState === "idle");
@@ -60,8 +60,8 @@ export function ProjectTreeItem({
       expandable
       expanded={expanded}
       busy={loading}
-      statusLabel={[statusLabel, workspaceCountLabel].filter(Boolean).join(", ")}
-      trailingLabel={String(workspaceCount)}
+      statusLabel={[statusLabel, sessionCountLabel].filter(Boolean).join(", ")}
+      trailingLabel={sessionCount > 0 ? String(sessionCount) : null}
       tabIndex={tabIndex}
       leadingIcon={
         loading ? (

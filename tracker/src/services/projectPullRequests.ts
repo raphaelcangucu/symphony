@@ -19,9 +19,7 @@ interface BackendProjectPullRequestDto {
   repo?: string | null;
   author?: string | null;
   updated_at?: string | null;
-  updatedAt?: string | null;
   issue_identifier?: string | null;
-  issueIdentifier?: string | null;
 }
 
 export async function listProjectPullRequests(
@@ -45,7 +43,7 @@ function normalize(dto: BackendProjectPullRequestDto): ProjectPullRequest {
     url: dto.url ?? null,
     repo: dto.repo ?? null,
     author: dto.author ?? null,
-    updatedAt: dto.updated_at ?? dto.updatedAt ?? null,
-    issueIdentifier: dto.issue_identifier ?? dto.issueIdentifier ?? null,
+    updatedAt: dto.updated_at ?? null,
+    issueIdentifier: dto.issue_identifier ?? null,
   };
 }

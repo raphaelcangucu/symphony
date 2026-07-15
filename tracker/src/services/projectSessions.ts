@@ -22,26 +22,18 @@ export interface BackendProjectSessionRowDto {
   kind: string;
   href: string;
   updated_at?: string | null;
-  updatedAt?: string | null;
   aggregate_status?: string | null;
-  aggregateStatus?: string | null;
   agent_kind?: string | null;
-  agentKind?: string | null;
   issue_identifier?: string | null;
-  issueIdentifier?: string | null;
   workspace_path?: string | null;
-  workspacePath?: string | null;
   workspace_id?: string | null;
-  workspaceId?: string | null;
   pinned?: boolean;
   archived?: boolean;
 }
 
 export interface BackendProjectSessionsMetaDto {
   next_cursor?: string | null;
-  nextCursor?: string | null;
   project_activity_at?: string | null;
-  projectActivityAt?: string | null;
 }
 
 export interface BackendProjectSessionsPageDto {
@@ -69,16 +61,23 @@ export function normalizeProjectSessionRow(dto: BackendProjectSessionRowDto): Pr
     id: dto.id,
     title: dto.title ?? "",
     kind: normalizeSessionKind(dto.kind),
-    href: dto.href,
-    updatedAt: dto.updatedAt ?? dto.updated_at ?? "",
-    aggregateStatus: dto.aggregateStatus ?? dto.aggregate_status ?? null,
-    agentKind: normalizeAgentKind(dto.agentKind ?? dto.agent_kind),
-    issueIdentifier: dto.issueIdentifier ?? dto.issue_identifier ?? null,
-    workspacePath: dto.workspacePath ?? dto.workspace_path ?? null,
-    workspaceId: dto.workspaceId ?? dto.workspace_id ?? null,
+    href: normalizeSessionHref(dto.href),
+    updatedAt: dto.updated_at ?? "",
+    aggregateStatus: dto.aggregate_status ?? null,
+    agentKind: normalizeAgentKind(dto.agent_kind),
+    issueIdentifier: dto.issue_identifier ?? null,
+    workspacePath: dto.workspace_path ?? null,
+    workspaceId: dto.workspace_id ?? null,
     pinned: dto.pinned ?? false,
     archived: dto.archived ?? false,
   };
+}
+
+/** Router paths are basename-relative (`/projects/...`), never `/tracker/...`. */
+function normalizeSessionHref(href: string): string {
+  const trimmed = href.trim();
+  if (trimmed.startsWith("/tracker/")) return trimmed.slice("/tracker".length);
+  return trimmed;
 }
 
 export function normalizeProjectSessionsPage(dto: BackendProjectSessionsPageDto): ProjectSessionsPage {
@@ -86,8 +85,8 @@ export function normalizeProjectSessionsPage(dto: BackendProjectSessionsPageDto)
 
   return {
     sessions: (dto.data ?? []).map(normalizeProjectSessionRow),
-    nextCursor: meta.nextCursor ?? meta.next_cursor ?? null,
-    projectActivityAt: meta.projectActivityAt ?? meta.project_activity_at ?? null,
+    nextCursor: meta.next_cursor ?? null,
+    projectActivityAt: meta.project_activity_at ?? null,
   };
 }
 

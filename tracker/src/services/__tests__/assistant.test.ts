@@ -227,22 +227,15 @@ describe("normalizeToolCall id", () => {
 
   it.each([
     ["an empty id", { name: "shell", id: "", call_id: "c2" }, "c2"],
-    ["a whitespace id and NaN call_id", { name: "shell", id: " \t", call_id: Number.NaN, callId: "c3" }, "c3"],
+    ["a whitespace id and NaN call_id", { name: "shell", id: " \t", call_id: Number.NaN, tool_use_id: "tu3" }, "tu3"],
     [
       "wrong-type and non-finite candidates",
-      { name: "shell", id: false as unknown as string, call_id: Number.POSITIVE_INFINITY, callId: 7 },
-      "7",
+      { name: "shell", id: false as unknown as string, call_id: Number.POSITIVE_INFINITY, tool_use_id: "tu4" },
+      "tu4",
     ],
     [
-      "invalid candidates before toolUseId",
-      {
-        name: "shell",
-        id: "",
-        call_id: " ",
-        callId: Number.NEGATIVE_INFINITY,
-        tool_use_id: Number.NaN,
-        toolUseId: "tu5",
-      },
+      "invalid candidates before tool_use_id",
+      { name: "shell", id: "", call_id: " ", tool_use_id: "tu5" },
       "tu5",
     ],
   ])("skips %s and uses the next valid alias", (_description, dto, expected) => {
@@ -255,9 +248,7 @@ describe("normalizeToolCall id", () => {
         name: "shell",
         id: "primary",
         call_id: "snake-call",
-        callId: "camel-call",
         tool_use_id: "snake-tool",
-        toolUseId: "camel-tool",
       }).id,
     ).toBe("primary");
   });
@@ -272,14 +263,7 @@ describe("normalizeToolCall id", () => {
 });
 
 describe("normalizeAssistantChatMessage content blocks", () => {
-  it("normalizes camel- and snake-case top-level blocks", () => {
-    const camelDto = {
-      id: "camel",
-      contentBlocks: [
-        { type: "text", text: "Camel" },
-        { type: "tool", toolCallId: "camel-tool" },
-      ],
-    };
+  it("normalizes snake-case top-level blocks", () => {
     const snakeDto = {
       id: "snake",
       content_blocks: [
@@ -288,29 +272,18 @@ describe("normalizeAssistantChatMessage content blocks", () => {
       ],
     };
 
-    expect(normalizeAssistantChatMessage(camelDto).contentBlocks).toEqual([
-      { type: "text", text: "Camel" },
-      { type: "tool", toolCallId: "camel-tool" },
-    ]);
     expect(normalizeAssistantChatMessage(snakeDto).contentBlocks).toEqual([
       { type: "text", text: "Snake" },
       { type: "tool", toolCallId: "snake-tool" },
     ]);
   });
 
-  it("falls back to camel- and snake-case metadata blocks only when top-level keys are absent", () => {
-    const camelDto = {
-      id: "camel-metadata",
-      metadata: { contentBlocks: [{ type: "text", text: "Camel metadata" }] },
-    };
+  it("falls back to snake-case metadata blocks only when top-level keys are absent", () => {
     const snakeDto = {
       id: "snake-metadata",
       metadata: { content_blocks: [{ type: "tool", tool_call_id: "metadata-tool" }] },
     };
 
-    expect(normalizeAssistantChatMessage(camelDto).contentBlocks).toEqual([
-      { type: "text", text: "Camel metadata" },
-    ]);
     expect(normalizeAssistantChatMessage(snakeDto).contentBlocks).toEqual([
       { type: "tool", toolCallId: "metadata-tool" },
     ]);
@@ -335,19 +308,18 @@ describe("normalizeAssistantChatMessage content blocks", () => {
   it("does not resurrect metadata when top-level blocks are malformed", () => {
     const dto = {
       id: "invalid-top-level",
-      contentBlocks: "not-an-array",
+      content_blocks: "not-an-array",
       metadata: { content_blocks: [{ type: "text", text: "Fallback" }] },
     };
 
     expect(normalizeAssistantChatMessage(dto).contentBlocks).toBeUndefined();
   });
 
-  it("gives an explicit camel top-level field precedence over snake-case and metadata fields", () => {
+  it("treats a present top-level field as authoritative over metadata fields", () => {
     const dto = {
-      id: "camel-precedence",
-      contentBlocks: null,
-      content_blocks: [{ type: "text", text: "Snake top level" }],
-      metadata: { contentBlocks: [{ type: "text", text: "Metadata" }] },
+      id: "top-level-precedence",
+      content_blocks: [],
+      metadata: { content_blocks: [{ type: "text", text: "Metadata" }] },
     };
 
     expect(normalizeAssistantChatMessage(dto).contentBlocks).toBeUndefined();
@@ -361,7 +333,7 @@ describe("normalizeAssistantChatMessage content blocks", () => {
       { type: "unknown", text: "Unknown" },
       { type: "text", text: "" },
       { type: "text", text: 7 },
-      { type: "tool", toolCallId: " \t" },
+      { type: "tool", tool_call_id: " \t" },
       { type: "tool", tool_call_id: 7 },
     ];
     const withValidRow = { id: "some-valid", content_blocks: [...malformedRows, { type: "text", text: "Valid" }] };
@@ -378,7 +350,7 @@ describe("normalizeAssistantChatMessage content blocks", () => {
         { type: "text", text: "A" },
         { type: "text", text: "B" },
         { type: "tool", tool_call_id: "tool-1" },
-        { type: "tool", toolCallId: "tool-1" },
+        { type: "tool", tool_call_id: "tool-1" },
         { type: "text", text: "C" },
         { type: "text", text: "D" },
       ],
@@ -392,7 +364,7 @@ describe("normalizeAssistantChatMessage content blocks", () => {
   });
 
   it("preserves non-empty whitespace text", () => {
-    const dto = { id: "whitespace", contentBlocks: [{ type: "text", text: " \t" }] };
+    const dto = { id: "whitespace", content_blocks: [{ type: "text", text: " \t" }] };
 
     expect(normalizeAssistantChatMessage(dto).contentBlocks).toEqual([{ type: "text", text: " \t" }]);
   });

@@ -69,7 +69,6 @@ interface UploadedAttachmentLike {
   path: string;
   name: string;
   mediaType?: string;
-  media_type?: string;
   sizeBytes?: number;
 }
 
@@ -78,14 +77,14 @@ export function createImageAttachmentPreview(file: File, uploaded: UploadedAttac
     id: cryptoRandomId(),
     type: "image",
     name: uploaded.name || file.name,
-    mediaType: uploaded.mediaType || uploaded.media_type || file.type,
+    mediaType: uploaded.mediaType || file.type,
     previewUrl: URL.createObjectURL(file),
     path: uploaded.path,
   };
 }
 
 export function createFileAttachment(file: File, uploaded: UploadedAttachmentLike): AssistantAttachment {
-  const mediaType = uploaded.mediaType || uploaded.media_type || file.type || "application/octet-stream";
+  const mediaType = uploaded.mediaType || file.type || "application/octet-stream";
 
   return {
     id: cryptoRandomId(),

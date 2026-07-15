@@ -28,9 +28,7 @@ interface BackendJobDto {
   conclusion?: string | null;
   url?: string | null;
   started_at?: string | null;
-  startedAt?: string | null;
   completed_at?: string | null;
-  completedAt?: string | null;
 }
 
 interface BackendPipelineDto {
@@ -51,9 +49,7 @@ interface BackendConversationDto {
   body?: string | null;
   kind?: string | null;
   review_state?: string | null;
-  reviewState?: string | null;
   created_at?: string | null;
-  createdAt?: string | null;
 }
 
 interface BackendMonitorDto {
@@ -69,26 +65,17 @@ interface BackendPullRequestDto {
   url?: string | null;
   state?: string | null;
   raw_state?: string | null;
-  rawState?: string | null;
   is_draft?: boolean | null;
-  isDraft?: boolean | null;
   merged?: boolean | null;
   head_ref?: string | null;
-  headRef?: string | null;
   base_ref?: string | null;
-  baseRef?: string | null;
   author?: string | null;
   created_at?: string | null;
-  createdAt?: string | null;
   updated_at?: string | null;
-  updatedAt?: string | null;
   merged_at?: string | null;
-  mergedAt?: string | null;
   mergeable?: string | null;
   checks_state?: string | null;
-  checksState?: string | null;
   base_behind_by?: number | null;
-  baseBehindBy?: number | null;
   repo?: string | null;
   origin?: string | null;
   pipelines?: BackendPipelineDto[] | null;
@@ -101,7 +88,6 @@ interface BackendPullRequestGroupDto {
   identifier?: string | null;
   title?: string | null;
   pull_requests?: BackendPullRequestDto[] | null;
-  pullRequests?: BackendPullRequestDto[] | null;
 }
 
 interface BackendPullRequestEnvelope {
@@ -127,8 +113,8 @@ function normalizeJob(dto: BackendJobDto): PullRequestJob {
     status: dto.status ?? null,
     conclusion: dto.conclusion ?? null,
     url: dto.url ?? null,
-    startedAt: dto.started_at ?? dto.startedAt ?? null,
-    completedAt: dto.completed_at ?? dto.completedAt ?? null,
+    startedAt: dto.started_at ?? null,
+    completedAt: dto.completed_at ?? null,
   };
 }
 
@@ -154,8 +140,8 @@ function normalizeConversation(dto: BackendConversationDto): PullRequestConversa
     author: dto.author ?? null,
     body: dto.body ?? "",
     kind: dto.kind === "review" ? "review" : "comment",
-    reviewState: dto.review_state ?? dto.reviewState ?? null,
-    createdAt: dto.created_at ?? dto.createdAt ?? null,
+    reviewState: dto.review_state ?? null,
+    createdAt: dto.created_at ?? null,
   };
 }
 
@@ -173,7 +159,7 @@ function normalizePullRequestGroup(dto: BackendPullRequestGroupDto): PullRequest
   return {
     identifier: dto.identifier ?? "",
     title: dto.title ?? null,
-    pullRequests: (dto.pull_requests ?? dto.pullRequests ?? []).map(normalizePullRequest),
+    pullRequests: (dto.pull_requests ?? []).map(normalizePullRequest),
   };
 }
 
@@ -185,21 +171,21 @@ export function normalizePullRequest(dto: BackendPullRequestDto): PullRequest {
     state: normalizeState(dto.state),
     repo: dto.repo ?? null,
     origin: dto.origin === "manual" ? "manual" : "auto",
-    rawState: dto.raw_state ?? dto.rawState ?? null,
-    isDraft: dto.is_draft ?? dto.isDraft ?? false,
+    rawState: dto.raw_state ?? null,
+    isDraft: dto.is_draft ?? false,
     merged: dto.merged ?? false,
-    headRef: dto.head_ref ?? dto.headRef ?? null,
-    baseRef: dto.base_ref ?? dto.baseRef ?? null,
+    headRef: dto.head_ref ?? null,
+    baseRef: dto.base_ref ?? null,
     author: dto.author ?? null,
-    createdAt: dto.created_at ?? dto.createdAt ?? null,
-    updatedAt: dto.updated_at ?? dto.updatedAt ?? null,
-    mergedAt: dto.merged_at ?? dto.mergedAt ?? null,
+    createdAt: dto.created_at ?? null,
+    updatedAt: dto.updated_at ?? null,
+    mergedAt: dto.merged_at ?? null,
     mergeable: dto.mergeable ?? null,
-    checksState: dto.checks_state ?? dto.checksState ?? null,
+    checksState: dto.checks_state ?? null,
     pipelines: (dto.pipelines ?? []).map(normalizePipeline),
     statuses: (dto.statuses ?? []).map(normalizeStatus),
     conversation: (dto.conversation ?? []).map(normalizeConversation),
-    baseBehindBy: dto.base_behind_by ?? dto.baseBehindBy ?? null,
+    baseBehindBy: dto.base_behind_by ?? null,
     monitor: normalizeMonitor(dto.monitor),
   };
 }

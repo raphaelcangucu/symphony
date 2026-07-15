@@ -8,32 +8,58 @@ defmodule SymphonyElixirWeb.Tracker.ProjectController do
   alias SymphonyElixir.GitHub.Gist
   alias SymphonyElixir.LocalTracker.{Context, Projects, ProjectYamlSource}
   alias SymphonyElixir.Tracker.Sync.Engine, as: SyncEngine
+  alias SymphonyElixir.HotpathCache
   alias SymphonyElixirWeb.TrackerErrors
   alias SymphonyElixirWeb.TrackerPresenter
+
+  @projects_index_ttl_ms 15_000
 
   @spec index(Conn.t(), map()) :: Conn.t()
   def index(conn, params) do
     include_archived? = Map.get(params, "include_archived") == "true"
+    cache_key = projects_index_cache_key(include_archived?)
+
+    data =
+      case HotpathCache.fetch(cache_key) do
+        {:ok, cached} ->
+          cached
+
+        :miss ->
+          built = build_projects_index(include_archived?)
+          HotpathCache.put(cache_key, built, @projects_index_ttl_ms)
+          built
+      end
+
+    json(conn, %{data: data})
+  end
+
+  defp build_projects_index(include_archived?) do
     projects = Context.list_projects(include_archived: include_archived?)
     project_ids = Enum.map(projects, & &1.id)
     counts = Context.count_issues_by_project_ids(project_ids)
     activity_at = Context.max_activity_at_by_projects(projects)
 
-    data =
-      Enum.map(projects, fn project ->
-        project
-        |> TrackerPresenter.project()
-        |> Map.put(:issue_count, Map.get(counts, project.id, 0))
-        |> Map.put(:last_activity_at, TrackerPresenter.datetime_iso8601(Map.get(activity_at, project.id)))
-      end)
+    Enum.map(projects, fn project ->
+      project
+      |> TrackerPresenter.project()
+      |> Map.put(:issue_count, Map.get(counts, project.id, 0))
+      |> Map.put(:last_activity_at, TrackerPresenter.datetime_iso8601(Map.get(activity_at, project.id)))
+    end)
+  end
 
-    json(conn, %{data: data})
+  defp projects_index_cache_key(include_archived?), do: {:tracker_projects_index, include_archived?}
+
+  defp invalidate_projects_index_cache do
+    HotpathCache.invalidate(projects_index_cache_key(true))
+    HotpathCache.invalidate(projects_index_cache_key(false))
+    :ok
   end
 
   @spec create(Conn.t(), map()) :: Conn.t()
   def create(conn, params) do
     case Context.ensure_project(params) do
       {:ok, project} ->
+        invalidate_projects_index_cache()
         statuses = Context.list_statuses(project.slug)
 
         conn
@@ -49,6 +75,7 @@ defmodule SymphonyElixirWeb.Tracker.ProjectController do
   def workspace(conn, params) do
     case Context.create_workspace_project(params) do
       {:ok, project} ->
+        invalidate_projects_index_cache()
         statuses = Context.list_statuses(project.slug)
         repositories = Context.list_repositories(project.slug)
         setup = Context.get_project_setup(project.slug)
@@ -66,6 +93,7 @@ defmodule SymphonyElixirWeb.Tracker.ProjectController do
   def update(conn, %{"id" => project_slug} = params) do
     case Context.update_project(project_slug, params) do
       {:ok, project} ->
+        invalidate_projects_index_cache()
         statuses = Context.list_statuses(project.slug)
         json(conn, %{data: TrackerPresenter.project(project, statuses)})
 
@@ -174,16 +202,24 @@ defmodule SymphonyElixirWeb.Tracker.ProjectController do
   @spec archive(Conn.t(), map()) :: Conn.t()
   def archive(conn, %{"id" => project_slug}) do
     case Context.archive_project(project_slug) do
-      {:ok, project} -> json(conn, %{data: TrackerPresenter.project(project)})
-      {:error, reason} -> TrackerErrors.render(conn, reason)
+      {:ok, project} ->
+        invalidate_projects_index_cache()
+        json(conn, %{data: TrackerPresenter.project(project)})
+
+      {:error, reason} ->
+        TrackerErrors.render(conn, reason)
     end
   end
 
   @spec restore(Conn.t(), map()) :: Conn.t()
   def restore(conn, %{"id" => project_slug}) do
     case Context.restore_project(project_slug) do
-      {:ok, project} -> json(conn, %{data: TrackerPresenter.project(project)})
-      {:error, reason} -> TrackerErrors.render(conn, reason)
+      {:ok, project} ->
+        invalidate_projects_index_cache()
+        json(conn, %{data: TrackerPresenter.project(project)})
+
+      {:error, reason} ->
+        TrackerErrors.render(conn, reason)
     end
   end
 
@@ -191,6 +227,7 @@ defmodule SymphonyElixirWeb.Tracker.ProjectController do
   def delete(conn, %{"id" => project_slug}) do
     case Context.delete_project(project_slug) do
       {:ok, _project} ->
+        invalidate_projects_index_cache()
         send_resp(conn, :no_content, "")
 
       {:error, :project_not_archived} ->

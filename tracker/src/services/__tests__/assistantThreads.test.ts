@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   archiveAssistantThread,
+  clearAssistantThreadRequestCaches,
   createIssueSessionThread,
   createProjectSessionThread,
   deleteAssistantThread,
@@ -32,45 +33,32 @@ describe("normalizeAssistantThread", () => {
     });
   });
 
-  it("maps camelCase sidebar metadata and defaults missing or malformed values", () => {
-    const camel = normalizeAssistantThread({
-      id: 4, scope: "freeform", status: "active", updatedAt: "now",
-      workspacePath: "/tmp/thread", labels: ["one", "two"], needsReview: true,
-    });
+  it("defaults missing or malformed sidebar metadata values", () => {
     const malformed = normalizeAssistantThread({
       id: 5, scope: "freeform", status: "active",
       workspace_path: 42, labels: "one", needs_review: "yes",
     } as never);
 
-    expect(camel).toMatchObject({
-      workspacePath: "/tmp/thread", labels: ["one", "two"], needsReview: true,
-    });
     expect(malformed).toMatchObject({ workspacePath: null, labels: [], needsReview: false });
   });
 
-  it("uses the first valid workspace path with camelCase precedence", () => {
-    const snakeFallback = normalizeAssistantThread({
+  it("reads workspace_path from snake_case wire format", () => {
+    const thread = normalizeAssistantThread({
       id: 6,
       scope: "freeform",
       status: "active",
-      workspacePath: 42,
-      workspace_path: "/snake/fallback",
-    });
-    const camelPreferred = normalizeAssistantThread({
-      id: 7,
-      scope: "freeform",
-      status: "active",
-      workspacePath: "/camel/preferred",
-      workspace_path: "/snake/ignored",
+      workspace_path: "/snake/path",
     });
 
-    expect(snakeFallback.workspacePath).toBe("/snake/fallback");
-    expect(camelPreferred.workspacePath).toBe("/camel/preferred");
+    expect(thread.workspacePath).toBe("/snake/path");
   });
 });
 
 describe("listAssistantThreads", () => {
-  beforeEach(() => vi.mocked(http.get).mockReset());
+  beforeEach(() => {
+    clearAssistantThreadRequestCaches();
+    vi.mocked(http.get).mockReset();
+  });
 
   it.each([
     [{ includeArchived: true }, "include_archived=true"],
@@ -83,6 +71,27 @@ describe("listAssistantThreads", () => {
 
     const requestedUrl = vi.mocked(http.get).mock.calls[0][0] as string;
     expect(new URL(requestedUrl, "http://tracker").searchParams.toString()).toBe(expected);
+  });
+
+  it("coalesces identical in-flight list requests and serves a short TTL cache", async () => {
+    let resolveGet!: (value: unknown) => void;
+    vi.mocked(http.get).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveGet = resolve;
+        }),
+    );
+
+    const first = listAssistantThreads({ projectSlug: "advising", limit: 100 });
+    const second = listAssistantThreads({ projectSlug: "advising", limit: 100 });
+    expect(http.get).toHaveBeenCalledTimes(1);
+
+    resolveGet({ data: { data: [{ id: 1, scope: "project_session", status: "active" }] } });
+    await expect(Promise.all([first, second])).resolves.toHaveLength(2);
+    expect(http.get).toHaveBeenCalledTimes(1);
+
+    await listAssistantThreads({ projectSlug: "advising", limit: 100 });
+    expect(http.get).toHaveBeenCalledTimes(1);
   });
 });
 

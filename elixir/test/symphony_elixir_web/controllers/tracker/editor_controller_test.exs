@@ -77,14 +77,22 @@ defmodule SymphonyElixirWeb.Tracker.EditorControllerTest do
            }
   end
 
-  test "returns 404 for an unknown issue" do
+  test "returns workspace_missing when the issue workspace is absent" do
     {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
 
     conn = get(authorized_conn(), "/api/tracker/v1/projects/macro-markets/issues/MAC-404/editor")
 
-    assert json_response(conn, 404) == %{
-             "error" => %{"code" => "issue_not_found", "message" => "Issue not found"}
-           }
+    assert %{
+             "data" => %{
+               "available" => false,
+               "url" => nil,
+               "cursor_desktop" => %{
+                 "available" => false,
+                 "url" => nil,
+                 "reason" => "workspace_missing"
+               }
+             }
+           } = json_response(conn, 200)
   end
 
   test "returns editor targets for the project explore workspace" do

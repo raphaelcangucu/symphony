@@ -16,6 +16,11 @@ defmodule SymphonyElixirWeb.Tracker.WorktreeInventoryController do
 
   @display_name_module_env :worktree_inventory_display_name_module
 
+  # EventSource sends Accept: text/event-stream. formats: [:json] would 406
+  # during controller negotiation before the action runs, so force the format
+  # in a plug (put_private inside events/2 is too late).
+  plug(:force_json_format when action: :events)
+
   @spec index(Conn.t(), map()) :: Conn.t()
   def index(conn, %{"project_slug" => project_slug}) do
     with {:ok, scan} <- Inventory.scan(project_slug),
@@ -31,8 +36,6 @@ defmodule SymphonyElixirWeb.Tracker.WorktreeInventoryController do
 
   @spec events(Conn.t(), map()) :: Conn.t()
   def events(conn, %{"project_slug" => project_slug}) do
-    conn = Plug.Conn.put_private(conn, :phoenix_format, "json")
-
     case Context.get_project(project_slug) do
       {:ok, _project} ->
         WorktreeInventoryEventStream.stream(conn, project_slug, display_name_module())
@@ -41,6 +44,8 @@ defmodule SymphonyElixirWeb.Tracker.WorktreeInventoryController do
         TrackerErrors.render(conn, reason)
     end
   end
+
+  defp force_json_format(conn, _opts), do: put_format(conn, "json")
 
   @spec remove(Conn.t(), map()) :: Conn.t()
   def remove(conn, %{"project_slug" => project_slug, "paths" => paths}) when is_list(paths) do
