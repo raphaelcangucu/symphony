@@ -72,6 +72,7 @@ export function useProjectSessions(projectSlug: string): UseProjectSessionsResul
   const [error, setError] = useState<string | null>(null);
   const [inventoryRefreshKey, setInventoryRefreshKey] = useState(0);
   const inventoryGenerationRef = useRef(0);
+  const fallbackStartedRef = useRef(false);
 
   const loadProjectData = useCallback(async () => {
     const slug = projectSlug.trim();
@@ -112,11 +113,12 @@ export function useProjectSessions(projectSlug: string): UseProjectSessionsResul
     }
 
     const generation = ++inventoryGenerationRef.current;
+    fallbackStartedRef.current = false;
     setIsInventoryLoading(true);
     setInventory({ entries: [], totals: EMPTY_INVENTORY_TOTALS });
 
     const applyEntry = (entry: WorkspaceInventoryEntry) => {
-      if (generation !== inventoryGenerationRef.current) {
+      if (generation !== inventoryGenerationRef.current || fallbackStartedRef.current) {
         return;
       }
 
@@ -130,7 +132,7 @@ export function useProjectSessions(projectSlug: string): UseProjectSessionsResul
     };
 
     const finishInventory = () => {
-      if (generation !== inventoryGenerationRef.current) {
+      if (generation !== inventoryGenerationRef.current || fallbackStartedRef.current) {
         return;
       }
 
@@ -138,6 +140,12 @@ export function useProjectSessions(projectSlug: string): UseProjectSessionsResul
     };
 
     const loadInventoryFallback = () => {
+      if (generation !== inventoryGenerationRef.current || fallbackStartedRef.current) {
+        return;
+      }
+
+      fallbackStartedRef.current = true;
+
       void fetchWorkspaceInventory(slug)
         .then((nextInventory) => {
           if (generation !== inventoryGenerationRef.current) {
@@ -160,7 +168,7 @@ export function useProjectSessions(projectSlug: string): UseProjectSessionsResul
     const unsubscribe = subscribeWorkspaceInventory(slug, {
       onEntry: applyEntry,
       onTotals: (totals) => {
-        if (generation !== inventoryGenerationRef.current) {
+        if (generation !== inventoryGenerationRef.current || fallbackStartedRef.current) {
           return;
         }
 
@@ -171,7 +179,7 @@ export function useProjectSessions(projectSlug: string): UseProjectSessionsResul
       },
       onDone: finishInventory,
       onError: () => {
-        if (generation !== inventoryGenerationRef.current) {
+        if (generation !== inventoryGenerationRef.current || fallbackStartedRef.current) {
           return;
         }
 

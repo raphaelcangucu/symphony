@@ -275,7 +275,9 @@ export function subscribeWorkspaceInventory(
       return;
     }
 
+    closed = true;
     handlers.onError?.();
+    source.close();
   };
 
   return () => {
