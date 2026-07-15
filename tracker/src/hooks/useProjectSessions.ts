@@ -31,7 +31,7 @@ export interface UseProjectSessionsResult {
 }
 
 export function useProjectSessions(projectSlug: string): UseProjectSessionsResult {
-  const { executions, refetch: refetchExecutions } = useAgentExecutions();
+  const { executions } = useAgentExecutions();
   const [issues, setIssues] = useState<Issue[]>([]);
   const [recents, setRecents] = useState<RecentSession[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -72,8 +72,8 @@ export function useProjectSessions(projectSlug: string): UseProjectSessionsResul
   }, [loadProjectData]);
 
   const refetch = useCallback(async () => {
-    await Promise.all([loadProjectData(), refetchExecutions()]);
-  }, [loadProjectData, refetchExecutions]);
+    await loadProjectData();
+  }, [loadProjectData]);
 
   const groups = useMemo(() => {
     if (issues.length === 0 || executions.size === 0) return emptyProjectSessionGroups();
