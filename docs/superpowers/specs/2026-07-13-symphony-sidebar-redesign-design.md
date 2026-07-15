@@ -1,5 +1,13 @@
 # Symphony Sidebar Redesign — Design
 
+> **Supersessão (hierarquia / carga):** a navegação **Projeto → Workspace →
+> Sessão** e o carregamento via inventory/issues ilimitados foram
+> redesenhados em
+> [`2026-07-14-sidebar-sessions-perf-design.md`](./2026-07-14-sidebar-sessions-perf-design.md)
+> (**Projeto → Sessão**, paginação server-side, PubSub para executions).
+> Shell utilitário, menus contextuais e acessibilidade deste doc continuam
+> válidos salvo conflito com o doc novo.
+
 > Redesenha a navegação lateral global do Symphony usando a hierarquia do
 > Codex e os menus contextuais do Cursor como referências. A nova arquitetura é
 > orientada a projeto e representa diretamente **Projeto → Workspace → Sessão**.
