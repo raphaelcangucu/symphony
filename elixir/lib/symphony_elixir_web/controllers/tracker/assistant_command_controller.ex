@@ -4,12 +4,13 @@ defmodule SymphonyElixirWeb.Tracker.AssistantCommandController do
   use Phoenix.Controller, formats: [:json]
 
   alias Plug.Conn
+  alias SymphonyElixir.Assistant.SkillProfiles
   alias SymphonyElixir.AssistantCommands
   alias SymphonyElixirWeb.{TrackerErrors, TrackerPresenter}
 
   @execution_context "execution"
   @authoring_context "authoring"
-  @invalid_context_message "context must be execution or authoring"
+  @invalid_context_message "context must be a skill profile id or legacy authoring/execution"
 
   @spec index(Conn.t(), map()) :: Conn.t()
   def index(conn, params), do: render_commands(conn, params["context"])
@@ -37,10 +38,19 @@ defmodule SymphonyElixirWeb.Tracker.AssistantCommandController do
   defp normalize_context(nil), do: {:ok, @execution_context}
 
   defp normalize_context(context) when is_binary(context) do
-    case String.trim(context) do
-      @execution_context -> {:ok, @execution_context}
-      @authoring_context -> {:ok, @authoring_context}
-      _other -> {:error, @invalid_context_message}
+    case String.downcase(String.trim(context)) do
+      @execution_context ->
+        {:ok, @execution_context}
+
+      @authoring_context ->
+        {:ok, @authoring_context}
+
+      lowered ->
+        if SkillProfiles.valid?(lowered) do
+          {:ok, lowered}
+        else
+          {:error, @invalid_context_message}
+        end
     end
   end
 

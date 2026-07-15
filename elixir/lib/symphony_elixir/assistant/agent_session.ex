@@ -28,6 +28,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
   alias SymphonyElixir.Config
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.{AgentPreference, InstanceConfig, ProjectConfig, Repo, Settings, Skills, Workspace}
+  alias SymphonyElixir.Workspace.IssueBranches
   alias SymphonyElixir.Settings.Orchestration
   alias SymphonyElixir.Workspace.PathOwnership
 
@@ -224,6 +225,24 @@ defmodule SymphonyElixir.Assistant.AgentSession do
     end
   end
 
+  @doc """
+  Idempotently provisions the workspace pinned on an issue or issue-session thread.
+
+  Isolated parallel trees also receive a per-issue feature branch checkout in each
+  repository after provisioning completes.
+  """
+  @spec provision_thread_workspace(SymphonyElixir.Assistant.Thread.t()) :: {:ok, Path.t()} | {:error, term()}
+  def provision_thread_workspace(%{scope: scope} = thread) when scope in ["issue", "issue_session"] do
+    with {:ok, path} <- persisted_thread_workspace_path(thread),
+         issue_ref <- issue_workspace_ref(Map.get(thread, :project_slug), thread.issue_identifier),
+         {:ok, workspace} <- Workspace.ensure_at(path, issue_ref),
+         :ok <- maybe_ensure_isolated_branches(thread, workspace) do
+      {:ok, workspace}
+    end
+  end
+
+  def provision_thread_workspace(_thread), do: {:error, :unsupported_scope}
+
   @spec send_message_to_issue_thread(SymphonyElixir.Assistant.Thread.t(), String.t(), map(), keyword()) ::
           {:ok, turn_result()} | {:error, term()}
   def send_message_to_issue_thread(
@@ -401,8 +420,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
     |> normalize_runner_result()
   end
 
-  defp ensure_issue_workspace(%{scope: "issue_session"} = thread),
-    do: session_workspace_path(thread)
+  defp ensure_issue_workspace(%{scope: "issue_session"} = thread), do: provision_thread_workspace(thread)
 
   # Honor the working tree persisted on the legacy issue thread so the authoring turn writes where the
   # document viewer reads. If that path is unusable (e.g. a thread created while a divergent serve
@@ -447,6 +465,23 @@ defmodule SymphonyElixir.Assistant.AgentSession do
   end
 
   defp repair_thread_workspace_path(_thread, _workspace), do: :ok
+
+  defp persisted_thread_workspace_path(%{workspace_path: path}) when is_binary(path) and path != "",
+    do: {:ok, path}
+
+  defp persisted_thread_workspace_path(_thread),
+    do: {:error, {:authoring_goal_unavailable, :workspace_not_executable}}
+
+  defp maybe_ensure_isolated_branches(%{metadata: metadata, project_slug: slug, issue_identifier: identifier}, workspace)
+       when is_binary(slug) and is_binary(identifier) and is_binary(workspace) do
+    if Map.get(metadata || %{}, "workspace_kind") == "isolated" do
+      IssueBranches.ensure(workspace, slug, identifier)
+    else
+      :ok
+    end
+  end
+
+  defp maybe_ensure_isolated_branches(_thread, _workspace), do: :ok
 
   defp run_issue_turn(workspace, prompt, project_slug, identifier, opts) do
     runner = Keyword.get(opts, :runner, &default_runner/4)

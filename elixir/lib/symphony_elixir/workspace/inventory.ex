@@ -607,6 +607,15 @@ defmodule SymphonyElixir.Workspace.Inventory do
     end
   end
 
+  defp format_reason({:remove_failed, posix, failed_path})
+       when posix in [:eacces, :eperm, :eexist] and is_binary(failed_path) do
+    "permission denied deleting #{failed_path} (often Docker-owned files; stop containers or chown, then retry)"
+  end
+
+  defp format_reason({:remove_failed, reason, failed_path}) when is_binary(failed_path) do
+    "failed deleting #{failed_path}: #{inspect(reason)}"
+  end
+
   defp format_reason(reason) when is_binary(reason), do: reason
   defp format_reason(reason), do: inspect(reason)
 

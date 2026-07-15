@@ -3,6 +3,7 @@ import type { TFunction } from "i18next";
 import { toast } from "sonner";
 
 import { createIssueSessionThread } from "@/services/assistantThreads";
+import { provisionThreadWorkspace } from "@/services/workspaceProvision";
 import type { AgentKind, ExecutionMode, Issue } from "@/types/issue";
 import type { AssistantThread } from "@/types/assistant-thread";
 
@@ -30,6 +31,12 @@ export async function createIssueSession(
     isolatedWorkspace: input.isolatedWorkspace === true,
     useParentWorkspace: input.useParentWorkspace === true,
   });
+
+  if (input.isolatedWorkspace === true) {
+    void provisionThreadWorkspace(thread.id).catch(() => {
+      // Provisioning also runs on the first assistant turn; ignore background failures here.
+    });
+  }
 
   if (t) {
     toast.success(t("issueSession.started", { identifier: issueIdentifier }));

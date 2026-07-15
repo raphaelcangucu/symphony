@@ -67,12 +67,45 @@ defmodule SymphonyElixirWeb.Tracker.AssistantCommandControllerTest do
     assert %{"slug" => "brainstorming", "category" => "superpowers"} = find_command(commands, "brainstorming")
   end
 
+  test "GET /assistant/commands with implementation profile excludes authoring-only skills", %{conn: conn} do
+    conn = get(conn, "/api/tracker/v1/assistant/commands?context=implementation")
+    %{"data" => commands} = json_response(conn, 200)
+
+    assert find_command(commands, "commit")
+    assert find_command(commands, "goal")
+    assert find_command(commands, "brainstorming") == nil
+  end
+
+  test "GET /assistant/commands with planning profile includes authoring-only skills", %{conn: conn} do
+    conn = get(conn, "/api/tracker/v1/assistant/commands?context=planning")
+    %{"data" => commands} = json_response(conn, 200)
+
+    assert %{"slug" => "brainstorming", "category" => "superpowers"} = find_command(commands, "brainstorming")
+  end
+
+  test "GET /assistant/commands with auto profile includes authoring-only skills", %{conn: conn} do
+    conn = get(conn, "/api/tracker/v1/assistant/commands?context=auto")
+    %{"data" => commands} = json_response(conn, 200)
+
+    assert %{"slug" => "brainstorming", "category" => "superpowers"} = find_command(commands, "brainstorming")
+  end
+
   test "GET /projects/:project_slug/assistant/commands mirrors global endpoint", %{conn: conn} do
     conn = get(conn, "/api/tracker/v1/projects/demo/assistant/commands?context=execution")
     %{"data" => commands} = json_response(conn, 200)
 
     assert find_command(commands, "commit")
     assert find_command(commands, "goal")
+  end
+
+  test "GET /projects/:project_slug/assistant/commands accepts skill profile context", %{conn: conn} do
+    conn =
+      get(conn, "/api/tracker/v1/projects/demo/assistant/commands?context=implementation")
+
+    %{"data" => commands} = json_response(conn, 200)
+
+    assert find_command(commands, "commit")
+    assert find_command(commands, "brainstorming") == nil
   end
 
   test "GET /assistant/commands rejects invalid context", %{conn: conn} do

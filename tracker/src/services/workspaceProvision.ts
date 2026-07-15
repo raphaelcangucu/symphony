@@ -15,6 +15,23 @@ interface BackendWorkspaceProvisionDto {
   status: string;
 }
 
+export async function provisionThreadWorkspace(threadId: number): Promise<WorkspaceProvisionResult> {
+  if (!Number.isInteger(threadId) || threadId <= 0) {
+    throw new Error("threadId must be a positive integer");
+  }
+
+  try {
+    const response = await http.post(
+      trackerPath(`/assistant/threads/${encodeURIComponent(String(threadId))}/workspace/provision`),
+    );
+
+    const dto = unwrapData<BackendWorkspaceProvisionDto>(response);
+    return { workspacePath: dto.workspace_path, status: dto.status };
+  } catch (cause) {
+    throw new Error(extractApiErrorMessage(cause, i18n.t("assistant.panel.workspaceProvision.retryFailed")));
+  }
+}
+
 /**
  * Idempotently (re)provisions an issue's workspace. Safe to call repeatedly,
  * including from a "Try again" affordance after a failed turn: concurrent

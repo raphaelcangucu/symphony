@@ -5,6 +5,7 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
 
   alias Plug.Conn
   alias SymphonyElixir.Assistant.{AgentSession, History}
+  alias SymphonyElixir.Workspace.Provision
   alias SymphonyElixir.Workspace.PathOwnership
   alias SymphonyElixirWeb.{TrackerErrors, TrackerPresenter}
 
@@ -226,6 +227,29 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
   def archive(conn, _params) do
     TrackerErrors.validation_msg(conn, "thread id is required")
   end
+
+  @spec provision_workspace(Conn.t(), map()) :: Conn.t()
+  def provision_workspace(conn, %{"thread_id" => raw_id}) do
+    with {:ok, id} <- parse_thread_id(raw_id),
+         {:ok, thread} <- History.get_thread(id),
+         {:ok, path} <- AgentSession.provision_thread_workspace(thread) do
+      json(conn, %{data: %{workspace_path: path, status: "ready"}})
+    else
+      {:error, :not_found} ->
+        TrackerErrors.render(conn, :thread_not_found)
+
+      {:error, :invalid_thread_id} ->
+        TrackerErrors.render(conn, :invalid_thread_id)
+
+      {:error, :unsupported_scope} ->
+        TrackerErrors.validation_msg(conn, "thread scope does not support workspace provisioning")
+
+      {:error, reason} ->
+        TrackerErrors.render(conn, Provision.classify_error(reason))
+    end
+  end
+
+  def provision_workspace(conn, _params), do: TrackerErrors.validation_msg(conn, "thread id is required")
 
   defp parse_thread_id(id) when is_integer(id) and id > 0, do: {:ok, id}
 

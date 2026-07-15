@@ -349,7 +349,7 @@ defmodule SymphonyElixirWeb.Tracker.WorktreeInventoryControllerTest do
     {:ok, thread} = History.get_thread(id)
 
     assert thread.workspace_path == ws <> "__p1"
-    assert File.dir?(thread.workspace_path)
+    refute File.dir?(thread.workspace_path)
     assert thread.metadata["workspace_kind"] == "isolated"
   end
 

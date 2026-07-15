@@ -114,7 +114,17 @@ defmodule SymphonyElixir.Workspace do
         case validate_workspace_path(workspace, allowed_root) do
           :ok ->
             maybe_run_before_remove_hook(workspace)
-            File.rm_rf(workspace)
+            # Restore write bits we own so nested unlinks can succeed. Docker /
+            # www-data ownership still fails — inventory surfaces that path.
+            _ = File.chmod(workspace, 0o700)
+
+            case File.rm_rf(workspace) do
+              {:ok, files} ->
+                {:ok, files}
+
+              {:error, reason, failed_path} ->
+                {:error, {:remove_failed, reason, failed_path}, ""}
+            end
 
           {:error, reason} ->
             {:error, reason, ""}

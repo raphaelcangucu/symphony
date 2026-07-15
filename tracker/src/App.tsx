@@ -38,6 +38,7 @@ import { SettingsPlaceholderRoute } from "@/pages/SettingsPlaceholderRoute";
 import { SidebarTreeLayoutProposalsPage } from "@/pages/SidebarTreeLayoutProposalsPage";
 import { AssistantSessionLayoutProposalsPage } from "@/pages/AssistantSessionLayoutProposalsPage";
 import { WorkspacesPageLayoutProposalsPage } from "@/pages/WorkspacesPageLayoutProposalsPage";
+import { WorkspaceArchiveCleanupProposalsPage } from "@/pages/WorkspaceArchiveCleanupProposalsPage";
 import { UsageSettingsPage } from "@/pages/UsageSettingsPage";
 import { GatewaysSettingsPage } from "@/pages/GatewaysSettingsPage";
 import { TemplateListPage } from "@/pages/TemplateListPage";
@@ -151,6 +152,10 @@ export function App() {
               <Route
                 path="dev/workspaces-page-proposals"
                 element={<WorkspacesPageLayoutProposalsPage />}
+              />
+              <Route
+                path="dev/workspace-archive-cleanup-proposals"
+                element={<WorkspaceArchiveCleanupProposalsPage />}
               />
               <Route
                 path="dev/assistant-session-proposals"

@@ -1,4 +1,4 @@
-import { FolderPlus, Trash2 } from "lucide-react";
+import { Archive, FolderPlus, Trash2 } from "lucide-react";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
 import { IssueEnvironmentDock } from "@/components/sessions/IssueEnvironmentDock";
@@ -24,6 +24,7 @@ import {
   WorkspaceActionButton,
   workspaceActionIconProps,
 } from "@/components/sessions/WorkspaceActionButton";
+import { WorkspaceArchiveDialog } from "@/components/sessions/WorkspaceArchiveDialog";
 import { WorkspaceCleanupDialog } from "@/components/sessions/WorkspaceCleanupDialog";
 import {
   WorkspaceRemoveDialog,
@@ -88,6 +89,7 @@ export function ProjectSessionsWorkspace({
   const setSessionsChrome = useContext(ProjectSessionsChromeSetterContext);
   const [resumePending, setResumePending] = useState<string | null>(null);
   const [cleanupOpen, setCleanupOpen] = useState(false);
+  const [archiveOpen, setArchiveOpen] = useState(false);
   const [newWorkspaceOpen, setNewWorkspaceOpen] = useState(false);
   const [removeTarget, setRemoveTarget] = useState<WorkspaceRemoveTarget | null>(null);
   const [newSessionIssue, setNewSessionIssue] = useState<StartIssueSessionDialogIssue | null>(null);
@@ -500,6 +502,12 @@ export function ProjectSessionsWorkspace({
                 >
                   {t("workspacesPage.newWorkspace.button")}
                 </WorkspaceActionButton>
+                <WorkspaceActionButton
+                  icon={<Archive {...workspaceActionIconProps} aria-hidden />}
+                  onClick={() => setArchiveOpen(true)}
+                >
+                  {t("workspacesPage.archive.button", { defaultValue: "Archive…" })}
+                </WorkspaceActionButton>
                 {inventory && !isInventoryLoading ? (
                   <WorkspaceActionButton
                     icon={<Trash2 {...workspaceActionIconProps} aria-hidden />}
@@ -645,6 +653,13 @@ export function ProjectSessionsWorkspace({
           if (!open) setRemoveTarget(null);
         }}
         onConfirm={confirmRemoveWorkspace}
+      />
+
+      <WorkspaceArchiveDialog
+        sessions={relatedSessions}
+        open={archiveOpen}
+        onOpenChange={setArchiveOpen}
+        onDone={() => void refetch()}
       />
 
       {inventory ? (

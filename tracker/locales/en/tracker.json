@@ -3345,6 +3345,26 @@
       "blockedExecution": "Live execution",
       "cancel": "Cancel"
     },
+    "archive": {
+      "button": "Archive…",
+      "title": "Archive sessions",
+      "description": "Archive chats to clear the list, or permanently delete history and logs. Working trees are unchanged — use Clean up for disk.",
+      "empty": "No sessions to archive.",
+      "confirm": "Archive ({{count}})",
+      "archiving": "Archiving…",
+      "done": "Archived {{count}} sessions",
+      "partial": "{{archived}} archived, {{failed}} failed",
+      "failed": "Archive failed",
+      "delete": "Delete…",
+      "confirmDelete": "Confirm delete",
+      "deleting": "Deleting…",
+      "deleteDone": "Deleted {{count}} sessions",
+      "deletePartial": "{{deleted}} deleted, {{failed}} failed",
+      "deleteFailed": "Delete failed",
+      "deleteConfirmTitle": "Permanently delete {{count}} sessions?",
+      "deleteConfirmBody": "This deletes thread history, logs, and attachments. It cannot be undone. Trees on disk are not removed.",
+      "backToSelection": "Back to selection"
+    },
     "removeWorkspace": {
       "title": "Remove workspace",
       "aria": "Remove workspace",

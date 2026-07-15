@@ -187,6 +187,28 @@ defmodule SymphonyElixir.Workspace.InventoryTest do
     refute File.exists?(ws)
   end
 
+  test "remove reports actionable permission errors for undeletable nested files", ctx do
+    issue = create_issue!("Locked nested files")
+    ws = workspace_dir!(ctx.segment_root, issue.identifier)
+    nested = Path.join(ws, "nested")
+    File.mkdir_p!(nested)
+    File.write!(Path.join(nested, "owned.txt"), "x\n")
+    # Strip write from the parent so File.rm_rf cannot unlink children.
+    File.chmod!(nested, 0o500)
+    File.chmod!(ws, 0o500)
+
+    {:ok, results} = Inventory.remove("invproj", [ws], executions: [])
+    [result] = results
+
+    assert result.status == :skipped
+    assert result.reason =~ "permission denied deleting"
+    assert result.reason =~ "Docker-owned"
+
+    File.chmod!(ws, 0o700)
+    File.chmod!(nested, 0o700)
+    File.rm_rf!(ws)
+  end
+
   test "remove deletes workspace under project-specific root outside process workspace root", ctx do
     global_root = Path.join(ctx.tmp, "process-workspaces")
     project_root = Path.join(ctx.tmp, "project-workspaces")

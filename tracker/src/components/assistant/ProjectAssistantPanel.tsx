@@ -97,7 +97,7 @@ import {
   type UserQuestionsRequest,
 } from "@/services/assistant";
 import { WorkspaceDiffStatsChip } from "@/components/sessions/WorkspaceDiffStatsChip";
-import { provisionWorkspace } from "@/services/workspaceProvision";
+import { provisionThreadWorkspace, provisionWorkspace } from "@/services/workspaceProvision";
 import { useIssueChangedDocPaths } from "@/hooks/useIssueChangedDocPaths";
 import { useWorkspaceDiffStats } from "@/hooks/useWorkspaceDiffStats";
 import { UserQuestionsCard } from "@/components/assistant/UserQuestionsCard";
@@ -1352,12 +1352,18 @@ export function ProjectAssistantPanel({
     connectionError && /workspace (provisioning|setup)/i.test(connectionError) ? connectionError : null;
 
   const retryWorkspaceProvisioning = useCallback(() => {
-    if (!projectSlug || !issueIdentifier || workspaceProvisionRetrying) return;
+    if (workspaceProvisionRetrying) return;
+    if (threadId == null && (!projectSlug || !issueIdentifier)) return;
 
     setWorkspaceProvisionRetrying(true);
     setWorkspaceProvisionRetryError(null);
 
-    provisionWorkspace(projectSlug, issueIdentifier)
+    const provision =
+      threadId != null
+        ? () => provisionThreadWorkspace(threadId)
+        : () => provisionWorkspace(projectSlug!, issueIdentifier!);
+
+    provision()
       .then(() => {
         setWorkspaceProvisionRetrying(false);
         setConnectionError(null);
@@ -1368,7 +1374,7 @@ export function ProjectAssistantPanel({
           cause instanceof Error ? cause.message : t("assistant.panel.workspaceProvision.retryFailed"),
         );
       });
-  }, [projectSlug, issueIdentifier, workspaceProvisionRetrying, t]);
+  }, [projectSlug, issueIdentifier, threadId, workspaceProvisionRetrying, t]);
 
   useEffect(() => {
     if (!workspaceProvisioningError) setWorkspaceProvisionRetryError(null);

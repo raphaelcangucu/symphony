@@ -3345,6 +3345,26 @@
       "blockedExecution": "Execução ativa",
       "cancel": "Cancelar"
     },
+    "archive": {
+      "button": "Arquivar…",
+      "title": "Arquivar sessões",
+      "description": "Arquive chats para limpar a lista, ou exclua permanentemente histórico e logs. Working trees não mudam — use Limpar para disco.",
+      "empty": "Nenhuma sessão para arquivar.",
+      "confirm": "Arquivar ({{count}})",
+      "archiving": "Arquivando…",
+      "done": "{{count}} sessões arquivadas",
+      "partial": "{{archived}} arquivadas, {{failed}} falharam",
+      "failed": "Falha ao arquivar",
+      "delete": "Excluir…",
+      "confirmDelete": "Confirmar exclusão",
+      "deleting": "Excluindo…",
+      "deleteDone": "{{count}} sessões excluídas",
+      "deletePartial": "{{deleted}} excluídas, {{failed}} falharam",
+      "deleteFailed": "Falha ao excluir",
+      "deleteConfirmTitle": "Excluir permanentemente {{count}} sessões?",
+      "deleteConfirmBody": "Apaga histórico, logs e anexos da thread. Não pode ser desfeito. Trees no disco não são removidas.",
+      "backToSelection": "Voltar à seleção"
+    },
     "removeWorkspace": {
       "title": "Remover workspace",
       "aria": "Remover workspace",

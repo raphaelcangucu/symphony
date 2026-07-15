@@ -1579,34 +1579,23 @@ defmodule SymphonyElixir.Assistant.History do
 
     cond do
       isolated_workspace?(attrs) ->
-        parallel_path = Workspace.next_parallel_path(issue_ref)
-
-        with {:ok, path} <- Workspace.ensure_at(parallel_path, issue_ref) do
-          {:ok, path, %{"workspace_kind" => "isolated"}}
-        end
+        {:ok, Workspace.next_parallel_path(issue_ref), %{"workspace_kind" => "isolated"}}
 
       use_parent_workspace?(attrs) ->
-        parent_issue_workspace(slug, identifier)
+        parent_issue_workspace_path(slug, identifier)
 
       true ->
         {:ok, Workspace.path_for_issue(issue_ref), %{"workspace_kind" => "shared"}}
     end
   end
 
-  defp parent_issue_workspace(slug, identifier) do
+  defp parent_issue_workspace_path(slug, identifier) do
     with {:ok, issue} <- Context.get_issue(slug, identifier),
          dto <- IssueAdapter.to_dto(issue),
          parent when is_binary(parent) and parent != "" <- dto.parent_identifier do
       parent_ref = %{identifier: parent, project_slug: slug}
       parent_path = Workspace.path_for_issue(parent_ref)
-
-      case Workspace.ensure_at(parent_path, parent_ref) do
-        {:ok, path} ->
-          {:ok, path, %{"workspace_kind" => "parent", "parent_workspace_issue" => parent}}
-
-        {:error, _reason} ->
-          {:error, :parent_workspace_unavailable}
-      end
+      {:ok, parent_path, %{"workspace_kind" => "parent", "parent_workspace_issue" => parent}}
     else
       nil -> {:error, :no_parent_issue}
       {:error, :issue_not_found} -> {:error, :issue_not_found}
