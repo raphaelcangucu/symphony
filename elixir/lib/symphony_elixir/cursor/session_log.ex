@@ -2,20 +2,44 @@ defmodule SymphonyElixir.Cursor.SessionLog do
   @moduledoc """
   Reads and parses Cursor Agent JSONL session logs for live UI streaming.
 
-  Session files live under `~/.cursor/projects/<encoded-workspace>/agent-transcripts/`
-  where the workspace path is encoded by replacing leading `/` and all subsequent `/`
-  with `-` (e.g. `/home/foo/bar` → `home-foo-bar`, note: no leading dash unlike Claude).
+  Resolution prefers `<workspace>/.symphony/cursor-session.jsonl` (or a sidecar
+  `path`) when present, then falls back to
+  `~/.cursor/projects/<encoded-workspace>/agent-transcripts/` where the workspace
+  path is encoded by replacing leading `/` and all subsequent `/` with `-`
+  (e.g. `/home/foo/bar` → `home-foo-bar`, note: no leading dash unlike Claude).
 
-  The most-recently-modified `.jsonl` file under that directory tree is used.
-  Cursor transcript lines use a `role`/`message` shape (not Claude's `type`/`message`),
-  and tool calls omit stable ids — both are normalized before UI parsing.
+  The most-recently-modified external `.jsonl` file under that directory tree is
+  used as fallback. Cursor transcript lines use a `role`/`message` shape (not
+  Claude's `type`/`message`), and tool calls omit stable ids — both are
+  normalized before UI parsing. Symphony-owned lines may use Claude-style
+  `type`/`message` which this module already accepts.
   """
+
+  alias SymphonyElixir.Agent.SessionTranscript
 
   @default_projects_dir "~/.cursor/projects"
   @default_tail_bytes 65_536
 
   @spec resolve_log_path(Path.t(), keyword()) :: {:ok, Path.t()} | :error
   def resolve_log_path(workspace, opts \\ []) when is_binary(workspace) do
+    symphony = SessionTranscript.path(:cursor, workspace)
+
+    cond do
+      File.regular?(symphony) ->
+        {:ok, symphony}
+
+      true ->
+        case SessionTranscript.read_sidecar(:cursor, workspace) do
+          {:ok, %{"path" => path}} when is_binary(path) ->
+            if File.regular?(path), do: {:ok, path}, else: resolve_external(workspace, opts)
+
+          _ ->
+            resolve_external(workspace, opts)
+        end
+    end
+  end
+
+  defp resolve_external(workspace, opts) do
     dir = projects_dir(opts) |> Path.join(encode_workspace(workspace)) |> Path.join("agent-transcripts")
 
     dir
