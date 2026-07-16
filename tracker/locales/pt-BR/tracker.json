@@ -872,7 +872,14 @@
         "committing": "Commitando...",
         "success_one": "{{count}} repo commitado.",
         "success_other": "{{count}} repos commitados.",
-        "failed": "Não foi possível commitar as alterações do workspace."
+        "failed": "Não foi possível commitar as alterações do workspace.",
+        "generate": "Gerar mensagem de commit",
+        "generating": "Gerando mensagem de commit...",
+        "generateFailed": "Não foi possível gerar uma mensagem de commit.",
+        "push": "Enviar",
+        "pushing": "Enviando...",
+        "pushSuccess": "{{count}} repo(s) enviado(s).",
+        "pushFailed": "Falha ao enviar."
       },
       "files": "{{count}} arquivos",
       "filterPlaceholder": "Filtrar arquivos...",

@@ -1,4 +1,4 @@
-import { Columns2, GitBranch, GitCommitHorizontal, MessageSquareText, RefreshCw, Rows3, Search } from "lucide-react";
+import { Columns2, GitBranch, GitCommitHorizontal, Loader2, MessageSquareText, RefreshCw, Rows3, Search, Sparkles } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -23,7 +23,13 @@ import { combineDiffStats, diffStatsFromPatch, type DiffStats } from "@/lib/diff
 import { loadDiffViewMode, saveDiffViewMode, type DiffViewMode } from "@/lib/diffViewMode";
 import { cn } from "@/lib/utils";
 import { getCommitEvidence } from "@/services/commitEvidence";
-import { commitGitDiff, commitThreadGitDiff } from "@/services/gitDiff";
+import {
+  commitGitDiff,
+  commitThreadGitDiff,
+  generateCommitMessage,
+  getGitDiffSummaries,
+  pushGitDiff,
+} from "@/services/gitDiff";
 import type { CommitEvidenceDetail, CommitEvidenceSummary } from "@/types/commitEvidence";
 import type { GitDiffFileChange, GitDiffFileEntry, GitDiffFileTreeEntry, GitDiffRepoStat, GitDiffType } from "@/types/gitDiff";
 
@@ -72,6 +78,10 @@ export default function GitDiffModal({
   const [commitDialogOpen, setCommitDialogOpen] = useState(false);
   const [commitMessage, setCommitMessage] = useState("");
   const [commitPending, setCommitPending] = useState(false);
+  const [generatePending, setGeneratePending] = useState(false);
+  const [pushPending, setPushPending] = useState(false);
+  const [canPush, setCanPush] = useState(false);
+  const [commitDialogError, setCommitDialogError] = useState<string | null>(null);
   const diffType: GitDiffType = activeTab === "uncommitted" ? "uncommitted" : "branch";
   const diffActive = open && activeTab !== "commits";
 
@@ -80,6 +90,14 @@ export default function GitDiffModal({
     setCommitDialogOpen(true);
     onCommitDialogOpened?.();
   }, [initialCommitDialogOpen, onCommitDialogOpened, open]);
+
+  useEffect(() => {
+    if (!commitDialogOpen) {
+      setCommitDialogError(null);
+      return;
+    }
+    void refreshPushAvailability();
+  }, [commitDialogOpen, identifier, projectSlug]);
 
   useEffect(() => {
     const handle = window.setTimeout(() => setDebouncedQuery(query.trim()), SEARCH_DEBOUNCE_MS);
@@ -266,6 +284,7 @@ export default function GitDiffModal({
         : await commitGitDiff(projectSlug, identifier ?? "", message);
 
       toast.success(t("issue.diff.commit.success", { count: result.commits.length }));
+      setCanPush(true);
       setCommitDialogOpen(false);
       setCommitMessage("");
       await refetchDiff();
@@ -274,6 +293,61 @@ export default function GitDiffModal({
       toast.error(cause instanceof Error ? cause.message : t("issue.diff.commit.failed"));
     } finally {
       setCommitPending(false);
+    }
+  }
+
+  async function refreshPushAvailability() {
+    if (!projectSlug || !identifier) {
+      setCanPush(false);
+      return;
+    }
+
+    try {
+      const result = await getGitDiffSummaries(projectSlug, identifier);
+      setCanPush(result.summaries.some((summary) => summary.aheadCount > 0));
+    } catch {
+      setCanPush(false);
+    }
+  }
+
+  async function generateMessage() {
+    if (!projectSlug || !identifier) return;
+
+    setGeneratePending(true);
+    setCommitDialogError(null);
+    try {
+      const message = await generateCommitMessage(projectSlug, identifier);
+      setCommitMessage(message);
+    } catch (cause) {
+      setCommitDialogError(cause instanceof Error ? cause.message : t("issue.diff.commit.generateFailed"));
+    } finally {
+      setGeneratePending(false);
+    }
+  }
+
+  async function submitPush() {
+    if (!projectSlug || !identifier || !canPush) return;
+
+    setPushPending(true);
+    setCommitDialogError(null);
+    try {
+      const result = await pushGitDiff(projectSlug, identifier);
+      const failures = result.results.filter((entry) => !entry.ok);
+      const successes = result.results.length - failures.length;
+
+      if (failures.length > 0) {
+        const errors = failures.map((entry) => entry.error).filter(Boolean).join(" ");
+        toast.error(errors || t("issue.diff.commit.pushFailed"));
+      } else {
+        toast.success(t("issue.diff.commit.pushSuccess", { count: successes }));
+      }
+      await refreshPushAvailability();
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : t("issue.diff.commit.pushFailed");
+      setCommitDialogError(message);
+      toast.error(message);
+    } finally {
+      setPushPending(false);
     }
   }
 
@@ -490,7 +564,7 @@ export default function GitDiffModal({
           <DialogTitle>{t("issue.diff.commit.dialogTitle")}</DialogTitle>
           <DialogDescription>{t("issue.diff.commit.dialogDescription")}</DialogDescription>
         </DialogHeader>
-        <div className="space-y-2">
+        <div className="relative space-y-2">
           <label className="text-sm font-medium" htmlFor="workspace-commit-message">
             {t("issue.diff.commit.messageLabel")}
           </label>
