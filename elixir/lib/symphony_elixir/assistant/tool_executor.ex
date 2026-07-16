@@ -17,6 +17,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     HandoffTools,
     KnowledgeBaseTools,
     ListPreviewTools,
+    ObservabilityTools,
     OrchestratorTools,
     PreviewTools,
     ProjectBoardTools,
@@ -93,6 +94,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
   @read_tools ReadTools.tools()
   @github_tools GitHubTools.tools()
   @kb_tools KnowledgeBaseTools.tools()
+  @observability_tools ObservabilityTools.tools()
   @discovery_tools DiscoveryTools.tools()
   @dynamic_tools Enum.map(DynamicTool.tool_specs(), & &1["name"])
   @supported_tools @tracker_tools ++ @read_tools ++ @github_tools ++ @kb_tools
@@ -586,6 +588,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
        ProjectBoardTools.tool_specs() ++
        GitHubTools.tool_specs() ++
        KnowledgeBaseTools.tool_specs() ++
+       ObservabilityTools.tool_specs() ++
        read_specs ++
        [GoalTools.assistant_tool_spec()] ++
        DynamicTool.tool_specs())
@@ -619,6 +622,9 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
           # arguments targets that project's KB instead. execute/4 already routes
           # "@user" and real project slugs to the right KB scope.
           wrap_for_codex(execute(kb_scope_slug(arguments), name, arguments, opts))
+
+        name in @observability_tools ->
+          wrap_for_codex(ObservabilityTools.execute(name, arguments, opts))
 
         name in @freeform_project_agnostic_read_tools ->
           wrap_for_codex(ReadTools.execute(nil, name, arguments, opts))

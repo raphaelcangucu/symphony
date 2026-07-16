@@ -964,6 +964,8 @@ defmodule SymphonyElixir.Assistant.AgentSession do
     (live running/retry/idle), list_running_agents (every agent executing now), steer_agent (inject a message into a
     running agent's turn), manage_blockers (blocked_by relations), sync_issue (pull external tracker edits).
 
+    Observability: list_observability_runtimes (live runtimes reported to the hub — status, running/retrying counts, per-agent usage; optional project_slug filter).
+
     Knowledge base (require project_slug; docs/ in each repo): kb_list_repositories, kb_search_pages, kb_read_page,
     kb_create_page, kb_update_page, kb_delete_page, kb_delete_asset, kb_delete_folder, kb_link_task, kb_sync. Project/freeform KB writes save to the project working tree; issue-bound KB reads/writes save to the issue working tree. kb_sync is a no-op compatibility hook. Projects can
     span multiple repositories; when more than one is linked and the user does not name one, the tool returns a remediation
