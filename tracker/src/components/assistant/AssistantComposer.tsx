@@ -84,6 +84,22 @@ function contextIconFor(type: ComposerContextChipRef["type"]) {
   return FileText;
 }
 
+/** Minimum textarea height (~2.75rem) before content grows the composer. */
+export const COMPOSER_TEXTAREA_MIN_HEIGHT_PX = 44;
+/** Cap so the composer grows with typing but never eats the chat viewport. */
+export const COMPOSER_TEXTAREA_MAX_HEIGHT_PX = 240;
+
+function syncComposerTextareaHeight(textarea: HTMLTextAreaElement): void {
+  textarea.style.height = "0px";
+  const contentHeight = textarea.scrollHeight;
+  const nextHeight = Math.min(
+    Math.max(contentHeight, COMPOSER_TEXTAREA_MIN_HEIGHT_PX),
+    COMPOSER_TEXTAREA_MAX_HEIGHT_PX,
+  );
+  textarea.style.height = `${nextHeight}px`;
+  textarea.scrollTop = textarea.scrollHeight;
+}
+
 export type AssistantComposerSubmitKind = "message" | "infer" | "btw" | "goal" | "new_thread";
 
 export interface AssistantComposerSubmit {
@@ -378,8 +394,7 @@ export function AssistantComposer({
   useLayoutEffect(() => {
     const textarea = textareaRef.current;
     if (!textarea) return;
-
-    textarea.scrollTop = textarea.scrollHeight;
+    syncComposerTextareaHeight(textarea);
   }, [input]);
 
   useEffect(() => {
@@ -854,7 +869,8 @@ export function AssistantComposer({
           placeholder={placeholder ?? t("assistant.composer.placeholder")}
           className={cn(
             ASSISTANT_CHAT_MESSAGE_TEXT_CLASS,
-            "min-h-[2.75rem] resize-none border-0 bg-transparent px-3 py-2 shadow-none focus-visible:ring-0",
+            SCROLLBAR_THIN,
+            "min-h-[2.75rem] max-h-[240px] resize-none overflow-y-auto border-0 bg-transparent px-3 py-2 shadow-none focus-visible:ring-0",
           )}
         />
 

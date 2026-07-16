@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { AssistantComposer } from "@/components/assistant/AssistantComposer";
+import { AssistantComposer, COMPOSER_TEXTAREA_MAX_HEIGHT_PX } from "@/components/assistant/AssistantComposer";
 import { uploadAssistantAttachment } from "@/services/assistant";
 import { i18n } from "@/i18n";
 import { mockAssistantCodexCatalog } from "@/test-fixtures/assistantCatalog";
@@ -313,19 +313,28 @@ describe("AssistantComposer", () => {
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
-  it("keeps the textarea scrolled to the bottom as text grows", () => {
+  it("grows the textarea with content and caps height at the max", () => {
     render(
       <AssistantComposer projectSlug="macro-markets" bundle={mockBundle} onSubmit={vi.fn()} />,
     );
 
     const textarea = screen.getByPlaceholderText("Write a message...") as HTMLTextAreaElement;
-    Object.defineProperty(textarea, "scrollHeight", { configurable: true, value: 1200 });
+    Object.defineProperty(textarea, "scrollHeight", { configurable: true, value: 120 });
     textarea.scrollTop = 0;
 
+    fireEvent.change(textarea, {
+      target: { value: "Line one\nLine two\nLine three" },
+    });
+
+    expect(textarea.style.height).toBe("120px");
+    expect(textarea.scrollTop).toBe(120);
+
+    Object.defineProperty(textarea, "scrollHeight", { configurable: true, value: 1200 });
     fireEvent.change(textarea, {
       target: { value: Array.from({ length: 40 }, (_, index) => `Line ${index}`).join("\n") },
     });
 
+    expect(textarea.style.height).toBe(`${COMPOSER_TEXTAREA_MAX_HEIGHT_PX}px`);
     expect(textarea.scrollTop).toBe(1200);
   });
 
