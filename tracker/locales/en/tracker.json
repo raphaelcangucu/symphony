@@ -15,6 +15,23 @@
       "days": "{{count}}d ago"
     }
   },
+  "maestro": {
+    "launcher": {
+      "open": "Ask the maestro",
+      "working": "The maestro is working…"
+    },
+    "title": "Maestro",
+    "close": "Close maestro",
+    "contextLabel": "In context",
+    "openFullPage": "Open full page",
+    "context": {
+      "home": "Home",
+      "observability": "Observability",
+      "project": "Project {{slug}}",
+      "issue": "Issue {{identifier}}",
+      "kb": "Knowledge base"
+    }
+  },
   "launcher": {
     "title": "New session",
     "subtitle": "Jump into a run from an issue, PR, branch, or quick action.",

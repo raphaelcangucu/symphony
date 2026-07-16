@@ -1,5 +1,7 @@
 import { Outlet } from "react-router-dom";
 
+import { MaestroExtraContextProvider } from "@/components/maestro/MaestroExtraContext";
+import { MaestroHost } from "@/components/maestro/MaestroHost";
 import { AgentExecutionsProvider } from "@/hooks/AgentExecutionsProvider";
 import { RecentsProvider } from "@/hooks/RecentsProvider";
 
@@ -12,15 +14,18 @@ export function Layout() {
     <AgentExecutionsProvider>
       <RecentsProvider>
         <SidebarTreeProvider>
-          <div className="flex h-screen min-h-0 overflow-hidden bg-background text-foreground">
-            <ProjectSidebar variant="desktop" />
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-              <SidebarMobileDrawer />
-              <main className="min-h-0 min-w-0 flex-1 overflow-hidden">
-                <Outlet />
-              </main>
+          <MaestroExtraContextProvider>
+            <div className="flex h-screen min-h-0 overflow-hidden bg-background text-foreground">
+              <ProjectSidebar variant="desktop" />
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                <SidebarMobileDrawer />
+                <main className="min-h-0 min-w-0 flex-1 overflow-hidden">
+                  <Outlet />
+                </main>
+              </div>
             </div>
-          </div>
+            <MaestroHost />
+          </MaestroExtraContextProvider>
         </SidebarTreeProvider>
       </RecentsProvider>
     </AgentExecutionsProvider>

@@ -15,6 +15,23 @@
       "days": "há {{count}}d"
     }
   },
+  "maestro": {
+    "launcher": {
+      "open": "Falar com o maestro",
+      "working": "O maestro está trabalhando…"
+    },
+    "title": "Maestro",
+    "close": "Fechar maestro",
+    "contextLabel": "No contexto",
+    "openFullPage": "Abrir em tela cheia",
+    "context": {
+      "home": "Início",
+      "observability": "Observabilidade",
+      "project": "Projeto {{slug}}",
+      "issue": "Issue {{identifier}}",
+      "kb": "Base de conhecimento"
+    }
+  },
   "launcher": {
     "title": "Nova sessão",
     "subtitle": "Entre numa execução por issue, PR, branch ou ação rápida.",
