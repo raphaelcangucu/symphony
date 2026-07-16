@@ -19,6 +19,7 @@ interface BackendAgentExecutionTokensDto {
 export interface BackendAgentExecutionDto {
   issue_identifier?: string | null;
   agent_kind?: string | null;
+  model?: string | null;
   status?: string | null;
   session_id?: string | null;
   last_event?: string | null;
@@ -135,6 +136,7 @@ export function normalizeAgentExecution(dto: BackendAgentExecutionDto): AgentExe
     issueIdentifier: normalizeIssueIdentifier(dto.issue_identifier ?? ""),
     status: normalizeStatus(dto.status),
     agentKind: normalizeAgentKind(dto.agent_kind),
+    model: typeof dto.model === "string" && dto.model.trim() ? dto.model.trim() : null,
     sessionId: dto.session_id ?? null,
     lastEvent: dto.last_event ?? null,
     lastMessage: dto.last_message ?? null,

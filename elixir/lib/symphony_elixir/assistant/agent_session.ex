@@ -13,6 +13,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
     GitHubAuthoring,
     History,
     IssueDocuments,
+    ProjectExploreWorkspace,
     SkillProfiles,
     SubtaskAuthoring,
     ThreadDocuments,
@@ -396,10 +397,12 @@ defmodule SymphonyElixir.Assistant.AgentSession do
 
   defp run_project_explore_turn(workspace, prompt, project_slug, opts) do
     runner = Keyword.get(opts, :runner, &default_runner/4)
+    %{root: project_root} = Workspace.project_layout(project_slug)
 
     runner_opts =
       opts
       |> Keyword.put(:project_slug, project_slug)
+      |> Keyword.put_new(:workspace_root, Path.expand(project_root))
       |> Keyword.put_new(:dynamic_tools, ToolExecutor.combined_tool_specs())
       |> Keyword.put_new(:tool_executor, ToolExecutor.combined_codex_tool_executor(project_slug, opts))
       |> maybe_put_project_codex_config(project_slug)
@@ -533,8 +536,12 @@ defmodule SymphonyElixir.Assistant.AgentSession do
   defp project_explore_issue(project_slug),
     do: %{id: "assistant:explore:#{project_slug}", identifier: project_slug, title: "Project explore assistant"}
 
-  defp ensure_project_explore_workspace(_project_slug, %{scope: "project_session"} = thread, _opts),
-    do: session_workspace_path(thread)
+  defp ensure_project_explore_workspace(project_slug, %{scope: "project_session"} = thread, opts) do
+    with {:ok, path} <- session_workspace_path(thread),
+         :ok <- maybe_ensure_project_default_workspace(project_slug, path, opts) do
+      {:ok, path}
+    end
+  end
 
   defp ensure_project_explore_workspace(_project_slug, thread, _opts),
     do: persisted_thread_workspace(thread)
@@ -544,6 +551,26 @@ defmodule SymphonyElixir.Assistant.AgentSession do
 
   defp session_workspace_path(_thread),
     do: {:error, {:authoring_goal_unavailable, :workspace_not_executable}}
+
+  defp maybe_ensure_project_default_workspace(project_slug, path, opts)
+       when is_binary(project_slug) and is_binary(path) do
+    explore_path = ProjectExploreWorkspace.path(project_slug)
+
+    if Path.expand(path) == Path.expand(explore_path) do
+      case ProjectExploreWorkspace.ensure(project_slug, explore_workspace_opts(opts)) do
+        {:ok, _ensured} -> :ok
+        {:error, reason} -> {:error, reason}
+      end
+    else
+      :ok
+    end
+  end
+
+  defp maybe_ensure_project_default_workspace(_project_slug, _path, _opts), do: :ok
+
+  defp explore_workspace_opts(opts) when is_list(opts) do
+    Keyword.take(opts, [:git])
+  end
 
   defp persisted_thread_workspace(%{workspace_path: path}) when is_binary(path) and path != "" do
     case File.mkdir_p(path) do

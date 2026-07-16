@@ -59,6 +59,42 @@ defmodule SymphonyElixir.Assistant.ProjectExploreWorkspaceTest do
     assert File.exists?(Path.join(Path.join(workspace, "api"), "README.md"))
   end
 
+  test "path/1 and ensure/2 use the project's custom workspace.root segment", %{workspace_root: global_root} do
+    # Sibling of the process workspace root (not nested under it), matching
+    # advising's ~/code/advising-workspaces vs ~/code/workspaces split.
+    project_root =
+      Path.join(Path.dirname(global_root), "custom-root-#{System.unique_integer([:positive])}")
+
+    File.mkdir_p!(project_root)
+    on_exit(fn -> File.rm_rf!(project_root) end)
+
+    {:ok, project} =
+      Context.create_workspace_project(%{
+        name: "Custom Root Explore",
+        slug: "custom-explore",
+        repositories: [
+          %{
+            github_full_name: "org/api",
+            clone_url: "https://github.com/org/api.git",
+            default_branch: "main",
+            workspace_path: "api",
+            role: "backend"
+          }
+        ]
+      })
+
+    markdown = Workflow.to_markdown(%{"workspace" => %{"root" => project_root}}, "")
+    assert {:ok, _} = Context.upsert_project_setup(project.slug, %{"workflow_markdown" => markdown})
+
+    expected = Path.expand(Path.join(project_root, project.slug))
+    assert ProjectExploreWorkspace.path(project.slug) == expected
+
+    assert {:ok, workspace} = ProjectExploreWorkspace.ensure(project.slug, git: GitStub)
+    assert workspace == expected
+    assert File.exists?(Path.join([workspace, "api", "README.md"]))
+    refute String.starts_with?(workspace <> "/", Path.expand(global_root) <> "/")
+  end
+
   test "ensure/1 rejects blank project slug" do
     assert {:error, {:missing_required_field, :project_slug}} = ProjectExploreWorkspace.ensure("  ")
   end

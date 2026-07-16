@@ -4,7 +4,7 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
   use Phoenix.Controller, formats: [:json]
 
   alias Plug.Conn
-  alias SymphonyElixir.Assistant.{AgentSession, History, TitleGenerator}
+  alias SymphonyElixir.Assistant.{AgentSession, History, ProjectExploreWorkspace, TitleGenerator}
   alias SymphonyElixir.Workspace.Provision
   alias SymphonyElixir.Workspace.PathOwnership
   alias SymphonyElixirWeb.{TrackerErrors, TrackerPresenter}
@@ -83,6 +83,7 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
     attrs = project_session_attrs(params)
 
     with {:ok, %{path: normalized_path}} <- PathOwnership.validate(project_slug, workspace_path),
+         :ok <- maybe_ensure_project_explore_workspace(project_slug, normalized_path),
          {:ok, thread} <- History.create_workspace_session_thread(project_slug, normalized_path, attrs) do
       render_created_thread(conn, thread)
     else
@@ -352,6 +353,20 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
       effort: params["effort"],
       execution_mode: params["execution_mode"] || params["mode"]
     }
+  end
+
+  defp maybe_ensure_project_explore_workspace(project_slug, workspace_path)
+       when is_binary(project_slug) and is_binary(workspace_path) do
+    explore_path = ProjectExploreWorkspace.path(project_slug)
+
+    if Path.expand(workspace_path) == Path.expand(explore_path) do
+      case ProjectExploreWorkspace.ensure(project_slug) do
+        {:ok, _path} -> :ok
+        {:error, reason} -> {:error, reason}
+      end
+    else
+      :ok
+    end
   end
 
   defp model_effort_metadata(params) when is_map(params) do

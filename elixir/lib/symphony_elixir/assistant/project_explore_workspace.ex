@@ -6,17 +6,28 @@ defmodule SymphonyElixir.Assistant.ProjectExploreWorkspace do
   `after_create` hook runs once under the project slug directory.
   """
 
-  alias SymphonyElixir.Config
   alias SymphonyElixir.LocalTracker.{Context, Git, Repository}
   alias SymphonyElixir.Workspace
 
   @explore_issue_prefix "explore:"
 
+  @doc """
+  Absolute path of the project's shared explore / default workspace.
+
+  Uses `Workspace.project_layout/1` so per-project `workspace.root` overrides the
+  process-level root (same segment root the inventory exposes as `kind: :project`).
+  """
   @spec path(String.t()) :: Path.t()
   def path(project_slug) when is_binary(project_slug) do
-    Config.workspace_root()
-    |> Path.expand()
-    |> Path.join(safe_segment(project_slug))
+    %{root: root, segment: segment} = Workspace.project_layout(project_slug)
+
+    case segment do
+      segment when is_binary(segment) and segment != "" ->
+        Path.expand(Path.join(root, segment))
+
+      _empty ->
+        Path.expand(root)
+    end
   end
 
   @spec ensure(String.t(), keyword()) :: {:ok, Path.t()} | {:error, term()}
@@ -52,8 +63,17 @@ defmodule SymphonyElixir.Assistant.ProjectExploreWorkspace do
     branch = repo.selected_branch || repo.default_branch
 
     case git.clone(url, dest, branch: branch) do
-      {:ok, _} -> :ok
-      {:error, message} -> {:error, {:repository_clone_failed, repo.workspace_path, message}}
+      {:ok, _} ->
+        :ok
+
+      {:error, _message} ->
+        # Idempotent for explore default: an existing checkout is usable even when
+        # origin differs (SSH vs HTTPS, local seed clone, etc.).
+        if File.dir?(Path.join(dest, ".git")) do
+          :ok
+        else
+          {:error, {:repository_clone_failed, repo.workspace_path, "clone failed and destination is not a git checkout"}}
+        end
     end
   end
 
@@ -64,9 +84,5 @@ defmodule SymphonyElixir.Assistant.ProjectExploreWorkspace do
       "" -> {:error, {:missing_required_field, :project_slug}}
       trimmed -> {:ok, trimmed}
     end
-  end
-
-  defp safe_segment(slug) do
-    String.replace(slug, ~r/[^a-zA-Z0-9._-]/, "_")
   end
 end

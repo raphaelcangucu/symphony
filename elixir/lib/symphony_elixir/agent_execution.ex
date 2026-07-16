@@ -14,6 +14,7 @@ defmodule SymphonyElixir.AgentExecution do
   """
 
   alias SymphonyElixir.AgentRouting
+  alias SymphonyElixir.AgentRunner
   alias SymphonyElixir.Claude.GoalStore, as: ClaudeGoalStore
   alias SymphonyElixir.Codex.Session, as: CodexStore
   alias SymphonyElixir.LocalTracker.{Context, IssueMapper}
@@ -51,6 +52,7 @@ defmodule SymphonyElixir.AgentExecution do
           retry_attempt: non_neg_integer(),
           error: String.t() | nil,
           agent_kind: String.t() | nil,
+          model: String.t() | nil,
           goal: map() | nil,
           long_running: boolean(),
           long_running_kind: String.t() | nil,
@@ -133,6 +135,7 @@ defmodule SymphonyElixir.AgentExecution do
       retry_attempt: 0,
       error: nil,
       agent_kind: nil,
+      model: nil,
       goal: nil,
       long_running: false,
       long_running_kind: nil,
@@ -196,6 +199,7 @@ defmodule SymphonyElixir.AgentExecution do
       issue_identifier: entry.identifier,
       status: interruption || status,
       agent_kind: Map.get(entry, :agent_kind),
+      model: resolve_execution_model(entry),
       session_id: Map.get(entry, :session_id),
       last_event: running_last_event(entry, interruption),
       last_message: running_last_message(entry, interruption),
@@ -310,6 +314,7 @@ defmodule SymphonyElixir.AgentExecution do
       retry_attempt: Map.get(entry, :attempt, 0) || 0,
       error: error,
       agent_kind: Map.get(entry, :agent_kind),
+      model: resolve_execution_model(entry),
       goal: nil,
       long_running: false,
       long_running_kind: nil,
@@ -321,6 +326,19 @@ defmodule SymphonyElixir.AgentExecution do
       child_identifiers: bundle_child_identifiers(entry),
       tokens: nil
     }
+  end
+
+  defp resolve_execution_model(entry) when is_map(entry) do
+    case Map.get(entry, :model) do
+      model when is_binary(model) and model != "" ->
+        model
+
+      _ ->
+        case Map.get(entry, :issue) do
+          issue when is_map(issue) -> Keyword.get(AgentRunner.agent_settings_opts(issue), :model)
+          _ -> nil
+        end
+    end
   end
 
   defp running_status(entry, last_event_at, now) do
@@ -405,6 +423,7 @@ defmodule SymphonyElixir.AgentExecution do
       retry_attempt: 0,
       error: nil,
       agent_kind: agent_kind,
+      model: resolve_record_model(record),
       goal: goal,
       long_running: true,
       long_running_kind: long_running_kind(goal),
@@ -416,6 +435,13 @@ defmodule SymphonyElixir.AgentExecution do
       child_identifiers: [],
       tokens: nil
     }
+  end
+
+  defp resolve_record_model(record) when is_map(record) do
+    record
+    |> IssueMapper.to_issue()
+    |> AgentRunner.agent_settings_opts()
+    |> Keyword.get(:model)
   end
 
   defp present?(value) when is_binary(value), do: String.trim(value) != ""
@@ -616,6 +642,7 @@ defmodule SymphonyElixir.AgentExecution do
       retry_attempt: 0,
       error: nil,
       agent_kind: agent_kind,
+      model: resolve_record_model(record),
       goal: goal,
       long_running: not is_nil(goal),
       long_running_kind: long_running_kind(goal),
@@ -659,6 +686,7 @@ defmodule SymphonyElixir.AgentExecution do
             "Agent run interrupted — use Resume in the execution panel"
         end,
       agent_kind: agent_kind,
+      model: resolve_record_model(record),
       goal: goal,
       long_running: not is_nil(goal),
       long_running_kind: long_running_kind(goal),

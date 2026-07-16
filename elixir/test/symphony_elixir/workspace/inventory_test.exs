@@ -116,6 +116,19 @@ defmodule SymphonyElixir.Workspace.InventoryTest do
     refute entry.reclaimable
   end
 
+  test "scan emits kind:project for an empty segment root", ctx do
+    File.mkdir_p!(ctx.segment_root)
+
+    {:ok, scan} = Inventory.scan("invproj", executions: [], size_fun: size_fun())
+    entry = Enum.find(scan.workspaces, &(&1.path == Path.expand(ctx.segment_root)))
+
+    assert entry
+    assert entry.kind == :project
+    assert entry.repos == []
+    refute entry.removable
+    refute entry.reclaimable
+  end
+
   test "scan_stream emits each workspace entry and totals", ctx do
     active = create_issue!("Active work")
     active_ws = workspace_dir!(ctx.segment_root, active.identifier)

@@ -2048,6 +2048,7 @@
     "table": {
       "project": "Project",
       "issue": "Issue",
+      "agentModel": "Agent / model",
       "goal": "Goal",
       "state": "State",
       "runtimeTurns": "Runtime / turns",
@@ -2063,6 +2064,8 @@
       "hardReset": "Hard reset",
       "newThread": "New thread",
       "resetting": "Resetting…",
+      "openSession": "Open session {{identifier}}",
+      "openIssueDetail": "Open issue details {{identifier}}",
       "noProjectMapping": "No project mapping for this runtime",
       "pauseTitle": "Pause the run (keeps the session to resume later)",
       "restartTitle": "Restart with a fresh agent pass",

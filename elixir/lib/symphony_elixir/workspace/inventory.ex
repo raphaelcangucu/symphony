@@ -427,27 +427,32 @@ defmodule SymphonyElixir.Workspace.Inventory do
   end
 
   defp project_workspace_entry(segment_root, size_fun, concurrency) do
-    repo_states = raw_repo_states(segment_root)
+    # Always publish the shared project workspace when the segment root exists so
+    # "Explorar projeto" can preselect it even before repos are cloned.
+    if File.dir?(segment_root) do
+      repo_states = raw_repo_states(segment_root)
+      repos = repo_entries(repo_states, size_fun, concurrency)
 
-    case repo_entries(repo_states, size_fun, concurrency) do
-      [] ->
-        nil
-
-      repos ->
-        %{
-          path: segment_root,
-          kind: :project,
-          issue_identifier: nil,
-          name: nil,
-          classification: :active,
-          reclaimable: false,
-          work_present: RunContract.work_present?(repo_states),
-          execution_status: nil,
-          removable: false,
-          size_bytes: Enum.sum_by(repos, & &1.size_bytes),
-          repos: repos,
-          child_worktrees: child_worktree_entries(repo_states, size_fun, concurrency)
-        }
+      %{
+        path: segment_root,
+        kind: :project,
+        issue_identifier: nil,
+        name: nil,
+        classification: :active,
+        reclaimable: false,
+        work_present: RunContract.work_present?(repo_states),
+        execution_status: nil,
+        removable: false,
+        size_bytes:
+          case repos do
+            [] -> size_fun.(segment_root)
+            _ -> Enum.sum_by(repos, & &1.size_bytes)
+          end,
+        repos: repos,
+        child_worktrees: child_worktree_entries(repo_states, size_fun, concurrency)
+      }
+    else
+      nil
     end
   end
 

@@ -1040,6 +1040,7 @@ defmodule SymphonyElixir.Orchestrator do
       identifier: issue.identifier,
       issue: issue,
       agent_kind: agent_kind,
+      model: Keyword.get(AgentRunner.agent_settings_opts(issue), :model),
       agent_goal: Map.get(issue, :agent_goal),
       goal: nil,
       session_id: nil,

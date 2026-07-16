@@ -273,6 +273,7 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
       issue_identifier: execution.issue_identifier,
       status: Atom.to_string(execution.status),
       agent_kind: Map.get(execution, :agent_kind),
+      model: Map.get(execution, :model),
       session_id: execution.session_id,
       last_event: event_to_string(execution.last_event),
       last_message: AgentExecution.humanize_message(execution.last_message),

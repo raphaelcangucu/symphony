@@ -34,6 +34,8 @@ export interface AgentExecution {
   issueIdentifier: string;
   status: AgentExecutionStatus;
   agentKind: "codex" | "claude" | "cursor" | "opencode" | null;
+  /** Resolved model for this execution (issue settings → project → user default). */
+  model?: string | null;
   sessionId: string | null;
   lastEvent: string | null;
   lastMessage: string | null;

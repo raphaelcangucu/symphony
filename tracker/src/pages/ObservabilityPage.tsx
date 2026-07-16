@@ -1,11 +1,26 @@
-import { ChevronDown, ChevronRight, Clock, Eraser, GitFork, Layers, Loader2, Pause, Target } from "lucide-react";
+import {
+  Activity,
+  ChevronDown,
+  ChevronRight,
+  Clock,
+  Cpu,
+  Eraser,
+  FileText,
+  GitFork,
+  Layers,
+  Loader2,
+  Pause,
+  Target,
+} from "lucide-react";
 import type { TFunction } from "i18next";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
+import { SessionAgentBadge } from "@/components/shared/SessionBadge";
 import { Button } from "@/components/ui/button";
+import type { AgentKind } from "@/types/issue";
 import {
   Dialog,
   DialogClose,
@@ -22,7 +37,7 @@ import { usePrMonitorObservability } from "@/hooks/usePrMonitorObservability";
 import { normalizeIssueIdentifier } from "@/lib/issueIdentifiers";
 import { elapsedSecondsSince } from "@/lib/timeFormat";
 import { cn } from "@/lib/utils";
-import { issuePath, withAgentSection, workspaceBasePath } from "@/lib/workspaceRoutes";
+import { issueAgentTabPath, issuePath, withAgentSection, workspaceBasePath } from "@/lib/workspaceRoutes";
 import { dispatchIssueAgent, type IssueDispatchAction } from "@/services/issueDispatch";
 import { listProjects } from "@/services/projects";
 import type { AgentExecution } from "@/types/agent-execution";
@@ -52,6 +67,7 @@ interface ProjectRunningRow extends GlobalRunningRow {
   projectKey: string;
   projectLabel: string;
   resolvedProjectSlug: string | null;
+  runtimeAgentKind: string | null;
 }
 
 function formatRuntime(startedAt: string | null, nowMs: number): string {
@@ -79,8 +95,14 @@ function flattenRows(runtimeViews: RuntimeView[]): ProjectRunningRow[] {
       projectKey: project.key,
       projectLabel: project.label,
       resolvedProjectSlug: project.slug,
+      runtimeAgentKind: runtime.agentKind,
     })),
   );
+}
+
+function asAgentKind(value: string | null | undefined): AgentKind | null {
+  if (value === "codex" || value === "claude" || value === "cursor" || value === "opencode") return value;
+  return null;
 }
 
 interface RunningRowGroup {
@@ -262,6 +284,7 @@ export function ObservabilityPage() {
                 <tr className="text-left text-xs text-muted-foreground">
                   <th className="p-2">{t("observability.table.project")}</th>
                   <th className="p-2">{t("observability.table.issue")}</th>
+                  <th className="p-2">{t("observability.table.agentModel")}</th>
                   <th className="p-2">{t("observability.table.goal")}</th>
                   <th className="p-2">{t("observability.table.state")}</th>
                   <th className="p-2">{t("observability.table.runtimeTurns")}</th>
@@ -306,17 +329,36 @@ function WaitingBadge({ t }: { t: TFunction }) {
 }
 
 function SessionIssueLink({ row }: { row: ProjectRunningRow }) {
-  if (row.resolvedProjectSlug && row.issueIdentifier.trim()) {
-    return (
-      <Link
-        className="text-primary underline-offset-2 hover:underline"
-        to={withAgentSection(issuePath(row.resolvedProjectSlug, "board", row.issueIdentifier, "sessions"), "", "execution")}
-      >
-        {row.issueIdentifier}
-      </Link>
-    );
+  const { t } = useTranslation();
+  const identifier = row.issueIdentifier.trim();
+  if (!row.resolvedProjectSlug || !identifier) {
+    return <>{row.issueIdentifier}</>;
   }
-  return <>{row.issueIdentifier}</>;
+
+  const sessionPath = issueAgentTabPath(row.resolvedProjectSlug, "board", identifier, "execution");
+  const detailPath = issuePath(row.resolvedProjectSlug, "board", identifier, "summary");
+
+  return (
+    <div className="inline-flex items-center gap-1.5">
+      <span className="font-medium">{identifier}</span>
+      <Link
+        to={sessionPath}
+        aria-label={t("observability.session.openSession", { identifier })}
+        title={t("observability.session.openSession", { identifier })}
+        className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+      >
+        <Activity className="h-3.5 w-3.5" aria-hidden="true" />
+      </Link>
+      <Link
+        to={detailPath}
+        aria-label={t("observability.session.openIssueDetail", { identifier })}
+        title={t("observability.session.openIssueDetail", { identifier })}
+        className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+      >
+        <FileText className="h-3.5 w-3.5" aria-hidden="true" />
+      </Link>
+    </div>
+  );
 }
 
 function SessionRowCells({
@@ -339,10 +381,15 @@ function SessionRowCells({
   const hasChildTokens = typeof childrenTokenTotal === "number" && childrenTokenTotal > 0;
   const consolidatedTokens = coordinatorTokens + (childrenTokenTotal ?? 0);
 
+  const execution = executions.get(normalizeIssueIdentifier(row.issueIdentifier));
+
   return (
     <>
       <td className="p-2">
-        <GoalCell execution={executions.get(normalizeIssueIdentifier(row.issueIdentifier))} />
+        <AgentModelCell execution={execution} runtimeAgentKind={row.runtimeAgentKind} />
+      </td>
+      <td className="p-2">
+        <GoalCell execution={execution} />
       </td>
       <td className="p-2">{row.state ?? "--"}</td>
       <td className="p-2 tabular-nums">
@@ -505,6 +552,38 @@ function RuntimeSummaryCard({ runtime, project }: RuntimeView) {
     >
       {body}
     </Link>
+  );
+}
+
+function AgentModelCell({
+  execution,
+  runtimeAgentKind,
+}: {
+  execution?: AgentExecution;
+  runtimeAgentKind: string | null;
+}) {
+  const agentKind = asAgentKind(execution?.agentKind ?? runtimeAgentKind);
+  const model = execution?.model?.trim() || null;
+
+  if (!agentKind && !model) {
+    return <span className="text-muted-foreground">--</span>;
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      {agentKind ? <SessionAgentBadge kind={agentKind} /> : null}
+      {model ? (
+        <span
+          role="img"
+          aria-label={model}
+          title={model}
+          className="inline-flex max-w-[12rem] shrink-0 items-center gap-1 rounded-full border border-border/60 bg-background px-2 py-0.5 font-mono text-[10px] font-medium text-muted-foreground"
+        >
+          <Cpu className="h-3 w-3 shrink-0" aria-hidden="true" />
+          <span className="truncate">{model}</span>
+        </span>
+      ) : null}
+    </div>
   );
 }
 

@@ -111,6 +111,7 @@ function goalExecution(issueIdentifier: string, objective: string): AgentExecuti
     issueIdentifier,
     status: "live",
     agentKind: "codex",
+    model: "gpt-5.4",
     sessionId: "sess-1",
     lastEvent: "turn_started",
     lastMessage: "working",
@@ -156,9 +157,13 @@ describe("ObservabilityPage", () => {
     );
 
     expect((await screen.findAllByText("macro-markets")).length).toBeGreaterThan(0);
-    expect(screen.getByRole("link", { name: "508" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: /open session 508/i })).toHaveAttribute(
       "href",
-      "/projects/macro-markets/board/issues/508/agent?agent=execution",
+      "/projects/macro-markets/board/issues/508/sessions?surface=autonomous",
+    );
+    expect(screen.getByRole("link", { name: /open issue details 508/i })).toHaveAttribute(
+      "href",
+      "/projects/macro-markets/board/issues/508",
     );
     expect(screen.getByText(/online/i)).toBeInTheDocument();
   });
@@ -173,13 +178,13 @@ describe("ObservabilityPage", () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByRole("link", { name: "508" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "9" })).toBeInTheDocument();
+    expect(await screen.findByText("508")).toBeInTheDocument();
+    expect(screen.getByText("9")).toBeInTheDocument();
 
     await userEvent.selectOptions(screen.getByLabelText("Project"), "xip");
 
-    expect(screen.queryByRole("link", { name: "508" })).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "9" })).toBeInTheDocument();
+    expect(screen.queryByText("508")).not.toBeInTheDocument();
+    expect(screen.getByText("9")).toBeInTheDocument();
   });
 
   it("pauses a running session directly", async () => {
@@ -189,7 +194,7 @@ describe("ObservabilityPage", () => {
       </MemoryRouter>,
     );
 
-    await screen.findByRole("link", { name: "508" });
+    await screen.findByText("508");
     await userEvent.click(screen.getByRole("button", { name: /pause/i }));
 
     await waitFor(() =>
@@ -204,7 +209,7 @@ describe("ObservabilityPage", () => {
       </MemoryRouter>,
     );
 
-    await screen.findByRole("link", { name: "508" });
+    await screen.findByText("508");
     await userEvent.click(screen.getByRole("button", { name: /new thread/i }));
 
     expect(dispatchIssueAgentMock).not.toHaveBeenCalled();
@@ -228,7 +233,7 @@ describe("ObservabilityPage", () => {
     expect(screen.getByText("running")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "510" })).toHaveAttribute(
       "href",
-      "/projects/macro-markets/board/issues/510/agent?agent=execution",
+      "/projects/macro-markets/board/issues/510/sessions?surface=autonomous",
     );
     expect(screen.getByText("PR merged")).toBeInTheDocument();
   });
@@ -256,8 +261,23 @@ describe("ObservabilityPage", () => {
       </MemoryRouter>,
     );
 
-    await screen.findByRole("link", { name: "508" });
+    await screen.findByText("508");
     expect(screen.getByText("Ship the i18n migration")).toBeInTheDocument();
+  });
+
+  it("shows agent and model badges for a running session", async () => {
+    executions = new Map([["508", goalExecution("508", "Ship the i18n migration")]]);
+
+    render(
+      <MemoryRouter>
+        <ObservabilityPage />
+      </MemoryRouter>,
+    );
+
+    await screen.findByText("508");
+    expect(screen.getByRole("columnheader", { name: /agent \/ model/i })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Codex" })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "gpt-5.4" })).toBeInTheDocument();
   });
 
   it("nests child runs under their coordinating parent", async () => {
@@ -292,15 +312,15 @@ describe("ObservabilityPage", () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByRole("link", { name: "601" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "602" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "603" })).toBeInTheDocument();
+    expect(await screen.findByText("601")).toBeInTheDocument();
+    expect(screen.getByText("602")).toBeInTheDocument();
+    expect(screen.getByText("603")).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: /child runs/i }));
 
-    expect(screen.queryByRole("link", { name: "602" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "603" })).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "601" })).toBeInTheDocument();
+    expect(screen.queryByText("602")).not.toBeInTheDocument();
+    expect(screen.queryByText("603")).not.toBeInTheDocument();
+    expect(screen.getByText("601")).toBeInTheDocument();
   });
 
   it("nests waiting subagents under their coordinator with a waiting badge", async () => {
@@ -341,16 +361,16 @@ describe("ObservabilityPage", () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByRole("link", { name: "701" })).toBeInTheDocument();
+    expect(await screen.findByText("701")).toBeInTheDocument();
     // The gated subagent is drillable (clickable) and badged as waiting.
-    expect(screen.getByRole("link", { name: "703" })).toBeInTheDocument();
+    expect(screen.getByText("703")).toBeInTheDocument();
     expect(screen.getByText("Waiting")).toBeInTheDocument();
 
     // Collapsing the parent hides both the live and waiting subagents.
     await userEvent.click(screen.getByRole("button", { name: /child runs/i }));
-    expect(screen.queryByRole("link", { name: "703" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "702" })).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "701" })).toBeInTheDocument();
+    expect(screen.queryByText("703")).not.toBeInTheDocument();
+    expect(screen.queryByText("702")).not.toBeInTheDocument();
+    expect(screen.getByText("701")).toBeInTheDocument();
   });
 
   it("shows the parent coordinator tokens with a consolidated total on hover", async () => {
@@ -386,7 +406,7 @@ describe("ObservabilityPage", () => {
       </MemoryRouter>,
     );
 
-    await screen.findByRole("link", { name: "601" });
+    await screen.findByText("601");
 
     const tokenCell = screen.getByTitle("Coordinator: 100 · Children: 100 · Total: 200");
     expect(tokenCell).toBeInTheDocument();

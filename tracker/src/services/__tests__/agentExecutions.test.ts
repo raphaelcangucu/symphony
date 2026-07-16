@@ -33,6 +33,17 @@ describe("normalizeAgentExecution", () => {
     expect(execution.issueIdentifier).toBe("508");
   });
 
+  it("normalizes execution model", () => {
+    const execution = normalizeAgentExecution({
+      issue_identifier: "MAC-1",
+      status: "live",
+      agent_kind: "codex",
+      model: "  gpt-5.4  ",
+    });
+
+    expect(execution.model).toBe("gpt-5.4");
+  });
+
   it("normalizes long-running goal metadata and capabilities", () => {
     const execution = normalizeAgentExecution({
       issue_identifier: "MAC-1",
