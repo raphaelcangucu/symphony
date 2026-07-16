@@ -243,6 +243,35 @@ defmodule SymphonyElixir.Evidence.WorkspaceDiffTest do
     end
   end
 
+  describe "repo_summaries/1" do
+    test "returns branch and ahead metadata for clean repos", %{tmp_dir: tmp_dir} do
+      ws = Path.join(tmp_dir, "GAM-9")
+      File.mkdir_p!(ws)
+      repo = make_repo!(tmp_dir, ws, "advising")
+
+      sh!(repo, "git checkout -b feat/local")
+
+      assert {:ok, [%{repo: "advising", branch: "feat/local", ahead_count: 0, dirty?: false}]} =
+               WorkspaceDiff.repo_summaries(ws)
+    end
+
+    test "includes dirty repos even when there are no file changes vs base", %{tmp_dir: tmp_dir} do
+      ws = Path.join(tmp_dir, "GAM-9")
+      File.mkdir_p!(ws)
+      repo = make_repo!(tmp_dir, ws, "frontend")
+
+      sh!(repo, "printf 'dirty\\n' > dirty.txt")
+
+      assert {:ok, [summary]} = WorkspaceDiff.repo_summaries(ws)
+      assert summary.repo == "frontend"
+      assert summary.dirty? == true
+    end
+
+    test "missing workspace yields an empty list", %{tmp_dir: tmp_dir} do
+      assert {:ok, []} = WorkspaceDiff.repo_summaries(Path.join(tmp_dir, "nope"))
+    end
+  end
+
   describe "patch/3" do
     test "returns the patch for exactly one tracked file", %{tmp_dir: tmp_dir} do
       ws = Path.join(tmp_dir, "GAM-9")

@@ -17,6 +17,10 @@ defmodule SymphonyElixir.Evidence.WorkspaceDiff do
   list was cut off, instead of shelling out once per changed file with no
   bound.
 
+  `repo_summaries/1` — lightweight per-repo branch, ahead count, and dirty
+  flag via `RunContract.repo_states/2`, including clean repos (unlike
+  `stats/2` and `changes/2`, which omit repos with no diff).
+
   All repo discovery here is intentionally local-only: no `ls-remote` (or any
   other network call) is made. The default branch is read from the local
   `origin/HEAD` symref (set once at clone/push time), optionally overridden by
@@ -36,6 +40,8 @@ defmodule SymphonyElixir.Evidence.WorkspaceDiff do
   huge diff cheaply, or to assert the number of subprocess calls stays
   constant as the simulated file count grows.
   """
+
+  alias SymphonyElixir.RunContract
 
   @type diff_type :: :uncommitted | :branch
   @type file_change :: %{
@@ -84,6 +90,12 @@ defmodule SymphonyElixir.Evidence.WorkspaceDiff do
           binary: boolean(),
           truncated: boolean(),
           patch: String.t()
+        }
+  @type repo_summary :: %{
+          repo: String.t(),
+          branch: String.t() | nil,
+          ahead_count: non_neg_integer(),
+          dirty?: boolean()
         }
 
   @diff_types [:uncommitted, :branch]
@@ -142,6 +154,37 @@ defmodule SymphonyElixir.Evidence.WorkspaceDiff do
   end
 
   def stats(_workspace, _opts), do: {:error, :invalid_diff_type}
+
+  ## -- repo_summaries ----------------------------------------------------
+
+  @doc """
+  Lightweight per-repo branch, ahead count, and dirty flag for a workspace.
+
+  Uses `RunContract.repo_states/2` so clean repos are included (unlike
+  `stats/2` and `changes/2`, which omit repos with no diff). Accepts the
+  same optional keyword args as `RunContract.repo_states/2` (e.g.
+  `:default_branches`, `:max_concurrency`).
+  """
+  @spec repo_summaries(Path.t(), keyword()) :: {:ok, [repo_summary()]}
+  def repo_summaries(workspace, opts \\ []) when is_binary(workspace) do
+    if File.dir?(workspace) do
+      summaries =
+        workspace
+        |> RunContract.repo_states(opts)
+        |> Enum.map(fn repo ->
+          %{
+            repo: repo.name,
+            branch: repo.branch,
+            ahead_count: repo.ahead_count,
+            dirty?: repo.dirty?
+          }
+        end)
+
+      {:ok, summaries}
+    else
+      {:ok, []}
+    end
+  end
 
   defp repo_stat(%Repo{} = repo, type, git) do
     {files_changed, additions, deletions} = numstat_totals(repo, diff_base_args(repo, type), git)
