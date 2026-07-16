@@ -9,7 +9,10 @@ import {
   type ReactNode,
 } from "react";
 
-type ExtraGetter = () => Record<string, unknown> | undefined;
+// Getters may return a named interface (e.g. KbExtraContext) or an inline
+// object literal; `object` accepts both, unlike Record<string, unknown> which
+// rejects interfaces lacking an index signature.
+type ExtraGetter = () => object | undefined;
 
 /** Imperative control the docked host exposes so page toolbars can open it. */
 export interface MaestroHostControl {
