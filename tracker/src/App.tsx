@@ -36,6 +36,7 @@ import { ProvidersSettingsPage } from "@/pages/ProvidersSettingsPage";
 import { SettingsPlaceholderRoute } from "@/pages/SettingsPlaceholderRoute";
 import { SidebarTreeLayoutProposalsPage } from "@/pages/SidebarTreeLayoutProposalsPage";
 import { AssistantSessionLayoutProposalsPage } from "@/pages/AssistantSessionLayoutProposalsPage";
+import { ToolCallProposalsPage } from "@/pages/ToolCallProposalsPage";
 import { WorkspacesPageLayoutProposalsPage } from "@/pages/WorkspacesPageLayoutProposalsPage";
 import { WorkspaceArchiveCleanupProposalsPage } from "@/pages/WorkspaceArchiveCleanupProposalsPage";
 import { UsageSettingsPage } from "@/pages/UsageSettingsPage";
@@ -174,6 +175,7 @@ export function App() {
                 path="dev/assistant-session-proposals"
                 element={<AssistantSessionLayoutProposalsPage />}
               />
+              <Route path="dev/tool-call-proposals" element={<ToolCallProposalsPage />} />
             </Route>
           </Route>
           <Route path="*" element={<Navigate to="/projects" replace />} />

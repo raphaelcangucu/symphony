@@ -16,9 +16,9 @@ export interface FileActivityView {
   body: { value: string; language: "diff" | "bash" | "text" } | null;
 }
 
-const READ_TOOLS = new Set(["read_workspace_file", "read_file"]);
-const EDIT_TOOLS = new Set(["apply_patch", "edit_file", "write_file"]);
-const COMMAND_TOOLS = new Set(["shell", "exec_command", "bash"]);
+const READ_TOOLS = new Set(["read_workspace_file", "read_file", "Read", "read"]);
+const EDIT_TOOLS = new Set(["apply_patch", "edit_file", "write_file", "edit", "write", "Write"]);
+const COMMAND_TOOLS = new Set(["shell", "exec_command", "bash", "Bash", "Shell"]);
 
 export function fileActivityFromToolCall(call: AssistantToolCall): FileActivityView | null {
   const status = mapStatus(call.status);
@@ -70,10 +70,11 @@ function editView(call: AssistantToolCall, status: FileActivityView["status"]): 
 
 function commandView(call: AssistantToolCall, status: FileActivityView["status"]): FileActivityView {
   const args = (call.arguments ?? {}) as Record<string, unknown>;
+  const description = stringOrNull(args.description);
   const command = stringOrNull(args.command) ?? "";
   return {
     kind: "command",
-    title: command || "command",
+    title: description ?? (command || "command"),
     path: null,
     lineRange: null,
     additions: null,
