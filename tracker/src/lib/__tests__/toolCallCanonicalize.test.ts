@@ -66,4 +66,43 @@ describe("canonicalizeToolCall family", () => {
     expect(p.family).toBe("kb");
     expect(p.kbPath).toContain("superpowers/specs");
   });
+
+  it("classifies curl+sleep health loops as preview health-wait", () => {
+    const p = canonicalizeToolCall({
+      name: "Bash",
+      arguments: {
+        description: "Wait for preview health endpoint",
+        command: "for i in $(seq 1 60); do curl -sf http://127.0.0.1:4301/health && break; sleep 3; done",
+      },
+      status: "running",
+    });
+    expect(p.family).toBe("preview");
+    expect(p.meta.healthWait).toBe(true);
+    expect(p.title.toLowerCase()).toMatch(/health|aguard/i);
+  });
+
+  it("adds PR link badge from gh pr list stdout", () => {
+    const p = canonicalizeToolCall({
+      name: "Bash",
+      arguments: { description: "Check if PR exists", command: "gh pr list --json number,url,state" },
+      status: "completed",
+      output: JSON.stringify({
+        success: {
+          exitCode: 0,
+          stdout:
+            '[{"number":9918,"state":"OPEN","url":"https://github.com/org/repo/pull/9918"}]',
+        },
+      }),
+    });
+    expect(p.links.some((l) => l.href.includes("/pull/9918"))).toBe(true);
+  });
+
+  it("marks kb_delete_folder as destructive", () => {
+    const p = canonicalizeToolCall({
+      name: "kb_delete_folder",
+      arguments: { path: "docs/tmp", repository: "advising" },
+      status: "completed",
+    });
+    expect(p.badges.some((b) => b.kind === "warn")).toBe(true);
+  });
 });

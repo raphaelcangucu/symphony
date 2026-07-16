@@ -1,6 +1,7 @@
 import type {
   ToolFamily,
   ToolPresentation,
+  ToolPresentationBadge,
   ToolPresentationLink,
   ToolPresentationStatus,
 } from "@/lib/toolCallPresentation";
@@ -134,12 +135,14 @@ function buildCommandPresentation(
 
   const unwrappedRecord = asRecord(unwrapped);
   const stdout = stringOrNull(unwrappedRecord?.stdout);
+  const interleavedOutput = stringOrNull(unwrappedRecord?.interleavedOutput);
+  const links = extractPrLinks(stdout, interleavedOutput);
 
   return {
     title: description ?? command ?? toolName,
     summary: command,
     badges: [],
-    links: [],
+    links,
     body: stdout,
     meta,
     kbPath: null,
@@ -152,6 +155,27 @@ function buildPreviewPresentation(
   innerArgs: Record<string, unknown>,
   unwrapped: unknown,
 ): BuiltPresentation {
+  const command = stringOrNull(innerArgs.command) ?? "";
+  const description = stringOrNull(innerArgs.description);
+
+  if (isHealthWaitCommand(command)) {
+    const title =
+      description && /health|aguard/i.test(description)
+        ? description
+        : "Waiting for health check";
+
+    return {
+      title,
+      summary: command,
+      badges: [],
+      links: [],
+      body: null,
+      meta: { healthWait: true },
+      kbPath: null,
+      raw: null,
+    };
+  }
+
   const action = stringOrNull(innerArgs.action);
   const links = extractPreviewLinks(unwrapped);
   const meta: Record<string, unknown> = {};
@@ -172,11 +196,16 @@ function buildPreviewPresentation(
 function buildKbPresentation(toolName: string, innerArgs: Record<string, unknown>): BuiltPresentation {
   const path = stringOrNull(innerArgs.path);
   const title = stringOrNull(innerArgs.title);
+  const badges: ToolPresentationBadge[] = [];
+
+  if (toolName.toLowerCase().startsWith("kb_delete_")) {
+    badges.push({ kind: "warn", label: "Destructive" });
+  }
 
   return {
     title: title ?? toolName,
     summary: null,
-    badges: [],
+    badges,
     links: [],
     body: null,
     meta: {},
@@ -185,8 +214,51 @@ function buildKbPresentation(toolName: string, innerArgs: Record<string, unknown
   };
 }
 
-export function isHealthWaitCommand(_command: string): boolean {
-  return false;
+export function isHealthWaitCommand(command: string): boolean {
+  const lower = command.toLowerCase();
+  if (!lower.includes("curl") || !lower.includes("sleep")) return false;
+  return /\bseq\b/.test(lower) || /\bfor\s+/.test(lower);
+}
+
+function extractPrLinks(
+  stdout: string | null,
+  interleavedOutput: string | null,
+): ToolPresentationLink[] {
+  const links: ToolPresentationLink[] = [];
+  const seen = new Set<string>();
+
+  for (const text of [stdout, interleavedOutput]) {
+    if (!text) continue;
+    const items = parsePrArray(text);
+    for (const item of items) {
+      const number = item.number;
+      const url = item.url;
+      if (typeof number !== "number" || typeof url !== "string" || !url.includes("/pull/")) {
+        continue;
+      }
+      if (seen.has(url)) continue;
+      seen.add(url);
+      links.push({ label: `PR #${number}`, href: url });
+    }
+  }
+
+  return links;
+}
+
+function parsePrArray(text: string): Array<{ number?: unknown; url?: unknown }> {
+  const trimmed = text.trim();
+  if (!trimmed.startsWith("[")) return [];
+
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((item) => item && typeof item === "object") as Array<{
+      number?: unknown;
+      url?: unknown;
+    }>;
+  } catch {
+    return [];
+  }
 }
 
 function extractExitCode(unwrapped: unknown): number | undefined {
