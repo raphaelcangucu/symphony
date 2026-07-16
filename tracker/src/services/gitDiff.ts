@@ -324,12 +324,14 @@ export async function commitThreadGitDiff(threadId: number, message: string): Pr
 export async function getGitDiffSummaries(
   projectSlug: string,
   identifier: string,
+  options: GitDiffRequestOptions = {},
 ): Promise<GitDiffSummariesResult> {
   const slug = requireProjectSlug(projectSlug);
   const issueIdentifier = requireNonBlank(normalizeIssueIdentifier(identifier), "identifier");
 
   const response = await http.get<BackendGitDiffSummariesEnvelope>(
     trackerPath(`/projects/${encodeURIComponent(slug)}/issues/${encodeURIComponent(issueIdentifier)}/diff/summaries`),
+    { signal: options.signal },
   );
 
   return {

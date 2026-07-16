@@ -1,14 +1,17 @@
 import { GitBranch, GitCommitHorizontal, GitCompare, HardDrive, PanelRight, X } from "lucide-react";
-import { type RefObject, useCallback, useState } from "react";
+import { type RefObject, useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router-dom";
 
 import { GitDiffLauncher } from "@/components/issues/issue-detail/git-diff/GitDiffLauncher";
+import { PullRequestLink } from "@/components/issues/pull-request/PullRequestLink";
 import { Button } from "@/components/ui/button";
 import { useHorizontalPanelResize } from "@/hooks/useHorizontalPanelResize";
+import { useIssuePullRequests } from "@/hooks/useIssuePullRequests";
 import { useWorkspaceDiffStats } from "@/hooks/useWorkspaceDiffStats";
+import { useWorkspaceRepoSummaries } from "@/hooks/useWorkspaceRepoSummaries";
 import { cn } from "@/lib/utils";
-import { issuePath, type WorkspaceView } from "@/lib/workspaceRoutes";
+import type { WorkspaceView } from "@/lib/workspaceRoutes";
+import { getIssue } from "@/services/issues";
 
 const ENVIRONMENT_DOCK_WIDTH_STORAGE_KEY = "symphony:issue-environment-dock-width";
 const ENVIRONMENT_DOCK_DEFAULT_WIDTH = 280;
@@ -18,7 +21,6 @@ interface IssueEnvironmentDockProps {
   projectSlug: string;
   issueIdentifier: string;
   view: WorkspaceView;
-  branch?: string | null;
   splitContainerRef: RefObject<HTMLDivElement | null>;
   onClose: () => void;
 }
@@ -26,17 +28,26 @@ interface IssueEnvironmentDockProps {
 export function IssueEnvironmentDock({
   projectSlug,
   issueIdentifier,
-  view,
-  branch = null,
   splitContainerRef,
   onClose,
 }: IssueEnvironmentDockProps) {
   const { t } = useTranslation();
-  const navigate = useNavigate();
   const [compareRequestId, setCompareRequestId] = useState(0);
+  const [commitRequestId, setCommitRequestId] = useState(0);
+  const [issueBranch, setIssueBranch] = useState<string | null>(null);
   const diffStats = useWorkspaceDiffStats({
     projectSlug,
     issueIdentifier,
+    enabled: true,
+  });
+  const workspaceSummaries = useWorkspaceRepoSummaries({
+    projectSlug,
+    issueIdentifier,
+    enabled: true,
+  });
+  const pullRequestResult = useIssuePullRequests({
+    projectSlug,
+    identifier: issueIdentifier,
     enabled: true,
   });
   const { width, isResizing, onResizePointerDown, onResizePointerUp } = useHorizontalPanelResize({
@@ -46,16 +57,44 @@ export function IssueEnvironmentDock({
     minWidth: ENVIRONMENT_DOCK_MIN_WIDTH,
   });
 
+  useEffect(() => {
+    let current = true;
+    setIssueBranch(null);
+
+    void getIssue(projectSlug, issueIdentifier)
+      .then((issue) => {
+        if (current) setIssueBranch(issue.branchName);
+      })
+      .catch(() => {
+        if (current) setIssueBranch(null);
+      });
+
+    return () => {
+      current = false;
+    };
+  }, [issueIdentifier, projectSlug]);
+
   const openCompare = useCallback(() => {
     setCompareRequestId((current) => current + 1);
   }, []);
 
   const openCommitPush = useCallback(() => {
-    navigate(issuePath(projectSlug, view, issueIdentifier, "sessions"));
-  }, [navigate, projectSlug, view, issueIdentifier]);
+    setCommitRequestId((current) => current + 1);
+  }, []);
 
   const additions = diffStats?.additions ?? 0;
   const deletions = diffStats?.deletions ?? 0;
+  const linkedPullRequests = useMemo(() => {
+    const ownUrls = new Set(
+      pullRequestResult.pullRequests.map((pullRequest) => pullRequest.url).filter((url): url is string => Boolean(url)),
+    );
+    const childPullRequests = pullRequestResult.children
+      .flatMap((group) => group.pullRequests)
+      .filter((pullRequest) => !pullRequest.url || !ownUrls.has(pullRequest.url));
+
+    return [...pullRequestResult.pullRequests, ...childPullRequests];
+  }, [pullRequestResult.children, pullRequestResult.pullRequests]);
+  const localBranch = workspaceSummaries.localBranch;
 
   return (
     <aside
@@ -115,12 +154,26 @@ export function IssueEnvironmentDock({
             <span className="truncate">{t("assistant.environment.local")}</span>
           </div>
 
-          {branch ? (
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <GitBranch className="h-3.5 w-3.5 shrink-0" />
-              <span className="truncate font-mono" title={branch}>
-                {branch}
-              </span>
+          {localBranch || issueBranch ? (
+            <div className="flex flex-col gap-1.5 text-xs text-muted-foreground">
+              {localBranch ? (
+                <div className="flex items-center gap-1.5">
+                  <GitBranch className="h-3.5 w-3.5 shrink-0" />
+                  <span className="shrink-0">{t("assistant.environment.localBranch")}</span>
+                  <span className="truncate font-mono" title={localBranch}>
+                    {localBranch}
+                  </span>
+                </div>
+              ) : null}
+              {issueBranch ? (
+                <div className="flex items-center gap-1.5">
+                  <GitBranch className="h-3.5 w-3.5 shrink-0" />
+                  <span className="shrink-0">{t("assistant.environment.issueBranch")}</span>
+                  <span className="truncate font-mono" title={issueBranch}>
+                    {issueBranch}
+                  </span>
+                </div>
+              ) : null}
             </div>
           ) : null}
 
@@ -149,6 +202,22 @@ export function IssueEnvironmentDock({
             </Button>
           </div>
 
+          {linkedPullRequests.length > 0 ? (
+            <div className="flex flex-col gap-1.5 border-t border-border/60 pt-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                {t("assistant.environment.linkedPullRequests")}
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {linkedPullRequests.map((pullRequest) => (
+                  <PullRequestLink
+                    key={pullRequest.url ?? `${pullRequest.repo}#${pullRequest.number}`}
+                    pullRequest={pullRequest}
+                  />
+                ))}
+              </div>
+            </div>
+          ) : null}
+
           <div className="flex flex-col gap-1 border-t border-border/60 pt-2">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
               {t("assistant.environment.sources")}
@@ -164,6 +233,7 @@ export function IssueEnvironmentDock({
         projectSlug={projectSlug}
         identifier={issueIdentifier}
         openRequestId={compareRequestId}
+        openCommitDialogRequestId={commitRequestId}
         showTrigger={false}
       />
     </aside>

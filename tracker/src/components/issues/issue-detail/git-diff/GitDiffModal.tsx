@@ -35,6 +35,8 @@ interface GitDiffModalProps {
   threadId?: number | null;
   /** When set, line comments can be collected on the diff and sent back to the agent as one review prompt. */
   onSendReview?: (review: string) => void;
+  initialCommitDialogOpen?: boolean;
+  onCommitDialogOpened?: () => void;
 }
 
 /** A file row for the tree/viewer: repo-prefixed display path plus the original repo/path needed to fetch its patch. */
@@ -52,6 +54,8 @@ export default function GitDiffModal({
   identifier = null,
   threadId = null,
   onSendReview,
+  initialCommitDialogOpen = false,
+  onCommitDialogOpened,
 }: GitDiffModalProps) {
   const { t } = useTranslation();
   const supportsCommits = Boolean(projectSlug && identifier);
@@ -70,6 +74,12 @@ export default function GitDiffModal({
   const [commitPending, setCommitPending] = useState(false);
   const diffType: GitDiffType = activeTab === "uncommitted" ? "uncommitted" : "branch";
   const diffActive = open && activeTab !== "commits";
+
+  useEffect(() => {
+    if (!open || !initialCommitDialogOpen) return;
+    setCommitDialogOpen(true);
+    onCommitDialogOpened?.();
+  }, [initialCommitDialogOpen, onCommitDialogOpened, open]);
 
   useEffect(() => {
     const handle = window.setTimeout(() => setDebouncedQuery(query.trim()), SEARCH_DEBOUNCE_MS);

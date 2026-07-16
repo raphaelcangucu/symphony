@@ -17,6 +17,8 @@ interface GitDiffLauncherProps {
   onSendReview?: (review: string) => void;
   /** External open trigger: incrementing this counter opens the modal (like other requestId props). */
   openRequestId?: number;
+  /** External commit trigger: incrementing this counter opens the modal with its commit dialog. */
+  openCommitDialogRequestId?: number;
   /** When false, only the modal + shortcut/requestId path remain (e.g. Environment dock Compare). */
   showTrigger?: boolean;
 }
@@ -46,10 +48,12 @@ export function GitDiffLauncher({
   disabled,
   onSendReview,
   openRequestId = 0,
+  openCommitDialogRequestId = 0,
   showTrigger = true,
 }: GitDiffLauncherProps) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
+  const [openCommitDialog, setOpenCommitDialog] = useState(false);
   const unavailable = !identifier && !threadId;
   const launcherDisabled = disabled || unavailable;
   const openModal = useCallback(() => {
@@ -62,6 +66,12 @@ export function GitDiffLauncher({
   useEffect(() => {
     if (openRequestId > 0) openModal();
   }, [openModal, openRequestId]);
+
+  useEffect(() => {
+    if (openCommitDialogRequestId <= 0) return;
+    setOpenCommitDialog(true);
+    openModal();
+  }, [openCommitDialogRequestId, openModal]);
 
   return (
     <>
@@ -88,6 +98,8 @@ export function GitDiffLauncher({
             identifier={identifier}
             threadId={threadId}
             onSendReview={onSendReview}
+            initialCommitDialogOpen={openCommitDialog}
+            onCommitDialogOpened={() => setOpenCommitDialog(false)}
           />
         </Suspense>
       ) : null}

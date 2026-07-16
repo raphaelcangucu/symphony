@@ -2423,6 +2423,9 @@
       "changes": "Alterações",
       "local": "Área de trabalho local",
       "branch": "Branch",
+      "localBranch": "Local",
+      "issueBranch": "Issue",
+      "linkedPullRequests": "PRs vinculados",
       "commitPush": "Commit e push",
       "compare": "Comparar",
       "sources": "Fontes"
