@@ -25,6 +25,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     PullRequestTools,
     ReadTools,
     RunningAgentsTools,
+    SettingsTools,
     SetupTools,
     SteerTools,
     SubtaskAuthoring,
@@ -95,6 +96,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
   @github_tools GitHubTools.tools()
   @kb_tools KnowledgeBaseTools.tools()
   @observability_tools ObservabilityTools.tools()
+  @settings_tools SettingsTools.tools()
   @discovery_tools DiscoveryTools.tools()
   @dynamic_tools Enum.map(DynamicTool.tool_specs(), & &1["name"])
   @supported_tools @tracker_tools ++ @read_tools ++ @github_tools ++ @kb_tools
@@ -589,6 +591,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
        GitHubTools.tool_specs() ++
        KnowledgeBaseTools.tool_specs() ++
        ObservabilityTools.tool_specs() ++
+       SettingsTools.tool_specs() ++
        read_specs ++
        [GoalTools.assistant_tool_spec()] ++
        DynamicTool.tool_specs())
@@ -625,6 +628,9 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
 
         name in @observability_tools ->
           wrap_for_codex(ObservabilityTools.execute(name, arguments, opts))
+
+        name in @settings_tools ->
+          wrap_for_codex(SettingsTools.execute(name, arguments, opts))
 
         name in @freeform_project_agnostic_read_tools ->
           wrap_for_codex(ReadTools.execute(nil, name, arguments, opts))
