@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { i18n } from "@/i18n";
 import { isAbortError } from "@/lib/httpAbort";
@@ -58,17 +58,29 @@ export function useGitDiffFiles({
     [identifier, limit, projectSlug, query, repoFilter, threadId, type],
   );
 
-  useEffect(() => {
+  const requestKey = `${enabled}:${canFetch}:${type}:${repoFilter ?? ""}:${query ?? ""}:${threadId ?? ""}:${projectSlug}:${identifier ?? ""}:${limit ?? ""}`;
+
+  // Reset before paint when the request identity changes so consumers (e.g. path
+  // focus) never resolve against a stale empty list with loading=false.
+  useLayoutEffect(() => {
+    cursorRef.current = null;
     if (!enabled || !canFetch) {
       setFiles([]);
       setTotal(0);
       setError(null);
-      cursorRef.current = null;
+      setLoading(false);
       return;
     }
+    setFiles([]);
+    setTotal(0);
+    setError(null);
+    setLoading(true);
+  }, [requestKey, enabled, canFetch]);
+
+  useEffect(() => {
+    if (!enabled || !canFetch) return;
 
     const controller = new AbortController();
-    setLoading(true);
 
     async function load() {
       try {
@@ -88,7 +100,7 @@ export function useGitDiffFiles({
 
     void load();
     return () => controller.abort();
-  }, [enabled, canFetch, fetchPage]);
+  }, [enabled, canFetch, fetchPage, requestKey]);
 
   const loadMore = useCallback(async () => {
     if (!canFetch || !cursorRef.current || loadingMore) return;

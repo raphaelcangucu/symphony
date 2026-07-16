@@ -583,23 +583,24 @@ describe("GitDiffModal", () => {
     });
     expect(onInitialFocusConsumed).toHaveBeenCalled();
 
-    // After focus, the basename filter clears and the full list reloads (README first).
-    // Selection must stay on the focused file — not fall back to README.md.
-    await waitFor(() => {
-      expect(useGitDiffFilesMock).toHaveBeenCalledWith(
-        expect.objectContaining({ type: "uncommitted", query: "" }),
-      );
-    });
+    // Keep the basename filter so paginated full-list reloads cannot drop the file.
+    expect(useGitDiffFilesMock).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "uncommitted", query: "index.md" }),
+    );
     expect(screen.getByTestId("git-diff-viewer")).toHaveTextContent("frontend/docs/index.md");
     expect(screen.getByTestId("git-diff-viewer")).not.toHaveTextContent("README.md");
   });
 
   it("falls back to branch when the focused path is missing from uncommitted", async () => {
     const onInitialFocusConsumed = vi.fn();
+    const fileState = {
+      loading: true,
+      files: [] as ReturnType<typeof fileEntry>[],
+    };
     useGitDiffFilesMock.mockImplementation((args: { type?: string } = {}) => ({
-      files: args.type === "branch" ? [fileEntry({ path: "docs/index.md" })] : [],
-      total: args.type === "branch" ? 1 : 0,
-      loading: false,
+      files: args.type === "branch" ? fileState.files : [],
+      total: args.type === "branch" ? fileState.files.length : 0,
+      loading: fileState.loading,
       loadingMore: false,
       hasMore: false,
       error: null,
@@ -612,7 +613,20 @@ describe("GitDiffModal", () => {
       error: null,
     });
 
-    render(
+    const view = render(
+      <GitDiffModal
+        open
+        onOpenChange={vi.fn()}
+        projectSlug="advising"
+        identifier="CDE-1"
+        initialFocusPath="docs/index.md"
+        onInitialFocusConsumed={onInitialFocusConsumed}
+      />,
+    );
+
+    // Finish uncommitted fetch (empty) so focus falls through to branch.
+    fileState.loading = false;
+    view.rerender(
       <GitDiffModal
         open
         onOpenChange={vi.fn()}
@@ -626,6 +640,32 @@ describe("GitDiffModal", () => {
     await waitFor(() => {
       expect(screen.getByRole("tab", { name: /^branch$/i })).toHaveAttribute("data-state", "active");
     });
+
+    // Branch fetch in flight, then resolves with the file.
+    fileState.loading = true;
+    view.rerender(
+      <GitDiffModal
+        open
+        onOpenChange={vi.fn()}
+        projectSlug="advising"
+        identifier="CDE-1"
+        initialFocusPath="docs/index.md"
+        onInitialFocusConsumed={onInitialFocusConsumed}
+      />,
+    );
+    fileState.loading = false;
+    fileState.files = [fileEntry({ path: "docs/index.md" })];
+    view.rerender(
+      <GitDiffModal
+        open
+        onOpenChange={vi.fn()}
+        projectSlug="advising"
+        identifier="CDE-1"
+        initialFocusPath="docs/index.md"
+        onInitialFocusConsumed={onInitialFocusConsumed}
+      />,
+    );
+
     await waitFor(() => {
       expect(screen.getByTestId("git-diff-viewer")).toHaveTextContent("frontend/docs/index.md");
     });
@@ -633,19 +673,56 @@ describe("GitDiffModal", () => {
   });
 
   it("toasts when the focused path is missing from uncommitted and branch", async () => {
-    useGitDiffFilesMock.mockReturnValue({
+    const fileState = { loading: true };
+    useGitDiffFilesMock.mockImplementation(() => ({
       files: [],
       total: 0,
-      loading: false,
+      loading: fileState.loading,
       loadingMore: false,
       hasMore: false,
       error: null,
       loadMore: vi.fn(),
       refetch: filesRefetchMock,
-    });
+    }));
     useGitDiffPatchMock.mockReturnValue({ file: null, loading: false, error: null });
 
-    render(
+    const view = render(
+      <GitDiffModal
+        open
+        onOpenChange={vi.fn()}
+        projectSlug="advising"
+        identifier="CDE-1"
+        initialFocusPath="missing.md"
+      />,
+    );
+
+    fileState.loading = false;
+    view.rerender(
+      <GitDiffModal
+        open
+        onOpenChange={vi.fn()}
+        projectSlug="advising"
+        identifier="CDE-1"
+        initialFocusPath="missing.md"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: /^branch$/i })).toHaveAttribute("data-state", "active");
+    });
+
+    fileState.loading = true;
+    view.rerender(
+      <GitDiffModal
+        open
+        onOpenChange={vi.fn()}
+        projectSlug="advising"
+        identifier="CDE-1"
+        initialFocusPath="missing.md"
+      />,
+    );
+    fileState.loading = false;
+    view.rerender(
       <GitDiffModal
         open
         onOpenChange={vi.fn()}

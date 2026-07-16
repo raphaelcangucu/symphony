@@ -1,5 +1,5 @@
 import { Columns2, GitBranch, GitCommitHorizontal, Loader2, MessageSquareText, RefreshCw, Rows3, Search, Sparkles } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
@@ -102,6 +102,7 @@ export default function GitDiffModal({
   const [pendingFocusPath, setPendingFocusPath] = useState<string | null>(null);
   const [focusAttempt, setFocusAttempt] = useState<FocusAttemptTab | null>(null);
   const [pendingSelectKey, setPendingSelectKey] = useState<string | null>(null);
+  const focusAttemptReadyKeyRef = useRef<string | null>(null);
   const diffType: GitDiffType = activeTab === "uncommitted" ? "uncommitted" : "branch";
   const diffActive = open && activeTab !== "commits";
 
@@ -124,6 +125,7 @@ export default function GitDiffModal({
     setPendingFocusPath(trimmed);
     setFocusAttempt("uncommitted");
     setPendingSelectKey(null);
+    focusAttemptReadyKeyRef.current = null;
     setActiveRepo("all");
     setActiveTab("uncommitted");
     setQuery(filter);
@@ -446,15 +448,18 @@ export default function GitDiffModal({
   useEffect(() => {
     if (!open || !pendingFocusPath || !focusAttempt) return;
     if (activeTab !== focusAttempt) return;
-    if (files.loading) return;
+
+    const attemptKey = `${focusAttempt}\0${debouncedQuery}`;
+    if (files.loading) {
+      focusAttemptReadyKeyRef.current = attemptKey;
+      return;
+    }
 
     const matches = findGitDiffEntriesForPath(files.files, pendingFocusPath);
     const best = pickBestGitDiffEntry(files.files, pendingFocusPath);
 
     if (best) {
       const key = rowKey({ repo: best.repo, originalPath: best.path });
-      // Keep pendingSelectKey pinned across the post-focus full-list reload so
-      // clearing the basename filter cannot fall back to the first tree file.
       setPendingSelectKey(key);
       setSelectedKey(key);
       if (matches.length > 1) {
@@ -462,13 +467,21 @@ export default function GitDiffModal({
       }
       setPendingFocusPath(null);
       setFocusAttempt(null);
-      setQuery("");
-      setDebouncedQuery("");
+      focusAttemptReadyKeyRef.current = null;
+      // Keep the basename filter so the focused file stays in the loaded page.
+      // Clearing it reloads the full paginated list and drops files beyond page 1.
       onInitialFocusConsumed?.();
       return;
     }
 
+    // Empty list before the fetch for this tab/query has completed — do not
+    // treat a stale prior result as definitive (uncommitted → branch race).
+    if (focusAttemptReadyKeyRef.current !== attemptKey) {
+      return;
+    }
+
     if (focusAttempt === "uncommitted") {
+      focusAttemptReadyKeyRef.current = null;
       setFocusAttempt("branch");
       setActiveTab("branch");
       return;
@@ -477,11 +490,13 @@ export default function GitDiffModal({
     toast.message(t("issue.diff.focus.notFound", { path: pendingFocusPath }));
     setPendingFocusPath(null);
     setFocusAttempt(null);
+    focusAttemptReadyKeyRef.current = null;
     setQuery("");
     setDebouncedQuery("");
     onInitialFocusConsumed?.();
   }, [
     activeTab,
+    debouncedQuery,
     files.files,
     files.loading,
     focusAttempt,

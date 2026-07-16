@@ -93,4 +93,34 @@ describe("useGitDiffFiles", () => {
     );
     expect(getGitDiffFiles).not.toHaveBeenCalled();
   });
+
+  it("clears stale files and sets loading before paint when type changes", async () => {
+    let resolveBranch: ((value: GitDiffFilesPage) => void) | undefined;
+    vi.mocked(getGitDiffFiles).mockImplementation((_project, _id, type) => {
+      if (type === "uncommitted") {
+        return Promise.resolve(page({ files: [], total: 0 }));
+      }
+      return new Promise<GitDiffFilesPage>((resolve) => {
+        resolveBranch = resolve;
+      });
+    });
+
+    const { result, rerender } = renderHook(
+      ({ type }: { type: "uncommitted" | "branch" }) =>
+        useGitDiffFiles({ projectSlug: "demo", identifier: "ABC-1", type }),
+      { initialProps: { type: "uncommitted" as "uncommitted" | "branch" } },
+    );
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.files).toEqual([]);
+
+    rerender({ type: "branch" });
+
+    expect(result.current.loading).toBe(true);
+    expect(result.current.files).toEqual([]);
+
+    resolveBranch?.(page({ files: [fileEntry("frontend", "a.ts")], total: 1 }));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.files).toEqual([fileEntry("frontend", "a.ts")]);
+  });
 });
