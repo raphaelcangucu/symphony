@@ -25,7 +25,7 @@ describe("KbToolCard", () => {
       />,
     );
     expect(screen.getByText(/superpowers\/specs/)).toBeTruthy();
-    const openButton = screen.getByRole("button", { name: /open in knowledge base/i });
+    const openButton = screen.getByRole("button", { name: /open in kb/i });
     fireEvent.click(openButton);
     expect(onOpen).toHaveBeenCalledWith("superpowers/specs/2026-07-16-cde-1180.md");
   });

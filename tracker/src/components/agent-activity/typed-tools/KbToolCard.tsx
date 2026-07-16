@@ -18,8 +18,13 @@ type KbToolCardProps = Omit<
   onOpenKbPath?: OpenKbPathHandler;
 };
 
-function buildBadges(presentation: ToolPresentation): ToolPresentationBadge[] {
-  const badges = [...presentation.badges];
+function buildBadges(
+  presentation: ToolPresentation,
+  destructiveLabel: string,
+): ToolPresentationBadge[] {
+  const badges = presentation.badges.map((badge) =>
+    badge.label === "Destructive" ? { ...badge, label: destructiveLabel } : badge,
+  );
   const kbPath = presentation.kbPath?.trim();
   if (kbPath && !badges.some((badge) => badge.label.includes(kbPath))) {
     badges.push({ kind: "neutral", label: kbPath });
@@ -31,6 +36,7 @@ function buildDetails(
   presentation: ToolPresentation,
   onOpenKbPath: OpenKbPathHandler | undefined,
   openLabel: string,
+  technicalDetailsLabel: string,
 ): ReactNode {
   const { body, raw, kbPath } = presentation;
   const path = kbPath?.trim() ?? null;
@@ -66,7 +72,7 @@ function buildDetails(
       {raw ? (
         <div className="min-w-0 space-y-1">
           <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-            Technical details
+            {technicalDetailsLabel}
           </div>
           <pre className="max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-slate-950 p-3 font-mono text-[11px] leading-5 text-slate-100">
             {raw}
@@ -79,18 +85,23 @@ function buildDetails(
 
 export function KbToolCard({ presentation, onOpenKbPath, ...shellProps }: KbToolCardProps) {
   const { t } = useTranslation();
-  const openLabel = t("issue.toolCall.openInKnowledgeBase");
-  const details = buildDetails(presentation, onOpenKbPath, openLabel);
+  const openLabel = t("issue.toolCall.typed.openInKb");
+  const details = buildDetails(
+    presentation,
+    onOpenKbPath,
+    openLabel,
+    t("issue.toolCall.typed.technicalDetails"),
+  );
   const hasOpenAction = Boolean(presentation.kbPath?.trim() && onOpenKbPath);
 
   return (
     <TypedToolCardShell
       icon={<BookOpen className="size-3.5" aria-hidden />}
-      verb="Knowledge base"
+      verb={t("issue.toolCall.typed.families.kb")}
       title={presentation.title}
       summary={presentation.summary}
       status={presentation.status}
-      badges={buildBadges(presentation)}
+      badges={buildBadges(presentation, t("issue.toolCall.typed.destructive"))}
       links={presentation.links}
       details={details}
       defaultCollapsed={!hasOpenAction}

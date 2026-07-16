@@ -717,6 +717,27 @@
       "loadFullOutput": "Carregar saída completa ({{size}})",
       "loadingFullOutput": "Carregando saída completa…",
       "loadFullOutputFailed": "Não foi possível carregar a saída completa.",
+      "typed": {
+        "technicalDetails": "Detalhes técnicos",
+        "workedFor": "Trabalhou por {{duration}}",
+        "workedThisTurn": "Trabalhou neste turno",
+        "families": {
+          "command": "Comando",
+          "search": "Busca",
+          "preview": "Preview",
+          "board": "Board",
+          "evidence": "Evidence",
+          "acceptance": "Acceptance",
+          "kb": "Knowledge base",
+          "devenv": "Ambiente de dev",
+          "tunnel": "Tunnel"
+        },
+        "healthWait": "Aguardando health check",
+        "openUrl": "Abrir URL",
+        "openInKb": "Abrir no KB",
+        "destructive": "Destrutivo",
+        "readCluster": "Leu {{count}} arquivos"
+      },
       "fileActivity": {
         "read": "Leu",
         "edited": "Editou",

@@ -1,10 +1,9 @@
 import { Clock } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
+import { typedToolFamilyLabel } from "@/components/agent-activity/typed-tools/typedToolI18n";
+import { formatWorkedDuration, summarizeToolPresentations } from "@/lib/toolCallTurnSummary";
 import { cn } from "@/lib/utils";
-import {
-  summarizeToolPresentations,
-  type TurnSummaryChip,
-} from "@/lib/toolCallTurnSummary";
 import type { ToolPresentation } from "@/lib/toolCallPresentation";
 
 interface TurnSummaryStripProps {
@@ -18,11 +17,19 @@ export function TurnSummaryStrip({
   durationMs = 0,
   className,
 }: TurnSummaryStripProps) {
+  const { t } = useTranslation();
+
   if (presentations.length === 0) {
     return null;
   }
 
   const summary = summarizeToolPresentations(presentations, { durationMs });
+  const headline =
+    durationMs > 0
+      ? t("issue.toolCall.typed.workedFor", {
+          duration: formatWorkedDuration(durationMs),
+        })
+      : t("issue.toolCall.typed.workedThisTurn");
 
   return (
     <div
@@ -39,23 +46,21 @@ export function TurnSummaryStrip({
         <Clock className="size-4 text-muted-foreground" />
       </div>
       <div className="min-w-0">
-        <div className="text-sm font-semibold text-foreground">{summary.headline}</div>
+        <div className="text-sm font-semibold text-foreground">{headline}</div>
       </div>
       {summary.chips.length > 0 ? (
         <div className="col-span-2 flex flex-wrap gap-1.5">
           {summary.chips.map((chip) => (
-            <TurnSummaryChip key={chip.family} chip={chip} />
+            <span
+              key={chip.family}
+              className="rounded-full bg-muted px-2.5 py-1 text-[11px] font-medium text-muted-foreground"
+            >
+              {chip.count}{" "}
+              {typedToolFamilyLabel(chip.family, (key, fallback) => t(key, { defaultValue: fallback }))}
+            </span>
           ))}
         </div>
       ) : null}
     </div>
-  );
-}
-
-function TurnSummaryChip({ chip }: { chip: TurnSummaryChip }) {
-  return (
-    <span className="rounded-full bg-muted px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
-      {chip.label}
-    </span>
   );
 }

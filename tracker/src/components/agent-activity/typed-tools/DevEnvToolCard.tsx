@@ -1,5 +1,6 @@
 import { Settings } from "lucide-react";
 import type { ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 
 import {
   TypedToolCardShell,
@@ -54,7 +55,7 @@ function stepLabel(step: DevEnvStep): string {
   return description ?? command ?? "Step";
 }
 
-function buildDetails(presentation: ToolPresentation): ReactNode {
+function buildDetails(presentation: ToolPresentation, technicalDetailsLabel: string): ReactNode {
   const { body, raw, meta } = presentation;
   const steps = parseSteps(meta.steps);
   const metaLines: ReactNode[] = [];
@@ -105,7 +106,7 @@ function buildDetails(presentation: ToolPresentation): ReactNode {
       {raw ? (
         <div className="min-w-0 space-y-1">
           <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-            Technical details
+            {technicalDetailsLabel}
           </div>
           <pre className="max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-slate-950 p-3 font-mono text-[11px] leading-5 text-slate-100">
             {raw}
@@ -117,16 +118,18 @@ function buildDetails(presentation: ToolPresentation): ReactNode {
 }
 
 export function DevEnvToolCard({ presentation, ...shellProps }: DevEnvToolCardProps) {
+  const { t } = useTranslation();
+
   return (
     <TypedToolCardShell
       icon={<Settings className="size-3.5" aria-hidden />}
-      verb="Dev environment"
+      verb={t("issue.toolCall.typed.families.devenv")}
       title={presentation.title}
       summary={buildSummary(presentation)}
       status={presentation.status}
       badges={presentation.badges}
       links={presentation.links}
-      details={buildDetails(presentation)}
+      details={buildDetails(presentation, t("issue.toolCall.typed.technicalDetails"))}
       defaultCollapsed
       {...shellProps}
     />

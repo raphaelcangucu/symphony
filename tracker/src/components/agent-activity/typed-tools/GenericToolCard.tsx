@@ -1,4 +1,5 @@
 import { Wrench } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { TypedToolCardShell, type TypedToolCardShellProps } from "@/components/agent-activity/typed-tools/TypedToolCardShell";
 import type { ToolPresentation } from "@/lib/toolCallPresentation";
@@ -15,6 +16,7 @@ function formatVerb(toolName: string): string {
 }
 
 export function GenericToolCard({ presentation, ...shellProps }: GenericToolCardProps) {
+  const { t } = useTranslation();
   const { body, raw } = presentation;
   const details =
     body || raw ? (
@@ -27,7 +29,7 @@ export function GenericToolCard({ presentation, ...shellProps }: GenericToolCard
         {raw ? (
           <div className="min-w-0 space-y-1">
             <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-              Technical details
+              {t("issue.toolCall.typed.technicalDetails")}
             </div>
             <pre className="max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-slate-950 p-3 font-mono text-[11px] leading-5 text-slate-100">
               {raw}

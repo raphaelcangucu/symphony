@@ -1,5 +1,6 @@
 import { CheckCircle2 } from "lucide-react";
 import type { ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 
 import {
   TypedToolCardShell,
@@ -14,7 +15,7 @@ type EvidenceToolCardProps = Omit<
   presentation: ToolPresentation;
 };
 
-function buildDetails(presentation: ToolPresentation): ReactNode {
+function buildDetails(presentation: ToolPresentation, technicalDetailsLabel: string): ReactNode {
   const { body, raw, meta } = presentation;
   const gateSatisfied = meta.gateSatisfied ?? meta.satisfied;
   const violations = Array.isArray(meta.violations)
@@ -65,7 +66,7 @@ function buildDetails(presentation: ToolPresentation): ReactNode {
       {raw ? (
         <div className="min-w-0 space-y-1">
           <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-            Technical details
+            {technicalDetailsLabel}
           </div>
           <pre className="max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-slate-950 p-3 font-mono text-[11px] leading-5 text-slate-100">
             {raw}
@@ -77,16 +78,18 @@ function buildDetails(presentation: ToolPresentation): ReactNode {
 }
 
 export function EvidenceToolCard({ presentation, ...shellProps }: EvidenceToolCardProps) {
+  const { t } = useTranslation();
+
   return (
     <TypedToolCardShell
       icon={<CheckCircle2 className="size-3.5" aria-hidden />}
-      verb="Evidence"
+      verb={t("issue.toolCall.typed.families.evidence")}
       title={presentation.title}
       summary={presentation.summary}
       status={presentation.status}
       badges={presentation.badges}
       links={presentation.links}
-      details={buildDetails(presentation)}
+      details={buildDetails(presentation, t("issue.toolCall.typed.technicalDetails"))}
       defaultCollapsed
       {...shellProps}
     />

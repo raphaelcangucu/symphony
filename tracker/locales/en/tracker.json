@@ -717,6 +717,27 @@
       "loadFullOutput": "Load full output ({{size}})",
       "loadingFullOutput": "Loading full output…",
       "loadFullOutputFailed": "Could not load the full output.",
+      "typed": {
+        "technicalDetails": "Technical details",
+        "workedFor": "Worked for {{duration}}",
+        "workedThisTurn": "Worked this turn",
+        "families": {
+          "command": "Command",
+          "search": "Search",
+          "preview": "Preview",
+          "board": "Board",
+          "evidence": "Evidence",
+          "acceptance": "Acceptance",
+          "kb": "Knowledge base",
+          "devenv": "Dev environment",
+          "tunnel": "Tunnel"
+        },
+        "healthWait": "Waiting for health check",
+        "openUrl": "Open URL",
+        "openInKb": "Open in KB",
+        "destructive": "Destructive",
+        "readCluster": "Read {{count}} files"
+      },
       "fileActivity": {
         "read": "Read",
         "edited": "Edited",

@@ -1,5 +1,6 @@
 import { AlertTriangle, ArrowRight, List } from "lucide-react";
 import type { ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 
 import {
   TypedToolCardShell,
@@ -14,14 +15,17 @@ type BoardToolCardProps = Omit<
   presentation: ToolPresentation;
 };
 
-function verbForFamily(family: ToolPresentation["family"]): string {
+function verbForFamily(
+  family: ToolPresentation["family"],
+  translate: (key: string) => string,
+): string {
   switch (family) {
     case "board_query":
-      return "Query";
+      return translate("issue.toolCall.typed.families.board");
     case "acceptance":
-      return "Acceptance";
+      return translate("issue.toolCall.typed.families.acceptance");
     default:
-      return "Board";
+      return translate("issue.toolCall.typed.families.board");
   }
 }
 
@@ -44,7 +48,7 @@ function resolveBadges(presentation: ToolPresentation): ToolPresentationBadge[] 
   return badges;
 }
 
-function buildDetails(presentation: ToolPresentation): ReactNode {
+function buildDetails(presentation: ToolPresentation, technicalDetailsLabel: string): ReactNode {
   const { body, raw, meta } = presentation;
   const issueId = stringOrNull(meta.issue_id);
   const status = stringOrNull(meta.status);
@@ -91,7 +95,7 @@ function buildDetails(presentation: ToolPresentation): ReactNode {
       {raw ? (
         <div className="min-w-0 space-y-1">
           <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-            Technical details
+            {technicalDetailsLabel}
           </div>
           <pre className="max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-slate-950 p-3 font-mono text-[11px] leading-5 text-slate-100">
             {raw}
@@ -107,16 +111,18 @@ function stringOrNull(value: unknown): string | null {
 }
 
 export function BoardToolCard({ presentation, ...shellProps }: BoardToolCardProps) {
+  const { t } = useTranslation();
+
   return (
     <TypedToolCardShell
       icon={iconForFamily(presentation.family)}
-      verb={verbForFamily(presentation.family)}
+      verb={verbForFamily(presentation.family, t)}
       title={presentation.title}
       summary={presentation.summary}
       status={presentation.status}
       badges={resolveBadges(presentation)}
       links={presentation.links}
-      details={buildDetails(presentation)}
+      details={buildDetails(presentation, t("issue.toolCall.typed.technicalDetails"))}
       defaultCollapsed
       {...shellProps}
     />
