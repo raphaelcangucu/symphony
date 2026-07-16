@@ -350,7 +350,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
 
     """
     You are the Symphony Project assistant for `#{project_slug}`.
-
+    #{docked_location_block(context)}
     Behave like a real conversational coding assistant inside the tracker.
     Answer naturally in the user's language. Use tracker tools only when the user asks for tracker data or a concrete tracker action.
     Prefer get_issue, get_project, get_issue_form_options, list_project_repositories, get_template, list_templates, get_workflow, and read_workspace_file over listing or searching the filesystem when you need structured project data.
@@ -940,6 +940,39 @@ defmodule SymphonyElixir.Assistant.AgentSession do
     |> to_string()
   end
 
+  @doc """
+  When the operator is talking through the docked Maestro on a board/list or an
+  open issue drawer, returns a one-line hint describing that location so the
+  project/issue prompt can stay concise and act in-place. Returns "" when there
+  is no docked-panel context. Public for unit testing.
+  """
+  @spec docked_location_block(map()) :: String.t()
+  def docked_location_block(context) when is_map(context) do
+    case Map.get(context, "maestro") || Map.get(context, :maestro) do
+      maestro when is_map(maestro) ->
+        case to_string(Map.get(maestro, "kind") || Map.get(maestro, :kind)) do
+          "project" ->
+            "You are docked on the operator's #{maestro_view(maestro)} view of this project — keep replies concise and act on this board."
+
+          "issue" ->
+            "You are docked on the operator's open issue drawer (#{maestro_view(maestro)} view) — stay focused on this issue."
+
+          _ ->
+            ""
+        end
+
+      _ ->
+        ""
+    end
+  end
+
+  defp maestro_view(maestro) do
+    case to_string(Map.get(maestro, "view") || Map.get(maestro, :view) || "board") do
+      "list" -> "list"
+      _ -> "board"
+    end
+  end
+
   defp build_freeform_prompt(message, context, history) do
     """
     You are the Symphony freeform assistant. There is no existing project or repository context.
@@ -1008,6 +1041,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
     You are running inside the issue's working tree (the project repositories are cloned here).
     Current agent mode: `#{turn_config.mode}`. Skill toolkit: `#{turn_config.skill_profile}`.
     In this issue chat, knowledge-base page reads/writes (`kb_read_page`, `kb_create_page`, `kb_update_page`, `kb_link_task`) target the issue working tree so docs changed for this task are kept with the task branch.
+    #{docked_location_block(context)}
     Answer in the user's language.
     Autonomous dispatch happens only when the user explicitly asks to dispatch, start an autonomous run, or hand off the work — then call the dispatch_codex tool for `#{identifier}` with concrete instructions. That moves the issue to In Progress so the orchestrator executes it (the orchestrator carries the issue's run objective). Never dispatch on your own.
     Dispatch automatically assigns the issue to the connected GitHub user and applies the resolved agent's `symphony:*` label when missing, including child_run subtasks listed in the execution bundle — you do not need to set assignee or symphony labels manually before dispatch.
