@@ -15,6 +15,7 @@ import {
   AssistantComposer,
   type AssistantComposerSubmit,
   type ComposerContextInsertRequest,
+  type ComposerDraftSeed,
 } from "@/components/assistant/AssistantComposer";
 import type { AssistantChatPlanApprovalAction } from "@/components/assistant/AssistantChatMessageBubble";
 import { AssistantMessageList, type LoadOlderControl } from "@/components/assistant/AssistantMessageList";
@@ -33,6 +34,11 @@ import {
 } from "@/components/assistant/chatTypography";
 import { CommandApprovalCard } from "@/components/assistant/CommandApprovalCard";
 import { QueuedMessageChips } from "@/components/assistant/QueuedMessageChips";
+import {
+  queuedMessagesStorageKey,
+  readQueuedMessages,
+  writeQueuedMessages,
+} from "@/components/assistant/queuedMessageStorage";
 import { assistantCommandsToSlashDefs } from "@/components/assistant/assistantCommandDefs";
 import { type ComposerContextChipRef } from "@/components/assistant/contextMentions";
 import { useComposerMentions } from "@/hooks/useComposerMentions";
@@ -345,9 +351,15 @@ export function ProjectAssistantPanel({
   // Both feed the always-mounted GitDiffLauncher so the modal survives menu close.
   const [composerDiffRequestId, setComposerDiffRequestId] = useState(0);
   const gitDiffOpenRequestId = diffRequestId + composerDiffRequestId;
+  const [diffFocusPathRequestId, setDiffFocusPathRequestId] = useState(0);
+  const [diffFocusPath, setDiffFocusPath] = useState<string | null>(null);
   const [turnRunning, setTurnRunning] = useState(false);
   const [runningStartedAt, setRunningStartedAt] = useState<number | null>(null);
-  const [queued, setQueued] = useState<QueuedMessage[]>([]);
+  const queueStorageKey = queuedMessagesStorageKey({ threadId, issueIdentifier, projectSlug });
+  const [queued, setQueued] = useState<QueuedMessage[]>(() => readQueuedMessages(queueStorageKey));
+  const hydratedQueueKeyRef = useRef(queueStorageKey);
+  const [composerDraftSeed, setComposerDraftSeed] = useState<ComposerDraftSeed | null>(null);
+  const composerDraftSeedRequestIdRef = useRef(0);
   const [btw, setBtw] = useState<{ id: string | null; question: string; answer: string; status: BtwStatus } | null>(
     null,
   );
@@ -901,13 +913,21 @@ export function ProjectAssistantPanel({
 
       // Reconcile the last turn on a freshly joined (e.g. reloaded) tab: surface the
       // Resume affordance for an interrupted turn and reattach the running indicator
-      // when a turn is still in flight.
+      // when a turn is still in flight. Prefer the live `turn_running` flag from the
+      // server registry over durable metadata that may still say "interrupted".
       const joinedLastTurn = readLastTurn(response);
-      setLastTurn(joinedLastTurn);
-      if (joinedLastTurn?.status === "running") {
+      const liveTurnRunning =
+        (response as { turn_running?: unknown } | null)?.turn_running === true ||
+        joinedLastTurn?.status === "running";
+      const reconciledLastTurn =
+        liveTurnRunning && joinedLastTurn
+          ? { ...joinedLastTurn, status: "running", canResume: false }
+          : joinedLastTurn;
+      setLastTurn(reconciledLastTurn);
+      if (liveTurnRunning) {
         setTurnRunning(true);
-        if (joinedLastTurn.activeTools.length > 0) {
-          setMessages((current) => hydrateStreamingActiveTools(current, joinedLastTurn.activeTools));
+        if (reconciledLastTurn && reconciledLastTurn.activeTools.length > 0) {
+          setMessages((current) => hydrateStreamingActiveTools(current, reconciledLastTurn.activeTools));
         }
       }
 
@@ -1341,6 +1361,15 @@ export function ProjectAssistantPanel({
   const wasQueueBlockedRef = useRef(false);
 
   useEffect(() => {
+    if (hydratedQueueKeyRef.current !== queueStorageKey) {
+      hydratedQueueKeyRef.current = queueStorageKey;
+      setQueued(readQueuedMessages(queueStorageKey));
+      return;
+    }
+    writeQueuedMessages(queueStorageKey, queued);
+  }, [queueStorageKey, queued]);
+
+  useEffect(() => {
     const justReleased = wasQueueBlockedRef.current && !queueBlocked;
     wasQueueBlockedRef.current = queueBlocked;
     if (!justReleased || queued.length === 0) return;
@@ -1697,6 +1726,13 @@ export function ProjectAssistantPanel({
     });
   }, []);
 
+  const openWorkspaceDiffAtPath = useCallback((request: { path: string }) => {
+    const path = typeof request.path === "string" ? request.path.trim() : "";
+    if (!path) return;
+    setDiffFocusPath(path);
+    setDiffFocusPathRequestId((current) => current + 1);
+  }, []);
+
   const messageItems = (
     <AssistantSessionErrorBoundary
       title={t("assistant.panel.renderErrorTitle")}
@@ -1724,6 +1760,7 @@ export function ProjectAssistantPanel({
         planApprovalMessageId={planApprovalMessageId}
         onOpenDocumentPath={handleOpenDocumentPath}
         onInsertContext={insertContextRef}
+        onOpenWorkspaceDiff={openWorkspaceDiffAtPath}
         onApprovePlan={dispatchApprovedPlan}
         onStop={handleStopTurn}
         onKillTool={handleKillTool}
@@ -1737,11 +1774,31 @@ export function ProjectAssistantPanel({
     [],
   );
 
+  const editQueued = useCallback(
+    (id: string) => {
+      if (typeof id !== "string" || id.length === 0) return;
+
+      const item = queued.find((entry) => entry.id === id);
+      if (!item) return;
+
+      setQueued((current) => current.filter((entry) => entry.id !== id));
+      composerDraftSeedRequestIdRef.current += 1;
+      setComposerDraftSeed({
+        requestId: composerDraftSeedRequestIdRef.current,
+        message: item.payload.message,
+        attachments: item.payload.attachments ?? [],
+        contextRefs: item.payload.contextRefs ?? [],
+      });
+    },
+    [queued],
+  );
+
   const queuedChips =
     queued.length > 0 ? (
       <QueuedMessageChips
         items={queued.map((item) => ({ id: item.id, message: item.payload.message.trim() }))}
         onSendNow={forceSendQueued}
+        onEdit={editQueued}
         onRemove={removeQueued}
       />
     ) : null;
@@ -1852,8 +1909,14 @@ export function ProjectAssistantPanel({
             onClick={() => {
               const channel = channelRef.current;
               if (!channel) return;
-              void resumeTurn(channel);
-              setLastTurn(null);
+              resumeTurn(channel)
+                .receive("ok", () => {
+                  setLastTurn((current) =>
+                    current ? { ...current, status: "running", canResume: false } : current,
+                  );
+                  setTurnRunning(true);
+                })
+                .receive("error", (reason) => setConnectionError(errorMessage(reason)));
             }}
           >
             {t("assistant.panel.resume")}
@@ -1936,6 +1999,7 @@ export function ProjectAssistantPanel({
       floating={isPanelMode}
       hasQueued={queued.length > 0}
       seedMessage={composerSeedMessage}
+      draftSeed={composerDraftSeed}
       slashContext={slashContext}
       slashCommandExtras={authoringSlashCommandExtras}
       magicPaletteRequestId={magicPaletteRequestId}
@@ -2199,6 +2263,8 @@ export function ProjectAssistantPanel({
             disabled={catalogLoading}
             onSendReview={sendDiffReview}
             openRequestId={gitDiffOpenRequestId}
+            focusPathRequestId={diffFocusPathRequestId}
+            focusPath={diffFocusPath}
             showTrigger={false}
           />
         ) : null}
@@ -2255,6 +2321,8 @@ export function ProjectAssistantPanel({
           disabled={catalogLoading}
           onSendReview={sendDiffReview}
           openRequestId={gitDiffOpenRequestId}
+          focusPathRequestId={diffFocusPathRequestId}
+          focusPath={diffFocusPath}
           showTrigger={false}
         />
       ) : null}

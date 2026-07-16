@@ -19,6 +19,10 @@ interface GitDiffLauncherProps {
   openRequestId?: number;
   /** External commit trigger: incrementing this counter opens the modal with its commit dialog. */
   openCommitDialogRequestId?: number;
+  /** External focus trigger: incrementing this counter opens the modal focused on `focusPath`. */
+  focusPathRequestId?: number;
+  /** Path from chat edited-file chips (or similar) to select after open. */
+  focusPath?: string | null;
   /** When false, only the modal + shortcut/requestId path remain (e.g. Environment dock Compare). */
   showTrigger?: boolean;
 }
@@ -49,11 +53,14 @@ export function GitDiffLauncher({
   onSendReview,
   openRequestId = 0,
   openCommitDialogRequestId = 0,
+  focusPathRequestId = 0,
+  focusPath = null,
   showTrigger = true,
 }: GitDiffLauncherProps) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [openCommitDialog, setOpenCommitDialog] = useState(false);
+  const [initialFocusPath, setInitialFocusPath] = useState<string | null>(null);
   const unavailable = !identifier && !threadId;
   const launcherDisabled = disabled || unavailable;
   const openModal = useCallback(() => {
@@ -72,6 +79,13 @@ export function GitDiffLauncher({
     setOpenCommitDialog(true);
     openModal();
   }, [openCommitDialogRequestId, openModal]);
+
+  useEffect(() => {
+    if (focusPathRequestId <= 0) return;
+    const trimmed = typeof focusPath === "string" ? focusPath.trim() : "";
+    if (trimmed) setInitialFocusPath(trimmed);
+    openModal();
+  }, [focusPath, focusPathRequestId, openModal]);
 
   return (
     <>
@@ -100,6 +114,8 @@ export function GitDiffLauncher({
             onSendReview={onSendReview}
             initialCommitDialogOpen={openCommitDialog}
             onCommitDialogOpened={() => setOpenCommitDialog(false)}
+            initialFocusPath={initialFocusPath}
+            onInitialFocusConsumed={() => setInitialFocusPath(null)}
           />
         </Suspense>
       ) : null}

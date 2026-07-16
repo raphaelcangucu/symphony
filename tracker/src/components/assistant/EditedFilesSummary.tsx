@@ -1,28 +1,18 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo } from "react";
 
-import { GitDiffViewer } from "@/components/issues/issue-detail/git-diff/GitDiffViewer";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { ComposerContextChipRef } from "@/components/assistant/contextMentions";
 import { diffStatsFromPatch } from "@/lib/diffStats";
-import { isAbortError } from "@/lib/httpAbort";
-import { loadDiffViewMode } from "@/lib/diffViewMode";
-import {
-  getGitDiffFiles,
-  getGitDiffPatch,
-  getThreadGitDiffFiles,
-  getThreadGitDiffPatch,
-  type GitDiffFilesListOptions,
-} from "@/services/gitDiff";
 import type { AssistantToolCall } from "@/services/assistant";
-import type { GitDiffFileChange, GitDiffFileEntry, GitDiffFilesPage } from "@/types/gitDiff";
+
+export interface OpenWorkspaceDiffRequest {
+  path: string;
+}
 
 interface EditedFilesSummaryProps {
   toolCalls: AssistantToolCall[];
-  projectSlug?: string;
-  issueIdentifier?: string | null;
-  threadId?: number | null;
   onInsertContext?: (ref: ComposerContextChipRef) => void;
+  onOpenWorkspaceDiff?: (request: OpenWorkspaceDiffRequest) => void;
 }
 
 interface EditedFileEntry {
@@ -34,61 +24,10 @@ interface EditedFileEntry {
 
 export function EditedFilesSummary({
   toolCalls,
-  projectSlug = "",
-  issueIdentifier = null,
-  threadId = null,
   onInsertContext,
+  onOpenWorkspaceDiff,
 }: EditedFilesSummaryProps) {
   const files = useMemo(() => editedFilesFromToolCalls(toolCalls), [toolCalls]);
-  const [selectedPath, setSelectedPath] = useState<string | null>(null);
-  const [resolvedPatches, setResolvedPatches] = useState<Record<string, string>>({});
-  const [loadingPath, setLoadingPath] = useState<string | null>(null);
-  const [viewMode] = useState(() => loadDiffViewMode());
-  const abortRef = useRef<AbortController | null>(null);
-
-  const selected = files.find((file) => file.path === selectedPath) ?? null;
-  const selectedPatch = selected ? resolvedPatches[selected.path] ?? selected.patch : "";
-  const selectedDiff: GitDiffFileChange | null = selected
-    ? { path: selected.path, oldPath: null, status: "modified", patch: selectedPatch }
-    : null;
-
-  useEffect(() => {
-    return () => abortRef.current?.abort();
-  }, []);
-
-  async function openFile(file: EditedFileEntry) {
-    setSelectedPath(file.path);
-    if (file.patch || resolvedPatches[file.path] || loadingPath === file.path) return;
-    if (!threadId && (!projectSlug || !issueIdentifier)) return;
-
-    abortRef.current?.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
-    setLoadingPath(file.path);
-
-    try {
-      const listFiles = (params: GitDiffFilesListOptions): Promise<GitDiffFilesPage> =>
-        threadId
-          ? getThreadGitDiffFiles(threadId, "uncommitted", params)
-          : getGitDiffFiles(projectSlug, issueIdentifier ?? "", "uncommitted", params);
-
-      const match = await resolveEditedFileLocation(file.path, listFiles, controller.signal);
-      if (controller.signal.aborted || !match) return;
-
-      const patchResult = threadId
-        ? await getThreadGitDiffPatch(threadId, "uncommitted", match.repo, match.path, { signal: controller.signal })
-        : await getGitDiffPatch(projectSlug, issueIdentifier ?? "", "uncommitted", match.repo, match.path, {
-            signal: controller.signal,
-          });
-      if (controller.signal.aborted) return;
-
-      setResolvedPatches((current) => ({ ...current, [file.path]: patchResult.patch }));
-    } catch (cause) {
-      if (isAbortError(cause)) return;
-    } finally {
-      if (!controller.signal.aborted) setLoadingPath(null);
-    }
-  }
 
   if (files.length === 0) return null;
 
@@ -101,27 +40,10 @@ export function EditedFilesSummary({
         <EditedFileButton
           key={file.path}
           file={file}
-          patch={resolvedPatches[file.path] ?? file.patch}
-          onClick={() => void openFile(file)}
+          onClick={() => onOpenWorkspaceDiff?.({ path: file.path })}
           onInsertContext={onInsertContext}
         />
       ))}
-
-      <Dialog open={selected != null} onOpenChange={(open) => !open && setSelectedPath(null)}>
-        <DialogContent className="flex h-[min(84vh,760px)] max-w-5xl flex-col gap-0 p-0">
-          <DialogHeader className="border-b px-4 py-3">
-            <DialogTitle>Edited file diff</DialogTitle>
-            <DialogDescription>{selected?.path ?? "No file selected"}</DialogDescription>
-          </DialogHeader>
-          <div className="min-h-0 flex-1">
-            {selected && loadingPath === selected.path ? (
-              <div className="flex h-full items-center justify-center text-sm text-muted-foreground">Loading diff…</div>
-            ) : (
-              <GitDiffViewer file={selectedDiff} viewMode={viewMode} />
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
@@ -199,16 +121,16 @@ function nativeFileEntries(result: Record<string, unknown>): EditedFileEntry[] {
 
 function EditedFileButton({
   file,
-  patch,
   onClick,
   onInsertContext,
 }: {
   file: EditedFileEntry;
-  patch: string;
   onClick: () => void;
   onInsertContext?: (ref: ComposerContextChipRef) => void;
 }) {
-  const stats = patch ? diffStatsFromPatch(patch) : { additions: file.additions, deletions: file.deletions };
+  const stats = file.patch
+    ? diffStatsFromPatch(file.patch)
+    : { additions: file.additions, deletions: file.deletions };
 
   return (
     <span className="inline-flex min-w-0 items-center gap-1">
@@ -233,7 +155,7 @@ function EditedFileButton({
           className="h-6 w-6 rounded-md"
           aria-label={`Add ${file.path} to context`}
           title={`Add ${file.path} to context`}
-          onClick={() => onInsertContext(contextRefForEditedFile(file, patch, stats))}
+          onClick={() => onInsertContext(contextRefForEditedFile(file, stats))}
         >
           +
         </Button>
@@ -244,7 +166,6 @@ function EditedFileButton({
 
 function contextRefForEditedFile(
   file: EditedFileEntry,
-  patch: string,
   stats: { additions: number; deletions: number },
 ): ComposerContextChipRef {
   const content = [
@@ -253,7 +174,7 @@ function contextRefForEditedFile(
     `- Path: ${file.path}`,
     `- Additions: ${stats.additions}`,
     `- Deletions: ${stats.deletions}`,
-    patch ? ["", "```diff", patch, "```"].join("\n") : null,
+    file.patch ? ["", "```diff", file.patch, "```"].join("\n") : null,
   ]
     .filter((value): value is string => typeof value === "string" && value.length > 0)
     .join("\n");
@@ -289,44 +210,6 @@ function pathFromDiffHeader(patch: string): string | null {
   const firstLine = patch.split("\n", 1)[0] ?? "";
   const match = firstLine.match(/^diff --git a\/(.+?) b\/(.+)$/);
   return match?.[2] ?? null;
-}
-
-/**
- * Resolves a tool-reported (often absolute) edited path to the exact
- * `{repo, path}` pair the patch API needs, via the paginated/searchable
- * `/diff/files` metadata endpoint — never the full workspace diff.
- */
-async function resolveEditedFileLocation(
-  editedPath: string,
-  listFiles: (params: GitDiffFilesListOptions) => Promise<GitDiffFilesPage>,
-  signal: AbortSignal,
-): Promise<{ repo: string; path: string } | null> {
-  const page = await listFiles({ q: baseName(editedPath), limit: 50, signal });
-  return findEntryForEditedPath(page.files, editedPath);
-}
-
-function findEntryForEditedPath(entries: GitDiffFileEntry[], editedPath: string): { repo: string; path: string } | null {
-  const normalizedEditedPath = normalizePath(editedPath);
-
-  for (const entry of entries) {
-    const repoPath = normalizePath(entry.repo ? `${entry.repo}/${entry.path}` : entry.path);
-    const filePath = normalizePath(entry.path);
-
-    if (
-      normalizedEditedPath === repoPath ||
-      normalizedEditedPath === filePath ||
-      normalizedEditedPath.endsWith(`/${repoPath}`) ||
-      normalizedEditedPath.endsWith(`/${filePath}`)
-    ) {
-      return { repo: entry.repo, path: entry.path };
-    }
-  }
-
-  return null;
-}
-
-function normalizePath(path: string): string {
-  return path.replace(/\\/g, "/").replace(/^\/+/, "");
 }
 
 function isEditTool(call: AssistantToolCall): boolean {

@@ -922,6 +922,10 @@
         "sent": "Revisão com {{count}} comentários enviada ao agente",
         "sendWithNotes_one": "Enviar revisão ({{count}} item)",
         "sendWithNotes_other": "Enviar revisão ({{count}} itens)"
+      },
+      "focus": {
+        "notFound": "Arquivo não encontrado no diff do workspace: {{path}}",
+        "ambiguous": "Várias ocorrências para {{path}}; selecionamos o path mais específico."
       }
     },
     "preview": {
@@ -2196,6 +2200,8 @@
       "clarifyingQuestions": "Perguntas de esclarecimento",
       "sendQueuedNow": "Enviar mensagem enfileirada agora",
       "sendNow": "Enviar agora",
+      "editQueued": "Editar mensagem enfileirada",
+      "edit": "Editar",
       "removeQueued": "Remover mensagem enfileirada",
       "remove": "Remover",
       "turnInterrupted": "O turno anterior foi interrompido.",

@@ -2068,6 +2068,77 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
     assert_reply(ref, :error, %{reason: _})
   end
 
+  test "resume_turn reattaches when a live worker is still registered after metadata desync" do
+    topic = "assistant:issue:macro-markets:DIS-5b"
+
+    {:ok, join_payload, socket} =
+      socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
+      |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, topic)
+
+    thread_id = join_payload.thread_id
+
+    run = fn ->
+      receive do
+        :finish -> {:ok, %{assistant_message: "still going", tool_calls: []}}
+      after
+        5_000 -> {:ok, %{assistant_message: "timeout", tool_calls: []}}
+      end
+    end
+
+    assert {:ok, %{pid: worker}} =
+             TurnManager.start_turn(thread_id, "keep going", run: run, reply_to: self(), trigger: "user")
+
+    {:ok, thread} = History.get_thread(thread_id)
+    {:ok, _interrupted} = History.interrupt_turn_state(thread, "serve_restart")
+    assert TurnManager.running?(thread_id)
+
+    ref = push(socket, "resume_turn", %{})
+    assert_reply(ref, :ok, %{})
+    assert_push("turn_status", %{status: "running"})
+
+    assert TurnManager.running?(thread_id)
+    assert Process.alive?(worker)
+
+    send(worker, :finish)
+  end
+
+  test "join last_turn reflects a live TurnManager worker even when metadata is interrupted" do
+    topic = "assistant:issue:macro-markets:DIS-5c"
+
+    {:ok, join_payload, socket} =
+      socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
+      |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, topic)
+
+    thread_id = join_payload.thread_id
+
+    run = fn ->
+      receive do
+        :finish -> {:ok, %{assistant_message: "ok", tool_calls: []}}
+      after
+        5_000 -> {:ok, %{assistant_message: "timeout", tool_calls: []}}
+      end
+    end
+
+    assert {:ok, %{pid: worker}} =
+             TurnManager.start_turn(thread_id, "live", run: run, reply_to: self(), trigger: "user")
+
+    {:ok, thread} = History.get_thread(thread_id)
+    {:ok, _} = History.interrupt_turn_state(thread, "serve_restart")
+
+    Process.unlink(socket.channel_pid)
+    :ok = close(socket)
+
+    {:ok, rejoined, _socket} =
+      socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
+      |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, topic)
+
+    assert rejoined.turn_running == true
+    assert rejoined.last_turn.status == "running"
+    assert rejoined.last_turn.can_resume == false
+
+    send(worker, :finish)
+  end
+
   test "join caps oversized tool output and fetch_tool_output returns the full value" do
     {:ok, thread} =
       History.ensure_issue_thread("macro-markets", "MAC-1", %{

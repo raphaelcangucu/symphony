@@ -251,6 +251,83 @@ defmodule SymphonyElixir.DevServer.ManagerTest do
     assert %DevServerRecord{status: "crashed"} = DevServerRecord.get_for_issue(project.id, "1878", record.id)
   end
 
+  test "list_for_issue adopts workspace preview-port when leased port is down", %{project: project} do
+    live_port = start_probe_server!()
+    workspace = prepare_workspace!("1131")
+    File.mkdir_p!(Path.join([workspace, "advising", ".symphony"]))
+    File.write!(Path.join([workspace, "advising", ".symphony", "preview-port"]), "#{live_port}\n")
+
+    {:ok, _steps} =
+      DevEnv.save_steps(project.slug, [
+        %{
+          description: "Advising",
+          command: "bash .symphony/serve.sh",
+          role: "serve",
+          working_dir: "advising",
+          ready_probe: "http",
+          ready_path: "/",
+          url_path: "/"
+        }
+      ])
+
+    {:ok, record} =
+      DevServerRecord.upsert(project.id, "1131", "advising", %{
+        working_dir: "advising",
+        port: 41_097,
+        url: "http://127.0.0.1:41097/",
+        status: "crashed",
+        primary: true,
+        session_name: "sym-dev-advising-1131-advising"
+      })
+
+    assert [
+             %{
+               id: id,
+               status: "ready",
+               port: ^live_port,
+               url: url
+             }
+           ] = Manager.list_for_issue(project.slug, "1131")
+
+    assert id == record.id
+    assert url == "http://127.0.0.1:#{live_port}/"
+
+    assert %DevServerRecord{status: "ready", port: ^live_port} =
+             DevServerRecord.get_for_issue(project.id, "1131", record.id)
+  end
+
+  test "list_for_issue does not adopt preview-port for stopped servers", %{project: project} do
+    live_port = start_probe_server!()
+    workspace = prepare_workspace!("1132")
+    File.mkdir_p!(Path.join([workspace, "advising", ".symphony"]))
+    File.write!(Path.join([workspace, "advising", ".symphony", "preview-port"]), "#{live_port}\n")
+
+    {:ok, _steps} =
+      DevEnv.save_steps(project.slug, [
+        %{
+          description: "Advising",
+          command: "bash .symphony/serve.sh",
+          role: "serve",
+          working_dir: "advising",
+          ready_probe: "http",
+          ready_path: "/"
+        }
+      ])
+
+    {:ok, record} =
+      DevServerRecord.upsert(project.id, "1132", "advising", %{
+        working_dir: "advising",
+        port: 41_096,
+        url: "http://127.0.0.1:41096/",
+        status: "stopped",
+        primary: true,
+        session_name: "sym-dev-advising-1132-advising"
+      })
+
+    assert [%{id: id, status: "stopped", port: 41_096}] = Manager.list_for_issue(project.slug, "1132")
+    assert id == record.id
+  end
+
   test "list_for_issue canonicalizes identifiers", %{project: project} do
     {:ok, row} =
       DevServerRecord.upsert(project.id, "1", "front", %{

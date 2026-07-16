@@ -5,7 +5,10 @@ import { useTranslation } from "react-i18next";
 import { AssistantMarkdown } from "@/components/assistant/AssistantMarkdown";
 import { AssistantTurnTimeline } from "@/components/assistant/AssistantTurnTimeline";
 import { ASSISTANT_CHAT_MESSAGE_TEXT_CLASS, CHAT_USER_BUBBLE_MAX_WIDTH_CLASS } from "@/components/assistant/chatTypography";
-import { EditedFilesSummary } from "@/components/assistant/EditedFilesSummary";
+import {
+  EditedFilesSummary,
+  type OpenWorkspaceDiffRequest,
+} from "@/components/assistant/EditedFilesSummary";
 import { LinkifiedText } from "@/components/assistant/LinkifiedText";
 import { ToolActivityTimeline } from "@/components/assistant/ToolActivityTimeline";
 import type { ComposerContextChipRef } from "@/components/assistant/contextMentions";
@@ -33,6 +36,7 @@ interface AssistantChatMessageBubbleProps {
   threadId?: number;
   onOpenDocumentPath?: (path: string) => void;
   onInsertContext?: (ref: ComposerContextChipRef) => void;
+  onOpenWorkspaceDiff?: (request: OpenWorkspaceDiffRequest) => void;
   taskSnapshot?: AgentTaskSnapshot | null;
   planApprovalAction?: AssistantChatPlanApprovalAction;
   onKillTool?: (toolCallId: string) => void;
@@ -46,6 +50,7 @@ function AssistantChatMessageBubbleComponent({
   threadId,
   onOpenDocumentPath,
   onInsertContext,
+  onOpenWorkspaceDiff,
   taskSnapshot = null,
   planApprovalAction,
   onKillTool,
@@ -68,10 +73,8 @@ function AssistantChatMessageBubbleComponent({
   const editedFilesSummary = isUser ? null : (
     <EditedFilesSummary
       toolCalls={message.toolCalls}
-      projectSlug={projectSlug}
-      issueIdentifier={issueIdentifier}
-      threadId={threadId}
       onInsertContext={onInsertContext}
+      onOpenWorkspaceDiff={onOpenWorkspaceDiff}
     />
   );
 

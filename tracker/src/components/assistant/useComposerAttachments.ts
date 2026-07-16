@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type DragEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type DragEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
@@ -165,8 +165,21 @@ export function useComposerAttachments({ projectSlug, dropTargetRef }: UseCompos
   }
 
   function clearAttachments() {
-    setAttachments([]);
+    setAttachments((current) => {
+      revokeAttachmentPreviews(current);
+      return [];
+    });
   }
+
+  const replaceAttachments = useCallback((next: AssistantAttachment[]) => {
+    if (!Array.isArray(next)) {
+      throw new Error("replaceAttachments requires an attachments array");
+    }
+    setAttachments((current) => {
+      revokeAttachmentPreviews(current);
+      return next;
+    });
+  }, []);
 
   return {
     attachments,
@@ -181,5 +194,6 @@ export function useComposerAttachments({ projectSlug, dropTargetRef }: UseCompos
     handleDrop,
     removeAttachment,
     clearAttachments,
+    replaceAttachments,
   };
 }

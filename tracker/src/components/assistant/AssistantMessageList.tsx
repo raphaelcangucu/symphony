@@ -7,6 +7,7 @@ import {
   WorkingIndicator,
   type WorkingActiveToolDetail,
 } from "@/components/assistant/WorkingIndicator";
+import type { OpenWorkspaceDiffRequest } from "@/components/assistant/EditedFilesSummary";
 import type { ComposerContextChipRef } from "@/components/assistant/contextMentions";
 import type { AssistantChatMessage } from "@/services/assistant";
 import type { AgentTaskSnapshot } from "@/types/agentTasks";
@@ -35,6 +36,7 @@ interface AssistantMessageListProps {
   planApprovalMessageId: string | null;
   onOpenDocumentPath?: (path: string) => void;
   onInsertContext: (ref: ComposerContextChipRef) => void;
+  onOpenWorkspaceDiff?: (request: OpenWorkspaceDiffRequest) => void;
   onApprovePlan: AssistantChatPlanApprovalAction["onApprove"];
   onStop?: () => void;
   onKillTool?: (toolCallId: string) => void;
@@ -58,6 +60,7 @@ export function AssistantMessageList({
   planApprovalMessageId,
   onOpenDocumentPath,
   onInsertContext,
+  onOpenWorkspaceDiff,
   onApprovePlan,
   onStop,
   onKillTool,
@@ -87,6 +90,7 @@ export function AssistantMessageList({
           threadId={threadId}
           onOpenDocumentPath={onOpenDocumentPath}
           onInsertContext={onInsertContext}
+          onOpenWorkspaceDiff={onOpenWorkspaceDiff}
           taskSnapshot={taskSnapshot}
           onKillTool={onKillTool}
           onFetchToolOutput={onFetchToolOutput}

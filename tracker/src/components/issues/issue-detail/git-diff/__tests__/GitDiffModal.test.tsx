@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -538,5 +538,174 @@ describe("GitDiffModal", () => {
 
     await user.click(screen.getByRole("button", { name: /load more/i }));
     expect(loadMoreMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("focuses an uncommitted file from initialFocusPath", async () => {
+    const onInitialFocusConsumed = vi.fn();
+    useGitDiffFilesMock.mockImplementation((args: { type?: string } = {}) => ({
+      files: args.type === "uncommitted" ? [fileEntry({ path: "docs/index.md" })] : [],
+      total: args.type === "uncommitted" ? 1 : 0,
+      loading: false,
+      loadingMore: false,
+      hasMore: false,
+      error: null,
+      loadMore: vi.fn(),
+      refetch: filesRefetchMock,
+    }));
+    useGitDiffPatchMock.mockReturnValue({
+      file: { path: "docs/index.md", oldPath: null, status: "modified", patch: "@@\n+a\n" },
+      loading: false,
+      error: null,
+    });
+
+    render(
+      <GitDiffModal
+        open
+        onOpenChange={vi.fn()}
+        projectSlug="advising"
+        identifier="CDE-1"
+        initialFocusPath="/tmp/ws/frontend/docs/index.md"
+        onInitialFocusConsumed={onInitialFocusConsumed}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: /uncommitted/i })).toHaveAttribute("data-state", "active");
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId("git-diff-viewer")).toHaveTextContent("frontend/docs/index.md");
+    });
+    expect(onInitialFocusConsumed).toHaveBeenCalled();
+  });
+
+  it("falls back to branch when the focused path is missing from uncommitted", async () => {
+    const onInitialFocusConsumed = vi.fn();
+    useGitDiffFilesMock.mockImplementation((args: { type?: string } = {}) => ({
+      files: args.type === "branch" ? [fileEntry({ path: "docs/index.md" })] : [],
+      total: args.type === "branch" ? 1 : 0,
+      loading: false,
+      loadingMore: false,
+      hasMore: false,
+      error: null,
+      loadMore: vi.fn(),
+      refetch: filesRefetchMock,
+    }));
+    useGitDiffPatchMock.mockReturnValue({
+      file: { path: "docs/index.md", oldPath: null, status: "modified", patch: "@@\n+a\n" },
+      loading: false,
+      error: null,
+    });
+
+    render(
+      <GitDiffModal
+        open
+        onOpenChange={vi.fn()}
+        projectSlug="advising"
+        identifier="CDE-1"
+        initialFocusPath="docs/index.md"
+        onInitialFocusConsumed={onInitialFocusConsumed}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: /^branch$/i })).toHaveAttribute("data-state", "active");
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId("git-diff-viewer")).toHaveTextContent("frontend/docs/index.md");
+    });
+    expect(onInitialFocusConsumed).toHaveBeenCalled();
+  });
+
+  it("toasts when the focused path is missing from uncommitted and branch", async () => {
+    useGitDiffFilesMock.mockReturnValue({
+      files: [],
+      total: 0,
+      loading: false,
+      loadingMore: false,
+      hasMore: false,
+      error: null,
+      loadMore: vi.fn(),
+      refetch: filesRefetchMock,
+    });
+    useGitDiffPatchMock.mockReturnValue({ file: null, loading: false, error: null });
+
+    render(
+      <GitDiffModal
+        open
+        onOpenChange={vi.fn()}
+        projectSlug="advising"
+        identifier="CDE-1"
+        initialFocusPath="missing.md"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(toastMessageMock).toHaveBeenCalledWith(
+        expect.stringMatching(/not found in workspace diff/i),
+      );
+    });
+  });
+
+  it("keeps review comments when re-focusing another path while open", async () => {
+    const user = userEvent.setup();
+    let focusPath: string | null = "a.ts";
+    const onInitialFocusConsumed = vi.fn(() => {
+      focusPath = null;
+    });
+    useGitDiffFilesMock.mockImplementation((args: { type?: string } = {}) => ({
+      files:
+        args.type === "uncommitted"
+          ? [fileEntry({ path: "a.ts" }), fileEntry({ path: "b.ts" })]
+          : [],
+      total: args.type === "uncommitted" ? 2 : 0,
+      loading: false,
+      loadingMore: false,
+      hasMore: false,
+      error: null,
+      loadMore: vi.fn(),
+      refetch: filesRefetchMock,
+    }));
+    useGitDiffPatchMock.mockReturnValue({
+      file: { path: "a.ts", oldPath: null, status: "modified", patch: "@@\n+a\n" },
+      loading: false,
+      error: null,
+    });
+
+    const { rerender } = render(
+      <GitDiffModal
+        open
+        onOpenChange={vi.fn()}
+        projectSlug="advising"
+        identifier="CDE-1"
+        onSendReview={vi.fn()}
+        initialFocusPath={focusPath}
+        onInitialFocusConsumed={onInitialFocusConsumed}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: /uncommitted/i })).toHaveAttribute("data-state", "active");
+    });
+    await user.click(screen.getByRole("button", { name: "mock add comment" }));
+    expect(screen.getByTestId("git-diff-viewer")).toHaveAttribute("data-comment-count", "1");
+
+    focusPath = "b.ts";
+    rerender(
+      <GitDiffModal
+        open
+        onOpenChange={vi.fn()}
+        projectSlug="advising"
+        identifier="CDE-1"
+        onSendReview={vi.fn()}
+        initialFocusPath={focusPath}
+        onInitialFocusConsumed={onInitialFocusConsumed}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("git-diff-viewer")).toHaveTextContent("frontend/b.ts");
+    });
+    // Comments are keyed by path; the newly focused file has none, but the session kept the prior one.
+    expect(screen.getByRole("button", { name: /send 1 to agent/i })).toBeInTheDocument();
   });
 });

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { buildFlatSidebarProject } from "@/lib/flatSidebarTree";
+import { buildFlatSidebarProject, overlaySessionTitlesFromRecents } from "@/lib/flatSidebarTree";
 import type { ProjectSessionRow } from "@/types/project-session";
+import type { RecentSession } from "@/types/recents";
 import type { SidebarSessionNode, SidebarTreeBuildOptions } from "@/types/sidebar";
 
 function sessionRow(overrides: Partial<ProjectSessionRow> = {}): ProjectSessionRow {
@@ -50,6 +51,59 @@ function buildInput(
     ...overrides,
   };
 }
+
+describe("overlaySessionTitlesFromRecents", () => {
+  it("replaces blank project-session titles with live recents titles", () => {
+    const sessions = [
+      sessionRow({ id: "thread:8009", title: "" }),
+      sessionRow({ id: "thread:1", title: "Keep me" }),
+    ];
+    const recents: RecentSession[] = [
+      {
+        id: "chat:8009",
+        kind: "chat",
+        scope: "project_session",
+        agentKind: "cursor",
+        projectSlug: "demo",
+        projectName: "Demo",
+        title: "Vou remover só o verify",
+        identifier: null,
+        threadId: 8009,
+        status: "active",
+        statusKind: "idle",
+        preview: "Vou remover só o verify",
+        updatedAt: "2026-07-16T12:00:00Z",
+      },
+    ];
+
+    const overlaid = overlaySessionTitlesFromRecents(sessions, recents);
+    expect(overlaid[0]?.title).toBe("Vou remover só o verify");
+    expect(overlaid[1]?.title).toBe("Keep me");
+  });
+
+  it("returns the same array reference when nothing changes", () => {
+    const sessions = [sessionRow({ id: "thread:1", title: "Same" })];
+    const recents: RecentSession[] = [
+      {
+        id: "chat:1",
+        kind: "chat",
+        scope: "project_session",
+        agentKind: null,
+        projectSlug: "demo",
+        projectName: "Demo",
+        title: "Same",
+        identifier: null,
+        threadId: 1,
+        status: "active",
+        statusKind: "idle",
+        preview: null,
+        updatedAt: "2026-07-16T12:00:00Z",
+      },
+    ];
+
+    expect(overlaySessionTitlesFromRecents(sessions, recents)).toBe(sessions);
+  });
+});
 
 describe("buildFlatSidebarProject", () => {
   it("maps project session rows to sidebar session nodes sorted by updatedAt desc", () => {

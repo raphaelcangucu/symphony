@@ -15,6 +15,9 @@ import type { Project } from "@/types/project";
 import type { ProjectSessionRow } from "@/types/project-session";
 
 vi.mock("@/hooks/useAgentExecutions", () => ({ useAgentExecutions: vi.fn() }));
+vi.mock("@/hooks/useRecents", () => ({
+  useRecents: vi.fn(() => ({ sessions: [], loading: false, refetch: async () => undefined })),
+}));
 vi.mock("@/services/issues", () => ({ listIssues: vi.fn() }));
 vi.mock("@/services/projects", () => ({ listProjects: vi.fn() }));
 vi.mock("@/services/projectSessions", () => ({ listProjectSessions: vi.fn() }));

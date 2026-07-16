@@ -21,6 +21,11 @@ import {
 } from "@/lib/diffReview";
 import { combineDiffStats, diffStatsFromPatch, type DiffStats } from "@/lib/diffStats";
 import { loadDiffViewMode, saveDiffViewMode, type DiffViewMode } from "@/lib/diffViewMode";
+import {
+  findGitDiffEntriesForPath,
+  gitDiffPathBaseName,
+  pickBestGitDiffEntry,
+} from "@/lib/gitDiffPathMatch";
 import { cn } from "@/lib/utils";
 import { getCommitEvidence } from "@/services/commitEvidence";
 import {
@@ -43,7 +48,12 @@ interface GitDiffModalProps {
   onSendReview?: (review: string) => void;
   initialCommitDialogOpen?: boolean;
   onCommitDialogOpened?: () => void;
+  /** When set while open, focus Uncommitted then Branch on this path. */
+  initialFocusPath?: string | null;
+  onInitialFocusConsumed?: () => void;
 }
+
+type FocusAttemptTab = "uncommitted" | "branch";
 
 /** A file row for the tree/viewer: repo-prefixed display path plus the original repo/path needed to fetch its patch. */
 interface DiffFileRow extends GitDiffFileTreeEntry {
@@ -62,6 +72,8 @@ export default function GitDiffModal({
   onSendReview,
   initialCommitDialogOpen = false,
   onCommitDialogOpened,
+  initialFocusPath = null,
+  onInitialFocusConsumed,
 }: GitDiffModalProps) {
   const { t } = useTranslation();
   const supportsCommits = Boolean(projectSlug && identifier);
@@ -82,6 +94,9 @@ export default function GitDiffModal({
   const [pushPending, setPushPending] = useState(false);
   const [canPush, setCanPush] = useState(false);
   const [commitDialogError, setCommitDialogError] = useState<string | null>(null);
+  const [pendingFocusPath, setPendingFocusPath] = useState<string | null>(null);
+  const [focusAttempt, setFocusAttempt] = useState<FocusAttemptTab | null>(null);
+  const [pendingSelectKey, setPendingSelectKey] = useState<string | null>(null);
   const diffType: GitDiffType = activeTab === "uncommitted" ? "uncommitted" : "branch";
   const diffActive = open && activeTab !== "commits";
 
@@ -90,6 +105,33 @@ export default function GitDiffModal({
     setCommitDialogOpen(true);
     onCommitDialogOpened?.();
   }, [initialCommitDialogOpen, onCommitDialogOpened, open]);
+
+  useEffect(() => {
+    if (!open) {
+      setPendingFocusPath(null);
+      setFocusAttempt(null);
+      setPendingSelectKey(null);
+      return;
+    }
+    const trimmed = typeof initialFocusPath === "string" ? initialFocusPath.trim() : "";
+    if (!trimmed) return;
+    const filter = gitDiffPathBaseName(trimmed);
+    setPendingFocusPath(trimmed);
+    setFocusAttempt("uncommitted");
+    setPendingSelectKey(null);
+    setActiveRepo("all");
+    setActiveTab("uncommitted");
+    setQuery(filter);
+    setDebouncedQuery(filter);
+  }, [initialFocusPath, open]);
+
+  useEffect(() => {
+    if (!pendingFocusPath || !focusAttempt) return;
+    if (activeTab !== focusAttempt) return;
+    const filter = gitDiffPathBaseName(pendingFocusPath);
+    setQuery(filter);
+    setDebouncedQuery(filter);
+  }, [activeTab, focusAttempt, pendingFocusPath]);
 
   useEffect(() => {
     if (!commitDialogOpen) {
@@ -359,7 +401,11 @@ export default function GitDiffModal({
   }
 
   useEffect(() => {
+    // Skip while focus resolution is still pinning a selection; do not list the
+    // pending flags in deps or clearing them would wipe the focused file.
+    if (pendingFocusPath || pendingSelectKey) return;
     setSelectedKey(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional guard-only reads
   }, [activeRepo, activeTab, identifier, selectedCommitKey, debouncedQuery]);
 
   useEffect(() => {
@@ -368,8 +414,60 @@ export default function GitDiffModal({
   }, [identifier]);
 
   useEffect(() => {
+    if (pendingFocusPath) return;
     setQuery("");
-  }, [activeTab, identifier]);
+  }, [activeTab, identifier, pendingFocusPath]);
+
+  useEffect(() => {
+    if (!open || !pendingFocusPath || !focusAttempt) return;
+    if (activeTab !== focusAttempt) return;
+    if (files.loading) return;
+
+    const matches = findGitDiffEntriesForPath(files.files, pendingFocusPath);
+    const best = pickBestGitDiffEntry(files.files, pendingFocusPath);
+
+    if (best) {
+      const key = rowKey({ repo: best.repo, originalPath: best.path });
+      setPendingSelectKey(key);
+      setSelectedKey(key);
+      if (matches.length > 1) {
+        toast.message(t("issue.diff.focus.ambiguous", { path: pendingFocusPath }));
+      }
+      setPendingFocusPath(null);
+      setFocusAttempt(null);
+      onInitialFocusConsumed?.();
+      return;
+    }
+
+    if (focusAttempt === "uncommitted") {
+      setFocusAttempt("branch");
+      setActiveTab("branch");
+      return;
+    }
+
+    toast.message(t("issue.diff.focus.notFound", { path: pendingFocusPath }));
+    setPendingFocusPath(null);
+    setFocusAttempt(null);
+    onInitialFocusConsumed?.();
+  }, [
+    activeTab,
+    files.files,
+    files.loading,
+    focusAttempt,
+    onInitialFocusConsumed,
+    open,
+    pendingFocusPath,
+    t,
+  ]);
+
+  useEffect(() => {
+    if (!pendingSelectKey) return;
+    if (files.loading) return;
+    const exists = diffRows.some((row) => rowKey(row) === pendingSelectKey);
+    if (!exists) return;
+    setSelectedKey(pendingSelectKey);
+    setPendingSelectKey(null);
+  }, [diffRows, files.loading, pendingSelectKey]);
 
   useEffect(() => {
     if (!open || activeTab !== "commits" || !selectedCommit || !projectSlug || !identifier) return;

@@ -270,6 +270,42 @@ describe("AssistantComposer", () => {
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
+  it("applies a draftSeed request by replacing input and context refs", () => {
+    const { rerender } = render(
+      <AssistantComposer projectSlug="macro-markets" bundle={mockBundle} onSubmit={vi.fn()} />,
+    );
+
+    const textarea = screen.getByPlaceholderText("Write a message...");
+    fireEvent.change(textarea, { target: { value: "draft to replace" } });
+
+    rerender(
+      <AssistantComposer
+        projectSlug="macro-markets"
+        bundle={mockBundle}
+        onSubmit={vi.fn()}
+        draftSeed={{
+          requestId: 1,
+          message: "edited from queue",
+          attachments: [],
+          contextRefs: [
+            {
+              type: "issue",
+              id: "MAC-9",
+              label: "Queued edit",
+              detail: "MAC-9",
+              content: "Queued edit body",
+              state: "draft",
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(textarea).toHaveValue("edited from queue");
+    expect(screen.getByText("MAC-9")).toBeInTheDocument();
+    expect(screen.getByText("Queued edit")).toBeInTheDocument();
+  });
+
   it("does not force a queued message when there is text to submit", () => {
     const onSubmit = vi.fn();
     const onForceQueued = vi.fn();

@@ -1,4 +1,4 @@
-import { Clock, SendHorizontal, X } from "lucide-react";
+import { Clock, Pencil, SendHorizontal, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 interface QueuedMessageChip {
@@ -9,10 +9,11 @@ interface QueuedMessageChip {
 interface QueuedMessageChipsProps {
   items: QueuedMessageChip[];
   onSendNow: (id: string) => void;
+  onEdit: (id: string) => void;
   onRemove: (id: string) => void;
 }
 
-export function QueuedMessageChips({ items, onSendNow, onRemove }: QueuedMessageChipsProps) {
+export function QueuedMessageChips({ items, onSendNow, onEdit, onRemove }: QueuedMessageChipsProps) {
   const { t } = useTranslation();
 
   if (items.length === 0) return null;
@@ -34,6 +35,15 @@ export function QueuedMessageChips({ items, onSendNow, onRemove }: QueuedMessage
             className="rounded p-0.5 hover:text-foreground"
           >
             <SendHorizontal className="h-3 w-3" />
+          </button>
+          <button
+            type="button"
+            aria-label={t("assistant.panel.editQueued")}
+            title={t("assistant.panel.edit")}
+            onClick={() => onEdit(item.id)}
+            className="rounded p-0.5 hover:text-foreground"
+          >
+            <Pencil className="h-3 w-3" />
           </button>
           <button
             type="button"

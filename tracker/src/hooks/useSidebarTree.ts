@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 
 import { useAgentExecutions } from "@/hooks/useAgentExecutions";
-import { buildFlatSidebarProject } from "@/lib/flatSidebarTree";
+import { useRecents } from "@/hooks/useRecents";
+import { buildFlatSidebarProject, overlaySessionTitlesFromRecents } from "@/lib/flatSidebarTree";
 import { TRACKER_PROJECTS_CHANGED_EVENT } from "@/lib/projectEvents";
 import {
   migrateSidebarPreferences,
@@ -107,6 +108,7 @@ function errorDetail(error: unknown): string {
 export function useSidebarTree(): UseSidebarTreeResult {
   const location = useLocation();
   const { executions } = useAgentExecutions();
+  const { sessions: recents } = useRecents();
   const [projects, setProjects] = useState<readonly Project[]>([]);
   const projectsRef = useRef<readonly Project[]>([]);
   const [projectsLoading, setProjectsLoading] = useState(true);
@@ -357,11 +359,16 @@ export function useSidebarTree(): UseSidebarTreeResult {
     return visible
       .map((project) => {
         const branch = branchStates.get(project.slug) ?? createBranchState();
+        const projectRecents = recents.filter((recent) => recent.projectSlug === project.slug);
+        const sessions = overlaySessionTitlesFromRecents(
+          overlayExecutionStatuses(branch.sessions, executions),
+          projectRecents,
+        );
         return buildFlatSidebarProject({
           projectSlug: project.slug,
           projectTitle: project.name,
           archived: project.archivedAt != null,
-          sessions: overlayExecutionStatuses(branch.sessions, executions),
+          sessions,
           nextCursor: branch.nextCursor,
           loadState: branch.loadState,
           error: branch.error,
@@ -382,7 +389,7 @@ export function useSidebarTree(): UseSidebarTreeResult {
           ?? right.updatedAt;
         return timestamp(rightActivity) - timestamp(leftActivity) || left.title.localeCompare(right.title);
       });
-  }, [branchStates, executions, preferences, projects]);
+  }, [branchStates, executions, preferences, projects, recents]);
 
   return {
     tree,

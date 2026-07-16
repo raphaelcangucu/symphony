@@ -7,7 +7,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { fetchAssistantCatalogBundle } from "@/services/assistant";
 
-vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), message: vi.fn() } }));
 
 let ProjectAssistantPanel: typeof import("@/components/assistant/ProjectAssistantPanel").ProjectAssistantPanel;
 
@@ -130,6 +130,12 @@ const getThreadGitDiffMock = vi.hoisted(() => vi.fn());
 const getGitDiffMock = vi.hoisted(() => vi.fn());
 const getThreadGitDiffStatsMock = vi.hoisted(() => vi.fn());
 const getGitDiffStatsMock = vi.hoisted(() => vi.fn());
+const getGitDiffFilesMock = vi.hoisted(() => vi.fn());
+const getThreadGitDiffFilesMock = vi.hoisted(() => vi.fn());
+const getGitDiffPatchMock = vi.hoisted(() => vi.fn());
+const getThreadGitDiffPatchMock = vi.hoisted(() => vi.fn());
+const getGitDiffSummariesMock = vi.hoisted(() => vi.fn());
+const listCommitEvidenceMock = vi.hoisted(() => vi.fn());
 const getProjectOverviewMock = vi.hoisted(() => vi.fn());
 const getRepoTreeMock = vi.hoisted(() => vi.fn());
 const getPageMock = vi.hoisted(() => vi.fn());
@@ -153,7 +159,87 @@ vi.mock("@/services/gitDiff", () => ({
   getGitDiff: (...args: unknown[]) => getGitDiffMock(...args),
   getThreadGitDiffStats: (...args: unknown[]) => getThreadGitDiffStatsMock(...args),
   getGitDiffStats: (...args: unknown[]) => getGitDiffStatsMock(...args),
+  getGitDiffFiles: (...args: unknown[]) => getGitDiffFilesMock(...args),
+  getThreadGitDiffFiles: (...args: unknown[]) => getThreadGitDiffFilesMock(...args),
+  getGitDiffPatch: (...args: unknown[]) => getGitDiffPatchMock(...args),
+  getThreadGitDiffPatch: (...args: unknown[]) => getThreadGitDiffPatchMock(...args),
+  getGitDiffSummaries: (...args: unknown[]) => getGitDiffSummariesMock(...args),
+  commitGitDiff: vi.fn(),
+  commitThreadGitDiff: vi.fn(),
+  generateCommitMessage: vi.fn(),
+  pushGitDiff: vi.fn(),
 }));
+
+vi.mock("@/services/commitEvidence", () => ({
+  listCommitEvidence: (...args: unknown[]) => listCommitEvidenceMock(...args),
+  getCommitEvidence: vi.fn(),
+}));
+
+const mockModalFocusPath = vi.hoisted(() => ({ current: "" }));
+
+/**
+ * Stub the launcher (not the lazy modal): React.lazy() bypasses vi.mock of
+ * GitDiffModal in this suite, so the panel e2e asserts chip → focus → review
+ * through the launcher props instead.
+ */
+vi.mock("@/components/issues/issue-detail/git-diff/GitDiffLauncher", async () => {
+  const React = await import("react");
+  return {
+    GitDiffLauncher: ({
+      focusPathRequestId = 0,
+      focusPath = null,
+      onSendReview,
+    }: {
+      focusPathRequestId?: number;
+      focusPath?: string | null;
+      onSendReview?: (review: string) => void;
+    }) => {
+      const [open, setOpen] = React.useState(false);
+
+      React.useEffect(() => {
+        if (focusPathRequestId <= 0) return;
+        if (typeof focusPath === "string" && focusPath.trim()) {
+          mockModalFocusPath.current = focusPath.trim();
+        }
+        setOpen(true);
+      }, [focusPath, focusPathRequestId]);
+
+      if (!open) return null;
+
+      return (
+        <div role="dialog" aria-label="Workspace diff">
+          <h2>Workspace diff</h2>
+          <button type="button" role="tab" aria-selected="true" data-state="active">
+            Uncommitted
+          </button>
+          <p>Click a line number to comment</p>
+          <div data-testid="git-diff-viewer" data-focus-path={mockModalFocusPath.current}>
+            {mockModalFocusPath.current || "no-focus"}
+          </div>
+          {onSendReview ? (
+            <button
+              type="button"
+              onClick={() => {
+                onSendReview(
+                  [
+                    "## Diff review",
+                    "",
+                    "### (uncommitted) — tracker.json:3",
+                    "",
+                    "Please revert this change",
+                  ].join("\n"),
+                );
+                setOpen(false);
+              }}
+            >
+              Send 1 to agent
+            </button>
+          ) : null}
+        </div>
+      );
+    },
+  };
+});
 
 vi.mock("@/services/knowledgeBase", () => ({
   getProjectOverview: (...args: unknown[]) => getProjectOverviewMock(...args),
@@ -169,6 +255,8 @@ beforeAll(async () => {
 describe("ProjectAssistantPanel", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    mockModalFocusPath.current = "";
+    window.localStorage.clear();
     if (typeof CSSStyleSheet !== "undefined" && !CSSStyleSheet.prototype.replaceSync) {
       Object.defineProperty(CSSStyleSheet.prototype, "replaceSync", {
         configurable: true,
@@ -181,8 +269,73 @@ describe("ProjectAssistantPanel", () => {
     listPullRequestsMock.mockResolvedValue({ data: [] });
     getThreadGitDiffMock.mockResolvedValue({ repos: [], workspace: { path: "", available: false } });
     getGitDiffMock.mockResolvedValue({ repos: [], workspace: { path: "", available: false } });
-    getThreadGitDiffStatsMock.mockResolvedValue({ stats: [], workspace: { path: "", available: false } });
-    getGitDiffStatsMock.mockResolvedValue({ stats: [], workspace: { path: "", available: false } });
+    getThreadGitDiffStatsMock.mockResolvedValue({ stats: [], workspace: { path: "/tmp/ws", available: true } });
+    getGitDiffStatsMock.mockResolvedValue({
+      stats: [{ repo: "tracker", branch: null, base: null, filesChanged: 1, additions: 1, deletions: 1, untracked: 0 }],
+      workspace: { path: "/tmp/ws", available: true },
+    });
+    getGitDiffFilesMock.mockResolvedValue({
+      files: [
+        {
+          repo: "tracker",
+          path: "tracker.json",
+          oldPath: null,
+          status: "modified",
+          additions: 1,
+          deletions: 1,
+          binary: false,
+        },
+      ],
+      total: 1,
+      limit: 50,
+      nextCursor: null,
+      workspace: { path: "/tmp/ws", available: true },
+    });
+    getThreadGitDiffFilesMock.mockResolvedValue({
+      files: [
+        {
+          repo: "tracker",
+          path: "tracker.json",
+          oldPath: null,
+          status: "modified",
+          additions: 1,
+          deletions: 1,
+          binary: false,
+        },
+      ],
+      total: 1,
+      limit: 50,
+      nextCursor: null,
+      workspace: { path: "/tmp/ws", available: true },
+    });
+    getGitDiffPatchMock.mockResolvedValue({
+      repo: "tracker",
+      path: "tracker.json",
+      status: "modified",
+      binary: false,
+      truncated: false,
+      patch: "diff --git a/tracker.json b/tracker.json\n@@ -1 +1 @@\n-old\n+new\n",
+      workspace: { path: "/tmp/ws", available: true },
+    });
+    getThreadGitDiffPatchMock.mockResolvedValue({
+      repo: "tracker",
+      path: "tracker.json",
+      status: "modified",
+      binary: false,
+      truncated: false,
+      patch: "diff --git a/tracker.json b/tracker.json\n@@ -1 +1 @@\n-old\n+new\n",
+      workspace: { path: "/tmp/ws", available: true },
+    });
+    getGitDiffSummariesMock.mockResolvedValue({
+      summaries: [],
+      workspace: { path: "/tmp/ws", available: true },
+    });
+    listCommitEvidenceMock.mockResolvedValue({
+      commits: [],
+      total: 0,
+      nextCursor: null,
+      workspace: { path: "/tmp/ws", available: true },
+    });
     getProjectOverviewMock.mockResolvedValue({
       project: { slug: "macro-markets", name: "Macro Markets" },
       repositories: [
@@ -235,6 +388,10 @@ describe("ProjectAssistantPanel", () => {
     });
     for (const key of Object.keys(channelHandlers)) delete channelHandlers[key];
     pushReceives.length = 0;
+    join.mockImplementation(() => ({
+      receive: (status: string, callback: (response: unknown) => void) =>
+        status === "ok" ? callback({}) : undefined,
+    }));
     vi.mocked(toast.error).mockClear();
     vi.mocked(toast.success).mockClear();
     Object.defineProperty(window, "matchMedia", {
@@ -428,6 +585,75 @@ describe("ProjectAssistantPanel", () => {
     await waitFor(() =>
       expect(push).toHaveBeenCalledWith("send_message", expect.objectContaining({ message: "second" })),
     );
+  });
+
+  it("restores a queued message after the panel remounts (page refresh)", async () => {
+    const view = render(<ProjectAssistantPanel projectSlug="macro-markets" threadId={42} view="board" mode="page" />);
+
+    const textarea = await screen.findByPlaceholderText("Write a message...");
+    fireEvent.change(textarea, { target: { value: "first" } });
+    fireEvent.keyDown(textarea, { key: "Enter", code: "Enter" });
+    await waitFor(() =>
+      expect(push).toHaveBeenCalledWith("send_message", expect.objectContaining({ message: "first" })),
+    );
+    channelHandlers["assistant_delta"]({ delta: "working" });
+
+    fireEvent.change(textarea, { target: { value: "survive refresh" } });
+    fireEvent.keyDown(textarea, { key: "Enter", code: "Enter" });
+    expect(await screen.findByText("survive refresh")).toBeTruthy();
+
+    view.unmount();
+    for (const key of Object.keys(channelHandlers)) delete channelHandlers[key];
+    pushReceives.length = 0;
+    push.mockClear();
+
+    join.mockImplementation(() => ({
+      receive: (status: string, callback: (response: unknown) => void) =>
+        status === "ok"
+          ? callback({
+              last_turn: {
+                status: "running",
+                started_at: "2026-07-16T12:00:00Z",
+                finished_at: null,
+                session_id: "s1",
+                can_resume: false,
+                active_tools: [],
+              },
+            })
+          : undefined,
+    }));
+
+    render(<ProjectAssistantPanel projectSlug="macro-markets" threadId={42} view="board" mode="page" />);
+
+    expect(await screen.findByText("survive refresh")).toBeTruthy();
+    expect(push).not.toHaveBeenCalledWith(
+      "send_message",
+      expect.objectContaining({ message: "survive refresh" }),
+    );
+  });
+
+  it("moves a queued message back into the composer when edit is clicked", async () => {
+    render(<ProjectAssistantPanel projectSlug="macro-markets" view="board" mode="page" />);
+
+    const textarea = await screen.findByPlaceholderText("Write a message...");
+    fireEvent.change(textarea, { target: { value: "first" } });
+    fireEvent.keyDown(textarea, { key: "Enter", code: "Enter" });
+    await waitFor(() =>
+      expect(push).toHaveBeenCalledWith("send_message", expect.objectContaining({ message: "first" })),
+    );
+    channelHandlers["assistant_delta"]({ delta: "working" });
+
+    fireEvent.change(textarea, { target: { value: "edit me in queue" } });
+    fireEvent.keyDown(textarea, { key: "Enter", code: "Enter" });
+    expect(await screen.findByText("edit me in queue")).toBeTruthy();
+
+    fireEvent.change(textarea, { target: { value: "composer draft" } });
+    fireEvent.click(screen.getByRole("button", { name: /edit queued message/i }));
+
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: /edit queued message/i })).toBeNull(),
+    );
+    expect(textarea).toHaveValue("edit me in queue");
   });
 
   it("removes a queued message when its chip remove button is clicked", async () => {
@@ -712,6 +938,27 @@ describe("ProjectAssistantPanel", () => {
     const button = await screen.findByRole("button", { name: /resume/i });
     fireEvent.click(button);
     expect(push).toHaveBeenCalledWith("resume_turn", {});
+  });
+
+  it("reattaches a live turn instead of offering Resume when join reports turn_running", async () => {
+    join.mockImplementation(() => ({
+      receive: (status: string, callback: (response: unknown) => void) =>
+        status === "ok"
+          ? callback({
+              messages: [],
+              thread_id: 1,
+              turn_running: true,
+              last_turn: { status: "interrupted", can_resume: true },
+            })
+          : undefined,
+    }));
+
+    render(<ProjectAssistantPanel projectSlug="macro-markets" threadId={1} view="board" mode="page" />);
+
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: /resume/i })).not.toBeInTheDocument();
+    });
+    expect(await screen.findByRole("button", { name: /stop/i })).toBeInTheDocument();
   });
 
   it("shows pause when a newer Goal event reports a running process", async () => {
@@ -1675,8 +1922,16 @@ describe("ProjectAssistantPanel", () => {
     expect(screen.getByText("List issues")).toBeInTheDocument();
   });
 
-  it("shows edited file badges and opens the clicked diff", async () => {
-    render(<ProjectAssistantPanel projectSlug="macro-markets" view="board" mode="page" />);
+  it("opens workspace diff from an edited-file chip and can send a line review to the agent", async () => {
+    const user = userEvent.setup();
+    render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        issueIdentifier="MAC-1"
+        view="board"
+        mode="page"
+      />,
+    );
 
     await waitFor(() => expect(channelHandlers["assistant_completed"]).toEqual(expect.any(Function)));
 
@@ -1691,9 +1946,22 @@ describe("ProjectAssistantPanel", () => {
             status: "complete",
             result: {
               paths: ["tracker.json", "ProjectConfigEditor.tsx"],
-              additions: 25,
-              deletions: 8,
-              diff: "diff --git a/tracker.json b/tracker.json\n@@ -1 +1 @@\n-old\n+new",
+              files: [
+                {
+                  path: "tracker.json",
+                  status: "modified",
+                  patch: "diff --git a/tracker.json b/tracker.json\n@@ -1 +1 @@\n-old\n+new\n",
+                  additions: 1,
+                  deletions: 1,
+                },
+                {
+                  path: "ProjectConfigEditor.tsx",
+                  status: "modified",
+                  patch: "diff --git a/ProjectConfigEditor.tsx b/ProjectConfigEditor.tsx\n@@ -1 +1 @@\n-a\n+b\n",
+                  additions: 1,
+                  deletions: 1,
+                },
+              ],
             },
           },
         ],
@@ -1701,14 +1969,27 @@ describe("ProjectAssistantPanel", () => {
     });
 
     expect(await screen.findByText("Edited 2 files:")).toBeInTheDocument();
+    expect(screen.queryByText("Edited file diff")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "View changes to tracker.json" }));
+    await user.click(screen.getByRole("button", { name: "View changes to tracker.json" }));
 
-    const dialog = await screen.findByRole("dialog", { name: "Edited file diff" });
-    expect(dialog).toBeInTheDocument();
-    expect(within(dialog).getAllByText("tracker.json").length).toBeGreaterThan(0);
-    expect(within(dialog).getByText("+1")).toBeInTheDocument();
-    expect(within(dialog).getByText("-1")).toBeInTheDocument();
+    const dialog = await screen.findByRole("dialog", { name: /workspace diff/i });
+    expect(within(dialog).getByRole("tab", { name: /uncommitted/i })).toHaveAttribute("data-state", "active");
+    expect(within(dialog).getByText(/click a line number to comment/i)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(within(dialog).getByTestId("git-diff-viewer")).toHaveAttribute("data-focus-path", "tracker.json");
+    });
+
+    await user.click(within(dialog).getByRole("button", { name: /send 1 to agent/i }));
+
+    await waitFor(() =>
+      expect(push).toHaveBeenCalledWith(
+        "send_message",
+        expect.objectContaining({
+          message: expect.stringContaining("Please revert this change"),
+        }),
+      ),
+    );
   });
 
   it("replaces the transcript when history_synced arrives after a terminal turn_status", async () => {

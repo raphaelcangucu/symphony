@@ -151,6 +151,66 @@ export function serializeAttachments(attachments: AssistantAttachment[]): Assist
   });
 }
 
+/**
+ * Rebuild composer attachment state from a previously serialized outgoing
+ * payload (e.g. editing a queued message). Blob previews are not restored;
+ * image/file chips keep path + metadata so resend still works.
+ */
+export function hydrateAttachments(outgoing: AssistantOutgoingAttachment[]): AssistantAttachment[] {
+  if (!Array.isArray(outgoing)) {
+    throw new Error("hydrateAttachments requires an attachments array");
+  }
+
+  const hydrated: AssistantAttachment[] = [];
+
+  for (const item of outgoing) {
+    if (!item || typeof item !== "object") continue;
+
+    if (item.type === "image") {
+      const path = typeof item.path === "string" ? item.path.trim() : "";
+      if (!path) continue;
+      hydrated.push({
+        id: cryptoRandomId(),
+        type: "image",
+        name: item.name || "image",
+        mediaType: item.media_type || "application/octet-stream",
+        previewUrl: "",
+        path,
+      });
+      continue;
+    }
+
+    if (item.type === "file") {
+      const path = typeof item.path === "string" ? item.path.trim() : "";
+      if (!path) continue;
+      hydrated.push({
+        id: cryptoRandomId(),
+        type: "file",
+        name: item.name || "file",
+        mediaType: item.media_type || "application/octet-stream",
+        path,
+      });
+      continue;
+    }
+
+    if (item.type === "audio") {
+      const data = typeof item.data === "string" ? item.data.trim() : "";
+      if (!data) continue;
+      const mediaType = item.media_type || "audio/webm";
+      hydrated.push({
+        id: cryptoRandomId(),
+        type: "audio",
+        name: item.name || "audio",
+        mediaType,
+        dataUrl: base64ToDataUrl(data, mediaType),
+        transcript: item.transcript,
+      });
+    }
+  }
+
+  return hydrated;
+}
+
 export function revokeAttachmentPreviews(attachments: AssistantAttachment[]): void {
   for (const attachment of attachments) {
     if (attachment.type === "image" && attachment.previewUrl.startsWith("blob:")) {
@@ -177,6 +237,11 @@ function dataUrlToBase64(dataUrl: string): string {
   const comma = dataUrl.indexOf(",");
   if (comma === -1) return dataUrl;
   return dataUrl.slice(comma + 1);
+}
+
+function base64ToDataUrl(data: string, mediaType: string): string {
+  if (data.startsWith("data:")) return data;
+  return `data:${mediaType};base64,${data}`;
 }
 
 function cryptoRandomId(): string {

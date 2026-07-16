@@ -462,14 +462,21 @@ defmodule SymphonyElixirWeb.AssistantChannel do
 
   def handle_in("resume_turn", _payload, socket) do
     with %{id: thread_id} when is_integer(thread_id) <- socket.assigns[:thread],
-         {:ok, reloaded} <- History.get_thread(thread_id),
-         %{"status" => "interrupted"} = turn <- History.current_turn(reloaded),
-         false <- TurnManager.running?(thread_id) do
-      do_resume_turn(reloaded, turn, socket)
+         {:ok, reloaded} <- History.get_thread(thread_id) do
+      cond do
+        TurnManager.running?(thread_id) ->
+          reattach_running_turn(reloaded, socket)
+
+        match?(%{"status" => "interrupted"}, History.current_turn(reloaded)) ->
+          do_resume_turn(reloaded, History.current_turn(reloaded), socket)
+
+        History.current_turn(reloaded) == nil ->
+          {:reply, {:error, %{reason: "no turn to resume"}}, socket}
+
+        true ->
+          {:reply, {:error, %{reason: "turn is not interrupted"}}, socket}
+      end
     else
-      true -> {:reply, {:error, %{reason: "assistant is busy"}}, socket}
-      %{"status" => _other} -> {:reply, {:error, %{reason: "turn is not interrupted"}}, socket}
-      nil -> {:reply, {:error, %{reason: "no turn to resume"}}, socket}
       {:error, _} -> {:reply, {:error, %{reason: "cannot resume"}}, socket}
       _ -> {:reply, {:error, %{reason: "cannot resume"}}, socket}
     end
@@ -1330,6 +1337,46 @@ defmodule SymphonyElixirWeb.AssistantChannel do
 
   defp inject_assistant_context_refs(_socket, message, _thread, _context_refs), do: message
 
+  # A live worker is already registered (often after the originating channel died
+  # on tab switch). Heal durable metadata if it drifted to interrupted, point this
+  # socket at the worker, and fan out running status so the UI reattaches.
+  defp reattach_running_turn(thread, socket) do
+    thread =
+      case History.current_turn(thread) do
+        %{"status" => status} when status != "running" ->
+          case History.restore_running_turn_state(thread) do
+            {:ok, healed} -> healed
+            {:error, _} -> thread
+          end
+
+        _ ->
+          thread
+      end
+
+    {turn_pid, codex_turn_id} =
+      case TurnManager.steer_target(thread.id) do
+        {:ok, pid, turn_id} -> {pid, turn_id}
+        :error -> {nil, nil}
+      end
+
+    payload =
+      thread
+      |> live_turn_payload(true)
+      |> Map.put(:status, "running")
+
+    push(socket, "turn_status", normalize_turn_payload(payload))
+
+    socket =
+      socket
+      |> assign(:thread, thread)
+      |> assign(:turn_status, :running)
+      |> assign(:turn_pid, turn_pid)
+      |> assign(:turn_generation, current_turn_generation(thread))
+      |> assign(:codex_turn_id, codex_turn_id)
+
+    {:reply, :ok, socket}
+  end
+
   # Re-dispatches a thread's interrupted current turn as a brand-new turn that
   # re-uses the saved prompt + codex_thread_id. Codex continuity is automatic:
   # run_send_turn -> AgentSession reloads the thread and continues the persisted
@@ -1904,12 +1951,15 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   # heavy thread (e.g. 8006) never duplicates megabytes of tool output between
   # the join reply and the follow-up push.
   defp join_metadata_payload(thread) do
+    turn_running = TurnManager.running?(thread.id)
+    thread = maybe_heal_running_turn_metadata(thread, turn_running)
+
     %{
       thread_id: thread.id,
       goal_mode: History.thread_goal_mode(thread),
       goal_objective: History.thread_goal_objective(thread),
-      last_turn: History.turn_payload(thread),
-      turn_running: TurnManager.running?(thread.id),
+      last_turn: live_turn_payload(thread, turn_running),
+      turn_running: turn_running,
       turn_elapsed_seconds: History.turn_elapsed_seconds(thread),
       goal_status: joined_authoritative_goal_status(thread),
       effective_agent: thread_effective_agent(thread),
@@ -1920,6 +1970,39 @@ defmodule SymphonyElixirWeb.AssistantChannel do
       scope: thread.scope
     }
   end
+
+  # Prefer the live TurnManager registry over durable metadata: a tab switch can
+  # leave the channel while the worker keeps running, and boot reconcile may mark
+  # metadata interrupted without clearing that registry entry.
+  defp live_turn_payload(thread, true = _turn_running) do
+    case History.turn_payload(thread) do
+      payload when is_map(payload) ->
+        payload
+        |> Map.put(:status, "running")
+        |> Map.put(:can_resume, false)
+        |> Map.put(:finished_at, nil)
+
+      _ ->
+        %{status: "running", can_resume: false, active_tools: []}
+    end
+  end
+
+  defp live_turn_payload(thread, _turn_running), do: History.turn_payload(thread)
+
+  defp maybe_heal_running_turn_metadata(thread, true = _turn_running) do
+    case History.current_turn(thread) do
+      %{"status" => status} when status != "running" ->
+        case History.restore_running_turn_state(thread) do
+          {:ok, healed} -> healed
+          {:error, _} -> thread
+        end
+
+      _ ->
+        thread
+    end
+  end
+
+  defp maybe_heal_running_turn_metadata(thread, _turn_running), do: thread
 
   defp joined_authoritative_goal_status(%{id: id} = thread) when is_integer(id) do
     operation = fn ->

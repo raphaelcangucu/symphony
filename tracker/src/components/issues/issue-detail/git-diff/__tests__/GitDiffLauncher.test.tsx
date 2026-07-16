@@ -5,10 +5,19 @@ import { describe, expect, it, vi } from "vitest";
 import { GitDiffLauncher } from "../GitDiffLauncher";
 
 vi.mock("../GitDiffModal", () => ({
-  default: ({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) =>
+  default: ({
+    open,
+    onOpenChange,
+    initialFocusPath,
+  }: {
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    initialFocusPath?: string | null;
+  }) =>
     open ? (
       <div role="dialog">
         diff-modal
+        <span data-testid="initial-focus-path">{initialFocusPath ?? ""}</span>
         <button type="button" onClick={() => onOpenChange(false)}>
           close
         </button>
@@ -57,5 +66,32 @@ describe("GitDiffLauncher", () => {
     );
 
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("opens from focusPathRequestId and forwards initialFocusPath", async () => {
+    const { rerender } = render(
+      <GitDiffLauncher
+        projectSlug="advising"
+        identifier="CDE-1"
+        showTrigger={false}
+        focusPathRequestId={0}
+        focusPath={null}
+      />,
+    );
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+    rerender(
+      <GitDiffLauncher
+        projectSlug="advising"
+        identifier="CDE-1"
+        showTrigger={false}
+        focusPathRequestId={1}
+        focusPath="docs/index.md"
+      />,
+    );
+
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByTestId("initial-focus-path")).toHaveTextContent("docs/index.md");
   });
 });

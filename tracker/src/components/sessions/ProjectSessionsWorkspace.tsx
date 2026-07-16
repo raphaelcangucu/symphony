@@ -666,14 +666,27 @@ export function ProjectSessionsWorkspace({
           </div>
         ) : null}
 
-        {activeTab?.kind === "assistant-session" ? (
-          <AssistantSessionTabContent
-            projectSlug={projectSlug}
-            threadId={activeTab.threadId}
-            view={view}
-            relatedSessions={relatedSessions}
-          />
-        ) : null}
+        {/* Keep every open assistant session mounted (hidden when inactive) so
+            switching tabs does not tear down the Phoenix channel mid-turn. */}
+        {tabs
+          .filter((tab): tab is Extract<typeof tab, { kind: "assistant-session" }> => tab.kind === "assistant-session")
+          .map((tab) => (
+            <div
+              key={tab.id}
+              className={cn(
+                "min-h-0 flex-1 flex-col overflow-hidden",
+                activeTabId === tab.id ? "flex" : "hidden",
+              )}
+              aria-hidden={activeTabId !== tab.id}
+            >
+              <AssistantSessionTabContent
+                projectSlug={projectSlug}
+                threadId={tab.threadId}
+                view={view}
+                relatedSessions={relatedSessions}
+              />
+            </div>
+          ))}
 
         {activeTab?.kind === "authoring-session" ? (
           <AuthoringSessionTabContent

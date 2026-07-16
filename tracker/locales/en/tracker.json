@@ -922,6 +922,10 @@
         "sent": "Review with {{count}} comments sent to the agent",
         "sendWithNotes_one": "Send review ({{count}} item)",
         "sendWithNotes_other": "Send review ({{count}} items)"
+      },
+      "focus": {
+        "notFound": "File not found in workspace diff: {{path}}",
+        "ambiguous": "Multiple matches for {{path}}; selected the most specific path."
       }
     },
     "preview": {
@@ -2200,6 +2204,8 @@
       "clarifyingQuestions": "Clarifying questions",
       "sendQueuedNow": "Send queued message now",
       "sendNow": "Send now",
+      "editQueued": "Edit queued message",
+      "edit": "Edit",
       "removeQueued": "Remove queued message",
       "remove": "Remove",
       "turnInterrupted": "The previous turn was interrupted.",

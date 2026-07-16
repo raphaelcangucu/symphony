@@ -27,8 +27,10 @@ import { createPortal } from "react-dom";
 import { toast } from "sonner";
 
 import {
+  hydrateAttachments,
   revokeAttachmentPreviews,
   serializeAttachments,
+  type AssistantOutgoingAttachment,
 } from "@/components/assistant/assistantAttachments";
 import { ASSISTANT_CHAT_MESSAGE_TEXT_CLASS } from "@/components/assistant/chatTypography";
 import { ComposerMoreMenu, ComposerToolbar } from "@/components/assistant/ComposerToolbar";
@@ -116,6 +118,13 @@ export interface ComposerSnapshot {
   attachments: ReturnType<typeof serializeAttachments>;
 }
 
+export interface ComposerDraftSeed {
+  requestId: number;
+  message: string;
+  attachments: AssistantOutgoingAttachment[];
+  contextRefs: ComposerContextChipRef[];
+}
+
 export interface ComposerContextInsertRequest {
   id: number;
   ref: ComposerContextChipRef;
@@ -197,6 +206,8 @@ interface AssistantComposerProps
   floating?: boolean;
   hasQueued?: boolean;
   seedMessage?: string | null;
+  /** Bumped `requestId` replaces the current composer draft (text/attachments/refs). */
+  draftSeed?: ComposerDraftSeed | null;
   placeholder?: string;
   /** When `null`, the footer hint is hidden. */
   hint?: string | null;
@@ -227,6 +238,7 @@ export function AssistantComposer({
   floating = false,
   hasQueued = false,
   seedMessage = null,
+  draftSeed = null,
   slashContext = "authoring",
   slashCommandExtras,
   magicPaletteRequestId = 0,
@@ -281,8 +293,10 @@ export function AssistantComposer({
     handleDrop,
     removeAttachment,
     clearAttachments,
+    replaceAttachments,
   } = useComposerAttachments({ projectSlug, dropTargetRef });
   const [contextRefs, setContextRefs] = useState<ComposerContextChipRef[]>([]);
+  const lastDraftSeedIdRef = useRef(0);
   const [composerState, setComposerState] = useState<AssistantComposerState>(() => {
     if (settingsSeed) {
       return {
@@ -380,6 +394,17 @@ export function AssistantComposer({
     if (!seedMessage?.trim()) return;
     setInput(seedMessage);
   }, [seedMessage]);
+
+  useEffect(() => {
+    if (!draftSeed || draftSeed.requestId === lastDraftSeedIdRef.current) return;
+    if (!Number.isFinite(draftSeed.requestId) || draftSeed.requestId <= 0) return;
+
+    lastDraftSeedIdRef.current = draftSeed.requestId;
+    setInput(draftSeed.message ?? "");
+    replaceAttachments(hydrateAttachments(draftSeed.attachments ?? []));
+    setContextRefs(Array.isArray(draftSeed.contextRefs) ? draftSeed.contextRefs : []);
+    requestAnimationFrame(() => textareaRef.current?.focus());
+  }, [draftSeed, replaceAttachments]);
 
   useEffect(() => {
     return () => {
@@ -741,7 +766,7 @@ export function AssistantComposer({
         {attachments.length > 0 ? (
           <div className="flex flex-wrap gap-2 border-b px-3 py-2">
             {attachments.map((attachment) => {
-              if (attachment.type === "image") {
+              if (attachment.type === "image" && attachment.previewUrl) {
                 return (
                   <div key={attachment.id} className="group relative">
                     <img

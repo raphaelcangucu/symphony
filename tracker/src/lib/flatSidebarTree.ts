@@ -6,7 +6,7 @@ import {
 } from "@/lib/sidebarTree";
 import { workspaceBasePath } from "@/lib/workspaceRoutes";
 import type { ProjectSessionKind, ProjectSessionRow } from "@/types/project-session";
-import type { RecentStatusKind } from "@/types/recents";
+import type { RecentSession, RecentStatusKind } from "@/types/recents";
 import type {
   SidebarAggregateStatus,
   SidebarFlatProjectBranchInput,
@@ -29,6 +29,38 @@ const ACTIVITY_STATUSES = new Set<SidebarAggregateStatus>(["active", "attention"
 const ERROR_STATUSES = new Set(["error", "failed", "crashed"]);
 const ATTENTION_STATUSES = new Set(["waiting", "retrying", "aborted", "paused", "review"]);
 const ACTIVE_STATUSES = new Set(["live", "running", "active", "in_progress"]);
+
+/**
+ * Applies live recents titles onto project-session rows so the sidebar stays in
+ * sync with tabs (recents falls back to preview / auto-title; project_sessions
+ * can lag with a blank title → "Session N").
+ */
+export function overlaySessionTitlesFromRecents(
+  sessions: readonly ProjectSessionRow[],
+  recents: readonly RecentSession[],
+): readonly ProjectSessionRow[] {
+  if (sessions.length === 0 || recents.length === 0) return sessions;
+
+  const titlesByThreadId = new Map<number, string>();
+  for (const recent of recents) {
+    if (recent.threadId == null) continue;
+    const title = recent.title.trim();
+    if (!title) continue;
+    titlesByThreadId.set(recent.threadId, title);
+  }
+  if (titlesByThreadId.size === 0) return sessions;
+
+  let changed = false;
+  const next = sessions.map((session) => {
+    const threadId = parseThreadId(session.id);
+    if (threadId == null) return session;
+    const overlay = titlesByThreadId.get(threadId);
+    if (!overlay || session.title.trim() === overlay) return session;
+    changed = true;
+    return { ...session, title: overlay };
+  });
+  return changed ? next : sessions;
+}
 
 export function buildFlatSidebarProject(
   input: SidebarFlatProjectBranchInput,

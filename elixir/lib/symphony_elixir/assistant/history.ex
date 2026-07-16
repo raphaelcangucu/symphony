@@ -517,6 +517,21 @@ defmodule SymphonyElixir.Assistant.History do
     end)
   end
 
+  @doc """
+  Restores `current_turn` to `running` after metadata was marked interrupted while a
+  live worker was still registered (e.g. channel leave + boot reconcile desync).
+  """
+  @spec restore_running_turn_state(Thread.t()) :: {:ok, Thread.t()} | {:error, Ecto.Changeset.t()}
+  def restore_running_turn_state(%Thread{} = thread) do
+    patch_current_turn(thread, fn turn ->
+      turn
+      |> Map.put("status", "running")
+      |> Map.put("interrupted_reason", nil)
+      |> Map.put("error", nil)
+      |> Map.put("finished_at", nil)
+    end)
+  end
+
   @doc "Atomically interrupts the same running turn, preserving a completion that won the race."
   @spec interrupt_turn_state_if_running(Thread.t(), String.t()) ::
           {:ok, Thread.t()} | {:already_finished, Thread.t()} | {:error, term()}
