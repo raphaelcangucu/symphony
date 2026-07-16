@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   attachChatScrollStickiness,
+  captureScrollBeforePrepend,
+  restoreScrollAfterPrepend,
   STICK_TO_BOTTOM_THRESHOLD_PX,
 } from "@/components/assistant/chatScrollStickiness";
 
@@ -96,5 +98,65 @@ describe("attachChatScrollStickiness", () => {
     expect(stickToBottomRef.current).toBe(false);
     expect(pinnedScrollTopRef.current).toBe(0);
     expect(800 - 0 - 200).toBeGreaterThan(STICK_TO_BOTTOM_THRESHOLD_PX);
+  });
+});
+
+describe("prepend scroll restore", () => {
+  function mockScroller(initial: { scrollHeight: number; scrollTop: number }) {
+    let scrollHeight = initial.scrollHeight;
+    let scrollTop = initial.scrollTop;
+    const scroller = document.createElement("div");
+    Object.defineProperties(scroller, {
+      clientHeight: { configurable: true, get: () => 200 },
+      scrollHeight: {
+        configurable: true,
+        get: () => scrollHeight,
+        set: (value: number) => {
+          scrollHeight = value;
+        },
+      },
+      scrollTop: {
+        configurable: true,
+        get: () => scrollTop,
+        set: (value: number) => {
+          scrollTop = value;
+        },
+      },
+    });
+    return {
+      scroller,
+      setScrollHeight: (value: number) => {
+        scrollHeight = value;
+      },
+    };
+  }
+
+  it("keeps the same viewport after content is prepended above", () => {
+    const stickToBottomRef = { current: false };
+    const pinnedScrollTopRef = { current: 0 as number | null };
+    const { scroller, setScrollHeight } = mockScroller({ scrollHeight: 800, scrollTop: 0 });
+
+    const pending = captureScrollBeforePrepend(scroller, stickToBottomRef, pinnedScrollTopRef);
+    setScrollHeight(1800);
+    restoreScrollAfterPrepend(scroller, pending, pinnedScrollTopRef);
+
+    expect(scroller.scrollTop).toBe(1000);
+    expect(pinnedScrollTopRef.current).toBe(1000);
+    expect(stickToBottomRef.current).toBe(false);
+  });
+
+  it("detaches stick-to-bottom so growth does not jump to the new bottom", () => {
+    const stickToBottomRef = { current: true };
+    const pinnedScrollTopRef = { current: null as number | null };
+    const { scroller, setScrollHeight } = mockScroller({ scrollHeight: 800, scrollTop: 600 });
+
+    const pending = captureScrollBeforePrepend(scroller, stickToBottomRef, pinnedScrollTopRef);
+    expect(stickToBottomRef.current).toBe(false);
+
+    setScrollHeight(1400);
+    restoreScrollAfterPrepend(scroller, pending, pinnedScrollTopRef);
+
+    expect(scroller.scrollTop).toBe(1200);
+    expect(pinnedScrollTopRef.current).toBe(1200);
   });
 });

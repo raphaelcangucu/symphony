@@ -73,22 +73,60 @@ export function attachChatScrollStickiness(
   };
 }
 
+export type PendingScrollRestore = {
+  prevScrollHeight: number;
+  prevScrollTop: number;
+};
+
+/**
+ * Capture scroll metrics before prepending content above the viewport.
+ * Detaches stick-to-bottom so ResizeObserver growth-follow cannot jump to the
+ * new bottom while older messages are revealed.
+ */
+export function captureScrollBeforePrepend(
+  scroller: HTMLDivElement | null,
+  stickToBottomRef: MutableRefObject<boolean>,
+  pinnedScrollTopRef: MutableRefObject<number | null>,
+): PendingScrollRestore | null {
+  if (!scroller) return null;
+
+  stickToBottomRef.current = false;
+  // Clear the absolute pin so layout effects do not restore a stale scrollTop
+  // before height-delta restoration runs.
+  pinnedScrollTopRef.current = null;
+
+  return {
+    prevScrollHeight: scroller.scrollHeight,
+    prevScrollTop: scroller.scrollTop,
+  };
+}
+
+/** Restore the pre-prepend viewport after DOM height has grown above it. */
+export function restoreScrollAfterPrepend(
+  scroller: HTMLDivElement | null,
+  pending: PendingScrollRestore | null,
+  pinnedScrollTopRef: MutableRefObject<number | null>,
+): void {
+  if (!scroller || !pending) return;
+
+  const nextTop = pending.prevScrollTop + (scroller.scrollHeight - pending.prevScrollHeight);
+  scroller.scrollTop = nextTop;
+  pinnedScrollTopRef.current = nextTop;
+}
+
 export function setMessagesPreservingScroll(
   scroller: HTMLDivElement | null,
   stickToBottomRef: MutableRefObject<boolean>,
+  pinnedScrollTopRef: MutableRefObject<number | null>,
   history: AssistantChatMessage[],
   setMessages: (messages: AssistantChatMessage[]) => void,
 ) {
-  if (scroller && !stickToBottomRef.current) {
-    const prevScrollHeight = scroller.scrollHeight;
-    const prevScrollTop = scroller.scrollTop;
-    setMessages(history);
-    requestAnimationFrame(() => {
-      if (!scroller.isConnected) return;
-      scroller.scrollTop = prevScrollTop + (scroller.scrollHeight - prevScrollHeight);
-    });
-    return;
-  }
-
+  const pending = captureScrollBeforePrepend(scroller, stickToBottomRef, pinnedScrollTopRef);
   setMessages(history);
+  if (!scroller || !pending) return;
+
+  requestAnimationFrame(() => {
+    if (!scroller.isConnected) return;
+    restoreScrollAfterPrepend(scroller, pending, pinnedScrollTopRef);
+  });
 }

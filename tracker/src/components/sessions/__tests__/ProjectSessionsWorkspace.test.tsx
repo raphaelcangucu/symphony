@@ -413,6 +413,50 @@ describe("ProjectSessionsWorkspace", () => {
     expect(screen.getByLabelText("mock assistant panel")).toHaveAttribute("data-content-max-width", "default");
   });
 
+  it("labels the assistant tab with the session title from recents", async () => {
+    vi.mocked(useProjectSessions).mockReturnValue({
+      groups: emptyProjectSessionGroups(),
+      relatedSessions: [
+        {
+          id: "thread:42",
+          kind: "chat",
+          scope: "project_session",
+          title: "Cleanup goapi GAM-19",
+          projectSlug: "demo",
+          projectName: "Demo",
+          identifier: null,
+          status: "active",
+          statusKind: "idle",
+          agentKind: "cursor",
+          updatedAt: "2026-07-16T12:00:00Z",
+          threadId: 42,
+          preview: null,
+        },
+      ],
+      issues: [],
+      executions: new Map(),
+      inventory: null,
+      isLoading: false,
+      isInventoryLoading: false,
+      error: null,
+      refetch,
+    });
+
+    renderWithI18n(
+      <MemoryRouter initialEntries={["/projects/demo/workspaces/42"]}>
+        <ProjectSessionsWorkspace projectSlug="demo" activeThreadId={42} />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: /Cleanup goapi GAM-19/i })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      ),
+    );
+    expect(screen.queryByRole("tab", { name: /^Project session/i })).not.toBeInTheDocument();
+  });
+
   it("omits the sibling session button on the workspaces list tab", () => {
     renderWithI18n(
       <MemoryRouter initialEntries={["/projects/demo/workspaces"]}>

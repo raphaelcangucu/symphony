@@ -19,7 +19,12 @@ import {
 import type { AssistantChatPlanApprovalAction } from "@/components/assistant/AssistantChatMessageBubble";
 import { AssistantMessageList, type LoadOlderControl } from "@/components/assistant/AssistantMessageList";
 import { AssistantSessionErrorBoundary } from "@/components/assistant/AssistantSessionErrorBoundary";
-import { getCurrentPromptWindow, mergeOlderMessages } from "@/components/assistant/compactHistoryWindow";
+import {
+  countHiddenPromptsBefore,
+  getCurrentPromptWindow,
+  mergeOlderMessages,
+  revealOlderPromptStartIndex,
+} from "@/components/assistant/compactHistoryWindow";
 import { AssistantPanelHeader } from "@/components/assistant/AssistantPanelHeader";
 import { AssistantSessionShell } from "@/components/assistant/AssistantSessionShell";
 import {
@@ -56,7 +61,10 @@ import {
 import { useIsLgUp } from "@/hooks/useMediaQuery";
 import {
   attachChatScrollStickiness,
+  captureScrollBeforePrepend,
+  restoreScrollAfterPrepend,
   setMessagesPreservingScroll,
+  type PendingScrollRestore,
 } from "@/components/assistant/chatScrollStickiness";
 import {
   authoringGoalPhase,
@@ -355,12 +363,14 @@ export function ProjectAssistantPanel({
     });
   }
   useEffect(() => () => deltaBufferRef.current?.dispose(), []);
-  // Compact-history window: by default only the current run is rendered; the
-  // user expands in-memory prompts first, then fetches older server pages.
-  const [expandedHistory, setExpandedHistory] = useState(false);
+  // Compact-history window: by default only the current run is rendered.
+  // `historyRevealStartIndex` is null while collapsed; otherwise it is the
+  // first visible message index after paginated "load older" reveals.
+  const [historyRevealStartIndex, setHistoryRevealStartIndex] = useState<number | null>(null);
   const [historyHasMoreBefore, setHistoryHasMoreBefore] = useState(false);
   const [historyOldestSequence, setHistoryOldestSequence] = useState<number | null>(null);
   const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
+  const pendingPrependScrollRef = useRef<PendingScrollRestore | null>(null);
   const [approvedPlanMessageIds, setApprovedPlanMessageIds] = useState<Set<string>>(() => new Set());
   // Tab-scoped Authoring Goal state is durable and independent from both the
   // issue's Execution goal and the lifecycle of an ordinary assistant turn.
@@ -629,8 +639,17 @@ export function ProjectAssistantPanel({
 
   useLayoutEffect(() => {
     const scroller = scrollRef.current;
+    if (!scroller) return;
+
+    const pendingPrepend = pendingPrependScrollRef.current;
+    if (pendingPrepend) {
+      restoreScrollAfterPrepend(scroller, pendingPrepend, pinnedScrollTopRef);
+      pendingPrependScrollRef.current = null;
+      return;
+    }
+
     const pinnedTop = pinnedScrollTopRef.current;
-    if (!scroller || stickToBottomRef.current || pinnedTop == null) return;
+    if (stickToBottomRef.current || pinnedTop == null) return;
     if (Math.abs(scroller.scrollTop - pinnedTop) > 1) {
       scroller.scrollTop = pinnedTop;
     }
@@ -698,7 +717,7 @@ export function ProjectAssistantPanel({
     goalEnabledRef.current = false;
     setGoalQueuePermitted(false);
     setLastTurn(null);
-    setExpandedHistory(false);
+    setHistoryRevealStartIndex(null);
     setHistoryHasMoreBefore(false);
     setHistoryOldestSequence(null);
     setLoadingOlderMessages(false);
@@ -736,13 +755,25 @@ export function ProjectAssistantPanel({
           skillProfileSelectionRef.current = profile;
         }
         setPrefsApplyNextTurn(false);
-        setMessagesPreservingScroll(scrollRef.current, stickToBottomRef, history, setMessages);
-        setExpandedHistory(false);
+        setMessagesPreservingScroll(
+          scrollRef.current,
+          stickToBottomRef,
+          pinnedScrollTopRef,
+          history,
+          setMessages,
+        );
+        setHistoryRevealStartIndex(null);
         setHistoryHasMoreBefore(meta?.hasMoreBefore ?? false);
         setHistoryOldestSequence(meta?.oldestSequence ?? null);
       },
       onHistorySynced: (history, meta) => {
-        setMessagesPreservingScroll(scrollRef.current, stickToBottomRef, history, setMessages);
+        setMessagesPreservingScroll(
+          scrollRef.current,
+          stickToBottomRef,
+          pinnedScrollTopRef,
+          history,
+          setMessages,
+        );
         setHistoryHasMoreBefore(meta?.hasMoreBefore ?? false);
         setHistoryOldestSequence(meta?.oldestSequence ?? null);
       },
@@ -1094,7 +1125,7 @@ export function ProjectAssistantPanel({
 
       setConnectionError(null);
       // Re-compact history to the new current run (spec 2026-07-10 §2 re-compact rule).
-      setExpandedHistory(false);
+      setHistoryRevealStartIndex(null);
       stickToBottomRef.current = true;
       pinnedScrollTopRef.current = null;
       setIsAtBottom(true);
@@ -1373,9 +1404,14 @@ export function ProjectAssistantPanel({
   // `renderedMessages` is the compacted slice actually painted; `visibleMessages`
   // stays the full list so derivations (tasks, KB refs, runtime) keep full context.
   const promptWindow = useMemo(() => getCurrentPromptWindow(visibleMessages), [visibleMessages]);
+  const effectiveHistoryStartIndex = historyRevealStartIndex ?? promptWindow.startIndex;
+  const hiddenPromptCount = useMemo(
+    () => countHiddenPromptsBefore(visibleMessages, effectiveHistoryStartIndex),
+    [visibleMessages, effectiveHistoryStartIndex],
+  );
   const renderedMessages = useMemo(
-    () => (expandedHistory ? visibleMessages : visibleMessages.slice(promptWindow.startIndex)),
-    [visibleMessages, expandedHistory, promptWindow.startIndex],
+    () => visibleMessages.slice(effectiveHistoryStartIndex),
+    [visibleMessages, effectiveHistoryStartIndex],
   );
 
   useEffect(() => {
@@ -1385,10 +1421,19 @@ export function ProjectAssistantPanel({
   const handleLoadOlderMessages = useCallback(() => {
     if (loadingOlderMessages) return;
 
-    // First click reveals in-memory prompts before hitting the server (spec §2).
-    const hasHiddenInMemory = !expandedHistory && getCurrentPromptWindow(messagesRef.current).startIndex > 0;
-    if (hasHiddenInMemory) {
-      setExpandedHistory(true);
+    const currentMessages = messagesRef.current;
+    const compactStart = getCurrentPromptWindow(currentMessages).startIndex;
+    const currentStart = historyRevealStartIndex ?? compactStart;
+
+    // Reveal in-memory prompts a page at a time before hitting the server.
+    if (currentStart > 0) {
+      pendingPrependScrollRef.current = captureScrollBeforePrepend(
+        scrollRef.current,
+        stickToBottomRef,
+        pinnedScrollTopRef,
+      );
+      setIsAtBottom(false);
+      setHistoryRevealStartIndex(revealOlderPromptStartIndex(currentMessages, currentStart));
       return;
     }
 
@@ -1396,34 +1441,40 @@ export function ProjectAssistantPanel({
     const channel = channelRef.current;
     if (!channel) return;
 
-    setExpandedHistory(true);
     setLoadingOlderMessages(true);
     loadOlderMessages(channel, historyOldestSequence)
       .then((page) => {
         const merged = mergeOlderMessages(page.messages, messagesRef.current);
-        setMessagesPreservingScroll(scrollRef.current, stickToBottomRef, merged, setMessages);
+        setMessagesPreservingScroll(
+          scrollRef.current,
+          stickToBottomRef,
+          pinnedScrollTopRef,
+          merged,
+          setMessages,
+        );
+        setIsAtBottom(false);
+        setHistoryRevealStartIndex(0);
         setHistoryHasMoreBefore(page.hasMoreBefore);
         setHistoryOldestSequence(page.oldestSequence);
       })
       .catch((error) => setConnectionError(errorMessage(error)))
       .finally(() => setLoadingOlderMessages(false));
-  }, [expandedHistory, historyHasMoreBefore, historyOldestSequence, loadingOlderMessages]);
+  }, [historyRevealStartIndex, historyHasMoreBefore, historyOldestSequence, loadingOlderMessages]);
 
   const loadOlderControl = useMemo<LoadOlderControl | null>(() => {
-    const hasHiddenInMemory = !expandedHistory && promptWindow.startIndex > 0;
+    const hasHiddenInMemory = effectiveHistoryStartIndex > 0;
     if (!hasHiddenInMemory && !historyHasMoreBefore) return null;
 
     const label = loadingOlderMessages
       ? t("assistant.panel.loadingOlder")
-      : hasHiddenInMemory && promptWindow.hiddenPromptCount > 0
-        ? t("assistant.panel.loadOldPrompts", { count: promptWindow.hiddenPromptCount })
+      : hasHiddenInMemory && hiddenPromptCount > 0
+        ? t("assistant.panel.loadOldPrompts", { count: hiddenPromptCount })
         : t("assistant.panel.loadOlderMessages");
 
     return { label, disabled: loadingOlderMessages, onLoad: handleLoadOlderMessages };
   }, [
-    expandedHistory,
-    promptWindow.startIndex,
-    promptWindow.hiddenPromptCount,
+    effectiveHistoryStartIndex,
+    hiddenPromptCount,
     historyHasMoreBefore,
     loadingOlderMessages,
     t,

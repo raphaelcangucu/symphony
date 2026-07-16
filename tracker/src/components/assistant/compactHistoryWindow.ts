@@ -5,6 +5,9 @@ export interface CompactHistoryWindow {
   hiddenPromptCount: number;
 }
 
+/** How many older user prompts each "Load old prompts" click reveals in-memory. */
+export const LOAD_OLDER_PROMPT_PAGE_SIZE = 10;
+
 type RoleOnly = { role: string };
 
 /**
@@ -24,12 +27,47 @@ export function getCurrentPromptWindow(messages: readonly RoleOnly[]): CompactHi
     }
   }
 
+  return { startIndex, hiddenPromptCount: countHiddenPromptsBefore(messages, startIndex) };
+}
+
+/** Counts user prompts strictly before `startIndex`. */
+export function countHiddenPromptsBefore(messages: readonly RoleOnly[], startIndex: number): number {
+  if (!Number.isInteger(startIndex) || startIndex <= 0) return 0;
+
+  const end = Math.min(startIndex, messages.length);
   let hiddenPromptCount = 0;
-  for (let index = 0; index < startIndex; index++) {
+  for (let index = 0; index < end; index++) {
     if (messages[index]?.role === "user") hiddenPromptCount++;
   }
+  return hiddenPromptCount;
+}
 
-  return { startIndex, hiddenPromptCount };
+/**
+ * Walks backward from `currentStartIndex` and returns a new start index that
+ * includes up to `pageSize` additional older user prompts (and their turns).
+ */
+export function revealOlderPromptStartIndex(
+  messages: readonly RoleOnly[],
+  currentStartIndex: number,
+  pageSize: number = LOAD_OLDER_PROMPT_PAGE_SIZE,
+): number {
+  if (!Number.isInteger(currentStartIndex) || currentStartIndex <= 0) return 0;
+  if (!Number.isInteger(pageSize) || pageSize <= 0) {
+    throw new Error("pageSize must be a positive integer");
+  }
+
+  const boundedStart = Math.min(currentStartIndex, messages.length);
+  let remaining = pageSize;
+  let nextStart = 0;
+
+  for (let index = boundedStart - 1; index >= 0; index--) {
+    if (messages[index]?.role !== "user") continue;
+    remaining--;
+    nextStart = index;
+    if (remaining === 0) break;
+  }
+
+  return nextStart;
 }
 
 /**

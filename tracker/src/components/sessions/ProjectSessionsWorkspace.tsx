@@ -49,6 +49,7 @@ import { workspaceCloneRepoOptions } from "@/lib/workspaceCloneRepos";
 import { cn, SCROLLBAR_THIN } from "@/lib/utils";
 import {
   SESSIONS_LIST_TAB_ID,
+  assistantSessionTabId,
   authoringSessionTabId,
   createAssistantSessionTab,
   createAuthoringSessionTab,
@@ -203,7 +204,10 @@ export function ProjectSessionsWorkspace({
         ...source,
         projectSlug: source.projectSlug?.trim() || projectSlug,
       });
-      openAssistantSession(created.id, t("sessions.newSessionTitle"));
+      openAssistantSession(
+        created.id,
+        created.title?.trim() || t("sessions.newSessionTitle"),
+      );
     } catch (cause) {
       toast.error(cause instanceof Error ? cause.message : t("sessions.createFailed"));
     } finally {
@@ -252,10 +256,62 @@ export function ProjectSessionsWorkspace({
     [openAssistantSession],
   );
 
+  const assistantTitleLookup = useMemo(() => {
+    const titles = new Map<number, string>();
+    for (const session of relatedSessions) {
+      if (session.threadId == null) continue;
+      const title = session.title.trim();
+      if (title) titles.set(session.threadId, title);
+    }
+    return titles;
+  }, [relatedSessions]);
+
+  const fetchedAssistantTitlesRef = useRef<Map<number, string>>(new Map());
+  const openedAssistantRef = useRef<number | null>(null);
+
   useEffect(() => {
-    if (!activeThreadId) return;
-    openTab(createAssistantSessionTab(activeThreadId, t("sessions.newSessionTitle")));
-  }, [activeThreadId, openTab, t]);
+    if (!activeThreadId) {
+      openedAssistantRef.current = null;
+      return;
+    }
+
+    const fallback = t("sessions.newSessionTitle");
+    const tabId = assistantSessionTabId(activeThreadId);
+    const existingTab = tabs.find((tab) => tab.id === tabId);
+    const knownTitle =
+      assistantTitleLookup.get(activeThreadId) ??
+      fetchedAssistantTitlesRef.current.get(activeThreadId) ??
+      null;
+
+    if (knownTitle) {
+      if (existingTab?.title === knownTitle) return;
+      openedAssistantRef.current = activeThreadId;
+      openTab(createAssistantSessionTab(activeThreadId, knownTitle));
+      return;
+    }
+
+    if (!existingTab) {
+      openTab(createAssistantSessionTab(activeThreadId, fallback));
+    }
+
+    let cancelled = false;
+    void getAssistantThread(activeThreadId)
+      .then((thread) => {
+        if (cancelled) return;
+        const title = thread.title?.trim() || fallback;
+        fetchedAssistantTitlesRef.current.set(activeThreadId, title);
+        openTab(createAssistantSessionTab(activeThreadId, title));
+        openedAssistantRef.current = activeThreadId;
+      })
+      .catch(() => {
+        if (cancelled) return;
+        openedAssistantRef.current = activeThreadId;
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeThreadId, assistantTitleLookup, openTab, t, tabs]);
 
   const executionTitleLookup = useMemo(() => {
     const titles = new Map<string, string>();

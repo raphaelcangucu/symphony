@@ -1,6 +1,20 @@
 import { describe, expect, it } from "vitest";
 
-import { getCurrentPromptWindow, mergeOlderMessages } from "@/components/assistant/compactHistoryWindow";
+import {
+  countHiddenPromptsBefore,
+  getCurrentPromptWindow,
+  LOAD_OLDER_PROMPT_PAGE_SIZE,
+  mergeOlderMessages,
+  revealOlderPromptStartIndex,
+} from "@/components/assistant/compactHistoryWindow";
+
+function promptThread(promptCount: number) {
+  const messages: Array<{ role: string }> = [];
+  for (let index = 0; index < promptCount; index++) {
+    messages.push({ role: "user" }, { role: "assistant" });
+  }
+  return messages;
+}
 
 describe("getCurrentPromptWindow", () => {
   it("returns an empty window for no messages", () => {
@@ -28,6 +42,42 @@ describe("getCurrentPromptWindow", () => {
     const messages = [{ role: "user" }];
 
     expect(getCurrentPromptWindow(messages)).toEqual({ startIndex: 0, hiddenPromptCount: 0 });
+  });
+});
+
+describe("revealOlderPromptStartIndex", () => {
+  it("defaults the page size to 10 prompts", () => {
+    expect(LOAD_OLDER_PROMPT_PAGE_SIZE).toBe(10);
+  });
+
+  it("reveals at most 10 older user prompts per click", () => {
+    const messages = promptThread(15);
+    const currentStart = getCurrentPromptWindow(messages).startIndex;
+
+    const nextStart = revealOlderPromptStartIndex(messages, currentStart);
+
+    expect(countHiddenPromptsBefore(messages, nextStart)).toBe(4);
+    expect(messages[nextStart]?.role).toBe("user");
+  });
+
+  it("stops at the beginning when fewer than a page of prompts remain", () => {
+    const messages = promptThread(3);
+    const currentStart = getCurrentPromptWindow(messages).startIndex;
+
+    expect(revealOlderPromptStartIndex(messages, currentStart)).toBe(0);
+  });
+
+  it("can reveal another page from a partially expanded start index", () => {
+    const messages = promptThread(25);
+    const afterFirst = revealOlderPromptStartIndex(messages, getCurrentPromptWindow(messages).startIndex);
+    const afterSecond = revealOlderPromptStartIndex(messages, afterFirst);
+
+    expect(countHiddenPromptsBefore(messages, afterFirst)).toBe(14);
+    expect(countHiddenPromptsBefore(messages, afterSecond)).toBe(4);
+  });
+
+  it("stays at 0 when already fully revealed", () => {
+    expect(revealOlderPromptStartIndex(promptThread(2), 0)).toBe(0);
   });
 });
 
