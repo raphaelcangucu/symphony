@@ -2,19 +2,41 @@ defmodule SymphonyElixir.Claude.SessionLog do
   @moduledoc """
   Reads and parses Claude Code JSONL session logs for live UI streaming.
 
-  Session files live under `~/.claude/projects/<encoded-workspace>/` where the
-  workspace path is encoded by replacing `/` with `-` and stripping the leading
-  separator (e.g. `/home/foo/bar` → `-home-foo-bar`).
+  Resolution prefers `<workspace>/.symphony/claude-session.jsonl` (or a sidecar
+  `path`) when present, then falls back to
+  `~/.claude/projects/<encoded-workspace>/` where the workspace path is encoded
+  by replacing `/` with `-` and stripping the leading separator
+  (e.g. `/home/foo/bar` → `-home-foo-bar`).
 
-  The most-recently-modified `.jsonl` file for the encoded workspace directory
-  is used when no sidecar is present. Each JSONL line is one conversation event.
+  The most-recently-modified external `.jsonl` file for the encoded workspace
+  directory is used as fallback. Each JSONL line is one conversation event.
   """
+
+  alias SymphonyElixir.Agent.SessionTranscript
 
   @default_projects_dir "~/.claude/projects"
   @default_tail_bytes 65_536
 
   @spec resolve_log_path(Path.t(), keyword()) :: {:ok, Path.t()} | :error
   def resolve_log_path(workspace, opts \\ []) when is_binary(workspace) do
+    symphony = SessionTranscript.path(:claude, workspace)
+
+    cond do
+      File.regular?(symphony) ->
+        {:ok, symphony}
+
+      true ->
+        case SessionTranscript.read_sidecar(:claude, workspace) do
+          {:ok, %{"path" => path}} when is_binary(path) ->
+            if File.regular?(path), do: {:ok, path}, else: resolve_external(workspace, opts)
+
+          _ ->
+            resolve_external(workspace, opts)
+        end
+    end
+  end
+
+  defp resolve_external(workspace, opts) do
     dir = projects_dir(opts) |> Path.join(encode_workspace(workspace))
 
     case File.ls(dir) do

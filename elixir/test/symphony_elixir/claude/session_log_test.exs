@@ -226,4 +226,39 @@ defmodule SymphonyElixir.Claude.SessionLogTest do
       assert Enum.any?(appended, &(&1["kind"] == "tool_result"))
     end
   end
+
+  describe "resolve_log_path/2 prefers Symphony transcript" do
+    test "returns .symphony/claude-session.jsonl when present" do
+      workspace = Path.join(System.tmp_dir!(), "claude-sl-#{System.unique_integer([:positive])}")
+      File.mkdir_p!(Path.join(workspace, ".symphony"))
+      symphony = Path.join(workspace, ".symphony/claude-session.jsonl")
+
+      File.write!(
+        symphony,
+        ~s({"type":"assistant","message":{"content":[{"type":"text","text":"x"}]}}\n)
+      )
+
+      on_exit(fn -> File.rm_rf(workspace) end)
+
+      assert {:ok, ^symphony} = SessionLog.resolve_log_path(workspace)
+    end
+
+    test "falls back to projects_dir when Symphony file missing" do
+      workspace = Path.join(System.tmp_dir!(), "claude-sl-fb-#{System.unique_integer([:positive])}")
+      File.mkdir_p!(workspace)
+      projects = Path.join(System.tmp_dir!(), "claude-projects-#{System.unique_integer([:positive])}")
+      encoded = SessionLog.encode_workspace(workspace)
+      external_dir = Path.join(projects, encoded)
+      File.mkdir_p!(external_dir)
+      external = Path.join(external_dir, "chat.jsonl")
+      File.write!(external, "{}\n")
+
+      on_exit(fn ->
+        File.rm_rf(workspace)
+        File.rm_rf(projects)
+      end)
+
+      assert {:ok, ^external} = SessionLog.resolve_log_path(workspace, projects_dir: projects)
+    end
+  end
 end
