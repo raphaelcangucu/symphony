@@ -277,6 +277,17 @@ export async function createFreeformThread(input: {
   return normalizeAssistantThread(unwrapData<BackendAssistantThreadDto>(response));
 }
 
+/**
+ * Resolves the freeform thread the docked Maestro host should bind to on home /
+ * observability: the most recently active freeform thread, creating one when
+ * none exist. Mirrors opening `/assistant` with no id, but never leaves the
+ * host without a thread.
+ */
+export async function ensureActiveFreeformThread(): Promise<AssistantThread> {
+  const response = await http.post(trackerPath("/assistant/threads/freeform/active"), {});
+  return normalizeAssistantThread(unwrapData<BackendAssistantThreadDto>(response));
+}
+
 export async function createProjectSessionThread(
   projectSlug: string,
   input: {

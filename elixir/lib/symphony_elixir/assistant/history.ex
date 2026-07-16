@@ -996,6 +996,19 @@ defmodule SymphonyElixir.Assistant.History do
     |> Repo.all()
   end
 
+  @doc """
+  Returns the most recently updated active freeform thread, or `nil` when none
+  exist. Used by the docked Maestro host to bind home/observability to a single
+  shared freeform conversation.
+  """
+  @spec latest_freeform_thread() :: Thread.t() | nil
+  def latest_freeform_thread do
+    case list_threads(scope: "freeform", limit: 1) do
+      [thread | _] -> thread
+      [] -> nil
+    end
+  end
+
   @spec latest_message(integer()) :: map() | nil
   def latest_message(thread_id) when is_integer(thread_id) do
     Message

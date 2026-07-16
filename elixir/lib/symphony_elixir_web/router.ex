@@ -109,6 +109,7 @@ defmodule SymphonyElixirWeb.Router do
     get("/projects/:project_slug/issues/form_options", IssueController, :form_options)
     get("/assistant/threads", AssistantThreadController, :index)
     post("/assistant/threads", AssistantThreadController, :create)
+    post("/assistant/threads/freeform/active", AssistantThreadController, :ensure_active_freeform)
     get("/assistant/threads/:thread_id", AssistantThreadController, :show)
     patch("/assistant/threads/:thread_id", AssistantThreadController, :update)
     delete("/assistant/threads/:thread_id", AssistantThreadController, :delete)

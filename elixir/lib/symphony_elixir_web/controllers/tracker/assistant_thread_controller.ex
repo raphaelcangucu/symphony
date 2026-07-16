@@ -53,24 +53,12 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
   end
 
   def create(conn, %{"scope" => "freeform"} = params) do
-    # workspace_path is NOT NULL, but the canonical per-thread directory depends on
-    # the autoincrement id we only learn after insert. Seed with the freeform root
-    # as a placeholder, then immediately rewrite it to the per-thread path so the
-    # document viewer scopes reads to this thread instead of the shared parent.
-    attrs = %{
-      title: params["title"],
-      workspace_path: AgentSession.freeform_workspace_root(),
-      agent_kind: normalize_agent(params["agent_kind"]),
-      metadata: model_effort_metadata(params)
-    }
+    case create_freeform_with_workspace(params) do
+      {:ok, thread} ->
+        conn
+        |> put_status(:created)
+        |> json(%{data: TrackerPresenter.assistant_thread(with_preview(thread))})
 
-    with {:ok, thread} <- History.create_freeform_thread(attrs),
-         {:ok, thread} <-
-           History.update_thread(thread, %{workspace_path: AgentSession.freeform_workspace(thread.id)}) do
-      conn
-      |> put_status(:created)
-      |> json(%{data: TrackerPresenter.assistant_thread(with_preview(thread))})
-    else
       {:error, %Ecto.Changeset{} = changeset} ->
         TrackerErrors.render(conn, changeset)
     end
@@ -150,6 +138,28 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
 
   def create(conn, _params) do
     TrackerErrors.validation_msg(conn, "scope must be freeform, project_session, or issue_session")
+  end
+
+  @doc """
+  Resolves the freeform thread the docked Maestro host binds to on
+  home/observability: reuse the most recently active freeform thread, or create
+  one when none exist.
+  """
+  @spec ensure_active_freeform(Conn.t(), map()) :: Conn.t()
+  def ensure_active_freeform(conn, _params) do
+    result =
+      case History.latest_freeform_thread() do
+        nil -> create_freeform_with_workspace(%{"title" => "Maestro"})
+        thread -> {:ok, thread}
+      end
+
+    case result do
+      {:ok, thread} ->
+        json(conn, %{data: TrackerPresenter.assistant_thread(with_preview(thread))})
+
+      {:error, %Ecto.Changeset{} = changeset} ->
+        TrackerErrors.render(conn, changeset)
+    end
   end
 
   @spec update(Conn.t(), map()) :: Conn.t()
@@ -385,6 +395,25 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
   end
 
   defp maybe_put_meta_string(metadata, _key, _value), do: metadata
+
+  # workspace_path is NOT NULL, but the canonical per-thread directory depends on
+  # the autoincrement id we only learn after insert. Seed with the freeform root
+  # as a placeholder, then immediately rewrite it to the per-thread path so the
+  # document viewer scopes reads to this thread instead of the shared parent.
+  defp create_freeform_with_workspace(params) do
+    attrs = %{
+      title: params["title"],
+      workspace_path: AgentSession.freeform_workspace_root(),
+      agent_kind: normalize_agent(params["agent_kind"]),
+      metadata: model_effort_metadata(params)
+    }
+
+    with {:ok, thread} <- History.create_freeform_thread(attrs),
+         {:ok, thread} <-
+           History.update_thread(thread, %{workspace_path: AgentSession.freeform_workspace(thread.id)}) do
+      {:ok, thread}
+    end
+  end
 
   defp render_created_thread(conn, thread) do
     conn
