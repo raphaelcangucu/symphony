@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tool call cards — mock CDE-1180</title>
+  <style>
+    :root {
+      --bg: #f3f1ec;
+      --ink: #1c1b19;
+      --muted: #6b6560;
+      --line: #ddd6cb;
+      --panel: #fffcf7;
+      --before: #0f172a;
+      --before-ink: #e2e8f0;
+      --accent: #0f6b5c;
+      --accent-soft: #e6f4f1;
+      --warn: #9a3412;
+      --warn-soft: #fff1e8;
+      --ok: #166534;
+      --ok-soft: #eaf7ee;
+      --fail: #b91c1c;
+      --chip: #efeae2;
+      --mono: "IBM Plex Mono", "SF Mono", ui-monospace, monospace;
+      --sans: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+      --display: "Fraunces", Georgia, serif;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: var(--sans);
+      color: var(--ink);
+      background:
+        radial-gradient(900px 420px at 10% -10%, #e7efe9 0%, transparent 55%),
+        radial-gradient(700px 380px at 100% 0%, #f0e6d8 0%, transparent 50%),
+        var(--bg);
+      min-height: 100vh;
+    }
+
+    header {
+      padding: 28px 32px 12px;
+      max-width: 1180px;
+      margin: 0 auto;
+    }
+    header h1 {
+      font-family: var(--display);
+      font-weight: 550;
+      font-size: 1.85rem;
+      margin: 0 0 6px;
+      letter-spacing: -0.02em;
+    }
+    header p {
+      margin: 0;
+      color: var(--muted);
+      max-width: 62ch;
+      line-height: 1.45;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 8px;
+      padding: 16px 32px 0;
+      max-width: 1180px;
+      margin: 0 auto;
+    }
+    .tab {
+      border: 1px solid var(--line);
+      background: transparent;
+      color: var(--muted);
+      padding: 8px 14px;
+      border-radius: 999px;
+      font: inherit;
+      cursor: pointer;
+    }
+    .tab[aria-selected="true"] {
+      background: var(--ink);
+      color: #fff;
+      border-color: var(--ink);
+    }
+
+    .stage {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+      padding: 18px 32px 40px;
+      max-width: 1180px;
+      margin: 0 auto;
+    }
+    @media (max-width: 920px) {
+      .stage { grid-template-columns: 1fr; }
+    }
+
+    .col {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      overflow: hidden;
+      min-height: 640px;
+      display: flex;
+      flex-direction: column;
+    }
+    .col-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+      background: #faf7f1;
+    }
+    .col-head h2 {
+      margin: 0;
+      font-size: 0.95rem;
+      font-weight: 650;
+    }
+    .col-head span {
+      font-size: 0.78rem;
+      color: var(--muted);
+    }
+    .feed {
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      flex: 1;
+    }
+
+    /* BEFORE — raw JSON aesthetic */
+    .raw-card {
+      background: var(--before);
+      color: var(--before-ink);
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-family: var(--mono);
+      font-size: 11px;
+      line-height: 1.45;
+    }
+    .raw-card .tag {
+      display: inline-block;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: #94a3b8;
+      margin-bottom: 6px;
+    }
+    .raw-card .meta {
+      color: #7dd3fc;
+      margin-bottom: 6px;
+    }
+    .raw-card pre {
+      margin: 0;
+      white-space: pre-wrap;
+      word-break: break-word;
+      opacity: 0.85;
+      max-height: 120px;
+      overflow: hidden;
+      mask-image: linear-gradient(#000 55%, transparent);
+    }
+
+    /* AFTER — human cards */
+    .tool {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #fff;
+      padding: 10px 12px;
+      display: grid;
+      grid-template-columns: 28px 1fr auto;
+      gap: 8px 10px;
+      align-items: start;
+      transition: border-color 160ms ease, transform 160ms ease;
+    }
+    .tool:hover { border-color: #c9c0b2; transform: translateY(-1px); }
+    .tool .icon {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      display: grid;
+      place-items: center;
+      font-size: 14px;
+      background: var(--chip);
+    }
+    .tool.command .icon { background: #e8eef8; }
+    .tool.search .icon { background: #f3e8f6; }
+    .tool.file .icon { background: #eef2e6; }
+    .tool.preview .icon { background: var(--accent-soft); }
+    .tool.board .icon { background: #eef0ff; }
+    .tool.evidence .icon { background: #fff4d6; }
+    .tool.kb .icon { background: #e7f0ff; }
+    .tool.devenv .icon { background: #e8f5ec; }
+    .tool.tunnel .icon { background: #f3ebe3; }
+    .tool .body { min-width: 0; }
+    .tool .verb {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .tool .title {
+      font-size: 0.92rem;
+      font-weight: 600;
+      margin-top: 1px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .tool .sub {
+      margin-top: 3px;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .tool .badges {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 4px;
+    }
+    .badge {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      padding: 3px 7px;
+      border-radius: 999px;
+      background: var(--chip);
+      color: var(--muted);
+      white-space: nowrap;
+    }
+    .badge.ok { background: var(--ok-soft); color: var(--ok); }
+    .badge.run { background: #e8f0ff; color: #1d4ed8; }
+    .badge.warn { background: var(--warn-soft); color: var(--warn); }
+    .badge.link {
+      background: var(--accent-soft);
+      color: var(--accent);
+      text-decoration: none;
+      text-transform: none;
+      letter-spacing: 0;
+      font-weight: 650;
+    }
+    .details {
+      grid-column: 2 / -1;
+      margin-top: 2px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      background: #f7f4ee;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: #3f3a34;
+      line-height: 1.45;
+      display: none;
+    }
+    .tool[open] .details { display: block; }
+    .tool .chev {
+      grid-column: 1 / -1;
+      justify-self: start;
+      margin-left: 38px;
+      border: 0;
+      background: none;
+      color: var(--muted);
+      font: inherit;
+      font-size: 11px;
+      cursor: pointer;
+      padding: 0;
+    }
+
+    .cluster {
+      border-left: 2px solid #cfd8c8;
+      padding-left: 10px;
+      margin: 2px 0 2px 6px;
+    }
+    .cluster-label {
+      font-size: 11px;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+
+    .summary {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      padding: 4px 2px 8px;
+    }
+    .pill {
+      font-size: 11px;
+      padding: 4px 9px;
+      border-radius: 999px;
+      background: #ebe4d8;
+      color: #3f3a34;
+    }
+
+    .worked {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 10px 14px;
+      align-items: center;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1px dashed #cfc5b6;
+      background: linear-gradient(135deg, #faf6ef, #f3ebe0);
+      margin-bottom: 4px;
+    }
+    .worked .clock {
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      display: grid;
+      place-items: center;
+      background: #fff;
+      border: 1px solid var(--line);
+      font-size: 18px;
+    }
+    .worked .headline {
+      font-weight: 700;
+      font-size: 0.95rem;
+    }
+    .worked .meta {
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .worked .stats {
+      grid-column: 1 / -1;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .kb-path {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 6px;
+      padding: 4px 8px;
+      border-radius: 8px;
+      background: #eef3ff;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: #274690;
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .step-list {
+      margin: 0;
+      padding-left: 16px;
+      font-size: 12px;
+      color: #3f3a34;
+    }
+    .step-list li { margin: 3px 0; }
+    .step-list .done { color: var(--ok); }
+    .step-list .run { color: #1d4ed8; }
+
+    .note {
+      max-width: 1180px;
+      margin: 0 auto 36px;
+      padding: 0 32px;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+    .note code {
+      font-family: var(--mono);
+      font-size: 0.85em;
+      background: #ebe4d8;
+      padding: 1px 5px;
+      border-radius: 4px;
+    }
+  </style>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=IBM+Plex+Mono:wght@400;500&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet" />
+</head>
+<body>
+  <header>
+    <h1>Tool calls · antes vs depois</h1>
+    <p>
+      Mock com eventos reais da sessão <strong>CDE-1180</strong>.
+      À esquerda: o JSON que incomoda. À direita: cards por tipo para usuário comum.
+    </p>
+  </header>
+
+  <div class="tabs" role="tablist">
+    <button class="tab" aria-selected="false" data-view="mixed">Timeline mista</button>
+    <button class="tab" aria-selected="false" data-view="bash">Foco Bash</button>
+    <button class="tab" aria-selected="false" data-view="mcp">Foco MCP</button>
+    <button class="tab" aria-selected="true" data-view="extras">KB · DevEnv · Turn</button>
+  </div>
+
+  <div class="stage">
+    <section class="col">
+      <div class="col-head">
+        <h2>Hoje</h2>
+        <span>ENT / SAÍ · JSON cru</span>
+      </div>
+      <div class="feed" id="before"></div>
+    </section>
+
+    <section class="col">
+      <div class="col-head">
+        <h2>Proposta</h2>
+        <span>Cards tipados · detalhe sob demanda</span>
+      </div>
+      <div class="feed" id="after"></div>
+    </section>
+  </div>
+
+  <p class="note">
+    Isto é só visual companion — ainda não está no produto.
+    Depois do ok, vira spec + página <code>/dev/tool-call-proposals</code> no tracker.
+  </p>
+
+  <script>
+    const samples = {
+      mixed: {
+        before: [
+          { tag: "Bash · em execução", meta: "Wait for preview health endpoint", body: `{\n  "closeStdin": false,\n  "command": "for i in $(seq 1 60); do curl -sf http://127.0.0.1:4301/health ...",\n  "parsingResult": {\n    "simpleCommands": ["seq","curl","echo","break","sleep","curl"],\n    "redirects": [{"operator":">","targetText":"/dev/null"}]\n  }\n}` },
+          { tag: "Mcp · concluído", meta: "manage_preview", body: `{\n  "args": { "action": "status" },\n  "name": "symphony-manage_preview",\n  "toolName": "manage_preview"\n}\nSAÍ: {"success":{"content":[{"text":{"text":"{\\n  \\"data\\": { \\"servers\\":[{...}] }"}}]}}` },
+          { tag: "Bash · concluído", meta: "Run GranteeAutocomplete unit tests", body: `{\n  "command": "cd .../accessible-ui && yarn test ... GranteeAutocomplete.test.js | tee ...",\n  "hasOutputRedirect": true,\n  "parsingResult": { "allRedirectsAreDevNull": true }\n}` },
+          { tag: "Mcp · concluído", meta: "set_issue_status", body: `{\n  "toolName": "set_issue_status",\n  "args": { "issue_id": "CDE-1180", "status": "Em andamento" }\n}` },
+        ],
+        after: `
+          <div class="worked">
+            <div class="clock">⏱</div>
+            <div>
+              <div class="headline">Worked for 1m 43s</div>
+              <div class="meta">Turn · Cursor Agent · CDE-1180</div>
+            </div>
+            <div class="stats">
+              <span class="pill">8 Bash</span>
+              <span class="pill">8 MCP</span>
+              <span class="pill">9 arquivos</span>
+              <span class="pill">4 buscas</span>
+            </div>
+          </div>
+
+          <article class="tool preview" open>
+            <div class="icon">◎</div>
+            <div class="body">
+              <div class="verb">Preview</div>
+              <div class="title">Aguardando health check</div>
+              <div class="sub">curl http://127.0.0.1:4301/health · até 3 min</div>
+            </div>
+            <div class="badges"><span class="badge run">em execução</span></div>
+            <div class="details">Loop de espera detectado (seq + curl + sleep). Comando completo disponível em detalhes técnicos.</div>
+            <button class="chev" type="button">ocultar detalhes</button>
+          </article>
+
+          <article class="tool preview">
+            <div class="icon">◎</div>
+            <div class="body">
+              <div class="verb">Preview</div>
+              <div class="title">Status do ambiente CDE-1180</div>
+              <div class="sub">advising · porta 4301 · sync awaiting_report</div>
+            </div>
+            <div class="badges">
+              <span class="badge warn">starting</span>
+              <a class="badge link" href="#">abrir URL</a>
+            </div>
+            <button class="chev" type="button">ver detalhes</button>
+            <div class="details">public_url → advising-cde-1180-….cods.dev · tunnel enabled, not running</div>
+          </article>
+
+          <article class="tool command">
+            <div class="icon">$</div>
+            <div class="body">
+              <div class="verb">Comando</div>
+              <div class="title">Run GranteeAutocomplete unit tests</div>
+              <div class="sub">yarn test · GranteeAutocomplete.test.js</div>
+            </div>
+            <div class="badges"><span class="badge ok">4 passed · 2.3s</span></div>
+            <button class="chev" type="button">ver saída</button>
+            <div class="details">PASS GranteeAutocomplete.test.js<br/>Tests: 4 passed, 4 total<br/>Done in 3.35s.</div>
+          </article>
+
+          <article class="tool board">
+            <div class="icon">→</div>
+            <div class="body">
+              <div class="verb">Board</div>
+              <div class="title">CDE-1180 movido</div>
+              <div class="sub">status → Em andamento</div>
+            </div>
+            <div class="badges"><span class="badge ok">ok</span></div>
+          </article>
+
+          <div class="cluster">
+            <div class="cluster-label">Leu 3 arquivos</div>
+            <article class="tool file">
+              <div class="icon">▤</div>
+              <div class="body">
+                <div class="verb">Arquivo</div>
+                <div class="title">GranteeAutocomplete.js</div>
+                <div class="sub">shared/GroupShare/</div>
+              </div>
+              <div class="badges"><span class="badge">lido</span></div>
+            </article>
+          </div>
+
+          <article class="tool search">
+            <div class="icon">⌕</div>
+            <div class="body">
+              <div class="verb">Busca</div>
+              <div class="title">GranteeAutocomplete | advisor_group_list_enabled</div>
+              <div class="sub">em advising/CDE-1180</div>
+            </div>
+            <div class="badges"><span class="badge">grep</span></div>
+          </article>
+
+          <article class="tool evidence">
+            <div class="icon">✓</div>
+            <div class="body">
+              <div class="verb">Evidence</div>
+              <div class="title">Gate de validação</div>
+              <div class="sub">manifest · required</div>
+            </div>
+            <div class="badges"><span class="badge ok">satisfied</span></div>
+          </article>
+        `,
+      },
+      bash: {
+        before: [
+          { tag: "Bash", meta: "ENT + parsingResult", body: `{\n  "description": "Ensure illume tenant DB exists",\n  "command": "bash .../ensure-tenant-db.sh illume | tee ... | tail -20",\n  "simpleCommands": ["bash","tee","tail"],\n  "hasOutputRedirect": true\n}` },
+          { tag: "SAÍ", meta: "success wrapper", body: `{"isBackground":false,"success":{"exitCode":0,"executionTime":8287,"stdout":">> WARNING No users found...\\n>> ERRORS No users found with role: Director"}}` },
+        ],
+        after: `
+          <article class="tool command" open>
+            <div class="icon">$</div>
+            <div class="body">
+              <div class="verb">Comando</div>
+              <div class="title">Ensure illume tenant DB exists</div>
+              <div class="sub">ensure-tenant-db.sh illume</div>
+            </div>
+            <div class="badges">
+              <span class="badge ok">exit 0</span>
+              <span class="badge warn">avisos</span>
+            </div>
+            <div class="details">Users Found: 0 · Errors: 1<br/>No users found with role: Director<br/>Sugestão: verificar role / tenant.</div>
+            <button class="chev" type="button">ocultar saída</button>
+          </article>
+          <article class="tool command">
+            <div class="icon">$</div>
+            <div class="body">
+              <div class="verb">Comando</div>
+              <div class="title">Check if PR exists for branch</div>
+              <div class="sub">gh pr list --head CDE-1180-…</div>
+            </div>
+            <div class="badges">
+              <a class="badge link" href="#">PR #9918</a>
+              <span class="badge ok">open</span>
+            </div>
+          </article>
+        `,
+      },
+      mcp: {
+        before: [
+          { tag: "Mcp", meta: "manage_preview start", body: `{"toolName":"manage_preview","args":{"action":"start"},"skipApproval":false}` },
+          { tag: "Mcp", meta: "get_evidence_status", body: `{"toolName":"get_evidence_status","args":{}}` },
+          { tag: "Mcp", meta: "update_acceptance_criteria", body: `{"toolName":"update_acceptance_criteria","args":{}}` },
+          { tag: "Mcp", meta: "list_comments", body: `{"toolName":"list_comments","args":{"issue_id":"CDE-1180"}}` },
+        ],
+        after: `
+          <article class="tool preview">
+            <div class="icon">◎</div>
+            <div class="body">
+              <div class="verb">Preview</div>
+              <div class="title">Ambiente iniciado</div>
+              <div class="sub">CDE-1180 · advising</div>
+            </div>
+            <div class="badges">
+              <span class="badge run">starting</span>
+              <a class="badge link" href="#">abrir</a>
+            </div>
+          </article>
+          <article class="tool evidence">
+            <div class="icon">✓</div>
+            <div class="body">
+              <div class="verb">Evidence</div>
+              <div class="title">Gate satisfeito</div>
+              <div class="sub">0 violações</div>
+            </div>
+            <div class="badges"><span class="badge ok">ok</span></div>
+          </article>
+          <article class="tool board">
+            <div class="icon">!</div>
+            <div class="body">
+              <div class="verb">Acceptance</div>
+              <div class="title">Não atualizou critérios</div>
+              <div class="sub">seção com checkboxes não encontrada</div>
+            </div>
+            <div class="badges"><span class="badge warn">erro amigável</span></div>
+          </article>
+          <article class="tool board">
+            <div class="icon">☰</div>
+            <div class="body">
+              <div class="verb">Consulta</div>
+              <div class="title">Comentários de CDE-1180</div>
+              <div class="sub">list_comments</div>
+            </div>
+            <div class="badges"><span class="badge">1+ itens</span></div>
+          </article>
+        `,
+      },
+      extras: {
+        before: [
+          { tag: "Mcp", meta: "kb_search_pages", body: `{"toolName":"kb_search_pages","args":{"query":"advisor groups placeholder","project_slug":"advising"}}` },
+          { tag: "Mcp", meta: "kb_create_page", body: `{"toolName":"kb_create_page","args":{"repository":"advising","path":"superpowers/specs/2026-07-16-cde-1180.md","title":"CDE-1180 design"}}` },
+          { tag: "Mcp", meta: "kb_link_task", body: `{"toolName":"kb_link_task","args":{"path":"superpowers/specs/…","issue_id":"CDE-1180"}}` },
+          { tag: "Mcp", meta: "manage_dev_env", body: `{"toolName":"manage_dev_env","args":{"action":"warm_up"}}\nSAÍ: {"data":{"status":"succeeded","port":4399,"run_id":1}}` },
+          { tag: "Mcp", meta: "manage_tunnel", body: `{"toolName":"manage_tunnel","args":{"action":"start"}}` },
+        ],
+        after: `
+          <div class="worked">
+            <div class="clock">⏱</div>
+            <div>
+              <div class="headline">Worked for 2m 08s</div>
+              <div class="meta">Fim do turn · 5 tools · 0 falhas</div>
+            </div>
+            <div class="stats">
+              <span class="pill">3 KB</span>
+              <span class="pill">1 DevEnv</span>
+              <span class="pill">1 Tunnel</span>
+            </div>
+          </div>
+
+          <article class="tool kb">
+            <div class="icon">▣</div>
+            <div class="body">
+              <div class="verb">Knowledge base</div>
+              <div class="title">Buscou páginas</div>
+              <div class="sub">“advisor groups placeholder”</div>
+              <div class="kb-path">docs/ · advising</div>
+            </div>
+            <div class="badges"><span class="badge">3 hits</span></div>
+          </article>
+
+          <article class="tool kb" open>
+            <div class="icon">✎</div>
+            <div class="body">
+              <div class="verb">Knowledge base</div>
+              <div class="title">Criou página</div>
+              <div class="sub">CDE-1180 design</div>
+              <div class="kb-path">docs/superpowers/specs/2026-07-16-cde-1180.md</div>
+            </div>
+            <div class="badges">
+              <span class="badge ok">criada</span>
+              <a class="badge link" href="#">abrir no KB</a>
+            </div>
+            <div class="details">repository: advising · write direto na working tree</div>
+            <button class="chev" type="button">ocultar detalhes</button>
+          </article>
+
+          <article class="tool kb">
+            <div class="icon">⛓</div>
+            <div class="body">
+              <div class="verb">Knowledge base</div>
+              <div class="title">Linkou issue na página</div>
+              <div class="sub">CDE-1180 ↔ spec</div>
+            </div>
+            <div class="badges"><span class="badge ok">linked</span></div>
+          </article>
+
+          <article class="tool devenv" open>
+            <div class="icon">⚙</div>
+            <div class="body">
+              <div class="verb">Dev environment</div>
+              <div class="title">Warm-up concluído</div>
+              <div class="sub">porta 4399 · run #1</div>
+            </div>
+            <div class="badges"><span class="badge ok">succeeded</span></div>
+            <div class="details">
+              <ul class="step-list">
+                <li class="done">✓ Install deps</li>
+                <li class="done">✓ Boot services</li>
+                <li class="done">✓ Health ok :4399</li>
+              </ul>
+            </div>
+            <button class="chev" type="button">ocultar passos</button>
+          </article>
+
+          <article class="tool devenv">
+            <div class="icon">⚙</div>
+            <div class="body">
+              <div class="verb">Dev environment</div>
+              <div class="title">3 setup steps</div>
+              <div class="sub">list_steps · advising</div>
+            </div>
+            <div class="badges"><span class="badge">pronto</span></div>
+            <button class="chev" type="button">ver passos</button>
+            <div class="details">
+              <ul class="step-list">
+                <li>Install — mix deps.get</li>
+                <li>Migrate — mix ecto.migrate</li>
+                <li class="run">▶ Serve — mix phx.server</li>
+              </ul>
+            </div>
+          </article>
+
+          <article class="tool tunnel">
+            <div class="icon">⇄</div>
+            <div class="body">
+              <div class="verb">Tunnel</div>
+              <div class="title">Túnel público ligado</div>
+              <div class="sub">manage_tunnel · start</div>
+            </div>
+            <div class="badges">
+              <span class="badge ok">running</span>
+              <a class="badge link" href="#">URL pública</a>
+            </div>
+          </article>
+
+          <article class="tool kb">
+            <div class="icon">⚠</div>
+            <div class="body">
+              <div class="verb">Knowledge base</div>
+              <div class="title">Delete pediu confirmação</div>
+              <div class="sub">kb_delete_folder · docs/tmp/</div>
+            </div>
+            <div class="badges"><span class="badge warn">destrutivo</span></div>
+          </article>
+        `,
+      },
+    };
+
+    const beforeEl = document.getElementById("before");
+    const afterEl = document.getElementById("after");
+
+    function renderBefore(items) {
+      beforeEl.innerHTML = items.map((item) => `
+        <div class="raw-card">
+          <div class="tag">${item.tag}</div>
+          <div class="meta">${item.meta}</div>
+          <pre>${item.body.replace(/</g, "&lt;")}</pre>
+        </div>
+      `).join("");
+    }
+
+    function bindToggles(root) {
+      root.querySelectorAll(".tool .chev").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const card = btn.closest(".tool");
+          const open = card.hasAttribute("open");
+          const label = btn.textContent;
+          const kind = label.includes("saída")
+            ? "saída"
+            : label.includes("passos")
+              ? "passos"
+              : "detalhes";
+          if (open) {
+            card.removeAttribute("open");
+            btn.textContent = `ver ${kind}`;
+          } else {
+            card.setAttribute("open", "");
+            btn.textContent = `ocultar ${kind}`;
+          }
+        });
+      });
+    }
+
+    function render(view) {
+      const data = samples[view];
+      renderBefore(data.before);
+      afterEl.innerHTML = data.after;
+      bindToggles(afterEl);
+    }
+
+    document.querySelectorAll(".tab").forEach((tab) => {
+      tab.addEventListener("click", () => {
+        document.querySelectorAll(".tab").forEach((t) => t.setAttribute("aria-selected", "false"));
+        tab.setAttribute("aria-selected", "true");
+        render(tab.dataset.view);
+      });
+    });
+
+    render("extras");
+  </script>
+</body>
+</html>
