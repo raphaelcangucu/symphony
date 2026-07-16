@@ -15,7 +15,7 @@ defmodule SymphonyElixir.Assistant.History do
   @sidebar_title_max_graphemes 160
   @sidebar_label_max_graphemes 40
   @sidebar_label_count_max 12
-  @deletable_scopes ~w(freeform project_session project_explore issue_session issue kb)
+  @deletable_scopes ~w(freeform project project_session project_explore issue_session issue kb)
 
   @spec ensure_thread(String.t(), attrs()) :: {:ok, Thread.t()} | {:error, term()}
   def ensure_thread(project_slug, attrs \\ %{}) when is_binary(project_slug) and is_map(attrs) do
@@ -805,6 +805,7 @@ defmodule SymphonyElixir.Assistant.History do
         |> put_session_model_effort(attrs)
         |> Map.merge(workspace_meta)
         |> maybe_put_clone_branches(attrs)
+        |> TitleGenerator.put_auto_eligible()
 
       attrs
       |> Map.drop([
@@ -862,6 +863,7 @@ defmodule SymphonyElixir.Assistant.History do
         |> Map.put("execution_mode", execution_mode)
         |> put_session_model_effort(attrs)
         |> Map.put("workspace_kind", workspace_kind)
+        |> TitleGenerator.put_auto_eligible()
 
       attrs
       |> Map.drop([
@@ -912,6 +914,7 @@ defmodule SymphonyElixir.Assistant.History do
         |> Map.new()
         |> Map.put("execution_mode", execution_mode)
         |> put_session_model_effort(attrs)
+        |> TitleGenerator.put_auto_eligible()
 
       attrs
       |> Map.drop([

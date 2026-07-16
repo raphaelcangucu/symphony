@@ -1,7 +1,7 @@
 # Session auto-title (LLM) + magic rename
 
 **Date:** 2026-07-16  
-**Status:** draft for review  
+**Status:** implementing  
 **Primary surface:** sidebar session list + assistant thread title  
 **Related:**
 [`2026-07-14-sidebar-sessions-perf-design.md`](./2026-07-14-sidebar-sessions-perf-design.md)

@@ -135,6 +135,10 @@ function sessionActions(
     );
   }
 
+  if (threadBacked) {
+    actions.push(enabled("generate-title"));
+  }
+
   if (threadBacked && context.threadCapabilities) {
     actions.push(capabilityAction("toggle-review", context.threadCapabilities.canReview));
   }

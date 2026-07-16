@@ -90,7 +90,7 @@ function sessionNodeFromRow(
     projectSlug,
     workspaceId: row.workspaceId,
     sessionKind: sessionKindFromRow(row.kind),
-    title: nonBlank(row.title) ?? `Session ${id}`,
+    title: nonBlank(row.title) ?? sessionFallbackTitle(parseThreadId(id)),
     subtitle: row.issueIdentifier ?? row.workspacePath ?? projectTitle,
     href: row.href,
     statusKind,
@@ -152,6 +152,10 @@ function parseThreadId(id: string): number | null {
   if (!id.startsWith("thread:")) return null;
   const parsed = Number.parseInt(id.slice("thread:".length), 10);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+function sessionFallbackTitle(threadId: number | null): string {
+  return threadId === null ? "Session" : `Session ${threadId}`;
 }
 
 function statusToAggregate(status: string | null | undefined): SidebarAggregateStatus {

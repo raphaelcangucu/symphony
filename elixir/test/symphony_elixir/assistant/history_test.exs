@@ -501,12 +501,15 @@ defmodule SymphonyElixir.Assistant.HistoryTest do
     assert {:error, :not_found} = History.get_thread(archived_thread.id)
   end
 
-  test "delete_thread rejects unsupported scopes and deletes errored threads" do
+  test "delete_thread deletes legacy project-scoped threads and errored threads" do
     {:ok, _project} = Context.ensure_project(%{name: "Delete Scope", slug: "delete-scope"})
     {:ok, project_thread} = History.ensure_thread("delete-scope", %{workspace_path: "/tmp/delete-scope"})
     {:ok, archived_project_thread} = History.archive_thread(project_thread.id)
 
-    assert {:error, :unsupported_scope} = History.delete_thread(archived_project_thread.id)
+    assert archived_project_thread.scope == "project"
+    assert {:ok, deleted_project} = History.delete_thread(archived_project_thread.id)
+    assert deleted_project.id == archived_project_thread.id
+    assert {:error, :not_found} = History.get_thread(archived_project_thread.id)
 
     {:ok, freeform_thread} =
       History.create_freeform_thread(%{title: "Errored", workspace_path: "/tmp/delete-status"})

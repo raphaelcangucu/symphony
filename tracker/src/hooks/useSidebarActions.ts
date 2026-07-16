@@ -14,6 +14,7 @@ import {
 import {
   archiveAssistantThread,
   deleteAssistantThread,
+  generateAssistantThreadTitle,
   updateAssistantThread,
 } from "@/services/assistantThreads";
 import { archiveIssue, updateIssue } from "@/services/issues";
@@ -73,6 +74,7 @@ export type SidebarActionRequest =
       removable: boolean;
     }
   | { action: "rename-thread"; projectSlug: string; threadId: number; title: string }
+  | { action: "generate-thread-title"; projectSlug: string; threadId: number }
   | {
       action: "update-thread-metadata";
       projectSlug: string;
@@ -296,6 +298,9 @@ async function dispatchAction(
     case "rename-thread":
       await updateAssistantThread(request.threadId, { title: request.title });
       return { changed: true };
+    case "generate-thread-title":
+      await generateAssistantThreadTitle(request.threadId);
+      return { changed: true };
     case "update-thread-metadata":
       await updateAssistantThread(request.threadId, {
         labels: request.labels,
@@ -377,6 +382,7 @@ const REQUEST_KEYS: Readonly<Record<string, readonly string[]>> = {
   "rename-workspace": ["action", "projectSlug", "path", "name", "workspaceKind"],
   "remove-workspace": ["action", "projectSlug", "path", "workspaceKind", "removable"],
   "rename-thread": ["action", "projectSlug", "threadId", "title"],
+  "generate-thread-title": ["action", "projectSlug", "threadId"],
   "update-thread-metadata": [
     "action",
     "projectSlug",
@@ -479,6 +485,12 @@ function normalizeByAction(
         projectSlug: projectSlug(),
         threadId: threadId(),
         title: limited(value.title, "title", MAX_TITLE_GRAPHEMES),
+      };
+    case "generate-thread-title":
+      return {
+        action,
+        projectSlug: projectSlug(),
+        threadId: threadId(),
       };
     case "update-thread-metadata":
       {
@@ -611,6 +623,7 @@ function actionKey(request: SidebarActionRequest): string {
     case "remove-workspace":
       return `${request.action}:${request.projectSlug}:${request.path}`;
     case "rename-thread":
+    case "generate-thread-title":
     case "update-thread-metadata":
     case "update-thread-review":
     case "archive-thread":

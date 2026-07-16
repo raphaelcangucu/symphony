@@ -109,6 +109,7 @@ export type SidebarMenuActionId =
   | "pin"
   | "unpin"
   | "rename"
+  | "generate-title"
   | "copy-branch"
   | "copy-path"
   | "manage-labels"

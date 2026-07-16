@@ -4,7 +4,7 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
   use Phoenix.Controller, formats: [:json]
 
   alias Plug.Conn
-  alias SymphonyElixir.Assistant.{AgentSession, History}
+  alias SymphonyElixir.Assistant.{AgentSession, History, TitleGenerator}
   alias SymphonyElixir.Workspace.Provision
   alias SymphonyElixir.Workspace.PathOwnership
   alias SymphonyElixirWeb.{TrackerErrors, TrackerPresenter}
@@ -233,6 +233,37 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
     TrackerErrors.validation_msg(conn, "thread id is required")
   end
 
+  @spec generate_title(Conn.t(), map()) :: Conn.t()
+  def generate_title(conn, %{"thread_id" => raw_id}) do
+    with {:ok, id} <- parse_thread_id(raw_id),
+         {:ok, thread} <- TitleGenerator.generate_and_persist(id, Keyword.merge([mode: :magic], title_runner_opts())) do
+      json(conn, %{data: TrackerPresenter.assistant_thread(with_preview(thread))})
+    else
+      {:error, :not_found} ->
+        TrackerErrors.render(conn, :thread_not_found)
+
+      {:error, :invalid_thread_id} ->
+        TrackerErrors.render(conn, :invalid_thread_id)
+
+      {:error, :not_enough_context} ->
+        TrackerErrors.render(conn, :not_enough_context)
+
+      {:error, :no_answer} ->
+        TrackerErrors.render(conn, :no_answer)
+
+      {:error, :invalid_title} ->
+        TrackerErrors.validation_msg(conn, "title must be between 1 and 160 characters")
+
+      {:error, %Ecto.Changeset{} = changeset} ->
+        TrackerErrors.render(conn, changeset)
+
+      {:error, reason} ->
+        TrackerErrors.render(conn, reason)
+    end
+  end
+
+  def generate_title(conn, _params), do: TrackerErrors.validation_msg(conn, "thread id is required")
+
   @spec provision_workspace(Conn.t(), map()) :: Conn.t()
   def provision_workspace(conn, %{"thread_id" => raw_id}) do
     with {:ok, id} <- parse_thread_id(raw_id),
@@ -266,6 +297,13 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
   end
 
   defp parse_thread_id(_), do: {:error, :invalid_thread_id}
+
+  defp title_runner_opts do
+    case Application.get_env(:symphony_elixir, :title_generator_runner) do
+      runner when is_function(runner, 4) -> [runner: runner]
+      _ -> []
+    end
+  end
 
   defp put_opt(opts, _key, nil), do: opts
   defp put_opt(opts, _key, ""), do: opts

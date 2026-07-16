@@ -190,6 +190,40 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadControllerTest do
     assert %{"error" => %{"code" => "validation_failed"}} = json_response(conn, 422)
   end
 
+  test "POST generate_title persists an LLM title from the injected runner" do
+    previous_runner = Application.get_env(:symphony_elixir, :title_generator_runner)
+
+    Application.put_env(:symphony_elixir, :title_generator_runner, fn _workspace, _prompt, _issue, _opts ->
+      {:ok, %{assistant_message: "Title: Cleanup goapi GAM-19"}}
+    end)
+
+    on_exit(fn ->
+      if previous_runner,
+        do: Application.put_env(:symphony_elixir, :title_generator_runner, previous_runner),
+        else: Application.delete_env(:symphony_elixir, :title_generator_runner)
+    end)
+
+    {:ok, thread} =
+      History.create_freeform_thread(%{title: "Project session", workspace_path: System.tmp_dir!()})
+
+    {:ok, _} = History.append_message(thread, %{role: "user", content: "cleanup goapi"})
+    {:ok, _} = History.append_message(thread, %{role: "assistant", content: "Sure, drafting a plan."})
+
+    conn = post(authorize(), "/api/tracker/v1/assistant/threads/#{thread.id}/generate_title", %{})
+
+    assert %{"data" => %{"id" => id, "title" => "Cleanup goapi GAM-19"}} = json_response(conn, 200)
+    assert id == thread.id
+  end
+
+  test "POST generate_title returns not_enough_context without an exchange" do
+    {:ok, thread} =
+      History.create_freeform_thread(%{title: "Project session", workspace_path: System.tmp_dir!()})
+
+    conn = post(authorize(), "/api/tracker/v1/assistant/threads/#{thread.id}/generate_title", %{})
+
+    assert %{"error" => %{"code" => "not_enough_context"}} = json_response(conn, 422)
+  end
+
   test "PATCH rejects invalid labels" do
     {:ok, thread} = History.create_freeform_thread(%{title: "Keep", workspace_path: System.tmp_dir!()})
 
@@ -266,12 +300,12 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadControllerTest do
     assert %{"error" => %{"code" => "validation_failed"}} = json_response(invalid_id_conn, 422)
   end
 
-  test "DELETE maps unsupported scope to validation responses" do
+  test "DELETE removes legacy project-scoped threads and errored freeform threads" do
     {:ok, _project} = Context.ensure_project(%{name: "Delete Mapping", slug: "delete-mapping"})
     {:ok, project_thread} = History.ensure_thread("delete-mapping", %{workspace_path: "/tmp/delete-mapping"})
     {:ok, archived_project_thread} = History.archive_thread(project_thread.id)
 
-    unsupported_scope_conn =
+    project_delete_conn =
       delete(authorize(), "/api/tracker/v1/assistant/threads/#{archived_project_thread.id}")
 
     {:ok, freeform_thread} =
@@ -280,7 +314,8 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadControllerTest do
     {:ok, errored_thread} = History.update_thread(freeform_thread, %{status: "error"})
     errored_delete_conn = delete(authorize(), "/api/tracker/v1/assistant/threads/#{errored_thread.id}")
 
-    assert %{"error" => %{"code" => "validation_failed"}} = json_response(unsupported_scope_conn, 422)
+    assert response(project_delete_conn, 204) == ""
+    assert {:error, :not_found} = History.get_thread(archived_project_thread.id)
     assert response(errored_delete_conn, 204) == ""
     assert {:error, :not_found} = History.get_thread(errored_thread.id)
   end

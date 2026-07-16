@@ -20,7 +20,7 @@ defmodule SymphonyElixir.Assistant.TurnManager do
 
   use GenServer
 
-  alias SymphonyElixir.Assistant.{GoalRun, History}
+  alias SymphonyElixir.Assistant.{GoalRun, History, TitleGenerator}
 
   require Logger
 
@@ -872,8 +872,20 @@ defmodule SymphonyElixir.Assistant.TurnManager do
     status = finish_status(payload, result)
 
     maybe_push_turn_completed(thread, status)
+    maybe_schedule_auto_title(thread_id, status)
     broadcast_from(self(), thread_id, {:turn_status, status, payload})
   end
+
+  defp maybe_schedule_auto_title(thread_id, :finished) when is_integer(thread_id) do
+    _ =
+      Task.start(fn ->
+        TitleGenerator.maybe_auto_generate(thread_id)
+      end)
+
+    :ok
+  end
+
+  defp maybe_schedule_auto_title(_thread_id, _status), do: :ok
 
   defp maybe_push_turn_completed(thread, status) when is_map(thread) and status in [:finished, :failed] do
     dispatcher =

@@ -86,6 +86,15 @@ defmodule SymphonyElixirWeb.TrackerErrors do
   def render(conn, :no_answer),
     do: error(conn, 422, "no_answer", dgettext("errors", "Could not generate a commit message."))
 
+  def render(conn, :not_enough_context),
+    do:
+      error(
+        conn,
+        422,
+        "not_enough_context",
+        dgettext("errors", "Need at least one user and one assistant message to generate a title.")
+      )
+
   def render(conn, {:commit_failed, repo, reason}) do
     error(conn, 422, "commit_failed", dgettext("errors", "Failed to commit workspace changes."), %{
       repo: repo,

@@ -113,6 +113,7 @@ defmodule SymphonyElixirWeb.Router do
     patch("/assistant/threads/:thread_id", AssistantThreadController, :update)
     delete("/assistant/threads/:thread_id", AssistantThreadController, :delete)
     post("/assistant/threads/:thread_id/archive", AssistantThreadController, :archive)
+    post("/assistant/threads/:thread_id/generate_title", AssistantThreadController, :generate_title)
     post("/assistant/threads/:thread_id/workspace/provision", AssistantThreadController, :provision_workspace)
     get("/assistant/threads/:thread_id/contexts", AttachedContextController, :index_assistant)
     post("/assistant/threads/:thread_id/contexts", AttachedContextController, :create_assistant)

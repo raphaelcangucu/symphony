@@ -274,7 +274,14 @@ describe("sidebar capabilities", () => {
       },
     );
 
-    expect(ids(actions)).toEqual(["rename", "manage-labels", "toggle-review", "pin", "archive"]);
+    expect(ids(actions)).toEqual([
+      "rename",
+      "manage-labels",
+      "generate-title",
+      "toggle-review",
+      "pin",
+      "archive",
+    ]);
     expect(actions[0]).toMatchObject({ enabled: false });
     expect(actions[0].disabledReason?.trim()).not.toBe("");
     expect(actions[1]).toMatchObject({ enabled: true });
@@ -299,6 +306,7 @@ describe("sidebar capabilities", () => {
     expect(ids(actions)).toEqual([
       "rename",
       "manage-labels",
+      "generate-title",
       "toggle-review",
       "pin",
       "archive",
@@ -326,6 +334,7 @@ describe("sidebar capabilities", () => {
     expect(ids(actions)).toEqual([
       "rename",
       "manage-labels",
+      "generate-title",
       "toggle-review",
       "pin",
       "archive",

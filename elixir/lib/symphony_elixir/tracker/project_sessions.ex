@@ -8,7 +8,9 @@ defmodule SymphonyElixir.Tracker.ProjectSessions do
 
   @default_limit 20
   @max_limit 50
-  @thread_scopes ~w(project_session project_explore issue issue_session workspace_session)
+  # Include legacy `project` scope so older project chats still appear in the
+  # flat Project → Session sidebar (they still show on the Workspaces page via recents).
+  @thread_scopes ~w(project project_session project_explore issue issue_session workspace_session)
 
   @type row :: %{
           id: String.t(),
@@ -97,6 +99,7 @@ defmodule SymphonyElixir.Tracker.ProjectSessions do
     }
   end
 
+  defp thread_kind("project"), do: "chat"
   defp thread_kind("project_session"), do: "workspace_session"
   defp thread_kind("project_explore"), do: "chat"
   defp thread_kind("issue"), do: "authoring"

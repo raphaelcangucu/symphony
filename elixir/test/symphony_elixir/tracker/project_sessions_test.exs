@@ -57,6 +57,27 @@ defmodule SymphonyElixir.Tracker.ProjectSessionsTest do
     refute inspect(rows) =~ huge_description
   end
 
+  test "includes legacy project-scoped assistant threads as chat sessions" do
+    {:ok, thread} =
+      %Thread{}
+      |> Thread.changeset(%{
+        scope: "project",
+        project_slug: "sessions",
+        title: "Legacy project chat",
+        workspace_path: "/tmp/legacy-project-chat",
+        status: "active",
+        agent_kind: "codex"
+      })
+      |> Repo.insert()
+
+    assert {:ok, %{data: [row]}} = ProjectSessions.list("sessions", limit: 20)
+
+    assert row.id == "thread:#{thread.id}"
+    assert row.title == "Legacy project chat"
+    assert row.kind == "chat"
+    assert row.href == "/projects/sessions/workspaces/#{thread.id}"
+  end
+
   defp insert_thread!(title, updated_at) do
     {:ok, thread} =
       %Thread{}

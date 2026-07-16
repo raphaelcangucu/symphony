@@ -17,6 +17,7 @@ export const SIDEBAR_ACTION_LABELS: Readonly<Record<SidebarMenuActionId, string>
   pin: "Pin",
   unpin: "Unpin",
   rename: "Rename",
+  "generate-title": "Generate name",
   "copy-branch": "Copy branch",
   "copy-path": "Copy path",
   "manage-labels": "Manage labels",

@@ -173,6 +173,17 @@ export async function updateAssistantThread(
   return thread;
 }
 
+export async function generateAssistantThreadTitle(threadId: number): Promise<AssistantThread> {
+  requirePositiveInteger(threadId, "threadId");
+  const response = await http.post(
+    trackerPath(`/assistant/threads/${encodeURIComponent(String(threadId))}/generate_title`),
+  );
+  const thread = normalizeAssistantThread(unwrapData<BackendAssistantThreadDto>(response));
+  getCache.set(threadId, { value: thread, at: Date.now() });
+  listCache.clear();
+  return thread;
+}
+
 export async function deleteAssistantThread(threadId: number): Promise<void> {
   requirePositiveInteger(threadId, "threadId");
   await http.delete(trackerPath(`/assistant/threads/${encodeURIComponent(String(threadId))}`));

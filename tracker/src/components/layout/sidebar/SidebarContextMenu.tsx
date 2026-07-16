@@ -11,6 +11,7 @@ import {
   FolderTree,
   MessageSquarePlus,
   Pencil,
+  Sparkles,
   Pin,
   PinOff,
   Settings,
@@ -81,6 +82,7 @@ const SIDEBAR_ACTION_ICONS: Readonly<Record<SidebarMenuActionId, LucideIcon>> = 
   pin: Pin,
   unpin: PinOff,
   rename: Pencil,
+  "generate-title": Sparkles,
   "copy-branch": Copy,
   "copy-path": ClipboardCopy,
   "manage-labels": Tags,
@@ -244,6 +246,15 @@ export function SidebarContextMenu({
         openDialog({ type: "rename", targetType });
         return;
       }
+      case "generate-title":
+        if (node.kind === "session" && node.threadId !== null) {
+          void runDirect(action.id, {
+            action: "generate-thread-title",
+            projectSlug: node.projectSlug,
+            threadId: node.threadId,
+          });
+        }
+        return;
       case "manage-labels":
         if (node.kind !== "session") return;
         openDialog({

@@ -966,7 +966,7 @@ function chatSessionNode(
     projectSlug: input.projectSlug,
     workspaceId,
     sessionKind: "chat",
-    title: nonBlank(sourceThread?.title) ?? nonBlank(recent.title) ?? `Session ${threadIdentifier}`,
+    title: nonBlank(sourceThread?.title) ?? nonBlank(recent.title) ?? sessionFallbackTitle(threadIdentifier),
     subtitle: recent.identifier ?? recent.projectName ?? input.projectTitle,
     href: recentSessionPath(recent),
     statusKind,
@@ -1001,7 +1001,7 @@ function threadSessionNode(
     projectSlug: input.projectSlug,
     workspaceId,
     sessionKind: "chat",
-    title: nonBlank(thread.title) ?? `Session ${thread.id}`,
+    title: nonBlank(thread.title) ?? sessionFallbackTitle(thread.id),
     subtitle: thread.issueIdentifier ?? thread.projectName ?? input.projectTitle,
     href: projectSessionPath(input.projectSlug, thread.id),
     statusKind,
@@ -1205,6 +1205,17 @@ function nonBlank(value: string | null | undefined): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
+}
+
+function sessionFallbackTitle(threadId: number | string | null | undefined): string {
+  if (typeof threadId === "number" && Number.isInteger(threadId) && threadId > 0) {
+    return `Session ${threadId}`;
+  }
+  if (typeof threadId === "string") {
+    const trimmed = threadId.trim();
+    if (/^\d+$/.test(trimmed)) return `Session ${trimmed}`;
+  }
+  return "Session";
 }
 
 function requireNonBlank(value: unknown, fieldName: string): string {

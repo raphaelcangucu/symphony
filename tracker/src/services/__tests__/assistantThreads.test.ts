@@ -6,6 +6,7 @@ import {
   createIssueSessionThread,
   createProjectSessionThread,
   deleteAssistantThread,
+  generateAssistantThreadTitle,
   listAssistantThreads,
   normalizeAssistantThread,
   updateAssistantThread,
@@ -320,6 +321,25 @@ describe("updateAssistantThread", () => {
     await updateAssistantThread(8, { labels: [] });
 
     expect(http.patch).toHaveBeenCalledWith("/api/tracker/v1/assistant/threads/8", { labels: [] });
+  });
+
+  it("posts generate_title for a thread", async () => {
+    vi.mocked(http.post).mockResolvedValue({
+      data: {
+        data: {
+          id: 9,
+          scope: "freeform",
+          title: "Cleanup goapi GAM-19",
+          status: "active",
+          updated_at: "2026-07-16T00:00:00Z",
+        },
+      },
+    });
+
+    const thread = await generateAssistantThreadTitle(9);
+
+    expect(http.post).toHaveBeenCalledWith("/api/tracker/v1/assistant/threads/9/generate_title");
+    expect(thread.title).toBe("Cleanup goapi GAM-19");
   });
 
   it("rejects mixed supported and unknown enumerable own keys", async () => {
