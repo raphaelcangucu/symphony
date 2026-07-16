@@ -4,10 +4,14 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { KbAssetPreview } from "@/components/kb/KbAssetPreview";
-import { KbAssistantLauncher } from "@/components/kb/KbAssistantLauncher";
-import { KbAssistantPanel, type KbLivePageContext } from "@/components/kb/KbAssistantPanel";
+import { buildKbExtraContext } from "@/components/kb/kbExtraContext";
 import { KbCreatePageForm } from "@/components/kb/KbCreatePageForm";
 import { KbEditor, type KbEditorLiveContext } from "@/components/kb/KbEditor";
+import {
+  useMaestroHostControl,
+  useRegisterMaestroExtra,
+  useSetMaestroKbHandlers,
+} from "@/components/maestro/MaestroExtraContext";
 import { KbSidebar } from "@/components/kb/KbSidebar";
 import type { KbDeleteKind, KbTreeHandlers } from "@/components/kb/KbTreeList";
 import { useKbAllRepoTrees } from "@/hooks/useKbAllRepoTrees";
@@ -129,37 +133,50 @@ export function KbWorkspace({
   const [saving, setSaving] = useState(false);
   const [pageDraft, setPageDraft] = useState<KbPageDraft | null>(null);
   const [renameTarget, setRenameTarget] = useState<KbRenameTarget | null>(null);
-  const [assistantOpen, setAssistantOpen] = useState(false);
-  const [assistantRunning, setAssistantRunning] = useState(false);
+
+  const { hostControl } = useMaestroHostControl();
 
   // The editor registers a lazy getter for its live snapshot (body + selection);
-  // the assistant reads it at send time so it always sees the current document.
+  // the docked Maestro reads it at send time so it always sees the current document.
   const kbContextGetterRef = useRef<() => KbEditorLiveContext>(() => ({ body: "", selection: "" }));
 
   const handleRegisterContext = useCallback((getter: () => KbEditorLiveContext) => {
     kbContextGetterRef.current = getter;
   }, []);
 
-  const getKbContext = useCallback<() => KbLivePageContext>(() => kbContextGetterRef.current(), []);
+  const getKbContext = useCallback<() => KbEditorLiveContext>(() => kbContextGetterRef.current(), []);
 
-  const toggleAssistant = useCallback(() => setAssistantOpen((open) => !open), []);
-  const handleRunningChange = useCallback((running: boolean) => setAssistantRunning(running), []);
+  const openMaestro = useCallback(() => {
+    hostControl?.openPanel();
+  }, [hostControl]);
 
   const handleAssistantDocChanged = useCallback(() => {
     void reloadPage();
   }, [reloadPage]);
+
+  const kbAssistantActive = repoSlug && pagePath && page && !isAssetPath;
+
+  // Publish the live page snapshot into every Maestro message on this page, and
+  // let the host reload the editor after assistant-driven writes.
+  useRegisterMaestroExtra(
+    () => {
+      if (!kbAssistantActive || !repoSlug || !pagePath || !page) return undefined;
+      const { body, selection } = getKbContext();
+      return buildKbExtraContext({ repoSlug, pagePath, title: page.title, body, selection });
+    },
+    [kbAssistantActive, repoSlug, pagePath, page, getKbContext],
+  );
+
+  useSetMaestroKbHandlers(
+    kbAssistantActive ? { onDocumentChanged: handleAssistantDocChanged } : null,
+    [kbAssistantActive, handleAssistantDocChanged],
+  );
 
   // Reset the getter to a body-only fallback when navigating pages until the
   // remounted editor re-registers, so the assistant never serves a stale snapshot.
   useEffect(() => {
     kbContextGetterRef.current = () => ({ body: page?.body ?? "", selection: "" });
   }, [repoSlug, pagePath, page?.body]);
-
-  // The page binds the chat to a single (repo, path); drop a stale running pill
-  // when navigating to another document.
-  useEffect(() => {
-    setAssistantRunning(false);
-  }, [repoSlug, pagePath]);
 
   const activeTree = useMemo(
     () => (repoSlug ? (treesByRepo[repoSlug] ?? []) : []),
@@ -446,8 +463,7 @@ export function KbWorkspace({
                 syncState={syncState}
                 syncLoading={syncLoading}
                 onSync={() => void triggerSync()}
-                assistantActive={assistantOpen}
-                onToggleAssistant={toggleAssistant}
+                onToggleAssistant={openMaestro}
                 onRegisterContext={handleRegisterContext}
                 githubFileUrl={githubFileUrl}
                 pagePath={pagePath}
@@ -476,26 +492,6 @@ export function KbWorkspace({
           )}
         </div>
       </section>
-
-      {/* Keep the chat mounted while a turn runs so the launcher stays "online"
-          even after the panel is collapsed; only visually hide it when closed. */}
-      {(assistantOpen || assistantRunning) && repoSlug && pagePath && page && !isAssetPath ? (
-        <KbAssistantPanel
-          projectSlug={projectSlug}
-          repoSlug={repoSlug}
-          pagePath={pagePath}
-          pageTitle={page.title}
-          getContext={getKbContext}
-          onClose={() => setAssistantOpen(false)}
-          onDocumentChanged={handleAssistantDocChanged}
-          onRunningChange={handleRunningChange}
-          hidden={!assistantOpen}
-        />
-      ) : null}
-
-      {!assistantOpen && repoSlug && pagePath && page && !isAssetPath ? (
-        <KbAssistantLauncher running={assistantRunning} onClick={() => setAssistantOpen(true)} />
-      ) : null}
     </div>
   );
 }

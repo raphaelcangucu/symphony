@@ -4,7 +4,11 @@ import { useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
 import { ProjectAssistantPanel } from "@/components/assistant/ProjectAssistantPanel";
-import { useMaestroExtraGetter } from "@/components/maestro/MaestroExtraContext";
+import {
+  useMaestroExtraGetter,
+  useMaestroHostControl,
+  useMaestroKbHandlers,
+} from "@/components/maestro/MaestroExtraContext";
 import { MaestroLauncher } from "@/components/maestro/MaestroLauncher";
 import { Button } from "@/components/ui/button";
 import {
@@ -81,6 +85,8 @@ export function MaestroHost() {
   const { t } = useTranslation();
   const location = useLocation();
   const getPageExtra = useMaestroExtraGetter();
+  const { setHostControl } = useMaestroHostControl();
+  const kbHandlers = useMaestroKbHandlers();
 
   const ctx = useMemo(() => resolveMaestroContext(location.pathname), [location.pathname]);
 
@@ -114,6 +120,11 @@ export function MaestroHost() {
     setRunning(false);
   }, [ctxKey]);
 
+  const openPanel = useCallback(() => {
+    setOpen(true);
+    writePanelOpen(true);
+  }, []);
+
   const handleToggle = useCallback(() => {
     setOpen((prev) => {
       const next = !prev;
@@ -121,6 +132,13 @@ export function MaestroHost() {
       return next;
     });
   }, []);
+
+  // Expose an open control so page toolbars (e.g. the KB editor "Ask AI"
+  // button) can reveal the docked panel.
+  useEffect(() => {
+    setHostControl({ openPanel });
+    return () => setHostControl(null);
+  }, [setHostControl, openPanel]);
 
   const handleClose = useCallback(() => {
     setOpen(false);
@@ -189,6 +207,7 @@ export function MaestroHost() {
               kbPagePath={ctx.kind === "kb" ? ctx.pagePath : undefined}
               getExtraContext={getExtraContext}
               onRunningChange={setRunning}
+              onDocumentChanged={ctx.kind === "kb" ? kbHandlers?.onDocumentChanged : undefined}
             />
           </div>
         </aside>
