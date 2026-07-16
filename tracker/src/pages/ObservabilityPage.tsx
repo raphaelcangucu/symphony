@@ -18,6 +18,7 @@ import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
+import { useRegisterMaestroExtra } from "@/components/maestro/MaestroExtraContext";
 import { SessionAgentBadge } from "@/components/shared/SessionBadge";
 import { Button } from "@/components/ui/button";
 import type { AgentKind } from "@/types/issue";
@@ -227,6 +228,19 @@ export function ObservabilityPage() {
   );
   const rows = useMemo(() => flattenRows(visibleRuntimeViews), [visibleRuntimeViews]);
   const runningGroups = useMemo(() => groupRunningRows(rows), [rows]);
+
+  // Give the docked Maestro the current filter + runtime count so it can reason
+  // about what the operator is looking at on this page.
+  useRegisterMaestroExtra(
+    () => ({
+      surface: "observability",
+      observability: {
+        projectFilter: selectedProject === ALL_PROJECTS ? null : selectedProject,
+        runtimeCount: runtimes.length,
+      },
+    }),
+    [selectedProject, runtimes.length],
+  );
   const prMonitorEvaluations = useMemo(() => {
     const evaluations = prMonitor?.evaluations ?? [];
     if (selectedProject === ALL_PROJECTS) return evaluations;
