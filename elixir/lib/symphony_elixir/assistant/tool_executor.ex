@@ -585,6 +585,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     (DiscoveryTools.tool_specs() ++
        ProjectBoardTools.tool_specs() ++
        GitHubTools.tool_specs() ++
+       KnowledgeBaseTools.tool_specs() ++
        read_specs ++
        [GoalTools.assistant_tool_spec()] ++
        DynamicTool.tool_specs())
@@ -613,12 +614,33 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
         name in @github_tools ->
           wrap_for_codex(GitHubTools.execute(name, arguments, opts))
 
+        name in @kb_tools ->
+          # Home Maestro edits the personal KB by default; a project slug in the
+          # arguments targets that project's KB instead. execute/4 already routes
+          # "@user" and real project slugs to the right KB scope.
+          wrap_for_codex(execute(kb_scope_slug(arguments), name, arguments, opts))
+
         name in @freeform_project_agnostic_read_tools ->
           wrap_for_codex(ReadTools.execute(nil, name, arguments, opts))
 
         true ->
           codex_failure_response({:unsupported_tool, name})
       end
+    end
+  end
+
+  # Personal KB (`@user`) is the default freeform KB scope; a non-blank
+  # `project_slug` argument targets that project's KB instead.
+  defp kb_scope_slug(arguments) do
+    case Map.get(arguments, "project_slug") do
+      slug when is_binary(slug) ->
+        case String.trim(slug) do
+          "" -> "@user"
+          trimmed -> trimmed
+        end
+
+      _ ->
+        "@user"
     end
   end
 
