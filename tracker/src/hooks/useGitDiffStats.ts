@@ -58,9 +58,16 @@ export function useGitDiffStats({
   );
 
   useEffect(() => {
-    if (!enabled || !canFetch) {
+    if (!canFetch) {
       setStats([]);
       setWorkspace(null);
+      setError(null);
+      return;
+    }
+
+    // When temporarily disabled (e.g. Commits tab), keep the last workspace/stats
+    // so the modal subtitle does not flash "unavailable".
+    if (!enabled) {
       setError(null);
       return;
     }

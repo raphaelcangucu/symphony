@@ -1,5 +1,5 @@
 import { GitBranch, GitCompare } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { AssistantTasksToolbarToggle, type AssistantTasksDockControl } from "@/components/agent-activity";
@@ -12,6 +12,7 @@ import {
 import { WorkspaceDiffStatsChip } from "@/components/sessions/WorkspaceDiffStatsChip";
 import { useAssistantThreadMetadata } from "@/hooks/useAssistantThreadMetadata";
 import { useWorkspaceDiffStats } from "@/hooks/useWorkspaceDiffStats";
+import { consumePendingThreadSeed } from "@/lib/pendingThreadSeed";
 import { cn } from "@/lib/utils";
 import type { WorkspaceView } from "@/lib/workspaceRoutes";
 import type { RecentSession } from "@/types/recents";
@@ -30,7 +31,13 @@ export function AssistantSessionTabContent({
   relatedSessions = [],
 }: AssistantSessionTabContentProps) {
   const { t } = useTranslation();
+  const [composerSeedMessage, setComposerSeedMessage] = useState<string | null>(null);
   const thread = useAssistantThreadMetadata(projectSlug, threadId, relatedSessions);
+
+  useEffect(() => {
+    const seed = consumePendingThreadSeed(threadId);
+    if (seed) setComposerSeedMessage(seed);
+  }, [threadId]);
   const issueIdentifier = thread?.issueIdentifier?.trim() || null;
   // Bumping this counter opens the diff modal owned by the assistant panel's
   // launcher, so the toolbar button and the composer button share one modal
@@ -87,6 +94,7 @@ export function AssistantSessionTabContent({
             hideHeader
             diffRequestId={diffRequestId}
             contentMaxWidth="default"
+            composerSeedMessage={composerSeedMessage}
             onTasksDockControlChange={setTasksControl}
             onKnowledgeBaseControlChange={setKbControl}
           />
@@ -101,6 +109,7 @@ export function AssistantSessionTabContent({
             hideHeader
             diffRequestId={diffRequestId}
             contentMaxWidth="default"
+            composerSeedMessage={composerSeedMessage}
             onTasksDockControlChange={setTasksControl}
           />
         </div>

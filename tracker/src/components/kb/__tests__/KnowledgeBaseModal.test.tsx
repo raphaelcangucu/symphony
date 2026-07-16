@@ -106,4 +106,22 @@ describe("KnowledgeBaseModal", () => {
     expect(screen.queryByRole("tab", { name: "Changed docs" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Other doc" })).toBeInTheDocument();
   });
+
+  it("selects initialPath when the modal opens", async () => {
+    render(
+      <I18nextProvider i18n={i18n}>
+        <MemoryRouter>
+          <KnowledgeBaseModal
+            open
+            projectSlug="macro-markets"
+            initialPath="docs/market/other.md"
+            initialRepo="back"
+            onOpenChange={() => undefined}
+          />
+        </MemoryRouter>
+      </I18nextProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByText("back / market/other.md")).toBeInTheDocument());
+  });
 });

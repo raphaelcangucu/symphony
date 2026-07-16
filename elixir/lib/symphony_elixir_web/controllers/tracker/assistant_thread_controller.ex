@@ -57,7 +57,12 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
     # the autoincrement id we only learn after insert. Seed with the freeform root
     # as a placeholder, then immediately rewrite it to the per-thread path so the
     # document viewer scopes reads to this thread instead of the shared parent.
-    attrs = %{title: params["title"], workspace_path: AgentSession.freeform_workspace_root()}
+    attrs = %{
+      title: params["title"],
+      workspace_path: AgentSession.freeform_workspace_root(),
+      agent_kind: normalize_agent(params["agent_kind"]),
+      metadata: model_effort_metadata(params)
+    }
 
     with {:ok, thread} <- History.create_freeform_thread(attrs),
          {:ok, thread} <-
@@ -75,10 +80,7 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
         conn,
         %{"scope" => "project_session", "project_slug" => project_slug, "workspace_path" => workspace_path} = params
       ) do
-    attrs = %{
-      title: params["title"],
-      agent_kind: normalize_agent(params["agent_kind"])
-    }
+    attrs = project_session_attrs(params)
 
     with {:ok, %{path: normalized_path}} <- PathOwnership.validate(project_slug, workspace_path),
          {:ok, thread} <- History.create_workspace_session_thread(project_slug, normalized_path, attrs) do
@@ -89,10 +91,7 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
   end
 
   def create(conn, %{"scope" => "project_session", "project_slug" => project_slug} = params) do
-    attrs = %{
-      title: params["title"],
-      agent_kind: normalize_agent(params["agent_kind"])
-    }
+    attrs = project_session_attrs(params)
 
     with {:ok, thread} <- History.create_project_session_thread(project_slug, attrs) do
       render_created_thread(conn, thread)
@@ -306,6 +305,33 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
       clone_branch: params["clone_branch"]
     }
   end
+
+  defp project_session_attrs(params) do
+    %{
+      title: params["title"],
+      agent_kind: normalize_agent(params["agent_kind"]),
+      model: params["model"],
+      effort: params["effort"],
+      execution_mode: params["execution_mode"] || params["mode"]
+    }
+  end
+
+  defp model_effort_metadata(params) when is_map(params) do
+    %{}
+    |> maybe_put_meta_string("model", params["model"])
+    |> maybe_put_meta_string("effort", params["effort"])
+  end
+
+  defp maybe_put_meta_string(metadata, _key, nil), do: metadata
+
+  defp maybe_put_meta_string(metadata, key, value) when is_binary(value) do
+    case String.trim(value) do
+      "" -> metadata
+      trimmed -> Map.put(metadata, key, trimmed)
+    end
+  end
+
+  defp maybe_put_meta_string(metadata, _key, _value), do: metadata
 
   defp render_created_thread(conn, thread) do
     conn

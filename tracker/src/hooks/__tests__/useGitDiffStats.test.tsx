@@ -47,6 +47,27 @@ describe("useGitDiffStats", () => {
     expect(getGitDiffStats).not.toHaveBeenCalled();
   });
 
+  it("keeps the last workspace when disabled after a successful load", async () => {
+    vi.mocked(getGitDiffStats).mockResolvedValue({
+      stats: [{ repo: "frontend", branch: "feat/x", base: "main", filesChanged: 1, additions: 1, deletions: 0, untracked: 0 }],
+      workspace: { path: "/tmp/ws", available: true },
+    });
+
+    const { result, rerender } = renderHook(
+      ({ enabled }) => useGitDiffStats({ projectSlug: "demo", identifier: "ABC-1", type: "branch", enabled }),
+      { initialProps: { enabled: true } },
+    );
+
+    await waitFor(() => expect(result.current.workspace).toEqual({ path: "/tmp/ws", available: true }));
+
+    rerender({ enabled: false });
+
+    expect(result.current.workspace).toEqual({ path: "/tmp/ws", available: true });
+    expect(result.current.stats).toEqual([
+      { repo: "frontend", branch: "feat/x", base: "main", filesChanged: 1, additions: 1, deletions: 0, untracked: 0 },
+    ]);
+  });
+
   it("uses the thread stats endpoint when a threadId is given", async () => {
     vi.mocked(getThreadGitDiffStats).mockResolvedValue({
       stats: [],

@@ -71,6 +71,33 @@ defmodule SymphonyElixir.Evidence.CommitsTest do
     assert commit.message =~ "agent work"
   end
 
+  test "falls back to a resolvable integration ref when configured default is missing", %{tmp_dir: tmp_dir} do
+    repo = Path.join(tmp_dir, "advising")
+    File.mkdir_p!(repo)
+    sh!(repo, "git init -b pre-release")
+    sh!(repo, ~s(git config user.email "agent@test.local"))
+    sh!(repo, "git config user.name \"Symphony Agent\"")
+    sh!(repo, "echo base > README.md && git add README.md && git commit -m 'chore: base'")
+    sh!(repo, "git checkout -b feature/graphql")
+    sh!(repo, "echo work > work.txt && git add work.txt && git commit -m 'feat: graphql work'")
+    sh!(repo, "git remote add origin .")
+    sh!(repo, "git update-ref refs/remotes/origin/pre-release pre-release")
+    # Configured default points at a stale feature branch that is not on origin.
+    # Also no origin/HEAD — same shape as shallow advising clones.
+
+    workspace = Path.join(tmp_dir, "CDE-1131")
+    File.mkdir_p!(workspace)
+    File.rename!(repo, Path.join(workspace, "advising"))
+
+    assert {:ok, [commit]} =
+             Commits.list(workspace,
+               default_branches: %{"advising" => "feature/lti-group-sharing-CDE-1106"}
+             )
+
+    assert commit.repo == "advising"
+    assert commit.message =~ "graphql work"
+  end
+
   defp sh!(cwd, command) do
     {output, status} = System.cmd("bash", ["-lc", command], cd: cwd, stderr_to_stdout: true)
     assert status == 0, output

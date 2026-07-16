@@ -1,7 +1,10 @@
 # Nova sessão — modal Livre / Projeto
 
 **Date:** 2026-07-15  
-**Status:** draft for review  
+**Status:** implementing  
+**Note:** “Explorar projeto” creates a new `project_session` on the chosen
+workspace (not the singleton `project_explore` ensure), so each “Criar sessão”
+yields a distinct thread while keeping the explore intent in the UI.  
 **Primary surface:** `tracker` sidebar — `SidebarNewSessionFlow`  
 **Related:**
 [`2026-07-14-session-agent-mode-fields-design.md`](./2026-07-14-session-agent-mode-fields-design.md)
@@ -100,7 +103,8 @@ Subtipo segmented: `Issue` | `Explorar projeto`.
 **Explorar projeto**
 
 - **Workspace** visível, pré-preenchido com o default do projeto, editável.
-- Scope: `project_explore` no `workspace_path` escolhido.
+- Scope: `project_session` no `workspace_path` escolhido (nova thread a cada
+  create; o singleton `project_explore` continua na página Explore dedicada).
 
 ## 6. Create behavior
 

@@ -115,6 +115,13 @@ export default function GitDiffModal({
     enabled: diffActive,
   });
   const commits = useIssueCommitEvidence({ projectSlug, identifier, enabled: open && activeTab === "commits" && supportsCommits });
+  const workspaceInfo = repoStats.workspace ?? commits.workspace;
+  const workspaceLabel =
+    workspaceInfo?.available === true
+      ? workspaceInfo.path
+      : workspaceInfo?.available === false
+        ? t("issue.diff.workspaceUnavailable")
+        : "";
   const selectedCommit =
     commits.commits.find((commit) => commitKey(commit) === selectedCommitKey) ?? commits.commits[0] ?? null;
 
@@ -400,7 +407,7 @@ export default function GitDiffModal({
         <DialogHeader className="min-h-11 border-b bg-background px-3 py-2">
           <DialogTitle className="text-sm font-semibold">{t("issue.diff.title")}</DialogTitle>
           <DialogDescription className="truncate text-[11px]">
-            {(identifier ?? (threadId ? `thread #${threadId}` : ""))} · {repoStats.workspace?.available ? repoStats.workspace.path : t("issue.diff.workspaceUnavailable")}
+            {[identifier ?? (threadId ? `thread #${threadId}` : ""), workspaceLabel].filter(Boolean).join(" · ")}
           </DialogDescription>
         </DialogHeader>
 
@@ -575,10 +582,30 @@ export default function GitDiffModal({
             placeholder={t("issue.diff.commit.messagePlaceholder")}
             className="min-h-24 font-mono text-xs"
           />
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="absolute right-2 top-8 h-7 w-7"
+            aria-label={t("issue.diff.commit.generate")}
+            disabled={generatePending || !identifier}
+            onClick={() => void generateMessage()}
+          >
+            {generatePending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+          </Button>
+          {commitDialogError ? <p className="text-xs text-destructive">{commitDialogError}</p> : null}
         </div>
         <DialogFooter>
           <Button type="button" variant="outline" onClick={() => setCommitDialogOpen(false)} disabled={commitPending}>
             {t("common.cancel")}
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={!identifier || !canPush || pushPending}
+            onClick={() => void submitPush()}
+          >
+            {pushPending ? t("issue.diff.commit.pushing") : t("issue.diff.commit.push")}
           </Button>
           <Button type="button" onClick={() => void submitCommit()} disabled={commitPending || !commitMessage.trim()}>
             {commitPending ? t("issue.diff.commit.committing") : t("issue.diff.commit.submit")}

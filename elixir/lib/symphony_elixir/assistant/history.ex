@@ -751,12 +751,23 @@ defmodule SymphonyElixir.Assistant.History do
     with {:ok, normalized_slug} <- normalize_required_string(project_slug, :project_slug),
          {:ok, _project} <- Context.get_project(normalized_slug),
          {:ok, workspace} <- ProjectExploreWorkspace.ensure(normalized_slug, explore_workspace_opts(attrs)) do
+      execution_mode = normalize_execution_mode(Map.get(attrs, :execution_mode) || Map.get(attrs, "execution_mode"))
+
+      metadata =
+        attrs
+        |> Map.get(:metadata, Map.get(attrs, "metadata", %{}))
+        |> Map.new()
+        |> Map.put("execution_mode", execution_mode)
+        |> put_session_model_effort(attrs)
+
       attrs
+      |> Map.drop([:model, "model", :effort, "effort", :execution_mode, "execution_mode"])
       |> Map.put(:scope, "project_session")
       |> Map.put(:project_slug, normalized_slug)
       |> Map.put_new(:title, "Project session")
       |> Map.put_new(:workspace_path, workspace)
       |> Map.put_new(:status, "active")
+      |> Map.put(:metadata, metadata)
       |> then(&Thread.changeset(%Thread{}, &1))
       |> Repo.insert()
       |> notify_recents()

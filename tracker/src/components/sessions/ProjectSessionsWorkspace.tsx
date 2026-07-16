@@ -1,4 +1,4 @@
-import { Archive, FolderPlus, Trash2 } from "lucide-react";
+import { Archive, FolderPlus, Loader2, Plus, Trash2 } from "lucide-react";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
 import { IssueEnvironmentDock } from "@/components/sessions/IssueEnvironmentDock";
@@ -30,11 +30,13 @@ import {
   WorkspaceRemoveDialog,
   type WorkspaceRemoveTarget,
 } from "@/components/sessions/WorkspaceRemoveDialog";
+import { sessionToolbarIconButtonClassName } from "@/components/sessions/sessionToolbarStyles";
 import { EmptyState } from "@/components/ui/empty-state";
 import { WorkspaceTabBar } from "@/components/workspace/WorkspaceTabBar";
 import { useArchiveChat } from "@/hooks/useArchiveChat";
 import { useProjectSessions } from "@/hooks/useProjectSessions";
 import { useWorkspaceTabs } from "@/hooks/useWorkspaceTabs";
+import { createSiblingSession } from "@/lib/createSiblingSession";
 import { type ProjectSessionRow } from "@/lib/projectSessions";
 import {
   buildWorkspaceCards,
@@ -43,7 +45,6 @@ import {
   isWorkspaceRemovable,
   linkedSessionThreadIds,
 } from "@/lib/workspaceCards";
-import { archiveAssistantThread } from "@/services/assistantThreads";
 import { workspaceCloneRepoOptions } from "@/lib/workspaceCloneRepos";
 import { cn, SCROLLBAR_THIN } from "@/lib/utils";
 import {
@@ -63,6 +64,7 @@ import {
   projectSessionsPath,
   type WorkspaceView,
 } from "@/lib/workspaceRoutes";
+import { archiveAssistantThread, getAssistantThread } from "@/services/assistantThreads";
 import { dispatchIssueAgent } from "@/services/issueDispatch";
 import { removeWorkspaces } from "@/services/worktrees";
 import type { AgentExecution } from "@/types/agent-execution";
@@ -94,6 +96,8 @@ export function ProjectSessionsWorkspace({
   const [newWorkspaceOpen, setNewWorkspaceOpen] = useState(false);
   const [removeTarget, setRemoveTarget] = useState<WorkspaceRemoveTarget | null>(null);
   const [newSessionIssue, setNewSessionIssue] = useState<StartIssueSessionDialogIssue | null>(null);
+  const [siblingCreating, setSiblingCreating] = useState(false);
+  const siblingCreateInFlight = useRef(false);
   const { archiving, archiveChat } = useArchiveChat(() => void refetch());
 
   const canonicalTabs = useMemo(() => [createSessionsListTab(t("workspacesPage.title"))], [t]);
@@ -187,6 +191,26 @@ export function ProjectSessionsWorkspace({
     },
     [navigate, openTab, projectSlug],
   );
+
+  const handleCreateSiblingSession = useCallback(async () => {
+    if (activeTab?.kind !== "assistant-session" || siblingCreateInFlight.current) return;
+
+    siblingCreateInFlight.current = true;
+    setSiblingCreating(true);
+    try {
+      const source = await getAssistantThread(activeTab.threadId);
+      const created = await createSiblingSession({
+        ...source,
+        projectSlug: source.projectSlug?.trim() || projectSlug,
+      });
+      openAssistantSession(created.id, t("sessions.newSessionTitle"));
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : t("sessions.createFailed"));
+    } finally {
+      siblingCreateInFlight.current = false;
+      setSiblingCreating(false);
+    }
+  }, [activeTab, openAssistantSession, projectSlug, t]);
 
   const openAuthoringSession = useCallback(
     (session: AuthoringSessionRow) => {
@@ -469,6 +493,25 @@ export function ProjectSessionsWorkspace({
           onClose={handleCloseTab}
           ariaLabel={t("workspace.sessions.tabsAria")}
           shortcutHints
+          trailing={
+            activeTab?.kind === "assistant-session" ? (
+              <button
+                type="button"
+                aria-label={t("sessions.newSession")}
+                title={t("sessions.newSession")}
+                disabled={siblingCreating}
+                onClick={() => void handleCreateSiblingSession()}
+                className={sessionToolbarIconButtonClassName}
+                data-testid="sibling-session-button"
+              >
+                {siblingCreating ? (
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                ) : (
+                  <Plus className="h-4 w-4" aria-hidden />
+                )}
+              </button>
+            ) : null
+          }
         />
         {error ? <p className="shrink-0 px-1 text-sm text-destructive">{error}</p> : null}
 

@@ -9,7 +9,6 @@ export function ProjectAssistantRoute() {
   const { projectSlug, view } = useWorkspace();
   const [composerSeedMessage, setComposerSeedMessage] = useState<string | null>(null);
   const [kbDocumentReferences, setKbDocumentReferences] = useState<string[]>([]);
-  const [requestedKbPath, setRequestedKbPath] = useState<string | null>(null);
 
   // One-shot: when the user clicks "Preparar ambiente" we stash a project
   // handoff and navigate here. Consume it and seed the composer with the
@@ -27,7 +26,6 @@ export function ProjectAssistantRoute() {
       view={view}
       mode="page"
       onKbDocumentReferencesChanged={setKbDocumentReferences}
-      onOpenDocumentPath={setRequestedKbPath}
       composerSeedMessage={composerSeedMessage}
     />
   );
@@ -56,7 +54,6 @@ export function ProjectAssistantRoute() {
           <AssistantKbDocumentsPanel
             projectSlug={projectSlug}
             citedPaths={kbDocumentReferences}
-            requestedPath={requestedKbPath}
           />
         </aside>
       ) : null}

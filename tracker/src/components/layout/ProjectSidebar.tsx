@@ -20,6 +20,7 @@ import {
   type SidebarCallbackAction,
   type SidebarPreferenceAction,
 } from "@/hooks/useSidebarActions";
+import { stashPendingThreadSeed } from "@/lib/pendingThreadSeed";
 import { resolveSidebarRouteSelection } from "@/lib/sidebarRouteResolution";
 import { cn } from "@/lib/utils";
 import type {
@@ -414,10 +415,19 @@ export function ProjectSidebar({ variant = "desktop" }: ProjectSidebarProps) {
         initialWorkspaceId={newSessionSeed.workspaceId}
         onOpenChange={setNewSessionOpen}
         ensureProjectExpanded={ensureProjectExpanded}
-        onCreated={(projectSlug, threadId) => {
+        onCreated={(result) => {
           setNewSessionOpen(false);
-          navigate(`/projects/${encodeURIComponent(projectSlug)}/workspaces/${threadId}`);
-          void reloadProjectBranch(projectSlug);
+          if (result.seed) {
+            stashPendingThreadSeed(result.threadId, result.seed);
+          }
+          if (result.scope === "freeform" || !result.projectSlug) {
+            navigate(`/assistant/${result.threadId}`);
+            return;
+          }
+          navigate(
+            `/projects/${encodeURIComponent(result.projectSlug)}/workspaces/${result.threadId}`,
+          );
+          void reloadProjectBranch(result.projectSlug);
         }}
       />
 

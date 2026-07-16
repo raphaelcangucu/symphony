@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { ExecutionSettingsFields } from "@/components/assistant/ExecutionSettingsFields";
 import { NewStandaloneWorkspaceDialog } from "@/components/sessions/NewStandaloneWorkspaceDialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,21 +14,44 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import type { SidebarRouteSelection } from "@/lib/sidebarRouteResolution";
+import { Textarea } from "@/components/ui/textarea";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import {
+  catalogFor,
+  defaultComposerSettings,
+  fallbackCatalogBundle,
+  type AssistantCatalogBundle,
+} from "@/lib/assistantSettings";
+import type { SidebarRouteSelection } from "@/lib/sidebarRouteResolution";
+import { cn } from "@/lib/utils";
+import { workspaceCloneRepoOptions } from "@/lib/workspaceCloneRepos";
+import { fetchAssistantCatalogBundle } from "@/services/assistant";
+import {
+  createFreeformThread,
   createIssueSessionThread,
   createProjectSessionThread,
 } from "@/services/assistantThreads";
-import { workspaceCloneRepoOptions } from "@/lib/workspaceCloneRepos";
+import { listIssues } from "@/services/issues";
 import { getProject } from "@/services/projects";
+import type { AgentKind, Issue } from "@/types/issue";
 import type { WorkspaceRepository } from "@/types/repository";
 import type { SidebarProjectNode, SidebarWorkspaceNode } from "@/types/sidebar";
 
 const MAX_TITLE_LENGTH = 160;
+const MAX_SEED_LENGTH = 8000;
 const SELECT_CLASS = "h-9 w-full min-w-0 rounded-md border bg-background px-2";
-const SUPPORTED_AGENT_KINDS = ["codex", "claude", "cursor"] as const;
-type SupportedAgentKind = (typeof SUPPORTED_AGENT_KINDS)[number];
-type FlowPhase = "confirm" | "edit" | "select";
+const SEGMENT_CLASS =
+  "inline-flex h-9 flex-1 items-center justify-center rounded-md px-3 text-sm font-medium transition-colors";
+
+export type SessionTopType = "livre" | "projeto";
+export type ProjectSessionKind = "issue" | "explore";
+
+export interface SidebarNewSessionCreated {
+  readonly scope: "freeform" | "project_session" | "issue_session";
+  readonly projectSlug: string | null;
+  readonly threadId: number;
+  readonly seed?: string;
+}
 
 export interface SidebarNewSessionFlowProps {
   readonly open: boolean;
@@ -37,7 +61,7 @@ export interface SidebarNewSessionFlowProps {
   readonly initialWorkspaceId?: string | null;
   onOpenChange(open: boolean): void;
   ensureProjectExpanded?(projectId: string): void | Promise<void>;
-  onCreated(projectSlug: string, threadId: number): void;
+  onCreated(result: SidebarNewSessionCreated): void;
 }
 
 export function SidebarNewSessionFlow({
@@ -52,11 +76,20 @@ export function SidebarNewSessionFlow({
 }: SidebarNewSessionFlowProps) {
   const { t } = useTranslation();
   const projects = useMemo(() => safeProjects(tree), [tree]);
+  const [topType, setTopType] = useState<SessionTopType>("livre");
+  const [projectKind, setProjectKind] = useState<ProjectSessionKind>("explore");
   const [projectId, setProjectId] = useState("");
   const [workspaceId, setWorkspaceId] = useState("");
+  const [issueQuery, setIssueQuery] = useState("");
+  const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null);
+  const [issueResults, setIssueResults] = useState<Issue[]>([]);
+  const [issuesLoading, setIssuesLoading] = useState(false);
   const [title, setTitle] = useState("");
-  const [agentKind, setAgentKind] = useState<SupportedAgentKind | "">("");
-  const [phase, setPhase] = useState<FlowPhase>("select");
+  const [seed, setSeed] = useState("");
+  const [agent, setAgent] = useState<AgentKind>("codex");
+  const [model, setModel] = useState<string | null>(null);
+  const [effort, setEffort] = useState<string | null>(null);
+  const [bundle, setBundle] = useState<AssistantCatalogBundle>(() => fallbackCatalogBundle());
   const [submitting, setSubmitting] = useState(false);
   const [serviceError, setServiceError] = useState<string | null>(null);
   const [newWorkspaceOpen, setNewWorkspaceOpen] = useState(false);
@@ -67,9 +100,8 @@ export function SidebarNewSessionFlow({
   const submitGeneration = useRef(0);
   const openRef = useRef(open);
   const initializedSelectionKey = useRef<string | null>(null);
-  const routeRestorePending = useRef(false);
   const userTouchedWorkspace = useRef(false);
-  const requestedWorkspaceIdRef = useRef<string | null>(null);
+  const debouncedIssueQuery = useDebouncedValue(issueQuery, 200);
 
   openRef.current = open;
 
@@ -78,27 +110,33 @@ export function SidebarNewSessionFlow({
     if (!selectedProject) return [];
     return workspaceCloneRepoOptions(projectRepos(selectedProject), configuredRepos);
   }, [configuredRepos, selectedProject]);
-  const workspaces = selectedProject
-    ? [...selectedProject.workspaces, ...selectedProject.overflowWorkspaces]
-    : [];
+  const workspaces = useMemo(() => {
+    if (!selectedProject) return [] as SidebarWorkspaceNode[];
+    return [...selectedProject.workspaces, ...selectedProject.overflowWorkspaces].filter(
+      (workspace) =>
+        workspace.workspaceKind !== "orphan" &&
+        Boolean(workspace.inventory?.path?.startsWith("/")),
+    );
+  }, [selectedProject]);
   const selectedWorkspace =
     workspaces.find((workspace) => workspace.id === workspaceId) ?? null;
-  const requestedWorkspaceId =
-    requestedWorkspaceIdRef.current ?? initialWorkspaceId ?? selection.workspaceId;
-  const routeWorkspaceMissing =
-    Boolean(selectedProject?.loadState === "ready") &&
-    Boolean(requestedWorkspaceId) &&
-    !workspaces.some((workspace) => workspace.id === requestedWorkspaceId) &&
-    !selectedWorkspace;
 
   useEffect(() => {
     if (!open) {
       submitGeneration.current += 1;
+      setTopType("livre");
+      setProjectKind("explore");
       setProjectId("");
       setWorkspaceId("");
+      setIssueQuery("");
+      setSelectedIssue(null);
+      setIssueResults([]);
       setTitle("");
-      setAgentKind("");
-      setPhase("select");
+      setSeed("");
+      setAgent("codex");
+      setModel(null);
+      setEffort(null);
+      setBundle(fallbackCatalogBundle());
       setSubmitting(false);
       setServiceError(null);
       setNewWorkspaceOpen(false);
@@ -106,9 +144,7 @@ export function SidebarNewSessionFlow({
       successDelivered.current = false;
       submissionInFlight.current = false;
       initializedSelectionKey.current = null;
-      routeRestorePending.current = false;
       userTouchedWorkspace.current = false;
-      requestedWorkspaceIdRef.current = null;
       return;
     }
 
@@ -131,19 +167,14 @@ export function SidebarNewSessionFlow({
       initialProjectId,
       initialWorkspaceId,
     );
-    requestedWorkspaceIdRef.current = initial.requestedWorkspaceId;
+    setTopType(initial.projectId ? "projeto" : "livre");
+    setProjectKind(initial.issueHint ? "issue" : "explore");
     setProjectId(initial.projectId);
     setWorkspaceId(initial.workspaceId);
-
-    const project =
-      projects.find((candidate) => candidate.id === initial.projectId) ?? null;
-    const workspaceReady =
-      Boolean(initial.workspaceId) && project?.loadState === "ready";
-    routeRestorePending.current =
-      Boolean(initial.projectId) &&
-      Boolean(initial.requestedWorkspaceId || selection.sessionId) &&
-      !workspaceReady;
-    setPhase(workspaceReady ? "confirm" : "select");
+    setIssueQuery(initial.issueHint ?? "");
+    setSelectedIssue(null);
+    setTitle("");
+    setSeed("");
   }, [
     initialProjectId,
     initialWorkspaceId,
@@ -155,58 +186,36 @@ export function SidebarNewSessionFlow({
   ]);
 
   useEffect(() => {
-    if (!open || !projectId || userTouchedWorkspace.current) return;
-
+    if (!open || topType !== "projeto" || !projectId || userTouchedWorkspace.current) return;
     const project = projects.find((candidate) => candidate.id === projectId);
-    if (!project) {
-      setProjectId("");
-      setWorkspaceId("");
-      setPhase("select");
-      return;
-    }
+    if (!project || project.loadState !== "ready") return;
 
-    if (project.loadState !== "ready") return;
-
-    const restored = resolveWorkspaceForRoute(
-      project,
-      selection,
-      initialWorkspaceId ?? requestedWorkspaceIdRef.current,
-    );
-
-    if (restored) {
-      if (workspaceId !== restored.id) setWorkspaceId(restored.id);
-      if (routeRestorePending.current || phase === "select") {
-        routeRestorePending.current = false;
-        setPhase("confirm");
-      }
-      return;
-    }
-
-    if (routeRestorePending.current) {
-      routeRestorePending.current = false;
-      if (workspaceId) setWorkspaceId("");
-      setPhase("select");
-    } else if (
-      workspaceId &&
-      ![...project.workspaces, ...project.overflowWorkspaces].some(
+    if (workspaceId) {
+      const stillThere = [...project.workspaces, ...project.overflowWorkspaces].some(
         (workspace) => workspace.id === workspaceId,
-      )
-    ) {
-      setWorkspaceId("");
+      );
+      if (!stillThere) setWorkspaceId("");
+      return;
     }
+
+    const preferred =
+      resolveWorkspaceForRoute(project, selection, initialWorkspaceId) ??
+      defaultExploreWorkspace(project);
+    if (preferred) setWorkspaceId(preferred.id);
   }, [
     initialWorkspaceId,
     open,
-    phase,
     projectId,
     projects,
     selection,
+    topType,
     workspaceId,
   ]);
 
   useEffect(() => {
     if (
       !open ||
+      topType !== "projeto" ||
       !selectedProject ||
       selectedProject.loadState === "ready" ||
       selectedProject.loadState === "error" ||
@@ -216,100 +225,56 @@ export function SidebarNewSessionFlow({
     }
     loadedRequests.current.add(selectedProject.id);
     void ensureProjectExpanded?.(selectedProject.id);
-  }, [ensureProjectExpanded, open, selectedProject]);
+  }, [ensureProjectExpanded, open, selectedProject, topType]);
 
-  const unavailableReason = submissionUnavailableReason(
-    selectedProject,
-    selectedWorkspace,
-    t,
-  );
-
-  function changeProject(nextProjectId: string) {
-    userTouchedWorkspace.current = true;
-    routeRestorePending.current = false;
-    setProjectId(nextProjectId);
-    setWorkspaceId("");
-    setServiceError(null);
-    if (phase === "confirm") setPhase("edit");
-  }
-
-  function changeWorkspace(nextWorkspaceId: string) {
-    userTouchedWorkspace.current = true;
-    routeRestorePending.current = false;
-    setWorkspaceId(nextWorkspaceId);
-    setServiceError(null);
-  }
-
-  async function submit() {
-    if (
-      phase === "edit" ||
-      submissionInFlight.current ||
-      submitting ||
-      unavailableReason ||
-      !selectedProject ||
-      !selectedWorkspace
-    ) {
+  useEffect(() => {
+    if (!open) return;
+    let active = true;
+    const slug = selectedProject?.projectSlug;
+    if (!slug) {
+      setBundle(fallbackCatalogBundle());
       return;
     }
-    const generation = ++submitGeneration.current;
-    submissionInFlight.current = true;
-    setSubmitting(true);
-    setServiceError(null);
+    void fetchAssistantCatalogBundle(slug)
+      .then((next) => {
+        if (!active) return;
+        setBundle(next);
+        const defaults = defaultComposerSettings(catalogFor(next, agent));
+        setModel((current) => current ?? defaults.model);
+        setEffort((current) => current ?? defaults.effort);
+      })
+      .catch(() => {
+        if (!active) return;
+        setBundle(fallbackCatalogBundle());
+      });
+    return () => {
+      active = false;
+    };
+  }, [agent, open, selectedProject?.projectSlug]);
 
-    try {
-      const input = {
-        ...(title.trim() ? { title: title.trim() } : {}),
-        ...(agentKind ? { agentKind } : {}),
-        workspacePath: selectedWorkspace.inventory!.path,
-      };
-      const thread =
-        selectedWorkspace.workspaceKind === "issue" ||
-        selectedWorkspace.workspaceKind === "parallel"
-          ? await createIssueSessionThread(
-              selectedProject.projectSlug,
-              selectedWorkspace.issueIdentifier!,
-              input,
-            )
-          : await createProjectSessionThread(selectedProject.projectSlug, input);
-      if (
-        generation !== submitGeneration.current ||
-        !openRef.current ||
-        successDelivered.current
-      ) {
-        return;
-      }
-      complete(selectedProject.projectSlug, thread.id);
-    } catch (cause) {
-      if (generation !== submitGeneration.current || !openRef.current) return;
-      setServiceError(
-        cause instanceof Error
-          ? cause.message
-          : t("layout.sidebar.newSession.serviceError"),
-      );
-    } finally {
-      if (generation !== submitGeneration.current) return;
-      submissionInFlight.current = false;
-      setSubmitting(false);
+  useEffect(() => {
+    if (!open || topType !== "projeto" || projectKind !== "issue" || !selectedProject) {
+      setIssueResults([]);
+      return;
     }
-  }
-
-  function complete(projectSlug: string, threadId: number) {
-    if (successDelivered.current || !openRef.current) return;
-    successDelivered.current = true;
-    onOpenChange(false);
-    onCreated(projectSlug, threadId);
-  }
-
-  function handleDialogOpenChange(next: boolean) {
-    if (!next && (submitting || submissionInFlight.current)) return;
-    if (!next && newWorkspaceOpen) return;
-    onOpenChange(next);
-  }
-
-  function handleWorkspaceDialogOpenChange(next: boolean) {
-    setNewWorkspaceOpen(next);
-    if (!next) setConfiguredRepos([]);
-  }
+    let active = true;
+    setIssuesLoading(true);
+    void listIssues(selectedProject.projectSlug, {
+      search: debouncedIssueQuery.trim() || undefined,
+    })
+      .then((loaded) => {
+        if (active) setIssueResults(loaded);
+      })
+      .catch(() => {
+        if (active) setIssueResults([]);
+      })
+      .finally(() => {
+        if (active) setIssuesLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [debouncedIssueQuery, open, projectKind, selectedProject, topType]);
 
   useEffect(() => {
     if (!newWorkspaceOpen || !selectedProject) return;
@@ -326,24 +291,146 @@ export function SidebarNewSessionFlow({
     };
   }, [newWorkspaceOpen, selectedProject]);
 
+  const unavailableReason = submissionUnavailableReason({
+    topType,
+    projectKind,
+    project: selectedProject,
+    workspace: selectedWorkspace,
+    issue: selectedIssue,
+    t,
+  });
+
+  function changeProject(nextProjectId: string) {
+    userTouchedWorkspace.current = false;
+    setProjectId(nextProjectId);
+    setWorkspaceId("");
+    setSelectedIssue(null);
+    setIssueQuery("");
+    setServiceError(null);
+  }
+
+  function changeWorkspace(nextWorkspaceId: string) {
+    userTouchedWorkspace.current = true;
+    setWorkspaceId(nextWorkspaceId);
+    setServiceError(null);
+  }
+
+  function resolveTitle(): string | undefined {
+    const explicit = title.trim();
+    if (explicit) return explicit.slice(0, MAX_TITLE_LENGTH);
+    const fromSeed = seed.trim();
+    if (fromSeed) return fromSeed.slice(0, MAX_TITLE_LENGTH);
+    if (selectedIssue) {
+      return `${selectedIssue.identifier} ${selectedIssue.title}`.trim().slice(0, MAX_TITLE_LENGTH);
+    }
+    return t("layout.sidebar.newSession.fallbackTitle");
+  }
+
+  async function submit() {
+    if (submissionInFlight.current || submitting || unavailableReason) return;
+    if (topType === "projeto" && projectKind === "issue" && (!selectedProject || !selectedIssue)) {
+      return;
+    }
+    if (
+      topType === "projeto" &&
+      projectKind === "explore" &&
+      (!selectedProject || !selectedWorkspace?.inventory?.path)
+    ) {
+      return;
+    }
+
+    const generation = ++submitGeneration.current;
+    submissionInFlight.current = true;
+    setSubmitting(true);
+    setServiceError(null);
+
+    const resolvedTitle = resolveTitle();
+    const seedTrimmed = seed.trim();
+    const createInput = {
+      ...(resolvedTitle ? { title: resolvedTitle } : {}),
+      agentKind: agent,
+      ...(model ? { model } : {}),
+      ...(effort ? { effort } : {}),
+    };
+
+    try {
+      let result: SidebarNewSessionCreated;
+      if (topType === "livre") {
+        const thread = await createFreeformThread(createInput);
+        result = {
+          scope: "freeform",
+          projectSlug: null,
+          threadId: thread.id,
+          ...(seedTrimmed ? { seed: seedTrimmed } : {}),
+        };
+      } else if (projectKind === "issue" && selectedProject && selectedIssue) {
+        const thread = await createIssueSessionThread(
+          selectedProject.projectSlug,
+          selectedIssue.identifier,
+          createInput,
+        );
+        result = {
+          scope: "issue_session",
+          projectSlug: selectedProject.projectSlug,
+          threadId: thread.id,
+          ...(seedTrimmed ? { seed: seedTrimmed } : {}),
+        };
+      } else if (selectedProject && selectedWorkspace?.inventory?.path) {
+        const thread = await createProjectSessionThread(selectedProject.projectSlug, {
+          ...createInput,
+          workspacePath: selectedWorkspace.inventory.path,
+        });
+        result = {
+          scope: "project_session",
+          projectSlug: selectedProject.projectSlug,
+          threadId: thread.id,
+          ...(seedTrimmed ? { seed: seedTrimmed } : {}),
+        };
+      } else {
+        return;
+      }
+
+      if (
+        generation !== submitGeneration.current ||
+        !openRef.current ||
+        successDelivered.current
+      ) {
+        return;
+      }
+      complete(result);
+    } catch (cause) {
+      if (generation !== submitGeneration.current || !openRef.current) return;
+      setServiceError(
+        cause instanceof Error
+          ? cause.message
+          : t("layout.sidebar.newSession.serviceError"),
+      );
+    } finally {
+      if (generation !== submitGeneration.current) return;
+      submissionInFlight.current = false;
+      setSubmitting(false);
+    }
+  }
+
+  function complete(result: SidebarNewSessionCreated) {
+    if (successDelivered.current || !openRef.current) return;
+    successDelivered.current = true;
+    onOpenChange(false);
+    onCreated(result);
+  }
+
+  function handleDialogOpenChange(next: boolean) {
+    if (!next && (submitting || submissionInFlight.current)) return;
+    if (!next && newWorkspaceOpen) return;
+    onOpenChange(next);
+  }
+
   function retryProject() {
     if (!selectedProject || !ensureProjectExpanded) return;
     loadedRequests.current.delete(selectedProject.id);
     loadedRequests.current.add(selectedProject.id);
     void ensureProjectExpanded(selectedProject.id);
   }
-
-  function reviewSelection() {
-    if (!selectedProject || selectedProject.loadState !== "ready" || !selectedWorkspace) {
-      return;
-    }
-    setPhase("confirm");
-  }
-
-  const showSelectors = phase !== "confirm";
-  const agentLabel = agentKind
-    ? t(`assistant.catalog.agents.${agentKind}`)
-    : t("layout.sidebar.newSession.defaultAgent");
 
   const sessionDialogOpen = open && !newWorkspaceOpen;
 
@@ -359,43 +446,64 @@ export function SidebarNewSessionFlow({
           </DialogHeader>
 
           <div className="min-w-0 space-y-3">
-            {phase === "confirm" && selectedProject && selectedWorkspace ? (
-              <div
-                data-testid="new-session-confirmation"
-                className="space-y-1 rounded-md border bg-muted/30 px-3 py-2 text-sm"
-              >
-                <p>
-                  <span className="text-muted-foreground">
-                    {t("layout.sidebar.newSession.project")}:{" "}
-                  </span>
-                  {selectedProject.title}
-                </p>
-                <p>
-                  <span className="text-muted-foreground">
-                    {t("layout.sidebar.newSession.workspace")}:{" "}
-                  </span>
-                  {selectedWorkspace.title}
-                </p>
-                <p>
-                  <span className="text-muted-foreground">
-                    {t("layout.sidebar.newSession.agent")}:{" "}
-                  </span>
-                  {agentLabel}
-                </p>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="mt-1 h-7 px-2"
-                  disabled={submitting}
-                  onClick={() => setPhase("edit")}
-                >
-                  {t("layout.sidebar.newSession.change")}
-                </Button>
-              </div>
-            ) : null}
+            <label className="grid gap-1 text-sm">
+              <span>{t("layout.sidebar.newSession.sessionTitle")}</span>
+              <Input
+                aria-label={t("layout.sidebar.newSession.sessionTitle")}
+                value={title}
+                maxLength={MAX_TITLE_LENGTH}
+                disabled={submitting}
+                placeholder={t("layout.sidebar.newSession.sessionTitleOptional")}
+                onChange={(event) => setTitle(event.target.value)}
+              />
+            </label>
 
-            {showSelectors ? (
+            <fieldset className="grid gap-1 text-sm">
+              <legend className="mb-1">{t("layout.sidebar.newSession.type")}</legend>
+              <div className="flex gap-1 rounded-lg border bg-muted/40 p-1">
+                <button
+                  type="button"
+                  className={cn(
+                    SEGMENT_CLASS,
+                    topType === "livre"
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                  aria-pressed={topType === "livre"}
+                  disabled={submitting}
+                  onClick={() => {
+                    setTopType("livre");
+                    setServiceError(null);
+                  }}
+                >
+                  {t("layout.sidebar.newSession.typeFree")}
+                </button>
+                <button
+                  type="button"
+                  className={cn(
+                    SEGMENT_CLASS,
+                    topType === "projeto"
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                  aria-pressed={topType === "projeto"}
+                  disabled={submitting}
+                  onClick={() => {
+                    setTopType("projeto");
+                    setServiceError(null);
+                  }}
+                >
+                  {t("layout.sidebar.newSession.typeProject")}
+                </button>
+              </div>
+              {topType === "livre" ? (
+                <p className="text-xs text-muted-foreground">
+                  {t("layout.sidebar.newSession.freeHint")}
+                </p>
+              ) : null}
+            </fieldset>
+
+            {topType === "projeto" ? (
               <>
                 <label className="grid gap-1 text-sm">
                   <span>{t("layout.sidebar.newSession.project")}</span>
@@ -415,77 +523,180 @@ export function SidebarNewSessionFlow({
                   </select>
                 </label>
 
-                <label className="grid gap-1 text-sm">
-                  <span>{t("layout.sidebar.newSession.workspace")}</span>
-                  <select
-                    aria-label={t("layout.sidebar.newSession.workspace")}
-                    className={SELECT_CLASS}
-                    value={workspaceId}
-                    disabled={
-                      !selectedProject ||
-                      selectedProject.loadState !== "ready" ||
-                      submitting
-                    }
-                    onChange={(event) => changeWorkspace(event.target.value)}
-                  >
-                    <option value="">{t("layout.sidebar.newSession.selectWorkspace")}</option>
-                    {workspaces.map((workspace) => (
-                      <option key={workspace.id} value={workspace.id}>
-                        {workspace.title}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <fieldset className="grid gap-1 text-sm">
+                  <legend className="mb-1">
+                    {t("layout.sidebar.newSession.projectKind")}
+                  </legend>
+                  <div className="flex gap-1 rounded-lg border bg-muted/40 p-1">
+                    <button
+                      type="button"
+                      className={cn(
+                        SEGMENT_CLASS,
+                        projectKind === "issue"
+                          ? "bg-background text-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground",
+                      )}
+                      aria-pressed={projectKind === "issue"}
+                      disabled={submitting}
+                      onClick={() => {
+                        setProjectKind("issue");
+                        setServiceError(null);
+                      }}
+                    >
+                      {t("layout.sidebar.newSession.kindIssue")}
+                    </button>
+                    <button
+                      type="button"
+                      className={cn(
+                        SEGMENT_CLASS,
+                        projectKind === "explore"
+                          ? "bg-background text-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground",
+                      )}
+                      aria-pressed={projectKind === "explore"}
+                      disabled={submitting}
+                      onClick={() => {
+                        setProjectKind("explore");
+                        setServiceError(null);
+                      }}
+                    >
+                      {t("layout.sidebar.newSession.kindExplore")}
+                    </button>
+                  </div>
+                </fieldset>
 
-                {selectedProject ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={submitting}
-                    onClick={() => setNewWorkspaceOpen(true)}
-                  >
-                    {t("layout.sidebar.newSession.createWorkspace")}
-                  </Button>
-                ) : null}
+                {projectKind === "issue" ? (
+                  <div className="grid gap-1 text-sm">
+                    <label htmlFor="new-session-issue" className="text-sm">
+                      {t("layout.sidebar.newSession.issue")}
+                    </label>
+                    <Input
+                      id="new-session-issue"
+                      aria-label={t("layout.sidebar.newSession.issue")}
+                      value={
+                        selectedIssue
+                          ? `${selectedIssue.identifier} — ${selectedIssue.title}`
+                          : issueQuery
+                      }
+                      disabled={submitting || !selectedProject}
+                      placeholder={t("layout.sidebar.newSession.issuePlaceholder")}
+                      onChange={(event) => {
+                        setSelectedIssue(null);
+                        setIssueQuery(event.target.value);
+                      }}
+                    />
+                    {selectedIssue ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 justify-start px-2"
+                        disabled={submitting}
+                        onClick={() => {
+                          setSelectedIssue(null);
+                          setIssueQuery("");
+                        }}
+                      >
+                        {t("layout.sidebar.newSession.clearIssue")}
+                      </Button>
+                    ) : (
+                      <ul
+                        className="max-h-40 overflow-auto rounded-md border bg-background"
+                        role="listbox"
+                        aria-label={t("layout.sidebar.newSession.issueResults")}
+                      >
+                        {issuesLoading ? (
+                          <li className="px-3 py-2 text-xs text-muted-foreground">
+                            {t("layout.sidebar.newSession.loadingIssues")}
+                          </li>
+                        ) : issueResults.length === 0 ? (
+                          <li className="px-3 py-2 text-xs text-muted-foreground">
+                            {t("layout.sidebar.newSession.noIssues")}
+                          </li>
+                        ) : (
+                          issueResults.slice(0, 20).map((issue) => (
+                            <li key={issue.identifier}>
+                              <button
+                                type="button"
+                                role="option"
+                                className="flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left hover:bg-muted"
+                                onClick={() => {
+                                  setSelectedIssue(issue);
+                                  setIssueQuery("");
+                                }}
+                              >
+                                <span className="font-mono text-xs">{issue.identifier}</span>
+                                <span className="line-clamp-1 text-sm">{issue.title}</span>
+                              </button>
+                            </li>
+                          ))
+                        )}
+                      </ul>
+                    )}
+                  </div>
+                ) : (
+                  <>
+                    <label className="grid gap-1 text-sm">
+                      <span>{t("layout.sidebar.newSession.workspace")}</span>
+                      <select
+                        aria-label={t("layout.sidebar.newSession.workspace")}
+                        className={SELECT_CLASS}
+                        value={workspaceId}
+                        disabled={
+                          !selectedProject ||
+                          selectedProject.loadState !== "ready" ||
+                          submitting
+                        }
+                        onChange={(event) => changeWorkspace(event.target.value)}
+                      >
+                        <option value="">
+                          {t("layout.sidebar.newSession.selectWorkspace")}
+                        </option>
+                        {workspaces.map((workspace) => (
+                          <option key={workspace.id} value={workspace.id}>
+                            {workspace.title}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    {selectedProject ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={submitting}
+                        onClick={() => setNewWorkspaceOpen(true)}
+                      >
+                        {t("layout.sidebar.newSession.createWorkspace")}
+                      </Button>
+                    ) : null}
+                  </>
+                )}
               </>
             ) : null}
 
-            <label className="grid gap-1 text-sm">
-              <span>{t("layout.sidebar.newSession.sessionTitle")}</span>
-              <Input
-                aria-label={t("layout.sidebar.newSession.sessionTitle")}
-                value={title}
-                maxLength={MAX_TITLE_LENGTH}
-                disabled={submitting}
-                onChange={(event) => setTitle(event.target.value)}
-              />
-            </label>
+            <ExecutionSettingsFields
+              bundle={bundle}
+              agent={agent}
+              model={model}
+              effort={effort}
+              disabled={submitting}
+              onAgentChange={(next) => setAgent(next ?? "codex")}
+              onModelChange={setModel}
+              onEffortChange={setEffort}
+            />
 
             <label className="grid gap-1 text-sm">
-              <span>{t("layout.sidebar.newSession.agent")}</span>
-              <select
-                aria-label={t("layout.sidebar.newSession.agent")}
-                className={SELECT_CLASS}
-                value={agentKind}
+              <span>{t("layout.sidebar.newSession.seed")}</span>
+              <Textarea
+                aria-label={t("layout.sidebar.newSession.seed")}
+                value={seed}
+                maxLength={MAX_SEED_LENGTH}
                 disabled={submitting}
-                onChange={(event) =>
-                  setAgentKind(
-                    SUPPORTED_AGENT_KINDS.includes(
-                      event.target.value as SupportedAgentKind,
-                    )
-                      ? (event.target.value as SupportedAgentKind)
-                      : "",
-                  )
-                }
-              >
-                <option value="">{t("layout.sidebar.newSession.defaultAgent")}</option>
-                {SUPPORTED_AGENT_KINDS.map((kind) => (
-                  <option key={kind} value={kind}>
-                    {t(`assistant.catalog.agents.${kind}`)}
-                  </option>
-                ))}
-              </select>
+                rows={3}
+                placeholder={t("layout.sidebar.newSession.seedPlaceholder")}
+                onChange={(event) => setSeed(event.target.value)}
+              />
             </label>
 
             {selectedProject?.loadState === "error" ? (
@@ -501,16 +712,12 @@ export function SidebarNewSessionFlow({
                 </Button>
               </div>
             ) : null}
-            {selectedProject &&
+            {topType === "projeto" &&
+            selectedProject &&
             selectedProject.loadState !== "ready" &&
             selectedProject.loadState !== "error" ? (
               <p className="text-sm text-muted-foreground">
                 {t("layout.sidebar.newSession.loading")}
-              </p>
-            ) : null}
-            {routeWorkspaceMissing ? (
-              <p role="alert" className="text-sm text-destructive">
-                {t("layout.sidebar.newSession.workspaceGone")}
               </p>
             ) : null}
             {unavailableReason ? (
@@ -531,28 +738,18 @@ export function SidebarNewSessionFlow({
                 {t("layout.sidebar.newSession.cancel")}
               </Button>
             </DialogClose>
-            {phase === "edit" ? (
-              <Button
-                type="button"
-                disabled={Boolean(unavailableReason) || submitting}
-                onClick={reviewSelection}
-              >
-                {t("layout.sidebar.newSession.review")}
-              </Button>
-            ) : (
-              <Button
-                type="button"
-                disabled={Boolean(unavailableReason) || submitting}
-                onClick={(event) => {
-                  if (event.detail > 1) return;
-                  void submit();
-                }}
-              >
-                {submitting
-                  ? t("layout.sidebar.newSession.creating")
-                  : t("layout.sidebar.newSession.create")}
-              </Button>
-            )}
+            <Button
+              type="button"
+              disabled={Boolean(unavailableReason) || submitting}
+              onClick={(event) => {
+                if (event.detail > 1) return;
+                void submit();
+              }}
+            >
+              {submitting
+                ? t("layout.sidebar.newSession.creating")
+                : t("layout.sidebar.newSession.create")}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -562,9 +759,16 @@ export function SidebarNewSessionFlow({
           projectSlug={selectedProject.projectSlug}
           cloneRepos={standaloneCloneRepos}
           open={newWorkspaceOpen}
-          onOpenChange={handleWorkspaceDialogOpenChange}
+          onOpenChange={(next) => {
+            setNewWorkspaceOpen(next);
+            if (!next) setConfiguredRepos([]);
+          }}
           onCreated={(_workspacePath, threadId) =>
-            complete(selectedProject.projectSlug, threadId)
+            complete({
+              scope: "project_session",
+              projectSlug: selectedProject.projectSlug,
+              threadId,
+            })
           }
         />
       ) : null}
@@ -592,7 +796,7 @@ function resolveInitialSelection(
 ): {
   projectId: string;
   workspaceId: string;
-  requestedWorkspaceId: string | null;
+  issueHint: string | null;
 } {
   const requestedProjectId = initialProjectId ?? selection.projectSlug ?? "";
   const project =
@@ -602,15 +806,21 @@ function resolveInitialSelection(
         candidate.projectSlug === requestedProjectId,
     ) ?? null;
   if (!project) {
-    return { projectId: "", workspaceId: "", requestedWorkspaceId: null };
+    return { projectId: "", workspaceId: "", issueHint: null };
   }
 
   const requestedWorkspaceId = initialWorkspaceId ?? selection.workspaceId;
   const restored = resolveWorkspaceForRoute(project, selection, requestedWorkspaceId);
+  const issueHint =
+    restored?.issueIdentifier?.trim() ||
+    (selection.sessionId?.startsWith("authoring:")
+      ? selection.sessionId.slice("authoring:".length)
+      : null);
+
   return {
     projectId: project.id,
-    workspaceId: restored?.id ?? "",
-    requestedWorkspaceId: requestedWorkspaceId ?? restored?.id ?? null,
+    workspaceId: restored?.id ?? defaultExploreWorkspace(project)?.id ?? "",
+    issueHint,
   };
 }
 
@@ -633,28 +843,53 @@ function resolveWorkspaceForRoute(
   );
 }
 
-function submissionUnavailableReason(
-  project: SidebarProjectNode | null,
-  workspace: SidebarWorkspaceNode | null,
-  t: ReturnType<typeof useTranslation>["t"],
-): string | null {
+function defaultExploreWorkspace(
+  project: SidebarProjectNode,
+): SidebarWorkspaceNode | null {
+  const workspaces = [...project.workspaces, ...project.overflowWorkspaces];
+  return (
+    workspaces.find(
+      (workspace) =>
+        workspace.workspaceKind === "project" &&
+        workspace.inventory?.path?.startsWith("/"),
+    ) ??
+    workspaces.find(
+      (workspace) =>
+        workspace.workspaceKind === "standalone" &&
+        workspace.inventory?.path?.startsWith("/"),
+    ) ??
+    workspaces.find((workspace) => workspace.inventory?.path?.startsWith("/")) ??
+    null
+  );
+}
+
+function submissionUnavailableReason({
+  topType,
+  projectKind,
+  project,
+  workspace,
+  issue,
+  t,
+}: {
+  topType: SessionTopType;
+  projectKind: ProjectSessionKind;
+  project: SidebarProjectNode | null;
+  workspace: SidebarWorkspaceNode | null;
+  issue: Issue | null;
+  t: ReturnType<typeof useTranslation>["t"];
+}): string | null {
+  if (topType === "livre") return null;
   if (!project) return t("layout.sidebar.newSession.requireProject");
-  if (project.loadState !== "ready") return t("layout.sidebar.newSession.requireReadyProject");
+  if (project.loadState !== "ready") {
+    return t("layout.sidebar.newSession.requireReadyProject");
+  }
+  if (projectKind === "issue") {
+    if (!issue) return t("layout.sidebar.newSession.requireIssue");
+    return null;
+  }
   if (!workspace) return t("layout.sidebar.newSession.requireWorkspace");
-  if (workspace.workspaceKind === "orphan") {
-    return t("layout.sidebar.newSession.unsupportedWorkspace");
-  }
-  if (!["project", "standalone", "issue", "parallel"].includes(workspace.workspaceKind)) {
-    return t("layout.sidebar.newSession.unsupportedWorkspace");
-  }
   if (!workspace.inventory?.path?.startsWith("/")) {
     return t("layout.sidebar.newSession.missingWorkspacePath");
-  }
-  if (
-    (workspace.workspaceKind === "issue" || workspace.workspaceKind === "parallel") &&
-    !workspace.issueIdentifier?.trim()
-  ) {
-    return t("layout.sidebar.newSession.missingIssue");
   }
   return null;
 }

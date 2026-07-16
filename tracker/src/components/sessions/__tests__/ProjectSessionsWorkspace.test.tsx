@@ -11,18 +11,25 @@ import {
 import { ProjectSessionsWorkspace } from "@/components/sessions/ProjectSessionsWorkspace";
 import { useProjectSessions } from "@/hooks/useProjectSessions";
 import { initTestI18n, renderWithI18n } from "@/i18n/testUtils";
+import { createSiblingSession } from "@/lib/createSiblingSession";
 import { emptyProjectSessionGroups } from "@/lib/projectSessions";
-import { archiveAssistantThread } from "@/services/assistantThreads";
+import { archiveAssistantThread, getAssistantThread } from "@/services/assistantThreads";
 import { removeWorkspaces } from "@/services/worktrees";
 
 const projectAssistantPanel = vi.fn((props: { contentMaxWidth?: string }) => (
   <div aria-label="mock assistant panel" data-content-max-width={props.contentMaxWidth} />
 ));
 
+const navigateMock = vi.hoisted(() => vi.fn());
+
 vi.mock("@/hooks/useProjectSessions", () => ({ useProjectSessions: vi.fn() }));
 vi.mock("@/services/assistantThreads", () => ({
   listAssistantThreads: vi.fn(async () => []),
   archiveAssistantThread: vi.fn(async () => ({ id: 99 })),
+  getAssistantThread: vi.fn(),
+}));
+vi.mock("@/lib/createSiblingSession", () => ({
+  createSiblingSession: vi.fn(),
 }));
 vi.mock("@/services/worktrees", () => ({
   removeWorkspaces: vi.fn(),
@@ -33,6 +40,13 @@ vi.mock("@/components/assistant/ProjectAssistantPanel", () => ({
 vi.mock("@/components/layout/WorkspaceContext", () => ({
   useWorkspace: () => ({ projectSlug: "demo", view: "board" }),
 }));
+vi.mock("react-router-dom", async () => {
+  const actual = await vi.importActual<typeof import("react-router-dom")>("react-router-dom");
+  return {
+    ...actual,
+    useNavigate: () => navigateMock,
+  };
+});
 
 function SessionsChromeHarness({ children }: { children: ReactNode }) {
   const [chromeState, setChromeState] = useState<ProjectSessionsChromeState | null>(null);
@@ -52,6 +66,22 @@ describe("ProjectSessionsWorkspace", () => {
     await initTestI18n("en");
     window.localStorage.clear();
     vi.clearAllMocks();
+    navigateMock.mockReset();
+    vi.mocked(getAssistantThread).mockResolvedValue({
+      id: 42,
+      scope: "project_session",
+      agentKind: null,
+      projectSlug: "demo",
+      projectName: "Demo",
+      issueIdentifier: null,
+      workspacePath: null,
+      labels: [],
+      needsReview: false,
+      title: "Project session",
+      status: "active",
+      preview: null,
+      updatedAt: "2026-07-15T12:00:00Z",
+    });
     vi.mocked(useProjectSessions).mockReturnValue({
       groups: emptyProjectSessionGroups(),
       relatedSessions: [],
@@ -381,5 +411,54 @@ describe("ProjectSessionsWorkspace", () => {
     expect(container.querySelector("main > div")).toHaveClass("w-full");
     expect(container.querySelector("main > div")).not.toHaveClass("max-w-[min(100%,96rem)]");
     expect(screen.getByLabelText("mock assistant panel")).toHaveAttribute("data-content-max-width", "default");
+  });
+
+  it("omits the sibling session button on the workspaces list tab", () => {
+    renderWithI18n(
+      <MemoryRouter initialEntries={["/projects/demo/workspaces"]}>
+        <ProjectSessionsWorkspace projectSlug="demo" />
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByRole("button", { name: /^New session$/i })).not.toBeInTheDocument();
+  });
+
+  it("creates a sibling session from the tab bar and opens it", async () => {
+    const user = userEvent.setup();
+    const sourceThread = {
+      id: 42,
+      scope: "project_session",
+      agentKind: "cursor" as const,
+      projectSlug: "demo",
+      projectName: "Demo",
+      issueIdentifier: null,
+      workspacePath: "/ws/demo",
+      labels: [],
+      needsReview: false,
+      title: "Project session",
+      status: "active",
+      preview: null,
+      updatedAt: "2026-07-15T12:00:00Z",
+    };
+    vi.mocked(getAssistantThread).mockResolvedValue(sourceThread);
+    vi.mocked(createSiblingSession).mockResolvedValue({ ...sourceThread, id: 99, title: null });
+
+    renderWithI18n(
+      <MemoryRouter initialEntries={["/projects/demo/workspaces/42"]}>
+        <ProjectSessionsWorkspace projectSlug="demo" activeThreadId={42} />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: /Project session/i })).toHaveAttribute("aria-selected", "true"),
+    );
+
+    await user.click(screen.getByRole("button", { name: /^New session$/i }));
+
+    await waitFor(() => {
+      expect(getAssistantThread).toHaveBeenCalledWith(42);
+      expect(createSiblingSession).toHaveBeenCalledWith(sourceThread);
+      expect(navigateMock).toHaveBeenCalledWith("/projects/demo/workspaces/99", { replace: true });
+    });
   });
 });

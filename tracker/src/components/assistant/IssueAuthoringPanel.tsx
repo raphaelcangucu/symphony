@@ -48,7 +48,6 @@ export const IssueAuthoringPanel = memo(function IssueAuthoringPanel({
   const issueDetailPath = normalizedIdentifier ? issuePath(projectSlug, view, normalizedIdentifier) : null;
   const [composerSeedMessage, setComposerSeedMessage] = useState<string | null>(null);
   const [kbDocumentReferences, setKbDocumentReferences] = useState<string[]>([]);
-  const [requestedKbPath, setRequestedKbPath] = useState<string | null>(null);
 
   useEffect(() => {
     if (!normalizedIdentifier) return;
@@ -79,7 +78,6 @@ export const IssueAuthoringPanel = memo(function IssueAuthoringPanel({
         mode={compact ? "embedded" : "page"}
         onDocumentChanged={handleDocumentChanged}
         onKbDocumentReferencesChanged={setKbDocumentReferences}
-        onOpenDocumentPath={setRequestedKbPath}
         onDraftIssueCreated={onDraftIssueCreated}
         onIssueCreated={onIssueCreated}
         composerSeedMessage={composerSeedMessage}
@@ -118,7 +116,6 @@ export const IssueAuthoringPanel = memo(function IssueAuthoringPanel({
       projectSlug={projectSlug}
       issueIdentifier={normalizedIdentifier ?? undefined}
       citedPaths={kbDocumentReferences}
-      requestedPath={requestedKbPath}
     />
   ) : (
     <div className="rounded-2xl border border-dashed border-border/70 bg-card/60 px-6 py-10 text-center text-sm text-muted-foreground shadow-sm backdrop-blur-sm">

@@ -1,5 +1,5 @@
 import { ArrowLeft } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 
@@ -7,6 +7,7 @@ import { ArchiveChatButton } from "@/components/assistant/ArchiveChatButton";
 import { ProjectAssistantPanel } from "@/components/assistant/ProjectAssistantPanel";
 import { ThreadDocumentViewer } from "@/components/assistant/ThreadDocumentViewer";
 import { useThreadDocuments } from "@/hooks/useThreadDocuments";
+import { consumePendingThreadSeed } from "@/lib/pendingThreadSeed";
 import { cn } from "@/lib/utils";
 import type { AssistantDocumentChangedPayload } from "@/services/phoenix/assistantChannel";
 
@@ -20,7 +21,13 @@ export function FreeformAssistantPanel({ threadId, archiving = false, onArchive 
   const { t } = useTranslation();
   const [refreshKey, setRefreshKey] = useState(0);
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
+  const [composerSeedMessage, setComposerSeedMessage] = useState<string | null>(null);
   const threadDocuments = useThreadDocuments({ threadId, refreshKey });
+
+  useEffect(() => {
+    const seed = consumePendingThreadSeed(threadId);
+    if (seed) setComposerSeedMessage(seed);
+  }, [threadId]);
 
   const handleDocumentChanged = useCallback(
     (payload: AssistantDocumentChangedPayload) => {
@@ -61,6 +68,7 @@ export function FreeformAssistantPanel({ threadId, archiving = false, onArchive 
           threadId={threadId}
           view="board"
           mode="page"
+          composerSeedMessage={composerSeedMessage}
           onDocumentChanged={handleDocumentChanged}
           onOpenDocumentPath={setSelectedPath}
         />

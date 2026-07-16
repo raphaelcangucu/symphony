@@ -57,7 +57,32 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadControllerTest do
       |> post("/api/tracker/v1/assistant/threads", %{scope: "freeform", title: "Ideas"})
 
     assert %{"data" => %{"scope" => "freeform", "title" => "Ideas", "project_slug" => nil, "id" => _}} =
-             json_response(conn, 201)
+      json_response(conn, 201)
+  end
+
+  test "POST freeform thread persists agent_kind and model/effort metadata" do
+    conn =
+      authorize()
+      |> post("/api/tracker/v1/assistant/threads", %{
+        scope: "freeform",
+        title: "Ops",
+        agent_kind: "cursor",
+        model: "gpt-5",
+        effort: "high"
+      })
+
+    assert %{
+             "data" => %{
+               "id" => id,
+               "scope" => "freeform",
+               "agent_kind" => "cursor"
+             }
+           } = json_response(conn, 201)
+
+    assert {:ok, thread} = History.get_thread(id)
+    assert thread.agent_kind == "cursor"
+    assert thread.metadata["model"] == "gpt-5"
+    assert thread.metadata["effort"] == "high"
   end
 
   test "POST freeform thread stores a per-thread workspace path, not the shared root" do

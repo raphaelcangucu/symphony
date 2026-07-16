@@ -44,6 +44,8 @@ export function useWorkspaceRepoSummaries({
       return;
     }
 
+    const resolvedProjectSlug = projectSlug;
+    const resolvedIssueIdentifier = issueIdentifier;
     const controller = new AbortController();
 
     async function load() {
@@ -51,7 +53,9 @@ export function useWorkspaceRepoSummaries({
       setError(null);
 
       try {
-        const result = await getGitDiffSummaries(projectSlug, issueIdentifier, { signal: controller.signal });
+        const result = await getGitDiffSummaries(resolvedProjectSlug, resolvedIssueIdentifier, {
+          signal: controller.signal,
+        });
         setSummaries(result.summaries);
       } catch (cause) {
         if (isAbortError(cause)) return;

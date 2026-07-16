@@ -10,6 +10,10 @@ defmodule SymphonyElixir.Evidence.Commits do
   alias SymphonyElixir.RunContract
   alias SymphonyElixir.RunContract.RepoState
 
+  # Tried after the configured/origin default when that ref is missing locally
+  # (stale project config or shallow clones without origin/HEAD).
+  @fallback_integration_branches ~w(main master develop pre-release homolog trunk)
+
   @type commit :: %{
           repo: String.t(),
           sha: String.t(),
@@ -73,14 +77,16 @@ defmodule SymphonyElixir.Evidence.Commits do
   end
 
   defp log_range(%RepoState{} = repo) do
-    case integration_ref(repo) do
-      nil -> nil
-      ref -> ref_range(repo, ref)
-    end
+    repo
+    |> integration_candidates()
+    |> Enum.find_value(&ref_range(repo, &1))
   end
 
-  defp integration_ref(%RepoState{default_branch: branch}) when is_binary(branch) and branch != "", do: branch
-  defp integration_ref(_repo), do: nil
+  defp integration_candidates(%RepoState{default_branch: branch}) do
+    [branch | @fallback_integration_branches]
+    |> Enum.reject(&(is_nil(&1) or &1 == ""))
+    |> Enum.uniq()
+  end
 
   defp ref_range(%RepoState{} = repo, ref) do
     case git(repo.path, ["rev-parse", "--verify", "origin/#{ref}"]) do

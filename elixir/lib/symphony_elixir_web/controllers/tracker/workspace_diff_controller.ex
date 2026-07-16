@@ -21,7 +21,10 @@ defmodule SymphonyElixirWeb.Tracker.WorkspaceDiffController do
   def show(conn, %{"project_slug" => project_slug, "identifier" => identifier} = params) do
     with {:ok, type} <- diff_type(Map.get(params, "type", "branch")),
          {:ok, workspace} <- issue_workspace(project_slug, identifier),
-         {:ok, repos} <- WorkspaceDiff.changes(workspace, type) do
+         {:ok, repos} <-
+           WorkspaceDiff.changes(workspace, type,
+             default_branches: Context.repo_default_branches(project_slug)
+           ) do
       json(conn, %{data: repos, workspace: workspace_brief(workspace)})
     else
       {:error, reason} -> TrackerErrors.render(conn, reason)
@@ -32,7 +35,11 @@ defmodule SymphonyElixirWeb.Tracker.WorkspaceDiffController do
   def stats(conn, %{"project_slug" => project_slug, "identifier" => identifier} = params) do
     with {:ok, type} <- diff_type(Map.get(params, "type", "branch")),
          {:ok, workspace} <- issue_workspace(project_slug, identifier),
-         {:ok, stats} <- WorkspaceDiff.stats(workspace, type: type) do
+         {:ok, stats} <-
+           WorkspaceDiff.stats(workspace,
+             type: type,
+             default_branches: Context.repo_default_branches(project_slug)
+           ) do
       json(conn, %{data: stats, workspace: workspace_brief(workspace)})
     else
       {:error, reason} -> TrackerErrors.render(conn, reason)
@@ -55,7 +62,11 @@ defmodule SymphonyElixirWeb.Tracker.WorkspaceDiffController do
   def files(conn, %{"project_slug" => project_slug, "identifier" => identifier} = params) do
     with {:ok, type} <- diff_type(Map.get(params, "type", "branch")),
          {:ok, workspace} <- issue_workspace(project_slug, identifier),
-         {:ok, page} <- WorkspaceDiff.list_files(workspace, list_files_opts(type, params)) do
+         {:ok, page} <-
+           WorkspaceDiff.list_files(
+             workspace,
+             Keyword.put(list_files_opts(type, params), :default_branches, Context.repo_default_branches(project_slug))
+           ) do
       json(conn, Map.put(page, :workspace, workspace_brief(workspace)))
     else
       {:error, reason} -> TrackerErrors.render(conn, reason)
@@ -81,7 +92,12 @@ defmodule SymphonyElixirWeb.Tracker.WorkspaceDiffController do
   def file_patch(conn, %{"project_slug" => project_slug, "identifier" => identifier} = params) do
     with {:ok, type} <- diff_type(Map.get(params, "type", "branch")),
          {:ok, workspace} <- issue_workspace(project_slug, identifier),
-         {:ok, patch} <- WorkspaceDiff.patch(workspace, type, patch_opts(params)) do
+         {:ok, patch} <-
+           WorkspaceDiff.patch(
+             workspace,
+             type,
+             Keyword.put(patch_opts(params), :default_branches, Context.repo_default_branches(project_slug))
+           ) do
       json(conn, %{data: patch, workspace: workspace_brief(workspace)})
     else
       {:error, reason} -> TrackerErrors.render(conn, reason)
@@ -131,7 +147,10 @@ defmodule SymphonyElixirWeb.Tracker.WorkspaceDiffController do
   @spec summaries(Conn.t(), map()) :: Conn.t()
   def summaries(conn, %{"project_slug" => project_slug, "identifier" => identifier}) do
     with {:ok, workspace} <- issue_workspace(project_slug, identifier),
-         {:ok, summaries} <- WorkspaceDiff.repo_summaries(workspace) do
+         {:ok, summaries} <-
+           WorkspaceDiff.repo_summaries(workspace,
+             default_branches: Context.repo_default_branches(project_slug)
+           ) do
       json(conn, %{
         data: Enum.map(summaries, &summary_json/1),
         workspace: workspace_brief(workspace)

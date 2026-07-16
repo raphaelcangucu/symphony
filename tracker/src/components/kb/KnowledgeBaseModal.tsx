@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useKbAllRepoTrees } from "@/hooks/useKbAllRepoTrees";
 import { useKbPage } from "@/hooks/useKbPage";
+import { normalizeKbDocumentReference } from "@/lib/assistantKbReferences";
 import { isKbImageAssetPath } from "@/lib/kbAssets";
 import { buildKbGitHubFileUrl } from "@/lib/kbGitHubUrl";
 import { kbPagePath as buildKbPagePath } from "@/lib/kbRoutes";
@@ -51,6 +52,10 @@ interface KnowledgeBaseModalProps {
   changedDocPaths?: string[];
   /** Preferred: repo-associated changed docs for multi-repo synthetic insertion. */
   changedDocEntries?: Array<{ repo: string; path: string }>;
+  /** Docs-relative or `docs/...` path to select when the modal opens. */
+  initialPath?: string | null;
+  /** Optional repo slug for `initialPath` when the path exists in multiple repos. */
+  initialRepo?: string | null;
 }
 
 export function KnowledgeBaseModal({
@@ -61,6 +66,8 @@ export function KnowledgeBaseModal({
   issueIdentifier = null,
   changedDocPaths = [],
   changedDocEntries,
+  initialPath = null,
+  initialRepo = null,
 }: KnowledgeBaseModalProps) {
   const { t } = useTranslation();
   const issueMode = Boolean(issueIdentifier);
@@ -152,8 +159,38 @@ export function KnowledgeBaseModal({
 
   useEffect(() => {
     if (!open) return;
+
+    const normalizedPath = normalizeKbDocumentReference(initialPath) ?? initialPath?.trim() ?? null;
+    if (!normalizedPath) return;
+
+    if (initialRepo) {
+      setActiveRepo(initialRepo);
+      setActivePath(normalizedPath);
+      setTreeCollapsed(true);
+      setFilter("all");
+      return;
+    }
+
+    for (const repoSlug of repoSlugs) {
+      if (treeContainsPage(treesByRepo[repoSlug] ?? [], normalizedPath)) {
+        setActiveRepo(repoSlug);
+        setActivePath(normalizedPath);
+        setTreeCollapsed(true);
+        setFilter("all");
+        return;
+      }
+    }
+
+    setActivePath(normalizedPath);
+    setTreeCollapsed(true);
+    setFilter("all");
+  }, [initialPath, initialRepo, open, repoSlugs, treesByRepo]);
+
+  useEffect(() => {
+    if (!open) return;
+    if (initialPath) return;
     setFilter(issueMode && effectiveEntries.length > 0 ? "changed" : "all");
-  }, [effectiveEntries.length, issueMode, open, issueIdentifier]);
+  }, [effectiveEntries.length, initialPath, issueMode, open, issueIdentifier]);
 
   useEffect(() => {
     if (issueMode && filter === "changed" && effectiveEntries.length === 0) {
@@ -657,4 +694,12 @@ function deleteSuccessKeyFor(kind: KbDeleteKind): string {
   if (kind === "folder") return "kb.folder.deleted";
   if (kind === "asset") return "kb.asset.deleted";
   return "kb.actions.deleted";
+}
+
+function treeContainsPage(nodes: KbTreeNodeType[], pagePath: string): boolean {
+  for (const node of nodes) {
+    if (node.type === "page" && node.path === pagePath) return true;
+    if (node.children.length > 0 && treeContainsPage(node.children, pagePath)) return true;
+  }
+  return false;
 }

@@ -81,6 +81,7 @@ import {
   normalizeAgentSeed,
   type DraftIssueCreated,
 } from "@/components/assistant/assistantPanelHelpers";
+import { AssistantKbDocumentLinksProvider } from "@/components/assistant/assistantKbDocumentLinksContext";
 import { KnowledgeBaseModal } from "@/components/kb/KnowledgeBaseModal";
 import { ExecutionModeMenu } from "@/components/issues/issue-detail/ExecutionModeMenu";
 import { SkillProfileMenu, resolvedSkillProfileForUi } from "@/components/assistant/SkillProfileMenu";
@@ -92,6 +93,8 @@ import { deriveAgentTasksFromAssistantMessages } from "@/lib/agentTasks";
 import { catalogFor, defaultComposerSettings, fallbackCatalogBundle, type AssistantCatalogBundle } from "@/lib/assistantSettings";
 import { DEFAULT_INTERACTIVE_MODE, normalizeAgentMode } from "@/lib/agentModes";
 import { normalizeIssueIdentifier } from "@/lib/issueIdentifiers";
+import { buildKbDocumentPageIndex, resolveKbDocumentLinkTarget } from "@/lib/kbDocumentLinks";
+import { normalizeKbDocumentReference } from "@/lib/assistantKbReferences";
 import {
   normalizeSkillProfileId,
   resolveSkillProfile,
@@ -103,9 +106,12 @@ import {
   type UserQuestionsRequest,
 } from "@/services/assistant";
 import { isCanceledError } from "@/services/http";
+import { getIssueRepoTree, getRepoTree } from "@/services/knowledgeBase";
 import { WorkspaceDiffStatsChip } from "@/components/sessions/WorkspaceDiffStatsChip";
 import { provisionThreadWorkspace, provisionWorkspace } from "@/services/workspaceProvision";
 import { useIssueChangedDocPaths } from "@/hooks/useIssueChangedDocPaths";
+import { useKbAllRepoTrees } from "@/hooks/useKbAllRepoTrees";
+import { useKbProjectOverview } from "@/hooks/useKbProjectOverview";
 import { useWorkspaceDiffStats } from "@/hooks/useWorkspaceDiffStats";
 import { UserQuestionsCard } from "@/components/assistant/UserQuestionsCard";
 import {
@@ -407,12 +413,83 @@ export function ProjectAssistantPanel({
   const [contextInsertRequest, setContextInsertRequest] = useState<ComposerContextInsertRequest | null>(null);
   const [magicPaletteRequestId, setMagicPaletteRequestId] = useState(0);
   const [knowledgeBaseOpen, setKnowledgeBaseOpen] = useState(false);
+  const [kbFocusPath, setKbFocusPath] = useState<string | null>(null);
+  const [kbFocusRepo, setKbFocusRepo] = useState<string | null>(null);
   const [changedDocsRefreshKey, setChangedDocsRefreshKey] = useState(0);
   const changedDocs = useIssueChangedDocPaths({
     projectSlug,
     issueIdentifier: issueIdentifier ?? null,
     refreshKey: changedDocsRefreshKey,
   });
+  const kbOverviewProjectSlug = projectSlug ?? "";
+  const { overview: kbOverview } = useKbProjectOverview(kbOverviewProjectSlug);
+  const kbRepoSlugs = useMemo(
+    () => kbOverview?.repositories.map((repo) => repo.repoSlug) ?? [],
+    [kbOverview],
+  );
+  const loadKbRepoTree = useCallback(
+    (scopeProjectSlug: string, repoSlug: string) =>
+      issueIdentifier
+        ? getIssueRepoTree(scopeProjectSlug, issueIdentifier, repoSlug)
+        : getRepoTree(scopeProjectSlug, repoSlug),
+    [issueIdentifier],
+  );
+  const { treesByRepo: kbTreesByRepo } = useKbAllRepoTrees(
+    kbOverviewProjectSlug,
+    kbRepoSlugs,
+    loadKbRepoTree,
+  );
+  const kbDocumentPageIndex = useMemo(() => buildKbDocumentPageIndex(kbTreesByRepo), [kbTreesByRepo]);
+  const preferredKbRepoSlug = useMemo(() => {
+    if (kbRepoSlug) return kbRepoSlug;
+    const fromChanged = changedDocs.entries.find((entry) => entry.repo)?.repo;
+    return fromChanged || kbRepoSlugs[0] || null;
+  }, [changedDocs.entries, kbRepoSlug, kbRepoSlugs]);
+  const resolveKbDocument = useCallback(
+    (rawReference: string) => {
+      if (!projectSlug) return null;
+      return resolveKbDocumentLinkTarget(rawReference, kbDocumentPageIndex, projectSlug, preferredKbRepoSlug);
+    },
+    [kbDocumentPageIndex, preferredKbRepoSlug, projectSlug],
+  );
+  const openKnowledgeBase = useCallback(
+    (path?: string | null) => {
+      if (!projectSlug) return;
+
+      if (path) {
+        const resolved = resolveKbDocument(path);
+        const normalized = resolved?.path ?? normalizeKbDocumentReference(path) ?? path.trim();
+        setKbFocusPath(normalized || null);
+        setKbFocusRepo(resolved?.repoSlug ?? preferredKbRepoSlug);
+      } else {
+        setKbFocusPath(null);
+        setKbFocusRepo(null);
+      }
+
+      setKnowledgeBaseOpen(true);
+    },
+    [preferredKbRepoSlug, projectSlug, resolveKbDocument],
+  );
+  const handleOpenDocumentPath = useCallback(
+    (path: string) => {
+      if (projectSlug) {
+        openKnowledgeBase(path);
+        return;
+      }
+      onOpenDocumentPath?.(path);
+    },
+    [onOpenDocumentPath, openKnowledgeBase, projectSlug],
+  );
+  const kbDocumentLinksValue = useMemo(
+    () =>
+      projectSlug
+        ? {
+            resolve: resolveKbDocument,
+            openDocument: handleOpenDocumentPath,
+          }
+        : null,
+    [handleOpenDocumentPath, projectSlug, resolveKbDocument],
+  );
 
   useEffect(() => {
     if (!routeAgentSeed) return;
@@ -1410,11 +1487,11 @@ export function ProjectAssistantPanel({
       return undefined;
     }
     onKnowledgeBaseControlChange({
-      open: () => setKnowledgeBaseOpen(true),
+      open: () => openKnowledgeBase(),
       changedDocCount: changedDocs.count,
     });
     return () => onKnowledgeBaseControlChange(null);
-  }, [changedDocs.count, onKnowledgeBaseControlChange, projectSlug]);
+  }, [changedDocs.count, onKnowledgeBaseControlChange, openKnowledgeBase, projectSlug]);
 
   const kbDocumentReferences = useMemo(
     () =>
@@ -1594,7 +1671,7 @@ export function ProjectAssistantPanel({
         connectionError={workspaceProvisioningError ? null : connectionError}
         channelReady={channelReady}
         planApprovalMessageId={planApprovalMessageId}
-        onOpenDocumentPath={onOpenDocumentPath}
+        onOpenDocumentPath={handleOpenDocumentPath}
         onInsertContext={insertContextRef}
         onApprovePlan={dispatchApprovedPlan}
         onStop={handleStopTurn}
@@ -1779,10 +1856,9 @@ export function ProjectAssistantPanel({
       />
     ) : null;
 
-  const openKnowledgeBase = useCallback(() => {
-    if (!projectSlug) return;
-    setKnowledgeBaseOpen(true);
-  }, [projectSlug]);
+  const openKnowledgeBaseShortcut = useCallback(() => {
+    openKnowledgeBase();
+  }, [openKnowledgeBase]);
 
   useEffect(() => {
     if (!projectSlug || catalogLoading) return;
@@ -1793,12 +1869,12 @@ export function ProjectAssistantPanel({
       if (isTextEntryTarget(event.target)) return;
 
       event.preventDefault();
-      openKnowledgeBase();
+      openKnowledgeBaseShortcut();
     }
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [catalogLoading, openKnowledgeBase, projectSlug]);
+  }, [catalogLoading, openKnowledgeBaseShortcut, projectSlug]);
 
   const composerNode = (
     <AssistantComposer
@@ -1874,7 +1950,7 @@ export function ProjectAssistantPanel({
                 disabled={catalogLoading}
                 aria-label={t("layout.projectHeader.knowledgeBase")}
                 title={t("assistant.panel.openKnowledgeBaseShortcut")}
-                onClick={openKnowledgeBase}
+                onClick={() => openKnowledgeBase()}
               >
                 <BookOpen className="h-3.5 w-3.5" />
                 <span className="hidden sm:inline">{t("assistant.panel.openKnowledgeBase")}</span>
@@ -1954,7 +2030,15 @@ export function ProjectAssistantPanel({
       issueIdentifier={issueIdentifier ?? null}
       changedDocPaths={changedDocs.paths}
       changedDocEntries={changedDocs.entries}
-      onOpenChange={setKnowledgeBaseOpen}
+      initialPath={kbFocusPath}
+      initialRepo={kbFocusRepo}
+      onOpenChange={(open) => {
+        setKnowledgeBaseOpen(open);
+        if (!open) {
+          setKbFocusPath(null);
+          setKbFocusRepo(null);
+        }
+      }}
       onInsertContext={insertContextRef}
     />
   ) : null;
@@ -1982,7 +2066,8 @@ export function ProjectAssistantPanel({
 
   if (isPanelMode) {
     return (
-      <AssistantRuntimeProvider runtime={runtime}>
+      <AssistantKbDocumentLinksProvider value={kbDocumentLinksValue}>
+        <AssistantRuntimeProvider runtime={runtime}>
         <section
           ref={panelRef}
           className={cn(
@@ -2067,10 +2152,12 @@ export function ProjectAssistantPanel({
           />
         ) : null}
       </AssistantRuntimeProvider>
+      </AssistantKbDocumentLinksProvider>
     );
   }
 
   return (
+    <AssistantKbDocumentLinksProvider value={kbDocumentLinksValue}>
     <AssistantRuntimeProvider runtime={runtime}>
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetTrigger asChild>
@@ -2121,5 +2208,6 @@ export function ProjectAssistantPanel({
         />
       ) : null}
     </AssistantRuntimeProvider>
+    </AssistantKbDocumentLinksProvider>
   );
 }

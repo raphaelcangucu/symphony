@@ -1,7 +1,10 @@
 const MARKDOWN_PATH_SUFFIX = ".md";
 const DOCS_SEGMENT = "docs";
 const EXTERNAL_SCHEME_RE = /^(?:https?:|mailto:)/i;
-const REFERENCE_TOKEN_RE = /(?:file:\/\/)?[^\s()[\]<>`"']+\.md(?:#[^\s()[\]<>`"']*)?(?:\?[^\s()[\]<>`"']*)?/gi;
+/** Matches markdown / bare / backtick-adjacent `.md` path tokens in assistant text. */
+export const KB_DOCUMENT_REFERENCE_TOKEN_RE =
+  /(?:file:\/\/)?[^\s()[\]<>`"']+\.md(?:#[^\s()[\]<>`"']*)?(?:\?[^\s()[\]<>`"']*)?/gi;
+const REFERENCE_TOKEN_RE = KB_DOCUMENT_REFERENCE_TOKEN_RE;
 
 export function normalizeKbDocumentReference(rawReference: string | null | undefined): string | null {
   if (!rawReference) return null;

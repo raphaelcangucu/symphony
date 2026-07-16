@@ -3,9 +3,11 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { AssistantMarkdown } from "@/components/assistant/AssistantMarkdown";
+import { AssistantKbDocumentLinksProvider } from "@/components/assistant/assistantKbDocumentLinksContext";
+import type { KbDocumentLinkTarget } from "@/lib/kbDocumentLinks";
 
 describe("AssistantMarkdown", () => {
-  it("normalizes document links into buttons", async () => {
+  it("normalizes document links into buttons without a KB index", async () => {
     const user = userEvent.setup();
     const onOpenDocumentPath = vi.fn();
 
@@ -29,6 +31,35 @@ describe("AssistantMarkdown", () => {
 
     expect(onOpenDocumentPath).toHaveBeenCalledOnce();
     expect(onOpenDocumentPath).toHaveBeenCalledWith("docs/plan.md");
+  });
+
+  it("linkifies existing KB paths and opens via the KB document href", async () => {
+    const user = userEvent.setup();
+    const openDocument = vi.fn();
+    const target: KbDocumentLinkTarget = {
+      path: "market/spec.md",
+      repoSlug: "back",
+      href: "/projects/macro-markets/kb/back/market/spec.md",
+    };
+
+    render(
+      <AssistantKbDocumentLinksProvider
+        value={{
+          resolve: (raw) => (raw.includes("market/spec.md") ? target : null),
+          openDocument,
+        }}
+      >
+        <AssistantMarkdown content="See docs/market/spec.md and docs/market/missing.md" />
+      </AssistantKbDocumentLinksProvider>,
+    );
+
+    const link = screen.getByRole("link", { name: "docs/market/spec.md" });
+    expect(link).toHaveAttribute("href", target.href);
+    expect(screen.getByText(/docs\/market\/missing\.md/)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "docs/market/missing.md" })).not.toBeInTheDocument();
+
+    await user.click(link);
+    expect(openDocument).toHaveBeenCalledWith("market/spec.md");
   });
 
   it("preserves external links and opts into assistant-scoped typography", () => {

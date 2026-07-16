@@ -686,14 +686,19 @@ defmodule SymphonyElixir.Evidence.WorkspaceDiff do
     end
   end
 
+  # Tried after configured/origin default when that ref is missing locally
+  # (stale project config or shallow clones without origin/HEAD).
+  @fallback_integration_branches ~w(main master develop pre-release homolog trunk)
+
   defp build_repo(path, git, default_branches) do
     name = Path.basename(path)
+    preferred = local_default_branch(path, git) || Map.get(default_branches, name)
 
     %Repo{
       path: path,
       name: name,
       branch: presence(git_value(path, ["branch", "--show-current"], git)),
-      default_branch: local_default_branch(path, git) || Map.get(default_branches, name)
+      default_branch: resolve_integration_branch(path, preferred, git)
     }
   end
 
@@ -704,6 +709,18 @@ defmodule SymphonyElixir.Evidence.WorkspaceDiff do
       {:ok, "origin/" <> name} -> name
       _other -> nil
     end
+  end
+
+  defp resolve_integration_branch(path, preferred, git) do
+    [preferred | @fallback_integration_branches]
+    |> Enum.reject(&(is_nil(&1) or &1 == ""))
+    |> Enum.uniq()
+    |> Enum.find(&integration_ref_exists?(path, &1, git))
+  end
+
+  defp integration_ref_exists?(path, branch, git) do
+    match?({:ok, _}, git.(path, ["rev-parse", "--verify", "origin/#{branch}"], [0])) or
+      match?({:ok, _}, git.(path, ["rev-parse", "--verify", branch], [0]))
   end
 
   defp git_value(path, args, git) do

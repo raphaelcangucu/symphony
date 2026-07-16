@@ -1,6 +1,7 @@
 import { graphemeCount, normalizeNullableString } from "@/lib/serviceNormalization";
 import { requireNonBlank, requirePositiveInteger } from "@/lib/serviceValidation";
 import type { AssistantThread } from "@/types/assistant-thread";
+import type { AgentKind } from "@/types/issue";
 
 import { http, trackerPath, unwrapData } from "./http";
 
@@ -248,8 +249,19 @@ function normalizeLabels(value: unknown): string[] {
   return labels;
 }
 
-export async function createFreeformThread(title?: string): Promise<AssistantThread> {
-  const response = await http.post(trackerPath("/assistant/threads"), { scope: "freeform", title });
+export async function createFreeformThread(input: {
+  title?: string;
+  agentKind?: AgentKind | null;
+  model?: string;
+  effort?: string;
+} = {}): Promise<AssistantThread> {
+  const response = await http.post(trackerPath("/assistant/threads"), {
+    scope: "freeform",
+    title: input.title,
+    agent_kind: input.agentKind ?? undefined,
+    ...(input.model ? { model: input.model } : {}),
+    ...(input.effort ? { effort: input.effort } : {}),
+  });
   return normalizeAssistantThread(unwrapData<BackendAssistantThreadDto>(response));
 }
 
@@ -257,7 +269,9 @@ export async function createProjectSessionThread(
   projectSlug: string,
   input: {
     title?: string;
-    agentKind?: "codex" | "claude" | "cursor" | null;
+    agentKind?: AgentKind | null;
+    model?: string;
+    effort?: string;
     workspacePath?: string;
   } = {},
 ): Promise<AssistantThread> {
@@ -267,6 +281,8 @@ export async function createProjectSessionThread(
     project_slug: projectSlug,
     title: input.title,
     agent_kind: input.agentKind ?? undefined,
+    ...(input.model ? { model: input.model } : {}),
+    ...(input.effort ? { effort: input.effort } : {}),
     ...(workspacePath === undefined ? {} : { workspace_path: workspacePath }),
   });
   return normalizeAssistantThread(unwrapData<BackendAssistantThreadDto>(response));
@@ -277,7 +293,7 @@ export async function createIssueSessionThread(
   issueIdentifier: string,
   input: {
     title?: string;
-    agentKind?: "codex" | "claude" | "cursor" | null;
+    agentKind?: AgentKind | null;
     executionMode?: "plan" | "build" | "yolo";
     model?: string;
     effort?: string;
