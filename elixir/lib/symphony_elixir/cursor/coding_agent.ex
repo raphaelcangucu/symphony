@@ -20,6 +20,7 @@ defmodule SymphonyElixir.Cursor.CodingAgent do
 
   require Logger
 
+  alias SymphonyElixir.Agent.SessionTranscript
   alias SymphonyElixir.Assistant.ToolExecutor
   alias SymphonyElixir.Claude.ApprovalBroker
   alias SymphonyElixir.Claude.AppServer.ToolGateway
@@ -70,8 +71,11 @@ defmodule SymphonyElixir.Cursor.CodingAgent do
 
     emit_message(on_message, :session_started, %{session_id: session_id, thread_id: session.session_uuid, turn_id: turn_id}, %{})
 
+    write_transcript_sidecar(session, opts)
+
     on_event = fn notification ->
-      emit_message(on_message, :notification, %{payload: notification, raw: Jason.encode!(notification)}, %{})
+      {event, details} = bridge_event_to_message(notification)
+      emit_message(on_message, event, details, %{})
     end
 
     runner_args = turn_args(session, prompt, opts)
@@ -409,6 +413,36 @@ defmodule SymphonyElixir.Cursor.CodingAgent do
   end
 
   defp parse_token_value(_), do: nil
+
+  @doc false
+  def bridge_event_to_message(%{"method" => "item/created", "params" => %{"item" => item}} = notification) do
+    event =
+      case item do
+        %{"type" => "tool_call"} -> :tool_call_started
+        %{"type" => "tool_result", "is_error" => true} -> :tool_call_failed
+        %{"type" => "tool_result"} -> :tool_call_completed
+        _ -> :notification
+      end
+
+    {event, %{payload: notification, raw: Jason.encode!(notification)}}
+  end
+
+  def bridge_event_to_message(notification) when is_map(notification) do
+    {:notification, %{payload: notification, raw: Jason.encode!(notification)}}
+  end
+
+  defp write_transcript_sidecar(session, opts) do
+    model = session.model || Keyword.get(opts, :model)
+    effort = Keyword.get(opts, :effort) || Map.get(session, :effort)
+
+    SessionTranscript.write_sidecar(:cursor, session.workspace, %{
+      "session_id" => session.cli_session_id,
+      "agent_kind" => "cursor",
+      "model" => model,
+      "effort" => effort,
+      "path" => SessionTranscript.path(:cursor, session.workspace)
+    })
+  end
 
   defp emit_message(on_message, event, details, metadata) when is_function(on_message, 1) do
     message = metadata |> Map.merge(details) |> Map.put(:event, event) |> Map.put(:timestamp, DateTime.utc_now())
