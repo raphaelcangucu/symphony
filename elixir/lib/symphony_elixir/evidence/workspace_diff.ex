@@ -19,26 +19,28 @@ defmodule SymphonyElixir.Evidence.WorkspaceDiff do
 
   `repo_summaries/1` — lightweight per-repo branch, ahead count, and dirty
   flag via `RunContract.repo_states/2`, including clean repos (unlike
-  `stats/2` and `changes/2`, which omit repos with no diff).
+  `stats/2` and `changes/2`, which omit repos with no diff). This is the
+  only public entry that intentionally reuses `RunContract` (and may
+  therefore call `ls-remote` for upstream/ahead). Field name is
+  `ahead_count` (RunContract), not `ahead` as on legacy `changes/2` entries.
 
-  All repo discovery here is intentionally local-only: no `ls-remote` (or any
-  other network call) is made. The default branch is read from the local
-  `origin/HEAD` symref (set once at clone/push time), optionally overridden by
-  a caller-supplied `default_branches` map (e.g. a project's configured
-  default branch). This is a deliberately lighter, decoupled rewrite of
-  `RunContract.repo_states/2` — that function always shells out to
-  `ls-remote` per repo (to compute `upstream?`), which this module never
-  needs.
+  Diff discovery (`stats/2`, `list_files/2`, `patch/3`, `changes/2`) is
+  intentionally local-only: no `ls-remote` (or any other network call) is
+  made. The default branch is read from the local `origin/HEAD` symref
+  (set once at clone/push time), optionally overridden by a caller-supplied
+  `default_branches` map (e.g. a project's configured default branch).
 
   `list_files/2` and `stats/2` use `--no-renames` when diffing so a changed
   path can be looked up by a single key across the name-status and numstat
   outputs; renames show up as a delete + an add. `changes/2` and `patch/3`
   keep full rename/copy detection, matching prior behavior.
 
-  Every public function accepts a `:runner` option (defaults to
+  Diff public functions accept a `:runner` option (defaults to
   `&System.cmd/3`) so tests can inject a fake git runner — to simulate a
   huge diff cheaply, or to assert the number of subprocess calls stays
-  constant as the simulated file count grows.
+  constant as the simulated file count grows. `repo_summaries/1` does not
+  take `:runner`; it forwards keywords supported by `RunContract.repo_states/2`
+  (e.g. `:default_branches`, `:max_concurrency`).
   """
 
   alias SymphonyElixir.RunContract
@@ -163,7 +165,8 @@ defmodule SymphonyElixir.Evidence.WorkspaceDiff do
   Uses `RunContract.repo_states/2` so clean repos are included (unlike
   `stats/2` and `changes/2`, which omit repos with no diff). Accepts the
   same optional keyword args as `RunContract.repo_states/2` (e.g.
-  `:default_branches`, `:max_concurrency`).
+  `:default_branches`, `:max_concurrency`). The ahead field is named
+  `ahead_count` (not `ahead` as on legacy `changes/2` entries).
   """
   @spec repo_summaries(Path.t(), keyword()) :: {:ok, [repo_summary()]}
   def repo_summaries(workspace, opts \\ []) when is_binary(workspace) do

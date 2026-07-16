@@ -255,7 +255,7 @@ defmodule SymphonyElixir.Evidence.WorkspaceDiffTest do
                WorkspaceDiff.repo_summaries(ws)
     end
 
-    test "includes dirty repos even when there are no file changes vs base", %{tmp_dir: tmp_dir} do
+    test "includes dirty repos with uncommitted files", %{tmp_dir: tmp_dir} do
       ws = Path.join(tmp_dir, "GAM-9")
       File.mkdir_p!(ws)
       repo = make_repo!(tmp_dir, ws, "frontend")
@@ -265,6 +265,28 @@ defmodule SymphonyElixir.Evidence.WorkspaceDiffTest do
       assert {:ok, [summary]} = WorkspaceDiff.repo_summaries(ws)
       assert summary.repo == "frontend"
       assert summary.dirty? == true
+    end
+
+    test "reports ahead_count when local commits are not on origin", %{tmp_dir: tmp_dir} do
+      ws = Path.join(tmp_dir, "GAM-9")
+      File.mkdir_p!(ws)
+      repo = make_repo!(tmp_dir, ws, "frontend")
+
+      sh!(
+        repo,
+        """
+        git checkout -b feat/ahead &&
+        mkdir -p src && printf 'a\\n' > src/App.tsx && git add -A && git commit -m work &&
+        git push -u origin feat/ahead &&
+        printf 'b\\n' >> src/App.tsx && git add -A && git commit -m more
+        """
+      )
+
+      assert {:ok, [summary]} = WorkspaceDiff.repo_summaries(ws)
+      assert summary.repo == "frontend"
+      assert summary.branch == "feat/ahead"
+      assert summary.ahead_count >= 1
+      assert summary.dirty? == false
     end
 
     test "missing workspace yields an empty list", %{tmp_dir: tmp_dir} do
