@@ -1,6 +1,6 @@
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { useState, type ReactNode } from "react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useSearchParams } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -12,6 +12,7 @@ import { useProjectSessions } from "@/hooks/useProjectSessions";
 import { initTestI18n, renderWithI18n } from "@/i18n/testUtils";
 import { emptyProjectSessionGroups, type ProjectSessionGroups, type ProjectSessionRow } from "@/lib/projectSessions";
 import { formatDateTime, formatRelativeTime } from "@/lib/utils";
+import { agentSectionFromSearchParams } from "@/lib/workspaceRoutes";
 import { dispatchIssueAgent } from "@/services/issueDispatch";
 import { archiveAssistantThread, createProjectSessionThread } from "@/services/assistantThreads";
 import type { AgentExecution } from "@/types/agent-execution";
@@ -37,6 +38,18 @@ vi.mock("@/components/issues/issue-detail/IssueAuthoringSessionPanel", () => ({
     <div aria-label="mock authoring session panel" data-issue={props.issue.identifier} />
   ),
 }));
+vi.mock("@/components/assistant/IssueAuthoringPanel", () => ({
+  IssueAuthoringPanel: (props: {
+    identifier?: string;
+    onIssueCreated?: (issue: { identifier: string }) => void;
+  }) => (
+    <div aria-label="mock new issue authoring panel" data-identifier={props.identifier ?? ""}>
+      <button type="button" onClick={() => props.onIssueCreated?.({ identifier: "DEMO-2" })}>
+        Simulate issue created
+      </button>
+    </div>
+  ),
+}));
 
 function SessionsChromeHarness({ children }: { children: ReactNode }) {
   const [chromeState, setChromeState] = useState<ProjectSessionsChromeState | null>(null);
@@ -46,6 +59,26 @@ function SessionsChromeHarness({ children }: { children: ReactNode }) {
       {chromeState ? <span data-testid="sessions-chrome-count">{chromeState.count}</span> : null}
       {children}
     </ProjectSessionsChromeSetterContext.Provider>
+  );
+}
+
+/** Mirrors ProjectSessionsPage query → props wiring for deep-link tests. */
+function WorkspaceQueryHarness({ projectSlug }: { projectSlug: string }) {
+  const [searchParams] = useSearchParams();
+  const exec = searchParams.get("exec")?.trim() || null;
+  const section = agentSectionFromSearchParams(searchParams);
+  const activeAuthoringIdentifier = exec && section === "authoring" ? exec : null;
+  const activeExecutionIdentifier = exec && section === "execution" ? exec : null;
+  const activeNewIssue =
+    searchParams.get("new") === "1" && !activeAuthoringIdentifier && !activeExecutionIdentifier;
+
+  return (
+    <ProjectSessionsPanel
+      projectSlug={projectSlug}
+      activeAuthoringIdentifier={activeAuthoringIdentifier}
+      activeExecutionIdentifier={activeExecutionIdentifier}
+      activeNewIssue={activeNewIssue}
+    />
   );
 }
 
@@ -306,6 +339,45 @@ describe("ProjectSessionsPanel", () => {
 
     expect(screen.getByRole("tab", { name: /Saved launcher work · Authoring/i })).toBeInTheDocument();
     expect(screen.getByLabelText("mock authoring session panel")).toHaveAttribute("data-issue", "DEMO-1");
+  });
+
+  it("opens the ephemeral new issue tab from the new=1 workspace query", () => {
+    renderWithI18n(
+      <MemoryRouter initialEntries={["/projects/demo/workspaces?new=1"]}>
+        <WorkspaceQueryHarness projectSlug="demo" />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole("tab", { name: /New issue with assistant/i })).toBeInTheDocument();
+    expect(screen.getByLabelText("mock new issue authoring panel")).toBeInTheDocument();
+    expect(screen.getByLabelText("mock new issue authoring panel")).toHaveAttribute("data-identifier", "");
+  });
+
+  it("morphs the new issue tab into an authoring session when an issue is created", async () => {
+    renderWithI18n(
+      <MemoryRouter initialEntries={["/projects/demo/workspaces?new=1"]}>
+        <WorkspaceQueryHarness projectSlug="demo" />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Simulate issue created" }));
+
+    expect(await screen.findByLabelText("mock authoring session panel")).toHaveAttribute("data-issue", "DEMO-2");
+    expect(screen.queryByLabelText("mock new issue authoring panel")).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: /New issue with assistant/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /Issue authoring chat · Session/i })).toBeInTheDocument();
+  });
+
+  it("prefers an exec authoring session over the new-issue query", () => {
+    renderWithI18n(
+      <MemoryRouter initialEntries={["/projects/demo/workspaces?new=1&exec=DEMO-1&agent=authoring"]}>
+        <WorkspaceQueryHarness projectSlug="demo" />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole("tab", { name: /Saved launcher work · Session/i })).toBeInTheDocument();
+    expect(screen.getByLabelText("mock authoring session panel")).toHaveAttribute("data-issue", "DEMO-1");
+    expect(screen.queryByLabelText("mock new issue authoring panel")).not.toBeInTheDocument();
   });
 
   it("renames a restored execution tab when issue data loads after a page reload", async () => {

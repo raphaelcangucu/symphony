@@ -10,6 +10,9 @@ export function ProjectSessionsPage() {
   const section = agentSectionFromSearchParams(searchParams);
   const activeAuthoringIdentifier = exec && section === "authoring" ? exec : null;
   const activeExecutionIdentifier = exec && section === "execution" ? exec : null;
+  // `exec` wins over `new=1` so issue-bound deep links are never shadowed.
+  const activeNewIssue =
+    searchParams.get("new") === "1" && !activeAuthoringIdentifier && !activeExecutionIdentifier;
 
   if (!projectSlug.trim()) return <Navigate to="/projects" replace />;
   return (
@@ -17,6 +20,7 @@ export function ProjectSessionsPage() {
       projectSlug={projectSlug}
       activeExecutionIdentifier={activeExecutionIdentifier}
       activeAuthoringIdentifier={activeAuthoringIdentifier}
+      activeNewIssue={activeNewIssue}
     />
   );
 }

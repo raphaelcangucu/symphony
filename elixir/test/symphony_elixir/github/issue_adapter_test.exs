@@ -5,6 +5,7 @@ defmodule SymphonyElixir.GitHub.IssueAdapterTest do
   alias SymphonyElixir.LocalTracker.{Context, IssueRecord, Project}
   alias SymphonyElixir.Repo
   alias SymphonyElixir.Tracker.IssueDTO
+  alias SymphonyElixir.Tracker.Sync.UserRecord
 
   defmodule LocalAliasBoardClientStub do
     def graphql(_query, _vars, _opts) do
@@ -900,6 +901,16 @@ defmodule SymphonyElixir.GitHub.IssueAdapterTest do
     end
   end
 
+  defmodule CreateClientAssignableUsersFailStub do
+    def graphql(query, vars, opts) do
+      if String.contains?(query, "SymphonyUiAssignableUsers") do
+        {:error, :remote_unavailable}
+      else
+        CreateClientStub.graphql(query, vars, opts)
+      end
+    end
+  end
+
   describe "create_issue" do
     setup do
       Application.put_env(:symphony_elixir, :github_client_module, CreateClientStub)
@@ -926,6 +937,73 @@ defmodule SymphonyElixir.GitHub.IssueAdapterTest do
       assert input["assigneeIds"] == ["U1"]
       assert "L1" in input["labelIds"]
       assert "AGC" in input["labelIds"]
+    end
+
+    test "resolves assignee login to GitHub node id on create" do
+      attrs = %{
+        "title" => "New",
+        "status" => "Todo",
+        "assignee_ids" => ["alice"]
+      }
+
+      assert {:ok, %IssueDTO{}} = IssueAdapter.create_issue(project(), attrs)
+
+      assert_received {:create_input, input}
+      assert input["assigneeIds"] == ["U1"]
+    end
+
+    test "resolves assignee login via local tracker_users when assignable users fetch fails" do
+      Application.put_env(:symphony_elixir, :github_client_module, CreateClientAssignableUsersFailStub)
+
+      migrate_repo()
+      clean_repo()
+
+      {:ok, project_row} =
+        Context.ensure_project(%{
+          name: "Gamba",
+          slug: "gamba-assignee-fallback",
+          tracker_kind: "github",
+          tracker_config: %{
+            "repo" => "clouapp/front",
+            "project_id" => "PVT_1",
+            "status_field" => "Symphony State"
+          }
+        })
+
+      %UserRecord{}
+      |> UserRecord.changeset(%{
+        project_id: project_row.id,
+        login: "henriqueduarteguerra1",
+        remote_id: "U_kgDOCYFVvw"
+      })
+      |> Repo.insert!()
+
+      attrs = %{
+        "title" => "New",
+        "status" => "Todo",
+        "assignee_ids" => ["henriqueduarteguerra1"]
+      }
+
+      assert {:ok, %IssueDTO{}} =
+               IssueAdapter.create_issue(%{project() | id: project_row.id, slug: project_row.slug}, attrs)
+
+      assert_received {:create_input, input}
+      assert input["assigneeIds"] == ["U_kgDOCYFVvw"]
+    end
+
+    test "omits unresolved assignee logins instead of sending them as node ids" do
+      Application.put_env(:symphony_elixir, :github_client_module, CreateClientAssignableUsersFailStub)
+
+      attrs = %{
+        "title" => "New",
+        "status" => "Todo",
+        "assignee_ids" => ["unknown-login"]
+      }
+
+      assert {:ok, %IssueDTO{}} = IssueAdapter.create_issue(project(), attrs)
+
+      assert_received {:create_input, input}
+      refute Map.has_key?(input, "assigneeIds")
     end
 
     test "returns validation error when title is blank" do

@@ -34,6 +34,15 @@ export interface AssistantChannelHandlers {
   onTurnStatus?: (status: AssistantTurnStatus) => void;
   onHistorySynced?: (messages: AssistantChatMessage[], meta?: AssistantHistoryMeta) => void;
   onApprovalRequired?: (request: AssistantApprovalRequest) => void;
+  onCreatePlanRequired?: (request: AssistantCreatePlanRequest) => void;
+}
+
+export interface AssistantCreatePlanRequest {
+  requestId: string;
+  name: string | null;
+  overview: string | null;
+  plan: string | null;
+  planUri: string | null;
 }
 
 export interface AssistantHistoryMeta {
@@ -426,6 +435,11 @@ export function bindAssistantEvents(channel: Channel, handlers: AssistantChannel
     if (request) handlers.onApprovalRequired?.(request);
   });
 
+  channel.on("create_plan_required", (payload) => {
+    const request = normalizeCreatePlanRequest(payload);
+    if (request) handlers.onCreatePlanRequired?.(request);
+  });
+
   channel.on("steer_failed", (payload) => {
     const data = payload as { reason?: string | null; message?: string | null };
     handlers.onSteerFailed?.({
@@ -590,6 +604,31 @@ export function submitApproval(
   action: "approve" | "cancel",
 ): ReturnType<Channel["push"]> {
   return channel.push("submit_approval", { request_id: requestId, action });
+}
+
+export function submitCreatePlan(
+  channel: Channel,
+  requestId: string | number,
+  action: "accept" | "reject",
+): ReturnType<Channel["push"]> {
+  return channel.push("submit_create_plan", { request_id: requestId, action });
+}
+
+function normalizeCreatePlanRequest(payload: unknown): AssistantCreatePlanRequest | null {
+  if (!payload || typeof payload !== "object") return null;
+  const data = payload as Record<string, unknown>;
+  const requestId = data.request_id ?? data.requestId;
+  if (typeof requestId !== "string" && typeof requestId !== "number") return null;
+  const asNullableString = (value: unknown): string | null =>
+    typeof value === "string" && value.trim() ? value : null;
+
+  return {
+    requestId: String(requestId),
+    name: asNullableString(data.name),
+    overview: asNullableString(data.overview),
+    plan: asNullableString(data.plan),
+    planUri: asNullableString(data.plan_uri ?? data.planUri),
+  };
 }
 
 export function dispatchCodingAgent(

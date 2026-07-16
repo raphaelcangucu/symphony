@@ -5,12 +5,31 @@ export function selectPrimaryServer(servers: IssueDevServer[]): IssueDevServer |
   return servers.find((server) => server.primary) ?? servers.find((server) => server.status === "ready") ?? servers[0] ?? null;
 }
 
+/**
+ * A server is in sync when it carries no contract (legacy / flag off) or its
+ * runtime contract reports `in_sync`. Any other sync state (conflict, awaiting,
+ * not_ready, stale) means the accepted runtime does not match the lease, so the
+ * dock must NOT embed it.
+ */
+export function isServerInSync(server: IssueDevServer | null): boolean {
+  if (!server) {
+    return false;
+  }
+
+  return server.sync_state == null || server.sync_state === "in_sync";
+}
+
+/** Only a ready + in-sync server may be embedded or opened. */
+export function isEmbeddableServer(server: IssueDevServer | null): boolean {
+  return server != null && server.status === "ready" && isServerInSync(server);
+}
+
 export function readyPreviewUrl(server: IssueDevServer | null): string | null {
-  if (!server || server.status !== "ready" || !server.url) {
+  if (!isEmbeddableServer(server)) {
     return null;
   }
 
-  return server.url;
+  return server?.public_url ?? server?.url ?? null;
 }
 
 export function publicTunnelPreviewUrl(server: IssueDevServer | null): string | null {
@@ -23,19 +42,25 @@ export function publicTunnelPreviewUrl(server: IssueDevServer | null): string | 
 }
 
 export function localPreviewUrl(server: IssueDevServer | null): string | null {
-  if (!server || server.status !== "ready" || !server.port) {
+  if (!isEmbeddableServer(server) || !server) {
     return null;
   }
 
-  if (isLoopbackUrl(server.url)) {
+  // Prefer the API-provided local URL (single source of truth), rewriting the
+  // loopback host to `localhost`: the browser may run on a different host than
+  // the dev server (e.g. Windows browser + WSL2), and `localhost` resolves to
+  // both ::1 and 127.0.0.1, reaching IPv6-bound listeners (Go's default `[::]`)
+  // as well as IPv4 listeners.
+  if (server.local_url) {
+    return toLocalhostUrl(server.local_url);
+  }
+
+  // Legacy fallback for payloads without a local_url: rebuild from the port and
+  // the path of a non-loopback public URL.
+  if (!server.port || isLoopbackUrl(server.url)) {
     return null;
   }
 
-  // Use `localhost` (not `127.0.0.1`): the browser may run on a different host
-  // than the dev server (e.g. Windows browser + WSL2 dev servers). `localhost`
-  // resolves to both ::1 and 127.0.0.1, so it reaches IPv6-bound listeners
-  // (Go's default `[::]` bind, e.g. goapi) as well as IPv4 `0.0.0.0` listeners,
-  // whereas a hardcoded `127.0.0.1` fails for IPv6-only forwarded listeners.
   return `http://localhost:${server.port}${pathFromUrl(server.url)}`;
 }
 
@@ -44,6 +69,18 @@ export function openablePreviewUrl(server: IssueDevServer | null, tunnelRunning:
   const previewUrl = readyPreviewUrl(server);
   const localUrl = localPreviewUrl(server);
   return tunnelRunning ? previewUrl : (localUrl ?? previewUrl);
+}
+
+function toLocalhostUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname === "127.0.0.1" || parsed.hostname === "::1") {
+      parsed.hostname = "localhost";
+    }
+    return parsed.toString();
+  } catch {
+    return url;
+  }
 }
 
 function pathFromUrl(url: string | null): string {

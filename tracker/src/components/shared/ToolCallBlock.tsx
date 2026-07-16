@@ -28,6 +28,9 @@ export interface ToolCallView {
   outputTruncated?: boolean;
   /** Original (untruncated) output size in bytes, when the server capped it. */
   outputByteSize?: number | null;
+  /** CreatePlan (or similar) docs path for opening the knowledge base. */
+  kbPath?: string | null;
+  kind?: "task" | "create_plan" | "other";
 }
 
 const MAX_LINES = 20;
@@ -43,12 +46,14 @@ interface ToolCallBlockProps extends ActivityDisclosureStateProps {
   view: ToolCallView;
   toolCallId?: string | null;
   onLoadFullOutput?: (toolCallId: string) => Promise<string>;
+  onOpenKbPath?: (path: string) => void;
 }
 
 export function ToolCallBlock({
   view,
   toolCallId = null,
   onLoadFullOutput,
+  onOpenKbPath,
   expanded,
   onExpandedChange,
 }: ToolCallBlockProps) {
@@ -61,9 +66,24 @@ export function ToolCallBlock({
     view.outputTruncated === true && trimmedToolCallId.length > 0 && onLoadFullOutput
       ? { byteSize: view.outputByteSize ?? null, onLoad: () => onLoadFullOutput(trimmedToolCallId) }
       : null;
+  const kbPath = typeof view.kbPath === "string" ? view.kbPath.trim() : "";
+  const kbAction =
+    kbPath && onOpenKbPath ? (
+      <button
+        type="button"
+        className="text-[11px] font-medium text-primary hover:underline"
+        onClick={(event) => {
+          event.stopPropagation();
+          onOpenKbPath(kbPath);
+        }}
+      >
+        {t("issue.toolCall.openInKnowledgeBase")}
+      </button>
+    ) : null;
   const details =
-    view.input || view.output ? (
+    view.input || view.output || kbAction ? (
       <div className="min-w-0 space-y-2">
+        {kbAction ? <div className="px-0.5">{kbAction}</div> : null}
         {view.input ? (
           <Section
             label={t("issue.toolCall.input")}

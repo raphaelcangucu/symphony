@@ -178,6 +178,25 @@ defmodule SymphonyElixirWeb.TrackerErrors do
   def render(conn, :sync_disabled),
     do: error(conn, 409, "tracker_sync_disabled", dgettext("errors", "Local-first sync is disabled on this server."))
 
+  def render(conn, :sync_push_failed),
+    do:
+      error(
+        conn,
+        422,
+        "tracker_sync_push_failed",
+        dgettext("errors", "Could not push this local issue to the remote tracker.")
+      )
+
+  def render(conn, {:sync_push_failed, detail}) when is_binary(detail),
+    do:
+      error(
+        conn,
+        422,
+        "tracker_sync_push_failed",
+        dgettext("errors", "Could not push this local issue to the remote tracker."),
+        %{reason: detail}
+      )
+
   def render(conn, :public_tunnel_disabled),
     do:
       error(

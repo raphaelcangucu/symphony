@@ -22,15 +22,34 @@ export type IssueDevServerReason =
   | "crashed"
   | null;
 
+export type IssueDevServerSource = "managed" | "contracted_manual";
+
+export type IssueDevServerSyncState =
+  | "in_sync"
+  | "awaiting_report"
+  | "conflict"
+  | "not_ready"
+  | "stale";
+
 export interface IssueDevServer {
   id: number;
   slug: string;
   working_dir: string | null;
   port: number | null;
   url: string | null;
+  local_url?: string | null;
+  public_url?: string | null;
   status: IssueDevServerStatus;
   primary: boolean;
   session_name: string | null;
+  source?: IssueDevServerSource | null;
+  sync_state?: IssueDevServerSyncState | null;
+  sync_reason?: string | null;
+  preferred_port?: number | null;
+  allowed_ports?: number[] | null;
+  actual_port?: number | null;
+  contract_id?: string | null;
+  revision?: number | null;
 }
 
 export interface IssueDevServerTunnel {
@@ -43,6 +62,8 @@ export interface IssueDevServersResponse {
   reason: IssueDevServerReason;
   servers: IssueDevServer[];
   tunnel?: IssueDevServerTunnel;
+  snapshot_id?: string | null;
+  as_of?: string | null;
 }
 
 export interface IssueLabel {
@@ -60,6 +81,8 @@ export interface IssueAttachment {
   author: string | null;
   isImage: boolean;
 }
+
+export type IssueSyncStatus = "synced" | "pending" | "conflict" | "error" | "archived";
 
 export interface Issue {
   id: string;
@@ -87,6 +110,8 @@ export interface Issue {
   repositoryFullName?: string | null;
   parentIdentifier?: string | null;
   subIssueSummary?: { total: number; completed: number; percentCompleted: number } | null;
+  syncStatus?: IssueSyncStatus | null;
+  lastSyncError?: string | null;
 }
 
 export const AGENT_KINDS = ["codex", "claude", "cursor", "opencode"] as const;

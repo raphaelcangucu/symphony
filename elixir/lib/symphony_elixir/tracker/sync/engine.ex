@@ -27,10 +27,10 @@ defmodule SymphonyElixir.Tracker.Sync.Engine do
   import Ecto.Query, only: [from: 2]
 
   alias SymphonyElixir.GitHub.StateReconciliation
-  alias SymphonyElixir.LocalTracker.{Context, Project}
+  alias SymphonyElixir.LocalTracker.{Context, IssueRecord, Project}
   alias SymphonyElixir.Repo
   alias SymphonyElixir.Tracker.IssueAdapter
-  alias SymphonyElixir.Tracker.Sync.{LocalStore, Normalize, Outbox, StateRecord}
+  alias SymphonyElixir.Tracker.Sync.{LocalStore, Normalize, Outbox, OutboxEntry, StateRecord}
 
   @default_seed_retry_seconds 60
 
@@ -152,10 +152,12 @@ defmodule SymphonyElixir.Tracker.Sync.Engine do
   defp min_pull_interval_ms, do: SymphonyElixir.InstanceConfig.tracker_sync_min_pull_ms()
 
   @doc """
-  Force-sync a single issue straight from the remote, bypassing the background
-  cadence. Pulls the issue, its comments (classified, including workpads) and its
-  pull requests, then upserts them into the local store. Used by the on-demand
-  "Sync from remote" action so a user can immediately reconcile a discrepancy.
+  Force-sync a single issue, bypassing the background cadence.
+
+  Prefer a remote pull (issue + classified comments + PRs) into the local store.
+  When the remote has no matching issue but a local draft exists, fall back to a
+  two-way `sync_project/2` so pending outbox writes (especially `issue:create`)
+  are pushed first. Used by the on-demand sync action in the issue drawer.
 
   Returns `{:error, :sync_disabled}` when local-first sync is off globally and
   `{:error, :not_supported_on_remote}` for projects without a remote tracker.
@@ -175,21 +177,124 @@ defmodule SymphonyElixir.Tracker.Sync.Engine do
         {:error, :no_remote_adapter}
 
       adapter ->
-        with {:ok, dto} <- adapter.get_issue(project, identifier) do
-          remote = Normalize.issue(dto, comments: remote_comments(adapter, project, identifier))
-          pr_driver = Keyword.get(opts, :pr_driver, default_driver_for(project))
+        case adapter.get_issue(project, identifier) do
+          {:ok, dto} ->
+            pull_single_remote_issue(project, adapter, identifier, dto, opts)
 
-          case LocalStore.upsert_remote_issue(project, remote) do
-            {:ok, issue} ->
-              maybe_sync_pull_requests(project, issue, pr_driver)
-              {:ok, issue}
+          {:error, :issue_not_found} ->
+            sync_local_issue_two_way(project, identifier, opts)
 
-            {:error, _reason} = error ->
-              error
-          end
+          error ->
+            error
         end
     end
   end
+
+  defp pull_single_remote_issue(project, adapter, identifier, dto, opts) do
+    remote = Normalize.issue(dto, comments: remote_comments(adapter, project, identifier))
+    pr_driver = Keyword.get(opts, :pr_driver, default_driver_for(project))
+
+    case LocalStore.upsert_remote_issue(project, remote) do
+      {:ok, issue} ->
+        maybe_sync_pull_requests(project, issue, pr_driver)
+        {:ok, issue}
+
+      {:error, _reason} = error ->
+        error
+    end
+  end
+
+  # Remote miss with a local card: push outbox (create/update) then pull, instead
+  # of surfacing issue_not_found for drafts that still need to be sent upstream.
+  defp sync_local_issue_two_way(project, identifier, opts) do
+    with {:ok, %IssueRecord{} = issue} <- Context.get_issue(project.slug, identifier),
+         :ok <- ensure_local_issue_create_queued(project, issue),
+         {:ok, _summary} <- sync_project(project, two_way_sync_opts(project, opts)),
+         {:ok, synced} <- Context.get_issue(project.slug, identifier) do
+      case synced do
+        %IssueRecord{remote_id: remote_id} when is_binary(remote_id) and remote_id != "" ->
+          {:ok, synced}
+
+        %IssueRecord{} = still_local ->
+          {:error, local_create_push_error(project, still_local)}
+      end
+    end
+  end
+
+  defp local_create_push_error(project, %IssueRecord{} = issue) do
+    dedup_key = "issue:create:#{project.id}:#{issue.identifier}"
+
+    latest_error =
+      from(e in OutboxEntry,
+        where: e.project_id == ^project.id and e.dedup_key == ^dedup_key,
+        order_by: [desc: e.updated_at, desc: e.id],
+        limit: 1,
+        select: e.last_error
+      )
+      |> Repo.one()
+
+    cond do
+      is_binary(latest_error) and latest_error != "" -> {:sync_push_failed, latest_error}
+      is_binary(issue.last_sync_error) and issue.last_sync_error != "" -> {:sync_push_failed, issue.last_sync_error}
+      true -> :sync_push_failed
+    end
+  end
+
+  defp ensure_local_issue_create_queued(_project, %IssueRecord{remote_id: remote_id})
+       when is_binary(remote_id) and remote_id != "",
+       do: :ok
+
+  defp ensure_local_issue_create_queued(project, %IssueRecord{} = issue) do
+    Outbox.requeue_issue_creates(project.id, [issue.identifier])
+    dedup_key = "issue:create:#{project.id}:#{issue.identifier}"
+    payload = issue_create_payload(issue)
+
+    case Outbox.enqueue(%{
+           project_id: project.id,
+           issue_id: issue.id,
+           entity_type: "issue",
+           operation: "create",
+           payload: payload,
+           dedup_key: dedup_key
+         }) do
+      {:ok, _entry} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp issue_create_payload(%IssueRecord{} = issue) do
+    %{"title" => issue.title || ""}
+    |> maybe_put_create_field("description", issue.description)
+    |> maybe_put_create_field("priority", issue.priority)
+    |> maybe_put_create_status(issue)
+    |> maybe_put_create_assignee(issue)
+  end
+
+  defp maybe_put_create_field(payload, _key, nil), do: payload
+  defp maybe_put_create_field(payload, _key, ""), do: payload
+  defp maybe_put_create_field(payload, key, value), do: Map.put(payload, key, value)
+
+  defp maybe_put_create_status(payload, %IssueRecord{status: %{name: name}}) when is_binary(name) and name != "",
+    do: Map.put(payload, "status", name)
+
+  defp maybe_put_create_status(payload, _issue), do: payload
+
+  defp maybe_put_create_assignee(payload, %IssueRecord{assignee_id: assignee_id})
+       when is_binary(assignee_id) and assignee_id != "",
+       do: Map.put(payload, "assignee_ids", [assignee_id])
+
+  defp maybe_put_create_assignee(payload, _issue), do: payload
+
+  defp two_way_sync_opts(project, opts) do
+    driver = Keyword.get(opts, :driver) || default_driver_for(project)
+
+    [driver: driver, force: Keyword.get(opts, :force, true)]
+    |> maybe_put_opt(:pr_driver, Keyword.get(opts, :pr_driver))
+    |> maybe_put_opt(:max_attempts, Keyword.get(opts, :max_attempts))
+  end
+
+  defp maybe_put_opt(opts, _key, nil), do: opts
+  defp maybe_put_opt(opts, key, value), do: Keyword.put(opts, key, value)
 
   defp remote_comments(adapter, project, identifier) do
     case adapter.list_comments(project, identifier) do
@@ -626,8 +731,12 @@ defmodule SymphonyElixir.Tracker.Sync.Engine do
   defp record_failed(acc, entry, reason, max_attempts) do
     case Outbox.mark_failed(entry, inspect(reason), max_attempts) do
       {:ok, %{status: "failed"} = updated} ->
-        mark_comment_push_exhausted(updated)
+        mark_push_exhausted(updated)
         %{acc | failed: acc.failed + 1}
+
+      {:ok, %{status: "pending"} = updated} ->
+        mark_issue_push_retry(updated)
+        acc
 
       {:ok, _updated} ->
         acc
@@ -649,6 +758,11 @@ defmodule SymphonyElixir.Tracker.Sync.Engine do
 
   defp mark_comment_synced(_payload), do: :ok
 
+  defp mark_push_exhausted(entry) do
+    mark_comment_push_exhausted(entry)
+    mark_issue_push_exhausted(entry)
+  end
+
   defp mark_comment_push_exhausted(%{entity_type: "comment", payload: %{"comment_id" => comment_id}})
        when is_integer(comment_id) do
     LocalStore.mark_comment_sync_status(comment_id, "error")
@@ -656,6 +770,22 @@ defmodule SymphonyElixir.Tracker.Sync.Engine do
   end
 
   defp mark_comment_push_exhausted(_entry), do: :ok
+
+  defp mark_issue_push_exhausted(%{entity_type: "issue", issue_id: issue_id, last_error: error})
+       when is_integer(issue_id) do
+    LocalStore.mark_issue_sync_status(issue_id, "error", last_sync_error: error)
+    :ok
+  end
+
+  defp mark_issue_push_exhausted(_entry), do: :ok
+
+  defp mark_issue_push_retry(%{entity_type: "issue", issue_id: issue_id, last_error: error})
+       when is_integer(issue_id) do
+    LocalStore.mark_issue_sync_status(issue_id, "pending", last_sync_error: error)
+    :ok
+  end
+
+  defp mark_issue_push_retry(_entry), do: :ok
 
   defp safe_push(driver, project, entry) do
     driver.push(project, entry)

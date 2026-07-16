@@ -13,6 +13,7 @@ interface ToolActivityTimelineProps {
   taskSnapshot?: AgentTaskSnapshot | null;
   onKillTool?: (toolCallId: string) => void;
   onLoadFullOutput?: (toolCallId: string) => Promise<string>;
+  onOpenKbPath?: (path: string) => void;
 }
 
 interface CanonicalToolCall {
@@ -31,6 +32,7 @@ function ToolActivityTimelineComponent({
   taskSnapshot = null,
   onKillTool,
   onLoadFullOutput,
+  onOpenKbPath,
 }: ToolActivityTimelineProps) {
   if (toolCalls.length === 0) return null;
 
@@ -47,6 +49,7 @@ function ToolActivityTimelineComponent({
           taskSnapshot={taskSnapshot}
           onKillTool={onKillTool}
           onLoadFullOutput={onLoadFullOutput}
+          onOpenKbPath={onOpenKbPath}
         />
       ))}
     </div>
@@ -62,12 +65,14 @@ function ToolActivityEntry({
   taskSnapshot,
   onKillTool,
   onLoadFullOutput,
+  onOpenKbPath,
 }: {
   group: ToolCallGroup;
   callKeys: readonly string[];
   taskSnapshot: AgentTaskSnapshot | null;
   onKillTool?: (toolCallId: string) => void;
   onLoadFullOutput?: (toolCallId: string) => Promise<string>;
+  onOpenKbPath?: (path: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -79,6 +84,7 @@ function ToolActivityEntry({
           taskSnapshot={taskSnapshot}
           onKillTool={onKillTool}
           onLoadFullOutput={onLoadFullOutput}
+          onOpenKbPath={onOpenKbPath}
           callKeys={callKeys}
           expanded={expanded}
           onExpandedChange={setExpanded}
@@ -100,6 +106,7 @@ function ToolActivityEntry({
         fileActivity={fileActivityFromToolCall(call)}
         onKillTool={onKillTool}
         onLoadFullOutput={onLoadFullOutput}
+        onOpenKbPath={onOpenKbPath}
         expanded={expanded}
         onExpandedChange={setExpanded}
       />

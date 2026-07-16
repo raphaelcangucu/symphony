@@ -107,7 +107,7 @@ export function StartIssueSessionDialog({
     setAgent(resolveDefaultAgent(issue));
     setModel(null);
     setEffort(null);
-    setTitle("");
+    setTitle(issue.title.trim());
     setInstructions("");
     setWorkspaceTarget("issue");
     setCloneBranches({});

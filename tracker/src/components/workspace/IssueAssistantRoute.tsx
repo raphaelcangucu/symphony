@@ -1,39 +1,18 @@
-import { useCallback, useMemo } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Navigate, useParams } from "react-router-dom";
 
-import { IssueAuthoringPanel } from "@/components/assistant/IssueAuthoringPanel";
-import { useWorkspace } from "@/components/layout/WorkspaceContext";
-import { normalizeIssueIdentifier } from "@/lib/issueIdentifiers";
-import { issueAssistantPath } from "@/lib/workspaceRoutes";
+import { projectAuthoringSessionPath, projectNewIssueWorkspacePath } from "@/lib/workspaceRoutes";
 
+/**
+ * Legacy host for `/assistant/new-issue` and `/assistant/issue/:issueId`.
+ * Prefer the App-level redirect components; this remains for any direct imports.
+ */
 export function IssueAssistantRoute() {
-  const { issueId } = useParams();
-  const navigate = useNavigate();
-  const { issues, projectSlug, view } = useWorkspace();
-  const identifier = issueId?.trim() ? issueId : undefined;
-  const normalizedIdentifier = normalizeIssueIdentifier(identifier);
-  const issue = useMemo(
-    () =>
-      normalizedIdentifier
-        ? issues.find((candidate) => normalizeIssueIdentifier(candidate.identifier) === normalizedIdentifier) ?? null
-        : null,
-    [issues, normalizedIdentifier],
-  );
-
-  const handleIssueCreated = useCallback(
-    (issue: { identifier: string }) => {
-      navigate(issueAssistantPath(projectSlug, issue.identifier));
-    },
-    [navigate, projectSlug],
-  );
-
-  return (
-    <IssueAuthoringPanel
-      projectSlug={projectSlug}
-      identifier={identifier}
-      issue={issue}
-      view={view}
-      onIssueCreated={handleIssueCreated}
-    />
-  );
+  const { projectSlug = "", issueId } = useParams();
+  if (!projectSlug.trim()) {
+    return <Navigate to="/projects" replace />;
+  }
+  if (issueId?.trim()) {
+    return <Navigate to={projectAuthoringSessionPath(projectSlug, issueId)} replace />;
+  }
+  return <Navigate to={projectNewIssueWorkspacePath(projectSlug)} replace />;
 }

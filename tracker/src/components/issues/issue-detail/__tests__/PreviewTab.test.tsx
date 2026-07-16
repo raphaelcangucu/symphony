@@ -134,6 +134,25 @@ describe("PreviewTab", () => {
     expect(screen.queryByRole("link", { name: /^open web preview$/i })).not.toBeInTheDocument();
   });
 
+  it("shows a conflict callout and no open link when a ready server bound an out-of-lease port", () => {
+    renderPreview(
+      response([
+        server({
+          status: "ready",
+          sync_state: "conflict",
+          sync_reason: "actual port 59595 is outside allowed ports [4300, 4301]",
+          port: 59595,
+          url: "http://127.0.0.1:59595/",
+          local_url: "http://127.0.0.1:59595/",
+        }),
+      ]),
+    );
+
+    expect(screen.getByText(/preview is out of sync/i)).toBeInTheDocument();
+    expect(screen.getByText(/59595 is outside allowed ports/i)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /^open preview$/i })).not.toBeInTheDocument();
+  });
+
   it("disables manual controls when previews are unavailable", () => {
     renderPreview({ available: false, reason: "disabled", servers: [] });
 

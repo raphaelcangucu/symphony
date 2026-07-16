@@ -135,6 +135,7 @@ function AssistantChatMessageBubbleComponent({
               taskSnapshot={taskSnapshot}
               onKillTool={onKillTool}
               onLoadFullOutput={loadFullOutput}
+              onOpenKbPath={onOpenDocumentPath}
             />
             {editedFilesSummary}
           </div>

@@ -239,8 +239,14 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
 
       sync_status = if dirty == %{}, do: "synced", else: issue.sync_status
 
+      attrs =
+        %{dirty_fields: dirty, sync_status: sync_status}
+        |> then(fn attrs ->
+          if sync_status == "synced", do: Map.put(attrs, :last_sync_error, nil), else: attrs
+        end)
+
       issue
-      |> IssueRecord.changeset(%{dirty_fields: dirty, sync_status: sync_status})
+      |> IssueRecord.changeset(attrs)
       |> Repo.update()
     else
       [] -> {:error, :no_fields}
@@ -467,6 +473,49 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
 
           {:ok, updated}
         end
+    end
+  end
+
+  @doc """
+  Sets a local issue's sync status (and optional `last_sync_error`).
+
+  Locally authored / dirty issues stay `"pending"` until the outbox push
+  succeeds (`"synced"`) or attempts are exhausted (`"error"`). The error string
+  is cleared when status becomes `"synced"` or `"pending"` without an explicit
+  `:last_sync_error` override.
+  """
+  @spec mark_issue_sync_status(integer(), String.t(), keyword()) ::
+          {:ok, IssueRecord.t()} | {:error, :not_found | Ecto.Changeset.t()}
+  def mark_issue_sync_status(issue_id, status, opts \\ [])
+
+  def mark_issue_sync_status(issue_id, status, opts)
+      when is_integer(issue_id) and status in ["synced", "pending", "conflict", "error", "archived"] and
+             is_list(opts) do
+    case Repo.get(IssueRecord, issue_id) do
+      nil ->
+        {:error, :not_found}
+
+      %IssueRecord{} = issue ->
+        attrs =
+          %{sync_status: status, last_synced_at: sync_timestamp(status)}
+          |> maybe_put_last_sync_error(status, opts)
+
+        issue
+        |> IssueRecord.changeset(attrs)
+        |> Repo.update()
+    end
+  end
+
+  defp maybe_put_last_sync_error(attrs, status, opts) do
+    cond do
+      Keyword.has_key?(opts, :last_sync_error) ->
+        Map.put(attrs, :last_sync_error, Keyword.get(opts, :last_sync_error))
+
+      status in ["synced", "pending"] ->
+        Map.put(attrs, :last_sync_error, nil)
+
+      true ->
+        attrs
     end
   end
 
@@ -816,7 +865,12 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
 
       %IssueRecord{} = issue ->
         issue
-        |> IssueRecord.changeset(%{remote_id: remote_id, last_synced_at: DateTime.utc_now()})
+        |> IssueRecord.changeset(%{
+          remote_id: remote_id,
+          last_synced_at: DateTime.utc_now(),
+          sync_status: "synced",
+          last_sync_error: nil
+        })
         |> Repo.update()
         |> case do
           {:ok, _updated} -> :ok

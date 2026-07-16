@@ -492,7 +492,8 @@ describe("ProjectAssistantPanel", () => {
             {
               name: "kb_create_page",
               status: "complete",
-              result: { path: "docs/market/polymarket-omnibus-plan.md" },
+              arguments: { path: "docs/market/polymarket-omnibus-plan.md" },
+              result: {},
             },
           ],
         },
@@ -2256,5 +2257,78 @@ describe("ProjectAssistantPanel", () => {
     // No nested overflow-y-auto descendants inside feed
     const nested = feed.querySelectorAll(".overflow-y-auto");
     expect(nested.length).toBe(0);
+  });
+
+  it("auto-sends composerSeedMessage once history is empty and the channel is ready", async () => {
+    join.mockImplementation(() => ({
+      receive: (status: string, callback: (response: unknown) => void) =>
+        status === "ok" ? callback({ effective_agent: "cursor" }) : undefined,
+    }));
+
+    render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        threadId={77}
+        view="board"
+        mode="page"
+        composerSeedMessage="Build the models game backlog"
+      />,
+    );
+
+    await waitFor(() => expect(channelHandlers["history_loaded"]).toEqual(expect.any(Function)));
+    channelHandlers["history_loaded"]({ messages: [] });
+
+    await waitFor(() =>
+      expect(push).toHaveBeenCalledWith(
+        "send_message",
+        expect.objectContaining({
+          message: "Build the models game backlog",
+          context: expect.objectContaining({ agent: "cursor" }),
+        }),
+      ),
+    );
+
+    const sendCalls = push.mock.calls.filter(([event]) => event === "send_message");
+    expect(sendCalls).toHaveLength(1);
+  });
+
+  it("does not auto-send composerSeedMessage when the thread already has history", async () => {
+    render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        threadId={78}
+        view="board"
+        mode="page"
+        composerSeedMessage="should stay in the composer"
+      />,
+    );
+
+    await waitFor(() => expect(channelHandlers["history_loaded"]).toEqual(expect.any(Function)));
+    channelHandlers["history_loaded"]({
+      messages: [{ id: 1, role: "user", content: "prior turn", tool_calls: [] }],
+    });
+
+    await screen.findByText("prior turn");
+    await waitFor(() => expect(screen.getByPlaceholderText("Write a message...")).toHaveValue("should stay in the composer"));
+    expect(push).not.toHaveBeenCalledWith("send_message", expect.anything());
+  });
+
+  it("names Cursor in the empty-state welcome when the thread agent is cursor", async () => {
+    join.mockImplementation(() => ({
+      receive: (status: string, callback: (response: unknown) => void) =>
+        status === "ok" ? callback({ effective_agent: "cursor" }) : undefined,
+    }));
+
+    render(<ProjectAssistantPanel projectSlug="macro-markets" threadId={79} view="board" mode="page" />);
+
+    await waitFor(() => expect(channelHandlers["history_loaded"]).toEqual(expect.any(Function)));
+    act(() => {
+      channelHandlers["history_loaded"]({ messages: [] });
+    });
+
+    await waitFor(() => {
+      expect(document.body.textContent ?? "").toMatch(/request work from Cursor/i);
+    });
+    expect(document.body.textContent ?? "").not.toMatch(/request work from Codex/i);
   });
 });

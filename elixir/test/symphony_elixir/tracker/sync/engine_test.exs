@@ -94,6 +94,49 @@ defmodule SymphonyElixir.Tracker.Sync.EngineTest do
     def delete_comment(_project, _identifier, _comment_id), do: {:error, :not_supported_on_remote}
   end
 
+  defmodule MissingRemoteAdapter do
+    @behaviour SymphonyElixir.Tracker.IssueAdapter
+
+    @impl true
+    def kind, do: :github
+
+    @impl true
+    def get_issue(_project, _identifier), do: {:error, :issue_not_found}
+
+    @impl true
+    def list_comments(_project, _identifier), do: {:ok, []}
+
+    @impl true
+    def list_issues(_project, _filters), do: {:ok, []}
+
+    @impl true
+    def create_issue(_project, _attrs), do: {:error, :not_supported_on_remote}
+
+    @impl true
+    def update_issue(_project, _identifier, _attrs), do: {:error, :not_supported_on_remote}
+
+    @impl true
+    def move_issue(_project, _identifier, _attrs), do: {:error, :not_supported_on_remote}
+
+    @impl true
+    def list_statuses(_project), do: {:ok, []}
+
+    @impl true
+    def list_labels(_project), do: {:ok, []}
+
+    @impl true
+    def list_assignable_users(_project), do: {:ok, []}
+
+    @impl true
+    def add_comment(_project, _identifier, _body, _opts), do: {:error, :not_supported_on_remote}
+
+    @impl true
+    def update_comment(_project, _identifier, _comment_id, _body), do: {:error, :not_supported_on_remote}
+
+    @impl true
+    def delete_comment(_project, _identifier, _comment_id), do: {:error, :not_supported_on_remote}
+  end
+
   defmodule LocalAliasBoardClientStub do
     def graphql(_query, _vars, _opts) do
       {:ok,
@@ -516,6 +559,122 @@ defmodule SymphonyElixir.Tracker.Sync.EngineTest do
     assert synced.identifier == issue.identifier
     assert synced.title == "DAR withdrawal cap"
     assert synced.remote_number == 288
+  end
+
+  test "sync_issue falls back to two-way sync when remote is missing but a local draft exists" do
+    prev_adapters = Application.get_env(:symphony_elixir, :issue_adapters)
+    prev_tracker = Application.get_env(:symphony_elixir, :tracker)
+    Application.put_env(:symphony_elixir, :issue_adapters, %{"github" => MissingRemoteAdapter})
+    Application.put_env(:symphony_elixir, :tracker, sync_enabled: true)
+
+    on_exit(fn ->
+      restore_env(:issue_adapters, prev_adapters)
+      restore_env(:tracker, prev_tracker)
+    end)
+
+    migrate_repo()
+    clean_repo()
+
+    {:ok, project} =
+      Context.ensure_project(%{
+        name: "Gamba",
+        slug: "gamba-sync-fallback",
+        tracker_kind: "github",
+        tracker_config: %{"repo" => "clouapp/gamba", "project_id" => "PVT_1"}
+      })
+
+    {:ok, draft} = Context.create_issue(project.slug, %{title: "Draft title", description: "body"})
+    assert is_nil(draft.remote_id)
+
+    {:ok, _} =
+      Outbox.enqueue(%{
+        project_id: project.id,
+        issue_id: draft.id,
+        entity_type: "issue",
+        operation: "create",
+        payload: %{"title" => "Draft title", "description" => "body"},
+        dedup_key: "issue:create:#{project.id}:#{draft.identifier}"
+      })
+
+    # Stuck mid-sync the way a crashed push leaves local-only drafts unclaimable.
+    assert [%{status: "in_flight"}] = Outbox.claim_pending(project.id, 10)
+
+    assert {:ok, synced} =
+             Engine.sync_issue(project, draft.identifier, driver: CreateLinkDriver, force: true)
+
+    assert synced.id == draft.id
+    reloaded = Repo.get!(IssueRecord, draft.id)
+    assert reloaded.remote_id == CreateLinkDriver.remote_id()
+  end
+
+  test "sync_issue still returns issue_not_found when neither remote nor local exists" do
+    prev_adapters = Application.get_env(:symphony_elixir, :issue_adapters)
+    prev_tracker = Application.get_env(:symphony_elixir, :tracker)
+    Application.put_env(:symphony_elixir, :issue_adapters, %{"github" => MissingRemoteAdapter})
+    Application.put_env(:symphony_elixir, :tracker, sync_enabled: true)
+
+    on_exit(fn ->
+      restore_env(:issue_adapters, prev_adapters)
+      restore_env(:tracker, prev_tracker)
+    end)
+
+    migrate_repo()
+    clean_repo()
+
+    {:ok, project} =
+      Context.ensure_project(%{
+        name: "Gamba",
+        slug: "gamba-sync-missing",
+        tracker_kind: "github",
+        tracker_config: %{"repo" => "clouapp/gamba", "project_id" => "PVT_1"}
+      })
+
+    assert {:error, :issue_not_found} =
+             Engine.sync_issue(project, "GAM-404", driver: CreateLinkDriver, force: true)
+  end
+
+  test "sync_issue returns sync_push_failed when two-way create push cannot link a remote id" do
+    prev_adapters = Application.get_env(:symphony_elixir, :issue_adapters)
+    prev_tracker = Application.get_env(:symphony_elixir, :tracker)
+    Application.put_env(:symphony_elixir, :issue_adapters, %{"github" => MissingRemoteAdapter})
+    Application.put_env(:symphony_elixir, :tracker, sync_enabled: true)
+
+    on_exit(fn ->
+      restore_env(:issue_adapters, prev_adapters)
+      restore_env(:tracker, prev_tracker)
+    end)
+
+    migrate_repo()
+    clean_repo()
+
+    {:ok, project} =
+      Context.ensure_project(%{
+        name: "Gamba",
+        slug: "gamba-sync-push-fail",
+        tracker_kind: "github",
+        tracker_config: %{"repo" => "clouapp/gamba", "project_id" => "PVT_1"}
+      })
+
+    {:ok, draft} = Context.create_issue(project.slug, %{title: "Draft title", description: "body"})
+
+    defmodule AlwaysFailPushDriver do
+      @behaviour SymphonyElixir.Tracker.Sync.Driver
+
+      @impl true
+      def push(_project, _entry), do: {:error, :boom}
+
+      @impl true
+      def pull(_project, _opts), do: {:ok, []}
+
+      @impl true
+      def pull_pull_requests(_project, _issue), do: {:ok, []}
+    end
+
+    assert {:error, {:sync_push_failed, detail}} =
+             Engine.sync_issue(project, draft.identifier, driver: AlwaysFailPushDriver, force: true, max_attempts: 1)
+
+    assert is_binary(detail)
+    assert detail =~ "boom"
   end
 
   test "sync_issue is not supported on local projects", %{project: project} do

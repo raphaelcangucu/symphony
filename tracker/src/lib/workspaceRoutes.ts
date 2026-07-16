@@ -169,10 +169,17 @@ export function projectSessionPath(projectSlug: string, threadId: number | strin
   return `${projectSessionsPath(projectSlug)}/${id}`;
 }
 
-export function newIssueAssistantPath(projectSlug: string): string {
-  return `/projects/${requireSlug(projectSlug)}/assistant/new-issue`;
+/** Deep link that opens the ephemeral new-issue authoring tab on Workspaces. */
+export function projectNewIssueWorkspacePath(projectSlug: string): string {
+  return `${projectSessionsPath(projectSlug)}?new=1`;
 }
 
+/** Entry path for “new issue with assistant” — hosted on Workspaces (`?new=1`). */
+export function newIssueAssistantPath(projectSlug: string): string {
+  return projectNewIssueWorkspacePath(projectSlug);
+}
+
+/** Legacy path retained for redirects into `projectAuthoringSessionPath`. */
 export function issueAssistantPath(projectSlug: string, issueId: string): string {
   const trimmed = requireNonBlank(normalizeIssueIdentifier(issueId), "identifier");
   return `/projects/${requireSlug(projectSlug)}/assistant/issue/${encodeURIComponent(trimmed)}`;

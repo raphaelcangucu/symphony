@@ -61,6 +61,7 @@ function AssistantTurnTimelineComponent({
               taskSnapshot={taskSnapshot}
               onKillTool={onKillTool}
               onLoadFullOutput={onLoadFullOutput}
+              onOpenKbPath={onOpenDocumentPath}
             />
           </div>
         );

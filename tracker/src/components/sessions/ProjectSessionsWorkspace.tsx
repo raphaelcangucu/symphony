@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import { ProjectSessionsChromeSetterContext } from "@/components/layout/ProjectSessionsChromeContext";
 import { useWorkspace } from "@/components/layout/WorkspaceContext";
 import { AssistantSessionTabContent } from "@/components/sessions/AssistantSessionTabContent";
+import { IssueAuthoringPanel } from "@/components/assistant/IssueAuthoringPanel";
 import { IssueAuthoringSessionPanel } from "@/components/issues/issue-detail/IssueAuthoringSessionPanel";
 import { IssueExecutionSessionPanel } from "@/components/issues/issue-detail/IssueExecutionSessionPanel";
 import { NewStandaloneWorkspaceDialog } from "@/components/sessions/NewStandaloneWorkspaceDialog";
@@ -48,12 +49,14 @@ import {
 import { workspaceCloneRepoOptions } from "@/lib/workspaceCloneRepos";
 import { cn, SCROLLBAR_THIN } from "@/lib/utils";
 import {
+  NEW_ISSUE_TAB_ID,
   SESSIONS_LIST_TAB_ID,
   assistantSessionTabId,
   authoringSessionTabId,
   createAssistantSessionTab,
   createAuthoringSessionTab,
   createExecutionSessionTab,
+  createNewIssueTab,
   createSessionsListTab,
   executionSessionTabId,
 } from "@/lib/workspaceTabs/types";
@@ -61,6 +64,7 @@ import {
   issuePath,
   projectAuthoringSessionPath,
   projectExecutionSessionPath,
+  projectNewIssueWorkspacePath,
   projectSessionPath,
   projectSessionsPath,
   type WorkspaceView,
@@ -77,6 +81,7 @@ interface ProjectSessionsWorkspaceProps {
   activeThreadId?: number | null;
   activeExecutionIdentifier?: string | null;
   activeAuthoringIdentifier?: string | null;
+  activeNewIssue?: boolean;
 }
 
 export function ProjectSessionsWorkspace({
@@ -84,6 +89,7 @@ export function ProjectSessionsWorkspace({
   activeThreadId = null,
   activeExecutionIdentifier = null,
   activeAuthoringIdentifier = null,
+  activeNewIssue = false,
 }: ProjectSessionsWorkspaceProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -340,6 +346,46 @@ export function ProjectSessionsWorkspace({
     openTab(createAuthoringSessionTab(activeAuthoringIdentifier, tabTitle));
   }, [activeAuthoringIdentifier, executionTitleLookup, openTab, t, tabs]);
 
+  const openedNewIssueRef = useRef(false);
+  const suppressNewIssueOpenRef = useRef(false);
+  useEffect(() => {
+    if (!activeNewIssue) {
+      openedNewIssueRef.current = false;
+      suppressNewIssueOpenRef.current = false;
+      return;
+    }
+    if (suppressNewIssueOpenRef.current) return;
+
+    const tabTitle = t("issue.create.withAssistant");
+    const existingTab = tabs.find((tab) => tab.id === NEW_ISSUE_TAB_ID);
+    if (openedNewIssueRef.current && existingTab?.title === tabTitle && activeTabId === NEW_ISSUE_TAB_ID) {
+      return;
+    }
+
+    openedNewIssueRef.current = true;
+    openTab(createNewIssueTab(tabTitle));
+  }, [activeNewIssue, activeTabId, openTab, t, tabs]);
+
+  const handleNewIssueCreated = useCallback(
+    (created: { identifier: string }) => {
+      const identifier = created.identifier.trim();
+      if (!identifier) return;
+
+      // Prevent the ?new=1 effect from reopening the ephemeral tab before the
+      // authoring deep link replaces it in the URL.
+      suppressNewIssueOpenRef.current = true;
+      closeTab(NEW_ISSUE_TAB_ID);
+      const issue = issues.find((entry) => entry.identifier === identifier);
+      openAuthoringSession({
+        issueIdentifier: identifier,
+        title: issue?.title ?? identifier,
+        updatedAt: "",
+        agentKind: null,
+      });
+    },
+    [closeTab, issues, openAuthoringSession],
+  );
+
   const openedExecutionRef = useRef<string | null>(null);
   useEffect(() => {
     if (!activeExecutionIdentifier) {
@@ -375,6 +421,10 @@ export function ProjectSessionsWorkspace({
       }
       if (tab?.kind === "execution-session") {
         navigate(projectExecutionSessionPath(projectSlug, tab.issueIdentifier), { replace: true });
+        return;
+      }
+      if (tab?.kind === "new-issue") {
+        navigate(projectNewIssueWorkspacePath(projectSlug), { replace: true });
         return;
       }
       if (tab?.kind === "sessions-list") {
@@ -696,6 +746,17 @@ export function ProjectSessionsWorkspace({
             view={view}
             isLoading={isLoading}
           />
+        ) : null}
+
+        {activeTab?.kind === "new-issue" ? (
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <IssueAuthoringPanel
+              projectSlug={projectSlug}
+              view={view}
+              compact
+              onIssueCreated={handleNewIssueCreated}
+            />
+          </div>
         ) : null}
 
         {activeTab?.kind === "execution-session" ? (

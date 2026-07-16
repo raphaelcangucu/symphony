@@ -71,8 +71,8 @@ defmodule SymphonyElixir.ExecutionModeTest do
     refute ExecutionMode.claude_interactive_approval?("turbo", true)
   end
 
-  test "cursor force on build and yolo, not plan" do
-    refute ExecutionMode.cursor_force?("plan")
+  test "cursor_force?/1 is true for every mode including plan" do
+    assert ExecutionMode.cursor_force?("plan")
     assert ExecutionMode.cursor_force?("build")
     assert ExecutionMode.cursor_force?("yolo")
     assert ExecutionMode.cursor_force?(nil)

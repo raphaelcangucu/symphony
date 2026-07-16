@@ -142,6 +142,20 @@ defmodule SymphonyElixir.Tracker.Sync.Outbox do
   """
   @spec requeue_failed_issue_creates(integer(), [String.t()]) :: non_neg_integer()
   def requeue_failed_issue_creates(project_id, identifiers) when is_integer(project_id) and is_list(identifiers) do
+    requeue_issue_creates(project_id, identifiers, ["failed"])
+  end
+
+  @doc """
+  Requeues failed or stuck `in_flight` `issue:create` entries so an on-demand
+  two-way sync can push local-only drafts that never reached the remote.
+  """
+  @spec requeue_issue_creates(integer(), [String.t()]) :: non_neg_integer()
+  def requeue_issue_creates(project_id, identifiers) when is_integer(project_id) and is_list(identifiers) do
+    requeue_issue_creates(project_id, identifiers, ["failed", "in_flight"])
+  end
+
+  defp requeue_issue_creates(project_id, identifiers, statuses)
+       when is_integer(project_id) and is_list(identifiers) and is_list(statuses) do
     dedup_keys =
       identifiers
       |> Enum.filter(&(is_binary(&1) and String.trim(&1) != ""))
@@ -158,7 +172,7 @@ defmodule SymphonyElixir.Tracker.Sync.Outbox do
           |> where(
             [e],
             e.project_id == ^project_id and e.entity_type == "issue" and e.operation == "create" and
-              e.status == "failed" and e.dedup_key in ^keys
+              e.status in ^statuses and e.dedup_key in ^keys
           )
           |> Repo.update_all(
             set: [

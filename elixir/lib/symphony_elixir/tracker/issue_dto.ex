@@ -26,7 +26,9 @@ defmodule SymphonyElixir.Tracker.IssueDTO do
             updated_at: nil,
             repository_full_name: nil,
             parent_identifier: nil,
-            sub_issue_summary: nil
+            sub_issue_summary: nil,
+            sync_status: nil,
+            last_sync_error: nil
 
   @type status :: %{
           name: String.t(),
@@ -66,7 +68,9 @@ defmodule SymphonyElixir.Tracker.IssueDTO do
           updated_at: String.t() | nil,
           repository_full_name: String.t() | nil,
           parent_identifier: String.t() | nil,
-          sub_issue_summary: %{total: integer(), completed: integer(), percent_completed: integer()} | nil
+          sub_issue_summary: %{total: integer(), completed: integer(), percent_completed: integer()} | nil,
+          sync_status: String.t() | nil,
+          last_sync_error: String.t() | nil
         }
 
   @spec build(map()) :: t()

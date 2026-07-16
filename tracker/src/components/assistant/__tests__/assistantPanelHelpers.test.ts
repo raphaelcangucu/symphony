@@ -1,6 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import { extractKbDocumentReferencesFromMessage } from "@/components/assistant/assistantPanelHelpers";
+import {
+  displayMessages,
+  extractKbDocumentReferencesFromMessage,
+} from "@/components/assistant/assistantPanelHelpers";
 import type { AssistantChatMessage, AssistantToolCall } from "@/services/assistant";
 
 function toolCall(overrides: Partial<AssistantToolCall>): AssistantToolCall {
@@ -25,6 +28,38 @@ function message(overrides: Partial<AssistantChatMessage>): AssistantChatMessage
     ...overrides,
   };
 }
+
+describe("displayMessages", () => {
+  const tMock = vi.fn((key: string, options?: { agent?: string }) => {
+    if (key === "assistant.panel.codingAgent") return "the coding agent";
+    if (key === "assistant.panel.welcome") {
+      return `Welcome via ${options?.agent ?? "missing"}`;
+    }
+    return key;
+  });
+  const t = tMock as unknown as import("i18next").TFunction;
+
+  it("names the thread agent in the empty-state welcome", () => {
+    const [welcome] = displayMessages([], t, "cursor");
+
+    expect(welcome.content).toBe("Welcome via Cursor");
+    expect(tMock).toHaveBeenCalledWith("assistant.panel.welcome", { agent: "Cursor" });
+  });
+
+  it("falls back to a neutral agent label when none is resolved yet", () => {
+    tMock.mockClear();
+    const [welcome] = displayMessages([], t, null);
+
+    expect(welcome.content).toBe("Welcome via the coding agent");
+    expect(tMock).toHaveBeenCalledWith("assistant.panel.codingAgent");
+    expect(tMock).toHaveBeenCalledWith("assistant.panel.welcome", { agent: "the coding agent" });
+  });
+
+  it("returns real messages unchanged when the transcript is non-empty", () => {
+    const existing = [message({ content: "hello" })];
+    expect(displayMessages(existing, t, "cursor")).toBe(existing);
+  });
+});
 
 describe("extractKbDocumentReferencesFromMessage", () => {
   it("extracts references from the message content", () => {

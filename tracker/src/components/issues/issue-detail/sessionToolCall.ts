@@ -1,5 +1,9 @@
 import type { ToolBlockLanguage, ToolCallView } from "@/components/shared/ToolCallBlock";
-import { formatToolOutput, resolveToolDisplayName } from "@/lib/toolCallDisplay";
+import {
+  enrichCursorToolPresentation,
+  formatToolOutput,
+  resolveToolDisplayName,
+} from "@/lib/toolCallDisplay";
 import { classifyToolName, type ToolGroupKind, type ToolGroupStatus } from "@/lib/toolCallGroups";
 import type { SessionLogEntry, SessionLogEntryLanguage } from "@/types/session-log";
 
@@ -121,15 +125,39 @@ export function sessionGroupStatus(pairs: SessionToolPair[]): ToolGroupStatus {
 
 export function sessionPairToView(call: SessionLogEntry, result: SessionLogEntry | null): ToolCallView {
   const outputBody = result?.body ? formatToolOutput(result.body) : null;
+  const parsedArgs = parseJsonBody(call.body);
+  const presentation = enrichCursorToolPresentation(call.title, parsedArgs ?? call.body);
+  const useCursorCard = presentation.kind !== "other";
 
   return {
-    toolType: toolTypeLabel(call.title, call.body, outputBody),
-    description: deriveDescription(call.body),
+    toolType: useCursorCard
+      ? presentation.toolType
+      : toolTypeLabel(call.title, call.body, outputBody),
+    description: useCursorCard ? presentation.description : deriveDescription(call.body),
     status: pairStatus(call, result),
-    input: call.body ? { value: call.body, language: toBlockLanguage(call.language) } : null,
+    input: presentation.detailMarkdown
+      ? { value: presentation.detailMarkdown, language: "markdown" }
+      : call.body
+        ? { value: call.body, language: toBlockLanguage(call.language) }
+        : null,
     output: outputBody ? { value: outputBody, language: toBlockLanguage(result?.language ?? "text") } : null,
     defaultCollapsed: false,
+    kbPath: presentation.kbPath,
+    kind: presentation.kind,
   };
+}
+
+function parseJsonBody(body: string | null): Record<string, unknown> | null {
+  if (!body) return null;
+  try {
+    const parsed = JSON.parse(body) as unknown;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {
+    return null;
+  }
+  return null;
 }
 
 function toolTypeLabel(title: string, input: string | null, output: string | null): string {

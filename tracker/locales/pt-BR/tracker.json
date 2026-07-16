@@ -623,6 +623,10 @@
       "openWorkspaceCode": "Abrir o workspace desta tarefa no Code (.)",
       "blocked": "Bloqueada",
       "syncFromRemote": "Sincronizar do remoto",
+      "syncError": {
+        "title": "Não foi possível sincronizar esta issue com o tracker remoto",
+        "retry": "Tentar sincronizar de novo"
+      },
       "archive": "Arquivar",
       "delete": "Excluir",
       "deleteConfirm": "Excluir {{identifier}} permanentemente? Isso remove do board e não pode ser desfeito.",
@@ -707,6 +711,8 @@
       "input": "ENT",
       "output": "SAÍ",
       "showMore": "… mostrar mais",
+      "openInKnowledgeBase": "Abrir na knowledge base",
+      "kbPathMissing": "Não foi possível encontrar um caminho de docs para este plano.",
       "loadFullOutput": "Carregar saída completa ({{size}})",
       "loadingFullOutput": "Carregando saída completa…",
       "loadFullOutputFailed": "Não foi possível carregar a saída completa.",
@@ -981,6 +987,14 @@
       "openServerPreview": "Abrir preview {{slug}}",
       "noUrlYet": "Sem URL ainda",
       "provisioningStatus": "O dev server {{slug}} está {{status}} e ainda não publicou uma URL.",
+      "syncState": {
+        "conflictTitle": "Preview fora de sincronia",
+        "conflictBody": "O dev server {{slug}} está rodando em uma porta fora do seu lease, então não é incorporado. {{reason}}",
+        "awaitingTitle": "Aguardando o dev server reportar",
+        "awaitingBody": "O dev server {{slug}} tem um contrato de runtime, mas ainda não reportou uma porta aceita. Ele será incorporado assim que vincular uma porta do lease e reportar como pronto.",
+        "staleTitle": "Contrato de preview desatualizado",
+        "staleBody": "O contrato de runtime de {{slug}} está desatualizado. Reinicie o preview para gerar um contrato novo."
+      },
       "availabilityReason": {
         "disabled": {
           "title": "Previews de dev-server desativados",
@@ -2196,7 +2210,8 @@
       "dispatchedTo": "Dispatch para {{agent}}.",
       "dispatchTimeout": "Dispatch de {{agent}} expirou",
       "btwFailed": "Falha ao iniciar pergunta paralela.",
-      "welcome": "Pergunte naturalmente sobre este projeto ou peça ações no tracker. Posso conversar, criar tarefas, comentar em issues, mover status, listar issues e solicitar trabalho do Codex quando você pedir.",
+      "codingAgent": "um agente de código",
+      "welcome": "Pergunte naturalmente sobre este projeto ou peça ações no tracker. Posso conversar, criar tarefas, comentar em issues, mover status, listar issues e solicitar trabalho de {{agent}} quando você pedir.",
       "clarifyingQuestions": "Perguntas de esclarecimento",
       "sendQueuedNow": "Enviar mensagem enfileirada agora",
       "sendNow": "Enviar agora",
@@ -2482,6 +2497,12 @@
       "other": "Outro",
       "submit": "Enviar respostas",
       "questionFallback": "P{{index}}"
+    },
+    "createPlan": {
+      "title": "Plan · {{name}}",
+      "untitled": "Plan",
+      "accept": "Aceitar",
+      "reject": "Rejeitar"
     },
     "page": {
       "conversationsAria": "Sessões",

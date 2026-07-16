@@ -3,7 +3,7 @@ defmodule SymphonyElixir.Assistant.PreviewTools do
 
   alias SymphonyElixir.Assistant.HandoffTools
   alias SymphonyElixir.DevServer
-  alias SymphonyElixir.DevServer.Manager
+  alias SymphonyElixir.DevServer.{Manager, Snapshot}
   alias SymphonyElixir.Issue
   alias SymphonyElixir.LocalTracker.DevEnv
 
@@ -420,22 +420,8 @@ defmodule SymphonyElixir.Assistant.PreviewTools do
         Map.get(server, "url")
 
     local_url =
-      cond do
-        not is_integer(port) or port <= 0 ->
-          nil
-
-        is_binary(ready_path) and ready_path != "" ->
-          "http://127.0.0.1:#{port}#{normalize_path(ready_path)}"
-
-        is_binary(url_path) and url_path != "" ->
-          "http://127.0.0.1:#{port}#{normalize_path(url_path)}"
-
-        String.contains?(slug, "admin") ->
-          "http://127.0.0.1:#{port}/"
-
-        true ->
-          "http://127.0.0.1:#{port}/api/health"
-      end
+      Map.get(server, :local_url) || Map.get(server, "local_url") ||
+        Snapshot.local_url(port, %{slug: slug, ready_path: ready_path, url_path: url_path})
 
     server
     |> Map.put(:local_url, local_url)
@@ -458,10 +444,6 @@ defmodule SymphonyElixir.Assistant.PreviewTools do
   defp step_field(step, key) when is_map(step) do
     Map.get(step, key) || Map.get(step, Atom.to_string(key))
   end
-
-  defp normalize_path("/" <> _ = path), do: path
-  defp normalize_path(path) when is_binary(path), do: "/" <> path
-  defp normalize_path(_), do: "/"
 
   defp maybe_put_public_url(server, public_url) when is_binary(public_url) and public_url != "",
     do: Map.put(server, :public_url, public_url)

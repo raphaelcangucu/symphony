@@ -237,16 +237,13 @@ No UI component changes required for v1. Existing
 Manual check: reproduce thread-7999 style ask on Claude in tracker and confirm
 card → answer → turn continues without **FALHOU**.
 
-## Cursor follow-up (documentation only)
+## Cursor follow-up → shipped design
 
-Cursor gaps to track separately:
-
-1. `AskQuestion` does not fire CLI/IDE `preToolUse` / `postToolUse` (upstream
-   bug).
-2. Headless `--print` may fabricate `"Questions skipped by the user…"` with
-   `is_error=false`, which is unsafe if treated as consent.
-3. Likely future path: MCP `ask_user` or ACP `cursor/ask_question` once available;
-   until then, prefer text questions for Cursor assistant turns.
+Interactive Cursor ask/permission/create-plan UX is specified and implemented via
+ACP in
+[`2026-07-16-cursor-plan-interactive-ux-design.md`](./2026-07-16-cursor-plan-interactive-ux-design.md)
+(`agent acp`, `cursor/ask_question`, `session/request_permission`,
+`cursor/create_plan`). Headless `--print` remains for non-interactive turns.
 
 ## Open implementation notes (resolve in the plan, not blockers)
 

@@ -1,3 +1,4 @@
+import { notifyTrackerProjectSessionsChanged } from "@/lib/projectEvents";
 import { graphemeCount, normalizeNullableString } from "@/lib/serviceNormalization";
 import { requireNonBlank, requirePositiveInteger } from "@/lib/serviceValidation";
 import type { AssistantThread } from "@/types/assistant-thread";
@@ -296,7 +297,9 @@ export async function createProjectSessionThread(
     ...(input.effort ? { effort: input.effort } : {}),
     ...(workspacePath === undefined ? {} : { workspace_path: workspacePath }),
   });
-  return normalizeAssistantThread(unwrapData<BackendAssistantThreadDto>(response));
+  const thread = normalizeAssistantThread(unwrapData<BackendAssistantThreadDto>(response));
+  notifyTrackerProjectSessionsChanged(projectSlug);
+  return thread;
 }
 
 export async function createIssueSessionThread(
@@ -335,7 +338,9 @@ export async function createIssueSessionThread(
     ...(workspacePath === undefined ? {} : { workspace_path: workspacePath }),
     ...(normalizeCloneBranches(input.cloneBranches, input.cloneBranch) ?? {}),
   });
-  return normalizeAssistantThread(unwrapData<BackendAssistantThreadDto>(response));
+  const thread = normalizeAssistantThread(unwrapData<BackendAssistantThreadDto>(response));
+  notifyTrackerProjectSessionsChanged(projectSlug);
+  return thread;
 }
 
 function normalizeCloneBranches(

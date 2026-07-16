@@ -47,6 +47,7 @@ import { resolveDisplayStatus } from "@/lib/agentExecutionDisplay";
 import { IssueSessionsTab } from "./issue-detail/IssueSessionsTab";
 import { AssigneeAvatar } from "./AssigneeAvatar";
 import { CommentsTab } from "./issue-detail/CommentsTab";
+import { SyncBadge } from "./issue-detail/CommentCard";
 import { EvidenceTab } from "./issue-detail/EvidenceTab";
 import { PriorityIndicator, priorityLabel } from "./PriorityIndicator";
 import { PreviewTab } from "./issue-detail/PreviewTab";
@@ -205,6 +206,11 @@ export function IssueDrawer({
                       {t("issue.drawer.blocked")}
                     </span>
                   ) : null}
+                  {issue.syncStatus && issue.syncStatus !== "synced" ? (
+                    <span title={issue.lastSyncError ?? undefined}>
+                      <SyncBadge syncStatus={issue.syncStatus} t={t} />
+                    </span>
+                  ) : null}
                   {execution ? (
                     <span className="inline-flex items-center gap-0.5">
                       <AgentStatusBadge status={resolveDisplayStatus(execution)} />
@@ -341,6 +347,36 @@ export function IssueDrawer({
                   </span>
                 </div>
               </SheetDescription>
+              {issue.syncStatus === "error" || (issue.syncStatus === "pending" && issue.lastSyncError) ? (
+                <div
+                  role="alert"
+                  className="mb-4 flex flex-col gap-2 rounded-lg border border-red-300/70 bg-red-50 px-3 py-2.5 text-xs text-red-900 dark:border-red-900 dark:bg-red-950/60 dark:text-red-100"
+                >
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium">{t("issue.drawer.syncError.title")}</p>
+                      {issue.lastSyncError ? (
+                        <p className="mt-1 break-words text-red-800/90 dark:text-red-200/90">{issue.lastSyncError}</p>
+                      ) : null}
+                    </div>
+                  </div>
+                  {onForceSync ? (
+                    <div className="flex justify-end">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-7 border-red-300 bg-background/80 text-red-900 hover:bg-red-100 dark:border-red-800 dark:text-red-100 dark:hover:bg-red-900/40"
+                        onClick={() => void handleForceSync(issue)}
+                      >
+                        <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+                        {t("issue.drawer.syncError.retry")}
+                      </Button>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
             </SheetHeader>
             <Tabs
               value={tab}

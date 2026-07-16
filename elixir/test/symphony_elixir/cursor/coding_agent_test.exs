@@ -229,7 +229,7 @@ defmodule SymphonyElixir.Cursor.CodingAgentTest do
     Agent.stop(calls)
   end
 
-  test "yolo runs mutating MCP tools without approval; plan denies them" do
+  test "yolo and plan run mutating MCP tools without approval" do
     {root, ws} = workspace()
     {:ok, calls} = Agent.start_link(fn -> [] end)
 
@@ -265,9 +265,7 @@ defmodule SymphonyElixir.Cursor.CodingAgentTest do
       )
 
     plan_exec = gateway_executor!(plan_session.gateway_token)
-    deny = plan_exec.("create_issue", %{"title" => "Blocked"})
-    assert deny["success"] == false
-    assert hd(deny["contentItems"])["text"] =~ "Plan mode is read-only"
+    assert plan_exec.("create_issue", %{"title" => "Go"})["success"] == true
     assert plan_exec.("list_issues", %{})["success"] == true
 
     CodingAgent.stop_session(plan_session)

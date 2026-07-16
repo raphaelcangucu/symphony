@@ -1,7 +1,7 @@
 defmodule SymphonyElixir.Tracker.Sync.EngineCommentSyncTest do
   use ExUnit.Case, async: false
 
-  alias SymphonyElixir.LocalTracker.{Comment, Context}
+  alias SymphonyElixir.LocalTracker.{Comment, Context, IssueRecord}
   alias SymphonyElixir.Repo
   alias SymphonyElixir.Tracker.Sync.{Engine, LocalStore, Outbox, OutboxEntry, UserRecord}
 
@@ -142,6 +142,28 @@ defmodule SymphonyElixir.Tracker.Sync.EngineCommentSyncTest do
     end)
 
     assert Repo.get!(Comment, comment.id).sync_status == "error"
+  end
+
+  test "exhausted issue push failures mark issue sync_status error", %{project: project, issue: issue} do
+    {:ok, _} = LocalStore.mark_issue_sync_status(issue.id, "pending")
+
+    Outbox.enqueue(%{
+      project_id: project.id,
+      issue_id: issue.id,
+      entity_type: "issue",
+      operation: "create",
+      payload: %{"identifier" => issue.identifier, "title" => issue.title},
+      dedup_key: "issue:create:#{project.id}:#{issue.identifier}"
+    })
+
+    Enum.each(1..5, fn _attempt ->
+      Engine.sync_project(project, driver: FailDriver)
+    end)
+
+    reloaded = Repo.get!(IssueRecord, issue.id)
+    assert reloaded.sync_status == "error"
+    assert is_binary(reloaded.last_sync_error)
+    assert reloaded.last_sync_error =~ "boom"
   end
 
   defp migrate_repo do

@@ -10,9 +10,10 @@ defmodule SymphonyElixir.Cursor.CodingAgent do
   servers from `<workspace>/.cursor/mcp.json`, so the gateway entry is merged
   into that file at session start and removed at session stop.
 
-  Interactive `build` gates mutating Symphony MCP tools through
-  `Claude.ApprovalBroker` so the composer can show the same approval card used
-  for Claude/Codex. `yolo` runs tools immediately; `plan` denies mutations.
+  Interactive assistant turns use Cursor ACP (`agent acp`) so permissions,
+  ask-question, and create-plan can wait on the composer. Non-interactive /
+  orchestrator turns keep `--print` stream-json via `CliRunner`. Interactive
+  `build` also gates mutating Symphony MCP tools through `ApprovalBroker`.
   """
 
   @behaviour SymphonyElixir.CodingAgent
@@ -23,6 +24,7 @@ defmodule SymphonyElixir.Cursor.CodingAgent do
   alias SymphonyElixir.Claude.ApprovalBroker
   alias SymphonyElixir.Claude.AppServer.ToolGateway
   alias SymphonyElixir.Config
+  alias SymphonyElixir.Cursor.AcpRunner
   alias SymphonyElixir.Cursor.CliRunner
   alias SymphonyElixir.ExecutionMode
 
@@ -72,7 +74,17 @@ defmodule SymphonyElixir.Cursor.CodingAgent do
       emit_message(on_message, :notification, %{payload: notification, raw: Jason.encode!(notification)}, %{})
     end
 
-    case CliRunner.run_turn(turn_args(session, prompt, opts), on_event) do
+    runner_args = turn_args(session, prompt, opts)
+    interactive? = Keyword.get(opts, :interactive_user_input, false) == true
+
+    run_result =
+      if interactive? do
+        AcpRunner.run_turn(acp_turn_args(runner_args, opts), on_event)
+      else
+        CliRunner.run_turn(runner_args, on_event)
+      end
+
+    case run_result do
       {:ok, result} ->
         emit_message(on_message, :turn_completed, %{payload: %{"usage" => result.usage}, result: result}, %{usage: result.usage})
 
@@ -93,11 +105,6 @@ defmodule SymphonyElixir.Cursor.CodingAgent do
         # thread forever; the fresh cli_session_id is persisted upstream, so
         # the thread self-heals for subsequent turns.
         Logger.warning("Cursor resume chat #{inspect(stale_id)} not found for #{issue_context(issue)}; retrying with a fresh session")
-
-        run_turn(%{session | cli_session_id: nil}, prompt, issue, opts)
-
-      {:error, {:turn_failed, "cursor-agent exited with code 1"}} when session.cli_session_id != nil ->
-        Logger.warning("Cursor resumed chat #{inspect(session.cli_session_id)} exited for #{issue_context(issue)}; retrying with a fresh session")
 
         run_turn(%{session | cli_session_id: nil}, prompt, issue, opts)
 
@@ -144,6 +151,13 @@ defmodule SymphonyElixir.Cursor.CodingAgent do
       execution_mode: Keyword.get(opts, :execution_mode),
       timeout_ms: Config.agent_turn_timeout_ms()
     }
+  end
+
+  defp acp_turn_args(runner_args, opts) do
+    runner_args
+    |> Map.put(:on_approval_required, Keyword.get(opts, :on_approval_required))
+    |> Map.put(:on_user_input_required, Keyword.get(opts, :on_user_input_required))
+    |> Map.put(:on_create_plan_required, Keyword.get(opts, :on_create_plan_required))
   end
 
   defp maybe_register_tools(workspace, opts) do
@@ -218,9 +232,6 @@ defmodule SymphonyElixir.Cursor.CodingAgent do
         :allow ->
           executor.(bare, arguments)
 
-        :deny_plan ->
-          tool_error("Plan mode is read-only. Switch to Build or Yolo to run #{bare}.")
-
         :require_approval ->
           await_tool_approval(bare, arguments, workspace, on_approval_required, timeout_ms, executor)
       end
@@ -231,9 +242,6 @@ defmodule SymphonyElixir.Cursor.CodingAgent do
     cond do
       ToolExecutor.read_only_tool?(tool) ->
         :allow
-
-      ExecutionMode.normalize(mode) == "plan" ->
-        :deny_plan
 
       ExecutionMode.cursor_interactive_approval?(mode, interactive?) ->
         :require_approval

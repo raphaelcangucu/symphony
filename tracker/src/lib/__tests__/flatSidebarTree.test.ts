@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { buildFlatSidebarProject, overlaySessionTitlesFromRecents } from "@/lib/flatSidebarTree";
+import {
+  buildFlatSidebarProject,
+  mergeSessionsFromRecents,
+  overlaySessionTitlesFromRecents,
+} from "@/lib/flatSidebarTree";
 import type { ProjectSessionRow } from "@/types/project-session";
 import type { RecentSession } from "@/types/recents";
 import type { SidebarSessionNode, SidebarTreeBuildOptions } from "@/types/sidebar";
@@ -52,7 +56,7 @@ function buildInput(
   };
 }
 
-describe("overlaySessionTitlesFromRecents", () => {
+describe("mergeSessionsFromRecents", () => {
   it("replaces blank project-session titles with live recents titles", () => {
     const sessions = [
       sessionRow({ id: "thread:8009", title: "" }),
@@ -76,9 +80,56 @@ describe("overlaySessionTitlesFromRecents", () => {
       },
     ];
 
-    const overlaid = overlaySessionTitlesFromRecents(sessions, recents);
-    expect(overlaid[0]?.title).toBe("Vou remover só o verify");
-    expect(overlaid[1]?.title).toBe("Keep me");
+    const merged = mergeSessionsFromRecents(sessions, recents, "demo");
+    expect(merged.find((session) => session.id === "thread:8009")?.title).toBe(
+      "Vou remover só o verify",
+    );
+    expect(merged.find((session) => session.id === "thread:1")?.title).toBe("Keep me");
+  });
+
+  it("inserts chat sessions that exist in recents but not in project_sessions", () => {
+    const sessions = [sessionRow({ id: "thread:1", title: "Existing" })];
+    const recents: RecentSession[] = [
+      {
+        id: "chat:1",
+        kind: "chat",
+        scope: "project_session",
+        agentKind: null,
+        projectSlug: "demo",
+        projectName: "Demo",
+        title: "Existing",
+        identifier: null,
+        threadId: 1,
+        status: "active",
+        statusKind: "idle",
+        preview: null,
+        updatedAt: "2026-07-16T12:00:00Z",
+      },
+      {
+        id: "chat:99",
+        kind: "chat",
+        scope: "issue_session",
+        agentKind: "cursor",
+        projectSlug: "demo",
+        projectName: "Demo",
+        title: "Models Game Back",
+        identifier: "GAM-20",
+        threadId: 99,
+        status: "active",
+        statusKind: "active",
+        preview: null,
+        updatedAt: "2026-07-16T13:00:00Z",
+      },
+    ];
+
+    const merged = mergeSessionsFromRecents(sessions, recents, "demo");
+    expect(merged.map((session) => session.id).sort()).toEqual(["thread:1", "thread:99"]);
+    expect(merged.find((session) => session.id === "thread:99")).toMatchObject({
+      title: "Models Game Back",
+      kind: "execution",
+      issueIdentifier: "GAM-20",
+      href: "/projects/demo/workspaces/99",
+    });
   });
 
   it("returns the same array reference when nothing changes", () => {
@@ -101,6 +152,7 @@ describe("overlaySessionTitlesFromRecents", () => {
       },
     ];
 
+    expect(mergeSessionsFromRecents(sessions, recents, "demo")).toBe(sessions);
     expect(overlaySessionTitlesFromRecents(sessions, recents)).toBe(sessions);
   });
 });

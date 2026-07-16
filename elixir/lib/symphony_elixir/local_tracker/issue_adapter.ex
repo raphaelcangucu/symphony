@@ -168,7 +168,9 @@ defmodule SymphonyElixir.LocalTracker.IssueAdapter do
       project_slug: project_slug(issue),
       created_at: iso8601(issue.inserted_at),
       updated_at: iso8601(issue.updated_at),
-      parent_identifier: subtask_parent_identifier(issue.source_relations)
+      parent_identifier: subtask_parent_identifier(issue.source_relations),
+      sync_status: issue.sync_status || "synced",
+      last_sync_error: issue.last_sync_error
     })
   end
 

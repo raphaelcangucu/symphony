@@ -48,6 +48,11 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstAdapter do
   @impl true
   def create_issue(%Project{} = project, attrs) do
     with {:ok, dto} <- IssueAdapter.create_issue(project, attrs) do
+      case local_issue_id(project, dto.identifier) do
+        {:ok, issue_id} -> LocalStore.mark_issue_sync_status(issue_id, "pending")
+        _missing -> :ok
+      end
+
       enqueue(project, dto.identifier, "issue", "create", attrs, "issue:create:#{project.id}:#{dto.identifier}")
       {:ok, dto}
     end
@@ -253,9 +258,16 @@ defmodule SymphonyElixir.Tracker.Sync.LocalFirstAdapter do
   end
 
   defp issue_id_for(project, identifier) do
-    case Context.get_issue(project.slug, identifier) do
-      {:ok, issue} -> issue.id
+    case local_issue_id(project, identifier) do
+      {:ok, issue_id} -> issue_id
       _ -> nil
+    end
+  end
+
+  defp local_issue_id(project, identifier) do
+    case Context.get_issue(project.slug, identifier) do
+      {:ok, %{id: issue_id}} when is_integer(issue_id) -> {:ok, issue_id}
+      _ -> {:error, :issue_not_found}
     end
   end
 

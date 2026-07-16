@@ -3,7 +3,7 @@ defmodule SymphonyElixir.Assistant.ListPreviewTools do
 
   alias SymphonyElixir.Cloudflare.Tunnel
   alias SymphonyElixir.DevServer
-  alias SymphonyElixir.DevServer.Manager
+  alias SymphonyElixir.DevServer.{Manager, Snapshot}
 
   @tool "list_previews"
   @unhealthy_statuses ~w(crashed pending provisioning starting stopped unknown)
@@ -120,7 +120,7 @@ defmodule SymphonyElixir.Assistant.ListPreviewTools do
       status: stringify_reason(map_field(server, :status) || "unknown"),
       port: port,
       primary: map_field(server, :primary) == true,
-      local_url: map_field(server, :local_url) || local_url(port, slug),
+      local_url: map_field(server, :local_url) || Snapshot.local_url(port, %{slug: slug}),
       public_url: map_field(server, :public_url) || map_field(server, :url)
     }
   end
@@ -145,13 +145,6 @@ defmodule SymphonyElixir.Assistant.ListPreviewTools do
   end
 
   defp normalize_tunnel(_tunnel), do: %{enabled: false, running: false}
-
-  defp local_url(port, slug) when is_integer(port) and port > 0 do
-    path = if is_binary(slug) and String.contains?(slug, "admin"), do: "/", else: "/api/health"
-    "http://127.0.0.1:#{port}#{path}"
-  end
-
-  defp local_url(_port, _slug), do: nil
 
   defp normalize_id(id) when is_integer(id), do: id
 

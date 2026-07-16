@@ -3,6 +3,8 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
 
   @behaviour SymphonyElixir.Tracker.IssueAdapter
 
+  import Ecto.Query, only: [from: 2]
+
   alias SymphonyElixir.GitHub.AttachmentRewriter
   alias SymphonyElixir.GitHub.Client
   alias SymphonyElixir.GitHub.IssueAdapter.Query
@@ -11,7 +13,9 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
   alias SymphonyElixir.GitHub.IssueRepo
   alias SymphonyElixir.GitHub.RepoSpec
   alias SymphonyElixir.LocalTracker.{Context, Project}
+  alias SymphonyElixir.Repo
   alias SymphonyElixir.Tracker.{IssueDTO, RemoteError}
+  alias SymphonyElixir.Tracker.Sync.UserRecord
 
   @page_size 50
   # Compile-time copy of the canonical list so it can be used in guards.
@@ -117,7 +121,7 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
          label_ids = resolve_label_ids(meta.labels, attrs),
          {:ok, status_target} <- resolve_status_target(cfg, status_name(attrs)),
          remote_body = AttachmentRewriter.rewrite(body(attrs), owner, name, project.slug),
-         {:ok, issue} <- create_remote_issue(meta.repo_id, title, attrs, label_ids, remote_body),
+         {:ok, issue} <- create_remote_issue(project, meta.repo_id, title, attrs, label_ids, remote_body),
          {:ok, item_id} <- add_to_project(cfg.project_id, issue["id"]),
          :ok <- apply_status_target(cfg, item_id, status_target) do
       {:ok, build_created_dto(issue, project, attrs, meta.labels, label_ids)}
@@ -551,11 +555,17 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
     end
   end
 
-  defp create_remote_issue(repo_id, title, attrs, label_ids, remote_body) do
+  defp create_remote_issue(%Project{} = project, repo_id, title, attrs, label_ids, remote_body) do
+    assignee_ids =
+      case assignee_ids_attr(attrs) do
+        :skip -> []
+        ids -> resolve_github_assignee_ids(project, ids)
+      end
+
     input =
       %{"repositoryId" => repo_id, "title" => title, "body" => remote_body}
       |> put_when_present("labelIds", label_ids)
-      |> put_when_present("assigneeIds", string_list(Map.get(attrs, "assignee_ids")))
+      |> put_when_present("assigneeIds", assignee_ids)
 
     case client().graphql(Query.create_issue_mutation(), %{"input" => input}, []) do
       {:ok, response} -> Query.created_issue(response)
@@ -711,25 +721,58 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
 
   defp resolve_github_assignee_ids(_project, []), do: []
 
+  # Resolve logins/ids to GitHub user node ids. Prefer live assignable users, then
+  # the local `tracker_users` cache. Never pass unresolved logins through — GraphQL
+  # treats them as node ids and fails create/update with remote_validation.
   defp resolve_github_assignee_ids(%Project{} = project, requested) do
-    with {:ok, users} <- list_assignable_users(project) do
-      by_id = Map.new(users, fn user -> {user.id, user.id} end)
-      by_login = Map.new(users, fn user -> {String.downcase(user.login || ""), user.id} end)
+    remote_users =
+      case list_assignable_users(project) do
+        {:ok, users} when is_list(users) -> users
+        _ -> []
+      end
 
-      requested
-      |> Enum.map(fn value ->
-        cond do
-          is_binary(value) and Map.has_key?(by_id, value) -> value
-          is_binary(value) -> Map.get(by_login, String.downcase(String.trim(value)))
-          true -> nil
-        end
-      end)
-      |> Enum.reject(&is_nil/1)
-      |> Enum.uniq()
-    else
-      _ -> requested
+    by_id = Map.new(remote_users, fn user -> {user.id, user.id} end)
+    by_login = Map.new(remote_users, fn user -> {String.downcase(user.login || ""), user.id} end)
+    local_by_login = local_assignee_ids_by_login(project)
+
+    requested
+    |> Enum.map(&resolve_one_github_assignee(&1, by_id, by_login, local_by_login))
+    |> Enum.reject(&is_nil/1)
+    |> Enum.uniq()
+  end
+
+  defp resolve_one_github_assignee(value, by_id, by_login, local_by_login) when is_binary(value) do
+    trimmed = String.trim(value)
+    login = String.downcase(trimmed)
+
+    cond do
+      trimmed == "" -> nil
+      Map.has_key?(by_id, trimmed) -> trimmed
+      Map.has_key?(by_login, login) -> Map.fetch!(by_login, login)
+      Map.has_key?(local_by_login, login) -> Map.fetch!(local_by_login, login)
+      github_user_node_id?(trimmed) -> trimmed
+      true -> nil
     end
   end
+
+  defp resolve_one_github_assignee(_value, _by_id, _by_login, _local_by_login), do: nil
+
+  defp local_assignee_ids_by_login(%Project{id: project_id}) when is_integer(project_id) do
+    from(user in UserRecord,
+      where: user.project_id == ^project_id and not is_nil(user.remote_id) and user.remote_id != "",
+      select: {user.login, user.remote_id}
+    )
+    |> Repo.all()
+    |> Map.new(fn {login, remote_id} -> {String.downcase(login || ""), remote_id} end)
+  end
+
+  defp local_assignee_ids_by_login(_project), do: %{}
+
+  defp github_user_node_id?(value) when is_binary(value) do
+    String.starts_with?(value, "U_") or String.starts_with?(value, "MDQ6VXNlc")
+  end
+
+  defp github_user_node_id?(_value), do: false
 
   defp maybe_sync_issue_labels(issue, repo_labels, attrs) do
     label_change? = Map.has_key?(attrs, "label_ids") or Map.has_key?(attrs, "labels")

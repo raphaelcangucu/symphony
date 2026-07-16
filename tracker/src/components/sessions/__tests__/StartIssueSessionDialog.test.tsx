@@ -49,6 +49,28 @@ describe("StartIssueSessionDialog", () => {
     });
   });
 
+  it("prefills the session title with the issue title", () => {
+    render(
+      <MemoryRouter initialEntries={["/projects/macro-markets/board"]}>
+        <Routes>
+          <Route
+            path="/projects/macro-markets/board"
+            element={
+              <StartIssueSessionDialog
+                projectSlug="macro-markets"
+                issue={{ identifier: "MAC-510", title: "Add languages", agentKind: "codex" }}
+                open
+                onOpenChange={() => {}}
+              />
+            }
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByLabelText(/session title/i)).toHaveValue("Add languages");
+  });
+
   it("creates a build-mode issue session thread on the issue tree by default", async () => {
     const user = userEvent.setup();
     const onCreated = vi.fn();
@@ -76,7 +98,9 @@ describe("StartIssueSessionDialog", () => {
     expect(screen.getByTestId("workspace-target-issue")).toBeInTheDocument();
     expect(screen.queryByTestId("workspace-target-parent")).not.toBeInTheDocument();
 
-    await user.type(screen.getByLabelText(/session title/i), "Build pass 2");
+    const titleInput = screen.getByLabelText(/session title/i);
+    await user.clear(titleInput);
+    await user.type(titleInput, "Build pass 2");
     await user.click(screen.getByRole("button", { name: /start session/i }));
 
     await waitFor(() =>
@@ -197,7 +221,9 @@ describe("StartIssueSessionDialog", () => {
       </MemoryRouter>,
     );
 
-    await user.type(screen.getByLabelText(/session title/i), "Build pass 2");
+    const titleInput = screen.getByLabelText(/session title/i);
+    await user.clear(titleInput);
+    await user.type(titleInput, "Build pass 2");
     await user.click(await screen.findByRole("button", { name: /codex/i }));
     await user.click(screen.getByRole("menuitemradio", { name: /claude/i }));
 

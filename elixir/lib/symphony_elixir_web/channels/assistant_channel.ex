@@ -538,6 +538,28 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   def handle_in("submit_approval", _payload, socket),
     do: {:reply, {:error, %{reason: "approval action is required"}}, socket}
 
+  def handle_in("submit_create_plan", %{"request_id" => request_id, "action" => action}, socket)
+      when action in ["accept", "reject"] do
+    if socket.assigns[:turn_status] != :running do
+      {:reply, {:error, %{reason: "ActiveTurnNotAwaitingCreatePlan"}}, socket}
+    else
+      pending = socket.assigns[:pending_create_plans] || %{}
+
+      case Map.pop(pending, request_id) do
+        {nil, _rest} ->
+          {:reply, {:error, %{reason: "create_plan request not found"}}, socket}
+
+        {_request, rest} ->
+          decision = if action == "accept", do: :accept, else: :reject
+          SymphonyElixir.Cursor.CreatePlanBroker.resolve(to_string(request_id), decision)
+          {:reply, :ok, assign(socket, :pending_create_plans, rest)}
+      end
+    end
+  end
+
+  def handle_in("submit_create_plan", _payload, socket),
+    do: {:reply, {:error, %{reason: "create_plan action is required"}}, socket}
+
   # credo:disable-for-lines:25
   def handle_in("btw", %{"message" => message}, socket) when is_binary(message) do
     case String.trim(message) do
@@ -718,6 +740,21 @@ defmodule SymphonyElixirWeb.AssistantChannel do
 
     notify_assistant_input_needed(socket, :approval)
     {:noreply, assign(socket, :pending_approvals, pending)}
+  end
+
+  def handle_info({:assistant_create_plan_required, %{request_id: request_id} = request}, socket) do
+    pending = Map.put(socket.assigns[:pending_create_plans] || %{}, request_id, request)
+
+    push(socket, "create_plan_required", %{
+      request_id: request_id,
+      name: Map.get(request, :name),
+      overview: Map.get(request, :overview),
+      plan: Map.get(request, :plan),
+      plan_uri: Map.get(request, :plan_uri)
+    })
+
+    notify_assistant_input_needed(socket, :create_plan)
+    {:noreply, assign(socket, :pending_create_plans, pending)}
   end
 
   def handle_info({:approval_ok, _request_id}, socket), do: {:noreply, socket}
@@ -907,11 +944,11 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     Map.new(answers, fn {question_id, value} -> {question_id, %{"answers" => [to_string(value)]}} end)
   end
 
-  # Claude AskUserQuestion waits on UserInputBroker (PreToolUse loopback); Codex
-  # answers land on the turn process as {:codex_user_input, ...}.
+  # Claude AskUserQuestion and Cursor ACP ask_question wait on UserInputBroker;
+  # Codex answers land on the turn process as {:codex_user_input, ...}.
   defp deliver_user_input(socket, request_id, normalized) do
     case current_turn_agent(socket) do
-      "claude" ->
+      agent when agent in ["claude", "cursor"] ->
         UserInputBroker.resolve(to_string(request_id), normalized)
 
       _ ->
@@ -961,11 +998,10 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     end
   end
 
-  # Claude approvals are answered out-of-band by the blocking MCP handler via the
-  # ApprovalBroker (keyed on request_id); Codex approvals are delivered to the
-  # turn process over its port protocol. Route by the originating agent.
+  # Claude / Cursor approvals wait on ApprovalBroker; Codex approvals are delivered
+  # to the turn process over its port protocol. Route by the originating agent.
   defp deliver_approval(turn_pid, request_id, "approve", request) do
-    if claude_approval?(request) do
+    if broker_approval?(request) do
       ApprovalBroker.resolve(request_id, :approve)
     else
       decision = Map.get(request, :decision) || Map.get(request, "decision") || "acceptForSession"
@@ -974,15 +1010,15 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   end
 
   defp deliver_approval(turn_pid, request_id, "cancel", request) do
-    if claude_approval?(request) do
+    if broker_approval?(request) do
       ApprovalBroker.resolve(request_id, :deny)
     else
       if is_pid(turn_pid), do: send(turn_pid, {:agent_interrupt})
     end
   end
 
-  defp claude_approval?(request) do
-    (Map.get(request, :agent) || Map.get(request, "agent")) == "claude"
+  defp broker_approval?(request) do
+    (Map.get(request, :agent) || Map.get(request, "agent")) in ["claude", "cursor"]
   end
 
   defp maybe_persist_user_questions(socket, questions, answers) do
@@ -2535,6 +2571,9 @@ defmodule SymphonyElixirWeb.AssistantChannel do
       end)
       |> Keyword.put(:on_approval_required, fn request ->
         send(channel_pid, {:assistant_approval_required, request})
+      end)
+      |> Keyword.put(:on_create_plan_required, fn request ->
+        send(channel_pid, {:assistant_create_plan_required, request})
       end)
       |> maybe_put_ask_user_session(socket, thread, channel_pid, context)
 

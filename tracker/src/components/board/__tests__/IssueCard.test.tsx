@@ -47,4 +47,13 @@ describe("IssueCard subtask metadata", () => {
     renderCard({ ...baseIssue, subIssueSummary: null });
     expect(screen.queryByText("4 / 4")).not.toBeInTheDocument();
   });
+
+  it("shows a sync failed badge when sync_status is error", () => {
+    renderCard({
+      ...baseIssue,
+      syncStatus: "error",
+      lastSyncError: "Could not resolve assignee",
+    });
+    expect(screen.getByText("Sync failed")).toBeInTheDocument();
+  });
 });

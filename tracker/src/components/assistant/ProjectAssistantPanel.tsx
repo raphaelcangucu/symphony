@@ -105,6 +105,7 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { deriveAgentTasksFromAssistantMessages } from "@/lib/agentTasks";
 import { catalogFor, defaultComposerSettings, fallbackCatalogBundle, type AssistantCatalogBundle } from "@/lib/assistantSettings";
+import { clearPendingThreadSeed } from "@/lib/pendingThreadSeed";
 import {
   DEFAULT_AUTONOMOUS_MODE,
   DEFAULT_INTERACTIVE_MODE,
@@ -131,6 +132,7 @@ import { useIssueChangedDocPaths } from "@/hooks/useIssueChangedDocPaths";
 import { useKbAllRepoTrees } from "@/hooks/useKbAllRepoTrees";
 import { useKbProjectOverview } from "@/hooks/useKbProjectOverview";
 import { useWorkspaceDiffStats } from "@/hooks/useWorkspaceDiffStats";
+import { CreatePlanCard } from "@/components/assistant/CreatePlanCard";
 import { UserQuestionsCard } from "@/components/assistant/UserQuestionsCard";
 import {
   assistantExploreTopic,
@@ -156,9 +158,11 @@ import {
   setTurnPreferences,
   stopTurn,
   submitApproval,
+  submitCreatePlan,
   submitUserInput,
   type AssistantActiveTool,
   type AssistantApprovalRequest,
+  type AssistantCreatePlanRequest,
   type AssistantDocumentChangedPayload,
   type AssistantTurnStatus,
   type AssistantIssueCreatedPayload,
@@ -402,12 +406,15 @@ export function ProjectAssistantPanel({
   const [lastTurn, setLastTurn] = useState<AssistantTurnStatus | null>(null);
   const [pendingQuestions, setPendingQuestions] = useState<UserQuestionsRequest | null>(null);
   const [pendingApproval, setPendingApproval] = useState<AssistantApprovalRequest | null>(null);
+  const [pendingCreatePlan, setPendingCreatePlan] = useState<AssistantCreatePlanRequest | null>(null);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [workspaceProvisionRetrying, setWorkspaceProvisionRetrying] = useState(false);
   const [workspaceProvisionRetryError, setWorkspaceProvisionRetryError] = useState<string | null>(null);
   const [bundle, setBundle] = useState<AssistantCatalogBundle | null>(null);
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const [channelReady, setChannelReady] = useState(false);
+  const [historyHydrated, setHistoryHydrated] = useState(false);
+  const seedAutoSentRef = useRef<string | null>(null);
   const channelRef = useRef<Channel | null>(null);
   const goalStatusAcceptorRef = useRef<GoalStatusAcceptor>(() => false);
   const bundleRef = useRef<AssistantCatalogBundle | null>(null);
@@ -732,6 +739,8 @@ export function ProjectAssistantPanel({
     }
 
     setChannelReady(false);
+    setHistoryHydrated(false);
+    seedAutoSentRef.current = null;
     lastConfirmedGoalModeRef.current = null;
     pendingGoalModeRef.current = null;
     setAuthoringGoal(emptyAuthoringGoal);
@@ -786,6 +795,7 @@ export function ProjectAssistantPanel({
         setHistoryRevealStartIndex(null);
         setHistoryHasMoreBefore(meta?.hasMoreBefore ?? false);
         setHistoryOldestSequence(meta?.oldestSequence ?? null);
+        setHistoryHydrated(true);
       },
       onHistorySynced: (history, meta) => {
         setMessagesPreservingScroll(
@@ -820,6 +830,7 @@ export function ProjectAssistantPanel({
         setTurnRunning(false);
         setPendingQuestions(null);
         setPendingApproval(null);
+        setPendingCreatePlan(null);
         const createdIssue = draftIssueCreatedFromMessage(message);
         if (createdIssue) onDraftIssueCreatedRef.current?.(createdIssue);
       },
@@ -830,6 +841,7 @@ export function ProjectAssistantPanel({
         setTurnRunning(false);
         setPendingQuestions(null);
         setPendingApproval(null);
+        setPendingCreatePlan(null);
       },
       onUserInputRequired: (request) => setPendingQuestions(request),
       onApprovalRequired: (request) => {
@@ -843,6 +855,7 @@ export function ProjectAssistantPanel({
         }
         setPendingApproval(request);
       },
+      onCreatePlanRequired: (request) => setPendingCreatePlan(request),
       onAssistantDocumentChanged: (payload) => {
         if (payload.identifier && issueIdentifier && normalizeIssueIdentifier(payload.identifier) === normalizeIssueIdentifier(issueIdentifier)) {
           setChangedDocsRefreshKey((current) => current + 1);
@@ -1438,7 +1451,10 @@ export function ProjectAssistantPanel({
     [sendMessage],
   );
 
-  const visibleMessages = useMemo(() => displayMessages(messages, t), [messages, t]);
+  const visibleMessages = useMemo(
+    () => displayMessages(messages, t, serverAgentSeed),
+    [messages, serverAgentSeed, t],
+  );
   // `renderedMessages` is the compacted slice actually painted; `visibleMessages`
   // stays the full list so derivations (tasks, KB refs, runtime) keep full context.
   const promptWindow = useMemo(() => getCurrentPromptWindow(visibleMessages), [visibleMessages]);
@@ -1595,6 +1611,49 @@ export function ProjectAssistantPanel({
   const kbDocumentReferencesKey = kbDocumentReferences.join("\0");
   const composerBundle = useMemo(() => bundle ?? fallbackCatalogBundle(), [bundle]);
   const catalogLoading = !bundle && !catalogError;
+
+  useEffect(() => {
+    const seed = composerSeedMessage?.trim();
+    if (!seed) return;
+    if (!channelReady || !historyHydrated || catalogLoading) return;
+    if (messages.length > 0 || turnRunning || submissionBlocked) return;
+    if (seedAutoSentRef.current === seed) return;
+
+    const activeBundle = bundleRef.current;
+    if (!activeBundle) return;
+
+    seedAutoSentRef.current = seed;
+    const agent = composerAgentRef.current ?? activeBundle.defaultAgent;
+    const activeCatalog = catalogFor(activeBundle, agent);
+    const settings =
+      settingsSeed && settingsSeed.agent === agent
+        ? { model: settingsSeed.model, effort: settingsSeed.effort }
+        : defaultComposerSettings(activeCatalog);
+
+    sendMessage({
+      kind: "message",
+      message: seed,
+      agent,
+      settings,
+      attachments: [],
+      contextRefs: [],
+    });
+
+    if (threadId != null && threadId > 0) {
+      clearPendingThreadSeed(threadId);
+    }
+  }, [
+    catalogLoading,
+    channelReady,
+    composerSeedMessage,
+    historyHydrated,
+    messages.length,
+    sendMessage,
+    settingsSeed,
+    submissionBlocked,
+    threadId,
+    turnRunning,
+  ]);
 
   useEffect(() => {
     onKbDocumentReferencesChanged?.(kbDocumentReferences);
@@ -1870,6 +1929,34 @@ export function ProjectAssistantPanel({
         request={pendingApproval}
         onSubmit={submitCommandApproval}
         onInsertContext={insertContextRef}
+        disabled={!channelReady}
+      />
+    </div>
+  ) : null;
+
+  const submitCreatePlanDecision = useCallback(
+    (requestId: string, action: "accept" | "reject") => {
+      const channel = channelRef.current;
+      if (!channel) return;
+
+      submitCreatePlan(channel, requestId, action)
+        .receive("ok", () =>
+          setPendingCreatePlan((current) => (current?.requestId === requestId ? null : current)),
+        )
+        .receive("error", (reason) => {
+          setPendingCreatePlan((current) => (current?.requestId === requestId ? null : current));
+          setConnectionError(errorMessage(reason));
+        });
+    },
+    [],
+  );
+
+  const createPlanNode = pendingCreatePlan ? (
+    <div className="px-4 pb-2">
+      <CreatePlanCard
+        request={pendingCreatePlan}
+        onSubmit={submitCreatePlanDecision}
+        onOpenKbPath={(path) => openKnowledgeBase(path)}
         disabled={!channelReady}
       />
     </div>
@@ -2248,6 +2335,7 @@ export function ProjectAssistantPanel({
                   {queuedChips}
                   {questionsNode}
                   {approvalNode}
+                  {createPlanNode}
                 </div>
               </div>
             }
@@ -2327,6 +2415,8 @@ export function ProjectAssistantPanel({
             {workspaceProvisionBanner}
             {queuedChips}
             {questionsNode}
+            {approvalNode}
+            {createPlanNode}
             {composerNode ?? (
               <div className="border-t px-4 py-6 text-sm text-muted-foreground">{t("assistant.panel.loadingModels")}</div>
             )}

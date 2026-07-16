@@ -623,6 +623,10 @@
       "openWorkspaceCode": "Open this task's workspace in Code (.)",
       "blocked": "Blocked",
       "syncFromRemote": "Sync from remote",
+      "syncError": {
+        "title": "Could not sync this issue to the remote tracker",
+        "retry": "Retry sync"
+      },
       "archive": "Archive",
       "delete": "Delete",
       "deleteConfirm": "Delete {{identifier}} permanently? This removes it from the board and cannot be undone.",
@@ -707,6 +711,8 @@
       "input": "IN",
       "output": "OUT",
       "showMore": "… show more",
+      "openInKnowledgeBase": "Open in knowledge base",
+      "kbPathMissing": "Could not find a docs path for this plan.",
       "loadFullOutput": "Load full output ({{size}})",
       "loadingFullOutput": "Loading full output…",
       "loadFullOutputFailed": "Could not load the full output.",
@@ -981,6 +987,14 @@
       "openServerPreview": "Open {{slug}} preview",
       "noUrlYet": "No URL yet",
       "provisioningStatus": "The {{slug}} dev server is {{status}} and has not published a URL yet.",
+      "syncState": {
+        "conflictTitle": "Preview is out of sync",
+        "conflictBody": "The {{slug}} dev server is running on a port that is not in its lease, so it is not embedded. {{reason}}",
+        "awaitingTitle": "Waiting for the dev server to report",
+        "awaitingBody": "The {{slug}} dev server has a runtime contract but has not reported an accepted port yet. It embeds once it binds a leased port and reports ready.",
+        "staleTitle": "Preview contract is stale",
+        "staleBody": "The runtime contract for {{slug}} is stale. Restart the preview to mint a fresh contract."
+      },
       "availabilityReason": {
         "disabled": {
           "title": "Dev-server previews are disabled",
@@ -2200,7 +2214,8 @@
       "dispatchedTo": "Dispatched to {{agent}}.",
       "dispatchTimeout": "{{agent}} dispatch timed out",
       "btwFailed": "Failed to start side question.",
-      "welcome": "Ask naturally about this project, or request tracker actions. I can chat, create tasks, comment on issues, move statuses, list issues, and request Codex work when you ask for it.",
+      "codingAgent": "the coding agent",
+      "welcome": "Ask naturally about this project, or request tracker actions. I can chat, create tasks, comment on issues, move statuses, list issues, and request work from {{agent}} when you ask for it.",
       "clarifyingQuestions": "Clarifying questions",
       "sendQueuedNow": "Send queued message now",
       "sendNow": "Send now",
@@ -2482,6 +2497,12 @@
       "other": "Other",
       "submit": "Submit answers",
       "questionFallback": "Q{{index}}"
+    },
+    "createPlan": {
+      "title": "Plan · {{name}}",
+      "untitled": "Plan",
+      "accept": "Accept",
+      "reject": "Reject"
     },
     "page": {
       "conversationsAria": "Sessions",

@@ -140,7 +140,9 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
       updated_at: dto.updated_at,
       repository_full_name: dto.repository_full_name,
       parent_identifier: dto.parent_identifier,
-      sub_issue_summary: dto.sub_issue_summary
+      sub_issue_summary: dto.sub_issue_summary,
+      sync_status: dto.sync_status || "synced",
+      last_sync_error: dto.last_sync_error
     }
     |> merge_execution_pins(dto.project_slug, dto.identifier, label_agent)
   end
@@ -169,7 +171,9 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
       started_at: iso8601(issue.started_at),
       completed_at: iso8601(issue.completed_at),
       inserted_at: iso8601(issue.inserted_at),
-      updated_at: iso8601(issue.updated_at)
+      updated_at: iso8601(issue.updated_at),
+      sync_status: issue.sync_status || "synced",
+      last_sync_error: issue.last_sync_error
     }
     |> merge_execution_pins(loaded_project_slug(issue), issue.identifier, label_agent)
   end

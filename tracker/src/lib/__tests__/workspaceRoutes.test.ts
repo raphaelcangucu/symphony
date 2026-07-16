@@ -16,6 +16,7 @@ import {
   issueAssistantPath,
   issuePath,
   newIssueAssistantPath,
+  projectNewIssueWorkspacePath,
   projectExploreAssistantPath,
   projectSettingsPath,
   projectSessionPath,
@@ -52,13 +53,15 @@ describe("workspaceRoutes", () => {
   });
 
   it("builds assistant issue authoring paths", () => {
-    expect(newIssueAssistantPath("acme")).toBe("/projects/acme/assistant/new-issue");
+    expect(projectNewIssueWorkspacePath("acme")).toBe("/projects/acme/workspaces?new=1");
+    expect(newIssueAssistantPath("acme")).toBe("/projects/acme/workspaces?new=1");
     expect(issueAssistantPath("acme", "ABC-1")).toBe("/projects/acme/assistant/issue/ABC-1");
     expect(projectExploreAssistantPath("acme")).toBe("/projects/acme/assistant/explore");
   });
 
   it("encodes assistant issue authoring path parameters", () => {
-    expect(newIssueAssistantPath("a/b c")).toBe("/projects/a%2Fb%20c/assistant/new-issue");
+    expect(projectNewIssueWorkspacePath("a/b c")).toBe("/projects/a%2Fb%20c/workspaces?new=1");
+    expect(newIssueAssistantPath("a/b c")).toBe("/projects/a%2Fb%20c/workspaces?new=1");
     expect(issueAssistantPath("acme", "#508")).toBe("/projects/acme/assistant/issue/508");
   });
 

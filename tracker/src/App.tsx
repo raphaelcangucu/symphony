@@ -8,7 +8,6 @@ import { Layout } from "@/components/layout/Layout";
 import { ProjectWorkspaceLayout } from "@/components/layout/ProjectWorkspaceLayout";
 import { NewProjectRoute } from "@/components/projects/NewProjectRoute";
 import { ProjectFiltersRoute } from "@/components/projects/ProjectFiltersRoute";
-import { IssueAssistantRoute } from "@/components/workspace/IssueAssistantRoute";
 import { IssueDetailRoute } from "@/components/workspace/IssueDetailRoute";
 import { NewIssueRoute } from "@/components/workspace/NewIssueRoute";
 import { ProjectAssistantRoute } from "@/components/workspace/ProjectAssistantRoute";
@@ -45,6 +44,7 @@ import { TemplateListPage } from "@/pages/TemplateListPage";
 import { TemplateEditPage } from "@/pages/TemplateEditPage";
 import { TokenGatePage } from "@/pages/TokenGatePage";
 import { settingsTemplatesPath } from "@/lib/settingsRoutes";
+import { projectAuthoringSessionPath, projectNewIssueWorkspacePath } from "@/lib/workspaceRoutes";
 
 const routerBasename = import.meta.env.BASE_URL.replace(/\/$/, "") || undefined;
 
@@ -67,6 +67,19 @@ function LegacySessionsRedirect() {
   const location = useLocation();
   const suffix = threadId ? `/${encodeURIComponent(threadId)}` : "";
   return <Navigate to={`/projects/${projectSlug}/workspaces${suffix}${location.search}`} replace />;
+}
+
+function LegacyNewIssueAssistantRedirect() {
+  const { projectSlug = "" } = useParams();
+  return <Navigate to={projectNewIssueWorkspacePath(projectSlug)} replace />;
+}
+
+function LegacyIssueAssistantRedirect() {
+  const { projectSlug = "", issueId = "" } = useParams();
+  if (!projectSlug.trim() || !issueId.trim()) {
+    return <Navigate to="/projects" replace />;
+  }
+  return <Navigate to={projectAuthoringSessionPath(projectSlug, issueId)} replace />;
 }
 
 export function App() {
@@ -108,8 +121,8 @@ export function App() {
                 <Route path="assistant" element={<ProjectAssistantRoute />} />
                 <Route path="assistant/explore" element={<ProjectExploreAssistantRoute />} />
                 <Route path="assistant/terminal" element={<ProjectTerminalRoute />} />
-                <Route path="assistant/new-issue" element={<IssueAssistantRoute />} />
-                <Route path="assistant/issue/:issueId" element={<IssueAssistantRoute />} />
+                <Route path="assistant/new-issue" element={<LegacyNewIssueAssistantRedirect />} />
+                <Route path="assistant/issue/:issueId" element={<LegacyIssueAssistantRedirect />} />
                 <Route path="workspaces" element={<ProjectSessionsPage />} />
                 <Route path="workspaces/:threadId" element={<ProjectSessionPage />} />
                 {/* Legacy Sessions URLs redirect to the Workspaces page. */}

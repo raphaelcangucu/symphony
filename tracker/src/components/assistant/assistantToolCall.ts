@@ -1,6 +1,6 @@
 import type { ToolCallView } from "@/components/shared/ToolCallBlock";
 import { i18n } from "@/i18n";
-import { formatToolOutput, resolveToolDisplayName } from "@/lib/toolCallDisplay";
+import { enrichCursorToolPresentation, formatToolOutput, resolveToolDisplayName } from "@/lib/toolCallDisplay";
 import type { AssistantToolCall, AssistantToolStatus } from "@/services/assistant";
 
 const ACTION_TOOLS = new Set<string>([
@@ -43,18 +43,33 @@ export function assistantToolCallToView(toolCall: AssistantToolCall): ToolCallVi
 }
 
 function buildToolCallView(toolCall: AssistantToolCall): ToolCallView {
-  const input = serializeArguments(toolCall.arguments);
+  const presentation = enrichCursorToolPresentation(toolCall.name, toolCall.arguments);
+  const inputJson = serializeArguments(toolCall.arguments);
   const output = toolCall.output ? formatToolOutput(toolCall.output) : null;
+  const inputSection =
+    presentation.detailMarkdown != null
+      ? { value: presentation.detailMarkdown, language: "markdown" as const }
+      : inputJson
+        ? {
+            value: inputJson,
+            language: (isShellTool(toolCall.name) ? "bash" : "json") as "bash" | "json",
+          }
+        : null;
 
   return {
-    toolType: localizeToolName(toolCall.name, input, output),
-    description: null,
+    toolType:
+      presentation.kind === "other"
+        ? localizeToolName(toolCall.name, inputJson, output)
+        : presentation.toolType,
+    description: presentation.description,
     status: mapStatus(toolCall.status),
-    input: input ? { value: input, language: isShellTool(toolCall.name) ? "bash" : "json" } : null,
+    input: inputSection,
     output: output ? { value: output, language: "text" } : null,
     defaultCollapsed: true,
     outputTruncated: toolCall.outputTruncated === true,
     outputByteSize: toolCall.outputByteSize ?? null,
+    kbPath: presentation.kbPath,
+    kind: presentation.kind,
   };
 }
 

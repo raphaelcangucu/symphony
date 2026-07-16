@@ -1,7 +1,10 @@
 # Preview ↔ chat port sync
 
 **Date:** 2026-07-15  
-**Status:** Approved for planning  
+**Status:** Superseded in part by **Runtime Contract v1** (2026-07-16) — see
+[§8](#8-superseded-by-runtime-contract-v1-2026-07-16). The "fallback may desync
+the dock" acceptance below is no longer the contract: a leased serve process now
+reports its actual port and Symphony never embeds an out-of-lease preview.  
 **Surfaces:** Issue Preview dock / Preview tab, `manage_preview` / `list_previews`, coding-agent prompt (`PromptBuilder`)  
 **Related:**  
 `2026-05-30-issue-dev-server-preview-design.md`,  
@@ -214,3 +217,74 @@ general optional serve-step gates in Symphony.
 - Does not change port lease math from 2026-06-15.
 - Preferred ≠ sole: Preview is priority; fallback after failure is first-class.
 - Availability gate unchanged from current `issue_targets/2` behavior.
+
+## 8. Superseded by Runtime Contract v1 (2026-07-16)
+
+The v1 design above deliberately left one hole open: **"fallback may desync the
+dock."** When an agent (or a human) brought the app up outside Symphony — `vibe`,
+Compose, `INSPIRE_PORT=4301` — the dock kept showing the leased record while chat
+cited a different published port, and that drift was declared *acceptable until a
+later best-effort `manage_preview restart`* (see §1.3 / §4 / Success criteria 3).
+
+The **Unified Preview Runtime Contract** closes that hole. It is implemented and
+gated behind the `preview_runtime_contract_v1` project flag; enable it per project
+via `dev_server.runtime_contract_v1: true` in `workflow_markdown`.
+
+### What changes
+
+- **Allocation is authoritative and bounded.** `LeaseStore` + `PortPlan` remain
+  the only port authority. A serve step receives a `RuntimeContract` (v1): a
+  `contract_id`, monotonic `revision`, a `preferred_port`, and a *disjoint*
+  `allowed_ports` fallback set inside the issue slot. A process may bind **only**
+  a port in that set — never an arbitrary one.
+- **Two launch sources, one contract.** `managed` launches are started by the
+  Manager; `contracted_manual` launches are minted by `manage_preview prepare`,
+  which reserves the lease and returns the exact env + command a human/agent/`vibe`
+  must run. Both carry the same `SYMPHONY_PREVIEW_*` env and report back the same
+  way.
+- **Processes report the truth.** A serve process writes a `RuntimeReport` (v1
+  JSON) atomically to `SYMPHONY_PREVIEW_REPORT_PATH` at each transition, echoing
+  the contract id/revision and its `actual_port`. Symphony accepts it only when
+  id/revision/server match, the port is in the lease, and its own readiness probe
+  passes.
+- **One authoritative snapshot.** REST, SSE, the Preview dock, `manage_preview`,
+  `list_previews`, and the coding-agent prompt all render the same
+  `DevServer.Snapshot` (same port, URL, and `snapshot_id`). Preview URLs are
+  constructed in exactly one place (`Snapshot.local_url/2`).
+
+### Sync-state contract (replaces "dock may be stale")
+
+The snapshot now carries an explicit `sync_state` per server; the dock/chat show
+truth instead of a guessed port:
+
+| `sync_state` | Meaning | Dock/agent behavior |
+| --- | --- | --- |
+| `in_sync` | `ready` + actual port ∈ lease | Embed / cite this port |
+| `awaiting_report` | Contract exists, no accepted report yet | Show "waiting to report"; do not embed |
+| `conflict` | `ready` but bound a port outside the lease (e.g. Docker republished `59595`) | Show a concrete conflict; **never** embed or cite |
+| `not_ready` | Process crashed | Surface crash; do not embed |
+| `stale` | Contract superseded / expired | Prompt a fresh `restart` |
+
+An out-of-lease or stale report is a **`conflict`** — it never rewrites the record
+port or the iframe URL. This is the direct reversal of the old "desync is OK"
+acceptance.
+
+### Advising adapter (project-local, unchanged boundary)
+
+Per §3, the project-specific work stays in the Advising repo's `.symphony`
+scripts: `serve.sh` selects a leased port (preferred → bounded fallback), verifies
+Docker's *published* port against the lease (tearing down on mismatch instead of
+publishing a split-brain preview), and writes the `RuntimeReport`; `stop.sh` is
+declared as the serve step's `stop_command` and writes a final `stopped` report.
+When no contract env is present, the scripts keep their legacy `INSPIRE_PORT` +
+`preview-port` behavior.
+
+### Rollout
+
+1. Ship behind `preview_runtime_contract_v1` (default **off**).
+2. Enable for Advising (`dev_server.runtime_contract_v1: true`).
+3. Smoke on CDE-1131 (stop the unmanaged `59595` stack → `manage_preview
+   prepare/start` → verify Docker + report use a leased port → verify dock, tools,
+   prompt, and REST show one identical snapshot → verify tenant URL + stop/restart
+   cleanup).
+4. Make it default only after the smoke passes.

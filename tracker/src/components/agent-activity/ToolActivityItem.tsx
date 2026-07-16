@@ -17,6 +17,7 @@ export interface ToolActivityItemProps extends ActivityDisclosureStateProps {
   fileActivity?: FileActivityView | null;
   onKillTool?: (toolCallId: string) => void;
   onLoadFullOutput?: (toolCallId: string) => Promise<string>;
+  onOpenKbPath?: (path: string) => void;
 }
 
 /** Renders one tool invocation: task marker, file-activity card, or the standard tool block. */
@@ -28,6 +29,7 @@ export function ToolActivityItem({
   fileActivity,
   onKillTool,
   onLoadFullOutput,
+  onOpenKbPath,
   expanded,
   onExpandedChange,
 }: ToolActivityItemProps) {
@@ -61,6 +63,7 @@ export function ToolActivityItem({
         view={view}
         toolCallId={toolCallId}
         onLoadFullOutput={onLoadFullOutput}
+        onOpenKbPath={onOpenKbPath}
         expanded={expanded}
         onExpandedChange={onExpandedChange}
       />
@@ -84,6 +87,7 @@ export function ToolActivityItem({
         view={view}
         toolCallId={toolCallId}
         onLoadFullOutput={onLoadFullOutput}
+        onOpenKbPath={onOpenKbPath}
         expanded={expanded}
         onExpandedChange={onExpandedChange}
       />

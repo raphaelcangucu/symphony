@@ -129,6 +129,28 @@ describe("IssuePreviewDock", () => {
     expect(panel).toHaveAttribute("data-issue", "510");
   });
 
+  it("does not embed a ready server whose runtime contract is out of sync", () => {
+    useIssueDevServersMock.mockReturnValue(
+      devServersResult({
+        data: response([
+          server({
+            status: "ready",
+            sync_state: "conflict",
+            sync_reason: "actual port 59595 is outside allowed ports [4300, 4301]",
+            port: 59595,
+            url: "http://myhost:59595/",
+            local_url: "http://127.0.0.1:59595/",
+          }),
+        ]),
+      }),
+    );
+
+    renderDock();
+
+    expect(screen.queryByTitle("Dev server preview for 510")).not.toBeInTheDocument();
+    expect(screen.getByTestId("preview-panel")).toBeInTheDocument();
+  });
+
   it("toggles the management panel from the details button while a preview is live", async () => {
     const user = userEvent.setup();
     useIssueDevServersMock.mockReturnValue(devServersResult({ data: response([server()]) }));

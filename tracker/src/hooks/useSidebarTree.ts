@@ -3,8 +3,11 @@ import { useLocation } from "react-router-dom";
 
 import { useAgentExecutions } from "@/hooks/useAgentExecutions";
 import { useRecents } from "@/hooks/useRecents";
-import { buildFlatSidebarProject, overlaySessionTitlesFromRecents } from "@/lib/flatSidebarTree";
-import { TRACKER_PROJECTS_CHANGED_EVENT } from "@/lib/projectEvents";
+import { buildFlatSidebarProject, mergeSessionsFromRecents } from "@/lib/flatSidebarTree";
+import {
+  TRACKER_PROJECTS_CHANGED_EVENT,
+  TRACKER_PROJECT_SESSIONS_CHANGED_EVENT,
+} from "@/lib/projectEvents";
 import {
   migrateSidebarPreferences,
   readSidebarPreferences,
@@ -306,13 +309,32 @@ export function useSidebarTree(): UseSidebarTreeResult {
     mountedRef.current = true;
     void reloadProjects();
     const onProjectsChanged = () => void reloadProjects();
+    const onProjectSessionsChanged = (event: Event) => {
+      const detail = (event as CustomEvent<{ projectSlug?: unknown }>).detail;
+      const slug =
+        typeof detail?.projectSlug === "string" ? detail.projectSlug.trim() : "";
+      if (!slug) return;
+      if (!preferencesRef.current.expandedProjectIds.includes(slug)) {
+        updatePreferences((current) =>
+          current.expandedProjectIds.includes(slug)
+            ? current
+            : { ...current, expandedProjectIds: [...current.expandedProjectIds, slug] },
+        );
+      }
+      void reloadProjectBranch(slug);
+    };
     window.addEventListener(TRACKER_PROJECTS_CHANGED_EVENT, onProjectsChanged);
+    window.addEventListener(TRACKER_PROJECT_SESSIONS_CHANGED_EVENT, onProjectSessionsChanged);
     return () => {
       mountedRef.current = false;
       window.removeEventListener(TRACKER_PROJECTS_CHANGED_EVENT, onProjectsChanged);
+      window.removeEventListener(
+        TRACKER_PROJECT_SESSIONS_CHANGED_EVENT,
+        onProjectSessionsChanged,
+      );
       for (const [slug] of branchResourcesRef.current) closeBranch(slug);
     };
-  }, [closeBranch, reloadProjects]);
+  }, [closeBranch, reloadProjectBranch, reloadProjects, updatePreferences]);
 
   useEffect(() => {
     preferencesRef.current = preferences;
@@ -360,9 +382,10 @@ export function useSidebarTree(): UseSidebarTreeResult {
       .map((project) => {
         const branch = branchStates.get(project.slug) ?? createBranchState();
         const projectRecents = recents.filter((recent) => recent.projectSlug === project.slug);
-        const sessions = overlaySessionTitlesFromRecents(
+        const sessions = mergeSessionsFromRecents(
           overlayExecutionStatuses(branch.sessions, executions),
           projectRecents,
+          project.slug,
         );
         return buildFlatSidebarProject({
           projectSlug: project.slug,

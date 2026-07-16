@@ -4,8 +4,10 @@ import { createWorkspaceTabsState, workspaceTabsReducer } from "@/lib/workspaceT
 import {
   createAssistantSessionTab,
   createIssueTerminalTab,
+  createNewIssueTab,
   createProjectTerminalTab,
   createSessionsListTab,
+  NEW_ISSUE_TAB_ID,
 } from "@/lib/workspaceTabs/types";
 
 describe("workspaceTabsReducer", () => {
@@ -50,5 +52,19 @@ describe("workspaceTabsReducer", () => {
     const initial = createWorkspaceTabsState([listTab], listTab.id);
     const next = workspaceTabsReducer(initial, { type: "select", tabId: "missing" });
     expect(next).toEqual(initial);
+  });
+
+  it("reopens the ephemeral new-issue tab without duplicating it", () => {
+    const newIssueTab = createNewIssueTab("New issue");
+    const initial = createWorkspaceTabsState([listTab, newIssueTab], listTab.id);
+    const next = workspaceTabsReducer(initial, {
+      type: "open",
+      tab: createNewIssueTab("Nova issue"),
+    });
+
+    expect(next.tabs).toHaveLength(2);
+    expect(next.tabs.filter((tab) => tab.id === NEW_ISSUE_TAB_ID)).toHaveLength(1);
+    expect(next.activeTabId).toBe(NEW_ISSUE_TAB_ID);
+    expect(next.tabs.find((tab) => tab.id === NEW_ISSUE_TAB_ID)?.title).toBe("Nova issue");
   });
 });

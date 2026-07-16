@@ -5,6 +5,7 @@ export type WorkspaceTabKind =
   | "assistant-session"
   | "authoring-session"
   | "execution-session"
+  | "new-issue"
   | "sessions-list";
 
 export interface WorkspaceTabBase {
@@ -49,6 +50,10 @@ export interface SessionsListTab extends WorkspaceTabBase {
   kind: "sessions-list";
 }
 
+export interface NewIssueTab extends WorkspaceTabBase {
+  kind: "new-issue";
+}
+
 export type WorkspaceTab =
   | IssueTerminalTab
   | ProjectTerminalTab
@@ -56,6 +61,7 @@ export type WorkspaceTab =
   | AssistantSessionTab
   | AuthoringSessionTab
   | ExecutionSessionTab
+  | NewIssueTab
   | SessionsListTab;
 
 export interface WorkspaceTabsState {
@@ -97,6 +103,9 @@ export function executionSessionTabId(issueIdentifier: string): string {
 }
 
 export const SESSIONS_LIST_TAB_ID = "sessions-list";
+
+/** Stable id: only one ephemeral new-issue tab per project workspace. */
+export const NEW_ISSUE_TAB_ID = "new-issue";
 
 export function createIssueTerminalTab(issueIdentifier: string, title: string): IssueTerminalTab {
   const identifier = issueIdentifier.trim();
@@ -178,5 +187,14 @@ export function createSessionsListTab(title: string): SessionsListTab {
     kind: "sessions-list",
     title: title.trim() || "Sessions",
     closable: false,
+  };
+}
+
+export function createNewIssueTab(title: string): NewIssueTab {
+  return {
+    id: NEW_ISSUE_TAB_ID,
+    kind: "new-issue",
+    title: title.trim() || "New issue",
+    closable: true,
   };
 }

@@ -65,14 +65,7 @@ defmodule SymphonyElixirWeb.Tracker.DevServerControllerTest do
   test "index returns availability and servers for an existing project", %{identifier: identifier} do
     conn = get(authorized_conn(), "/api/tracker/v1/projects/p/issues/#{identifier}/dev_servers")
 
-    assert json_response(conn, 200) == %{
-             "data" => %{
-               "available" => false,
-               "reason" => "disabled",
-               "servers" => [],
-               "tunnel" => %{"enabled" => false, "running" => false}
-             }
-           }
+    assert_disabled_snapshot(json_response(conn, 200))
   end
 
   test "index returns 404 for an unknown project" do
@@ -103,14 +96,7 @@ defmodule SymphonyElixirWeb.Tracker.DevServerControllerTest do
     for action <- ["start", "stop", "restart"] do
       conn = post(authorized_conn(), "/api/tracker/v1/projects/p/issues/#{identifier}/dev_servers/#{action}")
 
-      assert json_response(conn, 200) == %{
-               "data" => %{
-                 "available" => false,
-                 "reason" => "disabled",
-                 "servers" => [],
-                 "tunnel" => %{"enabled" => false, "running" => false}
-               }
-             }
+      assert_disabled_snapshot(json_response(conn, 200))
     end
   end
 
@@ -217,14 +203,7 @@ defmodule SymphonyElixirWeb.Tracker.DevServerControllerTest do
   test "index accepts token query param for EventSource auth", %{identifier: identifier} do
     conn = get(build_conn(), "/api/tracker/v1/projects/p/issues/#{identifier}/dev_servers?token=secret")
 
-    assert json_response(conn, 200) == %{
-             "data" => %{
-               "available" => false,
-               "reason" => "disabled",
-               "servers" => [],
-               "tunnel" => %{"enabled" => false, "running" => false}
-             }
-           }
+    assert_disabled_snapshot(json_response(conn, 200))
   end
 
   test "index reports project-level public tunnel as enabled even when process WORKFLOW disables it", %{
@@ -251,6 +230,19 @@ defmodule SymphonyElixirWeb.Tracker.DevServerControllerTest do
   defp authorized_conn do
     build_conn()
     |> put_req_header("authorization", "Bearer secret")
+  end
+
+  # The unified PreviewSnapshot payload carries stable availability fields plus a
+  # non-deterministic snapshot_id/as_of; assert the stable subset and type-check
+  # the dynamic identity fields.
+  defp assert_disabled_snapshot(response) do
+    assert %{"data" => data} = response
+    assert data["available"] == false
+    assert data["reason"] == "disabled"
+    assert data["servers"] == []
+    assert data["tunnel"] == %{"enabled" => false, "running" => false}
+    assert is_binary(data["snapshot_id"])
+    assert is_binary(data["as_of"])
   end
 
   defp migrate_repo do

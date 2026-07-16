@@ -158,19 +158,19 @@ defmodule SymphonyElixir.ExecutionMode do
   @doc """
   Whether cursor-agent should run with `--force`.
 
-  True for `build`, `yolo`, and unknown/nil (normalized to yolo). False only for
-  `plan`. Headless Cursor rejects MCP write tools without `--force`; Symphony then
-  applies interactive `build` approvals at the ToolGateway (see
-  `cursor_interactive_approval?/2`).
+  Always true. Headless/ACP Cursor rejects MCP tools without `--force`; Symphony
+  gates mutating MCP on interactive `build` via ToolGateway approval instead
+  (see `cursor_interactive_approval?/2`). Plan still passes `--mode plan`
+  separately.
   """
   @spec cursor_force?(term()) :: boolean()
-  def cursor_force?(mode), do: normalize(mode) != @plan
+  def cursor_force?(_mode), do: true
 
   @doc """
   Whether Cursor Symphony MCP tools should prompt the operator before mutating.
 
-  True only for interactive `build`. `yolo` auto-runs; `plan` denies mutations
-  without prompting. Wired in `SymphonyElixir.Cursor.CodingAgent`.
+  True only for interactive `build`. `yolo` and `plan` auto-run MCP at the
+  gateway. Wired in `SymphonyElixir.Cursor.CodingAgent`.
   """
   @spec cursor_interactive_approval?(term(), boolean()) :: boolean()
   def cursor_interactive_approval?(mode, interactive?) when is_boolean(interactive?) do

@@ -19,7 +19,9 @@ defmodule SymphonyElixirWeb.TrackerPresenterTest do
         url: "https://github.com/o/r/issues/9",
         project_slug: "remote",
         created_at: "2026-05-28T00:00:00Z",
-        updated_at: "2026-05-28T00:00:00Z"
+        updated_at: "2026-05-28T00:00:00Z",
+        sync_status: "error",
+        last_sync_error: "Could not resolve assignee"
       })
 
     json = TrackerPresenter.issue(dto)
@@ -29,6 +31,8 @@ defmodule SymphonyElixirWeb.TrackerPresenterTest do
     assert json.assignee_id == "octocat"
     assert json.creator == "octocat"
     assert json.project_slug == "remote"
+    assert json.sync_status == "error"
+    assert json.last_sync_error == "Could not resolve assignee"
   end
 
   test "issue/1 serializes repository, parent, and sub-issue summary" do

@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import { AgentLongRunningBadge, AgentStatusDot, agentStatusLabel } from "@/components/issues/AgentStatusBadge";
 import { AgentResumeIconButton } from "@/components/issues/AgentResumeIconButton";
 import { AssigneeAvatar } from "@/components/issues/AssigneeAvatar";
+import { SyncBadge } from "@/components/issues/issue-detail/CommentCard";
 import { PriorityIndicator } from "@/components/issues/PriorityIndicator";
 import { executionNeedsAttention, resolveDisplayStatus } from "@/lib/agentExecutionDisplay";
 import { issueDisplayIdentifier } from "@/lib/issueIdentifiers";
@@ -80,9 +81,16 @@ export function IssueCard({
       {mergeActive ? <MergeDropOverlay /> : null}
       {dropEdge && !mergeActive ? <ReorderDropLine edge={dropEdge} /> : null}
       <div className="flex items-center justify-between gap-2">
-        <span className="font-mono text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-          {issueDisplayIdentifier(issue)}
-        </span>
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span className="font-mono text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            {issueDisplayIdentifier(issue)}
+          </span>
+          {issue.syncStatus && issue.syncStatus !== "synced" ? (
+            <span title={issue.lastSyncError ?? undefined}>
+              <SyncBadge syncStatus={issue.syncStatus} t={t} />
+            </span>
+          ) : null}
+        </div>
         <div className="flex items-center gap-1.5">
           {issue.url ? (
             <a

@@ -31,35 +31,98 @@ const ATTENTION_STATUSES = new Set(["waiting", "retrying", "aborted", "paused", 
 const ACTIVE_STATUSES = new Set(["live", "running", "active", "in_progress"]);
 
 /**
- * Applies live recents titles onto project-session rows so the sidebar stays in
- * sync with tabs (recents falls back to preview / auto-title; project_sessions
- * can lag with a blank title → "Session N").
+ * Merges live recents chat threads into the project-sessions list.
+ *
+ * project_sessions is loaded once on expand and can lag behind creates; recents
+ * updates via PubSub. This upserts missing threads and overlays fresher titles
+ * so the sidebar matches open tabs.
  */
+export function mergeSessionsFromRecents(
+  sessions: readonly ProjectSessionRow[],
+  recents: readonly RecentSession[],
+  projectSlug: string,
+): readonly ProjectSessionRow[] {
+  const slug = projectSlug.trim();
+  if (!slug || recents.length === 0) return sessions;
+
+  const byId = new Map(sessions.map((session) => [session.id, session]));
+  let changed = false;
+
+  for (const recent of recents) {
+    if (recent.projectSlug !== slug) continue;
+    if (recent.kind !== "chat" || recent.threadId == null) continue;
+
+    const id = `thread:${recent.threadId}`;
+    const title = recent.title.trim();
+    const existing = byId.get(id);
+
+    if (!existing) {
+      byId.set(id, recentChatToSessionRow(recent));
+      changed = true;
+      continue;
+    }
+
+    if (title && existing.title.trim() !== title) {
+      byId.set(id, {
+        ...existing,
+        title,
+        updatedAt: recent.updatedAt || existing.updatedAt,
+      });
+      changed = true;
+    }
+  }
+
+  return changed ? [...byId.values()] : sessions;
+}
+
+/** @deprecated Prefer mergeSessionsFromRecents — kept for existing call sites/tests. */
 export function overlaySessionTitlesFromRecents(
   sessions: readonly ProjectSessionRow[],
   recents: readonly RecentSession[],
 ): readonly ProjectSessionRow[] {
-  if (sessions.length === 0 || recents.length === 0) return sessions;
-
-  const titlesByThreadId = new Map<number, string>();
-  for (const recent of recents) {
-    if (recent.threadId == null) continue;
-    const title = recent.title.trim();
-    if (!title) continue;
-    titlesByThreadId.set(recent.threadId, title);
+  if (sessions.length === 0) return sessions;
+  const projectSlug = recents.find((recent) => recent.projectSlug)?.projectSlug;
+  if (!projectSlug) {
+    return mergeSessionsFromRecents(sessions, recents, "");
   }
-  if (titlesByThreadId.size === 0) return sessions;
+  return mergeSessionsFromRecents(sessions, recents, projectSlug);
+}
 
-  let changed = false;
-  const next = sessions.map((session) => {
-    const threadId = parseThreadId(session.id);
-    if (threadId == null) return session;
-    const overlay = titlesByThreadId.get(threadId);
-    if (!overlay || session.title.trim() === overlay) return session;
-    changed = true;
-    return { ...session, title: overlay };
-  });
-  return changed ? next : sessions;
+function recentChatToSessionRow(recent: RecentSession): ProjectSessionRow {
+  const threadId = recent.threadId;
+  if (threadId == null) {
+    throw new Error("recentChatToSessionRow requires threadId");
+  }
+  const projectSlug = recent.projectSlug?.trim() || "unknown";
+  return {
+    id: `thread:${threadId}`,
+    title: recent.title.trim(),
+    kind: sessionKindFromRecentScope(recent.scope),
+    href: `/projects/${encodeURIComponent(projectSlug)}/workspaces/${threadId}`,
+    updatedAt: recent.updatedAt,
+    aggregateStatus: recent.statusKind,
+    agentKind: recent.agentKind,
+    issueIdentifier: recent.identifier,
+    workspacePath: null,
+    workspaceId: null,
+    pinned: false,
+    archived: recent.status === "archived",
+  };
+}
+
+function sessionKindFromRecentScope(scope: RecentSession["scope"]): ProjectSessionKind {
+  switch (scope) {
+    case "issue":
+      return "authoring";
+    case "issue_session":
+      // Matches SymphonyElixir.Tracker.ProjectSessions.thread_kind/1.
+      return "execution";
+    case "project_session":
+    case "project_explore":
+      return "workspace_session";
+    default:
+      return "chat";
+  }
 }
 
 export function buildFlatSidebarProject(

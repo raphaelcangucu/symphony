@@ -98,9 +98,9 @@ defmodule SymphonyElixir.Cursor.CliRunnerTest do
     assert args =~ "--trust"
   end
 
-  test "execution mode maps plan to native cursor plan mode; build/yolo get force" do
+  test "execution mode maps plan to native cursor plan mode; all modes get force" do
     # Unset/unknown mode matches ExecutionMode.default/0 (yolo). Headless Cursor
-    # must get --force for build/yolo or MCP write tools are rejected.
+    # must get --force (including plan) or MCP tools are rejected.
     default_args = CliRunner.build_args(%{cli_session_id: nil, model: nil, mcp_config_path: nil})
     assert default_args =~ "--trust"
     assert default_args =~ "--force"
@@ -114,7 +114,7 @@ defmodule SymphonyElixir.Cursor.CliRunnerTest do
     plan_args = CliRunner.build_args(%{cli_session_id: nil, model: nil, mcp_config_path: nil, execution_mode: "plan"})
     assert plan_args =~ "--mode plan"
     assert plan_args =~ "--trust"
-    refute plan_args =~ "--force"
+    assert plan_args =~ "--force"
 
     yolo_args = CliRunner.build_args(%{cli_session_id: nil, model: nil, mcp_config_path: nil, execution_mode: "yolo"})
     assert yolo_args =~ "--force"

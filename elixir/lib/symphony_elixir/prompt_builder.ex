@@ -5,6 +5,7 @@ defmodule SymphonyElixir.PromptBuilder do
 
   alias SymphonyElixir.Claude.GoalStore, as: ClaudeGoalStore
   alias SymphonyElixir.DevServer
+  alias SymphonyElixir.DevServer.Snapshot
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.{ProjectConfig, Repo, Skills}
   alias SymphonyElixir.Workpad.UnifiedUnitPlan
@@ -533,31 +534,10 @@ defmodule SymphonyElixir.PromptBuilder do
 
   defp local_preview_url(server) when is_map(server) do
     port = Map.get(server, :port) || Map.get(server, "port")
-    slug = to_string(Map.get(server, :slug) || Map.get(server, "slug") || "")
-    ready_path = Map.get(server, :ready_path) || Map.get(server, "ready_path")
-    url_path = Map.get(server, :url_path) || Map.get(server, "url_path")
+    local = Map.get(server, :local_url) || Map.get(server, "local_url")
 
-    cond do
-      not is_integer(port) or port <= 0 ->
-        "n/a"
-
-      is_binary(ready_path) and ready_path != "" ->
-        "http://127.0.0.1:#{port}#{normalize_preview_path(ready_path)}"
-
-      is_binary(url_path) and url_path != "" ->
-        "http://127.0.0.1:#{port}#{normalize_preview_path(url_path)}"
-
-      String.contains?(slug, "admin") ->
-        "http://127.0.0.1:#{port}/"
-
-      true ->
-        "http://127.0.0.1:#{port}/api/health"
-    end
+    local || Snapshot.local_url(port, server) || "n/a"
   end
-
-  defp normalize_preview_path("/" <> _ = path), do: path
-  defp normalize_preview_path(path) when is_binary(path), do: "/" <> path
-  defp normalize_preview_path(_), do: "/"
 
   defp local_preview_url(_), do: "n/a"
 

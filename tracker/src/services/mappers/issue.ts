@@ -10,6 +10,7 @@ import {
   type IssueFormOptions,
   type IssueLabelOption,
   type IssuePriority,
+  type IssueSyncStatus,
 } from "@/types/issue";
 
 import { maybeString, normalizeStatusName, type BackendId, type BackendWorkflowStatusDto } from "./shared";
@@ -39,6 +40,8 @@ export interface BackendIssueDto {
   parent_identifier?: string | null;
   sub_issue_summary?: { total: number; completed: number; percent_completed: number } | null;
   attachments?: BackendIssueAttachmentDto[] | null;
+  sync_status?: string | null;
+  last_sync_error?: string | null;
   inserted_at?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
@@ -92,9 +95,17 @@ export function normalizeIssue(dto: BackendIssueDto): Issue {
     repositoryFullName: dto.repository_full_name ?? null,
     parentIdentifier: dto.parent_identifier ?? null,
     subIssueSummary: normalizeSubIssueSummary(dto),
+    syncStatus: normalizeIssueSyncStatus(dto.sync_status),
+    lastSyncError: dto.last_sync_error ?? null,
     createdAt: dto.created_at ?? dto.inserted_at ?? "",
     updatedAt: dto.updated_at ?? dto.inserted_at ?? "",
   };
+}
+
+const ISSUE_SYNC_STATUSES: readonly IssueSyncStatus[] = ["synced", "pending", "conflict", "error", "archived"];
+
+function normalizeIssueSyncStatus(value?: string | null): IssueSyncStatus | null {
+  return (ISSUE_SYNC_STATUSES as readonly string[]).includes(value ?? "") ? (value as IssueSyncStatus) : null;
 }
 
 function normalizeSubIssueSummary(dto: BackendIssueDto): Issue["subIssueSummary"] {

@@ -113,7 +113,7 @@ describe("NewIssueMenu", () => {
             path="/projects/macro-markets/board"
             element={<NewIssueMenu projectSlug="macro-markets" />}
           />
-          <Route path="/projects/macro-markets/assistant/new-issue" element={<div>Assistant issue authoring</div>} />
+          <Route path="/projects/macro-markets/workspaces" element={<div>Assistant issue authoring</div>} />
         </Routes>
       </MemoryRouter>,
     );
@@ -226,7 +226,7 @@ describe("NewIssueMenu", () => {
             path="/projects/macro-markets/board"
             element={<NewIssueMenu projectSlug="macro-markets" status="Backlog" variant="icon" />}
           />
-          <Route path="/projects/macro-markets/assistant/new-issue" element={<div>Assistant issue authoring</div>} />
+          <Route path="/projects/macro-markets/workspaces" element={<div>Assistant issue authoring</div>} />
         </Routes>
       </MemoryRouter>,
     );

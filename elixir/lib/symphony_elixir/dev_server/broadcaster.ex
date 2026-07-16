@@ -1,7 +1,6 @@
 defmodule SymphonyElixir.DevServer.Broadcaster do
   @moduledoc "Broadcasts dev-server preview status changes to SSE subscribers."
 
-  alias SymphonyElixir.Cloudflare.Tunnel
   alias SymphonyElixir.DevServer
   alias SymphonyElixirWeb.DevServerPresenter
 
@@ -29,13 +28,8 @@ defmodule SymphonyElixir.DevServer.Broadcaster do
 
   @spec build_payload(String.t(), String.t()) :: {:ok, map()} | :error
   def build_payload(project_slug, identifier) do
-    with {:ok, view} <- DevServer.issue_targets(project_slug, identifier) do
-      data =
-        view
-        |> DevServerPresenter.view()
-        |> Map.put(:tunnel, Tunnel.summary_for_project(project_slug))
-
-      {:ok, %{data: data}}
+    with {:ok, snapshot} <- DevServer.issue_targets(project_slug, identifier) do
+      {:ok, %{data: DevServerPresenter.view(snapshot)}}
     else
       _ -> :error
     end

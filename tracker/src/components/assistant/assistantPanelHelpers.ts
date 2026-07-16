@@ -37,10 +37,15 @@ export function contextRefForApprovalRequest(request: AssistantApprovalRequest, 
   };
 }
 
-export function displayMessages(messages: AssistantChatMessage[], t: TFunction): AssistantChatMessage[] {
+export function displayMessages(
+  messages: AssistantChatMessage[],
+  t: TFunction,
+  agent?: AgentKind | null,
+): AssistantChatMessage[] {
   if (messages.length > 0) return messages;
 
-  return [assistantMessage("assistant-welcome", t("assistant.panel.welcome"))];
+  const agentLabel = agent ? agentDisplayName(agent) : t("assistant.panel.codingAgent");
+  return [assistantMessage("assistant-welcome", t("assistant.panel.welcome", { agent: agentLabel }))];
 }
 
 export function latestPendingPlanMessageId(

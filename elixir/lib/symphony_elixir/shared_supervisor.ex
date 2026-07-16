@@ -31,6 +31,7 @@ defmodule SymphonyElixir.SharedSupervisor do
       SymphonyElixir.Assistant.GoalRun.registry_child_spec(),
       SymphonyElixir.Claude.ApprovalBroker.registry_child_spec(),
       SymphonyElixir.Assistant.UserInputBroker.registry_child_spec(),
+      SymphonyElixir.Cursor.CreatePlanBroker.registry_child_spec(),
       SymphonyElixir.Claude.AppServer.ToolGateway,
       SymphonyElixir.Observability.Registry,
       SymphonyElixir.Repo,

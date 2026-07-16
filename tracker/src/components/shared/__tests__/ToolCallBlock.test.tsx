@@ -134,4 +134,25 @@ describe("ToolCallBlock", () => {
       expect(screen.getByRole("button", { name: /load full output/i })).not.toBeDisabled(),
     );
   });
+
+  it("offers Open in knowledge base when kbPath is set", async () => {
+    const onOpenKbPath = vi.fn();
+    render(
+      <ToolCallBlock
+        view={{
+          ...baseView,
+          toolType: "Plan · GAM-20 Spec Design",
+          description: "overview",
+          kind: "create_plan",
+          kbPath: "docs/superpowers/specs/example.md",
+        }}
+        onOpenKbPath={onOpenKbPath}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Plan · GAM-20 Spec Design/i }));
+    fireEvent.click(screen.getByRole("button", { name: /open in knowledge base/i }));
+
+    expect(onOpenKbPath).toHaveBeenCalledWith("docs/superpowers/specs/example.md");
+  });
 });

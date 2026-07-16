@@ -153,6 +153,7 @@ export function PreviewPanel({ projectSlug, issueIdentifier, view, execution, de
     ACTIVE_PROVISIONING_STATUSES.has(primaryServer.status)
       ? provisioningStatusMessage(primaryServer, t)
       : null;
+  const syncCallout = data.available ? outOfSyncCallout(primaryServer, t) : null;
   const canRunActions = canRunManualActions(data.available, data.reason);
   const controlsDisabled = loading || !canRunActions;
   const failureReason = data.reason != null && isPreviewFailureReason(data.reason);
@@ -224,6 +225,12 @@ export function PreviewPanel({ projectSlug, issueIdentifier, view, execution, de
                   <AskAssistantButton onClick={() => askAssistantToFix(data, primaryServer)} />
                 ) : null}
               </div>
+            </StateCallout>
+          ) : null}
+
+          {syncCallout ? (
+            <StateCallout tone="warning" title={syncCallout.title}>
+              {syncCallout.body}
             </StateCallout>
           ) : null}
 
@@ -601,4 +608,39 @@ function availabilityMessage(reason: IssueDevServerReason, t: TFunction): { titl
 
 function provisioningStatusMessage(primaryServer: IssueDevServer, t: TFunction): string {
   return t("issue.preview.provisioningStatus", { slug: primaryServer.slug, status: primaryServer.status });
+}
+
+/**
+ * Surfaces contract sync truth: a server that reports `ready` but bound a port
+ * outside its lease (`conflict`) or whose contract went `stale` must never look
+ * like a healthy preview. `awaiting_report` is intentionally left to the
+ * provisioning/stopped UI so a freshly stopped preview stays quiet.
+ */
+function outOfSyncCallout(
+  server: IssueDevServer | null,
+  t: TFunction,
+): { title: string; body: string } | null {
+  if (!server) {
+    return null;
+  }
+
+  switch (server.sync_state) {
+    case "conflict":
+      return {
+        title: t("issue.preview.syncState.conflictTitle"),
+        body: t("issue.preview.syncState.conflictBody", {
+          slug: server.slug,
+          reason: server.sync_reason ?? "",
+        }),
+      };
+
+    case "stale":
+      return {
+        title: t("issue.preview.syncState.staleTitle"),
+        body: t("issue.preview.syncState.staleBody", { slug: server.slug }),
+      };
+
+    default:
+      return null;
+  }
 }

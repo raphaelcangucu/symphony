@@ -77,6 +77,23 @@ function parseWorkspaceTab(value: unknown): WorkspaceTab | null {
             issueIdentifier: value.issueIdentifier.trim(),
           }
         : null;
+    case "authoring-session":
+      return typeof value.issueIdentifier === "string" && value.issueIdentifier.trim().length > 0
+        ? {
+            id: value.id,
+            kind: "authoring-session",
+            title: value.title,
+            closable,
+            issueIdentifier: value.issueIdentifier.trim(),
+          }
+        : null;
+    case "new-issue":
+      return {
+        id: value.id,
+        kind: "new-issue",
+        title: value.title,
+        closable,
+      };
     case "sessions-list":
       return {
         id: value.id,
