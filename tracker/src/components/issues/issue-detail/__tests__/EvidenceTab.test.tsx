@@ -54,14 +54,29 @@ vi.mock("@/services/evidence", async (importOriginal) => {
 });
 
 const dispatchIssueAgentMock = vi.hoisted(() => vi.fn());
-const getCommitEvidenceMock = vi.hoisted(() => vi.fn());
+const gitDiffLauncherPropsMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/services/issueDispatch", () => ({
   dispatchIssueAgent: (...args: unknown[]) => dispatchIssueAgentMock(...args),
 }));
 
-vi.mock("@/services/commitEvidence", () => ({
-  getCommitEvidence: (...args: unknown[]) => getCommitEvidenceMock(...args),
+vi.mock("@/components/issues/issue-detail/git-diff/GitDiffLauncher", () => ({
+  GitDiffLauncher: (props: {
+    focusCommitRequestId?: number;
+    focusCommit?: { repo: string; sha: string } | null;
+    showTrigger?: boolean;
+  }) => {
+    gitDiffLauncherPropsMock(props);
+    return (
+      <div
+        data-testid="git-diff-launcher-probe"
+        data-focus-commit-request-id={String(props.focusCommitRequestId ?? 0)}
+        data-focus-commit={
+          props.focusCommit ? `${props.focusCommit.repo}:${props.focusCommit.sha}` : ""
+        }
+      />
+    );
+  },
 }));
 
 const baseProps = {
@@ -337,21 +352,8 @@ describe("EvidenceTab", () => {
     expect(screen.getByText(".venv/bin/python -m pytest tests/test_modules.py")).toBeInTheDocument();
   });
 
-  it("renders agent commits and opens the diff sheet on click", async () => {
-    getCommitEvidenceMock.mockResolvedValue({
-      repo: "advising",
-      sha: "abc123def456",
-      shortSha: "abc123d",
-      message: "feat: agent work",
-      author: "Symphony Agent",
-      authoredAt: "2026-06-10T12:00:00Z",
-      filesChanged: 1,
-      insertions: 2,
-      deletions: 0,
-      online: false,
-      files: [{ path: "work.txt", oldPath: null, status: "added", patch: "+work\n" }],
-    });
-
+  it("renders agent commits and opens the workspace diff modal on click", async () => {
+    gitDiffLauncherPropsMock.mockClear();
     const user = userEvent.setup();
     renderTab(
       <EvidenceTab
@@ -377,8 +379,20 @@ describe("EvidenceTab", () => {
     );
 
     expect(screen.getByText(i18n.t("issue.commits.title"))).toBeInTheDocument();
+    expect(screen.getByTestId("git-diff-launcher-probe")).toHaveAttribute(
+      "data-focus-commit-request-id",
+      "0",
+    );
+
     await user.click(screen.getByTestId("commit-evidence-abc123d"));
-    expect(getCommitEvidenceMock).toHaveBeenCalledWith("advising", "CDE-1131", "advising", "abc123def456");
-    expect(await screen.findByText("work.txt")).toBeInTheDocument();
+
+    expect(screen.getByTestId("git-diff-launcher-probe")).toHaveAttribute(
+      "data-focus-commit-request-id",
+      "1",
+    );
+    expect(screen.getByTestId("git-diff-launcher-probe")).toHaveAttribute(
+      "data-focus-commit",
+      "advising:abc123def456",
+    );
   });
 });

@@ -2,7 +2,7 @@ import { GitCommit, RefreshCw } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { CommitDiffSheet } from "@/components/issues/issue-detail/CommitDiffSheet";
+import { GitDiffLauncher } from "@/components/issues/issue-detail/git-diff/GitDiffLauncher";
 import { Button } from "@/components/ui/button";
 import { formatFullDateTime } from "@/lib/timeFormat";
 import { cn } from "@/lib/utils";
@@ -28,12 +28,15 @@ export function CommitEvidenceSection({
   onRefresh,
 }: CommitEvidenceSectionProps) {
   const { t } = useTranslation();
-  const [selectedCommit, setSelectedCommit] = useState<CommitEvidenceSummary | null>(null);
-  const [sheetOpen, setSheetOpen] = useState(false);
+  const [focusCommitRequestId, setFocusCommitRequestId] = useState(0);
+  const [focusCommit, setFocusCommit] = useState<{ repo: string; sha: string } | null>(null);
 
   const openCommit = (commit: CommitEvidenceSummary) => {
-    setSelectedCommit(commit);
-    setSheetOpen(true);
+    const repo = typeof commit.repo === "string" ? commit.repo.trim() : "";
+    const sha = typeof commit.sha === "string" ? commit.sha.trim() : "";
+    if (!repo || !sha) return;
+    setFocusCommit({ repo, sha });
+    setFocusCommitRequestId((id) => id + 1);
   };
 
   return (
@@ -84,14 +87,13 @@ export function CommitEvidenceSection({
         </button>
       ))}
 
-      <CommitDiffSheet
-        commit={selectedCommit}
-        identifier={identifier}
-        onOpenChange={setSheetOpen}
-        open={sheetOpen}
+      <GitDiffLauncher
         projectSlug={projectSlug}
+        identifier={identifier}
+        showTrigger={false}
+        focusCommitRequestId={focusCommitRequestId}
+        focusCommit={focusCommit}
       />
     </div>
   );
 }
-
