@@ -64,6 +64,19 @@ defmodule SymphonyElixir.Evidence.CommitsTest do
     assert pushed.online == true
   end
 
+  test "page commits include numstat after light index", %{workspace: workspace} do
+    assert {:ok, %{commits: [latest | _]}} = Commits.list(workspace, limit: 1)
+    assert latest.insertions >= 1
+    assert latest.files_changed >= 1
+  end
+
+  test "serves a second list call from hotpath cache without changing results", %{workspace: workspace} do
+    assert {:ok, first} = Commits.list(workspace, limit: 2)
+    assert {:ok, second} = Commits.list(workspace, limit: 2)
+    assert second.commits == first.commits
+    assert second.total == first.total
+  end
+
   test "shows commit diff files", %{workspace: workspace} do
     assert {:ok, %{commits: commits}} = Commits.list(workspace)
     [latest | _] = commits

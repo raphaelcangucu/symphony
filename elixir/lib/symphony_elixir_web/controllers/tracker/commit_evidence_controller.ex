@@ -25,7 +25,12 @@ defmodule SymphonyElixirWeb.Tracker.CommitEvidenceController do
              limit: Map.get(params, "limit"),
              cursor: Map.get(params, "cursor")
            ) do
-      json(conn, Map.put(page, :workspace, workspace_brief(workspace)))
+      json(
+        conn,
+        page
+        |> Map.put(:data, page.commits)
+        |> Map.put(:workspace, workspace_brief(workspace))
+      )
     else
       {:error, reason} -> TrackerErrors.render(conn, reason)
     end

@@ -60,9 +60,10 @@ defmodule SymphonyElixirWeb.Tracker.CommitEvidenceControllerTest do
         "/api/tracker/v1/projects/advising/issues/#{ctx.issue.identifier}/commit_evidence"
       )
 
-    assert %{"commits" => [commit], "workspace" => workspace, "total" => 1, "next_cursor" => nil} =
+    assert %{"commits" => [commit], "data" => [same], "workspace" => workspace, "total" => 1, "next_cursor" => nil} =
              json_response(conn, 200)
 
+    assert same == commit
     assert workspace["available"] == true
     assert commit["repo"] == "advising"
     assert commit["message"] =~ "agent work"

@@ -348,6 +348,7 @@ describe("EvidenceTab", () => {
       filesChanged: 1,
       insertions: 2,
       deletions: 0,
+      online: false,
       files: [{ path: "work.txt", oldPath: null, status: "added", patch: "+work\n" }],
     });
 
@@ -366,6 +367,7 @@ describe("EvidenceTab", () => {
             filesChanged: 1,
             insertions: 2,
             deletions: 0,
+            online: false,
           },
         ]}
         commitWorkspace={{ path: "/tmp/ws", available: true }}
