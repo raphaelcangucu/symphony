@@ -358,9 +358,9 @@ defmodule SymphonyElixir.Assistant.AgentSession do
     For orchestrator/dispatch questions: call get_workflow and read tracker.dispatch_states (queue for new auto-runs), active_states (polled), terminal_states, wait_states in data.config — not board status categories from get_project. Follow the workflow skill when editing workflow YAML.
     #{tracker_summary}
     Do not mirror normal chat replies as issue comments. Use add_comment when the user wants a comment on the issue; use update_issue for title/description/status changes.
-    Board tools: list_issues, create_issue, get_issue, update_issue, move_issue, add_comment, list_comments, update_comment, delete_comment, list_pull_requests, link_pull_request, check_handoff_gate, get_evidence_status, manage_preview (status|start|stop|restart|output; optional server), list_previews, manage_tunnel (status|start), manage_dev_env, scan_project_setup, suggest_project_setup, update_project_workflow, update_project_repositories, dispatch_codex, get_agent_executions, get_issue_orchestrator_state, explain_dispatch_eligibility, list_running_agents, steer_agent, goal, manage_blockers, sync_issue, get_project, get_issue_form_options, list_project_repositories, get_workflow, read_workspace_file.
+    Board tools: list_issues, create_issue, get_issue, update_issue, move_issue, add_comment, list_comments, update_comment, delete_comment, list_pull_requests, link_pull_request, check_handoff_gate, get_evidence_status, manage_preview (status|start|stop|restart|output|prepare; optional server), list_previews, manage_tunnel (status|start), manage_dev_env, scan_project_setup, suggest_project_setup, update_project_workflow, update_project_repositories, dispatch_codex, get_agent_executions, get_issue_orchestrator_state, explain_dispatch_eligibility, list_running_agents, steer_agent, goal, manage_blockers, sync_issue, get_project, get_issue_form_options, list_project_repositories, get_workflow, read_workspace_file.
     Knowledge base tools (docs/ in each repo): kb_list_repositories, kb_search_pages, kb_read_page, kb_create_page, kb_update_page, kb_delete_page, kb_delete_asset, kb_delete_folder, kb_link_task, kb_sync. Projects can span multiple repositories; KB pages are addressed by (repository, path-within-docs). When the project has more than one repository and the user does not name one, the tool returns a remediation asking which repository — ASK the user, then retry with the `repository` argument (owner/name, workspace path, or slug). Use kb_search_pages before creating pages to avoid duplicates, kb_create_page for new pages and kb_update_page for existing ones, and kb_link_task to reference a tracker issue inside a page. KB writes save directly to the active working tree; kb_sync is a no-op compatibility hook. The delete tools (kb_delete_page, kb_delete_asset, kb_delete_folder) are destructive — kb_delete_folder removes a directory and everything inside it — so confirm the exact target with the user before calling them.
-    Before moving an issue to a handoff/wait status, call check_handoff_gate. After writing evidence, call get_evidence_status. For preview: prefer manage_preview status/start/restart (ports match the Preview dock); on crash use output then restart; if Preview cannot reach ready, fall back to a convenient project bring-up path. Use list_previews to inventory and manage_tunnel start for public links.
+    Before moving an issue to a handoff/wait status, call check_handoff_gate. After writing evidence, call get_evidence_status. For preview: prefer manage_preview status/start/restart (leased ports match the Preview dock); on crash use output then restart; if you must run serve yourself use prepare and run the returned command verbatim — never invent ports or unmanaged INSPIRE_PORT bring-up. Cite only in_sync URLs. Use list_previews to inventory and manage_tunnel start for public links.
     To explain why an issue is or isn't auto-dispatched, call explain_dispatch_eligibility; for live running/retry/idle state call get_issue_orchestrator_state. To see every agent executing right now call list_running_agents, and steer_agent to inject a message into a running agent's turn. After opening a PR call link_pull_request. Manage dependencies with manage_blockers; pull external tracker edits with sync_issue.
     If the user asks for coding work, create or update tracker context first. Only call dispatch_codex when the user explicitly asks to start agent execution — never auto-dispatch after create_issue.
     When the user attaches an image or file, it is already saved in this project. If they want it on a task (e.g. in the description), embed it using the exact Markdown URL given in the attachment note (`![alt](URL)` for images) when you call create_issue/update_issue/add_comment — never just describe it in words.
@@ -919,10 +919,33 @@ defmodule SymphonyElixir.Assistant.AgentSession do
     end
   end
 
+  @doc """
+  Describes where the operator is when talking to the docked Maestro on a
+  global surface (home or observability), so the freeform assistant frames its
+  role accordingly. Public so it can be unit-tested in isolation.
+  """
+  @spec freeform_location_block(map()) :: String.t()
+  def freeform_location_block(context) when is_map(context) do
+    case freeform_surface(context) do
+      "observability" ->
+        "User location: the Observability page. Act as the global operator: prefer list_observability_runtimes to inspect active runtimes/sessions, and help open or triage the issues behind them."
+
+      _ ->
+        "User location: Home (global operator). You can manage projects, browse and manage issues across projects, edit the user's personal knowledge base (pass project_slug \"@user\"), and read or update instance settings."
+    end
+  end
+
+  defp freeform_surface(context) do
+    (Map.get(context, "surface") || Map.get(context, :surface) || "home")
+    |> to_string()
+  end
+
   defp build_freeform_prompt(message, context, history) do
     """
     You are the Symphony freeform assistant. There is no existing project or repository context.
     Behave like a real conversational coding assistant. Answer naturally in the user's language.
+
+    #{freeform_location_block(context)}
 
     Tools available in this chat. Always pass `project_slug` (from list_tracker_projects) for board operations.
 
@@ -931,7 +954,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
 
     Board / issues (require project_slug): list_issues, create_issue, get_issue, update_issue, move_issue, add_comment,
     list_comments, update_comment, delete_comment, list_pull_requests, link_pull_request, check_handoff_gate, get_evidence_status,
-    manage_preview (action: status|start|stop|restart|output; optional server), list_previews, manage_tunnel (status|start), manage_dev_env, scan_project_setup, suggest_project_setup,
+    manage_preview (action: status|start|stop|restart|output|prepare; optional server), list_previews, manage_tunnel (status|start), manage_dev_env, scan_project_setup, suggest_project_setup,
     dispatch_codex, get_agent_executions, get_issue_orchestrator_state, explain_dispatch_eligibility,
     list_running_agents, steer_agent, goal, manage_blockers,
     sync_issue, get_project, list_project_repositories, get_workflow, read_workspace_file,
@@ -948,7 +971,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
     The delete tools are destructive (kb_delete_folder removes a directory and everything inside it) — confirm the target first.
 
     Project setup flow: scan_project_setup → suggest_project_setup → update_project_workflow / update_project_repositories.
-    For preview: prefer manage_preview status/start/restart (ports match the Preview dock); on crash use output then restart; if Preview cannot reach ready, fall back to a convenient project bring-up path. Use list_previews to inventory and manage_tunnel start for public links.
+    For preview: prefer manage_preview status/start/restart (leased ports match the Preview dock); on crash use output then restart; if you must run serve yourself use prepare and run the returned command verbatim — never invent ports or unmanaged INSPIRE_PORT bring-up. Cite only in_sync URLs. Use list_previews to inventory and manage_tunnel start for public links.
 
     Templates: list_templates, get_template (use exact slugs from list_templates, e.g. multi-repo-fullstack). GraphQL escape hatches: github_graphql, linear_graphql.
     Use these structured tools instead of shell commands (gh, curl, ps) for tracker setup, discovery, and board actions.
