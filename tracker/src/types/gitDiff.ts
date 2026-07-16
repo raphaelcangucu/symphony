@@ -38,6 +38,29 @@ export interface GitDiffCommitResponse {
   workspace: GitDiffWorkspace;
 }
 
+export interface GitDiffRepoSummary {
+  repo: string;
+  branch: string | null;
+  aheadCount: number;
+  dirty: boolean;
+}
+
+export interface GitDiffSummariesResult {
+  summaries: GitDiffRepoSummary[];
+  workspace: GitDiffWorkspace;
+}
+
+export interface GitDiffPushResult {
+  repo: string;
+  ok: boolean;
+  error?: string;
+}
+
+export interface GitDiffPushResponse {
+  results: GitDiffPushResult[];
+  workspace: GitDiffWorkspace;
+}
+
 /** Aggregate per-repo counters from the `/diff/stats` endpoint — no file list, no patches. */
 export interface GitDiffRepoStat {
   repo: string;

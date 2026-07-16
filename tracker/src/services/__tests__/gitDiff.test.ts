@@ -3,14 +3,17 @@ import { describe, expect, it, vi } from "vitest";
 import {
   commitGitDiff,
   commitThreadGitDiff,
+  generateCommitMessage,
   getGitDiff,
   getGitDiffFiles,
   getGitDiffPatch,
   getGitDiffStats,
+  getGitDiffSummaries,
   getThreadGitDiff,
   getThreadGitDiffFiles,
   getThreadGitDiffPatch,
   getThreadGitDiffStats,
+  pushGitDiff,
 } from "@/services/gitDiff";
 import { http } from "@/services/http";
 
@@ -309,5 +312,104 @@ describe("getGitDiffPatch", () => {
       signal: undefined,
     });
     expect(result.patch).toBe("@@\n+x\n");
+  });
+});
+
+describe("getGitDiffSummaries", () => {
+  it("loads and normalizes per-repo summaries", async () => {
+    vi.mocked(http.get).mockResolvedValue({
+      data: {
+        data: [
+          { repo: "frontend", branch: "feat/x", ahead_count: 2, dirty: true },
+          { repo: "backend", branch: null, ahead_count: 0, dirty: false },
+        ],
+        workspace: { path: "/tmp/ws", available: true },
+      },
+    });
+
+    const result = await getGitDiffSummaries("demo", "ABC-1");
+
+    expect(http.get).toHaveBeenCalledWith("/api/tracker/v1/projects/demo/issues/ABC-1/diff/summaries");
+    expect(result).toEqual({
+      summaries: [
+        { repo: "frontend", branch: "feat/x", aheadCount: 2, dirty: true },
+        { repo: "backend", branch: null, aheadCount: 0, dirty: false },
+      ],
+      workspace: { path: "/tmp/ws", available: true },
+    });
+  });
+
+  it("defaults missing numeric and boolean fields", async () => {
+    vi.mocked(http.get).mockResolvedValue({
+      data: { data: [{ repo: "frontend" }], workspace: { path: "/tmp/ws", available: true } },
+    });
+
+    const result = await getGitDiffSummaries("demo", "ABC-1");
+
+    expect(result.summaries[0]).toEqual({
+      repo: "frontend",
+      branch: null,
+      aheadCount: 0,
+      dirty: false,
+    });
+  });
+});
+
+describe("pushGitDiff", () => {
+  it("loads and normalizes push results", async () => {
+    vi.mocked(http.post).mockResolvedValue({
+      data: {
+        data: [
+          { repo: "frontend", ok: true },
+          { repo: "backend", ok: false, error: "no upstream" },
+        ],
+        workspace: { path: "/tmp/ws", available: true },
+      },
+    });
+
+    const result = await pushGitDiff("demo", "ABC-1");
+
+    expect(http.post).toHaveBeenCalledWith("/api/tracker/v1/projects/demo/issues/ABC-1/diff/push", {});
+    expect(result).toEqual({
+      results: [
+        { repo: "frontend", ok: true },
+        { repo: "backend", ok: false, error: "no upstream" },
+      ],
+      workspace: { path: "/tmp/ws", available: true },
+    });
+  });
+
+  it("returns empty results when nothing is pushable", async () => {
+    vi.mocked(http.post).mockResolvedValue({
+      data: { data: [], workspace: { path: "/tmp/ws", available: true } },
+    });
+
+    const result = await pushGitDiff("demo", "ABC-1");
+
+    expect(result.results).toEqual([]);
+  });
+});
+
+describe("generateCommitMessage", () => {
+  it("returns the generated commit message", async () => {
+    vi.mocked(http.post).mockResolvedValue({
+      data: { data: { message: "feat: add diff summaries" } },
+    });
+
+    const result = await generateCommitMessage("demo", "ABC-1");
+
+    expect(http.post).toHaveBeenCalledWith(
+      "/api/tracker/v1/projects/demo/issues/ABC-1/diff/generate-commit-message",
+      {},
+    );
+    expect(result).toBe("feat: add diff summaries");
+  });
+
+  it("returns an empty string when message is missing", async () => {
+    vi.mocked(http.post).mockResolvedValue({ data: { data: {} } });
+
+    const result = await generateCommitMessage("demo", "ABC-1");
+
+    expect(result).toBe("");
   });
 });

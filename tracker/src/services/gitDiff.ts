@@ -7,9 +7,13 @@ import type {
   GitDiffFileEntry,
   GitDiffFilesPage,
   GitDiffPatchResult,
+  GitDiffPushResponse,
+  GitDiffPushResult,
   GitDiffRepoStat,
+  GitDiffRepoSummary,
   GitDiffResult,
   GitDiffStatsResult,
+  GitDiffSummariesResult,
   GitDiffType,
   GitDiffWorkspace,
 } from "@/types/gitDiff";
@@ -99,6 +103,37 @@ interface BackendGitDiffPatchDto {
 interface BackendGitDiffPatchEnvelope {
   data?: BackendGitDiffPatchDto | null;
   workspace?: BackendWorkspaceDto | null;
+}
+
+interface BackendGitDiffRepoSummaryDto {
+  repo?: string | null;
+  branch?: string | null;
+  ahead_count?: number | null;
+  dirty?: boolean | null;
+}
+
+interface BackendGitDiffSummariesEnvelope {
+  data?: BackendGitDiffRepoSummaryDto[] | null;
+  workspace?: BackendWorkspaceDto | null;
+}
+
+interface BackendGitDiffPushResultDto {
+  repo?: string | null;
+  ok?: boolean | null;
+  error?: string | null;
+}
+
+interface BackendGitDiffPushEnvelope {
+  data?: BackendGitDiffPushResultDto[] | null;
+  workspace?: BackendWorkspaceDto | null;
+}
+
+interface BackendGitDiffGenerateCommitMessageDto {
+  message?: string | null;
+}
+
+interface BackendGitDiffGenerateCommitMessageEnvelope {
+  data?: BackendGitDiffGenerateCommitMessageDto | null;
 }
 
 export interface GitDiffRequestOptions {
@@ -286,6 +321,52 @@ export async function commitThreadGitDiff(threadId: number, message: string): Pr
   };
 }
 
+export async function getGitDiffSummaries(
+  projectSlug: string,
+  identifier: string,
+): Promise<GitDiffSummariesResult> {
+  const slug = requireProjectSlug(projectSlug);
+  const issueIdentifier = requireNonBlank(normalizeIssueIdentifier(identifier), "identifier");
+
+  const response = await http.get<BackendGitDiffSummariesEnvelope>(
+    trackerPath(`/projects/${encodeURIComponent(slug)}/issues/${encodeURIComponent(issueIdentifier)}/diff/summaries`),
+  );
+
+  return {
+    summaries: (response.data?.data ?? []).map(normalizeRepoSummary),
+    workspace: normalizeWorkspace(response.data?.workspace),
+  };
+}
+
+export async function pushGitDiff(projectSlug: string, identifier: string): Promise<GitDiffPushResponse> {
+  const slug = requireProjectSlug(projectSlug);
+  const issueIdentifier = requireNonBlank(normalizeIssueIdentifier(identifier), "identifier");
+
+  const response = await http.post<BackendGitDiffPushEnvelope>(
+    trackerPath(`/projects/${encodeURIComponent(slug)}/issues/${encodeURIComponent(issueIdentifier)}/diff/push`),
+    {},
+  );
+
+  return {
+    results: (response.data?.data ?? []).map(normalizePushResult),
+    workspace: normalizeWorkspace(response.data?.workspace),
+  };
+}
+
+export async function generateCommitMessage(projectSlug: string, identifier: string): Promise<string> {
+  const slug = requireProjectSlug(projectSlug);
+  const issueIdentifier = requireNonBlank(normalizeIssueIdentifier(identifier), "identifier");
+
+  const response = await http.post<BackendGitDiffGenerateCommitMessageEnvelope>(
+    trackerPath(
+      `/projects/${encodeURIComponent(slug)}/issues/${encodeURIComponent(issueIdentifier)}/diff/generate-commit-message`,
+    ),
+    {},
+  );
+
+  return response.data?.data?.message ?? "";
+}
+
 function filesListParams(type: GitDiffType, options?: GitDiffFilesListOptions): Record<string, unknown> {
   return {
     type,
@@ -378,6 +459,28 @@ function normalizeCommit(dto: BackendGitCommitDto): GitDiffCommitResult {
     message: dto.message ?? "",
     files: dto.files ?? [],
   };
+}
+
+export function normalizeRepoSummary(dto: BackendGitDiffRepoSummaryDto): GitDiffRepoSummary {
+  return {
+    repo: dto.repo ?? "",
+    branch: dto.branch ?? null,
+    aheadCount: normalizeCount(dto.ahead_count),
+    dirty: dto.dirty ?? false,
+  };
+}
+
+function normalizePushResult(dto: BackendGitDiffPushResultDto): GitDiffPushResult {
+  const result: GitDiffPushResult = {
+    repo: dto.repo ?? "",
+    ok: dto.ok ?? false,
+  };
+
+  if (dto.error) {
+    result.error = dto.error;
+  }
+
+  return result;
 }
 
 function normalizeWorkspace(raw: BackendWorkspaceDto | null | undefined): GitDiffWorkspace {
