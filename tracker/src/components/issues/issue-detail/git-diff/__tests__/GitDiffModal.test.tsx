@@ -143,9 +143,13 @@ describe("GitDiffModal", () => {
     });
     useIssueCommitEvidenceMock.mockReturnValue({
       commits: [],
+      total: 0,
       workspace: { path: "/tmp/ws", available: true },
       loading: false,
+      loadingMore: false,
+      hasMore: false,
       error: null,
+      loadMore: vi.fn(),
       refetch: vi.fn(),
     });
   });
@@ -161,9 +165,13 @@ describe("GitDiffModal", () => {
     });
     useIssueCommitEvidenceMock.mockReturnValue({
       commits: [],
+      total: 0,
       workspace: { path: "/home/code/advising-workspaces/advising/CDE-1131", available: true },
       loading: false,
+      loadingMore: false,
+      hasMore: false,
       error: null,
+      loadMore: vi.fn(),
       refetch: vi.fn(),
     });
 
@@ -343,10 +351,16 @@ describe("GitDiffModal", () => {
           filesChanged: 1,
           insertions: 10,
           deletions: 0,
+          online: false,
         },
       ],
+      total: 1,
+      workspace: { path: "/tmp/ws", available: true },
       loading: false,
+      loadingMore: false,
+      hasMore: false,
       error: null,
+      loadMore: vi.fn(),
       refetch: vi.fn(),
     });
     const { getCommitEvidence } = await import("@/services/commitEvidence");
@@ -360,6 +374,7 @@ describe("GitDiffModal", () => {
       filesChanged: 1,
       insertions: 10,
       deletions: 0,
+      online: false,
       files: [{ path: "docs/plan.md", oldPath: null, status: "added", patch: "@@\n+hello\n" }],
     });
 
@@ -399,6 +414,7 @@ describe("GitDiffModal", () => {
       filesChanged: 1,
       insertions: 5,
       deletions: 0,
+      online: true,
     };
     const commitB = {
       repo: "backend",
@@ -410,11 +426,17 @@ describe("GitDiffModal", () => {
       filesChanged: 1,
       insertions: 3,
       deletions: 1,
+      online: false,
     };
     useIssueCommitEvidenceMock.mockReturnValue({
       commits: [commitA, commitB],
+      total: 2,
+      workspace: { path: "/tmp/ws", available: true },
       loading: false,
+      loadingMore: false,
+      hasMore: false,
       error: null,
+      loadMore: vi.fn(),
       refetch: vi.fn(),
     });
     const { getCommitEvidence } = await import("@/services/commitEvidence");

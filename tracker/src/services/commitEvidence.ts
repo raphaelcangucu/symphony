@@ -2,6 +2,7 @@ import { normalizeIssueIdentifier } from "@/lib/issueIdentifiers";
 import { requireNonBlank, requireProjectSlug } from "@/lib/serviceValidation";
 import type {
   CommitEvidenceDetail,
+  CommitEvidencePage,
   CommitEvidenceSummary,
   CommitEvidenceWorkspace,
 } from "@/types/commitEvidence";
@@ -18,6 +19,7 @@ interface BackendCommitDto {
   files_changed?: number | null;
   insertions?: number | null;
   deletions?: number | null;
+  online?: boolean | null;
   files?: BackendFileDto[] | null;
 }
 
@@ -29,12 +31,22 @@ interface BackendFileDto {
 }
 
 interface BackendCommitListEnvelope {
+  commits?: BackendCommitDto[] | null;
   data?: BackendCommitDto[] | null;
+  total?: number | null;
+  limit?: number | null;
+  next_cursor?: string | null;
   workspace?: { path?: string | null; available?: boolean | null } | null;
 }
 
 interface BackendCommitDetailEnvelope {
   data?: BackendCommitDto | null;
+}
+
+export interface ListCommitEvidenceParams {
+  limit?: number;
+  cursor?: string | null;
+  signal?: AbortSignal;
 }
 
 function normalizeSummary(dto: BackendCommitDto): CommitEvidenceSummary {
@@ -48,6 +60,7 @@ function normalizeSummary(dto: BackendCommitDto): CommitEvidenceSummary {
     filesChanged: dto.files_changed ?? 0,
     insertions: dto.insertions ?? 0,
     deletions: dto.deletions ?? 0,
+    online: dto.online === true,
   };
 }
 
@@ -77,19 +90,32 @@ function normalizeWorkspace(raw: BackendCommitListEnvelope["workspace"]): Commit
 export async function listCommitEvidence(
   projectSlug: string,
   identifier: string,
-): Promise<{ commits: CommitEvidenceSummary[]; workspace: CommitEvidenceWorkspace }> {
+  params: ListCommitEvidenceParams = {},
+): Promise<CommitEvidencePage> {
   const slug = requireProjectSlug(projectSlug);
   const issueIdentifier = requireNonBlank(normalizeIssueIdentifier(identifier), "identifier");
 
+  const query = new URLSearchParams();
+  if (params.limit != null) query.set("limit", String(params.limit));
+  if (params.cursor) query.set("cursor", params.cursor);
+  const querySuffix = query.size > 0 ? `?${query.toString()}` : "";
+
   const response = await http.get<BackendCommitListEnvelope>(
     trackerPath(
-      `/projects/${encodeURIComponent(slug)}/issues/${encodeURIComponent(issueIdentifier)}/commit_evidence`,
+      `/projects/${encodeURIComponent(slug)}/issues/${encodeURIComponent(issueIdentifier)}/commit_evidence${querySuffix}`,
     ),
+    { signal: params.signal },
   );
 
+  const raw = response.data;
+  const commits = (raw?.commits ?? raw?.data ?? []).map(normalizeSummary);
+
   return {
-    commits: (response.data?.data ?? []).map(normalizeSummary),
-    workspace: normalizeWorkspace(response.data?.workspace),
+    commits,
+    total: raw?.total ?? commits.length,
+    limit: raw?.limit ?? params.limit ?? commits.length,
+    nextCursor: raw?.next_cursor ?? null,
+    workspace: normalizeWorkspace(raw?.workspace),
   };
 }
 

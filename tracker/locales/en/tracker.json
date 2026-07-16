@@ -840,7 +840,9 @@
       },
       "errors": {
         "loadFailed": "Could not load commit evidence."
-      }
+      },
+      "online": "Online",
+      "local": "Local"
     },
     "diff": {
       "button": "Diff",
@@ -2435,6 +2437,7 @@
       "linkedPullRequests": "Linked PRs",
       "commitPush": "Commit & push",
       "compare": "Compare",
+      "commits": "Commits",
       "sources": "Sources"
     },
     "toolGroup": {

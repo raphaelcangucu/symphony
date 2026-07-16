@@ -14,6 +14,9 @@ defmodule SymphonyElixir.Evidence.Commits do
   # (stale project config or shallow clones without origin/HEAD).
   @fallback_integration_branches ~w(main master develop pre-release homolog trunk)
 
+  @default_limit 20
+  @max_limit 100
+
   @type commit :: %{
           repo: String.t(),
           sha: String.t(),
@@ -23,7 +26,15 @@ defmodule SymphonyElixir.Evidence.Commits do
           authored_at: String.t(),
           files_changed: non_neg_integer(),
           insertions: non_neg_integer(),
-          deletions: non_neg_integer()
+          deletions: non_neg_integer(),
+          online: boolean()
+        }
+
+  @type commit_page :: %{
+          commits: [commit()],
+          total: non_neg_integer(),
+          limit: pos_integer(),
+          next_cursor: String.t() | nil
         }
 
   @type file_change :: %{
@@ -33,20 +44,32 @@ defmodule SymphonyElixir.Evidence.Commits do
           patch: String.t()
         }
 
-  @spec list(Path.t(), keyword()) :: {:ok, [commit()]} | {:error, term()}
+  @spec list(Path.t(), keyword()) :: {:ok, commit_page()} | {:error, term()}
   def list(workspace, opts \\ []) when is_binary(workspace) do
-    default_branches = Keyword.get(opts, :default_branches, %{})
+    with {:ok, offset} <- decode_cursor(Keyword.get(opts, :cursor)) do
+      default_branches = Keyword.get(opts, :default_branches, %{})
+      limit = clamp_limit(Keyword.get(opts, :limit))
 
-    if File.dir?(workspace) do
       commits =
-        workspace
-        |> RunContract.repo_states(default_branches: default_branches)
-        |> Enum.flat_map(&list_repo_commits/1)
-        |> Enum.sort_by(& &1.authored_at, :desc)
+        if File.dir?(workspace) do
+          workspace
+          |> RunContract.repo_states(default_branches: default_branches)
+          |> Enum.flat_map(&list_repo_commits/1)
+          |> Enum.sort_by(& &1.authored_at, :desc)
+        else
+          []
+        end
 
-      {:ok, commits}
-    else
-      {:ok, []}
+      total = length(commits)
+      page = Enum.slice(commits, offset, limit)
+
+      {:ok,
+       %{
+         commits: page,
+         total: total,
+         limit: limit,
+         next_cursor: encode_cursor(offset + limit, total)
+       }}
     end
   end
 
@@ -70,10 +93,40 @@ defmodule SymphonyElixir.Evidence.Commits do
   end
 
   defp list_repo_commits(%RepoState{} = repo) do
+    remote_tip = remote_feature_tip(repo)
+
     case log_range(repo) do
-      nil -> []
-      range -> parse_log(repo, range)
+      nil ->
+        []
+
+      range ->
+        repo
+        |> parse_log(range)
+        |> Enum.map(&Map.put(&1, :online, commit_online?(repo, &1.sha, remote_tip)))
     end
+  end
+
+  defp remote_feature_tip(%RepoState{} = repo) do
+    case git(repo.path, ["rev-parse", "@{upstream}"]) do
+      {:ok, tip} -> tip
+      {:error, _} -> remote_origin_branch_tip(repo)
+    end
+  end
+
+  defp remote_origin_branch_tip(%RepoState{branch: branch} = repo)
+       when is_binary(branch) and branch != "" do
+    case git(repo.path, ["rev-parse", "--verify", "origin/#{branch}"]) do
+      {:ok, tip} -> tip
+      {:error, _} -> nil
+    end
+  end
+
+  defp remote_origin_branch_tip(_repo), do: nil
+
+  defp commit_online?(_repo, _sha, nil), do: false
+
+  defp commit_online?(%RepoState{} = repo, sha, remote_tip) when is_binary(sha) and is_binary(remote_tip) do
+    match?({:ok, _}, git(repo.path, ["merge-base", "--is-ancestor", sha, remote_tip]))
   end
 
   defp log_range(%RepoState{} = repo) do
@@ -274,4 +327,36 @@ defmodule SymphonyElixir.Evidence.Commits do
       {output, status} -> {:error, {status, String.trim_trailing(output)}}
     end
   end
+
+  defp clamp_limit(nil), do: @default_limit
+
+  defp clamp_limit(value) when is_binary(value) do
+    case Integer.parse(value) do
+      {n, _} -> clamp_limit(n)
+      :error -> @default_limit
+    end
+  end
+
+  defp clamp_limit(value) when is_integer(value) and value > 0, do: min(value, @max_limit)
+  defp clamp_limit(_), do: @default_limit
+
+  defp decode_cursor(nil), do: {:ok, 0}
+
+  defp decode_cursor(cursor) when is_binary(cursor) do
+    with {:ok, decoded} <- Base.url_decode64(cursor, padding: false),
+         {offset, ""} <- Integer.parse(decoded),
+         true <- offset >= 0 do
+      {:ok, offset}
+    else
+      _ -> {:error, :invalid_cursor}
+    end
+  end
+
+  defp decode_cursor(_), do: {:error, :invalid_cursor}
+
+  defp encode_cursor(next_offset, total) when next_offset < total do
+    next_offset |> Integer.to_string() |> Base.url_encode64(padding: false)
+  end
+
+  defp encode_cursor(_next_offset, _total), do: nil
 end

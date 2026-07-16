@@ -289,8 +289,10 @@ defmodule SymphonyElixirWeb.Tracker.WorkspaceDiffControllerTest do
 
   test "generate_commit_message returns the injected runner response", %{issue: issue} do
     previous_runner = Application.get_env(:symphony_elixir, :commit_message_generator_runner)
+    parent = self()
 
-    Application.put_env(:symphony_elixir, :commit_message_generator_runner, fn _workspace, _prompt, _issue, _opts ->
+    Application.put_env(:symphony_elixir, :commit_message_generator_runner, fn _workspace, _prompt, _issue, opts ->
+      send(parent, {:runner_opts, opts})
       {:ok, %{assistant_message: "feat: test message"}}
     end)
 
@@ -304,6 +306,8 @@ defmodule SymphonyElixirWeb.Tracker.WorkspaceDiffControllerTest do
       )
 
     assert %{"data" => %{"message" => "feat: test message"}} = json_response(conn, 200)
+    assert_receive {:runner_opts, opts}
+    assert is_binary(Keyword.get(opts, :workspace_root))
   end
 
   test "stats_thread/files_thread/file_patch_thread proxy to the thread's workspace", %{tmp_dir: tmp_dir} do

@@ -55,4 +55,23 @@ defmodule SymphonyElixir.Evidence.CommitMessageGeneratorTest do
                diff_summary: "+x"
              )
   end
+
+  test "forwards workspace_root to the runner for per-project cwd guards" do
+    parent = self()
+
+    runner = fn _workspace, _prompt, _issue, opts ->
+      send(parent, {:runner_opts, opts})
+      {:ok, %{assistant_message: "feat: scoped root"}}
+    end
+
+    assert {:ok, "feat: scoped root"} =
+             CommitMessageGenerator.generate("/tmp/project/issue-1", @issue,
+               runner: runner,
+               diff_summary: "+x",
+               workspace_root: "/tmp/project"
+             )
+
+    assert_receive {:runner_opts, opts}
+    assert Keyword.get(opts, :workspace_root) == "/tmp/project"
+  end
 end

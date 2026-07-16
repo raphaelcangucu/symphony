@@ -3,7 +3,7 @@ defmodule SymphonyElixir.Assistant.History do
 
   import Ecto.Query
 
-  alias SymphonyElixir.Assistant.{Message, ProjectExploreWorkspace, Thread, TurnTimeline}
+  alias SymphonyElixir.Assistant.{Message, ProjectExploreWorkspace, Thread, TitleGenerator, TurnTimeline}
   alias SymphonyElixir.{ExecutionMode, Workspace}
   alias SymphonyElixir.LocalTracker.{Context, IssueAdapter}
   alias SymphonyElixir.Recents.Broadcaster, as: RecentsBroadcaster
@@ -15,7 +15,7 @@ defmodule SymphonyElixir.Assistant.History do
   @sidebar_title_max_graphemes 160
   @sidebar_label_max_graphemes 40
   @sidebar_label_count_max 12
-  @deletable_scopes ~w(freeform project_session issue_session issue)
+  @deletable_scopes ~w(freeform project_session project_explore issue_session issue kb)
 
   @spec ensure_thread(String.t(), attrs()) :: {:ok, Thread.t()} | {:error, term()}
   def ensure_thread(project_slug, attrs \\ %{}) when is_binary(project_slug) and is_map(attrs) do
@@ -714,10 +714,17 @@ defmodule SymphonyElixir.Assistant.History do
 
   @spec create_freeform_thread(attrs()) :: {:ok, Thread.t()} | {:error, Ecto.Changeset.t()}
   def create_freeform_thread(attrs) when is_map(attrs) do
+    metadata =
+      attrs
+      |> Map.get(:metadata, Map.get(attrs, "metadata", %{}))
+      |> Map.new()
+      |> TitleGenerator.put_auto_eligible()
+
     attrs
     |> Map.put(:scope, "freeform")
     |> Map.delete(:project_slug)
     |> Map.put_new(:status, "active")
+    |> Map.put(:metadata, metadata)
     |> then(&Thread.changeset(%Thread{}, &1))
     |> Repo.insert()
     |> notify_recents()
@@ -759,6 +766,7 @@ defmodule SymphonyElixir.Assistant.History do
         |> Map.new()
         |> Map.put("execution_mode", execution_mode)
         |> put_session_model_effort(attrs)
+        |> TitleGenerator.put_auto_eligible()
 
       attrs
       |> Map.drop([:model, "model", :effort, "effort", :execution_mode, "execution_mode"])

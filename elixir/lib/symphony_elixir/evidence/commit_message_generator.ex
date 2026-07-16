@@ -25,7 +25,7 @@ defmodule SymphonyElixir.Evidence.CommitMessageGenerator do
     with {:ok, diff_summary} <- normalize_diff_summary(Keyword.get(opts, :diff_summary)),
          prompt <- build_prompt(prompt_input(issue, diff_summary)),
          runner <- Keyword.get(opts, :runner, &default_runner/4),
-         runner_opts <- runner_opts() do
+         runner_opts <- runner_opts(opts) do
       case runner.(workspace, prompt, issue, runner_opts) do
         {:ok, %{assistant_message: message}} when is_binary(message) ->
           case normalize_message(message) do
@@ -98,11 +98,16 @@ defmodule SymphonyElixir.Evidence.CommitMessageGenerator do
     end
   end
 
-  defp runner_opts do
-    [
+  defp runner_opts(opts) when is_list(opts) do
+    base = [
       dynamic_tools: [],
       tool_executor: fn _tool, _arguments -> {:error, :no_tools} end
     ]
+
+    case Keyword.get(opts, :workspace_root) do
+      root when is_binary(root) and root != "" -> Keyword.put(base, :workspace_root, root)
+      _ -> base
+    end
   end
 
   defp default_runner(workspace, prompt, issue, opts) do

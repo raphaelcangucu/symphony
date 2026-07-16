@@ -27,14 +27,45 @@ defmodule SymphonyElixir.Evidence.CommitsTest do
   end
 
   test "lists commits ahead of main for workspace repos", %{workspace: workspace} do
-    assert {:ok, commits} = Commits.list(workspace)
+    assert {:ok, %{commits: commits, total: 2, next_cursor: nil}} = Commits.list(workspace)
     assert length(commits) == 2
     assert Enum.all?(commits, &(&1.repo == "advising"))
     assert Enum.at(commits, 0).message =~ "tweak"
+    assert Enum.all?(commits, &(&1.online == false))
+  end
+
+  test "paginates commits with limit and cursor", %{workspace: workspace} do
+    assert {:ok, %{commits: [first], total: 2, limit: 1, next_cursor: cursor}} =
+             Commits.list(workspace, limit: 1)
+
+    assert is_binary(cursor)
+    assert first.message =~ "tweak"
+
+    assert {:ok, %{commits: [second], total: 2, next_cursor: nil}} =
+             Commits.list(workspace, limit: 1, cursor: cursor)
+
+    assert second.message =~ "add feature"
+  end
+
+  test "marks pushed feature-branch commits as online", %{workspace: workspace} do
+    repo = Path.join(workspace, "advising")
+    assert {:ok, %{commits: [newest, older]}} = Commits.list(workspace)
+    assert newest.online == false
+    assert older.online == false
+
+    # Publish only the older commit to origin/feature/test; leave newest local.
+    sh!(repo, "git update-ref refs/remotes/origin/feature/test #{older.sha}")
+    sh!(repo, "git branch --set-upstream-to=origin/feature/test feature/test")
+
+    assert {:ok, %{commits: [latest, pushed]}} = Commits.list(workspace)
+    assert latest.sha == newest.sha
+    assert latest.online == false
+    assert pushed.sha == older.sha
+    assert pushed.online == true
   end
 
   test "shows commit diff files", %{workspace: workspace} do
-    assert {:ok, commits} = Commits.list(workspace)
+    assert {:ok, %{commits: commits}} = Commits.list(workspace)
     [latest | _] = commits
 
     assert {:ok, detail} = Commits.show(workspace, "advising", latest.sha)
@@ -43,8 +74,9 @@ defmodule SymphonyElixir.Evidence.CommitsTest do
     assert patch =~ "feature.txt"
   end
 
-  test "returns empty list when workspace is missing" do
-    assert {:ok, []} = Commits.list("/tmp/does-not-exist-#{System.unique_integer()}")
+  test "returns empty page when workspace is missing" do
+    assert {:ok, %{commits: [], total: 0, next_cursor: nil}} =
+             Commits.list("/tmp/does-not-exist-#{System.unique_integer()}")
   end
 
   test "lists commits using project default_branches when origin/HEAD is unset", %{tmp_dir: tmp_dir} do
@@ -64,9 +96,9 @@ defmodule SymphonyElixir.Evidence.CommitsTest do
     File.mkdir_p!(workspace)
     File.rename!(repo, Path.join(workspace, "back"))
 
-    assert {:ok, []} = Commits.list(workspace)
+    assert {:ok, %{commits: []}} = Commits.list(workspace)
 
-    assert {:ok, [commit]} = Commits.list(workspace, default_branches: %{"back" => "dev"})
+    assert {:ok, %{commits: [commit]}} = Commits.list(workspace, default_branches: %{"back" => "dev"})
     assert commit.repo == "back"
     assert commit.message =~ "agent work"
   end
@@ -89,7 +121,7 @@ defmodule SymphonyElixir.Evidence.CommitsTest do
     File.mkdir_p!(workspace)
     File.rename!(repo, Path.join(workspace, "advising"))
 
-    assert {:ok, [commit]} =
+    assert {:ok, %{commits: [commit]}} =
              Commits.list(workspace,
                default_branches: %{"advising" => "feature/lti-group-sharing-CDE-1106"}
              )

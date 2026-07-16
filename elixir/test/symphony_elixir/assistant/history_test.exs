@@ -517,6 +517,26 @@ defmodule SymphonyElixir.Assistant.HistoryTest do
     assert {:error, :not_found} = History.get_thread(errored_thread.id)
   end
 
+  test "delete_thread deletes project_explore threads" do
+    {:ok, _project} = Context.ensure_project(%{name: "Delete Explore", slug: "delete-explore"})
+    {:ok, thread} = History.ensure_project_explore_thread("delete-explore", %{workspace_path: "/tmp/delete-explore"})
+
+    assert {:ok, deleted} = History.delete_thread(thread.id)
+    assert deleted.id == thread.id
+    assert deleted.scope == "project_explore"
+    assert {:error, :not_found} = History.get_thread(thread.id)
+  end
+
+  test "delete_thread deletes kb threads" do
+    {:ok, _project} = Context.ensure_project(%{name: "Delete KB", slug: "delete-kb"})
+    {:ok, thread} = History.ensure_kb_thread("delete-kb", "delete-kb", "SETTINGS.md", %{})
+
+    assert {:ok, deleted} = History.delete_thread(thread.id)
+    assert deleted.id == thread.id
+    assert deleted.scope == "kb"
+    assert {:error, :not_found} = History.get_thread(thread.id)
+  end
+
   test "delete_thread returns not_found" do
     assert {:error, :not_found} = History.delete_thread(2_147_483_647)
   end

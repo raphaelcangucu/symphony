@@ -60,10 +60,39 @@ defmodule SymphonyElixirWeb.Tracker.CommitEvidenceControllerTest do
         "/api/tracker/v1/projects/advising/issues/#{ctx.issue.identifier}/commit_evidence"
       )
 
-    assert %{"data" => [commit], "workspace" => workspace} = json_response(conn, 200)
+    assert %{"commits" => [commit], "workspace" => workspace, "total" => 1, "next_cursor" => nil} =
+             json_response(conn, 200)
+
     assert workspace["available"] == true
     assert commit["repo"] == "advising"
     assert commit["message"] =~ "agent work"
+    assert commit["online"] == false
+  end
+
+  test "index paginates commits", ctx do
+    repo = Path.join(ctx.workspace, "advising")
+    sh!(repo, "echo more > more.txt && git add more.txt && git commit -m 'feat: second'")
+
+    first =
+      get(
+        authorized_conn(),
+        "/api/tracker/v1/projects/advising/issues/#{ctx.issue.identifier}/commit_evidence?limit=1"
+      )
+      |> json_response(200)
+
+    assert %{"commits" => [latest], "total" => 2, "limit" => 1, "next_cursor" => cursor} = first
+    assert is_binary(cursor)
+    assert latest["message"] =~ "second"
+
+    second =
+      get(
+        authorized_conn(),
+        "/api/tracker/v1/projects/advising/issues/#{ctx.issue.identifier}/commit_evidence?limit=1&cursor=#{cursor}"
+      )
+      |> json_response(200)
+
+    assert %{"commits" => [older], "next_cursor" => nil} = second
+    assert older["message"] =~ "agent work"
   end
 
   test "index lists commits via project repository default_branch without origin/HEAD", %{tmp_dir: tmp_dir} do
@@ -115,7 +144,7 @@ defmodule SymphonyElixirWeb.Tracker.CommitEvidenceControllerTest do
         "/api/tracker/v1/projects/advising/issues/#{issue.identifier}/commit_evidence"
       )
 
-    assert %{"data" => [commit], "workspace" => workspace_info} = json_response(conn, 200)
+    assert %{"commits" => [commit], "workspace" => workspace_info} = json_response(conn, 200)
     assert workspace_info["available"] == true
     assert commit["repo"] == "advising"
     assert commit["message"] =~ "agent work"
@@ -129,7 +158,7 @@ defmodule SymphonyElixirWeb.Tracker.CommitEvidenceControllerTest do
       )
       |> json_response(200)
 
-    [commit | _] = index["data"]
+    [commit | _] = index["commits"]
 
     conn =
       get(

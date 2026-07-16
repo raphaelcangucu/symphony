@@ -840,7 +840,9 @@
       },
       "errors": {
         "loadFailed": "Não foi possível carregar a evidência de commits."
-      }
+      },
+      "online": "Online",
+      "local": "Local"
     },
     "diff": {
       "button": "Diff",
@@ -2435,6 +2437,7 @@
       "linkedPullRequests": "PRs vinculados",
       "commitPush": "Commit e push",
       "compare": "Comparar",
+      "commits": "Commits",
       "sources": "Fontes"
     },
     "toolGroup": {

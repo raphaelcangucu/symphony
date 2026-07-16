@@ -225,6 +225,27 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadControllerTest do
     assert {:error, :not_found} = History.get_thread(thread.id)
   end
 
+  test "DELETE removes an active project_explore thread" do
+    {:ok, _project} = Context.ensure_project(%{name: "Delete Explore", slug: "delete-explore-api"})
+    {:ok, thread} =
+      History.ensure_project_explore_thread("delete-explore-api", %{workspace_path: "/tmp/delete-explore-api"})
+
+    conn = delete(authorize(), "/api/tracker/v1/assistant/threads/#{thread.id}")
+
+    assert response(conn, 204) == ""
+    assert {:error, :not_found} = History.get_thread(thread.id)
+  end
+
+  test "DELETE removes an active kb thread" do
+    {:ok, _project} = Context.ensure_project(%{name: "Delete KB", slug: "delete-kb-api"})
+    {:ok, thread} = History.ensure_kb_thread("delete-kb-api", "delete-kb-api", "SETTINGS.md", %{})
+
+    conn = delete(authorize(), "/api/tracker/v1/assistant/threads/#{thread.id}")
+
+    assert response(conn, 204) == ""
+    assert {:error, :not_found} = History.get_thread(thread.id)
+  end
+
   test "PATCH rejects an invalid thread id" do
     conn = patch(authorize(), "/api/tracker/v1/assistant/threads/not-an-id", %{title: "Nope"})
 

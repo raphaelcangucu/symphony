@@ -6,6 +6,7 @@ import { GitDiffLauncher } from "@/components/issues/issue-detail/git-diff/GitDi
 import { PullRequestLink } from "@/components/issues/pull-request/PullRequestLink";
 import { Button } from "@/components/ui/button";
 import { useHorizontalPanelResize } from "@/hooks/useHorizontalPanelResize";
+import { useIssueCommitEvidence } from "@/hooks/useIssueCommitEvidence";
 import { useIssuePullRequests } from "@/hooks/useIssuePullRequests";
 import { useWorkspaceDiffStats } from "@/hooks/useWorkspaceDiffStats";
 import { useWorkspaceRepoSummaries } from "@/hooks/useWorkspaceRepoSummaries";
@@ -16,6 +17,7 @@ import { getIssue } from "@/services/issues";
 const ENVIRONMENT_DOCK_WIDTH_STORAGE_KEY = "symphony:issue-environment-dock-width";
 const ENVIRONMENT_DOCK_DEFAULT_WIDTH = 280;
 const ENVIRONMENT_DOCK_MIN_WIDTH = 240;
+const RECENT_COMMITS_LIMIT = 3;
 
 interface IssueEnvironmentDockProps {
   projectSlug: string;
@@ -49,6 +51,12 @@ export function IssueEnvironmentDock({
     projectSlug,
     identifier: issueIdentifier,
     enabled: true,
+  });
+  const recentCommits = useIssueCommitEvidence({
+    projectSlug,
+    identifier: issueIdentifier,
+    enabled: true,
+    limit: RECENT_COMMITS_LIMIT,
   });
   const { width, isResizing, onResizePointerDown, onResizePointerUp } = useHorizontalPanelResize({
     containerRef: splitContainerRef,
@@ -201,6 +209,42 @@ export function IssueEnvironmentDock({
               <span className="truncate">{t("assistant.environment.compare")}</span>
             </Button>
           </div>
+
+          {recentCommits.commits.length > 0 ? (
+            <div className="flex flex-col gap-1.5 border-t border-border/60 pt-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                {t("assistant.environment.commits")}
+              </p>
+              <div className="flex flex-col gap-1">
+                {recentCommits.commits.slice(0, RECENT_COMMITS_LIMIT).map((commit) => (
+                  <button
+                    key={`${commit.repo}:${commit.sha}`}
+                    type="button"
+                    className="flex w-full flex-col gap-0.5 rounded-md px-1.5 py-1 text-left hover:bg-muted/50"
+                    onClick={openCompare}
+                    title={commit.message}
+                  >
+                    <span className="truncate text-xs font-medium">{commit.message}</span>
+                    <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                      <span className="font-mono">{commit.shortSha}</span>
+                      <span
+                        className={cn(
+                          "rounded px-1 py-px font-medium",
+                          commit.online
+                            ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
+                            : "bg-muted text-muted-foreground",
+                        )}
+                      >
+                        {commit.online
+                          ? t("issue.commits.online")
+                          : t("issue.commits.local")}
+                      </span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
 
           {linkedPullRequests.length > 0 ? (
             <div className="flex flex-col gap-1.5 border-t border-border/60 pt-2">

@@ -60,6 +60,45 @@ vi.mock("@/hooks/useIssuePullRequests", () => ({
   }),
 }));
 
+vi.mock("@/hooks/useIssueCommitEvidence", () => ({
+  useIssueCommitEvidence: () => ({
+    commits: [
+      {
+        repo: "symphony",
+        sha: "aaaaaaaaaaaa",
+        shortSha: "aaaaaaa",
+        message: "feat: dock commits",
+        author: "agent",
+        authoredAt: "2026-07-16T00:00:00Z",
+        filesChanged: 1,
+        insertions: 4,
+        deletions: 0,
+        online: true,
+      },
+      {
+        repo: "symphony",
+        sha: "bbbbbbbbbbbb",
+        shortSha: "bbbbbbb",
+        message: "fix: local only",
+        author: "agent",
+        authoredAt: "2026-07-15T00:00:00Z",
+        filesChanged: 1,
+        insertions: 2,
+        deletions: 1,
+        online: false,
+      },
+    ],
+    total: 2,
+    workspace: { path: "/tmp/ws", available: true },
+    loading: false,
+    loadingMore: false,
+    hasMore: false,
+    error: null,
+    loadMore: vi.fn(),
+    refetch: vi.fn(),
+  }),
+}));
+
 vi.mock("@/services/issues", () => ({
   getIssue: vi.fn().mockResolvedValue({ branchName: "issue/510-ambiente" }),
 }));
@@ -117,12 +156,15 @@ describe("IssueEnvironmentDock", () => {
     expect(screen.getByText("+12")).toBeInTheDocument();
     expect(screen.getByText("−4")).toBeInTheDocument();
     expect(await screen.findByText("feature/local-work")).toBeInTheDocument();
-    expect(screen.getByText("Local")).toBeInTheDocument();
     expect(screen.getByText("issue/510-ambiente")).toBeInTheDocument();
     expect(screen.getByText("Issue")).toBeInTheDocument();
     expect(screen.getByText("Linked PRs")).toBeInTheDocument();
     expect(screen.getByText("#42")).toBeInTheDocument();
     expect(screen.getByText("macro-markets")).toBeInTheDocument();
+    expect(screen.getByText("feat: dock commits")).toBeInTheDocument();
+    expect(screen.getByText("Online")).toBeInTheDocument();
+    expect(screen.getByText("fix: local only")).toBeInTheDocument();
+    expect(screen.getAllByText("Local").length).toBeGreaterThanOrEqual(2);
 
     await user.click(screen.getByRole("button", { name: /close environment/i }));
     expect(onClose).toHaveBeenCalledTimes(1);

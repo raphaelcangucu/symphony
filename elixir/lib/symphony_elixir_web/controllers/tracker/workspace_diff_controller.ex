@@ -182,7 +182,17 @@ defmodule SymphonyElixirWeb.Tracker.WorkspaceDiffController do
            CommitMessageGenerator.generate(
              workspace,
              issue,
-             Keyword.merge([diff_summary: summary], generator_runner_opts())
+             Keyword.merge(
+               [
+                 diff_summary: summary,
+                 workspace_root:
+                   Workspace.workspace_root_for(%{
+                     identifier: identifier,
+                     project_slug: project_slug
+                   })
+               ],
+               generator_runner_opts()
+             )
            ) do
       json(conn, %{data: %{message: message}})
     else

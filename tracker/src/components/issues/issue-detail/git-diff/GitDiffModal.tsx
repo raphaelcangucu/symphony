@@ -491,16 +491,32 @@ export default function GitDiffModal({
           <div className="grid min-h-0 flex-1 grid-cols-[20rem_minmax(0,1fr)] bg-background">
             <aside className="flex min-h-0 flex-col overflow-hidden border-r">
               {activeTab === "commits" ? (
-                <CommitList
-                  commits={commits.commits}
-                  selected={selectedCommit}
-                  commitNotes={commitNotes}
-                  commentCountsByCommitKey={commentCountsByCommitKey}
-                  onSelect={(commit) => {
-                    setSelectedCommitKey(commitKey(commit));
-                    setCommitDetail(null);
-                  }}
-                />
+                <div className="flex min-h-0 flex-1 flex-col">
+                  <CommitList
+                    commits={commits.commits}
+                    selected={selectedCommit}
+                    commitNotes={commitNotes}
+                    commentCountsByCommitKey={commentCountsByCommitKey}
+                    onSelect={(commit) => {
+                      setSelectedCommitKey(commitKey(commit));
+                      setCommitDetail(null);
+                    }}
+                  />
+                  {commits.hasMore ? (
+                    <div className="border-t p-1.5">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-7 w-full gap-1 text-[11px]"
+                        disabled={commits.loadingMore}
+                        onClick={() => void commits.loadMore()}
+                      >
+                        {commits.loadingMore ? t("issue.diff.loading") : t("issue.diff.loadMore")}
+                      </Button>
+                    </div>
+                  ) : null}
+                </div>
               ) : (
                 <div className="flex min-h-0 flex-1 flex-col">
                   <GitDiffFileTree
@@ -797,6 +813,7 @@ function CommitList({
   commentCountsByCommitKey?: Record<string, number>;
   onSelect: (commit: CommitEvidenceSummary) => void;
 }) {
+  const { t } = useTranslation();
   const [query, setQuery] = useState("");
   const normalizedQuery = query.trim().toLowerCase();
   const filteredCommits = normalizedQuery
@@ -843,9 +860,19 @@ function CommitList({
                 <GitCommitHorizontal className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[11px] font-medium">{commit.message}</span>
-                  <span className="mt-0.5 flex items-center gap-2 text-[10px] text-muted-foreground">
+                  <span className="mt-0.5 flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground">
                     <span className="font-mono">{commit.shortSha}</span>
                     <span className="truncate">{commit.repo}</span>
+                    <span
+                      className={cn(
+                        "rounded px-1 py-px font-medium",
+                        commit.online
+                          ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
+                          : "bg-muted text-muted-foreground",
+                      )}
+                    >
+                      {commit.online ? t("issue.commits.online") : t("issue.commits.local")}
+                    </span>
                     <span className="text-emerald-600">+{commit.insertions}</span>
                     <span className="text-rose-600">-{commit.deletions}</span>
                     {note?.note.trim() ? <span title={note.note}>📝</span> : null}

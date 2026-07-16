@@ -8,6 +8,7 @@ export interface CommitEvidenceSummary {
   filesChanged: number;
   insertions: number;
   deletions: number;
+  online: boolean;
 }
 
 export interface CommitFileChange {
@@ -24,4 +25,12 @@ export interface CommitEvidenceDetail extends CommitEvidenceSummary {
 export interface CommitEvidenceWorkspace {
   path: string;
   available: boolean;
+}
+
+export interface CommitEvidencePage {
+  commits: CommitEvidenceSummary[];
+  total: number;
+  limit: number;
+  nextCursor: string | null;
+  workspace: CommitEvidenceWorkspace;
 }
