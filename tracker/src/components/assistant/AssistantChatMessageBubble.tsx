@@ -2,8 +2,10 @@ import { AudioLines, Check, FileText, ImageIcon, Zap } from "lucide-react";
 import { memo } from "react";
 import { useTranslation } from "react-i18next";
 
+import { TurnSummaryStrip } from "@/components/agent-activity/typed-tools/TurnSummaryStrip";
 import { AssistantMarkdown } from "@/components/assistant/AssistantMarkdown";
 import { AssistantTurnTimeline } from "@/components/assistant/AssistantTurnTimeline";
+import { STREAMING_ASSISTANT_ID } from "@/components/assistant/assistantStream";
 import { ASSISTANT_CHAT_MESSAGE_TEXT_CLASS, CHAT_USER_BUBBLE_MAX_WIDTH_CLASS } from "@/components/assistant/chatTypography";
 import {
   EditedFilesSummary,
@@ -17,6 +19,8 @@ import { AttachmentImage } from "@/components/shared/AttachmentImage";
 import { AttachmentVideo } from "@/components/shared/AttachmentVideo";
 import { Button } from "@/components/ui/button";
 import type { OpenKbPathHandler } from "@/lib/openKbPath";
+import { canonicalizeToolCall } from "@/lib/toolCallCanonicalize";
+import type { ToolPresentation } from "@/lib/toolCallPresentation";
 import { cn } from "@/lib/utils";
 import { isVideoAttachmentSource, isVideoMediaType, projectAttachmentUrl } from "@/services/attachments";
 import type { AssistantChatMessage, UserQuestion } from "@/services/assistant";
@@ -71,6 +75,14 @@ function AssistantChatMessageBubbleComponent({
     message.contentBlocks.length > 0
       ? message.contentBlocks
       : null;
+  const isStreamingTurn = !isUser && message.id === STREAMING_ASSISTANT_ID;
+  const turnSummaryPresentations =
+    !isUser && !isStreamingTurn && message.toolCalls.length > 0
+      ? toolCallsToPresentations(message.toolCalls)
+      : null;
+  const turnSummaryStrip = turnSummaryPresentations ? (
+    <TurnSummaryStrip presentations={turnSummaryPresentations} durationMs={0} className="mt-2" />
+  ) : null;
   const editedFilesSummary = isUser ? null : (
     <EditedFilesSummary
       toolCalls={message.toolCalls}
@@ -138,10 +150,14 @@ function AssistantChatMessageBubbleComponent({
               onLoadFullOutput={loadFullOutput}
               onOpenKbPath={onOpenDocumentPath}
             />
+            {turnSummaryStrip}
             {editedFilesSummary}
           </div>
         ) : (
-          editedFilesSummary
+          <>
+            {turnSummaryStrip}
+            {editedFilesSummary}
+          </>
         )}
         {planApprovalAction ? <PlanApprovalButtons action={planApprovalAction} /> : null}
       </article>
@@ -155,6 +171,22 @@ function AssistantChatMessageBubbleComponent({
  * callbacks referentially stable (and stabilizes the task snapshot).
  */
 export const AssistantChatMessageBubble = memo(AssistantChatMessageBubbleComponent);
+
+function toolCallsToPresentations(
+  toolCalls: AssistantChatMessage["toolCalls"],
+): Pick<ToolPresentation, "family">[] {
+  return toolCalls.map((call) =>
+    canonicalizeToolCall({
+      name: call.name,
+      arguments: (call.arguments ?? {}) as Record<string, unknown>,
+      output: call.output ?? null,
+      status: call.status,
+      result: call.result,
+      outputTruncated: call.outputTruncated,
+      outputByteSize: call.outputByteSize ?? null,
+    }),
+  );
+}
 
 function PlanApprovalButtons({ action }: { action: AssistantChatPlanApprovalAction }) {
   const { t } = useTranslation();
