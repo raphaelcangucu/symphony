@@ -23,6 +23,10 @@ interface GitDiffLauncherProps {
   focusPathRequestId?: number;
   /** Path from chat edited-file chips (or similar) to select after open. */
   focusPath?: string | null;
+  /** External commit-focus trigger: incrementing opens the modal on Commits for `focusCommit`. */
+  focusCommitRequestId?: number;
+  /** Commit from Evidence (or similar) to select after open. */
+  focusCommit?: { repo: string; sha: string } | null;
   /** When false, only the modal + shortcut/requestId path remain (e.g. Environment dock Compare). */
   showTrigger?: boolean;
 }
@@ -55,12 +59,18 @@ export function GitDiffLauncher({
   openCommitDialogRequestId = 0,
   focusPathRequestId = 0,
   focusPath = null,
+  focusCommitRequestId = 0,
+  focusCommit = null,
   showTrigger = true,
 }: GitDiffLauncherProps) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [openCommitDialog, setOpenCommitDialog] = useState(false);
   const [initialFocusPath, setInitialFocusPath] = useState<string | null>(null);
+  const [initialFocusCommit, setInitialFocusCommit] = useState<{
+    repo: string;
+    sha: string;
+  } | null>(null);
   const unavailable = !identifier && !threadId;
   const launcherDisabled = disabled || unavailable;
   const openModal = useCallback(() => {
@@ -86,6 +96,15 @@ export function GitDiffLauncher({
     if (trimmed) setInitialFocusPath(trimmed);
     openModal();
   }, [focusPath, focusPathRequestId, openModal]);
+
+  useEffect(() => {
+    if (focusCommitRequestId <= 0) return;
+    const repo = typeof focusCommit?.repo === "string" ? focusCommit.repo.trim() : "";
+    const sha = typeof focusCommit?.sha === "string" ? focusCommit.sha.trim() : "";
+    if (!repo || !sha) return;
+    setInitialFocusCommit({ repo, sha });
+    openModal();
+  }, [focusCommit, focusCommitRequestId, openModal]);
 
   return (
     <>
@@ -116,6 +135,8 @@ export function GitDiffLauncher({
             onCommitDialogOpened={() => setOpenCommitDialog(false)}
             initialFocusPath={initialFocusPath}
             onInitialFocusConsumed={() => setInitialFocusPath(null)}
+            initialFocusCommit={initialFocusCommit}
+            onInitialFocusCommitConsumed={() => setInitialFocusCommit(null)}
           />
         </Suspense>
       ) : null}

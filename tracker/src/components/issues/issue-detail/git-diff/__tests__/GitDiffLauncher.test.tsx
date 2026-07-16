@@ -9,15 +9,20 @@ vi.mock("../GitDiffModal", () => ({
     open,
     onOpenChange,
     initialFocusPath,
+    initialFocusCommit,
   }: {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     initialFocusPath?: string | null;
+    initialFocusCommit?: { repo: string; sha: string } | null;
   }) =>
     open ? (
       <div role="dialog">
         diff-modal
         <span data-testid="initial-focus-path">{initialFocusPath ?? ""}</span>
+        <span data-testid="initial-focus-commit">
+          {initialFocusCommit ? `${initialFocusCommit.repo}:${initialFocusCommit.sha}` : ""}
+        </span>
         <button type="button" onClick={() => onOpenChange(false)}>
           close
         </button>
@@ -93,5 +98,33 @@ describe("GitDiffLauncher", () => {
 
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
     expect(screen.getByTestId("initial-focus-path")).toHaveTextContent("docs/index.md");
+  });
+
+  it("opens from focusCommitRequestId and forwards initialFocusCommit", async () => {
+    const { rerender } = render(
+      <GitDiffLauncher
+        projectSlug="advising"
+        identifier="CDE-1"
+        showTrigger={false}
+        focusCommitRequestId={0}
+        focusCommit={null}
+      />,
+    );
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+    rerender(
+      <GitDiffLauncher
+        projectSlug="advising"
+        identifier="CDE-1"
+        showTrigger={false}
+        focusCommitRequestId={1}
+        focusCommit={{ repo: "advising", sha: "abc123def456" }}
+      />,
+    );
+
+    expect(await screen.findByTestId("initial-focus-commit")).toHaveTextContent(
+      "advising:abc123def456",
+    );
   });
 });

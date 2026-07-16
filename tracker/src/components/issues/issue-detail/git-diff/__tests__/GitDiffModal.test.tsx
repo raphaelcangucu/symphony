@@ -646,6 +646,76 @@ describe("GitDiffModal", () => {
     });
   });
 
+  it("focuses a commit from initialFocusCommit", async () => {
+    const onInitialFocusCommitConsumed = vi.fn();
+    const commitA = {
+      repo: "frontend",
+      sha: "aaaaaaaaaaaa",
+      shortSha: "aaaaaaa",
+      message: "feat: first",
+      author: "agent",
+      authoredAt: "2026-07-10T00:00:00Z",
+      filesChanged: 1,
+      insertions: 5,
+      deletions: 0,
+      online: true,
+    };
+    const commitB = {
+      repo: "backend",
+      sha: "bbbbbbbbbbbb",
+      shortSha: "bbbbbbb",
+      message: "feat: second",
+      author: "agent",
+      authoredAt: "2026-07-10T01:00:00Z",
+      filesChanged: 1,
+      insertions: 3,
+      deletions: 1,
+      online: false,
+    };
+    useIssueCommitEvidenceMock.mockReturnValue({
+      commits: [commitA, commitB],
+      total: 2,
+      workspace: { path: "/tmp/ws", available: true },
+      loading: false,
+      loadingMore: false,
+      hasMore: false,
+      error: null,
+      loadMore: vi.fn(),
+      refetch: vi.fn(),
+    });
+    const { getCommitEvidence } = await import("@/services/commitEvidence");
+    vi.mocked(getCommitEvidence).mockImplementation(async (_p, _i, repo, sha) => ({
+      ...(sha === commitB.sha ? commitB : commitA),
+      files: [
+        {
+          path: sha === commitB.sha ? "b.ts" : "a.ts",
+          oldPath: null,
+          status: "modified",
+          patch: "@@\n+x\n",
+        },
+      ],
+    }));
+
+    render(
+      <GitDiffModal
+        open
+        onOpenChange={vi.fn()}
+        projectSlug="advising"
+        identifier="CDE-1"
+        initialFocusCommit={{ repo: "backend", sha: "bbbbbbbbbbbb" }}
+        onInitialFocusCommitConsumed={onInitialFocusCommitConsumed}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: /commits/i })).toHaveAttribute("data-state", "active");
+    });
+    await waitFor(() => {
+      expect(getCommitEvidence).toHaveBeenCalledWith("advising", "CDE-1", "backend", "bbbbbbbbbbbb");
+    });
+    expect(onInitialFocusCommitConsumed).toHaveBeenCalled();
+  });
+
   it("keeps review comments when re-focusing another path while open", async () => {
     const user = userEvent.setup();
     let focusPath: string | null = "a.ts";

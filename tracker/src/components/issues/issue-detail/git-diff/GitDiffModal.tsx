@@ -51,6 +51,9 @@ interface GitDiffModalProps {
   /** When set while open, focus Uncommitted then Branch on this path. */
   initialFocusPath?: string | null;
   onInitialFocusConsumed?: () => void;
+  /** When set while open, switch to Commits and select this commit. */
+  initialFocusCommit?: { repo: string; sha: string } | null;
+  onInitialFocusCommitConsumed?: () => void;
 }
 
 type FocusAttemptTab = "uncommitted" | "branch";
@@ -74,6 +77,8 @@ export default function GitDiffModal({
   onCommitDialogOpened,
   initialFocusPath = null,
   onInitialFocusConsumed,
+  initialFocusCommit = null,
+  onInitialFocusCommitConsumed,
 }: GitDiffModalProps) {
   const { t } = useTranslation();
   const supportsCommits = Boolean(projectSlug && identifier);
@@ -412,6 +417,21 @@ export default function GitDiffModal({
     setSelectedCommitKey(null);
     setCommitDetail(null);
   }, [identifier]);
+
+  // After the identifier reset above — same mount must not wipe focusCommit selection.
+  useEffect(() => {
+    if (!open) return;
+    const repo = typeof initialFocusCommit?.repo === "string" ? initialFocusCommit.repo.trim() : "";
+    const sha = typeof initialFocusCommit?.sha === "string" ? initialFocusCommit.sha.trim() : "";
+    if (!repo || !sha) return;
+    if (!supportsCommits) {
+      onInitialFocusCommitConsumed?.();
+      return;
+    }
+    setActiveTab("commits");
+    setSelectedCommitKey(`${repo}:${sha}`);
+    onInitialFocusCommitConsumed?.();
+  }, [initialFocusCommit, open, onInitialFocusCommitConsumed, supportsCommits]);
 
   useEffect(() => {
     if (pendingFocusPath) return;
