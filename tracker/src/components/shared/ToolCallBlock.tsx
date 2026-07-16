@@ -1,4 +1,4 @@
-import { Loader2, TerminalSquare, Wrench } from "lucide-react";
+import { BookOpen, Bot, Loader2, Map, TerminalSquare, Wrench } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -71,12 +71,13 @@ export function ToolCallBlock({
     kbPath && onOpenKbPath ? (
       <button
         type="button"
-        className="text-[11px] font-medium text-primary hover:underline"
+        className="inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline"
         onClick={(event) => {
           event.stopPropagation();
           onOpenKbPath(kbPath);
         }}
       >
+        <BookOpen className="size-3 shrink-0" aria-hidden />
         {t("issue.toolCall.openInKnowledgeBase")}
       </button>
     ) : null;
@@ -107,10 +108,8 @@ export function ToolCallBlock({
       icon={
         running ? (
           <Loader2 className="size-3.5 animate-spin" />
-        ) : view.toolType === "Bash" ? (
-          <TerminalSquare className="size-3.5" />
         ) : (
-          <Wrench className="size-3.5" />
+          toolKindIcon(view.kind, view.toolType)
         )
       }
       label={<span className="font-mono font-semibold">{view.toolType}</span>}
@@ -197,6 +196,13 @@ function Section({
       ) : null}
     </div>
   );
+}
+
+function toolKindIcon(kind: ToolCallView["kind"], toolType: string) {
+  if (kind === "create_plan") return <Map className="size-3.5" />;
+  if (kind === "task") return <Bot className="size-3.5" />;
+  if (toolType === "Bash") return <TerminalSquare className="size-3.5" />;
+  return <Wrench className="size-3.5" />;
 }
 
 function clamp(value: string, expanded: boolean): { visible: string; truncated: boolean } {

@@ -34,6 +34,8 @@ export interface KbPage {
   frontmatter: Record<string, unknown>;
   body: string;
   markdown: string;
+  /** Present when the backend scoped the read to a repository (issue/project KB). */
+  repoSlug?: string | null;
 }
 
 export interface KbSavePageInput {

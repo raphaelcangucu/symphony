@@ -43,6 +43,7 @@ interface PageDto {
   frontmatter: Record<string, unknown>;
   body: string;
   content: string;
+  repo_slug?: string | null;
 }
 
 interface SaveResultDto {
@@ -98,6 +99,7 @@ function mapPage(dto: PageDto): KbPage {
     frontmatter: dto.frontmatter ?? {},
     body: dto.body ?? "",
     markdown: dto.content ?? "",
+    repoSlug: typeof dto.repo_slug === "string" && dto.repo_slug.trim() ? dto.repo_slug : null,
   };
 }
 

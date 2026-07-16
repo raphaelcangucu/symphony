@@ -44,21 +44,29 @@ export interface KbDocumentReferenceMatch {
 export function normalizeKbDocumentReference(rawReference: string | null | undefined): string | null {
   if (!rawReference) return null;
 
-  const withoutWrapper = rawReference.trim().replace(/^<|>$/g, "");
-  if (!withoutWrapper || EXTERNAL_SCHEME_RE.test(withoutWrapper)) return null;
+  const segments = kbReferenceSegments(rawReference);
+  if (!segments) return null;
 
-  const withoutFileScheme = withoutWrapper.replace(/^file:\/\//i, "");
-  const withoutFragment = withoutFileScheme.split("#", 1)[0] ?? "";
-  const withoutQuery = withoutFragment.split("?", 1)[0] ?? "";
-  const normalizedSlashes = withoutQuery.replaceAll("\\", "/").replace(/^\.\//, "");
-  if (!normalizedSlashes.toLowerCase().endsWith(MARKDOWN_PATH_SUFFIX)) return null;
-
-  const segments = normalizedSlashes.split("/").filter(Boolean);
   const docsIndex = lastIndexOfSegment(segments, DOCS_SEGMENT);
   const pageSegments = docsIndex >= 0 ? segments.slice(docsIndex + 1) : segments;
   if (!isSafeKbPagePath(pageSegments)) return null;
 
   return pageSegments.join("/");
+}
+
+/**
+ * Best-effort repository hint from paths like `backend/docs/foo.md` or
+ * `…/frontend/docs/foo.md`. Returns the path segment immediately before `docs/`.
+ */
+export function extractKbRepoHint(rawReference: string | null | undefined): string | null {
+  const segments = kbReferenceSegments(rawReference);
+  if (!segments) return null;
+
+  const docsIndex = lastIndexOfSegment(segments, DOCS_SEGMENT);
+  if (docsIndex <= 0) return null;
+
+  const hint = segments[docsIndex - 1];
+  return hint && hint !== "." && hint !== ".." ? hint : null;
 }
 
 /**
@@ -171,4 +179,19 @@ function lastIndexOfSegment(segments: string[], target: string): number {
   }
 
   return -1;
+}
+
+function kbReferenceSegments(rawReference: string | null | undefined): string[] | null {
+  if (!rawReference) return null;
+
+  const withoutWrapper = rawReference.trim().replace(/^<|>$/g, "");
+  if (!withoutWrapper || EXTERNAL_SCHEME_RE.test(withoutWrapper)) return null;
+
+  const withoutFileScheme = withoutWrapper.replace(/^file:\/\//i, "");
+  const withoutFragment = withoutFileScheme.split("#", 1)[0] ?? "";
+  const withoutQuery = withoutFragment.split("?", 1)[0] ?? "";
+  const normalizedSlashes = withoutQuery.replaceAll("\\", "/").replace(/^\.\//, "");
+  if (!normalizedSlashes.toLowerCase().endsWith(MARKDOWN_PATH_SUFFIX)) return null;
+
+  return normalizedSlashes.split("/").filter(Boolean);
 }

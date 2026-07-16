@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   extractKbDocumentReferencesFromMarkdown,
+  extractKbRepoHint,
   findKbDocumentReferenceMatches,
   normalizeKbDocumentReference,
 } from "@/lib/assistantKbReferences";
@@ -16,6 +17,14 @@ describe("assistantKbReferences", () => {
         "file:///home/raphaelcangucu/symphony/back/docs/market/polymarket-omnibus-plan.md",
       ),
     ).toBe("market/polymarket-omnibus-plan.md");
+  });
+
+  it("extracts the repository hint before docs/", () => {
+    expect(extractKbRepoHint("backend/docs/superpowers/specs/foo.md")).toBe("backend");
+    expect(
+      extractKbRepoHint("file:///home/raphaelcangucu/symphony/back/docs/market/plan.md"),
+    ).toBe("back");
+    expect(extractKbRepoHint("docs/superpowers/specs/foo.md")).toBeNull();
   });
 
   it("rejects unsafe and non-markdown references", () => {

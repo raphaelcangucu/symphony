@@ -484,9 +484,15 @@ export function ProjectAssistantPanel({
   const resolveKbDocument = useCallback(
     (rawReference: string) => {
       if (!projectSlug) return null;
-      return resolveKbDocumentLinkTarget(rawReference, kbDocumentPageIndex, projectSlug, preferredKbRepoSlug);
+      return resolveKbDocumentLinkTarget(
+        rawReference,
+        kbDocumentPageIndex,
+        projectSlug,
+        preferredKbRepoSlug,
+        kbOverview,
+      );
     },
-    [kbDocumentPageIndex, preferredKbRepoSlug, projectSlug],
+    [kbDocumentPageIndex, kbOverview, preferredKbRepoSlug, projectSlug],
   );
   const openKnowledgeBase = useCallback(
     (path?: string | null) => {
@@ -497,6 +503,8 @@ export function ProjectAssistantPanel({
         const normalized = resolved?.path ?? normalizeKbDocumentReference(path) ?? path.trim();
         setKbFocusPath(normalized || null);
         setKbFocusRepo(resolved?.repoSlug ?? preferredKbRepoSlug);
+        // Refresh issue-changed docs so brand-new CreatePlan files surface in the modal.
+        setChangedDocsRefreshKey((current) => current + 1);
       } else {
         setKbFocusPath(null);
         setKbFocusRepo(null);

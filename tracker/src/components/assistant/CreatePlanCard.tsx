@@ -1,3 +1,4 @@
+import { BookOpen } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
@@ -46,7 +47,9 @@ export function CreatePlanCard({ request, onSubmit, onOpenKbPath, disabled }: Cr
             size="sm"
             disabled={disabled}
             onClick={() => onOpenKbPath(kbPath)}
+            className="gap-1.5"
           >
+            <BookOpen className="size-3.5" aria-hidden />
             {t("issue.toolCall.openInKnowledgeBase")}
           </Button>
         ) : null}

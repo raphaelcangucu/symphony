@@ -1,9 +1,10 @@
 import {
+  extractKbRepoHint,
   findKbDocumentReferenceMatches,
   normalizeKbDocumentReference,
 } from "@/lib/assistantKbReferences";
 import { GENERAL_KB_PROJECT_SLUG, kbGeneralPagePath, kbPagePath } from "@/lib/kbRoutes";
-import type { KbTreeNode } from "@/types/knowledgeBase";
+import type { KbProjectOverview, KbTreeNode } from "@/types/knowledgeBase";
 
 export interface KbDocumentLinkTarget {
   path: string;
@@ -42,23 +43,60 @@ export function resolveKbDocumentLinkTarget(
   index: KbDocumentPageIndex,
   projectSlug: string,
   preferredRepoSlug?: string | null,
+  overview?: KbProjectOverview | null,
 ): KbDocumentLinkTarget | null {
   const normalized = normalizeKbDocumentReference(rawReference);
   if (!normalized) return null;
 
   const matches = index.get(normalized);
-  if (!matches || matches.length === 0) return null;
+  const repoHint = extractKbRepoHint(rawReference);
+  const hintedRepo = matchKbRepoHint(repoHint, overview);
 
-  const preferred =
-    preferredRepoSlug && matches.find((match) => match.repoSlug === preferredRepoSlug);
-  const chosen = preferred ?? matches[0];
-  if (!chosen) return null;
+  if (matches && matches.length > 0) {
+    const preferred =
+      (hintedRepo && matches.find((match) => match.repoSlug === hintedRepo)) ||
+      (preferredRepoSlug && matches.find((match) => match.repoSlug === preferredRepoSlug));
+    const chosen = preferred ?? matches[0];
+    if (!chosen) return null;
 
-  return {
-    path: chosen.path,
-    repoSlug: chosen.repoSlug,
-    href: buildKbDocumentHref(projectSlug, chosen.repoSlug, chosen.path),
-  };
+    return {
+      path: chosen.path,
+      repoSlug: chosen.repoSlug,
+      href: buildKbDocumentHref(projectSlug, chosen.repoSlug, chosen.path),
+    };
+  }
+
+  // Page may be brand-new (CreatePlan) and not yet indexed — still open with a repo hint.
+  if (hintedRepo || preferredRepoSlug) {
+    const repoSlug = hintedRepo ?? preferredRepoSlug!;
+    return {
+      path: normalized,
+      repoSlug,
+      href: buildKbDocumentHref(projectSlug, repoSlug, normalized),
+    };
+  }
+
+  return null;
+}
+
+/** Match a path segment (or workspace folder name) to a known KB repository slug. */
+export function matchKbRepoHint(
+  hint: string | null | undefined,
+  overview?: KbProjectOverview | null,
+): string | null {
+  if (!hint || !overview?.repositories?.length) return null;
+  const needle = hint.trim().toLowerCase();
+  if (!needle) return null;
+
+  const exact = overview.repositories.find((repo) => repo.repoSlug.toLowerCase() === needle);
+  if (exact) return exact.repoSlug;
+
+  const byWorkspace = overview.repositories.find((repo) => {
+    const workspace = repo.workspacePath?.replaceAll("\\", "/").toLowerCase() ?? "";
+    if (!workspace) return false;
+    return workspace === needle || workspace.endsWith(`/${needle}`);
+  });
+  return byWorkspace?.repoSlug ?? null;
 }
 
 /**

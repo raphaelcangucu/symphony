@@ -1,3 +1,4 @@
+import { isAxiosError } from "axios";
 import { PanelLeftOpen } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -30,8 +31,10 @@ import {
   deleteAsset,
   deleteFolder,
   getIssuePage,
+  getIssueRepoTree,
   getPage,
   getProjectOverview,
+  getRepoTree,
   renameAsset,
   saveIssuePage,
   savePage,
@@ -87,24 +90,51 @@ export function KnowledgeBaseModal({
     issueMode && effectiveEntries.length > 0 ? "changed" : "all",
   );
   const repoSlugs = useMemo(() => overview?.repositories.map((repo) => repo.repoSlug) ?? [], [overview]);
-  const { treesByRepo, reloadRepo } = useKbAllRepoTrees(open ? projectSlug : "", repoSlugs);
+  const loadRepoTree = useCallback(
+    (scopeProjectSlug: string, repoSlug: string) =>
+      issueIdentifier
+        ? getIssueRepoTree(scopeProjectSlug, issueIdentifier, repoSlug)
+        : getRepoTree(scopeProjectSlug, repoSlug),
+    [issueIdentifier],
+  );
+  const { treesByRepo, reloadRepo } = useKbAllRepoTrees(open ? projectSlug : "", repoSlugs, loadRepoTree);
   const changedPathSet = useMemo(() => new Set(effectiveEntries.map((entry) => entry.path)), [effectiveEntries]);
   const displayedTreesByRepo = useMemo(() => {
     if (!issueMode || effectiveEntries.length === 0) return treesByRepo;
     if (filter === "changed") {
       return withSyntheticChangedPages(treesByRepo, repoSlugs, effectiveEntries);
     }
-    // "Todas as docs" still shows the project tree, but also surfaces branch-only
-    // docs (e.g. superpowers/) that exist in the issue worktree and not on base.
+    // "Todas as docs" still shows the issue worktree tree, but also surfaces
+    // branch-only docs (e.g. superpowers/) that exist in the issue worktree.
     return augmentTreesWithChangedPages(treesByRepo, repoSlugs, effectiveEntries);
   }, [effectiveEntries, filter, issueMode, repoSlugs, treesByRepo]);
   const selectedIsAsset = isKbImageAssetPath(activePath);
   const loadPage = useCallback(
-    (scopeProjectSlug: string, repoSlug: string, path: string) =>
-      issueIdentifier
-        ? getIssuePage(scopeProjectSlug, issueIdentifier, repoSlug, path)
-        : getPage(scopeProjectSlug, repoSlug, path),
-    [issueIdentifier],
+    async (scopeProjectSlug: string, repoSlug: string, path: string) => {
+      if (!issueIdentifier) return getPage(scopeProjectSlug, repoSlug, path);
+
+      const isNotFound = (error: unknown) => isAxiosError(error) && error.response?.status === 404;
+
+      try {
+        return await getIssuePage(scopeProjectSlug, issueIdentifier, repoSlug, path);
+      } catch (error) {
+        if (!isNotFound(error)) throw error;
+      }
+
+      // Wrong repo slug is a common CreatePlan miss — try sibling issue repos.
+      for (const otherRepo of repoSlugs) {
+        if (otherRepo === repoSlug) continue;
+        try {
+          return await getIssuePage(scopeProjectSlug, issueIdentifier, otherRepo, path);
+        } catch (error) {
+          if (!isNotFound(error)) throw error;
+        }
+      }
+
+      // Last resort: project KB clone (file may already be on the default branch).
+      return getPage(scopeProjectSlug, repoSlug, path);
+    },
+    [issueIdentifier, repoSlugs],
   );
   const { page: selectedPage, loading: selectedPageLoading, error: selectedPageError, reload: reloadSelectedPage } = useKbPage(
     projectSlug,
@@ -112,6 +142,14 @@ export function KnowledgeBaseModal({
     activePath && !selectedIsAsset ? activePath : null,
     loadPage,
   );
+
+  // Sibling-repo fallback in loadPage may resolve a different repo than activeRepo.
+  useEffect(() => {
+    const resolvedRepo = selectedPage?.repoSlug;
+    if (!resolvedRepo || !activePath) return;
+    if (resolvedRepo === activeRepo) return;
+    setActiveRepo(resolvedRepo);
+  }, [activePath, activeRepo, selectedPage?.repoSlug]);
   const activeRepository = useMemo(
     () => overview?.repositories.find((repo) => repo.repoSlug === activeRepo) ?? null,
     [activeRepo, overview],

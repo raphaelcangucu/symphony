@@ -137,7 +137,7 @@ describe("ToolCallBlock", () => {
 
   it("offers Open in knowledge base when kbPath is set", async () => {
     const onOpenKbPath = vi.fn();
-    render(
+    const { container } = render(
       <ToolCallBlock
         view={{
           ...baseView,
@@ -150,8 +150,11 @@ describe("ToolCallBlock", () => {
       />,
     );
 
+    expect(container.querySelector(".lucide-map")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /Plan · GAM-20 Spec Design/i }));
-    fireEvent.click(screen.getByRole("button", { name: /open in knowledge base/i }));
+    const openKb = screen.getByRole("button", { name: /open in knowledge base/i });
+    expect(openKb.querySelector(".lucide-book-open")).toBeTruthy();
+    fireEvent.click(openKb);
 
     expect(onOpenKbPath).toHaveBeenCalledWith("docs/superpowers/specs/example.md");
   });

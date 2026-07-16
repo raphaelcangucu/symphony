@@ -63,8 +63,55 @@ describe("resolveKbDocumentLinkTarget", () => {
     ).toMatchObject({ repoSlug: "api", path: "market/spec.md" });
   });
 
-  it("returns null for missing pages", () => {
+  it("returns null for missing pages without a preferred repo", () => {
     expect(resolveKbDocumentLinkTarget("docs/missing.md", index, "macro-markets")).toBeNull();
+  });
+
+  it("opens brand-new pages with a preferred repo when not yet indexed", () => {
+    expect(
+      resolveKbDocumentLinkTarget(
+        "docs/superpowers/specs/new.md",
+        index,
+        "macro-markets",
+        "api",
+      ),
+    ).toEqual({
+      path: "superpowers/specs/new.md",
+      repoSlug: "api",
+      href: "/projects/macro-markets/kb/api/superpowers/specs/new.md",
+    });
+  });
+
+  it("prefers a repo hint from the path over the preferred repo", () => {
+    expect(
+      resolveKbDocumentLinkTarget(
+        "api/docs/market/spec.md",
+        index,
+        "macro-markets",
+        "back",
+        {
+          project: { slug: "macro-markets", name: "Macro" },
+          repositories: [
+            {
+              repoSlug: "back",
+              workspacePath: "back",
+              githubFullName: null,
+              defaultBranch: "main",
+              role: null,
+              docsPresent: true,
+            },
+            {
+              repoSlug: "api",
+              workspacePath: "api",
+              githubFullName: null,
+              defaultBranch: "main",
+              role: null,
+              docsPresent: true,
+            },
+          ],
+        },
+      ),
+    ).toMatchObject({ repoSlug: "api", path: "market/spec.md" });
   });
 });
 
