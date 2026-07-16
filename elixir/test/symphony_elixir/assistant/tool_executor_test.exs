@@ -33,6 +33,20 @@ defmodule SymphonyElixir.Assistant.ToolExecutorTest do
     end
   end
 
+  test "tool_specs and combined_tool_specs have unique dynamic tool names" do
+    # Agents (Codex/Cursor) fail the turn with
+    # `duplicate dynamic tool name: <name>` when the advertised list repeats.
+    for {label, specs} <- [
+          {"tool_specs", ToolExecutor.tool_specs()},
+          {"combined_tool_specs", ToolExecutor.combined_tool_specs()},
+          {"issue_bound_tool_specs", ToolExecutor.issue_bound_tool_specs("MAC-1")}
+        ] do
+      names = Enum.map(specs, & &1["name"])
+      duplicates = names -- Enum.uniq(names)
+      assert duplicates == [], "#{label} has duplicate tool names: #{inspect(duplicates)}"
+    end
+  end
+
   test "creates an issue through the project tracker adapter" do
     {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
 

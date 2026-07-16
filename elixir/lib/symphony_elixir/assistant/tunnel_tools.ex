@@ -7,8 +7,13 @@ defmodule SymphonyElixir.Assistant.TunnelTools do
 
   @description "Inspect or start the Cloudflare public preview tunnel for this project. Prefer manage_preview for servers."
 
+  # Project-assistant catalog: one schema only. The issue-bound variant (no
+  # optional identifier) is advertised separately via
+  # `DynamicTool.coding_agent_tool_specs/0` — listing both here duplicates the
+  # name and makes Codex/Cursor reject the turn with
+  # `duplicate dynamic tool name: manage_tunnel`.
   @spec tool_specs() :: [map()]
-  def tool_specs, do: [assistant_tool_spec(), issue_bound_tool_spec()]
+  def tool_specs, do: [assistant_tool_spec()]
 
   @spec assistant_tool_spec() :: map()
   def assistant_tool_spec do

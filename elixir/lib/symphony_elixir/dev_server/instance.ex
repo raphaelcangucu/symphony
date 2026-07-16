@@ -13,6 +13,8 @@ defmodule SymphonyElixir.DevServer.Instance do
   alias SymphonyElixir.Config
   alias SymphonyElixir.DevServer.Broadcaster
   alias SymphonyElixir.DevServer.PortAllocator
+  alias SymphonyElixir.DevServer.RuntimeContract
+  alias SymphonyElixir.DevServer.RuntimeReport
   alias SymphonyElixir.LocalTracker.DevServerRecord
   alias SymphonyElixir.PublicRouting
   alias SymphonyElixir.Terminal.{Registry, Tmux}
@@ -159,6 +161,8 @@ defmodule SymphonyElixir.DevServer.Instance do
       probe_interval_ms: Keyword.get(opts, :probe_interval_ms, @default_probe_interval_ms),
       max_probe_attempts: Keyword.get(opts, :max_probe_attempts, @default_max_probe_attempts),
       claimed_ports: Keyword.get(opts, :claimed_ports, []),
+      contract: Keyword.get(opts, :contract),
+      report_reader: Keyword.get(opts, :report_reader, &File.read/1),
       started_at: DateTime.utc_now(),
       status: :provisioning,
       port: nil,
@@ -209,7 +213,7 @@ defmodule SymphonyElixir.DevServer.Instance do
 
   defp start_command(state, port, url, session) do
     session_name = Map.fetch!(session, :session_name)
-    command = launch_command(state.step, port)
+    command = launch_command(state.step, port, state.contract)
 
     case send_command(state.command_sender, session_name, command) do
       :ok ->
@@ -230,7 +234,12 @@ defmodule SymphonyElixir.DevServer.Instance do
     end
   end
 
-  defp probe_starting(state, port) do
+  defp probe_starting(state, _port) do
+    # Under a runtime contract the serve script may bind an allowed fallback port
+    # (e.g. its preferred host port was already published). Adopt the reported
+    # actual port before probing so readiness is confirmed on the live port.
+    state = maybe_adopt_reported_port(state)
+    port = state.port
     ready_probe = Map.get(state.step, :ready_probe, "tcp") || "tcp"
     ready_path = Map.get(state.step, :ready_path, "/") || "/"
 
@@ -283,13 +292,62 @@ defmodule SymphonyElixir.DevServer.Instance do
     end
   end
 
-  defp launch_command(step, port) do
+  defp launch_command(step, _port, %RuntimeContract{} = contract) do
+    command = Map.fetch!(step, :command)
+
+    prefix =
+      contract
+      |> RuntimeContract.to_env()
+      |> Enum.map(fn {key, value} -> "#{key}=#{shell_quote(value)}" end)
+      |> Enum.join(" ")
+
+    "#{prefix} #{command}\n"
+  end
+
+  defp launch_command(step, port, _contract) do
     command = Map.fetch!(step, :command)
 
     case Map.get(step, :port_env) do
       port_env when is_binary(port_env) and port_env != "" -> "#{port_env}=#{port} #{command}\n"
       _absent -> "#{command}\n"
     end
+  end
+
+  defp maybe_adopt_reported_port(%{contract: nil} = state), do: state
+
+  defp maybe_adopt_reported_port(%{contract: %RuntimeContract{} = contract} = state) do
+    case read_and_evaluate_report(state, contract) do
+      {:ok, actual_port} when is_integer(actual_port) and actual_port != state.port ->
+        url = build_url(state, actual_port, Map.get(state.step, :url_path, "/"))
+
+        state
+        |> Map.merge(%{port: actual_port, url: url})
+        |> persist_status(:starting)
+
+      _no_change ->
+        state
+    end
+  end
+
+  defp read_and_evaluate_report(state, contract) do
+    with {:ok, json} <- read_report(state.report_reader, contract.report_path),
+         {:ok, report} <- RuntimeReport.parse(json) do
+      RuntimeReport.evaluate(report, contract)
+    else
+      _ -> {:error, :no_report}
+    end
+  end
+
+  defp read_report(reader, path) when is_function(reader, 1) do
+    reader.(path)
+  rescue
+    error -> {:error, error}
+  end
+
+  defp read_report(_reader, _path), do: {:error, :invalid_reader}
+
+  defp shell_quote(value) do
+    "'" <> String.replace(to_string(value), "'", "'\"'\"'") <> "'"
   end
 
   defp send_command(command_sender, session_name, command) when is_function(command_sender, 2) do

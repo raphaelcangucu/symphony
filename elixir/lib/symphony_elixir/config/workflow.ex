@@ -36,6 +36,7 @@ defmodule SymphonyElixir.Config.Workflow do
   @default_editor_auth "none"
   @default_dev_server_enabled false
   @default_dev_server_reclaim_ports false
+  @default_dev_server_runtime_contract_v1 false
   @default_dev_server_max_concurrent 3
   @default_dev_server_idle_timeout_ms 1_800_000
   @default_dev_server_auto_start_on ["pull_request", "human_review"]
@@ -258,6 +259,10 @@ defmodule SymphonyElixir.Config.Workflow do
                                  reclaim_ports: [
                                    type: :boolean,
                                    default: @default_dev_server_reclaim_ports
+                                 ],
+                                 runtime_contract_v1: [
+                                   type: :boolean,
+                                   default: @default_dev_server_runtime_contract_v1
                                  ],
                                  port_range: [
                                    type: {:or, [{:list, :pos_integer}, nil]},
@@ -565,6 +570,7 @@ defmodule SymphonyElixir.Config.Workflow do
     %{}
     |> put_if_present(:enabled, boolean_value(Map.get(section, "enabled")))
     |> put_if_present(:reclaim_ports, boolean_value(Map.get(section, "reclaim_ports")))
+    |> put_if_present(:runtime_contract_v1, boolean_value(Map.get(section, "runtime_contract_v1")))
     |> put_if_present(:port_range, integer_list_value(Map.get(section, "port_range")))
     |> put_if_present(:max_concurrent, positive_integer_value(Map.get(section, "max_concurrent")))
     |> put_if_present(:idle_timeout_ms, positive_integer_value(Map.get(section, "idle_timeout_ms")))

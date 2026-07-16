@@ -91,6 +91,58 @@ defmodule SymphonyElixir.DevServer.InstanceTest do
     assert :ok = Instance.stop(pid)
   end
 
+  test "adopts an allowed reported port from the runtime contract before ready", %{project: project} do
+    contract = test_contract(project, preferred_port: 4300, allowed_ports: [4300, 4302])
+    report_json = ready_report_json("ctr_test", 1, "front", 4302)
+
+    {:ok, pid} =
+      Instance.start_link(
+        instance_opts(project,
+          port_allocator: fn _range, _claimed -> {:ok, 4300} end,
+          contract: contract,
+          report_reader: fn _path -> {:ok, report_json} end,
+          probe: fn
+            "127.0.0.1", 4302, "tcp", "/" -> :ok
+            "127.0.0.1", 4300, "tcp", "/" -> {:error, :not_listening}
+          end,
+          probe_interval_ms: 5
+        )
+      )
+
+    assert_eventually(fn -> Instance.status(pid) == :ready end)
+
+    assert [row] = DevServerRecord.list_for_issue(project.id, @identifier)
+    assert row.status == "ready"
+    assert row.port == 4302
+    assert row.url == "http://127.0.0.1:4302/"
+
+    assert :ok = Instance.stop(pid)
+  end
+
+  test "ignores an out-of-lease reported port and stays on the leased port", %{project: project} do
+    contract = test_contract(project, preferred_port: 4300, allowed_ports: [4300, 4302])
+    report_json = ready_report_json("ctr_test", 1, "front", 59_595)
+
+    {:ok, pid} =
+      Instance.start_link(
+        instance_opts(project,
+          port_allocator: fn _range, _claimed -> {:ok, 4300} end,
+          contract: contract,
+          report_reader: fn _path -> {:ok, report_json} end,
+          probe: fn "127.0.0.1", 4300, "tcp", "/" -> :ok end,
+          probe_interval_ms: 5
+        )
+      )
+
+    assert_eventually(fn -> Instance.status(pid) == :ready end)
+
+    assert [row] = DevServerRecord.list_for_issue(project.id, @identifier)
+    assert row.status == "ready"
+    assert row.port == 4300
+
+    assert :ok = Instance.stop(pid)
+  end
+
   test "probe timeout marks instance crashed", %{project: project} do
     {:ok, pid} =
       Instance.start_link(

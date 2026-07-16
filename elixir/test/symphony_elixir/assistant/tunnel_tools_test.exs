@@ -4,6 +4,14 @@ defmodule SymphonyElixir.Assistant.TunnelToolsTest do
   alias SymphonyElixir.Assistant.TunnelTools
   alias SymphonyElixir.Issue
 
+  test "tool_specs exposes a single manage_tunnel schema for the project assistant" do
+    # Codex/Cursor reject duplicate dynamic tool names (-32600). The issue-bound
+    # variant is advertised separately via DynamicTool.coding_agent_tool_specs/0.
+    assert [spec] = TunnelTools.tool_specs()
+    assert spec["name"] == "manage_tunnel"
+    assert get_in(spec, ["inputSchema", "properties", "identifier"])
+  end
+
   test "status returns project tunnel summary" do
     issue = %Issue{id: "1", identifier: "DEMO-1", project_slug: "demo"}
 
