@@ -105,7 +105,11 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { deriveAgentTasksFromAssistantMessages } from "@/lib/agentTasks";
 import { catalogFor, defaultComposerSettings, fallbackCatalogBundle, type AssistantCatalogBundle } from "@/lib/assistantSettings";
-import { DEFAULT_INTERACTIVE_MODE, normalizeAgentMode } from "@/lib/agentModes";
+import {
+  DEFAULT_AUTONOMOUS_MODE,
+  DEFAULT_INTERACTIVE_MODE,
+  normalizeAgentMode,
+} from "@/lib/agentModes";
 import { normalizeIssueIdentifier } from "@/lib/issueIdentifiers";
 import { buildKbDocumentPageIndex, resolveKbDocumentLinkTarget } from "@/lib/kbDocumentLinks";
 import { normalizeKbDocumentReference } from "@/lib/assistantKbReferences";
@@ -290,7 +294,9 @@ function defaultInteractiveModeForPanel(args: {
   // Parallel/workspace sessions default to Build; canonical issue chat defaults to Plan.
   if (args.threadId != null) return "build";
   if (args.issueIdentifier) return "plan";
-  return DEFAULT_INTERACTIVE_MODE;
+  // Project authoring (e.g. /assistant/new-issue): agent must call write tools
+  // like create_issue. Plan would block them; prefer full-permission default.
+  return DEFAULT_AUTONOMOUS_MODE;
 }
 
 function inferScopeForPanel(args: {
@@ -543,7 +549,9 @@ export function ProjectAssistantPanel({
   // Mentions work anywhere with a project context: issues are always searchable,
   // while file/PR sources self-disable when there is no bound issue identifier.
   const mentionsEnabled = Boolean(projectSlug);
-  const hasExecutableContext = Boolean(issueIdentifier || threadId);
+  // Project surfaces (new-issue, project chat) also need mode/skill controls and
+  // must send execution_mode — otherwise Cursor defaults omit --force for MCP writes.
+  const hasExecutableContext = Boolean(issueIdentifier || threadId || projectSlug);
   const modeLocked = assistantMode === "explore" || threadScope === "project_explore";
   const resolvedSkillProfile = useMemo(
     () =>
@@ -2055,6 +2063,17 @@ export function ProjectAssistantPanel({
           </Button>
         ) : undefined
       }
+      toolbarBeforeAgent={
+        hasExecutableContext || isExploreMode ? (
+          <ExecutionModeMenu
+            agent={composerAgent}
+            mode={executionMode}
+            disabled={catalogLoading}
+            locked={modeLocked}
+            onChange={handleExecutionModeChange}
+          />
+        ) : null
+      }
       toolbarMore={
         projectSlug || issueIdentifier || threadId ? (
           <>
@@ -2094,15 +2113,6 @@ export function ProjectAssistantPanel({
                   />
                 ) : null}
               </Button>
-            ) : null}
-            {hasExecutableContext || isExploreMode ? (
-              <ExecutionModeMenu
-                agent={composerAgent}
-                mode={executionMode}
-                disabled={catalogLoading}
-                locked={modeLocked}
-                onChange={handleExecutionModeChange}
-              />
             ) : null}
             {hasExecutableContext || isExploreMode ? (
               <SkillProfileMenu

@@ -9,17 +9,25 @@ defmodule SymphonyElixir.Cursor.CodingAgent do
   Unlike Claude (`--mcp-config <path>`), the cursor-agent CLI only reads MCP
   servers from `<workspace>/.cursor/mcp.json`, so the gateway entry is merged
   into that file at session start and removed at session stop.
+
+  Interactive `build` gates mutating Symphony MCP tools through
+  `Claude.ApprovalBroker` so the composer can show the same approval card used
+  for Claude/Codex. `yolo` runs tools immediately; `plan` denies mutations.
   """
 
   @behaviour SymphonyElixir.CodingAgent
 
   require Logger
 
+  alias SymphonyElixir.Assistant.ToolExecutor
+  alias SymphonyElixir.Claude.ApprovalBroker
   alias SymphonyElixir.Claude.AppServer.ToolGateway
   alias SymphonyElixir.Config
   alias SymphonyElixir.Cursor.CliRunner
+  alias SymphonyElixir.ExecutionMode
 
   @mcp_server_name "symphony"
+  @default_approval_timeout_ms 300_000
 
   @type session :: %{
           session_uuid: String.t(),
@@ -143,7 +151,8 @@ defmodule SymphonyElixir.Cursor.CodingAgent do
     executor = Keyword.get(opts, :tool_executor)
 
     if specs != [] and is_function(executor, 2) do
-      with {:ok, token, url} <- ToolGateway.register_session(specs, wrap_executor(executor)) do
+      with {:ok, token, url} <-
+             ToolGateway.register_session(specs, wrap_executor(executor, Path.expand(workspace), opts)) do
         {path, backup} = write_mcp_config!(Path.expand(workspace), url)
         {:ok, %{token: token, path: path, backup: backup}}
       end
@@ -193,11 +202,82 @@ defmodule SymphonyElixir.Cursor.CodingAgent do
 
   defp restore_mcp_config(_session), do: :ok
 
-  # The CLI prefixes MCP tools; executors know bare names.
-  defp wrap_executor(executor) do
+  # The CLI prefixes MCP tools; executors know bare names. Interactive build
+  # pauses mutating tools on ApprovalBroker so the composer can approve/deny.
+  defp wrap_executor(executor, workspace, opts) do
+    mode = Keyword.get(opts, :execution_mode)
+    interactive? = Keyword.get(opts, :interactive_user_input, false) == true
+    on_approval_required = Keyword.get(opts, :on_approval_required)
+    timeout_ms = Keyword.get(opts, :approval_timeout_ms, @default_approval_timeout_ms)
+
     fn name, arguments ->
-      executor.(String.replace_prefix(name, "mcp__#{@mcp_server_name}__", ""), arguments)
+      bare = String.replace_prefix(name, "mcp__#{@mcp_server_name}__", "")
+      arguments = if is_map(arguments), do: arguments, else: %{}
+
+      case tool_gate(bare, mode, interactive?) do
+        :allow ->
+          executor.(bare, arguments)
+
+        :deny_plan ->
+          tool_error("Plan mode is read-only. Switch to Build or Yolo to run #{bare}.")
+
+        :require_approval ->
+          await_tool_approval(bare, arguments, workspace, on_approval_required, timeout_ms, executor)
+      end
     end
+  end
+
+  defp tool_gate(tool, mode, interactive?) do
+    cond do
+      ToolExecutor.read_only_tool?(tool) ->
+        :allow
+
+      ExecutionMode.normalize(mode) == "plan" ->
+        :deny_plan
+
+      ExecutionMode.cursor_interactive_approval?(mode, interactive?) ->
+        :require_approval
+
+      true ->
+        :allow
+    end
+  end
+
+  defp await_tool_approval(tool, arguments, workspace, on_approval_required, timeout_ms, executor) do
+    request_id = generate_uuid()
+
+    if is_function(on_approval_required, 1) do
+      on_approval_required.(%{
+        request_id: request_id,
+        agent: "cursor",
+        tool_name: tool,
+        command: approval_command(tool, arguments),
+        cwd: workspace,
+        input: arguments,
+        reason: "Cursor requested approval to run Symphony MCP tool #{tool}"
+      })
+
+      case ApprovalBroker.await(request_id, timeout_ms) do
+        :approve -> executor.(tool, arguments)
+        :deny -> tool_error("Denied by operator: #{tool}")
+      end
+    else
+      Logger.warning("Cursor approval requested for #{tool} but no on_approval_required callback is wired; denying")
+      tool_error("Denied: no approval channel for #{tool}")
+    end
+  end
+
+  defp approval_command(tool, arguments) when is_map(arguments) do
+    case Jason.encode(Map.put(arguments, "tool", tool)) do
+      {:ok, encoded} -> encoded
+      _ -> tool
+    end
+  end
+
+  defp approval_command(tool, _arguments), do: tool
+
+  defp tool_error(message) when is_binary(message) do
+    %{"success" => false, "contentItems" => [%{"type" => "inputText", "text" => message}]}
   end
 
   defp resolve_command(opts) do

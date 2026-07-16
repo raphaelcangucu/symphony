@@ -13,7 +13,7 @@ defmodule SymphonyElixir.ExecutionMode do
   | mode  | codex sandbox        | codex approval (interactive) | codex approval (autonomous) | claude permission_mode (interactive) | claude permission_mode (autonomous) | cursor `--force` | opencode agent |
   | ----- | -------------------- | ---------------------------- | --------------------------- | ------------------------------------- | ------------------------------------ | ---------------- | -------------- |
   | plan  | `read-only`          | honor project config         | honor project config        | `plan`                                | `plan`                               | no               | `plan`         |
-  | build | `workspace-write`    | `on-request` (prompt)        | `never`                     | `default` (prompt via MCP)            | `bypassPermissions`                  | no               | `build`        |
+  | build | `workspace-write`    | `on-request` (prompt)        | `never`                     | `default` (prompt via MCP)            | `bypassPermissions`                  | yes              | `build`        |
   | yolo  | `danger-full-access` | `never`                      | `never`                     | `bypassPermissions`                   | `bypassPermissions`                  | yes              | `build`        |
 
   ## Why `build` differs from `yolo`
@@ -34,7 +34,11 @@ defmodule SymphonyElixir.ExecutionMode do
   `yolo` run use `bypassPermissions`; only `plan` stays read-only.
 
   `cursor-agent` supports `--mode plan`, so `plan` is offered for every agent
-  including cursor (see `available_for/1`).
+  including cursor (see `available_for/1`). Headless Cursor cannot answer its own
+  mid-run MCP prompts, so `build`/`yolo` pass `--force` (and `--approve-mcps`) so
+  Symphony MCP tools reach the ToolGateway. Interactive `build` then gates mutating
+  Symphony tools via `ApprovalBroker` + the composer approval card (see
+  `cursor_interactive_approval?/2`). Only `plan` stays without `--force`.
 
   The default is `yolo` (full access, no approval prompts) because non-interactive
   agent runs cannot recover from a mid-run approval request. Any unknown / nil mode
@@ -151,9 +155,27 @@ defmodule SymphonyElixir.ExecutionMode do
     normalize(mode) == @build and interactive?
   end
 
-  @doc "Whether cursor-agent should run with `--force` (only on `yolo`)."
+  @doc """
+  Whether cursor-agent should run with `--force`.
+
+  True for `build`, `yolo`, and unknown/nil (normalized to yolo). False only for
+  `plan`. Headless Cursor rejects MCP write tools without `--force`; Symphony then
+  applies interactive `build` approvals at the ToolGateway (see
+  `cursor_interactive_approval?/2`).
+  """
   @spec cursor_force?(term()) :: boolean()
-  def cursor_force?(mode), do: normalize(mode) == @yolo
+  def cursor_force?(mode), do: normalize(mode) != @plan
+
+  @doc """
+  Whether Cursor Symphony MCP tools should prompt the operator before mutating.
+
+  True only for interactive `build`. `yolo` auto-runs; `plan` denies mutations
+  without prompting. Wired in `SymphonyElixir.Cursor.CodingAgent`.
+  """
+  @spec cursor_interactive_approval?(term(), boolean()) :: boolean()
+  def cursor_interactive_approval?(mode, interactive?) when is_boolean(interactive?) do
+    normalize(mode) == @build and interactive?
+  end
 
   @doc """
   OpenCode `--agent` value for `mode`.

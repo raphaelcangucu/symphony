@@ -527,6 +527,44 @@ defmodule SymphonyElixir.DevServer.InstanceTest do
     }
   end
 
+  defp test_contract(project, opts) do
+    {:ok, contract} =
+      SymphonyElixir.DevServer.RuntimeContract.new(%{
+        contract_id: "ctr_test",
+        revision: 1,
+        project_slug: project.slug,
+        issue_identifier: "1",
+        server_slug: "front",
+        source: :managed,
+        preferred_port: Keyword.fetch!(opts, :preferred_port),
+        allowed_ports: Keyword.fetch!(opts, :allowed_ports),
+        report_path: Path.join(@workspace_path, "front/.symphony/preview-report.json"),
+        ready_probe: "tcp",
+        ready_path: "/",
+        url_path: "/",
+        port_env: "PORT",
+        expires_at: DateTime.add(DateTime.utc_now(), 3600, :second)
+      })
+
+    contract
+  end
+
+  defp ready_report_json(contract_id, revision, server_slug, actual_port) do
+    {:ok, json} =
+      Jason.encode(%{
+        "version" => 1,
+        "contract_id" => contract_id,
+        "revision" => revision,
+        "server_slug" => server_slug,
+        "state" => "ready",
+        "selected_port" => actual_port,
+        "actual_port" => actual_port,
+        "reported_at" => DateTime.to_iso8601(DateTime.utc_now())
+      })
+
+    json
+  end
+
   defp register_test_process! do
     case Process.whereis(@test_process) do
       nil -> :ok

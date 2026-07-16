@@ -490,7 +490,7 @@
         },
         "build": {
           "label": "Build",
-          "desc": "Edita o workspace — pede aprovação antes de rodar comandos",
+          "desc": "Edita o workspace — pede aprovação antes de comandos e tools que alteram estado",
           "permission": "Edições + aprovações"
         },
         "yolo": {

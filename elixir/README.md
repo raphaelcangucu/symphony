@@ -768,14 +768,16 @@ assistant chat. These are sent on the dispatch endpoint and persisted per issue.
   agent runs are non-interactive, so a mid-run approval prompt cannot be answered and would stall or
   fail the turn.
 
-  | mode  | Codex sandbox / approval                     | Claude `permission_mode` | Cursor          |
-  | ----- | -------------------------------------------- | ------------------------ | --------------- |
-  | plan  | `read-only` (approval unchanged)             | `plan`                   | n/a (hidden)\*  |
-  | build | `workspace-write` (approval unchanged)       | `bypassPermissions`      | default         |
-  | yolo  | `danger-full-access`, approval pinned `never`| `bypassPermissions`      | adds `--force`  |
+  | mode  | Codex sandbox / approval                     | Claude `permission_mode` | Cursor                                      |
+  | ----- | -------------------------------------------- | ------------------------ | ------------------------------------------- |
+  | plan  | `read-only` (approval unchanged)             | `plan`                   | `--mode plan` (no `--force`)                |
+  | build | `workspace-write` (approval unchanged)       | `bypassPermissions`\*    | `--force` + Symphony MCP approval card      |
+  | yolo  | `danger-full-access`, approval pinned `never`| `bypassPermissions`      | `--force` (no approval prompts)             |
 
-  \*Cursor's CLI has no read-only mode, so **Plan** is hidden for Cursor; if a `plan` mode reaches
-  the Cursor adapter it is treated as `build` (no `--force`) and logged.
+  \*Interactive Claude `build` uses `--permission-mode default` plus the MCP approval shim; the
+  autonomous ceiling is `bypassPermissions`. Cursor headless runs need `--force` for MCP write
+  tools to reach the Symphony gateway; interactive `build` then pauses mutating Symphony tools on
+  the composer approval card.
 
   Claude has no OS sandbox, so `permission_mode` is its only knob. Headless (`--print`) runs have no
   TTY to approve tool use, and `acceptEdits` still prompts for `Bash`/non-edit tools — so both

@@ -154,8 +154,50 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
           required(:data) => map()
         }
 
+  # Tools that never mutate tracker/workspace state. Used by Cursor interactive
+  # `build` to skip the composer approval card for safe reads.
+  @read_only_tools MapSet.new(
+                     ~w(
+                       list_issues
+                       list_comments
+                       list_pull_requests
+                       list_previews
+                       list_running_agents
+                       list_project_repositories
+                       list_templates
+                       list_tracker_projects
+                       list_linear_projects
+                       list_jira_projects
+                       list_github_projects
+                       get_issue
+                       get_project
+                       get_issue_form_options
+                       get_template
+                       get_workflow
+                       get_agent_executions
+                       get_evidence_status
+                       get_issue_orchestrator_state
+                       explain_dispatch_eligibility
+                       check_handoff_gate
+                       read_workspace_file
+                       scan_project_setup
+                       get_execution_bundle
+                       preview_execution_plan
+                       query_bundle_status
+                       classify_execution_unit
+                       kb_list_repositories
+                       kb_search_pages
+                       kb_read_page
+                     ) ++ @read_tools ++ @discovery_tools
+                   )
+
   @spec supported_tools() :: [String.t()]
   def supported_tools, do: @supported_tools
+
+  @doc "True when `tool` is a safe read that does not need interactive Build approval."
+  @spec read_only_tool?(String.t()) :: boolean()
+  def read_only_tool?(tool) when is_binary(tool), do: MapSet.member?(@read_only_tools, tool)
+  def read_only_tool?(_tool), do: false
 
   @spec tool_specs() :: [map()]
   def tool_specs do

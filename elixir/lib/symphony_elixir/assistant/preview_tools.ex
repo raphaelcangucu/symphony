@@ -11,9 +11,10 @@ defmodule SymphonyElixir.Assistant.PreviewTools do
 
   @tool_description """
   Inspect or control the issue Preview dock (preferred ports/URLs for this issue).
-  Actions: status|start|stop|restart|output.
+  Actions: status|start|stop|restart|output|prepare.
   Optional `server` (slug or id) scopes start/stop/restart/status/output to one process.
   Prefer these ports while Preview is healthy. On failure, read `reason`, `output_tail`, and `next_steps` to self-heal (fix code, manage_dev_env, restart); if Preview still cannot reach ready, fall back to a convenient project bring-up path (dock may lag).
+  Use `prepare` (not `start`) only when you must run the serve command yourself: it reserves the leased ports, mints a runtime contract, and returns the exact env + command to run so your process binds a leased port and reports back. Never run serve/vibe directly without a fresh `prepare` contract.
   """
 
   @output_tail_max_lines 100
@@ -34,6 +35,7 @@ defmodule SymphonyElixir.Assistant.PreviewTools do
   @preferred_ports_next_steps "These ports/URLs match the Preview dock — prefer them while Preview is healthy. Before citing ports mid-turn, re-call manage_preview status."
   @not_ready_next_steps "Preview is not ready. Self-heal with manage_preview output/restart/status and manage_dev_env if needed. If it still cannot reach ready, fall back to a convenient project bring-up path, cite the ports actually in use, and note the dock may be stale. Do not block the run; retry later or proceed without UI e2e — do not tight-loop retries."
   @lock_next_steps "A preview start is already in progress for this issue. Poll `manage_preview status` shortly and keep working meanwhile — do not block."
+  @prepare_next_steps "Run each server's `command` verbatim (it sets the leased port via `port_env` plus the SYMPHONY_PREVIEW_* contract env). The process must write its RuntimeReport to `report_path` and only bind a port in `allowed_ports`. Then poll `manage_preview status`; cite only the URLs it returns."
 
   @spec assistant_tool_spec() :: map()
   def assistant_tool_spec do
@@ -120,6 +122,25 @@ defmodule SymphonyElixir.Assistant.PreviewTools do
     case scoped_action_fun(project_slug, identifier, arguments, issue_targets, opts, :restart) do
       {:ok, restart_fun} ->
         run_preview_start("Restarted", restart_fun, project_slug, identifier, issue_targets, list_serve_steps, opts)
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp execute_action(project_slug, identifier, :prepare, _arguments, _issue_targets, _list_serve_steps, opts) do
+    prepare_for_issue = Keyword.get(opts, :prepare_for_issue, &Manager.prepare_for_issue/3)
+
+    case prepare_for_issue.(project_slug, identifier, []) do
+      {:ok, %{servers: servers} = plan} ->
+        {:ok,
+         %{
+           tool: @tool,
+           message:
+             "Prepared #{length(servers)} contracted server(s) for #{identifier}. Run each `command` as-is " <>
+               "(it carries the leased port + contract env); then poll `manage_preview status` for readiness.",
+           data: Map.put(plan, :next_steps, @prepare_next_steps)
+         }}
 
       {:error, reason} ->
         {:error, reason}
@@ -481,6 +502,7 @@ defmodule SymphonyElixir.Assistant.PreviewTools do
       "stop" -> {:ok, :stop}
       "restart" -> {:ok, :restart}
       "output" -> {:ok, :output}
+      "prepare" -> {:ok, :prepare}
       other -> {:error, {:invalid_preview_action, other}}
     end
   end
@@ -490,8 +512,9 @@ defmodule SymphonyElixir.Assistant.PreviewTools do
   defp preview_action_schema do
     %{
       "type" => "string",
-      "enum" => ["status", "start", "stop", "restart", "output"],
-      "description" => "Preview action. Use output with server to read command logs."
+      "enum" => ["status", "start", "stop", "restart", "output", "prepare"],
+      "description" =>
+        "Preview action. Use output with server to read command logs. Use prepare to get a contracted env + command when you must run the serve command yourself."
     }
   end
 

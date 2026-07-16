@@ -186,10 +186,16 @@ export interface ComposerSlotProps {
   header?: ReactNode;
   toolbarAfterAttach?: ReactNode;
   /**
-   * Secondary tools collapsed into a More menu below `lg` (Diff, KB, Yolo, Magic, etc.).
+   * Secondary tools collapsed into a More menu below `lg` (Diff, KB, Magic, etc.).
    * At `lg+` these render inline after `toolbarAfterAttach`.
    */
   toolbarMore?: ReactNode;
+  /**
+   * Always-visible controls on the right side before the agent/model pickers
+   * (e.g. Plan/Build/Yolo). Kept out of the More (⋯) overflow so operators see
+   * the active permission mode at a glance.
+   */
+  toolbarBeforeAgent?: ReactNode;
   submitActions?: ReactNode;
   footer?: ReactNode;
 }
@@ -260,6 +266,7 @@ export function AssistantComposer({
   header,
   toolbarAfterAttach,
   toolbarMore,
+  toolbarBeforeAgent,
   submitActions,
   footer,
   contextInsertRequest = null,
@@ -926,6 +933,7 @@ export function AssistantComposer({
           </div>
 
           <div className="flex flex-wrap items-center justify-end gap-1">
+            {toolbarBeforeAgent}
             <ComposerToolbar
               bundle={bundle}
               catalog={catalog}

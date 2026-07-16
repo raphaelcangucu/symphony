@@ -122,6 +122,36 @@ defmodule SymphonyElixir.DevServer.Manager do
 
   def restart_for_issue(_project_slug, _identifier, _opts), do: {:error, :invalid_arguments}
 
+  @doc """
+  Reserve leased ports and mint `contracted_manual` runtime contracts for an
+  issue's serve steps *without* launching them. Returns the exact env + command
+  an external caller (agent/user/`vibe`) must run so the process binds a leased
+  port and reports its actual port back under the contract.
+  """
+  @spec prepare_for_issue(String.t(), String.t(), keyword()) :: {:ok, map()} | {:error, term()}
+  def prepare_for_issue(project_slug, identifier, opts \\ [])
+
+  def prepare_for_issue(project_slug, identifier, opts)
+      when is_binary(project_slug) and is_binary(identifier) and is_list(opts) do
+    identifier = canonical_identifier(identifier)
+
+    with {:ok, project} <- Context.get_project(project_slug) do
+      runtime_options = project |> project_runtime_options() |> apply_runtime_overrides(opts)
+
+      if runtime_options.dev_server_enabled? do
+        normalize_lock_result(
+          :global.trans({__MODULE__, :prepare_for_issue}, fn ->
+            do_prepare_for_issue(project, identifier, runtime_options)
+          end)
+        )
+      else
+        {:error, :disabled}
+      end
+    end
+  end
+
+  def prepare_for_issue(_project_slug, _identifier, _opts), do: {:error, :invalid_arguments}
+
   @spec stop_instance_for_server(String.t(), String.t(), pos_integer()) :: :ok | {:error, :not_found}
   def stop_instance_for_server(project_slug, identifier, server_id)
       when is_binary(project_slug) and is_binary(identifier) and is_integer(server_id) and server_id > 0 do
@@ -291,6 +321,70 @@ defmodule SymphonyElixir.DevServer.Manager do
     end
   end
 
+  defp do_prepare_for_issue(project, identifier, runtime_options) do
+    with {:ok, workspace_path} <- issue_workspace_path(identifier),
+         {:ok, serve_steps} <- serve_steps(project.slug, identifier),
+         ctx = allocation_context(project, identifier, runtime_options.dev_server_port_range),
+         owned = owned_ports(project.id, identifier),
+         {:ok, reserved_steps} <-
+           reserve_with_context(
+             project.slug,
+             identifier,
+             serve_steps,
+             ctx,
+             owned,
+             runtime_options.dev_server_reclaim_ports?
+           ) do
+      servers = build_manual_contract_plan(project, identifier, workspace_path, serve_steps, reserved_steps, ctx)
+      {:ok, %{ok: true, issue: identifier, servers: servers}}
+    end
+  end
+
+  defp build_manual_contract_plan(project, identifier, workspace_path, serve_steps, reserved_steps, ctx) do
+    service_count = max(length(serve_steps), 1)
+    canonical = canonical_identifier(identifier)
+
+    reserved_steps
+    |> Enum.map(fn {step, port, key} ->
+      step_map = step_to_map(step)
+      slug = Map.fetch!(step_map, :slug)
+      offset = serve_offset(serve_steps, slug)
+      allowed = contract_allowed_ports(ctx, offset, service_count, port)
+      reserve_candidate_ports(key, allowed)
+
+      case build_service_contract(project, canonical, workspace_path, step_map, port, allowed, :contracted_manual) do
+        {:ok, contract} -> manual_server_plan(contract, step_map)
+        {:error, _reason} -> nil
+      end
+    end)
+    |> Enum.reject(&is_nil/1)
+  end
+
+  defp manual_server_plan(contract, step_map) do
+    env = SymphonyElixir.DevServer.RuntimeContract.to_env(contract)
+    command = Map.fetch!(step_map, :command)
+    prefix = env |> Enum.map(fn {k, v} -> "#{k}=#{shell_quote_env(v)}" end) |> Enum.join(" ")
+
+    %{
+      slug: contract.server_slug,
+      source: Atom.to_string(contract.source),
+      contract_id: contract.contract_id,
+      revision: contract.revision,
+      preferred_port: contract.preferred_port,
+      allowed_ports: contract.allowed_ports,
+      report_path: contract.report_path,
+      port_env: contract.port_env,
+      working_dir: Map.get(step_map, :working_dir),
+      env: env,
+      command: "#{prefix} #{command}",
+      stop_command: Map.get(step_map, :stop_command)
+    }
+  end
+
+  defp shell_quote_env(value) do
+    "'" <> String.replace(to_string(value), "'", "'\"'\"'") <> "'"
+  end
+
   defp do_start_instance_for_server(project, identifier, server_id, runtime_options) do
     with {:ok, slug} <- server_slug_for_id(project, identifier, server_id),
          {:ok, workspace_path} <- issue_workspace_path(identifier),
@@ -444,7 +538,7 @@ defmodule SymphonyElixir.DevServer.Manager do
       allowed = contract_allowed_ports(ctx, offset, service_count, port)
       reserve_candidate_ports(key, allowed)
 
-      case build_managed_contract(project, canonical, workspace_path, step_map, port, allowed) do
+      case build_service_contract(project, canonical, workspace_path, step_map, port, allowed, :managed) do
         {:ok, contract} ->
           Map.put(acc, slug, contract)
 
@@ -469,11 +563,11 @@ defmodule SymphonyElixir.DevServer.Manager do
     Enum.find_index(serve_steps, fn step -> Map.fetch!(step_to_map(step), :slug) == slug end) || 0
   end
 
-  defp build_managed_contract(project, identifier, workspace_path, step_map, port, allowed_ports) do
+  defp build_service_contract(project, identifier, workspace_path, step_map, port, allowed_ports, source) do
     RuntimeContractStore.put(project, %{
       issue_identifier: identifier,
       server_slug: Map.fetch!(step_map, :slug),
-      source: :managed,
+      source: source,
       preferred_port: port,
       allowed_ports: allowed_ports,
       report_path: contract_report_path(workspace_path, step_map),

@@ -446,6 +446,7 @@ describe("ProjectAssistantPanel", () => {
             agent: "codex",
             model: expect.any(String),
             effort: expect.any(String),
+            execution_mode: "yolo",
           }),
           attachments: expect.any(Array),
         }),
@@ -1585,7 +1586,6 @@ describe("ProjectAssistantPanel", () => {
 
   async function selectComposerExecutionMode(label: RegExp) {
     const user = userEvent.setup();
-    await openComposerMoreMenu();
     const trigger = await screen.findByTestId("execution-mode-menu");
     await user.click(trigger);
     await user.click(await screen.findByRole("menuitemradio", { name: label }));
@@ -1601,7 +1601,6 @@ describe("ProjectAssistantPanel", () => {
 
     await waitFor(() => expect(push).toHaveBeenCalledWith("send_message", expect.anything()));
 
-    await openComposerMoreMenu();
     const modeTrigger = await screen.findByTestId("execution-mode-menu");
     expect(modeTrigger).not.toBeDisabled();
     expect(modeTrigger).toHaveTextContent(/plan/i);
@@ -2101,7 +2100,6 @@ describe("ProjectAssistantPanel", () => {
       <ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-2" view="board" mode="page" />,
     );
 
-    await openComposerMoreMenu();
     expect(await screen.findByTestId("execution-mode-menu")).toHaveTextContent(/plan/i);
 
     const textarea = screen.getByPlaceholderText("Write a message...");
@@ -2129,8 +2127,8 @@ describe("ProjectAssistantPanel", () => {
   it("opens the Magic command palette as a modal on project session routes", async () => {
     render(<ProjectAssistantPanel projectSlug="macro-markets" threadId={7990} view="board" mode="page" />);
 
-    await openComposerMoreMenu();
     expect(await screen.findByTestId("execution-mode-menu")).toHaveTextContent(/build/i);
+    await openComposerMoreMenu();
     const magicButton = screen.getByRole("button", { name: /magic/i });
     await waitFor(() => expect(magicButton).not.toBeDisabled());
 
@@ -2163,7 +2161,7 @@ describe("ProjectAssistantPanel", () => {
     );
   });
 
-  it("enables issue @-mentions on the project assistant but hides execution mode without an issue", async () => {
+  it("shows Yolo by default on project authoring and still enables issue @-mentions", async () => {
     listIssuesMock.mockResolvedValue([
       {
         id: "2",
@@ -2181,7 +2179,7 @@ describe("ProjectAssistantPanel", () => {
     render(<ProjectAssistantPanel projectSlug="macro-markets" view="board" mode="page" />);
 
     const textarea = await screen.findByPlaceholderText("Write a message...");
-    expect(screen.queryByRole("button", { name: /build|plan|yolo/i })).not.toBeInTheDocument();
+    expect(await screen.findByTestId("execution-mode-menu")).toHaveTextContent(/yolo/i);
 
     fireEvent.change(textarea, { target: { value: "@mac" } });
 

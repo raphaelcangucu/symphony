@@ -1,10 +1,14 @@
 defmodule SymphonyElixir.Cursor.CodingAgentTest do
   use ExUnit.Case, async: false
 
+  alias SymphonyElixir.Claude.ApprovalBroker
+  alias SymphonyElixir.Claude.AppServer.ToolGateway
   alias SymphonyElixir.Cursor.CodingAgent
 
   @fake Path.expand("../../support/fixtures/fake_cursor.sh", __DIR__)
   @issue %{id: "1", identifier: "PREF-1", title: "Test issue"}
+  @create_issue_spec %{"name" => "create_issue", "description" => "d", "inputSchema" => %{"type" => "object"}}
+  @list_issues_spec %{"name" => "list_issues", "description" => "d", "inputSchema" => %{"type" => "object"}}
 
   defp workspace do
     root = Path.join(System.tmp_dir!(), "cursor-adapter-#{System.unique_integer([:positive])}")
@@ -148,5 +152,132 @@ defmodule SymphonyElixir.Cursor.CodingAgentTest do
       CodingAgent.start_session(ws, workspace_root: root, cursor_command: "definitely-not-a-binary-xyz")
 
     assert {:error, _reason} = CodingAgent.run_turn(session, "x", @issue, [])
+  end
+
+  test "interactive build pauses mutating MCP tools on ApprovalBroker" do
+    {root, ws} = workspace()
+    parent = self()
+
+    {:ok, calls} = Agent.start_link(fn -> [] end)
+
+    on_approval = fn request ->
+      send(parent, {:approval, request})
+
+      spawn(fn ->
+        ApprovalBroker.resolve(request.request_id, :approve)
+      end)
+    end
+
+    executor = fn name, args ->
+      Agent.update(calls, &[{name, args} | &1])
+      %{"success" => true, "contentItems" => [%{"type" => "inputText", "text" => "ok"}]}
+    end
+
+    {:ok, session} =
+      CodingAgent.start_session(ws,
+        workspace_root: root,
+        cursor_command: "FAKE_CURSOR_MODE=happy #{@fake}",
+        dynamic_tools: [@create_issue_spec],
+        tool_executor: executor,
+        execution_mode: "build",
+        interactive_user_input: true,
+        on_approval_required: on_approval
+      )
+
+    gated = gateway_executor!(session.gateway_token)
+    result = gated.("create_issue", %{"title" => "Moles"})
+
+    assert_receive {:approval, %{agent: "cursor", tool_name: "create_issue", request_id: _}}, 1_000
+    assert result["success"] == true
+    assert Agent.get(calls, & &1) == [{"create_issue", %{"title" => "Moles"}}]
+
+    CodingAgent.stop_session(session)
+    Agent.stop(calls)
+  end
+
+  test "interactive build denial does not execute the mutating tool" do
+    {root, ws} = workspace()
+
+    {:ok, calls} = Agent.start_link(fn -> [] end)
+
+    on_approval = fn request ->
+      spawn(fn -> ApprovalBroker.resolve(request.request_id, :deny) end)
+    end
+
+    executor = fn name, args ->
+      Agent.update(calls, &[{name, args} | &1])
+      %{"success" => true, "contentItems" => []}
+    end
+
+    {:ok, session} =
+      CodingAgent.start_session(ws,
+        workspace_root: root,
+        cursor_command: "FAKE_CURSOR_MODE=happy #{@fake}",
+        dynamic_tools: [@create_issue_spec],
+        tool_executor: executor,
+        execution_mode: "build",
+        interactive_user_input: true,
+        on_approval_required: on_approval
+      )
+
+    gated = gateway_executor!(session.gateway_token)
+    result = gated.("create_issue", %{"title" => "Nope"})
+
+    assert result["success"] == false
+    assert Agent.get(calls, & &1) == []
+    CodingAgent.stop_session(session)
+    Agent.stop(calls)
+  end
+
+  test "yolo runs mutating MCP tools without approval; plan denies them" do
+    {root, ws} = workspace()
+    {:ok, calls} = Agent.start_link(fn -> [] end)
+
+    executor = fn name, args ->
+      Agent.update(calls, &[{name, args} | &1])
+      %{"success" => true, "contentItems" => []}
+    end
+
+    {:ok, yolo_session} =
+      CodingAgent.start_session(ws,
+        workspace_root: root,
+        cursor_command: "FAKE_CURSOR_MODE=happy #{@fake}",
+        dynamic_tools: [@create_issue_spec, @list_issues_spec],
+        tool_executor: executor,
+        execution_mode: "yolo",
+        interactive_user_input: true,
+        on_approval_required: fn _ -> flunk("yolo must not request approval") end
+      )
+
+    yolo_exec = gateway_executor!(yolo_session.gateway_token)
+    assert yolo_exec.("create_issue", %{"title" => "Go"})["success"] == true
+    CodingAgent.stop_session(yolo_session)
+
+    {:ok, plan_session} =
+      CodingAgent.start_session(ws,
+        workspace_root: root,
+        cursor_command: "FAKE_CURSOR_MODE=happy #{@fake}",
+        dynamic_tools: [@create_issue_spec, @list_issues_spec],
+        tool_executor: executor,
+        execution_mode: "plan",
+        interactive_user_input: true,
+        on_approval_required: fn _ -> flunk("plan must not request approval") end
+      )
+
+    plan_exec = gateway_executor!(plan_session.gateway_token)
+    deny = plan_exec.("create_issue", %{"title" => "Blocked"})
+    assert deny["success"] == false
+    assert hd(deny["contentItems"])["text"] =~ "Plan mode is read-only"
+    assert plan_exec.("list_issues", %{})["success"] == true
+
+    CodingAgent.stop_session(plan_session)
+    Agent.stop(calls)
+  end
+
+  defp gateway_executor!(token) when is_binary(token) do
+    case :ets.lookup(ToolGateway, token) do
+      [{^token, _specs, executor, _inserted_at}] when is_function(executor, 2) -> executor
+      other -> flunk("expected ToolGateway session, got: #{inspect(other)}")
+    end
   end
 end

@@ -2,10 +2,10 @@ defmodule SymphonyElixir.Cursor.CliRunner do
   @moduledoc """
   Runs ONE Cursor Agent CLI turn:
   `cursor-agent --print --output-format stream-json --stream-partial-output --trust ...`
-  (plus `--force` only in yolo mode) with the prompt delivered via a temp file
-  + stdin redirect (Erlang ports cannot half-close stdin), parses the NDJSON
-  stream and emits bridge-style notifications (`item/progress`, `item/created`,
-  `turn/completed`, `turn/failed`) through `on_event`.
+  (plus `--force` for build/yolo; plan stays without it) with the prompt delivered
+  via a temp file + stdin redirect (Erlang ports cannot half-close stdin), parses
+  the NDJSON stream and emits bridge-style notifications (`item/progress`,
+  `item/created`, `turn/completed`, `turn/failed`) through `on_event`.
 
   Component rule: NO tracker/Phoenix/Ecto imports — Jason + stdlib only.
 
@@ -145,10 +145,13 @@ defmodule SymphonyElixir.Cursor.CliRunner do
   defp mode_flag("plan"), do: " --mode plan"
   defp mode_flag(_execution_mode), do: ""
 
-  # Only `yolo` enables --force (Run Everything / bypass command confirmation).
-  # Workspace trust is separate (`--trust` above) and must not depend on mode.
-  defp force_flag("yolo"), do: " --force"
-  defp force_flag(_execution_mode), do: ""
+  # Force for build/yolo and unset/unknown (matches ExecutionMode.cursor_force?/1).
+  # Headless Cursor cannot answer mid-run MCP approval prompts; without --force,
+  # write tools fail as "User rejected MCP: ...". Plan stays without force.
+  # Workspace trust is separate (`--trust` above). Kept inline (not via
+  # ExecutionMode) to honor this component's stdlib-only boundary.
+  defp force_flag("plan"), do: ""
+  defp force_flag(_execution_mode), do: " --force"
 
   # "auto" delegates to the CLI's own default model selection; passing it as a
   # --model value is not supported, so we omit the flag entirely.

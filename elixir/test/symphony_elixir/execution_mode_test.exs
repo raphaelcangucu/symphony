@@ -71,10 +71,19 @@ defmodule SymphonyElixir.ExecutionModeTest do
     refute ExecutionMode.claude_interactive_approval?("turbo", true)
   end
 
-  test "cursor force only on yolo" do
+  test "cursor force on build and yolo, not plan" do
     refute ExecutionMode.cursor_force?("plan")
-    refute ExecutionMode.cursor_force?("build")
+    assert ExecutionMode.cursor_force?("build")
     assert ExecutionMode.cursor_force?("yolo")
+    assert ExecutionMode.cursor_force?(nil)
+  end
+
+  test "cursor_interactive_approval? is true only for interactive build" do
+    assert ExecutionMode.cursor_interactive_approval?("build", true)
+    refute ExecutionMode.cursor_interactive_approval?("build", false)
+    refute ExecutionMode.cursor_interactive_approval?("plan", true)
+    refute ExecutionMode.cursor_interactive_approval?("yolo", true)
+    refute ExecutionMode.cursor_interactive_approval?("turbo", true)
   end
 
   test "opencode agent mapping" do

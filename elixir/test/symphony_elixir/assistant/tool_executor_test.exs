@@ -64,6 +64,14 @@ defmodule SymphonyElixir.Assistant.ToolExecutorTest do
     assert result.data.status.name == "Backlog"
   end
 
+  test "read_only_tool?/1 allows safe reads and rejects mutations" do
+    assert ToolExecutor.read_only_tool?("list_issues")
+    assert ToolExecutor.read_only_tool?("get_issue_form_options")
+    refute ToolExecutor.read_only_tool?("create_issue")
+    refute ToolExecutor.read_only_tool?("update_issue")
+    refute ToolExecutor.read_only_tool?(nil)
+  end
+
   test "create_issue rejects orchestrator queue statuses such as Todo" do
     {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
 

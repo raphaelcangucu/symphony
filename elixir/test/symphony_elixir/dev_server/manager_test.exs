@@ -508,6 +508,45 @@ defmodule SymphonyElixir.DevServer.ManagerTest do
     assert Manager.live_ports() == []
   end
 
+  test "start_for_issue persists a managed runtime contract when the flag is on", %{project: project} do
+    Application.put_env(:symphony_elixir, :preview_runtime_contract_v1, true)
+    on_exit(fn -> Application.delete_env(:symphony_elixir, :preview_runtime_contract_v1) end)
+
+    enable_project_dev_server!(project, port_range: [4100, 4131], max_concurrent: 2)
+
+    workspace = SymphonyElixir.Workspace.path_for_issue("1")
+    File.rm_rf!(workspace)
+    File.mkdir_p!(workspace)
+    on_exit(fn -> File.rm_rf(workspace) end)
+
+    ensure_manager_started!()
+
+    {:ok, _steps} =
+      DevEnv.save_steps(project.slug, [
+        %{
+          description: "Advising",
+          command: "bash .symphony/serve.sh",
+          role: "serve",
+          working_dir: "missing",
+          port_env: "INSPIRE_PORT",
+          primary: true
+        }
+      ])
+
+    # The instance crashes (missing working dir), but the contract is created and
+    # persisted during reservation, before the launch is attempted.
+    assert Manager.start_for_issue(project.slug, "#1") == {:error, :crashed}
+
+    assert {:ok, contract, _record} =
+             SymphonyElixir.DevServer.RuntimeContractStore.get_active(project, "1", "missing")
+
+    assert contract.source == :managed
+    assert contract.port_env == "INSPIRE_PORT"
+    assert contract.preferred_port in 4100..4131
+    assert contract.preferred_port in contract.allowed_ports
+    assert String.ends_with?(contract.report_path, ".symphony/preview-report.json")
+  end
+
   test "start_for_issue does not block on max concurrent capacity", %{project: project} do
     enable_project_dev_server!(project, port_range: [4100, 4101], max_concurrent: 1)
 
