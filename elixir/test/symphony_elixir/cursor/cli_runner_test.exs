@@ -28,11 +28,11 @@ defmodule SymphonyElixir.Cursor.CliRunnerTest do
 
     events = collector |> Agent.get(&Enum.reverse/1)
     Agent.stop(collector)
-    {result, events}
+    {result, events, workspace}
   end
 
   test "happy turn captures the chat id and emits translated events" do
-    {result, events} = run("happy")
+    {result, events, workspace} = run("happy")
 
     assert {:ok, %{cli_session_id: "chat-123", status: :completed, usage: usage}} = result
     assert usage["inputTokens"] == 1200
@@ -67,17 +67,30 @@ defmodule SymphonyElixir.Cursor.CliRunnerTest do
       end)
 
     assert tool_result["tool_use_id"] == "tc1"
+
+    symphony = Path.join(workspace, ".symphony/cursor-session.jsonl")
+    assert File.exists?(symphony)
+    decoded = symphony |> File.read!() |> String.split("\n", trim: true) |> Enum.map(&Jason.decode!/1)
+
+    assert Enum.any?(decoded, fn row ->
+             get_in(row, ["message", "content"])
+             |> List.wrap()
+             |> Enum.any?(fn
+               %{"type" => "tool_use", "name" => "mcp__symphony__list_issues"} -> true
+               _ -> false
+             end)
+           end)
   end
 
   test "error result yields turn/failed and an error tuple" do
-    {result, events} = run("error")
+    {result, events, _workspace} = run("error")
 
     assert {:error, {:turn_failed, "boom"}} = result
     assert Enum.any?(events, &(&1["method"] == "turn/failed"))
   end
 
   test "timeout kills the process and returns turn_timeout" do
-    {result, _events} = run("hang", timeout_ms: 300)
+    {result, _events, _workspace} = run("hang", timeout_ms: 300)
     assert {:error, :turn_timeout} = result
   end
 
@@ -140,7 +153,7 @@ defmodule SymphonyElixir.Cursor.CliRunnerTest do
   end
 
   test "multi: partial deltas, buffered flushes, and typed tool calls" do
-    {result, events} = run("multi")
+    {result, events, _workspace} = run("multi")
 
     assert {:ok, %{cli_session_id: "chat-multi", status: :completed}} = result
 
@@ -173,7 +186,7 @@ defmodule SymphonyElixir.Cursor.CliRunnerTest do
   end
 
   test "a later independent flush remains a full text segment" do
-    {result, events} = run("ordered-timeline")
+    {result, events, _workspace} = run("ordered-timeline")
     assert {:ok, %{cli_session_id: "chat-ordered", status: :completed}} = result
 
     created_texts =
@@ -186,7 +199,7 @@ defmodule SymphonyElixir.Cursor.CliRunnerTest do
   end
 
   test "independent repeated segments are not discarded" do
-    {result, events} = run("repeat-segments")
+    {result, events, _workspace} = run("repeat-segments")
     assert {:ok, %{cli_session_id: "chat-repeat", status: :completed}} = result
 
     created_texts =
@@ -200,7 +213,7 @@ defmodule SymphonyElixir.Cursor.CliRunnerTest do
   end
 
   test "independent prefix-sharing segments remain complete" do
-    {result, events} = run("prefix-segments")
+    {result, events, _workspace} = run("prefix-segments")
     assert {:ok, %{cli_session_id: "chat-prefix", status: :completed}} = result
 
     created_texts =
@@ -214,7 +227,7 @@ defmodule SymphonyElixir.Cursor.CliRunnerTest do
   end
 
   test "multiple tool boundaries conserve exact text order and final aggregate" do
-    {result, events} = run("multi-tools")
+    {result, events, _workspace} = run("multi-tools")
     assert {:ok, %{cli_session_id: "chat-multi-tools", status: :completed}} = result
 
     ordered_items =
@@ -249,7 +262,7 @@ defmodule SymphonyElixir.Cursor.CliRunnerTest do
   end
 
   test "glob error completed event preserves the tool name and error flag" do
-    {result, events} = run("glob-error")
+    {result, events, _workspace} = run("glob-error")
 
     assert {:ok, %{cli_session_id: "chat-glob", status: :completed}} = result
 
@@ -265,12 +278,12 @@ defmodule SymphonyElixir.Cursor.CliRunnerTest do
   end
 
   test "a --resume to a missing chat is surfaced as resume_session_not_found" do
-    {result, _events} = run("resume-aware", cli_session_id: "chat-stale")
+    {result, _events, _workspace} = run("resume-aware", cli_session_id: "chat-stale")
     assert {:error, {:resume_session_not_found, "chat-stale"}} = result
   end
 
   test "resume-aware without a prior session starts fresh and succeeds" do
-    {result, events} = run("resume-aware")
+    {result, events, _workspace} = run("resume-aware")
     assert {:ok, %{cli_session_id: "chat-fresh", status: :completed}} = result
 
     created_texts =

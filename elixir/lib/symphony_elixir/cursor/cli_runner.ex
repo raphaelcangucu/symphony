@@ -36,6 +36,7 @@ defmodule SymphonyElixir.Cursor.CliRunner do
   require Logger
 
   alias SymphonyElixir.Agent.CliRunner.Base
+  alias SymphonyElixir.Agent.SessionTranscript
 
   @type turn_args :: %{
           required(:command) => String.t(),
@@ -72,6 +73,11 @@ defmodule SymphonyElixir.Cursor.CliRunner do
     port = Base.open_cli_port(command, build_args(args), prompt_path, workspace)
     Base.notify_spawn(port, Map.get(args, :on_spawn))
 
+    bridged_on_event = fn notification ->
+      maybe_append_transcript(workspace, notification)
+      on_event.(notification)
+    end
+
     initial_state = %{
       cli_session_id: args.cli_session_id,
       usage: nil,
@@ -84,13 +90,13 @@ defmodule SymphonyElixir.Cursor.CliRunner do
     }
 
     handlers = [
-      on_json: fn payload, state -> process_event(payload, on_event, state) end,
+      on_json: fn payload, state -> process_event(payload, bridged_on_event, state) end,
       on_stray_line: fn line, state ->
         Base.log_stray_line(line, "Cursor cli stream")
         capture_cli_stream_error(line, state)
       end,
       on_exit: fn status, state ->
-        Base.finalize_exit(on_event, status, state, exit_label: "cursor-agent")
+        Base.finalize_exit(bridged_on_event, status, state, exit_label: "cursor-agent")
       end
     ]
 
@@ -535,4 +541,58 @@ defmodule SymphonyElixir.Cursor.CliRunner do
   defp encode_content(nil), do: ""
   defp encode_content(content) when is_binary(content), do: content
   defp encode_content(content), do: Jason.encode!(content)
+
+  defp maybe_append_transcript(workspace, %{
+         "method" => "item/created",
+         "params" => %{"item" => item}
+       }) do
+    case transcript_line(item) do
+      nil -> :ok
+      line -> SessionTranscript.append(:cursor, workspace, line)
+    end
+  end
+
+  defp maybe_append_transcript(_workspace, _notification), do: :ok
+
+  defp transcript_line(%{"type" => "text", "text" => text}) when is_binary(text) and text != "" do
+    %{
+      "type" => "assistant",
+      "message" => %{"content" => [%{"type" => "text", "text" => text}]}
+    }
+  end
+
+  defp transcript_line(%{"type" => "tool_call", "tool_use_id" => id, "name" => name} = item)
+       when is_binary(id) and is_binary(name) do
+    %{
+      "type" => "assistant",
+      "message" => %{
+        "content" => [
+          %{
+            "type" => "tool_use",
+            "id" => id,
+            "name" => name,
+            "input" => Map.get(item, "input") || %{}
+          }
+        ]
+      }
+    }
+  end
+
+  defp transcript_line(%{"type" => "tool_result", "tool_use_id" => id} = item) when is_binary(id) do
+    %{
+      "type" => "user",
+      "message" => %{
+        "content" => [
+          %{
+            "type" => "tool_result",
+            "tool_use_id" => id,
+            "content" => Map.get(item, "content"),
+            "is_error" => Map.get(item, "is_error", false)
+          }
+        ]
+      }
+    }
+  end
+
+  defp transcript_line(_), do: nil
 end
