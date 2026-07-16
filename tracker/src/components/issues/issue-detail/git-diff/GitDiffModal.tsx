@@ -434,9 +434,14 @@ export default function GitDiffModal({
   }, [initialFocusCommit, open, onInitialFocusCommitConsumed, supportsCommits]);
 
   useEffect(() => {
+    // Only reset the filter when the user changes tab/issue. Do NOT list
+    // pendingFocusPath in deps — clearing it after a successful chip focus
+    // used to wipe the basename filter, reload all files, and drop selection.
     if (pendingFocusPath) return;
     setQuery("");
-  }, [activeTab, identifier, pendingFocusPath]);
+    setDebouncedQuery("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- pendingFocusPath is guard-only
+  }, [activeTab, identifier]);
 
   useEffect(() => {
     if (!open || !pendingFocusPath || !focusAttempt) return;
@@ -448,6 +453,8 @@ export default function GitDiffModal({
 
     if (best) {
       const key = rowKey({ repo: best.repo, originalPath: best.path });
+      // Keep pendingSelectKey pinned across the post-focus full-list reload so
+      // clearing the basename filter cannot fall back to the first tree file.
       setPendingSelectKey(key);
       setSelectedKey(key);
       if (matches.length > 1) {
@@ -455,6 +462,8 @@ export default function GitDiffModal({
       }
       setPendingFocusPath(null);
       setFocusAttempt(null);
+      setQuery("");
+      setDebouncedQuery("");
       onInitialFocusConsumed?.();
       return;
     }
@@ -468,6 +477,8 @@ export default function GitDiffModal({
     toast.message(t("issue.diff.focus.notFound", { path: pendingFocusPath }));
     setPendingFocusPath(null);
     setFocusAttempt(null);
+    setQuery("");
+    setDebouncedQuery("");
     onInitialFocusConsumed?.();
   }, [
     activeTab,
@@ -483,11 +494,18 @@ export default function GitDiffModal({
   useEffect(() => {
     if (!pendingSelectKey) return;
     if (files.loading) return;
+    // Keep the pin while the basename filter is still active. Only release after
+    // the full (unfiltered) list reload confirms the focused file is present —
+    // otherwise clearing the filter drops selection onto the first tree file.
+    if (debouncedQuery.trim().length > 0) {
+      setSelectedKey(pendingSelectKey);
+      return;
+    }
     const exists = diffRows.some((row) => rowKey(row) === pendingSelectKey);
     if (!exists) return;
     setSelectedKey(pendingSelectKey);
     setPendingSelectKey(null);
-  }, [diffRows, files.loading, pendingSelectKey]);
+  }, [debouncedQuery, diffRows, files.loading, pendingSelectKey]);
 
   useEffect(() => {
     if (!open || activeTab !== "commits" || !selectedCommit || !projectSlug || !identifier) return;

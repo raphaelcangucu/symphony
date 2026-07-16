@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { groupProjectSessions, sessionBucketFor } from "@/lib/projectSessions";
+import {
+  groupProjectSessions,
+  mergeExecutionsFromSessionRows,
+  sessionBucketFor,
+} from "@/lib/projectSessions";
 import type { AgentExecution, AgentExecutionStatus } from "@/types/agent-execution";
+import type { ProjectSessionRow as SessionApiRow } from "@/types/project-session";
 
 function execution(
   issueIdentifier: string,
@@ -61,5 +66,50 @@ describe("projectSessions", () => {
     expect(grouped.active.map((session) => session.issueIdentifier)).toEqual(["DEMO-3", "DEMO-1"]);
     expect(grouped.saved.map((session) => session.issueIdentifier)).toEqual(["DEMO-2"]);
     expect(grouped.active.find((session) => session.issueIdentifier === "OTHER-9")).toBeUndefined();
+  });
+
+  it("synthesizes executions from autonomous exec: session rows missing from the live map", () => {
+    const live = new Map([["DEMO-1", execution("DEMO-1", "live")]]);
+    const sessions: SessionApiRow[] = [
+      {
+        id: "exec:CDE-1180",
+        title: "Adjust placeholder",
+        kind: "execution",
+        href: "/projects/advising/workspaces?exec=CDE-1180&surface=autonomous",
+        updatedAt: "2026-07-16T21:00:00Z",
+        aggregateStatus: "live",
+        agentKind: "cursor",
+        issueIdentifier: "CDE-1180",
+        workspacePath: "/tmp/CDE-1180",
+        workspaceId: null,
+        pinned: false,
+        archived: false,
+      },
+      {
+        id: "thread:8006",
+        title: "Thread execution",
+        kind: "execution",
+        href: "/projects/advising/workspaces/8006",
+        updatedAt: "2026-07-16T20:00:00Z",
+        aggregateStatus: "active",
+        agentKind: "codex",
+        issueIdentifier: "CDE-1131",
+        workspacePath: null,
+        workspaceId: null,
+        pinned: false,
+        archived: false,
+      },
+    ];
+
+    const merged = mergeExecutionsFromSessionRows(live, sessions);
+
+    expect(merged.get("DEMO-1")?.status).toBe("live");
+    expect(merged.get("CDE-1180")).toMatchObject({
+      issueIdentifier: "CDE-1180",
+      status: "live",
+      agentKind: "cursor",
+      lastEventAt: "2026-07-16T21:00:00Z",
+    });
+    expect(merged.has("CDE-1131")).toBe(false);
   });
 });

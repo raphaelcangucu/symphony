@@ -40,6 +40,11 @@ defmodule SymphonyElixir.Jira.SyncDriverTest do
       {:ok, IssueDTO.build(%{id: "10010", identifier: "ABC-99", title: "new"})}
     end
 
+    def update_issue(_project, identifier, attrs) do
+      send(self(), {:jira_update_issue, identifier, attrs})
+      {:ok, IssueDTO.build(%{id: "10001", identifier: identifier, title: Map.get(attrs, "title", "updated")})}
+    end
+
     def update_comment(_project, _id, remote_id, body) do
       send(self(), {:jira_update_comment, remote_id, body})
       {:ok, %{remote_id: remote_id, body: body, author: "Bot", remote_updated_at: "2026-06-01T03:00:00Z"}}
@@ -95,6 +100,24 @@ defmodule SymphonyElixir.Jira.SyncDriverTest do
   test "push issue/create delegates to create_issue", %{project: project} do
     entry = %OutboxEntry{entity_type: "issue", operation: "create", payload: %{"title" => "new"}}
     assert {:ok, "10010"} = SyncDriver.push(project, entry)
+  end
+
+  test "push issue/update delegates to update_issue", %{project: project} do
+    entry = %OutboxEntry{
+      entity_type: "issue",
+      operation: "update",
+      payload: %{
+        "identifier" => "ABC-12",
+        "agent" => "cursor",
+        "label_ids" => ["symphony:cursor"],
+        "model" => "auto"
+      }
+    }
+
+    assert {:ok, "10001"} = SyncDriver.push(project, entry)
+    assert_received {:jira_update_issue, "ABC-12", payload}
+    assert payload["agent"] == "cursor"
+    assert payload["label_ids"] == ["symphony:cursor"]
   end
 
   test "push rejects unsupported entity types", %{project: project} do

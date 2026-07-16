@@ -47,6 +47,19 @@ defmodule SymphonyElixir.Jira.SyncDriver do
     Push.push_issue_create(adapter(), project, payload)
   end
 
+  def push(%Project{} = project, %OutboxEntry{entity_type: "issue", operation: "update", payload: payload}) do
+    identifier = payload["identifier"]
+
+    if is_binary(identifier) and identifier != "" do
+      case adapter().update_issue(project, identifier, payload) do
+        {:ok, dto} -> {:ok, dto.id}
+        error -> error
+      end
+    else
+      {:error, {:unsupported_push, "issue", "update"}}
+    end
+  end
+
   def push(%Project{}, %OutboxEntry{entity_type: type, operation: op}) do
     {:error, {:unsupported_push, type, op}}
   end

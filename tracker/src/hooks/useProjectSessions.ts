@@ -3,7 +3,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAgentExecutions } from "@/hooks/useAgentExecutions";
 import { DEFAULT_PROJECT_SESSIONS_LIMIT, fetchProjectSessions } from "@/hooks/projectSessionsCache";
 import { useRecents } from "@/hooks/useRecents";
-import { emptyProjectSessionGroups, groupProjectSessions, type ProjectSessionGroups } from "@/lib/projectSessions";
+import {
+  emptyProjectSessionGroups,
+  groupProjectSessions,
+  mergeExecutionsFromSessionRows,
+  type ProjectSessionGroups,
+} from "@/lib/projectSessions";
 import type { AgentExecution } from "@/types/agent-execution";
 import type { Issue } from "@/types/issue";
 import type { ProjectSessionRow } from "@/types/project-session";
@@ -97,26 +102,31 @@ export function useProjectSessions(projectSlug: string): UseProjectSessionsResul
     return [...issuesByIdentifier.values()];
   }, [normalizedProjectSlug, sessions]);
 
+  const mergedExecutions = useMemo(
+    () => mergeExecutionsFromSessionRows(executions, sessions),
+    [executions, sessions],
+  );
+
   const groups = useMemo(() => {
-    if (issues.length === 0 || executions.size === 0) return emptyProjectSessionGroups();
-    return groupProjectSessions(executions.values(), issues);
-  }, [executions, issues]);
+    if (issues.length === 0 || mergedExecutions.size === 0) return emptyProjectSessionGroups();
+    return groupProjectSessions(mergedExecutions.values(), issues);
+  }, [issues, mergedExecutions]);
 
   const relatedSessions = useMemo(
     () =>
       recents.filter((session) => {
         if (session.projectSlug !== normalizedProjectSlug) return false;
         if (session.kind !== "codex" || !session.identifier) return true;
-        return !executions.has(session.identifier);
+        return !mergedExecutions.has(session.identifier);
       }),
-    [executions, normalizedProjectSlug, recents],
+    [mergedExecutions, normalizedProjectSlug, recents],
   );
 
   return {
     groups,
     relatedSessions,
     issues,
-    executions,
+    executions: mergedExecutions,
     inventory: null,
     isLoading: isLoading || recentsLoading,
     isInventoryLoading: false,

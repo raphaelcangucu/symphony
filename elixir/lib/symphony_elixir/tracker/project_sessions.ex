@@ -3,11 +3,17 @@ defmodule SymphonyElixir.Tracker.ProjectSessions do
   Produces lightweight, cursor-paginated session rows for a tracker project.
   """
 
+  alias SymphonyElixir.AgentExecution
   alias SymphonyElixir.Assistant.History
   alias SymphonyElixir.LocalTracker.Context
+  alias SymphonyElixir.SessionLog
+  alias SymphonyElixir.Workspace
 
   @default_limit 20
   @max_limit 50
+  # Consider a session-log mtime within this window as still "live" when the
+  # orchestrator snapshot has dropped the run (orphaned CLI agents).
+  @workspace_live_window_ms 90_000
   # Include legacy `project` scope so older project chats still appear in the
   # flat Project → Session sidebar (they still show on the Workspaces page via recents).
   @thread_scopes ~w(project project_session project_explore issue issue_session workspace_session)
@@ -37,10 +43,16 @@ defmodule SymphonyElixir.Tracker.ProjectSessions do
          {:ok, cursor} <- decode_cursor(Keyword.get(opts, :cursor)),
          {:ok, include_archived?} <- normalize_boolean(Keyword.get(opts, :include_archived, false), :include_archived) do
       fetch_limit = fetch_window(limit)
+      list_executions = Keyword.get(opts, :executions, &AgentExecution.list/0)
+
+      list_workspace_sessions =
+        Keyword.get(opts, :workspace_sessions, fn ->
+          discover_workspace_sessions(normalized_slug)
+        end)
 
       rows =
         normalized_slug
-        |> session_rows(include_archived?, fetch_limit)
+        |> session_rows(include_archived?, fetch_limit, list_executions, list_workspace_sessions)
         |> dedupe_by_id()
         |> sort_rows()
 
@@ -62,11 +74,185 @@ defmodule SymphonyElixir.Tracker.ProjectSessions do
 
   defp fetch_window(limit), do: min(limit * 3, @max_limit * 3)
 
-  defp session_rows(project_slug, include_archived?, fetch_limit) do
-    # Sidebar sessions are assistant/chat threads only. Board issues are not
-    # sessions — including them flooded Advising with Jira tickets and broke
-    # click-to-open (wrong destinations).
-    thread_rows(project_slug, include_archived?, fetch_limit)
+  defp session_rows(
+         project_slug,
+         include_archived?,
+         fetch_limit,
+         list_executions,
+         list_workspace_sessions
+       ) do
+    # Assistant/chat threads plus autonomous execution sessions for this project
+    # (orchestrator snapshot and/or on-disk session logs). Board issues alone are
+    # not sessions — including them flooded Advising with Jira tickets.
+    thread_rows(project_slug, include_archived?, fetch_limit) ++
+      execution_rows(project_slug, list_executions, list_workspace_sessions)
+  end
+
+  defp execution_rows(project_slug, list_executions, list_workspace_sessions)
+       when is_function(list_executions, 0) and is_function(list_workspace_sessions, 0) do
+    agent_rows =
+      list_executions.()
+      |> List.wrap()
+      |> Enum.flat_map(&execution_row(project_slug, &1))
+
+    covered =
+      agent_rows
+      |> Enum.map(& &1.issue_identifier)
+      |> MapSet.new()
+
+    workspace_rows =
+      list_workspace_sessions.()
+      |> List.wrap()
+      |> Enum.flat_map(fn session ->
+        identifier = execution_identifier(session)
+
+        if is_binary(identifier) and identifier != "" and MapSet.member?(covered, identifier) do
+          []
+        else
+          execution_row(project_slug, session)
+        end
+      end)
+
+    agent_rows ++ workspace_rows
+  end
+
+  defp execution_row(project_slug, execution) when is_map(execution) do
+    identifier = execution_identifier(execution)
+
+    with true <- is_binary(identifier) and identifier != "",
+         {:ok, issue} <- Context.get_issue(project_slug, identifier),
+         {:ok, updated_at} <- execution_updated_at(execution) do
+      [
+        %{
+          id: "exec:#{identifier}",
+          title: issue.title || identifier,
+          kind: "execution",
+          href: autonomous_execution_href(project_slug, identifier),
+          updated_at: format_datetime(updated_at),
+          aggregate_status: execution_status(execution),
+          agent_kind: execution_agent_kind(execution),
+          issue_identifier: identifier,
+          workspace_path: execution_workspace_path(execution),
+          workspace_id: nil,
+          pinned: false,
+          archived: false,
+          _cursor_updated_at: updated_at
+        }
+      ]
+    else
+      _ -> []
+    end
+  end
+
+  defp execution_row(_project_slug, _execution), do: []
+
+  defp autonomous_execution_href(project_slug, identifier) do
+    "/projects/#{project_slug}/workspaces?exec=#{URI.encode_www_form(identifier)}&surface=autonomous"
+  end
+
+  defp discover_workspace_sessions(project_slug) when is_binary(project_slug) do
+    %{root: root, segment: segment} = Workspace.project_layout(project_slug)
+    base = Path.join(root, segment)
+
+    case File.ls(base) do
+      {:ok, entries} ->
+        entries
+        |> Enum.reject(&String.starts_with?(&1, "."))
+        |> Enum.reject(&String.contains?(&1, "__p"))
+        |> Enum.flat_map(&workspace_session_from_entry(project_slug, Path.join(base, &1), &1))
+
+      {:error, _} ->
+        []
+    end
+  end
+
+  defp workspace_session_from_entry(project_slug, workspace_path, entry_name) do
+    with true <- File.dir?(workspace_path),
+         {:ok, _issue} <- Context.get_issue(project_slug, entry_name),
+         {:ok, agent_kind, log_path} <- SessionLog.resolve_log_source("cursor", workspace_path),
+         {:ok, mtime} <- file_mtime(log_path) do
+      status = if recent_mtime?(mtime), do: :live, else: :idle
+
+      [
+        %{
+          issue_identifier: entry_name,
+          agent_kind: agent_kind,
+          status: status,
+          last_event_at: mtime,
+          started_at: mtime,
+          workspace_path: workspace_path
+        }
+      ]
+    else
+      _ -> []
+    end
+  end
+
+  defp file_mtime(path) when is_binary(path) do
+    case File.stat(path, time: :posix) do
+      {:ok, %{mtime: mtime}} when is_integer(mtime) ->
+        DateTime.from_unix(mtime)
+
+      _ ->
+        {:error, :stat_failed}
+    end
+  end
+
+  defp recent_mtime?(%DateTime{} = mtime) do
+    DateTime.diff(DateTime.utc_now(), mtime, :millisecond) <= @workspace_live_window_ms
+  end
+
+  defp recent_mtime?(_), do: false
+
+  defp execution_identifier(execution) do
+    case Map.get(execution, :issue_identifier) || Map.get(execution, "issue_identifier") do
+      value when is_binary(value) -> String.trim(value)
+      _ -> nil
+    end
+  end
+
+  defp execution_status(execution) do
+    case Map.get(execution, :status) || Map.get(execution, "status") do
+      status when is_atom(status) -> Atom.to_string(status)
+      status when is_binary(status) -> status
+      _ -> nil
+    end
+  end
+
+  defp execution_agent_kind(execution) do
+    case Map.get(execution, :agent_kind) || Map.get(execution, "agent_kind") do
+      kind when is_binary(kind) -> kind
+      kind when is_atom(kind) -> Atom.to_string(kind)
+      _ -> nil
+    end
+  end
+
+  defp execution_updated_at(execution) do
+    case Map.get(execution, :last_event_at) ||
+           Map.get(execution, "last_event_at") ||
+           Map.get(execution, :updated_at) ||
+           Map.get(execution, "updated_at") ||
+           Map.get(execution, :started_at) ||
+           Map.get(execution, "started_at") do
+      %DateTime{} = datetime ->
+        {:ok, datetime}
+
+      value when is_binary(value) ->
+        case DateTime.from_iso8601(value) do
+          {:ok, datetime, _} -> {:ok, datetime}
+          _ -> {:error, :invalid_datetime}
+        end
+
+      _ ->
+        {:error, :missing_datetime}
+    end
+  end
+
+  defp execution_workspace_path(execution) do
+    case Map.get(execution, :workspace_path) || Map.get(execution, "workspace_path") do
+      path when is_binary(path) and path != "" -> path
+      _ -> nil
+    end
   end
 
   defp thread_rows(project_slug, include_archived?, fetch_limit) do

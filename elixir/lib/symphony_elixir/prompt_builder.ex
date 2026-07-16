@@ -414,7 +414,7 @@ defmodule SymphonyElixir.PromptBuilder do
         Per-repo commands (from this project's `evidence` config):
         #{Enum.join(repo_lines, "\n")}
 
-        When a UI repo's paths change, run its **configured** e2e command above with screenshot + video — never bare `npx playwright test` on ad-hoc ports. Call `manage_preview` (`status`/`start`) first. Preview is best-effort and non-blocking: if it won't reach `ready`, still write the e2e tests, run the unit suite, record the blocker in your workpad, and proceed (CI can run UI e2e) — do not stall on a stuck preview.
+        When a UI repo's paths change, run its **configured** e2e command above with screenshot + video — never bare `npx playwright test` on ad-hoc ports. Call `manage_preview` (`status`/`start`, or `prepare` + run the returned command) first and cite only contracted `in_sync` URLs. Preview is best-effort and non-blocking: if it won't reach ready/`in_sync`, still write the e2e tests, run the unit suite, record the blocker in your workpad, and proceed (CI can run UI e2e) — do not invent ports or stall on a stuck preview.
 
         Manifest: one passing `unit` run per changed repo; for a changed UI repo, a passing `e2e` run with at least 1 screenshot and 1 video. Record only commands you ran this session, then end the turn — do not move the card.
 
@@ -500,15 +500,15 @@ defmodule SymphonyElixir.PromptBuilder do
 
     #{availability}
 
-    **Preferred path:** when Preview is available, prefer `manage_preview` (`status` | `start` | `restart`) to bring up this issue's app so chat stays aligned with the Preview dock. Do not invent ports while still on the Preview path.
+    **Runtime contract:** when Preview is available, prefer `manage_preview` (`status` | `start` | `restart`) so chat and the Preview dock share one leased snapshot. If you must run the serve command yourself, call `manage_preview` with `action: prepare` first and run each returned `command` verbatim (it sets `port_env` plus `SYMPHONY_PREVIEW_*`). Never invent ports or use legacy fixed ports (for example `INSPIRE_PORT=4301`) outside a fresh prepare/start contract.
 
-    **Mid-turn:** before citing a port or running HTTP checks while using Preview, call `manage_preview` with `action: status` again (or trust the latest `start`/`restart` tool result).
+    **Cite only contracted URLs:** before citing a port or running HTTP checks, call `manage_preview` with `action: status` again (or trust the latest `start`/`restart`/`prepare` tool result). Cite only the ports/URLs it returns. When `sync_state` is present, cite only when it is `in_sync` — never probe or embed ports under `conflict`, `stale`, or `awaiting_report`.
 
-    **Fallback:** if Preview fails, stays crashed, or never reaches `ready` after reasonable `status`/`restart`/`output` self-heal, fall back to a convenient project bring-up path, cite the ports actually serving traffic, and note the dock may be stale until a later best-effort `manage_preview restart`. Do not block the run on Preview. Never retry a failing preview in a tight loop.
+    **If Preview cannot reach ready:** self-heal with `output`/`restart`/`status` (and `manage_dev_env` if needed). Do **not** fall back to unmanaged project bring-up that bypasses the lease. Keep the run moving (unit tests; write e2e for CI), record the blocker in your workpad, and do not tight-loop retries.
 
-    Do **not** run bare `npx playwright test` on random ports — use the project's configured e2e command (see the `evidence` config / project workflow), which reuses the preview ports below when Preview is healthy.
+    Do **not** run bare `npx playwright test` on random ports — use the project's configured e2e command (see the `evidence` config / project workflow), which reuses the preview ports below when Preview is `in_sync` / healthy.
 
-    #{if server_lines == "", do: "_No preview servers registered yet — call `manage_preview` with `start`._", else: server_lines}
+    #{if server_lines == "", do: "_No preview servers registered yet — call `manage_preview` with `start` (or `prepare` if you will run serve yourself)._", else: server_lines}
 
     Project: `#{project_slug}` · Issue: `#{identifier}`
     """
@@ -520,10 +520,16 @@ defmodule SymphonyElixir.PromptBuilder do
     port = Map.get(server, :port) || Map.get(server, "port")
     primary = Map.get(server, :primary) || Map.get(server, "primary")
     local_url = local_preview_url(server)
+    sync_state = Map.get(server, :sync_state) || Map.get(server, "sync_state")
+    preferred_port = Map.get(server, :preferred_port) || Map.get(server, "preferred_port")
+    allowed_ports = Map.get(server, :allowed_ports) || Map.get(server, "allowed_ports")
 
     primary_tag = if primary, do: " (primary UI)", else: ""
+    sync_tag = if sync_state, do: ", sync_state=#{sync_state}", else: ""
+    preferred_tag = if is_integer(preferred_port), do: ", preferred_port=#{preferred_port}", else: ""
+    allowed_tag = if is_list(allowed_ports) and allowed_ports != [], do: ", allowed_ports=#{inspect(allowed_ports)}", else: ""
 
-    "- `#{slug}`#{primary_tag}: status=#{status}, port=#{inspect(port)}, local=#{local_url}"
+    "- `#{slug}`#{primary_tag}: status=#{status}, port=#{inspect(port)}#{sync_tag}#{preferred_tag}#{allowed_tag}, local=#{local_url}"
   end
 
   defp preview_server_line(_), do: ""

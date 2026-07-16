@@ -16,15 +16,16 @@ defmodule SymphonyElixir.Assistant.ListPreviewToolsTest do
            }
   end
 
-  test "tool description prefers manage_preview ports and mentions fallback" do
+  test "tool description prefers manage_preview leased ports and forbids inventing ports" do
     spec = ListPreviewTools.assistant_tool_spec()
     desc = spec["description"]
     assert desc =~ "manage_preview"
-    assert desc =~ ~r/prefer/i or desc =~ "Preview"
-    assert desc =~ ~r/fall\s*back/i
+    assert desc =~ ~r/leased|in_sync/i
+    assert desc =~ "invent"
+    refute desc =~ "dock may"
   end
 
-  test "next_steps allow fallback when previews are unhealthy" do
+  test "next_steps forbid unmanaged bring-up when previews are unhealthy" do
     assert {:ok, result} =
              ListPreviewTools.execute("demo", %{},
                running_issue_keys: fn -> [{"demo", "DEMO-1"}] end,
@@ -40,7 +41,9 @@ defmodule SymphonyElixir.Assistant.ListPreviewToolsTest do
              )
 
     assert result.data.next_steps =~ "manage_preview"
-    assert result.data.next_steps =~ ~r/fall\s*back/i
+    assert result.data.next_steps =~ "prepare"
+    assert result.data.next_steps =~ "in_sync"
+    refute result.data.next_steps =~ "dock may"
   end
 
   test "lists running preview issues for a project" do

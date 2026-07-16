@@ -92,10 +92,12 @@ describe("ExecutionChatPanel", () => {
     expect(composer.firstElementChild?.className).toContain("max-w-3xl");
   });
 
-  it("renders execution status when the parent toggle is open", () => {
+  it("renders execution status outside the scroll feed when the parent toggle is open", () => {
     renderPanel({ execution: makeExecution({ status: "live" }), showExecutionStatus: true });
 
-    expect(screen.getByText("Run status")).toBeInTheDocument();
+    const status = screen.getByText("Run status");
+    expect(status).toBeInTheDocument();
+    expect(screen.getByTestId("assistant-session-feed").contains(status)).toBe(false);
   });
 
   it("keeps the composer inline (not behind advanced controls) outside a wait state", () => {

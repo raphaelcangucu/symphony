@@ -57,6 +57,75 @@ defmodule SymphonyElixir.Tracker.ProjectSessionsTest do
     refute inspect(rows) =~ huge_description
   end
 
+  test "includes live agent executions for the project as autonomous execution sessions" do
+    {:ok, issue} =
+      Context.create_issue("sessions", %{title: "Autonomous execution issue", description: "body"})
+
+    executions = [
+      %{
+        issue_identifier: issue.identifier,
+        status: :live,
+        agent_kind: "cursor",
+        last_event_at: ~U[2026-07-16 12:00:00Z],
+        started_at: ~U[2026-07-16 11:00:00Z]
+      },
+      %{
+        issue_identifier: "OTHER-1",
+        status: :live,
+        agent_kind: "codex",
+        last_event_at: ~U[2026-07-16 12:30:00Z],
+        started_at: ~U[2026-07-16 12:00:00Z]
+      }
+    ]
+
+    assert {:ok, %{data: rows}} =
+             ProjectSessions.list("sessions",
+               limit: 20,
+               executions: fn -> executions end,
+               workspace_sessions: fn -> [] end
+             )
+
+    exec_row = Enum.find(rows, &(&1.id == "exec:#{issue.identifier}"))
+    assert exec_row
+    assert exec_row.title == "Autonomous execution issue"
+    assert exec_row.kind == "execution"
+    assert exec_row.issue_identifier == issue.identifier
+    assert exec_row.agent_kind == "cursor"
+    assert exec_row.aggregate_status == "live"
+    assert exec_row.href == "/projects/sessions/workspaces?exec=#{issue.identifier}&surface=autonomous"
+    refute Enum.any?(rows, &(&1.id == "exec:OTHER-1"))
+  end
+
+  test "includes on-disk autonomous session workspaces when orchestrator snapshot omits them" do
+    {:ok, issue} =
+      Context.create_issue("sessions", %{title: "Disk-backed execution", description: "body"})
+
+    workspace_sessions = [
+      %{
+        issue_identifier: issue.identifier,
+        agent_kind: "cursor",
+        status: :idle,
+        updated_at: ~U[2026-07-16 15:00:00Z],
+        workspace_path: "/tmp/sessions/#{issue.identifier}"
+      }
+    ]
+
+    assert {:ok, %{data: rows}} =
+             ProjectSessions.list("sessions",
+               limit: 20,
+               executions: fn -> [] end,
+               workspace_sessions: fn -> workspace_sessions end
+             )
+
+    exec_row = Enum.find(rows, &(&1.id == "exec:#{issue.identifier}"))
+    assert exec_row
+    assert exec_row.title == "Disk-backed execution"
+    assert exec_row.kind == "execution"
+    assert exec_row.agent_kind == "cursor"
+    assert exec_row.href == "/projects/sessions/workspaces?exec=#{issue.identifier}&surface=autonomous"
+    assert exec_row.workspace_path == "/tmp/sessions/#{issue.identifier}"
+  end
+
   test "includes legacy project-scoped assistant threads as chat sessions" do
     {:ok, thread} =
       %Thread{}

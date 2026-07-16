@@ -265,6 +265,7 @@ function normalizeRecentStatus(status: string | null | undefined): RecentStatusK
   const normalized = status?.trim().toLowerCase() ?? "";
   switch (normalized) {
     case "running":
+    case "live":
     case "waiting":
     case "retrying":
     case "idle":
@@ -275,7 +276,7 @@ function normalizeRecentStatus(status: string | null | undefined): RecentStatusK
     case "done":
     case "in_progress":
     case "todo":
-      return normalized;
+      return normalized === "live" ? "running" : normalized;
     default:
       return "idle";
   }

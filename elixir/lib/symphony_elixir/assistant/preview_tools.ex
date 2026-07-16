@@ -10,11 +10,11 @@ defmodule SymphonyElixir.Assistant.PreviewTools do
   @tool "manage_preview"
 
   @tool_description """
-  Inspect or control the issue Preview dock (preferred ports/URLs for this issue).
+  Inspect or control the issue Preview dock (leased ports/URLs for this issue; same snapshot as the dock).
   Actions: status|start|stop|restart|output|prepare.
   Optional `server` (slug or id) scopes start/stop/restart/status/output to one process.
-  Prefer these ports while Preview is healthy. On failure, read `reason`, `output_tail`, and `next_steps` to self-heal (fix code, manage_dev_env, restart); if Preview still cannot reach ready, fall back to a convenient project bring-up path (dock may lag).
-  Use `prepare` (not `start`) only when you must run the serve command yourself: it reserves the leased ports, mints a runtime contract, and returns the exact env + command to run so your process binds a leased port and reports back. Never run serve/vibe directly without a fresh `prepare` contract.
+  Prefer `start`/`restart` for managed bring-up. Cite only ports/URLs from tool results; when `sync_state` is present, cite only `in_sync`. On failure, read `reason`, `output_tail`, and `next_steps` to self-heal (fix code, manage_dev_env, restart). Do not invent ports or bring the app up outside the lease.
+  Use `prepare` (not `start`) only when you must run the serve command yourself: it reserves leased ports, mints a runtime contract, and returns the exact env + command. Never run serve/vibe/Compose with a legacy fixed port (e.g. INSPIRE_PORT=4301) without a fresh `prepare` contract.
   """
 
   @output_tail_max_lines 100
@@ -32,10 +32,10 @@ defmodule SymphonyElixir.Assistant.PreviewTools do
   @recoverable_start_errors [:crashed, :no_free_port, :lock_unavailable]
 
   @starting_next_steps "Poll `manage_preview` with `status` until servers report `ready`. Meanwhile keep writing tests and run the unit suite — do not block on the preview or retry it in a tight loop."
-  @preferred_ports_next_steps "These ports/URLs match the Preview dock — prefer them while Preview is healthy. Before citing ports mid-turn, re-call manage_preview status."
-  @not_ready_next_steps "Preview is not ready. Self-heal with manage_preview output/restart/status and manage_dev_env if needed. If it still cannot reach ready, fall back to a convenient project bring-up path, cite the ports actually in use, and note the dock may be stale. Do not block the run; retry later or proceed without UI e2e — do not tight-loop retries."
+  @preferred_ports_next_steps "These ports/URLs match the Preview dock lease — cite them only while sync_state is in_sync (or status ready when sync_state is absent). Before citing ports mid-turn, re-call manage_preview status."
+  @not_ready_next_steps "Preview is not ready / not in_sync. Self-heal with manage_preview output/restart/status and manage_dev_env if needed. Do not invent ports or fall back to unmanaged vibe/Compose/INSPIRE_PORT bring-up outside a fresh manage_preview prepare. Do not block the run; retry later or proceed without UI e2e — do not tight-loop retries."
   @lock_next_steps "A preview start is already in progress for this issue. Poll `manage_preview status` shortly and keep working meanwhile — do not block."
-  @prepare_next_steps "Run each server's `command` verbatim (it sets the leased port via `port_env` plus the SYMPHONY_PREVIEW_* contract env). The process must write its RuntimeReport to `report_path` and only bind a port in `allowed_ports`. Then poll `manage_preview status`; cite only the URLs it returns."
+  @prepare_next_steps "Run each server's `command` verbatim (it sets the leased port via `port_env` plus the SYMPHONY_PREVIEW_* contract env). The process must write its RuntimeReport to `report_path` and only bind a port in `allowed_ports`. Then poll `manage_preview status`; cite only URLs when sync_state is in_sync."
 
   @spec assistant_tool_spec() :: map()
   def assistant_tool_spec do
@@ -379,27 +379,47 @@ defmodule SymphonyElixir.Assistant.PreviewTools do
     reason = Map.get(view, :reason)
     servers = Map.get(view, :servers) || Map.get(view, "servers") || []
 
-    if available == true and is_nil(reason) and servers_ready_or_empty?(servers) do
+    if available == true and is_nil(reason) and servers_citable?(servers) do
       @preferred_ports_next_steps
     else
       nil
     end
   end
 
-  defp servers_ready_or_empty?(servers) when is_list(servers) do
-    servers == [] or Enum.all?(servers, &(server_status(&1) == "ready"))
+  defp servers_citable?(servers) when is_list(servers) do
+    servers == [] or Enum.all?(servers, &server_citable?/1)
   end
 
-  defp servers_ready_or_empty?(_servers), do: false
+  defp servers_citable?(_servers), do: false
+
+  defp server_citable?(server) do
+    status = server_status(server)
+    sync_state = server_sync_state(server)
+
+    status == "ready" and (is_nil(sync_state) or sync_state in [:in_sync, "in_sync"])
+  end
+
+  defp server_sync_state(server) when is_map(server) do
+    Map.get(server, :sync_state) || Map.get(server, "sync_state")
+  end
+
+  defp server_sync_state(_server), do: nil
 
   defp crashed_servers_next_steps(view) do
     servers = Map.get(view, :servers) || Map.get(view, "servers") || []
 
-    if Enum.any?(servers, &(server_status(&1) == "crashed")) do
+    if Enum.any?(servers, &server_not_citable?/1) do
       @not_ready_next_steps
     else
       nil
     end
+  end
+
+  defp server_not_citable?(server) do
+    status = server_status(server)
+    sync_state = server_sync_state(server)
+
+    status == "crashed" or sync_state in [:conflict, "conflict", :stale, "stale", :not_ready, "not_ready"]
   end
 
   defp enrich_servers(servers, serve_steps) when is_list(servers) do

@@ -308,6 +308,15 @@ defmodule SymphonyElixir.Cursor.CliRunner do
     new_cost =
       Map.get(payload, "total_cost_usd") || Map.get(payload, "cost_usd") || state.cost_usd
 
+    # Emit as soon as the terminal result carries usage so observability can
+    # update before process-exit finalization (mirrors Claude's usage/update).
+    if is_map(new_usage) and not error? do
+      on_event.(%{
+        "method" => "usage/update",
+        "params" => %{"usage" => new_usage}
+      })
+    end
+
     new_state = %{state | cli_session_id: new_cli_session_id, usage: new_usage, cost_usd: new_cost}
 
     if error? do

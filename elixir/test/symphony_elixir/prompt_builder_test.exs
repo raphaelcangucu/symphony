@@ -324,7 +324,7 @@ defmodule SymphonyElixir.PromptBuilderTest do
     assert prompt =~ "ALPHA A-1"
   end
 
-  test "preview_context_section prefers manage_preview, mid-turn status, and fallback" do
+  test "preview_context_section prefers manage_preview runtime contract and in_sync cites" do
     issue = %Issue{
       identifier: "#1",
       project_slug: "mac",
@@ -336,10 +336,14 @@ defmodule SymphonyElixir.PromptBuilderTest do
     section = PromptBuilder.preview_context_section(issue)
 
     assert section =~ "## Issue preview (Symphony)"
-    assert section =~ "prefer"
+    assert section =~ "Runtime contract"
     assert section =~ "manage_preview"
-    assert section =~ ~r/fall\s*back/i
+    assert section =~ "prepare"
+    assert section =~ "in_sync"
     assert section =~ "status"
+    assert section =~ "INSPIRE_PORT=4301"
+    assert section =~ "Never invent"
+    refute section =~ "dock may be stale"
     refute section =~ "run-e2e.sh"
   end
 

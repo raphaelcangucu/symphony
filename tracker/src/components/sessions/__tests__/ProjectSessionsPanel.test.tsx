@@ -15,6 +15,7 @@ import { formatDateTime, formatRelativeTime } from "@/lib/utils";
 import { agentSectionFromSearchParams } from "@/lib/workspaceRoutes";
 import { dispatchIssueAgent } from "@/services/issueDispatch";
 import { archiveAssistantThread, createProjectSessionThread } from "@/services/assistantThreads";
+import { getIssue } from "@/services/issues";
 import type { AgentExecution } from "@/types/agent-execution";
 import type { Issue } from "@/types/issue";
 import type { RecentSession } from "@/types/recents";
@@ -22,6 +23,10 @@ import type { RecentSession } from "@/types/recents";
 vi.mock("@/hooks/useProjectSessions", () => ({ useProjectSessions: vi.fn() }));
 vi.mock("@/services/issueDispatch", () => ({ dispatchIssueAgent: vi.fn() }));
 vi.mock("@/services/assistantThreads", () => ({ archiveAssistantThread: vi.fn(), createProjectSessionThread: vi.fn() }));
+vi.mock("@/services/issues", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/services/issues")>();
+  return { ...actual, getIssue: vi.fn() };
+});
 vi.mock("@/components/layout/WorkspaceContext", () => ({
   useWorkspace: () => ({ projectSlug: "demo", view: "board" }),
 }));
@@ -300,7 +305,7 @@ describe("ProjectSessionsPanel", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Open execution session DEMO-1/i }));
 
-    expect(screen.getByRole("tab", { name: /Saved launcher work · Execution/i })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /Saved launcher work · (Execution|Autonomous)/i })).toBeInTheDocument();
     const executionPanel = screen.getByLabelText("mock execution session panel");
     expect(executionPanel).toBeInTheDocument();
     expect(executionPanel).toHaveAttribute("data-issue", "DEMO-1");
@@ -313,8 +318,85 @@ describe("ProjectSessionsPanel", () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole("tab", { name: /Saved launcher work · Execution/i })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /Saved launcher work · (Execution|Autonomous)/i })).toBeInTheDocument();
     expect(screen.getByLabelText("mock execution session panel")).toHaveAttribute("data-issue", "DEMO-1");
+  });
+
+  it("focuses an existing execution tab when the exec deep link is applied again", async () => {
+    function FocusHarness() {
+      const [searchParams, setSearchParams] = useSearchParams();
+      const exec = searchParams.get("exec")?.trim() || null;
+      const section = agentSectionFromSearchParams(searchParams);
+      const activeExecutionIdentifier = exec && section === "execution" ? exec : null;
+
+      return (
+        <>
+          <button type="button" onClick={() => setSearchParams({})}>
+            Clear deep link
+          </button>
+          <button type="button" onClick={() => setSearchParams({ exec: "DEMO-1", surface: "autonomous" })}>
+            Apply deep link
+          </button>
+          <ProjectSessionsPanel projectSlug="demo" activeExecutionIdentifier={activeExecutionIdentifier} />
+        </>
+      );
+    }
+
+    renderWithI18n(
+      <MemoryRouter initialEntries={["/projects/demo/workspaces?exec=DEMO-1&surface=autonomous"]}>
+        <FocusHarness />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByLabelText("mock execution session panel")).toHaveAttribute("data-issue", "DEMO-1");
+    expect(screen.getByRole("tab", { name: /Saved launcher work · (Execution|Autonomous)/i })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+
+    // Drop the deep-link query, switch away, then re-apply the deep link.
+    fireEvent.click(screen.getByRole("button", { name: "Clear deep link" }));
+    fireEvent.click(screen.getByRole("tab", { name: /Workspaces/i }));
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: /Saved launcher work · (Execution|Autonomous)/i })).toHaveAttribute(
+        "aria-selected",
+        "false",
+      ),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Apply deep link" }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: /Saved launcher work · (Execution|Autonomous)/i })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      ),
+    );
+    expect(screen.getByLabelText("mock execution session panel")).toHaveAttribute("data-issue", "DEMO-1");
+  });
+
+  it("loads the issue for an execution deep link when it is missing from the sessions list", async () => {
+    vi.mocked(useProjectSessions).mockReturnValue({
+      groups: emptyProjectSessionGroups(),
+      relatedSessions: [],
+      issues: [],
+      executions: new Map(),
+      inventory: null,
+      isLoading: false,
+      isInventoryLoading: false,
+      error: null,
+      refetch,
+    });
+    vi.mocked(getIssue).mockResolvedValue(demoIssue());
+
+    renderWithI18n(
+      <MemoryRouter initialEntries={["/projects/demo/workspaces?exec=DEMO-1&surface=autonomous"]}>
+        <ProjectSessionsPanel projectSlug="demo" activeExecutionIdentifier="DEMO-1" />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByLabelText("mock execution session panel")).toHaveAttribute("data-issue", "DEMO-1");
+    expect(getIssue).toHaveBeenCalledWith("demo", "DEMO-1");
   });
 
   it("opens the authoring session inline as its own workspace tab", () => {
@@ -411,7 +493,7 @@ describe("ProjectSessionsPanel", () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByRole("tab", { name: /DEMO-1 · Execution/i })).toBeInTheDocument();
+    expect(await screen.findByRole("tab", { name: /DEMO-1 · (Execution|Autonomous)/i })).toBeInTheDocument();
 
     vi.mocked(useProjectSessions).mockReturnValue({
       groups: groupsWithSavedRow(),
@@ -427,8 +509,10 @@ describe("ProjectSessionsPanel", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Refresh hook snapshot" }));
 
-    await waitFor(() => expect(screen.getByRole("tab", { name: /Saved launcher work · Execution/i })).toBeInTheDocument());
-    expect(screen.queryByRole("tab", { name: /^DEMO-1 · Execution/i })).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: /Saved launcher work · (Execution|Autonomous)/i })).toBeInTheDocument(),
+    );
+    expect(screen.queryByRole("tab", { name: /^DEMO-1 · (Execution|Autonomous)/i })).not.toBeInTheDocument();
   });
 
   it("resumes a saved session", async () => {

@@ -462,8 +462,61 @@ defmodule SymphonyElixir.Jira.IssueAdapterTest do
     assert {:error, :remote_rate_limited} = IssueAdapter.list_issues(@project, [])
   end
 
-  test "update_issue is not supported on remote" do
-    Stub.set(fn _verb, _path, _body -> flunk("should not call API") end)
-    assert {:error, :not_supported_on_remote} = IssueAdapter.update_issue(@project, "ABC-1", %{})
+  test "update_issue PUTs editable fields and returns the refreshed DTO" do
+    Stub.set(fn
+      :put, "/rest/api/3/issue/ABC-12", body ->
+        assert get_in(body, ["fields", "summary"]) == "Renamed"
+        assert get_in(body, ["fields", "labels"]) == ["backend", "symphony:cursor"]
+        assert get_in(body, ["fields", "assignee", "accountId"]) == "acc-1"
+        assert get_in(body, ["fields", "priority", "name"]) == "High"
+        {:ok, %{}}
+
+      :get, "/rest/api/3/issue/ABC-12", _body ->
+        {:ok, issue_body() |> put_in(["fields", "summary"], "Renamed")}
+    end)
+
+    assert {:ok, %IssueDTO{identifier: "ABC-12", title: "Renamed"}} =
+             IssueAdapter.update_issue(@project, "ABC-12", %{
+               "title" => "Renamed",
+               "label_ids" => ["backend"],
+               "agent" => "cursor",
+               "assignee_ids" => ["acc-1"],
+               "priority" => "high",
+               "model" => "auto",
+               "effort" => ""
+             })
+  end
+
+  test "update_issue with only local agent metadata still syncs routing labels" do
+    Stub.set(fn
+      :put, "/rest/api/3/issue/ABC-12", body ->
+        assert get_in(body, ["fields", "labels"]) == ["symphony:cursor"]
+        refute Map.has_key?(body["fields"], "summary")
+        {:ok, %{}}
+
+      :get, "/rest/api/3/issue/ABC-12", _body ->
+        {:ok, issue_body()}
+    end)
+
+    assert {:ok, %IssueDTO{identifier: "ABC-12"}} =
+             IssueAdapter.update_issue(@project, "ABC-12", %{
+               "agent" => "cursor",
+               "label_ids" => ["symphony:cursor"],
+               "model" => "auto",
+               "effort" => ""
+             })
+  end
+
+  test "update_issue with no remote-editable fields refreshes without PUT" do
+    Stub.set(fn
+      :get, "/rest/api/3/issue/ABC-12", _body ->
+        {:ok, issue_body()}
+
+      verb, path, _body ->
+        flunk("unexpected #{verb} #{path}")
+    end)
+
+    assert {:ok, %IssueDTO{identifier: "ABC-12"}} =
+             IssueAdapter.update_issue(@project, "ABC-12", %{"model" => "auto", "effort" => ""})
   end
 end

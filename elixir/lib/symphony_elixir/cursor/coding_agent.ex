@@ -68,29 +68,46 @@ defmodule SymphonyElixir.Cursor.CodingAgent do
     on_message = Keyword.get(opts, :on_message, &default_on_message/1)
     turn_id = generate_uuid()
     session_id = "#{session.session_uuid}-#{turn_id}"
+    prior_totals = session_usage_totals(session)
 
     emit_message(on_message, :session_started, %{session_id: session_id, thread_id: session.session_uuid, turn_id: turn_id}, %{})
 
     write_transcript_sidecar(session, opts)
 
+    # Cursor CLI reports per-turn usage (not cumulative). Accumulate into an
+    # absolute session total before emitting so TokenDelta can subtract safely.
+    {:ok, usage_agent} = Agent.start(fn -> %{prior: prior_totals, turn: nil} end)
+
     on_event = fn notification ->
       {event, details} = bridge_event_to_message(notification)
-      emit_message(on_message, event, details, %{})
+      emit_message(on_message, event, details, usage_metadata(notification, usage_agent))
     end
 
     runner_args = turn_args(session, prompt, opts)
     interactive? = Keyword.get(opts, :interactive_user_input, false) == true
 
     run_result =
-      if interactive? do
-        AcpRunner.run_turn(acp_turn_args(runner_args, opts), on_event)
-      else
-        CliRunner.run_turn(runner_args, on_event)
+      try do
+        if interactive? do
+          AcpRunner.run_turn(acp_turn_args(runner_args, opts), on_event)
+        else
+          CliRunner.run_turn(runner_args, on_event)
+        end
+      after
+        if Process.alive?(usage_agent), do: Agent.stop(usage_agent)
       end
 
     case run_result do
       {:ok, result} ->
-        emit_message(on_message, :turn_completed, %{payload: %{"usage" => result.usage}, result: result}, %{usage: result.usage})
+        turn_usage = canonicalize_usage(result.usage)
+        usage_totals = add_usage(prior_totals, turn_usage)
+
+        emit_message(
+          on_message,
+          :turn_completed,
+          %{payload: %{"usage" => usage_totals}, result: result},
+          %{usage: usage_totals}
+        )
 
         {:ok,
          %{
@@ -99,7 +116,8 @@ defmodule SymphonyElixir.Cursor.CodingAgent do
            thread_id: session.session_uuid,
            turn_id: turn_id,
            cli_session_id: result.cli_session_id,
-           usage: result.usage,
+           usage: usage_totals,
+           usage_totals: usage_totals,
            cost_usd: result.cost_usd
          }}
 
@@ -372,11 +390,14 @@ defmodule SymphonyElixir.Cursor.CodingAgent do
   defp canonicalize_usage(nil), do: nil
 
   defp canonicalize_usage(raw) when is_map(raw) do
+    # Prefer explicit input/output fields. Cache tokens are NOT input fallbacks —
+    # cursor-agent reports them separately and totals must include them
+    # (matches Cursor SDK: input + output + cacheRead + cacheWrite).
     input =
       token_value(
         raw,
-        ~w(input_tokens prompt_tokens inputTokens promptTokens cacheReadTokens cacheWriteTokens)a ++
-          ~w(input_tokens prompt_tokens inputTokens promptTokens cacheReadTokens cacheWriteTokens)
+        ~w(input_tokens prompt_tokens inputTokens promptTokens)a ++
+          ~w(input_tokens prompt_tokens inputTokens promptTokens)
       )
 
     output =
@@ -386,13 +407,29 @@ defmodule SymphonyElixir.Cursor.CodingAgent do
           ~w(output_tokens completion_tokens outputTokens completionTokens reasoningTokens)
       )
 
+    cache_read =
+      token_value(
+        raw,
+        ~w(cache_read_input_tokens cacheReadTokens cache_read_tokens)a ++
+          ~w(cache_read_input_tokens cacheReadTokens cache_read_tokens)
+      )
+
+    cache_write =
+      token_value(
+        raw,
+        ~w(cache_creation_input_tokens cacheWriteTokens cache_write_tokens)a ++
+          ~w(cache_creation_input_tokens cacheWriteTokens cache_write_tokens)
+      )
+
     total = token_value(raw, ~w(total_tokens total totalTokens)a ++ ~w(total_tokens total totalTokens))
 
     input = input || 0
     output = output || 0
-    total = total || input + output
+    cache_read = cache_read || 0
+    cache_write = cache_write || 0
+    total = total || input + output + cache_read + cache_write
 
-    if input > 0 or output > 0 or total > 0 do
+    if input > 0 or output > 0 or cache_read > 0 or cache_write > 0 or total > 0 do
       %{input_tokens: input, output_tokens: output, total_tokens: total}
     end
   end
@@ -413,6 +450,58 @@ defmodule SymphonyElixir.Cursor.CodingAgent do
   end
 
   defp parse_token_value(_), do: nil
+
+  defp zero_usage, do: %{input_tokens: 0, output_tokens: 0, total_tokens: 0}
+
+  defp session_usage_totals(%{metadata: %{usage_totals: totals}}) when is_map(totals) do
+    canonicalize_usage(totals) || zero_usage()
+  end
+
+  defp session_usage_totals(%{usage_totals: totals}) when is_map(totals) do
+    canonicalize_usage(totals) || zero_usage()
+  end
+
+  defp session_usage_totals(_session), do: zero_usage()
+
+  defp add_usage(nil, turn) when is_map(turn), do: turn
+  defp add_usage(_prior, nil), do: nil
+
+  defp add_usage(prior, turn) when is_map(prior) and is_map(turn) do
+    %{
+      input_tokens: Map.get(prior, :input_tokens, 0) + Map.get(turn, :input_tokens, 0),
+      output_tokens: Map.get(prior, :output_tokens, 0) + Map.get(turn, :output_tokens, 0),
+      total_tokens: Map.get(prior, :total_tokens, 0) + Map.get(turn, :total_tokens, 0)
+    }
+  end
+
+  defp usage_metadata(notification, usage_agent) when is_pid(usage_agent) do
+    case extract_notification_usage(notification) do
+      nil ->
+        %{}
+
+      raw ->
+        case canonicalize_usage(raw) do
+          nil ->
+            %{}
+
+          turn_usage ->
+            cumulative =
+              Agent.get_and_update(usage_agent, fn %{prior: prior} ->
+                reported = add_usage(prior, turn_usage)
+                {reported, %{prior: prior, turn: turn_usage}}
+              end)
+
+            %{usage: cumulative}
+        end
+    end
+  end
+
+  defp extract_notification_usage(%{"method" => method, "params" => params})
+       when method in ["usage/update", "turn/completed"] and is_map(params) do
+    Map.get(params, "usage") || Map.get(params, :usage)
+  end
+
+  defp extract_notification_usage(_notification), do: nil
 
   @doc false
   def bridge_event_to_message(%{"method" => "item/created", "params" => %{"item" => item}} = notification) do

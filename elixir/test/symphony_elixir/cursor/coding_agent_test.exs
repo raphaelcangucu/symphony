@@ -130,6 +130,66 @@ defmodule SymphonyElixir.Cursor.CodingAgentTest do
     assert event.usage == %{input_tokens: 90, output_tokens: 10, total_tokens: 100}
   end
 
+  test "normalize_event includes cache tokens in totals for real cursor-agent usage shape" do
+    # Real cursor-agent stream-json result.usage (2026.07.x): camelCase, no totalTokens.
+    event =
+      CodingAgent.normalize_event(%{
+        event: :turn_completed,
+        usage: %{
+          "inputTokens" => 7175,
+          "outputTokens" => 103,
+          "cacheReadTokens" => 8206,
+          "cacheWriteTokens" => 12
+        },
+        timestamp: DateTime.utc_now()
+      })
+
+    assert event.usage == %{
+             input_tokens: 7175,
+             output_tokens: 103,
+             total_tokens: 7175 + 103 + 8206 + 12
+           }
+  end
+
+  test "run_turn emits usage metadata so observability can count cursor tokens" do
+    {root, ws} = workspace()
+    fake = Path.expand("../../support/fixtures/fake_cursor.sh", __DIR__)
+
+    {:ok, session} =
+      CodingAgent.start_session(ws,
+        workspace_root: root,
+        cursor_command: "FAKE_CURSOR_MODE=happy #{fake}",
+        dynamic_tools: [],
+        tool_executor: fn _, _ -> %{"ok" => true} end
+      )
+
+    {:ok, collector} = Agent.start_link(fn -> [] end)
+    on_message = fn message -> Agent.update(collector, &[message | &1]) end
+
+    assert {:ok, turn} =
+             CodingAgent.run_turn(session, "do the thing", %{id: "1", identifier: "T-1"},
+               on_message: on_message
+             )
+
+    messages = Agent.get(collector, &Enum.reverse/1)
+    Agent.stop(collector)
+
+    usage_messages =
+      Enum.filter(messages, fn message ->
+        match?(%{usage: usage} when is_map(usage), message)
+      end)
+
+    assert usage_messages != []
+
+    Enum.each(usage_messages, fn message ->
+      normalized = CodingAgent.normalize_event(message)
+      assert normalized.usage.total_tokens > 0
+      assert normalized.usage.input_tokens > 0
+    end)
+
+    assert turn.usage_totals.total_tokens > 0
+  end
+
   test "implements CodingAgent behaviour and is routed by adapter_for/1" do
     behaviours =
       CodingAgent.__info__(:attributes)

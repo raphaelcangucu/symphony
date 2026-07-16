@@ -41,7 +41,13 @@ defmodule SymphonyElixir.Cursor.CliRunnerTest do
     methods = Enum.map(events, & &1["method"])
     assert "item/progress" in methods
     assert "item/created" in methods
+    assert "usage/update" in methods
     assert "turn/completed" in methods
+
+    assert Enum.any?(events, fn
+             %{"method" => "usage/update", "params" => %{"usage" => %{"inputTokens" => 1200}}} -> true
+             _ -> false
+           end)
 
     completed =
       Enum.find(events, fn

@@ -120,17 +120,22 @@ export function ExecutionChatPanel({
     />
   );
 
+  // Status sits in the shell toolbar (outside the scroller) so toggling it is
+  // visible next to the header control even when the transcript is stuck to bottom.
+  const statusToolbar = showExecutionStatus ? (
+    <div className={cn(CHAT_READING_COLUMN_CLASS, "pb-2 pt-1")}>
+      <ExecutionStatusHeader
+        projectSlug={projectSlug}
+        issue={issue}
+        execution={execution}
+        onIssueUpdated={onIssueUpdated}
+      />
+    </div>
+  ) : null;
+
   const feedTop = (
     <div className="space-y-3">
       <BundlePanel issue={issue} executions={bundleExecutions} />
-      {showExecutionStatus ? (
-        <ExecutionStatusHeader
-          projectSlug={projectSlug}
-          issue={issue}
-          execution={execution}
-          onIssueUpdated={onIssueUpdated}
-        />
-      ) : null}
       {showReturnPanel ? (
         <ReturnToAgentPanel
           projectSlug={projectSlug}
@@ -163,6 +168,7 @@ export function ExecutionChatPanel({
   return (
     <AssistantSessionShell
       className="min-h-0 flex-1"
+      toolbar={statusToolbar}
       feedRef={setScrollContainerRef}
       feed={
         <div className={cn(CHAT_READING_COLUMN_CLASS, "flex w-full flex-col gap-4 py-4")}>

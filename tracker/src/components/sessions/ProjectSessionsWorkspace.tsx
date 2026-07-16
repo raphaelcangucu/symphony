@@ -71,6 +71,7 @@ import {
 } from "@/lib/workspaceRoutes";
 import { archiveAssistantThread, getAssistantThread } from "@/services/assistantThreads";
 import { dispatchIssueAgent } from "@/services/issueDispatch";
+import { getIssue } from "@/services/issues";
 import { removeWorkspaces } from "@/services/worktrees";
 import type { AgentExecution } from "@/types/agent-execution";
 import type { Issue } from "@/types/issue";
@@ -336,15 +337,25 @@ export function ProjectSessionsWorkspace({
     const tabId = authoringSessionTabId(activeAuthoringIdentifier);
     const existingTab = tabs.find((tab) => tab.id === tabId);
     const tabTitle = `${title} · ${t("issue.agentTabs.authoring")}`;
-    const hasOpenedFallback =
+    const isActive = activeTabId === tabId;
+    const titleMatches = existingTab?.title === tabTitle;
+
+    // Deep links must focus the tab even when it already exists from persistence.
+    if (isActive && titleMatches) {
+      openedAuthoringRef.current = activeAuthoringIdentifier;
+      return;
+    }
+
+    const waitingForTitle =
+      isActive &&
+      existingTab != null &&
       openedAuthoringRef.current === activeAuthoringIdentifier &&
-      !executionTitleLookup.has(activeAuthoringIdentifier) &&
-      existingTab != null;
-    if (hasOpenedFallback || existingTab?.title === tabTitle) return;
+      !executionTitleLookup.has(activeAuthoringIdentifier);
+    if (waitingForTitle) return;
 
     openedAuthoringRef.current = activeAuthoringIdentifier;
     openTab(createAuthoringSessionTab(activeAuthoringIdentifier, tabTitle));
-  }, [activeAuthoringIdentifier, executionTitleLookup, openTab, t, tabs]);
+  }, [activeAuthoringIdentifier, activeTabId, executionTitleLookup, openTab, t, tabs]);
 
   const openedNewIssueRef = useRef(false);
   const suppressNewIssueOpenRef = useRef(false);
@@ -397,15 +408,25 @@ export function ProjectSessionsWorkspace({
     const tabId = executionSessionTabId(activeExecutionIdentifier);
     const existingTab = tabs.find((tab) => tab.id === tabId);
     const tabTitle = `${title} · ${t("issue.agentTabs.execution")}`;
-    const hasOpenedFallback =
+    const isActive = activeTabId === tabId;
+    const titleMatches = existingTab?.title === tabTitle;
+
+    // Deep links must focus the tab even when it already exists from persistence.
+    if (isActive && titleMatches) {
+      openedExecutionRef.current = activeExecutionIdentifier;
+      return;
+    }
+
+    const waitingForTitle =
+      isActive &&
+      existingTab != null &&
       openedExecutionRef.current === activeExecutionIdentifier &&
-      !executionTitleLookup.has(activeExecutionIdentifier) &&
-      existingTab != null;
-    if (hasOpenedFallback || existingTab?.title === tabTitle) return;
+      !executionTitleLookup.has(activeExecutionIdentifier);
+    if (waitingForTitle) return;
 
     openedExecutionRef.current = activeExecutionIdentifier;
     openTab(createExecutionSessionTab(activeExecutionIdentifier, tabTitle));
-  }, [activeExecutionIdentifier, executionTitleLookup, openTab, t, tabs]);
+  }, [activeExecutionIdentifier, activeTabId, executionTitleLookup, openTab, t, tabs]);
 
   const handleSelectTab = useCallback(
     (tabId: string) => {
@@ -864,6 +885,45 @@ export function ProjectSessionsWorkspace({
   );
 }
 
+function useResolvedIssue(
+  projectSlug: string,
+  issueIdentifier: string,
+  issueFromList: Issue | null,
+): { issue: Issue | null; loading: boolean } {
+  const [fetchedIssue, setFetchedIssue] = useState<Issue | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (issueFromList) {
+      setFetchedIssue(null);
+      setLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setLoading(true);
+    setFetchedIssue(null);
+
+    void getIssue(projectSlug, issueIdentifier)
+      .then((issue) => {
+        if (!cancelled) setFetchedIssue(issue);
+      })
+      .catch(() => {
+        if (!cancelled) setFetchedIssue(null);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [issueFromList, issueIdentifier, projectSlug]);
+
+  if (issueFromList) return { issue: issueFromList, loading: false };
+  return { issue: fetchedIssue, loading };
+}
+
 function AuthoringSessionTabContent({
   projectSlug,
   issueIdentifier,
@@ -878,18 +938,21 @@ function AuthoringSessionTabContent({
   isLoading: boolean;
 }) {
   const { t } = useTranslation();
+  const resolved = useResolvedIssue(projectSlug, issueIdentifier, issue);
 
-  if (!issue) {
+  if (!resolved.issue) {
     return (
       <section className="flex min-h-0 flex-1 items-center justify-center bg-background p-6 text-center text-sm text-muted-foreground">
-        {isLoading ? t("sessions.loading") : t("sessions.executionUnavailable", { identifier: issueIdentifier })}
+        {isLoading || resolved.loading
+          ? t("sessions.loading")
+          : t("sessions.executionUnavailable", { identifier: issueIdentifier })}
       </section>
     );
   }
 
   return (
     <section className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
-      <IssueAuthoringSessionPanel issue={issue} projectSlug={projectSlug} view={view} />
+      <IssueAuthoringSessionPanel issue={resolved.issue} projectSlug={projectSlug} view={view} />
     </section>
   );
 }
@@ -915,11 +978,14 @@ function ExecutionSessionTabContent({
 }) {
   const { t } = useTranslation();
   const allExecutions = useMemo(() => Array.from(executions.values()), [executions]);
+  const resolved = useResolvedIssue(projectSlug, issueIdentifier, issue);
 
-  if (!issue) {
+  if (!resolved.issue) {
     return (
       <section className="flex min-h-0 flex-1 items-center justify-center bg-background p-6 text-center text-sm text-muted-foreground">
-        {isLoading ? t("sessions.loading") : t("sessions.executionUnavailable", { identifier: issueIdentifier })}
+        {isLoading || resolved.loading
+          ? t("sessions.loading")
+          : t("sessions.executionUnavailable", { identifier: issueIdentifier })}
       </section>
     );
   }
@@ -927,7 +993,7 @@ function ExecutionSessionTabContent({
   return (
     <section className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
       <IssueExecutionSessionPanel
-        issue={issue}
+        issue={resolved.issue}
         projectSlug={projectSlug}
         execution={execution}
         executions={allExecutions}

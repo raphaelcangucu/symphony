@@ -10,7 +10,38 @@ defmodule SymphonyElixir.Assistant.PreviewToolsTest do
 
       assert properties["server"]["type"] == "string"
       assert "output" in properties["action"]["enum"]
+      assert "prepare" in properties["action"]["enum"]
     end
+  end
+
+  test "status next_steps reject conflict sync_state ports" do
+    issue = %Issue{id: "1", identifier: "DEMO-1", project_slug: "demo"}
+
+    assert {:ok, result} =
+             PreviewTools.execute("demo", %{"action" => "status"},
+               issue: issue,
+               issue_targets: fn _slug, _id ->
+                 {:ok,
+                  %{
+                    available: true,
+                    reason: nil,
+                    servers: [
+                      %{
+                        slug: "web",
+                        status: "ready",
+                        port: 59_595,
+                        sync_state: :conflict,
+                        allowed_ports: [4300, 4302]
+                      }
+                    ]
+                  }}
+               end,
+               list_serve_steps: fn _slug -> [%{role: "serve"}] end
+             )
+
+    assert result.data.next_steps =~ "in_sync"
+    assert result.data.next_steps =~ "prepare"
+    refute result.data.next_steps =~ "dock may"
   end
 
   test "enrich_view adds serve_steps_configured and next_steps for no_serve_step" do
@@ -260,11 +291,14 @@ defmodule SymphonyElixir.Assistant.PreviewToolsTest do
     assert message =~ "server"
   end
 
-  test "tool description prefers Preview ports and allows fallback" do
+  test "tool description prefers leased Preview ports under runtime contract" do
     for spec <- PreviewTools.tool_specs() do
       desc = spec["description"]
       assert desc =~ ~r/prefer/i
-      assert desc =~ ~r/fall\s*back/i
+      assert desc =~ "in_sync"
+      assert desc =~ "prepare"
+      assert desc =~ "INSPIRE_PORT=4301"
+      refute desc =~ "dock may"
     end
   end
 
@@ -292,7 +326,7 @@ defmodule SymphonyElixir.Assistant.PreviewToolsTest do
     assert combined =~ "Preview" or combined =~ "preview"
   end
 
-  test "crashed next_steps allow project-script fallback" do
+  test "crashed next_steps forbid unmanaged bring-up outside prepare" do
     issue = %Issue{id: "1", identifier: "DEMO-1", project_slug: "demo"}
 
     assert {:ok, result} =
@@ -311,10 +345,12 @@ defmodule SymphonyElixir.Assistant.PreviewToolsTest do
                capture_output: fn _, _, _ -> {:ok, %{output: ""}} end
              )
 
-    assert result.data.next_steps =~ ~r/fall\s*back/i
+    assert result.data.next_steps =~ "prepare"
+    assert result.data.next_steps =~ "unmanaged"
+    refute result.data.next_steps =~ "dock may"
   end
 
-  test "status with crashed server sets fallback next_steps" do
+  test "status with crashed server sets contract-safe next_steps" do
     issue = %Issue{id: "1", identifier: "DEMO-1", project_slug: "demo"}
 
     assert {:ok, result} =
@@ -331,8 +367,10 @@ defmodule SymphonyElixir.Assistant.PreviewToolsTest do
                list_serve_steps: fn _slug -> [%{role: "serve"}] end
              )
 
-    assert result.data.next_steps =~ ~r/fall\s*back/i
+    assert result.data.next_steps =~ "prepare"
+    assert result.data.next_steps =~ "unmanaged"
     refute result.data.next_steps =~ "while Preview is healthy"
+    refute result.data.next_steps =~ "dock may"
   end
 
   test "status with starting server does not set preferred healthy dock next_steps" do

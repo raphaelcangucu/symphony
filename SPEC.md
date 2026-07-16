@@ -1472,6 +1472,11 @@ Token accounting rules:
 - For absolute totals, track deltas relative to last reported totals to avoid double-counting.
 - Do not treat generic `usage` maps as cumulative totals unless the event type defines them that
   way.
+- Cursor Agent CLI `result.usage` is per-turn (camelCase `inputTokens` / `outputTokens` /
+  `cacheReadTokens` / `cacheWriteTokens`, often without `totalTokens`). Adapters must canonicalize
+  those fields, include cache tokens in `total_tokens` when `totalTokens` is absent, and accumulate
+  per-turn usage into an absolute session total before reporting so orchestrator delta accounting
+  stays correct across turns.
 - Accumulate aggregate totals in orchestrator state.
 
 Runtime accounting:

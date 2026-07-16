@@ -267,6 +267,37 @@ describe("buildFlatSidebarProject", () => {
     expect(byId["issue:42"]?.threadId).toBeNull();
   });
 
+  it("keeps autonomous exec: rows selectable with live status", () => {
+    const project = buildFlatSidebarProject(
+      buildInput({
+        sessions: [
+          sessionRow({
+            id: "exec:CDE-1180",
+            title: "Adjust placeholder",
+            kind: "execution",
+            href: "/projects/advising/workspaces?exec=CDE-1180&surface=autonomous",
+            issueIdentifier: "CDE-1180",
+            aggregateStatus: "live",
+            agentKind: "cursor",
+            workspaceId: null,
+            updatedAt: "2026-07-16T21:00:00.000000Z",
+          }),
+        ],
+      }),
+    );
+
+    expect(project.sessions).toHaveLength(1);
+    expect(project.sessions[0]).toMatchObject({
+      id: "exec:CDE-1180",
+      sessionKind: "execution",
+      issueIdentifier: "CDE-1180",
+      threadId: null,
+      href: "/projects/advising/workspaces?exec=CDE-1180&surface=autonomous",
+      statusKind: "running",
+      aggregateStatus: "active",
+    });
+  });
+
   it("reflects load errors on the project node", () => {
     const project = buildFlatSidebarProject(
       buildInput({

@@ -542,16 +542,22 @@ describe("GitDiffModal", () => {
 
   it("focuses an uncommitted file from initialFocusPath", async () => {
     const onInitialFocusConsumed = vi.fn();
-    useGitDiffFilesMock.mockImplementation((args: { type?: string } = {}) => ({
-      files: args.type === "uncommitted" ? [fileEntry({ path: "docs/index.md" })] : [],
-      total: args.type === "uncommitted" ? 1 : 0,
-      loading: false,
-      loadingMore: false,
-      hasMore: false,
-      error: null,
-      loadMore: vi.fn(),
-      refetch: filesRefetchMock,
-    }));
+    useGitDiffFilesMock.mockImplementation((args: { type?: string; query?: string } = {}) => {
+      const focused = fileEntry({ path: "docs/index.md" });
+      const other = fileEntry({ path: "README.md" });
+      const uncommitted =
+        args.type === "uncommitted" ? (args.query ? [focused] : [other, focused]) : [];
+      return {
+        files: uncommitted,
+        total: uncommitted.length,
+        loading: false,
+        loadingMore: false,
+        hasMore: false,
+        error: null,
+        loadMore: vi.fn(),
+        refetch: filesRefetchMock,
+      };
+    });
     useGitDiffPatchMock.mockReturnValue({
       file: { path: "docs/index.md", oldPath: null, status: "modified", patch: "@@\n+a\n" },
       loading: false,
@@ -576,6 +582,16 @@ describe("GitDiffModal", () => {
       expect(screen.getByTestId("git-diff-viewer")).toHaveTextContent("frontend/docs/index.md");
     });
     expect(onInitialFocusConsumed).toHaveBeenCalled();
+
+    // After focus, the basename filter clears and the full list reloads (README first).
+    // Selection must stay on the focused file — not fall back to README.md.
+    await waitFor(() => {
+      expect(useGitDiffFilesMock).toHaveBeenCalledWith(
+        expect.objectContaining({ type: "uncommitted", query: "" }),
+      );
+    });
+    expect(screen.getByTestId("git-diff-viewer")).toHaveTextContent("frontend/docs/index.md");
+    expect(screen.getByTestId("git-diff-viewer")).not.toHaveTextContent("README.md");
   });
 
   it("falls back to branch when the focused path is missing from uncommitted", async () => {

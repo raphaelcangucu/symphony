@@ -107,7 +107,23 @@ defmodule SymphonyElixir.Jira.IssueAdapter do
   end
 
   @impl true
-  def update_issue(%Project{} = _project, _identifier, _attrs), do: {:error, :not_supported_on_remote}
+  def update_issue(%Project{} = project, identifier, attrs) when is_map(attrs) do
+    fields = build_update_fields(project, attrs)
+
+    result =
+      if fields == %{} do
+        {:ok, %{}}
+      else
+        request(:put, "/rest/api/3/issue/#{identifier}", %{"fields" => fields})
+      end
+
+    with {:ok, _response} <- result,
+         {:ok, dto} <- get_issue(project, identifier) do
+      {:ok, dto}
+    else
+      {:error, reason} -> {:error, map_error(reason)}
+    end
+  end
 
   @impl true
   def move_issue(%Project{} = project, identifier, attrs) when is_map(attrs) do
@@ -371,6 +387,66 @@ defmodule SymphonyElixir.Jira.IssueAdapter do
     |> put_labels(labels(project, attrs))
   end
 
+  # Partial update: only include fields the outbox payload actually carries so a
+  # local-only agent/model tweak does not wipe summary/assignee on JIRA.
+  defp build_update_fields(%Project{} = project, attrs) when is_map(attrs) do
+    %{}
+    |> maybe_put_summary(attrs)
+    |> maybe_put_description(attrs)
+    |> maybe_put_assignee(attrs)
+    |> maybe_put_priority(attrs)
+    |> maybe_put_labels(project, attrs)
+  end
+
+  defp maybe_put_summary(fields, attrs) do
+    case attrs |> Map.get("title") |> trim_string() do
+      "" -> fields
+      title -> Map.put(fields, "summary", title)
+    end
+  end
+
+  defp maybe_put_description(fields, attrs) do
+    if Map.has_key?(attrs, "description") do
+      Map.put(fields, "description", description(attrs) || Adf.from_text(""))
+    else
+      fields
+    end
+  end
+
+  defp maybe_put_assignee(fields, attrs) do
+    if Map.has_key?(attrs, "assignee_ids") or Map.has_key?(attrs, "assignee_id") do
+      case assignee_account_id(attrs) do
+        nil -> Map.put(fields, "assignee", nil)
+        account_id -> Map.put(fields, "assignee", %{"accountId" => account_id})
+      end
+    else
+      fields
+    end
+  end
+
+  defp maybe_put_priority(fields, attrs) do
+    if Map.has_key?(attrs, "priority") do
+      case priority_field(attrs) do
+        nil -> fields
+        value -> Map.put(fields, "priority", value)
+      end
+    else
+      fields
+    end
+  end
+
+  defp maybe_put_labels(fields, project, attrs) do
+    if label_attrs?(attrs) do
+      Map.put(fields, "labels", labels(project, attrs))
+    else
+      fields
+    end
+  end
+
+  defp label_attrs?(attrs) do
+    Map.has_key?(attrs, "labels") or Map.has_key?(attrs, "label_ids") or Map.has_key?(attrs, "agent")
+  end
+
   defp description(attrs) do
     case attrs |> Map.get("description") |> trim_string() do
       "" -> nil
@@ -379,10 +455,17 @@ defmodule SymphonyElixir.Jira.IssueAdapter do
   end
 
   defp assignee_field(attrs) do
-    case attrs |> Map.get("assignee_ids") |> string_list() |> List.first() do
+    case assignee_account_id(attrs) do
       nil -> nil
       account_id -> %{"accountId" => account_id}
     end
+  end
+
+  defp assignee_account_id(attrs) do
+    attrs
+    |> Map.get("assignee_ids", List.wrap(Map.get(attrs, "assignee_id")))
+    |> string_list()
+    |> List.first()
   end
 
   defp priority_field(attrs) do

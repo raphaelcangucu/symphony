@@ -1319,9 +1319,25 @@ defmodule SymphonyElixir.AgentRunner do
     "issue_id=#{issue_id} issue_identifier=#{identifier}"
   end
 
-  defp maybe_advance_session(session, %{cli_session_id: cli_session_id}) when is_binary(cli_session_id) do
-    Map.put(session, :cli_session_id, cli_session_id)
+  defp maybe_advance_session(session, result) when is_map(result) do
+    session
+    |> maybe_put_cli_session_id(result)
+    |> maybe_put_usage_totals(result)
   end
 
   defp maybe_advance_session(session, _result), do: session
+
+  defp maybe_put_cli_session_id(session, %{cli_session_id: cli_session_id})
+       when is_binary(cli_session_id) do
+    Map.put(session, :cli_session_id, cli_session_id)
+  end
+
+  defp maybe_put_cli_session_id(session, _result), do: session
+
+  defp maybe_put_usage_totals(session, %{usage_totals: totals}) when is_map(totals) do
+    metadata = Map.get(session, :metadata) || %{}
+    %{session | metadata: Map.put(metadata, :usage_totals, totals)}
+  end
+
+  defp maybe_put_usage_totals(session, _result), do: session
 end

@@ -2,8 +2,10 @@ defmodule SymphonyElixir.OrchestratorStatusTest do
   use SymphonyElixir.TestSupport
 
   alias SymphonyElixir.Codex.CodingAgent, as: CodexCodingAgent
+  alias SymphonyElixir.Cursor.CodingAgent, as: CursorCodingAgent
 
   defp normalize(event), do: CodexCodingAgent.normalize_event(event)
+  defp normalize_cursor(event), do: CursorCodingAgent.normalize_event(event)
 
   test "snapshot returns :timeout when snapshot server is unresponsive" do
     server_name = Module.concat(__MODULE__, :UnresponsiveSnapshotServer)
@@ -469,6 +471,77 @@ defmodule SymphonyElixir.OrchestratorStatusTest do
     assert completed_state.agent_totals.input_tokens == 12
     assert completed_state.agent_totals.output_tokens == 4
     assert completed_state.agent_totals.total_tokens == 16
+  end
+
+  test "orchestrator snapshot tracks cursor-agent camelCase usage without totalTokens" do
+    issue_id = "issue-cursor-usage-snapshot"
+
+    issue = %Issue{
+      id: issue_id,
+      identifier: "MT-CURSOR-TOKENS",
+      title: "Cursor token snapshot test",
+      description: "Validate real cursor-agent usage payloads",
+      state: "In Progress",
+      url: "https://example.org/issues/MT-CURSOR-TOKENS"
+    }
+
+    orchestrator_name = Module.concat(__MODULE__, :CursorUsageOrchestrator)
+    {:ok, pid} = Orchestrator.start_link(name: orchestrator_name)
+
+    on_exit(fn ->
+      if Process.alive?(pid) do
+        Process.exit(pid, :normal)
+      end
+    end)
+
+    initial_state = :sys.get_state(pid)
+    process_ref = make_ref()
+    started_at = DateTime.utc_now()
+
+    running_entry = %{
+      pid: self(),
+      ref: process_ref,
+      identifier: issue.identifier,
+      issue: issue,
+      session_id: nil,
+      last_codex_message: nil,
+      last_codex_timestamp: nil,
+      last_codex_event: nil,
+      agent_input_tokens: 0,
+      agent_output_tokens: 0,
+      agent_total_tokens: 0,
+      codex_last_reported_input_tokens: 0,
+      codex_last_reported_output_tokens: 0,
+      codex_last_reported_total_tokens: 0,
+      started_at: started_at
+    }
+
+    :sys.replace_state(pid, fn _ ->
+      initial_state
+      |> Map.put(:running, %{issue_id => running_entry})
+      |> Map.put(:claimed, MapSet.put(initial_state.claimed, issue_id))
+    end)
+
+    send(
+      pid,
+      {:codex_worker_update, issue_id,
+       normalize_cursor(%{
+         event: :turn_completed,
+         usage: %{
+           "inputTokens" => 7175,
+           "outputTokens" => 103,
+           "cacheReadTokens" => 8206,
+           "cacheWriteTokens" => 12
+         },
+         timestamp: DateTime.utc_now()
+       })}
+    )
+
+    snapshot = GenServer.call(pid, :snapshot)
+    assert %{running: [snapshot_entry]} = snapshot
+    assert snapshot_entry.agent_input_tokens == 7175
+    assert snapshot_entry.agent_output_tokens == 103
+    assert snapshot_entry.agent_total_tokens == 7175 + 103 + 8206 + 12
   end
 
   test "orchestrator snapshot tracks codex token-count cumulative usage payloads" do
