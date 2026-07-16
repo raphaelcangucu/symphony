@@ -5,6 +5,7 @@ import { fileActivityFromToolCall } from "@/components/assistant/fileActivity";
 import { ToolActivityGroup } from "@/components/agent-activity/ToolActivityGroup";
 import { ToolActivityItem } from "@/components/agent-activity/ToolActivityItem";
 import type { OpenKbPathHandler } from "@/lib/openKbPath";
+import { canonicalizeToolCall } from "@/lib/toolCallCanonicalize";
 import { groupToolCalls, type ToolCallGroup } from "@/lib/toolCallGroups";
 import type { AgentTaskSnapshot } from "@/types/agentTasks";
 import type { AssistantToolCall } from "@/services/assistant";
@@ -97,6 +98,16 @@ function ToolActivityEntry({
   const call = group.calls[0];
   if (!call) return null;
 
+  const presentation = canonicalizeToolCall({
+    name: call.name,
+    arguments: (call.arguments ?? {}) as Record<string, unknown>,
+    output: call.output ?? null,
+    status: call.status,
+    result: call.result,
+    outputTruncated: call.outputTruncated,
+    outputByteSize: call.outputByteSize ?? null,
+  });
+
   return (
     <div className="min-w-0">
       <ToolActivityItem
@@ -105,6 +116,7 @@ function ToolActivityEntry({
         view={assistantToolCallToView(call)}
         taskSnapshot={taskSnapshot}
         fileActivity={fileActivityFromToolCall(call)}
+        presentation={presentation}
         onKillTool={onKillTool}
         onLoadFullOutput={onLoadFullOutput}
         onOpenKbPath={onOpenKbPath}

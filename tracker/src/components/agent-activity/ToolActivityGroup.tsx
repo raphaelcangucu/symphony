@@ -10,6 +10,7 @@ import { TOOL_GROUP_ICON } from "@/components/agent-activity/toolGroupIcons";
 import { assistantToolCallToView } from "@/components/assistant/assistantToolCall";
 import { fileActivityFromToolCall } from "@/components/assistant/fileActivity";
 import type { OpenKbPathHandler } from "@/lib/openKbPath";
+import { canonicalizeToolCall } from "@/lib/toolCallCanonicalize";
 import { summarizeGroup, type ToolCallGroup, type ToolGroupSummary } from "@/lib/toolCallGroups";
 import type { AgentTaskSnapshot } from "@/types/agentTasks";
 import type { AssistantToolCall } from "@/services/assistant";
@@ -78,19 +79,32 @@ export function ToolActivityGroup({
       onExpandedChange={onExpandedChange}
       details={
         <div className="space-y-0.5">
-          {group.calls.map((call, index) => (
-            <ToolActivityItem
-              key={rowKeys[index]}
-              toolName={call.name}
-              toolCallId={call.id}
-              view={assistantToolCallToView(call)}
-              taskSnapshot={taskSnapshot}
-              fileActivity={fileActivityFromToolCall(call)}
-              onKillTool={onKillTool}
-              onLoadFullOutput={onLoadFullOutput}
-              onOpenKbPath={onOpenKbPath}
-            />
-          ))}
+          {group.calls.map((call, index) => {
+            const presentation = canonicalizeToolCall({
+              name: call.name,
+              arguments: (call.arguments ?? {}) as Record<string, unknown>,
+              output: call.output ?? null,
+              status: call.status,
+              result: call.result,
+              outputTruncated: call.outputTruncated,
+              outputByteSize: call.outputByteSize ?? null,
+            });
+
+            return (
+              <ToolActivityItem
+                key={rowKeys[index]}
+                toolName={call.name}
+                toolCallId={call.id}
+                view={assistantToolCallToView(call)}
+                taskSnapshot={taskSnapshot}
+                fileActivity={fileActivityFromToolCall(call)}
+                presentation={presentation}
+                onKillTool={onKillTool}
+                onLoadFullOutput={onLoadFullOutput}
+                onOpenKbPath={onOpenKbPath}
+              />
+            );
+          })}
         </div>
       }
     />

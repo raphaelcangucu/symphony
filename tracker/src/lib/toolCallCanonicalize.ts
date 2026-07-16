@@ -327,7 +327,12 @@ function mapStatus(status: string | null | undefined): ToolPresentationStatus | 
   if (!status) return null;
   const normalized = status.trim().toLowerCase();
   if (normalized === "running" || normalized === "in_progress") return "running";
-  if (normalized === "completed" || normalized === "success" || normalized === "done") {
+  if (
+    normalized === "completed" ||
+    normalized === "complete" ||
+    normalized === "success" ||
+    normalized === "done"
+  ) {
     return "completed";
   }
   if (normalized === "failed" || normalized === "error") return "failed";
