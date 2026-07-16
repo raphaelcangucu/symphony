@@ -25,7 +25,10 @@ describe("CreatePlanCard", () => {
     );
 
     await user.click(screen.getByRole("button", { name: /open in knowledge base/i }));
-    expect(onOpenKbPath).toHaveBeenCalledWith("docs/superpowers/specs/example.md");
+    expect(onOpenKbPath).toHaveBeenCalledWith(
+      "docs/superpowers/specs/example.md",
+      expect.objectContaining({ seedMarkdown: expect.stringContaining("docs/superpowers/specs/example.md") }),
+    );
     expect(onSubmit).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole("button", { name: /accept/i }));

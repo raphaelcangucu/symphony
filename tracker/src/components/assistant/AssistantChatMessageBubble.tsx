@@ -16,6 +16,7 @@ import { AttachmentFileChip } from "@/components/shared/AttachmentFileChip";
 import { AttachmentImage } from "@/components/shared/AttachmentImage";
 import { AttachmentVideo } from "@/components/shared/AttachmentVideo";
 import { Button } from "@/components/ui/button";
+import type { OpenKbPathHandler } from "@/lib/openKbPath";
 import { cn } from "@/lib/utils";
 import { isVideoAttachmentSource, isVideoMediaType, projectAttachmentUrl } from "@/services/attachments";
 import type { AssistantChatMessage, UserQuestion } from "@/services/assistant";
@@ -34,7 +35,7 @@ interface AssistantChatMessageBubbleProps {
   projectSlug?: string;
   issueIdentifier?: string;
   threadId?: number;
-  onOpenDocumentPath?: (path: string) => void;
+  onOpenDocumentPath?: OpenKbPathHandler;
   onInsertContext?: (ref: ComposerContextChipRef) => void;
   onOpenWorkspaceDiff?: (request: OpenWorkspaceDiffRequest) => void;
   taskSnapshot?: AgentTaskSnapshot | null;

@@ -6,6 +6,7 @@ import {
   ActivityDisclosure,
   type ActivityDisclosureStateProps,
 } from "@/components/agent-activity/ActivityDisclosure";
+import type { OpenKbPathHandler } from "@/lib/openKbPath";
 import { formatBytes } from "@/lib/workspaceCards";
 
 export type ToolBlockLanguage = "bash" | "json" | "diff" | "markdown" | "text";
@@ -46,7 +47,7 @@ interface ToolCallBlockProps extends ActivityDisclosureStateProps {
   view: ToolCallView;
   toolCallId?: string | null;
   onLoadFullOutput?: (toolCallId: string) => Promise<string>;
-  onOpenKbPath?: (path: string) => void;
+  onOpenKbPath?: OpenKbPathHandler;
 }
 
 export function ToolCallBlock({
@@ -74,7 +75,11 @@ export function ToolCallBlock({
         className="inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline"
         onClick={(event) => {
           event.stopPropagation();
-          onOpenKbPath(kbPath);
+          const seedMarkdown =
+            view.kind === "create_plan"
+              ? view.input?.value ?? view.output?.value ?? null
+              : null;
+          onOpenKbPath(kbPath, seedMarkdown ? { seedMarkdown } : undefined);
         }}
       >
         <BookOpen className="size-3 shrink-0" aria-hidden />

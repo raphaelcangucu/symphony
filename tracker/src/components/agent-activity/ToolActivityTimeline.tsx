@@ -4,6 +4,7 @@ import { assistantToolCallToView } from "@/components/assistant/assistantToolCal
 import { fileActivityFromToolCall } from "@/components/assistant/fileActivity";
 import { ToolActivityGroup } from "@/components/agent-activity/ToolActivityGroup";
 import { ToolActivityItem } from "@/components/agent-activity/ToolActivityItem";
+import type { OpenKbPathHandler } from "@/lib/openKbPath";
 import { groupToolCalls, type ToolCallGroup } from "@/lib/toolCallGroups";
 import type { AgentTaskSnapshot } from "@/types/agentTasks";
 import type { AssistantToolCall } from "@/services/assistant";
@@ -13,7 +14,7 @@ interface ToolActivityTimelineProps {
   taskSnapshot?: AgentTaskSnapshot | null;
   onKillTool?: (toolCallId: string) => void;
   onLoadFullOutput?: (toolCallId: string) => Promise<string>;
-  onOpenKbPath?: (path: string) => void;
+  onOpenKbPath?: OpenKbPathHandler;
 }
 
 interface CanonicalToolCall {
@@ -72,7 +73,7 @@ function ToolActivityEntry({
   taskSnapshot: AgentTaskSnapshot | null;
   onKillTool?: (toolCallId: string) => void;
   onLoadFullOutput?: (toolCallId: string) => Promise<string>;
-  onOpenKbPath?: (path: string) => void;
+  onOpenKbPath?: OpenKbPathHandler;
 }) {
   const [expanded, setExpanded] = useState(false);
 

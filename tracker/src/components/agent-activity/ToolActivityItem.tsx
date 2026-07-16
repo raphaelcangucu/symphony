@@ -7,6 +7,7 @@ import type { FileActivityView } from "@/components/assistant/fileActivity";
 import { ToolCallBlock, type ToolCallView } from "@/components/shared/ToolCallBlock";
 import { Button } from "@/components/ui/button";
 import { isAgentTaskTool } from "@/lib/agentTasks";
+import type { OpenKbPathHandler } from "@/lib/openKbPath";
 import type { AgentTaskSnapshot } from "@/types/agentTasks";
 
 export interface ToolActivityItemProps extends ActivityDisclosureStateProps {
@@ -17,7 +18,7 @@ export interface ToolActivityItemProps extends ActivityDisclosureStateProps {
   fileActivity?: FileActivityView | null;
   onKillTool?: (toolCallId: string) => void;
   onLoadFullOutput?: (toolCallId: string) => Promise<string>;
-  onOpenKbPath?: (path: string) => void;
+  onOpenKbPath?: OpenKbPathHandler;
 }
 
 /** Renders one tool invocation: task marker, file-activity card, or the standard tool block. */

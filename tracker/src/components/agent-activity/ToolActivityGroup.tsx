@@ -9,6 +9,7 @@ import { ToolActivityItem } from "@/components/agent-activity/ToolActivityItem";
 import { TOOL_GROUP_ICON } from "@/components/agent-activity/toolGroupIcons";
 import { assistantToolCallToView } from "@/components/assistant/assistantToolCall";
 import { fileActivityFromToolCall } from "@/components/assistant/fileActivity";
+import type { OpenKbPathHandler } from "@/lib/openKbPath";
 import { summarizeGroup, type ToolCallGroup, type ToolGroupSummary } from "@/lib/toolCallGroups";
 import type { AgentTaskSnapshot } from "@/types/agentTasks";
 import type { AssistantToolCall } from "@/services/assistant";
@@ -33,7 +34,7 @@ interface ToolActivityGroupProps extends ActivityDisclosureStateProps {
   taskSnapshot?: AgentTaskSnapshot | null;
   onKillTool?: (toolCallId: string) => void;
   onLoadFullOutput?: (toolCallId: string) => Promise<string>;
-  onOpenKbPath?: (path: string) => void;
+  onOpenKbPath?: OpenKbPathHandler;
   callKeys?: readonly string[];
 }
 

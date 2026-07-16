@@ -713,6 +713,7 @@
       "showMore": "… show more",
       "openInKnowledgeBase": "Open in knowledge base",
       "kbPathMissing": "Could not find a docs path for this plan.",
+      "kbCreateFailed": "Could not create the plan page in the knowledge base.",
       "loadFullOutput": "Load full output ({{size}})",
       "loadingFullOutput": "Loading full output…",
       "loadFullOutputFailed": "Could not load the full output.",

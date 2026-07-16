@@ -3,6 +3,7 @@ import { memo } from "react";
 import { AssistantMarkdown } from "@/components/assistant/AssistantMarkdown";
 import { ToolActivityTimeline } from "@/components/assistant/ToolActivityTimeline";
 import { buildAssistantTimelineItems } from "@/components/assistant/assistantTimelineItems";
+import type { OpenKbPathHandler } from "@/lib/openKbPath";
 import type { AssistantContentBlock, AssistantToolCall } from "@/services/assistant";
 import type { AgentTaskSnapshot } from "@/types/agentTasks";
 
@@ -10,7 +11,7 @@ interface AssistantTurnTimelineProps {
   contentBlocks: readonly AssistantContentBlock[];
   toolCalls: readonly AssistantToolCall[];
   fallbackContent?: string;
-  onOpenDocumentPath?: (path: string) => void;
+  onOpenDocumentPath?: OpenKbPathHandler;
   taskSnapshot?: AgentTaskSnapshot | null;
   onKillTool?: (toolCallId: string) => void;
   onLoadFullOutput?: (toolCallId: string) => Promise<string>;

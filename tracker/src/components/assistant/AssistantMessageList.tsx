@@ -9,6 +9,7 @@ import {
 } from "@/components/assistant/WorkingIndicator";
 import type { OpenWorkspaceDiffRequest } from "@/components/assistant/EditedFilesSummary";
 import type { ComposerContextChipRef } from "@/components/assistant/contextMentions";
+import type { OpenKbPathHandler } from "@/lib/openKbPath";
 import type { AssistantChatMessage } from "@/services/assistant";
 import type { AgentTaskSnapshot } from "@/types/agentTasks";
 
@@ -34,7 +35,7 @@ interface AssistantMessageListProps {
   connectionError: string | null;
   channelReady: boolean;
   planApprovalMessageId: string | null;
-  onOpenDocumentPath?: (path: string) => void;
+  onOpenDocumentPath?: OpenKbPathHandler;
   onInsertContext: (ref: ComposerContextChipRef) => void;
   onOpenWorkspaceDiff?: (request: OpenWorkspaceDiffRequest) => void;
   onApprovePlan: AssistantChatPlanApprovalAction["onApprove"];

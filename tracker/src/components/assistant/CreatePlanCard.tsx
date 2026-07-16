@@ -2,6 +2,7 @@ import { BookOpen } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
+import type { OpenKbPathHandler } from "@/lib/openKbPath";
 import { resolveCreatePlanKbPath } from "@/lib/toolCallDisplay";
 
 export interface CreatePlanRequest {
@@ -15,7 +16,7 @@ export interface CreatePlanRequest {
 interface CreatePlanCardProps {
   request: CreatePlanRequest;
   onSubmit: (requestId: string, action: "accept" | "reject") => void;
-  onOpenKbPath?: (path: string) => void;
+  onOpenKbPath?: OpenKbPathHandler;
   disabled?: boolean;
 }
 
@@ -46,7 +47,9 @@ export function CreatePlanCard({ request, onSubmit, onOpenKbPath, disabled }: Cr
             variant="ghost"
             size="sm"
             disabled={disabled}
-            onClick={() => onOpenKbPath(kbPath)}
+            onClick={() =>
+              onOpenKbPath(kbPath, request.plan ? { seedMarkdown: request.plan } : undefined)
+            }
             className="gap-1.5"
           >
             <BookOpen className="size-3.5" aria-hidden />

@@ -713,6 +713,7 @@
       "showMore": "… mostrar mais",
       "openInKnowledgeBase": "Abrir na knowledge base",
       "kbPathMissing": "Não foi possível encontrar um caminho de docs para este plano.",
+      "kbCreateFailed": "Não foi possível criar a página do plano na knowledge base.",
       "loadFullOutput": "Carregar saída completa ({{size}})",
       "loadingFullOutput": "Carregando saída completa…",
       "loadFullOutputFailed": "Não foi possível carregar a saída completa.",

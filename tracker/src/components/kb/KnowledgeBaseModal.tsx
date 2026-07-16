@@ -31,7 +31,6 @@ import {
   deleteAsset,
   deleteFolder,
   getIssuePage,
-  getIssueRepoTree,
   getPage,
   getProjectOverview,
   getRepoTree,
@@ -90,22 +89,17 @@ export function KnowledgeBaseModal({
     issueMode && effectiveEntries.length > 0 ? "changed" : "all",
   );
   const repoSlugs = useMemo(() => overview?.repositories.map((repo) => repo.repoSlug) ?? [], [overview]);
-  const loadRepoTree = useCallback(
-    (scopeProjectSlug: string, repoSlug: string) =>
-      issueIdentifier
-        ? getIssueRepoTree(scopeProjectSlug, issueIdentifier, repoSlug)
-        : getRepoTree(scopeProjectSlug, repoSlug),
-    [issueIdentifier],
-  );
-  const { treesByRepo, reloadRepo } = useKbAllRepoTrees(open ? projectSlug : "", repoSlugs, loadRepoTree);
+  // Always list the project KB tree. Issue trees only contain git-changed docs, so
+  // using them here emptied "Todas as docs" when the task had no doc edits yet.
+  const { treesByRepo, reloadRepo } = useKbAllRepoTrees(open ? projectSlug : "", repoSlugs, getRepoTree);
   const changedPathSet = useMemo(() => new Set(effectiveEntries.map((entry) => entry.path)), [effectiveEntries]);
   const displayedTreesByRepo = useMemo(() => {
     if (!issueMode || effectiveEntries.length === 0) return treesByRepo;
     if (filter === "changed") {
       return withSyntheticChangedPages(treesByRepo, repoSlugs, effectiveEntries);
     }
-    // "Todas as docs" still shows the issue worktree tree, but also surfaces
-    // branch-only docs (e.g. superpowers/) that exist in the issue worktree.
+    // "Todas as docs" shows the project tree and also surfaces branch-only docs
+    // (e.g. superpowers/) that exist in the issue worktree but not on base.
     return augmentTreesWithChangedPages(treesByRepo, repoSlugs, effectiveEntries);
   }, [effectiveEntries, filter, issueMode, repoSlugs, treesByRepo]);
   const selectedIsAsset = isKbImageAssetPath(activePath);

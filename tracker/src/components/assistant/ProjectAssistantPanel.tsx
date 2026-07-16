@@ -114,6 +114,8 @@ import {
 import { normalizeIssueIdentifier } from "@/lib/issueIdentifiers";
 import { buildKbDocumentPageIndex, resolveKbDocumentLinkTarget } from "@/lib/kbDocumentLinks";
 import { normalizeKbDocumentReference } from "@/lib/assistantKbReferences";
+import { ensureIssueKbPage } from "@/lib/ensureIssueKbPage";
+import type { OpenKbPathOptions } from "@/lib/openKbPath";
 import {
   normalizeSkillProfileId,
   resolveSkillProfile,
@@ -495,29 +497,55 @@ export function ProjectAssistantPanel({
     [kbDocumentPageIndex, kbOverview, preferredKbRepoSlug, projectSlug],
   );
   const openKnowledgeBase = useCallback(
-    (path?: string | null) => {
+    (path?: string | null, options?: OpenKbPathOptions) => {
       if (!projectSlug) return;
 
-      if (path) {
-        const resolved = resolveKbDocument(path);
-        const normalized = resolved?.path ?? normalizeKbDocumentReference(path) ?? path.trim();
-        setKbFocusPath(normalized || null);
-        setKbFocusRepo(resolved?.repoSlug ?? preferredKbRepoSlug);
-        // Refresh issue-changed docs so brand-new CreatePlan files surface in the modal.
+      const openWith = (focusPath: string | null, focusRepo: string | null) => {
+        setKbFocusPath(focusPath);
+        setKbFocusRepo(focusRepo);
         setChangedDocsRefreshKey((current) => current + 1);
-      } else {
-        setKbFocusPath(null);
-        setKbFocusRepo(null);
+        setKnowledgeBaseOpen(true);
+      };
+
+      if (!path) {
+        openWith(null, null);
+        return;
       }
 
-      setKnowledgeBaseOpen(true);
+      const resolved = resolveKbDocument(path);
+      const normalized = resolved?.path ?? normalizeKbDocumentReference(path) ?? path.trim();
+      const repo = resolved?.repoSlug ?? preferredKbRepoSlug;
+      const seedMarkdown = options?.seedMarkdown?.trim() || null;
+
+      if (normalized && repo && seedMarkdown && issueIdentifier) {
+        void ensureIssueKbPage({
+          projectSlug,
+          issueIdentifier,
+          repoSlug: repo,
+          path: normalized,
+          markdown: seedMarkdown,
+          fallbackRepoSlugs: kbRepoSlugs,
+        })
+          .then((result) => {
+            openWith(normalized, result.repoSlug);
+          })
+          .catch(() => {
+            toast.error(t("issue.toolCall.kbCreateFailed"));
+            openWith(normalized, repo);
+          });
+        return;
+      }
+
+      openWith(normalized || null, repo);
     },
-    [preferredKbRepoSlug, projectSlug, resolveKbDocument],
+    [issueIdentifier, kbRepoSlugs, preferredKbRepoSlug, projectSlug, resolveKbDocument, t],
   );
   const handleOpenDocumentPath = useCallback(
-    (path: string) => {
+    (path: string, options?: OpenKbPathOptions) => {
       if (projectSlug) {
-        openKnowledgeBase(path);
+        // Forward seedMarkdown from CreatePlan tool cards — dropping options
+        // left Abrir-na-KB opening a path that was never written to disk.
+        openKnowledgeBase(path, options);
         return;
       }
       onOpenDocumentPath?.(path);
@@ -1964,7 +1992,7 @@ export function ProjectAssistantPanel({
       <CreatePlanCard
         request={pendingCreatePlan}
         onSubmit={submitCreatePlanDecision}
-        onOpenKbPath={(path) => openKnowledgeBase(path)}
+        onOpenKbPath={(path, options) => openKnowledgeBase(path, options)}
         disabled={!channelReady}
       />
     </div>

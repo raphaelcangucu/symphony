@@ -137,6 +137,7 @@ describe("ToolCallBlock", () => {
 
   it("offers Open in knowledge base when kbPath is set", async () => {
     const onOpenKbPath = vi.fn();
+    const planMarkdown = "# Plan\n\nSee [spec](docs/superpowers/specs/example.md).";
     const { container } = render(
       <ToolCallBlock
         view={{
@@ -145,6 +146,7 @@ describe("ToolCallBlock", () => {
           description: "overview",
           kind: "create_plan",
           kbPath: "docs/superpowers/specs/example.md",
+          input: { value: planMarkdown, language: "markdown" },
         }}
         onOpenKbPath={onOpenKbPath}
       />,
@@ -156,6 +158,8 @@ describe("ToolCallBlock", () => {
     expect(openKb.querySelector(".lucide-book-open")).toBeTruthy();
     fireEvent.click(openKb);
 
-    expect(onOpenKbPath).toHaveBeenCalledWith("docs/superpowers/specs/example.md");
+    expect(onOpenKbPath).toHaveBeenCalledWith("docs/superpowers/specs/example.md", {
+      seedMarkdown: planMarkdown,
+    });
   });
 });
