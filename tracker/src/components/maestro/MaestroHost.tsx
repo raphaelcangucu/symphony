@@ -1,6 +1,6 @@
-import { X } from "lucide-react";
+import { SquareArrowOutUpRight, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
 import { ProjectAssistantPanel } from "@/components/assistant/ProjectAssistantPanel";
@@ -17,6 +17,7 @@ import {
   type MaestroContext,
 } from "@/lib/maestroContext";
 import { cn } from "@/lib/utils";
+import { assistantPath } from "@/lib/workspaceRoutes";
 import { ensureActiveFreeformThread } from "@/services/assistantThreads";
 
 const PANEL_OPEN_STORAGE_KEY = "symphony.maestro.panelOpen";
@@ -64,6 +65,20 @@ function contextLabel(ctx: MaestroContext, t: (key: string, opts?: Record<string
       return t("maestro.context.issue", { identifier: ctx.issueIdentifier });
     case "kb":
       return t("maestro.context.kb");
+  }
+}
+
+/** Deep link to the full-page surface for contexts that have one, else null. */
+function fullPagePath(ctx: MaestroContext, freeformThreadId: number | null): string | null {
+  switch (ctx.kind) {
+    case "home":
+      return freeformThreadId === null ? null : `/assistant/${freeformThreadId}`;
+    case "project":
+      return assistantPath(ctx.projectSlug);
+    case "issue":
+    case "kb":
+      // The issue drawer and KB workspace are already their full surface.
+      return null;
   }
 }
 
@@ -174,16 +189,35 @@ export function MaestroHost() {
                 {contextLabel(ctx, t)}
               </span>
             </div>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 shrink-0"
-              aria-label={t("maestro.close")}
-              onClick={handleClose}
-            >
-              <X className="h-4 w-4" />
-            </Button>
+            <div className="flex shrink-0 items-center gap-1">
+              {fullPagePath(ctx, freeformThreadId) ? (
+                <Button
+                  asChild
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  title={t("maestro.openFullPage")}
+                >
+                  <Link
+                    to={fullPagePath(ctx, freeformThreadId) as string}
+                    aria-label={t("maestro.openFullPage")}
+                  >
+                    <SquareArrowOutUpRight className="h-4 w-4" />
+                  </Link>
+                </Button>
+              ) : null}
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                aria-label={t("maestro.close")}
+                onClick={handleClose}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
           </header>
 
           <div className="min-h-0 flex-1">

@@ -88,4 +88,36 @@ describe("MaestroHost", () => {
     expect(panel).toHaveAttribute("data-project", "acme");
     expect(panel).toHaveAttribute("data-issue", "ACME-7");
   });
+
+  it("links home to the full-page freeform thread", async () => {
+    const user = userEvent.setup();
+    renderAt("/projects");
+
+    await user.click(await screen.findByRole("button", { name: /maestro/i }));
+    await screen.findByTestId("assistant-panel");
+
+    const link = await screen.findByRole("link", { name: /full page/i });
+    expect(link).toHaveAttribute("href", "/assistant/42");
+  });
+
+  it("links a project board to the project assistant page", async () => {
+    const user = userEvent.setup();
+    renderAt("/projects/acme/board");
+
+    await user.click(await screen.findByRole("button", { name: /maestro/i }));
+    await screen.findByTestId("assistant-panel");
+
+    const link = await screen.findByRole("link", { name: /full page/i });
+    expect(link).toHaveAttribute("href", "/projects/acme/assistant");
+  });
+
+  it("omits the full-page link on an issue drawer", async () => {
+    const user = userEvent.setup();
+    renderAt("/projects/acme/board/issues/ACME-7");
+
+    await user.click(await screen.findByRole("button", { name: /maestro/i }));
+    await screen.findByTestId("assistant-panel");
+
+    expect(screen.queryByRole("link", { name: /full page/i })).toBeNull();
+  });
 });
