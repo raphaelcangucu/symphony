@@ -80,6 +80,12 @@ defmodule SymphonyElixirWeb.TrackerErrors do
   def render(conn, :invalid_commit_message),
     do: error(conn, 422, "invalid_commit_message", dgettext("errors", "Commit message is required."))
 
+  def render(conn, :nothing_to_commit),
+    do: error(conn, 422, "nothing_to_commit", dgettext("errors", "Nothing to commit."))
+
+  def render(conn, :no_answer),
+    do: error(conn, 422, "no_answer", dgettext("errors", "Could not generate a commit message."))
+
   def render(conn, {:commit_failed, repo, reason}) do
     error(conn, 422, "commit_failed", dgettext("errors", "Failed to commit workspace changes."), %{
       repo: repo,

@@ -242,6 +242,70 @@ defmodule SymphonyElixirWeb.Tracker.WorkspaceDiffControllerTest do
     assert %{"error" => %{"code" => "invalid_commit_message"}} = json_response(conn, 422)
   end
 
+  test "summaries returns branch, ahead count, and dirty state", %{issue: issue} do
+    conn =
+      get(
+        authorized_conn(),
+        "/api/tracker/v1/projects/advising/issues/#{issue.identifier}/diff/summaries"
+      )
+
+    assert %{"data" => [%{"repo" => "advising", "branch" => branch, "ahead_count" => ahead_count, "dirty" => true}]} =
+             json_response(conn, 200)
+
+    assert is_binary(branch)
+    assert is_integer(ahead_count)
+  end
+
+  test "push returns no results when no workspace branch is ahead", %{issue: issue} do
+    conn =
+      post(
+        authorized_conn(),
+        "/api/tracker/v1/projects/advising/issues/#{issue.identifier}/diff/push",
+        %{}
+      )
+
+    assert %{"data" => []} = json_response(conn, 200)
+  end
+
+  test "generate_commit_message rejects clean workspaces", %{issue: issue} do
+    commit_conn =
+      post(
+        authorized_conn(),
+        "/api/tracker/v1/projects/advising/issues/#{issue.identifier}/diff/commit",
+        %{"message" => "feat: save tracker diff"}
+      )
+
+    assert %{"data" => [%{"repo" => "advising"}]} = json_response(commit_conn, 200)
+
+    conn =
+      post(
+        authorized_conn(),
+        "/api/tracker/v1/projects/advising/issues/#{issue.identifier}/diff/generate-commit-message",
+        %{}
+      )
+
+    assert %{"error" => %{"code" => "nothing_to_commit"}} = json_response(conn, 422)
+  end
+
+  test "generate_commit_message returns the injected runner response", %{issue: issue} do
+    previous_runner = Application.get_env(:symphony_elixir, :commit_message_generator_runner)
+
+    Application.put_env(:symphony_elixir, :commit_message_generator_runner, fn _workspace, _prompt, _issue, _opts ->
+      {:ok, %{assistant_message: "feat: test message"}}
+    end)
+
+    on_exit(fn -> restore_app_env(:commit_message_generator_runner, previous_runner) end)
+
+    conn =
+      post(
+        authorized_conn(),
+        "/api/tracker/v1/projects/advising/issues/#{issue.identifier}/diff/generate-commit-message",
+        %{}
+      )
+
+    assert %{"data" => %{"message" => "feat: test message"}} = json_response(conn, 200)
+  end
+
   test "stats_thread/files_thread/file_patch_thread proxy to the thread's workspace", %{tmp_dir: tmp_dir} do
     persisted_workspace = Path.join(tmp_dir, "thread-ws")
     File.mkdir_p!(persisted_workspace)
@@ -286,6 +350,9 @@ defmodule SymphonyElixirWeb.Tracker.WorkspaceDiffControllerTest do
 
   defp restore_env(key, nil), do: System.delete_env(key)
   defp restore_env(key, value), do: System.put_env(key, value)
+
+  defp restore_app_env(key, nil), do: Application.delete_env(:symphony_elixir, key)
+  defp restore_app_env(key, value), do: Application.put_env(:symphony_elixir, key, value)
 
   defp sh!(cwd, command) do
     {output, status} = System.cmd("bash", ["-lc", command], cd: cwd, stderr_to_stdout: true)

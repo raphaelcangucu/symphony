@@ -173,6 +173,15 @@ defmodule SymphonyElixirWeb.Router do
     get("/projects/:project_slug/issues/:identifier/diff/files", WorkspaceDiffController, :files)
     get("/projects/:project_slug/issues/:identifier/diff/patch", WorkspaceDiffController, :file_patch)
     post("/projects/:project_slug/issues/:identifier/diff/commit", WorkspaceDiffController, :commit)
+    get("/projects/:project_slug/issues/:identifier/diff/summaries", WorkspaceDiffController, :summaries)
+    post("/projects/:project_slug/issues/:identifier/diff/push", WorkspaceDiffController, :push)
+
+    post(
+      "/projects/:project_slug/issues/:identifier/diff/generate-commit-message",
+      WorkspaceDiffController,
+      :generate_commit_message
+    )
+
     get("/projects/:project_slug/issues/:identifier/commit_evidence", CommitEvidenceController, :index)
 
     get(
