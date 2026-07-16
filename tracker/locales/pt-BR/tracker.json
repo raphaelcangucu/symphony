@@ -837,14 +837,6 @@
       "empty": "Nenhum commit do agente à frente do branch de integração ainda.",
       "files_one": "{{count}} arquivo",
       "files_other": "{{count}} arquivos",
-      "sheet": {
-        "title": "Commit",
-        "descriptionFallback": "Alterações do commit do agente",
-        "loadFailed": "Não foi possível carregar o diff do commit.",
-        "loadingDiff": "Carregando diff…",
-        "noFiles": "Nenhuma alteração de arquivo neste commit.",
-        "selectFile": "Selecione um arquivo para ver o diff."
-      },
       "errors": {
         "loadFailed": "Não foi possível carregar a evidência de commits."
       },
