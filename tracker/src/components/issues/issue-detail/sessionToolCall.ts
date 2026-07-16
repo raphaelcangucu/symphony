@@ -1,9 +1,11 @@
 import type { ToolBlockLanguage, ToolCallView } from "@/components/shared/ToolCallBlock";
+import { canonicalizeToolCall } from "@/lib/toolCallCanonicalize";
 import {
   enrichCursorToolPresentation,
   formatToolOutput,
   resolveToolDisplayName,
 } from "@/lib/toolCallDisplay";
+import type { ToolPresentation } from "@/lib/toolCallPresentation";
 import { classifyToolName, type ToolGroupKind, type ToolGroupStatus } from "@/lib/toolCallGroups";
 import type { SessionLogEntry, SessionLogEntryLanguage } from "@/types/session-log";
 
@@ -123,6 +125,22 @@ export function sessionGroupStatus(pairs: SessionToolPair[]): ToolGroupStatus {
   return "complete";
 }
 
+export function sessionPairToTyped(pair: SessionToolPair): {
+  view: ToolCallView;
+  presentation: ToolPresentation;
+} {
+  const view = sessionPairToView(pair.call, pair.result);
+  const args = parseBodyArgs(pair.call.body);
+  const name = pair.call.title || "unknown";
+  const presentation = canonicalizeToolCall({
+    name,
+    arguments: args,
+    output: pair.result?.body ?? null,
+    status: sessionPairPresentationStatus(pair.call, pair.result),
+  });
+  return { view, presentation };
+}
+
 export function sessionPairToView(call: SessionLogEntry, result: SessionLogEntry | null): ToolCallView {
   const outputBody = result?.body ? formatToolOutput(result.body) : null;
   const parsedArgs = parseJsonBody(call.body);
@@ -145,6 +163,30 @@ export function sessionPairToView(call: SessionLogEntry, result: SessionLogEntry
     kbPath: presentation.kbPath,
     kind: presentation.kind,
   };
+}
+
+function parseBodyArgs(body: string | null): Record<string, unknown> {
+  if (!body) return {};
+  try {
+    const parsed = JSON.parse(body) as unknown;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {
+    // body is not JSON
+  }
+  return {};
+}
+
+function sessionPairPresentationStatus(
+  call: SessionLogEntry,
+  result: SessionLogEntry | null,
+): string | null {
+  if (result) {
+    return result.status === "failed" ? "failed" : "completed";
+  }
+  if (call.status === "running") return "running";
+  return "completed";
 }
 
 function parseJsonBody(body: string | null): Record<string, unknown> | null {

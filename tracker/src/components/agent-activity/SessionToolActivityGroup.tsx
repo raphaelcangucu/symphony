@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 import { ActivityDisclosure } from "@/components/agent-activity/ActivityDisclosure";
 import { ToolActivityItem } from "@/components/agent-activity/ToolActivityItem";
 import { TOOL_GROUP_ICON } from "@/components/agent-activity/toolGroupIcons";
-import { sessionPairToView, type SessionToolPair } from "@/components/issues/issue-detail/sessionToolCall";
+import { sessionPairToTyped, type SessionToolPair } from "@/components/issues/issue-detail/sessionToolCall";
 import type { ToolGroupKind, ToolGroupStatus } from "@/lib/toolCallGroups";
 import type { AgentTaskSnapshot } from "@/types/agentTasks";
 
@@ -45,14 +45,18 @@ export function SessionToolActivityGroup({
       onExpandedChange={setOpen}
       details={
         <div className="space-y-0.5">
-          {pairs.map((pair, index) => (
-            <ToolActivityItem
-              key={`session-tool-${pair.call.callId ?? pair.call.title}-${index}`}
-              toolName={pair.call.title}
-              view={sessionPairToView(pair.call, pair.result)}
-              taskSnapshot={taskSnapshot}
-            />
-          ))}
+          {pairs.map((pair, index) => {
+            const typed = sessionPairToTyped(pair);
+            return (
+              <ToolActivityItem
+                key={`session-tool-${pair.call.callId ?? pair.call.title}-${index}`}
+                toolName={pair.call.title}
+                view={typed.view}
+                presentation={typed.presentation}
+                taskSnapshot={taskSnapshot}
+              />
+            );
+          })}
         </div>
       }
     />
