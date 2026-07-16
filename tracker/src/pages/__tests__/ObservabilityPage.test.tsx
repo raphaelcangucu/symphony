@@ -159,7 +159,7 @@ describe("ObservabilityPage", () => {
     expect((await screen.findAllByText("macro-markets")).length).toBeGreaterThan(0);
     expect(screen.getByRole("link", { name: /open session 508/i })).toHaveAttribute(
       "href",
-      "/projects/macro-markets/board/issues/508/sessions?surface=autonomous",
+      "/projects/macro-markets/workspaces?exec=508&surface=autonomous",
     );
     expect(screen.getByRole("link", { name: /open issue details 508/i })).toHaveAttribute(
       "href",

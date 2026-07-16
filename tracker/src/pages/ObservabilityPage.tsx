@@ -37,7 +37,7 @@ import { usePrMonitorObservability } from "@/hooks/usePrMonitorObservability";
 import { normalizeIssueIdentifier } from "@/lib/issueIdentifiers";
 import { elapsedSecondsSince } from "@/lib/timeFormat";
 import { cn } from "@/lib/utils";
-import { issueAgentTabPath, issuePath, withAgentSection, workspaceBasePath } from "@/lib/workspaceRoutes";
+import { issuePath, projectExecutionSessionPath, withAgentSection, workspaceBasePath } from "@/lib/workspaceRoutes";
 import { dispatchIssueAgent, type IssueDispatchAction } from "@/services/issueDispatch";
 import { listProjects } from "@/services/projects";
 import type { AgentExecution } from "@/types/agent-execution";
@@ -335,7 +335,7 @@ function SessionIssueLink({ row }: { row: ProjectRunningRow }) {
     return <>{row.issueIdentifier}</>;
   }
 
-  const sessionPath = issueAgentTabPath(row.resolvedProjectSlug, "board", identifier, "execution");
+  const sessionPath = projectExecutionSessionPath(row.resolvedProjectSlug, identifier);
   const detailPath = issuePath(row.resolvedProjectSlug, "board", identifier, "summary");
 
   return (
