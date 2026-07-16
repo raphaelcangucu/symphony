@@ -25,6 +25,7 @@ defmodule SymphonyElixir.Claude.AppServer.CliRunner do
   require Logger
 
   alias SymphonyElixir.Agent.CliRunner.Base
+  alias SymphonyElixir.Agent.SessionTranscript
 
   @type turn_args :: %{
           required(:command) => String.t(),
@@ -64,6 +65,11 @@ defmodule SymphonyElixir.Claude.AppServer.CliRunner do
     port = Base.open_cli_port(command, build_args(args), prompt_path, workspace)
     Base.notify_spawn(port, Map.get(args, :on_spawn))
 
+    bridged_on_event = fn notification ->
+      SessionTranscript.maybe_append_bridge_item(:claude, workspace, notification)
+      on_event.(notification)
+    end
+
     initial_state = %{
       cli_session_id: args.cli_session_id,
       usage: nil,
@@ -74,13 +80,13 @@ defmodule SymphonyElixir.Claude.AppServer.CliRunner do
     }
 
     handlers = [
-      on_json: fn payload, state -> process_event(payload, on_event, state) end,
+      on_json: fn payload, state -> process_event(payload, bridged_on_event, state) end,
       on_stray_line: fn line, state ->
         Base.log_stray_line(line, "Claude cli stream")
         maybe_flag_invalid_resume(line, state)
       end,
       on_exit: fn status, state ->
-        Base.finalize_exit(on_event, status, state,
+        Base.finalize_exit(bridged_on_event, status, state,
           exit_label: "claude",
           transform_usage: &usage_with_total/1
         )

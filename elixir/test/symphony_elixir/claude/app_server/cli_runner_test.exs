@@ -29,11 +29,11 @@ defmodule SymphonyElixir.Claude.AppServer.CliRunnerTest do
 
     events = collector |> Agent.get(&Enum.reverse/1)
     Agent.stop(collector)
-    {result, events}
+    {result, events, workspace}
   end
 
   test "happy turn captures session id, usage, cost, and emits translated events" do
-    {result, events} = run("happy")
+    {result, events, workspace} = run("happy")
 
     assert {:ok, %{cli_session_id: "sess-123", status: :completed} = turn} = result
     assert turn.usage == %{input_tokens: 10, output_tokens: 5, total_tokens: 15}
@@ -51,17 +51,30 @@ defmodule SymphonyElixir.Claude.AppServer.CliRunnerTest do
       end)
 
     assert tool_item["name"] == "mcp__symphony__list_issues"
+
+    symphony = Path.join(workspace, ".symphony/claude-session.jsonl")
+    assert File.exists?(symphony)
+    decoded = symphony |> File.read!() |> String.split("\n", trim: true) |> Enum.map(&Jason.decode!/1)
+
+    assert Enum.any?(decoded, fn row ->
+             get_in(row, ["message", "content"])
+             |> List.wrap()
+             |> Enum.any?(fn
+               %{"type" => "tool_use", "name" => "mcp__symphony__list_issues"} -> true
+               _ -> false
+             end)
+           end)
   end
 
   test "error result yields turn/failed and an error tuple" do
-    {result, events} = run("error")
+    {result, events, _workspace} = run("error")
 
     assert {:error, {:turn_failed, _details}} = result
     assert Enum.any?(events, &(&1["method"] == "turn/failed"))
   end
 
   test "timeout kills the process and returns turn_timeout" do
-    {result, _events} = run("hang", timeout_ms: 300)
+    {result, _events, _workspace} = run("hang", timeout_ms: 300)
     assert {:error, :turn_timeout} = result
   end
 
@@ -176,7 +189,7 @@ defmodule SymphonyElixir.Claude.AppServer.CliRunnerTest do
   end
 
   test "multi-partial deltas, usage updates and rate limits" do
-    {result, events} = run("multi")
+    {result, events, _workspace} = run("multi")
 
     # Final turn result
     assert {:ok, %{cli_session_id: "sess-multi", status: :completed}} = result
@@ -208,12 +221,12 @@ defmodule SymphonyElixir.Claude.AppServer.CliRunnerTest do
   end
 
   test "a --resume to a missing session is surfaced as resume_session_not_found" do
-    {result, _events} = run("resume-aware", cli_session_id: "sess-stale")
+    {result, _events, _workspace} = run("resume-aware", cli_session_id: "sess-stale")
     assert {:error, {:resume_session_not_found, "sess-stale"}} = result
   end
 
   test "resume-aware without a prior session starts fresh and succeeds" do
-    {result, events} = run("resume-aware")
+    {result, events, _workspace} = run("resume-aware")
     assert {:ok, %{cli_session_id: "sess-fresh", status: :completed}} = result
 
     created_texts =

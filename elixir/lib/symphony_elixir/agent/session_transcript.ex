@@ -80,6 +80,69 @@ defmodule SymphonyElixir.Agent.SessionTranscript do
     end
   end
 
+  @doc """
+  Builds a Claude-style JSONL line from a bridge `item/created` item map.
+  Returns `nil` for item types that should not be persisted (e.g. thinking).
+  """
+  @spec line_from_bridge_item(map()) :: map() | nil
+  def line_from_bridge_item(%{"type" => "text", "text" => text})
+      when is_binary(text) and text != "" do
+    %{
+      "type" => "assistant",
+      "message" => %{"content" => [%{"type" => "text", "text" => text}]}
+    }
+  end
+
+  def line_from_bridge_item(%{"type" => "tool_call", "tool_use_id" => id, "name" => name} = item)
+      when is_binary(id) and is_binary(name) do
+    %{
+      "type" => "assistant",
+      "message" => %{
+        "content" => [
+          %{
+            "type" => "tool_use",
+            "id" => id,
+            "name" => name,
+            "input" => Map.get(item, "input") || %{}
+          }
+        ]
+      }
+    }
+  end
+
+  def line_from_bridge_item(%{"type" => "tool_result", "tool_use_id" => id} = item)
+      when is_binary(id) do
+    %{
+      "type" => "user",
+      "message" => %{
+        "content" => [
+          %{
+            "type" => "tool_result",
+            "tool_use_id" => id,
+            "content" => Map.get(item, "content"),
+            "is_error" => Map.get(item, "is_error", false)
+          }
+        ]
+      }
+    }
+  end
+
+  def line_from_bridge_item(_item), do: nil
+
+  @doc false
+  @spec maybe_append_bridge_item(atom() | String.t(), Path.t(), map()) :: :ok
+  def maybe_append_bridge_item(agent_kind, workspace, %{
+        "method" => "item/created",
+        "params" => %{"item" => item}
+      }) do
+    case line_from_bridge_item(item) do
+      nil -> :ok
+      line -> append(agent_kind, workspace, line)
+    end
+  end
+
+  def maybe_append_bridge_item(_agent_kind, _workspace, _notification), do: :ok
+
   defp encode_line(line) when is_binary(line), do: {:ok, String.trim_trailing(line)}
   defp encode_line(%{} = entry), do: Jason.encode(entry)
   defp encode_line(_), do: :error

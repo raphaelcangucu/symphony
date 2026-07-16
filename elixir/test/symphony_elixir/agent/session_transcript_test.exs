@@ -40,6 +40,22 @@ defmodule SymphonyElixir.Agent.SessionTranscriptTest do
              })
   end
 
+  test "line_from_bridge_item/1 maps tool_call and tool_result" do
+    tool_call = %{
+      "type" => "tool_call",
+      "tool_use_id" => "tc1",
+      "name" => "Shell",
+      "input" => %{"command" => "ls"}
+    }
+
+    assert %{
+             "type" => "assistant",
+             "message" => %{"content" => [%{"type" => "tool_use", "id" => "tc1", "name" => "Shell"}]}
+           } = SessionTranscript.line_from_bridge_item(tool_call)
+
+    assert SessionTranscript.line_from_bridge_item(%{"type" => "thinking", "thinking" => "x"}) == nil
+  end
+
   test "write_sidecar/3 and read_sidecar/2 round-trip meta", %{workspace: workspace} do
     meta = %{
       "session_id" => "chat-1",
