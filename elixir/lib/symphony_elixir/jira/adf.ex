@@ -1,12 +1,12 @@
 defmodule SymphonyElixir.Jira.Adf do
   @moduledoc """
-  Conversion between plain text and Atlassian Document Format (ADF).
+  Conversion between Markdown/plain text and Atlassian Document Format (ADF).
 
   JIRA Cloud REST API v3 represents `description` and comment bodies as an ADF
-  JSON tree rather than plain strings. Symphony stores plain text, so writes wrap
-  text in a single-paragraph-per-block ADF doc.
+  JSON tree rather than plain strings. Symphony stores Markdown, so writes parse
+  Markdown into structured ADF nodes (headings, lists, code blocks, marks, etc.).
 
-  Reads (`to_text/1`) render the tree to **Markdown** so structure survives the
+  Reads (`to_text/1`) render the tree back to **Markdown** so structure survives the
   round trip: headings, bullet/ordered lists (nested), block quotes, fenced code
   blocks, horizontal rules, tables (GitHub-flavored) and the inline marks
   strong/em/code/strike/link. The tracker renders descriptions through a Markdown
@@ -19,8 +19,8 @@ defmodule SymphonyElixir.Jira.Adf do
   @type adf :: %{required(String.t()) => term()}
 
   @doc """
-  Wraps plain text in an ADF document. Blank lines split the text into separate
-  paragraphs. `nil` or empty input yields a doc with no content.
+  Parses Markdown (or plain text) into an ADF document. Blank lines separate
+  blocks. `nil` or empty input yields a doc with no content.
   """
   @spec from_text(String.t() | nil) :: adf()
   def from_text(nil), do: empty_doc()
@@ -28,8 +28,11 @@ defmodule SymphonyElixir.Jira.Adf do
   def from_text(text) when is_binary(text) do
     content =
       text
-      |> split_paragraphs()
-      |> Enum.map(&paragraph_node/1)
+      |> String.replace("\r\n", "\n")
+      |> String.replace("\r", "\n")
+      |> String.split("\n")
+      |> parse_blocks([])
+      |> Enum.reverse()
 
     %{"type" => "doc", "version" => @doc_version, "content" => content}
   end
@@ -46,15 +49,343 @@ defmodule SymphonyElixir.Jira.Adf do
 
   def to_text(node) when is_map(node), do: block(node)
 
-  defp split_paragraphs(text) do
+  # ── Markdown → ADF (blocks) ───────────────────────────────────────────────
+
+  defp parse_blocks([], acc), do: acc
+
+  defp parse_blocks([line | rest], acc) do
+    cond do
+      String.trim(line) == "" ->
+        parse_blocks(rest, acc)
+
+      rule?(line) ->
+        parse_blocks(rest, [%{"type" => "rule"} | acc])
+
+      match = Regex.run(~r/^```([\w-]*)\s*$/, line) ->
+        language = Enum.at(match, 1) || ""
+        {code_lines, remaining} = take_until_fence(rest, [])
+        code = code_lines |> Enum.reverse() |> Enum.join("\n")
+
+        node = %{
+          "type" => "codeBlock",
+          "attrs" => %{"language" => language},
+          "content" => if(code == "", do: [], else: [%{"type" => "text", "text" => code}])
+        }
+
+        parse_blocks(remaining, [node | acc])
+
+      heading = heading_line(line) ->
+        {level, text} = heading
+        node = %{"type" => "heading", "attrs" => %{"level" => level}, "content" => parse_inline(text)}
+        parse_blocks(rest, [node | acc])
+
+      quote_line?(line) ->
+        {quote_lines, remaining} = take_while_quote([line | rest], [])
+        inner =
+          quote_lines
+          |> Enum.map(&strip_quote_prefix/1)
+          |> parse_blocks([])
+          |> Enum.reverse()
+
+        parse_blocks(remaining, [%{"type" => "blockquote", "content" => inner} | acc])
+
+      table_start?(line, rest) ->
+        {rows, remaining} = take_table_rows([line | rest], [])
+        cells_rows = Enum.map(rows, &table_row_cells/1)
+        # Drop separator row (second physical row when present as --- cells)
+        data_rows =
+          case cells_rows do
+            [header, _separator | body] -> [header | body]
+            other -> other
+          end
+
+        table_rows =
+          Enum.map(data_rows, fn cells ->
+            %{
+              "type" => "tableRow",
+              "content" =>
+                Enum.map(cells, fn cell ->
+                  %{
+                    "type" => "tableCell",
+                    "content" => [%{"type" => "paragraph", "content" => parse_inline(cell)}]
+                  }
+                end)
+            }
+          end)
+
+        parse_blocks(remaining, [%{"type" => "table", "content" => table_rows} | acc])
+
+      list_line?(line) ->
+        {items, remaining, kind} = take_list([line | rest], [])
+        list_type = if kind == :ordered, do: "orderedList", else: "bulletList"
+        parse_blocks(remaining, [%{"type" => list_type, "content" => build_list_items(items)} | acc])
+
+      true ->
+        {para_lines, remaining} = take_paragraph([line | rest], [])
+        text = join_paragraph_lines(Enum.reverse(para_lines))
+        parse_blocks(remaining, [%{"type" => "paragraph", "content" => parse_inline(text)} | acc])
+    end
+  end
+
+  defp rule?(line), do: String.trim(line) == "---"
+
+  defp heading_line(line) do
+    case Regex.run(~r/^([#]{1,6})\s+(.+)$/, line) do
+      [_, hashes, text] -> {String.length(hashes), String.trim(text)}
+      _ -> nil
+    end
+  end
+
+  defp quote_line?(line), do: String.match?(line, ~r/^>\s?/)
+
+  defp strip_quote_prefix(line) do
+    case Regex.run(~r/^>\s?(.*)$/, line) do
+      [_, rest] -> rest
+      _ -> line
+    end
+  end
+
+  defp take_while_quote([], acc), do: {Enum.reverse(acc), []}
+
+  defp take_while_quote([line | rest], acc) do
+    if quote_line?(line) do
+      take_while_quote(rest, [line | acc])
+    else
+      {Enum.reverse(acc), [line | rest]}
+    end
+  end
+
+  defp take_until_fence([], acc), do: {acc, []}
+
+  defp take_until_fence([line | rest], acc) do
+    if String.trim(line) == "```" do
+      {acc, rest}
+    else
+      take_until_fence(rest, [line | acc])
+    end
+  end
+
+  defp table_row?(line), do: String.match?(String.trim(line), ~r/^\|.*\|$/)
+
+  defp table_start?(line, [separator | _rest]), do: table_row?(line) and table_separator?(separator)
+  defp table_start?(_line, _rest), do: false
+
+  defp table_separator?(line) do
+    trimmed = String.trim(line)
+    String.match?(trimmed, ~r/^\|[\s:\-|]+\|$/) and String.contains?(trimmed, "-")
+  end
+
+  defp take_table_rows([], acc), do: {Enum.reverse(acc), []}
+
+  defp take_table_rows([line | rest], acc) do
+    if table_row?(line) do
+      take_table_rows(rest, [line | acc])
+    else
+      {Enum.reverse(acc), [line | rest]}
+    end
+  end
+
+  defp table_row_cells(line) do
+    line
+    |> String.trim()
+    |> String.trim_leading("|")
+    |> String.trim_trailing("|")
+    |> String.split("|")
+    |> Enum.map(&String.trim/1)
+  end
+
+  defp list_line?(line) do
+    case list_match(line) do
+      nil -> false
+      _ -> true
+    end
+  end
+
+  defp list_match(line) do
+    cond do
+      match = Regex.run(~r/^(\s*)[-*]\s+(.*)$/, line) ->
+        [_, indent, text] = match
+        {div(String.length(indent), 2), :bullet, text}
+
+      match = Regex.run(~r/^(\s*)\d+\.\s+(.*)$/, line) ->
+        [_, indent, text] = match
+        {div(String.length(indent), 2), :ordered, text}
+
+      true ->
+        nil
+    end
+  end
+
+  defp take_list([], acc), do: finish_list(acc, [])
+
+  defp take_list([line | rest], acc) do
+    case list_match(line) do
+      {depth, kind, text} ->
+        take_list(rest, [{depth, kind, text} | acc])
+
+      nil ->
+        finish_list(acc, [line | rest])
+    end
+  end
+
+  defp finish_list(acc, remaining) do
+    items = Enum.reverse(acc)
+    kind = items |> List.first() |> elem(1)
+    {items, remaining, kind}
+  end
+
+  # Build nested listItem trees from flat {depth, kind, text} tuples.
+  defp build_list_items(items) do
+    items
+    |> nest_list_items(0)
+    |> elem(0)
+  end
+
+  defp nest_list_items([], _depth), do: {[], []}
+
+  defp nest_list_items([{item_depth, kind, text} | rest] = all, depth) do
+    cond do
+      item_depth < depth ->
+        {[], all}
+
+      item_depth > depth ->
+        # Caller should have consumed nested items; skip orphan deeper items by promoting.
+        nest_list_items(all, item_depth)
+
+      true ->
+        {children, after_children} = take_nested_children(rest, depth, kind)
+
+        content =
+          case children do
+            [] ->
+              [%{"type" => "paragraph", "content" => parse_inline(text)}]
+
+            nested ->
+              [
+                %{"type" => "paragraph", "content" => parse_inline(text)}
+                | nested
+              ]
+          end
+
+        item = %{"type" => "listItem", "content" => content}
+        {siblings, remaining} = nest_list_items(after_children, depth)
+        {[item | siblings], remaining}
+    end
+  end
+
+  defp take_nested_children(rest, parent_depth, _parent_kind) do
+    case rest do
+      [{child_depth, child_kind, _} | _] when child_depth > parent_depth ->
+        {nested_items, remaining} = nest_list_items(rest, child_depth)
+        list_type = if child_kind == :ordered, do: "orderedList", else: "bulletList"
+        {[%{"type" => list_type, "content" => nested_items}], remaining}
+
+      _ ->
+        {[], rest}
+    end
+  end
+
+  defp take_paragraph([], acc), do: {acc, []}
+
+  defp take_paragraph([line | rest], acc) do
+    cond do
+      String.trim(line) == "" ->
+        {acc, rest}
+
+      rule?(line) or heading_line(line) != nil or quote_line?(line) or list_line?(line) or
+          String.match?(line, ~r/^```/) or table_start?(line, rest) ->
+        {acc, [line | rest]}
+
+      true ->
+        take_paragraph(rest, [line | acc])
+    end
+  end
+
+  defp join_paragraph_lines([]), do: ""
+
+  defp join_paragraph_lines([first | rest]) do
+    Enum.reduce(rest, first, fn line, acc ->
+      if String.ends_with?(acc, "  ") do
+        String.trim_trailing(acc, " ") <> "  \n" <> line
+      else
+        # Soft wrap: preserve a newline so "line one  \\nline two" round-trips
+        # when the source was split on "\\n" before joining.
+        acc <> "\n" <> line
+      end
+    end)
+  end
+
+  # ── Markdown → ADF (inline) ───────────────────────────────────────────────
+
+  defp parse_inline(text) when is_binary(text) do
     text
-    |> String.split(~r/\n{2,}/)
+    |> split_hard_breaks()
+    |> Enum.flat_map(fn
+      :hard_break -> [%{"type" => "hardBreak"}]
+      segment when is_binary(segment) -> parse_inline_segment(segment, [])
+    end)
+  end
+
+  defp split_hard_breaks(text) do
+    text
+    |> String.split("  \n")
+    |> Enum.intersperse(:hard_break)
     |> Enum.reject(&(&1 == ""))
   end
 
-  defp paragraph_node(paragraph) do
-    %{"type" => "paragraph", "content" => [%{"type" => "text", "text" => paragraph}]}
+  defp parse_inline_segment("", acc), do: Enum.reverse(acc)
+
+  defp parse_inline_segment(text, acc) do
+    patterns = [
+      {~r/^`([^`]+)`/, fn [_, code] -> text_node(code, [%{"type" => "code"}]) end},
+      {~r/^\[([^\]]+)\]\(([^)]+)\)/,
+       fn [_, label, href] -> text_node(label, [%{"type" => "link", "attrs" => %{"href" => href}}]) end},
+      {~r/^\*\*(.+?)\*\*/, fn [_, inner] -> text_node(inner, [%{"type" => "strong"}]) end},
+      {~r/^~~(.+?)~~/, fn [_, inner] -> text_node(inner, [%{"type" => "strike"}]) end},
+      {~r/^\*(.+?)\*/, fn [_, inner] -> text_node(inner, [%{"type" => "em"}]) end}
+    ]
+
+    case first_match(text, patterns) do
+      {node, rest} ->
+        parse_inline_segment(rest, [node | acc])
+
+      nil ->
+        {plain, rest} = take_plain(text)
+        parse_inline_segment(rest, [text_node(plain, []) | acc])
+    end
   end
+
+  defp first_match(text, patterns) do
+    Enum.find_value(patterns, fn {regex, builder} ->
+      case Regex.run(regex, text) do
+        nil ->
+          nil
+
+        match ->
+          full = hd(match)
+          {builder.(match), String.slice(text, String.length(full)..-1//1)}
+      end
+    end)
+  end
+
+  defp take_plain(text) do
+    case Regex.run(~r/^(.[^`*~\[]*)/, text) do
+      [_, plain] ->
+        # Ensure we always consume at least one character to avoid infinite loops
+        # on special characters that failed to match a mark pattern.
+        if plain == "" do
+          {String.slice(text, 0, 1), String.slice(text, 1..-1//1)}
+        else
+          {plain, String.slice(text, String.length(plain)..-1//1)}
+        end
+
+      nil ->
+        {String.slice(text, 0, 1), String.slice(text, 1..-1//1)}
+    end
+  end
+
+  defp text_node(text, []), do: %{"type" => "text", "text" => text}
+  defp text_node(text, marks), do: %{"type" => "text", "text" => text, "marks" => marks}
 
   # ── Block-level rendering ─────────────────────────────────────────────────
 

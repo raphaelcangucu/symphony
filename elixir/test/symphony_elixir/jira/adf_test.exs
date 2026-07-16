@@ -36,6 +36,147 @@ defmodule SymphonyElixir.Jira.AdfTest do
     end
   end
 
+  describe "from_text/1 markdown parsing" do
+    test "parses headings into heading nodes" do
+      assert Adf.from_text("## Title") ==
+               doc([
+                 %{
+                   "type" => "heading",
+                   "attrs" => %{"level" => 2},
+                   "content" => [%{"type" => "text", "text" => "Title"}]
+                 }
+               ])
+    end
+
+    test "parses bullet lists" do
+      assert Adf.from_text("- First\n- Second") ==
+               doc([%{"type" => "bulletList", "content" => [list_item("First"), list_item("Second")]}])
+    end
+
+    test "parses ordered lists" do
+      assert Adf.from_text("1. First\n2. Second") ==
+               doc([%{"type" => "orderedList", "content" => [list_item("First"), list_item("Second")]}])
+    end
+
+    test "parses nested lists" do
+      nested = %{
+        "type" => "listItem",
+        "content" => [
+          paragraph("Parent"),
+          %{"type" => "bulletList", "content" => [list_item("Child")]}
+        ]
+      }
+
+      assert Adf.from_text("- Parent\n  - Child") == doc([%{"type" => "bulletList", "content" => [nested]}])
+    end
+
+    test "parses strong and emphasis marks" do
+      assert Adf.from_text("**bold** and *italic*") ==
+               doc([
+                 %{
+                   "type" => "paragraph",
+                   "content" => [
+                     %{"type" => "text", "text" => "bold", "marks" => [%{"type" => "strong"}]},
+                     %{"type" => "text", "text" => " and "},
+                     %{"type" => "text", "text" => "italic", "marks" => [%{"type" => "em"}]}
+                   ]
+                 }
+               ])
+    end
+
+    test "parses inline code and strikethrough" do
+      assert Adf.from_text("`run()` ~~gone~~") ==
+               doc([
+                 %{
+                   "type" => "paragraph",
+                   "content" => [
+                     %{"type" => "text", "text" => "run()", "marks" => [%{"type" => "code"}]},
+                     %{"type" => "text", "text" => " "},
+                     %{"type" => "text", "text" => "gone", "marks" => [%{"type" => "strike"}]}
+                   ]
+                 }
+               ])
+    end
+
+    test "parses links as link marks" do
+      assert Adf.from_text("[Civitas](https://x.test)") ==
+               doc([
+                 %{
+                   "type" => "paragraph",
+                   "content" => [
+                     %{
+                       "type" => "text",
+                       "text" => "Civitas",
+                       "marks" => [%{"type" => "link", "attrs" => %{"href" => "https://x.test"}}]
+                     }
+                   ]
+                 }
+               ])
+    end
+
+    test "parses hard breaks from trailing double spaces" do
+      assert Adf.from_text("line one  \nline two") ==
+               doc([
+                 %{
+                   "type" => "paragraph",
+                   "content" => [
+                     %{"type" => "text", "text" => "line one"},
+                     %{"type" => "hardBreak"},
+                     %{"type" => "text", "text" => "line two"}
+                   ]
+                 }
+               ])
+    end
+
+    test "parses fenced code blocks with language" do
+      assert Adf.from_text("```elixir\nIO.puts(1)\n```") ==
+               doc([
+                 %{
+                   "type" => "codeBlock",
+                   "attrs" => %{"language" => "elixir"},
+                   "content" => [%{"type" => "text", "text" => "IO.puts(1)"}]
+                 }
+               ])
+    end
+
+    test "parses block quotes" do
+      assert Adf.from_text("> quoted") == doc([%{"type" => "blockquote", "content" => [paragraph("quoted")]}])
+    end
+
+    test "parses horizontal rules" do
+      assert Adf.from_text("---") == doc([%{"type" => "rule"}])
+    end
+
+    test "parses GitHub-flavored tables" do
+      markdown = "| First Name | Last Name |\n| --- | --- |\n| Ada | Lovelace |"
+
+      assert Adf.from_text(markdown) ==
+               doc([
+                 %{
+                   "type" => "table",
+                   "content" => [
+                     %{"type" => "tableRow", "content" => [table_cell("First Name"), table_cell("Last Name")]},
+                     %{"type" => "tableRow", "content" => [table_cell("Ada"), table_cell("Lovelace")]}
+                   ]
+                 }
+               ])
+    end
+
+    test "round-trips structured markdown through to_text" do
+      markdown = "# Scope\n\nIntro line.\n\n- One\n- Two"
+
+      assert markdown |> Adf.from_text() |> Adf.to_text() == markdown
+    end
+
+    test "parses workpad-style headings without leaving markdown markers as text" do
+      doc = Adf.from_text("## Codex Workpad\n\n- plan item")
+
+      assert get_in(doc, ["content", Access.at(0), "type"]) == "heading"
+      assert get_in(doc, ["content", Access.at(0), "content", Access.at(0), "text"]) == "Codex Workpad"
+      refute get_in(doc, ["content", Access.at(0), "content", Access.at(0), "text"]) =~ "##"
+    end
+  end
+
   describe "to_text/1" do
     test "flattens nested ADF text nodes with paragraph breaks" do
       doc = %{

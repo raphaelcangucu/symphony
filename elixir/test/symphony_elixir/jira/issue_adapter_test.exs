@@ -375,6 +375,24 @@ defmodule SymphonyElixir.Jira.IssueAdapterTest do
     assert comment.author == "Bot"
   end
 
+  test "add_comment converts markdown headings into ADF heading nodes" do
+    Stub.set(fn :post, "/rest/api/3/issue/ABC-12/comment", body ->
+      assert get_in(body, ["body", "content", Access.at(0), "type"]) == "heading"
+      assert get_in(body, ["body", "content", Access.at(0), "attrs", "level"]) == 2
+      assert get_in(body, ["body", "content", Access.at(0), "content", Access.at(0), "text"]) == "Codex Workpad"
+
+      {:ok,
+       %{
+         "id" => "c-2",
+         "body" => body["body"],
+         "author" => %{"displayName" => "Bot"},
+         "updated" => "2026-06-01T13:00:00.000Z"
+       }}
+    end)
+
+    assert {:ok, _comment} = IssueAdapter.add_comment(@project, "ABC-12", "## Codex Workpad\n\nplan", %{})
+  end
+
   test "update_comment puts ADF to the comment endpoint and returns the comment map" do
     Stub.set(fn :put, "/rest/api/3/issue/ABC-12/comment/c-1", body ->
       assert get_in(body, ["body", "type"]) == "doc"
