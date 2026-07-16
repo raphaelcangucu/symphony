@@ -70,4 +70,28 @@ describe("fileActivityFromToolCall", () => {
     expect(fileActivityFromToolCall(call({ status: "running" }))?.status).toBe("running");
     expect(fileActivityFromToolCall(call({ name: "apply_patch", status: "error" }))?.status).toBe("error");
   });
+
+  it("treats Cursor Read as file read activity", () => {
+    const view = fileActivityFromToolCall(
+      call({
+        name: "Read",
+        arguments: { path: "shared/GroupShare/GranteeAutocomplete.js" },
+        output: "export function …",
+      }),
+    );
+    expect(view?.kind).toBe("read");
+    expect(view?.title).toContain("GranteeAutocomplete.js");
+  });
+
+  it("treats Claude Bash as command activity", () => {
+    const view = fileActivityFromToolCall(
+      call({
+        name: "Bash",
+        arguments: { command: "pwd", description: "Print cwd" },
+        output: "/tmp",
+      }),
+    );
+    expect(view?.kind).toBe("command");
+    expect(view?.title).toBe("Print cwd");
+  });
 });
