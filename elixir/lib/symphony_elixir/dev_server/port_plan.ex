@@ -95,6 +95,58 @@ defmodule SymphonyElixir.DevServer.PortPlan do
     end
   end
 
+  @doc """
+  Deterministic, ordered candidate ports for one service inside its issue slot.
+
+  Returns `[preferred | fallbacks]`, all inside the slot. `preferred` is the
+  service's canonical port (offset). Fallback offsets are the remaining in-slot
+  offsets, partitioned across the `service_count` sibling services round-robin so
+  that no two services can ever choose the same fallback port. This lets a serve
+  script pick an alternate leased port (e.g. when its preferred host port is
+  already published by an unmanaged container) without colliding with a sibling.
+
+  Returns `[]` when there is no bounded slot (pool-scan mode) or the offset does
+  not fit the slot; callers then fall back to `choose_port/4` scanning.
+  """
+  @spec candidate_ports(context(), non_neg_integer(), pos_integer()) :: [pos_integer()]
+  def candidate_ports(ctx, offset, service_count \\ 1)
+
+  def candidate_ports(%{slot_index: nil}, _offset, _service_count), do: []
+
+  def candidate_ports(
+        %{slot_index: slot_index, ports_per_slot: ports_per_slot, band: {band_start, _band_end}},
+        offset,
+        service_count
+      )
+      when is_integer(slot_index) and slot_index >= 0 and
+             is_integer(ports_per_slot) and ports_per_slot > 0 and
+             is_integer(offset) and offset >= 0 and
+             is_integer(service_count) and service_count >= 1 do
+    offset
+    |> candidate_offsets(ports_per_slot, service_count)
+    |> Enum.flat_map(fn candidate_offset ->
+      case port(band_start, slot_index, candidate_offset, ports_per_slot) do
+        {:ok, candidate_port} -> [candidate_port]
+        {:error, _reason} -> []
+      end
+    end)
+  end
+
+  def candidate_ports(_ctx, _offset, _service_count), do: []
+
+  defp candidate_offsets(offset, _ports_per_slot, _service_count) when offset < 0, do: []
+
+  defp candidate_offsets(offset, ports_per_slot, _service_count) when offset >= ports_per_slot, do: []
+
+  defp candidate_offsets(offset, ports_per_slot, service_count) do
+    fallback_offsets =
+      for candidate_offset <- service_count..(ports_per_slot - 1)//1,
+          rem(candidate_offset - service_count, service_count) == offset,
+          do: candidate_offset
+
+    Enum.uniq([offset | fallback_offsets])
+  end
+
   defp free?(ctx, candidate, claimed) do
     allocate(ctx).([candidate, candidate], claimed) == {:ok, candidate}
   end

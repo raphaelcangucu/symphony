@@ -940,6 +940,27 @@ describe("ProjectAssistantPanel", () => {
     expect(push).toHaveBeenCalledWith("resume_turn", {});
   });
 
+  it("dismisses an interrupted turn from the banner Cancel button", async () => {
+    join.mockImplementation(() => ({
+      receive: (status: string, callback: (response: unknown) => void) =>
+        status === "ok"
+          ? callback({ messages: [], thread_id: 1, last_turn: { status: "interrupted", can_resume: true } })
+          : undefined,
+    }));
+
+    render(<ProjectAssistantPanel projectSlug="macro-markets" view="board" mode="page" />);
+
+    const cancel = await screen.findByRole("button", { name: /^cancel$/i });
+    const dismissIndex = pushReceives.length;
+    fireEvent.click(cancel);
+    expect(push).toHaveBeenCalledWith("dismiss_interrupted_turn", {});
+
+    act(() => pushReceives[dismissIndex]?.ok?.({}));
+    await waitFor(() => {
+      expect(screen.queryByText(/previous turn was interrupted/i)).not.toBeInTheDocument();
+    });
+  });
+
   it("reattaches a live turn instead of offering Resume when join reports turn_running", async () => {
     join.mockImplementation(() => ({
       receive: (status: string, callback: (response: unknown) => void) =>

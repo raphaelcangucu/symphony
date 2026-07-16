@@ -100,4 +100,39 @@ defmodule SymphonyElixir.DevServer.PortPlanTest do
   test "choose_port ignores a stale owned port that is not the canonical slot port" do
     assert PortPlan.choose_port(ctx(%{}), 2, [], 99_999) == {:ok, 10_002}
   end
+
+  describe "candidate_ports/3" do
+    test "leads with the preferred port then in-slot fallbacks" do
+      assert PortPlan.candidate_ports(ctx(%{}), 0, 2) == [10_000, 10_002, 10_004, 10_006]
+      assert PortPlan.candidate_ports(ctx(%{}), 1, 2) == [10_001, 10_003, 10_005, 10_007]
+    end
+
+    test "partitions fallbacks disjointly across sibling services" do
+      s0 = PortPlan.candidate_ports(ctx(%{}), 0, 3)
+      s1 = PortPlan.candidate_ports(ctx(%{}), 1, 3)
+      s2 = PortPlan.candidate_ports(ctx(%{}), 2, 3)
+
+      assert hd(s0) == 10_000
+      assert hd(s1) == 10_001
+      assert hd(s2) == 10_002
+
+      # Every candidate stays inside the slot and no two services overlap.
+      all = s0 ++ s1 ++ s2
+      assert Enum.all?(all, &(&1 in 10_000..10_007))
+      assert length(Enum.uniq(all)) == length(all)
+    end
+
+    test "gives a single service the whole slot" do
+      assert PortPlan.candidate_ports(ctx(%{}), 0, 1) ==
+               Enum.map(0..7, &(10_000 + &1))
+    end
+
+    test "returns an empty list when there is no bounded slot" do
+      assert PortPlan.candidate_ports(ctx(%{slot_index: nil}), 0, 2) == []
+    end
+
+    test "returns an empty list when the offset does not fit the slot" do
+      assert PortPlan.candidate_ports(ctx(%{}), 8, 2) == []
+    end
+  end
 end

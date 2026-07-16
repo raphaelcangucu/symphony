@@ -2068,6 +2068,27 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
     assert_reply(ref, :error, %{reason: _})
   end
 
+  test "dismiss_interrupted_turn clears resumable interrupted metadata" do
+    topic = "assistant:issue:macro-markets:DIS-5d"
+
+    {:ok, join_payload, socket} =
+      socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
+      |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, topic)
+
+    thread_id = join_payload.thread_id
+    {:ok, thread} = History.get_thread(thread_id)
+    {:ok, thread} = History.start_turn_state(thread, %{trigger: "user", prompt: "paused work"})
+    {:ok, _interrupted} = History.interrupt_turn_state(thread, "serve_restart")
+
+    ref = push(socket, "dismiss_interrupted_turn", %{})
+    assert_reply(ref, :ok, %{})
+    assert_push("turn_status", %{status: "completed", can_resume: false})
+
+    {:ok, after_thread} = History.get_thread(thread_id)
+    assert History.current_turn(after_thread)["status"] == "completed"
+    assert History.turn_payload(after_thread).can_resume == false
+  end
+
   test "resume_turn reattaches when a live worker is still registered after metadata desync" do
     topic = "assistant:issue:macro-markets:DIS-5b"
 

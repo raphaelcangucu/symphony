@@ -86,22 +86,58 @@ function itemStatus(item: Record<string, unknown>): string {
   return typeof item.status === "string" ? item.status.toLowerCase() : "";
 }
 
-export function extractKbDocumentReferencesFromMessage(message: AssistantChatMessage): string[] {
-  const references = new Set(extractKbDocumentReferencesFromMarkdown(message.content));
+/**
+ * Only small tool arguments are scanned for KB references. Tool `output` and `result`
+ * are intentionally excluded: shell dumps reach ~1 MB and previously caused multi-second
+ * main-thread freezes during streaming and history reveal.
+ */
+const MAX_TOOL_ARGS_SCAN_LENGTH = 4096;
+const MARKDOWN_MARKER_RE = /\.md/i;
+const MAX_REFERENCE_CACHE_ENTRIES = 512;
 
-  for (const toolCall of message.toolCalls) {
-    for (const reference of extractKbDocumentReferencesFromMarkdown(serializedToolCallReferenceText(toolCall))) {
-      references.add(reference);
-    }
-  }
-
-  return [...references];
+interface CachedMessageReferences {
+  key: string;
+  references: string[];
 }
 
-function serializedToolCallReferenceText(toolCall: AssistantToolCall): string {
-  return [toolCall.output, safeJsonStringify(toolCall.arguments), safeJsonStringify(toolCall.result)]
-    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
-    .join("\n");
+const messageReferenceCache = new Map<string, CachedMessageReferences>();
+
+export function extractKbDocumentReferencesFromMessage(message: AssistantChatMessage): string[] {
+  const scannableText = scannableReferenceText(message);
+  const cached = messageReferenceCache.get(message.id);
+  if (cached && cached.key === scannableText) return cached.references;
+
+  const references = extractKbDocumentReferencesFromMarkdown(scannableText);
+  storeMessageReferences(message.id, scannableText, references);
+
+  return references;
+}
+
+function storeMessageReferences(messageId: string, key: string, references: string[]): void {
+  if (messageReferenceCache.size >= MAX_REFERENCE_CACHE_ENTRIES && !messageReferenceCache.has(messageId)) {
+    const oldestKey = messageReferenceCache.keys().next().value;
+    if (oldestKey !== undefined) messageReferenceCache.delete(oldestKey);
+  }
+  messageReferenceCache.set(messageId, { key, references });
+}
+
+function scannableReferenceText(message: AssistantChatMessage): string {
+  const parts = [message.content];
+
+  for (const toolCall of message.toolCalls) {
+    const serializedArguments = scannableToolArguments(toolCall);
+    if (serializedArguments) parts.push(serializedArguments);
+  }
+
+  return parts.join("\n");
+}
+
+function scannableToolArguments(toolCall: AssistantToolCall): string | null {
+  const serialized = safeJsonStringify(toolCall.arguments);
+  if (!serialized || serialized.length > MAX_TOOL_ARGS_SCAN_LENGTH) return null;
+  if (!MARKDOWN_MARKER_RE.test(serialized)) return null;
+
+  return serialized;
 }
 
 function safeJsonStringify(value: unknown): string | null {

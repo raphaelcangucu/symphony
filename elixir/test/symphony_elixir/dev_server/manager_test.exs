@@ -251,11 +251,19 @@ defmodule SymphonyElixir.DevServer.ManagerTest do
     assert %DevServerRecord{status: "crashed"} = DevServerRecord.get_for_issue(project.id, "1878", record.id)
   end
 
-  test "list_for_issue adopts workspace preview-port when leased port is down", %{project: project} do
-    live_port = start_probe_server!()
+  test "list_for_issue rejects an out-of-lease preview-port and marks the ready server crashed", %{
+    project: project
+  } do
+    # Simulates the split-brain report (e.g. serve republished on :59595):
+    # a live host port that is NOT the leased port must never be blindly adopted.
+    out_of_lease_port = start_probe_server!()
     workspace = prepare_workspace!("1131")
     File.mkdir_p!(Path.join([workspace, "advising", ".symphony"]))
-    File.write!(Path.join([workspace, "advising", ".symphony", "preview-port"]), "#{live_port}\n")
+
+    File.write!(
+      Path.join([workspace, "advising", ".symphony", "preview-port"]),
+      "#{out_of_lease_port}\n"
+    )
 
     {:ok, _steps} =
       DevEnv.save_steps(project.slug, [
@@ -275,28 +283,19 @@ defmodule SymphonyElixir.DevServer.ManagerTest do
         working_dir: "advising",
         port: 41_097,
         url: "http://127.0.0.1:41097/",
-        status: "crashed",
+        status: "ready",
         primary: true,
         session_name: "sym-dev-advising-1131-advising"
       })
 
-    assert [
-             %{
-               id: id,
-               status: "ready",
-               port: ^live_port,
-               url: url
-             }
-           ] = Manager.list_for_issue(project.slug, "1131")
-
+    assert [%{id: id, status: "crashed", port: 41_097}] = Manager.list_for_issue(project.slug, "1131")
     assert id == record.id
-    assert url == "http://127.0.0.1:#{live_port}/"
 
-    assert %DevServerRecord{status: "ready", port: ^live_port} =
+    assert %DevServerRecord{status: "crashed", port: 41_097} =
              DevServerRecord.get_for_issue(project.id, "1131", record.id)
   end
 
-  test "list_for_issue does not adopt preview-port for stopped servers", %{project: project} do
+  test "list_for_issue does not heal stopped servers from a preview-port file", %{project: project} do
     live_port = start_probe_server!()
     workspace = prepare_workspace!("1132")
     File.mkdir_p!(Path.join([workspace, "advising", ".symphony"]))

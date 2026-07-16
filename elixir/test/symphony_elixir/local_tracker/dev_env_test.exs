@@ -61,6 +61,32 @@ defmodule SymphonyElixir.LocalTracker.DevEnvTest do
     assert serve.primary
   end
 
+  test "save_steps persists an optional stop_command for a serve step", %{project: _project} do
+    assert {:ok, _steps} =
+             DevEnv.save_steps("p", [
+               %{
+                 "description" => "Front",
+                 "command" => "bash .symphony/serve.sh",
+                 "stop_command" => "bash .symphony/stop.sh",
+                 "role" => "serve",
+                 "primary" => true
+               }
+             ])
+
+    assert [serve] = DevEnv.list_serve_steps("p")
+    assert serve.stop_command == "bash .symphony/stop.sh"
+  end
+
+  test "save_steps treats a blank stop_command as absent", %{project: _project} do
+    assert {:ok, _steps} =
+             DevEnv.save_steps("p", [
+               %{"description" => "Front", "command" => "npm run dev", "role" => "serve", "stop_command" => ""}
+             ])
+
+    assert [serve] = DevEnv.list_serve_steps("p")
+    assert serve.stop_command == nil
+  end
+
   test "exactly one primary survives save when several serve steps are marked primary", %{project: _project} do
     assert {:ok, _steps} =
              DevEnv.save_steps("p", [

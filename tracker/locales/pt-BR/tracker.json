@@ -2205,6 +2205,7 @@
       "removeQueued": "Remover mensagem enfileirada",
       "remove": "Remover",
       "turnInterrupted": "O turno anterior foi interrompido.",
+      "dismissInterrupted": "Cancelar",
       "resume": "Retomar",
       "scrollToBottom": "Ir para as mensagens mais recentes",
       "loadOldPrompts": "↑ Carregar prompts anteriores ({{count}})",

@@ -14,6 +14,7 @@ defmodule SymphonyElixir.LocalTracker.DevEnv.Step do
   schema "local_tracker_dev_env_steps" do
     field(:description, :string)
     field(:command, :string)
+    field(:stop_command, :string)
     field(:working_dir, :string)
     field(:position, :integer, default: 0)
     field(:source, :string, default: "manual")
@@ -36,6 +37,7 @@ defmodule SymphonyElixir.LocalTracker.DevEnv.Step do
       :project_id,
       :description,
       :command,
+      :stop_command,
       :working_dir,
       :position,
       :source,
@@ -60,6 +62,7 @@ defmodule SymphonyElixir.LocalTracker.DevEnv.Step do
     |> validate_inclusion(:source, @sources)
     |> validate_inclusion(:role, @roles)
     |> validate_inclusion(:ready_probe, @probes)
+    |> validate_length(:stop_command, min: 1)
   end
 
   @spec sources() :: [String.t()]

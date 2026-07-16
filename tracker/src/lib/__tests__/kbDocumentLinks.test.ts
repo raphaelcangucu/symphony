@@ -85,4 +85,15 @@ describe("linkifyExistingKbDocumentPaths", () => {
     const input = "Open [Spec](docs/market/spec.md) now.";
     expect(linkifyExistingKbDocumentPaths(input, resolve)).toBe(input);
   });
+
+  it("stays fast and lossless on large text without markdown references", () => {
+    const input = "x".repeat(200_000);
+
+    const start = performance.now();
+    const output = linkifyExistingKbDocumentPaths(input, resolve);
+    const elapsedMs = performance.now() - start;
+
+    expect(output).toBe(input);
+    expect(elapsedMs).toBeLessThan(250);
+  });
 });

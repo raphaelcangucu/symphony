@@ -1,5 +1,5 @@
 import {
-  KB_DOCUMENT_REFERENCE_TOKEN_RE,
+  findKbDocumentReferenceMatches,
   normalizeKbDocumentReference,
 } from "@/lib/assistantKbReferences";
 import { GENERAL_KB_PROJECT_SLUG, kbGeneralPagePath, kbPagePath } from "@/lib/kbRoutes";
@@ -72,12 +72,20 @@ export function linkifyExistingKbDocumentPaths(
 ): string {
   if (!markdown) return markdown;
 
-  const tokenRe = new RegExp(KB_DOCUMENT_REFERENCE_TOKEN_RE.source, KB_DOCUMENT_REFERENCE_TOKEN_RE.flags);
-  return markdown.replace(tokenRe, (raw, offset: number) => {
-    if (offset > 0 && markdown[offset - 1] === "(") return raw;
-    if (!resolve(raw)) return raw;
-    return `[${raw}](${raw})`;
-  });
+  const matches = findKbDocumentReferenceMatches(markdown);
+  if (matches.length === 0) return markdown;
+
+  let result = "";
+  let lastIndex = 0;
+  for (const { raw, start, end } of matches) {
+    result += markdown.slice(lastIndex, start);
+    const alreadyLinkTarget = start > 0 && markdown[start - 1] === "(";
+    result += alreadyLinkTarget || !resolve(raw) ? raw : `[${raw}](${raw})`;
+    lastIndex = end;
+  }
+  result += markdown.slice(lastIndex);
+
+  return result;
 }
 
 export function buildKbDocumentHref(projectSlug: string, repoSlug: string, pagePath: string): string {

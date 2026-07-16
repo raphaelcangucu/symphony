@@ -532,6 +532,29 @@ defmodule SymphonyElixir.Assistant.History do
     end)
   end
 
+  @doc """
+  Clears a resumable interrupted turn so the UI stops offering Resume without
+  re-dispatching the saved prompt.
+  """
+  @spec dismiss_interrupted_turn_state(Thread.t()) ::
+          {:ok, Thread.t()} | {:error, :not_interrupted | Ecto.Changeset.t()}
+  def dismiss_interrupted_turn_state(%Thread{} = thread) do
+    case current_turn(thread) do
+      %{"status" => "interrupted"} ->
+        patch_current_turn(thread, fn turn ->
+          turn
+          |> Map.put("status", "completed")
+          |> Map.put("interrupted_reason", nil)
+          |> Map.put("error", nil)
+          |> Map.put("active_tools", [])
+          |> Map.put("finished_at", turn["finished_at"] || now_iso())
+        end)
+
+      _ ->
+        {:error, :not_interrupted}
+    end
+  end
+
   @doc "Atomically interrupts the same running turn, preserving a completion that won the race."
   @spec interrupt_turn_state_if_running(Thread.t(), String.t()) ::
           {:ok, Thread.t()} | {:already_finished, Thread.t()} | {:error, term()}

@@ -482,6 +482,22 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     end
   end
 
+  def handle_in("dismiss_interrupted_turn", _payload, socket) do
+    with %{id: thread_id} when is_integer(thread_id) <- socket.assigns[:thread],
+         false <- TurnManager.running?(thread_id),
+         {:ok, reloaded} <- History.get_thread(thread_id),
+         {:ok, updated} <- History.dismiss_interrupted_turn_state(reloaded) do
+      payload = History.turn_payload(updated) || %{status: "completed", can_resume: false}
+      push(socket, "turn_status", normalize_turn_payload(payload))
+      {:reply, :ok, assign(socket, :thread, updated)}
+    else
+      true -> {:reply, {:error, %{reason: "assistant is busy"}}, socket}
+      {:error, :not_interrupted} -> {:reply, {:error, %{reason: "turn is not interrupted"}}, socket}
+      {:error, _} -> {:reply, {:error, %{reason: "cannot dismiss"}}, socket}
+      _ -> {:reply, {:error, %{reason: "cannot dismiss"}}, socket}
+    end
+  end
+
   def handle_in("submit_user_input", %{"request_id" => request_id, "answers" => answers}, socket)
       when is_map(answers) do
     if socket.assigns[:turn_status] != :running or not is_pid(socket.assigns[:turn_pid]) do
@@ -1018,7 +1034,10 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   end
 
   defp finish_failed_turn(reason, socket) do
-    if socket.assigns[:goal_paused] or goal_pause_interruption?(socket) do
+    # `or`/`and` require a strict boolean on the left; `:goal_paused` may be
+    # unset (nil) on freshly joined sockets, which used to crash this clause
+    # and swallow the assistant_error push for Cursor turn failures.
+    if socket.assigns[:goal_paused] == true or goal_pause_interruption?(socket) do
       :ok
     else
       push(socket, "assistant_error", %{message: error_reason(reason)})

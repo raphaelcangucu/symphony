@@ -19,6 +19,7 @@ import {
   requestHistorySync,
   resumeAuthoringGoal,
   resumeTurn,
+  dismissInterruptedTurn,
   setAuthoringGoalObjective,
   shouldAcceptGoalStatus,
   stopTurn,
@@ -526,6 +527,15 @@ describe("turn status channel", () => {
     resumeTurn(channel);
 
     expect(push).toHaveBeenCalledWith("resume_turn", {});
+  });
+
+  it("pushes dismiss_interrupted_turn with an empty payload", () => {
+    const push = vi.fn();
+    const channel = { push } as never;
+
+    dismissInterruptedTurn(channel);
+
+    expect(push).toHaveBeenCalledWith("dismiss_interrupted_turn", {});
   });
 
   it("pushes stop_turn and kill_tool", () => {

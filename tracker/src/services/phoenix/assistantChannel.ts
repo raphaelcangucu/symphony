@@ -484,6 +484,10 @@ export function resumeTurn(channel: Channel): ReturnType<Channel["push"]> {
   return channel.push("resume_turn", {});
 }
 
+export function dismissInterruptedTurn(channel: Channel): ReturnType<Channel["push"]> {
+  return channel.push("dismiss_interrupted_turn", {});
+}
+
 export function stopTurn(channel: Channel): ReturnType<Channel["push"]> {
   return channel.push("stop_turn", {});
 }

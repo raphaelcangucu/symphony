@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 
 import { useAssistantKbDocumentLinks } from "@/components/assistant/assistantKbDocumentLinksContext";
 import { Markdown } from "@/components/ui/markdown";
@@ -13,8 +13,15 @@ interface AssistantMarkdownProps {
 export function AssistantMarkdown({ content, onOpenDocumentPath }: AssistantMarkdownProps) {
   const kbLinks = useAssistantKbDocumentLinks();
   const openDocumentPath = onOpenDocumentPath ?? (kbLinks ? kbLinks.openDocument : undefined);
-  const renderedContent =
-    kbLinks && openDocumentPath ? linkifyExistingKbDocumentPaths(content, kbLinks.resolve) : content;
+  const shouldLinkify = Boolean(kbLinks && openDocumentPath);
+  const resolveKbLink = kbLinks?.resolve;
+  const renderedContent = useMemo(
+    () =>
+      shouldLinkify && resolveKbLink
+        ? linkifyExistingKbDocumentPaths(content, resolveKbLink)
+        : content,
+    [content, shouldLinkify, resolveKbLink],
+  );
 
   return (
     <Markdown

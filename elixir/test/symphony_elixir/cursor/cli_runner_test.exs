@@ -84,6 +84,9 @@ defmodule SymphonyElixir.Cursor.CliRunnerTest do
   test "argv: first turn omits --resume, resumed turn includes it; model and mcp flags included" do
     args = CliRunner.build_args(%{cli_session_id: nil, model: nil, mcp_config_path: nil})
     assert args =~ "--print --output-format stream-json --stream-partial-output"
+    # Fresh Symphony workspaces are not in cursor-agent's trust store; headless
+    # turns must always pass --trust or the CLI exits before any model call.
+    assert args =~ "--trust"
     refute args =~ "--resume"
     refute args =~ "--model"
     refute args =~ "--approve-mcps"
@@ -92,20 +95,28 @@ defmodule SymphonyElixir.Cursor.CliRunnerTest do
     assert args =~ "--resume chat-9"
     assert args =~ "--model composer-1"
     assert args =~ "--approve-mcps"
+    assert args =~ "--trust"
   end
 
   test "execution mode maps plan to native cursor plan mode and yolo to force" do
-    refute CliRunner.build_args(%{cli_session_id: nil, model: nil, mcp_config_path: nil}) =~ "--force"
+    default_args = CliRunner.build_args(%{cli_session_id: nil, model: nil, mcp_config_path: nil})
+    assert default_args =~ "--trust"
+    refute default_args =~ "--force"
 
-    refute CliRunner.build_args(%{cli_session_id: nil, model: nil, mcp_config_path: nil, execution_mode: "build"}) =~
-             "--force"
+    build_args =
+      CliRunner.build_args(%{cli_session_id: nil, model: nil, mcp_config_path: nil, execution_mode: "build"})
+
+    assert build_args =~ "--trust"
+    refute build_args =~ "--force"
 
     plan_args = CliRunner.build_args(%{cli_session_id: nil, model: nil, mcp_config_path: nil, execution_mode: "plan"})
     assert plan_args =~ "--mode plan"
+    assert plan_args =~ "--trust"
     refute plan_args =~ "--force"
 
     yolo_args = CliRunner.build_args(%{cli_session_id: nil, model: nil, mcp_config_path: nil, execution_mode: "yolo"})
     assert yolo_args =~ "--force"
+    assert yolo_args =~ "--trust"
     refute yolo_args =~ "--mode plan"
   end
 

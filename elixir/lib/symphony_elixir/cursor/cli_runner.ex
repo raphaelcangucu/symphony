@@ -1,11 +1,11 @@
 defmodule SymphonyElixir.Cursor.CliRunner do
   @moduledoc """
   Runs ONE Cursor Agent CLI turn:
-  `cursor-agent --print --output-format stream-json --stream-partial-output --force ...`
-  with the prompt delivered via a temp file + stdin redirect (Erlang ports
-  cannot half-close stdin), parses the NDJSON stream and emits bridge-style
-  notifications (`item/progress`, `item/created`, `turn/completed`,
-  `turn/failed`) through `on_event`.
+  `cursor-agent --print --output-format stream-json --stream-partial-output --trust ...`
+  (plus `--force` only in yolo mode) with the prompt delivered via a temp file
+  + stdin redirect (Erlang ports cannot half-close stdin), parses the NDJSON
+  stream and emits bridge-style notifications (`item/progress`, `item/created`,
+  `turn/completed`, `turn/failed`) through `on_event`.
 
   Component rule: NO tracker/Phoenix/Ecto imports — Jason + stdlib only.
 
@@ -111,7 +111,10 @@ defmodule SymphonyElixir.Cursor.CliRunner do
 
   @spec build_args(map()) :: String.t()
   def build_args(%{cli_session_id: cli_session_id, model: model} = args) do
-    base = "--print --output-format stream-json --stream-partial-output"
+    # Always --trust: Symphony owns these workspaces and creates them under the
+    # configured workspace root. Without it, cursor-agent prints
+    # "Workspace Trust Required" and exits before any model call on fresh dirs.
+    base = "--print --output-format stream-json --stream-partial-output --trust"
 
     mode_flag = mode_flag(Map.get(args, :execution_mode))
     force_flag = force_flag(Map.get(args, :execution_mode))
@@ -143,6 +146,7 @@ defmodule SymphonyElixir.Cursor.CliRunner do
   defp mode_flag(_execution_mode), do: ""
 
   # Only `yolo` enables --force (Run Everything / bypass command confirmation).
+  # Workspace trust is separate (`--trust` above) and must not depend on mode.
   defp force_flag("yolo"), do: " --force"
   defp force_flag(_execution_mode), do: ""
 
@@ -180,6 +184,7 @@ defmodule SymphonyElixir.Cursor.CliRunner do
     state
     |> then(&maybe_flag_invalid_resume(line, &1))
     |> maybe_flag_auth_error(line)
+    |> maybe_flag_workspace_trust_error(line)
   end
 
   defp maybe_flag_auth_error(state, line) do
@@ -187,6 +192,17 @@ defmodule SymphonyElixir.Cursor.CliRunner do
       %{
         state
         | error: "Authentication required — run `cursor agent login` or set CURSOR_API_KEY"
+      }
+    else
+      state
+    end
+  end
+
+  defp maybe_flag_workspace_trust_error(state, line) do
+    if String.contains?(line, "Workspace Trust Required") do
+      %{
+        state
+        | error: "Workspace trust required — cursor-agent refused an untrusted workspace (pass --trust)"
       }
     else
       state
