@@ -112,44 +112,55 @@ defmodule SymphonyElixir.Notion.Importer do
     meta_path = Path.join(root, "meta.json")
 
     with :ok <- File.mkdir_p(assets_dir),
-         {:ok, asset_count} <- download_assets(assets, assets_dir, client_opts),
-         :ok <- File.write(markdown_path, markdown),
-         :ok <-
-           write_meta(meta_path, %{
-             source_url: source_url,
-             notion_id: notion_id,
-             kind: kind,
-             title: title,
-             imported_at: DateTime.utc_now() |> DateTime.to_iso8601(),
-             asset_count: asset_count,
-             warnings: warnings
-           }) do
-      {:ok,
-       %{
-         import_id: import_id,
-         title: title,
-         kind: kind,
-         source_url: source_url,
-         markdown_path: markdown_path,
-         assets_dir: assets_dir,
-         meta_path: meta_path,
-         asset_count: asset_count,
-         warnings: warnings,
-         preview_markdown: String.slice(markdown, 0, @preview_bytes)
-       }}
+         {:ok, asset_count, asset_warnings} <- download_assets(assets, assets_dir, client_opts) do
+      all_warnings = warnings ++ asset_warnings
+
+      with :ok <- File.write(markdown_path, markdown),
+           :ok <-
+             write_meta(meta_path, %{
+               source_url: source_url,
+               notion_id: notion_id,
+               kind: kind,
+               title: title,
+               imported_at: DateTime.utc_now() |> DateTime.to_iso8601(),
+               asset_count: asset_count,
+               warnings: all_warnings
+             }) do
+        {:ok,
+         %{
+           import_id: import_id,
+           title: title,
+           kind: kind,
+           source_url: source_url,
+           markdown_path: markdown_path,
+           assets_dir: assets_dir,
+           meta_path: meta_path,
+           asset_count: asset_count,
+           warnings: all_warnings,
+           preview_markdown: String.slice(markdown, 0, @preview_bytes)
+         }}
+      end
     end
   end
 
   defp download_assets(assets, assets_dir, client_opts) when is_list(assets) do
     assets_expanded = Path.expand(assets_dir)
 
-    Enum.reduce_while(assets, {:ok, 0}, fn asset, {:ok, count} ->
-      case download_one_asset(asset, assets_dir, assets_expanded, client_opts) do
-        :ok -> {:cont, {:ok, count + 1}}
-        {:error, reason} -> {:halt, {:error, reason}}
-        :skip -> {:cont, {:ok, count}}
-      end
-    end)
+    {count, warnings} =
+      Enum.reduce(assets, {0, []}, fn asset, {count, warnings} ->
+        case download_one_asset(asset, assets_dir, assets_expanded, client_opts) do
+          :ok ->
+            {count + 1, warnings}
+
+          {:warning, message} when is_binary(message) ->
+            {count, warnings ++ [message]}
+
+          :skip ->
+            {count, warnings}
+        end
+      end)
+
+    {:ok, count, warnings}
   end
 
   defp download_one_asset(%{url: url, filename: filename}, assets_dir, assets_expanded, client_opts)
@@ -158,15 +169,25 @@ defmodule SymphonyElixir.Notion.Importer do
 
     if safe_under_dir?(dest, assets_expanded) do
       case Client.download(url, client_opts) do
-        {:ok, body} -> File.write(dest, body)
-        {:error, reason} -> {:error, reason}
+        {:ok, body} ->
+          case File.write(dest, body) do
+            :ok -> :ok
+            {:error, reason} -> {:warning, asset_warning(filename, reason)}
+          end
+
+        {:error, reason} ->
+          {:warning, asset_warning(filename, reason)}
       end
     else
-      :skip
+      {:warning, "Rejected unsafe asset filename: #{filename}"}
     end
   end
 
   defp download_one_asset(_, _, _, _), do: :skip
+
+  defp asset_warning(filename, reason) when is_binary(filename) do
+    "Failed to download asset #{filename}: #{inspect(reason)}"
+  end
 
   defp safe_under_dir?(path, parent) when is_binary(path) and is_binary(parent) do
     parent_prefix = String.trim_trailing(parent, "/") <> "/"

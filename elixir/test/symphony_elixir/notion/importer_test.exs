@@ -120,6 +120,65 @@ defmodule SymphonyElixir.Notion.ImporterTest do
              Importer.import_url("https://example.com/not-notion", api_key: "k")
   end
 
+  test "continues import when asset download fails and records warning" do
+    asset_url = "https://cdn.example.com/photo.png"
+
+    http = fn method, url, _opts ->
+      cond do
+        method == :get and String.contains?(url, "/v1/pages/") ->
+          {:ok, 200,
+           %{
+             "object" => "page",
+             "id" => @page_id,
+             "properties" => %{
+               "title" => %{"type" => "title", "title" => [%{"plain_text" => "With Image"}]}
+             },
+             "url" => "https://www.notion.so/39c33f2eafc14020ac9bc223b4520d17"
+           }}
+
+        method == :get and String.contains?(url, "/v1/blocks/") ->
+          {:ok, 200,
+           %{
+             "results" => [
+               %{
+                 "id" => "img-block-1",
+                 "type" => "image",
+                 "image" => %{
+                   "type" => "external",
+                   "external" => %{"url" => asset_url}
+                 }
+               }
+             ],
+             "has_more" => false
+           }}
+
+        method == :get and url == asset_url ->
+          {:error, :timeout}
+
+        true ->
+          flunk("unexpected request: #{method} #{url}")
+      end
+    end
+
+    assert {:ok, result} =
+             Importer.import_url(
+               "https://www.notion.so/39c33f2eafc14020ac9bc223b4520d17",
+               api_key: "k",
+               http: http
+             )
+
+    assert result.kind == "page"
+    assert File.exists?(result.markdown_path)
+    assert File.read!(result.markdown_path) =~ "./assets/photo.png"
+    refute File.exists?(Path.join(result.assets_dir, "photo.png"))
+    assert result.asset_count == 0
+    assert Enum.any?(result.warnings, &String.contains?(&1, "photo.png"))
+    assert Enum.any?(result.warnings, &String.contains?(&1, "Failed to download"))
+
+    meta = result.meta_path |> File.read!() |> Jason.decode!()
+    assert Enum.any?(meta["warnings"], &String.contains?(&1, "Failed to download"))
+  end
+
   test "imports a database table and warns when truncated" do
     rows =
       for i <- 1..100 do
