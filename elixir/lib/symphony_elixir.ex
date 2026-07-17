@@ -23,6 +23,7 @@ defmodule SymphonyElixir.Application do
   def start(_type, _args) do
     :ok = SymphonyElixir.LogFile.configure()
     :ok = SymphonyElixir.Observability.SlowQueryLogger.attach()
+    :ok = SymphonyElixir.Observability.SqlLog.attach()
 
     Supervisor.start_link(
       root_children(),

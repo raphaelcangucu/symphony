@@ -10,4 +10,9 @@ defmodule SymphonyElixir.LogFileTest do
   test "default_log_file/1 builds the log path under a custom root" do
     assert LogFile.default_log_file("/tmp/symphony-logs") == "/tmp/symphony-logs/log/symphony.log"
   end
+
+  test "sql_log_file/1 derives the SQL log path next to the main log" do
+    assert LogFile.sql_log_file("/tmp/symphony-logs/log/symphony.log") ==
+             "/tmp/symphony-logs/log/symphony.sql.log"
+  end
 end

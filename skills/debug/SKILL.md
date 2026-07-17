@@ -19,7 +19,12 @@ description:
 - Primary runtime log: `log/symphony.log`
   - Default comes from `SymphonyElixir.LogFile` (`log/symphony.log`).
   - Includes orchestrator, agent runner, and Codex app-server lifecycle logs.
-- Rotated runtime logs: `log/symphony.log*`
+  - SQL query lines are excluded so this file's rotation window stays long.
+- SQL query log: `log/symphony.sql.log`
+  - Every Ecto query (emitted by `SymphonyElixir.Observability.SqlLog`), with
+    timings, params, and the app caller frame. Check it when you need to trace
+    reads/writes (e.g. which code path touched a record).
+- Rotated runtime logs: `log/symphony.log*` and `log/symphony.sql.log*`
   - Check these when the relevant run is older.
 
 ## Correlation Keys

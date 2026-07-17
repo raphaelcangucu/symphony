@@ -124,6 +124,11 @@ config :symphony_elixir,
 
 config :symphony_elixir, SymphonyElixir.Repo,
   database: local_tracker_database,
+  # Stock Ecto query logging is disabled: those debug lines dominated
+  # log/symphony.log and shrank its rotation window to minutes. Queries are
+  # still logged — SymphonyElixir.Observability.SqlLog re-emits them from the
+  # query telemetry event into the dedicated log/symphony.sql.log file.
+  log: false,
   # SINGLE WRITER. SQLite permits exactly one writer at a time, so a pool of N
   # connections does not buy write parallelism — it only lets N connections fight
   # over the one write lock. Under a burst of board moves (each of which fans out
