@@ -8,6 +8,7 @@ export interface DevEnvStep {
   id?: string;
   description: string;
   command: string;
+  stopCommand?: string | null;
   workingDir: string | null;
   position?: number;
   source: DevEnvStepSource;
@@ -18,6 +19,7 @@ export interface DevEnvStep {
   urlPath: string;
   readyProbe: DevEnvReadyProbe;
   readyPath: string;
+  runSpec?: Record<string, unknown> | null;
 }
 
 export type DevEnvRunStatus = "pending" | "running" | "succeeded" | "failed" | "skipped";

@@ -2,6 +2,7 @@ defmodule SymphonyElixir.LocalTracker.DevEnv.ConventionReaderTest do
   use ExUnit.Case, async: true
 
   alias SymphonyElixir.LocalTracker.DevEnv.{ConventionReader, ProposedStep}
+  alias SymphonyElixirWeb.DevEnvPresenter
 
   setup do
     root = Path.join(System.tmp_dir!(), "devenv-#{System.unique_integer([:positive])}")
@@ -29,23 +30,49 @@ defmodule SymphonyElixir.LocalTracker.DevEnv.ConventionReaderTest do
     File.write!(Path.join(root, ".symphony/devenv.yaml"), """
     steps:
       - description: Front dev server
-        command: npm run dev
+        command: symphony-preview-runner
+        stop_command: npm run stop
         working_dir: front
         role: serve
         port_env: PORT
-        url_path: /
+        url_path: /tracker/
         ready: http
-        ready_path: /health
+        ready_path: /tracker/
         primary: true
+        run_spec:
+          cwd: front
+          prepare:
+            - [npm, ci]
+          start:
+            - [npm, run, dev, "--", "--port", "${PORT}"]
+          health:
+            path: /tracker/
+            timeout_ms: 60000
+          stop:
+            signal: TERM
+            grace_ms: 5000
     """)
 
     assert {:ok, [step]} = ConventionReader.read(root)
     assert step.role == "serve"
     assert step.port_env == "PORT"
-    assert step.url_path == "/"
+    assert step.url_path == "/tracker/"
     assert step.ready_probe == "http"
-    assert step.ready_path == "/health"
+    assert step.ready_path == "/tracker/"
     assert step.primary == true
+    assert step.stop_command == "npm run stop"
+
+    assert step.run_spec == %{
+             "cwd" => "front",
+             "prepare" => [["npm", "ci"]],
+             "start" => [["npm", "run", "dev", "--", "--port", "${PORT}"]],
+             "health" => %{"path" => "/tracker/", "timeout_ms" => 60_000},
+             "stop" => %{"signal" => "TERM", "grace_ms" => 5_000}
+           }
+
+    proposed_dto = DevEnvPresenter.proposed(step)
+    assert proposed_dto.stop_command == "npm run stop"
+    assert proposed_dto.run_spec == step.run_spec
   end
 
   test "reads markdown convention fenced bash", %{root: root} do
