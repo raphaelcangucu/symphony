@@ -363,13 +363,8 @@ defmodule SymphonyElixir.DevServer.Manager do
   end
 
   defp manual_server_plan(contract, step_map) do
-    workspace_path =
-      contract.report_path
-      |> Path.dirname()
-      |> Path.dirname()
-
     launch =
-      case serve_launch(contract, step_map, workspace_path) do
+      case serve_launch(contract, step_map) do
         {:ok, launch} ->
           launch
 
@@ -394,8 +389,7 @@ defmodule SymphonyElixir.DevServer.Manager do
     }
   end
 
-  defp serve_launch(%RuntimeContract{} = contract, step_map, workspace_path)
-       when is_map(step_map) and is_binary(workspace_path) do
+  defp serve_launch(%RuntimeContract{} = contract, step_map) when is_map(step_map) do
     contract_env = RuntimeContract.to_env(contract)
 
     case fetch_run_spec(step_map) do
@@ -405,7 +399,7 @@ defmodule SymphonyElixir.DevServer.Manager do
           spec_path =
             RunSpec.write_temp!(
               normalized_spec,
-              Path.join(workspace_path, ".symphony")
+              run_spec_directory(contract)
             )
 
           runner_path = Application.app_dir(:symphony_elixir, "priv/preview/run.sh")
@@ -442,6 +436,10 @@ defmodule SymphonyElixir.DevServer.Manager do
          }}
     end
   end
+
+  defp run_spec_directory(%RuntimeContract{report_path: report_path})
+       when is_binary(report_path),
+       do: Path.dirname(report_path)
 
   defp fetch_run_spec(step_map) when is_map(step_map) do
     Map.get(step_map, :run_spec) || Map.get(step_map, "run_spec")
@@ -1081,8 +1079,8 @@ defmodule SymphonyElixir.DevServer.Manager do
     {:ok, serve_step_with_setup(project_slug, step_map)}
   end
 
-  defp managed_launch_step(project_slug, workspace_path, step_map, %RuntimeContract{} = contract) do
-    case serve_launch(contract, step_map, workspace_path) do
+  defp managed_launch_step(project_slug, _workspace_path, step_map, %RuntimeContract{} = contract) do
+    case serve_launch(contract, step_map) do
       {:ok, %{runner?: true} = launch} ->
         {:ok,
          step_map

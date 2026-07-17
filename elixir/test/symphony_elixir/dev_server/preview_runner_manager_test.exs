@@ -99,6 +99,52 @@ defmodule SymphonyElixir.DevServer.PreviewRunnerManagerTest do
     assert server.stop_command == "'echo' 'runner-stop'"
   end
 
+  test "start_for_issue launches the runner with run_spec beside the nested serve report", %{
+    project: project,
+    identifier: identifier,
+    workspace_path: workspace_path
+  } do
+    serve_root = Path.join(workspace_path, "frontend")
+    File.mkdir_p!(serve_root)
+
+    {:ok, _steps} =
+      DevEnv.save_steps(project.slug, [
+        %{
+          description: "Managed frontend preview",
+          command: "symphony-preview-runner",
+          role: "serve",
+          working_dir: "frontend",
+          run_spec: %{
+            "start" => [["python3", "-m", "http.server", "${PORT}"]]
+          }
+        }
+      ])
+
+    assert {:ok, [pid]} =
+             Manager.start_for_issue(project.slug, identifier, ready_timeout_ms: 0)
+
+    runner_path = Application.app_dir(:symphony_elixir, "priv/preview/run.sh")
+    launch_command = :sys.get_state(pid).step.command
+
+    assert {:ok, contract, _record} =
+             SymphonyElixir.DevServer.RuntimeContractStore.get_active(
+               project,
+               identifier,
+               "frontend"
+             )
+
+    spec_path = Path.join([serve_root, ".symphony", "run-spec.json"])
+
+    assert launch_command =~ runner_path
+    assert launch_command =~ "SYMPHONY_PREVIEW_RUN_SPEC="
+    assert launch_command =~ spec_path
+    assert contract.report_path ==
+             Path.join([serve_root, ".symphony", "preview-report.json"])
+
+    assert File.regular?(spec_path)
+    refute File.exists?(Path.join([workspace_path, ".symphony", "run-spec.json"]))
+  end
+
   defp enable_project_dev_server!(project) do
     workflow_markdown =
       Workflow.to_markdown(
