@@ -67,6 +67,8 @@ defmodule SymphonyElixirWeb.Router do
     get("/settings/credentials", CredentialsController, :index)
     put("/settings/credentials", CredentialsController, :update)
     delete("/settings/credentials/:provider/:key", CredentialsController, :delete)
+    post("/notion/import", NotionController, :import)
+    get("/notion/imports/:import_id", NotionController, :show)
     get("/prompt-templates", PromptTemplateController, :index)
     get("/assistant/commands", AssistantCommandController, :index)
     get("/push/config", PushController, :config)
