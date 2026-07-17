@@ -47,6 +47,7 @@ editor:
 dev_server:
   enabled: true
   port_range: [4200, 4299]
+  runtime_contract_v1: true
   # Reclaim a service's canonical port on (re)start: kill any stale listener
   # squatting it and reuse the same port instead of drifting to a new one.
   # Keeps the Symphony <-> preview <-> tunnel port bridge stable. Safe here
@@ -131,45 +132,46 @@ This is a **single-repository** workspace for a Python standalone application.
 
 ## Issue preview servers
 
-Symphony exposes a **Preview** tab when `dev_server.enabled` is true and DevEnv
-serve steps are saved for this project (imported via `distributionmachine.yaml`
-→ `dev_env_steps`).
+Symphony exposes a **Preview** tab when `dev_server.enabled` and
+`dev_server.runtime_contract_v1` are true and DevEnv serve steps are saved for
+this project (imported via `distributionmachine.yaml` → `dev_env_steps`).
 
 ### Preview flow
 
-Symphony starts the **FastAPI API** first, then the **React Admin** (serve steps
-boot in declared order; admin waits for API `/api/health`). The admin Vite dev
-server proxies browser `/api` calls to the local API, so previews work behind a
-tunnel without exposing the API port directly.
+Symphony starts the **FastAPI API** runner first, then the **React Admin**
+runner. Dependency metadata is deferred, so this API-before-Admin dependency
+is enforced by the declared serve-step position. Admin's `run_spec.prepare`
+runs `wire-services.sh`, which waits for API `/api/health`. The admin Vite dev
+server proxies browser `/api` calls to the local API, so previews work behind
+a tunnel without exposing the API port directly.
 
 | Step order | Service | Target |
 |------------|---------|--------|
 | 1–2 | API setup + serve | FastAPI on `127.0.0.1` (`/api/health`, `/docs`) |
 | 3–4 | Admin setup + serve (primary) | Vite React Admin wired to local API (`/` UI, `/api/health` proxied) |
 
-### How to run each service (manual or Preview tab)
+### Preview runner specs
 
-**API — FastAPI (`distributionmachine/`)** — run first
+**API — FastAPI (`distributionmachine/`)** — declared first
 
-```bash
-cd distributionmachine
-bash .symphony/setup.sh
-PORT=5000 bash .symphony/serve.sh
-# Health: http://127.0.0.1:5000/api/health
-# Docs:   http://127.0.0.1:5000/docs
+```yaml
+prepare: [["bash", ".symphony/setup.sh"]]
+start: [[".venv/bin/uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "${PORT}"]]
+health: {path: /api/health, timeout_ms: 60000}
 ```
 
-**Admin — React/Vite (`distributionmachine/admin/`)** — after API is healthy
+**Admin — React/Vite (`distributionmachine/admin/`)** — declared after API
 
-```bash
-cd distributionmachine/admin
-bash .symphony/setup.sh
-PORT=5173 bash .symphony/serve.sh
-# UI:     http://127.0.0.1:5173/
-# Health: http://127.0.0.1:5173/api/health  (proxied to API)
+```yaml
+prepare: [["bash", ".symphony/setup.sh"], ["bash", ".symphony/wire-services.sh"]]
+start: [["bun", "run", "dev", "--host", "0.0.0.0", "--port", "${PORT}", "--strictPort"]]
+health: {path: /, timeout_ms: 60000}
 ```
 
-- Scripts ship under `distributionmachine/.symphony/` and `distributionmachine/admin/.symphony/`.
+- `command: symphony-preview-runner` is a Symphony sentinel; the runner
+  executes the `run_spec` commands and owns runtime reports, health, and stop.
+- Setup and wiring scripts ship under `distributionmachine/.symphony/` and
+  `distributionmachine/admin/.symphony/`.
 - Setup runs `alembic upgrade head` (seeds default admin `admin@distributionmachine.local` / `changeme123`).
 - Admin wiring reads API port from `distributionmachine/.symphony/preview-port` (Symphony assigns e.g. **4200** for API, **4201** for Admin in the same slot). It does **not** use `API_PORT=5000` from `.env`.
 - Symphony health: API probes `/api/health` directly; Admin probes `/` (Vite UI), then scripts verify proxied `/api/health`.
@@ -180,9 +182,9 @@ PORT=5173 bash .symphony/serve.sh
 | Step | Role | Dir | Command |
 |------|------|-----|---------|
 | API setup | setup | `distributionmachine/` | `bash .symphony/setup.sh` |
-| FastAPI server | serve | `distributionmachine/` | `bash .symphony/serve.sh` |
+| FastAPI server | serve | `distributionmachine/` | `symphony-preview-runner` + API `run_spec` |
 | Admin setup | setup | `distributionmachine/admin/` | `bash .symphony/setup.sh` |
-| React Admin dev | serve (primary) | `distributionmachine/admin/` | `bash .symphony/serve.sh` |
+| React Admin dev | serve (primary) | `distributionmachine/admin/` | `symphony-preview-runner` + Admin `run_spec` |
 
 ## Python standalone conventions
 

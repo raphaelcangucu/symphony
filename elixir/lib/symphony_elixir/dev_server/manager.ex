@@ -13,6 +13,8 @@ defmodule SymphonyElixir.DevServer.Manager do
   alias SymphonyElixir.DevServer.LeaseStore
   alias SymphonyElixir.DevServer.PortPlan
   alias SymphonyElixir.DevServer.PortReclaimer
+  alias SymphonyElixir.DevServer.RunSpec
+  alias SymphonyElixir.DevServer.RuntimeContract
   alias SymphonyElixir.DevServer.RuntimeContractStore
   alias SymphonyElixir.LocalTracker.{Context, DevEnv, DevServerRecord, ProjectSetup}
   alias SymphonyElixir.Terminal.Registry, as: TerminalRegistry
@@ -361,9 +363,15 @@ defmodule SymphonyElixir.DevServer.Manager do
   end
 
   defp manual_server_plan(contract, step_map) do
-    env = SymphonyElixir.DevServer.RuntimeContract.to_env(contract)
-    command = Map.fetch!(step_map, :command)
-    prefix = env |> Enum.map(fn {k, v} -> "#{k}=#{shell_quote_env(v)}" end) |> Enum.join(" ")
+    launch =
+      case serve_launch(contract, step_map) do
+        {:ok, launch} ->
+          launch
+
+        {:error, reason} ->
+          raise ArgumentError,
+                "invalid preview run_spec for #{contract.server_slug}: #{inspect(reason)}"
+      end
 
     %{
       slug: contract.server_slug,
@@ -375,15 +383,87 @@ defmodule SymphonyElixir.DevServer.Manager do
       report_path: contract.report_path,
       port_env: contract.port_env,
       working_dir: Map.get(step_map, :working_dir),
-      env: env,
-      command: "#{prefix} #{command}",
-      stop_command: Map.get(step_map, :stop_command)
+      env: launch.env,
+      command: launch.command,
+      stop_command: launch.stop_command
     }
   end
 
-  defp shell_quote_env(value) do
-    "'" <> String.replace(to_string(value), "'", "'\"'\"'") <> "'"
+  defp serve_launch(%RuntimeContract{} = contract, step_map) when is_map(step_map) do
+    contract_env = RuntimeContract.to_env(contract)
+
+    case fetch_run_spec(step_map) do
+      run_spec when is_map(run_spec) and map_size(run_spec) > 0 ->
+        with {:ok, normalized_spec} <-
+               RunSpec.normalize(run_spec, port: contract.preferred_port) do
+          spec_path =
+            RunSpec.write_temp!(
+              normalized_spec,
+              run_spec_directory(contract)
+            )
+
+          runner_path = Application.app_dir(:symphony_elixir, "priv/preview/run.sh")
+
+          runner_env = %{
+            "PORT" => Integer.to_string(contract.preferred_port),
+            "SYMPHONY_PREVIEW_RUN_SPEC" => spec_path
+          }
+
+          env = Map.merge(contract_env, runner_env)
+
+          {:ok,
+           %{
+             command: prefixed_command(env, shell_quote(runner_path)),
+             env: env,
+             instance_command: prefixed_command(runner_env, shell_quote(runner_path)),
+             runner?: true,
+             stop_command: preferred_stop_command(normalized_spec, step_map)
+           }}
+        else
+          {:error, reason} -> {:error, {:invalid_run_spec, reason}}
+        end
+
+      _legacy ->
+        command = Map.fetch!(step_map, :command)
+
+        {:ok,
+         %{
+           command: prefixed_command(contract_env, command),
+           env: contract_env,
+           instance_command: command,
+           runner?: false,
+           stop_command: Map.get(step_map, :stop_command)
+         }}
+    end
   end
+
+  defp run_spec_directory(%RuntimeContract{report_path: report_path})
+       when is_binary(report_path),
+       do: Path.dirname(report_path)
+
+  defp fetch_run_spec(step_map) when is_map(step_map) do
+    Map.get(step_map, :run_spec) || Map.get(step_map, "run_spec")
+  end
+
+  defp prefixed_command(env, command) when is_map(env) and is_binary(command) do
+    prefix =
+      env
+      |> Enum.map(fn {key, value} -> "#{key}=#{shell_quote(to_string(value))}" end)
+      |> Enum.join(" ")
+
+    "#{prefix} #{command}"
+  end
+
+  defp preferred_stop_command(
+         %RunSpec{stop: %RunSpec.Stop{command: command}},
+         _step_map
+       )
+       when is_list(command) and command != [] do
+    Enum.map_join(command, " ", &shell_quote/1)
+  end
+
+  defp preferred_stop_command(%RunSpec{}, step_map),
+    do: Map.get(step_map, :stop_command)
 
   defp do_start_instance_for_server(project, identifier, server_id, runtime_options) do
     with {:ok, slug} <- server_slug_for_id(project, identifier, server_id),
@@ -958,36 +1038,60 @@ defmodule SymphonyElixir.DevServer.Manager do
   end
 
   defp start_instance(project, identifier, workspace_path, step, port, key, runtime_options, contracts) do
-    step = serve_step_with_setup(project.slug, step)
-    slug = Map.fetch!(step_to_map(step), :slug)
+    step_map = step_to_map(step)
+    slug = Map.fetch!(step_map, :slug)
+    contract = Map.get(contracts, slug)
 
-    opts =
-      [
-        registry_name: {:via, Registry, {@registry, key}},
-        project_id: project.id,
-        project_slug: project.slug,
-        identifier: identifier,
-        workspace_path: workspace_path,
-        step: step,
-        base_url: runtime_options.dev_server_base_url,
-        idle_timeout_ms: runtime_options.dev_server_idle_timeout_ms,
-        public_tunnel: runtime_options.public_tunnel,
-        claimed_ports: live_ports(),
-        contract: Map.get(contracts, slug),
-        port_allocator: fn _range, _claimed_ports -> {:ok, port} end
-      ] ++ serve_probe_opts(project.slug, step)
+    with {:ok, launch_step} <-
+           managed_launch_step(project.slug, workspace_path, step_map, contract) do
+      opts =
+        [
+          registry_name: {:via, Registry, {@registry, key}},
+          project_id: project.id,
+          project_slug: project.slug,
+          identifier: identifier,
+          workspace_path: workspace_path,
+          step: launch_step,
+          base_url: runtime_options.dev_server_base_url,
+          idle_timeout_ms: runtime_options.dev_server_idle_timeout_ms,
+          public_tunnel: runtime_options.public_tunnel,
+          claimed_ports: live_ports(),
+          contract: contract,
+          port_allocator: fn _range, _claimed_ports -> {:ok, port} end
+        ] ++ serve_probe_opts(project.slug, launch_step)
 
-    case DynamicSupervisor.start_child(@instance_supervisor, instance_child_spec(key, opts)) do
-      {:ok, pid} ->
-        attach_reserved_pid(key, pid)
-        {:ok, pid}
+      case DynamicSupervisor.start_child(@instance_supervisor, instance_child_spec(key, opts)) do
+        {:ok, pid} ->
+          attach_reserved_pid(key, pid)
+          {:ok, pid}
 
-      {:ok, pid, _info} ->
-        attach_reserved_pid(key, pid)
-        {:ok, pid}
+        {:ok, pid, _info} ->
+          attach_reserved_pid(key, pid)
+          {:ok, pid}
 
-      {:error, reason} ->
-        {:error, reason}
+        {:error, reason} ->
+          {:error, reason}
+      end
+    end
+  end
+
+  defp managed_launch_step(project_slug, _workspace_path, step_map, nil) do
+    {:ok, serve_step_with_setup(project_slug, step_map)}
+  end
+
+  defp managed_launch_step(project_slug, _workspace_path, step_map, %RuntimeContract{} = contract) do
+    case serve_launch(contract, step_map) do
+      {:ok, %{runner?: true} = launch} ->
+        {:ok,
+         step_map
+         |> Map.put(:command, launch.instance_command)
+         |> Map.put(:stop_command, launch.stop_command)}
+
+      {:ok, %{runner?: false}} ->
+        {:ok, serve_step_with_setup(project_slug, step_map)}
+
+      {:error, _reason} = error ->
+        error
     end
   end
 
@@ -1047,7 +1151,8 @@ defmodule SymphonyElixir.DevServer.Manager do
       :url_path,
       :ready_probe,
       :ready_path,
-      :primary
+      :primary,
+      :run_spec
     ])
     |> Map.put(:slug, slug)
   end

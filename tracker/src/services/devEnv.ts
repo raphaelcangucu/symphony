@@ -5,6 +5,7 @@ interface StepDto {
   id?: number | string;
   description: string;
   command: string;
+  stop_command?: string | null;
   working_dir?: string | null;
   position?: number;
   source: DevEnvStep["source"];
@@ -15,6 +16,7 @@ interface StepDto {
   url_path?: string | null;
   ready_probe?: DevEnvStep["readyProbe"];
   ready_path?: string | null;
+  run_spec?: Record<string, unknown> | null;
 }
 
 interface StepRunDto {
@@ -38,6 +40,7 @@ function normalizeStep(dto: StepDto): DevEnvStep {
     id: dto.id !== undefined ? String(dto.id) : undefined,
     description: dto.description,
     command: dto.command,
+    ...(dto.stop_command !== undefined ? { stopCommand: dto.stop_command } : {}),
     workingDir: dto.working_dir ?? null,
     position: dto.position,
     source: dto.source,
@@ -48,6 +51,7 @@ function normalizeStep(dto: StepDto): DevEnvStep {
     urlPath: dto.url_path ?? "/",
     readyProbe: dto.ready_probe ?? "tcp",
     readyPath: dto.ready_path ?? "/",
+    ...(dto.run_spec !== undefined ? { runSpec: dto.run_spec } : {}),
   };
 }
 
@@ -55,6 +59,7 @@ function denormalizeStep(step: DevEnvStep): Record<string, unknown> {
   return {
     description: step.description,
     command: step.command,
+    stop_command: step.stopCommand,
     working_dir: step.workingDir,
     source: step.source,
     optional: step.optional,
@@ -64,6 +69,7 @@ function denormalizeStep(step: DevEnvStep): Record<string, unknown> {
     url_path: step.urlPath,
     ready_probe: step.readyProbe,
     ready_path: step.readyPath,
+    run_spec: step.runSpec,
   };
 }
 

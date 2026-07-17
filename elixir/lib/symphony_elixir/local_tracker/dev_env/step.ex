@@ -25,6 +25,7 @@ defmodule SymphonyElixir.LocalTracker.DevEnv.Step do
     field(:ready_probe, :string, default: "tcp")
     field(:ready_path, :string, default: "/")
     field(:primary, :boolean, default: false)
+    field(:run_spec, :map)
 
     belongs_to(:project, Project)
     timestamps(type: :utc_datetime_usec)
@@ -47,7 +48,8 @@ defmodule SymphonyElixir.LocalTracker.DevEnv.Step do
       :url_path,
       :ready_probe,
       :ready_path,
-      :primary
+      :primary,
+      :run_spec
     ])
     |> validate_required([
       :project_id,

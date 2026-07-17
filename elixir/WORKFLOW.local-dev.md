@@ -48,6 +48,12 @@ editor:
   auth: none            # "none" (localhost only) or "password"
   # password: your-password               # required when auth: password
   # base_url: https://editor.example.com  # browser-facing URL override (remote/proxy)
+# Tracker UI issue previews. Vite proxies /api and /socket to the Phoenix URL in
+# TRACKER_API_PROXY_TARGET, so start Phoenix before opening Preview.
+dev_server:
+  enabled: true
+  runtime_contract_v1: true
+  port_range: [4400, 4499]
 workspace:
   root: ~/code/symphony-workspaces
 hooks:

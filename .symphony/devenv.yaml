@@ -1,0 +1,22 @@
+steps:
+  - description: Tracker Vite preview
+    role: serve
+    working_dir: tracker
+    port_env: PORT
+    primary: true
+    url_path: /tracker/
+    ready_probe: http
+    ready_path: /tracker/
+    command: symphony-preview-runner
+    run_spec:
+      cwd: tracker
+      prepare:
+        - [npm, ci]
+      start:
+        - [npm, run, dev, "--", "--host", "127.0.0.1", "--port", "${PORT}"]
+      health:
+        path: /tracker/
+        timeout_ms: 60000
+      stop:
+        signal: TERM
+        grace_ms: 5000
