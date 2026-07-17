@@ -59,6 +59,30 @@ defmodule SymphonyElixir.Assistant.ThreadTest do
     assert valid.valid?
   end
 
+  test "issue_execution scope is valid and requires project + issue + workspace" do
+    valid =
+      Thread.changeset(%Thread{}, %{
+        scope: "issue_execution",
+        project_slug: "advising",
+        issue_identifier: "CDE-1180",
+        workspace_path: "/tmp/advising/CDE-1180",
+        status: "active"
+      })
+
+    assert valid.valid?
+
+    missing =
+      Thread.changeset(%Thread{}, %{
+        scope: "issue_execution",
+        project_slug: "advising",
+        workspace_path: "/tmp/advising/CDE-1180",
+        status: "active"
+      })
+
+    refute missing.valid?
+    assert %{issue_identifier: _} = errors_on(missing)
+  end
+
   defp errors_on(changeset) do
     Ecto.Changeset.traverse_errors(changeset, fn {msg, _opts} -> msg end)
   end
