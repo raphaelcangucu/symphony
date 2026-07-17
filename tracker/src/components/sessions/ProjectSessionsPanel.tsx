@@ -13,6 +13,7 @@ export function ProjectSessionsPanel({
 }) {
   return (
     <ProjectSessionsWorkspace
+      key={projectSlug}
       projectSlug={projectSlug}
       activeExecutionIdentifier={activeExecutionIdentifier}
       activeAuthoringIdentifier={activeAuthoringIdentifier}

@@ -26,6 +26,8 @@ export interface UseProjectSessionsResult {
   inventory: WorkspaceInventory | null;
   /** Issues/recents still loading — does not include the inventory scan. */
   isLoading: boolean;
+  /** Project sessions index still loading (excludes global recents). */
+  isSessionsLoading: boolean;
   /** Inventory scan still streaming in. */
   isInventoryLoading: boolean;
   error: string | null;
@@ -129,6 +131,7 @@ export function useProjectSessions(projectSlug: string): UseProjectSessionsResul
     executions: mergedExecutions,
     inventory: null,
     isLoading: isLoading || recentsLoading,
+    isSessionsLoading: isLoading,
     isInventoryLoading: false,
     error,
     refetch,

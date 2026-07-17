@@ -74,6 +74,7 @@ import { archiveAssistantThread, getAssistantThread } from "@/services/assistant
 import { dispatchIssueAgent } from "@/services/issueDispatch";
 import { getIssue } from "@/services/issues";
 import { removeWorkspaces } from "@/services/worktrees";
+import { evictAssistantSessionCache } from "@/stores/assistantSessionStore";
 import type { AgentExecution } from "@/types/agent-execution";
 import type { Issue } from "@/types/issue";
 import type { RecentSession } from "@/types/recents";
@@ -96,8 +97,17 @@ export function ProjectSessionsWorkspace({
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { view, project } = useWorkspace();
-  const { relatedSessions, issues, executions, inventory, isLoading, isInventoryLoading, error, refetch } =
-    useProjectSessions(projectSlug);
+  const {
+    relatedSessions,
+    issues,
+    executions,
+    inventory,
+    isLoading,
+    isSessionsLoading,
+    isInventoryLoading,
+    error,
+    refetch,
+  } = useProjectSessions(projectSlug);
   const setSessionsChrome = useContext(ProjectSessionsChromeSetterContext);
   const [resumePending, setResumePending] = useState<string | null>(null);
   const [cleanupOpen, setCleanupOpen] = useState(false);
@@ -486,13 +496,17 @@ export function ProjectSessionsWorkspace({
 
   const handleCloseTab = useCallback(
     (tabId: string) => {
+      const closing = tabs.find((entry) => entry.id === tabId);
+      if (closing?.kind === "assistant-session") {
+        evictAssistantSessionCache(closing.threadId);
+      }
       const closingActive = tabId === activeTabId;
       closeTab(tabId);
       if (closingActive) {
         navigate(projectSessionsPath(projectSlug), { replace: true });
       }
     },
-    [activeTabId, closeTab, navigate, projectSlug],
+    [activeTabId, closeTab, navigate, projectSlug, tabs],
   );
 
   async function handleResume(session: ProjectSessionRow) {
@@ -550,7 +564,9 @@ export function ProjectSessionsWorkspace({
   }, [activeAuthoringIdentifier, activeExecutionIdentifier, issues]);
 
   useEffect(() => {
-    if (isLoading) return;
+    // Wait for the project sessions index only — global recents can lag and
+    // would otherwise leave cross-project tabs visible indefinitely.
+    if (isSessionsLoading) return;
 
     for (const tab of tabs) {
       if (!tab.closable) continue;
@@ -562,7 +578,7 @@ export function ProjectSessionsWorkspace({
 
       if (outOfProject) closeTab(tab.id);
     }
-  }, [allowedAssistantThreadIds, allowedIssueIdentifiers, closeTab, isLoading, tabs]);
+  }, [allowedAssistantThreadIds, allowedIssueIdentifiers, closeTab, isSessionsLoading, tabs]);
 
   useEffect(() => {
     if (listItems.length === 0) {

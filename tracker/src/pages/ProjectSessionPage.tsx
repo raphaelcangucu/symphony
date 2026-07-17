@@ -15,5 +15,11 @@ export function ProjectSessionPage() {
   if (!projectSlug.trim()) return <Navigate to="/projects" replace />;
   if (!parsedThreadId) return <Navigate to={`/projects/${projectSlug}/sessions`} replace />;
 
-  return <ProjectSessionsWorkspace projectSlug={projectSlug} activeThreadId={parsedThreadId} />;
+  return (
+    <ProjectSessionsWorkspace
+      key={projectSlug}
+      projectSlug={projectSlug}
+      activeThreadId={parsedThreadId}
+    />
+  );
 }

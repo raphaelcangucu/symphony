@@ -68,4 +68,33 @@ describe("useWorkspaceTabs", () => {
     const persisted = readPersistedWorkspaceTabs(workspaceTabsStorageKey(scope, "macro-markets"));
     expect(persisted?.tabs.some((tab) => tab.title === "Macro chat")).toBe(true);
   });
+
+  it("does not write the previous project's tabs into the next project's storage key", () => {
+    writePersistedWorkspaceTabs(workspaceTabsStorageKey(scope, "macro-markets"), {
+      tabs: [listTab, createAssistantSessionTab(8051, "Macro chat")],
+      activeTabId: "assistant-session:8051",
+    });
+
+    const { result, rerender } = renderHook(
+      ({ projectSlug }: { projectSlug: string }) =>
+        useWorkspaceTabs({
+          scope,
+          projectSlug,
+          canonicalTabs: [listTab],
+          defaultActiveTabId: SESSIONS_LIST_TAB_ID,
+        }),
+      { initialProps: { projectSlug: "advising" } },
+    );
+
+    act(() => {
+      result.current.openTab(createAssistantSessionTab(100, "Advising chat"));
+    });
+
+    rerender({ projectSlug: "macro-markets" });
+
+    const persisted = readPersistedWorkspaceTabs(workspaceTabsStorageKey(scope, "macro-markets"));
+    expect(persisted?.tabs.some((tab) => tab.title === "Advising chat")).toBe(false);
+    expect(persisted?.tabs.some((tab) => tab.title === "Macro chat")).toBe(true);
+    expect(result.current.tabs.some((tab) => tab.title === "Advising chat")).toBe(false);
+  });
 });

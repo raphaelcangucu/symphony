@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useReducer } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 
 import { createWorkspaceTabsState, workspaceTabsReducer } from "@/lib/workspaceTabs/reducer";
 import { readPersistedWorkspaceTabs, writePersistedWorkspaceTabs, workspaceTabsStorageKey } from "@/lib/workspaceTabs/persistence";
@@ -66,6 +66,9 @@ export function useWorkspaceTabs({
 }: UseWorkspaceTabsArgs): UseWorkspaceTabsResult {
   const storageKey = useMemo(() => workspaceTabsStorageKey(scope, projectSlug), [projectSlug, scope]);
   const canonicalSignature = useMemo(() => canonicalTabs.map((tab) => tab.id).join("|"), [canonicalTabs]);
+  // Tracks which storage key the in-memory state currently belongs to. Prevents
+  // writing project A's tabs into project B's key during a project switch.
+  const stateStorageKeyRef = useRef(storageKey);
 
   const [state, dispatch] = useReducer(
     workspaceTabsReducer,
@@ -75,10 +78,9 @@ export function useWorkspaceTabs({
   );
 
   useEffect(() => {
-    dispatch({
-      type: "restore",
-      state: buildInitialState(storageKey, canonicalTabs, defaultActiveTabId, persist),
-    });
+    const next = buildInitialState(storageKey, canonicalTabs, defaultActiveTabId, persist);
+    stateStorageKeyRef.current = storageKey;
+    dispatch({ type: "restore", state: next });
     // Reload persisted tabs when the storage scope changes (project switch) or
     // when canonical tab ids change (e.g. issue terminal switch).
     // eslint-disable-next-line react-hooks/exhaustive-deps -- canonicalTabs tracked via canonicalSignature
@@ -86,8 +88,14 @@ export function useWorkspaceTabs({
 
   useEffect(() => {
     if (!persist) return;
+    // Intentionally omit `storageKey` from deps: a key change must restore first
+    // and only persist after `state` updates to the restored tabs. Writing on
+    // storageKey change alone would copy the previous project's open tabs into
+    // the newly selected project's localStorage entry.
+    if (stateStorageKeyRef.current !== storageKey) return;
     writePersistedWorkspaceTabs(storageKey, state);
-  }, [persist, state, storageKey]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- persist only when state changes
+  }, [persist, state]);
 
   const selectTab = useCallback((tabId: string) => {
     dispatch({ type: "select", tabId });
