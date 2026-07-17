@@ -263,6 +263,15 @@ To get your project's slug, right-click the project and copy its URL. The slug i
 This repo's dogfood setup depends on non-standard Linear issue statuses: "Rework", "Human Review",
 and "Merging". Customize them in Team Settings → Workflow in Linear.
 
+### Notion import
+
+Configure a Notion Integration token under **Settings → Providers** (or set `NOTION_API_KEY`).
+Share the target page or database with the Integration in Notion.
+
+Codex sessions expose the `import_notion_page` dynamic tool. Pass a Notion URL; the tool writes
+temporary Markdown, assets, and metadata under `/tmp/symphony-notion/` (`markdown_path`,
+`assets_dir`, `meta_path`). See the `notion` skill in `skills/notion/SKILL.md`.
+
 ### JIRA Cloud
 
 Add a `jira:` section and configure workflow states in `tracker:`:

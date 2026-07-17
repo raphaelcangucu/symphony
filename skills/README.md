@@ -27,7 +27,7 @@ duplication and every skill is shared across agents:
   intentionally adapted for Symphony injection and may differ slightly from
   upstream. Because these live one level deeper, repo-local CLI auto-discovery
   does not surface them directly from this canonical tree.
-- `commit/`, `debug/`, `github-projects/`, `land/`, `linear/`, `pull/`,
+- `commit/`, `debug/`, `github-projects/`, `land/`, `linear/`, `notion/`, `pull/`,
   `push/`, `workflow/` — operational workflow skills (git, PRs, tracker, orchestrator config).
 - `release/` — release workflow skill.
 
