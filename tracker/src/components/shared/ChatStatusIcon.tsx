@@ -1,8 +1,9 @@
-import { MessageSquare, PenLine, Zap, type LucideIcon } from "lucide-react";
+import { Compass, Hammer, MessageSquare, PenLine, Zap, type LucideIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { cn } from "@/lib/utils";
 import type { AgentExecutionStatus } from "@/types/agent-execution";
+import type { ExecutionMode } from "@/types/issue";
 import type { RecentScope, RecentStatusKind } from "@/types/recents";
 import type { SidebarAggregateStatus } from "@/types/sidebar";
 
@@ -19,6 +20,14 @@ const KIND_ICON: Readonly<Record<SessionStatusIconKind, LucideIcon>> = {
   execution: Zap,
   authoring: PenLine,
   chat: MessageSquare,
+};
+
+// Operator-facing agent mode drives the glyph when known, so repetitive chats
+// read as plan/build/yolo instead of an identical bubble.
+const MODE_ICON: Readonly<Record<ExecutionMode, LucideIcon>> = {
+  plan: Compass,
+  build: Hammer,
+  yolo: Zap,
 };
 
 const KIND_BADGE: Readonly<Record<SessionStatusIconKind, string>> = {
@@ -45,6 +54,8 @@ const ATTENTION_STATUS_KINDS = new Set<string>([
 
 interface ChatStatusIconProps {
   sessionKind?: SessionStatusIconKind | null;
+  /** When known, the glyph reflects the agent mode (plan/build/yolo). */
+  executionMode?: ExecutionMode | null;
   /** Prefer aggregate + needsReview; statusKind is a legacy fallback. */
   statusKind?: RecentStatusKind | null;
   aggregateStatus?: SidebarAggregateStatus | null;
@@ -100,6 +111,7 @@ export function resolveSessionAgentStatus(input: {
 
 export function ChatStatusIcon({
   sessionKind = "chat",
+  executionMode = null,
   statusKind = null,
   aggregateStatus = null,
   needsAttention = false,
@@ -108,7 +120,7 @@ export function ChatStatusIcon({
 }: ChatStatusIconProps) {
   const { t } = useTranslation();
   const kind = sessionKind ?? "chat";
-  const Icon = KIND_ICON[kind];
+  const Icon = executionMode ? MODE_ICON[executionMode] : KIND_ICON[kind];
   const agentStatus = resolveSessionAgentStatus({
     executionStatus,
     aggregateStatus,
@@ -118,6 +130,12 @@ export function ChatStatusIcon({
   const statusLabel = t(`layout.sidebar.tree.agentStatus.${agentStatus}`, {
     defaultValue: agentStatusDefault(agentStatus),
   });
+  const modeLabel = executionMode
+    ? t(`issue.agent.executionMode.${executionMode}.label`, {
+        defaultValue: modeLabelDefault(executionMode),
+      })
+    : null;
+  const title = modeLabel ? `${modeLabel} · ${statusLabel}` : statusLabel;
 
   return (
     <span
@@ -126,7 +144,7 @@ export function ChatStatusIcon({
         KIND_BADGE[kind],
         className,
       )}
-      title={statusLabel}
+      title={title}
     >
       <Icon
         aria-hidden="true"
@@ -155,5 +173,16 @@ function agentStatusDefault(status: SessionAgentStatus): string {
     case "idle":
     default:
       return "Idle";
+  }
+}
+
+function modeLabelDefault(mode: ExecutionMode): string {
+  switch (mode) {
+    case "plan":
+      return "Plan";
+    case "build":
+      return "Build";
+    case "yolo":
+      return "Yolo";
   }
 }

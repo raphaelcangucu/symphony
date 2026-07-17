@@ -209,6 +209,26 @@ defmodule SymphonyElixir.Tracker.ProjectSessionsTest do
     assert Enum.map(rows, & &1.id) == ["thread:#{live.id}", "thread:#{idle.id}"]
   end
 
+  test "exposes the stored execution mode on chat/session rows" do
+    {:ok, thread} =
+      %Thread{}
+      |> Thread.changeset(%{
+        scope: "project_session",
+        project_slug: "sessions",
+        title: "Planning chat",
+        workspace_path: "/tmp/planning-chat",
+        status: "active",
+        agent_kind: "codex",
+        metadata: %{"execution_mode" => "plan"}
+      })
+      |> Repo.insert()
+
+    assert {:ok, %{data: [row]}} = ProjectSessions.list("sessions", limit: 20)
+
+    assert row.id == "thread:#{thread.id}"
+    assert row.execution_mode == "plan"
+  end
+
   defp insert_thread!(title, updated_at, opts \\ []) do
     status = Keyword.get(opts, :status, "active")
 

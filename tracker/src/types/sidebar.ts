@@ -1,6 +1,6 @@
 import type { AgentExecution } from "@/types/agent-execution";
 import type { AssistantThread } from "@/types/assistant-thread";
-import type { AgentKind, Issue } from "@/types/issue";
+import type { AgentKind, ExecutionMode, Issue } from "@/types/issue";
 import type { ProjectSessionRow } from "@/types/project-session";
 import type { RecentSession, RecentStatusKind } from "@/types/recents";
 import type { WorkspaceInventoryEntry } from "@/types/worktrees";
@@ -26,6 +26,8 @@ export interface SidebarSessionNode {
   projectSlug: string;
   workspaceId: string | null;
   sessionKind: SidebarSessionKind;
+  /** Operator-facing agent mode (plan/build/yolo) when known; drives the glyph. */
+  executionMode?: ExecutionMode | null;
   title: string;
   subtitle: string;
   href: string;

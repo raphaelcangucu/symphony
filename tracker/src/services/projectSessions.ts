@@ -1,5 +1,5 @@
 import { requireProjectSlug } from "@/lib/serviceValidation";
-import type { AgentKind } from "@/types/issue";
+import { EXECUTION_MODE_IDS, type AgentKind, type ExecutionMode } from "@/types/issue";
 import type { ProjectSessionKind, ProjectSessionRow, ProjectSessionsPage } from "@/types/project-session";
 import type { RecentScope } from "@/types/recents";
 
@@ -26,6 +26,7 @@ export interface BackendProjectSessionRowDto {
   updated_at?: string | null;
   aggregate_status?: string | null;
   agent_kind?: string | null;
+  execution_mode?: string | null;
   issue_identifier?: string | null;
   workspace_path?: string | null;
   workspace_id?: string | null;
@@ -56,6 +57,12 @@ function normalizeSessionKind(value: string): ProjectSessionKind {
 
 function normalizeAgentKind(value: string | null | undefined): AgentKind | null {
   return KNOWN_AGENT_KINDS.includes(value as AgentKind) ? (value as AgentKind) : null;
+}
+
+function normalizeExecutionMode(value: string | null | undefined): ExecutionMode | null {
+  return (EXECUTION_MODE_IDS as readonly string[]).includes(value as string)
+    ? (value as ExecutionMode)
+    : null;
 }
 
 function normalizeSessionScope(value: string | null | undefined, kind: ProjectSessionKind): RecentScope {
@@ -96,6 +103,7 @@ export function normalizeProjectSessionRow(dto: BackendProjectSessionRowDto): Pr
     updatedAt: dto.updated_at ?? "",
     aggregateStatus: dto.aggregate_status ?? null,
     agentKind: normalizeAgentKind(dto.agent_kind),
+    executionMode: normalizeExecutionMode(dto.execution_mode),
     issueIdentifier: dto.issue_identifier ?? null,
     workspacePath: dto.workspace_path ?? null,
     workspaceId: dto.workspace_id ?? null,

@@ -435,6 +435,21 @@ describe("buildFlatSidebarProject", () => {
     expect(byId["issue:42"]?.threadId).toBeNull();
   });
 
+  it("carries the stored execution mode onto the session node", () => {
+    const project = buildFlatSidebarProject(
+      buildInput({
+        sessions: [
+          sessionRow({ id: "thread:1", scope: "project_session", executionMode: "plan" }),
+          sessionRow({ id: "thread:2", scope: "project_session", executionMode: null }),
+        ],
+      }),
+    );
+
+    const byId = Object.fromEntries(project.sessions.map((session) => [session.id, session]));
+    expect(byId["thread:1"]?.executionMode).toBe("plan");
+    expect(byId["thread:2"]?.executionMode).toBe(null);
+  });
+
   it("prefers scope so issue chats stay chat icons when API kind is execution", () => {
     const project = buildFlatSidebarProject(
       buildInput({

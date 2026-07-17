@@ -28,12 +28,50 @@ describe("normalizeProjectSessionRow", () => {
       updatedAt: "2026-07-14T12:00:00.000000Z",
       aggregateStatus: "live",
       agentKind: "codex",
+      executionMode: null,
       issueIdentifier: "ADV-1",
       workspacePath: "/tmp/advising",
       workspaceId: "8006",
       pinned: true,
       archived: false,
     });
+  });
+
+  it("normalizes the execution mode, dropping unknown values", () => {
+    const planned = normalizeProjectSessionRow({
+      id: "thread:9",
+      title: "Planning chat",
+      kind: "chat",
+      scope: "project_session",
+      href: "/projects/demo/workspaces/9",
+      updated_at: "2026-07-14T12:00:00.000000Z",
+      aggregate_status: "active",
+      agent_kind: "codex",
+      execution_mode: "plan",
+      issue_identifier: null,
+      workspace_path: null,
+      workspace_id: null,
+      pinned: false,
+      archived: false,
+    });
+    expect(planned.executionMode).toBe("plan");
+
+    const unknown = normalizeProjectSessionRow({
+      id: "thread:10",
+      title: "Mystery",
+      kind: "chat",
+      href: "/projects/demo/workspaces/10",
+      updated_at: "2026-07-14T12:00:00.000000Z",
+      aggregate_status: "active",
+      agent_kind: "codex",
+      execution_mode: "turbo",
+      issue_identifier: null,
+      workspace_path: null,
+      workspace_id: null,
+      pinned: false,
+      archived: false,
+    });
+    expect(unknown.executionMode).toBeNull();
   });
 
   it("normalizes unknown agent kinds to null", () => {
@@ -115,6 +153,7 @@ describe("normalizeProjectSessionsPage", () => {
           updatedAt: "2026-07-14T11:00:00.000000Z",
           aggregateStatus: "active",
           agentKind: "cursor",
+          executionMode: null,
           issueIdentifier: null,
           workspacePath: "/tmp/demo",
           workspaceId: "1",

@@ -75,6 +75,7 @@ export function SessionTreeItem({
       leadingIcon={
         <ChatStatusIcon
           sessionKind={node.sessionKind}
+          executionMode={node.executionMode}
           statusKind={node.statusKind}
           aggregateStatus={node.aggregateStatus}
           needsAttention={node.needsReview}

@@ -40,4 +40,21 @@ describe("ChatStatusIcon", () => {
     expect(badge?.querySelector("svg")).not.toBeNull();
     expect(badge?.querySelector("[role='img']")).not.toBeNull();
   });
+
+  it("uses the agent-mode glyph when a mode is known", () => {
+    const { container: plan } = render(
+      <ChatStatusIcon sessionKind="chat" executionMode="plan" statusKind="idle" />,
+    );
+    const { container: build } = render(
+      <ChatStatusIcon sessionKind="chat" executionMode="build" statusKind="idle" />,
+    );
+    const { container: noMode } = render(
+      <ChatStatusIcon sessionKind="chat" executionMode={null} statusKind="idle" />,
+    );
+
+    expect(plan.querySelector("svg")).not.toBeNull();
+    expect(plan.innerHTML).not.toBe(build.innerHTML);
+    // Same kind, different mode → different glyphs; mode overrides the kind glyph.
+    expect(plan.innerHTML).not.toBe(noMode.innerHTML);
+  });
 });

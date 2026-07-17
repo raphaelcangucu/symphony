@@ -1,4 +1,4 @@
-import type { AgentKind } from "@/types/issue";
+import type { AgentKind, ExecutionMode } from "@/types/issue";
 import type { RecentScope } from "@/types/recents";
 
 export type ProjectSessionKind = "execution" | "authoring" | "chat" | "workspace_session" | "issue";
@@ -13,6 +13,8 @@ export interface ProjectSessionRow {
   updatedAt: string;
   aggregateStatus: string | null;
   agentKind: AgentKind | null;
+  /** Operator-facing agent mode (plan/build/yolo) when the thread stored one. */
+  executionMode?: ExecutionMode | null;
   issueIdentifier: string | null;
   workspacePath: string | null;
   workspaceId: string | null;

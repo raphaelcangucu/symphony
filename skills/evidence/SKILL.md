@@ -1,17 +1,17 @@
 ---
 name: evidence
 description:
-  Run the project's tests (unit always; e2e with mandatory screenshot/video
-  capture when UI files changed), then write .symphony/evidence/manifest.json
-  referencing the real artifacts. Use during the VALIDATE stage of every issue
-  run, before publishing.
+  Use during the VALIDATE stage of issue work that needs unit, e2e, visual, or
+  blocked evidence before publishing or handoff.
 ---
 
 # Evidence
 
 ## Goals
 
-- Prove the change works: unit tests green for every repo you changed.
+- Prove the change works with focused unit evidence for every repo you changed:
+  tests you created or modified, plus existing tests directly related to the
+  same changed feature/surface.
 - When the change touches UI paths, prove it visually: e2e run with at least
   1 screenshot AND 1 video (plus trace) of the affected flow.
 - Tick the issue's acceptance criteria as you prove them: when the issue body
@@ -37,29 +37,60 @@ execution contract says `scope_status: complete`.
 
 ## Focused testing (agent validation vs CI)
 
-During VALIDATE, **run only checks that cover what you changed** — not full-repo
-lint or unit suites. Leave full regression to CI/CD (GitHub Actions, etc.).
+During VALIDATE, **run only checks that cover what you changed**. Agent
+validation and CI have different scopes: the agent proves the changed surface;
+CI/CD owns full-repository and cross-repository regression.
+
+### Mandatory test-selection order
+
+1. Run every test file or test case you created or modified.
+2. Run existing tests that directly cover the changed component, endpoint,
+   domain behavior, dependency boundary, or user flow.
+3. Run the smallest focused integration/e2e spec required for the affected
+   surface.
+4. **Stop.** Do not expand to all tests in the repository, framework, CI job,
+   or matrix.
+
+"Same surface" means the same feature and behavior contract you changed — not
+every test in the same repository or technical layer. A configured unfiltered
+command, a desire for "extra confidence", a delayed CI run, or an imminent
+handoff does **not** authorize a full suite.
+
+On WSL, run the selected test files/cases **one at a time, sequentially**.
+Never batch, parallelize, repeat in loops, or widen the scope to compensate for
+an environment limitation.
 
 ### Scope from git diff first
 
 1. Run `git diff --name-only origin/<integration-branch>...HEAD` (and
    `git status --porcelain`) **per repo you touched**.
-2. Only run lint/unit/e2e for repos that appear in the diff.
-3. Derive test/lint paths from changed source files (mirror `src/` → `tests/`).
+2. Identify tests created or modified in that diff; these are always first.
+3. Map changed source files to directly related existing tests (for example,
+   mirror `src/` → `tests/`), then add only same-surface tests with a concrete
+   behavioral dependency.
+4. Run lint/unit only for changed repos. E2e may additionally target a UI repo
+   required by the cross-repo impact rules below.
 
 ### Per check type
 
 | Check | Do | Don't |
 |-------|----|-------|
 | **Lint** | ESLint on changed paths only, e.g. `npx eslint --max-warnings 0 src/pages/foo.tsx tests/pages/foo.test.tsx` | `npm run lint` on the whole repo |
-| **Unit (frontend)** | `npm run test:unit -- tests/...` matching changed areas | `npm run test:unit` without paths |
-| **Unit (backend)** | `./vibe test tests/Feature/MyTest.php` or `--filter=MyTest` for changed/impacted code | `./vibe test` (full Pest suite) when only a few files changed |
+| **Unit (frontend)** | Created/modified tests plus directly related same-surface files, each with an explicit path/filter | `npm run test:unit` without paths |
+| **Unit (backend)** | Created/modified tests plus directly related same-surface cases, e.g. `./vibe test tests/Feature/MyTest.php --filter=MyTest` | Bare `./vibe test` / full Pest suite |
 | **E2e** | Spec for the affected flow, e.g. `cypress run --spec cypress/e2e/my-flow.cy.ts` | Full e2e matrix |
 
-The gate needs **one** passing `unit` run per changed repo; a scoped run satisfies
-that. **Do not** also run the full suite and record a failing unrelated test —
-either skip the full suite entirely or omit failed supplementary runs from the
-manifest.
+All selected focused tests must pass. The gate needs at least one passing
+`unit` run per changed repo; a scoped run satisfies that. When the environment
+requires one command per test file/filter, run them sequentially and record the
+focused results. **Do not** also run the full suite "to be safe" or record an
+unrelated CI-suite failure — skip the full suite entirely.
+
+| Rationalization | Rule |
+|-----------------|------|
+| "The workflow says `./vibe test`." | Treat it as the test launcher; append the focused file/filter. |
+| "The full suite gives more confidence." | CI owns full regression; local evidence owns the changed surface. |
+| "CI has not started yet." | Waiting for CI does not expand agent-validation scope. |
 
 ### Manifest hygiene
 
@@ -96,8 +127,14 @@ evidence:
       contract_paths: ["app/Http/**", "routes/**", "graphql/**"]
 ```
 
-Use those commands. If a UI repo has no e2e suite and the change touches its UI
-paths, PROVISION one: install Playwright
+Use configured unit/e2e commands as **launchers**, not as permission to run
+their unfiltered CI form. Add the supported test path, case filter, or spec
+selector that implements the mandatory selection order above. If a configured
+launcher cannot be focused, find the repository's smallest focused target; do
+not fall back to the full suite.
+
+If a UI repo has no e2e suite and the change touches its UI paths, PROVISION
+one: install Playwright
 (`npm init playwright@latest -- --quiet`), write specs covering the changed
 screens, and enable capture in `playwright.config.ts`:
 
@@ -222,18 +259,18 @@ run's `repo` must be the UI repo it exercises:
       "task_title": "Task 3: Add Tasks, Review, And Runs Namespace",
       "kind": "unit",
       "repo": "backend",
-      "command": "./vibe test",
+      "command": "./vibe test tests/Feature/MyTest.php --filter=MyTest",
       "status": "passed",
-      "summary": { "total": 142, "passed": 142, "failed": 0 },
+      "summary": { "total": 1, "passed": 1, "failed": 0 },
       "report": "artifacts/backend-unit.txt",
       "duration_ms": 48210
     },
     {
       "kind": "e2e",
       "repo": "frontend",
-      "command": "npx playwright test",
+      "command": "npx playwright test tests/e2e/settings.spec.ts",
       "status": "passed",
-      "summary": { "total": 4, "passed": 4, "failed": 0 },
+      "summary": { "total": 1, "passed": 1, "failed": 0 },
       "report": "artifacts/playwright-report/",
       "screenshots": [
         {
@@ -278,10 +315,11 @@ When a project runs Symphony preview dev servers (typical ports **4200–4299**)
 
 - **First** call **`manage_preview`** with `action: status` (or `start` / `restart`).
   Read `local_url` and `port` for each server in the tool response.
-- **Always** use the **project's configured e2e command** (the `e2e.command` in the
-  project's `evidence` config / workflow). That command is responsible for reusing the
-  issue's preview ports and its isolated e2e database — read the project workflow for the
-  exact wrapper, ports, and DB path, as these differ per project.
+- **Always** use the **project's configured e2e launcher** (the `e2e.command`
+  in the project's `evidence` config / workflow) **plus its supported
+  spec/filter selector for the affected flow**. Preserve the configured wrapper
+  because it reuses the issue's preview ports and isolated e2e database — read
+  the workflow for the exact wrapper, selector syntax, ports, and DB path.
 - **Never** run bare `npx playwright test` on ad-hoc ports (e.g. 4310) — that bypasses
   preview wiring and causes webServer timeouts.
 - Do **not** kill Symphony preview band ports (or set any preview-kill override) unless a
@@ -312,12 +350,12 @@ corrective turns that push you to fix and re-run. So labeling a fixable,
 repo-owned problem as `blocked` **suppresses the self-heal loop** and strands the
 issue on a human for something you could have fixed yourself.
 
-**Concrete trap:** `./vibe test` prints `Sail is not running`. That *looks* like
-"no Docker", but if the containers are actually up under a different compose
-project (e.g. Symphony Preview started them as `whitelabel` while `vibe`
-defaulted the project name to the worktree directory), the real fix is to
-correct the script/compose project — that is bucket 2: **fix it and re-run**, do
-NOT record `blocked`.
+**Concrete trap:** a focused `./vibe test tests/Feature/MyTest.php` prints
+`Sail is not running`. That *looks* like "no Docker", but if the containers are
+actually up under a different compose project (e.g. Symphony Preview started
+them as `whitelabel` while `vibe` defaulted the project name to the worktree
+directory), the real fix is to correct the script/compose project — that is
+bucket 2: **fix it and re-run**, do NOT record `blocked`.
 
 ### Recording a genuine environment block
 
@@ -329,7 +367,7 @@ concrete `"blocked_reason"` instead of thrashing on it:
 {
   "kind": "unit",
   "repo": "backend",
-  "command": "./vibe test",
+  "command": "./vibe test tests/Feature/MyTest.php --filter=MyTest",
   "status": "blocked",
   "blocked_reason": "Docker daemon unreachable at /var/run/docker.sock; no container runtime exists in this sandbox, so Sail cannot start at all.",
   "report": "artifacts/backend-unit.txt"
@@ -374,9 +412,9 @@ running checks — stale `blocked` entries are not evidence for this session.
 
 | Situation | Action |
 |-----------|--------|
-| First turn in this session; required command not tried yet | Run it; record `passed`, `failed`, or `blocked` |
-| Continuation turn; prior manifest has `blocked` for that command **from an earlier turn in this same session** | Retry **once** — sandbox capabilities may differ |
-| Same command still `blocked` after one retry in this session | Stop retrying; keep the `blocked` entry with `blocked_reason` |
+| First turn in this session; required focused command not tried yet | Run it; record `passed`, `failed`, or `blocked` |
+| Continuation turn; prior manifest has `blocked` for that focused command **from an earlier turn in this same session** | Retry **once** — sandbox capabilities may differ |
+| Same focused command still `blocked` after one retry in this session | Stop retrying; keep the `blocked` entry with `blocked_reason` |
 | All required runs are `passed`, or remaining gaps are only `blocked` after real attempts | **End the turn** — do not burn further turns re-checking git/manifest |
 | Manifest satisfied from this session's executed commands | End the turn; do not append more workpad continuation notes |
 
@@ -389,14 +427,16 @@ be fine but the environment cannot prove it. Say so once in the workpad
 ```text
 ❌  git status → node -e 'parse manifest' → workpad "Continuação #9" → Task Complete
 ❌  npm run test:unit (full suite) + record unrelated failure alongside scoped pass
+❌  Run a bare configured `unit_command` after focused same-surface tests already passed
 ❌  Copy prior manifest.json without re-running commands this session
 ❌  Assume "no commits ahead" means "nothing to do" while e2e/backend tests were never run
 ❌  bare `npx playwright test` on ad-hoc ports instead of the project's configured e2e command
 ```
 
 ```text
-✅  git diff → scoped lint/unit → ./vibe up → scoped backend test → project's e2e command → fresh manifest
-✅  manage_preview(status) → run the project's configured e2e command (reuses preview + isolated DB)
+✅  git diff → tests created/modified → same-surface tests → focused e2e → fresh manifest
+✅  ./vibe up → ./vibe test tests/Feature/MyTest.php --filter=MyTest → fresh manifest
+✅  manage_preview(status) → configured e2e launcher + affected spec/filter (reuses preview + isolated DB)
 ✅  blocked after real attempt → one-sentence Validation summary → end turn
 ```
 

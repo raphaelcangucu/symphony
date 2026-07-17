@@ -208,6 +208,7 @@ function sessionNodeFromRow(
     projectSlug,
     workspaceId: row.workspaceId,
     sessionKind,
+    executionMode: row.executionMode ?? null,
     title: resolveSidebarSessionPresentation(sessionTitle, row.issueIdentifier),
     subtitle: row.issueIdentifier ?? row.workspacePath ?? projectTitle,
     href: row.href,
