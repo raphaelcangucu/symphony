@@ -139,7 +139,13 @@ import { useKbAllRepoTrees } from "@/hooks/useKbAllRepoTrees";
 import { useKbProjectOverview } from "@/hooks/useKbProjectOverview";
 import { useWorkspaceDiffStats } from "@/hooks/useWorkspaceDiffStats";
 import { CreatePlanCard } from "@/components/assistant/CreatePlanCard";
+import { NotionImportCard } from "@/components/assistant/NotionImportCard";
+import { NotionImportPreviewSheet } from "@/components/assistant/NotionImportPreviewSheet";
 import { UserQuestionsCard } from "@/components/assistant/UserQuestionsCard";
+import {
+  normalizeNotionImportResult,
+  type NotionImportResult,
+} from "@/services/notion";
 import {
   assistantExploreTopic,
   assistantIssueTopic,
@@ -189,6 +195,97 @@ import { useAssistantCommands } from "@/hooks/useAssistantCommands";
 function readThreadCache(threadId: number | null | undefined): AssistantSessionSnapshot | null {
   if (threadId == null || !Number.isInteger(threadId) || threadId <= 0) return null;
   return getAssistantSessionSnapshot(threadId);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function stringField(record: Record<string, unknown>, ...keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) return value;
+  }
+  return undefined;
+}
+
+function numberField(record: Record<string, unknown>, ...keys: string[]): number | undefined {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+  }
+  return undefined;
+}
+
+function notionImportResultFromUnknown(payload: unknown): NotionImportResult | null {
+  if (!isRecord(payload)) return null;
+
+  const nested = isRecord(payload.data) ? payload.data : null;
+  const sources = nested ? [nested, payload] : [payload];
+
+  for (const source of sources) {
+    const importId = stringField(source, "import_id", "importId");
+    const markdownPath = stringField(source, "markdown_path", "markdownPath");
+    if (!importId || !markdownPath) continue;
+
+    try {
+      return normalizeNotionImportResult({
+        import_id: importId,
+        title: stringField(source, "title"),
+        kind: stringField(source, "kind"),
+        source_url: stringField(source, "source_url", "sourceUrl"),
+        markdown_path: markdownPath,
+        assets_dir: stringField(source, "assets_dir", "assetsDir"),
+        meta_path: stringField(source, "meta_path", "metaPath"),
+        asset_count: numberField(source, "asset_count", "assetCount"),
+        warnings: Array.isArray(source.warnings)
+          ? source.warnings.filter((warning): warning is string => typeof warning === "string")
+          : undefined,
+        preview_markdown: stringField(source, "preview_markdown", "previewMarkdown") ?? "",
+      });
+    } catch {
+      continue;
+    }
+  }
+
+  return null;
+}
+
+function notionImportResultFromToolCall(toolCall: {
+  name: string;
+  result?: Record<string, unknown>;
+  output?: string | null;
+}): NotionImportResult | null {
+  const namedImport =
+    toolCall.name === "import_notion_page" ||
+    (isRecord(toolCall.result) && toolCall.result.tool === "import_notion_page");
+  if (!namedImport) return null;
+
+  const fromResult = notionImportResultFromUnknown(toolCall.result);
+  if (fromResult) return fromResult;
+
+  if (typeof toolCall.output === "string" && toolCall.output.trim()) {
+    try {
+      return notionImportResultFromUnknown(JSON.parse(toolCall.output) as unknown);
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+}
+
+function latestNotionImportFromMessages(
+  messages: Array<{ toolCalls: Array<{ name: string; result?: Record<string, unknown>; output?: string | null }> }>,
+): NotionImportResult | null {
+  for (let messageIndex = messages.length - 1; messageIndex >= 0; messageIndex -= 1) {
+    const toolCalls = messages[messageIndex]?.toolCalls ?? [];
+    for (let toolIndex = toolCalls.length - 1; toolIndex >= 0; toolIndex -= 1) {
+      const mapped = notionImportResultFromToolCall(toolCalls[toolIndex]!);
+      if (mapped) return mapped;
+    }
+  }
+  return null;
 }
 
 export type { DraftIssueCreated } from "@/components/assistant/assistantPanelHelpers";
@@ -464,6 +561,9 @@ function InteractiveProjectAssistantPanel({
   const [pendingQuestions, setPendingQuestions] = useState<UserQuestionsRequest | null>(null);
   const [pendingApproval, setPendingApproval] = useState<AssistantApprovalRequest | null>(null);
   const [pendingCreatePlan, setPendingCreatePlan] = useState<AssistantCreatePlanRequest | null>(null);
+  const [notionImport, setNotionImport] = useState<NotionImportResult | null>(null);
+  const [notionPreviewOpen, setNotionPreviewOpen] = useState(false);
+  const [notionPreviewImportId, setNotionPreviewImportId] = useState<string | null>(null);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [workspaceProvisionRetrying, setWorkspaceProvisionRetrying] = useState(false);
   const [workspaceProvisionRetryError, setWorkspaceProvisionRetryError] = useState<string | null>(null);
@@ -1699,6 +1799,11 @@ function InteractiveProjectAssistantPanel({
     () => visibleMessages.flatMap((message) => message.toolCalls),
     [visibleMessages],
   );
+  useEffect(() => {
+    const fromTools = latestNotionImportFromMessages(visibleMessages);
+    if (!fromTools) return;
+    setNotionImport((current) => (current?.importId === fromTools.importId ? current : fromTools));
+  }, [visibleMessages]);
   usePublishSessionTasksDockFeed({ tasks: taskSnapshot, toolItems });
   const hasTasks = (taskSnapshot?.tasks.length ?? 0) > 0;
   const tasksDone = taskSnapshot ? completedTaskCount(taskSnapshot) : 0;
@@ -2128,6 +2233,26 @@ function InteractiveProjectAssistantPanel({
     </div>
   ) : null;
 
+  const notionImportNode = notionImport ? (
+    <div className="px-4 pb-2">
+      <NotionImportCard
+        result={notionImport}
+        onOpenPreview={() => {
+          setNotionPreviewImportId(notionImport.importId);
+          setNotionPreviewOpen(true);
+        }}
+      />
+    </div>
+  ) : null;
+
+  const notionPreviewSheet = (
+    <NotionImportPreviewSheet
+      open={notionPreviewOpen}
+      onOpenChange={setNotionPreviewOpen}
+      importId={notionPreviewImportId}
+    />
+  );
+
   // Stays visible (does not auto-dismiss) until provisioning succeeds or the
   // user navigates away, since a stuck workspace otherwise silently blocks
   // every subsequent turn on this issue.
@@ -2283,6 +2408,7 @@ function InteractiveProjectAssistantPanel({
       magicPaletteRequestId={magicPaletteRequestId}
       header={authoringGoalPill}
       contextInsertRequest={contextInsertRequest}
+      onNotionImported={setNotionImport}
       hint={
         catalogLoading
           ? t("assistant.panel.loadingModels")
@@ -2507,6 +2633,7 @@ function InteractiveProjectAssistantPanel({
                     {questionsNode}
                     {approvalNode}
                     {createPlanNode}
+                    {notionImportNode}
                   </div>
                 </div>
               }
@@ -2541,6 +2668,7 @@ function InteractiveProjectAssistantPanel({
             <BtwOverlay question={btw.question} answer={btw.answer} status={btw.status} onClose={() => setBtw(null)} />
           ) : null}
           {knowledgeBaseDialog}
+          {notionPreviewSheet}
           {issueIdentifier || threadId ? (
             <GitDiffLauncher
               projectSlug={projectSlug ?? undefined}
@@ -2594,6 +2722,7 @@ function InteractiveProjectAssistantPanel({
               {questionsNode}
               {approvalNode}
               {createPlanNode}
+              {notionImportNode}
               {composerNode ?? (
                 <div className="border-t px-4 py-6 text-sm text-muted-foreground">{t("assistant.panel.loadingModels")}</div>
               )}
@@ -2607,6 +2736,7 @@ function InteractiveProjectAssistantPanel({
           <BtwOverlay question={btw.question} answer={btw.answer} status={btw.status} onClose={() => setBtw(null)} />
         ) : null}
         {knowledgeBaseDialog}
+        {notionPreviewSheet}
         {issueIdentifier || threadId ? (
           <GitDiffLauncher
             projectSlug={projectSlug ?? undefined}

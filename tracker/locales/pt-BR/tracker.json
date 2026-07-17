@@ -2552,6 +2552,8 @@
     },
     "notionImport": {
       "untitled": "Importação do Notion",
+      "importChip": "Importar do Notion",
+      "importFailed": "Falha ao importar do Notion.",
       "openPreview": "Abrir prévia",
       "assetCount_one": "{{count}} asset",
       "assetCount_other": "{{count}} assets",

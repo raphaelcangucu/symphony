@@ -1,3 +1,4 @@
+import axios from "axios";
 import {
   AudioLines,
   CircleDot,
@@ -19,6 +20,7 @@ import {
   type ReactNode,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -67,7 +69,9 @@ import {
   type AssistantComposerState,
   type AssistantEffort,
 } from "@/lib/assistantSettings";
+import { extractNotionUrls } from "@/lib/notionUrl";
 import { cn, SCROLLBAR_THIN } from "@/lib/utils";
+import { importNotionPage, type NotionImportResult } from "@/services/notion";
 import type { AgentKind } from "@/types/issue";
 
 function addContextRef(current: ComposerContextChipRef[], ref: ComposerContextChipRef): ComposerContextChipRef[] {
@@ -229,6 +233,8 @@ interface AssistantComposerProps
   onEmptySubmit?: () => void;
   onSubmit: (payload: AssistantComposerSubmit) => void;
   onComposerSnapshot?: (snapshot: ComposerSnapshot) => void;
+  /** Called after a successful composer Notion URL import. */
+  onNotionImported?: (result: NotionImportResult) => void;
   /**
    * Optional element that acts as the file drop zone. When provided, dropping
    * files anywhere inside it (e.g. the whole assistant panel) attaches them,
@@ -274,6 +280,7 @@ export function AssistantComposer({
   onEmptySubmit,
   onSubmit,
   onComposerSnapshot,
+  onNotionImported,
   onAgentChange,
   onSettingsChange,
   agentSeed = null,
@@ -284,6 +291,7 @@ export function AssistantComposer({
   const { t } = useTranslation();
   const isLgUp = useIsLgUp();
   const [input, setInput] = useState("");
+  const [notionImporting, setNotionImporting] = useState(false);
   const [internalMagicOpen, setInternalMagicOpen] = useState(false);
   const magicOpen = magicPaletteOpen ?? internalMagicOpen;
   const setMagicOpen = onMagicPaletteOpenChange ?? setInternalMagicOpen;
@@ -706,6 +714,23 @@ export function AssistantComposer({
     });
   }
 
+  const notionUrls = useMemo(() => extractNotionUrls(input), [input]);
+  const firstNotionUrl = notionUrls[0] ?? null;
+
+  async function handleNotionImport() {
+    if (!firstNotionUrl || notionImporting || disabled || composerDisabled) return;
+
+    setNotionImporting(true);
+    try {
+      const result = await importNotionPage(firstNotionUrl);
+      onNotionImported?.(result);
+    } catch (error) {
+      toast.error(notionImportErrorMessage(error, t("assistant.notionImport.importFailed")));
+    } finally {
+      setNotionImporting(false);
+    }
+  }
+
   const dropOverlay = dragActive ? (
     <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center border-2 border-dashed border-primary/60 bg-background/85 text-sm font-medium text-primary">
       {t("assistant.composer.dropFiles")}
@@ -886,6 +911,22 @@ export function AssistantComposer({
           </div>
         ) : null}
 
+        {firstNotionUrl ? (
+          <div className="flex flex-wrap items-center gap-2 border-b px-3 py-2">
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="h-7 px-2.5 text-xs"
+              data-testid="notion-import-chip"
+              disabled={disabled || composerDisabled || notionImporting}
+              onClick={() => void handleNotionImport()}
+            >
+              {t("assistant.notionImport.importChip")}
+            </Button>
+          </div>
+        ) : null}
+
         <Textarea
           ref={textareaRef}
           value={input}
@@ -1010,4 +1051,18 @@ export function AssistantComposer({
       {footer}
     </form>
   );
+}
+
+function notionImportErrorMessage(error: unknown, fallback: string): string {
+  if (axios.isAxiosError(error)) {
+    const body = error.response?.data;
+    if (body && typeof body === "object" && "error" in body) {
+      const message = (body as { error?: { message?: string } }).error?.message;
+      if (typeof message === "string" && message.trim()) return message;
+    }
+    if (typeof error.message === "string" && error.message.trim()) return error.message;
+  }
+
+  if (error instanceof Error && error.message.trim()) return error.message;
+  return fallback;
 }
