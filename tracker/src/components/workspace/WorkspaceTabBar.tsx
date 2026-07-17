@@ -3,6 +3,7 @@ import type { KeyboardEvent, ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { cn, SCROLLBAR_THIN } from "@/lib/utils";
+import type { WorkspaceTabPresentation } from "@/lib/workspaceTabs/presentation";
 import type { WorkspaceTab } from "@/lib/workspaceTabs/types";
 
 interface WorkspaceTabBarProps {
@@ -13,6 +14,7 @@ interface WorkspaceTabBarProps {
   ariaLabel: string;
   shortcutHints?: boolean;
   trailing?: ReactNode;
+  resolveTabPresentation?: (tab: WorkspaceTab) => WorkspaceTabPresentation;
 }
 
 export function WorkspaceTabBar({
@@ -23,6 +25,7 @@ export function WorkspaceTabBar({
   ariaLabel,
   shortcutHints = false,
   trailing,
+  resolveTabPresentation,
 }: WorkspaceTabBarProps) {
   if (tabs.length === 0 && !trailing) return null;
 
@@ -38,12 +41,16 @@ export function WorkspaceTabBar({
       >
         {tabs.map((tab, index) => {
           const active = tab.id === activeTabId;
+          const presentation = resolveTabPresentation?.(tab) ?? { label: tab.title };
+          const tabLabel = presentation.label.trim() || tab.title;
+          const tabTooltip = presentation.tooltip?.trim() || undefined;
           return (
             <div key={tab.id} className="flex shrink-0 items-center">
               <button
                 type="button"
                 role="tab"
                 aria-selected={active}
+                title={tabTooltip}
                 className={cn(
                   "inline-flex max-w-[14rem] items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors",
                   active
@@ -61,7 +68,7 @@ export function WorkspaceTabBar({
                   aria-hidden
                   className={cn("h-1.5 w-1.5 rounded-full", active ? "bg-emerald-500" : "bg-muted-foreground/40")}
                 />
-                <span className="truncate">{tab.title}</span>
+                <span className="truncate">{tabLabel}</span>
                 {shortcutHints && index < 9 ? (
                   <span className="hidden text-[10px] text-muted-foreground sm:inline">Ctrl+{index + 1}</span>
                 ) : null}
@@ -72,8 +79,11 @@ export function WorkspaceTabBar({
                   variant="ghost"
                   size="icon"
                   className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
-                  aria-label={`Close ${tab.title}`}
-                  onClick={() => onClose(tab.id)}
+                  aria-label={`Close ${tabLabel}`}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onClose(tab.id);
+                  }}
                 >
                   <X className="h-3.5 w-3.5" />
                 </Button>

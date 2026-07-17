@@ -28,51 +28,62 @@ export function ExecutionStatusHeaderControl() {
   const displayStatus = resolveDisplayStatus(execution);
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          data-testid="execution-status-header-control"
-          aria-label={t("issue.agent.tab.runStatus")}
-          title={t("issue.agent.tab.runStatus")}
-          className={cn(
-            sessionToolbarChipClassName,
-            "gap-1 border-transparent bg-transparent px-1 py-0 hover:bg-muted/60",
-          )}
-        >
-          <AgentStatusBadge status={displayStatus} />
-          <ChevronDown className={cn("h-3 w-3 shrink-0 transition-transform", open && "rotate-180")} />
-        </button>
-      </PopoverTrigger>
-      <PopoverContent align="start" sideOffset={6} className="w-80 p-0">
-        <div className="flex items-center justify-between gap-2 border-b border-border/60 px-4 py-3">
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-              {t("issue.agent.tab.runStatus")}
-            </span>
-            {execution.agentKind ? (
-              <span className="rounded-full border border-border/60 px-2 py-0.5 text-[11px] text-muted-foreground">
-                {agentKindLabel(execution.agentKind, t)}
+    <div className="flex min-w-0 items-center gap-2">
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            data-testid="execution-status-header-control"
+            aria-label={t("issue.agent.tab.runStatus")}
+            title={t("issue.agent.tab.runStatus")}
+            className={cn(
+              sessionToolbarChipClassName,
+              "gap-1 border-transparent bg-transparent px-1 py-0 hover:bg-muted/60",
+            )}
+          >
+            <AgentStatusBadge status={displayStatus} />
+            <ChevronDown className={cn("h-3 w-3 shrink-0 transition-transform", open && "rotate-180")} />
+          </button>
+        </PopoverTrigger>
+        <PopoverContent align="start" sideOffset={6} className="w-80 p-0">
+          <div className="flex items-center justify-between gap-2 border-b border-border/60 px-4 py-3">
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                {t("issue.agent.tab.runStatus")}
               </span>
-            ) : null}
+              {execution.agentKind ? (
+                <span className="rounded-full border border-border/60 px-2 py-0.5 text-[11px] text-muted-foreground">
+                  {agentKindLabel(execution.agentKind, t)}
+                </span>
+              ) : null}
+            </div>
+            <div className="flex flex-wrap items-center justify-end gap-1.5">
+              <span className="inline-flex items-center gap-0.5">
+                <AgentStatusBadge status={displayStatus} />
+                <AgentResumeIconButton
+                  projectSlug={projectSlug}
+                  issueIdentifier={issue.identifier}
+                  execution={execution}
+                  onIssueUpdated={onIssueUpdated}
+                />
+              </span>
+              <AgentLongRunningBadge execution={execution} />
+            </div>
           </div>
-          <div className="flex flex-wrap items-center justify-end gap-1.5">
-            <span className="inline-flex items-center gap-0.5">
-              <AgentStatusBadge status={displayStatus} />
-              <AgentResumeIconButton
-                projectSlug={projectSlug}
-                issueIdentifier={issue.identifier}
-                execution={execution}
-                onIssueUpdated={onIssueUpdated}
-              />
-            </span>
-            <AgentLongRunningBadge execution={execution} />
+          <div className="max-h-[60vh] overflow-y-auto px-4 py-3">
+            <ExecutionStatusDetails issue={issue} execution={execution} />
           </div>
-        </div>
-        <div className="max-h-[60vh] overflow-y-auto px-4 py-3">
-          <ExecutionStatusDetails issue={issue} execution={execution} />
-        </div>
-      </PopoverContent>
-    </Popover>
+        </PopoverContent>
+      </Popover>
+      {issue.title.trim() && issue.title.trim() !== issue.identifier ? (
+        <span
+          className="hidden max-w-[12rem] truncate text-[11px] text-muted-foreground/75 sm:inline"
+          title={issue.title}
+          data-testid="execution-status-issue-title"
+        >
+          {issue.title}
+        </span>
+      ) : null}
+    </div>
   );
 }

@@ -991,9 +991,27 @@ defmodule SymphonyElixir.Assistant.History do
     |> filter_project(Keyword.get(opts, :project_slug))
     |> filter_issue_identifier(Keyword.get(opts, :issue_identifier))
     |> filter_archived(Keyword.get(opts, :include_archived, false))
-    |> order_by([t], desc: t.updated_at, desc: t.id)
+    |> order_threads(Keyword.get(opts, :order, :updated_at))
     |> limit(^Keyword.get(opts, :limit, 50))
     |> Repo.all()
+  end
+
+  # `:activity` keeps in-progress threads in the fetch window ahead of idle/closed
+  # ones so project-session pagination does not drop live work.
+  defp order_threads(query, :activity) do
+    order_by(query, [t], [
+      asc:
+        fragment(
+          "CASE ? WHEN 'active' THEN 0 WHEN 'error' THEN 1 WHEN 'closed' THEN 2 WHEN 'archived' THEN 3 ELSE 4 END",
+          t.status
+        ),
+      desc: t.updated_at,
+      desc: t.id
+    ])
+  end
+
+  defp order_threads(query, _order) do
+    order_by(query, [t], desc: t.updated_at, desc: t.id)
   end
 
   @doc """

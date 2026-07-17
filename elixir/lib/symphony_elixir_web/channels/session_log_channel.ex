@@ -15,13 +15,18 @@ defmodule SymphonyElixirWeb.SessionLogChannel do
   alias SymphonyElixirWeb.TrackerAuth
 
   @poll_ms 500
+  @known_agent_kinds ["codex", "claude", "cursor", "opencode"]
 
   @impl true
   def join("session_log:" <> topic_rest, %{"project_slug" => project_slug} = params, socket)
       when is_binary(project_slug) and project_slug != "" do
-    case Integer.parse(topic_rest) do
-      {session_id, ""} -> join_session(session_id, project_slug, socket)
-      _ -> join_by_issue(topic_rest, project_slug, params, socket)
+    if String.starts_with?(topic_rest, "agent:") do
+      join_agent(String.replace_prefix(topic_rest, "agent:", ""), project_slug, params, socket)
+    else
+      case Integer.parse(topic_rest) do
+        {session_id, ""} -> join_session(session_id, project_slug, socket)
+        _ -> join_by_issue(topic_rest, project_slug, params, socket)
+      end
     end
   end
 
@@ -103,7 +108,89 @@ defmodule SymphonyElixirWeb.SessionLogChannel do
     end
   end
 
+  defp join_agent(subagent_id, project_slug, params, socket) do
+    with :ok <- authorize(socket),
+         :ok <- validate_subagent_id(subagent_id),
+         {:ok, agent_kind} <- parse_join_agent_kind(params),
+         {:ok, session_id} <- parse_parent_session_id(params),
+         {:ok, thread} <- SymphonyElixir.Assistant.History.get_thread(session_id),
+         {:ok, _log_agent_kind, parent_path} <- SessionLog.resolve_for_session(thread),
+         {:ok, child_path} <- resolve_subagent_child(agent_kind, subagent_id, parent_path, params),
+         {:ok, meta} <- scoped_subagent_meta(agent_kind, child_path) do
+      {:ok, lines, offset} = SessionLog.tail(agent_kind, child_path, SessionLog.join_tail_opts())
+
+      socket =
+        socket
+        |> assign(:path, child_path)
+        |> assign(:offset, offset)
+        |> assign(:agent_kind, agent_kind)
+        |> assign(:project_slug, project_slug)
+        |> assign(:subagent, true)
+
+      send(self(), :poll)
+
+      {:ok, %{entries: lines, offset: offset, agent_kind: agent_kind, meta: meta}, socket}
+    else
+      {:error, "unauthorized"} -> {:error, %{reason: "unauthorized"}}
+      _ -> {:error, %{reason: "session_log_unavailable"}}
+    end
+  end
+
+  defp validate_subagent_id(id) when is_binary(id) do
+    if Regex.match?(~r/^[A-Za-z0-9-]+$/, id), do: :ok, else: :error
+  end
+
+  defp validate_subagent_id(_id), do: :error
+
+  defp parse_join_agent_kind(%{"agent_kind" => kind}) when kind in @known_agent_kinds, do: {:ok, kind}
+  defp parse_join_agent_kind(_params), do: :error
+
+  defp parse_parent_session_id(%{"session_id" => session_id}) when is_integer(session_id) and session_id > 0 do
+    {:ok, session_id}
+  end
+
+  defp parse_parent_session_id(%{"session_id" => session_id}) when is_binary(session_id) do
+    case Integer.parse(session_id) do
+      {id, ""} when id > 0 -> {:ok, id}
+      _ -> :error
+    end
+  end
+
+  defp parse_parent_session_id(_params), do: :error
+
+  defp resolve_subagent_child(agent_kind, subagent_id, parent_path, params) do
+    opts = [parent_path: parent_path]
+
+    opts =
+      case params["tool_use_id"] do
+        tool_use_id when is_binary(tool_use_id) and tool_use_id != "" ->
+          Keyword.put(opts, :tool_use_id, tool_use_id)
+
+        _ ->
+          opts
+      end
+
+    SessionLog.resolve_subagent(agent_kind, subagent_id, opts)
+  end
+
+  defp scoped_subagent_meta("codex", child_path) do
+    meta = SessionLog.subagent_meta("codex", child_path)
+
+    case meta["parent"] do
+      parent when is_binary(parent) and parent != "" -> {:ok, meta}
+      _ -> :error
+    end
+  end
+
+  defp scoped_subagent_meta(agent_kind, child_path) do
+    {:ok, SessionLog.subagent_meta(agent_kind, child_path)}
+  end
+
   @impl true
+  def handle_in("steer_turn", _payload, %{assigns: %{subagent: true}} = socket) do
+    {:reply, {:error, %{reason: "read_only"}}, socket}
+  end
+
   def handle_in("steer_turn", payload, socket) when is_map(payload) do
     message = Map.get(payload, "message", "")
     attachments = Map.get(payload, "attachments", [])
@@ -174,8 +261,12 @@ defmodule SymphonyElixirWeb.SessionLogChannel do
     {:noreply, socket}
   end
 
-  defp poll_agent_log(socket, %{path: path, offset: offset, agent_kind: agent_kind, workspace: workspace}) do
-    log_opts = [workspace: workspace]
+  defp poll_agent_log(socket, %{path: path, offset: offset, agent_kind: agent_kind} = assigns) do
+    log_opts =
+      case Map.get(assigns, :workspace) do
+        workspace when is_binary(workspace) -> [workspace: workspace]
+        _ -> []
+      end
 
     case SessionLog.read_from(agent_kind, path, offset, log_opts) do
       {:ok, lines, new_offset} when lines != [] ->
@@ -189,6 +280,8 @@ defmodule SymphonyElixirWeb.SessionLogChannel do
         socket
     end
   end
+
+  defp poll_agent_log(socket, _assigns), do: socket
 
   defp poll_symphony_events(socket, %{workspace: workspace, symphony_offset: symphony_offset}) do
     case SessionEvents.read_from(workspace, symphony_offset) do
@@ -204,7 +297,7 @@ defmodule SymphonyElixirWeb.SessionLogChannel do
     end
   end
 
-  @known_agent_kinds ["codex", "claude", "cursor", "opencode"]
+  defp poll_symphony_events(socket, _assigns), do: socket
 
   # The client tells us which agent the operator is actually viewing (the
   # selected/running agent in the UI). Honor it so the session log shows that

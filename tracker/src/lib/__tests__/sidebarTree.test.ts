@@ -647,7 +647,7 @@ describe("buildSidebarProjectTree", () => {
     ]);
   });
 
-  it("sorts by pinned, recency, then error, attention, active, title, and stable id", () => {
+  it("sorts by pinned, in-progress activity, then recency, title, and stable id", () => {
     const nodes = [
       workspaceNode("alpha-b", "Alpha", "idle", "2026-01-01T00:00:00Z"),
       workspaceNode("active", "Zulu", "active", "2026-01-01T00:00:00Z"),
@@ -660,13 +660,20 @@ describe("buildSidebarProjectTree", () => {
 
     expect([...nodes].sort(compareSidebarNodes).map((node) => node.id)).toEqual([
       "pinned",
-      "recent",
-      "error",
-      "attention",
       "active",
+      "attention",
+      "error",
+      "recent",
       "alpha-a",
       "alpha-b",
     ]);
+    // active and attention share the in-progress rank; title/id break ties.
+    expect(
+      [
+        workspaceNode("waiting", "Waiting", "attention", "2026-01-01T00:00:00Z"),
+        workspaceNode("live", "Live", "active", "2026-01-01T00:00:00Z"),
+      ].sort(compareSidebarNodes).map((node) => node.id),
+    ).toEqual(["live", "waiting"]);
   });
 
   it("sorts malformed timestamps as oldest without unstable NaN comparisons", () => {

@@ -4,6 +4,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useAgentExecutions } from "@/hooks/useAgentExecutions";
+import { useRecents } from "@/hooks/useRecents";
 import { useSidebarTree } from "@/hooks/useSidebarTree";
 import { listIssues } from "@/services/issues";
 import { listProjects } from "@/services/projects";
@@ -13,6 +14,7 @@ import { subscribeWorkspaceInventory } from "@/services/worktrees";
 import type { AgentExecution } from "@/types/agent-execution";
 import type { Project } from "@/types/project";
 import type { ProjectSessionRow } from "@/types/project-session";
+import type { RecentSession } from "@/types/recents";
 
 vi.mock("@/hooks/useAgentExecutions", () => ({ useAgentExecutions: vi.fn() }));
 vi.mock("@/hooks/useRecents", () => ({
@@ -119,7 +121,7 @@ describe("useSidebarTree", () => {
     await waitFor(() => expect(listProjectSessions).toHaveBeenCalledOnce());
     expect(listProjectSessions).toHaveBeenCalledWith({
       projectSlug: "alpha",
-      limit: 20,
+      limit: 6,
       includeArchived: false,
     });
     expect(listIssues).not.toHaveBeenCalled();
@@ -147,6 +149,49 @@ describe("useSidebarTree", () => {
     await waitFor(() => expect(result.current.tree[0].loadState).toBe("ready"));
     expect(result.current.tree[0].sessions[0]).toMatchObject({
       issueIdentifier: "ALPHA-1",
+      aggregateStatus: "active",
+      statusKind: "running",
+    });
+  });
+
+  it("overlays live status after recents supply the issue identifier", async () => {
+    const recent: RecentSession = {
+      id: "chat:1",
+      kind: "chat",
+      scope: "issue_session",
+      agentKind: "cursor",
+      projectSlug: "alpha",
+      projectName: "ALPHA",
+      title: "Models Game Back",
+      identifier: "GAM-20",
+      threadId: 1,
+      status: "active",
+      statusKind: "active",
+      preview: null,
+      updatedAt: "2026-07-14T12:00:00Z",
+    };
+    vi.mocked(useRecents).mockReturnValue({
+      sessions: [recent],
+      loading: false,
+      refetch: async () => undefined,
+    });
+    vi.mocked(useAgentExecutions).mockReturnValue({
+      executions: new Map([["GAM-20", execution("GAM-20")]]),
+    });
+    vi.mocked(listProjectSessions).mockResolvedValue({
+      sessions: [{ ...session("thread:1"), aggregateStatus: "active", issueIdentifier: null }],
+      nextCursor: null,
+      projectActivityAt: "2026-07-14T12:00:00Z",
+    });
+
+    const { result } = renderHook(() => useSidebarTree(), { wrapper });
+    await waitFor(() => expect(result.current.projectsLoading).toBe(false));
+    act(() => result.current.toggleProjectExpanded("alpha"));
+
+    await waitFor(() => expect(result.current.tree[0].loadState).toBe("ready"));
+    expect(result.current.tree[0].sessions[0]).toMatchObject({
+      issueIdentifier: "GAM-20",
+      statusKind: "running",
       aggregateStatus: "active",
     });
   });
@@ -180,12 +225,14 @@ describe("useSidebarTree", () => {
     act(() => result.current.toggleProjectExpanded("alpha"));
     await waitFor(() => expect(result.current.tree[0].loadState).toBe("ready"));
 
+    // With page size 6, the first More reveals and immediately fetches the next page.
     act(() => result.current.showAllSessions("alpha"));
+    expect(result.current.preferences.revealedProjectIds).toContain("alpha");
 
     await waitFor(() =>
       expect(listProjectSessions).toHaveBeenLastCalledWith({
         projectSlug: "alpha",
-        limit: 20,
+        limit: 6,
         cursor: "cursor-2",
         includeArchived: false,
       }),

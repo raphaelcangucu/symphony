@@ -3,6 +3,7 @@ import axios from "axios";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { SubagentDrawerProvider } from "@/components/agent-activity/SubagentActivityDrawer";
 import { AssistantMessageList } from "@/components/assistant/AssistantMessageList";
 import { AssistantSessionErrorBoundary } from "@/components/assistant/AssistantSessionErrorBoundary";
 import { AssistantSessionShell } from "@/components/assistant/AssistantSessionShell";
@@ -248,53 +249,59 @@ export function ExecutionSessionPanel({
   ) : null;
 
   return (
-    <section
-      className="relative flex h-full min-h-0"
-      aria-label={t("assistant.panel.ariaLabel")}
-      data-testid="execution-session-panel"
-      data-execution-mode="true"
+    <SubagentDrawerProvider
+      projectSlug={projectSlug}
+      threadId={threadId}
+      agentKind={session.logAgentKind ?? session.preferredAgentKind}
     >
-      <AssistantSessionShell
-        className="min-w-0 flex-1"
-        feedRef={setScrollContainerRef}
-        feed={
-          <div className={cn(CHAT_READING_COLUMN_CLASS, "flex w-full flex-col gap-4 py-4")}>
-            {feedTop}
-            {messageItems}
-          </div>
-        }
-        feedOverlay={scrollToBottomButton}
-        composer={
-          <div className={cn("bg-background py-2", CHAT_READING_COLUMN_CLASS)}>
-            {showReturnPanel ? (
-              <details className="rounded-xl border border-border/70 bg-card/20 p-3">
-                <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
-                  {t("issue.agent.advancedControls")}
-                </summary>
-                <div className="mt-3">{composer}</div>
-              </details>
-            ) : (
-              composer
-            )}
-          </div>
-        }
-      />
-      <GitDiffLauncher
-        projectSlug={projectSlug}
-        identifier={issueIdentifier}
-        threadId={threadId}
-        disabled={issue == null}
-        onSendReview={(review) => {
-          void dispatchIssueAgent(projectSlug, issueIdentifier, {
-            action: "resume",
-            instructions: review,
-          }).then((result) => {
-            setIssue(result.issue);
-          });
-        }}
-        openRequestId={diffRequestId}
-        showTrigger={false}
-      />
-    </section>
+      <section
+        className="relative flex h-full min-h-0"
+        aria-label={t("assistant.panel.ariaLabel")}
+        data-testid="execution-session-panel"
+        data-execution-mode="true"
+      >
+        <AssistantSessionShell
+          className="min-w-0 flex-1"
+          feedRef={setScrollContainerRef}
+          feed={
+            <div className={cn(CHAT_READING_COLUMN_CLASS, "flex w-full flex-col gap-4 py-4")}>
+              {feedTop}
+              {messageItems}
+            </div>
+          }
+          feedOverlay={scrollToBottomButton}
+          composer={
+            <div className={cn("bg-background py-2", CHAT_READING_COLUMN_CLASS)}>
+              {showReturnPanel ? (
+                <details className="rounded-xl border border-border/70 bg-card/20 p-3">
+                  <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
+                    {t("issue.agent.advancedControls")}
+                  </summary>
+                  <div className="mt-3">{composer}</div>
+                </details>
+              ) : (
+                composer
+              )}
+            </div>
+          }
+        />
+        <GitDiffLauncher
+          projectSlug={projectSlug}
+          identifier={issueIdentifier}
+          threadId={threadId}
+          disabled={issue == null}
+          onSendReview={(review) => {
+            void dispatchIssueAgent(projectSlug, issueIdentifier, {
+              action: "resume",
+              instructions: review,
+            }).then((result) => {
+              setIssue(result.issue);
+            });
+          }}
+          openRequestId={diffRequestId}
+          showTrigger={false}
+        />
+      </section>
+    </SubagentDrawerProvider>
   );
 }

@@ -4,7 +4,13 @@ defmodule SymphonyElixir.Codex.SessionLog do
 
   Rollout files live under `~/.codex/sessions/**/rollout-*.jsonl`. The workspace
   sidecar (`.symphony/codex-session.json`) holds the active `thread_id`.
+
+  Subagent threads are also `rollout-*.jsonl` files under the same sessions tree;
+  resolve them by id via `resolve_subagent_path/2`. Listing all children for a
+  parent is intentionally unsupported (see `list_subagents/2`).
   """
+
+  @behaviour SymphonyElixir.SessionLogBackend
 
   alias SymphonyElixir.Codex.Session
 
@@ -13,12 +19,47 @@ defmodule SymphonyElixir.Codex.SessionLog do
   @spec resolve_rollout_path(Path.t(), keyword()) :: {:ok, Path.t()} | :error
   def resolve_rollout_path(workspace, opts \\ []) when is_binary(workspace) do
     with {:ok, thread_id} <- Session.resolve(workspace, opts),
-         {:ok, path} <- rollout_path_for_thread(thread_id, opts) do
+         {:ok, path} <- resolve_subagent_path(thread_id, opts) do
       {:ok, path}
     else
       _ -> :error
     end
   end
+
+  @doc """
+  Finds a Codex rollout whose basename contains `id` under `sessions_dir(opts)`.
+  """
+  @impl true
+  def resolve_subagent_path(id, opts) when is_binary(id) do
+    sessions_dir(opts)
+    |> Path.join("**/*.jsonl")
+    |> Path.wildcard()
+    |> Enum.find_value(:error, fn file ->
+      if String.contains?(Path.basename(file), id), do: {:ok, file}
+    end)
+  end
+
+  def resolve_subagent_path(_id, _opts), do: :error
+
+  @doc """
+  Codex does not implement parent→children listing.
+
+  Scanning hundreds of rollout files for `parent_thread_id` is too expensive for
+  UI refresh paths, and Codex subagent cards already carry the exact agent id
+  for `resolve_subagent_path/2`.
+  """
+  @impl true
+  def list_subagents(_parent_path, _opts), do: []
+
+  @impl true
+  def subagent_meta(path) when is_binary(path) do
+    case read_first_json_line(path) do
+      {:ok, decoded} -> session_meta_fields(decoded)
+      :error -> %{}
+    end
+  end
+
+  def subagent_meta(_path), do: %{}
 
   @spec tail(Path.t(), keyword()) :: {:ok, [map()], non_neg_integer()}
   def tail(path, opts \\ []) when is_binary(path) do
@@ -77,19 +118,56 @@ defmodule SymphonyElixir.Codex.SessionLog do
   defp entry_summary(%{"title" => title}) when is_binary(title), do: title
   defp entry_summary(_entry), do: nil
 
-  defp rollout_path_for_thread(thread_id, opts) when is_binary(thread_id) do
-    sessions_dir(opts)
-    |> Path.join("**/*.jsonl")
-    |> Path.wildcard()
-    |> Enum.find_value(:error, fn file ->
-      if String.contains?(Path.basename(file), thread_id), do: {:ok, file}
-    end)
-  end
-
   defp sessions_dir(opts) do
     Keyword.get(opts, :sessions_dir) ||
       Application.get_env(:symphony_elixir, :codex_sessions_dir) ||
       Path.expand("~/.codex/sessions")
+  end
+
+  defp read_first_json_line(path) do
+    case File.open(path, [:read, :utf8]) do
+      {:ok, io} ->
+        try do
+          case IO.read(io, :line) do
+            line when is_binary(line) ->
+              case Jason.decode(String.trim(line)) do
+                {:ok, decoded} when is_map(decoded) -> {:ok, decoded}
+                _ -> :error
+              end
+
+            _ ->
+              :error
+          end
+        after
+          File.close(io)
+        end
+
+      {:error, _} ->
+        :error
+    end
+  end
+
+  defp session_meta_fields(%{"type" => "session_meta", "payload" => payload}) when is_map(payload) do
+    session_meta_from_payload(payload)
+  end
+
+  defp session_meta_fields(payload) when is_map(payload) do
+    session_meta_from_payload(payload)
+  end
+
+  defp session_meta_fields(_decoded), do: %{}
+
+  defp session_meta_from_payload(payload) when is_map(payload) do
+    nickname = Map.get(payload, "agent_nickname")
+    role = Map.get(payload, "agent_role")
+    parent = Map.get(payload, "parent_thread_id")
+
+    %{
+      "nickname" => nickname,
+      "role" => role,
+      "parent" => parent,
+      "label" => if(is_binary(nickname) and nickname != "", do: nickname, else: nil)
+    }
   end
 
   defp read_chunk(path, offset, size) do

@@ -1,3 +1,5 @@
+import type { SubagentRef } from "@/lib/subagentRef";
+
 export const TOOL_FAMILIES = [
   "command",
   "file_read",
@@ -12,6 +14,7 @@ export const TOOL_FAMILIES = [
   "devenv",
   "tunnel",
   "task",
+  "spawn_agent",
   "create_plan",
   "generic_mcp",
   "other",
@@ -50,6 +53,8 @@ export interface ToolPresentation {
   raw: string | null;
   /** Structured extras for specialized cards. */
   meta: Record<string, unknown>;
+  /** Canonical child-agent reference when this tool call spawns a subagent. */
+  subagentRef?: SubagentRef;
   outputTruncated?: boolean;
   outputByteSize?: number | null;
   kbPath?: string | null;

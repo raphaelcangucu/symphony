@@ -364,7 +364,7 @@ describe("ProjectSessionsPanel", () => {
     );
 
     expect(await screen.findByLabelText("mock execution session panel")).toHaveAttribute("data-thread", "42");
-    expect(screen.getByRole("tab", { name: /Saved launcher work/i })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /DEMO-1/i })).toBeInTheDocument();
   });
 
   it("archives the execution thread from its row like any other thread", async () => {
@@ -445,7 +445,7 @@ describe("ProjectSessionsPanel", () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole("tab", { name: /Saved launcher work/i })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /DEMO-1/i })).toBeInTheDocument();
     expect(screen.getByLabelText("mock authoring session panel")).toHaveAttribute("data-issue", "DEMO-1");
   });
 
@@ -473,7 +473,7 @@ describe("ProjectSessionsPanel", () => {
     expect(await screen.findByLabelText("mock authoring session panel")).toHaveAttribute("data-issue", "DEMO-2");
     expect(screen.queryByLabelText("mock new issue authoring panel")).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: /New issue with assistant/i })).not.toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /Issue authoring chat · Session/i })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /DEMO-2/i })).toBeInTheDocument();
   });
 
   it("prefers an exec authoring session over the new-issue query", () => {
@@ -483,7 +483,7 @@ describe("ProjectSessionsPanel", () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole("tab", { name: /Saved launcher work · Session/i })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /DEMO-1/i })).toBeInTheDocument();
     expect(screen.getByLabelText("mock authoring session panel")).toHaveAttribute("data-issue", "DEMO-1");
     expect(screen.queryByLabelText("mock new issue authoring panel")).not.toBeInTheDocument();
   });
@@ -541,9 +541,9 @@ describe("ProjectSessionsPanel", () => {
 
     expect(await screen.findByLabelText("mock execution session panel")).toHaveAttribute("data-thread", "42");
     await waitFor(() =>
-      expect(screen.getByRole("tab", { name: /Saved launcher work · (Execution|Autonomous|Session)/i })).toBeInTheDocument(),
+      expect(screen.getByRole("tab", { name: /DEMO-1/i })).toBeInTheDocument(),
     );
-    expect(screen.queryByRole("tab", { name: /^DEMO-1 · (Execution|Autonomous)/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: /Saved launcher work · (Execution|Autonomous|Session)/i })).not.toBeInTheDocument();
   });
 
   it("resumes a saved session from the workspace row menu", async () => {

@@ -11,7 +11,10 @@ import {
   workspaceActionIconProps,
   workspaceMenuIconProps,
 } from "@/components/sessions/WorkspaceActionButton";
-import { ChatStatusIcon } from "@/components/shared/ChatStatusIcon";
+import {
+  ChatStatusIcon,
+  sessionStatusIconKindFromScope,
+} from "@/components/shared/ChatStatusIcon";
 import {
   canArchiveSessionRow,
   formatBytes,
@@ -87,7 +90,12 @@ export function WorkspaceDetailPane({
         </div>
         <div className="space-y-0.5">
           <DetailSession
-            icon={<ChatStatusIcon statusKind={session.statusKind} />}
+            icon={
+              <ChatStatusIcon
+                sessionKind={sessionStatusIconKindFromScope(session.scope)}
+                statusKind={session.statusKind}
+              />
+            }
             label={session.title}
             meta={formatRelativeTime(session.updatedAt)}
             absoluteTitle={formatDateTime(session.updatedAt)}
@@ -191,7 +199,12 @@ function CardDetail({
         {card.sessions.map((session) => (
           <DetailSession
             key={session.id}
-            icon={<ChatStatusIcon statusKind={session.statusKind} />}
+            icon={
+              <ChatStatusIcon
+                sessionKind={sessionStatusIconKindFromScope(session.scope)}
+                statusKind={session.statusKind}
+              />
+            }
             label={session.title}
             meta={formatRelativeTime(session.updatedAt)}
             absoluteTitle={formatDateTime(session.updatedAt)}

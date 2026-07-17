@@ -93,6 +93,7 @@ export interface SidebarFlatProjectBranchInput {
   readonly nextCursor: string | null;
   readonly loadState: SidebarLoadState;
   readonly error: string | null;
+  readonly preferredSessionId?: string | null;
   readonly options: SidebarTreeBuildOptions;
 }
 

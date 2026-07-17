@@ -2,6 +2,8 @@ import { useTranslation } from "react-i18next";
 
 import type { ActivityDisclosureStateProps } from "@/components/agent-activity/ActivityDisclosure";
 import { AgentTaskInlineCard } from "@/components/agent-activity/AgentTaskInlineCard";
+import { useSubagentDrawer } from "@/components/agent-activity/subagentDrawerContext";
+import { SubagentToolCard } from "@/components/agent-activity/typed-tools/SubagentToolCard";
 import { renderTypedToolCard } from "@/components/agent-activity/typed-tools/renderTypedToolCard";
 import { FileActivityCard } from "@/components/assistant/FileActivityCard";
 import type { FileActivityView } from "@/components/assistant/fileActivity";
@@ -9,6 +11,7 @@ import { ToolCallBlock, type ToolCallView } from "@/components/shared/ToolCallBl
 import { Button } from "@/components/ui/button";
 import { isAgentTaskTool } from "@/lib/agentTasks";
 import type { OpenKbPathHandler } from "@/lib/openKbPath";
+import { getSubagentRef, type SubagentRef } from "@/lib/subagentRef";
 import type { ToolPresentation } from "@/lib/toolCallPresentation";
 import type { AgentTaskSnapshot } from "@/types/agentTasks";
 
@@ -38,6 +41,8 @@ export function ToolActivityItem({
   expanded,
   onExpandedChange,
 }: ToolActivityItemProps) {
+  const drawer = useSubagentDrawer();
+
   if (taskSnapshot && isAgentTaskTool(toolName)) {
     return (
       <AgentTaskInlineCard
@@ -84,6 +89,26 @@ export function ToolActivityItem({
     }
   }
 
+  // Cursor Task / Claude TaskCreate (and any spawn that lacked a typed card).
+  if (drawer) {
+    const ref = getSubagentRef({
+      toolName,
+      args: parseToolCallArgs(view),
+      output: parseToolCallOutput(view),
+      toolCallId,
+    });
+    if (ref) {
+      return (
+        <SubagentToolCard
+          presentation={presentationFromSubagentView(toolName, view, ref)}
+          subagentRef={ref}
+          expanded={expanded}
+          onExpandedChange={onExpandedChange}
+        />
+      );
+    }
+  }
+
   return (
     <ToolCallBlockWithKill
       view={view}
@@ -95,6 +120,51 @@ export function ToolActivityItem({
       onExpandedChange={onExpandedChange}
     />
   );
+}
+
+function parseToolCallArgs(view: ToolCallView): unknown {
+  const raw = view.input?.value;
+  if (typeof raw !== "string" || !raw.trim()) return null;
+  try {
+    return JSON.parse(raw) as unknown;
+  } catch {
+    return null;
+  }
+}
+
+function parseToolCallOutput(view: ToolCallView): unknown {
+  const raw = view.output?.value;
+  if (typeof raw !== "string" || !raw.trim()) return null;
+  try {
+    return JSON.parse(raw) as unknown;
+  } catch {
+    return raw;
+  }
+}
+
+function presentationFromSubagentView(
+  toolName: string,
+  view: ToolCallView,
+  ref: SubagentRef,
+): ToolPresentation {
+  const status =
+    view.status === "running" || view.status === "completed" || view.status === "failed"
+      ? view.status
+      : null;
+
+  return {
+    family: "spawn_agent",
+    toolName,
+    title: ref.nickname ?? ref.taskPreview ?? toolName,
+    summary: ref.taskPreview ?? null,
+    status,
+    badges: [],
+    links: [],
+    body: null,
+    raw: null,
+    meta: {},
+    subagentRef: ref,
+  };
 }
 
 function ToolCallBlockWithKill({

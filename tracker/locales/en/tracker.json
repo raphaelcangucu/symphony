@@ -763,6 +763,17 @@
         "files_other": "{{count}} files",
         "running": "Working…",
         "expand": "Toggle details"
+      },
+      "subagent": {
+        "verb": "Subagent",
+        "viewActivity": "View activity",
+        "drawerTitle": "Subagent activity",
+        "loading": "Loading subagent…",
+        "empty": "No activity yet.",
+        "error": "Could not load subagent activity.",
+        "pickOne": "Pick a subagent",
+        "unavailable": "Subagent activity is unavailable for this session.",
+        "back": "Back"
       }
     },
     "inlineMarkdown": {
@@ -2845,6 +2856,7 @@
         "sessionCount_other": "{{count}} sessions",
         "moreWorkspaces_one": "{{count}} more workspace",
         "moreWorkspaces_other": "{{count}} more workspaces",
+        "more": "More",
         "moreSessions_one": "{{count}} more session",
         "moreSessions_other": "{{count}} more sessions",
         "workspaceKind": {
@@ -2858,6 +2870,11 @@
           "chat": "Chat",
           "authoring": "Authoring",
           "execution": "Execution"
+        },
+        "agentStatus": {
+          "idle": "Idle",
+          "running": "Running",
+          "attention": "Needs attention"
         },
         "aggregateStatus": {
           "idle": "Idle",

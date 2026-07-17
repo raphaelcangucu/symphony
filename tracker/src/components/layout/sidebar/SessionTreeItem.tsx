@@ -72,7 +72,14 @@ export function SessionTreeItem({
       statusLabel={statusLabel}
       trailingLabel={relativeTime}
       tabIndex={tabIndex}
-      leadingIcon={<ChatStatusIcon statusKind={node.statusKind} />}
+      leadingIcon={
+        <ChatStatusIcon
+          sessionKind={node.sessionKind}
+          statusKind={node.statusKind}
+          aggregateStatus={node.aggregateStatus}
+          needsAttention={node.needsReview}
+        />
+      }
       metadata={
         node.unread || node.needsReview ? (
           <>

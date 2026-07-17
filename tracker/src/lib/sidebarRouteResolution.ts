@@ -123,6 +123,20 @@ export function ancestorIdsForSelection(
   }
 
   if (!selection.sessionId) return projectOnly;
+
+  for (const session of [
+    ...project.sessions,
+    ...project.overflowSessions,
+    ...project.unassignedSessions,
+  ]) {
+    if (
+      session.id === selection.sessionId &&
+      session.projectSlug === project.projectSlug
+    ) {
+      return projectOnly;
+    }
+  }
+
   const matches: Array<{ workspace: SidebarWorkspaceNode | null; session: SidebarSessionNode }> = [];
   for (const workspace of workspaces) {
     for (const session of [...workspace.sessions, ...workspace.overflowSessions]) {

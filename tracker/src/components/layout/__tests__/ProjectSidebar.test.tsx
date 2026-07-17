@@ -26,6 +26,9 @@ vi.mock("@/components/theme/ThemeToggle", () => ({
 }));
 
 vi.mock("@/hooks/useAgentExecutions", () => ({ useAgentExecutions: vi.fn() }));
+vi.mock("@/hooks/useRecents", () => ({
+  useRecents: () => ({ sessions: [], loading: false, error: null }),
+}));
 vi.mock("@/services/assistantThreads", () => ({ listAssistantThreads: vi.fn() }));
 vi.mock("@/services/issues", () => ({ listIssues: vi.fn() }));
 vi.mock("@/services/projectSessions", () => ({ listProjectSessions: vi.fn() }));
@@ -236,7 +239,7 @@ describe("ProjectSidebar", () => {
     await waitFor(() => expect(selected).toHaveAttribute("aria-expanded", "true"));
     expect(listProjectSessions).toHaveBeenCalledWith({
       projectSlug: "active-project",
-      limit: 20,
+      limit: 6,
       includeArchived: false,
     });
     expect(listIssues).not.toHaveBeenCalled();

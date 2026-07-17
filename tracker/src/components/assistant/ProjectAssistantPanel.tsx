@@ -65,6 +65,7 @@ import {
   completedTaskCount,
   type AssistantTasksDockControl,
 } from "@/components/agent-activity";
+import { SubagentDrawerProvider } from "@/components/agent-activity/SubagentActivityDrawer";
 import { useSessionTasksDock } from "@/components/sessions/sessionTasksDockContext";
 import { usePublishSessionTasksDockFeed } from "@/components/sessions/sessionTasksDockFeedContext";
 import { useIsLgUp } from "@/hooks/useMediaQuery";
@@ -2460,77 +2461,148 @@ function InteractiveProjectAssistantPanel({
 
   if (isPanelMode) {
     return (
-      <AssistantKbDocumentLinksProvider value={kbDocumentLinksValue}>
-        <AssistantRuntimeProvider runtime={runtime}>
-        <section
-          ref={panelRef}
-          className={cn(
-            "relative flex",
-            isPageMode && (isFullPageProjectAssistant ? "h-[calc(100vh-4rem)]" : "h-full min-h-0"),
-            isEmbeddedMode && "h-full min-h-0",
-            showTasksDock && "gap-3",
-          )}
-          aria-label={t("assistant.panel.ariaLabel")}
-        >
-          <AssistantSessionShell
-            className="min-w-0 flex-1"
-            feedRef={setScrollContainerRef}
-            toolbar={
-              isEmbeddedMode || hideHeader ? null : (
-                <AssistantPanelHeader
-                  title={panelTitle}
-                  isPageMode={isPageMode}
-                  projectSlug={projectSlug}
-                  diffStats={workspaceDiffStats}
-                  modelCommand={panelModelCommand}
-                />
-              )
-            }
-            feed={
-              <div className={cn("flex w-full flex-col gap-4 py-4", chatReadingColumn)}>
-                {messageItems}
-              </div>
-            }
-            feedOverlay={scrollToBottomButton}
-            dock={
-              <div>
-                <div className={chatReadingColumn}>
-                  {!isEmbeddedMode ? resumeBanner : null}
-                  {workspaceProvisionBanner}
-                  {queuedChips}
-                  {questionsNode}
-                  {approvalNode}
-                  {createPlanNode}
+      <SubagentDrawerProvider
+        projectSlug={projectSlug ?? ""}
+        threadId={threadId ?? null}
+        agentKind={composerAgent}
+      >
+        <AssistantKbDocumentLinksProvider value={kbDocumentLinksValue}>
+          <AssistantRuntimeProvider runtime={runtime}>
+          <section
+            ref={panelRef}
+            className={cn(
+              "relative flex",
+              isPageMode && (isFullPageProjectAssistant ? "h-[calc(100vh-4rem)]" : "h-full min-h-0"),
+              isEmbeddedMode && "h-full min-h-0",
+              showTasksDock && "gap-3",
+            )}
+            aria-label={t("assistant.panel.ariaLabel")}
+          >
+            <AssistantSessionShell
+              className="min-w-0 flex-1"
+              feedRef={setScrollContainerRef}
+              toolbar={
+                isEmbeddedMode || hideHeader ? null : (
+                  <AssistantPanelHeader
+                    title={panelTitle}
+                    isPageMode={isPageMode}
+                    projectSlug={projectSlug}
+                    diffStats={workspaceDiffStats}
+                    modelCommand={panelModelCommand}
+                  />
+                )
+              }
+              feed={
+                <div className={cn("flex w-full flex-col gap-4 py-4", chatReadingColumn)}>
+                  {messageItems}
                 </div>
-              </div>
-            }
-            composer={
-              <div className={cn("bg-background", isPageMode ? "pr-2.5" : "pb-2 pt-2")}>
-                <div className={cn("py-2", chatReadingColumn)}>
-                  {composerNode ?? (
-                    <div className="rounded-2xl border bg-card px-4 py-6 text-sm text-muted-foreground shadow-sm">
-                      {t("assistant.panel.loadingModels")}
-                    </div>
-                  )}
-                  {catalogError ? (
-                    <p className="mt-2 text-xs text-amber-700 dark:text-amber-400">{catalogError}</p>
-                  ) : null}
+              }
+              feedOverlay={scrollToBottomButton}
+              dock={
+                <div>
+                  <div className={chatReadingColumn}>
+                    {!isEmbeddedMode ? resumeBanner : null}
+                    {workspaceProvisionBanner}
+                    {queuedChips}
+                    {questionsNode}
+                    {approvalNode}
+                    {createPlanNode}
+                  </div>
                 </div>
-              </div>
-            }
-          />
+              }
+              composer={
+                <div className={cn("bg-background", isPageMode ? "pr-2.5" : "pb-2 pt-2")}>
+                  <div className={cn("py-2", chatReadingColumn)}>
+                    {composerNode ?? (
+                      <div className="rounded-2xl border bg-card px-4 py-6 text-sm text-muted-foreground shadow-sm">
+                        {t("assistant.panel.loadingModels")}
+                      </div>
+                    )}
+                    {catalogError ? (
+                      <p className="mt-2 text-xs text-amber-700 dark:text-amber-400">{catalogError}</p>
+                    ) : null}
+                  </div>
+                </div>
+              }
+            />
 
-          {showTasksDock && taskSnapshot ? (
-            <AssistantTasksDock snapshot={taskSnapshot} onClose={toggleTasksDock} />
+            {showTasksDock && taskSnapshot ? (
+              <AssistantTasksDock snapshot={taskSnapshot} onClose={toggleTasksDock} />
+            ) : null}
+          </section>
+          {showTasksSheet && taskSnapshot ? (
+            <AssistantTasksSheet
+              open={tasksDockOpen}
+              snapshot={taskSnapshot}
+              onOpenChange={persistTasksDockOpen}
+            />
           ) : null}
-        </section>
-        {showTasksSheet && taskSnapshot ? (
-          <AssistantTasksSheet
-            open={tasksDockOpen}
-            snapshot={taskSnapshot}
-            onOpenChange={persistTasksDockOpen}
-          />
-        ) : null}
+          {btw ? (
+            <BtwOverlay question={btw.question} answer={btw.answer} status={btw.status} onClose={() => setBtw(null)} />
+          ) : null}
+          {knowledgeBaseDialog}
+          {issueIdentifier || threadId ? (
+            <GitDiffLauncher
+              projectSlug={projectSlug ?? undefined}
+              identifier={issueIdentifier ?? null}
+              threadId={threadId ?? null}
+              disabled={catalogLoading}
+              onSendReview={sendDiffReview}
+              openRequestId={gitDiffOpenRequestId}
+              focusPathRequestId={diffFocusPathRequestId}
+              focusPath={diffFocusPath}
+              showTrigger={false}
+            />
+          ) : null}
+        </AssistantRuntimeProvider>
+        </AssistantKbDocumentLinksProvider>
+      </SubagentDrawerProvider>
+    );
+  }
+
+  return (
+    <SubagentDrawerProvider
+      projectSlug={projectSlug ?? ""}
+      threadId={threadId ?? null}
+      agentKind={composerAgent}
+    >
+      <AssistantKbDocumentLinksProvider value={kbDocumentLinksValue}>
+      <AssistantRuntimeProvider runtime={runtime}>
+        <Sheet open={open} onOpenChange={setOpen}>
+          <SheetTrigger asChild>
+            <Button type="button" variant="outline" size="sm" aria-label={t("assistant.panel.openAria")}>
+              <Bot className="h-4 w-4" />
+              {t("assistant.panel.openButton")}
+            </Button>
+          </SheetTrigger>
+          <SheetContent className="flex w-full flex-col overflow-hidden p-0 sm:max-w-xl lg:max-w-2xl">
+            <SheetHeader className="border-b px-6 py-4">
+              <SheetTitle>
+                {projectSlug ? t("assistant.panel.projectTitle") : t("assistant.panel.freeformTitle")}
+              </SheetTitle>
+              <SheetDescription>
+                {projectSlug
+                  ? t("assistant.panel.projectDescription", { slug: projectSlug })
+                  : t("assistant.panel.freeformDescription")}
+              </SheetDescription>
+            </SheetHeader>
+            <div className="flex min-h-0 flex-1 flex-col">
+              <div className="min-h-0 flex-1 space-y-3 overflow-auto px-6 py-4">{messageItems}</div>
+              {resumeBanner}
+              {workspaceProvisionBanner}
+              {queuedChips}
+              {questionsNode}
+              {approvalNode}
+              {createPlanNode}
+              {composerNode ?? (
+                <div className="border-t px-4 py-6 text-sm text-muted-foreground">{t("assistant.panel.loadingModels")}</div>
+              )}
+              {catalogError ? (
+                <p className="border-t px-4 pb-3 text-xs text-amber-700 dark:text-amber-400">{catalogError}</p>
+              ) : null}
+            </div>
+          </SheetContent>
+        </Sheet>
         {btw ? (
           <BtwOverlay question={btw.question} answer={btw.answer} status={btw.status} onClose={() => setBtw(null)} />
         ) : null}
@@ -2550,65 +2622,6 @@ function InteractiveProjectAssistantPanel({
         ) : null}
       </AssistantRuntimeProvider>
       </AssistantKbDocumentLinksProvider>
-    );
-  }
-
-  return (
-    <AssistantKbDocumentLinksProvider value={kbDocumentLinksValue}>
-    <AssistantRuntimeProvider runtime={runtime}>
-      <Sheet open={open} onOpenChange={setOpen}>
-        <SheetTrigger asChild>
-          <Button type="button" variant="outline" size="sm" aria-label={t("assistant.panel.openAria")}>
-            <Bot className="h-4 w-4" />
-            {t("assistant.panel.openButton")}
-          </Button>
-        </SheetTrigger>
-        <SheetContent className="flex w-full flex-col overflow-hidden p-0 sm:max-w-xl lg:max-w-2xl">
-          <SheetHeader className="border-b px-6 py-4">
-            <SheetTitle>
-              {projectSlug ? t("assistant.panel.projectTitle") : t("assistant.panel.freeformTitle")}
-            </SheetTitle>
-            <SheetDescription>
-              {projectSlug
-                ? t("assistant.panel.projectDescription", { slug: projectSlug })
-                : t("assistant.panel.freeformDescription")}
-            </SheetDescription>
-          </SheetHeader>
-          <div className="flex min-h-0 flex-1 flex-col">
-            <div className="min-h-0 flex-1 space-y-3 overflow-auto px-6 py-4">{messageItems}</div>
-            {resumeBanner}
-            {workspaceProvisionBanner}
-            {queuedChips}
-            {questionsNode}
-            {approvalNode}
-            {createPlanNode}
-            {composerNode ?? (
-              <div className="border-t px-4 py-6 text-sm text-muted-foreground">{t("assistant.panel.loadingModels")}</div>
-            )}
-            {catalogError ? (
-              <p className="border-t px-4 pb-3 text-xs text-amber-700 dark:text-amber-400">{catalogError}</p>
-            ) : null}
-          </div>
-        </SheetContent>
-      </Sheet>
-      {btw ? (
-        <BtwOverlay question={btw.question} answer={btw.answer} status={btw.status} onClose={() => setBtw(null)} />
-      ) : null}
-      {knowledgeBaseDialog}
-      {issueIdentifier || threadId ? (
-        <GitDiffLauncher
-          projectSlug={projectSlug ?? undefined}
-          identifier={issueIdentifier ?? null}
-          threadId={threadId ?? null}
-          disabled={catalogLoading}
-          onSendReview={sendDiffReview}
-          openRequestId={gitDiffOpenRequestId}
-          focusPathRequestId={diffFocusPathRequestId}
-          focusPath={diffFocusPath}
-          showTrigger={false}
-        />
-      ) : null}
-    </AssistantRuntimeProvider>
-    </AssistantKbDocumentLinksProvider>
+    </SubagentDrawerProvider>
   );
 }

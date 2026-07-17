@@ -202,6 +202,7 @@ defmodule SymphonyElixirWeb.Router do
     get("/projects/:project_slug/worktrees", WorktreeInventoryController, :index)
     delete("/projects/:project_slug/worktrees", WorktreeInventoryController, :remove)
     post("/projects/:project_slug/workspaces", WorktreeInventoryController, :create_workspace)
+    get("/projects/:project_slug/workspaces/:thread_id/subagents", SubagentsController, :index)
     get("/projects/:project_slug/workspaces/display_names", WorkspaceDisplayNameController, :index)
     put("/projects/:project_slug/workspaces/display_names", WorkspaceDisplayNameController, :update)
     delete("/projects/:project_slug/workspaces/display_names", WorkspaceDisplayNameController, :delete)

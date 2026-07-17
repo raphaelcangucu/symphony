@@ -8,6 +8,11 @@ defmodule SymphonyElixir.SessionLog do
   - `"claude"` → `SymphonyElixir.Claude.SessionLog`
   - `"cursor"` → `SymphonyElixir.Cursor.SessionLog`
   - `"opencode"` → `SymphonyElixir.OpenCode.SessionLog`
+
+  SUBAGENT helpers (`resolve_subagent/3`, `list_subagents/3`, `subagent_meta/2`)
+  dispatch to `SymphonyElixir.SessionLogBackend` implementations. Unknown
+  agent kinds use safe defaults (`:error` / `[]` / `%{}`) rather than falling
+  back to Codex.
   """
 
   alias SymphonyElixir.Agent.SessionStore
@@ -137,6 +142,47 @@ defmodule SymphonyElixir.SessionLog do
 
   def read_from(_agent_kind, path, offset, opts),
     do: read_from_with_events(CodexLog.read_from(path, offset), offset, opts)
+
+  @doc """
+  Resolves a SUBAGENT transcript path for the given agent kind.
+
+  Unlike `resolve_log_path/3`, unknown agent kinds return `:error` (no Codex
+  fallback) because subagent layouts differ per agent.
+  """
+  @spec resolve_subagent(String.t(), String.t(), keyword()) :: {:ok, Path.t()} | :error
+  def resolve_subagent(agent_kind, id, opts \\ [])
+
+  def resolve_subagent("codex", id, opts), do: CodexLog.resolve_subagent_path(id, opts)
+  def resolve_subagent("claude", id, opts), do: ClaudeLog.resolve_subagent_path(id, opts)
+  def resolve_subagent("cursor", id, opts), do: CursorLog.resolve_subagent_path(id, opts)
+  def resolve_subagent("opencode", id, opts), do: OpenCodeLog.resolve_subagent_path(id, opts)
+  def resolve_subagent(_agent_kind, _id, _opts), do: :error
+
+  @doc """
+  Lists SUBAGENT transcripts for a parent log path.
+
+  Unknown agent kinds return `[]`.
+  """
+  @spec list_subagents(String.t(), Path.t(), keyword()) :: [map()]
+  def list_subagents(agent_kind, parent_path, opts \\ [])
+
+  def list_subagents("codex", parent_path, opts), do: CodexLog.list_subagents(parent_path, opts)
+  def list_subagents("claude", parent_path, opts), do: ClaudeLog.list_subagents(parent_path, opts)
+  def list_subagents("cursor", parent_path, opts), do: CursorLog.list_subagents(parent_path, opts)
+  def list_subagents("opencode", parent_path, opts), do: OpenCodeLog.list_subagents(parent_path, opts)
+  def list_subagents(_agent_kind, _parent_path, _opts), do: []
+
+  @doc """
+  Reads lightweight metadata for a SUBAGENT transcript path.
+
+  Unknown agent kinds return `%{}`.
+  """
+  @spec subagent_meta(String.t(), Path.t()) :: map()
+  def subagent_meta("codex", path), do: CodexLog.subagent_meta(path)
+  def subagent_meta("claude", path), do: ClaudeLog.subagent_meta(path)
+  def subagent_meta("cursor", path), do: CursorLog.subagent_meta(path)
+  def subagent_meta("opencode", path), do: OpenCodeLog.subagent_meta(path)
+  def subagent_meta(_agent_kind, _path), do: %{}
 
   defp tail_with_events({:ok, entries, offset}, opts) do
     {:ok, merge_workspace_events(entries, opts), offset}

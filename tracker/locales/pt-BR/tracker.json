@@ -763,6 +763,17 @@
         "files_other": "{{count}} arquivos",
         "running": "Trabalhando…",
         "expand": "Alternar detalhes"
+      },
+      "subagent": {
+        "verb": "Subagente",
+        "viewActivity": "Ver atividade",
+        "drawerTitle": "Atividade do subagente",
+        "loading": "Carregando subagente…",
+        "empty": "Nenhuma atividade ainda.",
+        "error": "Não foi possível carregar a atividade do subagente.",
+        "pickOne": "Escolha um subagente",
+        "unavailable": "A atividade do subagente não está disponível nesta sessão.",
+        "back": "Voltar"
       }
     },
     "inlineMarkdown": {
@@ -2845,6 +2856,7 @@
         "sessionCount_other": "{{count}} sessões",
         "moreWorkspaces_one": "Mais {{count}} workspace",
         "moreWorkspaces_other": "Mais {{count}} workspaces",
+        "more": "Mais",
         "moreSessions_one": "Mais {{count}} sessão",
         "moreSessions_other": "Mais {{count}} sessões",
         "workspaceKind": {
@@ -2858,6 +2870,11 @@
           "chat": "Chat",
           "authoring": "Autoria",
           "execution": "Execução"
+        },
+        "agentStatus": {
+          "idle": "Inativo",
+          "running": "Em execução",
+          "attention": "Requer atenção"
         },
         "aggregateStatus": {
           "idle": "Inativo",

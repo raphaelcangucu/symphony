@@ -468,6 +468,54 @@ describe("ProjectSessionsWorkspace", () => {
     expect(screen.queryByRole("tab", { name: /^Project session/i })).not.toBeInTheDocument();
   });
 
+  it("focuses an already-open issue tab when the route changes even if the title is unchanged", async () => {
+    const listTab = createSessionsListTab("Workspaces");
+    writePersistedWorkspaceTabs(workspaceTabsStorageKey("project-sessions", "demo"), {
+      tabs: [listTab, createAssistantSessionTab(99, "GAM-20")],
+      activeTabId: listTab.id,
+    });
+
+    vi.mocked(useProjectSessions).mockReturnValue({
+      groups: emptyProjectSessionGroups(),
+      relatedSessions: [
+        {
+          id: "thread:99",
+          kind: "chat",
+          scope: "issue_execution",
+          title: "Models Game Back",
+          projectSlug: "demo",
+          projectName: "Demo",
+          identifier: "GAM-20",
+          status: "active",
+          statusKind: "active",
+          agentKind: "cursor",
+          updatedAt: "2026-07-16T12:00:00Z",
+          threadId: 99,
+          preview: null,
+        },
+      ],
+      issues: [],
+      executions: new Map(),
+      inventory: null,
+      isLoading: false,
+      isSessionsLoading: false,
+      isInventoryLoading: false,
+      error: null,
+      refetch,
+    });
+
+    renderWithI18n(
+      <MemoryRouter initialEntries={["/projects/demo/workspaces/99"]}>
+        <ProjectSessionsWorkspace projectSlug="demo" activeThreadId={99} />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: /GAM-20/i })).toHaveAttribute("aria-selected", "true"),
+    );
+    expect(screen.getByRole("tab", { name: /Workspaces/i })).toHaveAttribute("aria-selected", "false");
+  });
+
   it("omits the sibling session button on the workspaces list tab", () => {
     renderWithI18n(
       <MemoryRouter initialEntries={["/projects/demo/workspaces"]}>
@@ -528,6 +576,53 @@ describe("ProjectSessionsWorkspace", () => {
       expect(screen.getByRole("tab", { name: /Macro chat/i })).toHaveAttribute("aria-selected", "true"),
     );
     expect(screen.queryByRole("tab", { name: /Advising chat/i })).not.toBeInTheDocument();
+  });
+
+  it("closes the active assistant tab on the first close click", async () => {
+    const user = userEvent.setup();
+    vi.mocked(useProjectSessions).mockReturnValue({
+      groups: emptyProjectSessionGroups(),
+      relatedSessions: [
+        {
+          id: "thread:42",
+          kind: "chat",
+          scope: "project_session",
+          title: "Project session",
+          projectSlug: "demo",
+          projectName: "Demo",
+          identifier: null,
+          status: "active",
+          statusKind: "idle",
+          agentKind: "cursor",
+          updatedAt: "2026-07-16T12:00:00Z",
+          threadId: 42,
+          preview: null,
+        },
+      ],
+      issues: [],
+      executions: new Map(),
+      inventory: null,
+      isLoading: false,
+      isSessionsLoading: false,
+      isInventoryLoading: false,
+      error: null,
+      refetch,
+    });
+
+    renderWithI18n(
+      <MemoryRouter initialEntries={["/projects/demo/workspaces/42"]}>
+        <ProjectSessionsWorkspace projectSlug="demo" activeThreadId={42} />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: /Project session/i })).toHaveAttribute("aria-selected", "true"),
+    );
+
+    await user.click(screen.getByRole("button", { name: /Close Project session/i }));
+
+    expect(screen.queryByRole("tab", { name: /Project session/i })).not.toBeInTheDocument();
+    expect(navigateMock).toHaveBeenCalledWith("/projects/demo/workspaces", { replace: true });
   });
 
   it("creates a sibling session from the tab bar and opens it", async () => {

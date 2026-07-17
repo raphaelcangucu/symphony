@@ -4,7 +4,10 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-import { ChatStatusIcon } from "@/components/shared/ChatStatusIcon";
+import {
+  ChatStatusIcon,
+  sessionStatusIconKindFromScope,
+} from "@/components/shared/ChatStatusIcon";
 import { StatusPill } from "@/components/ui/status-pill";
 import { executionStatusDotClass } from "@/lib/statusPresentation";
 import { formatBytes, type WorkspaceCard, type WorkspaceListItem } from "@/lib/workspaceCards";
@@ -48,7 +51,10 @@ export function WorkspaceListRow({
           selected && "bg-black/[0.06] dark:bg-white/[0.08]",
         )}
       >
-        <ChatStatusIcon statusKind={session.statusKind} />
+        <ChatStatusIcon
+          sessionKind={sessionStatusIconKindFromScope(session.scope)}
+          statusKind={session.statusKind}
+        />
         <span className="min-w-0 flex-1">
           <span className="flex min-w-0 items-center gap-1.5">
             <span className="truncate text-sm font-medium text-foreground">{session.title}</span>

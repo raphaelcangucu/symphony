@@ -61,6 +61,16 @@ const STATUS_PRECEDENCE: Readonly<Record<SidebarAggregateStatus, number>> = {
   error: 4,
 };
 
+/** Lower rank sorts first in activity mode — in-progress before idle. */
+const ACTIVITY_SORT_RANK: Readonly<Record<SidebarAggregateStatus, number>> = {
+  // waiting/retrying land in `attention`; keep them with live/active work.
+  active: 0,
+  attention: 0,
+  error: 1,
+  stale: 2,
+  idle: 3,
+};
+
 const ERROR_STATUSES = new Set(["error", "failed", "crashed"]);
 const ATTENTION_STATUSES = new Set(["waiting", "retrying", "aborted", "paused", "review"]);
 const ACTIVE_STATUSES = new Set(["live", "running", "active", "in_progress"]);
@@ -394,13 +404,14 @@ export function compareSidebarNodes(
 ): number {
   if (left.pinned !== right.pinned) return left.pinned ? -1 : 1;
 
+  // Match project-sessions API order: in-progress first, then recency.
+  const leftActivity = ACTIVITY_SORT_RANK[left.aggregateStatus] ?? ACTIVITY_SORT_RANK.idle;
+  const rightActivity = ACTIVITY_SORT_RANK[right.aggregateStatus] ?? ACTIVITY_SORT_RANK.idle;
+  if (leftActivity !== rightActivity) return leftActivity - rightActivity;
+
   const leftTimestamp = timestampValue(left.updatedAt);
   const rightTimestamp = timestampValue(right.updatedAt);
   if (leftTimestamp !== rightTimestamp) return rightTimestamp > leftTimestamp ? 1 : -1;
-
-  const statusDifference =
-    STATUS_PRECEDENCE[right.aggregateStatus] - STATUS_PRECEDENCE[left.aggregateStatus];
-  if (statusDifference !== 0) return statusDifference;
 
   const titleDifference = deterministicStringCompare(left.title, right.title);
   if (titleDifference !== 0) return titleDifference;

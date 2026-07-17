@@ -4,6 +4,10 @@ import {
   SIDEBAR_DEFAULT_SESSION_LIMIT,
   sortSidebarNodes,
 } from "@/lib/sidebarTree";
+import {
+  promoteSelectedSidebarSession,
+  resolveSidebarSessionPresentation,
+} from "@/lib/workspaceTabs/presentation";
 import { workspaceBasePath } from "@/lib/workspaceRoutes";
 import type { ProjectSessionKind, ProjectSessionRow } from "@/types/project-session";
 import type { RecentSession, RecentStatusKind } from "@/types/recents";
@@ -62,10 +66,18 @@ export function mergeSessionsFromRecents(
       continue;
     }
 
-    if (title && existing.title.trim() !== title) {
+    const identifier = recent.identifier?.trim() || null;
+    const nextTitle = title && existing.title.trim() !== title ? title : existing.title;
+    const nextIdentifier =
+      identifier && existing.issueIdentifier !== identifier
+        ? identifier
+        : existing.issueIdentifier;
+
+    if (nextTitle !== existing.title || nextIdentifier !== existing.issueIdentifier) {
       byId.set(id, {
         ...existing,
-        title,
+        title: nextTitle,
+        issueIdentifier: nextIdentifier,
         updatedAt: recent.updatedAt || existing.updatedAt,
       });
       changed = true;
@@ -115,10 +127,11 @@ function sessionKindFromRecentScope(scope: RecentSession["scope"]): ProjectSessi
   switch (scope) {
     case "issue":
       return "authoring";
-    case "issue_session":
     case "issue_execution":
-      // Matches SymphonyElixir.Tracker.ProjectSessions.thread_kind/1.
       return "execution";
+    case "issue_session":
+      // Interactive issue chats stay visually distinct from autonomous runs.
+      return "chat";
     case "project_session":
     case "project_explore":
       return "workspace_session";
@@ -133,14 +146,19 @@ export function buildFlatSidebarProject(
   const projectSlug = input.projectSlug.trim();
   const projectTitle = input.projectTitle.trim();
   const filters = normalizeFilters(input.options.filters);
-  const sessionLimit = input.options.sessionLimit ?? SIDEBAR_DEFAULT_SESSION_LIMIT;
   const filteredSessions = input.sessions.filter((session) =>
     sessionMatchesFilters(session, filters),
   );
   const sessionNodes = filteredSessions.map((session) =>
     sessionNodeFromRow(session, projectSlug, projectTitle, input.options),
   );
-  const sortedSessions = sortSidebarNodes(sessionNodes, input.options.sortMode);
+  const sortedSessions = promoteSelectedSidebarSession(
+    sortSidebarNodes(sessionNodes, input.options.sortMode),
+    input.preferredSessionId,
+  );
+  // Default page size matches Cursor's agent history ("More" expands the rest).
+  // Pass sessionLimit: Infinity (or sessions.length) after the user clicks More.
+  const sessionLimit = input.options.sessionLimit ?? SIDEBAR_DEFAULT_SESSION_LIMIT;
   const partition = partitionVisibleNodes(sortedSessions, sessionLimit);
   const branchStatus = loadStateStatus(input.loadState, input.error);
   const projectAggregateStatus = aggregateStatus([
@@ -179,8 +197,10 @@ function sessionNodeFromRow(
 ): SidebarSessionNode {
   const updatedAt = validTimestampString(row.updatedAt);
   const statusKind = normalizeRecentStatus(row.aggregateStatus);
-  const sessionKind = sessionKindFromRow(row.kind);
+  const sessionKind = sessionKindFromRow(row);
   const id = row.id;
+  const fallbackTitle = sessionFallbackTitle(parseThreadId(id));
+  const sessionTitle = nonBlank(row.title) ?? fallbackTitle;
 
   return {
     kind: "session",
@@ -188,7 +208,7 @@ function sessionNodeFromRow(
     projectSlug,
     workspaceId: row.workspaceId,
     sessionKind,
-    title: nonBlank(row.title) ?? sessionFallbackTitle(parseThreadId(id)),
+    title: resolveSidebarSessionPresentation(sessionTitle, row.issueIdentifier),
     subtitle: row.issueIdentifier ?? row.workspacePath ?? projectTitle,
     href: row.href,
     statusKind,
@@ -206,8 +226,19 @@ function sessionNodeFromRow(
   };
 }
 
-function sessionKindFromRow(kind: ProjectSessionKind): SidebarSessionKind {
-  switch (kind) {
+function sessionKindFromRow(row: ProjectSessionRow): SidebarSessionKind {
+  switch (row.scope) {
+    case "issue_execution":
+      return "execution";
+    case "issue":
+      return "authoring";
+    case "issue_session":
+      return "chat";
+    default:
+      break;
+  }
+
+  switch (row.kind) {
     case "execution":
       return "execution";
     case "authoring":

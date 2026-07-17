@@ -1,4 +1,4 @@
-import { Loader2 } from "lucide-react";
+import { Loader2, MoreHorizontal } from "lucide-react";
 import { type KeyboardEvent, type ReactNode, type Ref } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -200,34 +200,58 @@ export function SidebarPseudoTreeItem({
       data-sidebar-tree-row-id={id}
     >
       {soft ? (
-        <div
-          className="mx-0.5 flex min-h-7 items-center gap-1.5 py-0.5 pr-1 text-xs"
-          style={{ paddingLeft: `${sidebarTreeIndent(level) + 16}px` }}
-        >
-          <span className="text-muted-foreground/80">{label}</span>
-          {actionLabel && onActivate ? (
-            <>
-              <span className="text-muted-foreground/40" aria-hidden="true">
-                ·
-              </span>
-              <button
-                type="button"
-                tabIndex={-1}
-                title={actionName}
-                aria-label={actionName}
-                onMouseDown={(event) => {
-                  event.preventDefault();
-                  onPreserveFocus();
-                }}
-                onKeyDown={handleEmbeddedKeyDown}
-                onClick={(event) => onActivate(event.currentTarget)}
-                className="rounded px-0.5 font-medium text-foreground/80 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                {actionLabel}
-              </button>
-            </>
-          ) : null}
-        </div>
+        actionLabel && onActivate && actionLabel === label ? (
+          <div
+            className="mx-0.5 flex min-h-7 items-center py-0.5 pr-1 text-xs"
+            style={{ paddingLeft: `${sidebarTreeIndent(level) + 16}px` }}
+          >
+            <button
+              type="button"
+              tabIndex={-1}
+              title={actionName}
+              aria-label={actionName}
+              onMouseDown={(event) => {
+                event.preventDefault();
+                onPreserveFocus();
+              }}
+              onKeyDown={handleEmbeddedKeyDown}
+              onClick={(event) => onActivate(event.currentTarget)}
+              className="inline-flex items-center gap-1.5 rounded px-0.5 text-muted-foreground/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <MoreHorizontal className="h-3.5 w-3.5" strokeWidth={1.5} aria-hidden="true" />
+              <span>{actionLabel}</span>
+            </button>
+          </div>
+        ) : (
+          <div
+            className="mx-0.5 flex min-h-7 items-center gap-1.5 py-0.5 pr-1 text-xs"
+            style={{ paddingLeft: `${sidebarTreeIndent(level) + 16}px` }}
+          >
+            <span className="text-muted-foreground/80">{label}</span>
+            {actionLabel && onActivate ? (
+              <>
+                <span className="text-muted-foreground/40" aria-hidden="true">
+                  ·
+                </span>
+                <button
+                  type="button"
+                  tabIndex={-1}
+                  title={actionName}
+                  aria-label={actionName}
+                  onMouseDown={(event) => {
+                    event.preventDefault();
+                    onPreserveFocus();
+                  }}
+                  onKeyDown={handleEmbeddedKeyDown}
+                  onClick={(event) => onActivate(event.currentTarget)}
+                  className="rounded px-0.5 font-medium text-foreground/80 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  {actionLabel}
+                </button>
+              </>
+            ) : null}
+          </div>
+        )
       ) : (
         <div
           className={cn(

@@ -5,6 +5,7 @@ import type {
   ToolPresentationLink,
   ToolPresentationStatus,
 } from "@/lib/toolCallPresentation";
+import { getSubagentRef } from "@/lib/subagentRef";
 
 export interface CanonicalToolInput {
   name: string;
@@ -67,6 +68,7 @@ function familyFor(
   if (n === "manage_dev_env") return "devenv";
   if (n === "manage_tunnel") return "tunnel";
   if (n.startsWith("kb_")) return "kb";
+  if (n === "spawn_agent") return "spawn_agent";
   if (
     n === "task" ||
     n === "todowrite" ||
@@ -108,6 +110,8 @@ function buildForFamily(
       return buildPreviewPresentation(toolName, innerArgs, unwrapped);
     case "kb":
       return buildKbPresentation(toolName, innerArgs);
+    case "spawn_agent":
+      return buildSpawnAgentPresentation(toolName, innerArgs, unwrapped);
     default:
       return {
         title: toolName,
@@ -212,6 +216,57 @@ function buildKbPresentation(toolName: string, innerArgs: Record<string, unknown
     kbPath: path,
     raw: null,
   };
+}
+
+function buildSpawnAgentPresentation(
+  toolName: string,
+  innerArgs: Record<string, unknown>,
+  unwrapped: unknown,
+): BuiltPresentation {
+  const subagentRef = getSubagentRef({
+    toolName,
+    args: innerArgs,
+    output: unwrapped,
+  });
+
+  const taskPreview =
+    subagentRef?.taskPreview ??
+    truncate(
+      firstLine(
+        stringOrNull(innerArgs.message) ??
+          stringOrNull(innerArgs.task) ??
+          stringOrNull(innerArgs.prompt),
+      ),
+      140,
+    );
+  const title = subagentRef?.nickname ?? taskPreview ?? toolName;
+
+  return {
+    title,
+    summary: taskPreview,
+    badges: [],
+    links: [],
+    body: null,
+    meta: {},
+    kbPath: null,
+    raw: null,
+    ...(subagentRef ? { subagentRef } : {}),
+  };
+}
+
+function firstLine(value: string | null): string | null {
+  if (!value) return null;
+  for (const line of value.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (trimmed) return trimmed;
+  }
+  return null;
+}
+
+function truncate(value: string | null, max: number): string | null {
+  if (!value) return null;
+  if (value.length <= max) return value;
+  return value.slice(0, max);
 }
 
 export function isHealthWaitCommand(command: string): boolean {

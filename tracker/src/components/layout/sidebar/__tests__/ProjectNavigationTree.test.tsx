@@ -89,12 +89,18 @@ describe("ProjectNavigationTree", () => {
     expect(screen.queryByRole("treeitem", { name: /main/ })).not.toBeInTheDocument();
   });
 
-  it("requests the next cursor page from the project Mais action", async () => {
+  it("requests More from the Cursor-style pagination control", async () => {
     const user = userEvent.setup();
     const showAllSessions = vi.fn();
     render(
       <ProjectNavigationTree
-        tree={[project({ nextCursor: "cursor-2" })]}
+        tree={[
+          project({
+            sessions: [session("thread:1", "One"), session("thread:2", "Two")],
+            overflowSessions: [session("thread:3", "Three")],
+            nextCursor: "cursor-2",
+          }),
+        ]}
         expandedProjectIds={new Set(["macro"])}
         expandedWorkspaceIds={new Set()}
         currentSelection={{ projectSlug: "macro", workspaceId: null, sessionId: null }}
@@ -109,7 +115,8 @@ describe("ProjectNavigationTree", () => {
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: "0 more sessions" }));
+    expect(screen.queryByRole("treeitem", { name: /Three/ })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /^More$/i }));
 
     expect(showAllSessions).toHaveBeenCalledWith("macro");
   });

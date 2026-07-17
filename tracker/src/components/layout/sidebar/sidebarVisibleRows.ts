@@ -94,7 +94,8 @@ export function buildSidebarVisibleRows(
     for (const session of project.sessions) {
       rows.push(row(session, project.id, 2, false, false));
     }
-    if (project.nextCursor) {
+    // Overflow stays collapsed behind "More" until revealedProjectIds lifts the limit.
+    if (project.overflowSessions.length > 0 || project.nextCursor) {
       rows.push(syntheticRow("more-sessions", project.id, null, project.id, 2));
     }
 

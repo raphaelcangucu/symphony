@@ -341,14 +341,9 @@ export function ProjectNavigationTree(props: ProjectNavigationTreeProps) {
                 {rowById.has(moreSessionsId)
                   ? renderSyntheticAction(
                       rowById.get(moreSessionsId)!,
-                      t("layout.sidebar.tree.moreSessions", {
-                        count: project.overflowSessions.length,
-                        defaultValue: "More sessions",
-                      }),
-                      t("layout.sidebar.tree.moreSessions", {
-                        count: project.overflowSessions.length,
-                        defaultValue: "More sessions",
-                      }),
+                      t("layout.sidebar.tree.more", { defaultValue: "More" }),
+                      t("layout.sidebar.tree.more", { defaultValue: "More" }),
+                      { variant: "soft" },
                     )
                   : null}
                 {project.workspaces.map((workspace) => renderWorkspace(project, workspace))}

@@ -13,12 +13,24 @@ defmodule SymphonyElixir.Cursor.SessionLog do
   Claude's `type`/`message`), and tool calls omit stable ids — both are
   normalized before UI parsing. Symphony-owned lines may use Claude-style
   `type`/`message` which this module already accepts.
+
+  Subagent layout (verified on disk under `~/.cursor/projects/*/agent-transcripts/`):
+
+      <dir>/<parent-uuid>/<parent-uuid>.jsonl
+      <dir>/<parent-uuid>/subagents/<child-uuid>.jsonl
+
+  So the children directory is `Path.join(Path.dirname(parent_path), "subagents")`,
+  not `Path.rootname(parent_path)/subagents`.
   """
+
+  @behaviour SymphonyElixir.SessionLogBackend
 
   alias SymphonyElixir.Agent.SessionTranscript
 
   @default_projects_dir "~/.cursor/projects"
   @default_tail_bytes 65_536
+  @id_pattern ~r/^[A-Za-z0-9-]+$/
+  @label_max_chars 120
 
   @spec resolve_log_path(Path.t(), keyword()) :: {:ok, Path.t()} | :error
   def resolve_log_path(workspace, opts \\ []) when is_binary(workspace) do
@@ -133,6 +145,126 @@ defmodule SymphonyElixir.Cursor.SessionLog do
     |> Path.expand()
     |> String.trim_leading("/")
     |> String.replace("/", "-")
+  end
+
+  @impl true
+  def resolve_subagent_path(id, opts) when is_binary(id) do
+    parent_path = Keyword.get(opts, :parent_path)
+
+    with true <- Regex.match?(@id_pattern, id),
+         true <- is_binary(parent_path),
+         path <- Path.join(subagents_dir(parent_path), "#{id}.jsonl"),
+         true <- File.regular?(path) do
+      {:ok, path}
+    else
+      _ -> :error
+    end
+  end
+
+  def resolve_subagent_path(_id, _opts), do: :error
+
+  @impl true
+  def list_subagents(parent_path, _opts) when is_binary(parent_path) do
+    parent_path
+    |> subagents_dir()
+    |> Path.join("*.jsonl")
+    |> Path.wildcard()
+    |> Enum.filter(&File.regular?/1)
+    |> Enum.sort_by(&mtime/1, :asc)
+    |> Enum.map(&subagent_meta/1)
+  end
+
+  def list_subagents(_parent_path, _opts), do: []
+
+  @impl true
+  def subagent_meta(path) when is_binary(path) do
+    id = path |> Path.basename() |> Path.rootname(".jsonl")
+
+    %{
+      "id" => id,
+      "label" => prompt_label(path),
+      "nickname" => nil,
+      "role" => nil,
+      "tool_use_id" => nil,
+      "path" => path
+    }
+  end
+
+  def subagent_meta(_path), do: %{}
+
+  # Verified: children live beside the parent uuid directory, not under Path.rootname(parent).
+  defp subagents_dir(parent_path), do: Path.join(Path.dirname(parent_path), "subagents")
+
+  defp prompt_label(path) do
+    case read_first_json_line(path) do
+      {:ok, decoded} ->
+        decoded
+        |> prompt_text()
+        |> truncate_label()
+
+      :error ->
+        nil
+    end
+  end
+
+  defp prompt_text(%{"role" => "user", "message" => message}), do: message_content_text(message)
+  defp prompt_text(%{"type" => "user", "message" => message}), do: message_content_text(message)
+  defp prompt_text(_decoded), do: nil
+
+  defp message_content_text(%{"content" => content}) when is_binary(content), do: content
+
+  defp message_content_text(%{"content" => content}) when is_list(content) do
+    Enum.find_value(content, fn
+      %{"type" => "text", "text" => text} when is_binary(text) and text != "" -> text
+      %{"text" => text} when is_binary(text) and text != "" -> text
+      _ -> nil
+    end)
+  end
+
+  defp message_content_text(_message), do: nil
+
+  defp truncate_label(nil), do: nil
+
+  defp truncate_label(text) when is_binary(text) do
+    text
+    |> String.split("\n", parts: 2)
+    |> List.first()
+    |> String.trim()
+    |> String.slice(0, @label_max_chars)
+    |> case do
+      "" -> nil
+      label -> label
+    end
+  end
+
+  defp read_first_json_line(path) do
+    case File.open(path, [:read, :utf8]) do
+      {:ok, io} ->
+        try do
+          case IO.read(io, :line) do
+            line when is_binary(line) ->
+              case Jason.decode(String.trim(line)) do
+                {:ok, decoded} when is_map(decoded) -> {:ok, decoded}
+                _ -> :error
+              end
+
+            _ ->
+              :error
+          end
+        after
+          File.close(io)
+        end
+
+      {:error, _} ->
+        :error
+    end
+  end
+
+  defp mtime(path) do
+    case File.stat(path) do
+      {:ok, %File.Stat{mtime: mtime}} -> mtime
+      _ -> {{1970, 1, 1}, {0, 0, 0}}
+    end
   end
 
   defp projects_dir(opts) do

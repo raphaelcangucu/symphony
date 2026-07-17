@@ -106,3 +106,81 @@ describe("canonicalizeToolCall family", () => {
     expect(p.badges.some((b) => b.kind === "warn")).toBe(true);
   });
 });
+
+describe("canonicalizeToolCall spawn_agent", () => {
+  it("maps spawn_agent to spawn_agent family", () => {
+    const p = canonicalizeToolCall({
+      name: "spawn_agent",
+      arguments: {
+        agent_type: "worker",
+        message: "Review PR diffs",
+      },
+      status: "running",
+    });
+    expect(p.family).toBe("spawn_agent");
+    expect(p.title).toBe("Review PR diffs");
+  });
+
+  it("attaches subagentRef on completed call with agent_id", () => {
+    const p = canonicalizeToolCall({
+      name: "spawn_agent",
+      arguments: {
+        agent_type: "worker",
+        message: "Review the auth module\nInclude edge cases",
+      },
+      status: "completed",
+      output: JSON.stringify({
+        agent_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+        nickname: "auth-reviewer",
+      }),
+    });
+
+    expect(p.family).toBe("spawn_agent");
+    expect(p.title).toBe("auth-reviewer");
+    expect(p.summary).toBe("Review the auth module");
+    expect(p.status).toBe("completed");
+    expect(p.subagentRef).toEqual({
+      resolve: "id",
+      id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      nickname: "auth-reviewer",
+      subagentType: "worker",
+      taskPreview: "Review the auth module",
+    });
+  });
+
+  it("omits subagentRef while running without output", () => {
+    const p = canonicalizeToolCall({
+      name: "spawn_agent",
+      arguments: {
+        agent_type: "worker",
+        message: "Still starting",
+      },
+      status: "running",
+      output: null,
+    });
+
+    expect(p.family).toBe("spawn_agent");
+    expect(p.status).toBe("running");
+    expect(p.subagentRef).toBeUndefined();
+    expect(p.title).toBe("Still starting");
+  });
+
+  it("does not map wait or close_agent to spawn_agent", () => {
+    expect(
+      canonicalizeToolCall({
+        name: "wait",
+        arguments: { agent_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890" },
+        status: "completed",
+      }).family,
+    ).not.toBe("spawn_agent");
+
+    expect(
+      canonicalizeToolCall({
+        name: "close_agent",
+        arguments: { agent_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890" },
+        status: "completed",
+      }).family,
+    ).not.toBe("spawn_agent");
+  });
+});
+

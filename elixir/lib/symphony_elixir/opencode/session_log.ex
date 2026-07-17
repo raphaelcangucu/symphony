@@ -4,7 +4,11 @@ defmodule SymphonyElixir.OpenCode.SessionLog do
   `<workspace>/.symphony/opencode-session.jsonl`.
 
   Each line is NDJSON emitted by `OpenCode.CliRunner` during orchestrator runs.
+
+  Subagent resolution is not supported for OpenCode; callbacks are safe no-ops.
   """
+
+  @behaviour SymphonyElixir.SessionLogBackend
 
   @default_tail_bytes 65_536
   @log_filename "opencode-session.jsonl"
@@ -57,6 +61,15 @@ defmodule SymphonyElixir.OpenCode.SessionLog do
   end
 
   def parse_line(_line), do: nil
+
+  @impl true
+  def resolve_subagent_path(_id, _opts), do: :error
+
+  @impl true
+  def list_subagents(_parent_path, _opts), do: []
+
+  @impl true
+  def subagent_meta(_path), do: %{}
 
   @spec parse_entries(String.t()) :: [map()]
   def parse_entries(line) when is_binary(line) do

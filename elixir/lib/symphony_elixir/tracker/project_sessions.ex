@@ -54,7 +54,7 @@ defmodule SymphonyElixir.Tracker.ProjectSessions do
         normalized_slug
         |> session_rows(include_archived?, fetch_limit, list_executions, list_workspace_sessions)
         |> dedupe_by_id()
-        |> sort_rows()
+        |> sort_rows_by_activity()
 
       project_activity_at = rows |> List.first() |> row_updated_at()
       page = rows |> apply_cursor(cursor) |> Enum.take(limit)
@@ -321,6 +321,7 @@ defmodule SymphonyElixir.Tracker.ProjectSessions do
       project_slug: project_slug,
       scopes: @thread_scopes,
       include_archived: include_archived?,
+      order: :activity,
       limit: fetch_limit
     )
     |> Enum.map(&thread_row/1)
@@ -369,18 +370,65 @@ defmodule SymphonyElixir.Tracker.ProjectSessions do
     Enum.reverse(deduplicated_rows)
   end
 
-  defp sort_rows(rows) do
+  # In-progress first (live/waiting/active), then attention, then idle — then
+  # recency. This is the project-sessions listing order; the sidebar must not
+  # re-sort away from it in JS.
+  defp sort_rows_by_activity(rows) do
     Enum.sort(rows, fn left, right ->
-      case DateTime.compare(left._cursor_updated_at, right._cursor_updated_at) do
-        :gt -> true
-        :lt -> false
-        :eq -> left.id >= right.id
+      left_rank = activity_rank(left.aggregate_status)
+      right_rank = activity_rank(right.aggregate_status)
+
+      cond do
+        left_rank < right_rank ->
+          true
+
+        left_rank > right_rank ->
+          false
+
+        true ->
+          case DateTime.compare(left._cursor_updated_at, right._cursor_updated_at) do
+            :gt -> true
+            :lt -> false
+            :eq -> left.id >= right.id
+          end
       end
     end)
   end
 
+  defp activity_rank(status) when is_binary(status) do
+    case String.downcase(String.trim(status)) do
+      value when value in ~w(live running waiting retrying active in_progress) -> 0
+      value when value in ~w(error failed aborted paused review) -> 1
+      _ -> 2
+    end
+  end
+
+  defp activity_rank(_status), do: 2
+
   defp apply_cursor(rows, nil), do: rows
 
+  defp apply_cursor(rows, %{activity_rank: cursor_rank, updated_at: cursor_updated_at, id: cursor_id}) do
+    Enum.filter(rows, fn row ->
+      rank = activity_rank(row.aggregate_status)
+
+      cond do
+        rank > cursor_rank ->
+          true
+
+        rank < cursor_rank ->
+          false
+
+        true ->
+          case DateTime.compare(row._cursor_updated_at, cursor_updated_at) do
+            :lt -> true
+            :eq -> row.id < cursor_id
+            :gt -> false
+          end
+      end
+    end)
+  end
+
+  # Legacy cursors (updated_at + id only) stay valid for older clients.
   defp apply_cursor(rows, %{updated_at: cursor_updated_at, id: cursor_id}) do
     Enum.filter(rows, fn row ->
       case DateTime.compare(row._cursor_updated_at, cursor_updated_at) do
@@ -404,7 +452,11 @@ defmodule SymphonyElixir.Tracker.ProjectSessions do
   end
 
   defp encode_cursor(row) do
-    %{updated_at: format_datetime(row._cursor_updated_at), id: row.id}
+    %{
+      activity_rank: activity_rank(row.aggregate_status),
+      updated_at: format_datetime(row._cursor_updated_at),
+      id: row.id
+    }
     |> Jason.encode!()
     |> Base.url_encode64(padding: false)
   end
@@ -414,10 +466,17 @@ defmodule SymphonyElixir.Tracker.ProjectSessions do
 
   defp decode_cursor(cursor) when is_binary(cursor) do
     with {:ok, encoded} <- Base.url_decode64(cursor, padding: false),
-         {:ok, %{"updated_at" => updated_at, "id" => id}} <- Jason.decode(encoded),
+         {:ok, decoded} <- Jason.decode(encoded),
+         %{"updated_at" => updated_at, "id" => id} <- decoded,
          {:ok, parsed_updated_at, _offset} <- DateTime.from_iso8601(updated_at),
          true <- is_binary(id) and id != "" do
-      {:ok, %{updated_at: parsed_updated_at, id: id}}
+      case Map.get(decoded, "activity_rank") do
+        rank when is_integer(rank) and rank >= 0 ->
+          {:ok, %{activity_rank: rank, updated_at: parsed_updated_at, id: id}}
+
+        _ ->
+          {:ok, %{updated_at: parsed_updated_at, id: id}}
+      end
     else
       _ -> {:error, :invalid_cursor}
     end

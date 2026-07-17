@@ -10,12 +10,24 @@ defmodule SymphonyElixir.Claude.SessionLog do
 
   The most-recently-modified external `.jsonl` file for the encoded workspace
   directory is used as fallback. Each JSONL line is one conversation event.
+
+  Subagent layout (verified under `~/.claude/projects/`):
+
+      <dir>/<sessionId>.jsonl
+      <dir>/<sessionId>/subagents/agent-<id>.jsonl
+      <dir>/<sessionId>/subagents/agent-<id>.meta.json
+
+  Sidecar meta links to the parent's TaskCreate `tool_use` id via `toolUseId`.
   """
+
+  @behaviour SymphonyElixir.SessionLogBackend
 
   alias SymphonyElixir.Agent.SessionTranscript
 
   @default_projects_dir "~/.claude/projects"
   @default_tail_bytes 65_536
+  @id_pattern ~r/^[A-Za-z0-9-]+$/
+  @label_max_chars 120
 
   @spec resolve_log_path(Path.t(), keyword()) :: {:ok, Path.t()} | :error
   def resolve_log_path(workspace, opts \\ []) when is_binary(workspace) do
@@ -115,6 +127,200 @@ defmodule SymphonyElixir.Claude.SessionLog do
     workspace
     |> Path.expand()
     |> String.replace("/", "-")
+  end
+
+  @impl true
+  def resolve_subagent_path(id, opts) when is_binary(id) do
+    parent_path = Keyword.get(opts, :parent_path)
+    tool_use_id = Keyword.get(opts, :tool_use_id)
+
+    cond do
+      not is_binary(parent_path) ->
+        :error
+
+      true ->
+        case resolve_by_agent_id(parent_path, id) do
+          {:ok, _} = ok ->
+            ok
+
+          :error when is_binary(tool_use_id) and tool_use_id != "" ->
+            resolve_by_tool_use_id(parent_path, tool_use_id)
+
+          :error ->
+            :error
+        end
+    end
+  end
+
+  def resolve_subagent_path(_id, _opts), do: :error
+
+  @impl true
+  def list_subagents(parent_path, _opts) when is_binary(parent_path) do
+    parent_path
+    |> subagents_dir()
+    |> Path.join("agent-*.jsonl")
+    |> Path.wildcard()
+    |> Enum.filter(&File.regular?/1)
+    |> Enum.sort_by(&mtime/1, :asc)
+    |> Enum.map(&subagent_entry/1)
+  end
+
+  def list_subagents(_parent_path, _opts), do: []
+
+  @impl true
+  def subagent_meta(path) when is_binary(path), do: subagent_entry(path)
+
+  def subagent_meta(_path), do: %{}
+
+  defp resolve_by_agent_id(parent_path, id) do
+    if Regex.match?(@id_pattern, id) do
+      bare_id = String.replace_prefix(id, "agent-", "")
+      path = Path.join(subagents_dir(parent_path), "agent-#{bare_id}.jsonl")
+
+      if File.regular?(path), do: {:ok, path}, else: :error
+    else
+      :error
+    end
+  end
+
+  defp resolve_by_tool_use_id(parent_path, tool_use_id) do
+    parent_path
+    |> subagents_dir()
+    |> Path.join("*.meta.json")
+    |> Path.wildcard()
+    |> Enum.find_value(:error, fn meta_path ->
+      case read_meta_json(meta_path) do
+        {:ok, %{"toolUseId" => ^tool_use_id}} ->
+          jsonl = String.replace_suffix(meta_path, ".meta.json", ".jsonl")
+          if File.regular?(jsonl), do: {:ok, jsonl}
+
+        _ ->
+          nil
+      end
+    end)
+  end
+
+  # Verified: children live at Path.rootname(parent_path)/subagents/
+  defp subagents_dir(parent_path), do: Path.join(Path.rootname(parent_path), "subagents")
+
+  defp subagent_entry(path) do
+    bare_id =
+      path
+      |> Path.basename()
+      |> Path.rootname(".jsonl")
+      |> String.replace_prefix("agent-", "")
+
+    sidecar = read_sidecar_meta(path)
+
+    %{
+      "id" => bare_id,
+      "label" => subagent_label(path, sidecar),
+      "nickname" => nil,
+      "role" => Map.get(sidecar, "agentType"),
+      "tool_use_id" => Map.get(sidecar, "toolUseId"),
+      "path" => path
+    }
+  end
+
+  defp subagent_label(path, sidecar) do
+    case Map.get(sidecar, "description") do
+      description when is_binary(description) and description != "" ->
+        description
+
+      _ ->
+        prompt_label(path)
+    end
+  end
+
+  defp read_sidecar_meta(jsonl_path) do
+    meta_path = Path.rootname(jsonl_path, ".jsonl") <> ".meta.json"
+
+    case read_meta_json(meta_path) do
+      {:ok, meta} -> meta
+      :error -> %{}
+    end
+  end
+
+  defp read_meta_json(meta_path) do
+    with true <- File.regular?(meta_path),
+         {:ok, body} <- File.read(meta_path),
+         {:ok, decoded} when is_map(decoded) <- Jason.decode(body) do
+      {:ok, decoded}
+    else
+      _ -> :error
+    end
+  end
+
+  defp prompt_label(path) do
+    case read_first_json_line(path) do
+      {:ok, decoded} ->
+        decoded
+        |> prompt_text()
+        |> truncate_label()
+
+      :error ->
+        nil
+    end
+  end
+
+  defp prompt_text(%{"type" => "user", "message" => message}), do: message_content_text(message)
+  defp prompt_text(%{"role" => "user", "message" => message}), do: message_content_text(message)
+  defp prompt_text(_decoded), do: nil
+
+  defp message_content_text(%{"content" => content}) when is_binary(content), do: content
+
+  defp message_content_text(%{"content" => content}) when is_list(content) do
+    Enum.find_value(content, fn
+      %{"type" => "text", "text" => text} when is_binary(text) and text != "" -> text
+      %{"text" => text} when is_binary(text) and text != "" -> text
+      _ -> nil
+    end)
+  end
+
+  defp message_content_text(_message), do: nil
+
+  defp truncate_label(nil), do: nil
+
+  defp truncate_label(text) when is_binary(text) do
+    text
+    |> String.split("\n", parts: 2)
+    |> List.first()
+    |> String.trim()
+    |> String.slice(0, @label_max_chars)
+    |> case do
+      "" -> nil
+      label -> label
+    end
+  end
+
+  defp read_first_json_line(path) do
+    case File.open(path, [:read, :utf8]) do
+      {:ok, io} ->
+        try do
+          case IO.read(io, :line) do
+            line when is_binary(line) ->
+              case Jason.decode(String.trim(line)) do
+                {:ok, decoded} when is_map(decoded) -> {:ok, decoded}
+                _ -> :error
+              end
+
+            _ ->
+              :error
+          end
+        after
+          File.close(io)
+        end
+
+      {:error, _} ->
+        :error
+    end
+  end
+
+  defp mtime(path) do
+    case File.stat(path) do
+      {:ok, %File.Stat{mtime: mtime}} -> mtime
+      _ -> {{1970, 1, 1}, {0, 0, 0}}
+    end
   end
 
   defp projects_dir(opts) do

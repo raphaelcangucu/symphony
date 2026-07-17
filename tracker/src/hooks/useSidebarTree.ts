@@ -4,6 +4,7 @@ import { useLocation } from "react-router-dom";
 import { useAgentExecutions } from "@/hooks/useAgentExecutions";
 import { useRecents } from "@/hooks/useRecents";
 import { buildFlatSidebarProject, mergeSessionsFromRecents } from "@/lib/flatSidebarTree";
+import { SIDEBAR_DEFAULT_SESSION_LIMIT } from "@/lib/sidebarTree";
 import {
   TRACKER_PROJECTS_CHANGED_EVENT,
   TRACKER_PROJECT_SESSIONS_CHANGED_EVENT,
@@ -22,7 +23,8 @@ import type { Project } from "@/types/project";
 import type { ProjectSessionRow } from "@/types/project-session";
 import type { SidebarLoadState, SidebarProjectNode } from "@/types/sidebar";
 
-const SIDEBAR_PROJECT_SESSIONS_LIMIT = 20;
+/** Match the visible page size so each "More" loads the next 6 from the API. */
+const SIDEBAR_PROJECT_SESSIONS_LIMIT = SIDEBAR_DEFAULT_SESSION_LIMIT;
 const SIDEBAR_PREFERENCES_STORAGE_ERROR =
   "layout.sidebar.errors.preferencesStorage";
 const SIDEBAR_PROJECTS_LOAD_ERROR = "layout.sidebar.errors.projectsLoad";
@@ -90,16 +92,46 @@ function appendSessions(
   return [...previous, ...next.filter(({ id }) => !seen.has(id))];
 }
 
+function preservePreferredSession(
+  next: readonly ProjectSessionRow[],
+  previous: readonly ProjectSessionRow[],
+  preferredId: string | null,
+): readonly ProjectSessionRow[] {
+  if (!preferredId) return next;
+  if (next.some((session) => session.id === preferredId)) return next;
+  const kept = previous.find((session) => session.id === preferredId);
+  if (!kept) return next;
+  return [kept, ...next];
+}
+
 function overlayExecutionStatuses(
   sessions: readonly ProjectSessionRow[],
   executions: ReadonlyMap<string, AgentExecution>,
 ): readonly ProjectSessionRow[] {
   if (sessions.length === 0 || executions.size === 0) return sessions;
+
+  const byExecutionThreadId = new Map<number, AgentExecution>();
+  for (const execution of executions.values()) {
+    if (execution.executionSessionId == null) continue;
+    byExecutionThreadId.set(execution.executionSessionId, execution);
+  }
+
   return sessions.map((session) => {
-    if (!session.issueIdentifier) return session;
-    const execution = executions.get(session.issueIdentifier);
+    const fromIssue =
+      session.issueIdentifier != null
+        ? executions.get(session.issueIdentifier)
+        : undefined;
+    const threadId = parseSessionThreadId(session.id);
+    const fromThread = threadId != null ? byExecutionThreadId.get(threadId) : undefined;
+    const execution = fromIssue ?? fromThread;
     return execution ? { ...session, aggregateStatus: execution.status } : session;
   });
+}
+
+function parseSessionThreadId(id: string): number | null {
+  if (!id.startsWith("thread:")) return null;
+  const parsed = Number.parseInt(id.slice("thread:".length), 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
 function errorDetail(error: unknown): string {
@@ -110,6 +142,8 @@ function errorDetail(error: unknown): string {
 
 export function useSidebarTree(): UseSidebarTreeResult {
   const location = useLocation();
+  const locationRef = useRef(location);
+  locationRef.current = location;
   const { executions } = useAgentExecutions();
   const { sessions: recents } = useRecents();
   const [projects, setProjects] = useState<readonly Project[]>([]);
@@ -129,6 +163,15 @@ export function useSidebarTree(): UseSidebarTreeResult {
   const branchResourcesRef = useRef(new Map<string, BranchResource>());
   const mountedRef = useRef(false);
   const projectsGenerationRef = useRef(0);
+
+  const resolvePreferredSessionId = useCallback((projectSlug: string): string | null => {
+    const selection = resolveSidebarRouteSelection(
+      locationRef.current.pathname,
+      locationRef.current.search,
+    );
+    if (selection.projectSlug !== projectSlug) return null;
+    return selection.sessionId;
+  }, []);
 
   const updateBranchState = useCallback(
     (
@@ -208,14 +251,27 @@ export function useSidebarTree(): UseSidebarTreeResult {
         ) {
           return;
         }
-        updateBranchState(projectSlug, (current) => ({
-          sessions: append ? appendSessions(current.sessions, page.sessions) : [...page.sessions],
-          nextCursor: page.nextCursor,
-          projectActivityAt: page.projectActivityAt,
-          inventorySettled: true,
-          loadState: "ready",
-          error: null,
-        }));
+        updateBranchState(projectSlug, (current) => {
+          const nextSessions = append
+            ? appendSessions(current.sessions, page.sessions)
+            : [...page.sessions];
+          // Keep the open workspace session across reloads even if it fell out
+          // of the first API page — otherwise it vanishes from the sidebar.
+          const preferredId = resolvePreferredSessionId(projectSlug);
+          const preserved = preservePreferredSession(
+            nextSessions,
+            current.sessions,
+            preferredId,
+          );
+          return {
+            sessions: preserved,
+            nextCursor: page.nextCursor,
+            projectActivityAt: page.projectActivityAt,
+            inventorySettled: true,
+            loadState: "ready",
+            error: null,
+          };
+        });
       } catch (error) {
         if (
           !mountedRef.current ||
@@ -232,7 +288,7 @@ export function useSidebarTree(): UseSidebarTreeResult {
         }));
       }
     },
-    [branchResource, updateBranchState],
+    [branchResource, resolvePreferredSessionId, updateBranchState],
   );
 
   const reloadProjectBranch = useCallback(
@@ -298,11 +354,28 @@ export function useSidebarTree(): UseSidebarTreeResult {
 
   const showAllSessions = useCallback(
     (projectSlug: string) => {
-      const branch = branchStatesRef.current.get(projectSlug);
+      const slug = normalizedId(projectSlug);
+      if (!slug) return;
+
+      const branch = branchStatesRef.current.get(slug);
+      const revealed = preferencesRef.current.revealedProjectIds.includes(slug);
+
+      // First click: reveal any already-loaded overflow (Cursor-style "More").
+      if (!revealed) {
+        updatePreferences((current) =>
+          current.revealedProjectIds.includes(slug)
+            ? current
+            : { ...current, revealedProjectIds: [...current.revealedProjectIds, slug] },
+        );
+        // When the fetch page size equals the visible limit there is usually no
+        // local overflow — fall through and load the next API page immediately.
+        if ((branch?.sessions.length ?? 0) > SIDEBAR_DEFAULT_SESSION_LIMIT) return;
+      }
+
       if (!branch?.nextCursor || branch.loadState === "loading") return;
-      void startBranchLoad(projectSlug, branch.nextCursor);
+      void startBranchLoad(slug, branch.nextCursor);
     },
-    [startBranchLoad],
+    [startBranchLoad, updatePreferences],
   );
 
   useEffect(() => {
@@ -340,15 +413,24 @@ export function useSidebarTree(): UseSidebarTreeResult {
     preferencesRef.current = preferences;
   }, [preferences]);
 
+  // Prefer a content key so unrelated preference writes (e.g. revealing More)
+  // do not recreate expandedProjectIds and re-fetch every open branch.
+  const expandedProjectKey = useMemo(
+    () => [...preferences.expandedProjectIds].sort().join("\0"),
+    [preferences.expandedProjectIds],
+  );
+
   useEffect(() => {
-    const expanded = new Set(preferences.expandedProjectIds);
+    const expanded = new Set(
+      expandedProjectKey ? expandedProjectKey.split("\0").filter(Boolean) : [],
+    );
     for (const [slug, resource] of branchResourcesRef.current) {
       if (!expanded.has(slug) && resource.active) closeBranch(slug);
     }
     for (const slug of expanded) {
       if (projects.some((project) => project.slug === slug)) void startBranchLoad(slug);
     }
-  }, [closeBranch, preferences.expandedProjectIds, projects, startBranchLoad]);
+  }, [closeBranch, expandedProjectKey, projects, startBranchLoad]);
 
   const routeSelection = useMemo(
     () => resolveSidebarRouteSelection(location.pathname, location.search),
@@ -382,11 +464,13 @@ export function useSidebarTree(): UseSidebarTreeResult {
       .map((project) => {
         const branch = branchStates.get(project.slug) ?? createBranchState();
         const projectRecents = recents.filter((recent) => recent.projectSlug === project.slug);
-        const sessions = mergeSessionsFromRecents(
-          overlayExecutionStatuses(branch.sessions, executions),
-          projectRecents,
-          project.slug,
+        // Recents may supply issueIdentifier before we can match a live run —
+        // overlay agent status after that merge, never before.
+        const sessions = overlayExecutionStatuses(
+          mergeSessionsFromRecents(branch.sessions, projectRecents, project.slug),
+          executions,
         );
+        const revealed = preferences.revealedProjectIds.includes(project.slug);
         return buildFlatSidebarProject({
           projectSlug: project.slug,
           projectTitle: project.name,
@@ -395,7 +479,14 @@ export function useSidebarTree(): UseSidebarTreeResult {
           nextCursor: branch.nextCursor,
           loadState: branch.loadState,
           error: branch.error,
-          options,
+          preferredSessionId:
+            routeSelection.projectSlug === project.slug ? routeSelection.sessionId : null,
+          options: {
+            ...options,
+            sessionLimit: revealed
+              ? Math.max(sessions.length, SIDEBAR_DEFAULT_SESSION_LIMIT)
+              : SIDEBAR_DEFAULT_SESSION_LIMIT,
+          },
         });
       })
       .sort((left, right) => {
@@ -412,7 +503,7 @@ export function useSidebarTree(): UseSidebarTreeResult {
           ?? right.updatedAt;
         return timestamp(rightActivity) - timestamp(leftActivity) || left.title.localeCompare(right.title);
       });
-  }, [branchStates, executions, preferences, projects, recents]);
+  }, [branchStates, executions, preferences, projects, recents, routeSelection.projectSlug, routeSelection.sessionId]);
 
   return {
     tree,

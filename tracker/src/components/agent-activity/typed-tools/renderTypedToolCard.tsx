@@ -8,6 +8,7 @@ import { GenericToolCard } from "@/components/agent-activity/typed-tools/Generic
 import { KbToolCard } from "@/components/agent-activity/typed-tools/KbToolCard";
 import { PreviewToolCard } from "@/components/agent-activity/typed-tools/PreviewToolCard";
 import { SearchToolCard } from "@/components/agent-activity/typed-tools/SearchToolCard";
+import { SubagentToolCard } from "@/components/agent-activity/typed-tools/SubagentToolCard";
 import { TunnelToolCard } from "@/components/agent-activity/typed-tools/TunnelToolCard";
 import type { TypedToolCardShellProps } from "@/components/agent-activity/typed-tools/TypedToolCardShell";
 import type { OpenKbPathHandler } from "@/lib/openKbPath";
@@ -45,6 +46,17 @@ export function renderTypedToolCard(
       return <DevEnvToolCard presentation={presentation} {...shellProps} />;
     case "tunnel":
       return <TunnelToolCard presentation={presentation} {...shellProps} />;
+    case "spawn_agent":
+      if (presentation.subagentRef) {
+        return (
+          <SubagentToolCard
+            presentation={presentation}
+            subagentRef={presentation.subagentRef}
+            {...shellProps}
+          />
+        );
+      }
+      return null;
     case "generic_mcp":
     case "other":
       return <GenericToolCard presentation={presentation} {...shellProps} />;

@@ -88,6 +88,39 @@ describe("mergeSessionsFromRecents", () => {
     expect(merged.find((session) => session.id === "thread:1")?.title).toBe("Keep me");
   });
 
+  it("overlays missing issue identifiers from recents onto existing sessions", () => {
+    const sessions = [
+      sessionRow({
+        id: "thread:99",
+        title: "Models Game Back",
+        issueIdentifier: null,
+      }),
+    ];
+    const recents: RecentSession[] = [
+      {
+        id: "chat:99",
+        kind: "chat",
+        scope: "issue_session",
+        agentKind: "cursor",
+        projectSlug: "demo",
+        projectName: "Demo",
+        title: "Models Game Back",
+        identifier: "GAM-20",
+        threadId: 99,
+        status: "active",
+        statusKind: "active",
+        preview: null,
+        updatedAt: "2026-07-16T13:00:00Z",
+      },
+    ];
+
+    const merged = mergeSessionsFromRecents(sessions, recents, "demo");
+    expect(merged.find((session) => session.id === "thread:99")).toMatchObject({
+      title: "Models Game Back",
+      issueIdentifier: "GAM-20",
+    });
+  });
+
   it("inserts chat sessions that exist in recents but not in project_sessions", () => {
     const sessions = [sessionRow({ id: "thread:1", title: "Existing" })];
     const recents: RecentSession[] = [
@@ -127,7 +160,7 @@ describe("mergeSessionsFromRecents", () => {
     expect(merged.map((session) => session.id).sort()).toEqual(["thread:1", "thread:99"]);
     expect(merged.find((session) => session.id === "thread:99")).toMatchObject({
       title: "Models Game Back",
-      kind: "execution",
+      kind: "chat",
       issueIdentifier: "GAM-20",
       href: "/projects/demo/workspaces/99",
     });
@@ -209,13 +242,14 @@ describe("buildFlatSidebarProject", () => {
     );
 
     expect(project.kind).toBe("project");
-    expect(project.sessions.map((session) => session.title)).toEqual(["Newer", "Older"]);
+    expect(project.sessions.map((session) => session.title)).toEqual(["DEMO-2 - Newer", "Older"]);
     expect(project.sessions[0]).toMatchObject({
       kind: "session",
       id: "thread:2",
       projectSlug: "demo",
       sessionKind: "execution",
       issueIdentifier: "DEMO-2",
+      title: "DEMO-2 - Newer",
       workspaceId: "1",
       href: "/projects/demo/workspaces/1",
     } satisfies Partial<SidebarSessionNode>);
@@ -288,7 +322,23 @@ describe("buildFlatSidebarProject", () => {
     expect(project.unassignedSessions).toEqual([]);
   });
 
-  it("partitions visible and overflow sessions using sessionLimit", () => {
+  it("pages sessions behind More using the default session limit", () => {
+    const project = buildFlatSidebarProject(
+      buildInput({
+        sessions: Array.from({ length: 8 }, (_, index) =>
+          sessionRow({
+            id: `thread:${index + 1}`,
+            updatedAt: `2026-07-14T${String(12 - index).padStart(2, "0")}:00:00.000000Z`,
+          }),
+        ),
+      }),
+    );
+
+    expect(project.sessions).toHaveLength(6);
+    expect(project.overflowSessions).toHaveLength(2);
+  });
+
+  it("partitions visible and overflow sessions when sessionLimit is explicit", () => {
     const project = buildFlatSidebarProject(
       buildInput({
         sessions: [
@@ -302,6 +352,40 @@ describe("buildFlatSidebarProject", () => {
 
     expect(project.sessions.map((session) => session.id)).toEqual(["thread:1", "thread:2"]);
     expect(project.overflowSessions.map((session) => session.id)).toEqual(["thread:3"]);
+  });
+
+  it("promotes the preferred session into the visible list", () => {
+    const project = buildFlatSidebarProject(
+      buildInput({
+        sessions: [
+          sessionRow({
+            id: "thread:1",
+            title: "Recent",
+            updatedAt: "2026-07-14T12:00:00.000000Z",
+          }),
+          sessionRow({
+            id: "thread:99",
+            title: "Models Game Back",
+            issueIdentifier: "GAM-20",
+            updatedAt: "2026-07-14T10:00:00.000000Z",
+          }),
+          sessionRow({
+            id: "thread:2",
+            title: "Middle",
+            updatedAt: "2026-07-14T11:00:00.000000Z",
+          }),
+        ],
+        preferredSessionId: "thread:99",
+        options: defaultOptions({ sessionLimit: 2 }),
+      }),
+    );
+
+    expect(project.sessions.map((session) => session.id)).toEqual(["thread:99", "thread:1"]);
+    expect(project.sessions[0]).toMatchObject({
+      title: "GAM-20 - Models Game Back",
+      issueIdentifier: "GAM-20",
+    });
+    expect(project.overflowSessions.map((session) => session.id)).toEqual(["thread:2"]);
   });
 
   it("keeps pinned sessions visible ahead of unpinned rows", () => {
@@ -337,6 +421,7 @@ describe("buildFlatSidebarProject", () => {
           sessionRow({
             id: "issue:42",
             kind: "issue",
+            scope: "issue",
             title: "Board issue",
             updatedAt: "2026-07-14T11:00:00.000000Z",
           }),
@@ -348,6 +433,33 @@ describe("buildFlatSidebarProject", () => {
     expect(byId["thread:ws"]?.sessionKind).toBe("chat");
     expect(byId["issue:42"]?.sessionKind).toBe("authoring");
     expect(byId["issue:42"]?.threadId).toBeNull();
+  });
+
+  it("prefers scope so issue chats stay chat icons when API kind is execution", () => {
+    const project = buildFlatSidebarProject(
+      buildInput({
+        sessions: [
+          sessionRow({
+            id: "thread:20",
+            kind: "execution",
+            scope: "issue_session",
+            issueIdentifier: "GAM-20",
+            title: "Models Game Back",
+          }),
+          sessionRow({
+            id: "thread:21",
+            kind: "execution",
+            scope: "issue_execution",
+            issueIdentifier: "GAM-21",
+            title: "Autonomous run",
+          }),
+        ],
+      }),
+    );
+
+    const byId = Object.fromEntries(project.sessions.map((session) => [session.id, session]));
+    expect(byId["thread:20"]?.sessionKind).toBe("chat");
+    expect(byId["thread:21"]?.sessionKind).toBe("execution");
   });
 
   it("keeps orchestrator execution threads selectable with live status", () => {

@@ -64,6 +64,11 @@ import {
   createSessionsListTab,
 } from "@/lib/workspaceTabs/types";
 import {
+  resolveIssueLinkedTabTitle,
+  resolveWorkspaceTabPresentation,
+  type WorkspaceTabPresentationContext,
+} from "@/lib/workspaceTabs/presentation";
+import {
   issuePath,
   projectAuthoringSessionPath,
   projectNewIssueWorkspacePath,
@@ -270,19 +275,51 @@ export function ProjectSessionsWorkspace({
     }
   }, [activeTab, openAssistantSession, projectSlug, t]);
 
+  const executionTitleLookup = useMemo(() => {
+    const titles = new Map<string, string>();
+    for (const issue of issues) titles.set(issue.identifier, issue.title);
+    return titles;
+  }, [issues]);
+
+  const threadIssueLookup = useMemo(() => {
+    const identifiers = new Map<number, string>();
+    for (const session of relatedSessions) {
+      if (session.threadId == null) continue;
+      const identifier = session.identifier?.trim();
+      if (identifier) identifiers.set(session.threadId, identifier);
+    }
+    return identifiers;
+  }, [relatedSessions]);
+
+  const tabPresentationContext = useMemo<WorkspaceTabPresentationContext>(
+    () => ({
+      threadIssueIdentifiers: threadIssueLookup,
+      issueTitles: executionTitleLookup,
+    }),
+    [executionTitleLookup, threadIssueLookup],
+  );
+
+  const resolveTabPresentation = useCallback(
+    (tab: (typeof tabs)[number]) => resolveWorkspaceTabPresentation(tab, tabPresentationContext),
+    [tabPresentationContext],
+  );
+
   const openAuthoringSession = useCallback(
     (session: AuthoringSessionRow) => {
-      const tabTitle = `${session.title} · ${t("issue.agentTabs.authoring")}`;
+      const tabTitle = resolveIssueLinkedTabTitle(session.issueIdentifier, session.title);
       openTab(createAuthoringSessionTab(session.issueIdentifier, tabTitle));
       navigate(projectAuthoringSessionPath(projectSlug, session.issueIdentifier), { replace: true });
     },
-    [navigate, openTab, projectSlug, t],
+    [navigate, openTab, projectSlug],
   );
 
   const openRecentSession = useCallback(
     (session: RecentSession) => {
       if (session.threadId != null) {
-        openAssistantSession(session.threadId, session.title);
+        openAssistantSession(
+          session.threadId,
+          resolveIssueLinkedTabTitle(session.identifier, session.title),
+        );
       }
     },
     [openAssistantSession],
@@ -300,30 +337,41 @@ export function ProjectSessionsWorkspace({
 
   const fetchedAssistantTitlesRef = useRef<Map<number, string>>(new Map());
   const openedAssistantRef = useRef<number | null>(null);
+  const suppressedAssistantCloseRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!activeThreadId) {
       openedAssistantRef.current = null;
+      suppressedAssistantCloseRef.current = null;
       return;
     }
+
+    if (suppressedAssistantCloseRef.current === activeThreadId) return;
 
     const fallback = t("sessions.newSessionTitle");
     const tabId = assistantSessionTabId(activeThreadId);
     const existingTab = tabs.find((tab) => tab.id === tabId);
+    const issueIdentifier = threadIssueLookup.get(activeThreadId) ?? null;
     const knownTitle =
       assistantTitleLookup.get(activeThreadId) ??
       fetchedAssistantTitlesRef.current.get(activeThreadId) ??
       null;
+    const resolvedTitle = resolveIssueLinkedTabTitle(issueIdentifier, knownTitle ?? fallback);
 
-    if (knownTitle) {
-      if (existingTab?.title === knownTitle) return;
+    if (knownTitle || issueIdentifier) {
+      // Always openTab so route changes focus the matching tab even when the
+      // title is unchanged (common now that issue-linked tabs use the identifier).
+      if (existingTab?.title === resolvedTitle && activeTabId === tabId) {
+        openedAssistantRef.current = activeThreadId;
+        return;
+      }
       openedAssistantRef.current = activeThreadId;
-      openTab(createAssistantSessionTab(activeThreadId, knownTitle));
+      openTab(createAssistantSessionTab(activeThreadId, resolvedTitle));
       return;
     }
 
-    if (!existingTab) {
-      openTab(createAssistantSessionTab(activeThreadId, fallback));
+    if (!existingTab || activeTabId !== tabId) {
+      openTab(createAssistantSessionTab(activeThreadId, existingTab?.title || fallback));
     }
 
     let cancelled = false;
@@ -332,7 +380,12 @@ export function ProjectSessionsWorkspace({
         if (cancelled) return;
         const title = thread.title?.trim() || fallback;
         fetchedAssistantTitlesRef.current.set(activeThreadId, title);
-        openTab(createAssistantSessionTab(activeThreadId, title));
+        openTab(
+          createAssistantSessionTab(
+            activeThreadId,
+            resolveIssueLinkedTabTitle(thread.issueIdentifier, title),
+          ),
+        );
         openedAssistantRef.current = activeThreadId;
       })
       .catch(() => {
@@ -343,25 +396,23 @@ export function ProjectSessionsWorkspace({
     return () => {
       cancelled = true;
     };
-  }, [activeThreadId, assistantTitleLookup, openTab, t, tabs]);
-
-  const executionTitleLookup = useMemo(() => {
-    const titles = new Map<string, string>();
-    for (const issue of issues) titles.set(issue.identifier, issue.title);
-    return titles;
-  }, [issues]);
+  }, [activeTabId, activeThreadId, assistantTitleLookup, openTab, t, tabs, threadIssueLookup]);
 
   const openedAuthoringRef = useRef<string | null>(null);
+  const suppressedAuthoringCloseRef = useRef<string | null>(null);
   useEffect(() => {
     if (!activeAuthoringIdentifier) {
       openedAuthoringRef.current = null;
+      suppressedAuthoringCloseRef.current = null;
       return;
     }
+
+    if (suppressedAuthoringCloseRef.current === activeAuthoringIdentifier) return;
 
     const title = executionTitleLookup.get(activeAuthoringIdentifier) ?? activeAuthoringIdentifier;
     const tabId = authoringSessionTabId(activeAuthoringIdentifier);
     const existingTab = tabs.find((tab) => tab.id === tabId);
-    const tabTitle = `${title} · ${t("issue.agentTabs.authoring")}`;
+    const tabTitle = resolveIssueLinkedTabTitle(activeAuthoringIdentifier, title);
     const isActive = activeTabId === tabId;
     const titleMatches = existingTab?.title === tabTitle;
 
@@ -435,7 +486,7 @@ export function ProjectSessionsWorkspace({
     );
     if (resolvedId != null) {
       const title = executionTitleLookup.get(activeExecutionIdentifier) ?? activeExecutionIdentifier;
-      const tabTitle = `${title} · ${t("issue.agentTabs.execution")}`;
+      const tabTitle = resolveIssueLinkedTabTitle(activeExecutionIdentifier, title);
       const target = projectSessionPath(projectSlug, resolvedId);
       openAssistantSession(resolvedId, tabTitle);
       openedExecutionRef.current = activeExecutionIdentifier;
@@ -491,6 +542,15 @@ export function ProjectSessionsWorkspace({
       const closing = tabs.find((entry) => entry.id === tabId);
       if (closing?.kind === "assistant-session") {
         evictAssistantSessionCache(closing.threadId);
+        if (activeThreadId === closing.threadId) {
+          suppressedAssistantCloseRef.current = closing.threadId;
+        }
+      }
+      if (closing?.kind === "authoring-session" && activeAuthoringIdentifier === closing.issueIdentifier) {
+        suppressedAuthoringCloseRef.current = closing.issueIdentifier;
+      }
+      if (closing?.kind === "new-issue" && activeNewIssue) {
+        suppressNewIssueOpenRef.current = true;
       }
       const closingActive = tabId === activeTabId;
       closeTab(tabId);
@@ -498,7 +558,16 @@ export function ProjectSessionsWorkspace({
         navigate(projectSessionsPath(projectSlug), { replace: true });
       }
     },
-    [activeTabId, closeTab, navigate, projectSlug, tabs],
+    [
+      activeAuthoringIdentifier,
+      activeNewIssue,
+      activeTabId,
+      activeThreadId,
+      closeTab,
+      navigate,
+      projectSlug,
+      tabs,
+    ],
   );
 
   async function handleResume(session: ProjectSessionRow) {
@@ -511,7 +580,7 @@ export function ProjectSessionsWorkspace({
       if (trackerApiErrorCode(cause) === "already_running") {
         const threadId = resolveResumeThreadId(session.issueIdentifier, session, relatedSessions);
         if (threadId != null) {
-          const tabTitle = `${session.title} · ${t("issue.agentTabs.execution")}`;
+          const tabTitle = resolveIssueLinkedTabTitle(session.issueIdentifier, session.title);
           openAssistantSession(threadId, tabTitle);
           toast.info(
             t("sessions.alreadyRunningOpened", {
@@ -716,6 +785,7 @@ export function ProjectSessionsWorkspace({
           onClose={handleCloseTab}
           ariaLabel={t("workspace.sessions.tabsAria")}
           shortcutHints
+          resolveTabPresentation={resolveTabPresentation}
           trailing={
             activeTab?.kind === "assistant-session" ? (
               <button

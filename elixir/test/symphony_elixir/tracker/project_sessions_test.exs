@@ -197,7 +197,21 @@ defmodule SymphonyElixir.Tracker.ProjectSessionsTest do
     assert row.href == "/projects/sessions/workspaces/#{thread.id}"
   end
 
-  defp insert_thread!(title, updated_at) do
+  test "orders in-progress sessions ahead of newer idle ones" do
+    idle =
+      insert_thread!("Idle recent", ~U[2026-07-16 18:00:00.000000Z], status: "closed")
+
+    live =
+      insert_thread!("Live older", ~U[2026-07-16 10:00:00.000000Z], status: "active")
+
+    assert {:ok, %{data: rows}} = ProjectSessions.list("sessions", limit: 20)
+
+    assert Enum.map(rows, & &1.id) == ["thread:#{live.id}", "thread:#{idle.id}"]
+  end
+
+  defp insert_thread!(title, updated_at, opts \\ []) do
+    status = Keyword.get(opts, :status, "active")
+
     {:ok, thread} =
       %Thread{}
       |> Thread.changeset(%{
@@ -205,7 +219,7 @@ defmodule SymphonyElixir.Tracker.ProjectSessionsTest do
         project_slug: "sessions",
         title: title,
         workspace_path: "/tmp/#{String.downcase(String.replace(title, " ", "-"))}",
-        status: "active",
+        status: status,
         metadata: %{"workspace_id" => "workspace-1"},
         agent_kind: "codex"
       })
