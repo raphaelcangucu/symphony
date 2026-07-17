@@ -40,6 +40,7 @@ function execution(overrides: Partial<AgentExecution>): AgentExecution {
     status: overrides.status ?? "idle",
     agentKind: "codex",
     sessionId: null,
+    executionSessionId: null,
     lastEvent: null,
     lastMessage: null,
     lastEventAt: null,

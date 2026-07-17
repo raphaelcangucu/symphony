@@ -17,7 +17,11 @@ export function recentSessionSubtitle(
     return [session.identifier, session.projectName ?? session.projectSlug].filter(Boolean).join(" · ");
   }
 
-  if (session.scope === "issue" || session.scope === "issue_session") {
+  if (
+    session.scope === "issue" ||
+    session.scope === "issue_session" ||
+    session.scope === "issue_execution"
+  ) {
     return [session.identifier, session.projectName ?? session.projectSlug].filter(Boolean).join(" · ");
   }
 
@@ -45,7 +49,11 @@ export function recentSessionPath(session: RecentSession): string {
     return withAssistantAgent(projectAuthoringSessionPath(session.projectSlug, session.identifier), session);
   }
 
-  if (session.scope === "issue_session" && session.projectSlug && session.threadId != null) {
+  if (
+    (session.scope === "issue_session" || session.scope === "issue_execution") &&
+    session.projectSlug &&
+    session.threadId != null
+  ) {
     return withAssistantAgent(projectSessionPath(session.projectSlug, session.threadId), session);
   }
 

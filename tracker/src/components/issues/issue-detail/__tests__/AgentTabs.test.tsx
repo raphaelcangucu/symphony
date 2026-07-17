@@ -67,6 +67,7 @@ const execution: AgentExecution = {
   status: "live",
   agentKind: "codex",
   sessionId: "sess-1",
+  executionSessionId: null,
   lastEvent: "turn_started",
   lastMessage: null,
   lastEventAt: null,

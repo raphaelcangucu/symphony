@@ -39,6 +39,7 @@ import { useProjectSessions } from "@/hooks/useProjectSessions";
 import { useWorkspaceTabs } from "@/hooks/useWorkspaceTabs";
 import { createSiblingSession } from "@/lib/createSiblingSession";
 import { type ProjectSessionRow } from "@/lib/projectSessions";
+import { resolveExecutionSessionId } from "@/lib/resolveExecutionSessionId";
 import {
   buildWorkspaceCards,
   flattenWorkspaceCardsByRecency,
@@ -235,10 +236,18 @@ export function ProjectSessionsWorkspace({
   const openExecutionSession = useCallback(
     (session: ProjectSessionRow) => {
       const tabTitle = `${session.title} · ${t("issue.agentTabs.execution")}`;
+      const resolvedId = resolveExecutionSessionId(
+        Array.from(executions.values()),
+        session.issueIdentifier,
+      );
+      if (resolvedId != null) {
+        openAssistantSession(resolvedId, tabTitle);
+        return;
+      }
       openTab(createExecutionSessionTab(session.issueIdentifier, tabTitle));
       navigate(projectExecutionSessionPath(projectSlug, session.issueIdentifier), { replace: true });
     },
-    [navigate, openTab, projectSlug, t],
+    [executions, navigate, openAssistantSession, openTab, projectSlug, t],
   );
 
   const openAuthoringByIdentifier = useCallback(
@@ -404,6 +413,16 @@ export function ProjectSessionsWorkspace({
       return;
     }
 
+    const resolvedId = resolveExecutionSessionId(
+      Array.from(executions.values()),
+      activeExecutionIdentifier,
+    );
+    if (resolvedId != null) {
+      // Prefer the real issue_execution thread workspace over the synthetic exec tab.
+      navigate(projectSessionPath(projectSlug, resolvedId), { replace: true });
+      return;
+    }
+
     const title = executionTitleLookup.get(activeExecutionIdentifier) ?? activeExecutionIdentifier;
     const tabId = executionSessionTabId(activeExecutionIdentifier);
     const existingTab = tabs.find((tab) => tab.id === tabId);
@@ -426,7 +445,17 @@ export function ProjectSessionsWorkspace({
 
     openedExecutionRef.current = activeExecutionIdentifier;
     openTab(createExecutionSessionTab(activeExecutionIdentifier, tabTitle));
-  }, [activeExecutionIdentifier, activeTabId, executionTitleLookup, openTab, t, tabs]);
+  }, [
+    activeExecutionIdentifier,
+    activeTabId,
+    executionTitleLookup,
+    executions,
+    navigate,
+    openTab,
+    projectSlug,
+    t,
+    tabs,
+  ]);
 
   const handleSelectTab = useCallback(
     (tabId: string) => {

@@ -154,6 +154,7 @@ describe("ProjectSessionsWorkspace", () => {
             status: "live",
             agentKind: "codex",
             sessionId: "sess-1",
+            executionSessionId: null,
             lastEvent: null,
             lastMessage: null,
             lastEventAt: "2026-07-02T10:00:00Z",

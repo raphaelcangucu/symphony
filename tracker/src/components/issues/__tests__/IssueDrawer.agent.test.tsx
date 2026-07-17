@@ -185,6 +185,7 @@ const execution: AgentExecution = {
   retryAttempt: 0,
   runtimeSeconds: 42,
   sessionId: "session-1",
+  executionSessionId: null,
   startedAt: "2026-05-31T00:01:00Z",
   status: "live",
   tokens: null,

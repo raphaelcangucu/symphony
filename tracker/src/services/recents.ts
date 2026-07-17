@@ -41,7 +41,8 @@ function normalizeScope(value: string | null | undefined): RecentScope {
     value === "project_explore" ||
     value === "freeform" ||
     value === "issue" ||
-    value === "issue_session"
+    value === "issue_session" ||
+    value === "issue_execution"
   ) {
     return value;
   }

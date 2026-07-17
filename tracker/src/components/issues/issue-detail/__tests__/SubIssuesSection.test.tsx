@@ -12,6 +12,7 @@ function execution(identifier: string, status: AgentExecutionStatus): AgentExecu
     status,
     agentKind: "codex",
     sessionId: null,
+    executionSessionId: null,
     lastEvent: null,
     lastMessage: null,
     lastEventAt: null,

@@ -3421,6 +3421,7 @@
     "standaloneBadge": "Standalone",
     "parallelBadge": "Isolated tree",
     "orphanBadge": "Orphan",
+    "concurrentWriters": "{{count}} sessions writing to this tree",
     "dirtyBadge": "dirty",
     "workPresentWarning": "Unpublished work",
     "issueGone": "Issue removed or archived",

@@ -37,6 +37,8 @@ export interface AgentExecution {
   /** Resolved model for this execution (issue settings → project → user default). */
   model?: string | null;
   sessionId: string | null;
+  /** Numeric Symphony Threads id for the issue_execution session (channel / workspace). */
+  executionSessionId: number | null;
   lastEvent: string | null;
   lastMessage: string | null;
   lastEventAt: string | null;

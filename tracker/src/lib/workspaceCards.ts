@@ -6,6 +6,18 @@ import type { WorkspaceInventoryEntry } from "@/types/worktrees";
 
 export type WorkspaceCardSection = "project" | "active" | "waiting" | "orphan" | "chats";
 
+const LIVE_WRITER_STATUSES = new Set(["active", "live", "running", "retrying"]);
+
+export function countLiveWritersForWorkspace(
+  sessions: ReadonlyArray<{ workspacePath: string | null; aggregateStatus: string }>,
+  workspacePath: string,
+): number {
+  if (!workspacePath) return 0;
+  return sessions.filter(
+    (s) => s.workspacePath === workspacePath && LIVE_WRITER_STATUSES.has(s.aggregateStatus),
+  ).length;
+}
+
 /**
  * One card per working tree (or per issue for issues without an inventory
  * entry yet). Merges the execution session, the authoring session, the
@@ -318,7 +330,10 @@ function splitRelatedSessions(
       continue;
     }
 
-    if (session.scope === "issue_session" && session.identifier) {
+    if (
+      (session.scope === "issue_session" || session.scope === "issue_execution") &&
+      session.identifier
+    ) {
       const list = parallelSessionsByIssue.get(session.identifier) ?? [];
       list.push(session);
       parallelSessionsByIssue.set(session.identifier, list);

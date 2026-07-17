@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { buildWorkspaceCards, flattenWorkspaceCardsByRecency, formatBytes } from "@/lib/workspaceCards";
+import {
+  buildWorkspaceCards,
+  countLiveWritersForWorkspace,
+  flattenWorkspaceCardsByRecency,
+  formatBytes,
+} from "@/lib/workspaceCards";
 import type { AgentExecution } from "@/types/agent-execution";
 import type { Issue } from "@/types/issue";
 import type { RecentSession } from "@/types/recents";
@@ -12,6 +17,7 @@ function execution(overrides: Partial<AgentExecution> = {}): AgentExecution {
     status: "live",
     agentKind: "codex",
     sessionId: "sess-1",
+    executionSessionId: null,
     lastEvent: null,
     lastMessage: null,
     lastEventAt: "2026-07-02T10:00:00Z",
@@ -277,6 +283,20 @@ describe("buildWorkspaceCards orphans", () => {
 
     expect(result.activeCards).toHaveLength(0);
     expect(result.orphanCards.map((card) => card.kind)).toEqual(["issue_parallel"]);
+  });
+});
+
+describe("countLiveWritersForWorkspace", () => {
+  it("flags a workspace with 2+ live sessions writing to the same tree", () => {
+    const count = countLiveWritersForWorkspace(
+      [
+        { workspacePath: "/t/CDE-1180", aggregateStatus: "active" },
+        { workspacePath: "/t/CDE-1180", aggregateStatus: "active" },
+        { workspacePath: "/t/CDE-1180", aggregateStatus: "idle" },
+      ],
+      "/t/CDE-1180",
+    );
+    expect(count).toBe(2);
   });
 });
 

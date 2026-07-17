@@ -1,11 +1,11 @@
 import type { Channel } from "phoenix";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { AssistantOutgoingAttachment } from "@/components/assistant/assistantAttachments";
 import type { ComposerContextChipRef } from "@/components/assistant/contextMentions";
 import { usePhoenixChannel } from "@/hooks/usePhoenixChannel";
 import { i18n } from "@/i18n";
-import { sessionLogTopic } from "@/services/session-log";
+import { sessionLogIssueTopic, sessionLogTopic } from "@/services/session-log";
 import { payloadEntries, type SessionLogEntry } from "@/types/session-log";
 
 export interface AgentSteerPayload {
@@ -16,7 +16,8 @@ export interface AgentSteerPayload {
 
 interface UseSessionLogChannelArgs {
   projectSlug: string;
-  issueIdentifier: string;
+  sessionId?: number | string | null;
+  issueIdentifier?: string | null;
   enabled: boolean;
   agentKind?: string | null;
 }
@@ -40,9 +41,12 @@ const AGENT_LOG_LABEL_KEYS: Record<string, string> = {
   cursor: "issue.sessionLog.agentLabels.cursor",
 };
 
+const NUMERIC_SESSION_ID = /^\d+$/;
+
 export function useSessionLogChannel({
   projectSlug,
-  issueIdentifier,
+  sessionId = null,
+  issueIdentifier = null,
   enabled,
   agentKind,
 }: UseSessionLogChannelArgs): UseSessionLogChannelResult {
@@ -55,12 +59,21 @@ export function useSessionLogChannel({
   const [logFallback, setLogFallback] = useState(false);
 
   const project = projectSlug.trim();
-  const identifier = issueIdentifier.trim();
-  const active = enabled && Boolean(project) && Boolean(identifier);
   const preferredKind = agentKind?.trim();
 
+  const topic = useMemo(() => {
+    if (!enabled || !project) return null;
+    const id = sessionId == null ? "" : String(sessionId).trim();
+    if (id && NUMERIC_SESSION_ID.test(id)) return sessionLogTopic(id);
+    const identifier = issueIdentifier?.trim() ?? "";
+    if (identifier) return sessionLogIssueTopic(project, identifier);
+    return null;
+  }, [enabled, issueIdentifier, project, sessionId]);
+
+  const active = topic != null;
+
   const { channel, connected } = usePhoenixChannel({
-    topic: active ? sessionLogTopic(project, identifier) : null,
+    topic,
     params: {
       project_slug: project,
       ...(preferredKind ? { agent_kind: preferredKind } : {}),

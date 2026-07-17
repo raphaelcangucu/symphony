@@ -28,6 +28,7 @@ function execution(issueIdentifier: string): AgentExecution {
     status: "saved",
     agentKind: "codex",
     sessionId: `sess-${issueIdentifier}`,
+    executionSessionId: null,
     lastEvent: null,
     lastMessage: null,
     lastEventAt: "2026-07-02T10:00:00Z",

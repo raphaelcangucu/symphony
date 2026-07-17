@@ -69,6 +69,7 @@ function execution(
     status: "live",
     agentKind: "codex",
     sessionId: `session-${identifier}`,
+    executionSessionId: null,
     lastEvent: null,
     lastMessage: null,
     lastEventAt: "2026-07-10T10:00:00Z",

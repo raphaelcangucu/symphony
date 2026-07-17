@@ -10,7 +10,12 @@ import { WorkspaceListRow } from "@/components/sessions/WorkspaceListRow";
 import { WorkspaceRowMenu } from "@/components/sessions/WorkspaceRowMenu";
 import { cn } from "@/lib/utils";
 import type { ProjectSessionRow } from "@/lib/projectSessions";
-import { isWorkspaceRemovable, type WorkspaceListItem } from "@/lib/workspaceCards";
+import {
+  countLiveWritersForWorkspace,
+  isWorkspaceRemovable,
+  type WorkspaceCard,
+  type WorkspaceListItem,
+} from "@/lib/workspaceCards";
 import type { RecentSession } from "@/types/recents";
 
 interface WorkspaceAccordionItemProps {
@@ -49,6 +54,8 @@ export function WorkspaceAccordionItem({
   const { t } = useTranslation();
   const removable =
     item.kind === "card" && onRemove && isWorkspaceRemovable(item.card);
+  const liveWriterCount =
+    item.kind === "card" ? liveWritersForCard(item.card) : 0;
 
   return (
     <div className="space-y-0.5">
@@ -80,6 +87,11 @@ export function WorkspaceAccordionItem({
                 : undefined
             }
           />
+          {liveWriterCount > 1 ? (
+            <p className="mt-0.5 pl-1.5 text-[11px] text-amber-700 dark:text-amber-400">
+              {t("workspacesPage.concurrentWriters", { count: liveWriterCount })}
+            </p>
+          ) : null}
         </div>
         <div className="flex shrink-0 items-center gap-0.5 self-center pr-0.5">
           {removable ? (
@@ -139,4 +151,20 @@ export function WorkspaceAccordionItem({
       ) : null}
     </div>
   );
+}
+
+function liveWritersForCard(card: WorkspaceCard): number {
+  const workspacePath = card.inventory?.path?.trim() ?? "";
+  if (!workspacePath) return 0;
+
+  const sessions: Array<{ workspacePath: string | null; aggregateStatus: string }> = [
+    ...card.sessions.map((session) => ({
+      workspacePath,
+      aggregateStatus: session.statusKind,
+    })),
+  ];
+  if (card.execution) {
+    sessions.push({ workspacePath, aggregateStatus: card.execution.status });
+  }
+  return countLiveWritersForWorkspace(sessions, workspacePath);
 }

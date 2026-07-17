@@ -33,6 +33,7 @@ function execution(overrides: Partial<AgentExecution> = {}): AgentExecution {
     status: "idle",
     agentKind: "codex",
     sessionId: null,
+    executionSessionId: null,
     lastEvent: null,
     lastMessage: null,
     lastEventAt: null,

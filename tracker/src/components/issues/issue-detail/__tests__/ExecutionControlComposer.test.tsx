@@ -75,6 +75,7 @@ function makeExecution(overrides: Partial<AgentExecution> = {}): AgentExecution 
     status: "live",
     agentKind: "codex",
     sessionId: "sess-1",
+    executionSessionId: null,
     lastEvent: "turn_started",
     lastMessage: "working",
     lastEventAt: null,

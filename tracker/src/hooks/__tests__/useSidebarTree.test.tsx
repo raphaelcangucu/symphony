@@ -59,6 +59,7 @@ function execution(issueIdentifier: string): AgentExecution {
     status: "live",
     agentKind: "codex",
     sessionId: `session-${issueIdentifier}`,
+    executionSessionId: null,
     lastEvent: null,
     lastMessage: null,
     lastEventAt: "2026-07-14T12:00:00Z",

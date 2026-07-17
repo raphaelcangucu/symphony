@@ -94,6 +94,7 @@ function syntheticExecutionFromSessionRow(
     status: normalizeExecutionStatus(session.aggregateStatus),
     agentKind: session.agentKind,
     sessionId: null,
+    executionSessionId: null,
     lastEvent: null,
     lastMessage: null,
     lastEventAt: session.updatedAt,

@@ -22,6 +22,7 @@ export interface BackendAgentExecutionDto {
   model?: string | null;
   status?: string | null;
   session_id?: string | null;
+  execution_session_id?: number | null;
   last_event?: string | null;
   last_message?: string | null;
   last_event_at?: string | null;
@@ -138,6 +139,10 @@ export function normalizeAgentExecution(dto: BackendAgentExecutionDto): AgentExe
     agentKind: normalizeAgentKind(dto.agent_kind),
     model: typeof dto.model === "string" && dto.model.trim() ? dto.model.trim() : null,
     sessionId: dto.session_id ?? null,
+    executionSessionId:
+      typeof dto.execution_session_id === "number" && Number.isFinite(dto.execution_session_id)
+        ? dto.execution_session_id
+        : null,
     lastEvent: dto.last_event ?? null,
     lastMessage: dto.last_message ?? null,
     lastEventAt: dto.last_event_at ?? null,

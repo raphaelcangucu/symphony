@@ -58,6 +58,7 @@ export function ExecutionChatPanel({
 
   const sessionLog = useSessionLogChannel({
     projectSlug,
+    sessionId: execution?.executionSessionId ?? null,
     issueIdentifier: issue.identifier,
     enabled: true,
     agentKind: execution?.agentKind ?? issue.agentKind ?? null,

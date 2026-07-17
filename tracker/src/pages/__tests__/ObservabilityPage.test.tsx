@@ -113,6 +113,7 @@ function goalExecution(issueIdentifier: string, objective: string): AgentExecuti
     agentKind: "codex",
     model: "gpt-5.4",
     sessionId: "sess-1",
+    executionSessionId: null,
     lastEvent: "turn_started",
     lastMessage: "working",
     lastEventAt: null,

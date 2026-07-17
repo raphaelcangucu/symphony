@@ -115,6 +115,7 @@ function sessionKindFromRecentScope(scope: RecentSession["scope"]): ProjectSessi
     case "issue":
       return "authoring";
     case "issue_session":
+    case "issue_execution":
       // Matches SymphonyElixir.Tracker.ProjectSessions.thread_kind/1.
       return "execution";
     case "project_session":

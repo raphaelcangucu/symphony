@@ -132,6 +132,35 @@ describe("mergeSessionsFromRecents", () => {
     });
   });
 
+  it("maps issue_execution scope to the execution kind", () => {
+    const sessions = [sessionRow({ id: "thread:1", title: "Existing" })];
+    const recents: RecentSession[] = [
+      {
+        id: "chat:9001",
+        kind: "chat",
+        scope: "issue_execution",
+        agentKind: "cursor",
+        projectSlug: "demo",
+        projectName: "Demo",
+        title: "Autonomous run",
+        identifier: "CDE-1180",
+        threadId: 9001,
+        status: "active",
+        statusKind: "active",
+        preview: null,
+        updatedAt: "2026-07-16T13:00:00Z",
+      },
+    ];
+
+    const merged = mergeSessionsFromRecents(sessions, recents, "demo");
+    expect(merged.find((session) => session.id === "thread:9001")).toMatchObject({
+      title: "Autonomous run",
+      kind: "execution",
+      issueIdentifier: "CDE-1180",
+      href: "/projects/demo/workspaces/9001",
+    });
+  });
+
   it("returns the same array reference when nothing changes", () => {
     const sessions = [sessionRow({ id: "thread:1", title: "Same" })];
     const recents: RecentSession[] = [

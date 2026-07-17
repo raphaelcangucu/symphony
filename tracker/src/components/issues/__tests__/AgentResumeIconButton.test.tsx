@@ -17,6 +17,7 @@ function execution(overrides: Partial<AgentExecution> = {}): AgentExecution {
     agentKind: "codex",
     status: "idle",
     sessionId: "sess-1",
+    executionSessionId: null,
     turnCount: 1,
     runtimeSeconds: 42,
     startedAt: null,

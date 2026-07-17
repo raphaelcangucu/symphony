@@ -3421,6 +3421,7 @@
     "standaloneBadge": "Avulso",
     "parallelBadge": "Tree isolada",
     "orphanBadge": "Órfão",
+    "concurrentWriters": "{{count}} sessões escrevendo nesta árvore",
     "dirtyBadge": "dirty",
     "workPresentWarning": "Trabalho não publicado",
     "issueGone": "Issue removida ou arquivada",
