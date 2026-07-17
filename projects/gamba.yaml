@@ -70,7 +70,7 @@ dev_env_steps:
         - ["bash", ".symphony/wire-services.sh"]
       start:
         - ["node", "scripts/generate-version.cjs"]
-        - ["nuxi", "dev", "--dotenv", ".env.local", "--host", "0.0.0.0", "--port", "${PORT}"]
+        - ["./node_modules/.bin/nuxi", "dev", "--dotenv", ".env.local", "--host", "0.0.0.0", "--port", "${PORT}"]
       health:
         path: "/api/health"
         timeout_ms: 120000
