@@ -102,7 +102,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
   @notion_tools NotionTools.tools()
   @discovery_tools DiscoveryTools.tools()
   @dynamic_tools Enum.map(DynamicTool.tool_specs(), & &1["name"])
-  @supported_tools @tracker_tools ++ @read_tools ++ @github_tools ++ @kb_tools
+  @supported_tools @tracker_tools ++ @read_tools ++ @github_tools ++ @kb_tools ++ @notion_tools
   # Issue / issue_session / build / working-tree chats advertise the full project
   # tool surface (same names as project assistant). Identifier-sensitive tools are
   # rebound to the session issue; dual-schema tools swap to issue-bound variants.
