@@ -44,6 +44,7 @@ defmodule SymphonyElixir.AgentExecution do
           issue_identifier: String.t(),
           status: status(),
           session_id: String.t() | nil,
+          execution_session_id: integer() | nil,
           last_event: atom() | String.t() | nil,
           last_message: String.t() | nil,
           last_event_at: DateTime.t() | nil,
@@ -128,6 +129,7 @@ defmodule SymphonyElixir.AgentExecution do
       issue_identifier: session.issue_identifier,
       status: session_execution_status(session.status),
       session_id: to_string(session.id),
+      execution_session_id: session.id,
       last_event: nil,
       last_message: nil,
       last_event_at: session.updated_at,
@@ -178,6 +180,7 @@ defmodule SymphonyElixir.AgentExecution do
       issue_identifier: record.issue_identifier,
       status: :waiting,
       session_id: nil,
+      execution_session_id: nil,
       last_event: nil,
       last_message: record.last_message,
       last_event_at: nil,
@@ -253,6 +256,7 @@ defmodule SymphonyElixir.AgentExecution do
       agent_kind: Map.get(entry, :agent_kind),
       model: resolve_execution_model(entry),
       session_id: Map.get(entry, :session_id),
+      execution_session_id: normalize_execution_session_id(Map.get(entry, :execution_session_id)),
       last_event: running_last_event(entry, interruption),
       last_message: running_last_message(entry, interruption),
       last_event_at: last_event_at,
@@ -357,6 +361,7 @@ defmodule SymphonyElixir.AgentExecution do
       issue_identifier: identifier(entry),
       status: status,
       session_id: nil,
+      execution_session_id: nil,
       last_event: nil,
       last_message: nil,
       last_event_at: nil,
@@ -451,6 +456,7 @@ defmodule SymphonyElixir.AgentExecution do
       issue_identifier: record.identifier,
       status: :saved,
       session_id: record.agent_session_id,
+      execution_session_id: nil,
       last_event: nil,
       last_message: nil,
       last_event_at: record.updated_at,
@@ -811,6 +817,17 @@ defmodule SymphonyElixir.AgentExecution do
 
   defp maybe_to_string(nil), do: nil
   defp maybe_to_string(value), do: to_string(value)
+
+  defp normalize_execution_session_id(id) when is_integer(id) and id > 0, do: id
+
+  defp normalize_execution_session_id(id) when is_binary(id) do
+    case Integer.parse(id) do
+      {n, ""} when n > 0 -> n
+      _ -> nil
+    end
+  end
+
+  defp normalize_execution_session_id(_), do: nil
 
   @doc "Humanizes a raw Codex message for display, mirroring the dashboard."
   @spec humanize_message(term()) :: String.t() | nil

@@ -344,6 +344,18 @@ defmodule SymphonyElixir.AgentExecutionTest do
       assert [execution] = AgentExecution.from_snapshot(snapshot)
       assert execution.status == :live
     end
+
+    test "from_snapshot/1 surfaces execution_session_id from the running entry" do
+      snapshot = %{
+        running: [running_entry(%{execution_session_id: 8015})],
+        retrying: []
+      }
+
+      assert [execution] = AgentExecution.from_snapshot(snapshot)
+      assert execution.execution_session_id == 8015
+      # existing session_id (agent/codex) remains distinct
+      assert execution.session_id == "thread-turn"
+    end
   end
 
   describe "subagent_executions/2" do
@@ -477,6 +489,7 @@ defmodule SymphonyElixir.AgentExecutionTest do
       assert row
       assert row.status == :aborted
       assert row.session_id == to_string(session.id)
+      assert row.execution_session_id == session.id
     end
   end
 

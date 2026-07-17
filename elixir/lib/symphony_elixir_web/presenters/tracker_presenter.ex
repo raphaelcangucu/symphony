@@ -275,6 +275,7 @@ defmodule SymphonyElixirWeb.TrackerPresenter do
       agent_kind: Map.get(execution, :agent_kind),
       model: Map.get(execution, :model),
       session_id: execution.session_id,
+      execution_session_id: Map.get(execution, :execution_session_id),
       last_event: event_to_string(execution.last_event),
       last_message: AgentExecution.humanize_message(execution.last_message),
       last_event_at: iso8601(execution.last_event_at),
