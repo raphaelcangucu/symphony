@@ -1,6 +1,7 @@
 defmodule SymphonyElixirWeb.Tracker.CredentialsController do
   @moduledoc """
-  Operator-editable provider credentials (tokens) for GitHub, Jira, and Linear.
+  Operator-editable provider credentials (tokens) for GitHub, Jira, Linear,
+  Notion, and Telegram.
 
   Secrets are never returned in clear text: the index reports only whether each
   credential is configured, where it resolves from (DB override vs environment),

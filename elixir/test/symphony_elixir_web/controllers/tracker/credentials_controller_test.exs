@@ -5,6 +5,7 @@ defmodule SymphonyElixirWeb.Tracker.CredentialsControllerTest do
   import Plug.Conn
 
   alias SymphonyElixir.Repo
+  alias SymphonyElixir.Settings.Credentials
   alias SymphonyElixir.Settings.Setting
 
   @endpoint SymphonyElixirWeb.Endpoint
@@ -33,7 +34,7 @@ defmodule SymphonyElixirWeb.Tracker.CredentialsControllerTest do
     assert %{"data" => %{"providers" => providers}} = json_response(conn, 200)
 
     names = providers |> Enum.map(& &1["provider"]) |> Enum.sort()
-    assert names == ["github", "jira", "linear"]
+    assert names == Credentials.providers() |> Enum.sort()
 
     github = Enum.find(providers, &(&1["provider"] == "github"))
     token_field = Enum.find(github["fields"], &(&1["key"] == "token"))
