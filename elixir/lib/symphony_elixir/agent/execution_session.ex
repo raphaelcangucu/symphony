@@ -11,7 +11,9 @@ defmodule SymphonyElixir.Agent.ExecutionSession do
 
   import Ecto.Query, only: [from: 2]
 
+  alias SymphonyElixir.AgentExecution
   alias SymphonyElixir.Assistant.{History, Thread}
+  alias SymphonyElixir.Recents
   alias SymphonyElixir.Repo
 
   @statuses ~w(active completed aborted paused error closed archived)
@@ -29,9 +31,16 @@ defmodule SymphonyElixir.Agent.ExecutionSession do
   @spec finish(integer(), String.t()) :: {:ok, Thread.t()} | {:error, term()}
   def finish(session_id, status) when is_integer(session_id) and status in @statuses do
     with {:ok, thread} <- History.get_thread(session_id) do
-      thread
-      |> Thread.changeset(%{status: normalize_status(status)})
-      |> Repo.update()
+      case thread
+           |> Thread.changeset(%{status: normalize_status(status)})
+           |> Repo.update() do
+        {:ok, _updated} = result ->
+          notify_execution_change()
+          result
+
+        other ->
+          other
+      end
     end
   end
 
@@ -69,18 +78,33 @@ defmodule SymphonyElixir.Agent.ExecutionSession do
       |> maybe_put("unit_id", Keyword.get(opts, :unit_id))
       |> maybe_put("bundle_role", Keyword.get(opts, :bundle_role))
 
-    %Thread{}
-    |> Thread.changeset(%{
-      scope: "issue_execution",
-      project_slug: project_slug,
-      issue_identifier: issue_identifier,
-      workspace_path: workspace,
-      agent_kind: agent_kind,
-      title: Keyword.get(opts, :title) || issue_identifier,
-      status: "active",
-      metadata: metadata
-    })
-    |> Repo.insert()
+    case %Thread{}
+         |> Thread.changeset(%{
+           scope: "issue_execution",
+           project_slug: project_slug,
+           issue_identifier: issue_identifier,
+           workspace_path: workspace,
+           agent_kind: agent_kind,
+           title: Keyword.get(opts, :title) || issue_identifier,
+           status: "active",
+           metadata: metadata
+         })
+         |> Repo.insert() do
+      {:ok, _thread} = result ->
+        notify_execution_change()
+        result
+
+      other ->
+        other
+    end
+  end
+
+  defp notify_execution_change do
+    _ = Recents.Broadcaster.notify()
+    _ = AgentExecution.Broadcaster.notify()
+    :ok
+  rescue
+    _ -> :ok
   end
 
   # Thread status enum is active|closed|error|archived; map run outcomes onto it.
