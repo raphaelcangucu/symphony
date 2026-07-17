@@ -19,6 +19,15 @@ defmodule SymphonyElixirWeb.SessionLogChannel do
   @impl true
   def join("session_log:" <> topic_rest, %{"project_slug" => project_slug} = params, socket)
       when is_binary(project_slug) and project_slug != "" do
+    case Integer.parse(topic_rest) do
+      {session_id, ""} -> join_session(session_id, project_slug, socket)
+      _ -> join_by_issue(topic_rest, project_slug, params, socket)
+    end
+  end
+
+  def join(_topic, _payload, _socket), do: {:error, %{reason: "invalid_topic"}}
+
+  defp join_by_issue(topic_rest, project_slug, params, socket) do
     with :ok <- authorize(socket),
          {:ok, issue_identifier} <- parse_topic(topic_rest, project_slug),
          preferred_agent_kind <- preferred_agent_kind(params, project_slug, issue_identifier),
@@ -56,7 +65,43 @@ defmodule SymphonyElixirWeb.SessionLogChannel do
     end
   end
 
-  def join(_topic, _payload, _socket), do: {:error, %{reason: "invalid_topic"}}
+  defp join_session(session_id, project_slug, socket) do
+    with :ok <- authorize(socket),
+         {:ok, thread} <- SymphonyElixir.Assistant.History.get_thread(session_id),
+         {:ok, log_agent_kind, path} <- SessionLog.resolve_for_session(thread) do
+      workspace = thread.workspace_path
+      log_opts = SessionLog.join_tail_opts() |> Keyword.put(:workspace, workspace)
+      {:ok, lines, offset} = SessionLog.tail(log_agent_kind, path, log_opts)
+      {:ok, _, symphony_offset} = SessionEvents.tail(workspace)
+
+      socket =
+        socket
+        |> assign(:session_id, session_id)
+        |> assign(:issue_identifier, thread.issue_identifier)
+        |> assign(:project_slug, project_slug)
+        |> assign(:workspace, workspace)
+        |> assign(:path, path)
+        |> assign(:offset, offset)
+        |> assign(:symphony_offset, symphony_offset)
+        |> assign(:agent_kind, log_agent_kind)
+        |> assign(:preferred_agent_kind, thread.agent_kind)
+
+      send(self(), :poll)
+
+      {:ok,
+       %{
+         entries: lines,
+         offset: offset,
+         path: path,
+         agent_kind: log_agent_kind,
+         preferred_agent_kind: thread.agent_kind,
+         log_fallback: log_agent_kind != (thread.agent_kind || "codex")
+       }, socket}
+    else
+      :error -> {:error, %{reason: "session_log_unavailable"}}
+      {:error, reason} -> {:error, %{reason: error_reason(reason)}}
+    end
+  end
 
   @impl true
   def handle_in("steer_turn", payload, socket) when is_map(payload) do
