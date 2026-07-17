@@ -4,6 +4,10 @@ defmodule Mix.Tasks.Symphony.MigrateSessionLogs do
   Copies each Thread's shared working-tree agent log into
   `.symphony/sessions/<thread_id>/transcript.jsonl` when that file is missing.
 
+  The same work also runs automatically via the Ecto data migration
+  `SeedPerSessionTranscripts` on the next `mix ecto.migrate`. This Mix task
+  remains for dry-runs and project-scoped re-runs; both paths are idempotent.
+
       mix symphony.migrate_session_logs
       mix symphony.migrate_session_logs --dry-run
       mix symphony.migrate_session_logs --project advising
