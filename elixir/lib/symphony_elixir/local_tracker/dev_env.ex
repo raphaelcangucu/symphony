@@ -4,6 +4,7 @@ defmodule SymphonyElixir.LocalTracker.DevEnv do
   import Ecto.Query
 
   alias SymphonyElixir.Config
+  alias SymphonyElixir.DevServer.RunSpec
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.LocalTracker.DevEnv.{ProposedStep, Proposer, Run, Step, StepRun}
   alias SymphonyElixir.Repo
@@ -126,17 +127,103 @@ defmodule SymphonyElixir.LocalTracker.DevEnv do
 
     with {:ok, _project} <- Context.get_project(project_slug),
          {:ok, run} <- start_run(project_slug, "warm_up") do
-      if File.exists?(Path.join([base, ".symphony", "serve.sh"])) do
-        port = Keyword.get(opts, :port, pick_ephemeral_port())
-        {output, status} = exec.(base, warm_up_command(project_slug, port, tenant), [])
-        run_status = if status == 0, do: "succeeded", else: "failed"
-        failure = if status == 0, do: nil, else: classify_warm_up_failure(output)
-        finalize_warm_up(project_slug, run, run_status, failure, port, output)
-      else
-        finalize_warm_up(project_slug, run, "failed", "needs_scaffold", nil, "Missing .symphony/serve.sh")
+      case warm_up_run_spec(project_slug) do
+        run_spec when is_map(run_spec) ->
+          port = Keyword.get(opts, :port, pick_ephemeral_port())
+
+          case warm_up_runner_command(base, project_slug, port, tenant, run_spec) do
+            {:ok, command} ->
+              execute_warm_up(exec, base, command, project_slug, run, port)
+
+            {:error, reason} ->
+              output = "Invalid preview run_spec: #{inspect(reason)}"
+              finalize_warm_up(project_slug, run, "failed", "unknown", port, output)
+          end
+
+        nil ->
+          warm_up_legacy(exec, base, project_slug, run, tenant, opts)
       end
     end
   end
+
+  defp warm_up_run_spec(project_slug) do
+    serve_steps = list_serve_steps(project_slug)
+    primary_step = Enum.find(serve_steps, & &1.primary) || List.first(serve_steps)
+
+    case primary_step do
+      %Step{run_spec: run_spec} when is_map(run_spec) and map_size(run_spec) > 0 -> run_spec
+      _other -> nil
+    end
+  end
+
+  defp warm_up_legacy(exec, base, project_slug, run, tenant, opts) do
+    if File.exists?(Path.join([base, ".symphony", "serve.sh"])) do
+      port = Keyword.get(opts, :port, pick_ephemeral_port())
+      command = warm_up_command(project_slug, port, tenant)
+      execute_warm_up(exec, base, command, project_slug, run, port)
+    else
+      finalize_warm_up(project_slug, run, "failed", "needs_scaffold", nil, "Missing .symphony/serve.sh")
+    end
+  end
+
+  defp execute_warm_up(exec, base, command, project_slug, run, port) do
+    {output, status} = exec.(base, command, [])
+    run_status = if status == 0, do: "succeeded", else: "failed"
+    failure = if status == 0, do: nil, else: classify_warm_up_failure(output)
+    finalize_warm_up(project_slug, run, run_status, failure, port, output)
+  end
+
+  defp warm_up_runner_command(base, project_slug, port, tenant, run_spec) do
+    preview_env = %{
+      "SYMPHONY_PREVIEW_TENANT" => tenant,
+      "SYMPHONY_PREVIEW_WARMUP" => "1"
+    }
+
+    with {:ok, normalized_spec} <-
+           RunSpec.normalize(run_spec, port: port, preview_env: preview_env) do
+      expanded_base = Path.expand(base)
+      symphony_directory = Path.join(expanded_base, ".symphony")
+      report_path = Path.join(symphony_directory, "preview-report.json")
+
+      spec_path =
+        normalized_spec
+        |> Map.put(:warmup, true)
+        |> RunSpec.write_temp!(symphony_directory)
+
+      runner_path = Application.app_dir(:symphony_elixir, "priv/preview/run.sh")
+
+      env = %{
+        "COMPOSE_PROJECT_NAME" => warm_up_compose_project(project_slug),
+        "INSPIRE_PORT" => Integer.to_string(port),
+        "PORT" => Integer.to_string(port),
+        "SYMPHONY_PREVIEW_ALLOWED_PORTS" => Integer.to_string(port),
+        "SYMPHONY_PREVIEW_CONTRACT" => "1",
+        "SYMPHONY_PREVIEW_CONTRACT_ID" => "warmup-#{project_slug}",
+        "SYMPHONY_PREVIEW_CONTRACT_REVISION" => "1",
+        "SYMPHONY_PREVIEW_CONTRACT_SOURCE" => "contracted_manual",
+        "SYMPHONY_PREVIEW_PREFERRED_PORT" => Integer.to_string(port),
+        "SYMPHONY_PREVIEW_REPORT_PATH" => report_path,
+        "SYMPHONY_PREVIEW_RUN_SPEC" => spec_path,
+        "SYMPHONY_PREVIEW_TENANT" => tenant,
+        "SYMPHONY_PREVIEW_WARMUP" => "1",
+        "SYMPHONY_WARMUP" => "1",
+        "SYMPHONY_WORKSPACE" => expanded_base
+      }
+
+      {:ok, prefixed_command(env, runner_path)}
+    end
+  end
+
+  defp prefixed_command(env, executable) do
+    prefix =
+      env
+      |> Enum.map(fn {key, value} -> "#{key}=#{shell_quote(to_string(value))}" end)
+      |> Enum.join(" ")
+
+    "#{prefix} #{shell_quote(executable)}"
+  end
+
+  defp shell_quote(value), do: "'" <> String.replace(value, "'", "'\"'\"'") <> "'"
 
   defp warm_up_command(project_slug, port, tenant) do
     # Boot under a dedicated, isolated Compose project so the warm-up never reuses

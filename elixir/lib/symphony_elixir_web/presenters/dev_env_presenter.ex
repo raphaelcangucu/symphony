@@ -9,6 +9,7 @@ defmodule SymphonyElixirWeb.DevEnvPresenter do
       id: step.id,
       description: step.description,
       command: step.command,
+      stop_command: step.stop_command,
       working_dir: step.working_dir,
       position: step.position,
       source: step.source,
@@ -18,7 +19,8 @@ defmodule SymphonyElixirWeb.DevEnvPresenter do
       url_path: step.url_path,
       ready_probe: step.ready_probe,
       ready_path: step.ready_path,
-      primary: step.primary
+      primary: step.primary,
+      run_spec: step.run_spec
     }
   end
 
@@ -27,6 +29,7 @@ defmodule SymphonyElixirWeb.DevEnvPresenter do
     %{
       description: step.description,
       command: step.command,
+      stop_command: step.stop_command,
       working_dir: step.working_dir,
       source: step.source,
       optional: step.optional,
@@ -35,7 +38,8 @@ defmodule SymphonyElixirWeb.DevEnvPresenter do
       url_path: step.url_path,
       ready_probe: step.ready_probe,
       ready_path: step.ready_path,
-      primary: step.primary
+      primary: step.primary,
+      run_spec: step.run_spec
     }
   end
 

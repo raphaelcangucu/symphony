@@ -38,6 +38,7 @@ defmodule SymphonyElixir.LocalTracker.DevEnv.ConventionReader do
     ProposedStep.new(%{
       "description" => Map.get(map, "description", Map.get(map, "command", "step")),
       "command" => Map.fetch!(map, "command"),
+      "stop_command" => Map.get(map, "stop_command"),
       "working_dir" => Map.get(map, "working_dir"),
       "source" => "convention",
       "optional" => Map.get(map, "optional", false),
@@ -46,7 +47,8 @@ defmodule SymphonyElixir.LocalTracker.DevEnv.ConventionReader do
       "url_path" => Map.get(map, "url_path", "/"),
       "ready_probe" => Map.get(map, "ready", Map.get(map, "ready_probe", "tcp")),
       "ready_path" => Map.get(map, "ready_path", "/"),
-      "primary" => Map.get(map, "primary", false)
+      "primary" => Map.get(map, "primary", false),
+      "run_spec" => Map.get(map, "run_spec")
     })
   end
 
