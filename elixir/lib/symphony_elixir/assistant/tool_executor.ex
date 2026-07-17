@@ -18,6 +18,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     HandoffTools,
     KnowledgeBaseTools,
     ListPreviewTools,
+    NotionTools,
     ObservabilityTools,
     OrchestratorTools,
     PreviewTools,
@@ -98,6 +99,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
   @kb_tools KnowledgeBaseTools.tools()
   @observability_tools ObservabilityTools.tools()
   @settings_tools SettingsTools.tools()
+  @notion_tools NotionTools.tools()
   @discovery_tools DiscoveryTools.tools()
   @dynamic_tools Enum.map(DynamicTool.tool_specs(), & &1["name"])
   @supported_tools @tracker_tools ++ @read_tools ++ @github_tools ++ @kb_tools
@@ -526,7 +528,10 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
         SteerTools.assistant_tool_spec(),
         GoalTools.assistant_tool_spec()
       ] ++
-      ReadTools.tool_specs() ++ GitHubTools.tool_specs() ++ KnowledgeBaseTools.tool_specs()
+      ReadTools.tool_specs() ++
+      GitHubTools.tool_specs() ++
+      KnowledgeBaseTools.tool_specs() ++
+      NotionTools.tool_specs()
   end
 
   @spec combined_tool_specs() :: [map()]
@@ -580,6 +585,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
        KnowledgeBaseTools.tool_specs() ++
        ObservabilityTools.tool_specs() ++
        SettingsTools.tool_specs() ++
+       NotionTools.tool_specs() ++
        read_specs ++
        [GoalTools.assistant_tool_spec()] ++
        DynamicTool.tool_specs())
@@ -619,6 +625,9 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
 
         name in @settings_tools ->
           wrap_for_codex(SettingsTools.execute(name, arguments, opts))
+
+        name in @notion_tools ->
+          wrap_for_codex(NotionTools.execute(name, arguments, opts))
 
         name in @freeform_project_agnostic_read_tools ->
           wrap_for_codex(ReadTools.execute(nil, name, arguments, opts))
@@ -809,6 +818,10 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
 
   defp do_execute(project, tool, arguments, opts) when tool in @kb_tools do
     KnowledgeBaseTools.execute(project_slug(project), tool, arguments, opts)
+  end
+
+  defp do_execute(_project, tool, arguments, opts) when tool in @notion_tools do
+    NotionTools.execute(tool, arguments, opts)
   end
 
   defp do_execute(project, "create_issue", arguments, _opts) do
@@ -1949,6 +1962,26 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
 
   defp codex_failure_response(:missing_github_token) do
     codex_failure_response("GITHUB_TOKEN is not configured on the Symphony server (elixir/.env).")
+  end
+
+  defp codex_failure_response(:missing_api_key) do
+    codex_failure_response(
+      "Notion API key is not configured. Set Settings → Providers → Notion, or NOTION_API_KEY."
+    )
+  end
+
+  defp codex_failure_response(:invalid_notion_url) do
+    codex_failure_response("Invalid Notion URL. Pass a full notion.so or notion.site page or database URL.")
+  end
+
+  defp codex_failure_response(:forbidden) do
+    codex_failure_response(
+      "Notion returned 403 Forbidden. Share the page/database with the Integration and check the token."
+    )
+  end
+
+  defp codex_failure_response({:missing_field, field}) do
+    codex_failure_response("Missing required field: #{field}.")
   end
 
   defp codex_failure_response(:missing_jira_credentials) do
