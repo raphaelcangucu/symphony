@@ -13,6 +13,11 @@ import { useProjectSessions } from "@/hooks/useProjectSessions";
 import { initTestI18n, renderWithI18n } from "@/i18n/testUtils";
 import { createSiblingSession } from "@/lib/createSiblingSession";
 import { emptyProjectSessionGroups } from "@/lib/projectSessions";
+import {
+  createAssistantSessionTab,
+  createSessionsListTab,
+} from "@/lib/workspaceTabs/types";
+import { workspaceTabsStorageKey, writePersistedWorkspaceTabs } from "@/lib/workspaceTabs/persistence";
 import { archiveAssistantThread, getAssistantThread } from "@/services/assistantThreads";
 import { removeWorkspaces } from "@/services/worktrees";
 
@@ -466,6 +471,57 @@ describe("ProjectSessionsWorkspace", () => {
     );
 
     expect(screen.queryByRole("button", { name: /^New session$/i })).not.toBeInTheDocument();
+  });
+
+  it("drops assistant tabs that belong to another project", async () => {
+    const listTab = createSessionsListTab("Workspaces");
+    writePersistedWorkspaceTabs(workspaceTabsStorageKey("project-sessions", "macro-markets"), {
+      tabs: [
+        listTab,
+        createAssistantSessionTab(100, "Advising chat"),
+        createAssistantSessionTab(8051, "Macro chat"),
+      ],
+      activeTabId: "assistant-session:8051",
+    });
+
+    vi.mocked(useProjectSessions).mockReturnValue({
+      groups: emptyProjectSessionGroups(),
+      relatedSessions: [
+        {
+          id: "thread:8051",
+          kind: "chat",
+          scope: "project_session",
+          title: "Macro chat",
+          projectSlug: "macro-markets",
+          projectName: "Macro Markets",
+          identifier: null,
+          status: "active",
+          statusKind: "idle",
+          agentKind: "cursor",
+          updatedAt: "2026-07-16T12:00:00Z",
+          threadId: 8051,
+          preview: null,
+        },
+      ],
+      issues: [],
+      executions: new Map(),
+      inventory: null,
+      isLoading: false,
+      isInventoryLoading: false,
+      error: null,
+      refetch,
+    });
+
+    renderWithI18n(
+      <MemoryRouter initialEntries={["/projects/macro-markets/workspaces/8051"]}>
+        <ProjectSessionsWorkspace projectSlug="macro-markets" activeThreadId={8051} />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: /Macro chat/i })).toHaveAttribute("aria-selected", "true"),
+    );
+    expect(screen.queryByRole("tab", { name: /Advising chat/i })).not.toBeInTheDocument();
   });
 
   it("creates a sibling session from the tab bar and opens it", async () => {

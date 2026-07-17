@@ -529,6 +529,41 @@ export function ProjectSessionsWorkspace({
   const total = listItems.length;
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
 
+  const allowedAssistantThreadIds = useMemo(() => {
+    const ids = new Set<number>();
+    if (activeThreadId != null) ids.add(activeThreadId);
+    for (const session of relatedSessions) {
+      if (session.threadId != null) ids.add(session.threadId);
+    }
+    for (const item of listItems) {
+      if (item.kind !== "card") continue;
+      for (const threadId of linkedSessionThreadIds(item.card)) ids.add(threadId);
+    }
+    return ids;
+  }, [activeThreadId, listItems, relatedSessions]);
+
+  const allowedIssueIdentifiers = useMemo(() => {
+    const identifiers = new Set(issues.map((issue) => issue.identifier));
+    if (activeAuthoringIdentifier) identifiers.add(activeAuthoringIdentifier);
+    if (activeExecutionIdentifier) identifiers.add(activeExecutionIdentifier);
+    return identifiers;
+  }, [activeAuthoringIdentifier, activeExecutionIdentifier, issues]);
+
+  useEffect(() => {
+    if (isLoading) return;
+
+    for (const tab of tabs) {
+      if (!tab.closable) continue;
+
+      const outOfProject =
+        (tab.kind === "assistant-session" && !allowedAssistantThreadIds.has(tab.threadId)) ||
+        ((tab.kind === "authoring-session" || tab.kind === "execution-session") &&
+          !allowedIssueIdentifiers.has(tab.issueIdentifier));
+
+      if (outOfProject) closeTab(tab.id);
+    }
+  }, [allowedAssistantThreadIds, allowedIssueIdentifiers, closeTab, isLoading, tabs]);
+
   useEffect(() => {
     if (listItems.length === 0) {
       setExpandedKey(null);

@@ -77,11 +77,12 @@ export function useWorkspaceTabs({
   useEffect(() => {
     dispatch({
       type: "restore",
-      state: mergeCanonicalTabs(canonicalTabs, state, defaultActiveTabId),
+      state: buildInitialState(storageKey, canonicalTabs, defaultActiveTabId, persist),
     });
-    // Reconcile canonical tabs when their identity changes (e.g. issue switch).
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed by canonicalSignature only
-  }, [canonicalSignature, defaultActiveTabId]);
+    // Reload persisted tabs when the storage scope changes (project switch) or
+    // when canonical tab ids change (e.g. issue terminal switch).
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- canonicalTabs tracked via canonicalSignature
+  }, [storageKey, canonicalSignature, defaultActiveTabId, persist]);
 
   useEffect(() => {
     if (!persist) return;
