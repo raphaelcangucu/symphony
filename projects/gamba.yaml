@@ -11,14 +11,25 @@ dev_env_steps:
     source: "manual"
     url_path: "/"
     working_dir: "backend"
-  - command: "bash .symphony/serve.sh"
-    description: "Backend Laravel API (vibe up + bootstrap + /health verify)"
+  - command: "symphony-preview-runner"
+    description: "Backend Laravel API (vibe up + bootstrap)"
     optional: false
     port_env: "PORT"
     primary: false
     ready_path: "/health"
     ready_probe: "http"
     role: "serve"
+    run_spec:
+      cwd: "backend"
+      prepare:
+        - ["bash", ".symphony/setup.sh"]
+      start:
+        - ["bash", "-lc", "export APP_PORT=${PORT:-$APP_PORT}; ./vibe up && ./vibe bootstrap && docker logs -f betting-app"]
+      health:
+        path: "/health"
+        timeout_ms: 180000
+      stop:
+        command: ["bash", "-lc", "./vibe down || true"]
     source: "manual"
     url_path: "/graphiql"
     working_dir: "backend"
@@ -33,14 +44,24 @@ dev_env_steps:
     source: "manual"
     url_path: "/"
     working_dir: "goapi"
-  - command: "bash .symphony/serve.sh"
-    description: "GoAPI GraphQL server (waits for backend, then go run)"
+  - command: "symphony-preview-runner"
+    description: "GoAPI GraphQL server (waits for backend, then runs local binary)"
     optional: false
     port_env: "PORT"
     primary: false
     ready_path: "/graphiql"
     ready_probe: "http"
     role: "serve"
+    run_spec:
+      cwd: "goapi"
+      prepare:
+        - ["bash", ".symphony/setup.sh"]
+      start:
+        - ["make", "build-local"]
+        - ["./bin/server"]
+      health:
+        path: "/graphiql"
+        timeout_ms: 60000
     source: "manual"
     url_path: "/graphiql"
     working_dir: "goapi"
@@ -328,7 +349,11 @@ setup:
     ```bash
     cd backend
     bash .symphony/setup.sh
-    bash .symphony/serve.sh
+    export PORT="${PORT:-4100}"
+    export APP_PORT="$PORT"
+    ./vibe up
+    ./vibe bootstrap
+    docker logs -f betting-app
     # GraphiQL: http://127.0.0.1:<PORT>/graphiql
     # Health:   http://127.0.0.1:<PORT>/health
     ```
@@ -337,8 +362,10 @@ setup:
 
     ```bash
     cd goapi
+    export PORT="${PORT:-4101}"
     bash .symphony/setup.sh
-    bash .symphony/serve.sh
+    make build-local
+    ./bin/server
     # GraphiQL: http://127.0.0.1:<PORT>/graphiql
     # GraphQL:  http://127.0.0.1:<PORT>/graphql
     ```
@@ -354,7 +381,7 @@ setup:
     # Health: http://127.0.0.1:<PORT>/api/health
     ```
 
-    - The frontend `serve.sh` is a fail-fast legacy stub; Symphony launches its `run_spec` with `symphony-preview-runner`.
+    - Backend, GoAPI, and frontend `serve.sh` files are fail-fast legacy stubs; Symphony launches their `run_spec` definitions with `symphony-preview-runner`.
     - Scripts ship under `frontend/.symphony/`, `backend/.symphony/`, and `goapi/.symphony/`
     - Validation: `yarn lint` / `yarn test` (frontend), `./vibe test` (backend)
 
@@ -408,9 +435,9 @@ setup:
     | Step | Role | Dir | Command |
     |------|------|-----|---------|
     | Backend setup | setup | `backend/` | `bash .symphony/setup.sh` |
-    | Laravel API | serve | `backend/` | `bash .symphony/serve.sh` |
+    | Laravel API | serve | `backend/` | `symphony-preview-runner` |
     | GoAPI setup | setup | `goapi/` | `bash .symphony/setup.sh` |
-    | GoAPI server | serve | `goapi/` | `bash .symphony/serve.sh` |
+    | GoAPI server | serve | `goapi/` | `symphony-preview-runner` |
     | Frontend setup | setup | `frontend/` | `bash .symphony/setup.sh` |
     | Nuxt dev server | serve (primary) | `frontend/` | `symphony-preview-runner` |
 
