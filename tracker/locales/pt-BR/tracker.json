@@ -2550,6 +2550,22 @@
       "accept": "Aceitar",
       "reject": "Rejeitar"
     },
+    "notionImport": {
+      "untitled": "Importação do Notion",
+      "openPreview": "Abrir prévia",
+      "assetCount_one": "{{count}} asset",
+      "assetCount_other": "{{count}} assets",
+      "kind": {
+        "page": "Página",
+        "database": "Banco de dados"
+      },
+      "previewTitle": "Importação do Notion",
+      "previewDescription": "Prévia somente leitura em Markdown do conteúdo importado do Notion.",
+      "loading": "Carregando prévia…",
+      "loadError": "Não foi possível carregar esta importação do Notion.",
+      "assetsHeading": "Assets",
+      "noAssets": "Nenhum asset"
+    },
     "page": {
       "conversationsAria": "Sessões",
       "title": "Sessões",

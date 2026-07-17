@@ -2550,6 +2550,22 @@
       "accept": "Accept",
       "reject": "Reject"
     },
+    "notionImport": {
+      "untitled": "Notion import",
+      "openPreview": "Open preview",
+      "assetCount_one": "{{count}} asset",
+      "assetCount_other": "{{count}} assets",
+      "kind": {
+        "page": "Page",
+        "database": "Database"
+      },
+      "previewTitle": "Notion import",
+      "previewDescription": "Read-only Markdown preview of the imported Notion content.",
+      "loading": "Loading preview…",
+      "loadError": "Could not load this Notion import.",
+      "assetsHeading": "Assets",
+      "noAssets": "No assets"
+    },
     "page": {
       "conversationsAria": "Sessions",
       "title": "Sessions",
