@@ -1,22 +1,39 @@
+import type { SessionStatusIconKind } from "@/components/shared/ChatStatusIcon";
+import type { ExecutionMode } from "@/types/issue";
+import type { RecentStatusKind } from "@/types/recents";
+import type { SidebarAggregateStatus } from "@/types/sidebar";
+
 import type { WorkspaceTab } from "./types";
+
+export interface WorkspaceTabStatusIcon {
+  sessionKind: SessionStatusIconKind;
+  executionMode?: ExecutionMode | null;
+  statusKind?: RecentStatusKind | null;
+  aggregateStatus?: SidebarAggregateStatus | null;
+  needsAttention?: boolean;
+}
 
 export interface WorkspaceTabPresentationContext {
   threadIssueIdentifiers: ReadonlyMap<number, string>;
   issueTitles: ReadonlyMap<string, string>;
+  threadStatusIcons?: ReadonlyMap<number, WorkspaceTabStatusIcon>;
 }
 
 export interface WorkspaceTabPresentation {
   label: string;
   tooltip?: string;
+  statusIcon?: WorkspaceTabStatusIcon | null;
 }
 
 export function resolveIssueLinkedTabTitle(
   issueIdentifier: string | null | undefined,
   fallbackTitle: string,
 ): string {
+  const title = fallbackTitle.trim();
+  if (title) return title;
   const identifier = issueIdentifier?.trim();
   if (identifier) return identifier;
-  return fallbackTitle.trim() || fallbackTitle;
+  return "Session";
 }
 
 export function resolveSidebarSessionPresentation(
@@ -67,23 +84,30 @@ export function resolveWorkspaceTabPresentation(
   context: WorkspaceTabPresentationContext,
 ): WorkspaceTabPresentation {
   const issueIdentifier = getIssueIdentifierForTab(tab, context);
+  const sessionTitle = tab.title.trim();
+  const statusIcon =
+    tab.kind === "assistant-session"
+      ? (context.threadStatusIcons?.get(tab.threadId) ?? null)
+      : null;
+
   if (!issueIdentifier) {
-    return { label: tab.title };
+    return { label: sessionTitle || tab.title, statusIcon };
   }
 
   const issueTitle = context.issueTitles.get(issueIdentifier)?.trim() || null;
-  const label = issueIdentifier;
-  const tooltipParts = [issueIdentifier];
+  const label = sessionTitle || issueIdentifier || "Session";
 
-  if (issueTitle && issueTitle !== issueIdentifier) {
-    tooltipParts.push(issueTitle);
+  const tooltipParts: string[] = [];
+  if (issueIdentifier && !label.includes(issueIdentifier)) {
+    tooltipParts.push(issueIdentifier);
   }
-  if (tab.title.trim() && tab.title !== issueIdentifier && tab.title !== issueTitle) {
-    tooltipParts.push(tab.title);
+  if (issueTitle && issueTitle !== issueIdentifier && !label.includes(issueTitle)) {
+    tooltipParts.push(issueTitle);
   }
 
   return {
     label,
-    tooltip: tooltipParts.length > 1 ? tooltipParts.join(" · ") : undefined,
+    tooltip: tooltipParts.length > 0 ? tooltipParts.join(" · ") : undefined,
+    statusIcon,
   };
 }

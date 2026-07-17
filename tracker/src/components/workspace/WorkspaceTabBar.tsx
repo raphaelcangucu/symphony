@@ -1,6 +1,7 @@
 import { X } from "lucide-react";
 import type { KeyboardEvent, ReactNode } from "react";
 
+import { ChatStatusIcon } from "@/components/shared/ChatStatusIcon";
 import { Button } from "@/components/ui/button";
 import { cn, SCROLLBAR_THIN } from "@/lib/utils";
 import type { WorkspaceTabPresentation } from "@/lib/workspaceTabs/presentation";
@@ -64,10 +65,24 @@ export function WorkspaceTabBar({
                   onSelect(tab.id);
                 }}
               >
-                <span
-                  aria-hidden
-                  className={cn("h-1.5 w-1.5 rounded-full", active ? "bg-emerald-500" : "bg-muted-foreground/40")}
-                />
+                {presentation.statusIcon ? (
+                  <ChatStatusIcon
+                    sessionKind={presentation.statusIcon.sessionKind}
+                    executionMode={presentation.statusIcon.executionMode ?? null}
+                    statusKind={presentation.statusIcon.statusKind ?? null}
+                    aggregateStatus={presentation.statusIcon.aggregateStatus ?? null}
+                    needsAttention={presentation.statusIcon.needsAttention ?? false}
+                    className="shrink-0"
+                  />
+                ) : (
+                  <span
+                    aria-hidden
+                    className={cn(
+                      "h-1.5 w-1.5 rounded-full",
+                      active ? "bg-emerald-500" : "bg-muted-foreground/40",
+                    )}
+                  />
+                )}
                 <span className="truncate">{tabLabel}</span>
                 {shortcutHints && index < 9 ? (
                   <span className="hidden text-[10px] text-muted-foreground sm:inline">Ctrl+{index + 1}</span>

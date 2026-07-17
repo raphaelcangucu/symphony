@@ -3,7 +3,14 @@ defmodule SymphonyElixir.Assistant.History do
 
   import Ecto.Query
 
-  alias SymphonyElixir.Assistant.{Message, ProjectExploreWorkspace, Thread, TitleGenerator, TurnTimeline}
+  alias SymphonyElixir.Assistant.{
+    Message,
+    ProjectExploreWorkspace,
+    SessionTitles,
+    Thread,
+    TitleGenerator,
+    TurnTimeline
+  }
   alias SymphonyElixir.{ExecutionMode, Workspace}
   alias SymphonyElixir.LocalTracker.{Context, IssueAdapter}
   alias SymphonyElixir.Recents.Broadcaster, as: RecentsBroadcaster
@@ -31,7 +38,7 @@ defmodule SymphonyElixir.Assistant.History do
   @spec ensure_project_explore_thread(String.t(), attrs()) :: {:ok, Thread.t()} | {:error, term()}
   def ensure_project_explore_thread(project_slug, attrs \\ %{}) when is_binary(project_slug) and is_map(attrs) do
     with {:ok, normalized_slug} <- normalize_required_string(project_slug, :project_slug),
-         {:ok, _project} <- Context.get_project(normalized_slug),
+         {:ok, project} <- Context.get_project(normalized_slug),
          {:ok, workspace} <- ProjectExploreWorkspace.ensure(normalized_slug, explore_workspace_opts(attrs)) do
       attrs = Map.put_new(attrs, :workspace_path, workspace)
 
@@ -40,10 +47,17 @@ defmodule SymphonyElixir.Assistant.History do
           {:ok, thread}
 
         nil ->
+          default_title =
+            SessionTitles.default_title("project_explore",
+              project_name: project.name,
+              project_slug: normalized_slug
+            )
+
           attrs
           |> Map.put(:scope, "project_explore")
           |> Map.put(:project_slug, normalized_slug)
           |> Map.put_new(:status, "active")
+          |> Map.put_new(:title, default_title)
           |> then(&Thread.changeset(%Thread{}, &1))
           |> Repo.insert()
           |> notify_recents()
@@ -82,7 +96,7 @@ defmodule SymphonyElixir.Assistant.History do
           |> Map.put(:metadata, metadata)
           |> Map.put_new(:status, "active")
           |> Map.put_new(:workspace_path, kb_workspace(slug))
-          |> Map.put_new(:title, kb_thread_title(path))
+          |> Map.put_new(:title, SessionTitles.default_title("kb", page_title: kb_thread_title(path)))
           |> then(&Thread.changeset(%Thread{}, &1))
           |> Repo.insert()
           |> notify_recents()
@@ -689,18 +703,34 @@ defmodule SymphonyElixir.Assistant.History do
              | :invalid_labels
              | :invalid_needs_review
              | Ecto.Changeset.t()}
-  def update_thread_sidebar_metadata(id, attrs) when is_integer(id) and id > 0 and is_map(attrs) do
+  @spec update_thread_sidebar_metadata(integer(), map(), keyword()) ::
+          {:ok, Thread.t()}
+          | {:error,
+             :not_found
+             | :invalid_thread_id
+             | :invalid_attrs
+             | :invalid_title
+             | :invalid_labels
+             | :invalid_needs_review
+             | Ecto.Changeset.t()}
+  def update_thread_sidebar_metadata(id, attrs, opts \\ [])
+
+  def update_thread_sidebar_metadata(id, attrs, opts)
+      when is_integer(id) and id > 0 and is_map(attrs) and is_list(opts) do
+    mark_user_title = Keyword.get(opts, :mark_user_title, true)
+
     with {:ok, title_attrs} <- normalize_sidebar_title(attrs),
          {:ok, metadata_patch} <- normalize_sidebar_metadata_patch(attrs),
+         metadata_patch <- maybe_put_title_user_set(metadata_patch, title_attrs, mark_user_title),
          {:ok, metadata_patch_json} <- Jason.encode(metadata_patch) do
       persist_sidebar_update(id, title_attrs, metadata_patch_json)
     end
   end
 
-  def update_thread_sidebar_metadata(id, _attrs) when not is_integer(id) or id <= 0,
+  def update_thread_sidebar_metadata(id, _attrs, _opts) when not is_integer(id) or id <= 0,
     do: {:error, :invalid_thread_id}
 
-  def update_thread_sidebar_metadata(_id, _attrs), do: {:error, :invalid_attrs}
+  def update_thread_sidebar_metadata(_id, _attrs, _opts), do: {:error, :invalid_attrs}
 
   @spec delete_thread(integer()) ::
           {:ok, Thread.t()}
@@ -762,6 +792,7 @@ defmodule SymphonyElixir.Assistant.History do
     |> Map.put(:scope, "freeform")
     |> Map.delete(:project_slug)
     |> Map.put_new(:status, "active")
+    |> Map.put_new(:title, SessionTitles.default_title("freeform"))
     |> Map.put(:metadata, metadata)
     |> then(&Thread.changeset(%Thread{}, &1))
     |> Repo.insert()
@@ -771,20 +802,27 @@ defmodule SymphonyElixir.Assistant.History do
   @spec create_gateway_freeform_thread(attrs()) :: {:ok, Thread.t()} | {:error, Ecto.Changeset.t()}
   def create_gateway_freeform_thread(attrs) when is_map(attrs) do
     attrs
-    |> Map.put_new(:title, "Telegram freeform chat")
+    |> Map.put_new(:title, SessionTitles.default_title("freeform"))
     |> create_freeform_thread()
   end
 
   @spec create_gateway_project_explore_thread(String.t(), attrs()) :: {:ok, Thread.t()} | {:error, term()}
   def create_gateway_project_explore_thread(project_slug, attrs \\ %{}) when is_binary(project_slug) and is_map(attrs) do
     with {:ok, normalized_slug} <- normalize_required_string(project_slug, :project_slug),
-         {:ok, _project} <- Context.get_project(normalized_slug),
+         {:ok, project} <- Context.get_project(normalized_slug),
          {:ok, workspace} <- ProjectExploreWorkspace.ensure(normalized_slug, explore_workspace_opts(attrs)) do
+      default_title =
+        SessionTitles.default_title("project_explore",
+          project_name: project.name,
+          project_slug: normalized_slug
+        )
+
       attrs
       |> Map.put(:scope, "project_explore")
       |> Map.put(:project_slug, normalized_slug)
       |> Map.put_new(:workspace_path, workspace)
       |> Map.put_new(:status, "active")
+      |> Map.put_new(:title, default_title)
       |> then(&Thread.changeset(%Thread{}, &1))
       |> Repo.insert()
       |> notify_recents()
@@ -806,11 +844,16 @@ defmodule SymphonyElixir.Assistant.History do
         |> put_session_model_effort(attrs)
         |> TitleGenerator.put_auto_eligible()
 
+      workspace_basename = workspace |> Path.basename() |> String.trim()
+
       attrs
       |> Map.drop([:model, "model", :effort, "effort", :execution_mode, "execution_mode"])
       |> Map.put(:scope, "project_session")
       |> Map.put(:project_slug, normalized_slug)
-      |> Map.put_new(:title, "Project session")
+      |> Map.put_new(
+        :title,
+        SessionTitles.default_title("project_session", workspace_name: workspace_basename)
+      )
       |> Map.put_new(:workspace_path, workspace)
       |> Map.put_new(:status, "active")
       |> Map.put(:metadata, metadata)
@@ -845,6 +888,8 @@ defmodule SymphonyElixir.Assistant.History do
         |> maybe_put_clone_branches(attrs)
         |> TitleGenerator.put_auto_eligible()
 
+      default_title = issue_session_default_title(slug, identifier)
+
       attrs
       |> Map.drop([
         :isolated_workspace,
@@ -865,7 +910,7 @@ defmodule SymphonyElixir.Assistant.History do
       |> Map.put(:scope, "issue_session")
       |> Map.put(:project_slug, slug)
       |> Map.put(:issue_identifier, identifier)
-      |> Map.put_new(:title, "Issue session")
+      |> Map.put_new(:title, default_title)
       |> Map.put(:workspace_path, workspace_path)
       |> Map.put_new(:status, "active")
       |> Map.put(:metadata, metadata)
@@ -891,7 +936,7 @@ defmodule SymphonyElixir.Assistant.History do
          {:ok, path} <- normalize_required_string(workspace_path, :workspace_path),
          {:ok, workspace_kind} <- explicit_workspace_kind(attrs),
          {:ok, _project} <- Context.get_project(slug),
-         {:ok, _issue} <- Context.get_issue(slug, identifier) do
+         {:ok, issue} <- Context.get_issue(slug, identifier) do
       execution_mode = normalize_execution_mode(Map.get(attrs, :execution_mode) || Map.get(attrs, "execution_mode"))
 
       metadata =
@@ -902,6 +947,12 @@ defmodule SymphonyElixir.Assistant.History do
         |> put_session_model_effort(attrs)
         |> Map.put("workspace_kind", workspace_kind)
         |> TitleGenerator.put_auto_eligible()
+
+      default_title =
+        SessionTitles.default_title("issue_session",
+          identifier: identifier,
+          issue_title: issue.title
+        )
 
       attrs
       |> Map.drop([
@@ -919,7 +970,7 @@ defmodule SymphonyElixir.Assistant.History do
       |> Map.put(:scope, "issue_session")
       |> Map.put(:project_slug, slug)
       |> Map.put(:issue_identifier, identifier)
-      |> Map.put_new(:title, "Issue session")
+      |> Map.put_new(:title, default_title)
       |> Map.put(:workspace_path, path)
       |> Map.put_new(:status, "active")
       |> Map.put(:metadata, metadata)
@@ -954,6 +1005,8 @@ defmodule SymphonyElixir.Assistant.History do
         |> put_session_model_effort(attrs)
         |> TitleGenerator.put_auto_eligible()
 
+      workspace_basename = path |> Path.basename() |> String.trim()
+
       attrs
       |> Map.drop([
         :model,
@@ -965,7 +1018,10 @@ defmodule SymphonyElixir.Assistant.History do
       ])
       |> Map.put(:scope, "project_session")
       |> Map.put(:project_slug, slug)
-      |> Map.put_new(:title, "Workspace session")
+      |> Map.put_new(
+        :title,
+        SessionTitles.default_title("project_session", workspace_name: workspace_basename)
+      )
       |> Map.put(:workspace_path, path)
       |> Map.put_new(:status, "active")
       |> Map.put(:metadata, metadata)
@@ -1388,6 +1444,16 @@ defmodule SymphonyElixir.Assistant.History do
     |> String.replace(~r/\.md$/i, "")
   end
 
+  defp issue_session_default_title(slug, identifier) do
+    issue_title =
+      case Context.get_issue(slug, identifier) do
+        {:ok, issue} -> issue.title
+        _ -> nil
+      end
+
+    SessionTitles.default_title("issue_session", identifier: identifier, issue_title: issue_title)
+  end
+
   defp safe_workspace_segment(value) when is_binary(value) do
     case String.replace(value, ~r/[^a-zA-Z0-9_-]/, "_") do
       "" -> "project"
@@ -1597,6 +1663,9 @@ defmodule SymphonyElixir.Assistant.History do
         {:error, :invalid_title}
     end
   end
+
+  defp maybe_put_title_user_set(patch, %{title: _}, true), do: Map.put(patch, "title_user_set", true)
+  defp maybe_put_title_user_set(patch, _title_attrs, _mark_user_title), do: patch
 
   defp normalize_sidebar_metadata_patch(attrs) do
     with {:ok, patch} <- put_sidebar_labels(%{}, attrs),

@@ -48,22 +48,13 @@ export function sidebarRenameRequest(
     };
   }
   if (node.kind !== "session") return null;
-  if (node.issueIdentifier) {
-    return {
-      action: "rename-issue",
-      projectSlug: node.projectSlug,
-      identifier: node.issueIdentifier,
-      title: name,
-    };
-  }
-  return node.threadId === null
-    ? null
-    : {
-        action: "rename-thread",
-        projectSlug: node.projectSlug,
-        threadId: node.threadId,
-        title: name,
-      };
+  if (node.threadId === null) return null;
+  return {
+    action: "rename-thread",
+    projectSlug: node.projectSlug,
+    threadId: node.threadId,
+    title: name,
+  };
 }
 
 export function sidebarArchiveRequest(

@@ -153,7 +153,7 @@ describe("StartIssueSessionDialog", () => {
     });
   });
 
-  it("prefills the session title with the issue title", () => {
+  it("prefills the session title with Chat · identifier · issue title", () => {
     render(
       <MemoryRouter initialEntries={["/projects/macro-markets/board"]}>
         <Routes>
@@ -172,7 +172,7 @@ describe("StartIssueSessionDialog", () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByLabelText(/session title/i)).toHaveValue("Add languages");
+    expect(screen.getByLabelText(/session title/i)).toHaveValue("Chat · MAC-510 · Add languages");
   });
 
   it("creates a build-mode issue session thread on the issue tree by default", async () => {

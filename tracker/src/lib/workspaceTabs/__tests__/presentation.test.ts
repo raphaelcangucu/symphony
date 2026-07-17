@@ -14,9 +14,12 @@ import {
 } from "@/lib/workspaceTabs/types";
 
 describe("workspace tab presentation", () => {
-  it("prefers the issue identifier for issue-linked tab titles", () => {
-    expect(resolveIssueLinkedTabTitle("GAM-20", "Autonomous run")).toBe("GAM-20");
+  it("prefers the session title for issue-linked tab titles", () => {
+    expect(resolveIssueLinkedTabTitle("GAM-20", "Chat · GAM-20 · Fix login")).toBe(
+      "Chat · GAM-20 · Fix login",
+    );
     expect(resolveIssueLinkedTabTitle(null, "Project chat")).toBe("Project chat");
+    expect(resolveIssueLinkedTabTitle("GAM-20", "")).toBe("GAM-20");
   });
 
   it("labels sidebar issue sessions as code - title on one line", () => {
@@ -36,20 +39,39 @@ describe("workspace tab presentation", () => {
     ]);
   });
 
-  it("labels issue-linked tabs with the identifier and adds context in the tooltip", () => {
+  it("labels issue-linked tabs with the session title", () => {
     const context = {
       threadIssueIdentifiers: new Map([[42, "GAM-20"]]),
       issueTitles: new Map([["GAM-20", "Fix login race"]]),
+      threadStatusIcons: new Map([
+        [
+          42,
+          {
+            sessionKind: "chat" as const,
+            statusKind: "idle" as const,
+            aggregateStatus: "idle" as const,
+            needsAttention: false,
+          },
+        ],
+      ]),
     };
 
     const presentation = resolveWorkspaceTabPresentation(
-      createAssistantSessionTab(42, "Autonomous run"),
+      createAssistantSessionTab(42, "Chat · GAM-20 · Fix login race"),
       context,
     );
 
-    expect(presentation.label).toBe("GAM-20");
-    expect(presentation.tooltip).toBe("GAM-20 · Fix login race · Autonomous run");
-    expect(getIssueIdentifierForTab(createAuthoringSessionTab("DEMO-1", "Saved work"), context)).toBe("DEMO-1");
+    expect(presentation.label).toBe("Chat · GAM-20 · Fix login race");
+    expect(presentation.tooltip).toBeUndefined();
+    expect(presentation.statusIcon).toEqual({
+      sessionKind: "chat",
+      statusKind: "idle",
+      aggregateStatus: "idle",
+      needsAttention: false,
+    });
+    expect(getIssueIdentifierForTab(createAuthoringSessionTab("DEMO-1", "Saved work"), context)).toBe(
+      "DEMO-1",
+    );
   });
 
   it("keeps non-issue tabs unchanged", () => {
@@ -60,6 +82,7 @@ describe("workspace tab presentation", () => {
 
     expect(resolveWorkspaceTabPresentation(createSessionsListTab("Workspaces"), context)).toEqual({
       label: "Workspaces",
+      statusIcon: null,
     });
   });
 });

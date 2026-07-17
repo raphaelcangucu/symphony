@@ -17,7 +17,8 @@ defmodule SymphonyElixir.Agent.ExecutionSession do
   import Ecto.Query, only: [from: 2]
 
   alias SymphonyElixir.AgentExecution
-  alias SymphonyElixir.Assistant.{History, Thread}
+  alias SymphonyElixir.Assistant.{History, SessionTitles, Thread}
+  alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.Recents
   alias SymphonyElixir.Repo
 
@@ -147,6 +148,19 @@ defmodule SymphonyElixir.Agent.ExecutionSession do
       |> maybe_put("unit_id", Keyword.get(opts, :unit_id))
       |> maybe_put("bundle_role", Keyword.get(opts, :bundle_role))
 
+    issue_title =
+      case Context.get_issue(project_slug, issue_identifier) do
+        {:ok, issue} -> issue.title
+        _ -> nil
+      end
+
+    title =
+      Keyword.get(opts, :title) ||
+        SessionTitles.default_title("issue_execution",
+          identifier: issue_identifier,
+          issue_title: issue_title
+        )
+
     case %Thread{}
          |> Thread.changeset(%{
            scope: "issue_execution",
@@ -154,7 +168,7 @@ defmodule SymphonyElixir.Agent.ExecutionSession do
            issue_identifier: issue_identifier,
            workspace_path: workspace,
            agent_kind: agent_kind,
-           title: Keyword.get(opts, :title) || issue_identifier,
+           title: title,
            status: "active",
            metadata: metadata
          })

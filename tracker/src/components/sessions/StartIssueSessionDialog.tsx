@@ -125,7 +125,12 @@ export function StartIssueSessionDialog({
     setAgent(resolveDefaultAgent(issue));
     setModel(null);
     setEffort(null);
-    setTitle(issue.title.trim());
+    const issueTitle = issue.title.trim();
+    setTitle(
+      issueTitle
+        ? `Chat · ${issue.identifier} · ${issueTitle}`
+        : `Chat · ${issue.identifier}`,
+    );
     setInstructions("");
     setWorkspaceTarget("issue");
     setCloneBranches({});
@@ -236,6 +241,7 @@ export function StartIssueSessionDialog({
       const { cloneBranches: branchOverrides, cloneBranch } = resolveCloneBranchApiPayload(cloneBranches, {
         defaultCloneBranch: workspaceTarget === "isolated" ? DEFAULT_CLONE_BRANCH : null,
       });
+      const trimmedTitle = title.trim();
       const thread = await createIssueSession(
         projectSlug,
         issue.identifier,
@@ -244,7 +250,7 @@ export function StartIssueSessionDialog({
           agent,
           model,
           effort,
-          title: title.trim() || t("issue.sessions.defaultSessionTitle"),
+          ...(trimmedTitle ? { title: trimmedTitle } : {}),
           instructions: instructions.trim() || null,
           isolatedWorkspace: workspaceTarget === "isolated",
           useParentWorkspace: workspaceTarget === "parent",

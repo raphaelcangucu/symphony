@@ -75,10 +75,10 @@ defmodule SymphonyElixir.Assistant.TitleGenerator do
   def enough_context?(_other), do: false
 
   @spec auto_eligible?(thread_like()) :: boolean()
-  def auto_eligible?(%{metadata: metadata} = thread) when is_map(metadata) do
+  def auto_eligible?(%{metadata: metadata} = _thread) when is_map(metadata) do
     Map.get(metadata, "title_auto_eligible") == true and
       is_nil(Map.get(metadata, "title_auto_generated_at")) and
-      generic_title?(Map.get(thread, :title))
+      Map.get(metadata, "title_user_set") != true
   end
 
   def auto_eligible?(_thread), do: false
@@ -144,7 +144,8 @@ defmodule SymphonyElixir.Assistant.TitleGenerator do
              Keyword.take(opts, [:runner]) ++
                [workspace: thread.workspace_path || System.tmp_dir!()]
            ),
-         {:ok, updated} <- History.update_thread_sidebar_metadata(thread_id, %{title: title}),
+         {:ok, updated} <-
+           History.update_thread_sidebar_metadata(thread_id, %{title: title}, mark_user_title: false),
          {:ok, stamped} <- maybe_stamp_auto(updated, mode) do
       {:ok, stamped}
     end

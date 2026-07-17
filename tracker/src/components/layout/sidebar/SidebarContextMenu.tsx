@@ -240,9 +240,11 @@ export function SidebarContextMenu({
             ? "project"
             : node.kind === "workspace"
               ? "workspace"
-              : node.issueIdentifier
-                ? "issue"
-                : "thread";
+              : node.kind === "session" && node.threadId !== null
+                ? "thread"
+                : node.issueIdentifier
+                  ? "issue"
+                  : "thread";
         openDialog({ type: "rename", targetType });
         return;
       }

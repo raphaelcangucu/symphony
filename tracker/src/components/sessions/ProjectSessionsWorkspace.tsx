@@ -64,9 +64,13 @@ import {
   createSessionsListTab,
 } from "@/lib/workspaceTabs/types";
 import {
+  sessionStatusIconKindFromScope,
+} from "@/components/shared/ChatStatusIcon";
+import {
   resolveIssueLinkedTabTitle,
   resolveWorkspaceTabPresentation,
   type WorkspaceTabPresentationContext,
+  type WorkspaceTabStatusIcon,
 } from "@/lib/workspaceTabs/presentation";
 import {
   issuePath,
@@ -291,12 +295,26 @@ export function ProjectSessionsWorkspace({
     return identifiers;
   }, [relatedSessions]);
 
+  const threadStatusIconLookup = useMemo(() => {
+    const icons = new Map<number, WorkspaceTabStatusIcon>();
+    for (const session of relatedSessions) {
+      if (session.threadId == null) continue;
+      icons.set(session.threadId, {
+        sessionKind: sessionStatusIconKindFromScope(session.scope),
+        statusKind: session.statusKind,
+        needsAttention: false,
+      });
+    }
+    return icons;
+  }, [relatedSessions]);
+
   const tabPresentationContext = useMemo<WorkspaceTabPresentationContext>(
     () => ({
       threadIssueIdentifiers: threadIssueLookup,
       issueTitles: executionTitleLookup,
+      threadStatusIcons: threadStatusIconLookup,
     }),
-    [executionTitleLookup, threadIssueLookup],
+    [executionTitleLookup, threadIssueLookup, threadStatusIconLookup],
   );
 
   const resolveTabPresentation = useCallback(

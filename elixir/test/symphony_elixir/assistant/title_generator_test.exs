@@ -100,29 +100,37 @@ defmodule SymphonyElixir.Assistant.TitleGeneratorTest do
              )
   end
 
-  test "auto_eligible? requires flag, generic title, and no prior auto stamp" do
+  test "auto_eligible? requires flag, no prior auto stamp, and title_user_set not true" do
     eligible = %{
-      title: "Project session",
+      title: "Chat · GAM-20 · Fix login race",
       metadata: %{"title_auto_eligible" => true}
     }
 
     assert TitleGenerator.auto_eligible?(eligible)
 
-    refute TitleGenerator.auto_eligible?(%{
+    assert TitleGenerator.auto_eligible?(%{
              title: "Custom name",
              metadata: %{"title_auto_eligible" => true}
            })
 
     refute TitleGenerator.auto_eligible?(%{
-             title: "Project session",
+             title: "Chat · GAM-20 · Fix login race",
              metadata: %{}
            })
 
     refute TitleGenerator.auto_eligible?(%{
-             title: "Project session",
+             title: "Chat · GAM-20 · Fix login race",
              metadata: %{
                "title_auto_eligible" => true,
                "title_auto_generated_at" => "2026-07-16T00:00:00Z"
+             }
+           })
+
+    refute TitleGenerator.auto_eligible?(%{
+             title: "Chat · GAM-20 · Fix login race",
+             metadata: %{
+               "title_auto_eligible" => true,
+               "title_user_set" => true
              }
            })
   end
