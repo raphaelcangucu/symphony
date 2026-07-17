@@ -3,10 +3,17 @@ defmodule SymphonyElixir.Notion.UrlTest do
 
   alias SymphonyElixir.Notion.Url
 
-  test "parses hyphenated UUID in path" do
+  test "parses bare 32-hex UUID in path" do
     assert {:ok, %{id: "39c33f2e-afc1-4020-ac9b-c223b4520d17", focused_page_id: nil}} =
              Url.parse(
                "https://www.notion.so/39c33f2eafc14020ac9bc223b4520d17"
+             )
+  end
+
+  test "parses hyphenated UUID in path" do
+    assert {:ok, %{id: "39c33f2e-afc1-4020-ac9b-c223b4520d17", focused_page_id: nil}} =
+             Url.parse(
+               "https://www.notion.so/39c33f2e-afc1-4020-ac9b-c223b4520d17"
              )
   end
 

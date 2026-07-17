@@ -34,7 +34,9 @@ defmodule SymphonyElixir.Notion.Url do
   defp notion_host?(_), do: false
 
   defp path_id(path) when is_binary(path) do
-    case Regex.scan(@hex32, path) |> List.last() do
+    normalized_path = String.replace(path, "-", "")
+
+    case Regex.scan(@hex32, normalized_path) |> List.last() do
       [_, hex] -> {:ok, to_uuid(hex)}
       _ -> :error
     end
