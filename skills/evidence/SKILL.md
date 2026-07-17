@@ -26,6 +26,8 @@ For long plan-driven issues, read the `## Codex Workpad` first. If the
 complete:
 
 - You may record **slice evidence** for the task slice you just changed.
+- Persist each completed test command in that slice immediately; do not wait
+  for the slice or the full plan to finish.
 - Do not treat slice evidence as final handoff evidence.
 - Do not set `final_validate_allowed: true`, `final_publish_allowed: true`, or
   `scope_status: complete`.
@@ -92,11 +94,34 @@ unrelated CI-suite failure — skip the full suite entirely.
 | "The full suite gives more confidence." | CI owns full regression; local evidence owns the changed surface. |
 | "CI has not started yet." | Waiting for CI does not expand agent-validation scope. |
 
+### Persist after every test command
+
+Evidence is incremental, not an end-of-VALIDATE batch:
+
+1. Before the first check, remove stale evidence from prior sessions and
+   initialize a fresh manifest for the current session.
+2. Run one focused test command.
+3. As soon as that command exits or times out, save its stdout/stderr report
+   and copy any artifacts. After those files exist, **atomically update**
+   `.symphony/evidence/manifest.json` with that run's real status.
+4. Only then start the next focused command.
+
+Never wait for all unit/e2e commands to finish before writing evidence. A later
+failure or environment block must not erase an earlier passing run; keep prior
+entries and add/update only the command that just completed. If the same command
+is retried, replace its earlier entry with the latest result instead of
+duplicating it.
+
+This ordering preserves partial success if a later command hangs, the agent is
+interrupted, or the environment fails. Do not add a planned command to the
+manifest before it has actually executed.
+
 ### Manifest hygiene
 
 - Include **only** runs you executed in **this** session — never copy a prior
   `manifest.json`.
-- One entry per `{kind, repo}` is enough (the passing scoped command).
+- Keep one entry per actual focused command. Preserve completed commands across
+  later updates; replace only an exact command retry.
 - Record the **actual scoped command** in the `command` field.
 - For plan-driven workpads, include `task_id` and `task_title` on each run,
   using the current `### Plan` checklist item. This lets the Evidence tab group
@@ -333,8 +358,8 @@ the three buckets are treated very differently, and only the last one is
 
 | Failure | Owner | What you do |
 |---------|-------|-------------|
-| **Assertion failure** — the command ran and a test/lint check failed | the code | Fix the code, re-run, record `passed`. Use `failed` only if you genuinely cannot make it pass. |
-| **Repo tooling/config broken** — the command never ran because something *inside this workspace that you can change* is wrong: a `.symphony/*` or `vibe`/Sail script, a wrong `COMPOSE_PROJECT_NAME`, a missing setup step, file permissions, an installable-but-missing dependency | you (this repo) | **Diagnose and fix it, then re-run.** This is NOT `blocked`. |
+| **Assertion failure** — the command ran and a test/lint check failed | the code | Record `failed` immediately, fix the code, re-run, then replace that command entry with the latest result. |
+| **Repo tooling/config broken** — the command never ran because something *inside this workspace that you can change* is wrong: a `.symphony/*` or `vibe`/Sail script, a wrong `COMPOSE_PROJECT_NAME`, a missing setup step, file permissions, an installable-but-missing dependency | you (this repo) | Record the attempt as `failed`, diagnose and fix it, then re-run. This is NOT `blocked`. |
 | **Platform/sandbox limitation** — the command cannot run here no matter what you change: no Docker daemon, no network to fetch modules/browsers, a sandbox that blocks the browser's own sandbox | the environment | Record `blocked` + a concrete `blocked_reason` and hand off. |
 
 Retrying the same command will never succeed for bucket 3; it WILL succeed for
@@ -393,9 +418,11 @@ for code changes).
 
 In VALIDATE-only mode:
 
-1. Read this skill and run **focused** checks from the git diff (see above).
-2. Write a **fresh** `.symphony/evidence/manifest.json` for **this session only**.
-3. Update the workpad **Validation** section with commands and outcomes.
+1. Read this skill and derive **focused** checks from the git diff (see above).
+2. Initialize a **fresh** `.symphony/evidence/manifest.json` for this session.
+3. Run checks sequentially and update the manifest/artifacts immediately after
+   each command, preserving prior partial successes.
+4. Update the workpad **Validation** section with commands and outcomes.
 
 **Do not** treat a continuation turn as a status-check loop:
 - Do not only run `git status`, parse an old manifest, and append "Continuação
@@ -426,6 +453,7 @@ be fine but the environment cannot prove it. Say so once in the workpad
 
 ```text
 ❌  git status → node -e 'parse manifest' → workpad "Continuação #9" → Task Complete
+❌  Run several tests first and write the manifest only after the whole batch finishes
 ❌  npm run test:unit (full suite) + record unrelated failure alongside scoped pass
 ❌  Run a bare configured `unit_command` after focused same-surface tests already passed
 ❌  Copy prior manifest.json without re-running commands this session
@@ -434,8 +462,8 @@ be fine but the environment cannot prove it. Say so once in the workpad
 ```
 
 ```text
-✅  git diff → tests created/modified → same-surface tests → focused e2e → fresh manifest
-✅  ./vibe up → ./vibe test tests/Feature/MyTest.php --filter=MyTest → fresh manifest
+✅  git diff → fresh manifest → focused test 1 → persist → focused test 2 → persist
+✅  ./vibe up → ./vibe test tests/Feature/MyTest.php --filter=MyTest → persist immediately
 ✅  manage_preview(status) → configured e2e launcher + affected spec/filter (reuses preview + isolated DB)
 ✅  blocked after real attempt → one-sentence Validation summary → end turn
 ```
@@ -459,19 +487,22 @@ they hold:
    decision for that source→UI pair.
 5. Every declared `command` appears in this session's execution log.
 
-If tests fail: fix the code, re-run, and only then update the manifest. If a
-required command is blocked by fixable repo tooling/config (a `vibe`/`.symphony`
-script, a wrong compose project, permissions, a missing setup step), fix that and
-re-run — that is NOT `blocked`. Reserve `blocked` (with a `blocked_reason`) for a
-genuine environment limitation you cannot fix from inside the workspace (see the
-three buckets above), rather than retrying forever. Never declare a run you did
-not execute — the gate will reject it.
+If a test fails, record that failed execution immediately, then fix the code and
+re-run the same focused command; the rerun replaces that command's prior entry
+with its latest real result. If a required command is blocked by fixable repo
+tooling/config (a `vibe`/`.symphony` script, a wrong compose project,
+permissions, a missing setup step), record the attempt as `failed`, fix it, and
+re-run — that is NOT `blocked`. Reserve `blocked` (with a `blocked_reason`) for
+a genuine environment limitation you cannot fix from inside the workspace (see
+the three buckets above), rather than retrying forever. Never declare a run you
+did not execute — the gate will reject it.
 
 ## Symphony tracker tools (coding agent)
 
 When working inside Symphony (MCP / dynamic tools), prefer structured probes over guessing gate state:
 
-- **`get_evidence_status`** — after writing `.symphony/evidence/manifest.json`, confirm gate state and missing artifacts.
+- **`get_evidence_status`** — after each manifest update, confirm the accumulated
+  gate state and missing artifacts without discarding partial successes.
 - **`update_acceptance_criteria`** — when the issue body has an `## Acceptance criteria` checklist (`- [ ]`), tick each criterion your evidence covers. Read with no args (returns 1-based `index`, `text`, `checked`), then mark by `index` or `text`. It edits ONLY those acceptance checkboxes — never prose or Plan/Tasks boxes — so prefer it over `update_issue`/`gh issue edit`. Leave a box unchecked when the criterion is not yet proven.
 - **`check_handoff_gate`** — before calling `set_issue_status` to a handoff/wait status (e.g. Human Review), verify validate + publish gates.
 - **`link_pull_request`** — after opening the PR, attach its URL to the issue so the publish gate and board see the association (origin `manual`).
