@@ -325,7 +325,7 @@ describe("buildFlatSidebarProject", () => {
   it("pages sessions behind More using the default session limit", () => {
     const project = buildFlatSidebarProject(
       buildInput({
-        sessions: Array.from({ length: 8 }, (_, index) =>
+        sessions: Array.from({ length: 9 }, (_, index) =>
           sessionRow({
             id: `thread:${index + 1}`,
             updatedAt: `2026-07-14T${String(12 - index).padStart(2, "0")}:00:00.000000Z`,
@@ -334,7 +334,7 @@ describe("buildFlatSidebarProject", () => {
       }),
     );
 
-    expect(project.sessions).toHaveLength(6);
+    expect(project.sessions).toHaveLength(7);
     expect(project.overflowSessions).toHaveLength(2);
   });
 

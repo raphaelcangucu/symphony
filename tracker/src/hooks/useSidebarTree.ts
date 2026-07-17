@@ -23,7 +23,7 @@ import type { Project } from "@/types/project";
 import type { ProjectSessionRow } from "@/types/project-session";
 import type { SidebarLoadState, SidebarProjectNode } from "@/types/sidebar";
 
-/** Match the visible page size so each "More" loads the next 6 from the API. */
+/** Match the visible page size so each "More" loads the next page from the API. */
 const SIDEBAR_PROJECT_SESSIONS_LIMIT = SIDEBAR_DEFAULT_SESSION_LIMIT;
 const SIDEBAR_PREFERENCES_STORAGE_ERROR =
   "layout.sidebar.errors.preferencesStorage";

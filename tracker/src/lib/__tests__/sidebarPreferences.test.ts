@@ -144,6 +144,19 @@ describe("sidebar preferences", () => {
     expect(readSidebarPreferences(storage).expandedProjectIds).toEqual(["demo"]);
   });
 
+  it("never restores transient More reveals across a reload", () => {
+    const storage = new MemoryStorage();
+    const preferences = defaultSidebarPreferences();
+    preferences.revealedProjectIds.push("gamba");
+    preferences.revealedWorkspaceIds.push("workspace:gamba:main");
+
+    expect(writeSidebarPreferences(preferences, storage)).toBe(true);
+
+    const restored = readSidebarPreferences(storage);
+    expect(restored.revealedProjectIds).toEqual([]);
+    expect(restored.revealedWorkspaceIds).toEqual([]);
+  });
+
   it("returns fresh defaults and never shares mutable collections", () => {
     const first = defaultSidebarPreferences();
     const second = defaultSidebarPreferences();

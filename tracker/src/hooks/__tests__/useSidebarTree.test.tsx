@@ -121,7 +121,7 @@ describe("useSidebarTree", () => {
     await waitFor(() => expect(listProjectSessions).toHaveBeenCalledOnce());
     expect(listProjectSessions).toHaveBeenCalledWith({
       projectSlug: "alpha",
-      limit: 6,
+      limit: 7,
       includeArchived: false,
     });
     expect(listIssues).not.toHaveBeenCalled();
@@ -225,14 +225,14 @@ describe("useSidebarTree", () => {
     act(() => result.current.toggleProjectExpanded("alpha"));
     await waitFor(() => expect(result.current.tree[0].loadState).toBe("ready"));
 
-    // With page size 6, the first More reveals and immediately fetches the next page.
+    // With the default page size, the first More reveals and immediately fetches the next page.
     act(() => result.current.showAllSessions("alpha"));
     expect(result.current.preferences.revealedProjectIds).toContain("alpha");
 
     await waitFor(() =>
       expect(listProjectSessions).toHaveBeenLastCalledWith({
         projectSlug: "alpha",
-        limit: 6,
+        limit: 7,
         cursor: "cursor-2",
         includeArchived: false,
       }),

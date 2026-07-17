@@ -239,7 +239,7 @@ describe("ProjectSidebar", () => {
     await waitFor(() => expect(selected).toHaveAttribute("aria-expanded", "true"));
     expect(listProjectSessions).toHaveBeenCalledWith({
       projectSlug: "active-project",
-      limit: 6,
+      limit: 7,
       includeArchived: false,
     });
     expect(listIssues).not.toHaveBeenCalled();

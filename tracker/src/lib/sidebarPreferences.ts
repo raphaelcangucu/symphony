@@ -113,7 +113,7 @@ export function readSidebarPreferences(storage?: Storage): SidebarPreferences {
   try {
     const raw = target.getItem(SIDEBAR_PREFERENCES_STORAGE_KEY);
     const legacyCollapsed = target.getItem(LEGACY_SIDEBAR_COLLAPSED_STORAGE_KEY);
-    return migrateSidebarPreferences(raw, legacyCollapsed);
+    return withEphemeralReveal(migrateSidebarPreferences(raw, legacyCollapsed));
   } catch {
     return defaultSidebarPreferences();
   }
@@ -127,12 +127,28 @@ export function writeSidebarPreferences(
   if (!target) return false;
 
   try {
-    const snapshot = migrateSidebarPreferences(preferences);
+    const snapshot = withEphemeralReveal(migrateSidebarPreferences(preferences));
     target.setItem(SIDEBAR_PREFERENCES_STORAGE_KEY, JSON.stringify(snapshot));
     return true;
   } catch {
     return false;
   }
+}
+
+/**
+ * "More" reveals (revealed*Ids) are a transient per-view expansion, not a saved
+ * preference. Clearing them at the persistence boundary keeps each reload
+ * collapsed to the default page size while leaving the in-memory updater — which
+ * calls migrateSidebarPreferences directly — free to reveal within a session.
+ */
+function withEphemeralReveal(preferences: SidebarPreferences): SidebarPreferences {
+  if (
+    preferences.revealedProjectIds.length === 0 &&
+    preferences.revealedWorkspaceIds.length === 0
+  ) {
+    return preferences;
+  }
+  return { ...preferences, revealedProjectIds: [], revealedWorkspaceIds: [] };
 }
 
 function safelyResolveLocalStorage(): Storage | null {

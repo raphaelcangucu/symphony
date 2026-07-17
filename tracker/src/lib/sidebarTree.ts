@@ -28,7 +28,7 @@ import type {
 import type { WorkspaceInventoryEntry } from "@/types/worktrees";
 
 export const SIDEBAR_DEFAULT_WORKSPACE_LIMIT = 8;
-export const SIDEBAR_DEFAULT_SESSION_LIMIT = 6;
+export const SIDEBAR_DEFAULT_SESSION_LIMIT = 7;
 
 const DEFAULT_TREE_FILTERS: SidebarTreeFilters = {
   statuses: [],
