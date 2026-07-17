@@ -10,6 +10,7 @@ defmodule SymphonyElixir.SessionLog do
   - `"opencode"` → `SymphonyElixir.OpenCode.SessionLog`
   """
 
+  alias SymphonyElixir.Agent.SessionStore
   alias SymphonyElixir.Claude.SessionLog, as: ClaudeLog
   alias SymphonyElixir.Codex.SessionLog, as: CodexLog
   alias SymphonyElixir.Cursor.SessionLog, as: CursorLog
@@ -43,6 +44,22 @@ defmodule SymphonyElixir.SessionLog do
       nil -> :error
     end
   end
+
+  @doc """
+  Resolves the log source for a specific session, preferring its own
+  per-session transcript file over the working tree's native agent log.
+  """
+  @spec resolve_for_session(map()) :: {:ok, String.t(), Path.t()} | :error
+  def resolve_for_session(%{id: session_id, workspace_path: workspace} = session)
+      when is_binary(workspace) do
+    if SessionStore.exists?(workspace, session_id) do
+      {:ok, "symphony", SessionStore.transcript_path(workspace, session_id)}
+    else
+      resolve_log_source(Map.get(session, :agent_kind) || "codex", workspace)
+    end
+  end
+
+  def resolve_for_session(_session), do: :error
 
   @doc false
   @spec join_tail_opts() :: keyword()

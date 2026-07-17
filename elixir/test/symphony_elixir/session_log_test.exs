@@ -116,4 +116,30 @@ defmodule SymphonyElixir.SessionLogTest do
   defp symphony_abort?(entry) when is_map(entry) do
     Map.get(entry, "title") == "Turn aborted" or Map.get(entry, :title) == "Turn aborted"
   end
+
+  describe "resolve_for_session/1" do
+    alias SymphonyElixir.Agent.SessionStore
+
+    test "prefers the per-session transcript when present" do
+      workspace = Path.join(System.tmp_dir!(), "rfs-#{System.unique_integer([:positive])}")
+      File.mkdir_p!(workspace)
+      on_exit(fn -> File.rm_rf!(workspace) end)
+
+      :ok = SessionStore.append(workspace, 7, %{"type" => "assistant", "text" => "hi"})
+
+      session = %{id: 7, workspace_path: workspace, agent_kind: "codex"}
+      assert {:ok, "symphony", path} = SymphonyElixir.SessionLog.resolve_for_session(session)
+      assert path == SessionStore.transcript_path(workspace, 7)
+    end
+
+    test "falls back to resolve_log_source when no per-session transcript exists" do
+      workspace = Path.join(System.tmp_dir!(), "rfs-#{System.unique_integer([:positive])}")
+      File.mkdir_p!(workspace)
+      on_exit(fn -> File.rm_rf!(workspace) end)
+
+      session = %{id: 8, workspace_path: workspace, agent_kind: "codex"}
+      # No transcript and no native rollout in a temp dir → :error (documents fallback path).
+      assert SymphonyElixir.SessionLog.resolve_for_session(session) == :error
+    end
+  end
 end
