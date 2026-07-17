@@ -766,6 +766,7 @@
       },
       "subagent": {
         "verb": "Subagente",
+        "notification": "Relato do subagente",
         "viewActivity": "Ver atividade",
         "drawerTitle": "Atividade do subagente",
         "loading": "Carregando subagente…",

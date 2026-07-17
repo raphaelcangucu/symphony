@@ -14,6 +14,10 @@ import {
   type SessionToolPair,
 } from "@/components/issues/issue-detail/sessionToolCall";
 import { deriveAgentTasks } from "@/lib/agentTasks";
+import {
+  parseSubagentNotification,
+  type SubagentNotification,
+} from "@/lib/subagentNotification";
 import type {
   AssistantChatMessage,
   AssistantContentBlock,
@@ -63,22 +67,25 @@ export interface SessionLogFeedMessageItem {
   message: AssistantChatMessage;
 }
 
+export interface SessionLogFeedSubagentNotificationItem {
+  type: "subagent_notification";
+  id: string;
+  notification: SubagentNotification;
+}
+
 /**
  * Item model for the unified chat body.
  *
  * - `message` → `AssistantChatMessageBubble` (text + `toolCalls` → ToolActivityItem / typed cards)
  * - `disclosure` → ActivityDisclosure chrome (reasoning / system / meta / lone event)
  * - `event_group` → collapsed consecutive events ("N eventos")
- *
- * `AssistantMessageList` currently accepts `AssistantChatMessage[]` only; the next
- * wiring task should accept this union (or `messagesFromSessionLogFeed` for the
- * message subset) and render disclosure / event_group variants with the existing
- * ActivityDisclosure chrome — no parallel transcript stack.
+ * - `subagent_notification` → SubagentNotificationCard (Codex subagent status reports)
  */
 export type SessionLogFeedItem =
   | SessionLogFeedMessageItem
   | SessionLogFeedDisclosureItem
-  | SessionLogFeedEventGroupItem;
+  | SessionLogFeedEventGroupItem
+  | SessionLogFeedSubagentNotificationItem;
 
 const SHELL_TOOL_NAMES = new Set(["shell", "exec_command", "bash", "Bash", "Shell"]);
 
@@ -129,6 +136,18 @@ export function messagesFromSessionLogFeed(items: SessionLogFeedItem[]): Assista
 }
 
 function entryToFeedItem(entry: SessionLogEntry, index: number): SessionLogFeedItem {
+  // Codex injects `<subagent_notification>` as user-kind session log rows; lift
+  // them out before chat-message adaptation. User/message kinds never enter
+  // `eventGroup`s in `groupSessionLogItems` (only `kind === "event"` does).
+  const notification = parseSubagentNotification(entry.body);
+  if (notification) {
+    return {
+      type: "subagent_notification",
+      id: stableId("subagent-notification", index, notification.agentId ?? entry.title),
+      notification,
+    };
+  }
+
   if (entry.kind === "assistant" || entry.kind === "user" || entry.kind === "message") {
     const message = chatMessageFromSessionEntry(entry, index);
     return { type: "message", id: message.id, message };

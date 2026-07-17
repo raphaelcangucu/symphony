@@ -766,6 +766,7 @@
       },
       "subagent": {
         "verb": "Subagent",
+        "notification": "Subagent report",
         "viewActivity": "View activity",
         "drawerTitle": "Subagent activity",
         "loading": "Loading subagent…",

@@ -1,4 +1,5 @@
 import { AgentTaskPinnedPanel } from "@/components/agent-activity";
+import { SubagentNotificationCard } from "@/components/agent-activity/SubagentNotificationCard";
 import {
   AssistantChatMessageBubble,
   type AssistantChatPlanApprovalAction,
@@ -32,7 +33,7 @@ interface AssistantMessageListProps {
    */
   messages?: AssistantChatMessage[];
   /**
-   * Unified session-log feed (`message` | `disclosure` | `event_group`).
+   * Unified session-log feed (`message` | `disclosure` | `event_group` | `subagent_notification`).
    * When set, replaces `messages` as the body source.
    */
   feedItems?: SessionLogFeedItem[];
@@ -106,6 +107,9 @@ export function AssistantMessageList({
             }
             if (item.type === "event_group") {
               return <SessionLogFeedEventGroup key={item.id} item={item} />;
+            }
+            if (item.type === "subagent_notification") {
+              return <SubagentNotificationCard key={item.id} notification={item.notification} />;
             }
             return (
               <AssistantChatMessageBubble

@@ -68,6 +68,30 @@ describe("adaptSessionLogEntries", () => {
     expect(messages.every((message) => message.toolCalls.length === 0)).toBe(true);
   });
 
+  it("maps user entries with <subagent_notification> to subagent_notification items", () => {
+    const body = `<subagent_notification>
+${JSON.stringify({
+  agent_path: "019f7186-95e7-7a91-ac42-e918d56f7b06",
+  status: { completed: "DONE\n\nChanged files:\n- `a.ts`" },
+})}
+</subagent_notification>`;
+
+    const items = adaptSessionLogEntries([
+      entry({ kind: "user", title: "You", body, language: "markdown" }),
+    ]);
+
+    expect(items).toHaveLength(1);
+    expect(items[0].type).toBe("subagent_notification");
+    if (items[0].type !== "subagent_notification") throw new Error("expected subagent_notification");
+    expect(items[0].notification).toMatchObject({
+      agentId: "019f7186-95e7-7a91-ac42-e918d56f7b06",
+      headline: "DONE",
+      tone: "success",
+      detail: "Changed files:\n- `a.ts`",
+    });
+    expect(messageItems(items)).toHaveLength(0);
+  });
+
   it("pairs tool_call + tool_result by callId into AssistantToolCall statuses", () => {
     const items = adaptSessionLogEntries([
       toolCall("c1", "shell", '{"cmd":"pwd"}'),
