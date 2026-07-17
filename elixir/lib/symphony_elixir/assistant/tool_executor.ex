@@ -5,6 +5,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
 
   alias SymphonyElixir.AgentExecution
   alias SymphonyElixir.AgentPreference
+  alias SymphonyElixir.Issue
 
   alias SymphonyElixir.Assistant.{
     BlockerTools,
@@ -100,6 +101,10 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
   @discovery_tools DiscoveryTools.tools()
   @dynamic_tools Enum.map(DynamicTool.tool_specs(), & &1["name"])
   @supported_tools @tracker_tools ++ @read_tools ++ @github_tools ++ @kb_tools
+  # Issue / issue_session / build / working-tree chats advertise the full project
+  # tool surface (same names as project assistant). Identifier-sensitive tools are
+  # rebound to the session issue; dual-schema tools swap to issue-bound variants.
+  @issue_bound_supported_tools @supported_tools
   # Routine assistant chat replies should not be mirrored as issue comments; use
   # `add_comment` only when the user asks to record a comment on the issue.
   @issue_bound_mutable_tools ~w(update_issue move_issue add_comment dispatch_coding_agent dispatch_codex)
@@ -124,31 +129,14 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     query_bundle_status
     report_unit_status
   )
-  @issue_bound_supported_tools ~w(
-    list_issues
-    get_issue
-    read_workspace_file
-    update_issue
-    move_issue
-    add_comment
-    get_agent_executions
-    dispatch_coding_agent
-    dispatch_codex
+  # Dual-schema tools: `build_tool_specs/0` ships the project-chat (identifier-
+  # required) variant; issue sessions replace them with issue-bound schemas.
+  @issue_bound_replaced_tools ~w(
     goal
-    create_issue
-    create_draft_issue
-    list_project_repositories
-    get_workflow
-    get_issue_form_options
-    classify_execution_unit
-    create_subtask
-    set_issue_parent
-    get_execution_bundle
-    preview_execution_plan
-    define_shared_contract
-    update_shared_contract
-    query_bundle_status
-    report_unit_status
+    manage_preview
+    check_handoff_gate
+    get_evidence_status
+    manage_tunnel
   )
   @in_progress_state "In Progress"
 
@@ -665,10 +653,20 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
 
     build_tool_specs()
     |> Enum.filter(&(Map.get(&1, "name") in @issue_bound_supported_tools))
-    |> Enum.reject(&(&1["name"] == "goal"))
-    |> Kernel.++([GoalTools.issue_bound_tool_spec()])
+    |> Enum.reject(&(&1["name"] in @issue_bound_replaced_tools))
+    |> Kernel.++(issue_bound_replacement_specs())
     |> ToolText.localize_specs()
     |> Enum.map(&bind_tool_spec_identifier(&1, identifier))
+  end
+
+  defp issue_bound_replacement_specs do
+    [
+      GoalTools.issue_bound_tool_spec(),
+      PreviewTools.issue_bound_tool_spec(),
+      HandoffTools.issue_bound_tool_spec(),
+      EvidenceTools.issue_bound_tool_spec(),
+      TunnelTools.issue_bound_tool_spec()
+    ]
   end
 
   @spec codex_tool_executor(String.t(), keyword()) :: (String.t() | nil, term() -> map())
@@ -685,7 +683,11 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
       tool_name = to_string(tool)
       arguments = if is_map(arguments), do: stringify_keys(arguments), else: %{}
 
-      executor_opts = Keyword.put(opts, :bound_issue_identifier, identifier)
+      executor_opts =
+        opts
+        |> Keyword.put(:bound_issue_identifier, identifier)
+        |> maybe_put_bound_issue_struct(project_slug, identifier)
+
       root_fun = fn -> bundle_root(project_slug, identifier) end
 
       case bind_issue_tool_arguments(tool_name, arguments, identifier, root_fun) do
@@ -1764,6 +1766,22 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
     case Keyword.get(opts, :bound_issue_identifier) do
       identifier when is_binary(identifier) -> Keyword.put_new(opts, :bound_issue_identifier, identifier)
       _ -> opts
+    end
+  end
+
+  # Preview/handoff/evidence tools resolve the bound issue from `opts[:issue]`
+  # (same contract as `DynamicTool.execute_bound_assistant_tool/4`).
+  defp maybe_put_bound_issue_struct(opts, project_slug, identifier)
+       when is_list(opts) and is_binary(project_slug) and is_binary(identifier) do
+    case Keyword.get(opts, :issue) do
+      %Issue{} ->
+        opts
+
+      _ ->
+        case Context.get_issue(project_slug, identifier) do
+          {:ok, issue} -> Keyword.put(opts, :issue, issue)
+          _ -> opts
+        end
     end
   end
 

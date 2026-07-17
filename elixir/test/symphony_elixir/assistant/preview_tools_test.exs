@@ -14,6 +14,23 @@ defmodule SymphonyElixir.Assistant.PreviewToolsTest do
     end
   end
 
+  test "status accepts record-like issue opts and passes a binary identifier" do
+    assert {:ok, result} =
+             PreviewTools.execute("demo", %{"action" => "status"},
+               issue: %{identifier: "DEMO-1", title: "x"},
+               issue_targets: fn slug, id ->
+                 assert slug == "demo"
+                 assert id == "DEMO-1"
+                 assert is_binary(id)
+
+                 {:ok, %{available: true, reason: nil, servers: []}}
+               end,
+               list_serve_steps: fn _slug -> [] end
+             )
+
+    assert result.tool == "manage_preview"
+  end
+
   test "status next_steps reject conflict sync_state ports" do
     issue = %Issue{id: "1", identifier: "DEMO-1", project_slug: "demo"}
 

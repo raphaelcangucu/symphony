@@ -1,5 +1,5 @@
 import { PlayCircle } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -27,11 +27,21 @@ import {
   fallbackCatalogBundle,
   type AssistantCatalogBundle,
 } from "@/lib/assistantSettings";
+import {
+  findIssueInventoryEntry,
+  mergeCloneBranchDefaults,
+  resolveDefaultCloneBranches,
+} from "@/lib/defaultCloneBranches";
 import { projectSessionPath, type WorkspaceView } from "@/lib/workspaceRoutes";
+import { resolveCloneBranchApiPayload, workspaceCloneRepoOptions, type WorkspaceCloneRepoOption } from "@/lib/workspaceCloneRepos";
 import { fetchAssistantCatalogBundle } from "@/services/assistant";
-import type { AgentKind, ExecutionMode } from "@/types/issue";
+import { listPullRequests } from "@/services/pullRequests";
+import { getProject } from "@/services/projects";
+import { fetchWorkspaceInventory } from "@/services/worktrees";
 import type { AssistantThread } from "@/types/assistant-thread";
-import { resolveCloneBranchApiPayload, type WorkspaceCloneRepoOption } from "@/lib/workspaceCloneRepos";
+import type { AgentKind, ExecutionMode } from "@/types/issue";
+import type { PullRequest } from "@/types/pull-request";
+import type { WorkspaceInventoryEntry } from "@/types/worktrees";
 
 /** Default integration branch for advising-style hook-based workspaces. */
 const DEFAULT_CLONE_BRANCH = "pre-release";
@@ -86,11 +96,19 @@ export function StartIssueSessionDialog({
   const [instructions, setInstructions] = useState("");
   const [workspaceTarget, setWorkspaceTarget] = useState<WorkspaceTarget>("issue");
   const [cloneBranches, setCloneBranches] = useState<Record<string, string>>({});
+  const [dirtyBranchKeys, setDirtyBranchKeys] = useState<Set<string>>(() => new Set());
+  const [inventoryEntries, setInventoryEntries] = useState<WorkspaceInventoryEntry[]>([]);
+  const [pullRequests, setPullRequests] = useState<PullRequest[]>([]);
+  const [loadedCloneRepos, setLoadedCloneRepos] = useState<WorkspaceCloneRepoOption[]>([]);
   const [starting, setStarting] = useState(false);
   const initializedForRef = useRef<string | null>(null);
 
   const parentIdentifier = issue?.parentIdentifier?.trim() || null;
   const hasParent = Boolean(parentIdentifier);
+  const effectiveCloneRepos = useMemo(
+    () => (cloneRepos.length > 0 ? cloneRepos : loadedCloneRepos),
+    [cloneRepos, loadedCloneRepos],
+  );
 
   useEffect(() => {
     if (!open) {
@@ -111,6 +129,10 @@ export function StartIssueSessionDialog({
     setInstructions("");
     setWorkspaceTarget("issue");
     setCloneBranches({});
+    setDirtyBranchKeys(new Set());
+    setInventoryEntries([]);
+    setPullRequests([]);
+    setLoadedCloneRepos([]);
     setStarting(false);
   }, [open, issue?.identifier, issue?.agentKind, parentIdentifier]);
 
@@ -126,6 +148,61 @@ export function StartIssueSessionDialog({
   }, [open, projectSlug]);
 
   useEffect(() => {
+    if (!open || !issue) return;
+
+    let cancelled = false;
+    void Promise.all([
+      fetchWorkspaceInventory(projectSlug).catch(() => null),
+      listPullRequests(projectSlug, issue.identifier).catch(() => null),
+      cloneRepos.length > 0 ? Promise.resolve(null) : getProject(projectSlug).catch(() => null),
+    ]).then(([inventory, pullRequestResult, project]) => {
+      if (cancelled) return;
+      setInventoryEntries(inventory?.entries ?? []);
+      setPullRequests(pullRequestResult?.data ?? []);
+      if (cloneRepos.length > 0) {
+        setLoadedCloneRepos([]);
+        return;
+      }
+      const issueEntry = findIssueInventoryEntry(inventory?.entries ?? [], issue.identifier);
+      setLoadedCloneRepos(
+        workspaceCloneRepoOptions(issueEntry?.repos ?? [], project?.repositories),
+      );
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, projectSlug, issue?.identifier, cloneRepos]);
+
+  useEffect(() => {
+    if (!open || !issue?.identifier || effectiveCloneRepos.length === 0) return;
+
+    const targetIdentifier =
+      workspaceTarget === "parent" ? parentIdentifier : issue.identifier;
+    const inventoryEntry =
+      workspaceTarget === "isolated"
+        ? null
+        : findIssueInventoryEntry(inventoryEntries, targetIdentifier);
+    const defaults = resolveDefaultCloneBranches({
+      target: workspaceTarget,
+      repos: effectiveCloneRepos,
+      inventoryRepos: inventoryEntry?.repos ?? [],
+      pullRequests,
+    });
+
+    setCloneBranches((current) => mergeCloneBranchDefaults(current, defaults, dirtyBranchKeys));
+  }, [
+    open,
+    issue?.identifier,
+    workspaceTarget,
+    parentIdentifier,
+    inventoryEntries,
+    pullRequests,
+    effectiveCloneRepos,
+    dirtyBranchKeys,
+  ]);
+
+  useEffect(() => {
     if (!open) return;
     const defaults = defaultComposerSettings(catalogFor(bundle, agent));
     setModel((current) => current ?? defaults.model);
@@ -137,6 +214,20 @@ export function StartIssueSessionDialog({
       setWorkspaceTarget("issue");
     }
   }, [hasParent, workspaceTarget]);
+
+  function handleCloneBranchesChange(next: Record<string, string>) {
+    setDirtyBranchKeys((previous) => {
+      const updated = new Set(previous);
+      const keys = new Set([...Object.keys(cloneBranches), ...Object.keys(next)]);
+      for (const key of keys) {
+        if ((next[key] ?? "") !== (cloneBranches[key] ?? "")) {
+          updated.add(key);
+        }
+      }
+      return updated;
+    });
+    setCloneBranches(next);
+  }
 
   async function handleStart() {
     if (!issue || starting) return;
@@ -256,9 +347,9 @@ export function StartIssueSessionDialog({
             <WorkspaceCloneBranchesFields
               projectSlug={projectSlug}
               active={open}
-              repos={cloneRepos}
+              repos={effectiveCloneRepos}
               value={cloneBranches}
-              onChange={setCloneBranches}
+              onChange={handleCloneBranchesChange}
               disabled={starting}
               allowGlobalFallback
               globalDefault={DEFAULT_CLONE_BRANCH}

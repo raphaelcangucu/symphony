@@ -411,6 +411,32 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
     assert turn["active_tools"] == []
   end
 
+  test "stop_turn reconciles a stale running indicator when the turn already finished" do
+    # A tab can show a running indicator (turnRunning=true) while the backend turn
+    # already reached a terminal state (e.g. the terminal stream event was lost to a
+    # replaced channel process). Clicking Stop must still push the current turn
+    # status so the zombie "Stop" affordance clears instead of hanging forever.
+    {:ok, thread} =
+      History.ensure_issue_thread("macro-markets", "MAC-1", %{
+        workspace_path: Workspace.path_for_issue("MAC-1"),
+        agent_kind: "codex"
+      })
+
+    {:ok, thread} =
+      History.start_turn_state(thread, %{generation: "gen-zombie", prompt: "go", agent_kind: "codex"})
+
+    {:ok, _interrupted} = History.interrupt_turn_state(thread, "user_stop")
+
+    {:ok, _join, socket} =
+      socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
+      |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, "assistant:issue:macro-markets:MAC-1")
+
+    stop_ref = push(socket, "stop_turn", %{})
+    assert_reply(stop_ref, :ok, %{})
+
+    assert_push("turn_status", %{status: "interrupted", can_resume: true, active_tools: []})
+  end
+
   test "kill_tool cancels an active tool and leaves the turn running" do
     test_pid = self()
 

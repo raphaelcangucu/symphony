@@ -671,11 +671,24 @@ defmodule SymphonyElixir.Assistant.ToolExecutorTest do
       assert "add_comment" in names
       assert "get_issue" in names
       assert "read_workspace_file" in names
+      assert "manage_preview" in names
+      assert "list_previews" in names
+      assert "manage_tunnel" in names
+      assert "manage_dev_env" in names
+      assert "check_handoff_gate" in names
+      assert "get_evidence_status" in names
+      assert "update_project_workflow" in names
+      assert "kb_search_pages" in names
+      assert "kb_read_page" in names
 
       for tool <- ["update_issue", "move_issue", "add_comment", "dispatch_codex"] do
         spec = Enum.find(specs, &(&1["name"] == tool))
         assert get_in(spec, ["inputSchema", "properties", "identifier", "const"]) == "MAC-1"
       end
+
+      preview = Enum.find(specs, &(&1["name"] == "manage_preview"))
+      assert "action" in get_in(preview, ["inputSchema", "required"])
+      refute "identifier" in get_in(preview, ["inputSchema", "required"])
 
       assert required_fields(specs, "update_issue") == []
       refute "identifier" in required_fields(specs, "move_issue")

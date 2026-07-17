@@ -739,7 +739,8 @@ defmodule SymphonyElixir.Assistant.AgentSession do
 
     #{orchestrator_summary}
 
-    Tools: get_workflow, get_project, list_project_repositories, get_template, list_templates, read_workspace_file, list_issues, get_issue, update_project_workflow, update_project_repositories, and other tracker tools when needed.
+    Tools: get_workflow, get_project, list_project_repositories, get_template, list_templates, read_workspace_file, list_issues, get_issue, update_project_workflow, update_project_repositories, manage_preview (status|start|stop|restart|output|prepare), list_previews, manage_tunnel, manage_dev_env, check_handoff_gate, get_evidence_status, kb_*, and other tracker tools when needed.
+    For preview: prefer manage_preview so ports match the Preview dock; cite only in_sync URLs; never invent ports.
     Do not create or update tracker issues unless the user explicitly asks. Do not dispatch Codex execution unless asked.
     Do not post issue comments - your replies are shown to the user directly in this chat.
     Prefer answering questions and exploring the code over making changes; only edit files when the user clearly wants that.
@@ -1048,6 +1049,9 @@ defmodule SymphonyElixir.Assistant.AgentSession do
     Do NOT enable or set a chat goal on your own. Activate or change the chat goal only when the user uses `/goal` or explicitly asks in natural language (for example: "ative o goal", "use goal mode", "liga o goal mode para fazer X"). Then use goal (context authoring/plan) to set, adjust, pause, resume, or clear it. Use context execution only when the user explicitly asks to change the orchestrator run objective.
     Do not mirror normal chat replies as issue comments — your replies are shown to the user directly in this chat.
     Use add_comment only when the user explicitly asks to post a comment on the issue; use update_issue for title, description, status, and assignee changes.
+
+    Project tools available in this session (bound to `#{identifier}` when relevant): list_issues, create_issue, get_issue, update_issue, move_issue, add_comment, list_comments, update_comment, delete_comment, list_pull_requests, link_pull_request, check_handoff_gate, get_evidence_status, manage_preview (status|start|stop|restart|output|prepare; optional server), list_previews, manage_tunnel (status|start), manage_dev_env, scan_project_setup, suggest_project_setup, update_project_workflow, update_project_repositories, dispatch_codex, get_agent_executions, get_issue_orchestrator_state, explain_dispatch_eligibility, list_running_agents, steer_agent, goal, manage_blockers, sync_issue, get_project, get_issue_form_options, list_project_repositories, get_workflow, read_workspace_file, kb_list_repositories, kb_search_pages, kb_read_page, kb_create_page, kb_update_page, kb_link_task.
+    Before moving to a handoff/wait status, call check_handoff_gate. After writing evidence, call get_evidence_status. For preview: prefer manage_preview status/start/restart (leased ports match the Preview dock); on crash use output then restart; if you must run serve yourself use prepare and run the returned command verbatim — never invent ports or unmanaged INSPIRE_PORT bring-up. Cite only in_sync URLs.
 
     When to call update_issue:
     - Plan or acceptance criteria are defined and stable

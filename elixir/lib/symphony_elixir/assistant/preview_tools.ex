@@ -490,9 +490,25 @@ defmodule SymphonyElixir.Assistant.PreviewTools do
       %Issue{identifier: identifier} when is_binary(identifier) ->
         {:ok, identifier}
 
+      %{identifier: identifier} when is_binary(identifier) ->
+        # Bound issue may already be a tracker DTO/record (not %Issue{}).
+        {:ok, identifier}
+
       _ ->
-        with {:ok, %Issue{identifier: identifier}} <- HandoffTools.resolve_issue(project_slug, arguments, []) do
-          {:ok, identifier}
+        # Context.get_issue returns %IssueRecord{}; %Issue{} pattern must not be used
+        # in `with` or a mismatch returns {:ok, record} and binds the whole struct.
+        case HandoffTools.resolve_issue(project_slug, arguments, opts) do
+          {:ok, %Issue{identifier: identifier}} when is_binary(identifier) ->
+            {:ok, identifier}
+
+          {:ok, %{identifier: identifier}} when is_binary(identifier) ->
+            {:ok, identifier}
+
+          {:error, reason} ->
+            {:error, reason}
+
+          other ->
+            {:error, {:invalid_issue_resolve, other}}
         end
     end
   end

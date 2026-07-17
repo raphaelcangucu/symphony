@@ -233,9 +233,19 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     case thread_id_from_socket(socket) do
       thread_id when is_integer(thread_id) ->
         case TurnManager.interrupt(thread_id, "user_stop") do
-          :ok -> {:reply, :ok, socket}
-          {:ok, :already_finished} -> {:reply, :ok, socket}
-          {:error, reason} -> {:reply, {:error, %{reason: error_reason(reason)}}, socket}
+          :ok ->
+            {:reply, :ok, socket}
+
+          {:ok, :already_finished} ->
+            # The backend turn already reached a terminal state while this tab still
+            # renders a running indicator (its terminal stream event was lost, e.g. to
+            # a replaced channel process). No interrupt broadcast is emitted in this
+            # path, so push the current turn status directly to reconcile the stale
+            # "Stop" affordance instead of leaving it hanging.
+            {:reply, :ok, reconcile_finished_turn(socket, thread_id)}
+
+          {:error, reason} ->
+            {:reply, {:error, %{reason: error_reason(reason)}}, socket}
         end
 
       _ ->
@@ -1097,6 +1107,31 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   end
 
   defp rollback_deferred_goal_activation(socket), do: socket
+
+  # Push the current (terminal) turn status plus a durable history sync to a single
+  # socket so a stale running indicator reconciles when `stop_turn` finds the turn
+  # already finished. Keeps any resumable interrupted turn intact so Resume stays
+  # available, unlike `dismiss_interrupted_turn`.
+  defp reconcile_finished_turn(socket, thread_id) do
+    case History.get_thread(thread_id) do
+      {:ok, thread} ->
+        payload = History.turn_payload(thread) || %{status: "completed", can_resume: false}
+        push(socket, "turn_status", normalize_turn_payload(payload))
+
+        socket
+        |> push_history_sync()
+        |> maybe_reset_stale_running_turn()
+
+      _ ->
+        socket
+    end
+  end
+
+  defp maybe_reset_stale_running_turn(socket) do
+    if socket.assigns[:turn_status] == :running,
+      do: reset_turn_preserving_generation(socket),
+      else: socket
+  end
 
   defp handle_terminal_turn_status(payload, socket) do
     generation = turn_payload_generation(payload)

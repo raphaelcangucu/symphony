@@ -657,6 +657,8 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
       assert "create_issue" in tool_names
       assert "create_draft_issue" in tool_names
       assert "update_issue" in tool_names
+      assert "manage_preview" in tool_names
+      assert "list_previews" in tool_names
 
       tool_executor = Keyword.fetch!(opts, :tool_executor)
 
