@@ -86,6 +86,7 @@ function sidebarSession(
     id: `execution:${issueIdentifier}`,
     title: issueIdentifier,
     kind: "execution",
+    scope: "issue_session",
     href: `/projects/active-project/sessions/${issueIdentifier}`,
     updatedAt: "2026-07-13T12:00:00Z",
     aggregateStatus,

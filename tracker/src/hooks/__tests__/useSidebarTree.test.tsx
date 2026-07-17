@@ -41,6 +41,7 @@ function session(id: string): ProjectSessionRow {
     id,
     title: `Session ${id}`,
     kind: "chat",
+    scope: "project",
     href: `/projects/alpha/sessions/${id}`,
     updatedAt: "2026-07-14T12:00:00Z",
     aggregateStatus: "idle",

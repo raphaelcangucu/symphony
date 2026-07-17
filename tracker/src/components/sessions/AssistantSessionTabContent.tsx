@@ -3,7 +3,9 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { ProjectAssistantPanel } from "@/components/assistant/ProjectAssistantPanel";
+import { ExecutionStatusHeaderControl } from "@/components/sessions/ExecutionStatusHeaderControl";
 import { IssueSessionSplitLayout } from "@/components/sessions/IssueSessionSplitLayout";
+import { SessionExecutionStatusProvider } from "@/components/sessions/sessionExecutionStatusContext";
 import {
   sessionToolbarChipClassName,
   sessionToolbarIconButtonClassName,
@@ -51,6 +53,7 @@ export function AssistantSessionTabContent({
   });
 
   return (
+    <SessionExecutionStatusProvider>
     <section className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background" data-testid="assistant-session-tab">
       {issueIdentifier ? (
         <IssueSessionSplitLayout
@@ -60,13 +63,16 @@ export function AssistantSessionTabContent({
           onOpenKnowledgeBase={kbControl?.open}
           changedDocCount={kbControl?.changedDocCount ?? 0}
           headerStart={
-            <span
-              className={cn(sessionToolbarChipClassName, "font-mono")}
-              title={t("sessions.issueThreadHint", { identifier: issueIdentifier })}
-            >
-              <GitBranch className="h-3 w-3 shrink-0" />
-              <span className="truncate">{issueIdentifier}</span>
-            </span>
+            <div className="flex min-w-0 items-center gap-2">
+              <span
+                className={cn(sessionToolbarChipClassName, "font-mono")}
+                title={t("sessions.issueThreadHint", { identifier: issueIdentifier })}
+              >
+                <GitBranch className="h-3 w-3 shrink-0" />
+                <span className="truncate">{issueIdentifier}</span>
+              </span>
+              <ExecutionStatusHeaderControl />
+            </div>
           }
           toolbarLeading={
             <div className="inline-flex items-center gap-1">
@@ -113,5 +119,6 @@ export function AssistantSessionTabContent({
         </div>
       )}
     </section>
+    </SessionExecutionStatusProvider>
   );
 }

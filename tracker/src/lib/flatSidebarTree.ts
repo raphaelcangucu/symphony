@@ -98,6 +98,7 @@ function recentChatToSessionRow(recent: RecentSession): ProjectSessionRow {
     id: `thread:${threadId}`,
     title: recent.title.trim(),
     kind: sessionKindFromRecentScope(recent.scope),
+    scope: recent.scope,
     href: `/projects/${encodeURIComponent(projectSlug)}/workspaces/${threadId}`,
     updatedAt: recent.updatedAt,
     aggregateStatus: recent.statusKind,

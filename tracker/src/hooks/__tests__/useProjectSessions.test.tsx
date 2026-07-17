@@ -76,6 +76,7 @@ function session(issueIdentifier: string, title: string): ProjectSessionsPage["s
     id: `execution:${issueIdentifier}`,
     title,
     kind: "execution",
+    scope: "issue_session",
     href: `/projects/demo/executions/${issueIdentifier}`,
     updatedAt: "2026-07-02T10:00:00Z",
     aggregateStatus: "saved",

@@ -2770,16 +2770,13 @@
       "closeDock": "Close environment panel"
     },
     "tasks": {
-      "title": "Tasks & tools",
-      "ariaLabel": "Tasks and tools for {{identifier}}",
-      "resizeHandleAria": "Resize tasks and tools panel",
-      "expandFullscreen": "Expand tasks and tools to full screen",
+      "title": "Tasks",
+      "ariaLabel": "Tasks for {{identifier}}",
+      "resizeHandleAria": "Resize tasks panel",
+      "expandFullscreen": "Expand tasks to full screen",
       "exitFullscreen": "Exit full screen",
-      "closeDock": "Close tasks and tools panel",
-      "tasksSection": "Tasks",
-      "toolsSection": "Tools",
-      "emptyTasks": "No agent tasks for this session yet.",
-      "emptyTools": "No tool activity for this session yet."
+      "closeDock": "Close tasks panel",
+      "emptyTasks": "No agent tasks for this session yet."
     },
     "sessions": {
       "tabsAria": "Project session tabs"

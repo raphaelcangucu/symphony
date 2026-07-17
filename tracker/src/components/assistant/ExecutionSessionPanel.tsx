@@ -9,10 +9,10 @@ import { AssistantSessionShell } from "@/components/assistant/AssistantSessionSh
 import { CHAT_READING_COLUMN_CLASS } from "@/components/assistant/chatTypography";
 import { attachChatScrollStickiness } from "@/components/assistant/chatScrollStickiness";
 import { useExecutionSessionMode } from "@/components/assistant/useExecutionSessionMode";
+import { usePublishSessionExecutionStatus } from "@/components/sessions/sessionExecutionStatusContext";
 import { usePublishSessionTasksDockFeed } from "@/components/sessions/sessionTasksDockFeedContext";
 import { BundlePanel } from "@/components/issues/issue-detail/BundlePanel";
 import { ExecutionControlComposer } from "@/components/issues/issue-detail/ExecutionControlComposer";
-import { ExecutionStatusHeader } from "@/components/issues/issue-detail/ExecutionStatusHeader";
 import { GitDiffLauncher } from "@/components/issues/issue-detail/git-diff/GitDiffLauncher";
 import { ReturnToAgentPanel } from "@/components/issues/issue-detail/ReturnToAgentPanel";
 import { Button } from "@/components/ui/button";
@@ -152,20 +152,17 @@ export function ExecutionSessionPanel({
     setIssue(updated);
   }, []);
 
+  // Lift the live run status to the session header bar (compact chip + details
+  // popover) instead of rendering a status card above the transcript.
+  usePublishSessionExecutionStatus(
+    issue
+      ? { projectSlug, issue, execution: session.execution, onIssueUpdated: handleIssueUpdated }
+      : null,
+  );
+
   const trackerConfig = parseWorkflowTrackerConfig(null);
   const inWaitState = issue ? isWaitState(issue.status, trackerConfig) : false;
   const showReturnPanel = Boolean(issue && inWaitState && canResumeExecution(session.execution));
-
-  const statusToolbar = issue ? (
-    <div className={cn(CHAT_READING_COLUMN_CLASS, "pb-2 pt-1")}>
-      <ExecutionStatusHeader
-        projectSlug={projectSlug}
-        issue={issue}
-        execution={session.execution}
-        onIssueUpdated={handleIssueUpdated}
-      />
-    </div>
-  ) : null;
 
   const feedTop = issue ? (
     <div className="space-y-3">
@@ -259,7 +256,6 @@ export function ExecutionSessionPanel({
     >
       <AssistantSessionShell
         className="min-w-0 flex-1"
-        toolbar={statusToolbar}
         feedRef={setScrollContainerRef}
         feed={
           <div className={cn(CHAT_READING_COLUMN_CLASS, "flex w-full flex-col gap-4 py-4")}>

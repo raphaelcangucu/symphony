@@ -14,6 +14,7 @@ function sessionRow(overrides: Partial<ProjectSessionRow> = {}): ProjectSessionR
     id: "thread:1",
     title: "Session one",
     kind: "chat",
+    scope: "project",
     href: "/projects/demo/workspaces/1",
     updatedAt: "2026-07-14T12:00:00.000000Z",
     aggregateStatus: "active",

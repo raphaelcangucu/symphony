@@ -2770,16 +2770,13 @@
       "closeDock": "Fechar painel de ambiente"
     },
     "tasks": {
-      "title": "Tarefas e ferramentas",
-      "ariaLabel": "Tarefas e ferramentas de {{identifier}}",
-      "resizeHandleAria": "Redimensionar painel de tarefas e ferramentas",
-      "expandFullscreen": "Expandir tarefas e ferramentas para tela cheia",
+      "title": "Tarefas",
+      "ariaLabel": "Tarefas de {{identifier}}",
+      "resizeHandleAria": "Redimensionar painel de tarefas",
+      "expandFullscreen": "Expandir tarefas para tela cheia",
       "exitFullscreen": "Sair da tela cheia",
-      "closeDock": "Fechar painel de tarefas e ferramentas",
-      "tasksSection": "Tarefas",
-      "toolsSection": "Ferramentas",
-      "emptyTasks": "Ainda não há tarefas do agente nesta sessão.",
-      "emptyTools": "Ainda não há atividade de ferramentas nesta sessão."
+      "closeDock": "Fechar painel de tarefas",
+      "emptyTasks": "Ainda não há tarefas do agente nesta sessão."
     },
     "sessions": {
       "tabsAria": "Abas de sessões do projeto"

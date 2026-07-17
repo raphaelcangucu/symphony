@@ -1,9 +1,8 @@
-import { ListChecks, Maximize2, Minimize2, Wrench, X } from "lucide-react";
+import { ListChecks, Maximize2, Minimize2, X } from "lucide-react";
 import { type RefObject, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 
 import { AgentTaskItems, completedTaskCount } from "@/components/agent-activity/AgentTaskList";
-import { ToolActivityTimeline } from "@/components/agent-activity/ToolActivityTimeline";
 import { useSessionTasksDockFeed } from "@/components/sessions/sessionTasksDockFeedContext";
 import { Button } from "@/components/ui/button";
 import { useHorizontalPanelResize } from "@/hooks/useHorizontalPanelResize";
@@ -29,7 +28,7 @@ export function IssueTasksDock({
   onClose,
 }: IssueTasksDockProps) {
   const { t } = useTranslation();
-  const { tasks, toolItems } = useSessionTasksDockFeed();
+  const { tasks } = useSessionTasksDockFeed();
   const { width, isResizing, onResizePointerDown, onResizePointerUp } = useHorizontalPanelResize({
     containerRef: splitContainerRef,
     storageKey: TASKS_DOCK_WIDTH_STORAGE_KEY,
@@ -124,29 +123,11 @@ export function IssueTasksDock({
         </header>
 
         <div className={cn("flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-3", SCROLLBAR_THIN)}>
-          <section aria-label={t("workspace.tasks.tasksSection")}>
-            <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              <ListChecks className="size-3.5 shrink-0" aria-hidden />
-              <span>{t("workspace.tasks.tasksSection")}</span>
-            </div>
-            {tasks && tasks.tasks.length > 0 ? (
-              <AgentTaskItems snapshot={tasks} />
-            ) : (
-              <p className="text-sm text-muted-foreground">{t("workspace.tasks.emptyTasks")}</p>
-            )}
-          </section>
-
-          <section aria-label={t("workspace.tasks.toolsSection")}>
-            <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              <Wrench className="size-3.5 shrink-0" aria-hidden />
-              <span>{t("workspace.tasks.toolsSection")}</span>
-            </div>
-            {toolItems.length > 0 ? (
-              <ToolActivityTimeline toolCalls={[...toolItems]} taskSnapshot={tasks} />
-            ) : (
-              <p className="text-sm text-muted-foreground">{t("workspace.tasks.emptyTools")}</p>
-            )}
-          </section>
+          {tasks && tasks.tasks.length > 0 ? (
+            <AgentTaskItems snapshot={tasks} />
+          ) : (
+            <p className="text-sm text-muted-foreground">{t("workspace.tasks.emptyTasks")}</p>
+          )}
         </div>
       </div>
     </aside>

@@ -26,16 +26,6 @@ vi.mock("@/hooks/useIssueEditor", () => ({
   }),
 }));
 
-vi.mock("@/components/agent-activity/ToolActivityTimeline", () => ({
-  ToolActivityTimeline: ({ toolCalls }: { toolCalls: AssistantToolCall[] }) => (
-    <div data-testid="tool-activity-timeline">
-      {toolCalls.map((call, index) => (
-        <div key={`${call.name}-${index}`}>{call.name}</div>
-      ))}
-    </div>
-  ),
-}));
-
 const snapshot: AgentTaskSnapshot = {
   source: "plan",
   tasks: [
@@ -121,7 +111,7 @@ describe("IssueTasksDock", () => {
     await initTestI18n("en");
   });
 
-  it("toggles open from the toolbar and shows the task checklist plus tool items", async () => {
+  it("toggles open from the toolbar and shows the task checklist without tool activity", async () => {
     const user = userEvent.setup();
     let openIssueIdentifier: string | null = null;
     const toggleTasks = vi.fn((issueIdentifier: string) => {
@@ -140,13 +130,12 @@ describe("IssueTasksDock", () => {
     rerender(<TasksDockHarness dockControls={{ openIssueIdentifier: "510", toggleTasks }} />);
 
     expect(screen.getByTestId("tasks-dock")).toBeInTheDocument();
-    expect(screen.getByText("Tasks & tools")).toBeInTheDocument();
+    expect(screen.getByText("Tasks")).toBeInTheDocument();
     expect(screen.getByText("Verify branches integrated")).toBeInTheDocument();
     expect(screen.getByText("Remove workspace clones")).toBeInTheDocument();
     expect(screen.getByText("1/2 done")).toBeInTheDocument();
-    expect(screen.getByTestId("tool-activity-timeline")).toBeInTheDocument();
-    expect(screen.getByText("shell")).toBeInTheDocument();
-    expect(screen.getByText("read_file")).toBeInTheDocument();
+    expect(screen.queryByText("shell")).not.toBeInTheDocument();
+    expect(screen.queryByText("read_file")).not.toBeInTheDocument();
   });
 
   it("closes from the dock header button", async () => {
@@ -155,11 +144,11 @@ describe("IssueTasksDock", () => {
 
     render(<TasksDockHarness dockControls={{ openIssueIdentifier: "510", toggleTasks }} />);
 
-    await user.click(screen.getByRole("button", { name: "Close tasks and tools panel" }));
+    await user.click(screen.getByRole("button", { name: "Close tasks panel" }));
     expect(toggleTasks).toHaveBeenCalledWith("510");
   });
 
-  it("shows empty states when the session has no tasks or tools", () => {
+  it("shows the empty state when the session has no tasks", () => {
     render(
       <TasksDockHarness
         dockControls={{ openIssueIdentifier: "510", toggleTasks: vi.fn() }}
@@ -169,6 +158,5 @@ describe("IssueTasksDock", () => {
     );
 
     expect(screen.getByText("No agent tasks for this session yet.")).toBeInTheDocument();
-    expect(screen.getByText("No tool activity for this session yet.")).toBeInTheDocument();
   });
 });
