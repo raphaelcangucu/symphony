@@ -23,6 +23,7 @@ defmodule SymphonyElixir.Orchestrator do
     Workspace
   }
 
+  alias SymphonyElixir.Agent.ExecutionSession
   alias SymphonyElixir.Evidence
   alias SymphonyElixir.GitHub.IssueMarker
   alias SymphonyElixir.LocalTracker.{Context, IssueMapper, Repository}
@@ -151,10 +152,14 @@ defmodule SymphonyElixir.Orchestrator do
             :normal ->
               Logger.info("Agent task completed for issue_id=#{issue_id} session_id=#{session_id}; checking completion transition")
 
+              finish_execution_session(running_entry, execution_completion_status(running_entry))
+
               apply_normal_completion(state, running_entry, issue_id)
 
             _ ->
               Logger.warning("Agent task exited for issue_id=#{issue_id} session_id=#{session_id} reason=#{inspect(reason)}; scheduling retry")
+
+              finish_execution_session(running_entry, "aborted")
 
               unless WorkerFailure.crash_exception?(reason) do
                 record_session_abort(
@@ -575,6 +580,62 @@ defmodule SymphonyElixir.Orchestrator do
   end
 
   defp running_entry_workspace(_running_entry), do: nil
+
+  # Best-effort: give every orchestrator run its own persistent execution
+  # session (own id, channel, log path). A failure here must never abort the
+  # dispatch that is already underway, so all errors are swallowed and logged.
+  defp attach_execution_session(running_entry, %Issue{} = issue, bundle_ctx) do
+    case running_entry_workspace(running_entry) do
+      workspace when is_binary(workspace) and workspace != "" ->
+        case ExecutionSession.ensure(issue.project_slug, issue.identifier,
+               workspace_path: workspace,
+               agent_kind: Map.get(running_entry, :agent_kind),
+               unit_id: bundle_ctx.unit_id,
+               bundle_role: to_string(bundle_ctx.role)
+             ) do
+          {:ok, session} -> Map.put(running_entry, :execution_session_id, session.id)
+          {:error, _reason} -> running_entry
+        end
+
+      _ ->
+        running_entry
+    end
+  rescue
+    error ->
+      Logger.warning("ExecutionSession.ensure failed: #{Exception.message(error)}")
+      running_entry
+  end
+
+  # Best-effort terminal-status update for a run's execution session. No-ops when
+  # the run has no execution session id, and never raises into the caller.
+  defp finish_execution_session(running_entry, status)
+       when is_map(running_entry) and is_binary(status) do
+    case Map.get(running_entry, :execution_session_id) do
+      id when is_integer(id) ->
+        try do
+          ExecutionSession.finish(id, status)
+        rescue
+          error -> Logger.warning("ExecutionSession.finish failed: #{Exception.message(error)}")
+        end
+
+        :ok
+
+      _ ->
+        :ok
+    end
+  end
+
+  defp finish_execution_session(_running_entry, _status), do: :ok
+
+  defp execution_completion_status(running_entry) when is_map(running_entry) do
+    case Map.get(running_entry, :agent_outcome) do
+      {:error, _} -> "aborted"
+      {:incomplete, _} -> "aborted"
+      _ -> "completed"
+    end
+  end
+
+  defp execution_completion_status(_running_entry), do: "completed"
 
   defp choose_issues(issues, state) do
     candidates = DispatchOrder.sort(issues)
@@ -1009,7 +1070,11 @@ defmodule SymphonyElixir.Orchestrator do
           )
         end
 
-        running = Map.put(state.running, issue.id, dispatch_running_entry(pid, ref, issue, agent_kind, attempt, bundle_ctx))
+        running_entry =
+          dispatch_running_entry(pid, ref, issue, agent_kind, attempt, bundle_ctx)
+          |> attach_execution_session(issue, bundle_ctx)
+
+        running = Map.put(state.running, issue.id, running_entry)
 
         claimed = MapSet.put(state.claimed, issue.id)
 
@@ -1044,6 +1109,7 @@ defmodule SymphonyElixir.Orchestrator do
       agent_goal: Map.get(issue, :agent_goal),
       goal: nil,
       session_id: nil,
+      execution_session_id: nil,
       last_codex_message: nil,
       last_codex_timestamp: nil,
       last_codex_event: nil,
@@ -2715,6 +2781,7 @@ defmodule SymphonyElixir.Orchestrator do
 
         running_entry = Map.get(state.running, issue_id)
         record_session_abort(running_entry, "user_stop", "Stopped manually via hard reset")
+        finish_execution_session(running_entry, "aborted")
 
         # Terminate clears the paused flag, so mark AFTER so the poll loop won't
         # silently re-dispatch this issue until an explicit resume/dispatch.
