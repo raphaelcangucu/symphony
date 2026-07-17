@@ -7,6 +7,18 @@ defmodule SymphonyElixir.AgentExecutionTest do
   alias SymphonyElixir.SessionEvents
   alias SymphonyElixir.Workspace
 
+  defmodule SnapshotStub do
+    use GenServer
+
+    def start_link(snapshot), do: GenServer.start_link(__MODULE__, snapshot, name: __MODULE__)
+
+    @impl true
+    def init(snapshot), do: {:ok, snapshot}
+
+    @impl true
+    def handle_call(:snapshot, _from, snapshot), do: {:reply, snapshot, snapshot}
+  end
+
   setup do
     previous_sessions_dir = Application.get_env(:symphony_elixir, :codex_sessions_dir)
 
@@ -437,10 +449,48 @@ defmodule SymphonyElixir.AgentExecutionTest do
     end
   end
 
+  describe "list/2 derivation from persisted execution sessions" do
+    alias Ecto.Adapters.SQL
+    alias SymphonyElixir.Agent.ExecutionSession
+    alias SymphonyElixir.Repo
+
+    setup do
+      migrate_repo()
+      SQL.query!(Repo, "DELETE FROM assistant_threads", [])
+      :ok
+    end
+
+    test "derives an interrupted row from a real execution session, not workspace-log scanning" do
+      {:ok, session} =
+        ExecutionSession.ensure("advising", "CDE-9999",
+          workspace_path: "/tmp/advising/CDE-9999",
+          agent_kind: "codex"
+        )
+
+      {:ok, _finished} = ExecutionSession.finish(session.id, "aborted")
+
+      start_supervised!({SnapshotStub, %{running: [], retrying: []}})
+
+      executions = AgentExecution.list(SnapshotStub, 1_000)
+      row = Enum.find(executions, &(&1.issue_identifier == "CDE-9999"))
+
+      assert row
+      assert row.status == :aborted
+      assert row.session_id == to_string(session.id)
+    end
+  end
+
   defp write_rollout!(sessions_dir, thread_id) do
     path = Path.join([sessions_dir, "2026", "rollout-#{thread_id}.jsonl"])
     File.mkdir_p!(Path.dirname(path))
     File.write!(path, ~s({"type":"event_msg","payload":{"type":"task_started"}}\n))
     :ok
+  end
+
+  defp migrate_repo do
+    {:ok, _repo, _apps} =
+      Ecto.Migrator.with_repo(SymphonyElixir.Repo, fn repo ->
+        Ecto.Migrator.run(repo, :up, all: true)
+      end)
   end
 end

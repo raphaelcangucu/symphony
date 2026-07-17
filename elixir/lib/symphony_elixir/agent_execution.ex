@@ -13,6 +13,7 @@ defmodule SymphonyElixir.AgentExecution do
   which signals an unexpected interruption/failure that needs attention.
   """
 
+  alias SymphonyElixir.Agent.ExecutionSession
   alias SymphonyElixir.AgentRouting
   alias SymphonyElixir.AgentRunner
   alias SymphonyElixir.Claude.GoalStore, as: ClaudeGoalStore
@@ -99,12 +100,63 @@ defmodule SymphonyElixir.AgentExecution do
 
   defp executions_from_snapshot(snapshot) do
     live = from_snapshot(snapshot)
-    interrupted = interrupted_executions(snapshot)
-    covered = MapSet.new(live ++ interrupted, & &1.issue_identifier)
+    live_covered = MapSet.new(live, & &1.issue_identifier)
+    persisted = persisted_execution_sessions(live_covered)
+
+    covered =
+      MapSet.union(live_covered, MapSet.new(persisted, & &1.issue_identifier))
+
     waiting = subagent_executions(snapshot, [])
 
-    live ++ interrupted ++ saved_goal_executions(snapshot, covered) ++ waiting
+    live ++ persisted ++ saved_goal_executions(snapshot, covered) ++ waiting
   end
+
+  # Interrupted/aborted executions now come from REAL persisted execution
+  # sessions (orchestrator-created), never from scanning a shared working tree's
+  # session log. That eliminates the phantom "aborted" row that appeared when an
+  # interactive session merely shared the issue's canonical working tree.
+  defp persisted_execution_sessions(covered) do
+    ExecutionSession.recent_non_live()
+    |> Enum.filter(&(&1.status == "error"))
+    |> Enum.reject(fn session -> MapSet.member?(covered, session.issue_identifier) end)
+    |> Enum.map(&execution_from_session/1)
+  end
+
+  defp execution_from_session(session) do
+    %{
+      issue_id: nil,
+      issue_identifier: session.issue_identifier,
+      status: session_execution_status(session.status),
+      session_id: to_string(session.id),
+      last_event: nil,
+      last_message: nil,
+      last_event_at: session.updated_at,
+      turn_count: 0,
+      runtime_seconds: nil,
+      started_at: session.inserted_at,
+      retry_attempt: 0,
+      error: nil,
+      agent_kind: session.agent_kind,
+      model: nil,
+      goal: nil,
+      long_running: false,
+      long_running_kind: nil,
+      long_running_label: nil,
+      parent_identifier: nil,
+      bundle_role: :standalone,
+      unit_id: session_unit_id(session),
+      repo: nil,
+      child_identifiers: [],
+      tokens: nil
+    }
+  end
+
+  defp session_execution_status("error"), do: :aborted
+  defp session_execution_status("closed"), do: :saved
+  defp session_execution_status(_status), do: :aborted
+
+  defp session_unit_id(%{metadata: %{"unit_id" => unit_id}}) when is_binary(unit_id), do: unit_id
+  defp session_unit_id(_session), do: nil
 
   @doc """
   Projects the dependency-gated subagent units of in-flight coordinator parents
@@ -355,21 +407,6 @@ defmodule SymphonyElixir.AgentExecution do
 
   defp live?(_last_event_at, _now), do: false
 
-  defp interrupted_executions(%{running: running, retrying: retrying}) do
-    active_identifiers =
-      (running ++ retrying)
-      |> Enum.map(&Map.get(&1, :identifier))
-      |> Enum.reject(&is_nil/1)
-      |> MapSet.new()
-
-    Context.list_routable_non_terminal_issues()
-    |> Enum.reject(fn record -> MapSet.member?(active_identifiers, record.identifier) end)
-    |> Enum.filter(&interrupted_issue?/1)
-    |> Enum.map(&interrupted_execution/1)
-  end
-
-  defp interrupted_executions(_snapshot), do: []
-
   # Issues that own a durable Codex goal thread (persisted `agent_session_id`)
   # whose goal can be projected from native Codex data (the workspace goal mirror
   # for Codex, or `agent_goal` workflow guidance for Claude/Cursor) but have no
@@ -446,21 +483,6 @@ defmodule SymphonyElixir.AgentExecution do
 
   defp present?(value) when is_binary(value), do: String.trim(value) != ""
   defp present?(_value), do: false
-
-  defp interrupted_issue?(%{} = record) do
-    issue = IssueMapper.to_issue(record)
-
-    with true <- issue_in_active_state?(record, issue),
-         true <- AgentRouting.routable?(issue.labels),
-         workspace when is_binary(workspace) <- Workspace.path_for_issue(issue),
-         true <- File.dir?(workspace),
-         {:ok, agent_kind, path} <- SessionLog.resolve_log_source(issue.agent_kind || "codex", workspace),
-         true <- session_log_interrupted?(agent_kind, path, workspace) do
-      true
-    else
-      _ -> false
-    end
-  end
 
   defp issue_in_active_state?(record, issue) do
     case record.project do
@@ -607,98 +629,6 @@ defmodule SymphonyElixir.AgentExecution do
   end
 
   defp completed_recently?(_titles), do: false
-
-  defp interrupted_execution(record) do
-    issue = IssueMapper.to_issue(record)
-    workspace = Workspace.path_for_issue(issue)
-    {:ok, agent_kind, _path} = SessionLog.resolve_log_source(issue.agent_kind || "codex", workspace)
-
-    abort_info = session_log_abort_info(%{issue: issue, agent_kind: agent_kind, identifier: record.identifier})
-
-    case abort_info do
-      %{kind: :user_stop} ->
-        goal = build_goal(agent_kind, "paused", record.agent_goal, workspace)
-        paused_execution(record, agent_kind, goal)
-
-      _ ->
-        goal = build_goal(agent_kind, "interrupted", record.agent_goal, workspace)
-        aborted_execution(record, agent_kind, goal, abort_info)
-    end
-  end
-
-  # Operator paused the run on purpose: benign, resumable, keeps the parked goal.
-  defp paused_execution(record, agent_kind, goal) do
-    %{
-      issue_id: to_string(record.id),
-      issue_identifier: record.identifier,
-      status: :paused,
-      session_id: record.agent_session_id,
-      last_event: @paused_last_event,
-      last_message: @paused_message,
-      last_event_at: record.updated_at,
-      turn_count: 0,
-      runtime_seconds: nil,
-      started_at: nil,
-      retry_attempt: 0,
-      error: nil,
-      agent_kind: agent_kind,
-      model: resolve_record_model(record),
-      goal: goal,
-      long_running: not is_nil(goal),
-      long_running_kind: long_running_kind(goal),
-      long_running_label: if(is_nil(goal), do: nil, else: @paused_label),
-      parent_identifier: nil,
-      bundle_role: :standalone,
-      unit_id: nil,
-      repo: nil,
-      child_identifiers: [],
-      tokens: nil
-    }
-  end
-
-  defp aborted_execution(record, agent_kind, goal, abort_info) do
-    %{
-      issue_id: to_string(record.id),
-      issue_identifier: record.identifier,
-      status: :aborted,
-      session_id: record.agent_session_id,
-      last_event: "turn_aborted",
-      last_message:
-        case abort_info do
-          %{kind: :run_failed, summary: summary} when is_binary(summary) and summary != "" -> summary
-          %{summary: summary} when is_binary(summary) and summary != "" -> "Turn aborted — #{summary}"
-          _ -> "Agent run interrupted — resume from the session log"
-        end,
-      last_event_at: record.updated_at,
-      turn_count: 0,
-      runtime_seconds: nil,
-      started_at: nil,
-      retry_attempt: 0,
-      error:
-        case abort_info do
-          %{kind: :run_failed, summary: summary} when is_binary(summary) and summary != "" ->
-            "#{summary}. Use Resume in the execution panel."
-
-          %{summary: summary} when is_binary(summary) and summary != "" ->
-            "Turn aborted — #{summary}. Use Resume in the execution panel."
-
-          _ ->
-            "Agent run interrupted — use Resume in the execution panel"
-        end,
-      agent_kind: agent_kind,
-      model: resolve_record_model(record),
-      goal: goal,
-      long_running: not is_nil(goal),
-      long_running_kind: long_running_kind(goal),
-      long_running_label: if(is_nil(goal), do: nil, else: "Interrupted"),
-      parent_identifier: nil,
-      bundle_role: :standalone,
-      unit_id: nil,
-      repo: nil,
-      child_identifiers: [],
-      tokens: nil
-    }
-  end
 
   defp normalize_status_name(value) when is_binary(value),
     do: value |> String.trim() |> String.downcase()
