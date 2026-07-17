@@ -15,11 +15,17 @@ defmodule SymphonyElixirWeb.Tracker.CredentialsController do
   alias SymphonyElixir.GitHub.Config, as: GitHubConfig
   alias SymphonyElixir.Jira.Config, as: JiraConfig
   alias SymphonyElixir.Linear.Config, as: LinearConfig
+  alias SymphonyElixir.Notion.Config, as: NotionConfig
   alias SymphonyElixir.Settings.Credentials
   alias SymphonyElixir.Tracker.Identity
   alias SymphonyElixirWeb.TrackerErrors
 
-  @provider_labels %{"github" => "GitHub", "jira" => "Jira", "linear" => "Linear"}
+  @provider_labels %{
+    "github" => "GitHub",
+    "jira" => "Jira",
+    "linear" => "Linear",
+    "notion" => "Notion"
+  }
 
   @spec index(Conn.t(), map()) :: Conn.t()
   def index(conn, _params) do
@@ -94,6 +100,7 @@ defmodule SymphonyElixirWeb.Tracker.CredentialsController do
   defp effective_value("jira", "email"), do: JiraConfig.email()
   defp effective_value("jira", "api_token"), do: JiraConfig.api_token()
   defp effective_value("linear", "api_key"), do: LinearConfig.api_key()
+  defp effective_value("notion", "api_key"), do: NotionConfig.api_key()
   defp effective_value(_provider, _key), do: nil
 
   defp mask(value) when is_binary(value) do

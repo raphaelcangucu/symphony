@@ -48,6 +48,14 @@ defmodule SymphonyElixir.Settings.CredentialsTest do
     assert Credentials.get("telegram", "bot_token") == "123:abc"
   end
 
+  test "notion integration token is a known encrypted credential" do
+    assert Credentials.field?("notion", "api_key")
+    assert Credentials.secret_field?("notion", "api_key")
+
+    assert {:ok, :stored} = Credentials.put("notion", "api_key", "secret_notion_token")
+    assert Credentials.get("notion", "api_key") == "secret_notion_token"
+  end
+
   test "provider Config reads prefer the stored credential over the env var" do
     previous = System.get_env("GITHUB_TOKEN")
     System.put_env("GITHUB_TOKEN", "env-token")
