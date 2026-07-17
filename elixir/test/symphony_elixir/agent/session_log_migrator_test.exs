@@ -19,14 +19,15 @@ defmodule SymphonyElixir.Agent.SessionLogMigratorTest do
     content = ~s({"type":"assistant","text":"hello"}\n)
     File.write!(source_path, content)
 
-    {:ok, thread} = insert_thread!(workspace, "advising", "CDE-MIG-1")
+    {:ok, thread} = insert_thread!(workspace, "advising", "CDE-MIG-1", "issue_execution")
 
     result =
       SessionLogMigrator.migrate(
-        resolve: fn _thread -> {:ok, "codex", source_path} end
+        resolve: fn _thread -> {:ok, "codex", source_path} end,
+        candidates: []
       )
 
-    assert result == %{migrated: 1, skipped: 0, errors: 0}
+    assert result == %{created: 0, migrated: 1, skipped: 0, errors: 0}
 
     dest = SessionStore.transcript_path(workspace, thread.id)
     assert File.regular?(dest)
@@ -38,7 +39,7 @@ defmodule SymphonyElixir.Agent.SessionLogMigratorTest do
     source_path = Path.join(workspace, "source.jsonl")
     File.write!(source_path, ~s({"type":"assistant","text":"source"}\n))
 
-    {:ok, thread} = insert_thread!(workspace, "advising", "CDE-MIG-2")
+    {:ok, thread} = insert_thread!(workspace, "advising", "CDE-MIG-2", "issue_execution")
 
     existing = ~s({"type":"assistant","text":"already-here"}\n)
     dest = SessionStore.transcript_path(workspace, thread.id)
@@ -47,10 +48,11 @@ defmodule SymphonyElixir.Agent.SessionLogMigratorTest do
 
     result =
       SessionLogMigrator.migrate(
-        resolve: fn _thread -> {:ok, "codex", source_path} end
+        resolve: fn _thread -> {:ok, "codex", source_path} end,
+        candidates: []
       )
 
-    assert result == %{migrated: 0, skipped: 1, errors: 0}
+    assert result == %{created: 0, migrated: 0, skipped: 1, errors: 0}
     assert File.read!(dest) == existing
   end
 
@@ -59,27 +61,99 @@ defmodule SymphonyElixir.Agent.SessionLogMigratorTest do
     source_path = Path.join(workspace, "source.jsonl")
     File.write!(source_path, ~s({"type":"assistant","text":"dry"}\n))
 
-    {:ok, thread} = insert_thread!(workspace, "advising", "CDE-MIG-3")
+    {:ok, thread} = insert_thread!(workspace, "advising", "CDE-MIG-3", "issue_execution")
 
     result =
       SessionLogMigrator.migrate(
         dry_run: true,
-        resolve: fn _thread -> {:ok, "codex", source_path} end
+        resolve: fn _thread -> {:ok, "codex", source_path} end,
+        candidates: []
       )
 
-    assert result == %{migrated: 1, skipped: 0, errors: 0}
+    assert result == %{created: 0, migrated: 1, skipped: 0, errors: 0}
     refute SessionStore.exists?(workspace, thread.id)
   end
 
-  defp insert_thread!(workspace, project_slug, identifier) do
+  test "creates a historical issue_execution and seeds its transcript" do
+    workspace = tmp_workspace!("create-exec")
+    source_path = Path.join(workspace, "source.jsonl")
+    content = ~s({"type":"assistant","text":"exec-seed"}\n)
+    File.write!(source_path, content)
+
+    {:ok, _session} = insert_thread!(workspace, "advising", "CDE-MIG-4", "issue_session")
+
+    result =
+      SessionLogMigrator.migrate(
+        resolve: fn _thread -> {:ok, "codex", source_path} end,
+        candidates: [
+          %{
+            project_slug: "advising",
+            issue_identifier: "CDE-MIG-4",
+            workspace_path: workspace,
+            agent_kind: "codex",
+            title: "Migrate me"
+          }
+        ]
+      )
+
+    assert result.created == 1
+    assert result.errors == 0
+
+    execution =
+      Repo.get_by(Thread,
+        scope: "issue_execution",
+        project_slug: "advising",
+        issue_identifier: "CDE-MIG-4"
+      )
+
+    assert execution
+    assert execution.status == "error"
+    assert execution.metadata["origin"] == "migration"
+    assert SessionStore.exists?(workspace, execution.id)
+    assert File.read!(SessionStore.transcript_path(workspace, execution.id)) == content
+  end
+
+  test "does not create a second issue_execution when one already exists" do
+    workspace = tmp_workspace!("exists")
+    source_path = Path.join(workspace, "source.jsonl")
+    File.write!(source_path, ~s({"type":"assistant","text":"x"}\n))
+
+    {:ok, existing} = insert_thread!(workspace, "advising", "CDE-MIG-5", "issue_execution")
+
+    result =
+      SessionLogMigrator.migrate(
+        resolve: fn _thread -> {:ok, "codex", source_path} end,
+        candidates: [
+          %{
+            project_slug: "advising",
+            issue_identifier: "CDE-MIG-5",
+            workspace_path: workspace,
+            agent_kind: "codex",
+            title: "Already"
+          }
+        ]
+      )
+
+    assert result.created == 0
+
+    ids =
+      Repo.all(Thread)
+      |> Enum.filter(&(&1.scope == "issue_execution" and &1.issue_identifier == "CDE-MIG-5"))
+      |> Enum.map(& &1.id)
+
+    assert ids == [existing.id]
+  end
+
+  defp insert_thread!(workspace, project_slug, identifier, scope) do
     %Thread{}
     |> Thread.changeset(%{
-      scope: "issue_execution",
+      scope: scope,
       project_slug: project_slug,
       issue_identifier: identifier,
       workspace_path: workspace,
       agent_kind: "codex",
-      status: "active"
+      status: "active",
+      title: identifier
     })
     |> Repo.insert()
   end

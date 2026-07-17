@@ -118,7 +118,6 @@ defmodule SymphonyElixir.AgentExecution do
   # interactive session merely shared the issue's canonical working tree.
   defp persisted_execution_sessions(covered) do
     ExecutionSession.recent_non_live()
-    |> Enum.filter(&(&1.status == "error"))
     |> Enum.reject(fn session -> MapSet.member?(covered, session.issue_identifier) end)
     |> Enum.map(&execution_from_session/1)
   end

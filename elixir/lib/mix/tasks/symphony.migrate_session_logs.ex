@@ -27,7 +27,8 @@ defmodule Mix.Tasks.Symphony.MigrateSessionLogs do
 
     Mix.shell().info(
       "Session log migration complete: " <>
-        "migrated=#{result.migrated} skipped=#{result.skipped} errors=#{result.errors}"
+        "created=#{Map.get(result, :created, 0)} migrated=#{result.migrated} " <>
+        "skipped=#{result.skipped} errors=#{result.errors}"
     )
   end
 

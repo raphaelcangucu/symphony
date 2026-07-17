@@ -95,10 +95,13 @@ defmodule SymphonyElixir.Tracker.ProjectSessions do
       |> List.wrap()
       |> Enum.flat_map(&execution_row(project_slug, &1))
 
+    # Real issue_execution Threads already appear via thread_rows/3. Cover those
+    # identifiers so workspace-log discovery does not emit a duplicate exec:<id>.
     covered =
       agent_rows
       |> Enum.map(& &1.issue_identifier)
       |> MapSet.new()
+      |> MapSet.union(issue_execution_identifiers(project_slug))
 
     workspace_rows =
       list_workspace_sessions.()
@@ -116,18 +119,32 @@ defmodule SymphonyElixir.Tracker.ProjectSessions do
     agent_rows ++ workspace_rows
   end
 
+  defp issue_execution_identifiers(project_slug) when is_binary(project_slug) do
+    History.list_threads(
+      project_slug: project_slug,
+      scopes: ["issue_execution"],
+      include_archived: true,
+      limit: 500
+    )
+    |> Enum.map(& &1.issue_identifier)
+    |> Enum.reject(&(is_nil(&1) or &1 == ""))
+    |> MapSet.new()
+  end
+
   defp execution_row(project_slug, execution) when is_map(execution) do
     identifier = execution_identifier(execution)
 
     with true <- is_binary(identifier) and identifier != "",
          {:ok, issue} <- Context.get_issue(project_slug, identifier),
          {:ok, updated_at} <- execution_updated_at(execution) do
+      {id, href} = execution_identity(project_slug, identifier, execution)
+
       [
         %{
-          id: "exec:#{identifier}",
+          id: id,
           title: issue.title || identifier,
           kind: "execution",
-          href: autonomous_execution_href(project_slug, identifier),
+          href: href,
           updated_at: format_datetime(updated_at),
           aggregate_status: execution_status(execution),
           agent_kind: execution_agent_kind(execution),
@@ -145,6 +162,18 @@ defmodule SymphonyElixir.Tracker.ProjectSessions do
   end
 
   defp execution_row(_project_slug, _execution), do: []
+
+  # Prefer the real issue_execution Thread id when present so deep links and the
+  # sidebar address /workspaces/<id> instead of the legacy ?exec= synthetic id.
+  defp execution_identity(project_slug, identifier, execution) do
+    case Map.get(execution, :execution_session_id) do
+      session_id when is_integer(session_id) and session_id > 0 ->
+        {"thread:#{session_id}", "/projects/#{project_slug}/workspaces/#{session_id}"}
+
+      _ ->
+        {"exec:#{identifier}", autonomous_execution_href(project_slug, identifier)}
+    end
+  end
 
   defp autonomous_execution_href(project_slug, identifier) do
     "/projects/#{project_slug}/workspaces?exec=#{URI.encode_www_form(identifier)}&surface=autonomous"
