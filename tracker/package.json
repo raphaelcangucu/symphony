@@ -57,7 +57,8 @@
     "tailwind-merge": "latest",
     "tailwindcss": "latest",
     "tiptap-markdown": "^0.9.0",
-    "zod": "latest"
+    "zod": "latest",
+    "zustand": "^5.0.14"
   },
   "devDependencies": {
     "@eslint/js": "latest",

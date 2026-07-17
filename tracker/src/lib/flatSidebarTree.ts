@@ -178,6 +178,7 @@ function sessionNodeFromRow(
 ): SidebarSessionNode {
   const updatedAt = validTimestampString(row.updatedAt);
   const statusKind = normalizeRecentStatus(row.aggregateStatus);
+  const sessionKind = sessionKindFromRow(row.kind);
   const id = row.id;
 
   return {
@@ -185,7 +186,7 @@ function sessionNodeFromRow(
     id,
     projectSlug,
     workspaceId: row.workspaceId,
-    sessionKind: sessionKindFromRow(row.kind),
+    sessionKind,
     title: nonBlank(row.title) ?? sessionFallbackTitle(parseThreadId(id)),
     subtitle: row.issueIdentifier ?? row.workspacePath ?? projectTitle,
     href: row.href,
@@ -196,7 +197,7 @@ function sessionNodeFromRow(
     threadId: parseThreadId(id),
     issueIdentifier: row.issueIdentifier,
     archived: row.archived,
-    unread: unreadFromLastRead(id, updatedAt, options, statusKind !== "idle" && statusKind !== "done" && statusKind !== "closed"),
+    unread: unreadFromLastRead(id, updatedAt, options, unreadWhenMissingForSession(sessionKind)),
     needsReview: false,
     labels: null,
     issueLabelNames: null,
@@ -280,6 +281,16 @@ function normalizeRecentStatus(status: string | null | undefined): RecentStatusK
       return normalized === "live" ? "running" : normalized;
     default:
       return "idle";
+  }
+}
+
+function unreadWhenMissingForSession(sessionKind: SidebarSessionKind): boolean {
+  switch (sessionKind) {
+    case "chat":
+      return true;
+    case "authoring":
+    case "execution":
+      return false;
   }
 }
 

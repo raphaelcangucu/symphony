@@ -171,10 +171,21 @@ import {
   type GoalStatusAcceptor,
 } from "@/services/phoenix/assistantChannel";
 import { createTrackerSocket } from "@/services/phoenix/socket";
+import {
+  getAssistantSessionSnapshot,
+  preferCachedTranscript,
+  putAssistantSessionSnapshot,
+  type AssistantSessionSnapshot,
+} from "@/stores/assistantSessionStore";
 import type { AgentKind, ExecutionMode } from "@/types/issue";
 import { issuePath, type WorkspaceView } from "@/lib/workspaceRoutes";
 import { cn } from "@/lib/utils";
 import { useAssistantCommands } from "@/hooks/useAssistantCommands";
+
+function readThreadCache(threadId: number | null | undefined): AssistantSessionSnapshot | null {
+  if (threadId == null || !Number.isInteger(threadId) || threadId <= 0) return null;
+  return getAssistantSessionSnapshot(threadId);
+}
 
 export type { DraftIssueCreated } from "@/components/assistant/assistantPanelHelpers";
 
@@ -366,7 +377,7 @@ export function ProjectAssistantPanel({
   const gitDiffOpenRequestId = diffRequestId + composerDiffRequestId;
   const [diffFocusPathRequestId, setDiffFocusPathRequestId] = useState(0);
   const [diffFocusPath, setDiffFocusPath] = useState<string | null>(null);
-  const [turnRunning, setTurnRunning] = useState(false);
+  const [turnRunning, setTurnRunning] = useState(() => readThreadCache(threadId)?.turnRunning ?? false);
   const [runningStartedAt, setRunningStartedAt] = useState<number | null>(null);
   const queueStorageKey = queuedMessagesStorageKey({ threadId, issueIdentifier, projectSlug });
   const [queued, setQueued] = useState<QueuedMessage[]>(() => readQueuedMessages(queueStorageKey));
@@ -376,7 +387,9 @@ export function ProjectAssistantPanel({
   const [btw, setBtw] = useState<{ id: string | null; question: string; answer: string; status: BtwStatus } | null>(
     null,
   );
-  const [messages, setMessages] = useState<AssistantChatMessage[]>([]);
+  const [messages, setMessages] = useState<AssistantChatMessage[]>(
+    () => readThreadCache(threadId)?.messages ?? [],
+  );
   const messagesRef = useRef<AssistantChatMessage[]>([]);
   // Coalesces streaming deltas to one render per frame so a fast turn cannot
   // flood the main thread and freeze navigation/composer. Any non-delta event
@@ -391,9 +404,15 @@ export function ProjectAssistantPanel({
   // Compact-history window: by default only the current run is rendered.
   // `historyRevealStartIndex` is null while collapsed; otherwise it is the
   // first visible message index after paginated "load older" reveals.
-  const [historyRevealStartIndex, setHistoryRevealStartIndex] = useState<number | null>(null);
-  const [historyHasMoreBefore, setHistoryHasMoreBefore] = useState(false);
-  const [historyOldestSequence, setHistoryOldestSequence] = useState<number | null>(null);
+  const [historyRevealStartIndex, setHistoryRevealStartIndex] = useState<number | null>(
+    () => readThreadCache(threadId)?.historyRevealStartIndex ?? null,
+  );
+  const [historyHasMoreBefore, setHistoryHasMoreBefore] = useState(
+    () => readThreadCache(threadId)?.historyHasMoreBefore ?? false,
+  );
+  const [historyOldestSequence, setHistoryOldestSequence] = useState<number | null>(
+    () => readThreadCache(threadId)?.historyOldestSequence ?? null,
+  );
   const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
   const pendingPrependScrollRef = useRef<PendingScrollRestore | null>(null);
   const [approvedPlanMessageIds, setApprovedPlanMessageIds] = useState<Set<string>>(() => new Set());
@@ -405,7 +424,9 @@ export function ProjectAssistantPanel({
   const submissionBlocked = turnRunning || goalQueueHeld;
   const goalEnabledRef = useRef(false);
   // The thread's last turn lifecycle state; an interrupted turn surfaces a Resume affordance.
-  const [lastTurn, setLastTurn] = useState<AssistantTurnStatus | null>(null);
+  const [lastTurn, setLastTurn] = useState<AssistantTurnStatus | null>(
+    () => readThreadCache(threadId)?.lastTurn ?? null,
+  );
   const [pendingQuestions, setPendingQuestions] = useState<UserQuestionsRequest | null>(null);
   const [pendingApproval, setPendingApproval] = useState<AssistantApprovalRequest | null>(null);
   const [pendingCreatePlan, setPendingCreatePlan] = useState<AssistantCreatePlanRequest | null>(null);
@@ -782,11 +803,24 @@ export function ProjectAssistantPanel({
     setAuthoringGoal(emptyAuthoringGoal);
     goalEnabledRef.current = false;
     setGoalQueuePermitted(false);
-    setLastTurn(null);
-    setHistoryRevealStartIndex(null);
-    setHistoryHasMoreBefore(false);
-    setHistoryOldestSequence(null);
     setLoadingOlderMessages(false);
+
+    // Remount / channel rebind: keep the ephemeral same-browser cache so the UI
+    // does not flash empty while join history catches up mid-turn.
+    const remountCache = readThreadCache(threadId);
+    if (remountCache) {
+      setMessages(remountCache.messages);
+      setTurnRunning(remountCache.turnRunning);
+      setLastTurn(remountCache.lastTurn);
+      setHistoryRevealStartIndex(remountCache.historyRevealStartIndex);
+      setHistoryHasMoreBefore(remountCache.historyHasMoreBefore);
+      setHistoryOldestSequence(remountCache.historyOldestSequence);
+    } else {
+      setLastTurn(null);
+      setHistoryRevealStartIndex(null);
+      setHistoryHasMoreBefore(false);
+      setHistoryOldestSequence(null);
+    }
 
     const socket = createTrackerSocket();
     socket.connect();
@@ -821,14 +855,24 @@ export function ProjectAssistantPanel({
           skillProfileSelectionRef.current = profile;
         }
         setPrefsApplyNextTurn(false);
+
+        const cached = readThreadCache(threadId);
+        const keepCache = preferCachedTranscript(cached, history);
+        const nextMessages = keepCache && cached ? cached.messages : history;
         setMessagesPreservingScroll(
           scrollRef.current,
           stickToBottomRef,
           pinnedScrollTopRef,
-          history,
+          nextMessages,
           setMessages,
         );
-        setHistoryRevealStartIndex(null);
+        if (keepCache && cached) {
+          setTurnRunning(cached.turnRunning);
+          if (cached.lastTurn) setLastTurn(cached.lastTurn);
+          setHistoryRevealStartIndex(cached.historyRevealStartIndex);
+        } else {
+          setHistoryRevealStartIndex(null);
+        }
         setHistoryHasMoreBefore(meta?.hasMoreBefore ?? false);
         setHistoryOldestSequence(meta?.oldestSequence ?? null);
         setHistoryHydrated(true);
@@ -1507,6 +1551,33 @@ export function ProjectAssistantPanel({
   useEffect(() => {
     messagesRef.current = messages;
   }, [messages]);
+
+  // Ephemeral same-browser cache: survives Workspaces remounts without persisting
+  // transcript to disk. Skip the empty cold-start so we never clobber a richer entry.
+  useEffect(() => {
+    if (threadId == null || !Number.isInteger(threadId) || threadId <= 0) return;
+    if (!historyHydrated && messages.length === 0 && !turnRunning) return;
+
+    putAssistantSessionSnapshot({
+      threadId,
+      messages,
+      turnRunning,
+      lastTurn,
+      historyRevealStartIndex,
+      historyHasMoreBefore,
+      historyOldestSequence,
+      updatedAt: Date.now(),
+    });
+  }, [
+    threadId,
+    messages,
+    turnRunning,
+    lastTurn,
+    historyRevealStartIndex,
+    historyHasMoreBefore,
+    historyOldestSequence,
+    historyHydrated,
+  ]);
 
   const handleLoadOlderMessages = useCallback(() => {
     if (loadingOlderMessages) return;

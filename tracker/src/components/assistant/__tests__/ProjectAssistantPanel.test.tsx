@@ -6,6 +6,10 @@ import { toast } from "sonner";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { fetchAssistantCatalogBundle } from "@/services/assistant";
+import {
+  putAssistantSessionSnapshot,
+  resetAssistantSessionStoreForTests,
+} from "@/stores/assistantSessionStore";
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), message: vi.fn() } }));
 
@@ -255,6 +259,7 @@ beforeAll(async () => {
 describe("ProjectAssistantPanel", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    resetAssistantSessionStoreForTests();
     mockModalFocusPath.current = "";
     window.localStorage.clear();
     if (typeof CSSStyleSheet !== "undefined" && !CSSStyleSheet.prototype.replaceSync) {
@@ -632,6 +637,75 @@ describe("ProjectAssistantPanel", () => {
       "send_message",
       expect.objectContaining({ message: "survive refresh" }),
     );
+  });
+
+  it("keeps a mid-turn cached transcript when join history is shorter", async () => {
+    putAssistantSessionSnapshot({
+      threadId: 8051,
+      messages: [
+        {
+          id: "u1",
+          role: "user",
+          content: "build it",
+          toolCalls: [],
+          metadata: {},
+        },
+        {
+          id: "a1",
+          role: "assistant",
+          content: "Running yarn build…",
+          toolCalls: [
+            {
+              id: "tc1",
+              name: "shell",
+              status: "running",
+              arguments: { command: "yarn build" },
+              output: null,
+              result: {},
+            },
+          ],
+          metadata: {},
+        },
+      ],
+      turnRunning: true,
+      lastTurn: {
+        status: "running",
+        generation: "g1",
+        sessionId: "s1",
+        startedAt: "2026-07-17T10:00:00.000Z",
+        finishedAt: null,
+        canResume: false,
+        activeTools: [
+          {
+            id: "tc1",
+            name: "shell",
+            argumentsSummary: "yarn build",
+            startedAt: "2026-07-17T10:00:01.000Z",
+          },
+        ],
+        lastActivityAt: "2026-07-17T10:00:01.000Z",
+      },
+      historyRevealStartIndex: null,
+      historyHasMoreBefore: false,
+      historyOldestSequence: null,
+      updatedAt: Date.now(),
+    });
+
+    render(<ProjectAssistantPanel projectSlug="macro-markets" threadId={8051} view="board" mode="page" />);
+
+    expect(await screen.findByText("build it")).toBeInTheDocument();
+    expect(screen.getByText(/Running yarn build/)).toBeInTheDocument();
+
+    await waitFor(() => expect(channelHandlers["history_loaded"]).toEqual(expect.any(Function)));
+
+    await act(async () => {
+      channelHandlers["history_loaded"]({
+        messages: [{ id: 1, role: "user", content: "build it", tool_calls: [] }],
+      });
+    });
+
+    // Shorter durable history must not wipe the richer mid-turn cache.
+    expect(screen.getByText(/Running yarn build/)).toBeInTheDocument();
   });
 
   it("moves a queued message back into the composer when edit is clicked", async () => {

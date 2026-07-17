@@ -220,6 +220,59 @@ describe("buildFlatSidebarProject", () => {
     } satisfies Partial<SidebarSessionNode>);
   });
 
+  it("derives unread from session kind, not agent status overlay", () => {
+    const project = buildFlatSidebarProject(
+      buildInput({
+        sessions: [
+          sessionRow({
+            id: "thread:10",
+            kind: "chat",
+            aggregateStatus: "error",
+          }),
+          sessionRow({
+            id: "thread:11",
+            kind: "execution",
+            aggregateStatus: "error",
+            issueIdentifier: "DEMO-10",
+          }),
+          sessionRow({
+            id: "thread:12",
+            kind: "authoring",
+            aggregateStatus: "active",
+            issueIdentifier: "DEMO-11",
+          }),
+        ],
+        options: defaultOptions(),
+      }),
+    );
+
+    const byId = new Map(project.sessions.map((session) => [session.id, session]));
+    expect(byId.get("thread:10")?.unread).toBe(true);
+    expect(byId.get("thread:11")?.unread).toBe(false);
+    expect(byId.get("thread:12")?.unread).toBe(false);
+  });
+
+  it("clears unread for chats once lastReadAt catches up", () => {
+    const project = buildFlatSidebarProject(
+      buildInput({
+        sessions: [
+          sessionRow({
+            id: "thread:10",
+            kind: "chat",
+            updatedAt: "2026-07-14T12:00:00.000000Z",
+          }),
+        ],
+        options: defaultOptions({
+          lastReadAtBySession: {
+            "thread:10": "2026-07-14T13:00:00.000000Z",
+          },
+        }),
+      }),
+    );
+
+    expect(project.sessions[0]?.unread).toBe(false);
+  });
+
   it("preserves nextCursor and leaves workspace children empty for nav", () => {
     const project = buildFlatSidebarProject(
       buildInput({

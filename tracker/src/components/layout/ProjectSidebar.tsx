@@ -1,5 +1,5 @@
 import { KeyRound, PanelLeftClose, PanelLeftOpen } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
 
@@ -86,6 +86,20 @@ export function ProjectSidebar({ variant = "desktop" }: ProjectSidebarProps) {
     () => resolveSidebarRouteSelection(location.pathname, location.search),
     [location.pathname, location.search],
   );
+
+  useEffect(() => {
+    const sessionId = selection.sessionId;
+    if (!sessionId || sessionId.startsWith("exec:")) return;
+
+    const readAt = new Date().toISOString();
+    updatePreferences((current) => ({
+      ...current,
+      lastReadAtBySession: {
+        ...current.lastReadAtBySession,
+        [sessionId]: readAt,
+      },
+    }));
+  }, [selection.sessionId, updatePreferences]);
 
   const expandedProjectIds = useMemo(
     () => new Set(preferences.expandedProjectIds),
