@@ -137,7 +137,7 @@ describe("sidebar route resolution", () => {
     );
   });
 
-  it("selects canonical authoring and execution IDs from workspace search", () => {
+  it("selects authoring IDs from workspace search; autonomous query selects nothing", () => {
     expect(
       resolveSidebarRouteSelection("/projects/demo/workspaces", "?exec=DEMO-1").sessionId,
     ).toBe("authoring:DEMO-1");
@@ -146,17 +146,17 @@ describe("sidebar route resolution", () => {
         "/projects/demo/workspaces",
         "?exec=DEMO-1&surface=autonomous",
       ).sessionId,
-    ).toBe("exec:DEMO-1");
+    ).toBeNull();
     expect(
       resolveSidebarRouteSelection("/projects/demo/workspaces?exec=DEMO-2&agent=execution")
         .sessionId,
-    ).toBe("exec:DEMO-2");
+    ).toBeNull();
     expect(
       resolveSidebarRouteSelection(
         "/projects/demo/workspaces",
         "?exec=%20DEMO-3%20&surface=%20EXECUTION%20",
       ).sessionId,
-    ).toBe("exec:DEMO-3");
+    ).toBeNull();
     expect(
       resolveSidebarRouteSelection(
         "/projects/demo/workspaces",
@@ -171,7 +171,7 @@ describe("sidebar route resolution", () => {
         "/projects/demo/workspaces",
         "?unrelated=%E0%A4%A&exec=DEMO-5&surface=AUTONOMOUS",
       ).sessionId,
-    ).toBe("exec:DEMO-5");
+    ).toBeNull();
     expect(
       resolveSidebarRouteSelection(
         "/projects/demo/workspaces",

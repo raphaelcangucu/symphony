@@ -12,8 +12,18 @@ vi.mock("@/hooks/useWorkspaceDiffStats", () => ({
 }));
 
 vi.mock("@/components/assistant/ProjectAssistantPanel", () => ({
-  ProjectAssistantPanel: ({ diffRequestId }: { diffRequestId?: number }) => (
-    <div data-testid="assistant-panel" data-diff-request-id={diffRequestId ?? 0} />
+  ProjectAssistantPanel: ({
+    diffRequestId,
+    executionMode,
+  }: {
+    diffRequestId?: number;
+    executionMode?: boolean;
+  }) => (
+    <div
+      data-testid={executionMode ? "execution-session-panel" : "assistant-panel"}
+      data-diff-request-id={diffRequestId ?? 0}
+      data-execution-mode={executionMode ? "true" : "false"}
+    />
   ),
 }));
 
@@ -131,5 +141,32 @@ describe("AssistantSessionTabContent", () => {
 
     await user.click(screen.getByRole("button", { name: "Diff" }));
     expect(screen.getByTestId("assistant-panel")).toHaveAttribute("data-diff-request-id", "2");
+  });
+
+  it("passes executionMode for issue_execution threads and does not mount the interactive panel", async () => {
+    getAssistantThreadMock.mockResolvedValue({
+      id: 9001,
+      scope: "issue_execution",
+      agentKind: "codex",
+      projectSlug: "macro-markets",
+      projectName: "Macro Markets",
+      issueIdentifier: "510",
+      title: "Autonomous run",
+      status: "active",
+      preview: null,
+      updatedAt: "2026-07-17T00:00:00Z",
+    });
+
+    render(
+      <MemoryRouter>
+        <SessionTerminalDockContext.Provider value={{ openIssueIdentifier: null, toggleTerminal: vi.fn() }}>
+          <AssistantSessionTabContent projectSlug="macro-markets" threadId={9001} view="board" />
+        </SessionTerminalDockContext.Provider>
+      </MemoryRouter>,
+    );
+
+    const panel = await screen.findByTestId("execution-session-panel");
+    expect(panel).toHaveAttribute("data-execution-mode", "true");
+    expect(screen.queryByTestId("assistant-panel")).toBeNull();
   });
 });

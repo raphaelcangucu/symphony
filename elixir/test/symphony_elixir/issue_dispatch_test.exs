@@ -150,6 +150,37 @@ defmodule SymphonyElixir.IssueDispatchTest do
            end)
   end
 
+  test "hard reset archives the prior issue_execution session so resume opens a new one", %{
+    issue: issue
+  } do
+    alias SymphonyElixir.Agent.ExecutionSession
+    alias SymphonyElixir.Assistant.History
+
+    {:ok, _} = Context.move_issue("pref", issue.identifier, %{"status" => "In Progress"})
+    workspace = Workspace.path_for_issue(%{id: issue.id, identifier: issue.identifier, project_slug: "pref"})
+
+    {:ok, session} =
+      ExecutionSession.ensure("pref", issue.identifier,
+        workspace_path: workspace,
+        agent_kind: "codex"
+      )
+
+    {:ok, project} = Context.get_project("pref")
+    assert {:ok, _result} = IssueDispatch.hard_reset(project, issue.identifier, %{})
+
+    assert {:ok, archived} = History.get_thread(session.id)
+    assert archived.status == "archived"
+
+    {:ok, next} =
+      ExecutionSession.ensure("pref", issue.identifier,
+        workspace_path: workspace,
+        agent_kind: "cursor"
+      )
+
+    assert next.id != session.id
+    assert next.status == "active"
+  end
+
   test "stop pauses the run but preserves the agent session and status", %{issue: issue} do
     {:ok, _} = Context.move_issue("pref", issue.identifier, %{"status" => "In Progress"})
     {:ok, record} = Context.set_agent_session_id("pref", issue.identifier, "thread-keep")
@@ -195,6 +226,48 @@ defmodule SymphonyElixir.IssueDispatchTest do
     assert settings.model == "gpt-5.4"
     assert settings.effort == "high"
     assert settings.mode == "plan"
+  end
+
+  test "resume without opts agent uses the execution thread agent_kind", %{issue: issue} do
+    alias SymphonyElixir.Agent.ExecutionSession
+
+    {:ok, _} = Context.move_issue("pref", issue.identifier, %{"status" => "In Progress"})
+    {:ok, _} = Context.update_issue("pref", issue.identifier, %{"labels" => ["symphony:claude"]})
+    workspace = Workspace.path_for_issue(%{id: issue.id, identifier: issue.identifier, project_slug: "pref"})
+
+    {:ok, _session} =
+      ExecutionSession.ensure("pref", issue.identifier,
+        workspace_path: workspace,
+        agent_kind: "cursor"
+      )
+
+    {:ok, project} = Context.get_project("pref")
+
+    assert {:ok, _result} = IssueDispatch.resume(project, issue.identifier, %{})
+
+    assert {:ok, settings} = Context.get_agent_settings("pref", issue.identifier)
+    assert settings.agent_kind == "cursor"
+  end
+
+  test "resume opts agent still wins over the execution thread agent_kind", %{issue: issue} do
+    alias SymphonyElixir.Agent.ExecutionSession
+
+    {:ok, _} = Context.move_issue("pref", issue.identifier, %{"status" => "In Progress"})
+    workspace = Workspace.path_for_issue(%{id: issue.id, identifier: issue.identifier, project_slug: "pref"})
+
+    {:ok, _session} =
+      ExecutionSession.ensure("pref", issue.identifier,
+        workspace_path: workspace,
+        agent_kind: "cursor"
+      )
+
+    {:ok, project} = Context.get_project("pref")
+
+    assert {:ok, _result} =
+             IssueDispatch.resume(project, issue.identifier, %{agent: "claude"})
+
+    assert {:ok, settings} = Context.get_agent_settings("pref", issue.identifier)
+    assert settings.agent_kind == "claude"
   end
 
   test "resume coerces an invalid mode to the default", %{issue: issue} do

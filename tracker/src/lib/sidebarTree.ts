@@ -2,7 +2,6 @@ import { recentSessionPath } from "@/components/layout/recentSessionPath";
 import { buildWorkspaceCards, type WorkspaceCard } from "@/lib/workspaceCards";
 import {
   projectAuthoringSessionPath,
-  projectExecutionSessionPath,
   projectSessionPath,
   projectSessionsPath,
   workspaceBasePath,
@@ -825,8 +824,10 @@ function sessionNodesFromCard(
   projectThreads: readonly AssistantThread[],
 ): Array<{ session: SidebarSessionNode; sourceThread?: AssistantThread }> {
   const sessions: Array<{ session: SidebarSessionNode; sourceThread?: AssistantThread }> = [];
+  const executionThreadId = card.execution?.execution.executionSessionId ?? null;
   if (card.execution) {
-    sessions.push({ session: executionSessionNode(card, workspaceId, input) });
+    const executionNode = executionSessionNode(card, workspaceId, input);
+    if (executionNode) sessions.push({ session: executionNode });
   }
   if (card.authoring) {
     const sourceRecent = authoringRecentByIssue.get(card.authoring.issueIdentifier);
@@ -848,6 +849,11 @@ function sessionNodesFromCard(
     });
   }
   for (const recent of card.sessions) {
+    // Card sessions now carry every thread (authoring, execution, chats); the
+    // sidebar already renders dedicated authoring/execution nodes above, so
+    // skip those threads here to keep node ids unique.
+    if (recent.scope === "issue" && card.authoring) continue;
+    if (recent.threadId != null && recent.threadId === executionThreadId) continue;
     const sourceThread = recent.threadId == null ? undefined : threadById.get(recent.threadId);
     sessions.push({
       session: chatSessionNode(recent, workspaceId, input, sourceThread),
@@ -881,9 +887,12 @@ function executionSessionNode(
   card: WorkspaceCard,
   workspaceId: string,
   input: NormalizedSidebarProjectBranchInput,
-): SidebarSessionNode {
+): SidebarSessionNode | null {
   const execution = card.execution!;
-  const id = `exec:${execution.issueIdentifier}`;
+  const threadId = execution.execution.executionSessionId;
+  if (threadId == null || threadId <= 0) return null;
+
+  const id = `thread:${threadId}`;
   const updatedAt = validTimestampString(execution.lastEventAt ?? execution.startedAt);
   return {
     kind: "session",
@@ -893,12 +902,12 @@ function executionSessionNode(
     sessionKind: "execution",
     title: nonBlank(execution.title) ?? execution.issueIdentifier,
     subtitle: execution.issueIdentifier,
-    href: projectExecutionSessionPath(input.projectSlug, execution.issueIdentifier),
+    href: projectSessionPath(input.projectSlug, threadId),
     statusKind: executionStatusKind(execution.status),
     aggregateStatus: statusToAggregate(execution.status),
     agentKind: execution.agentKind,
     updatedAt,
-    threadId: null,
+    threadId,
     issueIdentifier: execution.issueIdentifier,
     archived: execution.status === "saved",
     unread: false,

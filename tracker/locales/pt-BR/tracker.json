@@ -2691,6 +2691,7 @@
     "resuming": "Retomando…",
     "resumeStarted": "Retomando {{identifier}}",
     "resumeFailed": "Não foi possível retomar {{identifier}}",
+    "alreadyRunningOpened": "{{identifier}} já está em execução — abri a sessão ativa.",
     "openExecutionAria": "Abrir run autônomo {{identifier}}",
     "openAuthoringAria": "Abrir sessão {{identifier}}",
     "issueThreadHint": "Working tree da issue {{identifier}}",
@@ -2767,6 +2768,18 @@
       "ariaLabel": "Ambiente de {{identifier}}",
       "resizeHandleAria": "Redimensionar painel de ambiente",
       "closeDock": "Fechar painel de ambiente"
+    },
+    "tasks": {
+      "title": "Tarefas e ferramentas",
+      "ariaLabel": "Tarefas e ferramentas de {{identifier}}",
+      "resizeHandleAria": "Redimensionar painel de tarefas e ferramentas",
+      "expandFullscreen": "Expandir tarefas e ferramentas para tela cheia",
+      "exitFullscreen": "Sair da tela cheia",
+      "closeDock": "Fechar painel de tarefas e ferramentas",
+      "tasksSection": "Tarefas",
+      "toolsSection": "Ferramentas",
+      "emptyTasks": "Ainda não há tarefas do agente nesta sessão.",
+      "emptyTools": "Ainda não há atividade de ferramentas nesta sessão."
     },
     "sessions": {
       "tabsAria": "Abas de sessões do projeto"

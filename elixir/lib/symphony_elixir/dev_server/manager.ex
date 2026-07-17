@@ -280,6 +280,41 @@ defmodule SymphonyElixir.DevServer.Manager do
     |> MapSet.new()
   end
 
+  @doc """
+  Issue identifiers for the project that hold an unexpired runtime contract.
+  These are preview candidates even when nothing is registered in-memory (a
+  contracted serve process — e.g. a docker container — survives Symphony
+  restarts, while the instance registry does not).
+  """
+  @spec contracted_issue_identifiers(String.t()) :: [String.t()]
+  def contracted_issue_identifiers(project_slug) when is_binary(project_slug) do
+    case Context.get_project(project_slug) do
+      {:ok, project} -> RuntimeContractStore.active_issue_identifiers(project.id)
+      {:error, _reason} -> []
+    end
+  end
+
+  def contracted_issue_identifiers(_project_slug), do: []
+
+  @doc """
+  {project_slug, identifier} keys whose persisted dev-server records are in a
+  non-terminal status. Complements `running_issue_keys/0` (in-memory registry)
+  with DB truth, e.g. adopted external processes with no registered instance.
+  """
+  @spec db_live_issue_keys() :: MapSet.t({String.t(), String.t()})
+  def db_live_issue_keys do
+    slugs_by_id = Map.new(Context.list_projects(), &{&1.id, &1.slug})
+
+    DevServerRecord.live_issue_keys()
+    |> Enum.flat_map(fn {project_id, identifier} ->
+      case Map.get(slugs_by_id, project_id) do
+        nil -> []
+        slug -> [{slug, identifier}]
+      end
+    end)
+    |> MapSet.new()
+  end
+
   @doc false
   @spec normalize_lock_result(:aborted | term()) :: {:error, :lock_unavailable} | term()
   def normalize_lock_result(:aborted), do: {:error, :lock_unavailable}
@@ -1352,11 +1387,33 @@ defmodule SymphonyElixir.DevServer.Manager do
   defp reconcile_port_truth(record, project, project_slug, identifier) do
     step = serve_step_map(project_slug, identifier, record.slug)
 
-    if record.status == "ready" and not port_ready?(record.port, step) do
-      persist_reconciled_status(record, project, project_slug, identifier, "crashed")
-    else
-      record
+    cond do
+      record.status != "ready" ->
+        record
+
+      port_ready?(record.port, step) ->
+        renew_contract_while_serving(record, project, identifier)
+        record
+
+      true ->
+        persist_reconciled_status(record, project, project_slug, identifier, "crashed")
     end
+  end
+
+  # Keep the runtime contract alive while its process verifiably serves the
+  # leased port, so long-lived previews (e.g. docker containers) do not fall
+  # out of adoption/discovery just because the original 24h TTL elapsed. The
+  # store throttles writes and refuses expired or out-of-lease renewals.
+  defp renew_contract_while_serving(record, project, identifier) do
+    if is_integer(record.port) do
+      RuntimeContractStore.renew_if_expiring(project, identifier, record.slug, record.port)
+    end
+  rescue
+    exception ->
+      Logger.debug("dev server contract renewal skipped slug=#{record.slug} issue=#{identifier} reason=#{inspect(exception)}")
+  catch
+    kind, reason ->
+      Logger.debug("dev server contract renewal skipped slug=#{record.slug} issue=#{identifier} reason=#{inspect({kind, reason})}")
   end
 
   # A live, registered instance whose port is actually serving is "ready" — even
@@ -1383,15 +1440,47 @@ defmodule SymphonyElixir.DevServer.Manager do
   defp reconcile_without_live_instance(record, project, project_slug, identifier) do
     step = serve_step_map(project_slug, identifier, record.slug)
 
-    if record.status in @tracked_live_statuses do
-      reconcile_stale_active_record(record, project, project_slug, identifier, step)
-    else
-      record
+    cond do
+      externally_serving_contracted_port?(record, project, identifier, step) ->
+        persist_reconciled_status(record, project, project_slug, identifier, "ready")
+
+      record.status in @tracked_live_statuses ->
+        reconcile_stale_active_record(record, project, project_slug, identifier, step)
+
+      true ->
+        record
     end
   end
 
   defp reconcile_stale_active_record(record, project, project_slug, identifier, _step) do
     persist_reconciled_status(record, project, project_slug, identifier, "crashed")
+  end
+
+  # Adopt a serve process that outlived Symphony (e.g. a docker container that
+  # keeps publishing its leased port across a Symphony restart, after boot has
+  # stamped every record "stopped"). Adoption is deliberately gated on an
+  # unexpired runtime contract that allows the recorded port: the contract is
+  # the lease proof, so a stale record whose port was re-leased to another
+  # issue can never be adopted by mistake.
+  defp externally_serving_contracted_port?(record, project, identifier, step) do
+    is_integer(record.port) and record.port > 0 and
+      contract_allows_port?(project, identifier, record.slug, record.port) and
+      port_ready?(record.port, step)
+  end
+
+  defp contract_allows_port?(project, identifier, slug, port) do
+    case RuntimeContractStore.get_active(project, identifier, slug) do
+      {:ok, contract, _record} ->
+        not RuntimeContract.expired?(contract, DateTime.utc_now()) and
+          RuntimeContract.port_allowed?(contract, port)
+
+      :error ->
+        false
+    end
+  rescue
+    exception ->
+      Logger.debug("dev server contract lookup failed slug=#{slug} issue=#{identifier} reason=#{inspect(exception)}")
+      false
   end
 
   defp serve_step_map(project_slug, identifier, slug) do

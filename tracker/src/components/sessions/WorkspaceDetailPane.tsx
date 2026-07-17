@@ -1,4 +1,4 @@
-import { ExternalLink, GitBranch, Play, Plus, Trash2 } from "lucide-react";
+import { ExternalLink, GitBranch, Plus, Trash2 } from "lucide-react";
 import type { KeyboardEvent, MouseEvent, ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
@@ -12,9 +12,8 @@ import {
   workspaceMenuIconProps,
 } from "@/components/sessions/WorkspaceActionButton";
 import { ChatStatusIcon } from "@/components/shared/ChatStatusIcon";
-import { canResumeExecution } from "@/lib/agentExecutionDisplay";
-import type { ProjectSessionRow } from "@/lib/projectSessions";
 import {
+  canArchiveSessionRow,
   formatBytes,
   isWorkspaceRemovable,
   type WorkspaceCard,
@@ -26,15 +25,11 @@ import type { RecentSession } from "@/types/recents";
 interface WorkspaceDetailPaneProps {
   item: WorkspaceListItem | null;
   issueHref: string | null;
-  resumePending?: boolean;
   archiving?: boolean;
   /** Compact body for accordion expansion (no empty-state filler). */
   embedded?: boolean;
-  onOpenExecution?(session: ProjectSessionRow): void;
-  onOpenAuthoring?(issueIdentifier: string): void;
   onOpenSession?(session: RecentSession): void;
   onOpenAssistantSession?(threadId: number, title: string): void;
-  onResume?(session: ProjectSessionRow): void;
   onNewSession?(issueIdentifier: string): void;
   onRemove?(path: string): void;
   onArchive?(threadId: number): void;
@@ -43,14 +38,10 @@ interface WorkspaceDetailPaneProps {
 export function WorkspaceDetailPane({
   item,
   issueHref,
-  resumePending = false,
   archiving = false,
   embedded = false,
-  onOpenExecution,
-  onOpenAuthoring,
   onOpenSession,
   onOpenAssistantSession,
-  onResume,
   onNewSession,
   onRemove,
   onArchive,
@@ -112,12 +103,8 @@ export function WorkspaceDetailPane({
     <CardDetail
       card={item.card}
       issueHref={issueHref}
-      resumePending={resumePending}
       embedded={embedded}
-      onOpenExecution={onOpenExecution}
-      onOpenAuthoring={onOpenAuthoring}
       onOpenSession={onOpenSession}
-      onResume={onResume}
       onNewSession={onNewSession}
       onRemove={onRemove}
       onArchive={onArchive}
@@ -128,24 +115,16 @@ export function WorkspaceDetailPane({
 function CardDetail({
   card,
   issueHref,
-  resumePending,
   embedded = false,
-  onOpenExecution,
-  onOpenAuthoring,
   onOpenSession,
-  onResume,
   onNewSession,
   onRemove,
   onArchive,
 }: {
   card: WorkspaceCard;
   issueHref: string | null;
-  resumePending: boolean;
   embedded?: boolean;
-  onOpenExecution?: (session: ProjectSessionRow) => void;
-  onOpenAuthoring?: (issueIdentifier: string) => void;
   onOpenSession?: (session: RecentSession) => void;
-  onResume?: (session: ProjectSessionRow) => void;
   onNewSession?: (issueIdentifier: string) => void;
   onRemove?: (path: string) => void;
   onArchive?: (threadId: number) => void;
@@ -159,8 +138,6 @@ function CardDetail({
       : card.title || card.issueIdentifier || card.key;
   const branch = inventory?.repos[0]?.branch ?? null;
   const size = inventory ? formatBytes(inventory.sizeBytes) : null;
-  const canResume =
-    Boolean(card.execution && onResume && canResumeExecution(card.execution.execution));
 
   const removable = Boolean(inventory && onRemove && isWorkspaceRemovable(card));
 
@@ -211,44 +188,6 @@ function CardDetail({
       </div>
 
       <div className="space-y-0.5">
-        {card.execution ? (
-          <DetailSession
-            icon={<ChatStatusIcon executionStatus={card.execution.status} />}
-            label={`${t("workspacesPage.sessionRows.execution")} · ${t("sessions.turns", {
-              count: card.execution.turnCount,
-            })}`}
-            meta={formatRelativeTime(card.execution.lastEventAt)}
-            absoluteTitle={formatDateTime(card.execution.lastEventAt)}
-            onOpen={onOpenExecution ? () => onOpenExecution(card.execution!) : undefined}
-            openAriaLabel={t("sessions.openExecutionAria", { identifier: card.issueIdentifier ?? "" })}
-            trailing={
-              canResume ? (
-                <WorkspaceActionButton
-                  icon={<Play {...workspaceActionIconProps} aria-hidden />}
-                  disabled={resumePending}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onResume!(card.execution!);
-                  }}
-                >
-                  {resumePending
-                    ? t("sessions.resuming", { defaultValue: "Resuming…" })
-                    : t("sessions.resume", { defaultValue: "Resume" })}
-                </WorkspaceActionButton>
-              ) : null
-            }
-          />
-        ) : null}
-        {card.authoring && card.issueIdentifier ? (
-          <DetailSession
-            icon={<ChatStatusIcon statusKind="idle" />}
-            label={t("workspacesPage.sessionRows.authoring")}
-            meta={formatRelativeTime(card.authoring.updatedAt)}
-            absoluteTitle={formatDateTime(card.authoring.updatedAt)}
-            onOpen={onOpenAuthoring ? () => onOpenAuthoring(card.issueIdentifier!) : undefined}
-            openAriaLabel={t("sessions.openAuthoringAria", { identifier: card.issueIdentifier })}
-          />
-        ) : null}
         {card.sessions.map((session) => (
           <DetailSession
             key={session.id}
@@ -258,7 +197,7 @@ function CardDetail({
             absoluteTitle={formatDateTime(session.updatedAt)}
             onOpen={onOpenSession ? () => onOpenSession(session) : undefined}
             onRemove={
-              session.threadId != null && onArchive
+              onArchive && canArchiveSessionRow(session)
                 ? () => onArchive(session.threadId!)
                 : undefined
             }
@@ -274,7 +213,7 @@ function CardDetail({
             {size ? <span className="shrink-0 tabular-nums">{size}</span> : null}
           </div>
         ) : null}
-        {!card.execution && !card.authoring && card.sessions.length === 0 ? (
+        {card.sessions.length === 0 ? (
           <DetailSession
             icon={<ChatStatusIcon />}
             label={t("workspacesPage.emptySessions", { defaultValue: "No sessions" })}

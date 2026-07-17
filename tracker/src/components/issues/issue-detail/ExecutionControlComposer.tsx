@@ -30,10 +30,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { resolveExecutionComposerRoute } from "@/components/assistant/executionComposerRouting";
 import { agentEnterHintLabel, canResumeExecution, deriveAgentControl } from "@/lib/agentExecutionDisplay";
 import { enrichGuidanceWithAttachments } from "@/lib/enrichComposerGuidance";
 import { catalogFor, defaultComposerSettings, fallbackCatalogBundle } from "@/lib/assistantSettings";
+import { resolveExecutionComposerSeed } from "@/lib/executionComposerSeed";
 import { fetchAssistantCatalogBundle } from "@/services/assistant";
+import { updateAssistantThread } from "@/services/assistantThreads";
 import { dispatchIssueAgent } from "@/services/issueDispatch";
 import { updateIssue } from "@/services/issues";
 import type { RunPromptTemplateResult } from "@/services/magicCommands";
@@ -157,44 +160,61 @@ export function ExecutionControlComposer({
     };
   }, [projectSlug]);
 
-  useEffect(() => {
-    if (issue.agentKind) setAgent(issue.agentKind);
-  }, [issue.agentKind]);
+  // Live/parked runs mirror the orchestrator snapshot; idle/finished runs keep
+  // durable issue pins. Catalog defaults apply only when neither source pins a
+  // model/effort — never seed fallback gpt-5.5/medium ahead of the remote catalog.
+  const composerSeed = useMemo(
+    () => resolveExecutionComposerSeed(execution, issue, bundle.defaultAgent),
+    [bundle.defaultAgent, execution, issue.agentKind, issue.effort, issue.model],
+  );
 
-  // Only seed from durable issue pins. Catalog defaults must come from the
-  // fetched bundle remap — seeding fallback defaults locks gpt-5.5/medium and
-  // races the remote catalog used by resume dispatch.
+  useEffect(() => {
+    setAgent(composerSeed.agent);
+  }, [composerSeed.agent]);
+
   const settingsSeed = useMemo(() => {
-    if (issue.model == null && issue.effort == null) return null;
-    const resolvedAgent = issue.agentKind ?? bundle.defaultAgent;
-    const defaults = defaultComposerSettings(catalogFor(bundle, resolvedAgent));
+    if (composerSeed.model == null && composerSeed.effort == null) return null;
+    const defaults = defaultComposerSettings(catalogFor(bundle, composerSeed.agent));
     return {
-      agent: resolvedAgent,
-      model: issue.model ?? defaults.model,
-      effort: issue.effort ?? defaults.effort,
+      agent: composerSeed.agent,
+      model: composerSeed.model ?? defaults.model,
+      effort: composerSeed.effort ?? defaults.effort,
     };
-  }, [bundle, issue.agentKind, issue.model, issue.effort]);
+  }, [bundle, composerSeed]);
 
   const persistExecutionSettings = useCallback(
     (nextAgent: AgentKind, model: string | null, effort: string | null) => {
       if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
       persistTimerRef.current = setTimeout(() => {
-        void updateIssue(projectSlug, issue.identifier, {
-          agent: nextAgent,
-          model,
-          effort,
-        })
-          .then((updated) => {
+        const threadId = execution?.executionSessionId;
+        const threadPatch =
+          threadId != null && threadId > 0
+            ? updateAssistantThread(threadId, { agentKind: nextAgent }).catch(() => {
+                toast.error(
+                  t("issue.summary.executionSaveFailed", {
+                    defaultValue: "Failed to save execution settings",
+                  }),
+                );
+              })
+            : Promise.resolve();
+
+        void Promise.all([
+          threadPatch,
+          updateIssue(projectSlug, issue.identifier, {
+            agent: nextAgent,
+            model,
+            effort,
+          }).then((updated) => {
             onIssueUpdated?.(updated);
-          })
-          .catch(() => {
-            toast.error(
-              t("issue.summary.executionSaveFailed", { defaultValue: "Failed to save execution settings" }),
-            );
-          });
+          }),
+        ]).catch(() => {
+          toast.error(
+            t("issue.summary.executionSaveFailed", { defaultValue: "Failed to save execution settings" }),
+          );
+        });
       }, 300);
     },
-    [issue.identifier, onIssueUpdated, projectSlug, t],
+    [execution?.executionSessionId, issue.identifier, onIssueUpdated, projectSlug, t],
   );
 
   const handleAgentChange = useCallback(
@@ -393,9 +413,15 @@ export function ExecutionControlComposer({
       const expanded = expandMentions(text);
       const hasAttachments = submit.attachments.length > 0;
       const hasContextRefs = submit.contextRefs.length > 0;
+      const hasContent = Boolean(text || hasAttachments || hasContextRefs);
+      const route = resolveExecutionComposerRoute({
+        canSteer,
+        isActive: control.isActive,
+        hasContent,
+        dispatchPending: dispatchPending != null,
+      });
 
-      if (canSteer) {
-        if (!text && !hasAttachments && !hasContextRefs) return;
+      if (route === "steer") {
         onSteer({
           message: expanded,
           attachments: submit.attachments,
@@ -404,8 +430,7 @@ export function ExecutionControlComposer({
         return;
       }
 
-      if (control.isActive) {
-        if (!text && !hasAttachments && !hasContextRefs) return;
+      if (route === "queue") {
         setQueued((current) => [
           ...current,
           {
@@ -417,7 +442,7 @@ export function ExecutionControlComposer({
         return;
       }
 
-      if (!dispatchPending) {
+      if (route === "resume") {
         const instructions = enrichGuidanceWithAttachments(expanded, submit.attachments, projectSlug, {});
         void runDispatch("resume", { instructions, contextRefs: submit.contextRefs });
       }
@@ -644,6 +669,7 @@ export function ExecutionControlComposer({
 
       <div>
         <AssistantComposer
+          key={composerSeed.remountKey}
           projectSlug={projectSlug}
           bundle={bundle}
           floating
@@ -673,7 +699,7 @@ export function ExecutionControlComposer({
           onSubmit={handleComposerSubmit}
           onAgentChange={handleAgentChange}
           onSettingsChange={handleSettingsChange}
-          agentSeed={issue.agentKind ?? bundle.defaultAgent}
+          agentSeed={composerSeed.agent}
           settingsSeed={settingsSeed}
           persistLocalComposerState={false}
           toolbarAfterAttach={

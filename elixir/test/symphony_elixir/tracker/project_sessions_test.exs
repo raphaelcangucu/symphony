@@ -57,15 +57,30 @@ defmodule SymphonyElixir.Tracker.ProjectSessionsTest do
     refute inspect(rows) =~ huge_description
   end
 
-  test "includes live agent executions for the project as autonomous execution sessions" do
+  test "includes live agent executions bound to a real issue_execution session" do
     {:ok, issue} =
       Context.create_issue("sessions", %{title: "Autonomous execution issue", description: "body"})
+
+    {:ok, session} =
+      %Thread{}
+      |> Thread.changeset(%{
+        scope: "issue_execution",
+        project_slug: "sessions",
+        issue_identifier: issue.identifier,
+        title: issue.identifier,
+        workspace_path: "/tmp/sessions/#{issue.identifier}",
+        status: "active",
+        agent_kind: "cursor",
+        metadata: %{"origin" => "orchestrator"}
+      })
+      |> Repo.insert()
 
     executions = [
       %{
         issue_identifier: issue.identifier,
         status: :live,
         agent_kind: "cursor",
+        execution_session_id: session.id,
         last_event_at: ~U[2026-07-16 12:00:00Z],
         started_at: ~U[2026-07-16 11:00:00Z]
       },
@@ -85,18 +100,17 @@ defmodule SymphonyElixir.Tracker.ProjectSessionsTest do
                workspace_sessions: fn -> [] end
              )
 
-    exec_row = Enum.find(rows, &(&1.id == "exec:#{issue.identifier}"))
+    exec_row = Enum.find(rows, &(&1.id == "thread:#{session.id}"))
     assert exec_row
-    assert exec_row.title == "Autonomous execution issue"
     assert exec_row.kind == "execution"
+    assert exec_row.scope == "issue_execution"
     assert exec_row.issue_identifier == issue.identifier
-    assert exec_row.agent_kind == "cursor"
-    assert exec_row.aggregate_status == "live"
-    assert exec_row.href == "/projects/sessions/workspaces?exec=#{issue.identifier}&surface=autonomous"
+    assert exec_row.href == "/projects/sessions/workspaces/#{session.id}"
+    refute Enum.any?(rows, &String.starts_with?(&1.id, "exec:"))
     refute Enum.any?(rows, &(&1.id == "exec:OTHER-1"))
   end
 
-  test "includes on-disk autonomous session workspaces when orchestrator snapshot omits them" do
+  test "omits orphan workspace executions that lack an issue_execution session" do
     {:ok, issue} =
       Context.create_issue("sessions", %{title: "Disk-backed execution", description: "body"})
 
@@ -117,13 +131,49 @@ defmodule SymphonyElixir.Tracker.ProjectSessionsTest do
                workspace_sessions: fn -> workspace_sessions end
              )
 
-    exec_row = Enum.find(rows, &(&1.id == "exec:#{issue.identifier}"))
+    refute Enum.any?(rows, &(&1.id == "exec:#{issue.identifier}"))
+    refute Enum.any?(rows, &(&1.issue_identifier == issue.identifier and &1.kind == "execution"))
+  end
+
+  test "resolves live executions to the latest issue_execution session when session id is omitted" do
+    {:ok, issue} =
+      Context.create_issue("sessions", %{title: "Lookup-backed execution", description: "body"})
+
+    {:ok, session} =
+      %Thread{}
+      |> Thread.changeset(%{
+        scope: "issue_execution",
+        project_slug: "sessions",
+        issue_identifier: issue.identifier,
+        title: issue.identifier,
+        workspace_path: "/tmp/sessions/#{issue.identifier}",
+        status: "error",
+        agent_kind: "codex",
+        metadata: %{"origin" => "orchestrator"}
+      })
+      |> Repo.insert()
+
+    executions = [
+      %{
+        issue_identifier: issue.identifier,
+        status: :live,
+        agent_kind: "cursor",
+        last_event_at: ~U[2026-07-16 12:00:00Z],
+        started_at: ~U[2026-07-16 11:00:00Z]
+      }
+    ]
+
+    assert {:ok, %{data: rows}} =
+             ProjectSessions.list("sessions",
+               limit: 20,
+               executions: fn -> executions end,
+               workspace_sessions: fn -> [] end
+             )
+
+    exec_row = Enum.find(rows, &(&1.id == "thread:#{session.id}"))
     assert exec_row
-    assert exec_row.title == "Disk-backed execution"
-    assert exec_row.kind == "execution"
-    assert exec_row.agent_kind == "cursor"
-    assert exec_row.href == "/projects/sessions/workspaces?exec=#{issue.identifier}&surface=autonomous"
-    assert exec_row.workspace_path == "/tmp/sessions/#{issue.identifier}"
+    assert exec_row.href == "/projects/sessions/workspaces/#{session.id}"
+    refute Enum.any?(rows, &String.starts_with?(&1.id, "exec:"))
   end
 
   test "includes legacy project-scoped assistant threads as chat sessions" do

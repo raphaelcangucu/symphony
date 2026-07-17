@@ -106,6 +106,14 @@ function asAgentKind(value: string | null | undefined): AgentKind | null {
   return null;
 }
 
+function parsePositiveThreadId(value: string | null | undefined): number | null {
+  if (value == null) return null;
+  const trimmed = value.trim();
+  if (!/^\d+$/.test(trimmed)) return null;
+  const parsed = Number(trimmed);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
 interface RunningRowGroup {
   parent: ProjectRunningRow;
   children: ProjectRunningRow[];
@@ -349,7 +357,12 @@ function SessionIssueLink({ row }: { row: ProjectRunningRow }) {
     return <>{row.issueIdentifier}</>;
   }
 
-  const sessionPath = projectExecutionSessionPath(row.resolvedProjectSlug, identifier);
+  const threadId = parsePositiveThreadId(row.sessionId);
+  const sessionPath = projectExecutionSessionPath(
+    row.resolvedProjectSlug,
+    identifier,
+    threadId,
+  );
   const detailPath = issuePath(row.resolvedProjectSlug, "board", identifier, "summary");
 
   return (

@@ -34,7 +34,7 @@ describe("startNewIssueExecutionSession", () => {
       agent: "codex",
       instructions: null,
     });
-    expect(navigate).toHaveBeenCalledWith("/projects/macro-markets/workspaces?exec=MAC-510&agent=execution");
+    expect(navigate).toHaveBeenCalledWith("/projects/macro-markets/workspaces");
   });
 
   it("can stay on the current page when navigateToSessions is false", async () => {

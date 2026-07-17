@@ -61,9 +61,9 @@ export function sessionBucketFor(status: AgentExecutionStatus): ProjectSessionBu
 }
 
 /**
- * Fills gaps in the live AgentExecution map using autonomous `exec:` rows from
- * the project sessions API (disk-backed session logs when the orchestrator
- * snapshot omitted the run).
+ * Fills gaps in the live AgentExecution map using real `thread:` execution
+ * sessions from the project sessions API. Legacy `exec:` rows are ignored —
+ * autonomous work always addresses `/workspaces/<sessionId>`.
  */
 export function mergeExecutionsFromSessionRows(
   executions: ReadonlyMap<string, AgentExecution>,
@@ -74,27 +74,45 @@ export function mergeExecutionsFromSessionRows(
   let next: Map<string, AgentExecution> | null = null;
 
   for (const session of sessions) {
-    if (!session.id.startsWith("exec:")) continue;
+    if (session.kind !== "execution") continue;
+    const threadId = parseThreadSessionId(session.id);
+    if (threadId == null) continue;
+
     const identifier = session.issueIdentifier?.trim();
-    if (!identifier || executions.has(identifier) || next?.has(identifier)) continue;
+    if (!identifier) continue;
+
+    const existing = next?.get(identifier) ?? executions.get(identifier);
+    if (existing?.executionSessionId != null) continue;
 
     if (!next) next = new Map(executions);
-    next.set(identifier, syntheticExecutionFromSessionRow(session, identifier));
+    next.set(
+      identifier,
+      existing
+        ? { ...existing, executionSessionId: threadId }
+        : syntheticExecutionFromSessionRow(session, identifier, threadId),
+    );
   }
 
   return next ?? executions;
 }
 
+function parseThreadSessionId(id: string): number | null {
+  if (!id.startsWith("thread:")) return null;
+  const parsed = Number.parseInt(id.slice("thread:".length), 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
 function syntheticExecutionFromSessionRow(
   session: SessionApiRow,
   identifier: string,
+  executionSessionId: number,
 ): AgentExecution {
   return {
     issueIdentifier: identifier,
     status: normalizeExecutionStatus(session.aggregateStatus),
     agentKind: session.agentKind,
-    sessionId: null,
-    executionSessionId: null,
+    sessionId: String(executionSessionId),
+    executionSessionId,
     lastEvent: null,
     lastMessage: null,
     lastEventAt: session.updatedAt,

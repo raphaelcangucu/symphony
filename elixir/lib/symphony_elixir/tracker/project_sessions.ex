@@ -136,15 +136,15 @@ defmodule SymphonyElixir.Tracker.ProjectSessions do
 
     with true <- is_binary(identifier) and identifier != "",
          {:ok, issue} <- Context.get_issue(project_slug, identifier),
-         {:ok, updated_at} <- execution_updated_at(execution) do
-      {id, href} = execution_identity(project_slug, identifier, execution)
-
+         {:ok, updated_at} <- execution_updated_at(execution),
+         {:ok, session_id} <- execution_session_id(project_slug, identifier, execution) do
       [
         %{
-          id: id,
+          id: "thread:#{session_id}",
           title: issue.title || identifier,
           kind: "execution",
-          href: href,
+          scope: "issue_execution",
+          href: "/projects/#{project_slug}/workspaces/#{session_id}",
           updated_at: format_datetime(updated_at),
           aggregate_status: execution_status(execution),
           agent_kind: execution_agent_kind(execution),
@@ -163,20 +163,52 @@ defmodule SymphonyElixir.Tracker.ProjectSessions do
 
   defp execution_row(_project_slug, _execution), do: []
 
-  # Prefer the real issue_execution Thread id when present so deep links and the
-  # sidebar address /workspaces/<id> instead of the legacy ?exec= synthetic id.
-  defp execution_identity(project_slug, identifier, execution) do
-    case Map.get(execution, :execution_session_id) do
-      session_id when is_integer(session_id) and session_id > 0 ->
-        {"thread:#{session_id}", "/projects/#{project_slug}/workspaces/#{session_id}"}
+  # Autonomous sidebar rows must address a real issue_execution Thread
+  # (`/workspaces/<id>`). Never emit the legacy `?exec=&surface=autonomous` href.
+  defp execution_session_id(project_slug, identifier, execution)
+       when is_binary(project_slug) and is_binary(identifier) and is_map(execution) do
+    case explicit_execution_session_id(execution) do
+      {:ok, _} = ok ->
+        ok
 
-      _ ->
-        {"exec:#{identifier}", autonomous_execution_href(project_slug, identifier)}
+      :error ->
+        case latest_issue_execution_id(project_slug, identifier) do
+          id when is_integer(id) and id > 0 -> {:ok, id}
+          _ -> :error
+        end
     end
   end
 
-  defp autonomous_execution_href(project_slug, identifier) do
-    "/projects/#{project_slug}/workspaces?exec=#{URI.encode_www_form(identifier)}&surface=autonomous"
+  defp explicit_execution_session_id(execution) when is_map(execution) do
+    case Map.get(execution, :execution_session_id) || Map.get(execution, "execution_session_id") do
+      session_id when is_integer(session_id) and session_id > 0 ->
+        {:ok, session_id}
+
+      session_id when is_binary(session_id) ->
+        case Integer.parse(String.trim(session_id)) do
+          {parsed, ""} when parsed > 0 -> {:ok, parsed}
+          _ -> :error
+        end
+
+      _ ->
+        :error
+    end
+  end
+
+  defp latest_issue_execution_id(project_slug, identifier)
+       when is_binary(project_slug) and is_binary(identifier) do
+    History.list_threads(
+      project_slug: project_slug,
+      scopes: ["issue_execution"],
+      include_archived: false,
+      limit: 50
+    )
+    |> Enum.filter(&(&1.issue_identifier == identifier))
+    |> Enum.max_by(& &1.id, fn -> nil end)
+    |> case do
+      %{id: id} when is_integer(id) -> id
+      _ -> nil
+    end
   end
 
   defp discover_workspace_sessions(project_slug) when is_binary(project_slug) do
@@ -301,6 +333,7 @@ defmodule SymphonyElixir.Tracker.ProjectSessions do
       id: "thread:#{thread.id}",
       title: thread.title,
       kind: thread_kind(thread.scope),
+      scope: thread.scope,
       href: "/projects/#{thread.project_slug}/workspaces/#{thread.id}",
       updated_at: format_datetime(thread.updated_at),
       aggregate_status: thread.status,

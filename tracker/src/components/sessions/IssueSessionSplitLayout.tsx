@@ -3,6 +3,7 @@ import { type ReactNode } from "react";
 import { IssueWorkingTreeToolbar } from "@/components/sessions/IssueWorkingTreeToolbar";
 import { useSessionEnvironmentDock } from "@/components/sessions/sessionEnvironmentDockContext";
 import { useSessionPreviewDock } from "@/components/sessions/sessionPreviewDockContext";
+import { useSessionTasksDock } from "@/components/sessions/sessionTasksDockContext";
 import { useSessionTerminalDock } from "@/components/sessions/sessionTerminalDockContext";
 import type { WorkspaceView } from "@/lib/workspaceRoutes";
 
@@ -20,8 +21,8 @@ interface IssueSessionSplitLayoutProps {
 
 /**
  * Header + toolbar wrapper for issue-bound session tabs. Terminal / Preview /
- * Environment buttons toggle workspace-level docks (rendered beside the sessions
- * panel by ProjectSessionsWorkspace) instead of navigating away.
+ * Environment / Tasks buttons toggle workspace-level docks (rendered beside the
+ * sessions panel by ProjectSessionsWorkspace) instead of navigating away.
  */
 export function IssueSessionSplitLayout({
   projectSlug,
@@ -40,6 +41,8 @@ export function IssueSessionSplitLayout({
   const previewOpen = previewDock?.openIssueIdentifier === issueIdentifier;
   const environmentDock = useSessionEnvironmentDock();
   const environmentOpen = environmentDock?.openIssueIdentifier === issueIdentifier;
+  const tasksDock = useSessionTasksDock();
+  const tasksOpen = tasksDock?.openIssueIdentifier === issueIdentifier;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -59,6 +62,8 @@ export function IssueSessionSplitLayout({
           onEnvironmentToggle={
             environmentDock ? () => environmentDock.toggleEnvironment(issueIdentifier) : undefined
           }
+          tasksOpen={tasksOpen}
+          onTasksToggle={tasksDock ? () => tasksDock.toggleTasks(issueIdentifier) : undefined}
           onOpenKnowledgeBase={onOpenKnowledgeBase}
           changedDocCount={changedDocCount}
         />

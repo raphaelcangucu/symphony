@@ -1,4 +1,5 @@
 import type { AgentKind } from "@/types/issue";
+import type { RecentScope } from "@/types/recents";
 
 export type ProjectSessionKind = "execution" | "authoring" | "chat" | "workspace_session" | "issue";
 
@@ -6,6 +7,8 @@ export interface ProjectSessionRow {
   id: string;
   title: string;
   kind: ProjectSessionKind;
+  /** Assistant thread scope when the row comes from a persisted thread. */
+  scope: RecentScope;
   href: string;
   updatedAt: string;
   aggregateStatus: string | null;

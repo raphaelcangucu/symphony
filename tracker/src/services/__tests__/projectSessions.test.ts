@@ -23,6 +23,7 @@ describe("normalizeProjectSessionRow", () => {
       id: "thread:123",
       title: "Fix login",
       kind: "execution",
+      scope: "issue_session",
       href: "/projects/advising/workspaces/123",
       updatedAt: "2026-07-14T12:00:00.000000Z",
       aggregateStatus: "live",
@@ -55,6 +56,26 @@ describe("normalizeProjectSessionRow", () => {
     expect(row.archived).toBe(true);
     expect(row.href).toBe("/projects/demo/board/issues/DEMO-1");
   });
+
+  it("preserves issue_execution scope for orchestrator sessions", () => {
+    const row = normalizeProjectSessionRow({
+      id: "thread:8056",
+      title: "GAM-20",
+      kind: "execution",
+      scope: "issue_execution",
+      href: "/projects/gamba/workspaces/8056",
+      updated_at: "2026-07-17T17:33:31Z",
+      aggregate_status: "active",
+      agent_kind: "codex",
+      issue_identifier: "GAM-20",
+      workspace_path: "/tmp/gamba/GAM-20",
+      workspace_id: null,
+      pinned: false,
+      archived: false,
+    });
+
+    expect(row.scope).toBe("issue_execution");
+  });
 });
 
 describe("normalizeProjectSessionsPage", () => {
@@ -65,6 +86,7 @@ describe("normalizeProjectSessionsPage", () => {
           id: "thread:1",
           title: "Session A",
           kind: "workspace_session",
+          scope: "project_session",
           href: "/projects/demo/workspaces/1",
           updated_at: "2026-07-14T11:00:00.000000Z",
           aggregate_status: "active",
@@ -88,6 +110,7 @@ describe("normalizeProjectSessionsPage", () => {
           id: "thread:1",
           title: "Session A",
           kind: "workspace_session",
+          scope: "project_session",
           href: "/projects/demo/workspaces/1",
           updatedAt: "2026-07-14T11:00:00.000000Z",
           aggregateStatus: "active",

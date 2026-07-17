@@ -143,6 +143,39 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadControllerTest do
     assert id == thread.id
   end
 
+  test "PATCH updates agent_kind on an assistant thread" do
+    workspace_path = Path.join(System.tmp_dir!(), "assistant-thread-agent-kind")
+    {:ok, thread} = History.create_freeform_thread(%{title: "Agent", workspace_path: workspace_path, agent_kind: "codex"})
+
+    conn =
+      authorize()
+      |> patch("/api/tracker/v1/assistant/threads/#{thread.id}", %{agent_kind: "cursor"})
+
+    assert %{
+             "data" => %{
+               "id" => id,
+               "agent_kind" => "cursor"
+             }
+           } = json_response(conn, 200)
+
+    assert id == thread.id
+    assert {:ok, reloaded} = History.get_thread(thread.id)
+    assert reloaded.agent_kind == "cursor"
+  end
+
+  test "PATCH rejects an invalid agent_kind" do
+    {:ok, thread} =
+      History.create_freeform_thread(%{title: "Agent", workspace_path: System.tmp_dir!(), agent_kind: "codex"})
+
+    conn =
+      authorize()
+      |> patch("/api/tracker/v1/assistant/threads/#{thread.id}", %{agent_kind: "not-an-agent"})
+
+    assert %{"error" => %{"code" => "validation_failed"}} = json_response(conn, 422)
+    assert {:ok, reloaded} = History.get_thread(thread.id)
+    assert reloaded.agent_kind == "codex"
+  end
+
   test "GET with include_archived=true includes archived threads" do
     {:ok, thread} = History.create_freeform_thread(%{title: "Archived", workspace_path: System.tmp_dir!()})
     {:ok, _archived} = History.archive_thread(thread.id)

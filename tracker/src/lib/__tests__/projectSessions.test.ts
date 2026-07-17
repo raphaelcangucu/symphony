@@ -69,7 +69,7 @@ describe("projectSessions", () => {
     expect(grouped.active.find((session) => session.issueIdentifier === "OTHER-9")).toBeUndefined();
   });
 
-  it("synthesizes executions from autonomous exec: session rows missing from the live map", () => {
+  it("attaches real thread execution session ids and ignores legacy exec: rows", () => {
     const live = new Map([["DEMO-1", execution("DEMO-1", "live")]]);
     const sessions: SessionApiRow[] = [
       {
@@ -100,17 +100,33 @@ describe("projectSessions", () => {
         pinned: false,
         archived: false,
       },
+      {
+        id: "thread:9001",
+        title: "Live without session id",
+        kind: "execution",
+        href: "/projects/advising/workspaces/9001",
+        updatedAt: "2026-07-16T22:00:00Z",
+        aggregateStatus: "live",
+        agentKind: "cursor",
+        issueIdentifier: "DEMO-1",
+        workspacePath: null,
+        workspaceId: null,
+        pinned: false,
+        archived: false,
+      },
     ];
 
     const merged = mergeExecutionsFromSessionRows(live, sessions);
 
-    expect(merged.get("DEMO-1")?.status).toBe("live");
-    expect(merged.get("CDE-1180")).toMatchObject({
-      issueIdentifier: "CDE-1180",
+    expect(merged.get("DEMO-1")).toMatchObject({
       status: "live",
-      agentKind: "cursor",
-      lastEventAt: "2026-07-16T21:00:00Z",
+      executionSessionId: 9001,
     });
-    expect(merged.has("CDE-1131")).toBe(false);
+    expect(merged.get("CDE-1131")).toMatchObject({
+      issueIdentifier: "CDE-1131",
+      executionSessionId: 8006,
+      agentKind: "codex",
+    });
+    expect(merged.has("CDE-1180")).toBe(false);
   });
 });

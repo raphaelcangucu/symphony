@@ -73,7 +73,7 @@ export function WorkspaceListRow({
   const size = card.inventory ? formatBytes(card.inventory.sizeBytes) : null;
   const dirty = Boolean(card.inventory?.workPresent);
   const orphan = card.inventory?.classification === "orphan" || card.kind === "orphan";
-  const sessionLabel = activityLabel(card, t);
+  const sessionLabel = activityLabel(card);
 
   return (
     <button
@@ -143,26 +143,16 @@ function primaryBranch(card: WorkspaceCard): string | null {
   return repos[0]?.branch ?? null;
 }
 
-function activityLabel(
-  card: WorkspaceCard,
-  t: (key: string, options?: Record<string, unknown>) => string,
-): string | null {
-  if (card.execution) {
-    return `${t("workspacesPage.sessionRows.execution")} · ${t("sessions.turns", {
-      count: card.execution.turnCount,
-    })}`;
-  }
-  if (card.authoring) return t("workspacesPage.sessionRows.authoring");
-  if (card.sessions[0]) return card.sessions[0].title;
-  return null;
+/** Threads are the source of truth: surface the newest thread title. */
+function activityLabel(card: WorkspaceCard): string | null {
+  return card.sessions[0]?.title ?? null;
 }
 
 function relativeActivity(card: WorkspaceCard) {
   const stamp =
+    card.sessions[0]?.updatedAt ??
     card.execution?.lastEventAt ??
     card.execution?.startedAt ??
-    card.authoring?.updatedAt ??
-    card.sessions[0]?.updatedAt ??
     null;
   return stamp ? formatRelativeTime(stamp) : "";
 }

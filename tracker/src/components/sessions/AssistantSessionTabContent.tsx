@@ -2,7 +2,6 @@ import { GitBranch, GitCompare } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { AssistantTasksToolbarToggle, type AssistantTasksDockControl } from "@/components/agent-activity";
 import { ProjectAssistantPanel } from "@/components/assistant/ProjectAssistantPanel";
 import { IssueSessionSplitLayout } from "@/components/sessions/IssueSessionSplitLayout";
 import {
@@ -39,11 +38,11 @@ export function AssistantSessionTabContent({
     if (seed) setComposerSeedMessage(seed);
   }, [threadId]);
   const issueIdentifier = thread?.issueIdentifier?.trim() || null;
+  const executionMode = thread?.scope === "issue_execution";
   // Bumping this counter opens the diff modal owned by the assistant panel's
   // launcher, so the toolbar button and the composer button share one modal
   // (same thread-scoped diff, same review-to-agent wiring).
   const [diffRequestId, setDiffRequestId] = useState(0);
-  const [tasksControl, setTasksControl] = useState<AssistantTasksDockControl | null>(null);
   const [kbControl, setKbControl] = useState<{ open: () => void; changedDocCount: number } | null>(null);
   const workspaceDiffStats = useWorkspaceDiffStats({
     projectSlug,
@@ -71,7 +70,6 @@ export function AssistantSessionTabContent({
           }
           toolbarLeading={
             <div className="inline-flex items-center gap-1">
-              <AssistantTasksToolbarToggle control={tasksControl} />
               <button
                 type="button"
                 aria-label={t("issue.diff.button")}
@@ -95,7 +93,7 @@ export function AssistantSessionTabContent({
             diffRequestId={diffRequestId}
             contentMaxWidth="default"
             composerSeedMessage={composerSeedMessage}
-            onTasksDockControlChange={setTasksControl}
+            executionMode={executionMode}
             onKnowledgeBaseControlChange={setKbControl}
           />
         </IssueSessionSplitLayout>
@@ -110,7 +108,7 @@ export function AssistantSessionTabContent({
             diffRequestId={diffRequestId}
             contentMaxWidth="default"
             composerSeedMessage={composerSeedMessage}
-            onTasksDockControlChange={setTasksControl}
+            executionMode={executionMode}
           />
         </div>
       )}

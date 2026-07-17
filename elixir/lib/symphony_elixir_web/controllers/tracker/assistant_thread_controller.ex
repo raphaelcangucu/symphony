@@ -167,7 +167,9 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
     attrs = Map.take(params, ["title", "labels", "needs_review"])
 
     with {:ok, id} <- parse_thread_id(raw_id),
-         {:ok, thread} <- History.update_thread_sidebar_metadata(id, attrs) do
+         {:ok, agent_kind} <- parse_optional_agent_kind(params),
+         {:ok, thread} <- History.update_thread_sidebar_metadata(id, attrs),
+         {:ok, thread} <- maybe_set_thread_agent(thread, agent_kind) do
       json(conn, %{data: TrackerPresenter.assistant_thread(with_preview(thread))})
     else
       {:error, :not_found} ->
@@ -175,6 +177,12 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
 
       {:error, :invalid_thread_id} ->
         TrackerErrors.render(conn, :invalid_thread_id)
+
+      {:error, :invalid_agent_kind} ->
+        TrackerErrors.validation_msg(
+          conn,
+          "agent_kind must be one of: #{Enum.join(@agent_kinds, ", ")}"
+        )
 
       {:error, :invalid_title} ->
         TrackerErrors.validation_msg(conn, "title must be between 1 and 160 characters")
@@ -340,6 +348,23 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
 
   defp normalize_agent(agent) when agent in @agent_kinds, do: agent
   defp normalize_agent(_agent), do: nil
+
+  defp parse_optional_agent_kind(params) when is_map(params) do
+    if Map.has_key?(params, "agent_kind") do
+      case normalize_agent(params["agent_kind"]) do
+        kind when is_binary(kind) -> {:ok, kind}
+        nil -> {:error, :invalid_agent_kind}
+      end
+    else
+      {:ok, :unchanged}
+    end
+  end
+
+  defp maybe_set_thread_agent(thread, :unchanged), do: {:ok, thread}
+
+  defp maybe_set_thread_agent(thread, agent_kind) when is_binary(agent_kind) do
+    History.set_thread_agent(thread, agent_kind)
+  end
 
   defp issue_session_attrs(params) do
     %{

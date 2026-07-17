@@ -40,8 +40,10 @@ function recentKindFromSessionKind(kind: ProjectSessionKind): RecentKind {
   return kind === "execution" ? "codex" : "chat";
 }
 
-function recentScopeFromSessionKind(kind: ProjectSessionKind): RecentScope {
-  switch (kind) {
+function recentScopeFromSessionRow(row: ProjectSessionRow): RecentScope {
+  if (row.scope) return row.scope;
+
+  switch (row.kind) {
     case "authoring":
     case "issue":
       return "issue";
@@ -82,7 +84,7 @@ export function projectSessionRowToRecent(
   return {
     id: row.id,
     kind: recentKindFromSessionKind(row.kind),
-    scope: recentScopeFromSessionKind(row.kind),
+    scope: recentScopeFromSessionRow(row),
     agentKind: row.agentKind,
     projectSlug,
     projectName,

@@ -3,7 +3,6 @@ import type { TFunction } from "i18next";
 import { i18n } from "@/i18n";
 import {
   projectAuthoringSessionPath,
-  projectExecutionSessionPath,
   projectExploreAssistantPath,
   projectSessionPath,
 } from "@/lib/workspaceRoutes";
@@ -39,10 +38,11 @@ export function recentSessionSubtitle(
 
 export function recentSessionPath(session: RecentSession): string {
   if (session.kind === "codex") {
-    if (session.projectSlug && session.identifier) {
-      return projectExecutionSessionPath(session.projectSlug, session.identifier);
+    // Prefer the real orchestrator execution session when present.
+    if (session.projectSlug && session.threadId != null) {
+      return projectSessionPath(session.projectSlug, session.threadId);
     }
-    return session.projectSlug ? `/projects/${session.projectSlug}/board` : "/projects";
+    return session.projectSlug ? `/projects/${session.projectSlug}/workspaces` : "/projects";
   }
 
   if (session.scope === "issue" && session.projectSlug && session.identifier) {

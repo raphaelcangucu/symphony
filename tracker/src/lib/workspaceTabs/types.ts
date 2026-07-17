@@ -4,7 +4,6 @@ export type WorkspaceTabKind =
   | "dynamic-terminal"
   | "assistant-session"
   | "authoring-session"
-  | "execution-session"
   | "new-issue"
   | "sessions-list";
 
@@ -41,11 +40,6 @@ export interface AuthoringSessionTab extends WorkspaceTabBase {
   issueIdentifier: string;
 }
 
-export interface ExecutionSessionTab extends WorkspaceTabBase {
-  kind: "execution-session";
-  issueIdentifier: string;
-}
-
 export interface SessionsListTab extends WorkspaceTabBase {
   kind: "sessions-list";
 }
@@ -60,7 +54,6 @@ export type WorkspaceTab =
   | DynamicTerminalTab
   | AssistantSessionTab
   | AuthoringSessionTab
-  | ExecutionSessionTab
   | NewIssueTab
   | SessionsListTab;
 
@@ -94,12 +87,6 @@ export function authoringSessionTabId(issueIdentifier: string): string {
   const identifier = issueIdentifier.trim();
   if (!identifier) throw new Error("issueIdentifier is required");
   return `authoring-session:${identifier}`;
-}
-
-export function executionSessionTabId(issueIdentifier: string): string {
-  const identifier = issueIdentifier.trim();
-  if (!identifier) throw new Error("issueIdentifier is required");
-  return `execution-session:${identifier}`;
 }
 
 export const SESSIONS_LIST_TAB_ID = "sessions-list";
@@ -164,18 +151,6 @@ export function createAuthoringSessionTab(issueIdentifier: string, title: string
     id: authoringSessionTabId(identifier),
     kind: "authoring-session",
     title: trimmedTitle,
-    closable: true,
-    issueIdentifier: identifier,
-  };
-}
-
-export function createExecutionSessionTab(issueIdentifier: string, title: string): ExecutionSessionTab {
-  const identifier = issueIdentifier.trim();
-  if (!identifier) throw new Error("issueIdentifier is required");
-  return {
-    id: executionSessionTabId(identifier),
-    kind: "execution-session",
-    title: title.trim() || identifier,
     closable: true,
     issueIdentifier: identifier,
   };

@@ -67,16 +67,8 @@ function parseWorkspaceTab(value: unknown): WorkspaceTab | null {
             threadId: value.threadId,
           }
         : null;
-    case "execution-session":
-      return typeof value.issueIdentifier === "string" && value.issueIdentifier.trim().length > 0
-        ? {
-            id: value.id,
-            kind: "execution-session",
-            title: value.title,
-            closable,
-            issueIdentifier: value.issueIdentifier.trim(),
-          }
-        : null;
+    // Legacy "execution-session" tabs are dropped on read: execution sessions
+    // are real threads now and reopen as assistant-session tabs.
     case "authoring-session":
       return typeof value.issueIdentifier === "string" && value.issueIdentifier.trim().length > 0
         ? {

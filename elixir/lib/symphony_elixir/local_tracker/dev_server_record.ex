@@ -82,6 +82,18 @@ defmodule SymphonyElixir.LocalTracker.DevServerRecord do
     )
   end
 
+  @doc "Distinct {project_id, issue_identifier} pairs with a record in a non-terminal status."
+  @spec live_issue_keys() :: [{integer(), String.t()}]
+  def live_issue_keys do
+    Repo.all(
+      from(record in __MODULE__,
+        where: record.status in ^@non_terminal_statuses,
+        distinct: true,
+        select: {record.project_id, record.issue_identifier}
+      )
+    )
+  end
+
   @spec get_for_issue(integer(), String.t(), integer()) :: t() | nil
   def get_for_issue(project_id, issue_identifier, id)
       when is_integer(project_id) and is_binary(issue_identifier) and is_integer(id) do

@@ -31,8 +31,6 @@ export interface WorkspaceRowMenuProps {
   item: WorkspaceListItem;
   issueHref: string | null;
   resumePending?: boolean;
-  onOpenExecution?(session: ProjectSessionRow): void;
-  onOpenAuthoring?(issueIdentifier: string): void;
   onOpenSession?(session: RecentSession): void;
   onOpenAssistantSession?(threadId: number, title: string): void;
   onResume?(session: ProjectSessionRow): void;
@@ -45,8 +43,6 @@ export function WorkspaceRowMenu({
   item,
   issueHref,
   resumePending = false,
-  onOpenExecution,
-  onOpenAuthoring,
   onOpenSession,
   onOpenAssistantSession,
   onResume,
@@ -60,8 +56,6 @@ export function WorkspaceRowMenu({
     issueHref,
     resumePending,
     t,
-    onOpenExecution,
-    onOpenAuthoring,
     onOpenSession,
     onOpenAssistantSession,
     onResume,
@@ -131,8 +125,6 @@ function buildActions({
   issueHref,
   resumePending,
   t,
-  onOpenExecution,
-  onOpenAuthoring,
   onOpenSession,
   onOpenAssistantSession,
   onResume,
@@ -179,21 +171,8 @@ function buildActions({
     });
   }
 
-  if (card.execution && onOpenExecution) {
-    actions.push({
-      key: "open-execution",
-      label: t("workspacesPage.sessionRows.open"),
-      icon: sessionIcon,
-      onSelect: () => onOpenExecution(card.execution!),
-    });
-  } else if (card.authoring && card.issueIdentifier && onOpenAuthoring) {
-    actions.push({
-      key: "open-authoring",
-      label: t("workspacesPage.sessionRows.open"),
-      icon: sessionIcon,
-      onSelect: () => onOpenAuthoring(card.issueIdentifier!),
-    });
-  } else if (card.sessions[0] && onOpenSession) {
+  // Threads only: open the newest thread; no synthetic execution/authoring targets.
+  if (card.sessions[0] && onOpenSession) {
     actions.push({
       key: "open-session",
       label: t("workspacesPage.sessionRows.open"),

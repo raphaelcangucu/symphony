@@ -89,7 +89,7 @@ export function ProjectSidebar({ variant = "desktop" }: ProjectSidebarProps) {
 
   useEffect(() => {
     const sessionId = selection.sessionId;
-    if (!sessionId || sessionId.startsWith("exec:")) return;
+    if (!sessionId) return;
 
     const readAt = new Date().toISOString();
     updatePreferences((current) => ({

@@ -87,4 +87,51 @@ defmodule SymphonyElixir.DevServer.RuntimeContractStoreTest do
     assert {:error, {:missing, :server_slug}} =
              RuntimeContractStore.put(project, offer(%{server_slug: nil}))
   end
+
+  describe "renew_if_expiring/4" do
+    test "extends expiry when less than half the TTL remains", %{project: project} do
+      soon = DateTime.add(DateTime.utc_now(), 3600, :second)
+      {:ok, contract} = RuntimeContractStore.put(project, offer(%{expires_at: soon}))
+
+      assert :ok = RuntimeContractStore.renew_if_expiring(project, "1131", "advising", 4300)
+
+      assert {:ok, renewed, _record} = RuntimeContractStore.get_active(project, "1131", "advising")
+      assert DateTime.compare(renewed.expires_at, soon) == :gt
+      assert renewed.revision == contract.revision
+      assert renewed.contract_id == contract.contract_id
+    end
+
+    test "throttles renewal while plenty of TTL remains", %{project: project} do
+      {:ok, contract} = RuntimeContractStore.put(project, offer())
+
+      assert :ok = RuntimeContractStore.renew_if_expiring(project, "1131", "advising", 4300)
+
+      assert {:ok, unchanged, _record} = RuntimeContractStore.get_active(project, "1131", "advising")
+      assert DateTime.compare(unchanged.expires_at, contract.expires_at) == :eq
+    end
+
+    test "never resurrects an expired contract", %{project: project} do
+      past = DateTime.add(DateTime.utc_now(), -60, :second)
+      {:ok, _contract} = RuntimeContractStore.put(project, offer(%{expires_at: past}))
+
+      assert :ok = RuntimeContractStore.renew_if_expiring(project, "1131", "advising", 4300)
+
+      assert {:ok, unchanged, _record} = RuntimeContractStore.get_active(project, "1131", "advising")
+      assert DateTime.compare(unchanged.expires_at, past) == :eq
+    end
+
+    test "refuses to renew for a port outside the contract", %{project: project} do
+      soon = DateTime.add(DateTime.utc_now(), 3600, :second)
+      {:ok, _contract} = RuntimeContractStore.put(project, offer(%{expires_at: soon}))
+
+      assert :ok = RuntimeContractStore.renew_if_expiring(project, "1131", "advising", 4399)
+
+      assert {:ok, unchanged, _record} = RuntimeContractStore.get_active(project, "1131", "advising")
+      assert DateTime.compare(unchanged.expires_at, soon) == :eq
+    end
+
+    test "is a no-op when no contract exists", %{project: project} do
+      assert :ok = RuntimeContractStore.renew_if_expiring(project, "1131", "advising", 4300)
+    end
+  end
 end

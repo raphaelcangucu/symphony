@@ -25,8 +25,6 @@ interface WorkspaceAccordionItemProps {
   resumePending?: boolean;
   archiving?: boolean;
   onToggle(): void;
-  onOpenExecution?(session: ProjectSessionRow): void;
-  onOpenAuthoring?(issueIdentifier: string): void;
   onOpenSession?(session: RecentSession): void;
   onOpenAssistantSession?(threadId: number, title: string): void;
   onResume?(session: ProjectSessionRow): void;
@@ -42,8 +40,6 @@ export function WorkspaceAccordionItem({
   resumePending = false,
   archiving = false,
   onToggle,
-  onOpenExecution,
-  onOpenAuthoring,
   onOpenSession,
   onOpenAssistantSession,
   onResume,
@@ -116,8 +112,6 @@ export function WorkspaceAccordionItem({
             item={item}
             issueHref={issueHref}
             resumePending={resumePending}
-            onOpenExecution={onOpenExecution}
-            onOpenAuthoring={onOpenAuthoring}
             onOpenSession={onOpenSession}
             onOpenAssistantSession={onOpenAssistantSession}
             onResume={onResume}
@@ -135,14 +129,10 @@ export function WorkspaceAccordionItem({
           <WorkspaceDetailPane
             item={item}
             issueHref={issueHref}
-            resumePending={resumePending}
             archiving={archiving}
             embedded
-            onOpenExecution={onOpenExecution}
-            onOpenAuthoring={onOpenAuthoring}
             onOpenSession={onOpenSession}
             onOpenAssistantSession={onOpenAssistantSession}
-            onResume={onResume}
             onNewSession={onNewSession}
             onRemove={onRemove}
             onArchive={onArchive}

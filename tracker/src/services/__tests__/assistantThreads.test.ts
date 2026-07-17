@@ -323,6 +323,31 @@ describe("updateAssistantThread", () => {
     expect(http.patch).toHaveBeenCalledWith("/api/tracker/v1/assistant/threads/8", { labels: [] });
   });
 
+  it("patches agent_kind when agentKind is provided", async () => {
+    vi.mocked(http.patch).mockResolvedValue({
+      data: {
+        data: {
+          id: 9,
+          scope: "issue_execution",
+          agent_kind: "cursor",
+          status: "active",
+        },
+      },
+    });
+
+    const thread = await updateAssistantThread(9, { agentKind: "cursor" });
+
+    expect(http.patch).toHaveBeenCalledWith("/api/tracker/v1/assistant/threads/9", {
+      agent_kind: "cursor",
+    });
+    expect(thread).toMatchObject({ id: 9, agentKind: "cursor" });
+  });
+
+  it("rejects invalid agentKind values", async () => {
+    await expect(updateAssistantThread(1, { agentKind: "bogus" as never })).rejects.toThrow(/agentKind/);
+    expect(http.patch).not.toHaveBeenCalled();
+  });
+
   it("posts generate_title for a thread", async () => {
     vi.mocked(http.post).mockResolvedValue({
       data: {

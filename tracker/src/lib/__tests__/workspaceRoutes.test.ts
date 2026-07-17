@@ -139,10 +139,9 @@ describe("workspaceRoutes", () => {
     expect(projectSessionPath("acme", "thread/1")).toBe("/projects/acme/workspaces/thread%2F1");
   });
 
-  it("builds a deep-linkable execution session path with the issue identifier", () => {
-    expect(projectExecutionSessionPath("acme", "MAC-13")).toBe(
-      "/projects/acme/workspaces?exec=MAC-13&surface=autonomous",
-    );
+  it("builds orchestrator session paths from thread ids, not legacy exec query", () => {
+    expect(projectExecutionSessionPath("acme", "MAC-13", 42)).toBe("/projects/acme/workspaces/42");
+    expect(projectExecutionSessionPath("acme", "MAC-13")).toBe("/projects/acme/workspaces");
     expect(projectAuthoringSessionPath("acme", "MAC-13")).toBe(
       "/projects/acme/workspaces?exec=MAC-13",
     );

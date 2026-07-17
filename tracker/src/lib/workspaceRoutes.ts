@@ -82,8 +82,20 @@ export function projectAuthoringSessionPath(projectSlug: string, issueIdentifier
   return projectSessionSurfacePath(projectSlug, issueIdentifier, "session");
 }
 
-export function projectExecutionSessionPath(projectSlug: string, issueIdentifier: string): string {
-  return projectSessionSurfacePath(projectSlug, issueIdentifier, "autonomous");
+/**
+ * Path to an orchestrator `issue_execution` session. Prefer a real thread id —
+ * never emit the legacy `?exec=&surface=autonomous` query destination.
+ * Without a session id, fall back to the project workspaces list.
+ */
+export function projectExecutionSessionPath(
+  projectSlug: string,
+  _issueIdentifier: string,
+  executionSessionId?: number | null,
+): string {
+  if (executionSessionId != null && Number.isInteger(executionSessionId) && executionSessionId > 0) {
+    return projectSessionPath(projectSlug, executionSessionId);
+  }
+  return projectSessionsPath(projectSlug);
 }
 
 export function projectSessionSurfacePath(

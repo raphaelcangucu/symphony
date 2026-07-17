@@ -2038,6 +2038,22 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
 
   defp encode_payload(payload), do: Jason.encode!(payload, pretty: true)
 
+  defp stringify_keys(%DateTime{} = value), do: DateTime.to_iso8601(value)
+  defp stringify_keys(%NaiveDateTime{} = value), do: NaiveDateTime.to_iso8601(value)
+  defp stringify_keys(%Date{} = value), do: Date.to_iso8601(value)
+  defp stringify_keys(%Time{} = value), do: Time.to_iso8601(value)
+  defp stringify_keys(%MapSet{} = value), do: value |> MapSet.to_list() |> stringify_keys()
+
+  # Structs (e.g. Ecto schemas leaking into tool payloads) do not implement
+  # Enumerable, so Map.new/2 on them crashes the whole tool call. Convert them
+  # to plain maps first and drop Ecto metadata.
+  defp stringify_keys(%_{} = struct) do
+    struct
+    |> Map.from_struct()
+    |> Map.delete(:__meta__)
+    |> stringify_keys()
+  end
+
   defp stringify_keys(value) when is_map(value) do
     Map.new(value, fn {key, nested_value} -> {to_string(key), stringify_keys(nested_value)} end)
   end

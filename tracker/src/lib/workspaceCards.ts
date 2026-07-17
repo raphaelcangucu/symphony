@@ -20,9 +20,9 @@ export function countLiveWritersForWorkspace(
 
 /**
  * One card per working tree (or per issue for issues without an inventory
- * entry yet). Merges the execution session, the authoring session, the
- * parallel issue sessions, and the git/disk state of the tree — replacing the
- * one-card-per-session model of the old Sessions page.
+ * entry yet). Threads (`sessions`) are the source of truth for the visible
+ * session list; `execution` and `authoring` are enrichment only (status dot,
+ * active/waiting section, Resume in the row menu, title fallbacks).
  */
 export interface WorkspaceCard {
   key: string;
@@ -35,7 +35,7 @@ export interface WorkspaceCard {
   inventory: WorkspaceInventoryEntry | null;
   execution: ProjectSessionRow | null;
   authoring: AuthoringSessionSummary | null;
-  /** Parallel/clean chat sessions bound to this issue or tree. */
+  /** Every thread bound to this issue or tree (authoring, issue, execution). */
   sessions: RecentSession[];
 }
 
@@ -116,7 +116,7 @@ export function buildWorkspaceCards(input: WorkspaceCardsInput): WorkspaceCardsR
   for (const identifier of issueIdentifiers) {
     const execution = executionByIssue.get(identifier) ?? null;
     const authoring = authoringByIssue.get(identifier) ?? null;
-    const sessions = parallelSessionsByIssue.get(identifier) ?? [];
+    const sessions = cardSessionRows(parallelSessionsByIssue.get(identifier) ?? [], execution);
     const inventory = inventoryByIssue.get(identifier) ?? null;
     const title = issueTitles.get(identifier) ?? execution?.title ?? authoring?.title ?? identifier;
 
@@ -318,6 +318,8 @@ function splitRelatedSessions(
 
   for (const session of relatedSessions) {
     if (session.scope === "issue" && session.identifier) {
+      // Summary kept for title fallbacks and the sidebar authoring node; the
+      // interactive authoring thread itself is listed with the other sessions.
       const existing = authoringByIssue.get(session.identifier);
       if (!existing || timestampValue(session.updatedAt) > timestampValue(existing.updatedAt)) {
         authoringByIssue.set(session.identifier, {
@@ -327,11 +329,12 @@ function splitRelatedSessions(
           agentKind: session.agentKind === "opencode" ? null : session.agentKind,
         });
       }
-      continue;
     }
 
     if (
-      (session.scope === "issue_session" || session.scope === "issue_execution") &&
+      (session.scope === "issue" ||
+        session.scope === "issue_session" ||
+        session.scope === "issue_execution") &&
       session.identifier
     ) {
       const list = parallelSessionsByIssue.get(session.identifier) ?? [];
@@ -374,6 +377,101 @@ function timestampValue(value: string | null | undefined): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+const ACTIVE_EXECUTION_STATUS_KINDS: ReadonlySet<RecentSession["statusKind"]> = new Set([
+  "active",
+  "running",
+  "waiting",
+  "retrying",
+]);
+
+/**
+ * Mirrors the sidebar capability rule: orchestrator execution threads cannot
+ * be archived while the run is still active; every other thread can.
+ */
+export function canArchiveSessionRow(session: RecentSession): boolean {
+  if (session.threadId == null) return false;
+  if (session.scope !== "issue_execution") return true;
+  return !ACTIVE_EXECUTION_STATUS_KINDS.has(session.statusKind);
+}
+
+/**
+ * Threads are the card's visible session list. Dedup by thread id, and when
+ * the live execution has a real `executionSessionId` that recents have not
+ * surfaced yet, synthesize exactly one row for that thread. An execution
+ * without a session id never invents a row.
+ */
+function cardSessionRows(
+  related: readonly RecentSession[],
+  execution: ProjectSessionRow | null,
+): RecentSession[] {
+  const rows: RecentSession[] = [];
+  const seenThreadIds = new Set<number>();
+
+  for (const session of related) {
+    if (session.threadId != null) {
+      if (seenThreadIds.has(session.threadId)) continue;
+      seenThreadIds.add(session.threadId);
+    }
+    rows.push(session);
+  }
+
+  const executionThreadId = execution?.execution.executionSessionId ?? null;
+  if (
+    execution &&
+    executionThreadId != null &&
+    executionThreadId > 0 &&
+    !seenThreadIds.has(executionThreadId)
+  ) {
+    rows.push(sessionRowFromExecution(execution, executionThreadId));
+  }
+
+  rows.sort((a, b) => timestampValue(b.updatedAt) - timestampValue(a.updatedAt));
+  return rows;
+}
+
+function sessionRowFromExecution(
+  execution: ProjectSessionRow,
+  threadId: number,
+): RecentSession {
+  return {
+    id: `thread:${threadId}`,
+    kind: "chat",
+    scope: "issue_execution",
+    agentKind: execution.agentKind,
+    projectSlug: null,
+    projectName: null,
+    title: execution.title,
+    identifier: execution.issueIdentifier,
+    threadId,
+    status: execution.status,
+    statusKind: executionStatusToRecentStatusKind(execution.status),
+    preview: null,
+    updatedAt: execution.lastEventAt ?? execution.startedAt ?? "",
+  };
+}
+
+function executionStatusToRecentStatusKind(
+  status: ProjectSessionRow["status"],
+): RecentSession["statusKind"] {
+  switch (status) {
+    case "live":
+      return "running";
+    case "retrying":
+      return "retrying";
+    case "waiting":
+      return "waiting";
+    case "error":
+      return "error";
+    case "aborted":
+      return "aborted";
+    case "saved":
+      return "closed";
+    case "idle":
+    case "paused":
+      return "idle";
+  }
+}
+
 export function formatBytes(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
   const units = ["B", "KB", "MB", "GB", "TB"];
@@ -392,6 +490,10 @@ export function linkedSessionThreadIds(card: WorkspaceCard): number[] {
   const ids = new Set<number>();
   for (const session of card.sessions) {
     if (session.threadId != null) ids.add(session.threadId);
+  }
+  const executionSessionId = card.execution?.execution.executionSessionId;
+  if (executionSessionId != null && executionSessionId > 0) {
+    ids.add(executionSessionId);
   }
   return [...ids];
 }

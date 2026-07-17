@@ -22,15 +22,27 @@ describe("recentSessionPath", () => {
       "/projects/demo/assistant/explore",
     );
   });
-  it("codex → sessions page inline execution tab", () => {
+  it("codex with execution session → /projects/:slug/workspaces/:threadId", () => {
+    expect(
+      recentSessionPath({
+        ...base,
+        kind: "codex",
+        scope: null,
+        projectSlug: "demo",
+        identifier: "ABC-1",
+        threadId: 42,
+      }),
+    ).toBe("/projects/demo/workspaces/42");
+  });
+  it("codex without execution session → project workspaces list", () => {
     expect(recentSessionPath({ ...base, kind: "codex", scope: null, projectSlug: "demo", identifier: "ABC-1" })).toBe(
-      "/projects/demo/workspaces?exec=ABC-1&agent=execution",
+      "/projects/demo/workspaces",
     );
   });
   it("issue authoring chat → project sessions authoring tab", () => {
     expect(
       recentSessionPath({ ...base, kind: "chat", scope: "issue", projectSlug: "demo", identifier: "ABC-1", threadId: 9 }),
-    ).toBe("/projects/demo/workspaces?exec=ABC-1&agent=authoring");
+    ).toBe("/projects/demo/workspaces?exec=ABC-1");
   });
   it("issue_session chat → /projects/:slug/sessions/:threadId", () => {
     expect(
@@ -60,7 +72,7 @@ describe("recentSessionPath", () => {
   it("issue authoring chat without thread id still opens authoring tab", () => {
     expect(
       recentSessionPath({ ...base, kind: "chat", scope: "issue", projectSlug: "demo", identifier: "ABC-1", threadId: null }),
-    ).toBe("/projects/demo/workspaces?exec=ABC-1&agent=authoring");
+    ).toBe("/projects/demo/workspaces?exec=ABC-1");
   });
   it("freeform chat without threadId → /assistant", () => {
     expect(recentSessionPath({ ...base, kind: "chat", scope: "freeform", threadId: null })).toBe("/assistant");

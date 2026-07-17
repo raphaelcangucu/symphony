@@ -1,6 +1,7 @@
 defmodule SymphonyElixir.AgentRunnerAgentKindTest do
   use ExUnit.Case, async: false
 
+  alias SymphonyElixir.Agent.ExecutionSession
   alias SymphonyElixir.AgentRunner
   alias SymphonyElixir.Issue
   alias SymphonyElixir.LocalTracker.Context
@@ -71,6 +72,44 @@ defmodule SymphonyElixir.AgentRunnerAgentKindTest do
 
   test "label agent is used when settings agent_kind is empty" do
     issue = %Issue{id: "10", identifier: "PREF-10", project_slug: "pref", agent_kind: "codex"}
+    assert AgentRunner.issue_agent_kind(issue) == "codex"
+  end
+
+  test "execution thread agent_kind beats settings and labels" do
+    :ok = Context.put_agent_settings("pref", "PREF-THREAD", %{agent_kind: "codex"})
+
+    {:ok, _session} =
+      ExecutionSession.ensure("pref", "PREF-THREAD",
+        workspace_path: "/tmp/pref/PREF-THREAD",
+        agent_kind: "cursor"
+      )
+
+    issue = %Issue{
+      id: "11",
+      identifier: "PREF-THREAD",
+      project_slug: "pref",
+      agent_kind: "claude"
+    }
+
+    assert AgentRunner.issue_agent_kind(issue) == "cursor"
+  end
+
+  test "falls through when execution thread has no agent_kind" do
+    {:ok, session} =
+      ExecutionSession.ensure("pref", "PREF-EMPTY",
+        workspace_path: "/tmp/pref/PREF-EMPTY",
+        agent_kind: "cursor"
+      )
+
+    {:ok, _} = SymphonyElixir.Assistant.History.update_thread(session, %{agent_kind: nil})
+
+    issue = %Issue{
+      id: "12",
+      identifier: "PREF-EMPTY",
+      project_slug: "pref",
+      agent_kind: "codex"
+    }
+
     assert AgentRunner.issue_agent_kind(issue) == "codex"
   end
 end

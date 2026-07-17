@@ -20,6 +20,7 @@ import {
 import type { AssistantChatPlanApprovalAction } from "@/components/assistant/AssistantChatMessageBubble";
 import { AssistantMessageList, type LoadOlderControl } from "@/components/assistant/AssistantMessageList";
 import { AssistantSessionErrorBoundary } from "@/components/assistant/AssistantSessionErrorBoundary";
+import { ExecutionSessionPanel } from "@/components/assistant/ExecutionSessionPanel";
 import {
   countHiddenPromptsBefore,
   getCurrentPromptWindow,
@@ -64,6 +65,8 @@ import {
   completedTaskCount,
   type AssistantTasksDockControl,
 } from "@/components/agent-activity";
+import { useSessionTasksDock } from "@/components/sessions/sessionTasksDockContext";
+import { usePublishSessionTasksDockFeed } from "@/components/sessions/sessionTasksDockFeedContext";
 import { useIsLgUp } from "@/hooks/useMediaQuery";
 import {
   attachChatScrollStickiness,
@@ -291,6 +294,12 @@ interface ProjectAssistantPanelProps {
   onTasksDockControlChange?: (control: AssistantTasksDockControl | null) => void;
   composerSeedMessage?: string | null;
   contentMaxWidth?: ProjectAssistantContentMaxWidth;
+  /**
+   * When true, render the orchestrator execution surface (session_log body +
+   * steer/queue/resume composer) instead of the interactive assistant channel.
+   * Set by AssistantSessionTabContent when thread.scope === "issue_execution".
+   */
+  executionMode?: boolean;
 }
 
 interface QueuedMessage {
@@ -336,7 +345,31 @@ const convertMessage = (message: AssistantChatMessage): ThreadMessageLike => ({
   content: [{ type: "text", text: message.content }],
 });
 
-export function ProjectAssistantPanel({
+export function ProjectAssistantPanel(props: ProjectAssistantPanelProps) {
+  // Branch before interactive hooks so execution mode never joins history /
+  // send_message paths. Interactive behavior stays in InteractiveProjectAssistantPanel.
+  if (
+    props.executionMode &&
+    props.projectSlug &&
+    props.threadId != null &&
+    props.issueIdentifier
+  ) {
+    return (
+      <ExecutionSessionPanel
+        projectSlug={props.projectSlug}
+        threadId={props.threadId}
+        issueIdentifier={props.issueIdentifier}
+        composerSeedMessage={props.composerSeedMessage}
+        hideHeader={props.hideHeader}
+        diffRequestId={props.diffRequestId}
+      />
+    );
+  }
+
+  return <InteractiveProjectAssistantPanel {...props} />;
+}
+
+function InteractiveProjectAssistantPanel({
   projectSlug,
   threadId,
   issueIdentifier,
@@ -1661,27 +1694,52 @@ export function ProjectAssistantPanel({
   const taskSnapshot = useStableValue(
     useMemo(() => deriveAgentTasksFromAssistantMessages(visibleMessages), [visibleMessages]),
   );
+  const toolItems = useMemo(
+    () => visibleMessages.flatMap((message) => message.toolCalls),
+    [visibleMessages],
+  );
+  usePublishSessionTasksDockFeed({ tasks: taskSnapshot, toolItems });
   const hasTasks = (taskSnapshot?.tasks.length ?? 0) > 0;
   const tasksDone = taskSnapshot ? completedTaskCount(taskSnapshot) : 0;
   const tasksTotal = taskSnapshot?.tasks.length ?? 0;
   const isLgUp = useIsLgUp();
-  const [tasksDockOpen, setTasksDockOpen] = useState<boolean>(
+  const sessionTasksDock = useSessionTasksDock();
+  const issueIdForTasksDock = issueIdentifier?.trim() || null;
+  const usesWorkspaceTasksDock = sessionTasksDock != null && issueIdForTasksDock != null;
+  const [localTasksDockOpen, setLocalTasksDockOpen] = useState<boolean>(
     () => window.localStorage.getItem(TASKS_DOCK_STORAGE_KEY) !== "false",
   );
-  const persistTasksDockOpen = useCallback((next: boolean) => {
-    window.localStorage.setItem(TASKS_DOCK_STORAGE_KEY, String(next));
-    setTasksDockOpen(next);
-  }, []);
+  const tasksDockOpen = usesWorkspaceTasksDock
+    ? sessionTasksDock.openIssueIdentifier === issueIdForTasksDock
+    : localTasksDockOpen;
+  const persistTasksDockOpen = useCallback(
+    (next: boolean) => {
+      if (usesWorkspaceTasksDock && sessionTasksDock && issueIdForTasksDock) {
+        const currentlyOpen = sessionTasksDock.openIssueIdentifier === issueIdForTasksDock;
+        if (next !== currentlyOpen) sessionTasksDock.toggleTasks(issueIdForTasksDock);
+        return;
+      }
+      window.localStorage.setItem(TASKS_DOCK_STORAGE_KEY, String(next));
+      setLocalTasksDockOpen(next);
+    },
+    [issueIdForTasksDock, sessionTasksDock, usesWorkspaceTasksDock],
+  );
   const toggleTasksDock = useCallback(() => {
-    setTasksDockOpen((previous) => {
+    if (sessionTasksDock && issueIdForTasksDock) {
+      sessionTasksDock.toggleTasks(issueIdForTasksDock);
+      return;
+    }
+    setLocalTasksDockOpen((previous) => {
       const next = !previous;
       window.localStorage.setItem(TASKS_DOCK_STORAGE_KEY, String(next));
       return next;
     });
-  }, []);
+  }, [issueIdForTasksDock, sessionTasksDock]);
   const tasksAvailable = isPageMode && hasTasks && taskSnapshot != null;
-  const showTasksDock = tasksAvailable && tasksDockOpen && isLgUp;
-  const showTasksSheet = tasksAvailable && tasksDockOpen && !isLgUp;
+  // Workspace sessions use the shared lateral Tasks/Tools dock; keep the panel-local
+  // dock/sheet only when that workspace control is unavailable.
+  const showTasksDock = tasksAvailable && tasksDockOpen && isLgUp && !usesWorkspaceTasksDock;
+  const showTasksSheet = tasksAvailable && tasksDockOpen && !isLgUp && !usesWorkspaceTasksDock;
 
   useEffect(() => {
     if (!onTasksDockControlChange) return undefined;

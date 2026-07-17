@@ -26,10 +26,10 @@ vi.mock("@/components/assistant/IssueAuthoringPanel", () => ({
   },
 }));
 
-vi.mock("@/components/issues/issue-detail/AgentTab", () => ({
-  AgentTab: ({ showExecutionStatus }: { showExecutionStatus?: boolean }) => (
-    <div data-testid="agent-execution-panel">
-      Execution {showExecutionStatus ? "status-open" : "status-closed"}
+vi.mock("@/components/assistant/ExecutionSessionPanel", () => ({
+  ExecutionSessionPanel: ({ threadId }: { threadId: number }) => (
+    <div data-testid="agent-execution-panel" data-thread={threadId}>
+      Execution
     </div>
   ),
 }));
@@ -39,6 +39,29 @@ vi.mock("@/hooks/useIssueEditor", () => ({
     browser: { available: true, url: "https://code.example/?folder=/w", reason: null },
     cursorDesktop: { available: true, url: "cursor://file/w", reason: null },
     loading: false,
+  }),
+}));
+
+vi.mock("@/services/assistant", () => ({
+  fetchAssistantCatalogBundle: vi.fn().mockResolvedValue({
+    defaultAgent: "codex",
+    agents: [
+      {
+        agent: "codex",
+        agentLabel: "Codex",
+        command: "codex",
+        defaultModel: "gpt-5",
+        models: [
+          {
+            id: "gpt-5",
+            model: "gpt-5",
+            label: "GPT-5",
+            defaultEffort: "high",
+            efforts: [{ id: "high", label: "High" }],
+          },
+        ],
+      },
+    ],
   }),
 }));
 
@@ -67,7 +90,7 @@ const execution: AgentExecution = {
   status: "live",
   agentKind: "codex",
   sessionId: "sess-1",
-  executionSessionId: null,
+  executionSessionId: 9001,
   lastEvent: "turn_started",
   lastMessage: null,
   lastEventAt: null,
@@ -91,70 +114,38 @@ describe("AgentTabs documents drawer", () => {
   it("shows documents on the execution section", () => {
     render(
       <MemoryRouter initialEntries={["/issues/DIS-6/agent?agent=execution"]}>
-        <AgentTabs issue={issue} projectSlug="distributionmachine" view="board" />
+        <AgentTabs issue={issue} projectSlug="distributionmachine" view="board" execution={execution} />
       </MemoryRouter>,
     );
 
     expect(screen.getByRole("button", { name: /documents/i })).toBeInTheDocument();
     expect(screen.getByTestId("agent-execution-panel")).toBeInTheDocument();
+    expect(screen.getByTestId("agent-execution-panel")).toHaveAttribute("data-thread", "9001");
     expect(screen.queryByTestId("issue-authoring-panel")).not.toBeInTheDocument();
   });
 
-  it("toggles execution status from the execution hint row", async () => {
-    const user = userEvent.setup();
-    render(
-      <MemoryRouter initialEntries={["/issues/DIS-6/agent?agent=execution"]}>
-        <AgentTabs issue={issue} projectSlug="distributionmachine" view="board" execution={execution} />
-      </MemoryRouter>,
-    );
-
-    expect(screen.queryByText(/watch the live run/i)).not.toBeInTheDocument();
-    const statusToggle = screen.getByRole("button", { name: /run status/i });
-    expect(screen.getByTestId("agent-tabs-left-control")).toContainElement(statusToggle);
-    expect(statusToggle).toHaveAttribute("aria-expanded", "false");
-    expect(statusToggle).toHaveTextContent("Live");
-    expect(screen.getByTestId("agent-execution-panel")).toHaveTextContent("status-closed");
-
-    await user.click(statusToggle);
-
-    expect(statusToggle).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByTestId("agent-execution-panel")).toHaveTextContent("status-open");
-  });
-
-  it("shows the resolved execution status in the status toggle", () => {
+  it("shows an empty state with new-session when there is no execution session id", () => {
     render(
       <MemoryRouter initialEntries={["/issues/DIS-6/agent?agent=execution"]}>
         <AgentTabs
           issue={issue}
           projectSlug="distributionmachine"
           view="board"
-          execution={{
-            ...execution,
-            status: "idle",
-            lastEvent: "turn_aborted",
-            error: "Run interrupted",
-          }}
+          execution={{ ...execution, executionSessionId: null }}
         />
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole("button", { name: /run status/i })).toHaveTextContent("Aborted");
-  });
-
-  it("does not show the execution status toggle while authoring", () => {
-    render(
-      <MemoryRouter initialEntries={["/issues/DIS-6/agent?agent=authoring"]}>
-        <AgentTabs issue={issue} projectSlug="distributionmachine" view="board" execution={execution} />
-      </MemoryRouter>,
-    );
-
-    expect(screen.queryByRole("button", { name: /run status/i })).not.toBeInTheDocument();
+    const empty = screen.getByTestId("agent-execution-empty");
+    expect(empty).toBeInTheDocument();
+    expect(screen.queryByTestId("agent-execution-panel")).not.toBeInTheDocument();
+    expect(within(empty).getByRole("button", { name: /new session/i })).toBeInTheDocument();
   });
 
   it("hides the view-issue link and code button without issueHref", () => {
     render(
       <MemoryRouter initialEntries={["/issues/DIS-6/agent?agent=execution"]}>
-        <AgentTabs issue={issue} projectSlug="distributionmachine" view="board" />
+        <AgentTabs issue={issue} projectSlug="distributionmachine" view="board" execution={execution} />
       </MemoryRouter>,
     );
 
@@ -192,6 +183,7 @@ describe("AgentTabs documents drawer", () => {
           issue={issue}
           projectSlug="distributionmachine"
           view="board"
+          execution={execution}
           issueHref="/projects/distributionmachine/board/issues/DIS-6"
           issueTerminalHref="/projects/distributionmachine/board/issues/DIS-6/terminal"
         />

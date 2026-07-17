@@ -697,6 +697,36 @@ defmodule SymphonyElixir.Assistant.ToolExecutorTest do
       assert "instructions" in required_fields(specs, "dispatch_codex")
     end
 
+    test "serializes DateTime fields in Codex tool results instead of crashing" do
+      # Regression: the preview snapshot carries `as_of: DateTime`, and
+      # stringify_keys used to crash with "Enumerable not implemented for
+      # DateTime", failing the whole manage_preview call before execution.
+      as_of = DateTime.utc_now()
+
+      response =
+        ToolExecutor.execute_for_codex(
+          "macro-markets",
+          "manage_preview",
+          %{"action" => "status"},
+          issue: %{identifier: "MAC-1"},
+          issue_targets: fn "macro-markets", "MAC-1" ->
+            {:ok,
+             %{
+               available: true,
+               reason: nil,
+               snapshot_id: "snap_test",
+               as_of: as_of,
+               servers: [],
+               tunnel: %{enabled: false, running: false}
+             }}
+          end,
+          list_serve_steps: fn _slug -> [] end
+        )
+
+      assert %{"success" => true, "contentItems" => [%{"text" => text}]} = response
+      assert text =~ DateTime.to_iso8601(as_of)
+    end
+
     test "rejects create_subtask with mismatched parent_identifier" do
       executor = ToolExecutor.issue_bound_codex_tool_executor("macro-markets", "MAC-1")
 

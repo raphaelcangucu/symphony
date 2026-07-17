@@ -17,6 +17,9 @@ defmodule SymphonyElixir.DevServer.RuntimeContractStore do
   alias SymphonyElixir.Repo
 
   @default_ttl_ms 86_400_000
+  # Renew only when less than half the TTL remains, so verified-serving
+  # reconciliations (dock polls, reconciler ticks) do not write on every pass.
+  @renew_threshold_ms div(@default_ttl_ms, 2)
 
   @offer_fields [
     :source,
@@ -79,6 +82,63 @@ defmodule SymphonyElixir.DevServer.RuntimeContractStore do
   end
 
   def get_active(_project, _issue, _server), do: :error
+
+  @doc """
+  Extend the contract's expiry while its process is verifiably serving.
+
+  Callers must only invoke this after confirming the port is actually serving
+  traffic. The renewal is skipped when the contract is missing, already
+  expired (expired contracts stay stale — a fresh start/prepare mints a new
+  one), the port is outside the contract's `allowed_ports`, or more than half
+  the TTL still remains (throttle). Renewal never rotates `revision`.
+  """
+  @spec renew_if_expiring(map(), String.t(), String.t(), integer()) :: :ok
+  def renew_if_expiring(%{id: project_id}, issue_identifier, server_slug, port)
+      when is_integer(project_id) and is_binary(issue_identifier) and is_binary(server_slug) and
+             is_integer(port) do
+    case fetch_record(project_id, issue_identifier, server_slug) do
+      nil -> :ok
+      record -> maybe_renew(record, port)
+    end
+  end
+
+  def renew_if_expiring(_project, _issue_identifier, _server_slug, _port), do: :ok
+
+  defp maybe_renew(%PreviewRuntimeContract{} = record, port) do
+    now = DateTime.utc_now()
+    renew_before = DateTime.add(now, @renew_threshold_ms, :millisecond)
+
+    with true <- port in (record.allowed_ports || []),
+         %DateTime{} = expires_at <- record.expires_at,
+         :gt <- DateTime.compare(expires_at, now),
+         :lt <- DateTime.compare(expires_at, renew_before) do
+      record
+      |> PreviewRuntimeContract.changeset(%{expires_at: DateTime.add(now, @default_ttl_ms, :millisecond)})
+      |> Repo.update()
+
+      :ok
+    else
+      _skip -> :ok
+    end
+  end
+
+  @doc """
+  Issue identifiers with at least one unexpired contract for the project.
+  Used to discover previews whose serve process may have outlived the in-memory
+  instance registry (e.g. across a Symphony restart).
+  """
+  @spec active_issue_identifiers(integer()) :: [String.t()]
+  def active_issue_identifiers(project_id) when is_integer(project_id) do
+    now = DateTime.utc_now()
+
+    Repo.all(
+      from(c in PreviewRuntimeContract,
+        where: c.project_id == ^project_id and c.expires_at > ^now,
+        distinct: true,
+        select: c.issue_identifier
+      )
+    )
+  end
 
   @spec list_for_issue(integer(), String.t()) :: [PreviewRuntimeContract.t()]
   def list_for_issue(project_id, issue_identifier)

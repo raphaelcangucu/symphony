@@ -139,7 +139,7 @@ function fixtureInput(
     projectTitle: "Demo",
     archived: false,
     issues: [issue("DEMO-1", "First issue")],
-    executions: new Map([["DEMO-1", execution("DEMO-1")]]),
+    executions: new Map([["DEMO-1", execution("DEMO-1", { executionSessionId: 42, sessionId: "42" })]]),
     relatedSessions: [
       recent("authoring", {
         scope: "issue",
@@ -210,9 +210,9 @@ describe("buildSidebarProjectTree", () => {
         href: "/projects/demo/workspaces/11?assistant_agent=claude",
       },
       {
-        id: "exec:DEMO-1",
+        id: "thread:42",
         sessionKind: "execution",
-        href: "/projects/demo/workspaces?exec=DEMO-1&surface=autonomous",
+        href: "/projects/demo/workspaces/42",
       },
     ]);
     expect(project.unassignedSessions.map((session) => session.title)).toEqual(["Free chat"]);
@@ -736,7 +736,7 @@ describe("buildSidebarProjectTree", () => {
 
     expect(sessions.find((session) => session.id === "thread:11")?.unread).toBe(false);
     expect(sessions.find((session) => session.id === "authoring:DEMO-1")?.unread).toBe(true);
-    expect(sessions.find((session) => session.id === "exec:DEMO-1")?.unread).toBe(false);
+    expect(sessions.find((session) => session.id === "thread:42")?.unread).toBe(false);
     expect(project.unassignedSessions[0]?.unread).toBe(true);
   });
 
@@ -748,7 +748,7 @@ describe("buildSidebarProjectTree", () => {
           lastReadAtBySession: {
             "thread:11": "not-a-timestamp",
             "authoring:DEMO-1": "not-a-timestamp",
-            "exec:DEMO-1": "not-a-timestamp",
+            "thread:42": "not-a-timestamp",
           },
         },
       }),
@@ -757,7 +757,7 @@ describe("buildSidebarProjectTree", () => {
 
     expect(sessions.find((session) => session.id === "thread:11")?.unread).toBe(true);
     expect(sessions.find((session) => session.id === "authoring:DEMO-1")?.unread).toBe(false);
-    expect(sessions.find((session) => session.id === "exec:DEMO-1")?.unread).toBe(false);
+    expect(sessions.find((session) => session.id === "thread:42")?.unread).toBe(false);
   });
 
   it("preserves Unix epoch zero while rejecting negative and invalid timestamps", () => {
@@ -819,7 +819,11 @@ describe("buildSidebarProjectTree", () => {
       fixtureInput({
         issues,
         executions: statuses.map((status, index) =>
-          execution(`DEMO-${index + 1}`, { status }),
+          execution(`DEMO-${index + 1}`, {
+            status,
+            executionSessionId: 100 + index,
+            sessionId: String(100 + index),
+          }),
         ),
         relatedSessions: [],
         assistantThreads: [],

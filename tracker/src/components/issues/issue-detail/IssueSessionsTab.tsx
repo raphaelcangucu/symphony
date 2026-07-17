@@ -47,8 +47,16 @@ export function IssueSessionsTab({ issue, projectSlug, execution, view }: IssueS
   const { archiving, archiveChat } = useArchiveChat(() => void refetch());
 
   const openExecutionSession = useCallback(() => {
-    navigate(projectExecutionSessionPath(projectSlug, issue.identifier));
-  }, [issue.identifier, navigate, projectSlug]);
+    const threadId =
+      execution?.executionSessionId ?? executionSession?.execution.executionSessionId ?? null;
+    navigate(projectExecutionSessionPath(projectSlug, issue.identifier, threadId));
+  }, [
+    execution?.executionSessionId,
+    executionSession?.execution.executionSessionId,
+    issue.identifier,
+    navigate,
+    projectSlug,
+  ]);
 
   const openChatSession = useCallback(
     (thread: AssistantThread) => {

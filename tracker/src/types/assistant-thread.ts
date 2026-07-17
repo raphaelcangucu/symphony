@@ -1,7 +1,7 @@
 export interface AssistantThread {
   id: number;
   scope: string;
-  agentKind: "codex" | "claude" | "cursor" | null;
+  agentKind: "codex" | "claude" | "cursor" | "opencode" | null;
   projectSlug: string | null;
   projectName: string | null;
   issueIdentifier: string | null;

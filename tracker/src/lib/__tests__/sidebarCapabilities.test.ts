@@ -348,9 +348,9 @@ describe("sidebar capabilities", () => {
     (statusKind) => {
       const actions = resolveSidebarCapabilities(
         session({
-          id: "exec:DEMO-1",
+          id: "thread:42",
           sessionKind: "execution",
-          threadId: null,
+          threadId: 42,
           issueIdentifier: "DEMO-1",
           statusKind,
         }),
@@ -367,9 +367,9 @@ describe("sidebar capabilities", () => {
   it("enables archive for inactive issue-backed executions and never offers delete", () => {
     const actions = resolveSidebarCapabilities(
       session({
-        id: "exec:DEMO-1",
+        id: "thread:42",
         sessionKind: "execution",
-        threadId: null,
+        threadId: 42,
         issueIdentifier: "DEMO-1",
         statusKind: "done",
       }),
@@ -386,9 +386,9 @@ describe("sidebar capabilities", () => {
       ids(
         resolveSidebarCapabilities(
           session({
-            id: "exec:unknown",
+            id: "thread:99",
             sessionKind: "execution",
-            threadId: null,
+            threadId: 99,
             issueIdentifier: null,
           }),
           BASE_CONTEXT,

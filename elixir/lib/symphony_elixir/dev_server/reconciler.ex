@@ -16,6 +16,7 @@ defmodule SymphonyElixir.DevServer.Reconciler do
   alias SymphonyElixir.{Config, Repo, Tracker}
   alias SymphonyElixir.DevServer.LeaseStore
   alias SymphonyElixir.DevServer.Manager
+  alias SymphonyElixir.DevServer.RuntimeContractStore
   alias SymphonyElixir.GitHub.Config, as: GitHubConfig
   alias SymphonyElixir.GitHub.PullRequests
   alias SymphonyElixir.LocalTracker.{Context, Project}
@@ -127,7 +128,29 @@ defmodule SymphonyElixir.DevServer.Reconciler do
       |> Enum.each(&start_candidate(&1, issue_index))
     end
 
+    reconcile_contracted_previews()
+
     gc_preview_slots(wait_state_issues)
+  end
+
+  # Converge persisted dev-server records with runtime truth for every issue
+  # holding an unexpired runtime contract. `Manager.list_for_issue/2` probes
+  # each record's port, adopts externally serving contracted processes back to
+  # "ready" (e.g. docker containers that outlived a Symphony restart), demotes
+  # dead ones, and broadcasts changes to the Preview dock — so the dock stays
+  # in sync without depending on a UI poll.
+  defp reconcile_contracted_previews do
+    Enum.each(Context.list_projects(), fn project ->
+      project.id
+      |> RuntimeContractStore.active_issue_identifiers()
+      |> Enum.each(fn identifier -> Manager.list_for_issue(project.slug, identifier) end)
+    end)
+  rescue
+    exception ->
+      Logger.debug("Dev server contracted preview reconcile skipped reason=#{inspect(exception)}")
+  catch
+    kind, reason ->
+      Logger.debug("Dev server contracted preview reconcile skipped reason=#{inspect({kind, reason})}")
   end
 
   @doc false
@@ -211,7 +234,12 @@ defmodule SymphonyElixir.DevServer.Reconciler do
         end
       end)
 
-    MapSet.union(MapSet.new(from_issues), Manager.running_issue_keys())
+    from_issues
+    |> MapSet.new()
+    |> MapSet.union(Manager.running_issue_keys())
+    # DB-live keys keep the slot of an adopted external process (ready record,
+    # no registered instance) from being GC'd while it is still serving.
+    |> MapSet.union(Manager.db_live_issue_keys())
   end
 
   defp known_trigger_requested?(auto_start_on) when is_list(auto_start_on) do

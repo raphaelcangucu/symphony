@@ -4,12 +4,17 @@ import {
   type AssistantChatPlanApprovalAction,
 } from "@/components/assistant/AssistantChatMessageBubble";
 import {
+  SessionLogFeedDisclosure,
+  SessionLogFeedEventGroup,
+} from "@/components/assistant/SessionLogFeedItems";
+import {
   WorkingIndicator,
   type WorkingActiveToolDetail,
 } from "@/components/assistant/WorkingIndicator";
 import type { OpenWorkspaceDiffRequest } from "@/components/assistant/EditedFilesSummary";
 import type { ComposerContextChipRef } from "@/components/assistant/contextMentions";
 import type { OpenKbPathHandler } from "@/lib/openKbPath";
+import type { SessionLogFeedItem } from "@/lib/sessionLogFeed";
 import type { AssistantChatMessage } from "@/services/assistant";
 import type { AgentTaskSnapshot } from "@/types/agentTasks";
 
@@ -21,7 +26,16 @@ export interface LoadOlderControl {
 }
 
 interface AssistantMessageListProps {
-  messages: AssistantChatMessage[];
+  /**
+   * Interactive history. Ignored when `feedItems` is provided (execution mode
+   * uses the adapted session-log feed as the sole body source).
+   */
+  messages?: AssistantChatMessage[];
+  /**
+   * Unified session-log feed (`message` | `disclosure` | `event_group`).
+   * When set, replaces `messages` as the body source.
+   */
+  feedItems?: SessionLogFeedItem[];
   taskSnapshot: AgentTaskSnapshot | null;
   loadOlder?: LoadOlderControl | null;
   hidePinnedPanel?: boolean;
@@ -45,7 +59,8 @@ interface AssistantMessageListProps {
 }
 
 export function AssistantMessageList({
-  messages,
+  messages = [],
+  feedItems,
   taskSnapshot,
   loadOlder = null,
   hidePinnedPanel = false,
@@ -67,6 +82,8 @@ export function AssistantMessageList({
   onKillTool,
   onFetchToolOutput,
 }: AssistantMessageListProps) {
+  const useFeed = Array.isArray(feedItems);
+
   return (
     <>
       {hidePinnedPanel ? null : <AgentTaskPinnedPanel snapshot={taskSnapshot} />}
@@ -82,26 +99,50 @@ export function AssistantMessageList({
           </button>
         </div>
       ) : null}
-      {messages.map((message) => (
-        <AssistantChatMessageBubble
-          key={message.id}
-          message={message}
-          projectSlug={projectSlug}
-          issueIdentifier={issueIdentifier}
-          threadId={threadId}
-          onOpenDocumentPath={onOpenDocumentPath}
-          onInsertContext={onInsertContext}
-          onOpenWorkspaceDiff={onOpenWorkspaceDiff}
-          taskSnapshot={taskSnapshot}
-          onKillTool={onKillTool}
-          onFetchToolOutput={onFetchToolOutput}
-          planApprovalAction={
-            issueIdentifier && !isRunning && message.id === planApprovalMessageId
-              ? { messageId: message.id, disabled: !channelReady, onApprove: onApprovePlan }
-              : undefined
-          }
-        />
-      ))}
+      {useFeed
+        ? feedItems.map((item) => {
+            if (item.type === "disclosure") {
+              return <SessionLogFeedDisclosure key={item.id} item={item} />;
+            }
+            if (item.type === "event_group") {
+              return <SessionLogFeedEventGroup key={item.id} item={item} />;
+            }
+            return (
+              <AssistantChatMessageBubble
+                key={item.id}
+                message={item.message}
+                projectSlug={projectSlug}
+                issueIdentifier={issueIdentifier}
+                threadId={threadId}
+                onOpenDocumentPath={onOpenDocumentPath}
+                onInsertContext={onInsertContext}
+                onOpenWorkspaceDiff={onOpenWorkspaceDiff}
+                taskSnapshot={taskSnapshot}
+                onKillTool={onKillTool}
+                onFetchToolOutput={onFetchToolOutput}
+              />
+            );
+          })
+        : messages.map((message) => (
+            <AssistantChatMessageBubble
+              key={message.id}
+              message={message}
+              projectSlug={projectSlug}
+              issueIdentifier={issueIdentifier}
+              threadId={threadId}
+              onOpenDocumentPath={onOpenDocumentPath}
+              onInsertContext={onInsertContext}
+              onOpenWorkspaceDiff={onOpenWorkspaceDiff}
+              taskSnapshot={taskSnapshot}
+              onKillTool={onKillTool}
+              onFetchToolOutput={onFetchToolOutput}
+              planApprovalAction={
+                issueIdentifier && !isRunning && message.id === planApprovalMessageId
+                  ? { messageId: message.id, disabled: !channelReady, onApprove: onApprovePlan }
+                  : undefined
+              }
+            />
+          ))}
       {connectionError ? <p className="text-sm text-destructive">{connectionError}</p> : null}
       {isRunning && runningStartedAt != null ? (
         <WorkingIndicator

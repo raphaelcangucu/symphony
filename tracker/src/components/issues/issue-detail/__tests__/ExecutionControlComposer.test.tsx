@@ -582,7 +582,7 @@ describe("ExecutionControlComposer", () => {
       />,
     );
 
-    const pauseButton = screen.getByRole("button", { name: /^pause$/i });
+    const pauseButton = screen.getByRole("button", { name: /^stop$/i });
     expect(pauseButton).not.toBeDisabled();
 
     await user.click(pauseButton);
@@ -914,7 +914,7 @@ describe("ExecutionControlComposer", () => {
     controlIssueGoalMock.mockResolvedValue({});
     const user = userEvent.setup();
 
-    render(
+    const { rerender } = render(
       <ExecutionControlComposer
         projectSlug="advising"
         issue={issue}
@@ -925,6 +925,21 @@ describe("ExecutionControlComposer", () => {
 
     await user.click(screen.getByRole("button", { name: "Stop goal process" }));
     await user.click(screen.getByRole("button", { name: "Pause goal" }));
+
+    // GoalPill only allows objective edit while the run is not active.
+    rerender(
+      <ExecutionControlComposer
+        projectSlug="advising"
+        issue={issue}
+        execution={makeExecution({
+          status: "paused",
+          lastEvent: "turn_aborted",
+          goal: makeGoal({ status: "paused" }),
+        })}
+        onSteer={vi.fn()}
+      />,
+    );
+
     await user.click(screen.getByRole("button", { name: "Edit objective" }));
     await user.clear(screen.getByPlaceholderText("Describe the goal objective…"));
     await user.type(screen.getByPlaceholderText("Describe the goal objective…"), "Updated objective");
@@ -998,5 +1013,64 @@ describe("ExecutionControlComposer", () => {
     expect(screen.queryByRole("button", { name: "Resume goal" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Edit objective" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Remove goal" })).not.toBeInTheDocument();
+  });
+
+  it("mirrors the live execution agent in the composer instead of issue pins", async () => {
+    fetchAssistantCatalogBundleMock.mockResolvedValue({
+      defaultAgent: "codex",
+      agents: [
+        {
+          agent: "codex",
+          agentLabel: "Codex",
+          command: "codex",
+          defaultModel: "gpt-5.5",
+          models: [
+            {
+              id: "gpt-5.5",
+              model: "gpt-5.5",
+              label: "GPT-5.5",
+              defaultEffort: "low",
+              efforts: [{ id: "low", label: "Low" }],
+            },
+          ],
+        },
+        {
+          agent: "cursor",
+          agentLabel: "Cursor",
+          command: "cursor",
+          defaultModel: "composer-1",
+          models: [
+            {
+              id: "composer-1",
+              model: "composer-1",
+              label: "Composer 1",
+              defaultEffort: "low",
+              efforts: [{ id: "low", label: "Low" }],
+            },
+          ],
+        },
+      ],
+    });
+
+    render(
+      <ExecutionControlComposer
+        projectSlug="gamba"
+        issue={{ ...issue, agentKind: "codex", model: "gpt-5.5", effort: "low" }}
+        execution={makeExecution({
+          status: "live",
+          agentKind: "cursor",
+          model: "composer-1",
+        })}
+        onSteer={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Composer 1")).toBeInTheDocument();
+    });
+    // Compact toolbar chip shows the mirrored model; agent lives in the title.
+    const chip = screen.getByText("Composer 1").closest("button");
+    expect(chip).not.toBeNull();
+    expect(chip?.getAttribute("title") ?? "").toMatch(/Cursor/i);
   });
 });

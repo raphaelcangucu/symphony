@@ -18,6 +18,8 @@ defmodule SymphonyElixir.IssueDispatch do
     Workspace
   }
 
+  alias SymphonyElixir.Agent.ExecutionSession
+
   alias SymphonyElixir.Claude.GoalControl, as: ClaudeGoal
   alias SymphonyElixir.Codex.GoalControl
   alias SymphonyElixir.Codex.Session, as: CodexStore
@@ -302,26 +304,44 @@ defmodule SymphonyElixir.IssueDispatch do
   defp maybe_route_agent_goal(_project, _identifier, _opts, _agent_kind), do: :ok
 
   # Effective agent kind for this dispatch: an explicit `opts[:agent]` override
-  # wins, otherwise resolve task labels over the project default.
-  defp effective_agent_kind(project, %IssueDTO{labels: labels}, opts) do
+  # wins, otherwise the reusable execution thread's agent_kind, otherwise
+  # resolve task labels over the project default.
+  defp effective_agent_kind(%Project{slug: project_slug} = project, %IssueDTO{} = issue, opts)
+       when is_binary(project_slug) do
     case normalize_agent(Map.get(opts, :agent)) do
       agent when is_binary(agent) ->
         agent
 
       _ ->
-        project_kind =
-          project
-          |> Repo.preload(:setup)
-          |> ProjectConfig.resolve()
-          |> Map.get(:agent_kind)
+        case execution_thread_agent_kind(project_slug, issue.identifier) do
+          kind when is_binary(kind) ->
+            kind
 
-        AgentPreference.resolve(labels || [], project_kind)
+          nil ->
+            project_kind =
+              project
+              |> Repo.preload(:setup)
+              |> ProjectConfig.resolve()
+              |> Map.get(:agent_kind)
+
+            AgentPreference.resolve(issue.labels || [], project_kind)
+        end
     end
   end
+
+  defp execution_thread_agent_kind(project_slug, identifier)
+       when is_binary(project_slug) and is_binary(identifier) do
+    project_slug
+    |> ExecutionSession.latest_agent_kind(identifier)
+    |> AgentPreference.normalize()
+  end
+
+  defp execution_thread_agent_kind(_project_slug, _identifier), do: nil
 
   defp maybe_hard_reset(%Project{} = project, identifier, %IssueDTO{} = issue, :hard_reset) do
     stop_active_run(identifier)
     clear_agent_session(project, identifier, issue)
+    archive_execution_session(project, identifier)
     :ok
   end
 
@@ -334,6 +354,25 @@ defmodule SymphonyElixir.IssueDispatch do
       :unavailable -> :ok
     end
   end
+
+  # Hard reset starts a brand-new orchestrator execution session. Archive the
+  # latest reusable issue_execution so ensure/3 does not reopen it on resume.
+  defp archive_execution_session(%Project{slug: slug}, identifier)
+       when is_binary(slug) and is_binary(identifier) do
+    case ExecutionSession.archive_latest(slug, identifier) do
+      {:ok, _} ->
+        :ok
+
+      {:error, reason} ->
+        Logger.warning(
+          "Hard reset could not archive execution session identifier=#{identifier} reason=#{inspect(reason)}"
+        )
+
+        :ok
+    end
+  end
+
+  defp archive_execution_session(_project, _identifier), do: :ok
 
   defp clear_agent_session(%Project{} = project, identifier, %IssueDTO{} = issue) do
     workspace = run_workspace(project, identifier, issue)

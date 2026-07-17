@@ -30,6 +30,47 @@ defmodule SymphonyElixir.Agent.ExecutionSessionTest do
     assert s1.metadata["origin"] == "orchestrator"
   end
 
+  test "ensure/3 reopens the latest finished session and updates agent_kind" do
+    {:ok, original} =
+      ExecutionSession.ensure("advising", "CDE-1180",
+        workspace_path: "/tmp/advising/CDE-1180",
+        agent_kind: "codex"
+      )
+
+    {:ok, _finished} = ExecutionSession.finish(original.id, "aborted")
+
+    {:ok, resumed} =
+      ExecutionSession.ensure("advising", "CDE-1180",
+        workspace_path: "/tmp/advising/CDE-1180",
+        agent_kind: "cursor"
+      )
+
+    assert resumed.id == original.id
+    assert resumed.status == "active"
+    assert resumed.agent_kind == "cursor"
+  end
+
+  test "ensure/3 with force_new creates a distinct session after finish" do
+    {:ok, original} =
+      ExecutionSession.ensure("advising", "CDE-1180",
+        workspace_path: "/tmp/advising/CDE-1180",
+        agent_kind: "codex"
+      )
+
+    {:ok, _finished} = ExecutionSession.finish(original.id, "aborted")
+
+    {:ok, forced} =
+      ExecutionSession.ensure("advising", "CDE-1180",
+        workspace_path: "/tmp/advising/CDE-1180",
+        agent_kind: "cursor",
+        force_new: true
+      )
+
+    assert forced.id != original.id
+    assert forced.status == "active"
+    assert forced.agent_kind == "cursor"
+  end
+
   test "finish/2 maps a run outcome onto the stored status enum and persists it" do
     {:ok, s} =
       ExecutionSession.ensure("advising", "CDE-1180",
@@ -62,6 +103,61 @@ defmodule SymphonyElixir.Agent.ExecutionSessionTest do
     ids = Enum.map(recent, & &1.id)
     assert other.id in ids
     refute active.id in ids
+  end
+
+  test "archive_latest/2 prevents ensure/3 from reusing the prior session" do
+    {:ok, original} =
+      ExecutionSession.ensure("advising", "CDE-1180",
+        workspace_path: "/tmp/advising/CDE-1180",
+        agent_kind: "codex"
+      )
+
+    assert {:ok, archived} = ExecutionSession.archive_latest("advising", "CDE-1180")
+    assert archived.id == original.id
+    assert archived.status == "archived"
+
+    {:ok, next} =
+      ExecutionSession.ensure("advising", "CDE-1180",
+        workspace_path: "/tmp/advising/CDE-1180",
+        agent_kind: "cursor"
+      )
+
+    assert next.id != original.id
+    assert next.status == "active"
+  end
+
+  test "latest_agent_kind/2 returns the reusable execution thread agent_kind" do
+    assert ExecutionSession.latest_agent_kind("advising", "CDE-1180") == nil
+
+    {:ok, _session} =
+      ExecutionSession.ensure("advising", "CDE-1180",
+        workspace_path: "/tmp/advising/CDE-1180",
+        agent_kind: "cursor"
+      )
+
+    assert ExecutionSession.latest_agent_kind("advising", "CDE-1180") == "cursor"
+  end
+
+  test "latest_agent_kind/2 ignores archived sessions and prefers the latest reusable one" do
+    {:ok, older} =
+      ExecutionSession.ensure("advising", "CDE-1180",
+        workspace_path: "/tmp/advising/CDE-1180",
+        agent_kind: "codex"
+      )
+
+    assert {:ok, _} = ExecutionSession.archive_latest("advising", "CDE-1180")
+
+    {:ok, newer} =
+      ExecutionSession.ensure("advising", "CDE-1180",
+        workspace_path: "/tmp/advising/CDE-1180",
+        agent_kind: "claude"
+      )
+
+    assert newer.id != older.id
+    assert ExecutionSession.latest_agent_kind("advising", "CDE-1180") == "claude"
+
+    {:ok, _} = ExecutionSession.finish(newer.id, "completed")
+    assert ExecutionSession.latest_agent_kind("advising", "CDE-1180") == "claude"
   end
 
   defp migrate_repo do

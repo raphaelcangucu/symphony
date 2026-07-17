@@ -1,19 +1,18 @@
-import { ChevronDown, ExternalLink, PenLine, Play, PlayCircle, TerminalSquare } from "lucide-react";
-import { memo, useCallback, useEffect, useState } from "react";
+import { ExternalLink, PenLine, Play, PlayCircle, TerminalSquare } from "lucide-react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
+import { ExecutionSessionPanel } from "@/components/assistant/ExecutionSessionPanel";
 import { IssueAuthoringPanel } from "@/components/assistant/IssueAuthoringPanel";
 import { IssueDocumentsDrawer } from "@/components/assistant/IssueDocumentsDrawer";
 import { IssueEditorMenu } from "@/components/issues/IssueEditorMenu";
 import { StartIssueSessionDialog } from "@/components/sessions/StartIssueSessionDialog";
 import { Button } from "@/components/ui/button";
-import { AgentStatusBadge } from "@/components/issues/AgentStatusBadge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { resolveDisplayStatus } from "@/lib/agentExecutionDisplay";
 import { composerSeedFromHandoff, consumePreviewAssistantHandoff } from "@/lib/previewAssistantHandoff";
-import { consumeReturnToAgentHandoff, type ReturnToAgentTemplate } from "@/lib/returnToAgent";
-import { assessEvidenceAttention } from "@/lib/evidenceStatus";
+import { consumeReturnToAgentHandoff } from "@/lib/returnToAgent";
+import { resolveExecutionSessionId } from "@/lib/resolveExecutionSessionId";
 import {
   agentSectionFromSearchParams,
   type AgentSection,
@@ -23,8 +22,6 @@ import {
 } from "@/lib/workspaceRoutes";
 import type { AgentExecution } from "@/types/agent-execution";
 import type { Issue } from "@/types/issue";
-
-import { AgentTab } from "./AgentTab";
 
 const AgentAuthoringPanel = memo(function AgentAuthoringPanel({
   projectSlug,
@@ -70,21 +67,25 @@ export function AgentTabs({
   execution,
   executions,
   view,
-  workflowMarkdown = null,
-  evidenceRecords = [],
   issueHref = null,
   issueTerminalHref = null,
-  onIssueUpdated,
 }: AgentTabsProps) {
   const { t } = useTranslation();
   const location = useLocation();
   const navigate = useNavigate();
   const section = agentSectionFromSearchParams(new URLSearchParams(location.search));
   const [steerSeedMessage, setSteerSeedMessage] = useState<string | null>(null);
-  const [returnToAgentTemplate, setReturnToAgentTemplate] = useState<ReturnToAgentTemplate | null>(null);
-  const [showExecutionStatus, setShowExecutionStatus] = useState(false);
   const [startSessionOpen, setStartSessionOpen] = useState(false);
-  const executionDisplayStatus = execution ? resolveDisplayStatus(execution) : null;
+
+  const executionThreadId = useMemo(() => {
+    if (execution?.executionSessionId != null && execution.executionSessionId > 0) {
+      return execution.executionSessionId;
+    }
+    if (executions?.length) {
+      return resolveExecutionSessionId(executions, issue.identifier);
+    }
+    return null;
+  }, [execution, executions, issue.identifier]);
 
   const setSection = useCallback(
     (nextSection: AgentSection) => {
@@ -104,7 +105,6 @@ export function AgentTabs({
     const returnHandoff = consumeReturnToAgentHandoff(projectSlug, issue.identifier);
     if (!returnHandoff) return;
 
-    setReturnToAgentTemplate(returnHandoff.template);
     setSection("execution");
   }, [issue.identifier, projectSlug, setSection]);
 
@@ -124,24 +124,6 @@ export function AgentTabs({
         >
           {section === "authoring" ? (
             <p className="text-xs text-muted-foreground">{t("issue.agentTabs.authoringHint")}</p>
-          ) : null}
-          {section === "execution" ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-6 gap-1 px-1.5 text-xs text-muted-foreground hover:text-foreground"
-              aria-expanded={showExecutionStatus}
-              onClick={() => setShowExecutionStatus((current) => !current)}
-            >
-              {t("issue.agent.tab.runStatus")}
-              {executionDisplayStatus ? (
-                <AgentStatusBadge status={executionDisplayStatus} showIcon={false} className="ml-0.5 px-1.5 py-0 text-[10px]" />
-              ) : null}
-              <ChevronDown
-                className={`h-3 w-3 transition-transform ${showExecutionStatus ? "rotate-180" : ""}`}
-              />
-            </Button>
           ) : null}
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -210,18 +192,32 @@ export function AgentTabs({
         />
       </TabsContent>
       <TabsContent value="execution" className="mt-0 flex min-h-0 flex-1 flex-col overflow-hidden">
-        <AgentTab
-          issue={issue}
-          execution={execution}
-          executions={executions}
-          projectSlug={projectSlug}
-          workflowMarkdown={workflowMarkdown}
-          evidenceAttention={assessEvidenceAttention(evidenceRecords)}
-          returnToAgentTemplate={returnToAgentTemplate}
-          steerSeedMessage={steerSeedMessage}
-          showExecutionStatus={showExecutionStatus}
-          onIssueUpdated={onIssueUpdated}
-        />
+        {executionThreadId != null ? (
+          <ExecutionSessionPanel
+            projectSlug={projectSlug}
+            threadId={executionThreadId}
+            issueIdentifier={issue.identifier}
+            composerSeedMessage={steerSeedMessage}
+          />
+        ) : (
+          <div
+            data-testid="agent-execution-empty"
+            className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 rounded-lg border border-dashed bg-background/70 px-5 py-10 text-center"
+          >
+            <p className="text-sm text-muted-foreground">{t("issue.sessions.empty")}</p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              onClick={() => setStartSessionOpen(true)}
+              title={t("issue.agentTabs.newSessionTitle")}
+            >
+              <PlayCircle className="h-3.5 w-3.5" />
+              {t("issue.agentTabs.newSession")}
+            </Button>
+          </div>
+        )}
       </TabsContent>
     </Tabs>
     <StartIssueSessionDialog

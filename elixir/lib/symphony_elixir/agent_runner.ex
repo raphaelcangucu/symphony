@@ -24,6 +24,8 @@ defmodule SymphonyElixir.AgentRunner do
     Workspace
   }
 
+  alias SymphonyElixir.Agent.ExecutionSession
+
   alias SymphonyElixir.Codex.DynamicTool
   alias SymphonyElixir.Evidence
   alias SymphonyElixir.GitHub.ReadCache
@@ -248,15 +250,30 @@ defmodule SymphonyElixir.AgentRunner do
 
   @spec issue_agent_kind(SymphonyElixir.Issue.t()) :: String.t()
   def issue_agent_kind(%Issue{} = issue) do
-    ExecutionSettings.resolve_agent(%{
-      settings_agent: settings_agent_kind(issue),
-      label_agent: AgentPreference.normalize(issue.agent_kind),
-      project_agent: project_agent_kind(issue),
-      user_agent: Settings.Agents.default_agent_kind()
-    })
+    case execution_thread_agent_kind(issue) do
+      kind when is_binary(kind) ->
+        kind
+
+      nil ->
+        ExecutionSettings.resolve_agent(%{
+          settings_agent: settings_agent_kind(issue),
+          label_agent: AgentPreference.normalize(issue.agent_kind),
+          project_agent: project_agent_kind(issue),
+          user_agent: Settings.Agents.default_agent_kind()
+        })
+    end
   end
 
   def issue_agent_kind(_issue), do: ExecutionSettings.resolve_agent(%{})
+
+  defp execution_thread_agent_kind(%Issue{project_slug: slug, identifier: identifier})
+       when is_binary(slug) and is_binary(identifier) do
+    slug
+    |> ExecutionSession.latest_agent_kind(identifier)
+    |> AgentPreference.normalize()
+  end
+
+  defp execution_thread_agent_kind(_issue), do: nil
 
   defp settings_agent_kind(%Issue{project_slug: slug, identifier: identifier})
        when is_binary(slug) and is_binary(identifier) do

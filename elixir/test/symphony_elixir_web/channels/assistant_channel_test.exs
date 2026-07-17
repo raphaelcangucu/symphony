@@ -1927,6 +1927,29 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
     Application.delete_env(:symphony_elixir, :assistant_runner)
   end
 
+  test "issue_execution threads reject interactive send_message with a stable reason", %{socket: socket} do
+    alias SymphonyElixir.Agent.ExecutionSession
+
+    workspace_path =
+      Path.join(System.tmp_dir!(), "symphony-assistant-execution-#{System.unique_integer([:positive])}")
+
+    File.mkdir_p!(workspace_path)
+    on_exit(fn -> File.rm_rf!(workspace_path) end)
+
+    {:ok, thread} =
+      ExecutionSession.ensure("macro-markets", "MAC-EXEC-1",
+        workspace_path: workspace_path,
+        agent_kind: "codex"
+      )
+
+    {:ok, join_payload, socket} = subscribe_and_join(socket, "assistant:thread:#{thread.id}", %{})
+    assert join_payload.thread_id == thread.id
+    assert_push("history_loaded", %{messages: []})
+
+    ref = push(socket, "send_message", %{"message" => "hi"})
+    assert_reply(ref, :error, %{reason: "execution_thread_not_interactive"})
+  end
+
   test "issue thread send_message routes to the issue working tree", %{socket: socket} do
     workspace_root =
       Path.join(System.tmp_dir!(), "symphony-assistant-channel-workspaces-#{System.unique_integer([:positive])}")

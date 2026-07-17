@@ -21,7 +21,7 @@ end
 defmodule SymphonyElixir.DevServer.ManagerTest do
   use ExUnit.Case, async: false
 
-  alias SymphonyElixir.DevServer.{Instance, Manager}
+  alias SymphonyElixir.DevServer.{Instance, Manager, RuntimeContractStore}
   alias SymphonyElixir.DevServer.ManagerTest.{BrokenTmux, FakeTmux, MissingPaneTmux}
   alias SymphonyElixir.LocalTracker.{Context, DevEnv, DevServerRecord}
   alias SymphonyElixir.Repo
@@ -191,6 +191,175 @@ defmodule SymphonyElixir.DevServer.ManagerTest do
     assert [%{id: id, status: "stopped"}] = Manager.list_for_issue(project.slug, "1878")
     assert id == record.id
     assert %DevServerRecord{status: "stopped"} = DevServerRecord.get_for_issue(project.id, "1878", record.id)
+  end
+
+  test "list_for_issue adopts a stopped server as ready when an unexpired contract allows the responding port", %{
+    project: project
+  } do
+    port = start_probe_server!()
+
+    {:ok, _steps} =
+      DevEnv.save_steps(project.slug, [
+        %{
+          description: "GoAPI",
+          command: "bash .symphony/serve.sh",
+          role: "serve",
+          working_dir: "goapi",
+          ready_probe: "http",
+          ready_path: "/graphiql"
+        }
+      ])
+
+    {:ok, _contract} =
+      RuntimeContractStore.put(project, %{
+        issue_identifier: "1878",
+        server_slug: "goapi",
+        source: "managed",
+        preferred_port: port,
+        allowed_ports: [port],
+        report_path: "/tmp/preview-report.json",
+        port_env: "PORT"
+      })
+
+    {:ok, record} =
+      DevServerRecord.upsert(project.id, "1878", "goapi", %{
+        working_dir: "goapi",
+        port: port,
+        url: "http://127.0.0.1:#{port}/graphiql",
+        status: "stopped",
+        primary: false,
+        session_name: "sym-dev-gamba-1878-goapi"
+      })
+
+    assert [%{id: id, status: "ready"}] = Manager.list_for_issue(project.slug, "1878")
+    assert id == record.id
+    assert %DevServerRecord{status: "ready"} = DevServerRecord.get_for_issue(project.id, "1878", record.id)
+  end
+
+  test "list_for_issue renews an expiring contract while the adopted port keeps serving", %{project: project} do
+    port = start_probe_server!()
+    soon = DateTime.add(DateTime.utc_now(), 3600, :second)
+
+    {:ok, _steps} =
+      DevEnv.save_steps(project.slug, [
+        %{
+          description: "GoAPI",
+          command: "bash .symphony/serve.sh",
+          role: "serve",
+          working_dir: "goapi",
+          ready_probe: "http",
+          ready_path: "/graphiql"
+        }
+      ])
+
+    {:ok, contract} =
+      RuntimeContractStore.put(project, %{
+        issue_identifier: "1878",
+        server_slug: "goapi",
+        source: "managed",
+        preferred_port: port,
+        allowed_ports: [port],
+        report_path: "/tmp/preview-report.json",
+        port_env: "PORT",
+        expires_at: soon
+      })
+
+    {:ok, _record} =
+      DevServerRecord.upsert(project.id, "1878", "goapi", %{
+        working_dir: "goapi",
+        port: port,
+        url: "http://127.0.0.1:#{port}/graphiql",
+        status: "stopped",
+        primary: false,
+        session_name: "sym-dev-gamba-1878-goapi"
+      })
+
+    assert [%{status: "ready"}] = Manager.list_for_issue(project.slug, "1878")
+
+    assert {:ok, renewed, _record} = RuntimeContractStore.get_active(project, "1878", "goapi")
+    assert DateTime.compare(renewed.expires_at, soon) == :gt
+    assert renewed.revision == contract.revision
+  end
+
+  test "list_for_issue does not adopt a stopped server when the contract is expired", %{project: project} do
+    port = start_probe_server!()
+
+    {:ok, _steps} =
+      DevEnv.save_steps(project.slug, [
+        %{
+          description: "GoAPI",
+          command: "bash .symphony/serve.sh",
+          role: "serve",
+          working_dir: "goapi",
+          ready_probe: "http",
+          ready_path: "/graphiql"
+        }
+      ])
+
+    {:ok, _contract} =
+      RuntimeContractStore.put(project, %{
+        issue_identifier: "1878",
+        server_slug: "goapi",
+        source: "managed",
+        preferred_port: port,
+        allowed_ports: [port],
+        report_path: "/tmp/preview-report.json",
+        port_env: "PORT",
+        expires_at: DateTime.add(DateTime.utc_now(), -60, :second)
+      })
+
+    {:ok, record} =
+      DevServerRecord.upsert(project.id, "1878", "goapi", %{
+        working_dir: "goapi",
+        port: port,
+        url: "http://127.0.0.1:#{port}/graphiql",
+        status: "stopped",
+        primary: false,
+        session_name: "sym-dev-gamba-1878-goapi"
+      })
+
+    assert [%{id: id, status: "stopped"}] = Manager.list_for_issue(project.slug, "1878")
+    assert id == record.id
+  end
+
+  test "list_for_issue does not adopt a stopped server whose port is outside the contract", %{project: project} do
+    port = start_probe_server!()
+
+    {:ok, _steps} =
+      DevEnv.save_steps(project.slug, [
+        %{
+          description: "GoAPI",
+          command: "bash .symphony/serve.sh",
+          role: "serve",
+          working_dir: "goapi",
+          ready_probe: "http",
+          ready_path: "/graphiql"
+        }
+      ])
+
+    {:ok, _contract} =
+      RuntimeContractStore.put(project, %{
+        issue_identifier: "1878",
+        server_slug: "goapi",
+        source: "managed",
+        preferred_port: port + 1,
+        allowed_ports: [port + 1],
+        report_path: "/tmp/preview-report.json",
+        port_env: "PORT"
+      })
+
+    {:ok, record} =
+      DevServerRecord.upsert(project.id, "1878", "goapi", %{
+        working_dir: "goapi",
+        port: port,
+        url: "http://127.0.0.1:#{port}/graphiql",
+        status: "stopped",
+        primary: false,
+        session_name: "sym-dev-gamba-1878-goapi"
+      })
+
+    assert [%{id: id, status: "stopped"}] = Manager.list_for_issue(project.slug, "1878")
+    assert id == record.id
   end
 
   test "list_for_issue marks ready servers as crashed when no live instance owns the port", %{project: project} do

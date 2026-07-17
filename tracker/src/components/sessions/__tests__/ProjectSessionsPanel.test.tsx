@@ -1,4 +1,5 @@
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { useState, type ReactNode } from "react";
 import { MemoryRouter, useSearchParams } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -11,10 +12,14 @@ import { ProjectSessionsPanel } from "@/components/sessions/ProjectSessionsPanel
 import { useProjectSessions } from "@/hooks/useProjectSessions";
 import { initTestI18n, renderWithI18n } from "@/i18n/testUtils";
 import { emptyProjectSessionGroups, type ProjectSessionGroups, type ProjectSessionRow } from "@/lib/projectSessions";
-import { formatDateTime, formatRelativeTime } from "@/lib/utils";
+import { formatRelativeTime } from "@/lib/utils";
 import { agentSectionFromSearchParams } from "@/lib/workspaceRoutes";
 import { dispatchIssueAgent } from "@/services/issueDispatch";
-import { archiveAssistantThread, createProjectSessionThread } from "@/services/assistantThreads";
+import {
+  archiveAssistantThread,
+  createProjectSessionThread,
+  getAssistantThread,
+} from "@/services/assistantThreads";
 import { getIssue } from "@/services/issues";
 import type { AgentExecution } from "@/types/agent-execution";
 import type { Issue } from "@/types/issue";
@@ -22,7 +27,11 @@ import type { RecentSession } from "@/types/recents";
 
 vi.mock("@/hooks/useProjectSessions", () => ({ useProjectSessions: vi.fn() }));
 vi.mock("@/services/issueDispatch", () => ({ dispatchIssueAgent: vi.fn() }));
-vi.mock("@/services/assistantThreads", () => ({ archiveAssistantThread: vi.fn(), createProjectSessionThread: vi.fn() }));
+vi.mock("@/services/assistantThreads", () => ({
+  archiveAssistantThread: vi.fn(),
+  createProjectSessionThread: vi.fn(),
+  getAssistantThread: vi.fn(),
+}));
 vi.mock("@/services/issues", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/services/issues")>();
   return { ...actual, getIssue: vi.fn() };
@@ -33,9 +42,9 @@ vi.mock("@/components/layout/WorkspaceContext", () => ({
 vi.mock("@/components/assistant/ProjectAssistantPanel", () => ({
   ProjectAssistantPanel: () => <div aria-label="mock assistant panel" />,
 }));
-vi.mock("@/components/issues/issue-detail/IssueExecutionSessionPanel", () => ({
-  IssueExecutionSessionPanel: (props: { issue: { identifier: string } }) => (
-    <div aria-label="mock execution session panel" data-issue={props.issue.identifier} />
+vi.mock("@/components/sessions/AssistantSessionTabContent", () => ({
+  AssistantSessionTabContent: (props: { threadId: number }) => (
+    <div aria-label="mock execution session panel" data-thread={props.threadId} />
   ),
 }));
 vi.mock("@/components/issues/issue-detail/IssueAuthoringSessionPanel", () => ({
@@ -92,8 +101,8 @@ function execution(): AgentExecution {
     issueIdentifier: "DEMO-1",
     status: "saved",
     agentKind: "codex",
-    sessionId: "sess-1",
-    executionSessionId: null,
+    sessionId: "42",
+    executionSessionId: 42,
     lastEvent: null,
     lastMessage: null,
     lastEventAt: "2026-07-02T10:00:00Z",
@@ -255,6 +264,21 @@ describe("ProjectSessionsPanel", () => {
       preview: null,
       updatedAt: "2026-07-04T15:30:00Z",
     });
+    vi.mocked(getAssistantThread).mockResolvedValue({
+      id: 42,
+      scope: "issue_execution",
+      agentKind: "codex",
+      projectSlug: "demo",
+      projectName: "Demo",
+      issueIdentifier: "DEMO-1",
+      workspacePath: "/tmp/DEMO-1",
+      labels: [],
+      needsReview: false,
+      title: "Saved launcher work",
+      status: "active",
+      preview: null,
+      updatedAt: "2026-07-02T10:00:00Z",
+    });
   });
 
   it("renders workspace cards and related chats", () => {
@@ -265,23 +289,25 @@ describe("ProjectSessionsPanel", () => {
     );
 
     expect(screen.getByRole("tab", { name: /Workspaces/i })).toBeInTheDocument();
-    // One card per issue: the execution session is a row inside the card, not
-    // a second card.
-    expect(screen.getAllByText("Saved launcher work")).toHaveLength(1);
-    expect(screen.getByText("Issue authoring chat")).toBeInTheDocument();
+    // One card per issue: title plus the newest thread label in the header —
+    // never a second card for the execution.
+    expect(screen.getAllByText("Saved launcher work").length).toBeLessThanOrEqual(2);
+    expect(screen.getAllByRole("button", { name: /DEMO-1 Saved launcher work/i })).toHaveLength(1);
+    expect(screen.getAllByText("Issue authoring chat").length).toBeGreaterThan(0);
     expect(screen.getByText("Project chat")).toBeInTheDocument();
     const relativeAuthoring = formatRelativeTime("2026-07-04T15:30:00Z");
     expect(screen.getAllByText(relativeAuthoring).length).toBeGreaterThan(0);
-    expect(screen.getAllByTitle(formatDateTime("2026-07-04T15:30:00Z")).length).toBeGreaterThan(0);
     expect(screen.queryByText("Related sessions")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Open execution session DEMO-1/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Open authoring session DEMO-2/i })).toBeInTheDocument();
+    const demoCard = screen.getByRole("button", { name: /DEMO-1 Saved launcher work/i });
+    expect(demoCard).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /DEMO-2 Issue authoring chat/i })).toBeInTheDocument();
+    const listItem = demoCard.closest("li");
+    expect(listItem).not.toBeNull();
+    fireEvent.click(within(listItem as HTMLElement).getByRole("button", { name: /^Expand$/i }));
     expect(screen.getAllByRole("link", { name: "Open issue DEMO-1" })[0]).toHaveAttribute(
       "href",
       "/projects/demo/board/issues/DEMO-1/sessions",
     );
-    expect(screen.getAllByRole("img", { name: "Codex" }).length).toBeGreaterThan(0);
-    expect(screen.getAllByRole("img", { name: "Cursor" }).length).toBeGreaterThan(0);
     expect(screen.queryByText("Cursor Agent")).not.toBeInTheDocument();
   });
 
@@ -292,92 +318,84 @@ describe("ProjectSessionsPanel", () => {
       </MemoryRouter>,
     );
 
+    const projectChat = screen.getByRole("button", { name: /Project chat/i });
+    const listItem = projectChat.closest("li");
+    expect(listItem).not.toBeNull();
+    fireEvent.click(within(listItem as HTMLElement).getByRole("button", { name: /^Expand$/i }));
     fireEvent.click(await screen.findByRole("button", { name: /Archive session/i }));
 
     await waitFor(() => expect(archiveAssistantThread).toHaveBeenCalledWith(1));
     expect(refetch).toHaveBeenCalled();
   });
 
-  it("opens the execution session inline instead of navigating to the issue detail", () => {
+  it("lists the orchestrator execution as a single thread row (no synthetic Autonomous row)", async () => {
     renderWithI18n(
       <MemoryRouter initialEntries={["/projects/demo/workspaces"]}>
         <ProjectSessionsPanel projectSlug="demo" />
       </MemoryRouter>,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /Open execution session DEMO-1/i }));
+    const demoCard = screen.getByRole("button", { name: /DEMO-1 Saved launcher work/i });
+    const listItem = demoCard.closest("li");
+    expect(listItem).not.toBeNull();
+    fireEvent.click(within(listItem as HTMLElement).getByRole("button", { name: /^Expand$/i }));
 
-    expect(screen.getByRole("tab", { name: /Saved launcher work · (Execution|Autonomous)/i })).toBeInTheDocument();
-    const executionPanel = screen.getByLabelText("mock execution session panel");
-    expect(executionPanel).toBeInTheDocument();
-    expect(executionPanel).toHaveAttribute("data-issue", "DEMO-1");
+    const detail = listItem as HTMLElement;
+    expect(within(detail).queryByRole("button", { name: /Open autonomous run/i })).not.toBeInTheDocument();
+    expect(within(detail).queryByText(/Autonomous ·/)).not.toBeInTheDocument();
+    expect(
+      within(detail).getAllByRole("button", { name: "Saved launcher work" }),
+    ).toHaveLength(1);
   });
 
-  it("restores the execution session from the exec identifier in the URL", () => {
+  it("opens the execution thread row via the real orchestrator session id", async () => {
     renderWithI18n(
-      <MemoryRouter initialEntries={["/projects/demo/workspaces?exec=DEMO-1&agent=execution"]}>
+      <MemoryRouter initialEntries={["/projects/demo/workspaces"]}>
+        <ProjectSessionsPanel projectSlug="demo" />
+      </MemoryRouter>,
+    );
+
+    const demoCard = screen.getByRole("button", { name: /DEMO-1 Saved launcher work/i });
+    const listItem = demoCard.closest("li");
+    expect(listItem).not.toBeNull();
+    fireEvent.click(within(listItem as HTMLElement).getByRole("button", { name: /^Expand$/i }));
+    fireEvent.click(
+      await within(listItem as HTMLElement).findByRole("button", { name: "Saved launcher work" }),
+    );
+
+    expect(await screen.findByLabelText("mock execution session panel")).toHaveAttribute("data-thread", "42");
+    expect(screen.getByRole("tab", { name: /Saved launcher work/i })).toBeInTheDocument();
+  });
+
+  it("archives the execution thread from its row like any other thread", async () => {
+    renderWithI18n(
+      <MemoryRouter initialEntries={["/projects/demo/workspaces"]}>
+        <ProjectSessionsPanel projectSlug="demo" />
+      </MemoryRouter>,
+    );
+
+    const demoCard = screen.getByRole("button", { name: /DEMO-1 Saved launcher work/i });
+    const listItem = demoCard.closest("li");
+    expect(listItem).not.toBeNull();
+    fireEvent.click(within(listItem as HTMLElement).getByRole("button", { name: /^Expand$/i }));
+    fireEvent.click(
+      await within(listItem as HTMLElement).findByRole("button", { name: /Remove session/i }),
+    );
+
+    await waitFor(() => expect(archiveAssistantThread).toHaveBeenCalledWith(42));
+  });
+
+  it("resolves the legacy exec deep link to the orchestrator session workspace", async () => {
+    renderWithI18n(
+      <MemoryRouter initialEntries={["/projects/demo/workspaces?exec=DEMO-1&surface=autonomous"]}>
         <ProjectSessionsPanel projectSlug="demo" activeExecutionIdentifier="DEMO-1" />
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole("tab", { name: /Saved launcher work · (Execution|Autonomous)/i })).toBeInTheDocument();
-    expect(screen.getByLabelText("mock execution session panel")).toHaveAttribute("data-issue", "DEMO-1");
+    expect(await screen.findByLabelText("mock execution session panel")).toHaveAttribute("data-thread", "42");
   });
 
-  it("focuses an existing execution tab when the exec deep link is applied again", async () => {
-    function FocusHarness() {
-      const [searchParams, setSearchParams] = useSearchParams();
-      const exec = searchParams.get("exec")?.trim() || null;
-      const section = agentSectionFromSearchParams(searchParams);
-      const activeExecutionIdentifier = exec && section === "execution" ? exec : null;
-
-      return (
-        <>
-          <button type="button" onClick={() => setSearchParams({})}>
-            Clear deep link
-          </button>
-          <button type="button" onClick={() => setSearchParams({ exec: "DEMO-1", surface: "autonomous" })}>
-            Apply deep link
-          </button>
-          <ProjectSessionsPanel projectSlug="demo" activeExecutionIdentifier={activeExecutionIdentifier} />
-        </>
-      );
-    }
-
-    renderWithI18n(
-      <MemoryRouter initialEntries={["/projects/demo/workspaces?exec=DEMO-1&surface=autonomous"]}>
-        <FocusHarness />
-      </MemoryRouter>,
-    );
-
-    expect(await screen.findByLabelText("mock execution session panel")).toHaveAttribute("data-issue", "DEMO-1");
-    expect(screen.getByRole("tab", { name: /Saved launcher work · (Execution|Autonomous)/i })).toHaveAttribute(
-      "aria-selected",
-      "true",
-    );
-
-    // Drop the deep-link query, switch away, then re-apply the deep link.
-    fireEvent.click(screen.getByRole("button", { name: "Clear deep link" }));
-    fireEvent.click(screen.getByRole("tab", { name: /Workspaces/i }));
-    await waitFor(() =>
-      expect(screen.getByRole("tab", { name: /Saved launcher work · (Execution|Autonomous)/i })).toHaveAttribute(
-        "aria-selected",
-        "false",
-      ),
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: "Apply deep link" }));
-
-    await waitFor(() =>
-      expect(screen.getByRole("tab", { name: /Saved launcher work · (Execution|Autonomous)/i })).toHaveAttribute(
-        "aria-selected",
-        "true",
-      ),
-    );
-    expect(screen.getByLabelText("mock execution session panel")).toHaveAttribute("data-issue", "DEMO-1");
-  });
-
-  it("loads the issue for an execution deep link when it is missing from the sessions list", async () => {
+  it("clears the legacy exec deep link when no orchestrator session exists", async () => {
     vi.mocked(useProjectSessions).mockReturnValue({
       groups: emptyProjectSessionGroups(),
       relatedSessions: [],
@@ -390,39 +408,44 @@ describe("ProjectSessionsPanel", () => {
       error: null,
       refetch,
     });
-    vi.mocked(getIssue).mockResolvedValue(demoIssue());
 
     renderWithI18n(
       <MemoryRouter initialEntries={["/projects/demo/workspaces?exec=DEMO-1&surface=autonomous"]}>
-        <ProjectSessionsPanel projectSlug="demo" activeExecutionIdentifier="DEMO-1" />
+        <WorkspaceQueryHarness projectSlug="demo" />
       </MemoryRouter>,
     );
 
-    expect(await screen.findByLabelText("mock execution session panel")).toHaveAttribute("data-issue", "DEMO-1");
-    expect(getIssue).toHaveBeenCalledWith("demo", "DEMO-1");
+    await waitFor(() => {
+      expect(screen.queryByLabelText("mock execution session panel")).not.toBeInTheDocument();
+    });
   });
 
-  it("opens the authoring session inline as its own workspace tab", () => {
+  it("opens the interactive authoring thread as a real session", async () => {
     renderWithI18n(
       <MemoryRouter initialEntries={["/projects/demo/workspaces"]}>
         <ProjectSessionsPanel projectSlug="demo" />
       </MemoryRouter>,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /Open authoring session DEMO-2/i }));
+    const demoCard = screen.getByRole("button", { name: /DEMO-2 Issue authoring chat/i });
+    const listItem = demoCard.closest("li");
+    expect(listItem).not.toBeNull();
+    fireEvent.click(within(listItem as HTMLElement).getByRole("button", { name: /^Expand$/i }));
+    fireEvent.click(
+      await within(listItem as HTMLElement).findByRole("button", { name: "Issue authoring chat" }),
+    );
 
-    expect(screen.getByRole("tab", { name: /Authoring/i })).toBeInTheDocument();
-    expect(screen.getByLabelText("mock authoring session panel")).toHaveAttribute("data-issue", "DEMO-2");
+    expect(await screen.findByLabelText("mock execution session panel")).toHaveAttribute("data-thread", "2");
   });
 
   it("restores the authoring session from the exec identifier in the URL", () => {
     renderWithI18n(
-      <MemoryRouter initialEntries={["/projects/demo/workspaces?exec=DEMO-1&agent=authoring"]}>
+      <MemoryRouter initialEntries={["/projects/demo/workspaces?exec=DEMO-1&surface=session"]}>
         <ProjectSessionsPanel projectSlug="demo" activeAuthoringIdentifier="DEMO-1" />
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole("tab", { name: /Saved launcher work · Authoring/i })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /Saved launcher work/i })).toBeInTheDocument();
     expect(screen.getByLabelText("mock authoring session panel")).toHaveAttribute("data-issue", "DEMO-1");
   });
 
@@ -465,7 +488,7 @@ describe("ProjectSessionsPanel", () => {
     expect(screen.queryByLabelText("mock new issue authoring panel")).not.toBeInTheDocument();
   });
 
-  it("renames a restored execution tab when issue data loads after a page reload", async () => {
+  it("opens the orchestrator session when executionSessionId arrives after reload", async () => {
     function ReloadHarness() {
       const [, setVersion] = useState(0);
       return (
@@ -492,12 +515,14 @@ describe("ProjectSessionsPanel", () => {
     });
 
     renderWithI18n(
-      <MemoryRouter initialEntries={["/projects/demo/workspaces?exec=DEMO-1&agent=execution"]}>
+      <MemoryRouter initialEntries={["/projects/demo/workspaces?exec=DEMO-1&surface=autonomous"]}>
         <ReloadHarness />
       </MemoryRouter>,
     );
 
-    expect(await screen.findByRole("tab", { name: /DEMO-1 · (Execution|Autonomous)/i })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByLabelText("mock execution session panel")).not.toBeInTheDocument();
+    });
 
     vi.mocked(useProjectSessions).mockReturnValue({
       groups: groupsWithSavedRow(),
@@ -514,20 +539,26 @@ describe("ProjectSessionsPanel", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Refresh hook snapshot" }));
 
+    expect(await screen.findByLabelText("mock execution session panel")).toHaveAttribute("data-thread", "42");
     await waitFor(() =>
-      expect(screen.getByRole("tab", { name: /Saved launcher work · (Execution|Autonomous)/i })).toBeInTheDocument(),
+      expect(screen.getByRole("tab", { name: /Saved launcher work · (Execution|Autonomous|Session)/i })).toBeInTheDocument(),
     );
     expect(screen.queryByRole("tab", { name: /^DEMO-1 · (Execution|Autonomous)/i })).not.toBeInTheDocument();
   });
 
-  it("resumes a saved session", async () => {
+  it("resumes a saved session from the workspace row menu", async () => {
+    const user = userEvent.setup();
     renderWithI18n(
       <MemoryRouter>
         <ProjectSessionsPanel projectSlug="demo" />
       </MemoryRouter>,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Resume" }));
+    const demoCard = screen.getByRole("button", { name: /DEMO-1 Saved launcher work/i });
+    const listItem = demoCard.closest("li");
+    expect(listItem).not.toBeNull();
+    await user.click(within(listItem as HTMLElement).getByRole("button", { name: "More actions" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Resume" }));
 
     await waitFor(() =>
       expect(dispatchIssueAgent).toHaveBeenCalledWith("demo", "DEMO-1", { action: "resume" }),

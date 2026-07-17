@@ -32,15 +32,27 @@ defmodule SymphonyElixir.Assistant.ListPreviewTools do
   def execute(project_slug, arguments, opts)
       when is_binary(project_slug) and is_map(arguments) and is_list(opts) do
     running_issue_keys = Keyword.get(opts, :running_issue_keys, &Manager.running_issue_keys/0)
+
+    contracted_issue_identifiers =
+      Keyword.get(opts, :contracted_issue_identifiers, &Manager.contracted_issue_identifiers/1)
+
     issue_targets = Keyword.get(opts, :issue_targets, &DevServer.issue_targets/2)
     tunnel_summary = Keyword.get(opts, :tunnel_summary, &Tunnel.summary_for_project/1)
 
-    previews =
+    registry_identifiers =
       running_issue_keys.()
       |> Enum.filter(&current_project_key?(&1, project_slug))
-      |> Enum.map(fn {_slug, identifier} ->
+      |> Enum.map(fn {_slug, identifier} -> identifier end)
+
+    registry_set = MapSet.new(registry_identifiers)
+
+    previews =
+      (registry_identifiers ++ contracted_issue_identifiers.(project_slug))
+      |> Enum.uniq()
+      |> Enum.map(fn identifier ->
         preview_entry(project_slug, identifier, issue_targets, tunnel_summary)
       end)
+      |> Enum.filter(&listable?(&1, registry_set))
 
     {:ok,
      %{
@@ -62,6 +74,20 @@ defmodule SymphonyElixir.Assistant.ListPreviewTools do
        do: true
 
   defp current_project_key?(_key, _project_slug), do: false
+
+  # Registry-backed previews are always listed. Contract-discovered candidates
+  # are listed only when reconciliation left at least one server in a
+  # non-stopped state, so long-gone previews with lingering contracts do not
+  # flood the list.
+  defp listable?(%{identifier: identifier} = preview, registry_set) do
+    MapSet.member?(registry_set, identifier) or any_active_server?(preview)
+  end
+
+  defp any_active_server?(%{servers: servers}) when is_list(servers) do
+    Enum.any?(servers, fn server -> Map.get(server, :status) not in [nil, "stopped"] end)
+  end
+
+  defp any_active_server?(_preview), do: false
 
   defp preview_entry(project_slug, identifier, issue_targets, tunnel_summary) do
     case issue_targets.(project_slug, identifier) do

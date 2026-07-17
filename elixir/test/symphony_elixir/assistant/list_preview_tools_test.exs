@@ -113,6 +113,59 @@ defmodule SymphonyElixir.Assistant.ListPreviewToolsTest do
     assert [%{id: 2, slug: "api", status: "ready", port: 4102}] = entry.servers
   end
 
+  test "discovers contract-backed previews when the in-memory registry is empty" do
+    assert {:ok, result} =
+             ListPreviewTools.execute("demo", %{},
+               running_issue_keys: fn -> MapSet.new() end,
+               contracted_issue_identifiers: fn "demo" -> ["DEMO-9"] end,
+               issue_targets: fn "demo", "DEMO-9" ->
+                 {:ok,
+                  %{
+                    available: true,
+                    reason: nil,
+                    servers: [%{id: 9, slug: "app", status: "ready", port: 4300, primary: true}]
+                  }}
+               end,
+               tunnel_summary: fn "demo" -> %{enabled: false, running: false} end
+             )
+
+    assert result.message == "Found 1 preview(s) for demo."
+    assert [entry] = result.data.previews
+    assert entry.identifier == "DEMO-9"
+    assert [%{slug: "app", status: "ready", port: 4300}] = entry.servers
+  end
+
+  test "drops contract-discovered previews whose servers are all stopped" do
+    assert {:ok, result} =
+             ListPreviewTools.execute("demo", %{},
+               running_issue_keys: fn -> MapSet.new([{"demo", "DEMO-1"}]) end,
+               contracted_issue_identifiers: fn "demo" -> ["DEMO-1", "DEMO-2"] end,
+               issue_targets: fn
+                 "demo", "DEMO-1" ->
+                   {:ok,
+                    %{
+                      available: true,
+                      reason: nil,
+                      servers: [%{id: 1, slug: "app", status: "stopped", port: 4300, primary: true}]
+                    }}
+
+                 "demo", "DEMO-2" ->
+                   {:ok,
+                    %{
+                      available: true,
+                      reason: nil,
+                      servers: [%{id: 2, slug: "app", status: "stopped", port: 4308, primary: true}]
+                    }}
+               end,
+               tunnel_summary: fn "demo" -> %{enabled: false, running: false} end
+             )
+
+    # DEMO-1 is registry-backed so it stays even while stopped; DEMO-2 is a
+    # contract leftover with nothing serving and is dropped.
+    assert [entry] = result.data.previews
+    assert entry.identifier == "DEMO-1"
+  end
+
   test "surfaces unavailable previews and lookup errors with next steps" do
     assert {:ok, result} =
              ListPreviewTools.execute("demo", %{},

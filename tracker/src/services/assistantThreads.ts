@@ -47,7 +47,9 @@ function normalizeStringArray(value: unknown): string[] {
 }
 
 function normalizeAgentKind(value: string | null | undefined): AssistantThread["agentKind"] {
-  return value === "codex" || value === "claude" || value === "cursor" ? value : null;
+  return value === "codex" || value === "claude" || value === "cursor" || value === "opencode"
+    ? value
+    : null;
 }
 
 const LIST_CACHE_TTL_MS = 15_000;
@@ -127,12 +129,14 @@ export interface UpdateAssistantThreadInput {
   title?: string;
   labels?: string[];
   needsReview?: boolean;
+  agentKind?: AgentKind;
 }
 
 const MAX_THREAD_TITLE_GRAPHEMES = 160;
 const MAX_THREAD_LABELS = 12;
 const MAX_THREAD_LABEL_GRAPHEMES = 40;
-const UPDATE_THREAD_KEYS = ["title", "labels", "needsReview"] as const;
+const UPDATE_THREAD_KEYS = ["title", "labels", "needsReview", "agentKind"] as const;
+const UPDATE_AGENT_KINDS = ["codex", "claude", "cursor", "opencode"] as const;
 
 export async function getAssistantThread(threadId: number): Promise<AssistantThread> {
   requirePositiveInteger(threadId, "threadId");
@@ -196,6 +200,7 @@ function normalizeUpdateAssistantThreadInput(input: UpdateAssistantThreadInput):
   title?: string;
   labels?: string[];
   needs_review?: boolean;
+  agent_kind?: AgentKind;
 } {
   if (!isPlainObject(input)) {
     throw new Error("Assistant thread update input must be a plain object");
@@ -216,7 +221,7 @@ function normalizeUpdateAssistantThreadInput(input: UpdateAssistantThreadInput):
     throw new Error("Assistant thread update input must include at least one supported field");
   }
 
-  const payload: { title?: string; labels?: string[]; needs_review?: boolean } = {};
+  const payload: { title?: string; labels?: string[]; needs_review?: boolean; agent_kind?: AgentKind } = {};
   if (supportedKeys.includes("title")) {
     payload.title = normalizeTitle(input.title);
   }
@@ -229,7 +234,20 @@ function normalizeUpdateAssistantThreadInput(input: UpdateAssistantThreadInput):
     }
     payload.needs_review = input.needsReview;
   }
+  if (supportedKeys.includes("agentKind")) {
+    payload.agent_kind = normalizeUpdateAgentKind(input.agentKind);
+  }
   return payload;
+}
+
+function normalizeUpdateAgentKind(value: unknown): AgentKind {
+  if (
+    typeof value === "string" &&
+    (UPDATE_AGENT_KINDS as readonly string[]).includes(value)
+  ) {
+    return value as AgentKind;
+  }
+  throw new Error("agentKind must be one of: codex, claude, cursor, opencode");
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

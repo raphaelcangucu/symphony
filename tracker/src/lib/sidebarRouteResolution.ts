@@ -67,10 +67,15 @@ export function resolveSidebarRouteSelection(
       const agent = queryParam(normalizedSearch, "agent").value;
       if (agent) surfaceParams.set("agent", agent);
     }
-    const executionSurface = sessionSurfaceFromSearchParams(surfaceParams) === "autonomous";
+    // Autonomous/`exec:` nodes are gone — only authoring still uses `?exec=`.
+    // Legacy `surface=autonomous` bookmarks redirect to `/workspaces/<threadId>`
+    // elsewhere and do not select a synthetic sidebar session.
+    if (sessionSurfaceFromSearchParams(surfaceParams) === "autonomous") {
+      return base;
+    }
     return {
       ...base,
-      sessionId: `${executionSurface ? "exec" : "authoring"}:${executionIdentifier}`,
+      sessionId: `authoring:${executionIdentifier}`,
     };
   }
 

@@ -1380,6 +1380,9 @@ defmodule SymphonyElixirWeb.AssistantChannel do
       trimmed == "" ->
         {:reply, {:error, %{reason: "message is required"}}, socket}
 
+      is_map(thread) and Map.get(thread, :scope) == "issue_execution" ->
+        {:reply, {:error, %{reason: error_reason(:execution_thread_not_interactive)}}, socket}
+
       raw_attachments != [] and attachments == [] ->
         {:reply, {:error, %{reason: "One or more attachments could not be processed. Try a smaller image (max 4 MB)."}}, socket}
 
@@ -1665,6 +1668,9 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   defp run_send_turn(%{scope: "project"} = thread, _project_slug, trimmed, context, opts) do
     AgentSession.send_message_to_project_thread(thread, trimmed, context, opts)
   end
+
+  defp run_send_turn(%{scope: "issue_execution"}, _project_slug, _trimmed, _context, _opts),
+    do: {:error, :execution_thread_not_interactive}
 
   defp run_send_turn(_thread, _project_slug, _trimmed, _context, _opts),
     do: {:error, :assistant_thread_required}
@@ -2895,6 +2901,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   defp error_reason(:project_not_found), do: "project not found"
   defp error_reason(:issue_thread_required), do: "this action is only supported for issue assistant threads"
   defp error_reason(:assistant_thread_required), do: "this action requires a persistent assistant thread"
+  defp error_reason(:execution_thread_not_interactive), do: "execution_thread_not_interactive"
   defp error_reason(:assistant_thread_not_active), do: "the current assistant thread is not active"
   defp error_reason(:assistant_busy), do: "assistant is busy"
   defp error_reason(:turn_interrupt_conflict), do: "assistant turn changed while interruption was being persisted"

@@ -1,6 +1,7 @@
 import { requireProjectSlug } from "@/lib/serviceValidation";
 import type { AgentKind } from "@/types/issue";
 import type { ProjectSessionKind, ProjectSessionRow, ProjectSessionsPage } from "@/types/project-session";
+import type { RecentScope } from "@/types/recents";
 
 import { http, trackerPath } from "./http";
 
@@ -20,6 +21,7 @@ export interface BackendProjectSessionRowDto {
   id: string;
   title: string | null;
   kind: string;
+  scope?: string | null;
   href: string;
   updated_at?: string | null;
   aggregate_status?: string | null;
@@ -56,11 +58,40 @@ function normalizeAgentKind(value: string | null | undefined): AgentKind | null 
   return KNOWN_AGENT_KINDS.includes(value as AgentKind) ? (value as AgentKind) : null;
 }
 
+function normalizeSessionScope(value: string | null | undefined, kind: ProjectSessionKind): RecentScope {
+  if (
+    value === "project" ||
+    value === "project_session" ||
+    value === "project_explore" ||
+    value === "freeform" ||
+    value === "issue" ||
+    value === "issue_session" ||
+    value === "issue_execution"
+  ) {
+    return value;
+  }
+
+  switch (kind) {
+    case "authoring":
+    case "issue":
+      return "issue";
+    case "execution":
+      return "issue_session";
+    case "workspace_session":
+      return "project_session";
+    default:
+      return "project";
+  }
+}
+
 export function normalizeProjectSessionRow(dto: BackendProjectSessionRowDto): ProjectSessionRow {
+  const kind = normalizeSessionKind(dto.kind);
+
   return {
     id: dto.id,
     title: dto.title ?? "",
-    kind: normalizeSessionKind(dto.kind),
+    kind,
+    scope: normalizeSessionScope(dto.scope, kind),
     href: normalizeSessionHref(dto.href),
     updatedAt: dto.updated_at ?? "",
     aggregateStatus: dto.aggregate_status ?? null,

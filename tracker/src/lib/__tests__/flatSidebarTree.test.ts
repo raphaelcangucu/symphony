@@ -349,15 +349,15 @@ describe("buildFlatSidebarProject", () => {
     expect(byId["issue:42"]?.threadId).toBeNull();
   });
 
-  it("keeps autonomous exec: rows selectable with live status", () => {
+  it("keeps orchestrator execution threads selectable with live status", () => {
     const project = buildFlatSidebarProject(
       buildInput({
         sessions: [
           sessionRow({
-            id: "exec:CDE-1180",
+            id: "thread:1180",
             title: "Adjust placeholder",
             kind: "execution",
-            href: "/projects/advising/workspaces?exec=CDE-1180&surface=autonomous",
+            href: "/projects/advising/workspaces/1180",
             issueIdentifier: "CDE-1180",
             aggregateStatus: "live",
             agentKind: "cursor",
@@ -370,11 +370,11 @@ describe("buildFlatSidebarProject", () => {
 
     expect(project.sessions).toHaveLength(1);
     expect(project.sessions[0]).toMatchObject({
-      id: "exec:CDE-1180",
+      id: "thread:1180",
       sessionKind: "execution",
       issueIdentifier: "CDE-1180",
-      threadId: null,
-      href: "/projects/advising/workspaces?exec=CDE-1180&surface=autonomous",
+      threadId: 1180,
+      href: "/projects/advising/workspaces/1180",
       statusKind: "running",
       aggregateStatus: "active",
     });

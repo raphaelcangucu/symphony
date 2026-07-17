@@ -3,12 +3,16 @@ import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "r
 
 import { IssueEnvironmentDock } from "@/components/sessions/IssueEnvironmentDock";
 import { IssuePreviewDock } from "@/components/sessions/IssuePreviewDock";
+import { IssueTasksDock } from "@/components/sessions/IssueTasksDock";
 import { IssueTerminalDock } from "@/components/sessions/IssueTerminalDock";
 import { SessionEnvironmentDockContext } from "@/components/sessions/sessionEnvironmentDockContext";
 import { SessionPreviewDockContext } from "@/components/sessions/sessionPreviewDockContext";
+import { SessionTasksDockContext } from "@/components/sessions/sessionTasksDockContext";
+import { SessionTasksDockFeedProvider } from "@/components/sessions/sessionTasksDockFeedContext";
 import { SessionTerminalDockContext } from "@/components/sessions/sessionTerminalDockContext";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+import axios from "axios";
 import { toast } from "sonner";
 
 import { ProjectSessionsChromeSetterContext } from "@/components/layout/ProjectSessionsChromeContext";
@@ -16,7 +20,6 @@ import { useWorkspace } from "@/components/layout/WorkspaceContext";
 import { AssistantSessionTabContent } from "@/components/sessions/AssistantSessionTabContent";
 import { IssueAuthoringPanel } from "@/components/assistant/IssueAuthoringPanel";
 import { IssueAuthoringSessionPanel } from "@/components/issues/issue-detail/IssueAuthoringSessionPanel";
-import { IssueExecutionSessionPanel } from "@/components/issues/issue-detail/IssueExecutionSessionPanel";
 import { NewStandaloneWorkspaceDialog } from "@/components/sessions/NewStandaloneWorkspaceDialog";
 import { type AuthoringSessionRow } from "@/components/sessions/SessionListItem";
 import { StartIssueSessionDialog, type StartIssueSessionDialogIssue } from "@/components/sessions/StartIssueSessionDialog";
@@ -40,6 +43,7 @@ import { useWorkspaceTabs } from "@/hooks/useWorkspaceTabs";
 import { createSiblingSession } from "@/lib/createSiblingSession";
 import { type ProjectSessionRow } from "@/lib/projectSessions";
 import { resolveExecutionSessionId } from "@/lib/resolveExecutionSessionId";
+import { resolveResumeThreadId, trackerApiErrorCode } from "@/lib/resumeExecutionSession";
 import {
   buildWorkspaceCards,
   flattenWorkspaceCardsByRecency,
@@ -56,15 +60,12 @@ import {
   authoringSessionTabId,
   createAssistantSessionTab,
   createAuthoringSessionTab,
-  createExecutionSessionTab,
   createNewIssueTab,
   createSessionsListTab,
-  executionSessionTabId,
 } from "@/lib/workspaceTabs/types";
 import {
   issuePath,
   projectAuthoringSessionPath,
-  projectExecutionSessionPath,
   projectNewIssueWorkspacePath,
   projectSessionPath,
   projectSessionsPath,
@@ -75,7 +76,6 @@ import { dispatchIssueAgent } from "@/services/issueDispatch";
 import { getIssue } from "@/services/issues";
 import { removeWorkspaces } from "@/services/worktrees";
 import { evictAssistantSessionCache } from "@/stores/assistantSessionStore";
-import type { AgentExecution } from "@/types/agent-execution";
 import type { Issue } from "@/types/issue";
 import type { RecentSession } from "@/types/recents";
 
@@ -96,6 +96,7 @@ export function ProjectSessionsWorkspace({
 }: ProjectSessionsWorkspaceProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const location = useLocation();
   const { view, project } = useWorkspace();
   const {
     relatedSessions,
@@ -127,6 +128,8 @@ export function ProjectSessionsWorkspace({
   const [previewDockIssue, setPreviewDockIssue] = useState<string | null>(null);
   const [previewFullscreen, setPreviewFullscreen] = useState(false);
   const [environmentDockIssue, setEnvironmentDockIssue] = useState<string | null>(null);
+  const [tasksDockIssue, setTasksDockIssue] = useState<string | null>(null);
+  const [tasksFullscreen, setTasksFullscreen] = useState(false);
 
   const toggleTerminalDock = useCallback((issueIdentifier: string) => {
     setTerminalDockIssue((current) => {
@@ -138,6 +141,8 @@ export function ProjectSessionsWorkspace({
     setPreviewDockIssue(null);
     setPreviewFullscreen(false);
     setEnvironmentDockIssue(null);
+    setTasksDockIssue(null);
+    setTasksFullscreen(false);
   }, []);
 
   const closeTerminalDock = useCallback(() => {
@@ -158,6 +163,8 @@ export function ProjectSessionsWorkspace({
     setTerminalDockIssue(null);
     setTerminalFullscreen(false);
     setEnvironmentDockIssue(null);
+    setTasksDockIssue(null);
+    setTasksFullscreen(false);
   }, []);
 
   const closePreviewDock = useCallback(() => {
@@ -175,10 +182,34 @@ export function ProjectSessionsWorkspace({
     setTerminalFullscreen(false);
     setPreviewDockIssue(null);
     setPreviewFullscreen(false);
+    setTasksDockIssue(null);
+    setTasksFullscreen(false);
   }, []);
 
   const closeEnvironmentDock = useCallback(() => {
     setEnvironmentDockIssue(null);
+  }, []);
+
+  const toggleTasksDock = useCallback((issueIdentifier: string) => {
+    setTasksDockIssue((current) => {
+      const next = current === issueIdentifier ? null : issueIdentifier;
+      if (next === null) setTasksFullscreen(false);
+      return next;
+    });
+    setTerminalDockIssue(null);
+    setTerminalFullscreen(false);
+    setPreviewDockIssue(null);
+    setPreviewFullscreen(false);
+    setEnvironmentDockIssue(null);
+  }, []);
+
+  const closeTasksDock = useCallback(() => {
+    setTasksDockIssue(null);
+    setTasksFullscreen(false);
+  }, []);
+
+  const toggleTasksFullscreen = useCallback(() => {
+    setTasksFullscreen((current) => !current);
   }, []);
 
   const terminalDockControls = useMemo(
@@ -194,6 +225,11 @@ export function ProjectSessionsWorkspace({
   const environmentDockControls = useMemo(
     () => ({ openIssueIdentifier: environmentDockIssue, toggleEnvironment: toggleEnvironmentDock }),
     [environmentDockIssue, toggleEnvironmentDock],
+  );
+
+  const tasksDockControls = useMemo(
+    () => ({ openIssueIdentifier: tasksDockIssue, toggleTasks: toggleTasksDock }),
+    [tasksDockIssue, toggleTasksDock],
   );
 
   const { tabs, activeTabId, activeTab, selectTab, openTab, closeTab } = useWorkspaceTabs({
@@ -241,36 +277,6 @@ export function ProjectSessionsWorkspace({
       navigate(projectAuthoringSessionPath(projectSlug, session.issueIdentifier), { replace: true });
     },
     [navigate, openTab, projectSlug, t],
-  );
-
-  const openExecutionSession = useCallback(
-    (session: ProjectSessionRow) => {
-      const tabTitle = `${session.title} · ${t("issue.agentTabs.execution")}`;
-      const resolvedId = resolveExecutionSessionId(
-        Array.from(executions.values()),
-        session.issueIdentifier,
-      );
-      if (resolvedId != null) {
-        openAssistantSession(resolvedId, tabTitle);
-        return;
-      }
-      openTab(createExecutionSessionTab(session.issueIdentifier, tabTitle));
-      navigate(projectExecutionSessionPath(projectSlug, session.issueIdentifier), { replace: true });
-    },
-    [executions, navigate, openAssistantSession, openTab, projectSlug, t],
-  );
-
-  const openAuthoringByIdentifier = useCallback(
-    (issueIdentifier: string) => {
-      const issue = issues.find((entry) => entry.identifier === issueIdentifier);
-      openAuthoringSession({
-        issueIdentifier,
-        title: issue?.title ?? issueIdentifier,
-        updatedAt: "",
-        agentKind: null,
-      });
-    },
-    [issues, openAuthoringSession],
   );
 
   const openRecentSession = useCallback(
@@ -428,43 +434,33 @@ export function ProjectSessionsWorkspace({
       activeExecutionIdentifier,
     );
     if (resolvedId != null) {
-      // Prefer the real issue_execution thread workspace over the synthetic exec tab.
-      navigate(projectSessionPath(projectSlug, resolvedId), { replace: true });
-      return;
-    }
-
-    const title = executionTitleLookup.get(activeExecutionIdentifier) ?? activeExecutionIdentifier;
-    const tabId = executionSessionTabId(activeExecutionIdentifier);
-    const existingTab = tabs.find((tab) => tab.id === tabId);
-    const tabTitle = `${title} · ${t("issue.agentTabs.execution")}`;
-    const isActive = activeTabId === tabId;
-    const titleMatches = existingTab?.title === tabTitle;
-
-    // Deep links must focus the tab even when it already exists from persistence.
-    if (isActive && titleMatches) {
+      const title = executionTitleLookup.get(activeExecutionIdentifier) ?? activeExecutionIdentifier;
+      const tabTitle = `${title} · ${t("issue.agentTabs.execution")}`;
+      const target = projectSessionPath(projectSlug, resolvedId);
+      openAssistantSession(resolvedId, tabTitle);
       openedExecutionRef.current = activeExecutionIdentifier;
+      if (location.pathname !== target) {
+        navigate(target, { replace: true });
+      }
       return;
     }
 
-    const waitingForTitle =
-      isActive &&
-      existingTab != null &&
-      openedExecutionRef.current === activeExecutionIdentifier &&
-      !executionTitleLookup.has(activeExecutionIdentifier);
-    if (waitingForTitle) return;
-
-    openedExecutionRef.current = activeExecutionIdentifier;
-    openTab(createExecutionSessionTab(activeExecutionIdentifier, tabTitle));
+    // Legacy `?exec=&surface=autonomous` is no longer a destination — drop it when
+    // there is no orchestrator execution session to open.
+    openedExecutionRef.current = null;
+    if (location.search.includes("exec=")) {
+      navigate(projectSessionsPath(projectSlug), { replace: true });
+    }
   }, [
     activeExecutionIdentifier,
-    activeTabId,
     executionTitleLookup,
     executions,
+    location.pathname,
+    location.search,
     navigate,
-    openTab,
+    openAssistantSession,
     projectSlug,
     t,
-    tabs,
   ]);
 
   const handleSelectTab = useCallback(
@@ -479,10 +475,6 @@ export function ProjectSessionsWorkspace({
         navigate(projectAuthoringSessionPath(projectSlug, tab.issueIdentifier), { replace: true });
         return;
       }
-      if (tab?.kind === "execution-session") {
-        navigate(projectExecutionSessionPath(projectSlug, tab.issueIdentifier), { replace: true });
-        return;
-      }
       if (tab?.kind === "new-issue") {
         navigate(projectNewIssueWorkspacePath(projectSlug), { replace: true });
         return;
@@ -491,7 +483,7 @@ export function ProjectSessionsWorkspace({
         navigate(projectSessionsPath(projectSlug), { replace: true });
       }
     },
-    [navigate, projectSlug, selectTab, tabs],
+    [executions, navigate, projectSlug, selectTab, tabs],
   );
 
   const handleCloseTab = useCallback(
@@ -516,7 +508,30 @@ export function ProjectSessionsWorkspace({
       toast.success(result.message || t("sessions.resumeStarted", { identifier: session.issueIdentifier }));
       await refetch();
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : t("sessions.resumeFailed", { identifier: session.issueIdentifier }));
+      if (trackerApiErrorCode(cause) === "already_running") {
+        const threadId = resolveResumeThreadId(session.issueIdentifier, session, relatedSessions);
+        if (threadId != null) {
+          const tabTitle = `${session.title} · ${t("issue.agentTabs.execution")}`;
+          openAssistantSession(threadId, tabTitle);
+          toast.info(
+            t("sessions.alreadyRunningOpened", {
+              identifier: session.issueIdentifier,
+              defaultValue: "{{identifier}} is already running — opened the live session.",
+            }),
+          );
+          return;
+        }
+      }
+
+      const message =
+        axios.isAxiosError(cause) &&
+        typeof (cause.response?.data as { error?: { message?: string } } | undefined)?.error?.message ===
+          "string"
+          ? ((cause.response?.data as { error: { message: string } }).error.message as string)
+          : cause instanceof Error
+            ? cause.message
+            : t("sessions.resumeFailed", { identifier: session.issueIdentifier });
+      toast.error(message);
     } finally {
       setResumePending(null);
     }
@@ -573,8 +588,7 @@ export function ProjectSessionsWorkspace({
 
       const outOfProject =
         (tab.kind === "assistant-session" && !allowedAssistantThreadIds.has(tab.threadId)) ||
-        ((tab.kind === "authoring-session" || tab.kind === "execution-session") &&
-          !allowedIssueIdentifiers.has(tab.issueIdentifier));
+        (tab.kind === "authoring-session" && !allowedIssueIdentifiers.has(tab.issueIdentifier));
 
       if (outOfProject) closeTab(tab.id);
     }
@@ -682,6 +696,8 @@ export function ProjectSessionsWorkspace({
     <SessionTerminalDockContext.Provider value={terminalDockControls}>
     <SessionPreviewDockContext.Provider value={previewDockControls}>
     <SessionEnvironmentDockContext.Provider value={environmentDockControls}>
+    <SessionTasksDockContext.Provider value={tasksDockControls}>
+    <SessionTasksDockFeedProvider>
     <main className="box-border flex h-[calc(100vh-4rem)] min-h-0 flex-col overflow-hidden bg-background p-2 sm:p-3">
       <div
         ref={splitContainerRef}
@@ -690,7 +706,7 @@ export function ProjectSessionsWorkspace({
       <section
         className={cn(
           "flex h-full min-h-0 min-w-0 flex-1 flex-col gap-2.5 overflow-hidden",
-          (terminalFullscreen || previewFullscreen) && "hidden",
+          (terminalFullscreen || previewFullscreen || tasksFullscreen) && "hidden",
         )}
       >
         <WorkspaceTabBar
@@ -800,8 +816,6 @@ export function ProjectSessionsWorkspace({
                         }
                         archiving={archiving}
                         onToggle={() => toggleExpanded(item.key)}
-                        onOpenExecution={openExecutionSession}
-                        onOpenAuthoring={openAuthoringByIdentifier}
                         onOpenSession={openRecentSession}
                         onOpenAssistantSession={openAssistantSession}
                         onResume={handleResume}
@@ -860,18 +874,6 @@ export function ProjectSessionsWorkspace({
           </div>
         ) : null}
 
-        {activeTab?.kind === "execution-session" ? (
-          <ExecutionSessionTabContent
-            projectSlug={projectSlug}
-            issueIdentifier={activeTab.issueIdentifier}
-            issue={issues.find((entry) => entry.identifier === activeTab.issueIdentifier) ?? null}
-            execution={executions.get(activeTab.issueIdentifier)}
-            executions={executions}
-            view={view}
-            isLoading={isLoading}
-            onIssueUpdated={() => void refetch()}
-          />
-        ) : null}
       </section>
 
       {terminalDockIssue ? (
@@ -905,6 +907,16 @@ export function ProjectSessionsWorkspace({
           view={view}
           splitContainerRef={splitContainerRef}
           onClose={closeEnvironmentDock}
+        />
+      ) : null}
+
+      {tasksDockIssue ? (
+        <IssueTasksDock
+          issueIdentifier={tasksDockIssue}
+          splitContainerRef={splitContainerRef}
+          fullscreen={tasksFullscreen}
+          onToggleFullscreen={toggleTasksFullscreen}
+          onClose={closeTasksDock}
         />
       ) : null}
       </div>
@@ -959,6 +971,8 @@ export function ProjectSessionsWorkspace({
         }}
       />
     </main>
+    </SessionTasksDockFeedProvider>
+    </SessionTasksDockContext.Provider>
     </SessionEnvironmentDockContext.Provider>
     </SessionPreviewDockContext.Provider>
     </SessionTerminalDockContext.Provider>
@@ -1037,50 +1051,4 @@ function AuthoringSessionTabContent({
   );
 }
 
-function ExecutionSessionTabContent({
-  projectSlug,
-  issueIdentifier,
-  issue,
-  execution,
-  executions,
-  view,
-  isLoading,
-  onIssueUpdated,
-}: {
-  projectSlug: string;
-  issueIdentifier: string;
-  issue: Issue | null;
-  execution?: AgentExecution;
-  executions: ReadonlyMap<string, AgentExecution>;
-  view: WorkspaceView;
-  isLoading: boolean;
-  onIssueUpdated: (updated: Issue) => void;
-}) {
-  const { t } = useTranslation();
-  const allExecutions = useMemo(() => Array.from(executions.values()), [executions]);
-  const resolved = useResolvedIssue(projectSlug, issueIdentifier, issue);
-
-  if (!resolved.issue) {
-    return (
-      <section className="flex min-h-0 flex-1 items-center justify-center bg-background p-6 text-center text-sm text-muted-foreground">
-        {isLoading || resolved.loading
-          ? t("sessions.loading")
-          : t("sessions.executionUnavailable", { identifier: issueIdentifier })}
-      </section>
-    );
-  }
-
-  return (
-    <section className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
-      <IssueExecutionSessionPanel
-        issue={resolved.issue}
-        projectSlug={projectSlug}
-        execution={execution}
-        executions={allExecutions}
-        view={view}
-        onIssueUpdated={onIssueUpdated}
-      />
-    </section>
-  );
-}
 

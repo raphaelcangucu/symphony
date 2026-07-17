@@ -76,20 +76,24 @@ function AssistantChatMessageBubbleComponent({
       ? message.contentBlocks
       : null;
   const isStreamingTurn = !isUser && message.id === STREAMING_ASSISTANT_ID;
+  // Session-log adapted messages already surface tool activity inline; skip the
+  // interactive-only turn/file summary chrome that would double-count edits.
+  const fromSessionLog = message.metadata?.source === "session_log";
   const turnSummaryPresentations =
-    !isUser && !isStreamingTurn && message.toolCalls.length > 0
+    !fromSessionLog && !isUser && !isStreamingTurn && message.toolCalls.length > 0
       ? toolCallsToPresentations(message.toolCalls)
       : null;
   const turnSummaryStrip = turnSummaryPresentations ? (
     <TurnSummaryStrip presentations={turnSummaryPresentations} durationMs={0} className="mt-2" />
   ) : null;
-  const editedFilesSummary = isUser ? null : (
-    <EditedFilesSummary
-      toolCalls={message.toolCalls}
-      onInsertContext={onInsertContext}
-      onOpenWorkspaceDiff={onOpenWorkspaceDiff}
-    />
-  );
+  const editedFilesSummary =
+    isUser || fromSessionLog ? null : (
+      <EditedFilesSummary
+        toolCalls={message.toolCalls}
+        onInsertContext={onInsertContext}
+        onOpenWorkspaceDiff={onOpenWorkspaceDiff}
+      />
+    );
 
   if (isUserQuestionsMessage(message)) {
     return <UserQuestionsReceipt message={message} />;

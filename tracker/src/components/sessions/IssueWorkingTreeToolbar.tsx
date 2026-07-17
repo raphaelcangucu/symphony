@@ -1,4 +1,4 @@
-import { AppWindow, ExternalLink, PanelRight, TerminalSquare } from "lucide-react";
+import { AppWindow, ExternalLink, ListChecks, PanelRight, TerminalSquare } from "lucide-react";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
@@ -29,6 +29,9 @@ interface IssueWorkingTreeToolbarProps {
   /** When set, shows an environment control toggling the workspace environment dock. */
   environmentOpen?: boolean;
   onEnvironmentToggle?: () => void;
+  /** When set, shows a tasks/tools control toggling the workspace tasks dock. */
+  tasksOpen?: boolean;
+  onTasksToggle?: () => void;
   /** Opens the shared issue KB modal owned by the assistant panel. */
   onOpenKnowledgeBase?: () => void;
   changedDocCount?: number;
@@ -46,6 +49,8 @@ export function IssueWorkingTreeToolbar({
   onPreviewToggle,
   environmentOpen = false,
   onEnvironmentToggle,
+  tasksOpen = false,
+  onTasksToggle,
   onOpenKnowledgeBase,
   changedDocCount,
 }: IssueWorkingTreeToolbarProps) {
@@ -63,6 +68,10 @@ export function IssueWorkingTreeToolbar({
   const environmentActionClassName = cn(
     sessionToolbarIconButtonClassName,
     environmentOpen && sessionToolbarIconButtonActiveClassName,
+  );
+  const tasksActionClassName = cn(
+    sessionToolbarIconButtonClassName,
+    tasksOpen && sessionToolbarIconButtonActiveClassName,
   );
 
   return (
@@ -119,6 +128,19 @@ export function IssueWorkingTreeToolbar({
           className={environmentActionClassName}
         >
           <PanelRight className="h-4 w-4" />
+        </button>
+      ) : null}
+      {onTasksToggle ? (
+        <button
+          type="button"
+          data-testid="tasks-dock-toolbar-toggle"
+          aria-label={t("workspace.tasks.ariaLabel", { identifier: issueIdentifier })}
+          title={t("workspace.tasks.ariaLabel", { identifier: issueIdentifier })}
+          aria-pressed={tasksOpen}
+          onClick={onTasksToggle}
+          className={tasksActionClassName}
+        >
+          <ListChecks className="h-4 w-4" />
         </button>
       ) : null}
       <IssueEditorMenu projectSlug={projectSlug} identifier={issueIdentifier} compact />

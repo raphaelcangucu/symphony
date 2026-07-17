@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildWorkspaceCards,
+  canArchiveSessionRow,
   countLiveWritersForWorkspace,
   flattenWorkspaceCardsByRecency,
   formatBytes,
+  linkedSessionThreadIds,
 } from "@/lib/workspaceCards";
 import type { AgentExecution } from "@/types/agent-execution";
 import type { Issue } from "@/types/issue";
@@ -101,8 +103,8 @@ describe("buildWorkspaceCards", () => {
       executions: [execution()],
       issues: [issue("DEMO-1", "Fix login race")],
       relatedSessions: [
-        session({ id: "chat:2", scope: "issue", identifier: "DEMO-1", title: "Authoring" }),
-        session({ id: "chat:3", scope: "issue_session", identifier: "DEMO-1", title: "Parallel pass" }),
+        session({ id: "chat:2", scope: "issue", identifier: "DEMO-1", threadId: 2, title: "Authoring" }),
+        session({ id: "chat:3", scope: "issue_session", identifier: "DEMO-1", threadId: 3, title: "Parallel pass" }),
       ],
       inventory: [
         inventoryEntry({
@@ -128,8 +130,61 @@ describe("buildWorkspaceCards", () => {
     expect(card.title).toBe("Fix login race");
     expect(card.execution?.status).toBe("live");
     expect(card.authoring?.issueIdentifier).toBe("DEMO-1");
-    expect(card.sessions.map((entry) => entry.title)).toEqual(["Parallel pass"]);
+    // Threads are the source of truth: authoring and parallel threads are both
+    // plain session rows; the execution has no session id, so no row is invented.
+    expect(card.sessions.map((entry) => entry.title)).toEqual(["Authoring", "Parallel pass"]);
     expect(card.inventory?.repos[0].branch).toBe("feat/demo-1");
+  });
+
+  it("dedups the execution thread against its issue_execution session row", () => {
+    const result = buildWorkspaceCards({
+      executions: [execution({ executionSessionId: 42, sessionId: "42" })],
+      issues: [issue("DEMO-1", "Fix login race")],
+      relatedSessions: [
+        session({
+          id: "thread:42",
+          scope: "issue_execution",
+          identifier: "DEMO-1",
+          threadId: 42,
+          title: "Orchestrator run",
+          statusKind: "running",
+        }),
+      ],
+      inventory: [],
+    });
+
+    const card = result.activeCards[0];
+    expect(card.sessions).toHaveLength(1);
+    expect(card.sessions[0]).toMatchObject({ threadId: 42, title: "Orchestrator run" });
+  });
+
+  it("synthesizes exactly one session row when the execution thread is missing from recents", () => {
+    const result = buildWorkspaceCards({
+      executions: [execution({ executionSessionId: 42, sessionId: "42", status: "saved" })],
+      issues: [issue("DEMO-1", "Saved launcher work")],
+      relatedSessions: [],
+      inventory: [],
+    });
+
+    const card = [...result.activeCards, ...result.waitingCards][0];
+    expect(card.sessions).toHaveLength(1);
+    expect(card.sessions[0]).toMatchObject({
+      threadId: 42,
+      scope: "issue_execution",
+      title: "Saved launcher work",
+      statusKind: "closed",
+    });
+  });
+
+  it("never invents a session row for an execution without a session id", () => {
+    const result = buildWorkspaceCards({
+      executions: [execution({ executionSessionId: null })],
+      issues: [issue("DEMO-1", "Fix login race")],
+      relatedSessions: [],
+      inventory: [],
+    });
+
+    expect(result.activeCards[0].sessions).toHaveLength(0);
   });
 
   it("splits issues into active and waiting sections by execution bucket", () => {
@@ -283,6 +338,51 @@ describe("buildWorkspaceCards orphans", () => {
 
     expect(result.activeCards).toHaveLength(0);
     expect(result.orphanCards.map((card) => card.kind)).toEqual(["issue_parallel"]);
+  });
+});
+
+describe("linkedSessionThreadIds", () => {
+  it("includes the orchestrator execution session id", () => {
+    const result = buildWorkspaceCards({
+      executions: [execution({ executionSessionId: 42, sessionId: "42", status: "saved" })],
+      issues: [issue("DEMO-1", "Saved launcher work")],
+      relatedSessions: [],
+      inventory: [],
+    });
+    const card = [...result.activeCards, ...result.waitingCards].find(
+      (entry) => entry.issueIdentifier === "DEMO-1",
+    );
+    expect(card).toBeTruthy();
+    expect(linkedSessionThreadIds(card!)).toEqual([42]);
+  });
+});
+
+describe("canArchiveSessionRow", () => {
+  it("blocks archiving an active orchestrator execution thread", () => {
+    expect(
+      canArchiveSessionRow(
+        session({ scope: "issue_execution", threadId: 42, statusKind: "running" }),
+      ),
+    ).toBe(false);
+    expect(
+      canArchiveSessionRow(
+        session({ scope: "issue_execution", threadId: 42, statusKind: "waiting" }),
+      ),
+    ).toBe(false);
+  });
+
+  it("allows archiving inactive executions and regular threads", () => {
+    expect(
+      canArchiveSessionRow(
+        session({ scope: "issue_execution", threadId: 42, statusKind: "closed" }),
+      ),
+    ).toBe(true);
+    expect(canArchiveSessionRow(session({ scope: "issue", threadId: 9 }))).toBe(true);
+    expect(canArchiveSessionRow(session({ scope: "issue_session", threadId: 9 }))).toBe(true);
+  });
+
+  it("requires a thread id", () => {
+    expect(canArchiveSessionRow(session({ threadId: null }))).toBe(false);
   });
 });
 

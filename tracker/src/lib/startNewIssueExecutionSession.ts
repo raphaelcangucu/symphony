@@ -2,7 +2,7 @@ import type { TFunction } from "i18next";
 import type { NavigateFunction } from "react-router-dom";
 import { toast } from "sonner";
 
-import { projectExecutionSessionPath } from "@/lib/workspaceRoutes";
+import { projectSessionsPath } from "@/lib/workspaceRoutes";
 import { DEFAULT_EXECUTION_MODE } from "@/lib/executionMode";
 import { dispatchIssueAgent, type IssueDispatchResult } from "@/services/issueDispatch";
 import type { AgentKind, ExecutionMode, Issue } from "@/types/issue";
@@ -32,7 +32,9 @@ export async function startNewIssueExecutionSession(
   options.onIssueUpdated?.(result.issue);
 
   if (options.navigateToSessions !== false && options.navigate) {
-    options.navigate(projectExecutionSessionPath(projectSlug, issueIdentifier));
+    // Dispatch does not return the new thread id yet — land on workspaces; the
+    // orchestrator session appears as a real `/workspaces/<threadId>` row.
+    options.navigate(projectSessionsPath(projectSlug));
   }
 
   if (options.t) {
