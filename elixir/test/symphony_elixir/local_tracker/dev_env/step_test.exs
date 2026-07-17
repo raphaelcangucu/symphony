@@ -1,7 +1,37 @@
 defmodule SymphonyElixir.LocalTracker.DevEnv.StepTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
+  alias SymphonyElixir.LocalTracker.{Context, DevEnv}
   alias SymphonyElixir.LocalTracker.DevEnv.{ProposedStep, Step}
+  alias SymphonyElixir.Repo
+
+  setup do
+    {:ok, _repo, _apps} =
+      Ecto.Migrator.with_repo(Repo, fn repo -> Ecto.Migrator.run(repo, :up, all: true) end)
+
+    for t <- [
+          "local_tracker_dev_env_step_runs",
+          "local_tracker_dev_env_runs",
+          "local_tracker_dev_env_steps",
+          "local_tracker_repositories",
+          "local_tracker_projects"
+        ] do
+      Repo.query!("delete from #{t}")
+    end
+
+    {:ok, _project} =
+      Context.create_workspace_project(%{
+        "name" => "RunSpec",
+        "slug" => "run-spec",
+        "workflow_statuses" => [
+          %{"name" => "Todo", "category" => "active", "position" => 0, "is_terminal" => false}
+        ],
+        "repositories" => [],
+        "setup" => %{}
+      })
+
+    :ok
+  end
 
   test "requires description and command" do
     refute Step.changeset(%Step{}, %{project_id: 1}).valid?
@@ -69,6 +99,47 @@ defmodule SymphonyElixir.LocalTracker.DevEnv.StepTest do
     assert s.ready_probe == "tcp"
     assert s.ready_path == "/"
     refute s.primary
+  end
+
+  test "changeset accepts optional run_spec without requiring it" do
+    cs =
+      Step.changeset(%Step{}, %{
+        project_id: 1,
+        description: "Preview",
+        command: "symphony-preview-runner",
+        role: "serve",
+        run_spec: %{
+          "start" => [["nuxi", "dev", "--port", "${PORT}"]],
+          "health" => %{"path" => "/api/health"}
+        }
+      })
+
+    assert cs.valid?
+    assert Ecto.Changeset.get_field(cs, :run_spec)["health"]["path"] == "/api/health"
+  end
+
+  test "run_spec round-trips through insert and reload" do
+    run_spec = %{
+      "cwd" => "frontend",
+      "start" => [["nuxi", "dev", "--port", "${PORT}"]],
+      "health" => %{"path" => "/api/health", "timeout_ms" => 1_000}
+    }
+
+    assert {:ok, [step]} =
+             DevEnv.save_steps("run-spec", [
+               %{
+                 "description" => "Front dev",
+                 "command" => "symphony-preview-runner",
+                 "role" => "serve",
+                 "run_spec" => run_spec,
+                 "primary" => true
+               }
+             ])
+
+    assert step.run_spec == run_spec
+
+    reloaded = DevEnv.list_serve_steps("run-spec") |> hd()
+    assert reloaded.run_spec == run_spec
   end
 
   test "ProposedStep accepts string-keyed serve fields" do
