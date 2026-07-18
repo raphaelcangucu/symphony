@@ -26,6 +26,7 @@ export interface SidebarSearchResult {
   readonly status: string;
   readonly href: string;
   readonly projectId: string;
+  readonly issueIdentifier: string | null;
 }
 
 export interface SidebarSearchLauncherProps {
@@ -57,9 +58,14 @@ export function buildSidebarSearchResults(
         status: project.loadState,
         href: `/projects/${encodeURIComponent(project.projectSlug)}/board`,
         projectId: project.id,
+        issueIdentifier: null,
       },
       normalizedQuery,
     );
+
+    for (const flatSession of [...project.sessions, ...project.overflowSessions]) {
+      addSessionResult(results, seenIds, project, null, flatSession, normalizedQuery);
+    }
 
     const workspaces = [...project.workspaces, ...project.overflowWorkspaces];
     for (const workspace of workspaces) {
@@ -169,6 +175,7 @@ function addWorkspaceResults(
       status: workspace.aggregateStatus,
       href: workspace.href,
       projectId: project.id,
+      issueIdentifier: null,
     },
     query,
   );
@@ -193,10 +200,15 @@ function addSessionResult(
       id: session.id,
       kind: "session",
       title: session.title,
-      context: workspace ? `${project.title} · ${workspace.title}` : project.title,
+      context: workspace
+        ? `${project.title} · ${workspace.title}`
+        : session.issueIdentifier
+          ? `${project.title} · ${session.issueIdentifier}`
+          : project.title,
       status: session.statusKind,
       href: session.href,
       projectId: project.id,
+      issueIdentifier: session.issueIdentifier,
     },
     query,
   );
@@ -215,7 +227,9 @@ function addResult(
 
 function searchableText(result: SidebarSearchResult): string {
   return normalizeSearchText(
-    `${result.title} ${result.context} ${result.status} ${result.kind}`,
+    [result.title, result.context, result.issueIdentifier ?? ""]
+      .filter(Boolean)
+      .join(" "),
   );
 }
 

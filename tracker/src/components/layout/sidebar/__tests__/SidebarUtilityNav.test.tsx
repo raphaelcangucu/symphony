@@ -140,6 +140,58 @@ describe("sidebar utility navigation", () => {
     expect(screen.getByRole("link", { name: "Observabilidade" })).toBeInTheDocument();
   });
 
+  it("indexes flat-nav project.sessions and overflowSessions", () => {
+    const tree = [
+      project({
+        workspaces: [],
+        sessions: [
+          session({
+            id: "thread:11",
+            title: "GAM-20 · Floating surfaces",
+            href: "/projects/gamba/workspaces/11",
+            issueIdentifier: "GAM-20",
+          }),
+        ],
+        overflowSessions: [
+          session({
+            id: "thread:12",
+            title: "Hidden overflow chat",
+            href: "/projects/gamba/workspaces/12",
+            workspaceId: null,
+          }),
+        ],
+      }),
+    ];
+
+    expect(buildSidebarSearchResults(tree, "floating").map((r) => r.id)).toEqual([
+      "thread:11",
+    ]);
+    expect(buildSidebarSearchResults(tree, "overflow").map((r) => r.id)).toEqual([
+      "thread:12",
+    ]);
+    expect(buildSidebarSearchResults(tree, "gam-20").map((r) => r.id)).toContain(
+      "thread:11",
+    );
+  });
+
+  it("does not match project loadState or kind tokens alone", () => {
+    const tree = [
+      project({
+        title: "Gamba",
+        sessions: [session({ id: "thread:1", title: "Alpha" })],
+        workspaces: [],
+      }),
+    ];
+
+    expect(buildSidebarSearchResults(tree, "re").map((r) => r.kind)).toEqual([]);
+    expect(buildSidebarSearchResults(tree, "project").map((r) => r.kind)).toEqual([]);
+    // Project title match also surfaces child sessions whose context includes the project name.
+    expect(buildSidebarSearchResults(tree, "gamba").map((r) => r.kind)).toEqual([
+      "project",
+      "session",
+    ]);
+  });
+
   it("normalizes search, includes overflow and unassigned, and deduplicates malformed nodes", () => {
     const overflow = workspace({
       id: "workspace:overflow",
