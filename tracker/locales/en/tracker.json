@@ -2933,16 +2933,17 @@
         "settings": "Settings"
       },
       "search": {
-        "title": "Search sidebar",
-        "description": "Search loaded projects, workspaces, and sessions.",
-        "placeholder": "Search projects and sessions…",
+        "title": "Search",
+        "description": "Search projects, sessions, and issues.",
+        "placeholder": "Search projects, sessions, and issues…",
         "loading": "Loading…",
         "empty": "No results found.",
         "unknownStatus": "Unknown status",
         "types": {
           "project": "Project",
           "workspace": "Workspace",
-          "session": "Session"
+          "session": "Session",
+          "issue": "Issue"
         },
         "loadState": {
           "idle": "Idle",

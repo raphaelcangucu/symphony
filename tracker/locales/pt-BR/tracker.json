@@ -2933,16 +2933,17 @@
         "settings": "Configurações"
       },
       "search": {
-        "title": "Buscar na barra lateral",
-        "description": "Busque projetos, workspaces e sessões carregados.",
-        "placeholder": "Buscar projetos e sessões…",
+        "title": "Buscar",
+        "description": "Busque projetos, sessões e issues.",
+        "placeholder": "Buscar projetos, sessões e issues…",
         "loading": "Carregando…",
         "empty": "Nenhum resultado encontrado.",
         "unknownStatus": "Status desconhecido",
         "types": {
           "project": "Projeto",
           "workspace": "Workspace",
-          "session": "Sessão"
+          "session": "Sessão",
+          "issue": "Issue"
         },
         "loadState": {
           "idle": "Ocioso",

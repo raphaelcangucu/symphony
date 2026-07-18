@@ -352,7 +352,7 @@ describe("sidebar utility navigation", () => {
     );
 
     await act(async () => {
-      fireEvent.change(screen.getByPlaceholderText("Search projects and sessions…"), {
+      fireEvent.change(screen.getByPlaceholderText("Search projects, sessions, and issues…"), {
         target: { value: "floating" },
       });
       await vi.advanceTimersByTimeAsync(250);
@@ -379,7 +379,7 @@ describe("sidebar utility navigation", () => {
       />,
     );
 
-    await user.type(screen.getByPlaceholderText("Search projects and sessions…"), "resume");
+    await user.type(screen.getByPlaceholderText("Search projects, sessions, and issues…"), "resume");
     const result = screen.getByRole("option", { name: /Résumé API/i });
     result.focus();
     await user.keyboard("{Enter}");
