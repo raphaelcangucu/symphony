@@ -114,7 +114,7 @@ export function MinibrowserChrome({
   }
 
   return (
-    <div className={cn("flex min-h-0 flex-1 flex-col overflow-hidden bg-white", className)}>
+    <div className={cn("flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden bg-background", className)}>
       <div className="flex shrink-0 items-center gap-0.5 border-b border-border/50 px-2 py-1">
         <Button
           type="button"
@@ -216,14 +216,16 @@ export function MinibrowserChrome({
           </Button>
         ) : null}
       </div>
-      <iframe
-        key={`${history.current}:${reloadKey}`}
-        src={stopped ? "about:blank" : history.current}
-        title={frameTitle}
-        className="h-full w-full flex-1 border-0"
-        sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
-        onLoad={() => setLoading(false)}
-      />
+      <div className="relative min-h-0 flex-1 bg-white">
+        <iframe
+          key={`${history.current}:${reloadKey}`}
+          src={stopped ? "about:blank" : history.current}
+          title={frameTitle}
+          className="absolute inset-0 h-full w-full border-0"
+          sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
+          onLoad={() => setLoading(false)}
+        />
+      </div>
     </div>
   );
 }

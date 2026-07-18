@@ -28,19 +28,31 @@ export function FloatingSurfaceContent({ surface }: FloatingSurfaceContentProps)
       );
     case "issue-terminal":
       return (
-        <TerminalWorkspacePanel
-          projectSlug={surface.payload.projectSlug}
-          issueIdentifier={surface.payload.issueIdentifier}
-          variant="embedded"
-        />
+        <div className="flex h-full min-h-0 flex-col overflow-hidden p-2">
+          <TerminalWorkspacePanel
+            projectSlug={surface.payload.projectSlug}
+            issueIdentifier={surface.payload.issueIdentifier}
+            variant="embedded"
+          />
+        </div>
       );
     case "project-terminal":
-      return <ProjectTerminalWorkspace projectSlug={surface.payload.projectSlug} />;
+      return (
+        <div className="flex h-full min-h-0 flex-col overflow-hidden">
+          <ProjectTerminalWorkspace projectSlug={surface.payload.projectSlug} />
+        </div>
+      );
     case "minibrowser":
-      return <MinibrowserChrome homeUrl={surface.payload.homeUrl} frameTitle={surface.title} />;
+      return (
+        <MinibrowserChrome
+          homeUrl={surface.payload.homeUrl}
+          frameTitle={surface.title}
+          className="h-full min-h-0"
+        />
+      );
     default:
       return (
-        <div className="flex h-full items-center justify-center p-4 text-sm text-muted-foreground">
+        <div className="flex h-full min-h-0 items-center justify-center p-4 text-sm text-muted-foreground">
           {t("floatingSurface.unavailable")}
         </div>
       );
