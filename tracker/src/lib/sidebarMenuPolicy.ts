@@ -86,3 +86,15 @@ export function sidebarArchiveRequest(
     canArchive: true,
   };
 }
+
+export function sidebarRemoveIssueRequest(node: SidebarNode): SidebarActionRequest | null {
+  if (node.kind !== "session") return null;
+  if (node.sessionKind !== "execution") return null;
+  if (!node.issueIdentifier?.trim()) return null;
+  return {
+    action: "delete-issue",
+    projectSlug: node.projectSlug,
+    identifier: node.issueIdentifier,
+    active: node.aggregateStatus === "active",
+  };
+}

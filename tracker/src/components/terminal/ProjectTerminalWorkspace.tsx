@@ -182,7 +182,7 @@ export function ProjectTerminalWorkspace({ projectSlug }: ProjectTerminalWorkspa
 
         <section
           className={cn(
-            "min-h-0 flex-1 overflow-hidden rounded-xl border border-border/60 bg-[#0b1220] shadow-sm",
+            "flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border/60 bg-[#0b1220] shadow-sm",
             SCROLLBAR_THIN,
           )}
         >

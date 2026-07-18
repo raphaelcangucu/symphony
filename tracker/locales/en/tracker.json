@@ -3046,6 +3046,7 @@
         "metadataDescription": "Update labels and review state.",
         "archiveEffect": "Archive hides this item from active views. It can be restored later.",
         "removeProjectEffect": "Permanently remove this project and its tracker data from the sidebar.",
+        "removeIssueEffect": "Permanently remove this issue from the tracker. This cannot be undone.",
         "removeWorkspaceEffect": "Remove this workspace and its files. The project and issue remain.",
         "deleteThreadEffect": "Permanently delete this local thread and its history."
       },
@@ -3092,6 +3093,7 @@
         "localThreadDelete": "Only local thread scopes can be deleted.",
         "threadDeleteState": "A thread must be archived or closed before deletion.",
         "activeExecutionArchive": "An active execution cannot be archived.",
+        "activeExecutionRemove": "An active execution cannot be removed.",
         "reviewUnauthorized": "Review changes are not authorized.",
         "threadArchiveUnauthorized": "Thread archive capability is required."
       },

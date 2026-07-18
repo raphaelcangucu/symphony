@@ -56,6 +56,7 @@ import {
 } from "@/lib/sidebarCapabilities";
 import {
   sidebarArchiveRequest,
+  sidebarRemoveIssueRequest,
   sidebarRenameRequest,
   SIDEBAR_ACTION_LABELS,
 } from "@/lib/sidebarMenuPolicy";
@@ -294,21 +295,35 @@ export function SidebarContextMenu({
         return;
       }
       case "remove": {
-        if (node.kind !== "project") return;
+        if (node.kind === "project") {
+          openDialog({
+            type: "confirm",
+            actionLabel: t("layout.sidebar.actions.remove"),
+            effectDescription: t("layout.sidebar.actions.removeProjectEffect", {
+              defaultValue:
+                "Permanently remove this project and its tracker data from the sidebar.",
+            }),
+            requireExactName: true,
+            request: {
+              action: "remove-project",
+              projectSlug: node.projectSlug,
+              archived: node.archived,
+              canArchive: !node.archived,
+            },
+          });
+          return;
+        }
+        const removeIssueRequest = sidebarRemoveIssueRequest(node);
+        if (!removeIssueRequest) return;
         openDialog({
           type: "confirm",
           actionLabel: t("layout.sidebar.actions.remove"),
-          effectDescription: t("layout.sidebar.actions.removeProjectEffect", {
+          effectDescription: t("layout.sidebar.actions.removeIssueEffect", {
             defaultValue:
-              "Permanently remove this project and its tracker data from the sidebar.",
+              "Permanently remove this issue from the tracker. This cannot be undone.",
           }),
           requireExactName: true,
-          request: {
-            action: "remove-project",
-            projectSlug: node.projectSlug,
-            archived: node.archived,
-            canArchive: !node.archived,
-          },
+          request: removeIssueRequest,
         });
         return;
       }

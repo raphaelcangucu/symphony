@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { sidebarRenameRequest } from "@/lib/sidebarMenuPolicy";
+import {
+  sidebarRemoveIssueRequest,
+  sidebarRenameRequest,
+} from "@/lib/sidebarMenuPolicy";
 import type { SidebarCapabilityContext, SidebarSessionNode } from "@/types/sidebar";
 
 function session(overrides: Partial<SidebarSessionNode> = {}): SidebarSessionNode {
@@ -42,5 +45,40 @@ describe("sidebarRenameRequest", () => {
 
   it("returns null for issue-backed session rows without threadId", () => {
     expect(sidebarRenameRequest(session({ threadId: null }), context, "My name")).toBeNull();
+  });
+});
+
+describe("sidebarRemoveIssueRequest", () => {
+  it("maps inactive execution sessions to delete-issue", () => {
+    expect(
+      sidebarRemoveIssueRequest(
+        session({
+          sessionKind: "execution",
+          issueIdentifier: "GAM-20",
+          aggregateStatus: "idle",
+        }),
+      ),
+    ).toEqual({
+      action: "delete-issue",
+      projectSlug: "demo",
+      identifier: "GAM-20",
+      active: false,
+    });
+  });
+
+  it("marks active executions so the dispatcher can reject them", () => {
+    expect(
+      sidebarRemoveIssueRequest(
+        session({
+          sessionKind: "execution",
+          issueIdentifier: "GAM-20",
+          aggregateStatus: "active",
+        }),
+      ),
+    ).toMatchObject({ action: "delete-issue", active: true });
+  });
+
+  it("returns null for non-execution sessions", () => {
+    expect(sidebarRemoveIssueRequest(session())).toBeNull();
   });
 });

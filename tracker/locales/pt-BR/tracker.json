@@ -3046,6 +3046,7 @@
         "metadataDescription": "Atualize etiquetas e o estado de revisão.",
         "archiveEffect": "Arquivar oculta este item das visualizações ativas. Ele poderá ser restaurado.",
         "removeProjectEffect": "Remove permanentemente este projeto e seus dados do rastreador da barra lateral.",
+        "removeIssueEffect": "Remove permanentemente esta issue do rastreador. Isso não pode ser desfeito.",
         "removeWorkspaceEffect": "Remove este workspace e seus arquivos. O projeto e a issue permanecem.",
         "deleteThreadEffect": "Exclui permanentemente esta thread local e seu histórico."
       },
@@ -3092,6 +3093,7 @@
         "localThreadDelete": "Somente threads locais podem ser excluídas.",
         "threadDeleteState": "A thread deve estar arquivada ou fechada antes da exclusão.",
         "activeExecutionArchive": "Uma execução ativa não pode ser arquivada.",
+        "activeExecutionRemove": "Uma execução ativa não pode ser removida.",
         "reviewUnauthorized": "Alterações de revisão não são autorizadas.",
         "threadArchiveUnauthorized": "É necessária permissão para arquivar a thread."
       },

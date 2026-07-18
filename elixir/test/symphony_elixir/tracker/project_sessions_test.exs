@@ -110,6 +110,79 @@ defmodule SymphonyElixir.Tracker.ProjectSessionsTest do
     refute Enum.any?(rows, &(&1.id == "exec:OTHER-1"))
   end
 
+  test "hides issue_execution sessions when the linked issue is archived" do
+    {:ok, issue} =
+      Context.create_issue("sessions", %{title: "Archived execution issue", description: "body"})
+
+    {:ok, session} =
+      %Thread{}
+      |> Thread.changeset(%{
+        scope: "issue_execution",
+        project_slug: "sessions",
+        issue_identifier: issue.identifier,
+        title: issue.title,
+        workspace_path: "/tmp/sessions/#{issue.identifier}",
+        status: "closed",
+        agent_kind: "codex",
+        metadata: %{"origin" => "orchestrator"}
+      })
+      |> Repo.insert()
+
+    assert {:ok, _} = Context.archive_issue("sessions", issue.identifier)
+
+    assert {:ok, %{data: rows}} =
+             ProjectSessions.list("sessions",
+               limit: 20,
+               executions: fn -> [] end,
+               workspace_sessions: fn -> [] end
+             )
+
+    refute Enum.any?(rows, &(&1.id == "thread:#{session.id}"))
+
+    assert {:ok, %{data: archived_rows}} =
+             ProjectSessions.list("sessions",
+               limit: 20,
+               include_archived: true,
+               executions: fn -> [] end,
+               workspace_sessions: fn -> [] end
+             )
+
+    archived_row = Enum.find(archived_rows, &(&1.id == "thread:#{session.id}"))
+    assert archived_row
+    assert archived_row.archived == true
+  end
+
+  test "hides issue_execution sessions when the linked issue is deleted" do
+    {:ok, issue} =
+      Context.create_issue("sessions", %{title: "Deleted execution issue", description: "body"})
+
+    {:ok, session} =
+      %Thread{}
+      |> Thread.changeset(%{
+        scope: "issue_execution",
+        project_slug: "sessions",
+        issue_identifier: issue.identifier,
+        title: issue.title,
+        workspace_path: "/tmp/sessions/#{issue.identifier}",
+        status: "closed",
+        agent_kind: "codex",
+        metadata: %{"origin" => "orchestrator"}
+      })
+      |> Repo.insert()
+
+    assert {:ok, _} = Context.delete_issue("sessions", issue.identifier)
+
+    assert {:ok, %{data: rows}} =
+             ProjectSessions.list("sessions",
+               limit: 20,
+               include_archived: true,
+               executions: fn -> [] end,
+               workspace_sessions: fn -> [] end
+             )
+
+    refute Enum.any?(rows, &(&1.id == "thread:#{session.id}"))
+  end
+
   test "omits orphan workspace executions that lack an issue_execution session" do
     {:ok, issue} =
       Context.create_issue("sessions", %{title: "Disk-backed execution", description: "body"})

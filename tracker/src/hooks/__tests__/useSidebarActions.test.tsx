@@ -12,7 +12,7 @@ import {
   deleteAssistantThread,
   updateAssistantThread,
 } from "@/services/assistantThreads";
-import { archiveIssue, updateIssue } from "@/services/issues";
+import { archiveIssue, deleteIssue, updateIssue } from "@/services/issues";
 import {
   archiveProject,
   deleteProject,
@@ -32,6 +32,7 @@ vi.mock("@/services/assistantThreads", () => ({
 }));
 vi.mock("@/services/issues", () => ({
   archiveIssue: vi.fn(),
+  deleteIssue: vi.fn(),
   updateIssue: vi.fn(),
 }));
 vi.mock("@/services/projects", () => ({
@@ -50,6 +51,7 @@ const services = {
   deleteAssistantThread: vi.mocked(deleteAssistantThread),
   updateAssistantThread: vi.mocked(updateAssistantThread),
   archiveIssue: vi.mocked(archiveIssue),
+  deleteIssue: vi.mocked(deleteIssue),
   updateIssue: vi.mocked(updateIssue),
   archiveProject: vi.mocked(archiveProject),
   deleteProject: vi.mocked(deleteProject),
@@ -214,6 +216,16 @@ describe("useSidebarActions", () => {
         active: false,
       },
       services.archiveIssue,
+      ["acme", "ACME-1"],
+    ],
+    [
+      {
+        action: "delete-issue",
+        projectSlug: "acme",
+        identifier: "ACME-1",
+        active: false,
+      },
+      services.deleteIssue,
       ["acme", "ACME-1"],
     ],
   ] as const)(

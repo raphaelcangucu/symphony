@@ -109,10 +109,14 @@ function sessionActions(
     }
     actions.push(enabled(node.pinned ? "unpin" : "pin"));
     if (nonBlank(node.issueIdentifier)) {
+      const activeExecution = ACTIVE_EXECUTION_STATUSES.has(node.statusKind);
       actions.push(
-        ACTIVE_EXECUTION_STATUSES.has(node.statusKind)
+        activeExecution
           ? disabled("archive", REASON_ACTIVE_EXECUTION, true)
           : enabled("archive", true),
+        activeExecution
+          ? disabled("remove", REASON_ACTIVE_EXECUTION, true)
+          : enabled("remove", true),
       );
     }
     return actions;

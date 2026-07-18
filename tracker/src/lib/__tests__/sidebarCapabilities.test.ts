@@ -344,7 +344,7 @@ describe("sidebar capabilities", () => {
   });
 
   it.each(["active", "running", "waiting", "retrying"] as const)(
-    "disables archive for issue-backed %s executions and never offers delete",
+    "disables archive and remove for issue-backed %s executions",
     (statusKind) => {
       const actions = resolveSidebarCapabilities(
         session({
@@ -357,14 +357,16 @@ describe("sidebar capabilities", () => {
         BASE_CONTEXT,
       );
 
-      expect(ids(actions)).toEqual(["copy-resume-link", "pin", "archive"]);
+      expect(ids(actions)).toEqual(["copy-resume-link", "pin", "archive", "remove"]);
       expect(actions[2]).toMatchObject({ enabled: false, destructive: true });
       expect(actions[2].disabledReason?.trim()).not.toBe("");
+      expect(actions[3]).toMatchObject({ enabled: false, destructive: true });
+      expect(actions[3].disabledReason?.trim()).not.toBe("");
       expect(ids(actions)).not.toContain("delete");
     },
   );
 
-  it("enables archive for inactive issue-backed executions and never offers delete", () => {
+  it("enables archive and remove for inactive issue-backed executions", () => {
     const actions = resolveSidebarCapabilities(
       session({
         id: "thread:42",
@@ -376,8 +378,9 @@ describe("sidebar capabilities", () => {
       BASE_CONTEXT,
     );
 
-    expect(ids(actions)).toEqual(["copy-resume-link", "pin", "archive"]);
+    expect(ids(actions)).toEqual(["copy-resume-link", "pin", "archive", "remove"]);
     expect(actions[2]).toMatchObject({ enabled: true, destructive: true });
+    expect(actions[3]).toMatchObject({ enabled: true, destructive: true });
     expect(ids(actions)).not.toContain("delete");
   });
 

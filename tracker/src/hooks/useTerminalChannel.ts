@@ -96,13 +96,31 @@ export function useTerminalChannel({
     const fitAddon = new FitAddon();
     terminal.loadAddon(fitAddon);
     terminal.open(container);
-    fitAddon.fit();
 
     const socket = createTrackerSocket();
     socket.connect();
     let channel: Channel | null = null;
     let cancelled = false;
     let lastSnapshot = "";
+    let fitFrame: number | null = null;
+
+    const fitTerminal = () => {
+      if (cancelled) return;
+      const width = container.clientWidth;
+      const height = container.clientHeight;
+      if (width < 1 || height < 1) return;
+      fitAddon.fit();
+    };
+
+    const scheduleFit = () => {
+      if (fitFrame !== null) return;
+      fitFrame = window.requestAnimationFrame(() => {
+        fitFrame = null;
+        fitTerminal();
+      });
+    };
+
+    fitTerminal();
 
     const joinChannel = (topic: string, joinParams: Record<string, string>) => {
       channel = socket.channel(topic, joinParams);
@@ -135,9 +153,9 @@ export function useTerminalChannel({
           if (typeof output === "string" && output.length > 0) {
             lastSnapshot = renderSnapshot(terminal, output, lastSnapshot);
           }
-          channel?.push("resize", { cols: terminal.cols, rows: terminal.rows });
           onActivated?.();
-          fitAddon.fit();
+          fitTerminal();
+          channel?.push("resize", { cols: terminal.cols, rows: terminal.rows });
         })
         .receive("error", (reason) => {
           if (cancelled) return;
@@ -183,14 +201,16 @@ export function useTerminalChannel({
     const resizeObserver =
       typeof ResizeObserver === "undefined"
         ? null
-        : new ResizeObserver(() => {
-            fitAddon.fit();
-            channel?.push("resize", { cols: terminal.cols, rows: terminal.rows });
+        : new ResizeObserver((entries) => {
+            const entry = entries[0];
+            if (!entry || entry.contentRect.width < 1 || entry.contentRect.height < 1) return;
+            scheduleFit();
           });
     resizeObserver?.observe(container);
 
     return () => {
       cancelled = true;
+      if (fitFrame !== null) window.cancelAnimationFrame(fitFrame);
       resizeObserver?.disconnect();
       channel?.leave();
       socket.disconnect();

@@ -14,8 +14,24 @@ vi.mock("@/services/issueDevServers", () => ({
 }));
 
 vi.mock("@/components/terminal/TerminalView", () => ({
-  TerminalView: ({ ariaLabel, serverSlug, kind }: { ariaLabel: string; serverSlug?: string; kind: string }) => (
-    <div data-testid="interactive-terminal" data-kind={kind} data-server-slug={serverSlug} aria-label={ariaLabel} />
+  TerminalView: ({
+    ariaLabel,
+    serverSlug,
+    kind,
+    enabled,
+  }: {
+    ariaLabel: string;
+    serverSlug?: string;
+    kind: string;
+    enabled?: boolean;
+  }) => (
+    <div
+      data-testid="interactive-terminal"
+      data-kind={kind}
+      data-server-slug={serverSlug}
+      data-enabled={enabled ? "true" : "false"}
+      aria-label={ariaLabel}
+    />
   ),
 }));
 
@@ -23,9 +39,10 @@ describe("DevServerOutputPanel", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(subscribeDevServerOutput).mockReturnValue(() => undefined);
+    floatingSurfaceStore.resetFloatingSurfaceStoreForTests();
   });
 
-  it("shows load error without empty pre body", async () => {
+  it("shows load error without empty pre body when there is no interactive session", async () => {
     vi.mocked(fetchDevServerOutput).mockRejectedValue(new Error("fail"));
 
     render(
@@ -35,7 +52,7 @@ describe("DevServerOutputPanel", () => {
         serverId={1}
         slug="front"
         status="crashed"
-        sessionName="sym"
+        sessionName={null}
         defaultOpen
       />,
     );
@@ -45,7 +62,7 @@ describe("DevServerOutputPanel", () => {
     expect(screen.queryByLabelText(/front command output/i)).not.toBeInTheDocument();
   });
 
-  it("streams output for stalled servers", () => {
+  it("streams output for stalled servers without an interactive session", () => {
     render(
       <DevServerOutputPanel
         projectSlug="macro-markets"
@@ -53,7 +70,7 @@ describe("DevServerOutputPanel", () => {
         serverId={1}
         slug="front"
         status="stalled"
-        sessionName="sym"
+        sessionName={null}
         defaultOpen
       />,
     );
@@ -61,8 +78,28 @@ describe("DevServerOutputPanel", () => {
     expect(subscribeDevServerOutput).toHaveBeenCalledWith("macro-markets", "510", 1, expect.any(Object));
   });
 
+  it("renders the interactive terminal inline when a session exists", () => {
+    render(
+      <DevServerOutputPanel
+        projectSlug="macro-markets"
+        issueIdentifier="510"
+        serverId={1}
+        slug="front"
+        status="crashed"
+        sessionName="sym-dev-front"
+        defaultOpen
+      />,
+    );
+
+    const terminal = screen.getByTestId("interactive-terminal");
+    expect(terminal).toHaveAttribute("data-kind", "dev-server");
+    expect(terminal).toHaveAttribute("data-server-slug", "front");
+    expect(terminal).toHaveAttribute("data-enabled", "true");
+    expect(fetchDevServerOutput).not.toHaveBeenCalled();
+    expect(subscribeDevServerOutput).not.toHaveBeenCalled();
+  });
+
   it("offers run-again on failed servers and forwards the action", async () => {
-    vi.mocked(fetchDevServerOutput).mockResolvedValue({ output: "boom", session_name: "sym" });
     const onRerun = vi.fn();
 
     render(
@@ -100,8 +137,6 @@ describe("DevServerOutputPanel", () => {
   });
 
   it("opens the fullscreen dialog with an interactive terminal attached to the server session", async () => {
-    vi.mocked(fetchDevServerOutput).mockResolvedValue({ output: "serve log line", session_name: "sym" });
-
     render(
       <DevServerOutputPanel
         projectSlug="macro-markets"
@@ -116,9 +151,9 @@ describe("DevServerOutputPanel", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /open front output in fullscreen/i }));
 
-    const terminal = await screen.findByTestId("interactive-terminal");
-    expect(terminal).toHaveAttribute("data-kind", "dev-server");
-    expect(terminal).toHaveAttribute("data-server-slug", "front");
+    const terminals = await screen.findAllByTestId("interactive-terminal");
+    expect(terminals.length).toBeGreaterThanOrEqual(1);
+    expect(terminals.some((node) => node.getAttribute("data-enabled") === "true")).toBe(true);
     expect(screen.getByText(/interactive terminal/i)).toBeInTheDocument();
   });
 
@@ -126,8 +161,6 @@ describe("DevServerOutputPanel", () => {
     const openSpy = vi
       .spyOn(floatingSurfaceStore, "openFloatingSurfaceOrToast")
       .mockReturnValue("dev-server-output:macro-markets:510:1");
-
-    vi.mocked(fetchDevServerOutput).mockResolvedValue({ output: "line", session_name: "sym" });
 
     render(
       <DevServerOutputPanel
