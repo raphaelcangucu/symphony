@@ -17,7 +17,7 @@ import {
   generateAssistantThreadTitle,
   updateAssistantThread,
 } from "@/services/assistantThreads";
-import { archiveIssue, updateIssue } from "@/services/issues";
+import { archiveIssue, deleteIssue, updateIssue } from "@/services/issues";
 import {
   archiveProject,
   deleteProject,
@@ -128,6 +128,12 @@ export type SidebarActionRequest =
     }
   | {
       action: "archive-issue";
+      projectSlug: string;
+      identifier: string;
+      active: boolean;
+    }
+  | {
+      action: "delete-issue";
       projectSlug: string;
       identifier: string;
       active: boolean;
@@ -349,6 +355,9 @@ async function dispatchAction(
     case "archive-issue":
       await archiveIssue(request.projectSlug, request.identifier);
       return { changed: true };
+    case "delete-issue":
+      await deleteIssue(request.projectSlug, request.identifier);
+      return { changed: true };
     case "copy":
       if (!(await copyTextToClipboard(request.value))) {
         throw new Error(i18n.t("layout.sidebar.errors.clipboardFailed"));
@@ -420,6 +429,7 @@ const REQUEST_KEYS: Readonly<Record<string, readonly string[]>> = {
   "rename-issue": ["action", "projectSlug", "identifier", "title"],
   "update-issue-labels": ["action", "projectSlug", "identifier", "labelIds"],
   "archive-issue": ["action", "projectSlug", "identifier", "active"],
+  "delete-issue": ["action", "projectSlug", "identifier", "active"],
   copy: ["action", "value"],
   "set-pinned": ["action", "nodeKind", "nodeId", "pinned"],
   "mark-read": ["action", "sessionId", "readAt"],
@@ -583,6 +593,16 @@ function normalizeByAction(
         identifier: nonBlank(value.identifier, "identifier"),
         active: false,
       };
+    case "delete-issue":
+      if (boolean(value.active, "active")) {
+        throw new Error(i18n.t("layout.sidebar.errors.activeExecutionRemove"));
+      }
+      return {
+        action,
+        projectSlug: projectSlug(),
+        identifier: nonBlank(value.identifier, "identifier"),
+        active: false,
+      };
     case "copy":
       return { action, value: nonBlank(value.value, "value") };
     case "set-pinned":
@@ -632,6 +652,7 @@ function actionKey(request: SidebarActionRequest): string {
     case "rename-issue":
     case "update-issue-labels":
     case "archive-issue":
+    case "delete-issue":
       return `${request.action}:${request.projectSlug}:${request.identifier}`;
     case "update-issue-thread-metadata":
       return `${request.action}:${request.projectSlug}:${request.identifier}:${request.threadId}`;

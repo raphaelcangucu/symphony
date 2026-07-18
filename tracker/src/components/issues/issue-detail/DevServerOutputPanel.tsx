@@ -1,14 +1,16 @@
 import { ChevronDown, ChevronRight, Loader2, Maximize2, RotateCcw, SquareArrowOutUpRight } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { TerminalView } from "@/components/terminal/TerminalView";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { useFloatingSurfaces } from "@/hooks/useFloatingSurfaces";
+import { buildFloatingSurfaceId } from "@/lib/floatingSurfaceIds";
+import { cn } from "@/lib/utils";
 import { fetchDevServerOutput, subscribeDevServerOutput } from "@/services/issueDevServers";
 import { openFloatingSurfaceOrToast } from "@/stores/floatingSurfaceStore";
 import type { IssueDevServerStatus } from "@/types/issue";
-import { cn } from "@/lib/utils";
 
 const STREAM_STATUSES = new Set<IssueDevServerStatus>(["pending", "provisioning", "starting", "stalled"]);
 const AUTO_OPEN_STATUSES = new Set<IssueDevServerStatus>(["pending", "provisioning", "starting", "stalled", "crashed"]);
@@ -37,6 +39,7 @@ export function DevServerOutputPanel({
   onRerun,
 }: DevServerOutputPanelProps) {
   const { t } = useTranslation();
+  const floatingSurfaces = useFloatingSurfaces();
   const [open, setOpen] = useState(defaultOpen);
   const [fullscreen, setFullscreen] = useState(false);
   const [output, setOutput] = useState<string>("");
@@ -44,6 +47,22 @@ export function DevServerOutputPanel({
   const [error, setError] = useState<string | null>(null);
   const preRef = useRef<HTMLPreElement | null>(null);
   const stickToBottomRef = useRef(true);
+
+  const hasInteractiveSession = Boolean(sessionName?.trim());
+  const popoutSurfaceId = useMemo(
+    () =>
+      buildFloatingSurfaceId({
+        kind: "dev-server-output",
+        projectSlug,
+        issueIdentifier,
+        serverId,
+        serverSlug: slug,
+        title: t("issue.devServer.fullscreenTitle", { slug }),
+      }),
+    [issueIdentifier, projectSlug, serverId, slug, t],
+  );
+  const popoutOpen = floatingSurfaces.some((surface) => surface.id === popoutSurfaceId);
+  const interactiveEnabled = open && !fullscreen && !popoutOpen;
 
   const applyOutput = useCallback((nextOutput: string) => {
     setOutput(nextOutput);
@@ -55,7 +74,7 @@ export function DevServerOutputPanel({
   }, []);
 
   const refresh = useCallback(async () => {
-    if (!open) {
+    if (!open || hasInteractiveSession) {
       return;
     }
 
@@ -69,10 +88,10 @@ export function DevServerOutputPanel({
     } finally {
       setLoading(false);
     }
-  }, [applyOutput, issueIdentifier, open, projectSlug, serverId, t]);
+  }, [applyOutput, hasInteractiveSession, issueIdentifier, open, projectSlug, serverId, t]);
 
   useEffect(() => {
-    if (!open) {
+    if (!open || hasInteractiveSession) {
       return undefined;
     }
 
@@ -109,7 +128,7 @@ export function DevServerOutputPanel({
     });
 
     return unsubscribe;
-  }, [applyOutput, issueIdentifier, open, projectSlug, refresh, serverId, status]);
+  }, [applyOutput, hasInteractiveSession, issueIdentifier, open, projectSlug, refresh, serverId, status]);
 
   useEffect(() => {
     if (AUTO_OPEN_STATUSES.has(status)) {
@@ -152,6 +171,18 @@ export function DevServerOutputPanel({
     >
       {output.trim().length > 0 ? output : t("issue.devServer.empty")}
     </pre>
+  );
+
+  const interactiveTerminal = (enabled: boolean, className: string) => (
+    <TerminalView
+      kind="dev-server"
+      projectSlug={projectSlug}
+      issueIdentifier={issueIdentifier}
+      serverSlug={slug}
+      enabled={enabled}
+      ariaLabel={t("issue.devServer.interactiveAria", { slug })}
+      className={className}
+    />
   );
 
   return (
@@ -201,14 +232,22 @@ export function DevServerOutputPanel({
         >
           <SquareArrowOutUpRight className="h-3.5 w-3.5" />
         </Button>
-        <Button type="button" size="sm" variant="ghost" className="h-7 text-xs" onClick={() => void refresh()} disabled={!open}>
-          {t("issue.devServer.refresh")}
-        </Button>
+        {!hasInteractiveSession ? (
+          <Button type="button" size="sm" variant="ghost" className="h-7 text-xs" onClick={() => void refresh()} disabled={!open}>
+            {t("issue.devServer.refresh")}
+          </Button>
+        ) : null}
       </div>
 
       {open ? (
         <div className="p-2">
-          {error ? <p className="text-xs text-red-400">{error}</p> : outputPre(preRef, "max-h-64")}
+          {hasInteractiveSession ? (
+            interactiveTerminal(interactiveEnabled, "h-64")
+          ) : error ? (
+            <p className="text-xs text-red-400">{error}</p>
+          ) : (
+            outputPre(preRef, "max-h-64")
+          )}
         </div>
       ) : null}
 
@@ -230,16 +269,17 @@ export function DevServerOutputPanel({
               </Button>
             ) : null}
           </DialogTitle>
-          <p className="text-xs text-slate-400">{t("issue.devServer.interactiveHint")}</p>
-          <TerminalView
-            kind="dev-server"
-            projectSlug={projectSlug}
-            issueIdentifier={issueIdentifier}
-            serverSlug={slug}
-            enabled={fullscreen}
-            ariaLabel={t("issue.devServer.interactiveAria", { slug })}
-            className="h-[70vh]"
-          />
+          {hasInteractiveSession ? (
+            <>
+              <p className="text-xs text-slate-400">{t("issue.devServer.interactiveHint")}</p>
+              {interactiveTerminal(fullscreen, "h-[70vh]")}
+            </>
+          ) : (
+            <div className="space-y-2">
+              {error ? <p className="text-xs text-red-400">{error}</p> : null}
+              {outputPre(preRef, "h-[70vh]")}
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

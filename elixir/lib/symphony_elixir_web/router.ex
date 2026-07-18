@@ -79,6 +79,8 @@ defmodule SymphonyElixirWeb.Router do
     get("/observability", ObservabilityController, :index)
     get("/observability/pr_monitor", ObservabilityController, :pr_monitor)
     post("/observability/report", ObservabilityController, :report)
+    get("/docker/containers", DockerController, :index)
+    post("/docker/containers/:id/:command", DockerController, :command)
     get("/backups", BackupController, :index)
     get("/backups/stats", BackupController, :stats)
     post("/backups", BackupController, :create)

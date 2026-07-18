@@ -2072,6 +2072,36 @@
       }
     }
   },
+  "docker": {
+    "title": "Docker",
+    "subtitle": "Containers on the local Docker daemon",
+    "searchPlaceholder": "Search containers…",
+    "onlyRunning": "Only running",
+    "unavailable": "Docker daemon is unavailable",
+    "loading": "Loading containers…",
+    "empty": "No containers match the current filters.",
+    "columns": {
+      "name": "Name",
+      "project": "Compose project",
+      "path": "Path",
+      "image": "Image",
+      "status": "Status",
+      "ports": "Ports",
+      "cpu": "CPU",
+      "memory": "Memory"
+    },
+    "rowActions": {
+      "start": "Start",
+      "stop": "Stop",
+      "restart": "Restart",
+      "remove": "Remove"
+    },
+    "removeTitle": "Remove container",
+    "removeDescription": "Remove {{name}}? Running containers are force-removed. This cannot be undone.",
+    "removeConfirm": "Remove",
+    "cancel": "Cancel",
+    "actionFailed": "Docker action failed: {{message}}"
+  },
   "observability": {
     "title": "Observability",
     "subtitle": "Live runtime state across all reporting Symphony processes.",
@@ -3047,6 +3077,7 @@
         "metadataDescription": "Update labels and review state.",
         "archiveEffect": "Archive hides this item from active views. It can be restored later.",
         "removeProjectEffect": "Permanently remove this project and its tracker data from the sidebar.",
+        "removeIssueEffect": "Permanently remove this issue from the tracker. This cannot be undone.",
         "removeWorkspaceEffect": "Remove this workspace and its files. The project and issue remain.",
         "deleteThreadEffect": "Permanently delete this local thread and its history."
       },
@@ -3093,6 +3124,7 @@
         "localThreadDelete": "Only local thread scopes can be deleted.",
         "threadDeleteState": "A thread must be archived or closed before deletion.",
         "activeExecutionArchive": "An active execution cannot be archived.",
+        "activeExecutionRemove": "An active execution cannot be removed.",
         "reviewUnauthorized": "Review changes are not authorized.",
         "threadArchiveUnauthorized": "Thread archive capability is required."
       },
@@ -3442,6 +3474,7 @@
     "knowledgeBase": "Knowledge Base",
     "templates": "Templates",
     "observability": "Observability",
+    "docker": "Docker",
     "backups": "Backups",
     "settings": "Settings",
     "boards": "Boards",

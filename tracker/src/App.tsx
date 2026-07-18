@@ -22,6 +22,7 @@ import { KbGeneralPage } from "@/pages/KbGeneralPage";
 import { KbProjectPage } from "@/pages/KbProjectPage";
 import { BackupPage } from "@/pages/BackupPage";
 import { ObservabilityPage } from "@/pages/ObservabilityPage";
+import { DockerPage } from "@/pages/DockerPage";
 import { SettingsLayout } from "@/components/settings/SettingsLayout";
 import { ProjectListPage } from "@/pages/ProjectListPage";
 import { ProjectSettingsPage } from "@/pages/ProjectSettingsPage";
@@ -137,6 +138,7 @@ export function App() {
               <Route path="templates" element={<Navigate to="/settings/templates" replace />} />
               <Route path="templates/:slug" element={<LegacyTemplateRedirect />} />
               <Route path="observability" element={<ObservabilityPage />} />
+              <Route path="docker" element={<DockerPage />} />
               <Route path="backups" element={<Navigate to="/settings/backups" replace />} />
               <Route path="settings" element={<SettingsLayout />}>
                 <Route index element={<SettingsPage />} />

@@ -54,6 +54,7 @@ defmodule SymphonyElixir.Tracker.ProjectSessions do
       rows =
         normalized_slug
         |> session_rows(include_archived?, fetch_limit, list_executions, list_workspace_sessions)
+        |> apply_linked_issue_visibility(normalized_slug, include_archived?)
         |> dedupe_by_id()
         |> sort_rows_by_activity()
 
@@ -359,6 +360,55 @@ defmodule SymphonyElixir.Tracker.ProjectSessions do
   defp thread_kind("issue_execution"), do: "execution"
   defp thread_kind("workspace_session"), do: "workspace_session"
   defp thread_kind(scope), do: scope
+
+  # Sidebar archive/delete targets the tracker issue. Execution threads stay
+  # active unless we mirror issue.archived_at / missing issues onto the row.
+  defp apply_linked_issue_visibility(rows, project_slug, include_archived?)
+       when is_list(rows) and is_binary(project_slug) do
+    identifiers =
+      rows
+      |> Enum.map(& &1.issue_identifier)
+      |> Enum.filter(&(is_binary(&1) and &1 != ""))
+      |> Enum.uniq()
+
+    {existing, archived} = linked_issue_states(project_slug, identifiers)
+
+    rows
+    |> Enum.reject(fn row ->
+      identifier = row.issue_identifier
+      is_binary(identifier) and identifier != "" and not MapSet.member?(existing, identifier)
+    end)
+    |> Enum.map(fn row ->
+      identifier = row.issue_identifier
+
+      if is_binary(identifier) and MapSet.member?(archived, identifier) do
+        %{row | archived: true}
+      else
+        row
+      end
+    end)
+    |> Enum.filter(fn row -> include_archived? or not row.archived end)
+  end
+
+  defp linked_issue_states(_project_slug, []), do: {MapSet.new(), MapSet.new()}
+
+  defp linked_issue_states(project_slug, identifiers)
+       when is_binary(project_slug) and is_list(identifiers) do
+    Enum.reduce(identifiers, {MapSet.new(), MapSet.new()}, fn identifier, {existing, archived} ->
+      case Context.get_issue(project_slug, identifier) do
+        {:ok, issue} ->
+          next_existing = MapSet.put(existing, identifier)
+
+          next_archived =
+            if issue.archived_at != nil, do: MapSet.put(archived, identifier), else: archived
+
+          {next_existing, next_archived}
+
+        {:error, _} ->
+          {existing, archived}
+      end
+    end)
+  end
 
   defp dedupe_by_id(rows) do
     {_, deduplicated_rows} =

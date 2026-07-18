@@ -194,11 +194,25 @@ describe("SidebarContextMenu", () => {
       [
         "Rename",
         "Manage labels",
+        "Generate name",
         "Remove review marker",
         "Pin",
         "Archive",
         "Delete",
       ],
+    ],
+    [
+      session({
+        id: "exec:ACME-1",
+        sessionKind: "execution",
+        statusKind: "done",
+        aggregateStatus: "idle",
+        threadId: null,
+        issueIdentifier: "ACME-1",
+        needsReview: false,
+        archived: false,
+      }),
+      ["Copy resume link", "Pin", "Archive", "Remove"],
     ],
   ] as const)("renders immutable capability order and one destructive separator", (node, labels) => {
     render(<Harness node={node} />);
