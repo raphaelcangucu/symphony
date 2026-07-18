@@ -40,8 +40,11 @@ export function FloatingSurfaceWindow({ surface, children }: FloatingSurfaceWind
     };
   }
 
-  function handleDragPointerDown(event: PointerEvent<HTMLDivElement>) {
+  function handleShellPointerDown() {
     bringFloatingSurfaceToFront(surface.id);
+  }
+
+  function handleDragPointerDown(event: PointerEvent<HTMLDivElement>) {
     if (event.target instanceof Element && event.target.closest("button")) return;
 
     dragOriginRef.current = createPointerOrigin(event);
@@ -66,8 +69,6 @@ export function FloatingSurfaceWindow({ surface, children }: FloatingSurfaceWind
   }
 
   function handleResizePointerDown(event: PointerEvent<HTMLDivElement>) {
-    event.stopPropagation();
-    bringFloatingSurfaceToFront(surface.id);
     resizeOriginRef.current = createPointerOrigin(event);
     event.currentTarget.setPointerCapture(event.pointerId);
   }
@@ -100,6 +101,7 @@ export function FloatingSurfaceWindow({ surface, children }: FloatingSurfaceWind
         height: surface.bounds.height,
         zIndex: surface.zIndex,
       }}
+      onPointerDown={handleShellPointerDown}
     >
       <div
         aria-label={t("floatingSurface.dragHandleAria")}

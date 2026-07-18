@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import userEvent from "@testing-library/user-event";
+import { Link, MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { FloatingSurfaceHost } from "@/components/floating/FloatingSurfaceHost";
@@ -28,6 +29,7 @@ afterEach(() => {
 describe("FloatingSurfaceHost", () => {
   it("keeps an open surface mounted across route changes", async () => {
     await initTestI18n();
+    const user = userEvent.setup();
     openFloatingSurface({
       kind: "project-terminal",
       projectSlug: "acme",
@@ -35,11 +37,19 @@ describe("FloatingSurfaceHost", () => {
       title: "Project shell",
     });
 
-    const { rerender } = render(
+    render(
       <MemoryRouter initialEntries={["/a"]}>
         <FloatingSurfaceHost />
         <Routes>
-          <Route path="/a" element={<div>Page A</div>} />
+          <Route
+            path="/a"
+            element={
+              <div>
+                Page A
+                <Link to="/b">Go to B</Link>
+              </div>
+            }
+          />
           <Route path="/b" element={<div>Page B</div>} />
         </Routes>
       </MemoryRouter>,
@@ -47,17 +57,11 @@ describe("FloatingSurfaceHost", () => {
 
     expect(screen.getByTestId("floating-surface")).toBeInTheDocument();
     expect(screen.getByText("Project shell")).toBeInTheDocument();
+    expect(screen.getByText("Page A")).toBeInTheDocument();
 
-    rerender(
-      <MemoryRouter initialEntries={["/b"]}>
-        <FloatingSurfaceHost />
-        <Routes>
-          <Route path="/a" element={<div>Page A</div>} />
-          <Route path="/b" element={<div>Page B</div>} />
-        </Routes>
-      </MemoryRouter>,
-    );
+    await user.click(screen.getByRole("link", { name: "Go to B" }));
 
+    expect(screen.getByText("Page B")).toBeInTheDocument();
     expect(screen.getByTestId("floating-surface")).toBeInTheDocument();
     expect(screen.getByText("Project shell")).toBeInTheDocument();
   });
