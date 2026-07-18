@@ -10,13 +10,15 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { i18n } from "@/i18n";
+import { issuePath } from "@/lib/workspaceRoutes";
+import type { Issue } from "@/types/issue";
 import type {
   SidebarProjectNode,
   SidebarSessionNode,
   SidebarWorkspaceNode,
 } from "@/types/sidebar";
 
-export type SidebarSearchResultKind = "project" | "workspace" | "session";
+export type SidebarSearchResultKind = "project" | "workspace" | "session" | "issue";
 
 export interface SidebarSearchResult {
   readonly id: string;
@@ -85,6 +87,63 @@ export function buildSidebarSearchResults(
   }
 
   return results;
+}
+
+export function buildSidebarIssueSearchResults(
+  issues: readonly Issue[],
+  query: unknown,
+  projectTitles: ReadonlyMap<string, string>,
+): readonly SidebarSearchResult[] {
+  const normalizedQuery = normalizeSearchText(typeof query === "string" ? query.trim() : "");
+  if (!normalizedQuery) return [];
+
+  const results: SidebarSearchResult[] = [];
+  const seenIds = new Set<string>();
+
+  for (const issue of issues) {
+    if (!issue || typeof issue.identifier !== "string" || !issue.identifier.trim()) continue;
+    if (typeof issue.projectSlug !== "string" || !issue.projectSlug.trim()) continue;
+    const title = `${issue.identifier} · ${issue.title}`.trim();
+    const projectTitle = projectTitles.get(issue.projectSlug) ?? issue.projectSlug;
+    addResult(
+      results,
+      seenIds,
+      {
+        id: `issue:${issue.projectSlug}:${issue.identifier}`,
+        kind: "issue",
+        title,
+        context: projectTitle,
+        status: String(issue.status ?? ""),
+        href: issuePath(issue.projectSlug, "board", issue.identifier),
+        projectId: issue.projectSlug,
+        issueIdentifier: issue.identifier,
+      },
+      normalizedQuery,
+    );
+  }
+  return results;
+}
+
+export function mergeSidebarSearchResults(
+  treeResults: readonly SidebarSearchResult[],
+  issueResults: readonly SidebarSearchResult[],
+): readonly SidebarSearchResult[] {
+  const order: Record<SidebarSearchResultKind, number> = {
+    project: 0,
+    issue: 1,
+    workspace: 2,
+    session: 3,
+  };
+  const seen = new Set<string>();
+  const merged: SidebarSearchResult[] = [];
+  for (const result of [...treeResults, ...issueResults].sort(
+    (a, b) => order[a.kind] - order[b.kind] || a.title.localeCompare(b.title),
+  )) {
+    if (seen.has(result.id)) continue;
+    seen.add(result.id);
+    merged.push(result);
+  }
+  return merged;
 }
 
 export function SidebarSearchLauncher({
@@ -258,6 +317,10 @@ export function localizeSidebarSearchStatus(
     const key = `layout.recents.status.${status}`;
     const label = i18n.t(key);
     return label === key ? unknown : label;
+  }
+
+  if (kind === "issue") {
+    return status.trim() ? status : unknown;
   }
 
   if (kind === "workspace") {

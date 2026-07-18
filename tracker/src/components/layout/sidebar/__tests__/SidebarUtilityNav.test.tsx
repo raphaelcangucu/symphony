@@ -4,10 +4,13 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import {
+  buildSidebarIssueSearchResults,
   buildSidebarSearchResults,
   localizeSidebarSearchStatus,
+  mergeSidebarSearchResults,
   SidebarSearchLauncher,
 } from "@/components/layout/sidebar/SidebarSearchLauncher";
+import type { Issue } from "@/types/issue";
 import { SidebarUtilityNav } from "@/components/layout/sidebar/SidebarUtilityNav";
 import { initTestI18n } from "@/i18n/testUtils";
 import type {
@@ -77,6 +80,29 @@ function workspace(overrides: Partial<SidebarWorkspaceNode> = {}): SidebarWorksp
   };
 }
 
+function issue(overrides: Partial<Issue> = {}): Issue {
+  return {
+    id: "1",
+    identifier: "GAM-20",
+    projectSlug: "gamba",
+    status: "In Progress",
+    title: "Floating preview surfaces",
+    description: null,
+    priority: null,
+    position: 0,
+    labels: [],
+    blockedBy: [],
+    assignee: null,
+    creator: null,
+    url: null,
+    branchName: null,
+    createdAt: "2026-07-18T00:00:00.000Z",
+    updatedAt: "2026-07-18T00:00:00.000Z",
+    attachments: [],
+    ...overrides,
+  };
+}
+
 function project(overrides: Partial<SidebarProjectNode> = {}): SidebarProjectNode {
   return {
     kind: "project",
@@ -138,6 +164,64 @@ describe("sidebar utility navigation", () => {
     );
     expect(screen.getByRole("button", { name: "Nova sessão" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Observabilidade" })).toBeInTheDocument();
+  });
+
+  it("builds issue search results with board hrefs", () => {
+    const results = buildSidebarIssueSearchResults(
+      [issue(), issue({ identifier: "GAM-21", title: "Other", projectSlug: "gamba" })],
+      "floating",
+      new Map([["gamba", "Gamba"]]),
+    );
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({
+      kind: "issue",
+      id: "issue:gamba:GAM-20",
+      title: "GAM-20 · Floating preview surfaces",
+      context: "Gamba",
+      href: "/projects/gamba/board/issues/GAM-20",
+      status: "In Progress",
+      projectId: "gamba",
+    });
+  });
+
+  it("merges projects, issues, then sessions and dedupes by id", () => {
+    const merged = mergeSidebarSearchResults(
+      [
+        {
+          id: "gamba",
+          kind: "project",
+          title: "Gamba",
+          context: "2 sessions",
+          status: "ready",
+          href: "/projects/gamba/board",
+          projectId: "gamba",
+          issueIdentifier: null,
+        },
+        {
+          id: "thread:1",
+          kind: "session",
+          title: "Chat",
+          context: "Gamba",
+          status: "active",
+          href: "/projects/gamba/workspaces/1",
+          projectId: "gamba",
+          issueIdentifier: null,
+        },
+      ],
+      [
+        {
+          id: "issue:gamba:GAM-20",
+          kind: "issue",
+          title: "GAM-20 · Floating preview surfaces",
+          context: "Gamba",
+          status: "In Progress",
+          href: "/projects/gamba/board/issues/GAM-20",
+          projectId: "gamba",
+          issueIdentifier: "GAM-20",
+        },
+      ],
+    );
+    expect(merged.map((r) => r.kind)).toEqual(["project", "issue", "session"]);
   });
 
   it("indexes flat-nav project.sessions and overflowSessions", () => {
