@@ -43,7 +43,7 @@ export type OpenFloatingSurfaceResult =
   | { ok: false; reason: "max_surfaces" };
 
 function defaultBounds(openCount: number): FloatingSurfaceBounds {
-  const offset = (openCount % 6) * CASCADE_OFFSET;
+  const offset = (openCount % MAX_FLOATING_SURFACES) * CASCADE_OFFSET;
   return {
     x: 64 + offset,
     y: 64 + offset,
@@ -133,7 +133,7 @@ export function updateFloatingSurfaceBounds(id: string, bounds: FloatingSurfaceB
 }
 
 export function listFloatingSurfaces(): FloatingSurface[] {
-  return store.getState().surfaces;
+  return [...store.getState().surfaces];
 }
 
 export function getFloatingSurfaceStore() {
