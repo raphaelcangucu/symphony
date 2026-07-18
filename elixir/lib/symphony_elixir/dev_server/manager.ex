@@ -686,9 +686,7 @@ defmodule SymphonyElixir.DevServer.Manager do
           Map.put(acc, slug, contract)
 
         {:error, reason} ->
-          Logger.warning(
-            "preview runtime contract build failed slug=#{slug} issue=#{canonical} reason=#{inspect(reason)}"
-          )
+          Logger.warning("preview runtime contract build failed slug=#{slug} issue=#{canonical} reason=#{inspect(reason)}")
 
           acc
       end
@@ -1139,7 +1137,24 @@ defmodule SymphonyElixir.DevServer.Manager do
   end
 
   defp managed_launch_step(project_slug, _workspace_path, step_map, nil) do
-    {:ok, serve_step_with_setup(project_slug, step_map)}
+    if runner_placeholder_command?(step_map) do
+      # A run-spec step whose `command` is the "symphony-preview-runner"
+      # placeholder cannot launch raw — the tmux session just prints
+      # "command not found". Runner-backed steps need a contract, so fail
+      # loudly instead of launching a guaranteed-dead command.
+      {:error, :runner_requires_contract}
+    else
+      {:ok, serve_step_with_setup(project_slug, step_map)}
+    end
+  end
+
+  @doc false
+  @spec runner_placeholder_command?(map()) :: boolean()
+  def runner_placeholder_command?(step_map) when is_map(step_map) do
+    command = step_map |> Map.get(:command, "") |> to_string() |> String.trim()
+    has_spec? = match?(spec when is_map(spec) and map_size(spec) > 0, fetch_run_spec(step_map))
+
+    has_spec? and command in ["", "symphony-preview-runner"]
   end
 
   defp managed_launch_step(project_slug, _workspace_path, step_map, %RuntimeContract{} = contract) do

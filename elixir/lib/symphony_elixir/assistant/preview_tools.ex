@@ -33,7 +33,7 @@ defmodule SymphonyElixir.Assistant.PreviewTools do
 
   @starting_next_steps "Poll `manage_preview` with `status` until servers report `ready`. Meanwhile keep writing tests and run the unit suite — do not block on the preview or retry it in a tight loop."
   @preferred_ports_next_steps "These ports/URLs match the Preview dock lease — cite them only while sync_state is in_sync (or status ready when sync_state is absent). Before citing ports mid-turn, re-call manage_preview status."
-  @not_ready_next_steps "Preview is not ready / not in_sync. Self-heal with manage_preview output/restart/status and manage_dev_env if needed. Do not invent ports or fall back to unmanaged vibe/Compose/INSPIRE_PORT bring-up outside a fresh manage_preview prepare. Do not block the run; retry later or proceed without UI e2e — do not tight-loop retries."
+  @not_ready_next_steps "Preview is not ready / not in_sync. You can and should fix this yourself: read the failure with manage_preview output — serve/setup commands are ordinary project scripts (usually <working_dir>/.symphony/serve.sh, setup.sh, stop.sh in this workspace), so diagnose and edit them like any other code, or update the step's command/run_spec via manage_dev_env save_steps, then manage_preview restart. Do not invent ports or fall back to unmanaged vibe/Compose/INSPIRE_PORT bring-up outside a fresh manage_preview prepare. Do not block the run while it boots — do not tight-loop retries."
   @lock_next_steps "A preview start is already in progress for this issue. Poll `manage_preview status` shortly and keep working meanwhile — do not block."
   @prepare_next_steps "Run each server's `command` verbatim (it sets the leased port via `port_env` plus the SYMPHONY_PREVIEW_* contract env). The process must write its RuntimeReport to `report_path` and only bind a port in `allowed_ports`. Then poll `manage_preview status`; cite only URLs when sync_state is in_sync."
 
@@ -548,8 +548,7 @@ defmodule SymphonyElixir.Assistant.PreviewTools do
     %{
       "type" => "string",
       "enum" => ["status", "start", "stop", "restart", "output", "prepare"],
-      "description" =>
-        "Preview action. Use output with server to read command logs. Use prepare to get a contracted env + command when you must run the serve command yourself."
+      "description" => "Preview action. Use output with server to read command logs. Use prepare to get a contracted env + command when you must run the serve command yourself."
     }
   end
 
@@ -650,7 +649,16 @@ defmodule SymphonyElixir.Assistant.PreviewTools do
   defp status_reason(_status), do: nil
 
   defp output_next_steps("crashed"),
-    do: "Read output_tail, fix the underlying error (or manage_dev_env), then manage_preview restart with the same server."
+    do:
+      "Read output_tail and fix the root cause yourself: the serve/setup commands are project scripts in this " <>
+        "workspace (usually <working_dir>/.symphony/serve.sh and setup.sh) — edit them like any other code, or " <>
+        "update the step via manage_dev_env save_steps, then manage_preview restart with the same server."
+
+  defp output_next_steps("stalled"),
+    do:
+      "Output stopped evolving. Read output_tail for where it hangs; the serve/setup commands are editable project " <>
+        "scripts (<working_dir>/.symphony/*.sh) — fix the hang (missing service, wrong host, absent dependency) and " <>
+        "manage_preview restart, or wait if it is a legitimately slow build."
 
   defp output_next_steps(_status),
     do: "If the server is unhealthy, fix the root cause then manage_preview restart."

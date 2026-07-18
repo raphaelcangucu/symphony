@@ -233,7 +233,8 @@ defmodule SymphonyElixir.Assistant.PreviewToolsTest do
     assert result.tool == "manage_preview"
     assert result.message =~ "crashed"
     assert result.message =~ "Do not block"
-    assert result.data.next_steps =~ "retry"
+    assert result.data.next_steps =~ "fix this yourself"
+    assert result.data.next_steps =~ ".symphony/serve.sh"
     assert result.data.output_tail =~ "boom"
   end
 

@@ -160,6 +160,9 @@ defmodule SymphonyElixir.DevServer.InstanceTest do
 
     assert [row] = DevServerRecord.list_for_issue(project.id, @identifier)
     assert row.status == "stalled"
+
+    # Boot recycles the session once for a clean shell; stalling must not kill it.
+    assert_receive {:killed_dev_session, "p", @identifier, "front"}, 1_000
     refute_received {:killed_dev_session, "p", @identifier, "front"}
 
     assert :ok = Instance.stop(pid)

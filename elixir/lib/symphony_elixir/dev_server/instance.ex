@@ -215,6 +215,12 @@ defmodule SymphonyElixir.DevServer.Instance do
   end
 
   defp open_session(state, port, url, cwd) do
+    # A previous serve process may still occupy this slug's tmux session (e.g.
+    # a daemon restart left nobody to stop it). Sending the launch command into
+    # a busy pane just types into the running process's stdin — it never
+    # executes — so always recycle the session to get a clean shell first.
+    safe_kill_session(state)
+
     case state.tmux.open_dev_session(state.project_slug, state.identifier, state.slug, cwd, []) do
       {:ok, session} ->
         start_command(state, port, url, session)
@@ -628,6 +634,15 @@ defmodule SymphonyElixir.DevServer.Instance do
       session_name: state.session_name,
       started_at: state.started_at
     }
+  end
+
+  defp safe_kill_session(state) do
+    state.tmux.kill_dev_session(state.project_slug, state.identifier, state.slug, [])
+    :ok
+  rescue
+    _error -> :ok
+  catch
+    _kind, _reason -> :ok
   end
 
   defp cleanup_session(%{session_name: nil}), do: :ok

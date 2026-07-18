@@ -504,7 +504,7 @@ defmodule SymphonyElixir.PromptBuilder do
 
     **Cite only contracted URLs:** before citing a port or running HTTP checks, call `manage_preview` with `action: status` again (or trust the latest `start`/`restart`/`prepare` tool result). Cite only the ports/URLs it returns. When `sync_state` is present, cite only when it is `in_sync` — never probe or embed ports under `conflict`, `stale`, or `awaiting_report`.
 
-    **If Preview cannot reach ready:** self-heal with `output`/`restart`/`status` (and `manage_dev_env` if needed). Do **not** fall back to unmanaged project bring-up that bypasses the lease. Keep the run moving (unit tests; write e2e for CI), record the blocker in your workpad, and do not tight-loop retries.
+    **If Preview cannot reach ready:** self-heal with `output`/`restart`/`status` (and `manage_dev_env` if needed). The serve/setup commands are ordinary project scripts in this workspace (typically `<working_dir>/.symphony/serve.sh`, `setup.sh`, `stop.sh`) — read the failure in `output`, **fix the script or the step's `run_spec` yourself** (edit the file or `manage_dev_env` `save_steps`), then `restart`. Do **not** fall back to unmanaged project bring-up that bypasses the lease. Keep the run moving (unit tests; write e2e for CI), record the blocker in your workpad, and do not tight-loop retries.
 
     Do **not** run bare `npx playwright test` on random ports — use the project's configured e2e command (see the `evidence` config / project workflow), which reuses the preview ports below when Preview is `in_sync` / healthy.
 
