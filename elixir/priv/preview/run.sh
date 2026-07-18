@@ -141,7 +141,10 @@ class PreviewRunner:
     def _working_directory(self):
         raw_cwd = self.spec.get("cwd")
         if raw_cwd is None or raw_cwd == "":
-            return self.workspace
+            # Specs without an explicit cwd keep running where the manager
+            # launched the runner (the step's working_dir), not the workspace
+            # root, so legacy steps are unaffected by SYMPHONY_WORKSPACE.
+            return self.launch_directory
         if not isinstance(raw_cwd, str):
             raise RunnerError("run spec cwd must be a string")
 

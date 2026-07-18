@@ -24,12 +24,12 @@ dev_env_steps:
       prepare:
         - ["bash", ".symphony/setup.sh"]
       start:
-        - ["bash", "-lc", "export APP_PORT=${PORT:-$APP_PORT}; ./vibe up && ./vibe bootstrap && docker logs -f betting-app"]
+        - ["bash", ".symphony/preview-backend.sh"]
       health:
         path: "/health"
         timeout_ms: 180000
       stop:
-        command: ["bash", "-lc", "./vibe down || true"]
+        command: ["bash", ".symphony/stop.sh"]
     source: "manual"
     url_path: "/graphiql"
     working_dir: "backend"

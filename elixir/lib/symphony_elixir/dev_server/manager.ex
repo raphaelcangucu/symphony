@@ -396,16 +396,16 @@ defmodule SymphonyElixir.DevServer.Manager do
       reserve_candidate_ports(key, allowed)
 
       case build_service_contract(project, canonical, workspace_path, step_map, port, allowed, :contracted_manual) do
-        {:ok, contract} -> manual_server_plan(contract, step_map)
+        {:ok, contract} -> manual_server_plan(contract, step_map, workspace_path)
         {:error, _reason} -> nil
       end
     end)
     |> Enum.reject(&is_nil/1)
   end
 
-  defp manual_server_plan(contract, step_map) do
+  defp manual_server_plan(contract, step_map, workspace_path) do
     launch =
-      case serve_launch(contract, step_map) do
+      case serve_launch(contract, step_map, workspace_path) do
         {:ok, launch} ->
           launch
 
@@ -430,7 +430,8 @@ defmodule SymphonyElixir.DevServer.Manager do
     }
   end
 
-  defp serve_launch(%RuntimeContract{} = contract, step_map) when is_map(step_map) do
+  defp serve_launch(%RuntimeContract{} = contract, step_map, workspace_path)
+       when is_map(step_map) and is_binary(workspace_path) do
     contract_env = RuntimeContract.to_env(contract)
 
     case fetch_run_spec(step_map) do
@@ -445,9 +446,15 @@ defmodule SymphonyElixir.DevServer.Manager do
 
           runner_path = Application.app_dir(:symphony_elixir, "priv/preview/run.sh")
 
+          # The runner resolves the run-spec `cwd` relative to SYMPHONY_WORKSPACE
+          # (falling back to its launch directory). The instance launches inside
+          # the step's working_dir, so without the workspace root a
+          # workspace-relative cwd like "backend" would resolve to
+          # "<workspace>/backend/backend".
           runner_env = %{
             "PORT" => Integer.to_string(contract.preferred_port),
-            "SYMPHONY_PREVIEW_RUN_SPEC" => spec_path
+            "SYMPHONY_PREVIEW_RUN_SPEC" => spec_path,
+            "SYMPHONY_WORKSPACE" => Path.expand(workspace_path)
           }
 
           env = Map.merge(contract_env, runner_env)
@@ -1157,8 +1164,8 @@ defmodule SymphonyElixir.DevServer.Manager do
     has_spec? and command in ["", "symphony-preview-runner"]
   end
 
-  defp managed_launch_step(project_slug, _workspace_path, step_map, %RuntimeContract{} = contract) do
-    case serve_launch(contract, step_map) do
+  defp managed_launch_step(project_slug, workspace_path, step_map, %RuntimeContract{} = contract) do
+    case serve_launch(contract, step_map, workspace_path) do
       {:ok, %{runner?: true} = launch} ->
         {:ok,
          step_map

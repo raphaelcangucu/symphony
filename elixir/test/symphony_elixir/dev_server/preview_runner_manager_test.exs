@@ -115,6 +115,7 @@ defmodule SymphonyElixir.DevServer.PreviewRunnerManagerTest do
           role: "serve",
           working_dir: "frontend",
           run_spec: %{
+            "cwd" => "frontend",
             "start" => [["python3", "-m", "http.server", "${PORT}"]]
           }
         }
@@ -138,6 +139,12 @@ defmodule SymphonyElixir.DevServer.PreviewRunnerManagerTest do
     assert launch_command =~ runner_path
     assert launch_command =~ "SYMPHONY_PREVIEW_RUN_SPEC="
     assert launch_command =~ spec_path
+
+    # The instance launches inside the step's working_dir, so the runner must
+    # receive the workspace root to resolve the workspace-relative run-spec
+    # `cwd` ("frontend") without doubling it into "frontend/frontend".
+    assert launch_command =~ "SYMPHONY_WORKSPACE='#{Path.expand(workspace_path)}'"
+
     assert contract.report_path ==
              Path.join([serve_root, ".symphony", "preview-report.json"])
 
