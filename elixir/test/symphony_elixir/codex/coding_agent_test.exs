@@ -152,6 +152,43 @@ defmodule SymphonyElixir.Codex.CodingAgentTest do
     end
   end
 
+  describe "workspace session sidecar ownership" do
+    test "a non-goal session never overwrites the durable sidecar" do
+      with_fake_goal_server([:active, :completed], fn workspace, issue, _trace_file ->
+        enable_goals!()
+        write_session_sidecar!(workspace, "durable-thread")
+
+        assert {:ok, _result} = AppServer.run(workspace, "Build the feature", issue)
+
+        # Interactive/non-goal sessions share the working tree with the issue's
+        # durable goal thread. Overwriting the sidecar here cross-links session
+        # logs and makes the next goal-mode run resume the wrong conversation.
+        assert {:ok, "durable-thread"} = SymphonyElixir.Codex.Session.resolve(workspace)
+      end)
+    end
+
+    test "a non-goal session does not create the sidecar" do
+      with_fake_goal_server([:active, :completed], fn workspace, issue, _trace_file ->
+        enable_goals!()
+
+        assert {:ok, _result} = AppServer.run(workspace, "Build the feature", issue)
+
+        refute File.exists?(Path.join([Path.expand(workspace), ".symphony", "codex-session.json"]))
+      end)
+    end
+
+    test "a goal-mode session persists its thread id in the sidecar" do
+      with_fake_goal_server([:completed], fn workspace, issue, _trace_file ->
+        enable_goals!()
+
+        assert {:ok, _result} =
+                 AppServer.run(workspace, "Build the feature", issue, goal: "Ship the feature")
+
+        assert {:ok, "thread-goal"} = SymphonyElixir.Codex.Session.resolve(workspace)
+      end)
+    end
+  end
+
   describe "durable goal threads" do
     test "resumes the stored thread and reads the native goal instead of overwriting it" do
       with_fake_resume_server(:present, fn workspace, issue, trace_file ->

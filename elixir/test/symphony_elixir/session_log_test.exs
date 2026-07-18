@@ -141,5 +141,89 @@ defmodule SymphonyElixir.SessionLogTest do
       # No transcript and no native rollout in a temp dir → :error (documents fallback path).
       assert SymphonyElixir.SessionLog.resolve_for_session(session) == :error
     end
+
+    test "prefers the session's own backend rollout over the workspace sidecar" do
+      workspace = Path.join(System.tmp_dir!(), "rfs-own-#{System.unique_integer([:positive])}")
+      sessions_dir = Path.join(System.tmp_dir!(), "rfs-rollouts-#{System.unique_integer([:positive])}")
+      File.mkdir_p!(Path.join(workspace, ".symphony"))
+      File.mkdir_p!(sessions_dir)
+
+      on_exit(fn ->
+        File.rm_rf!(workspace)
+        File.rm_rf!(sessions_dir)
+      end)
+
+      own_path = Path.join(sessions_dir, "rollout-2026-07-18T00-00-00-own-thread.jsonl")
+      other_path = Path.join(sessions_dir, "rollout-2026-07-18T00-01-00-other-thread.jsonl")
+      File.write!(own_path, "")
+      File.write!(other_path, "")
+
+      # Sidecar points at ANOTHER session's thread (a sibling sharing the tree).
+      File.write!(
+        Path.join([workspace, ".symphony", "codex-session.json"]),
+        Jason.encode!(%{"thread_id" => "other-thread"})
+      )
+
+      session = %{
+        id: 9,
+        workspace_path: workspace,
+        agent_kind: "codex",
+        agent_thread_ids: %{"codex" => "own-thread"}
+      }
+
+      assert {:ok, "codex", ^own_path} =
+               SymphonyElixir.SessionLog.resolve_for_session(session, sessions_dir: sessions_dir)
+    end
+
+    test "uses the legacy codex_thread_id when agent_thread_ids is empty" do
+      workspace = Path.join(System.tmp_dir!(), "rfs-legacy-#{System.unique_integer([:positive])}")
+      sessions_dir = Path.join(System.tmp_dir!(), "rfs-rollouts-#{System.unique_integer([:positive])}")
+      File.mkdir_p!(workspace)
+      File.mkdir_p!(sessions_dir)
+
+      on_exit(fn ->
+        File.rm_rf!(workspace)
+        File.rm_rf!(sessions_dir)
+      end)
+
+      own_path = Path.join(sessions_dir, "rollout-2026-07-18T00-00-00-legacy-thread.jsonl")
+      File.write!(own_path, "")
+
+      session = %{
+        id: 10,
+        workspace_path: workspace,
+        agent_kind: "codex",
+        agent_thread_ids: %{},
+        codex_thread_id: "legacy-thread"
+      }
+
+      assert {:ok, "codex", ^own_path} =
+               SymphonyElixir.SessionLog.resolve_for_session(session, sessions_dir: sessions_dir)
+    end
+
+    test "falls back to the workspace sidecar when the session has no backend thread id" do
+      workspace = Path.join(System.tmp_dir!(), "rfs-sidecar-#{System.unique_integer([:positive])}")
+      sessions_dir = Path.join(System.tmp_dir!(), "rfs-rollouts-#{System.unique_integer([:positive])}")
+      File.mkdir_p!(Path.join(workspace, ".symphony"))
+      File.mkdir_p!(sessions_dir)
+
+      on_exit(fn ->
+        File.rm_rf!(workspace)
+        File.rm_rf!(sessions_dir)
+      end)
+
+      sidecar_rollout = Path.join(sessions_dir, "rollout-2026-07-18T00-00-00-durable-thread.jsonl")
+      File.write!(sidecar_rollout, "")
+
+      File.write!(
+        Path.join([workspace, ".symphony", "codex-session.json"]),
+        Jason.encode!(%{"thread_id" => "durable-thread"})
+      )
+
+      session = %{id: 11, workspace_path: workspace, agent_kind: "codex", agent_thread_ids: %{}}
+
+      assert {:ok, "codex", ^sidecar_rollout} =
+               SymphonyElixir.SessionLog.resolve_for_session(session, sessions_dir: sessions_dir)
+    end
   end
 end

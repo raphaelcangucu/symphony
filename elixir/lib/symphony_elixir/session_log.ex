@@ -51,20 +51,61 @@ defmodule SymphonyElixir.SessionLog do
   end
 
   @doc """
-  Resolves the log source for a specific session, preferring its own
-  per-session transcript file over the working tree's native agent log.
+  Resolves the log source for a specific session.
+
+  Resolution order:
+
+  1. The session's own per-session transcript (`SessionStore`).
+  2. The rollout/transcript identified by the session's own backend thread id
+     (`agent_thread_ids[agent_kind]`, or legacy `codex_thread_id`). Sibling
+     sessions share a working tree, so workspace-level resolution can point at
+     ANOTHER session's log; the backend thread id is exact.
+  3. Workspace-level resolution (`resolve_log_source/3`) as a last resort.
   """
-  @spec resolve_for_session(map()) :: {:ok, String.t(), Path.t()} | :error
-  def resolve_for_session(%{id: session_id, workspace_path: workspace} = session)
+  @spec resolve_for_session(map(), keyword()) :: {:ok, String.t(), Path.t()} | :error
+  def resolve_for_session(session, opts \\ [])
+
+  def resolve_for_session(%{id: session_id, workspace_path: workspace} = session, opts)
       when is_binary(workspace) do
-    if SessionStore.exists?(workspace, session_id) do
-      {:ok, "symphony", SessionStore.transcript_path(workspace, session_id)}
-    else
-      resolve_log_source(Map.get(session, :agent_kind) || "codex", workspace)
+    agent_kind = Map.get(session, :agent_kind) || "codex"
+
+    cond do
+      SessionStore.exists?(workspace, session_id) ->
+        {:ok, "symphony", SessionStore.transcript_path(workspace, session_id)}
+
+      (own = resolve_own_backend_log(session, agent_kind, opts)) != :error ->
+        own
+
+      true ->
+        resolve_log_source(agent_kind, workspace, opts)
     end
   end
 
-  def resolve_for_session(_session), do: :error
+  def resolve_for_session(_session, _opts), do: :error
+
+  defp resolve_own_backend_log(session, agent_kind, opts) do
+    case backend_thread_id(session, agent_kind) do
+      nil ->
+        :error
+
+      backend_id ->
+        case resolve_subagent(agent_kind, backend_id, opts) do
+          {:ok, path} -> {:ok, agent_kind, path}
+          :error -> :error
+        end
+    end
+  end
+
+  defp backend_thread_id(session, agent_kind) do
+    thread_ids = Map.get(session, :agent_thread_ids)
+    mapped = if is_map(thread_ids), do: Map.get(thread_ids, agent_kind), else: nil
+    legacy = if agent_kind == "codex", do: Map.get(session, :codex_thread_id), else: nil
+
+    case mapped || legacy do
+      id when is_binary(id) and id != "" -> id
+      _ -> nil
+    end
+  end
 
   @doc false
   @spec join_tail_opts() :: keyword()

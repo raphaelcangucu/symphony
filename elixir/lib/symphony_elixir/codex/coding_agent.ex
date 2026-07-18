@@ -68,7 +68,12 @@ defmodule SymphonyElixir.Codex.CodingAgent do
              do_start_session(port, expanded_workspace, session_policies, opts, goals_section),
            {:ok, goal_state, goal_map} <-
              establish_goal(port, thread_id, origin, opts, goals_section) do
-        Session.write(expanded_workspace, thread_id)
+        # Only durable goal-mode runs own the workspace session sidecar.
+        # Interactive (non-goal) sessions share the working tree with the
+        # issue's durable thread; overwriting the pointer here cross-links
+        # session logs between sibling sessions and makes the next goal-mode
+        # run resume the wrong conversation.
+        if goal_opt?(opts), do: Session.write(expanded_workspace, thread_id)
         maybe_mirror_session_goal(expanded_workspace, goal_map)
 
         {:ok,
