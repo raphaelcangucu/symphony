@@ -4,7 +4,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ProjectTerminalWorkspace } from "@/components/terminal/ProjectTerminalWorkspace";
 import { initTestI18n, renderWithI18n } from "@/i18n/testUtils";
 import { PROJECT_TERMINAL_SCOPE } from "@/lib/terminalScopes";
+import { projectTerminalTabId } from "@/lib/workspaceTabs/types";
 import { createTerminalTab, listTerminalTabs } from "@/services/terminalTabs";
+import * as floatingSurfaceStore from "@/stores/floatingSurfaceStore";
 
 const channelHandlers: Record<string, (payload: unknown) => void> = {};
 const push = vi.fn();
@@ -108,6 +110,27 @@ describe("ProjectTerminalWorkspace", () => {
 
     await waitFor(() =>
       expect(createTerminalTab).toHaveBeenCalledWith("demo", PROJECT_TERMINAL_SCOPE, { title: "Shell" }),
+    );
+  });
+
+  it("opens a floating surface popout for the project terminal", async () => {
+    const openSpy = vi
+      .spyOn(floatingSurfaceStore, "openFloatingSurfaceOrToast")
+      .mockReturnValue("project-terminal:demo:project-terminal:demo");
+
+    renderWithI18n(<ProjectTerminalWorkspace projectSlug="demo" />);
+
+    await waitFor(() => expect(listTerminalTabs).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByRole("button", { name: "Open in floating window" }));
+    expect(openSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "project-terminal",
+        projectSlug: "demo",
+        tabId: projectTerminalTabId("demo"),
+        title: "Terminal",
+      }),
+      expect.any(String),
     );
   });
 });

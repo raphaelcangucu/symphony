@@ -1,4 +1,4 @@
-import { Maximize2, Minimize2, X } from "lucide-react";
+import { Maximize2, Minimize2, SquareArrowOutUpRight, X } from "lucide-react";
 import { type RefObject, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -6,6 +6,7 @@ import { TerminalWorkspacePanel } from "@/components/terminal/TerminalWorkspaceP
 import { Button } from "@/components/ui/button";
 import { useHorizontalPanelResize } from "@/hooks/useHorizontalPanelResize";
 import { cn } from "@/lib/utils";
+import { openFloatingSurfaceOrToast } from "@/stores/floatingSurfaceStore";
 
 const TERMINAL_DOCK_WIDTH_STORAGE_KEY = "symphony:issue-terminal-dock-width";
 
@@ -96,6 +97,27 @@ export function IssueTerminalDock({
                 onClick={onToggleFullscreen}
               >
                 {fullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                aria-label={t("floatingSurface.popout")}
+                title={t("floatingSurface.popout")}
+                onClick={() =>
+                  openFloatingSurfaceOrToast(
+                    {
+                      kind: "issue-terminal",
+                      projectSlug,
+                      issueIdentifier,
+                      title: t("workspace.terminal.popoutTitle", { identifier: issueIdentifier }),
+                    },
+                    t("floatingSurface.maxSurfaces"),
+                  )
+                }
+              >
+                <SquareArrowOutUpRight className="h-3.5 w-3.5" />
               </Button>
               <Button
                 type="button"

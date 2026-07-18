@@ -2788,7 +2788,8 @@
       "resizeHandleAria": "Redimensionar painel do terminal",
       "expandFullscreen": "Expandir terminal para tela cheia",
       "exitFullscreen": "Sair da tela cheia",
-      "closeDock": "Fechar painel do terminal"
+      "closeDock": "Fechar painel do terminal",
+      "popoutTitle": "Terminal · {{identifier}}"
     },
     "preview": {
       "title": "Preview",

@@ -2788,7 +2788,8 @@
       "resizeHandleAria": "Resize terminal panel",
       "expandFullscreen": "Expand terminal to full screen",
       "exitFullscreen": "Exit full screen",
-      "closeDock": "Close terminal panel"
+      "closeDock": "Close terminal panel",
+      "popoutTitle": "Terminal · {{identifier}}"
     },
     "preview": {
       "title": "Preview",
