@@ -1220,6 +1220,7 @@
       "refresh": "Refresh",
       "rerun": "Run again",
       "fullscreenAria": "Open {{slug}} output in fullscreen",
+      "popoutAria": "Open {{slug}} output in popout",
       "fullscreenTitle": "{{slug}} terminal",
       "interactiveHint": "Interactive terminal: your keyboard goes straight to the server session (Ctrl+C cancels and hands you the shell).",
       "interactiveAria": "{{slug}} interactive terminal",

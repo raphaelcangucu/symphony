@@ -1220,6 +1220,7 @@
       "refresh": "Atualizar",
       "rerun": "Rodar de novo",
       "fullscreenAria": "Abrir saída de {{slug}} em tela cheia",
+      "popoutAria": "Abrir saída de {{slug}} em janela flutuante",
       "fullscreenTitle": "Terminal de {{slug}}",
       "interactiveHint": "Terminal interativo: seu teclado vai direto para a sessão do servidor (Ctrl+C cancela e te entrega o shell).",
       "interactiveAria": "terminal interativo de {{slug}}",

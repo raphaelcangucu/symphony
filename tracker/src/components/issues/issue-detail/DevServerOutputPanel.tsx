@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight, Keyboard, Loader2, RotateCcw } from "lucide-react";
+import { ChevronDown, ChevronRight, Loader2, Maximize2, RotateCcw, SquareArrowOutUpRight } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -6,6 +6,7 @@ import { TerminalView } from "@/components/terminal/TerminalView";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { fetchDevServerOutput, subscribeDevServerOutput } from "@/services/issueDevServers";
+import { openFloatingSurfaceOrToast } from "@/stores/floatingSurfaceStore";
 import type { IssueDevServerStatus } from "@/types/issue";
 import { cn } from "@/lib/utils";
 
@@ -118,6 +119,20 @@ export function DevServerOutputPanel({
 
   const showRerun = onRerun != null && RERUN_STATUSES.has(status);
 
+  const handlePopout = () => {
+    openFloatingSurfaceOrToast(
+      {
+        kind: "dev-server-output",
+        projectSlug,
+        issueIdentifier,
+        serverId,
+        serverSlug: slug,
+        title: t("issue.devServer.fullscreenTitle", { slug }),
+      },
+      t("floatingSurface.maxSurfaces"),
+    );
+  };
+
   const handleScroll = (event: React.UIEvent<HTMLPreElement>) => {
     const element = event.currentTarget;
     const nearBottom = element.scrollHeight - element.scrollTop - element.clientHeight < 24;
@@ -174,7 +189,17 @@ export function DevServerOutputPanel({
           aria-label={t("issue.devServer.fullscreenAria", { slug })}
           title={t("issue.devServer.interactiveHint")}
         >
-          <Keyboard className="h-3.5 w-3.5" />
+          <Maximize2 className="h-3.5 w-3.5" />
+        </Button>
+        <Button
+          type="button"
+          size="icon"
+          variant="ghost"
+          className="h-7 w-7"
+          onClick={handlePopout}
+          aria-label={t("issue.devServer.popoutAria", { slug })}
+        >
+          <SquareArrowOutUpRight className="h-3.5 w-3.5" />
         </Button>
         <Button type="button" size="sm" variant="ghost" className="h-7 text-xs" onClick={() => void refresh()} disabled={!open}>
           {t("issue.devServer.refresh")}
