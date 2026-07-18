@@ -32,6 +32,13 @@
       "kb": "Base de conhecimento"
     }
   },
+  "floatingSurface": {
+    "close": "Fechar janela",
+    "unavailable": "Esta janela não está mais disponível.",
+    "maxSurfaces": "Feche uma janela flutuante antes de abrir outra.",
+    "popout": "Abrir em janela flutuante",
+    "dragHandleAria": "Arrastar janela"
+  },
   "launcher": {
     "title": "Nova sessão",
     "subtitle": "Entre numa execução por issue, PR, branch ou ação rápida.",

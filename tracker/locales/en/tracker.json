@@ -32,6 +32,13 @@
       "kb": "Knowledge base"
     }
   },
+  "floatingSurface": {
+    "close": "Close window",
+    "unavailable": "This window is no longer available.",
+    "maxSurfaces": "Close a floating window before opening another.",
+    "popout": "Open in floating window",
+    "dragHandleAria": "Drag window"
+  },
   "launcher": {
     "title": "New session",
     "subtitle": "Jump into a run from an issue, PR, branch, or quick action.",
