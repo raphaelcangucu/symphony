@@ -117,4 +117,57 @@ defmodule SymphonyElixir.Evidence.SessionAuditTest do
                sources: [{"codex", Path.join(tmp_dir, "gone.jsonl")}]
              )
   end
+
+  test "workspace audit sees commands from EVERY codex session of the workspace, not just the newest",
+       %{tmp_dir: tmp_dir} do
+    workspace = Path.join(tmp_dir, "workspace")
+    sessions_dir = Path.join(tmp_dir, "codex-sessions")
+    File.mkdir_p!(workspace)
+    File.mkdir_p!(sessions_dir)
+
+    write_session_rollout!(sessions_dir, "rollout-2026-01-01T01-00-00-aaa.jsonl", workspace, [
+      "bun run test -- src/pages/__tests__/Task1Page.test.jsx"
+    ])
+
+    # Newer session (sidecar target) that did NOT run the declared command.
+    write_session_rollout!(sessions_dir, "rollout-2026-01-01T02-00-00-bbb.jsonl", workspace, ["git diff"])
+    File.mkdir_p!(Path.join(workspace, ".symphony"))
+    File.write!(Path.join(workspace, ".symphony/codex-session.json"), Jason.encode!(%{"thread_id" => "bbb"}))
+
+    prev = Application.get_env(:symphony_elixir, :codex_sessions_dir)
+    Application.put_env(:symphony_elixir, :codex_sessions_dir, sessions_dir)
+    on_exit(fn ->
+      if prev, do: Application.put_env(:symphony_elixir, :codex_sessions_dir, prev),
+        else: Application.delete_env(:symphony_elixir, :codex_sessions_dir)
+    end)
+
+    assert :ok =
+             SessionAudit.verify_commands(
+               ["bun run test -- src/pages/__tests__/Task1Page.test.jsx"],
+               workspace: workspace
+             )
+  end
+
+  defp write_session_rollout!(sessions_dir, name, workspace, commands) do
+    meta =
+      Jason.encode!(%{
+        "type" => "session_meta",
+        "payload" => %{"cwd" => workspace, "id" => name}
+      })
+
+    lines =
+      Enum.map(commands, fn cmd ->
+        Jason.encode!(%{
+          "type" => "response_item",
+          "payload" => %{
+            "type" => "function_call",
+            "name" => "exec_command",
+            "call_id" => "c1",
+            "arguments" => Jason.encode!(%{"cmd" => cmd})
+          }
+        })
+      end)
+
+    File.write!(Path.join(sessions_dir, name), Enum.join([meta | lines], "\n") <> "\n")
+  end
 end

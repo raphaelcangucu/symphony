@@ -178,6 +178,26 @@ defmodule SymphonyElixir.Codex.Session do
     end
   end
 
+  @doc """
+  All rollout files whose `session_meta` cwd is this workspace, newest first.
+
+  An issue often spans several Codex sessions (retries, re-dispatches, agent
+  switches), so callers that need the workspace's full command history — like
+  the evidence session audit — must see every rollout, not just the one the
+  sidecar currently points at. Bounded by the same scan limit as `resolve/2`.
+  """
+  @spec rollout_paths_for_workspace(Path.t(), keyword()) :: [Path.t()]
+  def rollout_paths_for_workspace(workspace, opts \\ []) when is_binary(workspace) do
+    target = Path.expand(workspace)
+
+    sessions_dir(opts)
+    |> Path.join("**/*.jsonl")
+    |> Path.wildcard()
+    |> Enum.sort(:desc)
+    |> Enum.take(@scan_limit)
+    |> Enum.filter(fn file -> match?({:ok, _id}, rollout_thread_id(file, target)) end)
+  end
+
   defp sidecar_path(workspace), do: Path.join(Path.expand(workspace), @sidecar_relative_path)
 
   defp read_sidecar(workspace) do

@@ -16,6 +16,7 @@ defmodule SymphonyElixir.Evidence.SessionAudit do
   """
 
   alias SymphonyElixir.Claude.SessionLog, as: ClaudeLog
+  alias SymphonyElixir.Codex.Session, as: CodexSession
   alias SymphonyElixir.Codex.SessionLog, as: CodexLog
   alias SymphonyElixir.Cursor.SessionLog, as: CursorLog
   alias SymphonyElixir.OpenCode.SessionLog, as: OpenCodeLog
@@ -79,9 +80,21 @@ defmodule SymphonyElixir.Evidence.SessionAudit do
             :error -> []
           end
         end)
+        |> Kernel.++(all_codex_rollouts(workspace))
         |> Enum.uniq_by(fn {_kind, path} -> path end)
         |> Enum.filter(fn {_kind, path} -> readable?(path) end)
     end
+  end
+
+  # An issue often spans several Codex sessions (retries, re-dispatches), and
+  # evidence commands may have run in ANY of them — the sidecar-resolved
+  # rollout alone misses earlier sessions of the same workspace.
+  defp all_codex_rollouts(workspace) do
+    workspace
+    |> CodexSession.rollout_paths_for_workspace()
+    |> Enum.map(&{"codex", &1})
+  rescue
+    _error -> []
   end
 
   defp readable?(path), do: is_binary(path) and File.exists?(path)
