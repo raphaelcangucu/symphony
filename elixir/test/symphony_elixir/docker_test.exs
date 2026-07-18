@@ -64,4 +64,34 @@ defmodule SymphonyElixir.DockerTest do
 
     assert {:error, "Cannot connect to the Docker daemon"} = Docker.list_containers()
   end
+
+  test "container_action rejects a non-hex container id" do
+    assert {:error, :invalid_container_id} = Docker.container_action("betting-app", "stop")
+    assert {:error, :invalid_container_id} = Docker.container_action("abc; rm -rf /", "stop")
+  end
+
+  test "container_action rejects an unknown action" do
+    assert {:error, :invalid_action} = Docker.container_action(@full_id, "kill")
+  end
+
+  test "container_action runs the expected docker arguments" do
+    parent = self()
+
+    put_runner(fn args ->
+      send(parent, {:docker_args, args})
+      {"", 0}
+    end)
+
+    assert :ok = Docker.container_action(@full_id, "restart")
+    assert_received {:docker_args, ["restart", @full_id]}
+
+    assert :ok = Docker.container_action(@full_id, "remove", force: true)
+    assert_received {:docker_args, ["rm", "--force", @full_id]}
+  end
+
+  test "container_action returns trimmed CLI output on failure" do
+    put_runner(fn _args -> {"Error response from daemon: boom\n", 1} end)
+
+    assert {:error, "Error response from daemon: boom"} = Docker.container_action(@full_id, "stop")
+  end
 end
