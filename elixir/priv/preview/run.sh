@@ -263,16 +263,39 @@ class PreviewRunner:
         if not isinstance(argv, list) or not argv:
             raise RunnerError(f"{field_name} command argv must be a non-empty list")
 
+        shell_script_index = self._shell_script_index(argv)
         normalized_argv = []
-        for argument in argv:
+        for index, argument in enumerate(argv):
             if not isinstance(argument, str) or "\x00" in argument:
                 raise RunnerError(f"{field_name} command argv entries must be strings without NUL")
+            if index == shell_script_index:
+                # Explicit `bash -c` / `sh -lc` script argument: the shell is
+                # intentional, so metacharacters are legitimate here and the
+                # shell itself expands ${...} from the contract environment.
+                normalized_argv.append(argument)
+                continue
             expanded_argument = self._expand_argument(argument)
             if SHELL_CONTROL_PATTERN.search(expanded_argument):
-                raise RunnerError(f"{field_name} command contains rejected shell metacharacters")
+                raise RunnerError(
+                    f"{field_name} command contains rejected shell metacharacters; "
+                    'wrap shell logic as ["bash", "-lc", "<script>"] or move it into a repo script'
+                )
             normalized_argv.append(expanded_argument)
 
         return {"argv": tuple(normalized_argv), "exists": exists_path}
+
+    @staticmethod
+    def _shell_script_index(argv):
+        if len(argv) < 3:
+            return None
+        if not all(isinstance(argument, str) for argument in argv[:3]):
+            return None
+        interpreter = Path(argv[0]).name
+        if interpreter not in ("bash", "sh"):
+            return None
+        if argv[1] not in ("-c", "-lc"):
+            return None
+        return 2
 
     def _expand_argument(self, argument):
         def replace(match):

@@ -37,6 +37,60 @@ defmodule SymphonyElixir.DevServer.PreviewRunnerContractTest do
     end)
   end
 
+  test "runner accepts metacharacters inside an explicit shell script argument" do
+    with_runner_tmp(fn tmp ->
+      port = available_port()
+      report_path = Path.join(tmp, "preview-report.json")
+
+      spec = %{
+        "cwd" => tmp,
+        "prepare" => [],
+        "start" => [
+          [
+            "bash",
+            "-c",
+            "true && exec python3 -m http.server ${PORT} --bind 127.0.0.1"
+          ]
+        ],
+        "health" => %{"path" => "/", "timeout_ms" => @report_timeout_ms, "interval_ms" => 25},
+        "stop" => %{"signal" => "TERM", "grace_ms" => 2_000}
+      }
+
+      runner_port = start_runner(tmp, spec, report_path, port, [port])
+      runner_pid = port_os_pid(runner_port)
+
+      assert %{__struct__: RuntimeReport, state: "ready", actual_port: ^port} =
+               await_report_state(report_path, "ready")
+
+      signal_process(runner_pid, "TERM")
+      assert %{__struct__: RuntimeReport, state: "stopped"} = await_report_state(report_path, "stopped")
+      assert_port_exit(runner_port, 0)
+    end)
+  end
+
+  test "runner still rejects metacharacters outside an explicit shell script argument" do
+    with_runner_tmp(fn tmp ->
+      port = available_port()
+      report_path = Path.join(tmp, "preview-report.json")
+
+      spec = %{
+        "cwd" => tmp,
+        "prepare" => [],
+        "start" => [["python3", "-m", "http.server", "&&", "true"]],
+        "health" => %{"path" => "/", "timeout_ms" => @report_timeout_ms, "interval_ms" => 25},
+        "stop" => %{"signal" => "TERM", "grace_ms" => 2_000}
+      }
+
+      runner_port = start_runner(tmp, spec, report_path, port, [port])
+
+      assert %{__struct__: RuntimeReport, state: "error", error: error} =
+               await_report_state(report_path, "error")
+
+      assert error =~ "rejected shell metacharacters"
+      assert_port_exit(runner_port, 1)
+    end)
+  end
+
   test "runner rejects healthy service when selected port is outside lease" do
     with_runner_tmp(fn tmp ->
       port = available_port()

@@ -52,6 +52,12 @@ defmodule SymphonyElixir.DevServer.RunSpec do
   @default_stop_signal "TERM"
   @default_stop_grace_ms 5_000
 
+  # Mirrors SHELL_CONTROL_PATTERN in priv/preview/run.sh. Both sides must agree,
+  # otherwise a spec accepted at save/prepare time explodes only at start time.
+  @shell_control_pattern ~r/[;&|<>`\r\n]|\$\(/
+  @shell_interpreters ~w(bash sh)
+  @shell_script_flags ~w(-c -lc)
+
   @spec normalize(map(), keyword()) :: {:ok, t()} | {:error, atom()}
   def normalize(map, opts) when is_map(map) and is_list(opts) do
     port = Keyword.fetch!(opts, :port)
@@ -149,11 +155,21 @@ defmodule SymphonyElixir.DevServer.RunSpec do
   defp normalize_command(_entry, _port, _preview_env), do: {:error, :invalid_command}
 
   defp normalize_argv(argv, port, preview_env) when is_list(argv) do
+    shell_script_index = shell_script_index(argv)
+
     argv
-    |> Enum.reduce_while({:ok, []}, fn part, {:ok, acc} ->
+    |> Enum.with_index()
+    |> Enum.reduce_while({:ok, []}, fn {part, index}, {:ok, acc} ->
       case normalize_argv_part(part, port, preview_env) do
-        {:ok, normalized} -> {:cont, {:ok, [normalized | acc]}}
-        {:error, _} = error -> {:halt, error}
+        {:ok, normalized} ->
+          if index != shell_script_index and Regex.match?(@shell_control_pattern, normalized) do
+            {:halt, {:error, :rejected_shell_metacharacters}}
+          else
+            {:cont, {:ok, [normalized | acc]}}
+          end
+
+        {:error, _} = error ->
+          {:halt, error}
       end
     end)
     |> case do
@@ -163,6 +179,18 @@ defmodule SymphonyElixir.DevServer.RunSpec do
   end
 
   defp normalize_argv(_argv, _port, _preview_env), do: {:error, :invalid_argv}
+
+  # Index of the script argument in an explicit shell command
+  # (["bash"|"sh", "-c"|"-lc", script, ...]). That argument may legitimately
+  # contain shell metacharacters; the runner applies the same exemption.
+  defp shell_script_index([interpreter, flag, script | _rest])
+       when is_binary(interpreter) and is_binary(script) do
+    if Path.basename(interpreter) in @shell_interpreters and flag in @shell_script_flags do
+      2
+    end
+  end
+
+  defp shell_script_index(_argv), do: nil
 
   defp normalize_argv_part(value, port, preview_env) when is_binary(value) do
     {:ok, expand_substitutions(value, port, preview_env)}
@@ -245,12 +273,18 @@ defmodule SymphonyElixir.DevServer.RunSpec do
   end
 
   defp normalize_stop(%{} = stop) do
-    {:ok,
-     %Stop{
-       signal: to_str(fetch(stop, :signal)) || @default_stop_signal,
-       command: normalize_stop_command(fetch(stop, :command)),
-       grace_ms: to_int(fetch(stop, :grace_ms), @default_stop_grace_ms)
-     }}
+    case normalize_stop_command(fetch(stop, :command)) do
+      {:error, _} = error ->
+        error
+
+      command ->
+        {:ok,
+         %Stop{
+           signal: to_str(fetch(stop, :signal)) || @default_stop_signal,
+           command: command,
+           grace_ms: to_int(fetch(stop, :grace_ms), @default_stop_grace_ms)
+         }}
+    end
   end
 
   defp normalize_stop(_stop), do: {:error, :invalid_stop}
@@ -268,11 +302,27 @@ defmodule SymphonyElixir.DevServer.RunSpec do
     end)
     |> case do
       :invalid -> nil
-      parts -> Enum.reverse(parts)
+      parts -> parts |> Enum.reverse() |> validate_stop_command_safety()
     end
   end
 
   defp normalize_stop_command(_command), do: nil
+
+  # The runner re-normalizes the stop command at teardown time with the same
+  # metacharacter rule; rejecting here keeps a bad stop command from silently
+  # degrading teardown to a bare signal.
+  defp validate_stop_command_safety(argv) do
+    shell_script_index = shell_script_index(argv)
+
+    rejected? =
+      argv
+      |> Enum.with_index()
+      |> Enum.any?(fn {part, index} ->
+        index != shell_script_index and Regex.match?(@shell_control_pattern, part)
+      end)
+
+    if rejected?, do: {:error, :rejected_shell_metacharacters}, else: argv
+  end
 
   defp command_to_map(%Command{} = command) do
     base = %{"argv" => command.argv}
