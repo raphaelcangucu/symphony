@@ -29,6 +29,7 @@ const STATUS_DOT_CLASS: Record<IssueDevServerStatus, string> = {
   provisioning: "bg-blue-500",
   ready: "bg-emerald-500",
   starting: "bg-blue-500",
+  stalled: "bg-amber-500",
   stopped: "bg-muted-foreground/40",
 };
 
@@ -226,12 +227,12 @@ export function IssuePreviewDock({
               devServers={devServers}
             />
           </div>
-        ) : (
+        ) : previewUrl ? (
           <MinibrowserChrome
             homeUrl={previewUrl}
             frameTitle={t("workspace.preview.frameTitle", { identifier: issueIdentifier })}
           />
-        )}
+        ) : null}
       </div>
     </aside>
   );
