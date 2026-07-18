@@ -36,6 +36,7 @@ defmodule SymphonyElixirWeb.Router do
     pipe_through(:browser)
 
     get("/", RootRedirectController, :index)
+    get("/task1", Task1Controller, :index)
   end
 
   scope "/api/tracker/v1", SymphonyElixirWeb.Tracker do
@@ -322,6 +323,7 @@ defmodule SymphonyElixirWeb.Router do
   scope "/", SymphonyElixirWeb do
     pipe_through(:observability_api)
 
+    get("/api/health", HealthController, :show)
     get("/api/v1/state", ObservabilityApiController, :state)
 
     match(:*, "/api/v1/state", ObservabilityApiController, :method_not_allowed)
