@@ -32,6 +32,13 @@
       "kb": "Base de conhecimento"
     }
   },
+  "floatingSurface": {
+    "close": "Fechar janela",
+    "unavailable": "Esta janela não está mais disponível.",
+    "maxSurfaces": "Feche uma janela flutuante antes de abrir outra.",
+    "popout": "Abrir em janela flutuante",
+    "dragHandleAria": "Arrastar janela"
+  },
   "launcher": {
     "title": "Nova sessão",
     "subtitle": "Entre numa execução por issue, PR, branch ou ação rápida.",
@@ -1213,6 +1220,7 @@
       "refresh": "Atualizar",
       "rerun": "Rodar de novo",
       "fullscreenAria": "Abrir saída de {{slug}} em tela cheia",
+      "popoutAria": "Abrir saída de {{slug}} em janela flutuante",
       "fullscreenTitle": "Terminal de {{slug}}",
       "interactiveHint": "Terminal interativo: seu teclado vai direto para a sessão do servidor (Ctrl+C cancela e te entrega o shell).",
       "interactiveAria": "terminal interativo de {{slug}}",
@@ -2780,7 +2788,8 @@
       "resizeHandleAria": "Redimensionar painel do terminal",
       "expandFullscreen": "Expandir terminal para tela cheia",
       "exitFullscreen": "Sair da tela cheia",
-      "closeDock": "Fechar painel do terminal"
+      "closeDock": "Fechar painel do terminal",
+      "popoutTitle": "Terminal · {{identifier}}"
     },
     "preview": {
       "title": "Preview",
@@ -2796,7 +2805,15 @@
       "hideDetails": "Ocultar detalhes dos dev servers",
       "serverTabsAria": "Dev servers",
       "serverTabAria": "Preview de {{slug}} ({{status}})",
-      "urlInputAria": "URL do preview"
+      "urlInputAria": "URL do preview",
+      "minibrowser": {
+        "back": "Voltar",
+        "forward": "Avançar",
+        "stop": "Parar",
+        "home": "Início",
+        "loadingAria": "Carregando preview",
+        "popoutAria": "Abrir em janela flutuante"
+      }
     },
 
     "environment": {

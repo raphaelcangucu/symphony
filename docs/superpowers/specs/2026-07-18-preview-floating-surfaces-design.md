@@ -1,7 +1,7 @@
 # Preview sidebar UX — floating surfaces, terminals & minibrowser
 
 **Date:** 2026-07-18  
-**Status:** Approved  
+**Status:** Implemented  
 **Surfaces:** Tracker Preview dock (`IssuePreviewDock`, `PreviewPanel`,
 `DevServerOutputPanel`), issue/project terminals, app shell (`Layout`)  
 **Related:** existing dock fullscreen in `ProjectSessionsWorkspace`;

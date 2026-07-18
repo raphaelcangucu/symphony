@@ -1022,7 +1022,7 @@ EOF
 **Files:**
 - Modify: `docs/superpowers/specs/2026-07-18-preview-floating-surfaces-design.md` (Status → Approved / Implemented)
 
-- [ ] **Step 1: Update spec status to Approved** after code lands (or `Implemented` when all tasks done)
+- [x] **Step 1: Update spec status to Approved** after code lands (or `Implemented` when all tasks done)
 
 - [ ] **Step 2: Manual smoke (dev server)**
 
@@ -1032,7 +1032,7 @@ EOF
 4. Open 6 popouts; 7th shows toast  
 5. Minibrowser: navigate path, Back, Home, Reload, Stop mid-load  
 
-- [ ] **Step 3: Final commit for docs**
+- [x] **Step 3: Final commit for docs**
 
 ```bash
 git add docs/superpowers/specs/2026-07-18-preview-floating-surfaces-design.md

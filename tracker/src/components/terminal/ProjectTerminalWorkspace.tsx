@@ -1,4 +1,4 @@
-import { Plus } from "lucide-react";
+import { Plus, SquareArrowOutUpRight } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -20,6 +20,7 @@ import {
   createTerminalTab,
   listTerminalTabs,
 } from "@/services/terminalTabs";
+import { openFloatingSurfaceOrToast } from "@/stores/floatingSurfaceStore";
 
 interface ProjectTerminalWorkspaceProps {
   projectSlug: string;
@@ -140,19 +141,42 @@ export function ProjectTerminalWorkspace({ projectSlug }: ProjectTerminalWorkspa
           ariaLabel={t("workspace.terminal.tabsAria")}
           shortcutHints
           trailing={
-            dynamicTabsEnabled ? (
+            <>
               <Button
                 type="button"
                 variant="ghost"
-                size="sm"
-                className="h-7 gap-1 px-2 text-xs"
-                disabled={creatingTab || loadingTabs}
-                onClick={() => void handleCreateTab()}
+                size="icon"
+                className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                aria-label={t("floatingSurface.popout")}
+                title={t("floatingSurface.popout")}
+                onClick={() =>
+                  openFloatingSurfaceOrToast(
+                    {
+                      kind: "project-terminal",
+                      projectSlug,
+                      tabId: projectTerminalTabId(projectSlug),
+                      title: t("workspace.terminal.projectDockTitle"),
+                    },
+                    t("floatingSurface.maxSurfaces"),
+                  )
+                }
               >
-                <Plus className="h-3.5 w-3.5" />
-                {creatingTab ? t("workspace.terminal.creatingTab") : t("workspace.terminal.newTab")}
+                <SquareArrowOutUpRight className="h-3.5 w-3.5" />
               </Button>
-            ) : null
+              {dynamicTabsEnabled ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 gap-1 px-2 text-xs"
+                  disabled={creatingTab || loadingTabs}
+                  onClick={() => void handleCreateTab()}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  {creatingTab ? t("workspace.terminal.creatingTab") : t("workspace.terminal.newTab")}
+                </Button>
+              ) : null}
+            </>
           }
         />
 

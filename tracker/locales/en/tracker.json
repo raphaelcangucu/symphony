@@ -32,6 +32,13 @@
       "kb": "Knowledge base"
     }
   },
+  "floatingSurface": {
+    "close": "Close window",
+    "unavailable": "This window is no longer available.",
+    "maxSurfaces": "Close a floating window before opening another.",
+    "popout": "Open in floating window",
+    "dragHandleAria": "Drag window"
+  },
   "launcher": {
     "title": "New session",
     "subtitle": "Jump into a run from an issue, PR, branch, or quick action.",
@@ -1213,6 +1220,7 @@
       "refresh": "Refresh",
       "rerun": "Run again",
       "fullscreenAria": "Open {{slug}} output in fullscreen",
+      "popoutAria": "Open {{slug}} output in popout",
       "fullscreenTitle": "{{slug}} terminal",
       "interactiveHint": "Interactive terminal: your keyboard goes straight to the server session (Ctrl+C cancels and hands you the shell).",
       "interactiveAria": "{{slug}} interactive terminal",
@@ -2780,7 +2788,8 @@
       "resizeHandleAria": "Resize terminal panel",
       "expandFullscreen": "Expand terminal to full screen",
       "exitFullscreen": "Exit full screen",
-      "closeDock": "Close terminal panel"
+      "closeDock": "Close terminal panel",
+      "popoutTitle": "Terminal · {{identifier}}"
     },
     "preview": {
       "title": "Preview",
@@ -2796,7 +2805,15 @@
       "hideDetails": "Hide dev server details",
       "serverTabsAria": "Dev servers",
       "serverTabAria": "Preview {{slug}} ({{status}})",
-      "urlInputAria": "Preview URL"
+      "urlInputAria": "Preview URL",
+      "minibrowser": {
+        "back": "Back",
+        "forward": "Forward",
+        "stop": "Stop",
+        "home": "Home",
+        "loadingAria": "Preview loading",
+        "popoutAria": "Pop out"
+      }
     },
 
     "environment": {

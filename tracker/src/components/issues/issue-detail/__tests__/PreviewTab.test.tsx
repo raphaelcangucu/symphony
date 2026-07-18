@@ -49,6 +49,14 @@ describe("PreviewTab", () => {
     }
   });
 
+  it("renders status strip without a card title heading", () => {
+    renderPreview(response([server({ status: "ready" })]));
+
+    expect(screen.getByLabelText(/^preview status$/i)).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /^issue preview$/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/^issue preview$/i)).not.toBeInTheDocument();
+  });
+
   it("renders one ready CTA, secondary controls, and compact server metadata", () => {
     renderPreview(
       response([
@@ -56,6 +64,8 @@ describe("PreviewTab", () => {
         server({ id: 2, slug: "web", status: "ready", url: "http://127.0.0.1:5173", primary: true }),
       ]),
     );
+
+    expect(screen.getByLabelText(/^preview status$/i)).toBeInTheDocument();
 
     const link = screen.getByRole("link", { name: /^open preview$/i });
     expect(link).toHaveAttribute("href", "http://127.0.0.1:5173");

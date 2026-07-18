@@ -4,6 +4,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { fetchDevServerOutput, subscribeDevServerOutput } from "@/services/issueDevServers";
+import * as floatingSurfaceStore from "@/stores/floatingSurfaceStore";
 
 import { DevServerOutputPanel } from "../DevServerOutputPanel";
 
@@ -119,5 +120,37 @@ describe("DevServerOutputPanel", () => {
     expect(terminal).toHaveAttribute("data-kind", "dev-server");
     expect(terminal).toHaveAttribute("data-server-slug", "front");
     expect(screen.getByText(/interactive terminal/i)).toBeInTheDocument();
+  });
+
+  it("opens a floating surface popout for the server output", async () => {
+    const openSpy = vi
+      .spyOn(floatingSurfaceStore, "openFloatingSurfaceOrToast")
+      .mockReturnValue("dev-server-output:macro-markets:510:1");
+
+    vi.mocked(fetchDevServerOutput).mockResolvedValue({ output: "line", session_name: "sym" });
+
+    render(
+      <DevServerOutputPanel
+        projectSlug="macro-markets"
+        issueIdentifier="510"
+        serverId={1}
+        slug="front"
+        status="stopped"
+        sessionName="sym"
+        defaultOpen
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /open front output in popout/i }));
+    expect(openSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "dev-server-output",
+        projectSlug: "macro-markets",
+        issueIdentifier: "510",
+        serverId: 1,
+        serverSlug: "front",
+      }),
+      expect.any(String),
+    );
   });
 });

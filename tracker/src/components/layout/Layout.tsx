@@ -1,5 +1,6 @@
 import { Outlet } from "react-router-dom";
 
+import { FloatingSurfaceHost } from "@/components/floating/FloatingSurfaceHost";
 import { MaestroExtraContextProvider } from "@/components/maestro/MaestroExtraContext";
 import { MaestroHost } from "@/components/maestro/MaestroHost";
 import { AgentExecutionsProvider } from "@/hooks/AgentExecutionsProvider";
@@ -24,6 +25,7 @@ export function Layout() {
                 </main>
               </div>
             </div>
+            <FloatingSurfaceHost />
             <MaestroHost />
           </MaestroExtraContextProvider>
         </SidebarTreeProvider>
