@@ -2078,6 +2078,7 @@
     "searchPlaceholder": "Search containers…",
     "onlyRunning": "Only running",
     "unavailable": "Docker daemon is unavailable",
+    "loading": "Loading containers…",
     "empty": "No containers match the current filters.",
     "columns": {
       "name": "Name",

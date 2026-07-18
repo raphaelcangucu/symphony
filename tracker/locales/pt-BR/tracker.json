@@ -2078,6 +2078,7 @@
     "searchPlaceholder": "Buscar containers…",
     "onlyRunning": "Somente em execução",
     "unavailable": "O daemon do Docker está indisponível",
+    "loading": "Carregando containers…",
     "empty": "Nenhum container corresponde aos filtros atuais.",
     "columns": {
       "name": "Nome",

@@ -306,7 +306,7 @@ export function DockerPage() {
             {rows.length === 0 ? (
               <tr>
                 <td colSpan={9} className="px-3 py-8 text-center text-muted-foreground">
-                  {t("docker.empty")}
+                  {overview === null ? t("docker.loading") : t("docker.empty")}
                 </td>
               </tr>
             ) : null}
@@ -326,7 +326,12 @@ export function DockerPage() {
             <Button type="button" variant="ghost" onClick={() => setRemoveTarget(null)}>
               {t("docker.cancel")}
             </Button>
-            <Button type="button" variant="destructive" onClick={() => void confirmRemove()}>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={removeTarget !== null && pendingIds.has(removeTarget.id)}
+              onClick={() => void confirmRemove()}
+            >
               {t("docker.removeConfirm")}
             </Button>
           </DialogFooter>
