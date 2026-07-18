@@ -28,12 +28,28 @@ defmodule SymphonyElixir.Tracker.Sync.Push do
 
   @doc """
   Pushes an `issue`/`create` outbox entry via `adapter.create_issue/2`.
+
+  Options:
+
+  - `:adopt_identifier` — when true, returns the created issue's identity map
+    (`remote_id` + tracker-issued `identifier`/`url`) so the sync engine can
+    adopt the REMOTE key as the local identifier. Trackers that issue their own
+    issue keys (JIRA `CDE-123`, Linear `ENG-42`) need this: keeping the local
+    placeholder identifier makes every later sync call 404 against the remote.
   """
-  @spec push_issue_create(module(), Project.t(), map()) :: {:ok, String.t() | nil} | {:error, term()}
-  def push_issue_create(adapter, %Project{} = project, payload) do
+  @spec push_issue_create(module(), Project.t(), map(), keyword()) ::
+          {:ok, String.t() | nil | map()} | {:error, term()}
+  def push_issue_create(adapter, %Project{} = project, payload, opts \\ []) do
     case adapter.create_issue(project, payload) do
-      {:ok, dto} -> {:ok, dto.id}
-      error -> error
+      {:ok, dto} ->
+        if Keyword.get(opts, :adopt_identifier, false) do
+          {:ok, %{remote_id: dto.id, identifier: Map.get(dto, :identifier), url: Map.get(dto, :url)}}
+        else
+          {:ok, dto.id}
+        end
+
+      error ->
+        error
     end
   end
 

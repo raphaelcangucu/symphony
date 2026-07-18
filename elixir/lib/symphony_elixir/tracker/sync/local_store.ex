@@ -851,6 +851,94 @@ defmodule SymphonyElixir.Tracker.Sync.LocalStore do
   pending local edits (`dirty_fields`/`sync_status`) survive for the pull's LWW
   merge.
   """
+  @doc """
+  Links a freshly created issue to the identity the remote tracker returned:
+  `remote_id` plus — for trackers that issue their own keys (JIRA) — the
+  canonical `identifier`/`url`.
+
+  Adopting the remote identifier is what keeps later sync calls working: JIRA
+  paths are keyed by the issue KEY (`/rest/api/3/issue/CDE-1182`), so a local
+  placeholder identifier would 404 every update/transition after create.
+
+  Returns `{:renamed, old_identifier, new_identifier}` when the identifier was
+  adopted, `:linked` when only the remote id was linked (identifier already
+  correct, or the remote key is already taken by another mirrored row), and
+  `:ok` when nothing was changed.
+  """
+  @spec adopt_created_issue_identity(term(), map()) ::
+          {:renamed, String.t(), String.t()} | :linked | :ok
+  def adopt_created_issue_identity(issue_id, %{remote_id: remote_id} = identity) do
+    new_identifier = identity |> Map.get(:identifier) |> normalize_adopted_identifier()
+
+    case Repo.get(IssueRecord, issue_id) do
+      nil ->
+        :ok
+
+      %IssueRecord{remote_id: existing} when is_binary(existing) and existing != "" ->
+        :ok
+
+      %IssueRecord{} = issue ->
+        attrs = %{
+          remote_id: remote_id,
+          last_synced_at: DateTime.utc_now(),
+          sync_status: "synced",
+          last_sync_error: nil
+        }
+
+        cond do
+          is_nil(new_identifier) or new_identifier == issue.identifier ->
+            apply_adoption(issue, attrs, nil)
+
+          identifier_taken?(issue.project_id, issue.id, new_identifier) ->
+            apply_adoption(issue, attrs, nil)
+
+          true ->
+            attrs =
+              attrs
+              |> Map.put(:identifier, new_identifier)
+              |> maybe_put_url(Map.get(identity, :url))
+
+            apply_adoption(issue, attrs, {issue.identifier, new_identifier})
+        end
+    end
+  end
+
+  def adopt_created_issue_identity(_issue_id, _identity), do: :ok
+
+  defp apply_adoption(issue, attrs, rename) do
+    issue
+    |> IssueRecord.changeset(attrs)
+    |> Repo.update()
+    |> case do
+      {:ok, _updated} ->
+        case rename do
+          {old_identifier, new_identifier} -> {:renamed, old_identifier, new_identifier}
+          nil -> :linked
+        end
+
+      {:error, _changeset} ->
+        :ok
+    end
+  end
+
+  defp normalize_adopted_identifier(identifier) when is_binary(identifier) do
+    case String.trim(identifier) do
+      "" -> nil
+      trimmed -> trimmed
+    end
+  end
+
+  defp normalize_adopted_identifier(_identifier), do: nil
+
+  defp identifier_taken?(project_id, issue_id, identifier) do
+    IssueRecord
+    |> where([i], i.project_id == ^project_id and i.identifier == ^identifier and i.id != ^issue_id)
+    |> Repo.exists?()
+  end
+
+  defp maybe_put_url(attrs, url) when is_binary(url) and url != "", do: Map.put(attrs, :url, url)
+  defp maybe_put_url(attrs, _url), do: attrs
+
   @spec link_issue_remote_id(term(), term()) :: :ok
   def link_issue_remote_id(nil, _remote_id), do: :ok
   def link_issue_remote_id(_issue_id, remote_id) when not is_binary(remote_id) or remote_id == "", do: :ok

@@ -44,7 +44,9 @@ defmodule SymphonyElixir.Jira.SyncDriver do
   end
 
   def push(%Project{} = project, %OutboxEntry{entity_type: "issue", operation: "create", payload: payload}) do
-    Push.push_issue_create(adapter(), project, payload)
+    # JIRA issues the canonical key (e.g. CDE-1182) at create time; adopt it as
+    # the local identifier or every later sync call 404s on the placeholder.
+    Push.push_issue_create(adapter(), project, payload, adopt_identifier: true)
   end
 
   def push(%Project{} = project, %OutboxEntry{entity_type: "issue", operation: "update", payload: payload}) do
