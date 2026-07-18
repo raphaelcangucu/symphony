@@ -1,4 +1,4 @@
-import { AlertTriangle, Bot, Cloud, ExternalLink, Loader2, MoreHorizontal, Play, RotateCcw, Server, Square } from "lucide-react";
+import { AlertTriangle, Bot, Cloud, ExternalLink, Loader2, MoreHorizontal, Play, RotateCcw, Square } from "lucide-react";
 import type { TFunction } from "i18next";
 import { useCallback, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -6,7 +6,6 @@ import { useNavigate } from "react-router-dom";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DevServerOutputPanel } from "@/components/issues/issue-detail/DevServerOutputPanel";
 import { useIssueDevServers, type UseIssueDevServersResult } from "@/hooks/useIssueDevServers";
 import {
@@ -166,109 +165,95 @@ export function PreviewPanel({ projectSlug, issueIdentifier, view, execution, de
   const canAskAssistant = openPrimaryUrl == null && (failureReason || primaryFailureServer != null);
 
   return (
-    <div className="space-y-4 text-sm">
+    <div className="space-y-3 text-sm">
       {error ? (
         <StateCallout tone="error" title={t("issue.preview.refreshErrorTitle")}>
           {error}
         </StateCallout>
       ) : null}
 
-      <Card>
-        <CardHeader className="gap-3 p-4">
-          <PreviewStatusStrip
-            available={data.available}
-            loading={loading}
-            onStartTunnel={() => void handleStartTunnel()}
-            startingTunnel={startingTunnel}
-            tunnelEnabled={tunnelEnabled}
-            tunnelRunning={tunnelRunning}
-          />
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div className="min-w-0 space-y-1">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Server className="h-4 w-4" />
-                {t("issue.preview.cardTitle")}
-              </CardTitle>
-            </div>
-            <div className="flex flex-col gap-2 sm:items-end">
-              <PrimaryPreviewAction
-                canAskAssistant={canAskAssistant}
-                canStart={canStartPreview}
-                disabled={controlsDisabled}
-                onAskAssistant={() => askAssistantToFix(data, primaryFailureServer)}
-                onStart={start}
-                openUrl={openPrimaryUrl}
-              />
-              <SecondaryPreviewControls disabled={controlsDisabled} onRestart={restart} onStop={stop} />
-            </div>
+      <PreviewStatusStrip
+        available={data.available}
+        loading={loading}
+        onStartTunnel={() => void handleStartTunnel()}
+        startingTunnel={startingTunnel}
+        tunnelEnabled={tunnelEnabled}
+        tunnelRunning={tunnelRunning}
+      />
+      <div className="flex flex-wrap items-center gap-2">
+        <PrimaryPreviewAction
+          canAskAssistant={canAskAssistant}
+          canStart={canStartPreview}
+          disabled={controlsDisabled}
+          onAskAssistant={() => askAssistantToFix(data, primaryFailureServer)}
+          onStart={start}
+          openUrl={openPrimaryUrl}
+        />
+        <SecondaryPreviewControls disabled={controlsDisabled} onRestart={restart} onStop={stop} />
+      </div>
+      {openPrimaryUrl ? <ReadyUrlLine url={openPrimaryUrl} /> : null}
+
+      {unavailableMessage ? (
+        <StateCallout tone="warning" title={unavailableMessage.title}>
+          {unavailableMessage.body}
+        </StateCallout>
+      ) : null}
+
+      {provisioningMessage ? (
+        <StateCallout
+          ariaLive="polite"
+          icon={<Loader2 className="h-5 w-5 animate-spin" />}
+          role="status"
+          title={t("issue.preview.provisioningTitle")}
+        >
+          <div className="space-y-3">
+            <p>{provisioningMessage}</p>
+            {primaryServer && isPreviewFailureServerStatus(primaryServer.status) ? (
+              <AskAssistantButton onClick={() => askAssistantToFix(data, primaryServer)} />
+            ) : null}
           </div>
-        </CardHeader>
-        <CardContent className="space-y-4 p-4 pt-0">
-          {openPrimaryUrl ? <ReadyUrlLine url={openPrimaryUrl} /> : null}
+        </StateCallout>
+      ) : null}
 
-          {unavailableMessage ? (
-            <StateCallout tone="warning" title={unavailableMessage.title}>
-              {unavailableMessage.body}
-            </StateCallout>
-          ) : null}
+      {syncCallout ? (
+        <StateCallout tone="warning" title={syncCallout.title}>
+          {syncCallout.body}
+        </StateCallout>
+      ) : null}
 
-          {provisioningMessage ? (
-            <StateCallout
-              ariaLive="polite"
-              icon={<Loader2 className="h-5 w-5 animate-spin" />}
-              role="status"
-              title={t("issue.preview.provisioningTitle")}
-            >
-              <div className="space-y-3">
-                <p>{provisioningMessage}</p>
-                {primaryServer && isPreviewFailureServerStatus(primaryServer.status) ? (
-                  <AskAssistantButton onClick={() => askAssistantToFix(data, primaryServer)} />
-                ) : null}
-              </div>
-            </StateCallout>
-          ) : null}
-
-          {syncCallout ? (
-            <StateCallout tone="warning" title={syncCallout.title}>
-              {syncCallout.body}
-            </StateCallout>
-          ) : null}
-
-          <section className="space-y-2">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t("issue.preview.devServers")}</h3>
-            {data.servers.length === 0 ? (
-              <p
-                aria-live="polite"
-                role="status"
-                className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground"
-              >
-                {t("issue.preview.noServers")}
-              </p>
-            ) : (
-              <div className="divide-y rounded-lg border">
-                {data.servers.map((server) => (
-                  <ServerRow
-                    key={server.id}
-                    controlsDisabled={controlsDisabled}
-                    issueIdentifier={issueIdentifier}
-                    onAskAssistant={
-                      isPreviewFailureServerStatus(server.status)
-                        ? () => askAssistantToFix(data, server)
-                        : undefined
-                    }
-                    onRestart={(serverId) => void restartServer(serverId)}
-                    onStart={(serverId) => void startServer(serverId)}
-                    onStop={(serverId) => void stopServer(serverId)}
-                    projectSlug={projectSlug}
-                    server={server}
-                    tunnelRunning={tunnelRunning}
-                  />
-                ))}
-              </div>
-            )}
-          </section>
-        </CardContent>
-      </Card>
+      <section className="space-y-2">
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t("issue.preview.devServers")}</h3>
+        {data.servers.length === 0 ? (
+          <p
+            aria-live="polite"
+            role="status"
+            className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground"
+          >
+            {t("issue.preview.noServers")}
+          </p>
+        ) : (
+          <div className="divide-y rounded-lg border">
+            {data.servers.map((server) => (
+              <ServerRow
+                key={server.id}
+                controlsDisabled={controlsDisabled}
+                issueIdentifier={issueIdentifier}
+                onAskAssistant={
+                  isPreviewFailureServerStatus(server.status)
+                    ? () => askAssistantToFix(data, server)
+                    : undefined
+                }
+                onRestart={(serverId) => void restartServer(serverId)}
+                onStart={(serverId) => void startServer(serverId)}
+                onStop={(serverId) => void stopServer(serverId)}
+                projectSlug={projectSlug}
+                server={server}
+                tunnelRunning={tunnelRunning}
+              />
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   );
 }
@@ -441,7 +426,7 @@ function ServerRow({
   const hasOverflowActions = openUrl != null || onAskAssistant != null;
 
   return (
-    <div className="p-3">
+    <div className="p-2">
       <div className="flex items-center gap-2">
         <div className="min-w-0 flex-1 truncate text-xs">
           <span className="font-medium">{compactLabel}</span>
