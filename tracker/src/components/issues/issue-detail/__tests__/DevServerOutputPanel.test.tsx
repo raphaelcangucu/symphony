@@ -12,6 +12,12 @@ vi.mock("@/services/issueDevServers", () => ({
   subscribeDevServerOutput: vi.fn(),
 }));
 
+vi.mock("@/components/terminal/TerminalView", () => ({
+  TerminalView: ({ ariaLabel, serverSlug, kind }: { ariaLabel: string; serverSlug?: string; kind: string }) => (
+    <div data-testid="interactive-terminal" data-kind={kind} data-server-slug={serverSlug} aria-label={ariaLabel} />
+  ),
+}));
+
 describe("DevServerOutputPanel", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -92,7 +98,7 @@ describe("DevServerOutputPanel", () => {
     expect(screen.queryByRole("button", { name: /run again/i })).not.toBeInTheDocument();
   });
 
-  it("opens the fullscreen dialog with the output", async () => {
+  it("opens the fullscreen dialog with an interactive terminal attached to the server session", async () => {
     vi.mocked(fetchDevServerOutput).mockResolvedValue({ output: "serve log line", session_name: "sym" });
 
     render(
@@ -108,6 +114,10 @@ describe("DevServerOutputPanel", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: /open front output in fullscreen/i }));
-    expect(await screen.findByText(/front output/i)).toBeInTheDocument();
+
+    const terminal = await screen.findByTestId("interactive-terminal");
+    expect(terminal).toHaveAttribute("data-kind", "dev-server");
+    expect(terminal).toHaveAttribute("data-server-slug", "front");
+    expect(screen.getByText(/interactive terminal/i)).toBeInTheDocument();
   });
 });

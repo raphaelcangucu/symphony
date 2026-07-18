@@ -13,6 +13,10 @@ defmodule SymphonyElixirWeb.Tracker.DevServerController do
 
   @availability_action_error_reasons ~w(disabled workspace_missing no_serve_step no_free_port lock_unavailable crashed)a
 
+  # HTTP actions must return promptly with the in-flight status; slow boots keep
+  # provisioning in the background (dock streams progress via SSE).
+  @http_ready_timeout_ms 15_000
+
   @spec index(Conn.t(), map()) :: Conn.t()
   def index(conn, %{"project_slug" => project_slug, "identifier" => identifier}) do
     with_valid_issue(conn, project_slug, identifier, fn ->
@@ -53,7 +57,7 @@ defmodule SymphonyElixirWeb.Tracker.DevServerController do
     with_valid_issue(conn, project_slug, identifier, fn ->
       with {:ok, id} <- parse_server_id(server_id) do
         project_slug
-        |> Manager.start_instance_for_server(identifier, id)
+        |> Manager.start_instance_for_server(identifier, id, ready_timeout_ms: @http_ready_timeout_ms)
         |> instance_action_result(conn, project_slug, identifier, "start_failed")
       else
         {:error, :invalid_server_id} -> TrackerErrors.validation_msg(conn, "server_id must be a positive integer")
@@ -82,7 +86,7 @@ defmodule SymphonyElixirWeb.Tracker.DevServerController do
     with_valid_issue(conn, project_slug, identifier, fn ->
       with {:ok, id} <- parse_server_id(server_id) do
         project_slug
-        |> Manager.restart_instance_for_server(identifier, id)
+        |> Manager.restart_instance_for_server(identifier, id, ready_timeout_ms: @http_ready_timeout_ms)
         |> instance_action_result(conn, project_slug, identifier, "restart_failed")
       else
         {:error, :invalid_server_id} -> TrackerErrors.validation_msg(conn, "server_id must be a positive integer")

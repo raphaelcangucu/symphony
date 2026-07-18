@@ -1,7 +1,8 @@
-import { ChevronDown, ChevronRight, Loader2, Maximize2, RotateCcw } from "lucide-react";
+import { ChevronDown, ChevronRight, Keyboard, Loader2, RotateCcw } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { TerminalView } from "@/components/terminal/TerminalView";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { fetchDevServerOutput, subscribeDevServerOutput } from "@/services/issueDevServers";
@@ -41,24 +42,19 @@ export function DevServerOutputPanel({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const preRef = useRef<HTMLPreElement | null>(null);
-  const fullscreenPreRef = useRef<HTMLPreElement | null>(null);
   const stickToBottomRef = useRef(true);
 
   const applyOutput = useCallback((nextOutput: string) => {
     setOutput(nextOutput);
     setError(null);
 
-    if (stickToBottomRef.current) {
-      for (const element of [preRef.current, fullscreenPreRef.current]) {
-        if (element) {
-          element.scrollTop = element.scrollHeight;
-        }
-      }
+    if (stickToBottomRef.current && preRef.current) {
+      preRef.current.scrollTop = preRef.current.scrollHeight;
     }
   }, []);
 
   const refresh = useCallback(async () => {
-    if (!open && !fullscreen) {
+    if (!open) {
       return;
     }
 
@@ -72,12 +68,10 @@ export function DevServerOutputPanel({
     } finally {
       setLoading(false);
     }
-  }, [applyOutput, fullscreen, issueIdentifier, open, projectSlug, serverId, t]);
-
-  const visible = open || fullscreen;
+  }, [applyOutput, issueIdentifier, open, projectSlug, serverId, t]);
 
   useEffect(() => {
-    if (!visible) {
+    if (!open) {
       return undefined;
     }
 
@@ -114,7 +108,7 @@ export function DevServerOutputPanel({
     });
 
     return unsubscribe;
-  }, [applyOutput, issueIdentifier, projectSlug, refresh, serverId, status, visible]);
+  }, [applyOutput, issueIdentifier, open, projectSlug, refresh, serverId, status]);
 
   useEffect(() => {
     if (AUTO_OPEN_STATUSES.has(status)) {
@@ -178,8 +172,9 @@ export function DevServerOutputPanel({
           className="h-7 w-7"
           onClick={() => setFullscreen(true)}
           aria-label={t("issue.devServer.fullscreenAria", { slug })}
+          title={t("issue.devServer.interactiveHint")}
         >
-          <Maximize2 className="h-3.5 w-3.5" />
+          <Keyboard className="h-3.5 w-3.5" />
         </Button>
         <Button type="button" size="sm" variant="ghost" className="h-7 text-xs" onClick={() => void refresh()} disabled={!open}>
           {t("issue.devServer.refresh")}
@@ -210,11 +205,16 @@ export function DevServerOutputPanel({
               </Button>
             ) : null}
           </DialogTitle>
-          {error ? (
-            <p className="text-xs text-red-400">{error}</p>
-          ) : (
-            outputPre(fullscreenPreRef, "h-[70vh] max-h-[70vh]")
-          )}
+          <p className="text-xs text-slate-400">{t("issue.devServer.interactiveHint")}</p>
+          <TerminalView
+            kind="dev-server"
+            projectSlug={projectSlug}
+            issueIdentifier={issueIdentifier}
+            serverSlug={slug}
+            enabled={fullscreen}
+            ariaLabel={t("issue.devServer.interactiveAria", { slug })}
+            className="h-[70vh]"
+          />
         </DialogContent>
       </Dialog>
     </div>

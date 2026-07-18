@@ -11,6 +11,7 @@ defmodule SymphonyElixirWeb.TerminalChannel do
   alias SymphonyElixirWeb.TrackerAuth
 
   @capture_delays_ms [50, 250, 750]
+  @dev_capture_tick_ms 1_000
 
   @impl true
   def join("terminal:devenv:" <> project_slug, _payload, socket)
@@ -40,6 +41,37 @@ defmodule SymphonyElixirWeb.TerminalChannel do
 
       {:ok, %{session: tab_session_payload(session)}, socket}
     else
+      {:error, reason} -> {:error, %{reason: error_reason(socket, reason)}}
+    end
+  end
+
+  # Interactive attach to one dev server's tmux session (the same session the
+  # preview dock streams). Lets an operator send keystrokes — cancel a boot
+  # with Ctrl+C and take over from the same shell.
+  def join("terminal:dev:" <> topic_rest, _payload, socket) do
+    with :ok <- authorize(socket),
+         {:ok, project_slug, issue_identifier, slug} <- parse_dev_topic(topic_rest),
+         true <- Registry.dev_session_exists?(project_slug, issue_identifier, slug) do
+      socket =
+        socket
+        |> assign(:project_slug, project_slug)
+        |> assign(:issue_identifier, issue_identifier)
+        |> assign(:dev_slug, slug)
+        |> assign(:dev, true)
+
+      output =
+        case Registry.capture_dev_session(project_slug, issue_identifier, slug) do
+          {:ok, captured} -> captured
+          {:error, _reason} -> ""
+        end
+
+      # Keep the attached terminal live even without keystrokes (builds/logs
+      # stream while the operator just watches).
+      Process.send_after(self(), :dev_capture_tick, @dev_capture_tick_ms)
+
+      {:ok, %{session: dev_session_payload(project_slug, issue_identifier, slug, output)}, socket}
+    else
+      false -> {:error, %{reason: localized_message(socket, "dev server session not found")}}
       {:error, reason} -> {:error, %{reason: error_reason(socket, reason)}}
     end
   end
@@ -91,6 +123,24 @@ defmodule SymphonyElixirWeb.TerminalChannel do
     end
   end
 
+  def handle_in(
+        "input",
+        %{"data" => data},
+        %{assigns: %{dev: true, project_slug: project_slug, issue_identifier: issue_identifier, dev_slug: slug}} = socket
+      )
+      when is_binary(data) do
+    case Registry.send_input_dev(project_slug, issue_identifier, slug, data) do
+      :ok ->
+        push_dev_capture(socket, project_slug, issue_identifier, slug)
+        schedule_followup_dev_captures(project_slug, issue_identifier, slug)
+        {:noreply, socket}
+
+      {:error, message} ->
+        push(socket, "error", %{message: present_error(socket, message)})
+        {:noreply, socket}
+    end
+  end
+
   def handle_in("input", %{"data" => data}, socket) when is_binary(data) do
     issue_identifier = socket.assigns.issue_identifier
     project_slug = socket.assigns.project_slug
@@ -121,6 +171,23 @@ defmodule SymphonyElixirWeb.TerminalChannel do
     case Registry.resize_tab(project_slug, tab_id, cols, rows) do
       :ok ->
         push_tab_capture(socket, project_slug, tab_id)
+        {:noreply, socket}
+
+      {:error, message} ->
+        push(socket, "error", %{message: present_error(socket, message)})
+        {:noreply, socket}
+    end
+  end
+
+  def handle_in(
+        "resize",
+        %{"cols" => cols, "rows" => rows},
+        %{assigns: %{dev: true, project_slug: project_slug, issue_identifier: issue_identifier, dev_slug: slug}} = socket
+      )
+      when is_integer(cols) and is_integer(rows) do
+    case Registry.resize_dev(project_slug, issue_identifier, slug, cols, rows) do
+      :ok ->
+        push_dev_capture(socket, project_slug, issue_identifier, slug)
         {:noreply, socket}
 
       {:error, message} ->
@@ -165,6 +232,22 @@ defmodule SymphonyElixirWeb.TerminalChannel do
     {:noreply, socket}
   end
 
+  def handle_info({:capture_dev, project_slug, issue_identifier, slug}, socket) do
+    push_dev_capture(socket, project_slug, issue_identifier, slug)
+    {:noreply, socket}
+  end
+
+  def handle_info(
+        :dev_capture_tick,
+        %{assigns: %{dev: true, project_slug: project_slug, issue_identifier: issue_identifier, dev_slug: slug}} = socket
+      ) do
+    push_dev_capture(socket, project_slug, issue_identifier, slug)
+    Process.send_after(self(), :dev_capture_tick, @dev_capture_tick_ms)
+    {:noreply, socket}
+  end
+
+  def handle_info(:dev_capture_tick, socket), do: {:noreply, socket}
+
   defp schedule_followup_captures(project_slug, issue_identifier) do
     Enum.each(@capture_delays_ms, fn delay_ms ->
       Process.send_after(self(), {:capture_terminal, project_slug, issue_identifier}, delay_ms)
@@ -195,6 +278,41 @@ defmodule SymphonyElixirWeb.TerminalChannel do
     case Registry.capture_tab(project_slug, tab_id) do
       {:ok, output} -> push(socket, "output", %{data: output})
       {:error, message} -> push(socket, "error", %{message: present_error(socket, message)})
+    end
+  end
+
+  defp push_dev_capture(socket, project_slug, issue_identifier, slug) do
+    case Registry.capture_dev_session(project_slug, issue_identifier, slug) do
+      {:ok, output} -> push(socket, "output", %{data: output})
+      {:error, message} -> push(socket, "error", %{message: present_error(socket, message)})
+    end
+  end
+
+  defp schedule_followup_dev_captures(project_slug, issue_identifier, slug) do
+    Enum.each(@capture_delays_ms, fn delay_ms ->
+      Process.send_after(self(), {:capture_dev, project_slug, issue_identifier, slug}, delay_ms)
+    end)
+  end
+
+  defp dev_session_payload(project_slug, issue_identifier, slug, output) do
+    %{
+      project_slug: project_slug,
+      issue_identifier: issue_identifier,
+      server_slug: slug,
+      session_name: Registry.dev_session_name(project_slug, issue_identifier, slug),
+      state: "running",
+      output: output
+    }
+  end
+
+  defp parse_dev_topic(topic_rest) do
+    case String.split(topic_rest, ":", parts: 3) do
+      [project_slug, issue_identifier, slug]
+      when project_slug != "" and issue_identifier != "" and slug != "" ->
+        {:ok, project_slug, issue_identifier, slug}
+
+      _invalid ->
+        {:error, "invalid_topic"}
     end
   end
 

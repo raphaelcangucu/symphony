@@ -9,13 +9,14 @@ import { createTrackerSocket } from "@/services/phoenix/socket";
 import { openTerminalSession } from "@/services/terminal";
 import { terminalTabTopic } from "@/services/terminalTabs";
 
-export type TerminalConnectionKind = "issue" | "project-devenv" | "dynamic-tab";
+export type TerminalConnectionKind = "issue" | "project-devenv" | "dynamic-tab" | "dev-server";
 
 interface UseTerminalChannelArgs {
   kind: TerminalConnectionKind;
   projectSlug: string;
   issueIdentifier?: string;
   tabId?: string;
+  serverSlug?: string;
   enabled?: boolean;
   onActivated?: () => void;
 }
@@ -43,6 +44,7 @@ export function useTerminalChannel({
   projectSlug,
   issueIdentifier,
   tabId,
+  serverSlug,
   enabled = true,
   onActivated,
 }: UseTerminalChannelArgs): UseTerminalChannelResult {
@@ -54,6 +56,7 @@ export function useTerminalChannel({
     const project = projectSlug.trim();
     const identifier = issueIdentifier?.trim() ?? "";
     const dynamicTabId = tabId?.trim() ?? "";
+    const devServerSlug = serverSlug?.trim() ?? "";
     const container = containerRef.current;
 
     if (!enabled || !project || !container) {
@@ -71,6 +74,12 @@ export function useTerminalChannel({
     if (kind === "dynamic-tab" && !dynamicTabId) {
       setConnected(false);
       setError(i18n.t("workspace.terminal.missingTab"));
+      return undefined;
+    }
+
+    if (kind === "dev-server" && (!identifier || !devServerSlug)) {
+      setConnected(false);
+      setError(i18n.t("workspace.terminal.missingIssue"));
       return undefined;
     }
 
@@ -156,6 +165,11 @@ export function useTerminalChannel({
           return;
         }
 
+        if (kind === "dev-server") {
+          joinChannel(`terminal:dev:${project}:${identifier}:${devServerSlug}`, {});
+          return;
+        }
+
         joinChannel(`terminal:devenv:${project}`, {});
       } catch (reason: unknown) {
         if (cancelled) return;
@@ -183,7 +197,7 @@ export function useTerminalChannel({
       terminal.dispose();
       setConnected(false);
     };
-  }, [enabled, issueIdentifier, kind, onActivated, projectSlug, tabId]);
+  }, [enabled, issueIdentifier, kind, onActivated, projectSlug, serverSlug, tabId]);
 
   return { containerRef, error, connected };
 }

@@ -263,14 +263,31 @@ defmodule SymphonyElixir.Assistant.PreviewTools do
   defp issue_action_fun(opts, :start), do: Keyword.get(opts, :start_for_issue, &Manager.start_for_issue/3)
   defp issue_action_fun(opts, :restart), do: Keyword.get(opts, :restart_for_issue, &Manager.restart_for_issue/3)
 
+  # The ready-timeout bound must reach server-scoped calls too; otherwise a
+  # scoped restart blocks the whole tool call on the Manager default (10min)
+  # while a slow server boots.
   defp instance_action_fun(opts, :start, server_id) do
-    start_instance = Keyword.get(opts, :start_instance, &Manager.start_instance_for_server/3)
-    fn project_slug, identifier, _opts -> start_instance.(project_slug, identifier, server_id) end
+    case Keyword.get(opts, :start_instance) do
+      nil ->
+        fn project_slug, identifier, start_opts ->
+          Manager.start_instance_for_server(project_slug, identifier, server_id, start_opts)
+        end
+
+      start_instance ->
+        fn project_slug, identifier, _opts -> start_instance.(project_slug, identifier, server_id) end
+    end
   end
 
   defp instance_action_fun(opts, :restart, server_id) do
-    restart_instance = Keyword.get(opts, :restart_instance, &Manager.restart_instance_for_server/3)
-    fn project_slug, identifier, _opts -> restart_instance.(project_slug, identifier, server_id) end
+    case Keyword.get(opts, :restart_instance) do
+      nil ->
+        fn project_slug, identifier, start_opts ->
+          Manager.restart_instance_for_server(project_slug, identifier, server_id, start_opts)
+        end
+
+      restart_instance ->
+        fn project_slug, identifier, _opts -> restart_instance.(project_slug, identifier, server_id) end
+    end
   end
 
   defp stop_preview(project_slug, identifier, arguments, issue_targets, opts) do

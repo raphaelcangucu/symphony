@@ -197,6 +197,38 @@ defmodule SymphonyElixir.Terminal.Registry do
     tmux.capture_pane(dev_session_name(project_slug, issue_identifier, slug))
   end
 
+  @doc """
+  Forward raw keyboard input (including control bytes such as Ctrl+C) to a dev
+  server's tmux session, so an operator can cancel a boot and take over from
+  the same shell.
+  """
+  @spec send_input_dev(String.t(), String.t(), String.t(), String.t(), keyword()) ::
+          :ok | {:error, String.t()}
+  def send_input_dev(project_slug, issue_identifier, slug, data, opts \\ [])
+      when is_binary(project_slug) and is_binary(issue_identifier) and is_binary(slug) and is_binary(data) do
+    tmux = dependency(opts, :tmux, :terminal_tmux, Tmux)
+    tmux.send_keys(dev_session_name(project_slug, issue_identifier, slug), data)
+  end
+
+  @spec resize_dev(String.t(), String.t(), String.t(), pos_integer(), pos_integer(), keyword()) ::
+          :ok | {:error, String.t()}
+  def resize_dev(project_slug, issue_identifier, slug, cols, rows, opts \\ [])
+      when is_binary(project_slug) and is_binary(issue_identifier) and is_binary(slug) and
+             is_integer(cols) and is_integer(rows) and cols > 0 and rows > 0 do
+    tmux = dependency(opts, :tmux, :terminal_tmux, Tmux)
+    tmux.resize(dev_session_name(project_slug, issue_identifier, slug), cols, rows)
+  end
+
+  @doc "Whether the dev server tmux session currently exists."
+  @spec dev_session_exists?(String.t(), String.t(), String.t(), keyword()) :: boolean()
+  def dev_session_exists?(project_slug, issue_identifier, slug, opts \\ [])
+      when is_binary(project_slug) and is_binary(issue_identifier) and is_binary(slug) do
+    tmux = dependency(opts, :tmux, :terminal_tmux, Tmux)
+    tmux.has_session?(dev_session_name(project_slug, issue_identifier, slug))
+  rescue
+    _error -> false
+  end
+
   @spec capture(String.t(), String.t(), keyword()) :: {:ok, String.t()} | {:error, String.t()}
   def capture(project_slug, issue_identifier, opts \\ []) when is_binary(project_slug) and is_binary(issue_identifier) do
     tmux = dependency(opts, :tmux, :terminal_tmux, Tmux)

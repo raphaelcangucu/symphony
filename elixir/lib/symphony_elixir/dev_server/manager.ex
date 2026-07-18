@@ -168,15 +168,18 @@ defmodule SymphonyElixir.DevServer.Manager do
 
   def stop_instance_for_server(_project_slug, _identifier, _server_id), do: {:error, :not_found}
 
-  @spec start_instance_for_server(String.t(), String.t(), pos_integer()) ::
+  @spec start_instance_for_server(String.t(), String.t(), pos_integer(), keyword()) ::
           {:ok, [pid()]} | {:error, start_error() | :not_found}
-  def start_instance_for_server(project_slug, identifier, server_id)
-      when is_binary(project_slug) and is_binary(identifier) and is_integer(server_id) and server_id > 0 do
+  def start_instance_for_server(project_slug, identifier, server_id, opts \\ [])
+
+  def start_instance_for_server(project_slug, identifier, server_id, opts)
+      when is_binary(project_slug) and is_binary(identifier) and is_integer(server_id) and server_id > 0 and
+             is_list(opts) do
     identifier = canonical_identifier(identifier)
 
     with {:ok, project} <- Context.get_project(project_slug),
          {:ok, _slug} <- server_slug_for_id(project, identifier, server_id) do
-      runtime_options = project_runtime_options(project)
+      runtime_options = project |> project_runtime_options() |> apply_runtime_overrides(opts)
 
       if runtime_options.dev_server_enabled? do
         normalize_lock_result(
@@ -190,17 +193,20 @@ defmodule SymphonyElixir.DevServer.Manager do
     end
   end
 
-  def start_instance_for_server(_project_slug, _identifier, _server_id), do: {:error, :not_found}
+  def start_instance_for_server(_project_slug, _identifier, _server_id, _opts), do: {:error, :not_found}
 
-  @spec restart_instance_for_server(String.t(), String.t(), pos_integer()) ::
+  @spec restart_instance_for_server(String.t(), String.t(), pos_integer(), keyword()) ::
           {:ok, [pid()]} | {:error, start_error() | :not_found}
-  def restart_instance_for_server(project_slug, identifier, server_id)
-      when is_binary(project_slug) and is_binary(identifier) and is_integer(server_id) and server_id > 0 do
+  def restart_instance_for_server(project_slug, identifier, server_id, opts \\ [])
+
+  def restart_instance_for_server(project_slug, identifier, server_id, opts)
+      when is_binary(project_slug) and is_binary(identifier) and is_integer(server_id) and server_id > 0 and
+             is_list(opts) do
     identifier = canonical_identifier(identifier)
 
     with {:ok, project} <- Context.get_project(project_slug),
          {:ok, slug} <- server_slug_for_id(project, identifier, server_id) do
-      runtime_options = project_runtime_options(project)
+      runtime_options = project |> project_runtime_options() |> apply_runtime_overrides(opts)
 
       if runtime_options.dev_server_enabled? do
         normalize_lock_result(
@@ -216,7 +222,7 @@ defmodule SymphonyElixir.DevServer.Manager do
     end
   end
 
-  def restart_instance_for_server(_project_slug, _identifier, _server_id), do: {:error, :not_found}
+  def restart_instance_for_server(_project_slug, _identifier, _server_id, _opts), do: {:error, :not_found}
 
   @spec list_for_issue(String.t(), String.t()) :: [dev_server_map()]
   def list_for_issue(project_slug, identifier) when is_binary(project_slug) and is_binary(identifier) do
@@ -500,25 +506,53 @@ defmodule SymphonyElixir.DevServer.Manager do
   defp preferred_stop_command(%RunSpec{}, step_map),
     do: Map.get(step_map, :stop_command)
 
+  # A server-scoped start must behave like its slice of the issue-wide start:
+  # the step keeps its canonical offset inside the issue slot (so the port does
+  # not drift to an arbitrary in-slot port) and its runtime contract is minted /
+  # refreshed for the reserved port (so runner-backed steps launch through
+  # run.sh instead of their placeholder command, and the dock never flags a
+  # scoped restart as out-of-contract).
   defp do_start_instance_for_server(project, identifier, server_id, runtime_options) do
     with {:ok, slug} <- server_slug_for_id(project, identifier, server_id),
          {:ok, workspace_path} <- issue_workspace_path(identifier),
+         {:ok, all_steps} <- serve_steps(project.slug, identifier),
          {:ok, step} <- serve_step_for_slug(project.slug, identifier, slug),
-         {:ok, reserved_steps} <-
-           reserve_ports(
-             project,
-             identifier,
-             [step],
-             runtime_options.dev_server_port_range,
-             runtime_options.dev_server_reclaim_ports?
-           ),
-         [{step, port, key}] <- reserved_steps do
+         ctx = allocation_context(project, identifier, runtime_options.dev_server_port_range),
+         offset = serve_offset(all_steps, slug),
+         {:ok, port} <- choose_scoped_port(project, identifier, slug, ctx, offset, runtime_options) do
+      key = {project.slug, identifier, slug}
+      reserve_port_for_key(key, port)
+
+      contracts =
+        maybe_build_managed_contracts(
+          project,
+          identifier,
+          workspace_path,
+          all_steps,
+          [{step, port, key}],
+          ctx,
+          runtime_options
+        )
+
       setup_issue_session(project.slug, identifier, workspace_path)
 
-      case start_reserved_instance(project, identifier, workspace_path, step, port, key, runtime_options, %{}) do
+      case start_reserved_instance(project, identifier, workspace_path, step, port, key, runtime_options, contracts) do
         {:ok, {pid, _key}} -> {:ok, [pid]}
         {:error, reason} -> {:error, reason}
       end
+    end
+  end
+
+  defp choose_scoped_port(project, identifier, slug, ctx, offset, runtime_options) do
+    if runtime_options.dev_server_reclaim_ports? do
+      reclaim_canonical_port(project.slug, identifier, slug, ctx, offset)
+    end
+
+    owned = owned_ports(project.id, identifier)
+
+    case PortPlan.choose_port(ctx, offset, live_ports(), Map.get(owned, slug)) do
+      {:ok, port} -> {:ok, port}
+      {:error, _reason} -> {:error, :no_free_port}
     end
   end
 
@@ -587,12 +621,6 @@ defmodule SymphonyElixir.DevServer.Manager do
       [] -> {:error, :no_serve_step}
       steps -> {:ok, unique_serve_steps(project_slug, identifier, steps)}
     end
-  end
-
-  defp reserve_ports(project, identifier, serve_steps, port_range, reclaim?) do
-    ctx = allocation_context(project, identifier, port_range)
-    owned = owned_ports(project.id, identifier)
-    reserve_with_context(project.slug, identifier, serve_steps, ctx, owned, reclaim?)
   end
 
   # Ports each service of this issue was last assigned (from its DevServerRecord),

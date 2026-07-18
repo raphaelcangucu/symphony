@@ -8,6 +8,7 @@ interface TerminalViewProps {
   projectSlug: string;
   issueIdentifier?: string;
   tabId?: string;
+  serverSlug?: string;
   enabled?: boolean;
   ariaLabel: string;
   className?: string;
@@ -18,6 +19,7 @@ export function TerminalView({
   projectSlug,
   issueIdentifier,
   tabId,
+  serverSlug,
   enabled = true,
   ariaLabel,
   className,
@@ -31,6 +33,7 @@ export function TerminalView({
     projectSlug,
     issueIdentifier,
     tabId,
+    serverSlug,
     enabled,
     onActivated: handleActivated,
   });
