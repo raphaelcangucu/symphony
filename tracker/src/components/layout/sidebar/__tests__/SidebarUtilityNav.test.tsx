@@ -1,7 +1,13 @@
-import { render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const listIssues = vi.hoisted(() => vi.fn());
+
+vi.mock("@/services/issues", () => ({
+  listIssues,
+}));
 
 import {
   buildSidebarIssueSearchResults,
@@ -130,6 +136,11 @@ function project(overrides: Partial<SidebarProjectNode> = {}): SidebarProjectNod
 describe("sidebar utility navigation", () => {
   beforeEach(async () => {
     await initTestI18n("en");
+    vi.mocked(listIssues).mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("renders compact actions and routes in both locales", async () => {
@@ -300,6 +311,59 @@ describe("sidebar utility navigation", () => {
     expect(new Set(buildSidebarSearchResults(tree, "").map(({ id }) => id)).size).toBe(
       buildSidebarSearchResults(tree, "").length,
     );
+  });
+
+  it("loads issue results across projects for the search query", async () => {
+    vi.useFakeTimers();
+    vi.mocked(listIssues).mockImplementation(async (slug) => {
+      if (slug === "gamba") {
+        return [
+          {
+            id: "1",
+            identifier: "GAM-20",
+            projectSlug: "gamba",
+            status: "In Progress",
+            title: "Floating preview surfaces",
+            description: null,
+            priority: null,
+            position: 0,
+            labels: [],
+            blockedBy: [],
+            assignee: null,
+            creator: null,
+            url: null,
+            branchName: null,
+            createdAt: "2026-07-18T00:00:00.000Z",
+            updatedAt: "2026-07-18T00:00:00.000Z",
+            attachments: [],
+          },
+        ];
+      }
+      return [];
+    });
+
+    render(
+      <SidebarSearchLauncher
+        open
+        tree={[project({ id: "gamba", projectSlug: "gamba", title: "Gamba", workspaces: [] })]}
+        onOpenChange={() => {}}
+        onOpenNode={() => {}}
+      />,
+    );
+
+    await act(async () => {
+      fireEvent.change(screen.getByPlaceholderText("Search projects and sessions…"), {
+        target: { value: "floating" },
+      });
+      await vi.advanceTimersByTimeAsync(250);
+    });
+
+    vi.useRealTimers();
+
+    expect(
+      await screen.findByRole("option", { name: /GAM-20 · Floating preview surfaces/i }),
+    ).toBeInTheDocument();
+    expect(listIssues).toHaveBeenCalledWith("gamba", { search: "floating" });
   });
 
   it("opens a search result with keyboard selection and closes", async () => {

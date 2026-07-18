@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { normalizeSidebarTree } from "@/components/layout/sidebar/sidebarVisibleRows";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+import { listIssues } from "@/services/issues";
 import {
   CommandDialog,
   CommandEmpty,
@@ -30,6 +32,9 @@ export interface SidebarSearchResult {
   readonly projectId: string;
   readonly issueIdentifier: string | null;
 }
+
+const ISSUE_SEARCH_DEBOUNCE_MS = 200;
+const ISSUE_SEARCH_LIMIT_PER_PROJECT = 20;
 
 export interface SidebarSearchLauncherProps {
   readonly open: boolean;
@@ -156,11 +161,68 @@ export function SidebarSearchLauncher({
 }: SidebarSearchLauncherProps) {
   const { t } = useTranslation();
   const [query, setQuery] = useState("");
-  const results = useMemo(() => buildSidebarSearchResults(tree, query), [query, tree]);
+  const debouncedQuery = useDebouncedValue(query, ISSUE_SEARCH_DEBOUNCE_MS);
+  const [issueHits, setIssueHits] = useState<readonly Issue[]>([]);
+  const [issuesLoading, setIssuesLoading] = useState(false);
+
+  const projectTitles = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const project of normalizeSidebarTree(tree)) {
+      map.set(project.projectSlug, project.title);
+    }
+    return map;
+  }, [tree]);
 
   useEffect(() => {
     if (!open) setQuery("");
   }, [open]);
+
+  useEffect(() => {
+    if (!open) {
+      setIssueHits([]);
+      setIssuesLoading(false);
+      return;
+    }
+    const q = debouncedQuery.trim();
+    if (!q) {
+      setIssueHits([]);
+      setIssuesLoading(false);
+      return;
+    }
+
+    const projects = normalizeSidebarTree(tree);
+    let cancelled = false;
+    setIssuesLoading(true);
+
+    void Promise.all(
+      projects.map((project) =>
+        listIssues(project.projectSlug, { search: q })
+          .then((rows) => rows.slice(0, ISSUE_SEARCH_LIMIT_PER_PROJECT))
+          .catch(() => [] as Issue[]),
+      ),
+    ).then((pages) => {
+      if (cancelled) return;
+      setIssueHits(pages.flat());
+      setIssuesLoading(false);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [debouncedQuery, open, tree]);
+
+  const treeResults = useMemo(
+    () => buildSidebarSearchResults(tree, query),
+    [query, tree],
+  );
+  const issueResults = useMemo(
+    () => buildSidebarIssueSearchResults(issueHits, debouncedQuery, projectTitles),
+    [debouncedQuery, issueHits, projectTitles],
+  );
+  const results = useMemo(
+    () => mergeSidebarSearchResults(treeResults, issueResults),
+    [issueResults, treeResults],
+  );
 
   function close() {
     setQuery("");
@@ -188,7 +250,7 @@ export function SidebarSearchLauncher({
       />
       <CommandList>
         <CommandEmpty>
-          {loading
+          {loading || issuesLoading
             ? t("layout.sidebar.search.loading")
             : t("layout.sidebar.search.empty")}
         </CommandEmpty>
