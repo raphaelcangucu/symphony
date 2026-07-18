@@ -1211,6 +1211,9 @@
     "devServer": {
       "commandOutput": "Command output",
       "refresh": "Refresh",
+      "rerun": "Run again",
+      "fullscreenAria": "Open {{slug}} output in fullscreen",
+      "fullscreenTitle": "{{slug}} output",
       "loadFailed": "Could not load server output.",
       "outputAria": "{{slug}} command output",
       "empty": "No output captured yet. Output appears here while setup and serve commands run.",

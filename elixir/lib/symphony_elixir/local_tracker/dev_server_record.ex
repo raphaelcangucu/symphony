@@ -9,8 +9,8 @@ defmodule SymphonyElixir.LocalTracker.DevServerRecord do
   alias SymphonyElixir.Repo
 
   @type t :: %__MODULE__{}
-  @statuses ~w(pending provisioning starting ready crashed stopped)
-  @non_terminal_statuses ~w(pending provisioning starting ready)
+  @statuses ~w(pending provisioning starting stalled ready crashed stopped)
+  @non_terminal_statuses ~w(pending provisioning starting stalled ready)
   @identity_fields ~w(project_id issue_identifier slug)a
   @updatable_fields ~w(working_dir port url status primary session_name started_at)a
   @known_fields @identity_fields ++ @updatable_fields

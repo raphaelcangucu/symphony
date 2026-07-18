@@ -29,7 +29,7 @@ defmodule SymphonyElixir.DevServer.Manager do
   @serve_with_setup_max_probe_attempts 300
   @probe_connect_timeout_ms 1_000
   @probe_loopback_host "127.0.0.1"
-  @tracked_live_statuses ~w(pending provisioning starting ready)
+  @tracked_live_statuses ~w(pending provisioning starting stalled ready)
 
   @type start_error ::
           :disabled

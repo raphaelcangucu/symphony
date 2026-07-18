@@ -7,6 +7,7 @@ export type IssueDevServerStatus =
   | "pending"
   | "provisioning"
   | "starting"
+  | "stalled"
   | "ready"
   | "crashed"
   | "stopped";

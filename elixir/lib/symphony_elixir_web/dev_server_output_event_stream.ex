@@ -7,7 +7,7 @@ defmodule SymphonyElixirWeb.DevServerOutputEventStream do
   alias SymphonyElixir.LocalTracker.{Context, DevServerRecord}
 
   @default_poll_ms 1_500
-  @stream_statuses ~w(pending provisioning starting)
+  @stream_statuses ~w(pending provisioning starting stalled)
 
   @spec stream(Plug.Conn.t(), String.t(), String.t(), pos_integer()) :: Plug.Conn.t()
   def stream(conn, project_slug, identifier, server_id)

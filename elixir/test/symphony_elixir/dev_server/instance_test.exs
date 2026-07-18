@@ -143,22 +143,63 @@ defmodule SymphonyElixir.DevServer.InstanceTest do
     assert :ok = Instance.stop(pid)
   end
 
-  test "probe timeout marks instance crashed", %{project: project} do
+  test "probe timeout marks instance stalled without killing the session", %{project: project} do
     {:ok, pid} =
       Instance.start_link(
         instance_opts(project,
           port_allocator: fn _range, _claimed -> {:ok, 4123} end,
           probe: fn "127.0.0.1", 4123, "tcp", "/" -> {:error, :timeout} end,
           probe_interval_ms: 5,
-          max_probe_attempts: 2
+          capture_output: fn "p", @identifier, "front" -> {:ok, "same output"} end,
+          stall_after_ms: 0,
+          stall_check_interval_ms: 0
         )
       )
 
-    assert_eventually(fn -> Instance.status(pid) == :crashed end)
+    assert_eventually(fn -> Instance.status(pid) == :stalled end)
 
     assert [row] = DevServerRecord.list_for_issue(project.id, @identifier)
-    assert row.status == "crashed"
-    assert_receive {:killed_dev_session, "p", @identifier, "front"}, 1_000
+    assert row.status == "stalled"
+    refute_received {:killed_dev_session, "p", @identifier, "front"}
+
+    assert :ok = Instance.stop(pid)
+  end
+
+  test "stalled instance recovers to starting when output evolves and to ready when the port answers", %{
+    project: project
+  } do
+    {:ok, output_agent} = Agent.start_link(fn -> :static end)
+    {:ok, probe_agent} = Agent.start_link(fn -> {:error, :not_listening} end)
+
+    capture = fn "p", @identifier, "front" ->
+      case Agent.get(output_agent, & &1) do
+        :static -> {:ok, "chunk-1"}
+        :evolving -> {:ok, "chunk-#{System.unique_integer([:positive, :monotonic])}"}
+      end
+    end
+
+    {:ok, pid} =
+      Instance.start_link(
+        instance_opts(project,
+          port_allocator: fn _range, _claimed -> {:ok, 4124} end,
+          probe: fn "127.0.0.1", 4124, "tcp", "/" -> Agent.get(probe_agent, & &1) end,
+          probe_interval_ms: 5,
+          capture_output: capture,
+          stall_after_ms: 0,
+          stall_check_interval_ms: 0
+        )
+      )
+
+    assert_eventually(fn -> Instance.status(pid) == :stalled end)
+
+    Agent.update(output_agent, fn _ -> :evolving end)
+    assert_eventually(fn -> Instance.status(pid) == :starting end)
+
+    Agent.update(probe_agent, fn _ -> :ok end)
+    assert_eventually(fn -> Instance.status(pid) == :ready end)
+
+    assert [row] = DevServerRecord.list_for_issue(project.id, @identifier)
+    assert row.status == "ready"
 
     assert :ok = Instance.stop(pid)
   end

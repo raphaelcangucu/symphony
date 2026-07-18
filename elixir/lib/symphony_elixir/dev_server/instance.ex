@@ -22,10 +22,17 @@ defmodule SymphonyElixir.DevServer.Instance do
   @default_idle_timeout_ms 1_800_000
   @default_probe_interval_ms 1_000
   @default_max_probe_attempts 60
+  # A booting serve process is never killed for being slow. Instead, its tmux
+  # output is sampled every @default_stall_check_interval_ms; when it stops
+  # evolving for @default_stall_after_ms the record surfaces as "stalled"
+  # (still probed — it flips back to starting/ready as soon as output or the
+  # port move again).
+  @default_stall_after_ms 180_000
+  @default_stall_check_interval_ms 10_000
   @probe_connect_timeout_ms 1_000
   @loopback_host "127.0.0.1"
 
-  @type status :: :provisioning | :starting | :ready | :crashed | :stopped
+  @type status :: :provisioning | :starting | :stalled | :ready | :crashed | :stopped
 
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts) when is_list(opts) do
@@ -68,12 +75,13 @@ defmodule SymphonyElixir.DevServer.Instance do
   end
 
   @impl true
-  def handle_info(:probe, %{status: :starting, port: port} = state) when is_integer(port) do
+  def handle_info(:probe, %{status: status, port: port} = state)
+      when status in [:starting, :stalled] and is_integer(port) do
     probe_starting(state, port)
   end
 
-  def handle_info({:probe, token}, %{probe_timer_ref: {_timer_ref, token}, status: :starting, port: port} = state)
-      when is_integer(port) do
+  def handle_info({:probe, token}, %{probe_timer_ref: {_timer_ref, token}, status: status, port: port} = state)
+      when status in [:starting, :stalled] and is_integer(port) do
     probe_starting(%{state | probe_timer_ref: nil}, port)
   end
 
@@ -160,6 +168,9 @@ defmodule SymphonyElixir.DevServer.Instance do
       probe: Keyword.get(opts, :probe, &default_probe/4),
       probe_interval_ms: Keyword.get(opts, :probe_interval_ms, @default_probe_interval_ms),
       max_probe_attempts: Keyword.get(opts, :max_probe_attempts, @default_max_probe_attempts),
+      capture_output: Keyword.get(opts, :capture_output, &Registry.capture_dev_session/3),
+      stall_after_ms: Keyword.get(opts, :stall_after_ms, @default_stall_after_ms),
+      stall_check_interval_ms: Keyword.get(opts, :stall_check_interval_ms, @default_stall_check_interval_ms),
       claimed_ports: Keyword.get(opts, :claimed_ports, []),
       contract: Keyword.get(opts, :contract),
       report_reader: Keyword.get(opts, :report_reader, &File.read/1),
@@ -172,7 +183,10 @@ defmodule SymphonyElixir.DevServer.Instance do
       probe_attempts: 0,
       probe_timer_ref: nil,
       idle_timer_ref: nil,
-      stop_requested: false
+      stop_requested: false,
+      last_output_hash: nil,
+      last_progress_at: nil,
+      last_stall_check_at: nil
     }
   end
 
@@ -219,7 +233,13 @@ defmodule SymphonyElixir.DevServer.Instance do
       :ok ->
         state =
           state
-          |> Map.merge(%{port: port, url: url, session_name: session_name, status: :starting})
+          |> Map.merge(%{
+            port: port,
+            url: url,
+            session_name: session_name,
+            status: :starting,
+            last_progress_at: System.monotonic_time(:millisecond)
+          })
           |> persist_status(:starting)
           |> schedule_probe()
           |> reset_idle_timer()
@@ -256,8 +276,8 @@ defmodule SymphonyElixir.DevServer.Instance do
 
         {:noreply, state}
 
-      {:error, reason} ->
-        handle_probe_error(state, reason)
+      {:error, _reason} ->
+        handle_boot_probe_error(state)
     end
   end
 
@@ -291,6 +311,74 @@ defmodule SymphonyElixir.DevServer.Instance do
       {:noreply, schedule_probe(%{state | probe_attempts: attempts})}
     end
   end
+
+  # A booting server is never killed for taking long (image builds, dependency
+  # installs). Instead the tmux output is sampled: while it keeps evolving the
+  # instance stays `starting`; when it freezes past the stall threshold it is
+  # surfaced as `stalled` and keeps being probed until the port answers, output
+  # resumes, or a human/agent stops it.
+  defp handle_boot_probe_error(state) do
+    state =
+      %{state | probe_attempts: state.probe_attempts + 1}
+      |> maybe_check_stall()
+
+    {:noreply, schedule_probe(state)}
+  end
+
+  defp maybe_check_stall(state) do
+    now = System.monotonic_time(:millisecond)
+
+    if is_integer(state.last_stall_check_at) and
+         now - state.last_stall_check_at < state.stall_check_interval_ms do
+      state
+    else
+      run_stall_check(%{state | last_stall_check_at: now}, now)
+    end
+  end
+
+  defp run_stall_check(state, now) do
+    case capture_output(state) do
+      {:ok, output} ->
+        evaluate_output_progress(state, :erlang.phash2(output), now)
+
+      {:error, _reason} ->
+        # Capture hiccups (tmux busy, session mid-restart) are not a liveness
+        # verdict; treat as "no new signal" and keep the current status.
+        evaluate_stall_deadline(state, now)
+    end
+  end
+
+  defp evaluate_output_progress(state, output_hash, now) do
+    if output_hash == state.last_output_hash do
+      evaluate_stall_deadline(state, now)
+    else
+      state = %{state | last_output_hash: output_hash, last_progress_at: now}
+
+      case state.status do
+        :stalled -> state |> persist_status(:starting) |> reset_idle_timer()
+        _status -> reset_idle_timer(state)
+      end
+    end
+  end
+
+  defp evaluate_stall_deadline(state, now) do
+    stalled_for = now - (state.last_progress_at || now)
+
+    if state.status == :starting and stalled_for >= state.stall_after_ms do
+      Logger.warning("Dev server output stalled slug=#{state.slug} stalled_for_ms=#{stalled_for}")
+      persist_status(state, :stalled)
+    else
+      state
+    end
+  end
+
+  defp capture_output(%{capture_output: capture} = state) when is_function(capture, 3) do
+    capture.(state.project_slug, state.identifier, state.slug)
+  rescue
+    error -> {:error, error}
+  end
+
+  defp capture_output(_state), do: {:error, :invalid_capture}
 
   defp launch_command(step, _port, %RuntimeContract{} = contract) do
     command = Map.fetch!(step, :command)

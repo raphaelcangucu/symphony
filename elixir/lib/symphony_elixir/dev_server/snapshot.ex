@@ -23,7 +23,7 @@ defmodule SymphonyElixir.DevServer.Snapshot do
   @loopback "127.0.0.1"
   @admin_marker "admin"
   @default_local_path "/api/health"
-  @awaiting_statuses ~w(stopped pending provisioning starting)
+  @awaiting_statuses ~w(stopped pending provisioning starting stalled)
 
   @type sync_state :: :in_sync | :awaiting_report | :conflict | :not_ready | :stale | nil
 

@@ -41,7 +41,7 @@ const RETRYABLE_UNAVAILABLE_REASONS = new Set<IssueDevServerReason>([
   "crashed",
 ]);
 
-const ACTIVE_PROVISIONING_STATUSES = new Set<IssueDevServerStatus>(["pending", "provisioning", "starting"]);
+const ACTIVE_PROVISIONING_STATUSES = new Set<IssueDevServerStatus>(["pending", "provisioning", "starting", "stalled"]);
 
 export function PreviewTab({ projectSlug, issueIdentifier, view, execution }: PreviewTabProps) {
   const devServers = useIssueDevServers(projectSlug, issueIdentifier);
@@ -539,6 +539,7 @@ function ServerRow({
           sessionName={server.session_name}
           slug={server.slug}
           status={server.status}
+          onRerun={() => onRestart(server.id)}
         />
       </div>
     </div>

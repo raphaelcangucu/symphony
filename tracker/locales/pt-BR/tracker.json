@@ -1211,6 +1211,9 @@
     "devServer": {
       "commandOutput": "Saída do comando",
       "refresh": "Atualizar",
+      "rerun": "Rodar de novo",
+      "fullscreenAria": "Abrir saída de {{slug}} em tela cheia",
+      "fullscreenTitle": "Saída de {{slug}}",
       "loadFailed": "Não foi possível carregar a saída do servidor.",
       "outputAria": "saída do comando {{slug}}",
       "empty": "Nenhuma saída capturada ainda. A saída aparece aqui enquanto os comandos de setup e serve rodam.",

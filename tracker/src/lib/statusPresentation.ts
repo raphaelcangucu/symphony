@@ -114,6 +114,7 @@ const DEV_SERVER_STATUS_TONES: Record<IssueDevServerStatus, StatusTone> = {
   pending: "neutral",
   provisioning: "info",
   ready: "success",
+  stalled: "warning",
   starting: "info",
   stopped: "muted",
 };

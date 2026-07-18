@@ -6,7 +6,7 @@ defmodule SymphonyElixir.Assistant.ListPreviewTools do
   alias SymphonyElixir.DevServer.{Manager, Snapshot}
 
   @tool "list_previews"
-  @unhealthy_statuses ~w(crashed pending provisioning starting stopped unknown)
+  @unhealthy_statuses ~w(crashed pending provisioning starting stalled stopped unknown)
   @next_steps "Inspect unhealthy entries with manage_preview status/output, then restart or fix via manage_dev_env. Do not invent ports or fall back to unmanaged vibe/Compose bring-up outside a fresh manage_preview prepare; cite only in_sync URLs."
 
   @spec tool_specs() :: [map()]

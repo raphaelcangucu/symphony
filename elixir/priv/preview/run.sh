@@ -358,7 +358,14 @@ class PreviewRunner:
             "health.interval_ms",
             1,
         )
-        deadline = time.monotonic() + (timeout_ms / 1000)
+        # A serve process is never killed for being slow: long first boots
+        # (image builds, dependency installs) keep running and readiness is
+        # observed whenever the port finally responds. Only warm-up runs are
+        # bounded by health.timeout_ms, because they exist to terminate.
+        if self._warmup_requested():
+            deadline = time.monotonic() + (timeout_ms / 1000)
+        else:
+            deadline = None
 
         primary_probe = {
             "path": health.get("path", DEFAULT_HEALTH_PATH),
@@ -398,12 +405,15 @@ class PreviewRunner:
             raise RunnerError("health probe host_header must be a non-empty string")
 
         last_error = "probe did not run"
-        while time.monotonic() < deadline:
+        while deadline is None or time.monotonic() < deadline:
             self._raise_if_stop_requested()
             if self.child.poll() is not None:
                 raise RunnerError(f"supervised process exited with status {self.child.returncode} before ready")
 
-            remaining_seconds = max(0.05, deadline - time.monotonic())
+            if deadline is None:
+                remaining_seconds = 1.0
+            else:
+                remaining_seconds = max(0.05, deadline - time.monotonic())
             try:
                 connection = http.client.HTTPConnection(
                     "127.0.0.1",
@@ -422,7 +432,10 @@ class PreviewRunner:
             except (OSError, http.client.HTTPException) as error:
                 last_error = str(error)
 
-            time.sleep(min(interval_ms / 1000, max(0, deadline - time.monotonic())))
+            if deadline is None:
+                time.sleep(interval_ms / 1000)
+            else:
+                time.sleep(min(interval_ms / 1000, max(0, deadline - time.monotonic())))
 
         raise RunnerError(f"health probe {path} timed out: {last_error}")
 

@@ -1,6 +1,6 @@
 import "@testing-library/jest-dom/vitest";
 
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { fetchDevServerOutput, subscribeDevServerOutput } from "@/services/issueDevServers";
@@ -36,5 +36,78 @@ describe("DevServerOutputPanel", () => {
     expect(await screen.findByText(/could not load server output/i)).toBeInTheDocument();
     expect(screen.queryByText(/no output captured/i)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/front command output/i)).not.toBeInTheDocument();
+  });
+
+  it("streams output for stalled servers", () => {
+    render(
+      <DevServerOutputPanel
+        projectSlug="macro-markets"
+        issueIdentifier="510"
+        serverId={1}
+        slug="front"
+        status="stalled"
+        sessionName="sym"
+        defaultOpen
+      />,
+    );
+
+    expect(subscribeDevServerOutput).toHaveBeenCalledWith("macro-markets", "510", 1, expect.any(Object));
+  });
+
+  it("offers run-again on failed servers and forwards the action", async () => {
+    vi.mocked(fetchDevServerOutput).mockResolvedValue({ output: "boom", session_name: "sym" });
+    const onRerun = vi.fn();
+
+    render(
+      <DevServerOutputPanel
+        projectSlug="macro-markets"
+        issueIdentifier="510"
+        serverId={1}
+        slug="front"
+        status="crashed"
+        sessionName="sym"
+        defaultOpen
+        onRerun={onRerun}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /run again/i }));
+    expect(onRerun).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not offer run-again while starting", async () => {
+    render(
+      <DevServerOutputPanel
+        projectSlug="macro-markets"
+        issueIdentifier="510"
+        serverId={1}
+        slug="front"
+        status="starting"
+        sessionName="sym"
+        defaultOpen
+        onRerun={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: /run again/i })).not.toBeInTheDocument();
+  });
+
+  it("opens the fullscreen dialog with the output", async () => {
+    vi.mocked(fetchDevServerOutput).mockResolvedValue({ output: "serve log line", session_name: "sym" });
+
+    render(
+      <DevServerOutputPanel
+        projectSlug="macro-markets"
+        issueIdentifier="510"
+        serverId={1}
+        slug="front"
+        status="stopped"
+        sessionName="sym"
+        defaultOpen
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /open front output in fullscreen/i }));
+    expect(await screen.findByText(/front output/i)).toBeInTheDocument();
   });
 });
