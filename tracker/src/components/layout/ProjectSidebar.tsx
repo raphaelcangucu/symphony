@@ -208,6 +208,15 @@ export function ProjectSidebar({ variant = "desktop" }: ProjectSidebarProps) {
     setSearchOpen(true);
   }, [expandSidebar]);
 
+  useEffect(() => {
+    if (!searchOpen) return;
+    for (const project of tree) {
+      if (project.loadState === "idle" || project.loadState === "error") {
+        void reloadProjectBranch(project.projectSlug);
+      }
+    }
+  }, [reloadProjectBranch, searchOpen, tree]);
+
   const ensureProjectExpanded = useCallback(
     (projectId: string) => {
       if (preferences.expandedProjectIds.includes(projectId)) return;
@@ -448,7 +457,7 @@ export function ProjectSidebar({ variant = "desktop" }: ProjectSidebarProps) {
       <SidebarSearchLauncher
         open={searchOpen}
         tree={tree}
-        loading={projectsLoading}
+        loading={projectsLoading || tree.some((p) => p.loadState === "loading")}
         onOpenChange={setSearchOpen}
         onOpenNode={(href) => {
           setSearchOpen(false);

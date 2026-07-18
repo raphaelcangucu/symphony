@@ -338,6 +338,33 @@ describe("ProjectSidebar", () => {
     );
   });
 
+  it("reloads idle project branches when search opens", async () => {
+    const user = userEvent.setup();
+    vi.mocked(listProjects).mockResolvedValue([activeProject]);
+    vi.mocked(listProjectSessions).mockResolvedValue({
+      sessions: [],
+      nextCursor: null,
+      projectActivityAt: null,
+    });
+
+    renderProjectSidebar();
+    expect(await screen.findByRole("treeitem", { name: /^Active Project,/ })).toBeTruthy();
+
+    const callsBefore = vi.mocked(listProjectSessions).mock.calls.length;
+    expect(callsBefore).toBe(0);
+
+    await user.click(screen.getByRole("button", { name: "Search" }));
+
+    await waitFor(() => {
+      expect(vi.mocked(listProjectSessions).mock.calls.length).toBeGreaterThan(callsBefore);
+    });
+    expect(vi.mocked(listProjectSessions)).toHaveBeenCalledWith({
+      projectSlug: "active-project",
+      limit: 7,
+      includeArchived: false,
+    });
+  });
+
   it("does not clear loaded branch snapshots when projects reload", async () => {
     vi.mocked(listProjects).mockResolvedValue([activeProject]);
     vi.mocked(listProjectSessions).mockResolvedValue({
