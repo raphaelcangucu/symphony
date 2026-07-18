@@ -8,9 +8,14 @@ import { initTestI18n } from "@/i18n/testUtils";
 import type { IssueDevServer, IssueDevServersResponse } from "@/types/issue";
 
 const useIssueDevServersMock = vi.hoisted(() => vi.fn());
+const openFloatingSurfaceOrToastMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/hooks/useIssueDevServers", () => ({
   useIssueDevServers: (...args: unknown[]) => useIssueDevServersMock(...args),
+}));
+
+vi.mock("@/stores/floatingSurfaceStore", () => ({
+  openFloatingSurfaceOrToast: (...args: unknown[]) => openFloatingSurfaceOrToastMock(...args),
 }));
 
 vi.mock("@/components/issues/issue-detail/PreviewTab", () => ({
@@ -94,6 +99,7 @@ describe("IssuePreviewDock", () => {
     window.localStorage.clear();
     useIssueDevServersMock.mockReset();
     useIssueDevServersMock.mockReturnValue(devServersResult());
+    openFloatingSurfaceOrToastMock.mockReset();
   });
 
   it("renders resize, details, fullscreen and close controls in split mode", () => {
@@ -113,6 +119,7 @@ describe("IssuePreviewDock", () => {
     const frame = screen.getByTitle("Dev server preview for 510");
     expect(frame).toHaveAttribute("src", "http://localhost:5173/");
     expect(screen.getByRole("button", { name: "Reload preview" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Back" })).toBeDisabled();
     expect(screen.queryByTestId("preview-panel")).not.toBeInTheDocument();
   });
 
@@ -239,6 +246,59 @@ describe("IssuePreviewDock", () => {
     expect(screen.getByRole("link", { name: "Open preview in new tab" })).toHaveAttribute(
       "href",
       "http://mtu.localhost:4301/advisor/32555201/student-advising-note#/Advising%20Notes",
+    );
+  });
+
+  it("enables back after navigation and returns home from the toolbar", async () => {
+    const user = userEvent.setup();
+    useIssueDevServersMock.mockReturnValue(devServersResult({ data: response([server({ port: 4300 })]) }));
+
+    renderDock();
+
+    const urlInput = screen.getByRole("textbox", { name: "Preview URL" });
+    await user.clear(urlInput);
+    await user.type(urlInput, "/dashboard{Enter}");
+
+    expect(screen.getByRole("button", { name: "Back" })).toBeEnabled();
+    expect(screen.getByTitle("Dev server preview for 510")).toHaveAttribute("src", "http://localhost:4300/dashboard");
+
+    await user.click(screen.getByRole("button", { name: "Home" }));
+
+    expect(urlInput).toHaveValue("http://localhost:4300/");
+    expect(screen.getByTitle("Dev server preview for 510")).toHaveAttribute("src", "http://localhost:4300/");
+  });
+
+  it("stops the preview while it is loading", async () => {
+    const user = userEvent.setup();
+    useIssueDevServersMock.mockReturnValue(devServersResult({ data: response([server()]) }));
+
+    renderDock();
+
+    const stopButton = screen.getByRole("button", { name: "Stop" });
+    expect(stopButton).toBeEnabled();
+    await user.click(stopButton);
+
+    expect(stopButton).toBeDisabled();
+    expect(screen.getByTitle("Dev server preview for 510")).toHaveAttribute("src", "about:blank");
+  });
+
+  it("opens the selected preview server in a floating minibrowser", async () => {
+    const user = userEvent.setup();
+    useIssueDevServersMock.mockReturnValue(devServersResult({ data: response([server()]) }));
+
+    renderDock();
+    await user.click(screen.getByRole("button", { name: "Open in floating window" }));
+
+    expect(openFloatingSurfaceOrToastMock).toHaveBeenCalledWith(
+      {
+        kind: "minibrowser",
+        projectSlug: "macro-markets",
+        issueIdentifier: "510",
+        serverId: 1,
+        homeUrl: "http://localhost:5173/",
+        title: "Preview · web",
+      },
+      "Close a floating window before opening another.",
     );
   });
 

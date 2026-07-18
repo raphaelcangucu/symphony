@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
 
+import { MinibrowserChrome } from "@/components/sessions/MinibrowserChrome";
 import { ProjectTerminalWorkspace } from "@/components/terminal/ProjectTerminalWorkspace";
 import { TerminalView } from "@/components/terminal/TerminalView";
 import { TerminalWorkspacePanel } from "@/components/terminal/TerminalWorkspacePanel";
@@ -36,13 +37,7 @@ export function FloatingSurfaceContent({ surface }: FloatingSurfaceContentProps)
     case "project-terminal":
       return <ProjectTerminalWorkspace projectSlug={surface.payload.projectSlug} />;
     case "minibrowser":
-      return (
-        <iframe
-          src={surface.payload.homeUrl}
-          title={surface.title}
-          className="h-full w-full border-0"
-        />
-      );
+      return <MinibrowserChrome homeUrl={surface.payload.homeUrl} frameTitle={surface.title} />;
     default:
       return (
         <div className="flex h-full items-center justify-center p-4 text-sm text-muted-foreground">

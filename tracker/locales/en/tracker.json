@@ -2805,7 +2805,15 @@
       "hideDetails": "Hide dev server details",
       "serverTabsAria": "Dev servers",
       "serverTabAria": "Preview {{slug}} ({{status}})",
-      "urlInputAria": "Preview URL"
+      "urlInputAria": "Preview URL",
+      "minibrowser": {
+        "back": "Back",
+        "forward": "Forward",
+        "stop": "Stop",
+        "home": "Home",
+        "loadingAria": "Preview loading",
+        "popoutAria": "Pop out"
+      }
     },
 
     "environment": {

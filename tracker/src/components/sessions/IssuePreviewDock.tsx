@@ -1,23 +1,23 @@
 import {
   AppWindow,
-  ExternalLink,
   Maximize2,
   Minimize2,
-  RefreshCw,
+  SquareArrowOutUpRight,
   SlidersHorizontal,
   X,
 } from "lucide-react";
-import { type KeyboardEvent, type RefObject, useEffect, useState } from "react";
+import { type RefObject, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { PreviewPanel } from "@/components/issues/issue-detail/PreviewTab";
+import { MinibrowserChrome } from "@/components/sessions/MinibrowserChrome";
 import { Button } from "@/components/ui/button";
 import { useHorizontalPanelResize } from "@/hooks/useHorizontalPanelResize";
 import { useIssueDevServers } from "@/hooks/useIssueDevServers";
 import { openablePreviewUrl, selectPrimaryServer } from "@/lib/devServerUrls";
-import { resolvePreviewNavigationUrl } from "@/lib/previewNavigationUrl";
 import { cn } from "@/lib/utils";
 import type { WorkspaceView } from "@/lib/workspaceRoutes";
+import { openFloatingSurfaceOrToast } from "@/stores/floatingSurfaceStore";
 import type { AgentExecution } from "@/types/agent-execution";
 import type { IssueDevServerStatus } from "@/types/issue";
 
@@ -57,10 +57,6 @@ export function IssuePreviewDock({
   const devServers = useIssueDevServers(projectSlug, issueIdentifier);
   const [selectedServerId, setSelectedServerId] = useState<number | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
-  // Bumping the key forces the iframe to reload with the same URL.
-  const [reloadKey, setReloadKey] = useState(0);
-  const [committedUrl, setCommittedUrl] = useState<string | null>(null);
-  const [draftUrl, setDraftUrl] = useState("");
   const { width, isResizing, onResizePointerDown, onResizePointerUp } = useHorizontalPanelResize({
     containerRef: splitContainerRef,
     storageKey: PREVIEW_DOCK_WIDTH_STORAGE_KEY,
@@ -87,34 +83,7 @@ export function IssuePreviewDock({
   // Without a ready URL the iframe has nothing to show, so the management panel
   // (with start/restart, logs and assistant handoff) takes over automatically.
   const showDetails = detailsOpen || !serverPreviewUrl;
-  const previewUrl = committedUrl ?? serverPreviewUrl;
-
-  useEffect(() => {
-    if (!serverPreviewUrl) {
-      setCommittedUrl(null);
-      setDraftUrl("");
-      return;
-    }
-
-    setCommittedUrl(serverPreviewUrl);
-    setDraftUrl(serverPreviewUrl);
-  }, [serverPreviewUrl]);
-
-  function commitDraftUrl() {
-    if (!previewUrl) return;
-
-    const resolved = resolvePreviewNavigationUrl(draftUrl, previewUrl);
-    if (!resolved) return;
-
-    setCommittedUrl(resolved);
-    setDraftUrl(resolved);
-  }
-
-  function handleUrlKeyDown(event: KeyboardEvent<HTMLInputElement>) {
-    if (event.key !== "Enter") return;
-    event.preventDefault();
-    commitDraftUrl();
-  }
+  const previewUrl = serverPreviewUrl;
 
   const fullscreenLabel = fullscreen
     ? t("workspace.preview.exitFullscreen")
@@ -198,36 +167,30 @@ export function IssuePreviewDock({
             >
               <SlidersHorizontal className="h-3.5 w-3.5" />
             </Button>
-            {previewUrl ? (
-              <>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 text-muted-foreground hover:text-foreground"
-                  aria-label={t("workspace.preview.reload")}
-                  title={t("workspace.preview.reload")}
-                  onClick={() => setReloadKey((current) => current + 1)}
-                >
-                  <RefreshCw className="h-3.5 w-3.5" />
-                </Button>
-                <Button
-                  asChild
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 text-muted-foreground hover:text-foreground"
-                >
-                  <a
-                    href={previewUrl}
-                    target="_blank"
-                    rel="noreferrer noopener"
-                    aria-label={t("workspace.preview.openInNewTab")}
-                    title={t("workspace.preview.openInNewTab")}
-                  >
-                    <ExternalLink className="h-3.5 w-3.5" />
-                  </a>
-                </Button>
-              </>
+            {previewUrl && selectedServer ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                aria-label={t("floatingSurface.popout")}
+                title={t("floatingSurface.popout")}
+                onClick={() =>
+                  openFloatingSurfaceOrToast(
+                    {
+                      kind: "minibrowser",
+                      projectSlug,
+                      issueIdentifier,
+                      serverId: selectedServer.id,
+                      homeUrl: previewUrl,
+                      title: `${t("workspace.preview.title")} · ${selectedServer.slug}`,
+                    },
+                    t("floatingSurface.maxSurfaces"),
+                  )
+                }
+              >
+                <SquareArrowOutUpRight className="h-3.5 w-3.5" />
+              </Button>
             ) : null}
             <Button
               type="button"
@@ -264,31 +227,11 @@ export function IssuePreviewDock({
             />
           </div>
         ) : (
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-white">
-            <iframe
-              key={`${previewUrl}:${reloadKey}`}
-              src={previewUrl ?? undefined}
-              title={t("workspace.preview.frameTitle", { identifier: issueIdentifier })}
-              className="h-full w-full flex-1 border-0"
-              sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
-            />
-          </div>
+          <MinibrowserChrome
+            homeUrl={previewUrl}
+            frameTitle={t("workspace.preview.frameTitle", { identifier: issueIdentifier })}
+          />
         )}
-        {!showDetails && previewUrl ? (
-          <footer className="flex shrink-0 items-center border-t border-border/50 px-3 py-1">
-            <input
-              type="text"
-              value={draftUrl}
-              onChange={(event) => setDraftUrl(event.target.value)}
-              onKeyDown={handleUrlKeyDown}
-              spellCheck={false}
-              autoComplete="off"
-              aria-label={t("workspace.preview.urlInputAria")}
-              title={draftUrl}
-              className="w-full min-w-0 truncate border-0 bg-transparent font-mono text-[10px] text-muted-foreground outline-none focus:text-foreground"
-            />
-          </footer>
-        ) : null}
       </div>
     </aside>
   );
