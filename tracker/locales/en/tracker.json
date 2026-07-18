@@ -2072,6 +2072,35 @@
       }
     }
   },
+  "docker": {
+    "title": "Docker",
+    "subtitle": "Containers on the local Docker daemon",
+    "searchPlaceholder": "Search containers…",
+    "onlyRunning": "Only running",
+    "unavailable": "Docker daemon is unavailable",
+    "empty": "No containers match the current filters.",
+    "columns": {
+      "name": "Name",
+      "project": "Compose project",
+      "path": "Path",
+      "image": "Image",
+      "status": "Status",
+      "ports": "Ports",
+      "cpu": "CPU",
+      "memory": "Memory"
+    },
+    "rowActions": {
+      "start": "Start",
+      "stop": "Stop",
+      "restart": "Restart",
+      "remove": "Remove"
+    },
+    "removeTitle": "Remove container",
+    "removeDescription": "Remove {{name}}? Running containers are force-removed. This cannot be undone.",
+    "removeConfirm": "Remove",
+    "cancel": "Cancel",
+    "actionFailed": "Docker action failed: {{message}}"
+  },
   "observability": {
     "title": "Observability",
     "subtitle": "Live runtime state across all reporting Symphony processes.",
@@ -3443,6 +3472,7 @@
     "knowledgeBase": "Knowledge Base",
     "templates": "Templates",
     "observability": "Observability",
+    "docker": "Docker",
     "backups": "Backups",
     "settings": "Settings",
     "boards": "Boards",

@@ -2072,6 +2072,35 @@
       }
     }
   },
+  "docker": {
+    "title": "Docker",
+    "subtitle": "Containers no daemon Docker local",
+    "searchPlaceholder": "Buscar containers…",
+    "onlyRunning": "Somente em execução",
+    "unavailable": "O daemon do Docker está indisponível",
+    "empty": "Nenhum container corresponde aos filtros atuais.",
+    "columns": {
+      "name": "Nome",
+      "project": "Projeto compose",
+      "path": "Caminho",
+      "image": "Imagem",
+      "status": "Status",
+      "ports": "Portas",
+      "cpu": "CPU",
+      "memory": "Memória"
+    },
+    "rowActions": {
+      "start": "Iniciar",
+      "stop": "Parar",
+      "restart": "Reiniciar",
+      "remove": "Remover"
+    },
+    "removeTitle": "Remover container",
+    "removeDescription": "Remover {{name}}? Containers em execução são removidos à força. Esta ação não pode ser desfeita.",
+    "removeConfirm": "Remover",
+    "cancel": "Cancelar",
+    "actionFailed": "A ação do Docker falhou: {{message}}"
+  },
   "observability": {
     "title": "Observabilidade",
     "subtitle": "Estado ao vivo dos processos Symphony que reportam.",
@@ -3443,6 +3472,7 @@
     "knowledgeBase": "Base de Conhecimento",
     "templates": "Templates",
     "observability": "Observabilidade",
+    "docker": "Docker",
     "backups": "Backups",
     "settings": "Configurações",
     "boards": "Boards",
