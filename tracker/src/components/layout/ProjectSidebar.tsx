@@ -1,5 +1,5 @@
 import { KeyRound, PanelLeftClose, PanelLeftOpen } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
 
@@ -208,12 +208,20 @@ export function ProjectSidebar({ variant = "desktop" }: ProjectSidebarProps) {
     setSearchOpen(true);
   }, [expandSidebar]);
 
+  // One attempt per project slug per search-open session — avoids retry loops when
+  // a failed branch updates the tree to `error` while the dialog stays open.
+  const searchPreloadAttemptedRef = useRef<Set<string>>(new Set());
+
   useEffect(() => {
-    if (!searchOpen) return;
+    if (!searchOpen) {
+      searchPreloadAttemptedRef.current = new Set();
+      return;
+    }
     for (const project of tree) {
-      if (project.loadState === "idle" || project.loadState === "error") {
-        void reloadProjectBranch(project.projectSlug);
-      }
+      if (project.loadState !== "idle" && project.loadState !== "error") continue;
+      if (searchPreloadAttemptedRef.current.has(project.projectSlug)) continue;
+      searchPreloadAttemptedRef.current.add(project.projectSlug);
+      void reloadProjectBranch(project.projectSlug);
     }
   }, [reloadProjectBranch, searchOpen, tree]);
 
