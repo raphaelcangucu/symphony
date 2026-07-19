@@ -187,6 +187,9 @@
       "backups": {
         "label": "Backups"
       },
+      "docker": {
+        "label": "Docker"
+      },
       "gateways": {
         "label": "Gateways"
       },
@@ -2919,6 +2922,7 @@
       },
       "tree": {
         "label": "Projetos",
+        "openProjectsPage": "Abrir página de projetos",
         "collapseNode": "Recolher {{label}}",
         "expandNode": "Expandir {{label}}",
         "openNode": "Abrir {{label}}",

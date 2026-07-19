@@ -1,4 +1,4 @@
-import { Activity, FolderKanban, Plus, Search, Settings } from "lucide-react";
+import { Activity, BookOpen, FolderKanban, Plus, Search, Settings } from "lucide-react";
 import { useMemo, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
@@ -12,6 +12,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { kbGeneralPath } from "@/lib/kbRoutes";
 import type { SidebarRouteSelection } from "@/lib/sidebarRouteResolution";
 import { cn } from "@/lib/utils";
 import type { RecentStatusKind } from "@/types/recents";
@@ -67,6 +68,9 @@ export function SidebarCollapsedRail({
           to="/observability"
         >
           <Activity className="h-4 w-4" aria-hidden />
+        </RailIconLink>
+        <RailIconLink label={t("nav.knowledgeBase")} to={kbGeneralPath()}>
+          <BookOpen className="h-4 w-4" aria-hidden />
         </RailIconLink>
         <RailIconLink label={t("layout.sidebar.utility.settings")} to="/settings">
           <Settings className="h-4 w-4" aria-hidden />

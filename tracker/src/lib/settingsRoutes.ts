@@ -53,6 +53,10 @@ export function settingsBackupsPath(): string {
   return `${SETTINGS_PATH}/backups`;
 }
 
+export function settingsDockerPath(): string {
+  return `${SETTINGS_PATH}/docker`;
+}
+
 export function settingsGatewaysPath(): string {
   return `${SETTINGS_PATH}/gateways`;
 }

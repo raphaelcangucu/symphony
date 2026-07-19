@@ -1,8 +1,9 @@
-import { Activity, Container, Plus, Search, Settings } from "lucide-react";
+import { Activity, BookOpen, Plus, Search, Settings } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
+import { kbGeneralPath } from "@/lib/kbRoutes";
 import { cn } from "@/lib/utils";
 
 export interface SidebarUtilityNavProps {
@@ -57,9 +58,9 @@ export function SidebarUtilityNav({
         </Link>
       </Button>
       <Button asChild variant="ghost" className={actionClass}>
-        <Link to="/docker">
-          <Container className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-          <span>{t("nav.docker")}</span>
+        <Link to={kbGeneralPath()}>
+          <BookOpen className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+          <span>{t("nav.knowledgeBase")}</span>
         </Link>
       </Button>
       <Button asChild variant="ghost" className={actionClass}>

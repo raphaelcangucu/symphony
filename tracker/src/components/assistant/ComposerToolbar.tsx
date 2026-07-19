@@ -140,7 +140,9 @@ export function ComposerMoreMenu({ children, disabled = false }: ComposerMoreMen
 
   useLayoutEffect(() => {
     if (!open || !triggerRef.current) {
-      setPosition(null);
+      // Avoid scheduling an update when already closed — many composer menus
+      // mounting at once can hit React's nested-update depth (error #185).
+      setPosition((current) => (current === null ? current : null));
       return;
     }
 
@@ -161,7 +163,17 @@ export function ComposerMoreMenu({ children, disabled = false }: ComposerMoreMen
       const rawLeft = rect.left;
       const top = Math.max(8, Math.min(rawTop, window.innerHeight - panelHeight - 8));
       const left = Math.max(8, Math.min(rawLeft, window.innerWidth - panelWidth - 8));
-      setPosition({ top, left, openUpward });
+      setPosition((current) => {
+        if (
+          current &&
+          current.top === top &&
+          current.left === left &&
+          current.openUpward === openUpward
+        ) {
+          return current;
+        }
+        return { top, left, openUpward };
+      });
     };
 
     updatePosition();
@@ -171,7 +183,9 @@ export function ComposerMoreMenu({ children, disabled = false }: ComposerMoreMen
       window.removeEventListener("resize", updatePosition);
       window.removeEventListener("scroll", updatePosition, true);
     };
-  }, [open, children]);
+    // `children` must not be a dependency: the parent recreates that element
+    // every render, which would re-run this effect and loop setPosition.
+  }, [open]);
 
   useEffect(() => {
     if (!open) return undefined;

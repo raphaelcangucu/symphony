@@ -45,7 +45,7 @@ import { GatewaysSettingsPage } from "@/pages/GatewaysSettingsPage";
 import { TemplateListPage } from "@/pages/TemplateListPage";
 import { TemplateEditPage } from "@/pages/TemplateEditPage";
 import { TokenGatePage } from "@/pages/TokenGatePage";
-import { settingsTemplatesPath } from "@/lib/settingsRoutes";
+import { settingsDockerPath, settingsTemplatesPath } from "@/lib/settingsRoutes";
 import { projectAuthoringSessionPath, projectNewIssueWorkspacePath } from "@/lib/workspaceRoutes";
 
 const routerBasename = import.meta.env.BASE_URL.replace(/\/$/, "") || undefined;
@@ -138,7 +138,7 @@ export function App() {
               <Route path="templates" element={<Navigate to="/settings/templates" replace />} />
               <Route path="templates/:slug" element={<LegacyTemplateRedirect />} />
               <Route path="observability" element={<ObservabilityPage />} />
-              <Route path="docker" element={<DockerPage />} />
+              <Route path="docker" element={<Navigate to={settingsDockerPath()} replace />} />
               <Route path="backups" element={<Navigate to="/settings/backups" replace />} />
               <Route path="settings" element={<SettingsLayout />}>
                 <Route index element={<SettingsPage />} />
@@ -155,6 +155,7 @@ export function App() {
                 <Route path="templates" element={<TemplateListPage />} />
                 <Route path="templates/:slug" element={<TemplateEditPage />} />
                 <Route path="backups" element={<BackupPage />} />
+                <Route path="docker" element={<DockerPage />} />
                 <Route path="gateways" element={<GatewaysSettingsPage />} />
                 <Route path="lab" element={<Navigate to="/settings/experimental" replace />} />
               </Route>

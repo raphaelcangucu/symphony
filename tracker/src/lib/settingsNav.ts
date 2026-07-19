@@ -1,5 +1,6 @@
 import {
   BarChart3,
+  Container,
   FlaskConical,
   GitBranch,
   Globe,
@@ -21,6 +22,7 @@ import {
 import {
   settingsAppearancePath,
   settingsBackupsPath,
+  settingsDockerPath,
   settingsExperimentalPath,
   settingsGatewaysPath,
   settingsIntegrationsPath,
@@ -83,6 +85,7 @@ export const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
       { to: settingsToolPath("terminal"), labelKey: "settings.sections.terminal.label", icon: Terminal },
       { to: settingsToolPath("magic-prompts"), labelKey: "settings.sections.magicPrompts.label", icon: Wand2 },
       { to: settingsToolPath("opinionated"), labelKey: "settings.sections.opinionated.label", icon: Sparkles },
+      { to: settingsDockerPath(), labelKey: "settings.sections.docker.label", icon: Container },
     ],
   },
   {

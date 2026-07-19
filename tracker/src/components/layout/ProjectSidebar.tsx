@@ -1,7 +1,7 @@
-import { KeyRound, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { KeyRound, Link2, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import { ProjectNavigationTree } from "@/components/layout/sidebar/ProjectNavigationTree";
 import { SidebarCollapsedRail } from "@/components/layout/sidebar/SidebarCollapsedRail";
@@ -337,6 +337,20 @@ export function ProjectSidebar({ variant = "desktop" }: ProjectSidebarProps) {
             <h2 className="min-w-0 flex-1 truncate text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
               {t("layout.sidebar.tree.label", { defaultValue: "Projects" })}
             </h2>
+            <Button
+              asChild
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 shrink-0 text-muted-foreground hover:text-foreground"
+            >
+              <Link
+                to="/projects"
+                aria-label={t("layout.sidebar.tree.openProjectsPage")}
+                title={t("layout.sidebar.tree.openProjectsPage")}
+              >
+                <Link2 className="h-3.5 w-3.5" aria-hidden />
+              </Link>
+            </Button>
             <SidebarFiltersMenu
               preferences={preferences}
               visibleNodes={visibleNodes}

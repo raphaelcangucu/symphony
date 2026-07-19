@@ -161,6 +161,8 @@ describe("sidebar utility navigation", () => {
       "href",
       "/observability",
     );
+    expect(screen.getByRole("link", { name: "Knowledge Base" })).toHaveAttribute("href", "/kb");
+    expect(screen.queryByRole("link", { name: "Docker" })).toBeNull();
     expect(screen.getByRole("link", { name: "Settings" })).toHaveAttribute("href", "/settings");
     const expectedShortcut = /Mac|iPhone|iPad|iPod/i.test(navigator.platform ?? "")
       ? "⌘K"
@@ -175,6 +177,10 @@ describe("sidebar utility navigation", () => {
     );
     expect(screen.getByRole("button", { name: "Nova sessão" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Observabilidade" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Base de Conhecimento" })).toHaveAttribute(
+      "href",
+      "/kb",
+    );
   });
 
   it("builds issue search results with board hrefs", () => {

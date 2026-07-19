@@ -33,6 +33,10 @@ describe("SettingsLayout", () => {
     expect(screen.getByText("Agents")).toBeTruthy();
     expect(screen.getByText("Platform")).toBeTruthy();
     expect(screen.getByText("Insights")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Docker" })).toHaveAttribute(
+      "href",
+      "/settings/docker",
+    );
   });
 
   it("highlights the general section on /settings", async () => {

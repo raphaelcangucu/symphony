@@ -219,6 +219,10 @@ describe("ProjectSidebar", () => {
       utility.compareDocumentPosition(tree) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(screen.getAllByRole("tree", { name: "Projects" })).toHaveLength(1);
+    expect(screen.getByRole("link", { name: "Open projects page" })).toHaveAttribute(
+      "href",
+      "/projects",
+    );
     expect(screen.queryByRole("heading", { name: "Recents" })).toBeNull();
     expect(screen.queryByRole("heading", { name: "Boards" })).toBeNull();
     expect(screen.queryByText("Recents")).toBeNull();

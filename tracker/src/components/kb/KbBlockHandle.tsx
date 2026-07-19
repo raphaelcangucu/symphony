@@ -142,14 +142,20 @@ export function KbBlockHandle({ editor, onInsertImage }: KbBlockHandleProps) {
 
   const toggleMenu = (next: Menu) => setMenu((current) => (current === next ? null : next));
 
+  // Must be referentially stable: TipTap's DragHandle re-registers its
+  // ProseMirror plugin whenever onNodeChange changes identity, and
+  // registerPlugin updates the editor → parent re-render → new inline
+  // callback → infinite update loop (React #185) after opening a menu.
+  const onNodeChange = useCallback(({ node, pos }: BlockTarget) => {
+    targetRef.current = { node, pos };
+    setMenu(null);
+  }, []);
+
   return (
     <DragHandle
       editor={editor}
       computePositionConfig={HANDLE_POSITION_CONFIG}
-      onNodeChange={({ node, pos }) => {
-        targetRef.current = { node, pos };
-        setMenu(null);
-      }}
+      onNodeChange={onNodeChange}
     >
       <div ref={rootRef} className="kb-block-handle relative flex items-center gap-1 pr-2.5">
         <button
