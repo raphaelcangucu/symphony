@@ -56,7 +56,7 @@ import {
 } from "@/lib/sidebarCapabilities";
 import {
   sidebarArchiveRequest,
-  sidebarRemoveIssueRequest,
+  sidebarRemoveExecutionRequest,
   sidebarRenameRequest,
   SIDEBAR_ACTION_LABELS,
 } from "@/lib/sidebarMenuPolicy";
@@ -313,17 +313,22 @@ export function SidebarContextMenu({
           });
           return;
         }
-        const removeIssueRequest = sidebarRemoveIssueRequest(node);
-        if (!removeIssueRequest) return;
+        const removeExecutionRequest = sidebarRemoveExecutionRequest(node);
+        if (!removeExecutionRequest) return;
+        const removesThread = removeExecutionRequest.action === "delete-thread";
         openDialog({
           type: "confirm",
           actionLabel: t("layout.sidebar.actions.remove"),
-          effectDescription: t("layout.sidebar.actions.removeIssueEffect", {
-            defaultValue:
-              "Permanently remove this issue from the tracker. This cannot be undone.",
-          }),
+          effectDescription: removesThread
+            ? t("layout.sidebar.actions.deleteThreadEffect", {
+                defaultValue: "Permanently delete this local thread and its history.",
+              })
+            : t("layout.sidebar.actions.removeIssueEffect", {
+                defaultValue:
+                  "Permanently remove this issue from the tracker. This cannot be undone.",
+              }),
           requireExactName: true,
-          request: removeIssueRequest,
+          request: removeExecutionRequest,
         });
         return;
       }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  sidebarRemoveIssueRequest,
+  sidebarArchiveRequest,
+  sidebarRemoveExecutionRequest,
   sidebarRenameRequest,
 } from "@/lib/sidebarMenuPolicy";
 import type { SidebarCapabilityContext, SidebarSessionNode } from "@/types/sidebar";
@@ -48,12 +49,55 @@ describe("sidebarRenameRequest", () => {
   });
 });
 
-describe("sidebarRemoveIssueRequest", () => {
-  it("maps inactive execution sessions to delete-issue", () => {
+describe("sidebarArchiveRequest for executions", () => {
+  it("archives the execution thread when threadId is present", () => {
     expect(
-      sidebarRemoveIssueRequest(
+      sidebarArchiveRequest(
         session({
           sessionKind: "execution",
+          threadId: 42,
+          issueIdentifier: "GAM-20",
+        }),
+        context,
+      ),
+    ).toEqual({
+      action: "archive-thread",
+      projectSlug: "demo",
+      threadId: 42,
+      canArchive: true,
+    });
+  });
+});
+
+describe("sidebarRemoveExecutionRequest", () => {
+  it("maps thread-backed executions to delete-thread", () => {
+    expect(
+      sidebarRemoveExecutionRequest(
+        session({
+          sessionKind: "execution",
+          threadId: 42,
+          issueIdentifier: "GAM-20",
+          aggregateStatus: "active",
+          archived: false,
+        }),
+      ),
+    ).toEqual({
+      action: "delete-thread",
+      projectSlug: "demo",
+      threadId: 42,
+      sessionKind: "execution",
+      local: true,
+      archived: false,
+      closed: false,
+    });
+  });
+
+  it("falls back to delete-issue when an execution has no thread id", () => {
+    expect(
+      sidebarRemoveExecutionRequest(
+        session({
+          sessionKind: "execution",
+          threadId: null,
           issueIdentifier: "GAM-20",
           aggregateStatus: "idle",
         }),
@@ -66,19 +110,7 @@ describe("sidebarRemoveIssueRequest", () => {
     });
   });
 
-  it("marks active executions so the dispatcher can reject them", () => {
-    expect(
-      sidebarRemoveIssueRequest(
-        session({
-          sessionKind: "execution",
-          issueIdentifier: "GAM-20",
-          aggregateStatus: "active",
-        }),
-      ),
-    ).toMatchObject({ action: "delete-issue", active: true });
-  });
-
   it("returns null for non-execution sessions", () => {
-    expect(sidebarRemoveIssueRequest(session())).toBeNull();
+    expect(sidebarRemoveExecutionRequest(session())).toBeNull();
   });
 });

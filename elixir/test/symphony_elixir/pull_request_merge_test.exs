@@ -54,6 +54,17 @@ defmodule SymphonyElixir.PullRequestMergeTest do
       assert_received {:put, "/repos/acme/app/pulls/509/merge", %{merge_method: "rebase"}}
     end
 
+    test "uses an explicit repo override for multi-repo projects" do
+      assert {:ok, result} =
+               PullRequestMerge.merge(github_project(), 509, "squash",
+                 client_module: AcceptedClient,
+                 repo: "acme/backend"
+               )
+
+      assert result.merged == true
+      assert_received {:put, "/repos/acme/backend/pulls/509/merge", %{merge_method: "squash"}}
+    end
+
     test "rejects unsupported merge methods before calling GitHub" do
       assert {:error, :invalid_merge_method} =
                PullRequestMerge.merge(github_project(), 509, "octopus", client_module: AcceptedClient)

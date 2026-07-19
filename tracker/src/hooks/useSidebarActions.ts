@@ -555,9 +555,6 @@ function normalizeByAction(
       const local = boolean(value.local, "local");
       const archived = boolean(value.archived, "archived");
       const closed = boolean(value.closed, "closed");
-      if (sessionKind === "execution") {
-        throw new Error(i18n.t("layout.sidebar.errors.executionThreadDelete"));
-      }
       if (!local) throw new Error(i18n.t("layout.sidebar.errors.localThreadDelete"));
       return {
         action,

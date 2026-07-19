@@ -80,7 +80,11 @@ import {
   projectSessionsPath,
   type WorkspaceView,
 } from "@/lib/workspaceRoutes";
-import { archiveAssistantThread, getAssistantThread } from "@/services/assistantThreads";
+import {
+  archiveAssistantThread,
+  deleteAssistantThread,
+  getAssistantThread,
+} from "@/services/assistantThreads";
 import { dispatchIssueAgent } from "@/services/issueDispatch";
 import { getIssue } from "@/services/issues";
 import { removeWorkspaces } from "@/services/worktrees";
@@ -631,6 +635,39 @@ export function ProjectSessionsWorkspace({
     [archiveChat],
   );
 
+  const handleDelete = useCallback(
+    (threadId: number) => {
+      const confirmed = window.confirm(
+        t("layout.sidebar.actions.deleteThreadEffect", {
+          defaultValue: "Permanently delete this local thread and its history.",
+        }),
+      );
+      if (!confirmed) return;
+
+      void (async () => {
+        try {
+          await deleteAssistantThread(threadId);
+          toast.success(
+            t("workspacesPage.archive.deleteDone", {
+              count: 1,
+              defaultValue: "Deleted {{count}} sessions",
+            }),
+          );
+          void refetch();
+        } catch (cause) {
+          toast.error(
+            cause instanceof Error
+              ? cause.message
+              : t("workspacesPage.archive.deleteFailed", {
+                  defaultValue: "Unable to delete sessions",
+                }),
+          );
+        }
+      })();
+    },
+    [refetch, t],
+  );
+
   const cards = useMemo(
     () =>
       buildWorkspaceCards({
@@ -910,6 +947,7 @@ export function ProjectSessionsWorkspace({
                         onNewSession={handleNewSession}
                         onRemove={requestRemoveWorkspace}
                         onArchive={handleArchive}
+                        onDelete={handleDelete}
                       />
                     </li>
                   ))}

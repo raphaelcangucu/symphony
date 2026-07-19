@@ -21,7 +21,7 @@ defmodule SymphonyElixir.PullRequestMerge do
   def merge(%Project{} = project, number, method, opts \\ []) when is_list(opts) do
     with :ok <- validate_number(number),
          {:ok, normalized_method} <- normalize_method(method),
-         {:ok, repo} <- PullRequests.resolve_repo(project),
+         {:ok, repo} <- resolve_repo(project, opts),
          {:ok, {owner, name}} <- RepoSpec.split(repo) do
       do_merge(owner, name, number, normalized_method, opts)
     end
@@ -36,6 +36,13 @@ defmodule SymphonyElixir.PullRequestMerge do
     case client.rest_put(path, %{merge_method: method}, rest_opts) do
       {:ok, %{body: body}} -> confirmed_result(body, method, bypass)
       {:error, reason} -> {:error, map_error(reason)}
+    end
+  end
+
+  defp resolve_repo(project, opts) do
+    case Keyword.get(opts, :repo) do
+      repo when is_binary(repo) and repo != "" -> {:ok, repo}
+      _ -> PullRequests.resolve_repo(project)
     end
   end
 

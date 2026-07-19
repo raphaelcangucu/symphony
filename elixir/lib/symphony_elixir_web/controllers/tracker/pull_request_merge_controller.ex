@@ -6,6 +6,7 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestMergeController do
   use Phoenix.Controller, formats: [:json]
 
   alias Plug.Conn
+  alias SymphonyElixir.GitHub.PullRequests
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.PullRequestMerge
   alias SymphonyElixir.Tracker.IssueAdapter
@@ -18,8 +19,16 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestMergeController do
   def create(conn, %{"project_slug" => project_slug, "identifier" => identifier, "number" => number} = params) do
     with {:ok, parsed_number} <- parse_number(number),
          {:ok, project} <- Context.get_project(project_slug),
+         {:ok, prs} <- PullRequests.for_project_issue(project, identifier),
+         {:ok, pr} <- find_pull_request(prs, parsed_number),
          {:ok, result} <-
-           PullRequestMerge.merge(project, parsed_number, merge_method(params), bypass: force_merge?(params)),
+           PullRequestMerge.merge(
+             project,
+             parsed_number,
+             merge_method(params),
+             bypass: force_merge?(params),
+             repo: pr_repo(pr) || default_repo(project)
+           ),
          {:ok, issue} <- IssueAdapter.dispatch(project, :move_issue, [identifier, %{"status" => @done_status}]) do
       json(conn, %{data: Map.put(result, :issue, TrackerPresenter.issue(issue))})
     else
@@ -35,6 +44,24 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestMergeController do
   end
 
   defp parse_number(_number), do: {:error, :invalid_pr_number}
+
+  defp find_pull_request(prs, parsed_number) do
+    case Enum.find(prs, &(&1.number == parsed_number)) do
+      %{} = pr -> {:ok, pr}
+      _ -> {:error, :invalid_pr_number}
+    end
+  end
+
+  defp pr_repo(pr) do
+    Map.get(pr, :repo) || Map.get(pr, "repo")
+  end
+
+  defp default_repo(project) do
+    case PullRequests.resolve_repo(project) do
+      {:ok, repo} -> repo
+      {:error, _reason} -> nil
+    end
+  end
 
   defp merge_method(params) do
     case Map.get(params, "method") do

@@ -12,6 +12,97 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestMergeControllerTest do
   @github_token_env "GITHUB_TOKEN"
 
   defmodule AcceptedClient do
+    def graphql(query, _variables, _opts) when is_binary(query) do
+      cond do
+        query =~ "issueNodeId" or query =~ "IssueNodeId" ->
+          {:ok, %{"data" => %{"repository" => %{"issue" => %{"id" => "I_node"}}}}}
+
+        true ->
+          {:ok,
+           %{
+             "data" => %{
+               "repository" => %{
+                 "issue" => %{
+                   "linkedBranches" => %{"nodes" => []},
+                   "timelineItems" => %{"nodes" => []},
+                   "closedByPullRequestsReferences" => %{
+                     "nodes" => [
+                       pr_node(509, "acme/app")
+                     ]
+                   }
+                 }
+               }
+             }
+           }}
+      end
+    end
+
+    def rest_put(path, body, _opts) do
+      send(self(), {:merge, path, body})
+      {:ok, %{status: 200, body: %{"merged" => true, "sha" => "abc123"}}}
+    end
+
+    defp pr_node(number, repo) do
+      %{
+        "number" => number,
+        "title" => "Ship it",
+        "url" => "https://github.com/#{repo}/pull/#{number}",
+        "state" => "OPEN",
+        "isDraft" => false,
+        "merged" => false,
+        "headRefName" => "feat-#{number}",
+        "baseRefName" => "main",
+        "repository" => %{"nameWithOwner" => repo},
+        "author" => %{"login" => "codex-bot"},
+        "updatedAt" => "2026-05-29T00:00:00Z",
+        "commits" => %{"nodes" => []},
+        "comments" => %{"nodes" => []},
+        "reviews" => %{"nodes" => []}
+      }
+    end
+  end
+
+  defmodule MultiRepoGraphqlClient do
+    def graphql(query, _variables, _opts) when is_binary(query) do
+      cond do
+        query =~ "issueNodeId" or query =~ "IssueNodeId" ->
+          {:ok, %{"data" => %{"repository" => %{"issue" => %{"id" => "I_node"}}}}}
+
+        true ->
+          {:ok,
+           %{
+             "data" => %{
+               "repository" => %{
+                 "issue" => %{
+                   "linkedBranches" => %{"nodes" => []},
+                   "timelineItems" => %{"nodes" => []},
+                   "closedByPullRequestsReferences" => %{
+                     "nodes" => [
+                       %{
+                         "number" => 509,
+                         "title" => "fix(auth): rotate tokens",
+                         "url" => "https://github.com/acme/backend/pull/509",
+                         "state" => "OPEN",
+                         "isDraft" => false,
+                         "merged" => false,
+                         "headRefName" => "fix-auth",
+                         "baseRefName" => "dev",
+                         "repository" => %{"nameWithOwner" => "acme/backend"},
+                         "author" => %{"login" => "codex-bot"},
+                         "updatedAt" => "2026-05-29T00:00:00Z",
+                         "commits" => %{"nodes" => []},
+                         "comments" => %{"nodes" => []},
+                         "reviews" => %{"nodes" => []}
+                       }
+                     ]
+                   }
+                 }
+               }
+             }
+           }}
+      end
+    end
+
     def rest_put(path, body, _opts) do
       send(self(), {:merge, path, body})
       {:ok, %{status: 200, body: %{"merged" => true, "sha" => "abc123"}}}
@@ -19,6 +110,8 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestMergeControllerTest do
   end
 
   defmodule BlockedClient do
+    def graphql(query, variables, opts), do: AcceptedClient.graphql(query, variables, opts)
+
     def rest_put(_path, _body, _opts), do: {:error, {:github_api_status, 405}}
   end
 
@@ -99,6 +192,19 @@ defmodule SymphonyElixirWeb.Tracker.PullRequestMergeControllerTest do
 
     assert %{"data" => %{"merged" => true, "method" => "rebase", "bypass" => true}} = json_response(conn, 200)
     assert_received {:merge, "/repos/acme/app/pulls/509/merge", %{merge_method: "rebase"}}
+    assert_received {:move_issue, "508", %{"status" => "Done"}}
+  end
+
+  test "uses the PR repo for multi-repo projects" do
+    Application.put_env(:symphony_elixir, :github_client_module, MultiRepoGraphqlClient)
+
+    conn =
+      post(authorized_conn(), "/api/tracker/v1/projects/remote/issues/508/pull_requests/509/merge", %{
+        "method" => "merge"
+      })
+
+    assert %{"data" => %{"merged" => true}} = json_response(conn, 200)
+    assert_received {:merge, "/repos/acme/backend/pulls/509/merge", %{merge_method: "merge"}}
     assert_received {:move_issue, "508", %{"status" => "Done"}}
   end
 

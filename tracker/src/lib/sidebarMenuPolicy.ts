@@ -65,13 +65,24 @@ export function sidebarArchiveRequest(
     return { action: "archive-project", projectSlug: node.projectSlug };
   }
   if (node.kind !== "session") return null;
-  if (node.sessionKind === "execution" && node.issueIdentifier) {
-    return {
-      action: "archive-issue",
-      projectSlug: node.projectSlug,
-      identifier: node.issueIdentifier,
-      active: node.aggregateStatus === "active",
-    };
+  if (node.sessionKind === "execution") {
+    if (node.threadId != null) {
+      return {
+        action: "archive-thread",
+        projectSlug: node.projectSlug,
+        threadId: node.threadId,
+        canArchive: true,
+      };
+    }
+    if (node.issueIdentifier) {
+      return {
+        action: "archive-issue",
+        projectSlug: node.projectSlug,
+        identifier: node.issueIdentifier,
+        active: node.aggregateStatus === "active",
+      };
+    }
+    return null;
   }
   if (
     node.threadId === null ||
@@ -87,9 +98,20 @@ export function sidebarArchiveRequest(
   };
 }
 
-export function sidebarRemoveIssueRequest(node: SidebarNode): SidebarActionRequest | null {
+export function sidebarRemoveExecutionRequest(node: SidebarNode): SidebarActionRequest | null {
   if (node.kind !== "session") return null;
   if (node.sessionKind !== "execution") return null;
+  if (node.threadId != null) {
+    return {
+      action: "delete-thread",
+      projectSlug: node.projectSlug,
+      threadId: node.threadId,
+      sessionKind: "execution",
+      local: true,
+      archived: node.archived,
+      closed: node.archived || node.statusKind === "closed" || node.statusKind === "done",
+    };
+  }
   if (!node.issueIdentifier?.trim()) return null;
   return {
     action: "delete-issue",

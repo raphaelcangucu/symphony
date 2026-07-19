@@ -31,6 +31,7 @@ interface WorkspaceAccordionItemProps {
   onNewSession?(issueIdentifier: string): void;
   onRemove?(path: string): void;
   onArchive?(threadId: number): void;
+  onDelete?(threadId: number): void;
 }
 
 export function WorkspaceAccordionItem({
@@ -46,6 +47,7 @@ export function WorkspaceAccordionItem({
   onNewSession,
   onRemove,
   onArchive,
+  onDelete,
 }: WorkspaceAccordionItemProps) {
   const { t } = useTranslation();
   const removable =
@@ -118,6 +120,7 @@ export function WorkspaceAccordionItem({
             onNewSession={onNewSession}
             onRemove={onRemove}
             onArchive={onArchive}
+            onDelete={onDelete}
           />
         </div>
       </div>

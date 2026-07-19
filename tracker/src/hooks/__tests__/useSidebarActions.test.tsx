@@ -190,6 +190,19 @@ describe("useSidebarActions", () => {
     ],
     [
       {
+        action: "delete-thread",
+        projectSlug: "acme",
+        threadId: 42,
+        sessionKind: "execution",
+        local: true,
+        archived: false,
+        closed: false,
+      },
+      services.deleteAssistantThread,
+      [42],
+    ],
+    [
+      {
         action: "rename-issue",
         projectSlug: "acme",
         identifier: "ACME-1",
@@ -455,18 +468,6 @@ describe("useSidebarActions", () => {
         removable: true,
       },
       /main workspace/,
-    ],
-    [
-      {
-        action: "delete-thread",
-        projectSlug: "acme",
-        threadId: 7,
-        sessionKind: "execution",
-        local: true,
-        archived: true,
-        closed: true,
-      },
-      /execution/,
     ],
     [
       {

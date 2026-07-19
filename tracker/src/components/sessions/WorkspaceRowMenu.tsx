@@ -24,7 +24,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { canResumeExecution } from "@/lib/agentExecutionDisplay";
 import type { ProjectSessionRow } from "@/lib/projectSessions";
-import { isWorkspaceRemovable, type WorkspaceListItem } from "@/lib/workspaceCards";
+import {
+  canArchiveSessionRow,
+  isWorkspaceRemovable,
+  type WorkspaceListItem,
+} from "@/lib/workspaceCards";
 import type { RecentSession } from "@/types/recents";
 
 export interface WorkspaceRowMenuProps {
@@ -37,6 +41,7 @@ export interface WorkspaceRowMenuProps {
   onNewSession?(issueIdentifier: string): void;
   onRemove?(path: string): void;
   onArchive?(threadId: number): void;
+  onDelete?(threadId: number): void;
 }
 
 export function WorkspaceRowMenu({
@@ -49,6 +54,7 @@ export function WorkspaceRowMenu({
   onNewSession,
   onRemove,
   onArchive,
+  onDelete,
 }: WorkspaceRowMenuProps) {
   const { t } = useTranslation();
   const actions = buildActions({
@@ -62,6 +68,7 @@ export function WorkspaceRowMenu({
     onNewSession,
     onRemove,
     onArchive,
+    onDelete,
   });
 
   if (actions.length === 0) return null;
@@ -131,6 +138,7 @@ function buildActions({
   onNewSession,
   onRemove,
   onArchive,
+  onDelete,
 }: WorkspaceRowMenuProps & { t: Translate }): MenuAction[] {
   const actions: MenuAction[] = [];
   const openIcon = <ExternalLink {...workspaceMenuIconProps} aria-hidden />;
@@ -146,15 +154,7 @@ function buildActions({
         onSelect: () => onOpenAssistantSession(session.threadId!, session.title),
       });
     }
-    if (session.threadId != null && onArchive) {
-      actions.push({
-        key: "archive",
-        label: t("assistant.archive.label", { defaultValue: "Archive" }),
-        icon: <Archive {...workspaceMenuIconProps} aria-hidden />,
-        danger: true,
-        onSelect: () => onArchive(session.threadId!),
-      });
-    }
+    pushThreadLifecycleActions(actions, session, t, onArchive, onDelete);
     return actions;
   }
 
@@ -202,6 +202,9 @@ function buildActions({
     });
   }
 
+  const primarySession = card.sessions.find((session) => session.threadId != null) ?? null;
+  pushThreadLifecycleActions(actions, primarySession, t, onArchive, onDelete);
+
   if (onRemove && isWorkspaceRemovable(card)) {
     if (actions.length > 0) actions.push({ key: "sep-remove", separator: true });
     actions.push({
@@ -214,4 +217,39 @@ function buildActions({
   }
 
   return actions;
+}
+
+function pushThreadLifecycleActions(
+  actions: MenuAction[],
+  session: RecentSession | null,
+  t: Translate,
+  onArchive: WorkspaceRowMenuProps["onArchive"],
+  onDelete: WorkspaceRowMenuProps["onDelete"],
+): void {
+  if (session?.threadId == null) return;
+
+  const canArchive = Boolean(onArchive && canArchiveSessionRow(session));
+  const canDelete = Boolean(onDelete);
+  if (!canArchive && !canDelete) return;
+
+  if (actions.length > 0) actions.push({ key: "sep-lifecycle", separator: true });
+
+  if (canArchive && onArchive) {
+    actions.push({
+      key: "archive",
+      label: t("assistant.archive.label", { defaultValue: "Archive" }),
+      icon: <Archive {...workspaceMenuIconProps} aria-hidden />,
+      onSelect: () => onArchive(session.threadId!),
+    });
+  }
+
+  if (canDelete && onDelete) {
+    actions.push({
+      key: "delete",
+      label: t("layout.sidebar.actions.delete", { defaultValue: "Delete" }),
+      icon: <Trash2 {...workspaceMenuIconProps} aria-hidden />,
+      danger: true,
+      onSelect: () => onDelete(session.threadId!),
+    });
+  }
 }

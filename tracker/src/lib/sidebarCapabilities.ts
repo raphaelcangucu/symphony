@@ -108,7 +108,17 @@ function sessionActions(
       actions.push(enabled("copy-resume-link"));
     }
     actions.push(enabled(node.pinned ? "unpin" : "pin"));
-    if (nonBlank(node.issueIdentifier)) {
+    if (node.threadId != null) {
+      const activeExecution = ACTIVE_EXECUTION_STATUSES.has(node.statusKind);
+      actions.push(
+        activeExecution
+          ? disabled("archive", REASON_ACTIVE_EXECUTION, true)
+          : enabled("archive", true),
+        // Thread delete stays available while a run is active so users can
+        // clear stuck execution sessions from the sidebar.
+        enabled("remove", true),
+      );
+    } else if (nonBlank(node.issueIdentifier)) {
       const activeExecution = ACTIVE_EXECUTION_STATUSES.has(node.statusKind);
       actions.push(
         activeExecution
