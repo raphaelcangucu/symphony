@@ -18,6 +18,10 @@ defmodule SymphonyElixirWeb.Router do
     plug(SymphonyElixirWeb.TrackerAuth)
   end
 
+  pipeline :public_api do
+    plug(:accepts, ["json"])
+  end
+
   pipeline :tracker_sse do
     plug(SymphonyElixirWeb.Plugs.SetLocale)
     plug(SymphonyElixirWeb.TrackerAuth)
@@ -36,6 +40,12 @@ defmodule SymphonyElixirWeb.Router do
     pipe_through(:browser)
 
     get("/", RootRedirectController, :index)
+  end
+
+  scope "/api", SymphonyElixirWeb do
+    pipe_through(:public_api)
+
+    get("/health", HealthController, :show)
   end
 
   scope "/api/tracker/v1", SymphonyElixirWeb.Tracker do
