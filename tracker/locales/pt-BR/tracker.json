@@ -2080,6 +2080,8 @@
     "unavailable": "O daemon do Docker está indisponível",
     "loading": "Carregando containers…",
     "empty": "Nenhum container corresponde aos filtros atuais.",
+    "unassignedProject": "Sem projeto compose",
+    "groupSummary": "{{total}} containers · {{running}} em execução",
     "columns": {
       "name": "Nome",
       "project": "Projeto compose",
@@ -2096,6 +2098,20 @@
       "restart": "Reiniciar",
       "remove": "Remover"
     },
+    "selectionSummary": "{{selected}} de {{total}} selecionados",
+    "selectAll": "Selecionar todos os containers visíveis",
+    "selectGroup": "Selecionar todos os containers de {{project}}",
+    "selectContainer": "Selecionar {{name}}",
+    "clearSelection": "Limpar seleção",
+    "bulkActions": {
+      "start": "Iniciar selecionados",
+      "stop": "Parar selecionados",
+      "restart": "Reiniciar selecionados",
+      "remove": "Remover selecionados"
+    },
+    "bulkRemoveTitle": "Remover containers selecionados",
+    "bulkRemoveDescription": "Remover {{count}} containers? Containers em execução são removidos à força. Esta ação não pode ser desfeita.",
+    "bulkActionFailed": "{{count}} de {{total}} ações falharam.",
     "removeTitle": "Remover container",
     "removeDescription": "Remover {{name}}? Containers em execução são removidos à força. Esta ação não pode ser desfeita.",
     "removeConfirm": "Remover",
@@ -3562,6 +3578,7 @@
       "title": "Arquivar sessões",
       "description": "Arquive chats para limpar a lista, ou exclua permanentemente histórico e logs. Working trees não mudam — use Limpar para disco.",
       "empty": "Nenhuma sessão para arquivar.",
+      "selectAll": "Selecionar todos",
       "confirm": "Arquivar ({{count}})",
       "archiving": "Arquivando…",
       "done": "{{count}} sessões arquivadas",

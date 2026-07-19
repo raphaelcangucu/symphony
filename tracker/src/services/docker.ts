@@ -26,6 +26,22 @@ export interface DockerOverview {
 
 export type DockerSortKey = "name" | "composeProject" | "image" | "state" | "cpuPercent";
 
+export interface DockerProjectGroup {
+  composeProject: string | null;
+  composeWorkingDir: string | null;
+  containers: DockerContainer[];
+}
+
+function containerGroupKey(container: DockerContainer): string {
+  if (!container.composeProject) return "";
+  return `${container.composeProject}\0${container.composeWorkingDir ?? ""}`;
+}
+
+export function dockerProjectGroupKey(group: DockerProjectGroup): string {
+  if (group.composeProject === null) return "__unassigned__";
+  return `${group.composeProject}\0${group.composeWorkingDir ?? ""}`;
+}
+
 interface BackendDockerContainerDto {
   id?: string | null;
   name?: string | null;
@@ -83,6 +99,53 @@ function parseCpuPercent(value: string | null): number {
   if (!value) return -1;
   const parsed = Number.parseFloat(value.replace("%", ""));
   return Number.isFinite(parsed) ? parsed : -1;
+}
+
+function resolveGroupWorkingDir(containers: DockerContainer[]): string | null {
+  for (const container of containers) {
+    if (container.composeWorkingDir) return container.composeWorkingDir;
+  }
+  return null;
+}
+
+export function groupDockerContainersByProject(
+  containers: DockerContainer[],
+  sortKey: DockerSortKey,
+  sortAsc: boolean,
+): DockerProjectGroup[] {
+  const grouped = new Map<string, DockerContainer[]>();
+
+  for (const container of containers) {
+    const key = containerGroupKey(container);
+    const list = grouped.get(key) ?? [];
+    list.push(container);
+    grouped.set(key, list);
+  }
+
+  const groups = [...grouped.entries()].map(([groupKey, items]) => {
+    const sorted = [...items].sort((a, b) => compareDockerContainers(a, b, sortKey));
+    const ordered = sortAsc ? sorted : sorted.reverse();
+    const composeProject = groupKey === "" ? null : (ordered[0]?.composeProject ?? null);
+    return {
+      composeProject,
+      composeWorkingDir: resolveGroupWorkingDir(ordered),
+      containers: ordered,
+    };
+  });
+
+  groups.sort((a, b) => {
+    if (a.composeProject === null && b.composeProject !== null) return 1;
+    if (a.composeProject !== null && b.composeProject === null) return -1;
+    const left = a.composeProject ?? "";
+    const right = b.composeProject ?? "";
+    return left.toLowerCase().localeCompare(right.toLowerCase());
+  });
+
+  if (sortKey === "composeProject" && !sortAsc) {
+    groups.reverse();
+  }
+
+  return groups;
 }
 
 export async function fetchDockerOverview(signal?: AbortSignal): Promise<DockerOverview> {

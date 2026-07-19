@@ -13,7 +13,7 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadControllerTest do
   import Phoenix.ConnTest
   import Plug.Conn
 
-  alias SymphonyElixir.Assistant.{AgentSession, History, ProjectExploreWorkspace}
+  alias SymphonyElixir.Assistant.{AgentSession, History, ProjectExploreWorkspace, Thread}
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.Repo
   alias SymphonyElixir.Workflow
@@ -306,6 +306,25 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadControllerTest do
   test "DELETE removes an active kb thread" do
     {:ok, _project} = Context.ensure_project(%{name: "Delete KB", slug: "delete-kb-api"})
     {:ok, thread} = History.ensure_kb_thread("delete-kb-api", "delete-kb-api", "SETTINGS.md", %{})
+
+    conn = delete(authorize(), "/api/tracker/v1/assistant/threads/#{thread.id}")
+
+    assert response(conn, 204) == ""
+    assert {:error, :not_found} = History.get_thread(thread.id)
+  end
+
+  test "DELETE removes an active issue_execution thread" do
+    {:ok, thread} =
+      %Thread{}
+      |> Thread.changeset(%{
+        scope: "issue_execution",
+        project_slug: "delete-exec-api",
+        issue_identifier: "CDE-DEL-API-1",
+        workspace_path: "/tmp/delete-exec-api",
+        status: "active",
+        title: "Run · CDE-DEL-API-1"
+      })
+      |> Repo.insert()
 
     conn = delete(authorize(), "/api/tracker/v1/assistant/threads/#{thread.id}")
 

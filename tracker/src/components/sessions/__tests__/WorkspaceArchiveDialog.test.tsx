@@ -63,9 +63,27 @@ describe("WorkspaceArchiveDialog", () => {
     expect(screen.getByText("Two")).toBeVisible();
     expect(screen.queryByText("No thread")).not.toBeInTheDocument();
     const checkboxes = screen.getAllByRole("checkbox");
-    expect(checkboxes).toHaveLength(2);
+    expect(checkboxes).toHaveLength(3);
     expect(checkboxes[0]).toBeChecked();
     expect(checkboxes[1]).toBeChecked();
+    expect(checkboxes[2]).toBeChecked();
+  });
+
+  it("toggles select all and clears the selection", () => {
+    renderDialog([
+      session({ id: "a", threadId: 11, title: "One" }),
+      session({ id: "c", threadId: 12, title: "Two" }),
+    ]);
+
+    const selectAll = screen.getByRole("checkbox", { name: /select all/i });
+    expect(selectAll).toBeChecked();
+
+    fireEvent.click(selectAll);
+    const checkboxes = screen.getAllByRole("checkbox");
+    expect(checkboxes.every((checkbox) => !(checkbox as HTMLInputElement).checked)).toBe(true);
+
+    fireEvent.click(selectAll);
+    expect(checkboxes.every((checkbox) => (checkbox as HTMLInputElement).checked)).toBe(true);
   });
 
   it("archives selected sessions", async () => {

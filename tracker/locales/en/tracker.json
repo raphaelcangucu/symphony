@@ -2080,6 +2080,8 @@
     "unavailable": "Docker daemon is unavailable",
     "loading": "Loading containers…",
     "empty": "No containers match the current filters.",
+    "unassignedProject": "Standalone",
+    "groupSummary": "{{total}} containers · {{running}} running",
     "columns": {
       "name": "Name",
       "project": "Compose project",
@@ -2096,6 +2098,20 @@
       "restart": "Restart",
       "remove": "Remove"
     },
+    "selectionSummary": "{{selected}} of {{total}} selected",
+    "selectAll": "Select all visible containers",
+    "selectGroup": "Select all containers in {{project}}",
+    "selectContainer": "Select {{name}}",
+    "clearSelection": "Clear selection",
+    "bulkActions": {
+      "start": "Start selected",
+      "stop": "Stop selected",
+      "restart": "Restart selected",
+      "remove": "Remove selected"
+    },
+    "bulkRemoveTitle": "Remove selected containers",
+    "bulkRemoveDescription": "Remove {{count}} containers? Running containers are force-removed. This cannot be undone.",
+    "bulkActionFailed": "{{count}} of {{total}} actions failed.",
     "removeTitle": "Remove container",
     "removeDescription": "Remove {{name}}? Running containers are force-removed. This cannot be undone.",
     "removeConfirm": "Remove",
@@ -3562,6 +3578,7 @@
       "title": "Archive sessions",
       "description": "Archive chats to clear the list, or permanently delete history and logs. Working trees are unchanged — use Clean up for disk.",
       "empty": "No sessions to archive.",
+      "selectAll": "Select all",
       "confirm": "Archive ({{count}})",
       "archiving": "Archiving…",
       "done": "Archived {{count}} sessions",

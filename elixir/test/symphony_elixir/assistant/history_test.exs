@@ -540,6 +540,25 @@ defmodule SymphonyElixir.Assistant.HistoryTest do
     assert {:error, :not_found} = History.get_thread(thread.id)
   end
 
+  test "delete_thread deletes issue_execution threads" do
+    {:ok, thread} =
+      %Thread{}
+      |> Thread.changeset(%{
+        scope: "issue_execution",
+        project_slug: "delete-exec",
+        issue_identifier: "CDE-DEL-1",
+        workspace_path: "/tmp/delete-exec",
+        status: "active",
+        title: "Run · CDE-DEL-1"
+      })
+      |> Repo.insert()
+
+    assert {:ok, deleted} = History.delete_thread(thread.id)
+    assert deleted.id == thread.id
+    assert deleted.scope == "issue_execution"
+    assert {:error, :not_found} = History.get_thread(thread.id)
+  end
+
   test "delete_thread returns not_found" do
     assert {:error, :not_found} = History.delete_thread(2_147_483_647)
   end

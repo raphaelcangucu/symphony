@@ -1,5 +1,5 @@
 import { Archive, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
@@ -41,8 +41,11 @@ export function WorkspaceArchiveDialog({
   const [selected, setSelected] = useState<ReadonlySet<number>>(new Set());
   const [busy, setBusy] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const selectAllRef = useRef<HTMLInputElement>(null);
 
   const candidates = useMemo(() => collectArchiveCandidates(sessions), [sessions]);
+  const allSelected = candidates.length > 0 && selected.size === candidates.length;
+  const someSelected = selected.size > 0 && !allSelected;
 
   useEffect(() => {
     if (!open) {
@@ -53,6 +56,12 @@ export function WorkspaceArchiveDialog({
     setConfirmDelete(false);
   }, [candidates, open]);
 
+  useEffect(() => {
+    if (selectAllRef.current) {
+      selectAllRef.current.indeterminate = someSelected;
+    }
+  }, [someSelected]);
+
   function toggle(threadId: number) {
     setSelected((current) => {
       const next = new Set(current);
@@ -60,6 +69,14 @@ export function WorkspaceArchiveDialog({
       else next.add(threadId);
       return next;
     });
+  }
+
+  function toggleSelectAll() {
+    if (allSelected) {
+      setSelected(new Set());
+      return;
+    }
+    setSelected(new Set(candidates.map((entry) => entry.threadId)));
   }
 
   async function runArchive() {
@@ -178,26 +195,42 @@ export function WorkspaceArchiveDialog({
             {t("workspacesPage.archive.empty", { defaultValue: "No sessions to archive." })}
           </p>
         ) : (
-          <ul className={cn("max-h-72 space-y-1.5 overflow-y-auto", SCROLLBAR_THIN)}>
-            {candidates.map((entry) => (
-              <li key={entry.key}>
-                <label className="flex cursor-pointer items-center gap-3 rounded-md border border-border/50 bg-background/60 px-3 py-2">
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4 accent-primary"
-                    checked={selected.has(entry.threadId)}
-                    onChange={() => toggle(entry.threadId)}
-                  />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium text-foreground">
-                      {entry.title}
+          <div className="space-y-2">
+            <label className="flex cursor-pointer items-center gap-2 px-1 text-sm text-muted-foreground">
+              <input
+                ref={selectAllRef}
+                type="checkbox"
+                className="h-4 w-4 accent-primary"
+                checked={allSelected}
+                onChange={toggleSelectAll}
+                disabled={busy}
+              />
+              {t("workspacesPage.archive.selectAll", { defaultValue: "Select all" })}
+            </label>
+            <ul className={cn("max-h-72 space-y-1.5 overflow-y-auto", SCROLLBAR_THIN)}>
+              {candidates.map((entry) => (
+                <li key={entry.key}>
+                  <label className="flex cursor-pointer items-center gap-3 rounded-md border border-border/50 bg-background/60 px-3 py-2">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 accent-primary"
+                      checked={selected.has(entry.threadId)}
+                      onChange={() => toggle(entry.threadId)}
+                      disabled={busy}
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium text-foreground">
+                        {entry.title}
+                      </span>
+                      <span className="block truncate text-xs text-muted-foreground">
+                        {entry.meta}
+                      </span>
                     </span>
-                    <span className="block truncate text-xs text-muted-foreground">{entry.meta}</span>
-                  </span>
-                </label>
-              </li>
-            ))}
-          </ul>
+                  </label>
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
 
         <DialogFooter>

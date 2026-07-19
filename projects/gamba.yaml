@@ -208,6 +208,7 @@ setup:
         NUXT_TELEMETRY_DISABLED=1
         APP_ENV=dev
         NUXT_PUBLIC_APP_ENV=dev
+        SSR_ENABLED=false
         ENV
     pr_monitor:
       done_on_merge: true
