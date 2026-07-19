@@ -19,6 +19,6 @@ defmodule SymphonyElixir.Tracker.Sync.Driver do
   @type pr :: map()
 
   @callback pull(Project.t(), keyword()) :: {:ok, [normalized_issue()]} | {:error, term()}
-  @callback push(Project.t(), OutboxEntry.t()) :: {:ok, String.t() | nil} | {:error, term()}
+  @callback push(Project.t(), OutboxEntry.t()) :: {:ok, String.t() | nil | map()} | {:error, term()}
   @callback pull_pull_requests(Project.t(), IssueRecord.t()) :: {:ok, [pr()]} | {:error, term()}
 end

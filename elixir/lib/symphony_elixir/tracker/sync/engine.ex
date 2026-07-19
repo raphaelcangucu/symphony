@@ -636,10 +636,20 @@ defmodule SymphonyElixir.Tracker.Sync.Engine do
   end
 
   defp push_entry(entry, acc, project, driver, max_attempts) do
+    # Re-read the claimed entry: an earlier push in this same pass may have
+    # rewritten its payload (identifier adoption after an issue create).
+    entry = Repo.get(OutboxEntry, entry.id) || entry
+
     case safe_push(driver, project, entry) do
       {:ok, remote_id} -> record_pushed(acc, entry, remote_id)
       {:error, reason} -> record_failed(acc, entry, reason, max_attempts)
     end
+  end
+
+  defp record_pushed(acc, entry, %{remote_id: remote_id} = identity) do
+    Outbox.mark_done(entry, remote_id)
+    link_pushed_remote_id(entry, identity)
+    %{acc | pushed: acc.pushed + 1}
   end
 
   defp record_pushed(acc, entry, remote_id) do
@@ -663,6 +673,23 @@ defmodule SymphonyElixir.Tracker.Sync.Engine do
   defp link_pushed_remote_id(%{entity_type: "comment", operation: "update", payload: payload}, _remote_id)
        when is_map(payload) do
     mark_comment_synced(payload)
+  end
+
+  defp link_pushed_remote_id(
+         %{entity_type: "issue", operation: "create", issue_id: issue_id, project_id: project_id},
+         %{remote_id: remote_id} = identity
+       ) do
+    # Trackers that issue their own keys (JIRA) return the created identity so
+    # the local placeholder identifier is replaced by the remote key. Queued
+    # writes for the placeholder are rewritten too, or they 404 on the remote.
+    case LocalStore.adopt_created_issue_identity(issue_id, identity) do
+      {:renamed, old_identifier, new_identifier} ->
+        Outbox.rewrite_issue_identifier(project_id, old_identifier, new_identifier)
+        :ok
+
+      _linked_only ->
+        LocalStore.link_issue_remote_id(issue_id, remote_id)
+    end
   end
 
   defp link_pushed_remote_id(%{entity_type: "issue", operation: "create", issue_id: issue_id}, remote_id) do

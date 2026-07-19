@@ -118,6 +118,50 @@ defmodule SymphonyElixir.Tracker.Sync.Outbox do
   end
 
   @doc """
+  Rewrites queued entries that still reference a pre-create placeholder
+  identifier to the identifier the remote tracker issued at create time
+  (JIRA keys). Both the payload `identifier` and the dedup key are rewritten so
+  queued updates/moves push against the real remote issue instead of 404ing.
+  """
+  @spec rewrite_issue_identifier(integer(), String.t(), String.t()) :: non_neg_integer()
+  def rewrite_issue_identifier(project_id, old_identifier, new_identifier)
+      when is_integer(project_id) and is_binary(old_identifier) and is_binary(new_identifier) and
+             old_identifier != new_identifier do
+    entries =
+      OutboxEntry
+      |> where(
+        [e],
+        e.project_id == ^project_id and e.status in ["pending", "in_flight", "failed"] and
+          fragment("json_extract(?, '$.identifier') = ?", e.payload, ^old_identifier)
+      )
+      |> Repo.all()
+
+    Enum.reduce(entries, 0, fn entry, count ->
+      attrs = %{
+        payload: Map.put(entry.payload || %{}, "identifier", new_identifier),
+        dedup_key: rewrite_dedup_key(entry.dedup_key, old_identifier, new_identifier)
+      }
+
+      case entry |> OutboxEntry.changeset(attrs) |> Repo.update() do
+        {:ok, _updated} -> count + 1
+        {:error, _changeset} -> count
+      end
+    end)
+  end
+
+  def rewrite_issue_identifier(_project_id, _old_identifier, _new_identifier), do: 0
+
+  defp rewrite_dedup_key(dedup_key, old_identifier, new_identifier) when is_binary(dedup_key) do
+    if String.ends_with?(dedup_key, ":#{old_identifier}") do
+      String.replace_suffix(dedup_key, ":#{old_identifier}", ":#{new_identifier}")
+    else
+      dedup_key
+    end
+  end
+
+  defp rewrite_dedup_key(dedup_key, _old, _new), do: dedup_key
+
+  @doc """
   Drops pending/in-flight outbox entries for a locally deleted comment that never
   reached the remote (no `remote_id` yet).
   """

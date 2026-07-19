@@ -54,4 +54,120 @@ defmodule SymphonyElixir.Evidence.SessionAuditTest do
     assert {:error, {:commands_not_executed, ["  "]}} =
              SessionAudit.verify_commands(["  "], rollout_path: rollout)
   end
+
+  defp write_claude_log!(tmp_dir, commands) do
+    path = Path.join(tmp_dir, "claude-session.jsonl")
+
+    lines =
+      commands
+      |> Enum.with_index()
+      |> Enum.map(fn {cmd, index} ->
+        Jason.encode!(%{
+          "type" => "assistant",
+          "message" => %{
+            "content" => [
+              %{
+                "type" => "tool_use",
+                "id" => "toolu_#{index}",
+                "name" => "Bash",
+                "input" => %{"command" => cmd}
+              }
+            ]
+          }
+        })
+      end)
+
+    File.write!(path, Enum.join(lines, "\n") <> "\n")
+    path
+  end
+
+  test "commands executed in a Claude session pass via explicit sources", %{tmp_dir: tmp_dir} do
+    claude_log = write_claude_log!(tmp_dir, ["yarn test --run tests/pages/Task2.test.ts"])
+
+    assert :ok =
+             SessionAudit.verify_commands(["yarn test --run tests/pages/Task2.test.ts"],
+               sources: [{"claude", claude_log}]
+             )
+  end
+
+  test "commands are accepted when found in ANY of several agent logs", %{tmp_dir: tmp_dir} do
+    rollout = write_rollout!(tmp_dir, ["npx playwright test task.spec.ts"])
+    claude_log = write_claude_log!(tmp_dir, ["./vibe phpunit --filter Task2HealthPageTest"])
+
+    assert :ok =
+             SessionAudit.verify_commands(
+               ["npx playwright test task.spec.ts", "./vibe phpunit --filter Task2HealthPageTest"],
+               sources: [{"codex", rollout}, {"claude", claude_log}]
+             )
+  end
+
+  test "fabricated commands still fail across multiple agent logs", %{tmp_dir: tmp_dir} do
+    rollout = write_rollout!(tmp_dir, ["ls -la"])
+    claude_log = write_claude_log!(tmp_dir, ["git status"])
+
+    assert {:error, {:commands_not_executed, ["npm test"]}} =
+             SessionAudit.verify_commands(["npm test"],
+               sources: [{"codex", rollout}, {"claude", claude_log}]
+             )
+  end
+
+  test "no readable source at all fails closed", %{tmp_dir: tmp_dir} do
+    assert {:error, :session_log_unavailable} =
+             SessionAudit.verify_commands(["npm test"],
+               sources: [{"codex", Path.join(tmp_dir, "gone.jsonl")}]
+             )
+  end
+
+  test "workspace audit sees commands from EVERY codex session of the workspace, not just the newest",
+       %{tmp_dir: tmp_dir} do
+    workspace = Path.join(tmp_dir, "workspace")
+    sessions_dir = Path.join(tmp_dir, "codex-sessions")
+    File.mkdir_p!(workspace)
+    File.mkdir_p!(sessions_dir)
+
+    write_session_rollout!(sessions_dir, "rollout-2026-01-01T01-00-00-aaa.jsonl", workspace, [
+      "bun run test -- src/pages/__tests__/Task1Page.test.jsx"
+    ])
+
+    # Newer session (sidecar target) that did NOT run the declared command.
+    write_session_rollout!(sessions_dir, "rollout-2026-01-01T02-00-00-bbb.jsonl", workspace, ["git diff"])
+    File.mkdir_p!(Path.join(workspace, ".symphony"))
+    File.write!(Path.join(workspace, ".symphony/codex-session.json"), Jason.encode!(%{"thread_id" => "bbb"}))
+
+    prev = Application.get_env(:symphony_elixir, :codex_sessions_dir)
+    Application.put_env(:symphony_elixir, :codex_sessions_dir, sessions_dir)
+    on_exit(fn ->
+      if prev, do: Application.put_env(:symphony_elixir, :codex_sessions_dir, prev),
+        else: Application.delete_env(:symphony_elixir, :codex_sessions_dir)
+    end)
+
+    assert :ok =
+             SessionAudit.verify_commands(
+               ["bun run test -- src/pages/__tests__/Task1Page.test.jsx"],
+               workspace: workspace
+             )
+  end
+
+  defp write_session_rollout!(sessions_dir, name, workspace, commands) do
+    meta =
+      Jason.encode!(%{
+        "type" => "session_meta",
+        "payload" => %{"cwd" => workspace, "id" => name}
+      })
+
+    lines =
+      Enum.map(commands, fn cmd ->
+        Jason.encode!(%{
+          "type" => "response_item",
+          "payload" => %{
+            "type" => "function_call",
+            "name" => "exec_command",
+            "call_id" => "c1",
+            "arguments" => Jason.encode!(%{"cmd" => cmd})
+          }
+        })
+      end)
+
+    File.write!(Path.join(sessions_dir, name), Enum.join([meta | lines], "\n") <> "\n")
+  end
 end
