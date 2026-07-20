@@ -39,7 +39,8 @@ defmodule SymphonyElixir.Assistant.ToolExecutorTest do
     for {label, specs} <- [
           {"tool_specs", ToolExecutor.tool_specs()},
           {"combined_tool_specs", ToolExecutor.combined_tool_specs()},
-          {"issue_bound_tool_specs", ToolExecutor.issue_bound_tool_specs("MAC-1")}
+          {"issue_bound_tool_specs", ToolExecutor.issue_bound_tool_specs("MAC-1")},
+          {"freeform_tool_specs", ToolExecutor.freeform_tool_specs()}
         ] do
       names = Enum.map(specs, & &1["name"])
       duplicates = names -- Enum.uniq(names)

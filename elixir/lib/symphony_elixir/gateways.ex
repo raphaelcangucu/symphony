@@ -44,6 +44,25 @@ defmodule SymphonyElixir.Gateways do
     end
   end
 
+  @spec ensure_group_freeform_binding(map()) :: {:ok, Binding.t()} | {:error, Ecto.Changeset.t()}
+  def ensure_group_freeform_binding(attrs) when is_map(attrs) do
+    attrs =
+      attrs
+      |> stringify_keys()
+      |> Map.put("binding_kind", "group_freeform")
+      |> Map.put_new("account_id", @default_account_id)
+      |> Map.put_new("status", "active")
+      |> Map.put("default_mode", "freeform")
+      |> Map.put("active_mode", "freeform")
+      |> Map.put_new("metadata", %{})
+
+    case get_active_binding(attrs["provider"], attrs["account_id"], attrs["conversation_id"]) do
+      {:ok, %Binding{binding_kind: "group_freeform"} = binding} -> {:ok, binding}
+      {:ok, %Binding{} = other} -> {:error, {:unexpected_binding_kind, other.binding_kind}}
+      {:error, :binding_not_found} -> insert_binding(attrs)
+    end
+  end
+
   @spec get_active_binding(String.t(), String.t(), String.t()) :: {:ok, Binding.t()} | {:error, :binding_not_found}
   def get_active_binding(provider, account_id, conversation_id)
       when is_binary(provider) and is_binary(account_id) and is_binary(conversation_id) do

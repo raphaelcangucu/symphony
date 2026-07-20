@@ -573,14 +573,25 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
   # GitHub project provisioning, raw GraphQL, and workflow/template lookups.
   @freeform_project_agnostic_read_tools ~w(get_template list_templates)
 
+  # ProjectBoardTools.tool_specs/0 already embeds KnowledgeBaseTools (+ goal) for
+  # project-scoped chats. Freeform concatenates those modules separately so Home
+  # Maestro can default KB to `@user` and keep the unbound `goal` schema — exclude
+  # the overlapping names here or Codex rejects the turn with
+  # `duplicate dynamic tool name`.
+  @freeform_board_excluded_tools ["goal" | KnowledgeBaseTools.tools()]
+
   @spec freeform_tool_specs() :: [map()]
   def freeform_tool_specs do
     read_specs =
       ReadTools.tool_specs()
       |> Enum.filter(&(&1["name"] in @freeform_project_agnostic_read_tools))
 
+    board_specs =
+      ProjectBoardTools.tool_specs()
+      |> Enum.reject(&(&1["name"] in @freeform_board_excluded_tools))
+
     (DiscoveryTools.tool_specs() ++
-       ProjectBoardTools.tool_specs() ++
+       board_specs ++
        GitHubTools.tool_specs() ++
        KnowledgeBaseTools.tool_specs() ++
        ObservabilityTools.tool_specs() ++
@@ -608,17 +619,19 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
         name in @discovery_tools ->
           wrap_for_codex(DiscoveryTools.execute(name, arguments, opts))
 
+        name in @kb_tools ->
+          # Home Maestro edits the personal KB by default; a project slug in the
+          # arguments targets that project's KB instead. execute/4 already routes
+          # "@user" and real project slugs to the right KB scope. Must run before
+          # ProjectBoardTools.tools/0, which also lists KB names but requires a
+          # project_slug.
+          wrap_for_codex(execute(kb_scope_slug(arguments), name, arguments, opts))
+
         name in ProjectBoardTools.tools() ->
           wrap_for_codex(ProjectBoardTools.execute(name, arguments, opts))
 
         name in @github_tools ->
           wrap_for_codex(GitHubTools.execute(name, arguments, opts))
-
-        name in @kb_tools ->
-          # Home Maestro edits the personal KB by default; a project slug in the
-          # arguments targets that project's KB instead. execute/4 already routes
-          # "@user" and real project slugs to the right KB scope.
-          wrap_for_codex(execute(kb_scope_slug(arguments), name, arguments, opts))
 
         name in @observability_tools ->
           wrap_for_codex(ObservabilityTools.execute(name, arguments, opts))

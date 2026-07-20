@@ -572,6 +572,19 @@ defmodule SymphonyElixir.Assistant.AgentSession do
     Keyword.take(opts, [:git])
   end
 
+  defp persisted_thread_workspace(%{scope: "freeform"} = thread) do
+    path = resolve_freeform_workspace_path(thread)
+
+    case File.mkdir_p(path) do
+      :ok ->
+        repair_freeform_workspace_path(thread, path)
+        {:ok, path}
+
+      {:error, _reason} ->
+        {:error, {:authoring_goal_unavailable, :workspace_not_executable}}
+    end
+  end
+
   defp persisted_thread_workspace(%{workspace_path: path}) when is_binary(path) and path != "" do
     case File.mkdir_p(path) do
       :ok -> {:ok, path}
@@ -581,6 +594,48 @@ defmodule SymphonyElixir.Assistant.AgentSession do
 
   defp persisted_thread_workspace(_thread),
     do: {:error, {:authoring_goal_unavailable, :workspace_not_executable}}
+
+  # Freeform threads persist an absolute workspace path. When the instance
+  # workspace root moves (common across serve restarts / env changes), the
+  # stored path falls outside Config.workspace_root/0 and Codex refuses the cwd.
+  # Recompute the canonical freeform tree and repair the thread so the next turn
+  # lands under the live root.
+  defp resolve_freeform_workspace_path(%{workspace_path: path} = thread)
+       when is_binary(path) and path != "" do
+    root = Config.workspace_root() |> Path.expand()
+    expanded = Path.expand(path)
+    root_prefix = root <> "/"
+
+    if expanded != root and String.starts_with?(expanded <> "/", root_prefix) do
+      expanded
+    else
+      canonical_freeform_workspace(thread)
+    end
+  end
+
+  defp resolve_freeform_workspace_path(thread), do: canonical_freeform_workspace(thread)
+
+  defp canonical_freeform_workspace(%{metadata: metadata, id: thread_id}) do
+    binding_id =
+      case metadata do
+        %{"gateway_binding_id" => id} when is_integer(id) -> id
+        %{"gateway_binding_id" => id} when is_binary(id) -> id
+        %{gateway_binding_id: id} when is_integer(id) or is_binary(id) -> id
+        _other -> thread_id
+      end
+
+    freeform_workspace(binding_id)
+  end
+
+  defp repair_freeform_workspace_path(%{workspace_path: current} = thread, path)
+       when is_binary(current) and current != path do
+    case History.update_thread(thread, %{workspace_path: path}) do
+      {:ok, _updated} -> :ok
+      {:error, _reason} -> :ok
+    end
+  end
+
+  defp repair_freeform_workspace_path(_thread, _path), do: :ok
 
   # This check intentionally sits immediately before each runner call. A filesystem
   # TOCTOU window still exists after validation; the coding-agent runner's cwd/root

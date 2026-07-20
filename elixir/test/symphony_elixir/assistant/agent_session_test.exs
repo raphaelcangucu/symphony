@@ -164,6 +164,32 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
     refute Repo.get_by(Thread, project_slug: "exact-project", scope: "project", status: "active")
   end
 
+  test "send_message_to_thread/4 heals freeform workspace outside the current workspace root" do
+    stale = Path.join(System.tmp_dir!(), "stale-freeform-#{System.unique_integer([:positive])}")
+    File.mkdir_p!(stale)
+
+    {:ok, thread} =
+      History.create_freeform_thread(%{
+        title: "Stale freeform",
+        workspace_path: stale,
+        metadata: %{"gateway_binding_id" => 42}
+      })
+
+    runner = fn workspace, _prompt, _issue, _opts ->
+      send(self(), {:workspace, workspace})
+      {:ok, %{assistant_message: "ok", tool_calls: [], codex_thread_id: "ct-1", turn_id: "t-1"}}
+    end
+
+    assert {:ok, _result} =
+             AgentSession.send_message_to_thread(thread, "hi", %{}, runner: runner)
+
+    expected = AgentSession.freeform_workspace(42)
+    assert_received {:workspace, ^expected}
+
+    {:ok, updated} = History.get_thread(thread.id)
+    assert updated.workspace_path == expected
+  end
+
   test "send_message_to_thread/4 runs a freeform turn with project-agnostic tools only" do
     {:ok, thread} = History.create_freeform_thread(%{title: "F", workspace_path: tmp_dir()})
 

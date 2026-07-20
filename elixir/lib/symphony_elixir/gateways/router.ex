@@ -1,11 +1,16 @@
 defmodule SymphonyElixir.Gateways.Router do
   @moduledoc "Routes normalized gateway messages through access control, commands, and assistant sessions."
 
+  require Logger
+
   alias SymphonyElixir.Gateways
   alias SymphonyElixir.Assistant.AgentSession
   alias SymphonyElixir.Gateways.{Binding, CommandParser, InboundMessage, SessionResolver}
   alias SymphonyElixir.Settings
   alias SymphonyElixir.Settings.Gateways, as: GatewaySettings
+
+  # Telegram forum "General" topic always uses message_thread_id = 1.
+  @general_topic_thread_id "1"
 
   @spec handle_message(InboundMessage.t(), keyword()) ::
           {:ok, :command | :queued | :sent} | {:dropped, atom()} | {:error, term()}
@@ -13,21 +18,24 @@ defmodule SymphonyElixir.Gateways.Router do
     adapter = Keyword.get(opts, :adapter, SymphonyElixir.Gateways.TelegramAdapter)
     parsed = CommandParser.parse(message.raw_text)
 
-    with :continue <- maybe_handle_pairing_command(parsed, message, adapter),
-         :ok <- ensure_gateway_enabled(message, parsed),
-         {:ok, binding} <- resolve_or_create_binding(message) do
-      case parsed do
-        :plain_text ->
-          dispatch_plain_text(binding, message, adapter, opts)
+    result =
+      with :continue <- maybe_handle_pairing_command(parsed, message, adapter),
+           :ok <- ensure_gateway_enabled(message, parsed),
+           {:ok, binding} <- resolve_or_create_binding(message) do
+        case parsed do
+          :plain_text ->
+            dispatch_plain_text(binding, message, adapter, opts)
 
-        {:command, command} ->
-          execute_command(command, binding, message, adapter)
+          {:command, command} ->
+            execute_command(command, binding, message, adapter)
 
-        {:error, reason} ->
-          send_text(adapter, message, command_error_text(reason))
-          {:ok, :command}
+          {:error, reason} ->
+            send_text(adapter, message, command_error_text(reason))
+            {:ok, :command}
+        end
       end
-    end
+
+    maybe_notify_failure(result, message, adapter)
   end
 
   defp ensure_gateway_enabled(%InboundMessage{}, parsed) do
@@ -114,16 +122,43 @@ defmodule SymphonyElixir.Gateways.Router do
         {:dropped, :unauthorized_group_sender}
 
       true ->
-        Gateways.get_active_binding(message.provider, message.account_id, message.conversation_id)
+        case Gateways.get_active_binding(message.provider, message.account_id, message.conversation_id) do
+          {:ok, binding} ->
+            {:ok, binding}
+
+          {:error, :binding_not_found} ->
+            maybe_general_topic_freeform(message)
+        end
     end
   end
 
   defp resolve_or_create_binding(%InboundMessage{conversation_kind: "group"} = message) do
-    if message.conversation_id == GatewaySettings.telegram_group_chat_id() do
-      {:error, :group_topic_required}
-    else
-      {:dropped, :unauthorized_group}
+    cond do
+      message.conversation_id != GatewaySettings.telegram_group_chat_id() ->
+        {:dropped, :unauthorized_group}
+
+      not allowed_sender?(message.sender_id, GatewaySettings.telegram_allowed_user_ids()) ->
+        {:dropped, :unauthorized_group_sender}
+
+      true ->
+        ensure_shared_general_freeform(message.provider, message.account_id, message.conversation_id)
     end
+  end
+
+  defp maybe_general_topic_freeform(%InboundMessage{thread_id: @general_topic_thread_id} = message) do
+    ensure_shared_general_freeform(message.provider, message.account_id, message.parent_conversation_id)
+  end
+
+  defp maybe_general_topic_freeform(_message), do: {:error, :binding_not_found}
+
+  defp ensure_shared_general_freeform(provider, account_id, conversation_id)
+       when is_binary(provider) and is_binary(account_id) and is_binary(conversation_id) do
+    Gateways.ensure_group_freeform_binding(%{
+      provider: provider,
+      account_id: account_id,
+      conversation_id: conversation_id,
+      default_agent_kind: Settings.Agents.default_agent_kind()
+    })
   end
 
   defp execute_command({:help, %{}}, _binding, message, adapter) do
@@ -153,15 +188,16 @@ defmodule SymphonyElixir.Gateways.Router do
     {:ok, :command}
   end
 
-  defp execute_command({:set_mode, %{mode: "freeform"}}, %Binding{binding_kind: "direct_freeform"} = binding, message, adapter) do
+  defp execute_command({:set_mode, %{mode: "freeform"}}, %Binding{binding_kind: kind} = binding, message, adapter)
+       when kind in ["direct_freeform", "group_freeform"] do
     with {:ok, updated} <- Gateways.update_binding(binding, %{active_mode: "freeform", default_mode: "freeform"}) do
       send_text(adapter, message, "Mode set to #{updated.active_mode}.")
       {:ok, :command}
     end
   end
 
-  defp execute_command({:set_mode, %{mode: mode}}, %Binding{binding_kind: "direct_freeform"}, message, adapter)
-       when mode in ["explore", "project", "issue", "kb"] do
+  defp execute_command({:set_mode, %{mode: mode}}, %Binding{binding_kind: kind}, message, adapter)
+       when kind in ["direct_freeform", "group_freeform"] and mode in ["explore", "project", "issue", "kb"] do
     send_text(adapter, message, "Mode #{mode} requires a paired project topic.")
     {:ok, :command}
   end
@@ -252,6 +288,53 @@ defmodule SymphonyElixir.Gateways.Router do
   end
 
   defp send_text(adapter, message, text), do: adapter.send_text(message, text, [])
+
+  defp maybe_notify_failure({:ok, _} = ok, _message, _adapter), do: ok
+
+  defp maybe_notify_failure({:dropped, reason} = dropped, _message, _adapter)
+       when reason in [
+              :gateway_disabled,
+              :unauthorized_direct_sender,
+              :unauthorized_group,
+              :unauthorized_group_sender
+            ],
+       do: dropped
+
+  defp maybe_notify_failure({:error, :binding_not_found} = error, message, adapter) do
+    send_text(
+      adapter,
+      message,
+      "This topic is not paired with a Symphony project. Use /symphony_pair <code> in a project topic, message in General/DM freeform, or pair this topic."
+    )
+
+    error
+  end
+
+  defp maybe_notify_failure({:error, reason} = error, message, adapter) do
+    Logger.warning("Gateway turn failed conversation_id=#{message.conversation_id} reason=#{inspect(reason)}")
+
+    send_text(
+      adapter,
+      message,
+      "Symphony could not complete that turn (#{format_failure_reason(reason)}). Try /new and send again, or use a paired project topic."
+    )
+
+    error
+  end
+
+  defp maybe_notify_failure(other, _message, _adapter), do: other
+
+  defp format_failure_reason({:invalid_workspace_cwd, kind, _path, _root}),
+    do: "invalid workspace (#{kind})"
+
+  defp format_failure_reason({:invalid_workspace_cwd, kind, path}),
+    do: "invalid workspace (#{kind}: #{path})"
+
+  defp format_failure_reason({:authoring_goal_unavailable, reason}),
+    do: "workspace unavailable (#{reason})"
+
+  defp format_failure_reason(reason) when is_atom(reason), do: Atom.to_string(reason)
+  defp format_failure_reason(reason), do: inspect(reason)
 
   defp status_text(%Binding{} = binding) do
     "Gateway status: #{binding.binding_kind}; mode=#{binding.active_mode}; agent=#{binding.default_agent_kind || "default"}."

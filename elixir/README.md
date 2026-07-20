@@ -96,6 +96,10 @@ Project topics are configured per project:
 Direct 1:1 chats with the bot are freeform assistant chats. They are scoped to the Telegram direct
 chat/sender and require the sender's Telegram user ID in the direct-message allowlist.
 
+The group's **General** topic (and plain group messages in that chat) use one shared freeform
+session for the group, gated by the group allowlist — same pattern as a project topic, without a
+project pairing.
+
 Supported Telegram commands:
 
 - `/help`, `/ajuda`

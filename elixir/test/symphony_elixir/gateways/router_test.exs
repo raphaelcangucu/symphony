@@ -20,6 +20,35 @@ defmodule SymphonyElixir.Gateways.RouterTest do
 
     message = direct_message("777", "hello")
     assert {:dropped, :unauthorized_direct_sender} = Router.handle_message(message, adapter: __MODULE__.FakeAdapter)
+    refute_received {:sent_text, _}
+  end
+
+  test "creates a shared group_freeform binding for General group messages" do
+    Settings.put("gateways", "telegram_enabled", true)
+    Settings.put("gateways", "telegram_group_chat_id", "-100123")
+    Settings.put("gateways", "telegram_allowed_user_ids", ["777"])
+
+    assert {:ok, :command} =
+             Router.handle_message(group_message("/status"), adapter: __MODULE__.FakeAdapter)
+
+    assert {:ok, binding} = Gateways.get_active_binding("telegram", "default", "-100123")
+    assert binding.binding_kind == "group_freeform"
+    assert binding.active_mode == "freeform"
+    assert_received {:sent_text, text}
+    assert text =~ "group_freeform"
+  end
+
+  test "replies when an unpaired project topic has no binding" do
+    Settings.put("gateways", "telegram_enabled", true)
+    Settings.put("gateways", "telegram_group_chat_id", "-100123")
+    Settings.put("gateways", "telegram_allowed_user_ids", ["777"])
+
+    assert {:error, :binding_not_found} =
+             Router.handle_message(topic_message("hello unpaired"), adapter: __MODULE__.FakeAdapter)
+
+    assert_received {:sent_text, text}
+    assert text =~ "not paired"
+    assert text =~ "/symphony_pair"
   end
 
   test "allows direct status and creates direct binding" do
@@ -120,7 +149,11 @@ defmodule SymphonyElixir.Gateways.RouterTest do
   end
 
   defmodule FakeAdapter do
-    def send_text(_message, _text, _opts), do: :ok
+    def send_text(_message, text, _opts) do
+      send(self(), {:sent_text, text})
+      :ok
+    end
+
     def send_typing(_message, _opts), do: :ok
   end
 end

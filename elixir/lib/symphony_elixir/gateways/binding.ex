@@ -8,7 +8,7 @@ defmodule SymphonyElixir.Gateways.Binding do
 
   @type t :: %__MODULE__{}
 
-  @binding_kinds ~w(project_topic direct_freeform)
+  @binding_kinds ~w(project_topic direct_freeform group_freeform)
   @statuses ~w(active disabled archived)
   @agent_kinds SymphonyElixir.Settings.Agents.agent_kinds()
   @modes ~w(explore project issue kb freeform)
@@ -95,6 +95,15 @@ defmodule SymphonyElixir.Gateways.Binding do
         changeset
         |> validate_required([:sender_id])
         |> put_change(:project_slug, nil)
+        |> put_change(:default_mode, "freeform")
+        |> put_change(:active_mode, "freeform")
+
+      "group_freeform" ->
+        changeset
+        |> put_change(:project_slug, nil)
+        |> put_change(:sender_id, nil)
+        |> put_change(:thread_id, nil)
+        |> put_change(:parent_conversation_id, nil)
         |> put_change(:default_mode, "freeform")
         |> put_change(:active_mode, "freeform")
 

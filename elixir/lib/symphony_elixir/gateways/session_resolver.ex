@@ -39,6 +39,20 @@ defmodule SymphonyElixir.Gateways.SessionResolver do
     })
   end
 
+  defp create_thread(%Binding{binding_kind: "group_freeform"} = binding) do
+    History.create_gateway_freeform_thread(%{
+      workspace_path: AgentSession.freeform_workspace(binding.id),
+      title: "Telegram General #{binding.conversation_id}",
+      agent_kind: binding.default_agent_kind,
+      metadata: %{
+        "gateway_binding_id" => binding.id,
+        "gateway_provider" => binding.provider,
+        "gateway_conversation_id" => binding.conversation_id,
+        "gateway_surface" => "general"
+      }
+    })
+  end
+
   defp create_thread(%Binding{binding_kind: "project_topic", active_mode: "explore"} = binding) do
     with {:ok, thread} <-
            History.ensure_project_explore_thread(binding.project_slug, %{
