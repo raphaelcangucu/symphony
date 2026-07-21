@@ -183,6 +183,18 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadControllerTest do
            } = json_response(conn, 200)
   end
 
+  test "GET editor rejects an invalid thread id" do
+    conn = get(authorize(), "/api/tracker/v1/assistant/threads/not-an-id/editor")
+
+    assert %{"error" => %{"code" => "validation_failed"}} = json_response(conn, 422)
+  end
+
+  test "GET editor returns thread_not_found for a missing thread" do
+    conn = get(authorize(), "/api/tracker/v1/assistant/threads/2147483647/editor")
+
+    assert %{"error" => %{"code" => "thread_not_found"}} = json_response(conn, 404)
+  end
+
   test "POST archive hides thread from list" do
     {:ok, thread} = History.create_freeform_thread(%{title: "Old", workspace_path: System.tmp_dir!()})
     id = thread.id

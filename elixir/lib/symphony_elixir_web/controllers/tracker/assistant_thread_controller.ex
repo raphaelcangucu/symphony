@@ -62,7 +62,20 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
 
       render_editor_payload(conn, browser, cursor)
     else
-      _ -> render_workspace_missing_editor_payload(conn)
+      {:error, :invalid_thread_id} ->
+        TrackerErrors.render(conn, :invalid_thread_id)
+
+      {:error, :not_found} ->
+        TrackerErrors.render(conn, :thread_not_found)
+
+      workspace_path when workspace_path in [nil, ""] ->
+        render_workspace_missing_editor_payload(conn)
+
+      {:error, reason} ->
+        TrackerErrors.render(conn, reason)
+
+      _unexpected_workspace_path ->
+        TrackerErrors.render(conn, :request_failed)
     end
   end
 
