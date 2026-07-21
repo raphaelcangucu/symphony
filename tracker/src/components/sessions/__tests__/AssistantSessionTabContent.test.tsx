@@ -4,6 +4,9 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AssistantSessionTabContent } from "@/components/sessions/AssistantSessionTabContent";
+import { SessionEnvironmentDockContext } from "@/components/sessions/sessionEnvironmentDockContext";
+import { SessionPreviewDockContext } from "@/components/sessions/sessionPreviewDockContext";
+import { SessionTasksDockContext } from "@/components/sessions/sessionTasksDockContext";
 import { SessionTerminalDockContext } from "@/components/sessions/sessionTerminalDockContext";
 import { initTestI18n } from "@/i18n/testUtils";
 
@@ -15,14 +18,17 @@ vi.mock("@/components/assistant/ProjectAssistantPanel", () => ({
   ProjectAssistantPanel: ({
     diffRequestId,
     executionMode,
+    onKnowledgeBaseControlChange,
   }: {
     diffRequestId?: number;
     executionMode?: boolean;
+    onKnowledgeBaseControlChange?: unknown;
   }) => (
     <div
       data-testid={executionMode ? "execution-session-panel" : "assistant-panel"}
       data-diff-request-id={diffRequestId ?? 0}
       data-execution-mode={executionMode ? "true" : "false"}
+      data-has-kb-control={onKnowledgeBaseControlChange ? "true" : "false"}
     />
   ),
 }));
@@ -76,6 +82,43 @@ describe("AssistantSessionTabContent", () => {
     expect(screen.getByRole("button", { name: "Terminal for 510" })).toHaveAttribute("aria-pressed", "false");
     expect(screen.getByRole("button", { name: /open in code/i })).toBeInTheDocument();
     expect(screen.getByTestId("assistant-panel")).toBeInTheDocument();
+  });
+
+  it("shows working-tree toolbar for threads without issueIdentifier", async () => {
+    getAssistantThreadMock.mockResolvedValue({
+      id: 8076,
+      scope: "freeform",
+      agentKind: "codex",
+      projectSlug: "macro-markets",
+      projectName: "Macro Markets",
+      issueIdentifier: null,
+      workspacePath: "/workspaces/macro-markets/flaky-pipe",
+      title: "Workspace: flaky-pipe",
+      status: "active",
+      preview: null,
+      updatedAt: "2026-07-20T00:00:00Z",
+    });
+
+    render(
+      <MemoryRouter>
+        <SessionPreviewDockContext.Provider value={{ openIssueIdentifier: null, togglePreview: vi.fn() }}>
+          <SessionTerminalDockContext.Provider value={{ openIssueIdentifier: null, toggleTerminal: vi.fn() }}>
+            <SessionEnvironmentDockContext.Provider
+              value={{ openIssueIdentifier: null, toggleEnvironment: vi.fn() }}
+            >
+              <SessionTasksDockContext.Provider value={{ openIssueIdentifier: null, toggleTasks: vi.fn() }}>
+                <AssistantSessionTabContent projectSlug="macro-markets" threadId={8076} view="board" />
+              </SessionTasksDockContext.Provider>
+            </SessionEnvironmentDockContext.Provider>
+          </SessionTerminalDockContext.Provider>
+        </SessionPreviewDockContext.Provider>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole("button", { name: /diff/i })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /open issue/i })).toBeNull();
+    expect(screen.getByText(/flaky-pipe/i)).toBeInTheDocument();
+    expect(screen.getByTestId("assistant-panel")).toHaveAttribute("data-has-kb-control", "true");
   });
 
   it("toggles the workspace terminal dock instead of navigating to the issue drawer", async () => {

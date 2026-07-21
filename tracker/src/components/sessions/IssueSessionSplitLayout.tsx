@@ -9,11 +9,13 @@ import type { WorkspaceView } from "@/lib/workspaceRoutes";
 
 interface IssueSessionSplitLayoutProps {
   projectSlug: string;
-  issueIdentifier: string;
+  issueIdentifier?: string | null;
   view: WorkspaceView;
   headerStart: ReactNode;
   toolbarLeading?: ReactNode;
   toolbarTrailing?: ReactNode;
+  showOpenIssue?: boolean;
+  pathActionsEnabled?: boolean;
   onOpenKnowledgeBase?: () => void;
   changedDocCount?: number;
   children: ReactNode;
@@ -31,18 +33,28 @@ export function IssueSessionSplitLayout({
   headerStart,
   toolbarLeading = null,
   toolbarTrailing = null,
+  showOpenIssue = true,
+  pathActionsEnabled = true,
   onOpenKnowledgeBase,
   changedDocCount,
   children,
 }: IssueSessionSplitLayoutProps) {
+  const normalizedIssueIdentifier = issueIdentifier?.trim() || null;
   const dock = useSessionTerminalDock();
-  const terminalOpen = dock?.openIssueIdentifier === issueIdentifier;
+  const terminalOpen =
+    normalizedIssueIdentifier != null && dock?.openIssueIdentifier === normalizedIssueIdentifier;
   const previewDock = useSessionPreviewDock();
-  const previewOpen = previewDock?.openIssueIdentifier === issueIdentifier;
+  const previewOpen =
+    normalizedIssueIdentifier != null &&
+    previewDock?.openIssueIdentifier === normalizedIssueIdentifier;
   const environmentDock = useSessionEnvironmentDock();
-  const environmentOpen = environmentDock?.openIssueIdentifier === issueIdentifier;
+  const environmentOpen =
+    normalizedIssueIdentifier != null &&
+    environmentDock?.openIssueIdentifier === normalizedIssueIdentifier;
   const tasksDock = useSessionTasksDock();
-  const tasksOpen = tasksDock?.openIssueIdentifier === issueIdentifier;
+  const tasksOpen =
+    normalizedIssueIdentifier != null &&
+    tasksDock?.openIssueIdentifier === normalizedIssueIdentifier;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -50,20 +62,36 @@ export function IssueSessionSplitLayout({
         <div className="flex min-w-0 flex-1 items-center">{headerStart}</div>
         <IssueWorkingTreeToolbar
           projectSlug={projectSlug}
-          issueIdentifier={issueIdentifier}
+          issueIdentifier={normalizedIssueIdentifier}
           view={view}
           leading={toolbarLeading}
           trailing={toolbarTrailing}
+          showOpenIssue={showOpenIssue}
+          pathActionsEnabled={pathActionsEnabled}
           terminalOpen={terminalOpen}
-          onTerminalToggle={dock ? () => dock.toggleTerminal(issueIdentifier) : undefined}
+          onTerminalToggle={
+            dock && normalizedIssueIdentifier
+              ? () => dock.toggleTerminal(normalizedIssueIdentifier)
+              : undefined
+          }
           previewOpen={previewOpen}
-          onPreviewToggle={previewDock ? () => previewDock.togglePreview(issueIdentifier) : undefined}
+          onPreviewToggle={
+            previewDock && normalizedIssueIdentifier
+              ? () => previewDock.togglePreview(normalizedIssueIdentifier)
+              : undefined
+          }
           environmentOpen={environmentOpen}
           onEnvironmentToggle={
-            environmentDock ? () => environmentDock.toggleEnvironment(issueIdentifier) : undefined
+            environmentDock && normalizedIssueIdentifier
+              ? () => environmentDock.toggleEnvironment(normalizedIssueIdentifier)
+              : undefined
           }
           tasksOpen={tasksOpen}
-          onTasksToggle={tasksDock ? () => tasksDock.toggleTasks(issueIdentifier) : undefined}
+          onTasksToggle={
+            tasksDock && normalizedIssueIdentifier
+              ? () => tasksDock.toggleTasks(normalizedIssueIdentifier)
+              : undefined
+          }
           onOpenKnowledgeBase={onOpenKnowledgeBase}
           changedDocCount={changedDocCount}
         />

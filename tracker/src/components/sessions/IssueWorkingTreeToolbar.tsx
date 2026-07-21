@@ -1,4 +1,11 @@
-import { AppWindow, ExternalLink, ListChecks, PanelRight, TerminalSquare } from "lucide-react";
+import {
+  AppWindow,
+  BookOpen,
+  ExternalLink,
+  ListChecks,
+  PanelRight,
+  TerminalSquare,
+} from "lucide-react";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
@@ -9,17 +16,22 @@ import {
   sessionToolbarIconButtonActiveClassName,
   sessionToolbarIconButtonClassName,
 } from "@/components/sessions/sessionToolbarStyles";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { issuePath, type WorkspaceView } from "@/lib/workspaceRoutes";
 
 interface IssueWorkingTreeToolbarProps {
   projectSlug: string;
-  issueIdentifier: string;
+  issueIdentifier?: string | null;
   view: WorkspaceView;
   /** Extra controls rendered before the standard issue/working-tree actions. */
   leading?: ReactNode;
   /** Extra controls rendered after documents (e.g. new session). */
   trailing?: ReactNode;
+  /** Hides issue navigation for thread-scoped workspaces. */
+  showOpenIssue?: boolean;
+  /** Disables actions that require a provisioned workspace path. */
+  pathActionsEnabled?: boolean;
   /** When set, the terminal control toggles an inline dock instead of navigating away. */
   terminalOpen?: boolean;
   onTerminalToggle?: () => void;
@@ -43,6 +55,8 @@ export function IssueWorkingTreeToolbar({
   view,
   leading = null,
   trailing = null,
+  showOpenIssue = true,
+  pathActionsEnabled = true,
   terminalOpen = false,
   onTerminalToggle,
   previewOpen = false,
@@ -55,8 +69,14 @@ export function IssueWorkingTreeToolbar({
   changedDocCount,
 }: IssueWorkingTreeToolbarProps) {
   const { t } = useTranslation();
-  const issueHref = issuePath(projectSlug, view, issueIdentifier, "sessions");
-  const issueTerminalHref = issuePath(projectSlug, view, issueIdentifier, "terminal");
+  const normalizedIssueIdentifier = issueIdentifier?.trim() || null;
+  const issueHref = normalizedIssueIdentifier
+    ? issuePath(projectSlug, view, normalizedIssueIdentifier, "sessions")
+    : null;
+  const issueTerminalHref = normalizedIssueIdentifier
+    ? issuePath(projectSlug, view, normalizedIssueIdentifier, "terminal")
+    : null;
+  const pathActionUnavailableTitle = t("sessions.workspaceNotProvisioned");
   const terminalActionClassName = cn(
     sessionToolbarIconButtonClassName,
     terminalOpen && sessionToolbarIconButtonActiveClassName,
@@ -77,40 +97,57 @@ export function IssueWorkingTreeToolbar({
   return (
     <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
       {leading}
-      <Link
-        to={issueHref}
-        aria-label={t("sessions.openIssueAria", { identifier: issueIdentifier })}
-        title={t("sessions.openIssueAria", { identifier: issueIdentifier })}
-        className={sessionToolbarIconButtonClassName}
-      >
-        <ExternalLink className="h-4 w-4" />
-      </Link>
-      {onTerminalToggle ? (
+      {showOpenIssue && normalizedIssueIdentifier && issueHref ? (
+        <Link
+          to={issueHref}
+          aria-label={t("sessions.openIssueAria", { identifier: normalizedIssueIdentifier })}
+          title={t("sessions.openIssueAria", { identifier: normalizedIssueIdentifier })}
+          className={sessionToolbarIconButtonClassName}
+        >
+          <ExternalLink className="h-4 w-4" />
+        </Link>
+      ) : null}
+      {normalizedIssueIdentifier && !pathActionsEnabled ? (
         <button
           type="button"
-          aria-label={t("issue.terminal.ariaLabel", { identifier: issueIdentifier })}
-          title={t("issue.terminal.ariaLabel", { identifier: issueIdentifier })}
+          disabled
+          aria-label={t("issue.terminal.ariaLabel", { identifier: normalizedIssueIdentifier })}
+          title={pathActionUnavailableTitle}
+          className={terminalActionClassName}
+        >
+          <TerminalSquare className="h-4 w-4" />
+        </button>
+      ) : normalizedIssueIdentifier && onTerminalToggle ? (
+        <button
+          type="button"
+          aria-label={t("issue.terminal.ariaLabel", { identifier: normalizedIssueIdentifier })}
+          title={t("issue.terminal.ariaLabel", { identifier: normalizedIssueIdentifier })}
           aria-pressed={terminalOpen}
           onClick={onTerminalToggle}
           className={terminalActionClassName}
         >
           <TerminalSquare className="h-4 w-4" />
         </button>
-      ) : (
+      ) : normalizedIssueIdentifier && issueTerminalHref ? (
         <Link
           to={issueTerminalHref}
-          aria-label={t("issue.terminal.ariaLabel", { identifier: issueIdentifier })}
-          title={t("issue.terminal.ariaLabel", { identifier: issueIdentifier })}
+          aria-label={t("issue.terminal.ariaLabel", { identifier: normalizedIssueIdentifier })}
+          title={t("issue.terminal.ariaLabel", { identifier: normalizedIssueIdentifier })}
           className={terminalActionClassName}
         >
           <TerminalSquare className="h-4 w-4" />
         </Link>
-      )}
+      ) : null}
       {onPreviewToggle ? (
         <button
           type="button"
-          aria-label={t("workspace.preview.ariaLabel", { identifier: issueIdentifier })}
-          title={t("workspace.preview.ariaLabel", { identifier: issueIdentifier })}
+          disabled={!pathActionsEnabled}
+          aria-label={t("workspace.preview.ariaLabel", { identifier: normalizedIssueIdentifier })}
+          title={
+            pathActionsEnabled
+              ? t("workspace.preview.ariaLabel", { identifier: normalizedIssueIdentifier })
+              : pathActionUnavailableTitle
+          }
           aria-pressed={previewOpen}
           onClick={onPreviewToggle}
           className={previewActionClassName}
@@ -121,8 +158,15 @@ export function IssueWorkingTreeToolbar({
       {onEnvironmentToggle ? (
         <button
           type="button"
-          aria-label={t("workspace.environment.ariaLabel", { identifier: issueIdentifier })}
-          title={t("workspace.environment.ariaLabel", { identifier: issueIdentifier })}
+          disabled={!pathActionsEnabled}
+          aria-label={t("workspace.environment.ariaLabel", {
+            identifier: normalizedIssueIdentifier,
+          })}
+          title={
+            pathActionsEnabled
+              ? t("workspace.environment.ariaLabel", { identifier: normalizedIssueIdentifier })
+              : pathActionUnavailableTitle
+          }
           aria-pressed={environmentOpen}
           onClick={onEnvironmentToggle}
           className={environmentActionClassName}
@@ -133,9 +177,14 @@ export function IssueWorkingTreeToolbar({
       {onTasksToggle ? (
         <button
           type="button"
+          disabled={!pathActionsEnabled}
           data-testid="tasks-dock-toolbar-toggle"
-          aria-label={t("workspace.tasks.ariaLabel", { identifier: issueIdentifier })}
-          title={t("workspace.tasks.ariaLabel", { identifier: issueIdentifier })}
+          aria-label={t("workspace.tasks.ariaLabel", { identifier: normalizedIssueIdentifier })}
+          title={
+            pathActionsEnabled
+              ? t("workspace.tasks.ariaLabel", { identifier: normalizedIssueIdentifier })
+              : pathActionUnavailableTitle
+          }
           aria-pressed={tasksOpen}
           onClick={onTasksToggle}
           className={tasksActionClassName}
@@ -143,22 +192,49 @@ export function IssueWorkingTreeToolbar({
           <ListChecks className="h-4 w-4" />
         </button>
       ) : null}
-      <IssueEditorMenu projectSlug={projectSlug} identifier={issueIdentifier} compact />
-      <IssueDocumentsDrawer
-        projectSlug={projectSlug}
-        identifier={issueIdentifier}
-        compact
-        triggerOnly={Boolean(onOpenKnowledgeBase)}
-        onOpenChange={
-          onOpenKnowledgeBase
-            ? (next) => {
-                if (next) onOpenKnowledgeBase();
-              }
-            : undefined
-        }
-        changedDocCount={onOpenKnowledgeBase ? changedDocCount : undefined}
-        changedDocPaths={onOpenKnowledgeBase ? [] : undefined}
-      />
+      {normalizedIssueIdentifier && pathActionsEnabled ? (
+        <IssueEditorMenu
+          projectSlug={projectSlug}
+          identifier={normalizedIssueIdentifier}
+          compact
+        />
+      ) : null}
+      {normalizedIssueIdentifier ? (
+        <IssueDocumentsDrawer
+          projectSlug={projectSlug}
+          identifier={normalizedIssueIdentifier}
+          compact
+          triggerOnly={Boolean(onOpenKnowledgeBase)}
+          onOpenChange={
+            onOpenKnowledgeBase
+              ? (next) => {
+                  if (next) onOpenKnowledgeBase();
+                }
+              : undefined
+          }
+          changedDocCount={onOpenKnowledgeBase ? changedDocCount : undefined}
+          changedDocPaths={onOpenKnowledgeBase ? [] : undefined}
+        />
+      ) : onOpenKnowledgeBase ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className={cn("relative", sessionToolbarIconButtonClassName)}
+          onClick={onOpenKnowledgeBase}
+          aria-label={t("assistant.authoring.openDocuments")}
+          title={t("assistant.authoring.openDocuments")}
+        >
+          <BookOpen className="h-4 w-4 shrink-0" />
+          {(changedDocCount ?? 0) > 0 ? (
+            <span
+              aria-hidden
+              className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-amber-500"
+              data-testid="changed-docs-dot"
+            />
+          ) : null}
+        </Button>
+      ) : null}
       {trailing}
     </div>
   );

@@ -2788,6 +2788,7 @@
     "openAuthoringAria": "Open session {{identifier}}",
     "issueThreadHint": "Issue {{identifier}} working tree",
     "openIssueAria": "Open issue {{identifier}}",
+    "workspaceNotProvisioned": "Workspace is not provisioned yet.",
     "executionUnavailable": "Execution details for {{identifier}} are not available right now.",
     "turns": "{{count}} turns",
     "runtime": "Runtime {{value}}",

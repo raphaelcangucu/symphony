@@ -2788,6 +2788,7 @@
     "openAuthoringAria": "Abrir sessão {{identifier}}",
     "issueThreadHint": "Working tree da issue {{identifier}}",
     "openIssueAria": "Abrir issue {{identifier}}",
+    "workspaceNotProvisioned": "O workspace ainda não foi provisionado.",
     "executionUnavailable": "Os detalhes da execução de {{identifier}} não estão disponíveis agora.",
     "turns": "{{count}} turnos",
     "runtime": "Duração {{value}}",
