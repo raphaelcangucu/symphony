@@ -3,6 +3,7 @@ import {
   issueWorkspaceScope,
   threadWorkspaceScope,
   workspaceScopeKey,
+  workspaceScopeProvisioned,
   workspaceScopesEqual,
 } from "@/lib/workspaceScope";
 
@@ -32,5 +33,14 @@ describe("workspaceScope", () => {
   it("stable keys for dock state", () => {
     expect(workspaceScopeKey(issueWorkspaceScope("p", "510"))).toBe("issue:p:510");
     expect(workspaceScopeKey(threadWorkspaceScope("p", 8076, null))).toBe("thread:p:8076");
+  });
+
+  it("detects provisioned scopes", () => {
+    expect(
+      workspaceScopeProvisioned(threadWorkspaceScope("p", 1, "/ws/flaky-pipe")),
+    ).toBe(true);
+    expect(workspaceScopeProvisioned(threadWorkspaceScope("p", 1, null))).toBe(false);
+    expect(workspaceScopeProvisioned(threadWorkspaceScope("p", 1, "   "))).toBe(false);
+    expect(workspaceScopeProvisioned(issueWorkspaceScope("p", "510"))).toBe(true);
   });
 });
