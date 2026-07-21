@@ -5,6 +5,7 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
 
   alias Plug.Conn
   alias SymphonyElixir.Assistant.{AgentSession, History, ProjectExploreWorkspace, TitleGenerator}
+  alias SymphonyElixir.Editor
   alias SymphonyElixir.Workspace.Provision
   alias SymphonyElixir.Workspace.PathOwnership
   alias SymphonyElixirWeb.{TrackerErrors, TrackerPresenter}
@@ -44,6 +45,24 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
       :error -> TrackerErrors.validation_msg(conn, "thread_id must be an integer")
       {:error, :not_found} -> TrackerErrors.render(conn, :thread_not_found)
       {:error, reason} -> TrackerErrors.render(conn, reason)
+    end
+  end
+
+  @spec editor(Conn.t(), map()) :: Conn.t()
+  def editor(conn, %{"thread_id" => raw_id}) do
+    with {:ok, id} <- parse_thread_id(raw_id),
+         {:ok, thread} <- History.get_thread(id),
+         workspace_path when is_binary(workspace_path) and workspace_path != "" <-
+           Map.get(thread, :workspace_path) do
+      project_slug = Map.get(thread, :project_slug) || ""
+      browser = editor_payload(Editor.workspace_path_target(project_slug, workspace_path))
+
+      cursor =
+        editor_payload(Editor.workspace_path_cursor_desktop_target(project_slug, workspace_path))
+
+      render_editor_payload(conn, browser, cursor)
+    else
+      _ -> render_workspace_missing_editor_payload(conn)
     end
   end
 
@@ -316,6 +335,31 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
   end
 
   defp parse_thread_id(_), do: {:error, :invalid_thread_id}
+
+  defp render_editor_payload(conn, browser, cursor) do
+    json(conn, %{
+      data: %{
+        available: browser.available,
+        url: browser.url,
+        reason: browser.reason,
+        cursor_desktop: %{
+          available: cursor.available,
+          url: cursor.url,
+          reason: cursor.reason
+        }
+      }
+    })
+  end
+
+  defp render_workspace_missing_editor_payload(conn) do
+    missing = editor_payload({:error, :workspace_missing})
+    render_editor_payload(conn, missing, missing)
+  end
+
+  defp editor_payload({:ok, url}), do: %{available: true, url: url, reason: nil}
+
+  defp editor_payload({:error, reason}),
+    do: %{available: false, url: nil, reason: Atom.to_string(reason)}
 
   defp title_runner_opts do
     case Application.get_env(:symphony_elixir, :title_generator_runner) do

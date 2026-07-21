@@ -256,6 +256,45 @@ defmodule SymphonyElixir.EditorTest do
     end
   end
 
+  describe "workspace_path_target/2" do
+    test "builds browser url when directory exists" do
+      load_workflow_with_front_matter(editor_front_matter())
+      enable_editor!()
+      put_status_fun(fn -> :ready end)
+
+      dir =
+        Path.join(
+          System.tmp_dir!(),
+          "symphony-editor-ws-#{System.unique_integer([:positive])}"
+        )
+
+      File.mkdir_p!(dir)
+      on_exit(fn -> File.rm_rf(dir) end)
+
+      expected_url =
+        SymphonyElixir.Config.editor_base_url() <> "/?folder=" <> URI.encode_www_form(dir)
+
+      assert Editor.workspace_path_target("macro-markets", dir) == {:ok, expected_url}
+    end
+
+    test "returns workspace_missing when path is absent" do
+      load_workflow_with_front_matter(editor_front_matter())
+      enable_editor!()
+      put_status_fun(fn -> :ready end)
+
+      missing_path =
+        Path.join(
+          System.tmp_dir!(),
+          "symphony-editor-missing-#{System.unique_integer([:positive])}"
+        )
+
+      refute File.dir?(missing_path)
+
+      assert Editor.workspace_path_target("macro-markets", missing_path) ==
+               {:error, :workspace_missing}
+    end
+  end
+
   describe "cursor_desktop_target/2" do
     test "returns {:error, :workspace_missing} when the workspace is absent" do
       path = SymphonyElixir.Workspace.path_for_issue("MAC-EXISTS")
@@ -374,8 +413,12 @@ defmodule SymphonyElixir.EditorTest do
 
   defp wait_until(fun, attempts \\ 50) do
     cond do
-      fun.() -> true
-      attempts <= 0 -> false
+      fun.() ->
+        true
+
+      attempts <= 0 ->
+        false
+
       true ->
         Process.sleep(20)
         wait_until(fun, attempts - 1)

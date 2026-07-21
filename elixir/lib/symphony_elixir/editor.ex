@@ -40,6 +40,26 @@ defmodule SymphonyElixir.Editor do
     end
   end
 
+  @spec workspace_path_target(String.t(), String.t()) :: {:ok, String.t()} | {:error, reason()}
+  def workspace_path_target(project_slug, workspace_path)
+      when is_binary(project_slug) and is_binary(workspace_path) do
+    with :ok <- ensure_enabled(),
+         :ok <- ensure_ready(),
+         {:ok, path} <- ensure_browser_workspace_path(project_slug, workspace_path) do
+      {:ok, build_browser_url(path)}
+    end
+  end
+
+  @spec workspace_path_cursor_desktop_target(String.t(), String.t()) ::
+          {:ok, String.t()} | {:error, reason()}
+  def workspace_path_cursor_desktop_target(project_slug, workspace_path)
+      when is_binary(project_slug) and is_binary(workspace_path) do
+    case ensure_explicit_workspace_path(project_slug, workspace_path) do
+      {:ok, path} -> {:ok, build_cursor_url(path)}
+      {:error, _} = error -> error
+    end
+  end
+
   @spec project_editor_target(String.t()) :: {:ok, String.t()} | {:error, reason()}
   def project_editor_target(project_slug) when is_binary(project_slug) do
     with :ok <- ensure_enabled(),
@@ -90,6 +110,14 @@ defmodule SymphonyElixir.Editor do
     end
   end
 
+  defp ensure_explicit_workspace_path(project_slug, workspace_path) do
+    if File.dir?(workspace_path) do
+      {:ok, resolve_project_editor_folder(String.trim(project_slug), workspace_path)}
+    else
+      {:error, :workspace_missing}
+    end
+  end
+
   defp ensure_browser_workspace(project_slug, issue_identifier) do
     workspace_path = Workspace.path_for_issue(workspace_identifier(issue_identifier))
 
@@ -98,6 +126,17 @@ defmodule SymphonyElixir.Editor do
       {:ok, resolve_issue_editor_folder(project_slug, workspace_path)}
     else
       {:error, :workspace_missing}
+    end
+  end
+
+  defp ensure_browser_workspace_path(project_slug, workspace_path) do
+    case ensure_explicit_workspace_path(project_slug, workspace_path) do
+      {:ok, path} ->
+        prepare_workspace_skills_async(workspace_path)
+        {:ok, path}
+
+      {:error, _} = error ->
+        error
     end
   end
 
@@ -120,9 +159,7 @@ defmodule SymphonyElixir.Editor do
           :ok
 
         {:error, reason} ->
-          Logger.warning(
-            "Editor workspace skills preparation failed workspace=#{workspace_path} reason=#{inspect(reason)}"
-          )
+          Logger.warning("Editor workspace skills preparation failed workspace=#{workspace_path} reason=#{inspect(reason)}")
       end
     end)
 

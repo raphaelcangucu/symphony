@@ -57,7 +57,7 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadControllerTest do
       |> post("/api/tracker/v1/assistant/threads", %{scope: "freeform", title: "Ideas"})
 
     assert %{"data" => %{"scope" => "freeform", "title" => "Ideas", "project_slug" => nil, "id" => _}} =
-      json_response(conn, 201)
+             json_response(conn, 201)
   end
 
   test "POST freeform thread persists agent_kind and model/effort metadata" do
@@ -104,6 +104,54 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadControllerTest do
     conn = get(authorize(), "/api/tracker/v1/assistant/threads?scope=freeform")
 
     assert %{"data" => [%{"scope" => "freeform"} | _]} = json_response(conn, 200)
+  end
+
+  test "GET editor returns browser and Cursor targets for the thread workspace", ctx do
+    workspace_path = Path.join(ctx.tmp, "editor-workspace")
+    File.mkdir_p!(workspace_path)
+
+    {:ok, thread} =
+      History.create_freeform_thread(%{
+        title: "Editor",
+        workspace_path: workspace_path
+      })
+
+    previous_enabled = Application.get_env(:symphony_elixir, :editor_enabled)
+    previous_base_url = Application.get_env(:symphony_elixir, :editor_base_url)
+    previous_status_fun = Application.get_env(:symphony_elixir, :editor_status_fun)
+    previous_wsl = System.get_env("WSL_DISTRO_NAME")
+
+    Application.put_env(:symphony_elixir, :editor_enabled, true)
+    Application.put_env(:symphony_elixir, :editor_base_url, "https://editor.example.com")
+    Application.put_env(:symphony_elixir, :editor_status_fun, fn -> :ready end)
+    System.delete_env("WSL_DISTRO_NAME")
+
+    on_exit(fn ->
+      restore_application_env(:editor_enabled, previous_enabled)
+      restore_application_env(:editor_base_url, previous_base_url)
+      restore_application_env(:editor_status_fun, previous_status_fun)
+      restore_env("WSL_DISTRO_NAME", previous_wsl)
+    end)
+
+    conn = get(authorize(), "/api/tracker/v1/assistant/threads/#{thread.id}/editor")
+
+    expected_browser_url =
+      "https://editor.example.com/?folder=" <> URI.encode_www_form(workspace_path)
+
+    expected_cursor_url = "cursor://file/" <> URI.encode(Path.expand(workspace_path))
+
+    assert %{
+             "data" => %{
+               "available" => true,
+               "url" => ^expected_browser_url,
+               "reason" => nil,
+               "cursor_desktop" => %{
+                 "available" => true,
+                 "url" => ^expected_cursor_url,
+                 "reason" => nil
+               }
+             }
+           } = json_response(conn, 200)
   end
 
   test "POST archive hides thread from list" do
@@ -294,6 +342,7 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadControllerTest do
 
   test "DELETE removes an active project_explore thread" do
     {:ok, _project} = Context.ensure_project(%{name: "Delete Explore", slug: "delete-explore-api"})
+
     {:ok, thread} =
       History.ensure_project_explore_thread("delete-explore-api", %{workspace_path: "/tmp/delete-explore-api"})
 
@@ -795,6 +844,11 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadControllerTest do
       val -> System.put_env(key, val)
     end
   end
+
+  defp restore_application_env(key, nil), do: Application.delete_env(:symphony_elixir, key)
+
+  defp restore_application_env(key, value),
+    do: Application.put_env(:symphony_elixir, key, value)
 
   defp restore_inventory_module(nil), do: Application.delete_env(:symphony_elixir, @inventory_module_env)
 

@@ -125,6 +125,7 @@ defmodule SymphonyElixirWeb.Router do
     post("/assistant/threads", AssistantThreadController, :create)
     post("/assistant/threads/freeform/active", AssistantThreadController, :ensure_active_freeform)
     get("/assistant/threads/:thread_id", AssistantThreadController, :show)
+    get("/assistant/threads/:thread_id/editor", AssistantThreadController, :editor)
     patch("/assistant/threads/:thread_id", AssistantThreadController, :update)
     delete("/assistant/threads/:thread_id", AssistantThreadController, :delete)
     post("/assistant/threads/:thread_id/archive", AssistantThreadController, :archive)
