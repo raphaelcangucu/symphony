@@ -18,7 +18,7 @@ defmodule SymphonyElixir.Settings.AgentModels do
 
   @catalog %{
     "codex" => ["gpt-5-codex", "gpt-5"],
-    "claude" => ["claude-sonnet-4-5", "claude-opus-4-1"],
+    "claude" => ["claude-fable-5", "claude-opus-4-8", "claude-sonnet-5"],
     "cursor" => ["auto"]
   }
 

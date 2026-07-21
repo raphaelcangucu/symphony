@@ -118,11 +118,14 @@ export function fallbackClaudeCatalog(
   command = "claude",
   t: Translate = i18n.t.bind(i18n) as Translate,
 ): AssistantAgentCatalog {
-  // Mirrors SymphonyElixir.Claude.ModelCatalog: xhigh is Opus 4.7+, max is
-  // Opus-tier only, Haiku has no effort control, and high is the CLI default.
+  // Mirrors SymphonyElixir.Claude.ModelCatalog: max is flagship-tier (Opus /
+  // Fable), xhigh reaches Opus 4.7+ and Sonnet 5, Haiku has no effort control,
+  // and each model pins an explicit default rung (Sonnet 5 has xhigh yet
+  // defaults to high).
   const opusEfforts = efforts(t, "low", "medium", "high", "xhigh", "max");
   const opusLegacyEfforts = efforts(t, "low", "medium", "high", "max");
   const sonnetEfforts = efforts(t, "low", "medium", "high");
+  const sonnetNextEfforts = efforts(t, "low", "medium", "high", "xhigh");
 
   return {
     agent: "claude",
@@ -131,8 +134,10 @@ export function fallbackClaudeCatalog(
     defaultModel: "claude-opus-4-8",
     models: [
       fallbackModel("claude-opus-4-8", true, "xhigh", opusEfforts, t),
+      fallbackModel("claude-fable-5", false, "xhigh", opusEfforts, t),
       fallbackModel("claude-opus-4-7", false, "xhigh", opusEfforts, t),
       fallbackModel("claude-opus-4-6", false, "high", opusLegacyEfforts, t),
+      fallbackModel("claude-sonnet-5", false, "high", sonnetNextEfforts, t),
       fallbackModel("claude-sonnet-4-6", false, "high", sonnetEfforts, t),
       fallbackModel("claude-haiku-4-5", false, "", [], t),
     ],

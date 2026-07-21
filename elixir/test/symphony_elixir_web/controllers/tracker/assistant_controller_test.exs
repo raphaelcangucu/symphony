@@ -83,7 +83,7 @@ defmodule SymphonyElixirWeb.Tracker.AssistantControllerTest do
     assert claude["agent_label"] == "Claude Code"
     assert is_binary(claude["command"])
     assert claude["default_model"] == "claude-opus-4-8"
-    assert length(claude["models"]) == 5
+    assert length(claude["models"]) == 7
 
     default_claude_model = Enum.find(claude["models"], & &1["is_default"])
     assert default_claude_model["model"] == "claude-opus-4-8"
