@@ -28,6 +28,7 @@ const projectAssistantPanel = vi.fn((props: { contentMaxWidth?: string }) => (
 const navigateMock = vi.hoisted(() => vi.fn());
 const environmentDockMock = vi.hoisted(() => vi.fn());
 const terminalDockMock = vi.hoisted(() => vi.fn());
+const previewDockMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/hooks/useProjectSessions", () => ({ useProjectSessions: vi.fn() }));
 vi.mock("@/services/assistantThreads", () => ({
@@ -54,6 +55,12 @@ vi.mock("@/components/sessions/IssueTerminalDock", () => ({
   IssueTerminalDock: (props: unknown) => {
     terminalDockMock(props);
     return <div data-testid="terminal-dock" />;
+  },
+}));
+vi.mock("@/components/sessions/IssuePreviewDock", () => ({
+  IssuePreviewDock: (props: unknown) => {
+    previewDockMock(props);
+    return <div data-testid="preview-dock" />;
   },
 }));
 vi.mock("@/components/layout/WorkspaceContext", () => ({
@@ -513,6 +520,47 @@ describe("ProjectSessionsWorkspace", () => {
     expect(container.querySelector("main > div")).toHaveClass("w-full");
     expect(container.querySelector("main > div")).not.toHaveClass("max-w-[min(100%,96rem)]");
     expect(screen.getByLabelText("mock assistant panel")).toHaveAttribute("data-content-max-width", "default");
+  });
+
+  it("mounts the preview dock for a thread workspace scope", async () => {
+    const user = userEvent.setup();
+    vi.mocked(getAssistantThread).mockResolvedValue({
+      id: 42,
+      scope: "project_session",
+      agentKind: "cursor",
+      projectSlug: "demo",
+      projectName: "Demo",
+      issueIdentifier: null,
+      workspacePath: "/workspaces/demo/thread-workspace",
+      labels: [],
+      needsReview: false,
+      title: "Project session",
+      status: "active",
+      preview: null,
+      updatedAt: "2026-07-15T12:00:00Z",
+    });
+
+    renderWithI18n(
+      <MemoryRouter initialEntries={["/projects/demo/workspaces/42"]}>
+        <ProjectSessionsWorkspace projectSlug="demo" activeThreadId={42} />
+      </MemoryRouter>,
+    );
+
+    await user.click(
+      await screen.findByRole("button", { name: "Preview for thread-workspace" }),
+    );
+
+    expect(screen.getByTestId("preview-dock")).toBeInTheDocument();
+    expect(previewDockMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scope: {
+          kind: "thread",
+          projectSlug: "demo",
+          threadId: 42,
+          workspacePath: "/workspaces/demo/thread-workspace",
+        },
+      }),
+    );
   });
 
   it("labels the assistant tab with the session title from recents", async () => {

@@ -12,7 +12,18 @@ import {
   stopIssueDevServer,
   stopIssueDevServers,
   subscribeIssueDevServers,
+  type IssueDevServersStreamHandlers,
 } from "@/services/issueDevServers";
+import {
+  fetchThreadDevServers,
+  restartThreadDevServer,
+  restartThreadDevServers,
+  startThreadDevServer,
+  startThreadDevServers,
+  stopThreadDevServer,
+  stopThreadDevServers,
+  subscribeThreadDevServers,
+} from "@/services/threadDevServers";
 import type { IssueDevServersResponse } from "@/types/issue";
 
 export interface UseIssueDevServersResult {
@@ -29,20 +40,14 @@ export interface UseIssueDevServersResult {
   startTunnel: () => Promise<void>;
 }
 
-type IssueDevServerAction = (
-  projectSlug: string,
-  issueIdentifier: string,
-) => Promise<IssueDevServersResponse>;
+type IssueDevServerAction = () => Promise<IssueDevServersResponse>;
 
-type IssueDevServerInstanceAction = (
-  projectSlug: string,
-  issueIdentifier: string,
-  serverId: number,
-) => Promise<IssueDevServersResponse>;
+type IssueDevServerInstanceAction = (serverId: number) => Promise<IssueDevServersResponse>;
 
 export function useIssueDevServers(
   projectSlug: string | null | undefined,
   issueIdentifier: string | null | undefined,
+  threadId?: number | null,
 ): UseIssueDevServersResult {
   const [data, setData] = useState<IssueDevServersResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -58,9 +63,11 @@ export function useIssueDevServers(
   focusedRef.current = focused;
 
   const hasIdentifiers = hasRequiredIdentifier(projectSlug) && hasRequiredIdentifier(issueIdentifier);
+  const validThreadId = Number.isInteger(threadId) && (threadId ?? 0) > 0 ? threadId : null;
+  const hasScope = hasIdentifiers || validThreadId != null;
 
   const refresh = useCallback(async () => {
-    if (!hasIdentifiers || !projectSlug || !issueIdentifier) {
+    if (!hasScope) {
       return;
     }
 
@@ -76,7 +83,10 @@ export function useIssueDevServers(
     }
 
     try {
-      const response = await fetchIssueDevServers(projectSlug, issueIdentifier);
+      const response =
+        validThreadId != null
+          ? await fetchThreadDevServers(validThreadId)
+          : await fetchIssueDevServers(projectSlug!, issueIdentifier!);
 
       if (requestId !== requestIdRef.current) {
         return;
@@ -97,11 +107,11 @@ export function useIssueDevServers(
         setLoading(false);
       }
     }
-  }, [hasIdentifiers, issueIdentifier, projectSlug]);
+  }, [hasScope, issueIdentifier, projectSlug, validThreadId]);
 
   const runAction = useCallback(
     async (action: IssueDevServerAction, failureMessage: string) => {
-      if (!hasIdentifiers || !projectSlug || !issueIdentifier) {
+      if (!hasScope) {
         setError(i18n.t("issue.devServer.errors.identifiersRequired"));
         return;
       }
@@ -117,7 +127,7 @@ export function useIssueDevServers(
       setLoading(true);
 
       try {
-        const response = await action(projectSlug, issueIdentifier);
+        const response = await action();
 
         if (requestId !== requestIdRef.current) {
           return;
@@ -143,12 +153,12 @@ export function useIssueDevServers(
         }
       }
     },
-    [hasIdentifiers, issueIdentifier, projectSlug],
+    [hasScope],
   );
 
   const runInstanceAction = useCallback(
     async (action: IssueDevServerInstanceAction, serverId: number, failureMessage: string) => {
-      if (!hasIdentifiers || !projectSlug || !issueIdentifier) {
+      if (!hasScope) {
         setError(i18n.t("issue.devServer.errors.identifiersRequired"));
         return;
       }
@@ -164,7 +174,7 @@ export function useIssueDevServers(
       setLoading(true);
 
       try {
-        const response = await action(projectSlug, issueIdentifier, serverId);
+        const response = await action(serverId);
 
         if (requestId !== requestIdRef.current) {
           return;
@@ -190,35 +200,77 @@ export function useIssueDevServers(
         }
       }
     },
-    [hasIdentifiers, issueIdentifier, projectSlug],
+    [hasScope],
   );
 
   const start = useCallback(
-    () => runAction(startIssueDevServers, i18n.t("issue.devServer.errors.startAllFailed")),
-    [runAction],
+    () =>
+      runAction(
+        () =>
+          validThreadId != null
+            ? startThreadDevServers(validThreadId)
+            : startIssueDevServers(projectSlug!, issueIdentifier!),
+        i18n.t("issue.devServer.errors.startAllFailed"),
+      ),
+    [issueIdentifier, projectSlug, runAction, validThreadId],
   );
   const stop = useCallback(
-    () => runAction(stopIssueDevServers, i18n.t("issue.devServer.errors.stopAllFailed")),
-    [runAction],
+    () =>
+      runAction(
+        () =>
+          validThreadId != null
+            ? stopThreadDevServers(validThreadId)
+            : stopIssueDevServers(projectSlug!, issueIdentifier!),
+        i18n.t("issue.devServer.errors.stopAllFailed"),
+      ),
+    [issueIdentifier, projectSlug, runAction, validThreadId],
   );
   const restart = useCallback(
-    () => runAction(restartIssueDevServers, i18n.t("issue.devServer.errors.restartAllFailed")),
-    [runAction],
+    () =>
+      runAction(
+        () =>
+          validThreadId != null
+            ? restartThreadDevServers(validThreadId)
+            : restartIssueDevServers(projectSlug!, issueIdentifier!),
+        i18n.t("issue.devServer.errors.restartAllFailed"),
+      ),
+    [issueIdentifier, projectSlug, runAction, validThreadId],
   );
   const startServer = useCallback(
     (serverId: number) =>
-      runInstanceAction(startIssueDevServer, serverId, i18n.t("issue.devServer.errors.startFailed")),
-    [runInstanceAction],
+      runInstanceAction(
+        (id) =>
+          validThreadId != null
+            ? startThreadDevServer(validThreadId, id)
+            : startIssueDevServer(projectSlug!, issueIdentifier!, id),
+        serverId,
+        i18n.t("issue.devServer.errors.startFailed"),
+      ),
+    [issueIdentifier, projectSlug, runInstanceAction, validThreadId],
   );
   const stopServer = useCallback(
     (serverId: number) =>
-      runInstanceAction(stopIssueDevServer, serverId, i18n.t("issue.devServer.errors.stopFailed")),
-    [runInstanceAction],
+      runInstanceAction(
+        (id) =>
+          validThreadId != null
+            ? stopThreadDevServer(validThreadId, id)
+            : stopIssueDevServer(projectSlug!, issueIdentifier!, id),
+        serverId,
+        i18n.t("issue.devServer.errors.stopFailed"),
+      ),
+    [issueIdentifier, projectSlug, runInstanceAction, validThreadId],
   );
   const restartServer = useCallback(
     (serverId: number) =>
-      runInstanceAction(restartIssueDevServer, serverId, i18n.t("issue.devServer.errors.restartFailed")),
-    [runInstanceAction],
+      runInstanceAction(
+        (id) =>
+          validThreadId != null
+            ? restartThreadDevServer(validThreadId, id)
+            : restartIssueDevServer(projectSlug!, issueIdentifier!, id),
+        serverId,
+        i18n.t("issue.devServer.errors.restartFailed"),
+      ),
+    [issueIdentifier, projectSlug, runInstanceAction, validThreadId],
   );
 
   const startTunnel = useCallback(async () => {
@@ -241,7 +293,7 @@ export function useIssueDevServers(
     actionInFlightRef.current = false;
     streamFailedRef.current = false;
 
-    if (!hasIdentifiers || !projectSlug || !issueIdentifier) {
+    if (!hasScope) {
       setData(null);
       setError(null);
       setLoading(false);
@@ -250,7 +302,7 @@ export function useIssueDevServers(
 
     setLoading(true);
 
-    const unsubscribe = subscribeIssueDevServers(projectSlug, issueIdentifier, {
+    const handlers: IssueDevServersStreamHandlers = {
       onSnapshot: (response) => {
         setData(response);
         setError(null);
@@ -269,7 +321,12 @@ export function useIssueDevServers(
         streamFailedRef.current = true;
         void refresh();
       },
-    });
+    };
+
+    const unsubscribe =
+      validThreadId != null
+        ? subscribeThreadDevServers(validThreadId, handlers)
+        : subscribeIssueDevServers(projectSlug!, issueIdentifier!, handlers);
 
     return () => {
       requestIdRef.current += 1;
@@ -278,12 +335,12 @@ export function useIssueDevServers(
       actionInFlightRef.current = false;
       unsubscribe();
     };
-  }, [hasIdentifiers, issueIdentifier, projectSlug, refresh]);
+  }, [hasScope, issueIdentifier, projectSlug, refresh, validThreadId]);
 
   useEffect(() => {
-    if (!hasIdentifiers || !focused) return;
+    if (!hasScope || !focused) return;
     void refresh();
-  }, [focused, hasIdentifiers, refresh]);
+  }, [focused, hasScope, refresh]);
 
   return { data, loading, error, refresh, start, stop, restart, startServer, stopServer, restartServer, startTunnel };
 }

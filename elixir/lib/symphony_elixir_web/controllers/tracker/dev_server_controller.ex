@@ -5,6 +5,7 @@ defmodule SymphonyElixirWeb.Tracker.DevServerController do
 
   alias Plug.Conn
   alias SymphonyElixir.Cloudflare.Tunnel
+  alias SymphonyElixir.Assistant.History
   alias SymphonyElixir.DevServer
   alias SymphonyElixir.DevServer.Manager
   alias SymphonyElixir.LocalTracker.Context
@@ -24,6 +25,13 @@ defmodule SymphonyElixirWeb.Tracker.DevServerController do
     end)
   end
 
+  @spec index_thread(Conn.t(), map()) :: Conn.t()
+  def index_thread(conn, %{"thread_id" => thread_id}) do
+    with_thread_workspace(conn, thread_id, fn project_slug, workspace_path ->
+      render_workspace_targets(conn, project_slug, workspace_path)
+    end)
+  end
+
   @spec start(Conn.t(), map()) :: Conn.t()
   def start(conn, %{"project_slug" => project_slug, "identifier" => identifier}) do
     with_valid_issue(conn, project_slug, identifier, fn ->
@@ -34,11 +42,39 @@ defmodule SymphonyElixirWeb.Tracker.DevServerController do
     end)
   end
 
+  @spec start_thread(Conn.t(), map()) :: Conn.t()
+  def start_thread(conn, %{"thread_id" => thread_id}) do
+    with_thread_workspace(conn, thread_id, fn project_slug, workspace_path ->
+      project_slug
+      |> Manager.start_for_workspace(
+        workspace_path,
+        ready_timeout_ms: @http_ready_timeout_ms
+      )
+      |> action_error_reason("start_failed")
+      |> then(
+        &render_workspace_targets(
+          conn,
+          project_slug,
+          workspace_path,
+          &1
+        )
+      )
+    end)
+  end
+
   @spec stop(Conn.t(), map()) :: Conn.t()
   def stop(conn, %{"project_slug" => project_slug, "identifier" => identifier}) do
     with_valid_issue(conn, project_slug, identifier, fn ->
       Manager.stop_for_issue(project_slug, identifier)
       render_targets(conn, project_slug, identifier)
+    end)
+  end
+
+  @spec stop_thread(Conn.t(), map()) :: Conn.t()
+  def stop_thread(conn, %{"thread_id" => thread_id}) do
+    with_thread_workspace(conn, thread_id, fn project_slug, workspace_path ->
+      Manager.stop_for_workspace(project_slug, workspace_path)
+      render_workspace_targets(conn, project_slug, workspace_path)
     end)
   end
 
@@ -52,6 +88,26 @@ defmodule SymphonyElixirWeb.Tracker.DevServerController do
     end)
   end
 
+  @spec restart_thread(Conn.t(), map()) :: Conn.t()
+  def restart_thread(conn, %{"thread_id" => thread_id}) do
+    with_thread_workspace(conn, thread_id, fn project_slug, workspace_path ->
+      project_slug
+      |> Manager.restart_for_workspace(
+        workspace_path,
+        ready_timeout_ms: @http_ready_timeout_ms
+      )
+      |> action_error_reason("restart_failed")
+      |> then(
+        &render_workspace_targets(
+          conn,
+          project_slug,
+          workspace_path,
+          &1
+        )
+      )
+    end)
+  end
+
   @spec start_server(Conn.t(), map()) :: Conn.t()
   def start_server(conn, %{"project_slug" => project_slug, "identifier" => identifier, "server_id" => server_id}) do
     with_valid_issue(conn, project_slug, identifier, fn ->
@@ -62,6 +118,38 @@ defmodule SymphonyElixirWeb.Tracker.DevServerController do
       else
         {:error, :invalid_server_id} -> TrackerErrors.validation_msg(conn, "server_id must be a positive integer")
         {:error, :not_found} -> TrackerErrors.render(conn, :dev_server_not_found)
+      end
+    end)
+  end
+
+  @spec start_thread_server(Conn.t(), map()) :: Conn.t()
+  def start_thread_server(
+        conn,
+        %{"thread_id" => thread_id, "server_id" => server_id}
+      ) do
+    with_thread_workspace(conn, thread_id, fn project_slug, workspace_path ->
+      with {:ok, id} <- parse_server_id(server_id) do
+        project_slug
+        |> Manager.start_instance_for_workspace_server(
+          workspace_path,
+          id,
+          ready_timeout_ms: @http_ready_timeout_ms
+        )
+        |> workspace_instance_action_result(
+          conn,
+          project_slug,
+          workspace_path,
+          "start_failed"
+        )
+      else
+        {:error, :invalid_server_id} ->
+          TrackerErrors.validation_msg(
+            conn,
+            "server_id must be a positive integer"
+          )
+
+        {:error, :not_found} ->
+          TrackerErrors.render(conn, :dev_server_not_found)
       end
     end)
   end
@@ -81,6 +169,37 @@ defmodule SymphonyElixirWeb.Tracker.DevServerController do
     end)
   end
 
+  @spec stop_thread_server(Conn.t(), map()) :: Conn.t()
+  def stop_thread_server(
+        conn,
+        %{"thread_id" => thread_id, "server_id" => server_id}
+      ) do
+    with_thread_workspace(conn, thread_id, fn project_slug, workspace_path ->
+      with {:ok, id} <- parse_server_id(server_id) do
+        case Manager.stop_instance_for_workspace_server(
+               project_slug,
+               workspace_path,
+               id
+             ) do
+          :ok ->
+            render_workspace_targets(conn, project_slug, workspace_path)
+
+          {:error, :not_found} ->
+            TrackerErrors.render(conn, :dev_server_not_found)
+
+          {:error, _reason} ->
+            render_workspace_targets(conn, project_slug, workspace_path)
+        end
+      else
+        {:error, :invalid_server_id} ->
+          TrackerErrors.validation_msg(
+            conn,
+            "server_id must be a positive integer"
+          )
+      end
+    end)
+  end
+
   @spec restart_server(Conn.t(), map()) :: Conn.t()
   def restart_server(conn, %{"project_slug" => project_slug, "identifier" => identifier, "server_id" => server_id}) do
     with_valid_issue(conn, project_slug, identifier, fn ->
@@ -95,10 +214,53 @@ defmodule SymphonyElixirWeb.Tracker.DevServerController do
     end)
   end
 
+  @spec restart_thread_server(Conn.t(), map()) :: Conn.t()
+  def restart_thread_server(
+        conn,
+        %{"thread_id" => thread_id, "server_id" => server_id}
+      ) do
+    with_thread_workspace(conn, thread_id, fn project_slug, workspace_path ->
+      with {:ok, id} <- parse_server_id(server_id) do
+        project_slug
+        |> Manager.restart_instance_for_workspace_server(
+          workspace_path,
+          id,
+          ready_timeout_ms: @http_ready_timeout_ms
+        )
+        |> workspace_instance_action_result(
+          conn,
+          project_slug,
+          workspace_path,
+          "restart_failed"
+        )
+      else
+        {:error, :invalid_server_id} ->
+          TrackerErrors.validation_msg(
+            conn,
+            "server_id must be a positive integer"
+          )
+
+        {:error, :not_found} ->
+          TrackerErrors.render(conn, :dev_server_not_found)
+      end
+    end)
+  end
+
   @spec events(Conn.t(), map()) :: Conn.t()
   def events(conn, %{"project_slug" => project_slug, "identifier" => identifier}) do
     with_valid_issue(conn, project_slug, identifier, fn ->
       DevServerEventStream.stream(conn, project_slug, identifier)
+    end)
+  end
+
+  @spec events_thread(Conn.t(), map()) :: Conn.t()
+  def events_thread(conn, %{"thread_id" => thread_id}) do
+    with_thread_workspace(conn, thread_id, fn project_slug, workspace_path ->
+      DevServerEventStream.stream_workspace(
+        conn,
+        project_slug,
+        workspace_path
+      )
     end)
   end
 
@@ -122,6 +284,37 @@ defmodule SymphonyElixirWeb.Tracker.DevServerController do
     end)
   end
 
+  @spec output_thread(Conn.t(), map()) :: Conn.t()
+  def output_thread(
+        conn,
+        %{"thread_id" => thread_id, "server_id" => server_id}
+      ) do
+    with_thread_workspace(conn, thread_id, fn project_slug, workspace_path ->
+      with {:ok, id} <- parse_server_id(server_id) do
+        case Manager.capture_workspace_server_output(
+               project_slug,
+               workspace_path,
+               id
+             ) do
+          {:ok, payload} ->
+            json(conn, %{data: payload})
+
+          {:error, :not_found} ->
+            TrackerErrors.render(conn, :dev_server_not_found)
+
+          {:error, message} when is_binary(message) ->
+            TrackerErrors.render(conn, message)
+        end
+      else
+        {:error, :invalid_server_id} ->
+          TrackerErrors.validation_msg(
+            conn,
+            "server_id must be a positive integer"
+          )
+      end
+    end)
+  end
+
   @spec output_events(Conn.t(), map()) :: Conn.t()
   def output_events(conn, %{"project_slug" => project_slug, "identifier" => identifier, "server_id" => server_id}) do
     with_valid_issue(conn, project_slug, identifier, fn ->
@@ -131,6 +324,60 @@ defmodule SymphonyElixirWeb.Tracker.DevServerController do
         {:error, :invalid_server_id} -> TrackerErrors.validation_msg(conn, "server_id must be a positive integer")
       end
     end)
+  end
+
+  @spec output_events_thread(Conn.t(), map()) :: Conn.t()
+  def output_events_thread(
+        conn,
+        %{"thread_id" => thread_id, "server_id" => server_id}
+      ) do
+    with_thread_workspace(conn, thread_id, fn project_slug, workspace_path ->
+      with {:ok, id} <- parse_server_id(server_id) do
+        DevServerOutputEventStream.stream_workspace(
+          conn,
+          project_slug,
+          workspace_path,
+          id
+        )
+      else
+        {:error, :invalid_server_id} ->
+          TrackerErrors.validation_msg(
+            conn,
+            "server_id must be a positive integer"
+          )
+      end
+    end)
+  end
+
+  defp with_thread_workspace(conn, raw_thread_id, render)
+       when is_function(render, 2) do
+    with {:ok, thread_id} <- parse_thread_id(raw_thread_id),
+         {:ok, thread} <- History.get_thread(thread_id),
+         project_slug when is_binary(project_slug) and project_slug != "" <-
+           Map.get(thread, :project_slug),
+         workspace_path when is_binary(workspace_path) and workspace_path != "" <-
+           Map.get(thread, :workspace_path) do
+      render.(project_slug, Path.expand(workspace_path))
+    else
+      {:error, :invalid_thread_id} ->
+        TrackerErrors.render(conn, :invalid_thread_id)
+
+      {:error, :not_found} ->
+        TrackerErrors.render(conn, :thread_not_found)
+
+      value when value in [nil, ""] ->
+        TrackerErrors.render(conn, :workspace_missing)
+
+      {:error, reason} ->
+        TrackerErrors.render(conn, reason)
+    end
+  end
+
+  defp parse_thread_id(raw_thread_id) do
+    case Integer.parse(to_string(raw_thread_id)) do
+      {thread_id, ""} when thread_id > 0 -> {:ok, thread_id}
+      _invalid -> {:error, :invalid_thread_id}
+    end
   end
 
   defp with_valid_issue(conn, project_slug, identifier, render) when is_function(render, 0) do
@@ -144,6 +391,27 @@ defmodule SymphonyElixirWeb.Tracker.DevServerController do
 
   defp render_targets(conn, project_slug, identifier, action_error_reason \\ nil) do
     case DevServer.issue_targets(project_slug, identifier) do
+      {:ok, view} ->
+        data =
+          view
+          |> apply_action_error(action_error_reason)
+          |> DevServerPresenter.view()
+          |> Map.put(:tunnel, Tunnel.summary_for_project(project_slug))
+
+        json(conn, %{data: data})
+
+      {:error, reason} ->
+        TrackerErrors.render(conn, reason)
+    end
+  end
+
+  defp render_workspace_targets(
+         conn,
+         project_slug,
+         workspace_path,
+         action_error_reason \\ nil
+       ) do
+    case DevServer.workspace_targets(project_slug, workspace_path) do
       {:ok, view} ->
         data =
           view
@@ -189,6 +457,45 @@ defmodule SymphonyElixirWeb.Tracker.DevServerController do
     reason
     |> then(&action_error_reason({:error, &1}, fallback_reason))
     |> then(&render_targets(conn, project_slug, identifier, &1))
+  end
+
+  defp workspace_instance_action_result(
+         {:ok, _pids},
+         conn,
+         project_slug,
+         workspace_path,
+         _fallback_reason
+       ) do
+    render_workspace_targets(conn, project_slug, workspace_path)
+  end
+
+  defp workspace_instance_action_result(
+         {:error, :not_found},
+         conn,
+         _project_slug,
+         _workspace_path,
+         _fallback_reason
+       ) do
+    TrackerErrors.render(conn, :dev_server_not_found)
+  end
+
+  defp workspace_instance_action_result(
+         {:error, reason},
+         conn,
+         project_slug,
+         workspace_path,
+         fallback_reason
+       ) do
+    reason
+    |> then(&action_error_reason({:error, &1}, fallback_reason))
+    |> then(
+      &render_workspace_targets(
+        conn,
+        project_slug,
+        workspace_path,
+        &1
+      )
+    )
   end
 
   defp parse_server_id(server_id) when is_binary(server_id) do

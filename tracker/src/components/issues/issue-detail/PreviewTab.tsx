@@ -29,6 +29,8 @@ import type { IssueDevServer, IssueDevServerReason, IssueDevServerStatus, IssueD
 interface PreviewTabProps {
   projectSlug: string;
   issueIdentifier: string;
+  threadId?: number;
+  issueScoped?: boolean;
   view: WorkspaceView;
   execution?: AgentExecution;
 }
@@ -66,7 +68,15 @@ interface PreviewPanelProps extends PreviewTabProps {
  * logs and assistant handoff. Rendered by the issue Preview tab and embedded by
  * the session preview dock so both surfaces share the same behavior.
  */
-export function PreviewPanel({ projectSlug, issueIdentifier, view, execution, devServers }: PreviewPanelProps) {
+export function PreviewPanel({
+  projectSlug,
+  issueIdentifier,
+  threadId,
+  issueScoped = true,
+  view,
+  execution,
+  devServers,
+}: PreviewPanelProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { data, error, loading, restart, restartServer, start, startServer, stop, stopServer, startTunnel } =
@@ -106,7 +116,11 @@ export function PreviewPanel({ projectSlug, issueIdentifier, view, execution, de
   const primaryServer = selectPrimaryServer(data?.servers ?? []);
   const primaryUrl = readyPreviewUrl(primaryServer);
   const primaryLocalUrl = localPreviewUrl(primaryServer);
-  const hasRequiredIdentifiers = projectSlug.trim().length > 0 && issueIdentifier.trim().length > 0;
+  const hasRequiredIdentifiers =
+    projectSlug.trim().length > 0 &&
+    (issueScoped
+      ? issueIdentifier.trim().length > 0
+      : Number.isInteger(threadId) && (threadId ?? 0) > 0);
 
   if (!hasRequiredIdentifiers) {
     return (
@@ -162,7 +176,8 @@ export function PreviewPanel({ projectSlug, issueIdentifier, view, execution, de
   const tunnelRunning = data.tunnel?.running ?? false;
   const openPrimaryUrl = tunnelRunning ? primaryUrl : (primaryLocalUrl ?? primaryUrl);
   const canStartPreview = openPrimaryUrl == null && canRunActions && !failureReason && primaryFailureServer == null;
-  const canAskAssistant = openPrimaryUrl == null && (failureReason || primaryFailureServer != null);
+  const canAskAssistant =
+    issueScoped && openPrimaryUrl == null && (failureReason || primaryFailureServer != null);
 
   return (
     <div className="space-y-3 text-sm">
@@ -238,8 +253,9 @@ export function PreviewPanel({ projectSlug, issueIdentifier, view, execution, de
                 key={server.id}
                 controlsDisabled={controlsDisabled}
                 issueIdentifier={issueIdentifier}
+                threadId={threadId}
                 onAskAssistant={
-                  isPreviewFailureServerStatus(server.status)
+                  issueScoped && isPreviewFailureServerStatus(server.status)
                     ? () => askAssistantToFix(data, server)
                     : undefined
                 }
@@ -398,6 +414,7 @@ function ServerRow({
   server,
   projectSlug,
   issueIdentifier,
+  threadId,
   controlsDisabled,
   onAskAssistant,
   onRestart,
@@ -408,6 +425,7 @@ function ServerRow({
   server: IssueDevServer;
   projectSlug: string;
   issueIdentifier: string;
+  threadId?: number;
   controlsDisabled: boolean;
   onAskAssistant?: () => void;
   onRestart: (serverId: number) => void;
@@ -519,6 +537,7 @@ function ServerRow({
         <DevServerOutputPanel
           defaultOpen={ACTIVE_PROVISIONING_STATUSES.has(server.status) || server.status === "crashed"}
           issueIdentifier={issueIdentifier}
+          threadId={threadId}
           projectSlug={projectSlug}
           serverId={server.id}
           sessionName={server.session_name}

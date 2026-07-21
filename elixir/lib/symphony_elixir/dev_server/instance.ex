@@ -146,6 +146,7 @@ defmodule SymphonyElixir.DevServer.Instance do
     project_slug = Keyword.fetch!(opts, :project_slug)
     identifier = Keyword.fetch!(opts, :identifier)
     workspace_path = Keyword.fetch!(opts, :workspace_path)
+    record_scope = Keyword.get(opts, :record_scope, {:issue, identifier})
     step = Keyword.fetch!(opts, :step)
     slug = Map.fetch!(step, :slug)
     working_dir = Map.get(step, :working_dir)
@@ -155,12 +156,13 @@ defmodule SymphonyElixir.DevServer.Instance do
       project_id: project_id,
       project_slug: project_slug,
       identifier: identifier,
+      record_scope: record_scope,
       workspace_path: workspace_path,
       step: step,
       slug: slug,
       working_dir: working_dir,
       base_url: Keyword.get(opts, :base_url),
-      public_host: PublicRouting.preview_host(project_slug, identifier, slug, public_tunnel),
+      public_host: public_host(project_slug, identifier, slug, public_tunnel, record_scope),
       idle_timeout_ms: Keyword.get(opts, :idle_timeout_ms, @default_idle_timeout_ms),
       tmux: Keyword.get(opts, :tmux, Registry),
       port_allocator: Keyword.get(opts, :port_allocator, &PortAllocator.allocate/2),
@@ -168,7 +170,7 @@ defmodule SymphonyElixir.DevServer.Instance do
       probe: Keyword.get(opts, :probe, &default_probe/4),
       probe_interval_ms: Keyword.get(opts, :probe_interval_ms, @default_probe_interval_ms),
       max_probe_attempts: Keyword.get(opts, :max_probe_attempts, @default_max_probe_attempts),
-      capture_output: Keyword.get(opts, :capture_output, &Registry.capture_dev_session/3),
+      capture_output: Keyword.get(opts, :capture_output, capture_output_function(record_scope)),
       stall_after_ms: Keyword.get(opts, :stall_after_ms, @default_stall_after_ms),
       stall_check_interval_ms: Keyword.get(opts, :stall_check_interval_ms, @default_stall_check_interval_ms),
       claimed_ports: Keyword.get(opts, :claimed_ports, []),
@@ -221,7 +223,7 @@ defmodule SymphonyElixir.DevServer.Instance do
     # executes — so always recycle the session to get a clean shell first.
     safe_kill_session(state)
 
-    case state.tmux.open_dev_session(state.project_slug, state.identifier, state.slug, cwd, []) do
+    case open_dev_session(state, cwd) do
       {:ok, session} ->
         start_command(state, port, url, session)
 
@@ -385,6 +387,14 @@ defmodule SymphonyElixir.DevServer.Instance do
   end
 
   defp capture_output(_state), do: {:error, :invalid_capture}
+
+  defp capture_output_function({:workspace, workspace_path}) do
+    fn project_slug, _identifier, slug ->
+      Registry.capture_workspace_dev_session(project_slug, workspace_path, slug)
+    end
+  end
+
+  defp capture_output_function(_record_scope), do: &Registry.capture_dev_session/3
 
   defp launch_command(step, _port, %RuntimeContract{} = contract) do
     command = Map.fetch!(step, :command)
@@ -609,9 +619,9 @@ defmodule SymphonyElixir.DevServer.Instance do
   defp persist(state, status) do
     attrs = persist_attrs(state, status)
 
-    case DevServerRecord.upsert(state.project_id, state.identifier, state.slug, attrs) do
+    case persist_record(state, attrs) do
       {:ok, _record} ->
-        Broadcaster.notify(state.project_slug, state.identifier)
+        notify_scope(state)
         :ok
 
       {:error, reason} ->
@@ -623,6 +633,20 @@ defmodule SymphonyElixir.DevServer.Instance do
       Logger.warning("Dev server persistence failed slug=#{state.slug} status=#{status} reason=#{inspect(error)}")
       {:error, error}
   end
+
+  defp persist_record(%{record_scope: {:workspace, workspace_path}} = state, attrs) do
+    DevServerRecord.upsert_workspace(state.project_id, workspace_path, state.slug, attrs)
+  end
+
+  defp persist_record(state, attrs) do
+    DevServerRecord.upsert(state.project_id, state.identifier, state.slug, attrs)
+  end
+
+  defp notify_scope(%{record_scope: {:workspace, workspace_path}} = state) do
+    Broadcaster.notify_workspace(state.project_slug, workspace_path)
+  end
+
+  defp notify_scope(state), do: Broadcaster.notify(state.project_slug, state.identifier)
 
   defp persist_attrs(state, status) do
     %{
@@ -637,7 +661,7 @@ defmodule SymphonyElixir.DevServer.Instance do
   end
 
   defp safe_kill_session(state) do
-    state.tmux.kill_dev_session(state.project_slug, state.identifier, state.slug, [])
+    kill_dev_session(state)
     :ok
   rescue
     _error -> :ok
@@ -648,7 +672,7 @@ defmodule SymphonyElixir.DevServer.Instance do
   defp cleanup_session(%{session_name: nil}), do: :ok
 
   defp cleanup_session(state) do
-    case state.tmux.kill_dev_session(state.project_slug, state.identifier, state.slug, []) do
+    case kill_dev_session(state) do
       :ok ->
         :ok
 
@@ -660,6 +684,63 @@ defmodule SymphonyElixir.DevServer.Instance do
     error ->
       Logger.warning("Dev server cleanup failed slug=#{state.slug} reason=#{inspect(error)}")
       {:error, error}
+  end
+
+  defp open_dev_session(
+         %{tmux: Registry, record_scope: {:workspace, workspace_path}} = state,
+         cwd
+       ) do
+    Registry.open_workspace_dev_session(
+      state.project_slug,
+      workspace_path,
+      state.slug,
+      cwd
+    )
+  end
+
+  defp open_dev_session(state, cwd) do
+    state.tmux.open_dev_session(
+      state.project_slug,
+      state.identifier,
+      state.slug,
+      cwd,
+      []
+    )
+  end
+
+  defp kill_dev_session(
+         %{
+           tmux: Registry,
+           record_scope: {:workspace, workspace_path}
+         } = state
+       ) do
+    Registry.kill_workspace_dev_session(
+      state.project_slug,
+      workspace_path,
+      state.slug
+    )
+  end
+
+  defp kill_dev_session(state) do
+    state.tmux.kill_dev_session(
+      state.project_slug,
+      state.identifier,
+      state.slug,
+      []
+    )
+  end
+
+  defp public_host(
+         _project_slug,
+         _identifier,
+         _slug,
+         _public_tunnel,
+         {:workspace, _workspace_path}
+       ),
+       do: nil
+
+  defp public_host(project_slug, identifier, slug, public_tunnel, _record_scope) do
+    PublicRouting.preview_host(project_slug, identifier, slug, public_tunnel)
   end
 
   defp default_probe(host, port, "http", ready_path) do

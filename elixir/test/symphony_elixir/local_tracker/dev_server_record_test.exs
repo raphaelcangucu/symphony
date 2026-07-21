@@ -77,6 +77,43 @@ defmodule SymphonyElixir.LocalTracker.DevServerRecordTest do
              |> Enum.map(& &1.slug)
   end
 
+  test "workspace records isolate identical server slugs by path", %{project: project} do
+    {:ok, first} =
+      DevServerRecord.upsert_workspace(project.id, "/tmp/workspace-a", "front", %{
+        status: "starting"
+      })
+
+    {:ok, second} =
+      DevServerRecord.upsert_workspace(project.id, "/tmp/workspace-b", "front", %{
+        status: "ready"
+      })
+
+    refute first.id == second.id
+
+    assert [%DevServerRecord{id: first_id, issue_identifier: nil}] =
+             DevServerRecord.list_for_workspace(project.id, "/tmp/workspace-a")
+
+    assert first_id == first.id
+  end
+
+  test "changeset rejects records with both issue and workspace scopes", %{
+    project: project
+  } do
+    changeset =
+      DevServerRecord.changeset(%DevServerRecord{}, %{
+        project_id: project.id,
+        issue_identifier: "P-1",
+        workspace_path: "/tmp/workspace",
+        slug: "front",
+        status: "stopped"
+      })
+
+    refute changeset.valid?
+
+    assert {"exactly one of issue_identifier or workspace_path must be set", []} =
+             changeset.errors[:issue_identifier]
+  end
+
   test "mark_all_stopped flips non-terminal rows to stopped", %{project: project} do
     {:ok, _} = DevServerRecord.upsert(project.id, "#1", "front", %{status: "ready"})
 

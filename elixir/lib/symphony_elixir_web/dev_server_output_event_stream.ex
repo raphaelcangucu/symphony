@@ -40,6 +40,49 @@ defmodule SymphonyElixirWeb.DevServerOutputEventStream do
     end
   end
 
+  @spec stream_workspace(Plug.Conn.t(), String.t(), Path.t(), pos_integer()) ::
+          Plug.Conn.t()
+  def stream_workspace(conn, project_slug, workspace_path, server_id)
+      when is_binary(project_slug) and is_binary(workspace_path) and is_integer(server_id) and
+             server_id > 0 do
+    conn =
+      conn
+      |> put_resp_header("content-type", "text/event-stream; charset=utf-8")
+      |> put_resp_header("cache-control", "no-cache")
+      |> put_resp_header("connection", "keep-alive")
+      |> send_chunked(200)
+
+    workspace_path = Path.expand(workspace_path)
+
+    case Context.get_project(project_slug) do
+      {:ok, project} ->
+        case DevServerRecord.get_for_workspace(
+               project.id,
+               workspace_path,
+               server_id
+             ) do
+          %DevServerRecord{} ->
+            loop_workspace(
+              conn,
+              project_slug,
+              workspace_path,
+              server_id,
+              nil
+            )
+
+          nil ->
+            conn
+            |> send_event("failure", %{message: "dev_server_not_found"})
+            |> halt()
+        end
+
+      {:error, _reason} ->
+        conn
+        |> send_event("failure", %{message: "project_not_found"})
+        |> halt()
+    end
+  end
+
   defp loop(conn, project_slug, identifier, server_id, last_output) do
     receive do
     after
@@ -72,10 +115,76 @@ defmodule SymphonyElixirWeb.DevServerOutputEventStream do
     end
   end
 
+  defp loop_workspace(
+         conn,
+         project_slug,
+         workspace_path,
+         server_id,
+         last_output
+       ) do
+    receive do
+    after
+      poll_interval_ms() ->
+        case poll_workspace_output(project_slug, workspace_path, server_id) do
+          {:ok, payload} ->
+            conn =
+              conn
+              |> maybe_send_snapshot(last_output, payload)
+              |> maybe_send_update(last_output, payload)
+
+            if streamable?(payload.status) do
+              loop_workspace(
+                conn,
+                project_slug,
+                workspace_path,
+                server_id,
+                payload.output
+              )
+            else
+              conn
+              |> send_event("done", %{status: payload.status})
+              |> halt()
+            end
+
+          {:error, :not_found} ->
+            conn
+            |> send_event("failure", %{message: "dev_server_not_found"})
+            |> halt()
+
+          {:error, message} when is_binary(message) ->
+            conn
+            |> send_event("failure", %{message: message})
+            |> halt()
+        end
+    end
+  end
+
   defp poll_output(project_slug, identifier, server_id) do
     with {:ok, project} <- Context.get_project(project_slug),
          %DevServerRecord{status: status} <- DevServerRecord.get_for_issue(project.id, identifier, server_id),
          {:ok, payload} <- Manager.capture_server_output(project_slug, identifier, server_id) do
+      {:ok, Map.merge(payload, %{status: status})}
+    else
+      nil -> {:error, :not_found}
+      {:error, :not_found} -> {:error, :not_found}
+      {:error, reason} -> {:error, inspect(reason)}
+    end
+  end
+
+  defp poll_workspace_output(project_slug, workspace_path, server_id) do
+    with {:ok, project} <- Context.get_project(project_slug),
+         %DevServerRecord{status: status} <-
+           DevServerRecord.get_for_workspace(
+             project.id,
+             workspace_path,
+             server_id
+           ),
+         {:ok, payload} <-
+           Manager.capture_workspace_server_output(
+             project_slug,
+             workspace_path,
+             server_id
+           ) do
       {:ok, Map.merge(payload, %{status: status})}
     else
       nil -> {:error, :not_found}

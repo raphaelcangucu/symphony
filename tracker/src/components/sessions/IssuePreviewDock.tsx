@@ -14,9 +14,11 @@ import { MinibrowserChrome } from "@/components/sessions/MinibrowserChrome";
 import { Button } from "@/components/ui/button";
 import { useHorizontalPanelResize } from "@/hooks/useHorizontalPanelResize";
 import { useIssueDevServers } from "@/hooks/useIssueDevServers";
+import { useThreadDevServers } from "@/hooks/useThreadDevServers";
 import { openablePreviewUrl, selectPrimaryServer } from "@/lib/devServerUrls";
 import { cn } from "@/lib/utils";
 import type { WorkspaceView } from "@/lib/workspaceRoutes";
+import { workspaceScopeLabel, type WorkspaceScope } from "@/lib/workspaceScope";
 import { openFloatingSurfaceOrToast } from "@/stores/floatingSurfaceStore";
 import type { AgentExecution } from "@/types/agent-execution";
 import type { IssueDevServerStatus } from "@/types/issue";
@@ -34,8 +36,7 @@ const STATUS_DOT_CLASS: Record<IssueDevServerStatus, string> = {
 };
 
 interface IssuePreviewDockProps {
-  projectSlug: string;
-  issueIdentifier: string;
+  scope: WorkspaceScope;
   view: WorkspaceView;
   execution?: AgentExecution;
   splitContainerRef: RefObject<HTMLDivElement | null>;
@@ -45,8 +46,7 @@ interface IssuePreviewDockProps {
 }
 
 export function IssuePreviewDock({
-  projectSlug,
-  issueIdentifier,
+  scope,
   view,
   execution,
   splitContainerRef,
@@ -55,7 +55,14 @@ export function IssuePreviewDock({
   onClose,
 }: IssuePreviewDockProps) {
   const { t } = useTranslation();
-  const devServers = useIssueDevServers(projectSlug, issueIdentifier);
+  const projectSlug = scope.projectSlug;
+  const issueIdentifier = scope.kind === "issue" ? scope.issueIdentifier : workspaceScopeLabel(scope);
+  const issueDevServers = useIssueDevServers(
+    scope.kind === "issue" ? projectSlug : null,
+    scope.kind === "issue" ? scope.issueIdentifier : null,
+  );
+  const threadDevServers = useThreadDevServers(scope.kind === "thread" ? scope.threadId : null);
+  const devServers = scope.kind === "thread" ? threadDevServers : issueDevServers;
   const [selectedServerId, setSelectedServerId] = useState<number | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const { width, isResizing, onResizePointerDown, onResizePointerUp } = useHorizontalPanelResize({
@@ -168,7 +175,7 @@ export function IssuePreviewDock({
             >
               <SlidersHorizontal className="h-3.5 w-3.5" />
             </Button>
-            {previewUrl && selectedServer ? (
+            {previewUrl && selectedServer && scope.kind === "issue" ? (
               <Button
                 type="button"
                 variant="ghost"
@@ -222,6 +229,8 @@ export function IssuePreviewDock({
             <PreviewPanel
               projectSlug={projectSlug}
               issueIdentifier={issueIdentifier}
+              threadId={scope.kind === "thread" ? scope.threadId : undefined}
+              issueScoped={scope.kind === "issue"}
               view={view}
               execution={execution}
               devServers={devServers}

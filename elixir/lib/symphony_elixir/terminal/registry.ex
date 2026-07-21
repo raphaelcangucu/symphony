@@ -63,6 +63,64 @@ defmodule SymphonyElixir.Terminal.Registry do
     tmux.kill_session(dev_session_name(project_slug, issue_identifier, slug))
   end
 
+  @spec dev_workspace_session_name(String.t(), Path.t(), String.t()) :: String.t()
+  def dev_workspace_session_name(project_slug, workspace_path, slug)
+      when is_binary(project_slug) and is_binary(workspace_path) and is_binary(slug) do
+    "#{workspace_session_name(project_slug, Path.expand(workspace_path))}-dev-#{safe_segment(slug, "server")}"
+  end
+
+  @spec open_workspace_dev_session(
+          String.t(),
+          Path.t(),
+          String.t(),
+          Path.t(),
+          keyword()
+        ) ::
+          {:ok, session()} | {:error, String.t()}
+  def open_workspace_dev_session(
+        project_slug,
+        workspace_path,
+        slug,
+        cwd,
+        opts \\ []
+      )
+      when is_binary(project_slug) and is_binary(workspace_path) and is_binary(slug) and
+             is_binary(cwd) do
+    tmux = dependency(opts, :tmux, :terminal_tmux, Tmux)
+    session_name = dev_workspace_session_name(project_slug, workspace_path, slug)
+
+    with :ok <- ensure_tmux_available(tmux),
+         {:ok, _state} <- ensure_session(tmux, session_name, cwd),
+         {:ok, output} <- capture_output(tmux, session_name) do
+      {:ok,
+       %{
+         project_slug: project_slug,
+         issue_identifier: nil,
+         workspace_path: Path.expand(workspace_path),
+         session_name: session_name,
+         cwd: cwd,
+         state: "running",
+         output: output
+       }}
+    end
+  end
+
+  @spec kill_workspace_dev_session(String.t(), Path.t(), String.t(), keyword()) ::
+          :ok | {:error, String.t()}
+  def kill_workspace_dev_session(project_slug, workspace_path, slug, opts \\ [])
+      when is_binary(project_slug) and is_binary(workspace_path) and is_binary(slug) do
+    tmux = dependency(opts, :tmux, :terminal_tmux, Tmux)
+    tmux.kill_session(dev_workspace_session_name(project_slug, workspace_path, slug))
+  end
+
+  @spec capture_workspace_dev_session(String.t(), Path.t(), String.t(), keyword()) ::
+          {:ok, String.t()} | {:error, String.t()}
+  def capture_workspace_dev_session(project_slug, workspace_path, slug, opts \\ [])
+      when is_binary(project_slug) and is_binary(workspace_path) and is_binary(slug) do
+    tmux = dependency(opts, :tmux, :terminal_tmux, Tmux)
+    tmux.capture_pane(dev_workspace_session_name(project_slug, workspace_path, slug))
+  end
+
   @spec open_project_issue_session(String.t(), String.t(), keyword()) ::
           {:ok, session()} | {:error, String.t() | atom()}
   def open_project_issue_session(project_slug, issue_identifier, opts \\ [])

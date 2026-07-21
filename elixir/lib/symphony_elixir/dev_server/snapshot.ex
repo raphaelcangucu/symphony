@@ -67,6 +67,37 @@ defmodule SymphonyElixir.DevServer.Snapshot do
 
   def build(_project_slug, _identifier), do: {:error, :project_not_found}
 
+  @spec build_for_workspace(String.t(), Path.t()) ::
+          {:ok, t()} | {:error, :project_not_found}
+  def build_for_workspace(project_slug, workspace_path)
+      when is_binary(project_slug) and is_binary(workspace_path) do
+    workspace_path = Path.expand(workspace_path)
+
+    with {:ok, project} <- Context.get_project(project_slug) do
+      project = Repo.preload(project, :setup)
+      config = ProjectConfig.resolve(project)
+      serve_steps = DevEnv.list_serve_steps(project_slug)
+      records = Manager.list_for_workspace(project_slug, workspace_path)
+      servers = Enum.map(records, &server_snapshot(&1, serve_steps, %{}))
+      {available, reason} = workspace_availability(workspace_path, config, serve_steps)
+
+      {:ok,
+       %{
+         snapshot_id: generate_snapshot_id(),
+         as_of: DateTime.utc_now(),
+         project_slug: project_slug,
+         identifier: workspace_path,
+         available: available,
+         reason: reason,
+         tunnel: Tunnel.summary_for_project(project_slug),
+         servers: servers
+       }}
+    end
+  end
+
+  def build_for_workspace(_project_slug, _workspace_path),
+    do: {:error, :project_not_found}
+
   @doc """
   Build the canonical local preview URL for a port, honoring the serve step's
   readiness/URL paths and falling back to slug-aware defaults. Returns `nil` when
@@ -167,6 +198,15 @@ defmodule SymphonyElixir.DevServer.Snapshot do
     cond do
       not ProjectConfig.dev_server_enabled?(config) -> {false, :disabled}
       not issue_workspace_exists?(project_slug, identifier) -> {false, :workspace_missing}
+      serve_steps == [] -> {false, :no_serve_step}
+      true -> {true, nil}
+    end
+  end
+
+  defp workspace_availability(workspace_path, config, serve_steps) do
+    cond do
+      not ProjectConfig.dev_server_enabled?(config) -> {false, :disabled}
+      not File.dir?(workspace_path) -> {false, :workspace_missing}
       serve_steps == [] -> {false, :no_serve_step}
       true -> {true, nil}
     end

@@ -8,7 +8,15 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { useFloatingSurfaces } from "@/hooks/useFloatingSurfaces";
 import { buildFloatingSurfaceId } from "@/lib/floatingSurfaceIds";
 import { cn } from "@/lib/utils";
-import { fetchDevServerOutput, subscribeDevServerOutput } from "@/services/issueDevServers";
+import {
+  fetchDevServerOutput,
+  subscribeDevServerOutput,
+  type DevServerOutputStreamHandlers,
+} from "@/services/issueDevServers";
+import {
+  fetchThreadDevServerOutput,
+  subscribeThreadDevServerOutput,
+} from "@/services/threadDevServers";
 import { openFloatingSurfaceOrToast } from "@/stores/floatingSurfaceStore";
 import type { IssueDevServerStatus } from "@/types/issue";
 
@@ -20,6 +28,7 @@ const READY_POLL_MS = 5_000;
 interface DevServerOutputPanelProps {
   projectSlug: string;
   issueIdentifier: string;
+  threadId?: number;
   serverId: number;
   slug: string;
   status: IssueDevServerStatus;
@@ -31,6 +40,7 @@ interface DevServerOutputPanelProps {
 export function DevServerOutputPanel({
   projectSlug,
   issueIdentifier,
+  threadId,
   serverId,
   slug,
   status,
@@ -48,18 +58,20 @@ export function DevServerOutputPanel({
   const preRef = useRef<HTMLPreElement | null>(null);
   const stickToBottomRef = useRef(true);
 
-  const hasInteractiveSession = Boolean(sessionName?.trim());
+  const hasInteractiveSession = threadId == null && Boolean(sessionName?.trim());
   const popoutSurfaceId = useMemo(
-    () =>
-      buildFloatingSurfaceId({
+    () => {
+      if (threadId != null) return "";
+      return buildFloatingSurfaceId({
         kind: "dev-server-output",
         projectSlug,
         issueIdentifier,
         serverId,
         serverSlug: slug,
         title: t("issue.devServer.fullscreenTitle", { slug }),
-      }),
-    [issueIdentifier, projectSlug, serverId, slug, t],
+      });
+    },
+    [issueIdentifier, projectSlug, serverId, slug, t, threadId],
   );
   const popoutOpen = floatingSurfaces.some((surface) => surface.id === popoutSurfaceId);
   const interactiveEnabled = open && !fullscreen && !popoutOpen;
@@ -81,14 +93,26 @@ export function DevServerOutputPanel({
     setLoading(true);
 
     try {
-      const response = await fetchDevServerOutput(projectSlug, issueIdentifier, serverId);
+      const response =
+        threadId != null
+          ? await fetchThreadDevServerOutput(threadId, serverId)
+          : await fetchDevServerOutput(projectSlug, issueIdentifier, serverId);
       applyOutput(response.output);
     } catch {
       setError(t("issue.devServer.loadFailed"));
     } finally {
       setLoading(false);
     }
-  }, [applyOutput, hasInteractiveSession, issueIdentifier, open, projectSlug, serverId, t]);
+  }, [
+    applyOutput,
+    hasInteractiveSession,
+    issueIdentifier,
+    open,
+    projectSlug,
+    serverId,
+    t,
+    threadId,
+  ]);
 
   useEffect(() => {
     if (!open || hasInteractiveSession) {
@@ -110,7 +134,7 @@ export function DevServerOutputPanel({
 
     setLoading(true);
 
-    const unsubscribe = subscribeDevServerOutput(projectSlug, issueIdentifier, serverId, {
+    const handlers: DevServerOutputStreamHandlers = {
       onSnapshot: (payload) => {
         applyOutput(payload.output);
         setLoading(false);
@@ -125,10 +149,25 @@ export function DevServerOutputPanel({
         setLoading(false);
         void refresh();
       },
-    });
+    };
+
+    const unsubscribe =
+      threadId != null
+        ? subscribeThreadDevServerOutput(threadId, serverId, handlers)
+        : subscribeDevServerOutput(projectSlug, issueIdentifier, serverId, handlers);
 
     return unsubscribe;
-  }, [applyOutput, hasInteractiveSession, issueIdentifier, open, projectSlug, refresh, serverId, status]);
+  }, [
+    applyOutput,
+    hasInteractiveSession,
+    issueIdentifier,
+    open,
+    projectSlug,
+    refresh,
+    serverId,
+    status,
+    threadId,
+  ]);
 
   useEffect(() => {
     if (AUTO_OPEN_STATUSES.has(status)) {
@@ -222,16 +261,18 @@ export function DevServerOutputPanel({
         >
           <Maximize2 className="h-3.5 w-3.5" />
         </Button>
-        <Button
-          type="button"
-          size="icon"
-          variant="ghost"
-          className="h-7 w-7"
-          onClick={handlePopout}
-          aria-label={t("issue.devServer.popoutAria", { slug })}
-        >
-          <SquareArrowOutUpRight className="h-3.5 w-3.5" />
-        </Button>
+        {threadId == null ? (
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="h-7 w-7"
+            onClick={handlePopout}
+            aria-label={t("issue.devServer.popoutAria", { slug })}
+          >
+            <SquareArrowOutUpRight className="h-3.5 w-3.5" />
+          </Button>
+        ) : null}
         {!hasInteractiveSession ? (
           <Button type="button" size="sm" variant="ghost" className="h-7 text-xs" onClick={() => void refresh()} disabled={!open}>
             {t("issue.devServer.refresh")}

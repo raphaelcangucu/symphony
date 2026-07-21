@@ -17,4 +17,15 @@ defmodule SymphonyElixir.DevServer do
   def issue_targets(_project_slug, _identifier) do
     raise ArgumentError, "project_slug and identifier must be strings"
   end
+
+  @spec workspace_targets(String.t(), Path.t()) ::
+          {:ok, view()} | {:error, :project_not_found}
+  def workspace_targets(project_slug, workspace_path)
+      when is_binary(project_slug) and is_binary(workspace_path) do
+    Snapshot.build_for_workspace(project_slug, workspace_path)
+  end
+
+  def workspace_targets(_project_slug, _workspace_path) do
+    raise ArgumentError, "project_slug and workspace_path must be strings"
+  end
 end

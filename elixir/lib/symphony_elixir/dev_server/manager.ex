@@ -92,6 +92,31 @@ defmodule SymphonyElixir.DevServer.Manager do
 
   def start_for_issue(_project_slug, _identifier, _opts), do: {:error, :invalid_arguments}
 
+  @spec start_for_workspace(String.t(), Path.t(), keyword()) ::
+          {:ok, [pid()]} | {:error, start_error() | :invalid_arguments}
+  def start_for_workspace(project_slug, workspace_path, opts \\ [])
+
+  def start_for_workspace(project_slug, workspace_path, opts)
+      when is_binary(project_slug) and is_binary(workspace_path) and is_list(opts) do
+    with {:ok, workspace_path} <- validate_workspace_path(workspace_path),
+         {:ok, project} <- Context.get_project(project_slug) do
+      runtime_options = project |> project_runtime_options() |> apply_runtime_overrides(opts)
+
+      if runtime_options.dev_server_enabled? do
+        normalize_lock_result(
+          :global.trans({__MODULE__, {:start_for_workspace, project.slug, workspace_path}}, fn ->
+            do_start_for_workspace(project, workspace_path, runtime_options)
+          end)
+        )
+      else
+        {:error, :disabled}
+      end
+    end
+  end
+
+  def start_for_workspace(_project_slug, _workspace_path, _opts),
+    do: {:error, :invalid_arguments}
+
   @spec stop_for_issue(String.t(), String.t()) :: :ok
   def stop_for_issue(project_slug, identifier) when is_binary(project_slug) and is_binary(identifier) do
     identifier = canonical_identifier(identifier)
@@ -112,6 +137,25 @@ defmodule SymphonyElixir.DevServer.Manager do
 
   def stop_for_issue(_project_slug, _identifier), do: :ok
 
+  @spec stop_for_workspace(String.t(), Path.t()) :: :ok
+  def stop_for_workspace(project_slug, workspace_path)
+      when is_binary(project_slug) and is_binary(workspace_path) do
+    workspace_path = Path.expand(workspace_path)
+
+    project_slug
+    |> registered_instance_pids(workspace_path)
+    |> Enum.each(&stop_instance/1)
+
+    project_slug
+    |> reservation_keys_for_issue(workspace_path)
+    |> release_reservations()
+
+    release_issue_slot(project_slug, workspace_path)
+    :ok
+  end
+
+  def stop_for_workspace(_project_slug, _workspace_path), do: :ok
+
   @spec restart_for_issue(String.t(), String.t(), keyword()) :: {:ok, [pid()]} | {:error, term()}
   def restart_for_issue(project_slug, identifier, opts \\ [])
 
@@ -123,6 +167,21 @@ defmodule SymphonyElixir.DevServer.Manager do
   end
 
   def restart_for_issue(_project_slug, _identifier, _opts), do: {:error, :invalid_arguments}
+
+  @spec restart_for_workspace(String.t(), Path.t(), keyword()) ::
+          {:ok, [pid()]} | {:error, term()}
+  def restart_for_workspace(project_slug, workspace_path, opts \\ [])
+
+  def restart_for_workspace(project_slug, workspace_path, opts)
+      when is_binary(project_slug) and is_binary(workspace_path) and is_list(opts) do
+    with {:ok, workspace_path} <- normalize_workspace_path(workspace_path) do
+      :ok = stop_for_workspace(project_slug, workspace_path)
+      start_for_workspace(project_slug, workspace_path, opts)
+    end
+  end
+
+  def restart_for_workspace(_project_slug, _workspace_path, _opts),
+    do: {:error, :invalid_arguments}
 
   @doc """
   Reserve leased ports and mint `contracted_manual` runtime contracts for an
@@ -168,6 +227,23 @@ defmodule SymphonyElixir.DevServer.Manager do
 
   def stop_instance_for_server(_project_slug, _identifier, _server_id), do: {:error, :not_found}
 
+  @spec stop_instance_for_workspace_server(String.t(), Path.t(), pos_integer()) ::
+          :ok | {:error, :not_found}
+  def stop_instance_for_workspace_server(project_slug, workspace_path, server_id)
+      when is_binary(project_slug) and is_binary(workspace_path) and is_integer(server_id) and
+             server_id > 0 do
+    workspace_path = Path.expand(workspace_path)
+
+    with {:ok, project} <- Context.get_project(project_slug),
+         {:ok, slug} <- server_slug_for_workspace_id(project, workspace_path, server_id) do
+      do_stop_instance_for_server(project.slug, workspace_path, slug)
+      :ok
+    end
+  end
+
+  def stop_instance_for_workspace_server(_project_slug, _workspace_path, _server_id),
+    do: {:error, :not_found}
+
   @spec start_instance_for_server(String.t(), String.t(), pos_integer(), keyword()) ::
           {:ok, [pid()]} | {:error, start_error() | :not_found}
   def start_instance_for_server(project_slug, identifier, server_id, opts \\ [])
@@ -194,6 +270,51 @@ defmodule SymphonyElixir.DevServer.Manager do
   end
 
   def start_instance_for_server(_project_slug, _identifier, _server_id, _opts), do: {:error, :not_found}
+
+  @spec start_instance_for_workspace_server(
+          String.t(),
+          Path.t(),
+          pos_integer(),
+          keyword()
+        ) ::
+          {:ok, [pid()]} | {:error, start_error() | :not_found}
+  def start_instance_for_workspace_server(project_slug, workspace_path, server_id, opts \\ [])
+
+  def start_instance_for_workspace_server(project_slug, workspace_path, server_id, opts)
+      when is_binary(project_slug) and is_binary(workspace_path) and is_integer(server_id) and
+             server_id > 0 and is_list(opts) do
+    with {:ok, workspace_path} <- validate_workspace_path(workspace_path),
+         {:ok, project} <- Context.get_project(project_slug),
+         {:ok, _slug} <- server_slug_for_workspace_id(project, workspace_path, server_id) do
+      runtime_options = project |> project_runtime_options() |> apply_runtime_overrides(opts)
+
+      if runtime_options.dev_server_enabled? do
+        normalize_lock_result(
+          :global.trans(
+            {__MODULE__, {:start_instance_for_workspace_server, server_id}},
+            fn ->
+              do_start_instance_for_workspace_server(
+                project,
+                workspace_path,
+                server_id,
+                runtime_options
+              )
+            end
+          )
+        )
+      else
+        {:error, :disabled}
+      end
+    end
+  end
+
+  def start_instance_for_workspace_server(
+        _project_slug,
+        _workspace_path,
+        _server_id,
+        _opts
+      ),
+      do: {:error, :not_found}
 
   @spec restart_instance_for_server(String.t(), String.t(), pos_integer(), keyword()) ::
           {:ok, [pid()]} | {:error, start_error() | :not_found}
@@ -224,6 +345,64 @@ defmodule SymphonyElixir.DevServer.Manager do
 
   def restart_instance_for_server(_project_slug, _identifier, _server_id, _opts), do: {:error, :not_found}
 
+  @spec restart_instance_for_workspace_server(
+          String.t(),
+          Path.t(),
+          pos_integer(),
+          keyword()
+        ) ::
+          {:ok, [pid()]} | {:error, start_error() | :not_found}
+  def restart_instance_for_workspace_server(
+        project_slug,
+        workspace_path,
+        server_id,
+        opts \\ []
+      )
+
+  def restart_instance_for_workspace_server(
+        project_slug,
+        workspace_path,
+        server_id,
+        opts
+      )
+      when is_binary(project_slug) and is_binary(workspace_path) and is_integer(server_id) and
+             server_id > 0 and is_list(opts) do
+    workspace_path = Path.expand(workspace_path)
+
+    with {:ok, project} <- Context.get_project(project_slug),
+         {:ok, slug} <- server_slug_for_workspace_id(project, workspace_path, server_id) do
+      runtime_options = project |> project_runtime_options() |> apply_runtime_overrides(opts)
+
+      if runtime_options.dev_server_enabled? do
+        normalize_lock_result(
+          :global.trans(
+            {__MODULE__, {:restart_instance_for_workspace_server, server_id}},
+            fn ->
+              with :ok <- do_stop_instance_for_server(project.slug, workspace_path, slug) do
+                do_start_instance_for_workspace_server(
+                  project,
+                  workspace_path,
+                  server_id,
+                  runtime_options
+                )
+              end
+            end
+          )
+        )
+      else
+        {:error, :disabled}
+      end
+    end
+  end
+
+  def restart_instance_for_workspace_server(
+        _project_slug,
+        _workspace_path,
+        _server_id,
+        _opts
+      ),
+      do: {:error, :not_found}
+
   @spec list_for_issue(String.t(), String.t()) :: [dev_server_map()]
   def list_for_issue(project_slug, identifier) when is_binary(project_slug) and is_binary(identifier) do
     identifier = canonical_identifier(identifier)
@@ -243,6 +422,27 @@ defmodule SymphonyElixir.DevServer.Manager do
   end
 
   def list_for_issue(_project_slug, _identifier), do: []
+
+  @spec list_for_workspace(String.t(), Path.t()) :: [dev_server_map()]
+  def list_for_workspace(project_slug, workspace_path)
+      when is_binary(project_slug) and is_binary(workspace_path) do
+    workspace_path = Path.expand(workspace_path)
+
+    case Context.get_project(project_slug) do
+      {:ok, project} ->
+        ensure_serve_records_for_workspace(project, project_slug, workspace_path)
+
+        project.id
+        |> DevServerRecord.list_for_workspace(workspace_path)
+        |> Enum.map(&reconcile_workspace_record_status(&1, project, project_slug, workspace_path))
+        |> Enum.map(&record_to_map/1)
+
+      {:error, _reason} ->
+        []
+    end
+  end
+
+  def list_for_workspace(_project_slug, _workspace_path), do: []
 
   @spec capture_server_output(String.t(), String.t(), pos_integer()) ::
           {:ok, %{output: String.t(), session_name: String.t()}} | {:error, :not_found | String.t()}
@@ -267,6 +467,35 @@ defmodule SymphonyElixir.DevServer.Manager do
   end
 
   def capture_server_output(_project_slug, _identifier, _server_id), do: {:error, :not_found}
+
+  @spec capture_workspace_server_output(String.t(), Path.t(), pos_integer()) ::
+          {:ok, %{output: String.t(), session_name: String.t()}}
+          | {:error, :not_found | String.t()}
+  def capture_workspace_server_output(project_slug, workspace_path, server_id)
+      when is_binary(project_slug) and is_binary(workspace_path) and is_integer(server_id) and
+             server_id > 0 do
+    workspace_path = Path.expand(workspace_path)
+
+    with {:ok, project} <- Context.get_project(project_slug),
+         %DevServerRecord{slug: slug, session_name: session_name} <-
+           DevServerRecord.get_for_workspace(project.id, workspace_path, server_id),
+         true <- is_binary(slug) do
+      session_name =
+        session_name ||
+          TerminalRegistry.dev_workspace_session_name(project_slug, workspace_path, slug)
+
+      project_slug
+      |> TerminalRegistry.capture_workspace_dev_session(workspace_path, slug)
+      |> normalize_dev_session_capture(session_name)
+    else
+      nil -> {:error, :not_found}
+      {:error, _reason} -> {:error, :not_found}
+      _ -> {:error, :not_found}
+    end
+  end
+
+  def capture_workspace_server_output(_project_slug, _workspace_path, _server_id),
+    do: {:error, :not_found}
 
   @spec live_ports() :: [pos_integer()]
   def live_ports do
@@ -359,6 +588,40 @@ defmodule SymphonyElixir.DevServer.Manager do
 
         {:error, reason} ->
           release_issue_candidate_reservations(project.slug, identifier)
+          {:error, reason}
+      end
+    end
+  end
+
+  defp do_start_for_workspace(project, workspace_path, runtime_options) do
+    with {:ok, serve_steps} <- serve_steps(project.slug, workspace_path),
+         ctx = allocation_context(project, workspace_path, runtime_options.dev_server_port_range),
+         owned = owned_workspace_ports(project.id, workspace_path),
+         {:ok, reserved_steps} <-
+           reserve_with_context(
+             project.slug,
+             workspace_path,
+             serve_steps,
+             ctx,
+             owned,
+             runtime_options.dev_server_reclaim_ports?
+           ) do
+      runtime_options =
+        Map.put(runtime_options, :record_scope, {:workspace, workspace_path})
+
+      case start_instances(
+             project,
+             workspace_path,
+             workspace_path,
+             reserved_steps,
+             runtime_options,
+             %{}
+           ) do
+        {:ok, pids} ->
+          {:ok, pids}
+
+        {:error, reason} ->
+          release_issue_candidate_reservations(project.slug, workspace_path)
           {:error, reason}
       end
     end
@@ -550,6 +813,53 @@ defmodule SymphonyElixir.DevServer.Manager do
     end
   end
 
+  defp do_start_instance_for_workspace_server(
+         project,
+         workspace_path,
+         server_id,
+         runtime_options
+       ) do
+    with {:ok, slug} <- server_slug_for_workspace_id(project, workspace_path, server_id),
+         {:ok, all_steps} <- serve_steps(project.slug, workspace_path),
+         {:ok, step} <- serve_step_for_slug(project.slug, workspace_path, slug),
+         ctx =
+           allocation_context(
+             project,
+             workspace_path,
+             runtime_options.dev_server_port_range
+           ),
+         offset = serve_offset(all_steps, slug),
+         {:ok, port} <-
+           choose_scoped_port(
+             project,
+             workspace_path,
+             slug,
+             ctx,
+             offset,
+             runtime_options
+           ) do
+      key = {project.slug, workspace_path, slug}
+      reserve_port_for_key(key, port)
+
+      runtime_options =
+        Map.put(runtime_options, :record_scope, {:workspace, workspace_path})
+
+      case start_reserved_instance(
+             project,
+             workspace_path,
+             workspace_path,
+             step,
+             port,
+             key,
+             runtime_options,
+             %{}
+           ) do
+        {:ok, {pid, _key}} -> {:ok, [pid]}
+        {:error, reason} -> {:error, reason}
+      end
+    end
+  end
+
   defp choose_scoped_port(project, identifier, slug, ctx, offset, runtime_options) do
     if runtime_options.dev_server_reclaim_ports? do
       reclaim_canonical_port(project.slug, identifier, slug, ctx, offset)
@@ -583,6 +893,13 @@ defmodule SymphonyElixir.DevServer.Manager do
 
   defp server_slug_for_id(project, identifier, server_id) do
     case DevServerRecord.get_for_issue(project.id, identifier, server_id) do
+      %DevServerRecord{slug: slug} when is_binary(slug) -> {:ok, slug}
+      nil -> {:error, :not_found}
+    end
+  end
+
+  defp server_slug_for_workspace_id(project, workspace_path, server_id) do
+    case DevServerRecord.get_for_workspace(project.id, workspace_path, server_id) do
       %DevServerRecord{slug: slug} when is_binary(slug) -> {:ok, slug}
       nil -> {:error, :not_found}
     end
@@ -623,6 +940,28 @@ defmodule SymphonyElixir.DevServer.Manager do
     end
   end
 
+  defp validate_workspace_path(workspace_path) do
+    with {:ok, workspace_path} <- normalize_workspace_path(workspace_path),
+         true <- File.dir?(workspace_path) do
+      {:ok, workspace_path}
+    else
+      false -> {:error, :workspace_missing}
+      {:error, _reason} = error -> error
+    end
+  end
+
+  defp normalize_workspace_path(workspace_path) when is_binary(workspace_path) do
+    normalized = String.trim(workspace_path)
+
+    if normalized != "" and Path.type(normalized) == :absolute do
+      {:ok, Path.expand(normalized)}
+    else
+      {:error, :invalid_arguments}
+    end
+  end
+
+  defp normalize_workspace_path(_workspace_path), do: {:error, :invalid_arguments}
+
   defp serve_steps(project_slug, identifier) do
     case DevEnv.list_serve_steps(project_slug) do
       [] -> {:error, :no_serve_step}
@@ -635,6 +974,15 @@ defmodule SymphonyElixir.DevServer.Manager do
   # when a long-lived resource it owns still holds it (see PortPlan.choose_port/4).
   defp owned_ports(project_id, identifier) do
     for record <- DevServerRecord.list_for_issue(project_id, identifier),
+        is_binary(record.slug),
+        is_integer(record.port),
+        into: %{} do
+      {record.slug, record.port}
+    end
+  end
+
+  defp owned_workspace_ports(project_id, workspace_path) do
+    for record <- DevServerRecord.list_for_workspace(project_id, workspace_path),
         is_binary(record.slug),
         is_integer(record.port),
         into: %{} do
@@ -1125,6 +1473,7 @@ defmodule SymphonyElixir.DevServer.Manager do
           public_tunnel: runtime_options.public_tunnel,
           claimed_ports: live_ports(),
           contract: contract,
+          record_scope: Map.get(runtime_options, :record_scope, {:issue, identifier}),
           port_allocator: fn _range, _claimed_ports -> {:ok, port} end
         ] ++ serve_probe_opts(project.slug, launch_step)
 
@@ -1621,6 +1970,81 @@ defmodule SymphonyElixir.DevServer.Manager do
         end
       end
     end)
+  end
+
+  defp ensure_serve_records_for_workspace(project, project_slug, workspace_path) do
+    serve_steps = unique_serve_steps(project_slug, workspace_path, DevEnv.list_serve_steps(project_slug))
+
+    existing_slugs =
+      project.id
+      |> DevServerRecord.list_for_workspace(workspace_path)
+      |> MapSet.new(& &1.slug)
+
+    Enum.each(serve_steps, fn step ->
+      slug = Map.fetch!(step, :slug)
+
+      unless MapSet.member?(existing_slugs, slug) do
+        case DevServerRecord.upsert_workspace(project.id, workspace_path, slug, %{
+               working_dir: Map.get(step, :working_dir),
+               status: "stopped",
+               primary: Map.get(step, :primary, false)
+             }) do
+          {:ok, _record} ->
+            :ok
+
+          {:error, reason} ->
+            Logger.warning(
+              "dev server workspace placeholder upsert failed slug=#{slug} " <>
+                "workspace=#{workspace_path} reason=#{inspect(reason)}"
+            )
+        end
+      end
+    end)
+  end
+
+  defp reconcile_workspace_record_status(record, project, project_slug, workspace_path) do
+    case running_instance_pid(project_slug, workspace_path, record.slug) do
+      {:ok, pid} ->
+        step = serve_step_map(project_slug, workspace_path, record.slug)
+
+        cond do
+          port_ready?(record.port, step) ->
+            persist_workspace_reconciled_status(record, project, project_slug, workspace_path, "ready")
+
+          safe_instance_status(pid) in [:crashed, :stopped] ->
+            status = pid |> safe_instance_status() |> Atom.to_string()
+            persist_workspace_reconciled_status(record, project, project_slug, workspace_path, status)
+
+          true ->
+            record
+        end
+
+      {:error, :not_running} when record.status in @tracked_live_statuses ->
+        persist_workspace_reconciled_status(record, project, project_slug, workspace_path, "crashed")
+
+      {:error, :not_running} ->
+        record
+    end
+  end
+
+  defp persist_workspace_reconciled_status(record, project, project_slug, workspace_path, status) do
+    if record.status == status do
+      record
+    else
+      case DevServerRecord.upsert_workspace(project.id, workspace_path, record.slug, %{status: status}) do
+        {:ok, updated} ->
+          Broadcaster.notify_workspace(project_slug, workspace_path)
+          updated
+
+        {:error, reason} ->
+          Logger.warning(
+            "dev server workspace status reconciliation failed slug=#{record.slug} " <>
+              "workspace=#{workspace_path} reason=#{inspect(reason)}"
+          )
+
+          record
+      end
+    end
   end
 
   @doc false

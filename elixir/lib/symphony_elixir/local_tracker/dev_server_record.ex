@@ -1,5 +1,5 @@
 defmodule SymphonyElixir.LocalTracker.DevServerRecord do
-  @moduledoc "Last-known persisted state for a per-issue dev server."
+  @moduledoc "Last-known persisted state for an issue- or workspace-scoped dev server."
 
   use Ecto.Schema
   import Ecto.Changeset
@@ -12,11 +12,13 @@ defmodule SymphonyElixir.LocalTracker.DevServerRecord do
   @statuses ~w(pending provisioning starting stalled ready crashed stopped)
   @non_terminal_statuses ~w(pending provisioning starting stalled ready)
   @identity_fields ~w(project_id issue_identifier slug)a
+  @workspace_identity_fields ~w(project_id workspace_path slug)a
   @updatable_fields ~w(working_dir port url status primary session_name started_at)a
-  @known_fields @identity_fields ++ @updatable_fields
+  @known_fields Enum.uniq(@identity_fields ++ @workspace_identity_fields ++ @updatable_fields)
 
   schema "local_tracker_dev_servers" do
     field(:issue_identifier, :string)
+    field(:workspace_path, :string)
     field(:working_dir, :string)
     field(:slug, :string)
     field(:port, :integer)
@@ -36,6 +38,7 @@ defmodule SymphonyElixir.LocalTracker.DevServerRecord do
     |> cast(attrs, [
       :project_id,
       :issue_identifier,
+      :workspace_path,
       :working_dir,
       :slug,
       :port,
@@ -45,9 +48,19 @@ defmodule SymphonyElixir.LocalTracker.DevServerRecord do
       :session_name,
       :started_at
     ])
-    |> validate_required([:project_id, :issue_identifier, :slug, :status])
+    |> validate_required([:project_id, :slug, :status])
+    |> validate_exactly_one_scope()
     |> validate_inclusion(:status, @statuses)
-    |> unique_constraint([:project_id, :issue_identifier, :slug])
+    |> unique_constraint([:project_id, :issue_identifier, :slug],
+      name: :local_tracker_dev_servers_issue_scope_index
+    )
+    |> unique_constraint([:project_id, :workspace_path, :slug],
+      name: :local_tracker_dev_servers_workspace_scope_index
+    )
+    |> check_constraint(:issue_identifier,
+      name: :local_tracker_dev_servers_exactly_one_scope,
+      message: "exactly one of issue_identifier or workspace_path must be set"
+    )
   end
 
   @spec upsert(integer(), String.t(), String.t(), map()) :: {:ok, t()} | {:error, Ecto.Changeset.t()}
@@ -62,10 +75,45 @@ defmodule SymphonyElixir.LocalTracker.DevServerRecord do
     if changeset.valid? do
       case Repo.insert(changeset,
              on_conflict: [set: conflict_updates(attrs, changeset)],
-             conflict_target: @identity_fields
+             conflict_target: {:unsafe_fragment, "(project_id, issue_identifier, slug) WHERE issue_identifier IS NOT NULL"}
            ) do
         {:ok, _inserted_or_updated} -> {:ok, Repo.one!(query_one(project_id, issue_identifier, slug))}
         {:error, changeset} -> {:error, changeset}
+      end
+    else
+      {:error, changeset}
+    end
+  end
+
+  @spec upsert_workspace(integer(), Path.t(), String.t(), map()) ::
+          {:ok, t()} | {:error, Ecto.Changeset.t()}
+  def upsert_workspace(project_id, workspace_path, slug, attrs)
+      when is_integer(project_id) and is_binary(workspace_path) and is_binary(slug) and
+             is_map(attrs) do
+    workspace_path = Path.expand(workspace_path)
+
+    attrs =
+      attrs
+      |> atomize_known_keys()
+      |> Map.merge(%{
+        project_id: project_id,
+        issue_identifier: nil,
+        workspace_path: workspace_path,
+        slug: slug
+      })
+
+    changeset = changeset(%__MODULE__{}, attrs)
+
+    if changeset.valid? do
+      case Repo.insert(changeset,
+             on_conflict: [set: conflict_updates(attrs, changeset)],
+             conflict_target: {:unsafe_fragment, "(project_id, workspace_path, slug) WHERE workspace_path IS NOT NULL"}
+           ) do
+        {:ok, _inserted_or_updated} ->
+          {:ok, Repo.one!(query_one_workspace(project_id, workspace_path, slug))}
+
+        {:error, changeset} ->
+          {:error, changeset}
       end
     else
       {:error, changeset}
@@ -82,14 +130,43 @@ defmodule SymphonyElixir.LocalTracker.DevServerRecord do
     )
   end
 
+  @spec list_for_workspace(integer(), Path.t()) :: [t()]
+  def list_for_workspace(project_id, workspace_path)
+      when is_integer(project_id) and is_binary(workspace_path) do
+    workspace_path = Path.expand(workspace_path)
+
+    Repo.all(
+      from(record in __MODULE__,
+        where: record.project_id == ^project_id and record.workspace_path == ^workspace_path,
+        order_by: [desc: record.primary, asc: record.slug]
+      )
+    )
+  end
+
   @doc "Distinct {project_id, issue_identifier} pairs with a record in a non-terminal status."
   @spec live_issue_keys() :: [{integer(), String.t()}]
   def live_issue_keys do
     Repo.all(
       from(record in __MODULE__,
-        where: record.status in ^@non_terminal_statuses,
+        where:
+          record.status in ^@non_terminal_statuses and
+            not is_nil(record.issue_identifier),
         distinct: true,
         select: {record.project_id, record.issue_identifier}
+      )
+    )
+  end
+
+  @spec get_for_workspace(integer(), Path.t(), integer()) :: t() | nil
+  def get_for_workspace(project_id, workspace_path, id)
+      when is_integer(project_id) and is_binary(workspace_path) and is_integer(id) do
+    workspace_path = Path.expand(workspace_path)
+
+    Repo.one(
+      from(record in __MODULE__,
+        where:
+          record.project_id == ^project_id and record.workspace_path == ^workspace_path and
+            record.id == ^id
       )
     )
   end
@@ -113,6 +190,24 @@ defmodule SymphonyElixir.LocalTracker.DevServerRecord do
       set: [status: "stopped", updated_at: DateTime.utc_now()]
     )
   end
+
+  defp validate_exactly_one_scope(changeset) do
+    issue_identifier = get_field(changeset, :issue_identifier)
+    workspace_path = get_field(changeset, :workspace_path)
+
+    if present?(issue_identifier) != present?(workspace_path) do
+      changeset
+    else
+      add_error(
+        changeset,
+        :issue_identifier,
+        "exactly one of issue_identifier or workspace_path must be set"
+      )
+    end
+  end
+
+  defp present?(value) when is_binary(value), do: String.trim(value) != ""
+  defp present?(_value), do: false
 
   defp atomize_known_keys(attrs) do
     Enum.reduce(attrs, %{}, fn
@@ -147,6 +242,14 @@ defmodule SymphonyElixir.LocalTracker.DevServerRecord do
     from(record in __MODULE__,
       where:
         record.project_id == ^project_id and record.issue_identifier == ^issue_identifier and
+          record.slug == ^slug
+    )
+  end
+
+  defp query_one_workspace(project_id, workspace_path, slug) do
+    from(record in __MODULE__,
+      where:
+        record.project_id == ^project_id and record.workspace_path == ^workspace_path and
           record.slug == ^slug
     )
   end

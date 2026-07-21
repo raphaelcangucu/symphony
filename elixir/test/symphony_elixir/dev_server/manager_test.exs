@@ -92,6 +92,70 @@ defmodule SymphonyElixir.DevServer.ManagerTest do
     assert Manager.start_for_issue(project.slug, "#missing-workspace") == {:error, :workspace_missing}
   end
 
+  test "list_for_workspace persists path-scoped placeholders without an issue identifier", %{project: project} do
+    workspace_path =
+      Path.join(
+        System.tmp_dir!(),
+        "symphony-manager-workspace-#{System.unique_integer([:positive])}"
+      )
+
+    File.mkdir_p!(workspace_path)
+    on_exit(fn -> File.rm_rf(workspace_path) end)
+
+    {:ok, _steps} =
+      DevEnv.save_steps(project.slug, [
+        %{description: "Front", command: "npm run dev", role: "serve", working_dir: "front"}
+      ])
+
+    assert [%{slug: "front", status: "stopped"}] =
+             Manager.list_for_workspace(project.slug, workspace_path)
+
+    assert [%DevServerRecord{workspace_path: ^workspace_path, issue_identifier: nil}] =
+             DevServerRecord.list_for_workspace(project.id, workspace_path)
+  end
+
+  test "start_for_workspace keeps failed launch state scoped to the workspace path", %{
+    project: project
+  } do
+    workspace_path =
+      Path.join(
+        System.tmp_dir!(),
+        "symphony-manager-start-workspace-#{System.unique_integer([:positive])}"
+      )
+
+    File.mkdir_p!(workspace_path)
+    on_exit(fn -> File.rm_rf(workspace_path) end)
+
+    enable_project_dev_server!(
+      project,
+      port_range: [41_200, 41_201],
+      max_concurrent: 1
+    )
+
+    ensure_manager_started!()
+
+    {:ok, _steps} =
+      DevEnv.save_steps(project.slug, [
+        %{
+          description: "Missing",
+          command: "npm run dev",
+          role: "serve",
+          working_dir: "missing"
+        }
+      ])
+
+    assert Manager.start_for_workspace(project.slug, workspace_path) ==
+             {:error, :crashed}
+
+    assert [
+             %DevServerRecord{
+               workspace_path: ^workspace_path,
+               issue_identifier: nil,
+               status: "crashed"
+             }
+           ] = DevServerRecord.list_for_workspace(project.id, workspace_path)
+  end
+
   test "list_for_issue ensures stopped placeholders for configured serve steps", %{project: project} do
     {:ok, _steps} =
       DevEnv.save_steps(project.slug, [

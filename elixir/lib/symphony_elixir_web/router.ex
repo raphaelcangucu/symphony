@@ -52,11 +52,18 @@ defmodule SymphonyElixirWeb.Router do
     pipe_through(:tracker_sse)
 
     get("/projects/:project_slug/issues/:identifier/dev_servers/events", DevServerController, :events)
+    get("/assistant/threads/:thread_id/dev_servers/events", DevServerController, :events_thread)
 
     get(
       "/projects/:project_slug/issues/:identifier/dev_servers/:server_id/output/events",
       DevServerController,
       :output_events
+    )
+
+    get(
+      "/assistant/threads/:thread_id/dev_servers/:server_id/output/events",
+      DevServerController,
+      :output_events_thread
     )
 
     get("/projects/:project_slug/worktrees/events", WorktreeInventoryController, :events)
@@ -267,6 +274,36 @@ defmodule SymphonyElixirWeb.Router do
     post("/projects/:project_slug/issues/:identifier/dev_servers/:server_id/start", DevServerController, :start_server)
     post("/projects/:project_slug/issues/:identifier/dev_servers/:server_id/stop", DevServerController, :stop_server)
     post("/projects/:project_slug/issues/:identifier/dev_servers/:server_id/restart", DevServerController, :restart_server)
+    get("/assistant/threads/:thread_id/dev_servers", DevServerController, :index_thread)
+
+    get(
+      "/assistant/threads/:thread_id/dev_servers/:server_id/output",
+      DevServerController,
+      :output_thread
+    )
+
+    post("/assistant/threads/:thread_id/dev_servers/start", DevServerController, :start_thread)
+    post("/assistant/threads/:thread_id/dev_servers/stop", DevServerController, :stop_thread)
+    post("/assistant/threads/:thread_id/dev_servers/restart", DevServerController, :restart_thread)
+
+    post(
+      "/assistant/threads/:thread_id/dev_servers/:server_id/start",
+      DevServerController,
+      :start_thread_server
+    )
+
+    post(
+      "/assistant/threads/:thread_id/dev_servers/:server_id/stop",
+      DevServerController,
+      :stop_thread_server
+    )
+
+    post(
+      "/assistant/threads/:thread_id/dev_servers/:server_id/restart",
+      DevServerController,
+      :restart_thread_server
+    )
+
     post("/tunnel/start", TunnelController, :start)
     get("/projects/:project_slug/editor", EditorController, :show)
     get("/projects/:project_slug/issues/:identifier/editor", EditorController, :show)

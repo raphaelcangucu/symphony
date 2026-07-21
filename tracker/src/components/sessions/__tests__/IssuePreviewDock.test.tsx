@@ -5,13 +5,19 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { IssuePreviewDock } from "@/components/sessions/IssuePreviewDock";
 import { initTestI18n } from "@/i18n/testUtils";
+import type { WorkspaceScope } from "@/lib/workspaceScope";
 import type { IssueDevServer, IssueDevServersResponse } from "@/types/issue";
 
 const useIssueDevServersMock = vi.hoisted(() => vi.fn());
+const useThreadDevServersMock = vi.hoisted(() => vi.fn());
 const openFloatingSurfaceOrToastMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/hooks/useIssueDevServers", () => ({
   useIssueDevServers: (...args: unknown[]) => useIssueDevServersMock(...args),
+}));
+
+vi.mock("@/hooks/useThreadDevServers", () => ({
+  useThreadDevServers: (...args: unknown[]) => useThreadDevServersMock(...args),
 }));
 
 vi.mock("@/stores/floatingSurfaceStore", () => ({
@@ -19,8 +25,21 @@ vi.mock("@/stores/floatingSurfaceStore", () => ({
 }));
 
 vi.mock("@/components/issues/issue-detail/PreviewTab", () => ({
-  PreviewPanel: ({ projectSlug, issueIdentifier }: { projectSlug: string; issueIdentifier: string }) => (
-    <div data-testid="preview-panel" data-project={projectSlug} data-issue={issueIdentifier} />
+  PreviewPanel: ({
+    projectSlug,
+    issueIdentifier,
+    threadId,
+  }: {
+    projectSlug: string;
+    issueIdentifier: string;
+    threadId?: number;
+  }) => (
+    <div
+      data-testid="preview-panel"
+      data-project={projectSlug}
+      data-issue={issueIdentifier}
+      data-thread={threadId}
+    />
   ),
 }));
 
@@ -71,18 +90,23 @@ function renderDock({
   fullscreen = false,
   onToggleFullscreen = () => {},
   onClose = () => {},
+  scope = {
+    kind: "issue",
+    projectSlug: "macro-markets",
+    issueIdentifier: "510",
+  },
 }: {
   fullscreen?: boolean;
   onToggleFullscreen?: () => void;
   onClose?: () => void;
+  scope?: WorkspaceScope;
 } = {}) {
   const splitContainerRef = createRef<HTMLDivElement>();
 
   return render(
     <div ref={splitContainerRef} style={{ width: 1200 }}>
       <IssuePreviewDock
-        projectSlug="macro-markets"
-        issueIdentifier="510"
+        scope={scope}
         view="board"
         splitContainerRef={splitContainerRef}
         fullscreen={fullscreen}
@@ -99,7 +123,23 @@ describe("IssuePreviewDock", () => {
     window.localStorage.clear();
     useIssueDevServersMock.mockReset();
     useIssueDevServersMock.mockReturnValue(devServersResult());
+    useThreadDevServersMock.mockReset();
+    useThreadDevServersMock.mockReturnValue(devServersResult());
     openFloatingSurfaceOrToastMock.mockReset();
+  });
+
+  it("uses the thread dev-server hook for a thread workspace scope", () => {
+    renderDock({
+      scope: {
+        kind: "thread",
+        projectSlug: "macro-markets",
+        threadId: 42,
+        workspacePath: "/tmp/thread-42",
+      },
+    });
+
+    expect(useThreadDevServersMock).toHaveBeenCalledWith(42);
+    expect(useIssueDevServersMock).toHaveBeenCalledWith(null, null);
   });
 
   it("renders resize, details, fullscreen and close controls in split mode", () => {

@@ -4,7 +4,8 @@ defmodule SymphonyElixirWeb.Tracker.DevServerControllerTest do
   import Phoenix.ConnTest
   import Plug.Conn
 
-  alias SymphonyElixir.LocalTracker.Context
+  alias SymphonyElixir.Assistant.History
+  alias SymphonyElixir.LocalTracker.{Context, DevEnv, DevServerRecord}
   alias SymphonyElixir.Repo
   alias SymphonyElixir.TestSupport
   alias SymphonyElixir.Workflow
@@ -47,6 +48,13 @@ defmodule SymphonyElixirWeb.Tracker.DevServerControllerTest do
       })
 
     {:ok, issue} = Context.create_issue("p", %{"title" => "Preview issue", "status" => "Todo"})
+    thread_workspace_path = Path.join(workspace_root, "thread-preview")
+    File.mkdir_p!(thread_workspace_path)
+
+    {:ok, thread} =
+      History.create_workspace_session_thread("p", thread_workspace_path, %{
+        title: "Thread preview"
+      })
 
     previous_token = System.get_env(@token_env)
     System.put_env(@token_env, "secret")
@@ -59,7 +67,7 @@ defmodule SymphonyElixirWeb.Tracker.DevServerControllerTest do
       File.rm_rf(workspace_root)
     end)
 
-    {:ok, identifier: issue.identifier}
+    {:ok, identifier: issue.identifier, thread_id: thread.id, thread_workspace_path: thread_workspace_path}
   end
 
   test "index returns availability and servers for an existing project", %{identifier: identifier} do
@@ -98,6 +106,45 @@ defmodule SymphonyElixirWeb.Tracker.DevServerControllerTest do
 
       assert_disabled_snapshot(json_response(conn, 200))
     end
+  end
+
+  test "thread index and start use workspace-path records without synthetic issue identifiers", %{
+    thread_id: thread_id,
+    thread_workspace_path: workspace_path
+  } do
+    {:ok, _steps} =
+      DevEnv.save_steps("p", [
+        %{
+          description: "Front",
+          command: "npm run dev",
+          role: "serve",
+          working_dir: "front"
+        }
+      ])
+
+    for {method, path} <- [
+          {:get, "/api/tracker/v1/assistant/threads/#{thread_id}/dev_servers"},
+          {:post, "/api/tracker/v1/assistant/threads/#{thread_id}/dev_servers/start"}
+        ] do
+      conn =
+        case method do
+          :get -> get(authorized_conn(), path)
+          :post -> post(authorized_conn(), path)
+        end
+
+      assert %{
+               "data" => %{
+                 "available" => false,
+                 "reason" => "disabled",
+                 "servers" => [%{"slug" => "front"}]
+               }
+             } = json_response(conn, 200)
+    end
+
+    {:ok, project} = Context.get_project("p")
+
+    assert [%DevServerRecord{workspace_path: ^workspace_path, issue_identifier: nil}] =
+             DevServerRecord.list_for_workspace(project.id, workspace_path)
   end
 
   test "per-server start stop and restart return 404 for an unknown server", %{identifier: identifier} do

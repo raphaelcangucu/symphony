@@ -1015,12 +1015,15 @@ export function ProjectSessionsWorkspace({
         />
       ) : null}
 
-      {previewDockScope?.kind === "issue" ? (
+      {previewDockScope ? (
         <IssuePreviewDock
-          projectSlug={projectSlug}
-          issueIdentifier={previewDockScope.issueIdentifier}
+          scope={previewDockScope}
           view={view}
-          execution={executions.get(previewDockScope.issueIdentifier)}
+          execution={
+            previewDockScope.kind === "issue"
+              ? executions.get(previewDockScope.issueIdentifier)
+              : undefined
+          }
           splitContainerRef={splitContainerRef}
           fullscreen={previewFullscreen}
           onToggleFullscreen={togglePreviewFullscreen}
