@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useAgentExecutions } from "@/hooks/useAgentExecutions";
 import { useRecents } from "@/hooks/useRecents";
 import { useSidebarTree } from "@/hooks/useSidebarTree";
+import { TRACKER_PROJECTS_CHANGED_EVENT } from "@/lib/projectEvents";
 import { listIssues } from "@/services/issues";
 import { listProjects } from "@/services/projects";
 import { listProjectSessions } from "@/services/projectSessions";
@@ -243,5 +244,21 @@ describe("useSidebarTree", () => {
         "thread:2",
       ]),
     );
+  });
+
+  it("does not refetch an expanded branch when the project list reloads", async () => {
+    const { result } = renderHook(() => useSidebarTree(), { wrapper });
+    await waitFor(() => expect(result.current.projectsLoading).toBe(false));
+
+    act(() => result.current.toggleProjectExpanded("alpha"));
+    await waitFor(() => expect(listProjectSessions).toHaveBeenCalledOnce());
+
+    vi.mocked(listProjects).mockResolvedValueOnce([project("alpha"), project("beta")]);
+    await act(async () => {
+      window.dispatchEvent(new Event(TRACKER_PROJECTS_CHANGED_EVENT));
+    });
+    await waitFor(() => expect(listProjects).toHaveBeenCalledTimes(2));
+
+    expect(listProjectSessions).toHaveBeenCalledTimes(1);
   });
 });

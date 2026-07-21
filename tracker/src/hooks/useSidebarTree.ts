@@ -140,6 +140,10 @@ function errorDetail(error: unknown): string {
     : "unknown error";
 }
 
+function branchNeedsInitialLoad(branch: SidebarBranchState): boolean {
+  return branch.loadState !== "loading" && branch.loadState !== "ready";
+}
+
 export function useSidebarTree(): UseSidebarTreeResult {
   const location = useLocation();
   const locationRef = useRef(location);
@@ -421,6 +425,8 @@ export function useSidebarTree(): UseSidebarTreeResult {
   );
 
   useEffect(() => {
+    if (projectsLoading) return;
+
     const expanded = new Set(
       expandedProjectKey ? expandedProjectKey.split("\0").filter(Boolean) : [],
     );
@@ -428,9 +434,12 @@ export function useSidebarTree(): UseSidebarTreeResult {
       if (!expanded.has(slug) && resource.active) closeBranch(slug);
     }
     for (const slug of expanded) {
-      if (projects.some((project) => project.slug === slug)) void startBranchLoad(slug);
+      if (!projectsRef.current.some((project) => project.slug === slug)) continue;
+      const branch = branchStatesRef.current.get(slug) ?? createBranchState();
+      if (!branchNeedsInitialLoad(branch)) continue;
+      void startBranchLoad(slug);
     }
-  }, [closeBranch, expandedProjectKey, projects, startBranchLoad]);
+  }, [closeBranch, expandedProjectKey, projectsLoading, startBranchLoad]);
 
   const routeSelection = useMemo(
     () => resolveSidebarRouteSelection(location.pathname, location.search),
