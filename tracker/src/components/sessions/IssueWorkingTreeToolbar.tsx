@@ -185,14 +185,9 @@ export function IssueWorkingTreeToolbar({
       {onTasksToggle ? (
         <button
           type="button"
-          disabled={!pathActionsEnabled}
           data-testid="tasks-dock-toolbar-toggle"
           aria-label={t("workspace.tasks.ariaLabel", { identifier: actionIdentifier })}
-          title={
-            pathActionsEnabled
-              ? t("workspace.tasks.ariaLabel", { identifier: actionIdentifier })
-              : pathActionUnavailableTitle
-          }
+          title={t("workspace.tasks.ariaLabel", { identifier: actionIdentifier })}
           aria-pressed={tasksOpen}
           onClick={onTasksToggle}
           className={tasksActionClassName}

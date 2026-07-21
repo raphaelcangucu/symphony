@@ -81,12 +81,31 @@ describe("AssistantSessionTabContent", () => {
     });
   });
 
-  it("shows issue working-tree actions for issue-bound assistant sessions", async () => {
+  it("keeps every issue working-tree action wired to the issue scope", async () => {
+    const user = userEvent.setup();
+    const togglePreview = vi.fn();
+    const toggleTerminal = vi.fn();
+    const toggleEnvironment = vi.fn();
+    const toggleTasks = vi.fn();
+    const scope = issueWorkspaceScope("macro-markets", "510", 7996);
+
     render(
       <MemoryRouter>
-        <SessionTerminalDockContext.Provider value={{ openScope: null, toggleTerminal: vi.fn() }}>
-          <AssistantSessionTabContent projectSlug="macro-markets" threadId={7996} view="board" />
-        </SessionTerminalDockContext.Provider>
+        <SessionPreviewDockContext.Provider value={{ openScope: null, togglePreview }}>
+          <SessionTerminalDockContext.Provider value={{ openScope: null, toggleTerminal }}>
+            <SessionEnvironmentDockContext.Provider
+              value={{ openScope: null, toggleEnvironment }}
+            >
+              <SessionTasksDockContext.Provider value={{ openScope: null, toggleTasks }}>
+                <AssistantSessionTabContent
+                  projectSlug="macro-markets"
+                  threadId={7996}
+                  view="board"
+                />
+              </SessionTasksDockContext.Provider>
+            </SessionEnvironmentDockContext.Provider>
+          </SessionTerminalDockContext.Provider>
+        </SessionPreviewDockContext.Provider>
       </MemoryRouter>,
     );
 
@@ -94,9 +113,20 @@ describe("AssistantSessionTabContent", () => {
       "href",
       "/projects/macro-markets/board/issues/510/sessions",
     );
-    expect(screen.getByRole("button", { name: "Terminal for 510" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: "Diff" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /open in code/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Documents" })).toBeInTheDocument();
     expect(screen.getByTestId("assistant-panel")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Terminal for 510" }));
+    await user.click(screen.getByRole("button", { name: "Preview for 510" }));
+    await user.click(screen.getByRole("button", { name: "Environment for 510" }));
+    await user.click(screen.getByRole("button", { name: "Tasks for 510" }));
+
+    expect(toggleTerminal).toHaveBeenCalledWith(scope);
+    expect(togglePreview).toHaveBeenCalledWith(scope);
+    expect(toggleEnvironment).toHaveBeenCalledWith(scope);
+    expect(toggleTasks).toHaveBeenCalledWith(scope);
   });
 
   it("shows working-tree toolbar for threads without issueIdentifier", async () => {
@@ -136,9 +166,13 @@ describe("AssistantSessionTabContent", () => {
     );
 
     expect(await screen.findByRole("button", { name: /diff/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Terminal for flaky-pipe" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Preview for flaky-pipe" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Environment for flaky-pipe" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Tasks for flaky-pipe" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /open in code/i })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /open issue/i })).toBeNull();
     expect(screen.getByText(/flaky-pipe/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /open in code/i })).toBeInTheDocument();
     expect(useIssueEditorMock).toHaveBeenCalledWith({
       projectSlug: "macro-markets",
       identifier: null,
@@ -177,6 +211,7 @@ describe("AssistantSessionTabContent", () => {
   });
 
   it("disables Code with the workspace-missing tooltip for an unprovisioned thread", async () => {
+    const toggleTasks = vi.fn();
     getAssistantThreadMock.mockResolvedValue({
       id: 8080,
       scope: "freeform",
@@ -198,7 +233,9 @@ describe("AssistantSessionTabContent", () => {
 
     render(
       <MemoryRouter>
-        <AssistantSessionTabContent projectSlug="macro-markets" threadId={8080} view="board" />
+        <SessionTasksDockContext.Provider value={{ openScope: null, toggleTasks }}>
+          <AssistantSessionTabContent projectSlug="macro-markets" threadId={8080} view="board" />
+        </SessionTasksDockContext.Provider>
       </MemoryRouter>,
     );
 
@@ -208,6 +245,7 @@ describe("AssistantSessionTabContent", () => {
       "title",
       "Workspace not created yet — run the agent or open the terminal first",
     );
+    expect(screen.getByTestId("tasks-dock-toolbar-toggle")).toBeEnabled();
   });
 
   it("toggles the workspace terminal dock instead of navigating to the issue drawer", async () => {
