@@ -596,7 +596,7 @@ defmodule SymphonyElixirWeb.Tracker.IssueControllerTest do
         "title" => "Clear model",
         "status" => "Todo",
         "agent" => "claude",
-        "model" => "gpt-5.5",
+        "model" => "claude-sonnet-4-5",
         "effort" => "high"
       })
 

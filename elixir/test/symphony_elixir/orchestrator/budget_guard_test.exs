@@ -88,4 +88,26 @@ defmodule SymphonyElixir.Orchestrator.BudgetGuardTest do
   test "token progress logging is disabled for a non-positive interval" do
     refute Orchestrator.token_threshold_crossed?(0, 9_000_000, 0)
   end
+
+  describe "effective_token_budget/2" do
+    test "the operator budget wins when the guard is enabled" do
+      assert Orchestrator.effective_token_budget(4_000_000, 15_000_000) == 4_000_000
+    end
+
+    test "the hard ceiling backstops a disabled operator budget" do
+      assert Orchestrator.effective_token_budget(0, 15_000_000) == 15_000_000
+    end
+
+    test "both zero means truly unbounded (guard fully off)" do
+      assert Orchestrator.effective_token_budget(0, 0) == 0
+      refute Orchestrator.run_budget_exceeded?(%{agent_total_tokens: 999_999_999}, 0)
+    end
+
+    test "a disabled operator budget still parks a runaway that crosses the hard ceiling" do
+      budget = Orchestrator.effective_token_budget(0, 15_000_000)
+      entry = %{agent_total_tokens: 16_000_000, retry_attempt: 2, bundle_role: :standalone}
+
+      assert Orchestrator.budget_overrun_action(entry, budget, 2) == :park
+    end
+  end
 end

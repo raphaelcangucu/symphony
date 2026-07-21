@@ -288,6 +288,9 @@ defmodule SymphonyElixir.Config do
   @spec agent_token_budget() :: non_neg_integer()
   def agent_token_budget, do: OrchestrationSettings.agent_token_budget()
 
+  @spec agent_token_hard_ceiling() :: non_neg_integer()
+  def agent_token_hard_ceiling, do: OrchestrationSettings.agent_token_hard_ceiling()
+
   @spec agent_budget_max_retries() :: non_neg_integer()
   def agent_budget_max_retries, do: InstanceConfig.agent_budget_max_retries()
 

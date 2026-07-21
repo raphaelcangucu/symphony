@@ -225,5 +225,46 @@ defmodule SymphonyElixir.SessionLogTest do
       assert {:ok, "codex", ^sidecar_rollout} =
                SymphonyElixir.SessionLog.resolve_for_session(session, sessions_dir: sessions_dir)
     end
+
+    test "streams the most recently written rollout for the cwd, not a stale sidecar pointer" do
+      workspace = Path.join(System.tmp_dir!(), "rfs-live-#{System.unique_integer([:positive])}")
+      sessions_dir = Path.join(System.tmp_dir!(), "rfs-rollouts-#{System.unique_integer([:positive])}")
+      File.mkdir_p!(Path.join(workspace, ".symphony"))
+      File.mkdir_p!(sessions_dir)
+
+      on_exit(fn ->
+        File.rm_rf!(workspace)
+        File.rm_rf!(sessions_dir)
+      end)
+
+      # Two rollouts for the same working tree: a completed one the sidecar cached,
+      # and a newer one written by the current run (e.g. after an agent switch).
+      stale_path = Path.join(sessions_dir, "rollout-2026-07-20T21-54-43-stale-thread.jsonl")
+      live_path = Path.join(sessions_dir, "rollout-2026-07-20T21-59-57-live-thread.jsonl")
+      write_session_meta!(stale_path, workspace, "stale-thread")
+      write_session_meta!(live_path, workspace, "live-thread")
+
+      # Sidecar still points at the OLD, completed thread (the lazily-cached pointer).
+      File.write!(
+        Path.join([workspace, ".symphony", "codex-session.json"]),
+        Jason.encode!(%{"thread_id" => "stale-thread"})
+      )
+
+      # The live rollout is the most recently modified file.
+      File.touch!(stale_path, 1_784_595_360)
+      File.touch!(live_path, 1_784_596_380)
+
+      session = %{id: 12, workspace_path: workspace, agent_kind: "codex", agent_thread_ids: %{}}
+
+      assert {:ok, "codex", ^live_path} =
+               SymphonyElixir.SessionLog.resolve_for_session(session, sessions_dir: sessions_dir)
+    end
+  end
+
+  defp write_session_meta!(path, cwd, id) do
+    File.write!(
+      path,
+      Jason.encode!(%{"type" => "session_meta", "payload" => %{"cwd" => cwd, "id" => id}}) <> "\n"
+    )
   end
 end

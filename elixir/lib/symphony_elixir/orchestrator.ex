@@ -1397,6 +1397,22 @@ defmodule SymphonyElixir.Orchestrator do
   defp running_entry_total_tokens(%{agent_total_tokens: tokens}) when is_integer(tokens), do: tokens
   defp running_entry_total_tokens(_running_entry), do: 0
 
+  @doc """
+  The token budget actually enforced on a live run. When the operator guard is
+  enabled its ceiling wins; otherwise the always-on hard ceiling is the backstop
+  that stops a runaway non-goal run before it burns tens of millions of tokens.
+  Both being `0` means the operator opted into a truly unbounded run.
+  """
+  @spec effective_token_budget(non_neg_integer(), non_neg_integer()) :: non_neg_integer()
+  def effective_token_budget(operator_budget, hard_ceiling)
+      when is_integer(operator_budget) and is_integer(hard_ceiling) do
+    if operator_budget > 0, do: operator_budget, else: hard_ceiling
+  end
+
+  defp effective_token_budget do
+    effective_token_budget(Config.agent_token_budget(), Config.agent_token_hard_ceiling())
+  end
+
   defp running_entry_attempt(%{retry_attempt: attempt}) when is_integer(attempt) and attempt >= 0, do: attempt
   defp running_entry_attempt(_running_entry), do: 0
 
@@ -1404,7 +1420,7 @@ defmodule SymphonyElixir.Orchestrator do
   # it balloons (e.g. a child babysitting CI in a sleep/poll loop). Re-dispatches
   # the now-bounded run up to the configured cap, then parks it for a human.
   defp maybe_enforce_token_budget(%State{} = state, issue_id, running_entry) do
-    case budget_overrun_action(running_entry, Config.agent_token_budget(), Config.agent_budget_max_retries()) do
+    case budget_overrun_action(running_entry, effective_token_budget(), Config.agent_budget_max_retries()) do
       :within_budget ->
         state
 
@@ -1460,7 +1476,7 @@ defmodule SymphonyElixir.Orchestrator do
   defp budget_log_context(running_entry, attempt) do
     "issue_identifier=#{running_entry.identifier} role=#{inspect(Map.get(running_entry, :bundle_role))} " <>
       "parent=#{inspect(Map.get(running_entry, :parent_identifier))} unit=#{inspect(Map.get(running_entry, :unit_id))} " <>
-      "tokens=#{running_entry_total_tokens(running_entry)} budget=#{Config.agent_token_budget()} " <>
+      "tokens=#{running_entry_total_tokens(running_entry)} budget=#{effective_token_budget()} " <>
       "session_id=#{inspect(Map.get(running_entry, :session_id))} attempt=#{attempt}"
   end
 

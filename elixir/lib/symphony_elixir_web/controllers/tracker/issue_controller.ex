@@ -58,6 +58,7 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
   @spec create(Conn.t(), map()) :: Conn.t()
   def create(conn, %{"project_slug" => project_slug} = params) do
     with {:ok, project} <- Context.get_project(project_slug),
+         :ok <- validate_execution_model(project, nil, params),
          attrs =
            params
            |> normalize_create_attrs(project)
@@ -71,6 +72,7 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
       |> json(%{data: present_issue(project, reload_issue(project, issue))})
     else
       {:error, :project_not_found} -> TrackerErrors.render(conn, :project_not_found)
+      {:error, {:invalid_request, message}} -> TrackerErrors.validation_msg(conn, message)
       {:error, reason} -> TrackerErrors.render(conn, reason)
     end
   end
@@ -204,9 +206,8 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
         |> Map.drop(["project_slug", "id"])
         |> normalize_update_attrs(project)
 
-      if Map.has_key?(attrs, "agent") and attrs["agent"] not in [nil | @agent_kinds] do
-        TrackerErrors.validation_msg(conn, "agent must be codex, claude, cursor, or null")
-      else
+      with :ok <- validate_agent_attr(attrs),
+           :ok <- validate_execution_model(project, identifier, params) do
         case IssueAdapter.dispatch(project, :update_issue, [identifier, attrs]) do
           {:ok, issue} ->
             if Map.has_key?(attrs, "agent") do
@@ -220,6 +221,8 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
           {:error, reason} ->
             TrackerErrors.render(conn, reason)
         end
+      else
+        {:error, {:invalid_request, message}} -> TrackerErrors.validation_msg(conn, message)
       end
     else
       {:error, :project_not_found} -> TrackerErrors.render(conn, :project_not_found)
@@ -526,6 +529,57 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
     else
       attrs
     end
+  end
+
+  defp validate_agent_attr(attrs) do
+    if Map.has_key?(attrs, "agent") and attrs["agent"] not in [nil | @agent_kinds] do
+      {:error, {:invalid_request, "agent must be codex, claude, cursor, or null"}}
+    else
+      :ok
+    end
+  end
+
+  # Reject a model pin the target agent's CLI does not actually offer (e.g. a typo
+  # or decommissioned model) before it is persisted and dispatched, and tell the
+  # operator which models are valid. Fail-open by design: only a model positively
+  # absent from a non-empty catalog is rejected (see `SymphonyElixir.AgentModel`).
+  defp validate_execution_model(project, identifier, params) do
+    case blank_execution_string(Map.get(params, "model")) do
+      nil ->
+        :ok
+
+      model ->
+        agent_kind = execution_agent_kind(project, identifier, params)
+
+        case SymphonyElixir.AgentModel.validate(agent_kind, model) do
+          :ok ->
+            :ok
+
+          {:error, %{valid_models: valid_models}} ->
+            {:error, {:invalid_request, invalid_model_message(agent_kind, model, valid_models)}}
+        end
+    end
+  end
+
+  defp execution_agent_kind(project, identifier, params) do
+    case normalized_agent_param(params) do
+      agent when agent in @agent_kinds -> agent
+      _ when is_binary(identifier) and identifier != "" -> resolve_goal_agent(project, identifier, params)
+      _ -> SymphonyElixir.Settings.Agents.default_agent_kind()
+    end
+  end
+
+  defp normalized_agent_param(params) do
+    case Map.get(params, "agent") do
+      agent when is_binary(agent) -> agent |> String.trim() |> String.downcase()
+      _ -> nil
+    end
+  end
+
+  defp invalid_model_message(agent_kind, model, valid_models) do
+    valid_text = if valid_models == [], do: "none available", else: Enum.join(valid_models, ", ")
+
+    ~s(Model "#{model}" is not available for #{agent_kind}. Valid #{agent_kind} models: #{valid_text}.)
   end
 
   # Writes agent/model/effort pins to issue_agent_settings after create/update.

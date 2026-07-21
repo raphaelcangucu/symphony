@@ -5,6 +5,11 @@ defmodule SymphonyElixir.Codex.SessionLog do
   Rollout files live under `~/.codex/sessions/**/rollout-*.jsonl`. The workspace
   sidecar (`.symphony/codex-session.json`) holds the active `thread_id`.
 
+  Live streaming (`resolve_rollout_path/2`) follows the most recently written
+  rollout for the workspace cwd rather than the sidecar, because the sidecar is a
+  lazily-written cache that can point at a stale/completed thread after an agent
+  switch or re-dispatch (see `live_rollout_path/2`).
+
   Subagent threads are also `rollout-*.jsonl` files under the same sessions tree;
   resolve them by id via `resolve_subagent_path/2`. Listing all children for a
   parent is intentionally unsupported (see `list_subagents/2`).
@@ -18,11 +23,45 @@ defmodule SymphonyElixir.Codex.SessionLog do
 
   @spec resolve_rollout_path(Path.t(), keyword()) :: {:ok, Path.t()} | :error
   def resolve_rollout_path(workspace, opts \\ []) when is_binary(workspace) do
-    with {:ok, thread_id} <- Session.resolve(workspace, opts),
-         {:ok, path} <- resolve_subagent_path(thread_id, opts) do
-      {:ok, path}
-    else
+    case live_rollout_path(workspace, opts) do
+      {:ok, path} ->
+        {:ok, path}
+
+      :error ->
+        with {:ok, thread_id} <- Session.resolve(workspace, opts),
+             {:ok, path} <- resolve_subagent_path(thread_id, opts) do
+          {:ok, path}
+        else
+          _ -> :error
+        end
+    end
+  end
+
+  # The workspace sidecar (`.symphony/codex-session.json`) is a lazily-written
+  # cache: `Session.resolve/2` records the FIRST rollout it scans for a working
+  # tree and never invalidates it. After an agent switch or re-dispatch, the next
+  # run writes a brand-new rollout the sidecar never learns about, so a live
+  # stream that trusts the sidecar tails a frozen, already-completed transcript.
+  #
+  # For live streaming we must follow the rollout that is actually being written,
+  # so prefer the most recently modified rollout whose `session_meta` cwd is this
+  # workspace. Resume/goal resolution keeps using `Session.resolve/2` (the durable
+  # sidecar pointer) and is unaffected by this streaming-only preference.
+  @spec live_rollout_path(Path.t(), keyword()) :: {:ok, Path.t()} | :error
+  defp live_rollout_path(workspace, opts) do
+    workspace
+    |> Session.rollout_paths_for_workspace(opts)
+    |> Enum.max_by(&rollout_mtime/1, fn -> nil end)
+    |> case do
+      path when is_binary(path) -> {:ok, path}
       _ -> :error
+    end
+  end
+
+  defp rollout_mtime(path) when is_binary(path) do
+    case File.stat(path, time: :posix) do
+      {:ok, %File.Stat{mtime: mtime}} -> mtime
+      _ -> 0
     end
   end
 

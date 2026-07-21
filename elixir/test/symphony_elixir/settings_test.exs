@@ -62,7 +62,8 @@ defmodule SymphonyElixir.SettingsTest do
                "require_symphony_label" => true,
                "require_assignee_match" => true,
                "agent_token_budget_enabled" => false,
-               "agent_token_budget" => 4_000_000
+               "agent_token_budget" => 4_000_000,
+               "agent_token_hard_ceiling" => 15_000_000
              },
              "ui" => %{"locale" => "auto"}
            }
@@ -73,7 +74,8 @@ defmodule SymphonyElixir.SettingsTest do
              "require_symphony_label" => true,
              "require_assignee_match" => true,
              "agent_token_budget_enabled" => false,
-             "agent_token_budget" => 4_000_000
+             "agent_token_budget" => 4_000_000,
+             "agent_token_hard_ceiling" => 15_000_000
            }
 
     assert Settings.Orchestration.require_symphony_label?() == true
@@ -81,6 +83,19 @@ defmodule SymphonyElixir.SettingsTest do
     refute Settings.Orchestration.agent_token_budget_enabled?()
     assert Settings.Orchestration.agent_token_budget() == 0
     assert Settings.Orchestration.configured_agent_token_budget() == 4_000_000
+    assert Settings.Orchestration.agent_token_hard_ceiling() == 15_000_000
+  end
+
+  test "the hard ceiling backstop persists, disables at 0, and rejects negatives" do
+    assert Settings.Orchestration.agent_token_hard_ceiling() == 15_000_000
+
+    assert {:ok, 8_000_000} = Settings.put("orchestrator", "agent_token_hard_ceiling", 8_000_000)
+    assert Settings.Orchestration.agent_token_hard_ceiling() == 8_000_000
+
+    assert {:ok, 0} = Settings.put("orchestrator", "agent_token_hard_ceiling", 0)
+    assert Settings.Orchestration.agent_token_hard_ceiling() == 0
+
+    assert {:error, :invalid_value} = Settings.put("orchestrator", "agent_token_hard_ceiling", -1)
   end
 
   test "orchestrator toggles persist and round-trip as booleans" do
