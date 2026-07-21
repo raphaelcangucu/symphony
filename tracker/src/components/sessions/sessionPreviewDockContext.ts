@@ -1,10 +1,12 @@
 import { createContext, useContext } from "react";
 
+import type { WorkspaceScope } from "@/lib/workspaceScope";
+
 export interface SessionPreviewDockControls {
-  /** Issue whose preview dock is currently open at the workspace level, if any. */
-  openIssueIdentifier: string | null;
-  /** Opens the dock for the issue, or closes it when it is already open for that issue. */
-  togglePreview: (issueIdentifier: string) => void;
+  /** Workspace scope whose preview dock is currently open, if any. */
+  openScope: WorkspaceScope | null;
+  /** Opens the dock for the scope, or closes it when it is already open for that scope. */
+  togglePreview: (scope: WorkspaceScope) => void;
 }
 
 export const SessionPreviewDockContext = createContext<SessionPreviewDockControls | null>(null);

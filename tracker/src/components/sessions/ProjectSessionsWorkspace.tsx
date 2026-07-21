@@ -44,6 +44,7 @@ import { createSiblingSession } from "@/lib/createSiblingSession";
 import { type ProjectSessionRow } from "@/lib/projectSessions";
 import { resolveExecutionSessionId } from "@/lib/resolveExecutionSessionId";
 import { resolveResumeThreadId, trackerApiErrorCode } from "@/lib/resumeExecutionSession";
+import { workspaceScopesEqual, type WorkspaceScope } from "@/lib/workspaceScope";
 import {
   buildWorkspaceCards,
   flattenWorkspaceCardsByRecency,
@@ -136,30 +137,31 @@ export function ProjectSessionsWorkspace({
   const canonicalTabs = useMemo(() => [createSessionsListTab(t("workspacesPage.title"))], [t]);
 
   const splitContainerRef = useRef<HTMLDivElement>(null);
-  const [terminalDockIssue, setTerminalDockIssue] = useState<string | null>(null);
+  const [terminalDockScope, setTerminalDockScope] = useState<WorkspaceScope | null>(null);
   const [terminalFullscreen, setTerminalFullscreen] = useState(false);
-  const [previewDockIssue, setPreviewDockIssue] = useState<string | null>(null);
+  const [previewDockScope, setPreviewDockScope] = useState<WorkspaceScope | null>(null);
   const [previewFullscreen, setPreviewFullscreen] = useState(false);
-  const [environmentDockIssue, setEnvironmentDockIssue] = useState<string | null>(null);
-  const [tasksDockIssue, setTasksDockIssue] = useState<string | null>(null);
+  const [environmentDockScope, setEnvironmentDockScope] = useState<WorkspaceScope | null>(null);
+  const [tasksDockScope, setTasksDockScope] = useState<WorkspaceScope | null>(null);
   const [tasksFullscreen, setTasksFullscreen] = useState(false);
 
-  const toggleTerminalDock = useCallback((issueIdentifier: string) => {
-    setTerminalDockIssue((current) => {
-      const next = current === issueIdentifier ? null : issueIdentifier;
+  const toggleTerminalDock = useCallback((scope: WorkspaceScope) => {
+    setTerminalDockScope((current) => {
+      const next = workspaceScopesEqual(current, scope) ? null : scope;
       if (next === null) setTerminalFullscreen(false);
       return next;
     });
+    if (scope.kind === "thread") setTerminalFullscreen(false);
     // Only one dock at a time keeps the split layout readable.
-    setPreviewDockIssue(null);
+    setPreviewDockScope(null);
     setPreviewFullscreen(false);
-    setEnvironmentDockIssue(null);
-    setTasksDockIssue(null);
+    setEnvironmentDockScope(null);
+    setTasksDockScope(null);
     setTasksFullscreen(false);
   }, []);
 
   const closeTerminalDock = useCallback(() => {
-    setTerminalDockIssue(null);
+    setTerminalDockScope(null);
     setTerminalFullscreen(false);
   }, []);
 
@@ -167,21 +169,22 @@ export function ProjectSessionsWorkspace({
     setTerminalFullscreen((current) => !current);
   }, []);
 
-  const togglePreviewDock = useCallback((issueIdentifier: string) => {
-    setPreviewDockIssue((current) => {
-      const next = current === issueIdentifier ? null : issueIdentifier;
+  const togglePreviewDock = useCallback((scope: WorkspaceScope) => {
+    setPreviewDockScope((current) => {
+      const next = workspaceScopesEqual(current, scope) ? null : scope;
       if (next === null) setPreviewFullscreen(false);
       return next;
     });
-    setTerminalDockIssue(null);
+    if (scope.kind === "thread") setPreviewFullscreen(false);
+    setTerminalDockScope(null);
     setTerminalFullscreen(false);
-    setEnvironmentDockIssue(null);
-    setTasksDockIssue(null);
+    setEnvironmentDockScope(null);
+    setTasksDockScope(null);
     setTasksFullscreen(false);
   }, []);
 
   const closePreviewDock = useCallback(() => {
-    setPreviewDockIssue(null);
+    setPreviewDockScope(null);
     setPreviewFullscreen(false);
   }, []);
 
@@ -189,35 +192,35 @@ export function ProjectSessionsWorkspace({
     setPreviewFullscreen((current) => !current);
   }, []);
 
-  const toggleEnvironmentDock = useCallback((issueIdentifier: string) => {
-    setEnvironmentDockIssue((current) => (current === issueIdentifier ? null : issueIdentifier));
-    setTerminalDockIssue(null);
+  const toggleEnvironmentDock = useCallback((scope: WorkspaceScope) => {
+    setEnvironmentDockScope((current) => (workspaceScopesEqual(current, scope) ? null : scope));
+    setTerminalDockScope(null);
     setTerminalFullscreen(false);
-    setPreviewDockIssue(null);
+    setPreviewDockScope(null);
     setPreviewFullscreen(false);
-    setTasksDockIssue(null);
+    setTasksDockScope(null);
     setTasksFullscreen(false);
   }, []);
 
   const closeEnvironmentDock = useCallback(() => {
-    setEnvironmentDockIssue(null);
+    setEnvironmentDockScope(null);
   }, []);
 
-  const toggleTasksDock = useCallback((issueIdentifier: string) => {
-    setTasksDockIssue((current) => {
-      const next = current === issueIdentifier ? null : issueIdentifier;
+  const toggleTasksDock = useCallback((scope: WorkspaceScope) => {
+    setTasksDockScope((current) => {
+      const next = workspaceScopesEqual(current, scope) ? null : scope;
       if (next === null) setTasksFullscreen(false);
       return next;
     });
-    setTerminalDockIssue(null);
+    setTerminalDockScope(null);
     setTerminalFullscreen(false);
-    setPreviewDockIssue(null);
+    setPreviewDockScope(null);
     setPreviewFullscreen(false);
-    setEnvironmentDockIssue(null);
+    setEnvironmentDockScope(null);
   }, []);
 
   const closeTasksDock = useCallback(() => {
-    setTasksDockIssue(null);
+    setTasksDockScope(null);
     setTasksFullscreen(false);
   }, []);
 
@@ -226,23 +229,23 @@ export function ProjectSessionsWorkspace({
   }, []);
 
   const terminalDockControls = useMemo(
-    () => ({ openIssueIdentifier: terminalDockIssue, toggleTerminal: toggleTerminalDock }),
-    [terminalDockIssue, toggleTerminalDock],
+    () => ({ openScope: terminalDockScope, toggleTerminal: toggleTerminalDock }),
+    [terminalDockScope, toggleTerminalDock],
   );
 
   const previewDockControls = useMemo(
-    () => ({ openIssueIdentifier: previewDockIssue, togglePreview: togglePreviewDock }),
-    [previewDockIssue, togglePreviewDock],
+    () => ({ openScope: previewDockScope, togglePreview: togglePreviewDock }),
+    [previewDockScope, togglePreviewDock],
   );
 
   const environmentDockControls = useMemo(
-    () => ({ openIssueIdentifier: environmentDockIssue, toggleEnvironment: toggleEnvironmentDock }),
-    [environmentDockIssue, toggleEnvironmentDock],
+    () => ({ openScope: environmentDockScope, toggleEnvironment: toggleEnvironmentDock }),
+    [environmentDockScope, toggleEnvironmentDock],
   );
 
   const tasksDockControls = useMemo(
-    () => ({ openIssueIdentifier: tasksDockIssue, toggleTasks: toggleTasksDock }),
-    [tasksDockIssue, toggleTasksDock],
+    () => ({ openScope: tasksDockScope, toggleTasks: toggleTasksDock }),
+    [tasksDockScope, toggleTasksDock],
   );
 
   const { tabs, activeTabId, activeTab, selectTab, openTab, closeTab } = useWorkspaceTabs({
@@ -556,7 +559,7 @@ export function ProjectSessionsWorkspace({
         navigate(projectSessionsPath(projectSlug), { replace: true });
       }
     },
-    [executions, navigate, projectSlug, selectTab, tabs],
+    [navigate, projectSlug, selectTab, tabs],
   );
 
   const handleCloseTab = useCallback(
@@ -1002,10 +1005,10 @@ export function ProjectSessionsWorkspace({
 
       </section>
 
-      {terminalDockIssue ? (
+      {terminalDockScope?.kind === "issue" ? (
         <IssueTerminalDock
           projectSlug={projectSlug}
-          issueIdentifier={terminalDockIssue}
+          issueIdentifier={terminalDockScope.issueIdentifier}
           splitContainerRef={splitContainerRef}
           fullscreen={terminalFullscreen}
           onToggleFullscreen={toggleTerminalFullscreen}
@@ -1013,12 +1016,12 @@ export function ProjectSessionsWorkspace({
         />
       ) : null}
 
-      {previewDockIssue ? (
+      {previewDockScope?.kind === "issue" ? (
         <IssuePreviewDock
           projectSlug={projectSlug}
-          issueIdentifier={previewDockIssue}
+          issueIdentifier={previewDockScope.issueIdentifier}
           view={view}
-          execution={executions.get(previewDockIssue)}
+          execution={executions.get(previewDockScope.issueIdentifier)}
           splitContainerRef={splitContainerRef}
           fullscreen={previewFullscreen}
           onToggleFullscreen={togglePreviewFullscreen}
@@ -1026,19 +1029,19 @@ export function ProjectSessionsWorkspace({
         />
       ) : null}
 
-      {environmentDockIssue ? (
+      {environmentDockScope?.kind === "issue" ? (
         <IssueEnvironmentDock
           projectSlug={projectSlug}
-          issueIdentifier={environmentDockIssue}
+          issueIdentifier={environmentDockScope.issueIdentifier}
           view={view}
           splitContainerRef={splitContainerRef}
           onClose={closeEnvironmentDock}
         />
       ) : null}
 
-      {tasksDockIssue ? (
+      {tasksDockScope ? (
         <IssueTasksDock
-          issueIdentifier={tasksDockIssue}
+          scope={tasksDockScope}
           splitContainerRef={splitContainerRef}
           fullscreen={tasksFullscreen}
           onToggleFullscreen={toggleTasksFullscreen}

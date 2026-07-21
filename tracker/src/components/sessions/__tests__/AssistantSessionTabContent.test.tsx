@@ -9,6 +9,7 @@ import { SessionPreviewDockContext } from "@/components/sessions/sessionPreviewD
 import { SessionTasksDockContext } from "@/components/sessions/sessionTasksDockContext";
 import { SessionTerminalDockContext } from "@/components/sessions/sessionTerminalDockContext";
 import { initTestI18n } from "@/i18n/testUtils";
+import { issueWorkspaceScope, threadWorkspaceScope } from "@/lib/workspaceScope";
 
 vi.mock("@/hooks/useWorkspaceDiffStats", () => ({
   useWorkspaceDiffStats: () => ({ additions: 12, deletions: 3 }),
@@ -69,7 +70,7 @@ describe("AssistantSessionTabContent", () => {
   it("shows issue working-tree actions for issue-bound assistant sessions", async () => {
     render(
       <MemoryRouter>
-        <SessionTerminalDockContext.Provider value={{ openIssueIdentifier: null, toggleTerminal: vi.fn() }}>
+        <SessionTerminalDockContext.Provider value={{ openScope: null, toggleTerminal: vi.fn() }}>
           <AssistantSessionTabContent projectSlug="macro-markets" threadId={7996} view="board" />
         </SessionTerminalDockContext.Provider>
       </MemoryRouter>,
@@ -85,6 +86,11 @@ describe("AssistantSessionTabContent", () => {
   });
 
   it("shows working-tree toolbar for threads without issueIdentifier", async () => {
+    const user = userEvent.setup();
+    const togglePreview = vi.fn();
+    const toggleTerminal = vi.fn();
+    const toggleEnvironment = vi.fn();
+    const toggleTasks = vi.fn();
     getAssistantThreadMock.mockResolvedValue({
       id: 8076,
       scope: "freeform",
@@ -101,12 +107,12 @@ describe("AssistantSessionTabContent", () => {
 
     render(
       <MemoryRouter>
-        <SessionPreviewDockContext.Provider value={{ openIssueIdentifier: null, togglePreview: vi.fn() }}>
-          <SessionTerminalDockContext.Provider value={{ openIssueIdentifier: null, toggleTerminal: vi.fn() }}>
+        <SessionPreviewDockContext.Provider value={{ openScope: null, togglePreview }}>
+          <SessionTerminalDockContext.Provider value={{ openScope: null, toggleTerminal }}>
             <SessionEnvironmentDockContext.Provider
-              value={{ openIssueIdentifier: null, toggleEnvironment: vi.fn() }}
+              value={{ openScope: null, toggleEnvironment }}
             >
-              <SessionTasksDockContext.Provider value={{ openIssueIdentifier: null, toggleTasks: vi.fn() }}>
+              <SessionTasksDockContext.Provider value={{ openScope: null, toggleTasks }}>
                 <AssistantSessionTabContent projectSlug="macro-markets" threadId={8076} view="board" />
               </SessionTasksDockContext.Provider>
             </SessionEnvironmentDockContext.Provider>
@@ -119,6 +125,21 @@ describe("AssistantSessionTabContent", () => {
     expect(screen.queryByRole("link", { name: /open issue/i })).toBeNull();
     expect(screen.getByText(/flaky-pipe/i)).toBeInTheDocument();
     expect(screen.getByTestId("assistant-panel")).toHaveAttribute("data-has-kb-control", "true");
+
+    const scope = threadWorkspaceScope(
+      "macro-markets",
+      8076,
+      "/workspaces/macro-markets/flaky-pipe",
+    );
+    await user.click(screen.getByRole("button", { name: "Terminal for flaky-pipe" }));
+    await user.click(screen.getByRole("button", { name: "Preview for flaky-pipe" }));
+    await user.click(screen.getByRole("button", { name: "Environment for flaky-pipe" }));
+    await user.click(screen.getByRole("button", { name: "Tasks for flaky-pipe" }));
+
+    expect(toggleTerminal).toHaveBeenCalledWith(scope);
+    expect(togglePreview).toHaveBeenCalledWith(scope);
+    expect(toggleEnvironment).toHaveBeenCalledWith(scope);
+    expect(toggleTasks).toHaveBeenCalledWith(scope);
   });
 
   it("toggles the workspace terminal dock instead of navigating to the issue drawer", async () => {
@@ -127,7 +148,7 @@ describe("AssistantSessionTabContent", () => {
 
     render(
       <MemoryRouter>
-        <SessionTerminalDockContext.Provider value={{ openIssueIdentifier: null, toggleTerminal }}>
+        <SessionTerminalDockContext.Provider value={{ openScope: null, toggleTerminal }}>
           <AssistantSessionTabContent projectSlug="macro-markets" threadId={7996} view="board" />
         </SessionTerminalDockContext.Provider>
       </MemoryRouter>,
@@ -135,13 +156,13 @@ describe("AssistantSessionTabContent", () => {
 
     await user.click(await screen.findByRole("button", { name: "Terminal for 510" }));
 
-    expect(toggleTerminal).toHaveBeenCalledWith("510");
+    expect(toggleTerminal).toHaveBeenCalledWith(issueWorkspaceScope("macro-markets", "510", 7996));
   });
 
   it("shows diff line counters next to the toolbar diff button", async () => {
     render(
       <MemoryRouter>
-        <SessionTerminalDockContext.Provider value={{ openIssueIdentifier: null, toggleTerminal: vi.fn() }}>
+        <SessionTerminalDockContext.Provider value={{ openScope: null, toggleTerminal: vi.fn() }}>
           <AssistantSessionTabContent projectSlug="macro-markets" threadId={7996} view="board" />
         </SessionTerminalDockContext.Provider>
       </MemoryRouter>,
@@ -154,7 +175,7 @@ describe("AssistantSessionTabContent", () => {
   it("does not wrap the assistant in a bordered scrolling card", async () => {
     render(
       <MemoryRouter>
-        <SessionTerminalDockContext.Provider value={{ openIssueIdentifier: null, toggleTerminal: vi.fn() }}>
+        <SessionTerminalDockContext.Provider value={{ openScope: null, toggleTerminal: vi.fn() }}>
           <AssistantSessionTabContent projectSlug="macro-markets" threadId={7996} view="board" />
         </SessionTerminalDockContext.Provider>
       </MemoryRouter>,
@@ -171,7 +192,7 @@ describe("AssistantSessionTabContent", () => {
 
     render(
       <MemoryRouter>
-        <SessionTerminalDockContext.Provider value={{ openIssueIdentifier: null, toggleTerminal: vi.fn() }}>
+        <SessionTerminalDockContext.Provider value={{ openScope: null, toggleTerminal: vi.fn() }}>
           <AssistantSessionTabContent projectSlug="macro-markets" threadId={7996} view="board" />
         </SessionTerminalDockContext.Provider>
       </MemoryRouter>,
@@ -202,7 +223,7 @@ describe("AssistantSessionTabContent", () => {
 
     render(
       <MemoryRouter>
-        <SessionTerminalDockContext.Provider value={{ openIssueIdentifier: null, toggleTerminal: vi.fn() }}>
+        <SessionTerminalDockContext.Provider value={{ openScope: null, toggleTerminal: vi.fn() }}>
           <AssistantSessionTabContent projectSlug="macro-markets" threadId={9001} view="board" />
         </SessionTerminalDockContext.Provider>
       </MemoryRouter>,

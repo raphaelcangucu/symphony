@@ -1,10 +1,12 @@
 import { createContext, useContext } from "react";
 
+import type { WorkspaceScope } from "@/lib/workspaceScope";
+
 export interface SessionTerminalDockControls {
-  /** Issue whose terminal dock is currently open at the workspace level, if any. */
-  openIssueIdentifier: string | null;
-  /** Opens the dock for the issue, or closes it when it is already open for that issue. */
-  toggleTerminal: (issueIdentifier: string) => void;
+  /** Workspace scope whose terminal dock is currently open, if any. */
+  openScope: WorkspaceScope | null;
+  /** Opens the dock for the scope, or closes it when it is already open for that scope. */
+  toggleTerminal: (scope: WorkspaceScope) => void;
 }
 
 export const SessionTerminalDockContext = createContext<SessionTerminalDockControls | null>(null);

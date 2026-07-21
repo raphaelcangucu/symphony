@@ -112,7 +112,6 @@ import { catalogFor, defaultComposerSettings, fallbackCatalogBundle, type Assist
 import { clearPendingThreadSeed } from "@/lib/pendingThreadSeed";
 import {
   DEFAULT_AUTONOMOUS_MODE,
-  DEFAULT_INTERACTIVE_MODE,
   normalizeAgentMode,
 } from "@/lib/agentModes";
 import { normalizeIssueIdentifier } from "@/lib/issueIdentifiers";
@@ -188,7 +187,12 @@ import {
   type AssistantSessionSnapshot,
 } from "@/stores/assistantSessionStore";
 import type { AgentKind, ExecutionMode } from "@/types/issue";
-import { issuePath, type WorkspaceView } from "@/lib/workspaceRoutes";
+import {
+  issueWorkspaceScope,
+  threadWorkspaceScope,
+  workspaceScopesEqual,
+} from "@/lib/workspaceScope";
+import type { WorkspaceView } from "@/lib/workspaceRoutes";
 import { cn } from "@/lib/utils";
 import { useAssistantCommands } from "@/hooks/useAssistantCommands";
 
@@ -1810,29 +1814,41 @@ function InteractiveProjectAssistantPanel({
   const tasksTotal = taskSnapshot?.tasks.length ?? 0;
   const isLgUp = useIsLgUp();
   const sessionTasksDock = useSessionTasksDock();
-  const issueIdForTasksDock = issueIdentifier?.trim() || null;
-  const usesWorkspaceTasksDock = sessionTasksDock != null && issueIdForTasksDock != null;
+  const tasksDockScope = useMemo(() => {
+    const normalizedProjectSlug = projectSlug?.trim();
+    if (!normalizedProjectSlug) return null;
+
+    const normalizedIssueIdentifier = issueIdentifier?.trim();
+    if (normalizedIssueIdentifier) {
+      return issueWorkspaceScope(normalizedProjectSlug, normalizedIssueIdentifier, threadId);
+    }
+    if (threadId != null && Number.isInteger(threadId) && threadId > 0) {
+      return threadWorkspaceScope(normalizedProjectSlug, threadId, null);
+    }
+    return null;
+  }, [issueIdentifier, projectSlug, threadId]);
+  const usesWorkspaceTasksDock = sessionTasksDock != null && tasksDockScope != null;
   const [localTasksDockOpen, setLocalTasksDockOpen] = useState<boolean>(
     () => window.localStorage.getItem(TASKS_DOCK_STORAGE_KEY) !== "false",
   );
   const tasksDockOpen = usesWorkspaceTasksDock
-    ? sessionTasksDock.openIssueIdentifier === issueIdForTasksDock
+    ? workspaceScopesEqual(sessionTasksDock.openScope, tasksDockScope)
     : localTasksDockOpen;
   const persistTasksDockOpen = useCallback(
     (next: boolean) => {
-      if (usesWorkspaceTasksDock && sessionTasksDock && issueIdForTasksDock) {
-        const currentlyOpen = sessionTasksDock.openIssueIdentifier === issueIdForTasksDock;
-        if (next !== currentlyOpen) sessionTasksDock.toggleTasks(issueIdForTasksDock);
+      if (usesWorkspaceTasksDock && sessionTasksDock && tasksDockScope) {
+        const currentlyOpen = workspaceScopesEqual(sessionTasksDock.openScope, tasksDockScope);
+        if (next !== currentlyOpen) sessionTasksDock.toggleTasks(tasksDockScope);
         return;
       }
       window.localStorage.setItem(TASKS_DOCK_STORAGE_KEY, String(next));
       setLocalTasksDockOpen(next);
     },
-    [issueIdForTasksDock, sessionTasksDock, usesWorkspaceTasksDock],
+    [sessionTasksDock, tasksDockScope, usesWorkspaceTasksDock],
   );
   const toggleTasksDock = useCallback(() => {
-    if (sessionTasksDock && issueIdForTasksDock) {
-      sessionTasksDock.toggleTasks(issueIdForTasksDock);
+    if (sessionTasksDock && tasksDockScope) {
+      sessionTasksDock.toggleTasks(tasksDockScope);
       return;
     }
     setLocalTasksDockOpen((previous) => {
@@ -1840,7 +1856,7 @@ function InteractiveProjectAssistantPanel({
       window.localStorage.setItem(TASKS_DOCK_STORAGE_KEY, String(next));
       return next;
     });
-  }, [issueIdForTasksDock, sessionTasksDock]);
+  }, [sessionTasksDock, tasksDockScope]);
   const tasksAvailable = isPageMode && hasTasks && taskSnapshot != null;
   // Workspace sessions use the shared lateral Tasks/Tools dock; keep the panel-local
   // dock/sheet only when that workspace control is unavailable.

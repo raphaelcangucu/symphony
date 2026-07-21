@@ -5,11 +5,15 @@ import { useSessionEnvironmentDock } from "@/components/sessions/sessionEnvironm
 import { useSessionPreviewDock } from "@/components/sessions/sessionPreviewDockContext";
 import { useSessionTasksDock } from "@/components/sessions/sessionTasksDockContext";
 import { useSessionTerminalDock } from "@/components/sessions/sessionTerminalDockContext";
+import {
+  workspaceScopeLabel,
+  workspaceScopesEqual,
+  type WorkspaceScope,
+} from "@/lib/workspaceScope";
 import type { WorkspaceView } from "@/lib/workspaceRoutes";
 
 interface IssueSessionSplitLayoutProps {
-  projectSlug: string;
-  issueIdentifier?: string | null;
+  scope: WorkspaceScope;
   view: WorkspaceView;
   headerStart: ReactNode;
   toolbarLeading?: ReactNode;
@@ -22,13 +26,12 @@ interface IssueSessionSplitLayoutProps {
 }
 
 /**
- * Header + toolbar wrapper for issue-bound session tabs. Terminal / Preview /
+ * Header + toolbar wrapper for issue and freeform session tabs. Terminal / Preview /
  * Environment / Tasks buttons toggle workspace-level docks (rendered beside the
  * sessions panel by ProjectSessionsWorkspace) instead of navigating away.
  */
 export function IssueSessionSplitLayout({
-  projectSlug,
-  issueIdentifier,
+  scope,
   view,
   headerStart,
   toolbarLeading = null,
@@ -39,59 +42,40 @@ export function IssueSessionSplitLayout({
   changedDocCount,
   children,
 }: IssueSessionSplitLayoutProps) {
-  const normalizedIssueIdentifier = issueIdentifier?.trim() || null;
+  const issueIdentifier = scope.kind === "issue" ? scope.issueIdentifier : null;
+  const workspaceLabel = workspaceScopeLabel(scope);
   const dock = useSessionTerminalDock();
-  const terminalOpen =
-    normalizedIssueIdentifier != null && dock?.openIssueIdentifier === normalizedIssueIdentifier;
+  const terminalOpen = workspaceScopesEqual(dock?.openScope, scope);
   const previewDock = useSessionPreviewDock();
-  const previewOpen =
-    normalizedIssueIdentifier != null &&
-    previewDock?.openIssueIdentifier === normalizedIssueIdentifier;
+  const previewOpen = workspaceScopesEqual(previewDock?.openScope, scope);
   const environmentDock = useSessionEnvironmentDock();
-  const environmentOpen =
-    normalizedIssueIdentifier != null &&
-    environmentDock?.openIssueIdentifier === normalizedIssueIdentifier;
+  const environmentOpen = workspaceScopesEqual(environmentDock?.openScope, scope);
   const tasksDock = useSessionTasksDock();
-  const tasksOpen =
-    normalizedIssueIdentifier != null &&
-    tasksDock?.openIssueIdentifier === normalizedIssueIdentifier;
+  const tasksOpen = workspaceScopesEqual(tasksDock?.openScope, scope);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <div className="flex h-8 shrink-0 items-center justify-between gap-2 border-b border-border/50 pb-1.5">
         <div className="flex min-w-0 flex-1 items-center">{headerStart}</div>
         <IssueWorkingTreeToolbar
-          projectSlug={projectSlug}
-          issueIdentifier={normalizedIssueIdentifier}
+          projectSlug={scope.projectSlug}
+          issueIdentifier={issueIdentifier}
+          workspaceLabel={workspaceLabel}
           view={view}
           leading={toolbarLeading}
           trailing={toolbarTrailing}
           showOpenIssue={showOpenIssue}
           pathActionsEnabled={pathActionsEnabled}
           terminalOpen={terminalOpen}
-          onTerminalToggle={
-            dock && normalizedIssueIdentifier
-              ? () => dock.toggleTerminal(normalizedIssueIdentifier)
-              : undefined
-          }
+          onTerminalToggle={dock ? () => dock.toggleTerminal(scope) : undefined}
           previewOpen={previewOpen}
-          onPreviewToggle={
-            previewDock && normalizedIssueIdentifier
-              ? () => previewDock.togglePreview(normalizedIssueIdentifier)
-              : undefined
-          }
+          onPreviewToggle={previewDock ? () => previewDock.togglePreview(scope) : undefined}
           environmentOpen={environmentOpen}
           onEnvironmentToggle={
-            environmentDock && normalizedIssueIdentifier
-              ? () => environmentDock.toggleEnvironment(normalizedIssueIdentifier)
-              : undefined
+            environmentDock ? () => environmentDock.toggleEnvironment(scope) : undefined
           }
           tasksOpen={tasksOpen}
-          onTasksToggle={
-            tasksDock && normalizedIssueIdentifier
-              ? () => tasksDock.toggleTasks(normalizedIssueIdentifier)
-              : undefined
-          }
+          onTasksToggle={tasksDock ? () => tasksDock.toggleTasks(scope) : undefined}
           onOpenKnowledgeBase={onOpenKnowledgeBase}
           changedDocCount={changedDocCount}
         />

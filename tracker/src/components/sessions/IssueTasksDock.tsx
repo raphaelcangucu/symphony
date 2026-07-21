@@ -7,13 +7,14 @@ import { useSessionTasksDockFeed } from "@/components/sessions/sessionTasksDockF
 import { Button } from "@/components/ui/button";
 import { useHorizontalPanelResize } from "@/hooks/useHorizontalPanelResize";
 import { cn, SCROLLBAR_THIN } from "@/lib/utils";
+import { workspaceScopeLabel, type WorkspaceScope } from "@/lib/workspaceScope";
 
 const TASKS_DOCK_WIDTH_STORAGE_KEY = "symphony:issue-tasks-dock-width";
 const TASKS_DOCK_DEFAULT_WIDTH = 320;
 const TASKS_DOCK_MIN_WIDTH = 280;
 
 interface IssueTasksDockProps {
-  issueIdentifier: string;
+  scope: WorkspaceScope;
   splitContainerRef: RefObject<HTMLDivElement | null>;
   fullscreen: boolean;
   onToggleFullscreen: () => void;
@@ -21,7 +22,7 @@ interface IssueTasksDockProps {
 }
 
 export function IssueTasksDock({
-  issueIdentifier,
+  scope,
   splitContainerRef,
   fullscreen,
   onToggleFullscreen,
@@ -29,6 +30,7 @@ export function IssueTasksDock({
 }: IssueTasksDockProps) {
   const { t } = useTranslation();
   const { tasks } = useSessionTasksDockFeed();
+  const scopeLabel = workspaceScopeLabel(scope);
   const { width, isResizing, onResizePointerDown, onResizePointerUp } = useHorizontalPanelResize({
     containerRef: splitContainerRef,
     storageKey: TASKS_DOCK_WIDTH_STORAGE_KEY,
@@ -59,7 +61,7 @@ export function IssueTasksDock({
   return (
     <aside
       data-testid="tasks-dock"
-      aria-label={t("workspace.tasks.ariaLabel", { identifier: issueIdentifier })}
+      aria-label={t("workspace.tasks.ariaLabel", { identifier: scopeLabel })}
       className={cn(
         "relative flex min-h-0 flex-col overflow-hidden",
         fullscreen ? "min-w-0 flex-1" : "shrink-0 pl-1.5",

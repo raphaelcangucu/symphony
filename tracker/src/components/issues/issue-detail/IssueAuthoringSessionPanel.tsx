@@ -6,6 +6,7 @@ import { IssueAuthoringPanel } from "@/components/assistant/IssueAuthoringPanel"
 import { IssueSessionSplitLayout } from "@/components/sessions/IssueSessionSplitLayout";
 import { StartIssueSessionDialog } from "@/components/sessions/StartIssueSessionDialog";
 import { Button } from "@/components/ui/button";
+import { issueWorkspaceScope } from "@/lib/workspaceScope";
 import type { WorkspaceView } from "@/lib/workspaceRoutes";
 import type { Issue } from "@/types/issue";
 
@@ -34,8 +35,7 @@ export function IssueAuthoringSessionPanel({ issue, projectSlug, view }: IssueAu
   return (
     <>
       <IssueSessionSplitLayout
-        projectSlug={projectSlug}
-        issueIdentifier={issue.identifier}
+        scope={issueWorkspaceScope(projectSlug, issue.identifier)}
         view={view}
         headerStart={<p className="text-xs text-muted-foreground">{t("issue.agentTabs.authoringHint")}</p>}
         toolbarTrailing={

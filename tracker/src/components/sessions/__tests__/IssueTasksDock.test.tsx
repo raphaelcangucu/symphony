@@ -14,6 +14,11 @@ import {
   usePublishSessionTasksDockFeed,
 } from "@/components/sessions/sessionTasksDockFeedContext";
 import { initTestI18n } from "@/i18n/testUtils";
+import {
+  issueWorkspaceScope,
+  workspaceScopesEqual,
+  type WorkspaceScope,
+} from "@/lib/workspaceScope";
 import type { AssistantToolCall } from "@/services/assistant";
 import type { AgentTaskSnapshot } from "@/types/agentTasks";
 import { MemoryRouter } from "react-router-dom";
@@ -52,6 +57,7 @@ const toolItems: AssistantToolCall[] = [
 ];
 
 const EMPTY_TOOLS: AssistantToolCall[] = [];
+const ISSUE_SCOPE = issueWorkspaceScope("macro-markets", "510");
 
 function FeedPublisher({
   tasks,
@@ -75,7 +81,7 @@ function TasksDockHarness({
 }) {
   const splitContainerRef = createRef<HTMLDivElement>();
   const [fullscreen, setFullscreen] = useState(false);
-  const open = dockControls.openIssueIdentifier === "510";
+  const open = workspaceScopesEqual(dockControls.openScope, ISSUE_SCOPE);
 
   return (
     <MemoryRouter>
@@ -88,15 +94,15 @@ function TasksDockHarness({
               issueIdentifier="510"
               view="board"
               tasksOpen={open}
-              onTasksToggle={() => dockControls.toggleTasks("510")}
+              onTasksToggle={() => dockControls.toggleTasks(ISSUE_SCOPE)}
             />
             {open ? (
               <IssueTasksDock
-                issueIdentifier="510"
+                scope={ISSUE_SCOPE}
                 splitContainerRef={splitContainerRef}
                 fullscreen={fullscreen}
                 onToggleFullscreen={() => setFullscreen((current) => !current)}
-                onClose={() => dockControls.toggleTasks("510")}
+                onClose={() => dockControls.toggleTasks(ISSUE_SCOPE)}
               />
             ) : null}
           </div>
@@ -113,21 +119,21 @@ describe("IssueTasksDock", () => {
 
   it("toggles open from the toolbar and shows the task checklist without tool activity", async () => {
     const user = userEvent.setup();
-    let openIssueIdentifier: string | null = null;
-    const toggleTasks = vi.fn((issueIdentifier: string) => {
-      openIssueIdentifier = openIssueIdentifier === issueIdentifier ? null : issueIdentifier;
+    let openScope: WorkspaceScope | null = null;
+    const toggleTasks = vi.fn((scope: WorkspaceScope) => {
+      openScope = workspaceScopesEqual(openScope, scope) ? null : scope;
     });
 
     const { rerender } = render(
-      <TasksDockHarness dockControls={{ openIssueIdentifier, toggleTasks }} />,
+      <TasksDockHarness dockControls={{ openScope, toggleTasks }} />,
     );
 
     expect(screen.queryByTestId("tasks-dock")).not.toBeInTheDocument();
 
     await user.click(screen.getByTestId("tasks-dock-toolbar-toggle"));
-    expect(toggleTasks).toHaveBeenCalledWith("510");
+    expect(toggleTasks).toHaveBeenCalledWith(ISSUE_SCOPE);
 
-    rerender(<TasksDockHarness dockControls={{ openIssueIdentifier: "510", toggleTasks }} />);
+    rerender(<TasksDockHarness dockControls={{ openScope: ISSUE_SCOPE, toggleTasks }} />);
 
     expect(screen.getByTestId("tasks-dock")).toBeInTheDocument();
     expect(screen.getByText("Tasks")).toBeInTheDocument();
@@ -142,16 +148,16 @@ describe("IssueTasksDock", () => {
     const user = userEvent.setup();
     const toggleTasks = vi.fn();
 
-    render(<TasksDockHarness dockControls={{ openIssueIdentifier: "510", toggleTasks }} />);
+    render(<TasksDockHarness dockControls={{ openScope: ISSUE_SCOPE, toggleTasks }} />);
 
     await user.click(screen.getByRole("button", { name: "Close tasks panel" }));
-    expect(toggleTasks).toHaveBeenCalledWith("510");
+    expect(toggleTasks).toHaveBeenCalledWith(ISSUE_SCOPE);
   });
 
   it("shows the empty state when the session has no tasks", () => {
     render(
       <TasksDockHarness
-        dockControls={{ openIssueIdentifier: "510", toggleTasks: vi.fn() }}
+        dockControls={{ openScope: ISSUE_SCOPE, toggleTasks: vi.fn() }}
         tasks={null}
         tools={EMPTY_TOOLS}
       />,

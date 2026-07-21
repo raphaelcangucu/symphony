@@ -23,6 +23,8 @@ import { issuePath, type WorkspaceView } from "@/lib/workspaceRoutes";
 interface IssueWorkingTreeToolbarProps {
   projectSlug: string;
   issueIdentifier?: string | null;
+  /** Label used by workspace actions when the scope is not issue-bound. */
+  workspaceLabel?: string | null;
   view: WorkspaceView;
   /** Extra controls rendered before the standard issue/working-tree actions. */
   leading?: ReactNode;
@@ -52,6 +54,7 @@ interface IssueWorkingTreeToolbarProps {
 export function IssueWorkingTreeToolbar({
   projectSlug,
   issueIdentifier,
+  workspaceLabel,
   view,
   leading = null,
   trailing = null,
@@ -70,6 +73,7 @@ export function IssueWorkingTreeToolbar({
 }: IssueWorkingTreeToolbarProps) {
   const { t } = useTranslation();
   const normalizedIssueIdentifier = issueIdentifier?.trim() || null;
+  const actionIdentifier = normalizedIssueIdentifier ?? (workspaceLabel?.trim() || null);
   const issueHref = normalizedIssueIdentifier
     ? issuePath(projectSlug, view, normalizedIssueIdentifier, "sessions")
     : null;
@@ -107,21 +111,21 @@ export function IssueWorkingTreeToolbar({
           <ExternalLink className="h-4 w-4" />
         </Link>
       ) : null}
-      {normalizedIssueIdentifier && !pathActionsEnabled ? (
+      {actionIdentifier && !pathActionsEnabled ? (
         <button
           type="button"
           disabled
-          aria-label={t("issue.terminal.ariaLabel", { identifier: normalizedIssueIdentifier })}
+          aria-label={t("issue.terminal.ariaLabel", { identifier: actionIdentifier })}
           title={pathActionUnavailableTitle}
           className={terminalActionClassName}
         >
           <TerminalSquare className="h-4 w-4" />
         </button>
-      ) : normalizedIssueIdentifier && onTerminalToggle ? (
+      ) : actionIdentifier && onTerminalToggle ? (
         <button
           type="button"
-          aria-label={t("issue.terminal.ariaLabel", { identifier: normalizedIssueIdentifier })}
-          title={t("issue.terminal.ariaLabel", { identifier: normalizedIssueIdentifier })}
+          aria-label={t("issue.terminal.ariaLabel", { identifier: actionIdentifier })}
+          title={t("issue.terminal.ariaLabel", { identifier: actionIdentifier })}
           aria-pressed={terminalOpen}
           onClick={onTerminalToggle}
           className={terminalActionClassName}
@@ -142,10 +146,10 @@ export function IssueWorkingTreeToolbar({
         <button
           type="button"
           disabled={!pathActionsEnabled}
-          aria-label={t("workspace.preview.ariaLabel", { identifier: normalizedIssueIdentifier })}
+          aria-label={t("workspace.preview.ariaLabel", { identifier: actionIdentifier })}
           title={
             pathActionsEnabled
-              ? t("workspace.preview.ariaLabel", { identifier: normalizedIssueIdentifier })
+              ? t("workspace.preview.ariaLabel", { identifier: actionIdentifier })
               : pathActionUnavailableTitle
           }
           aria-pressed={previewOpen}
@@ -160,11 +164,11 @@ export function IssueWorkingTreeToolbar({
           type="button"
           disabled={!pathActionsEnabled}
           aria-label={t("workspace.environment.ariaLabel", {
-            identifier: normalizedIssueIdentifier,
+            identifier: actionIdentifier,
           })}
           title={
             pathActionsEnabled
-              ? t("workspace.environment.ariaLabel", { identifier: normalizedIssueIdentifier })
+              ? t("workspace.environment.ariaLabel", { identifier: actionIdentifier })
               : pathActionUnavailableTitle
           }
           aria-pressed={environmentOpen}
@@ -179,10 +183,10 @@ export function IssueWorkingTreeToolbar({
           type="button"
           disabled={!pathActionsEnabled}
           data-testid="tasks-dock-toolbar-toggle"
-          aria-label={t("workspace.tasks.ariaLabel", { identifier: normalizedIssueIdentifier })}
+          aria-label={t("workspace.tasks.ariaLabel", { identifier: actionIdentifier })}
           title={
             pathActionsEnabled
-              ? t("workspace.tasks.ariaLabel", { identifier: normalizedIssueIdentifier })
+              ? t("workspace.tasks.ariaLabel", { identifier: actionIdentifier })
               : pathActionUnavailableTitle
           }
           aria-pressed={tasksOpen}

@@ -1,10 +1,12 @@
 import { createContext, useContext } from "react";
 
+import type { WorkspaceScope } from "@/lib/workspaceScope";
+
 export interface SessionEnvironmentDockControls {
-  /** Issue whose environment dock is currently open at the workspace level, if any. */
-  openIssueIdentifier: string | null;
-  /** Opens the dock for the issue, or closes it when it is already open for that issue. */
-  toggleEnvironment: (issueIdentifier: string) => void;
+  /** Workspace scope whose environment dock is currently open, if any. */
+  openScope: WorkspaceScope | null;
+  /** Opens the dock for the scope, or closes it when it is already open for that scope. */
+  toggleEnvironment: (scope: WorkspaceScope) => void;
 }
 
 export const SessionEnvironmentDockContext = createContext<SessionEnvironmentDockControls | null>(null);

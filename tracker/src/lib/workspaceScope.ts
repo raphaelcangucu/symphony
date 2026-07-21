@@ -51,6 +51,11 @@ export function workspaceScopeKey(scope: WorkspaceScope): string {
   return `thread:${scope.projectSlug}:${scope.threadId}`;
 }
 
+export function workspaceScopeLabel(scope: WorkspaceScope): string {
+  if (scope.kind === "issue") return scope.issueIdentifier;
+  return scope.workspacePath?.split("/").filter(Boolean).at(-1) || `thread-${scope.threadId}`;
+}
+
 export function workspaceScopesEqual(
   a: WorkspaceScope | null | undefined,
   b: WorkspaceScope | null | undefined,

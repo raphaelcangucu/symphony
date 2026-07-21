@@ -77,8 +77,7 @@ export function AssistantSessionTabContent({
       >
         {scope ? (
           <IssueSessionSplitLayout
-            projectSlug={projectSlug}
-            issueIdentifier={issueIdentifier}
+            scope={scope}
             view={view}
             showOpenIssue={scope.kind === "issue"}
             pathActionsEnabled={workspaceScopeProvisioned(scope)}

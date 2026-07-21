@@ -16,7 +16,12 @@ import {
   SessionTerminalDockContext,
   type SessionTerminalDockControls,
 } from "@/components/sessions/sessionTerminalDockContext";
+import {
+  SessionTasksDockContext,
+  type SessionTasksDockControls,
+} from "@/components/sessions/sessionTasksDockContext";
 import { initTestI18n } from "@/i18n/testUtils";
+import { issueWorkspaceScope, threadWorkspaceScope, type WorkspaceScope } from "@/lib/workspaceScope";
 
 vi.mock("@/hooks/useIssueEditor", () => ({
   useIssueEditor: () => ({
@@ -30,20 +35,23 @@ function renderLayout(
   dock: SessionTerminalDockControls | null,
   previewDock: SessionPreviewDockControls | null = null,
   environmentDock: SessionEnvironmentDockControls | null = null,
+  tasksDock: SessionTasksDockControls | null = null,
+  scope: WorkspaceScope = issueWorkspaceScope("macro-markets", "510"),
 ) {
   return render(
     <MemoryRouter>
       <SessionTerminalDockContext.Provider value={dock}>
         <SessionPreviewDockContext.Provider value={previewDock}>
           <SessionEnvironmentDockContext.Provider value={environmentDock}>
-            <IssueSessionSplitLayout
-              projectSlug="macro-markets"
-              issueIdentifier="510"
-              view="board"
-              headerStart={<p>Issue session</p>}
-            >
-              <div data-testid="session-content">Session body</div>
-            </IssueSessionSplitLayout>
+            <SessionTasksDockContext.Provider value={tasksDock}>
+              <IssueSessionSplitLayout
+                scope={scope}
+                view="board"
+                headerStart={<p>Issue session</p>}
+              >
+                <div data-testid="session-content">Session body</div>
+              </IssueSessionSplitLayout>
+            </SessionTasksDockContext.Provider>
           </SessionEnvironmentDockContext.Provider>
         </SessionPreviewDockContext.Provider>
       </SessionTerminalDockContext.Provider>
@@ -60,7 +68,7 @@ describe("IssueSessionSplitLayout", () => {
     const user = userEvent.setup();
     const toggleTerminal = vi.fn();
 
-    renderLayout({ openIssueIdentifier: null, toggleTerminal });
+    renderLayout({ openScope: null, toggleTerminal });
 
     expect(screen.getByTestId("session-content")).toBeInTheDocument();
 
@@ -69,11 +77,14 @@ describe("IssueSessionSplitLayout", () => {
 
     await user.click(terminalButton);
 
-    expect(toggleTerminal).toHaveBeenCalledWith("510");
+    expect(toggleTerminal).toHaveBeenCalledWith(issueWorkspaceScope("macro-markets", "510"));
   });
 
   it("marks the terminal button as pressed when the dock is open for this issue", () => {
-    renderLayout({ openIssueIdentifier: "510", toggleTerminal: vi.fn() });
+    renderLayout({
+      openScope: issueWorkspaceScope("macro-markets", "510"),
+      toggleTerminal: vi.fn(),
+    });
 
     expect(screen.getByRole("button", { name: "Terminal for 510" })).toHaveAttribute("aria-pressed", "true");
   });
@@ -91,18 +102,21 @@ describe("IssueSessionSplitLayout", () => {
     const user = userEvent.setup();
     const togglePreview = vi.fn();
 
-    renderLayout(null, { openIssueIdentifier: null, togglePreview });
+    renderLayout(null, { openScope: null, togglePreview });
 
     const previewButton = screen.getByRole("button", { name: "Preview for 510" });
     expect(previewButton).toHaveAttribute("aria-pressed", "false");
 
     await user.click(previewButton);
 
-    expect(togglePreview).toHaveBeenCalledWith("510");
+    expect(togglePreview).toHaveBeenCalledWith(issueWorkspaceScope("macro-markets", "510"));
   });
 
   it("marks the preview button as pressed when the dock is open for this issue", () => {
-    renderLayout(null, { openIssueIdentifier: "510", togglePreview: vi.fn() });
+    renderLayout(null, {
+      openScope: issueWorkspaceScope("macro-markets", "510"),
+      togglePreview: vi.fn(),
+    });
 
     expect(screen.getByRole("button", { name: "Preview for 510" })).toHaveAttribute("aria-pressed", "true");
   });
@@ -117,18 +131,21 @@ describe("IssueSessionSplitLayout", () => {
     const user = userEvent.setup();
     const toggleEnvironment = vi.fn();
 
-    renderLayout(null, null, { openIssueIdentifier: null, toggleEnvironment });
+    renderLayout(null, null, { openScope: null, toggleEnvironment });
 
     const environmentButton = screen.getByRole("button", { name: "Environment for 510" });
     expect(environmentButton).toHaveAttribute("aria-pressed", "false");
 
     await user.click(environmentButton);
 
-    expect(toggleEnvironment).toHaveBeenCalledWith("510");
+    expect(toggleEnvironment).toHaveBeenCalledWith(issueWorkspaceScope("macro-markets", "510"));
   });
 
   it("marks the environment button as pressed when the dock is open for this issue", () => {
-    renderLayout(null, null, { openIssueIdentifier: "510", toggleEnvironment: vi.fn() });
+    renderLayout(null, null, {
+      openScope: issueWorkspaceScope("macro-markets", "510"),
+      toggleEnvironment: vi.fn(),
+    });
 
     expect(screen.getByRole("button", { name: "Environment for 510" })).toHaveAttribute(
       "aria-pressed",
@@ -140,5 +157,36 @@ describe("IssueSessionSplitLayout", () => {
     renderLayout(null);
 
     expect(screen.queryByRole("button", { name: "Environment for 510" })).not.toBeInTheDocument();
+  });
+
+  it("toggles every workspace dock with a freeform thread scope", async () => {
+    const user = userEvent.setup();
+    const scope = threadWorkspaceScope(
+      "macro-markets",
+      8076,
+      "/workspaces/macro-markets/flaky-pipe",
+    );
+    const toggleTerminal = vi.fn();
+    const togglePreview = vi.fn();
+    const toggleEnvironment = vi.fn();
+    const toggleTasks = vi.fn();
+
+    renderLayout(
+      { openScope: null, toggleTerminal },
+      { openScope: null, togglePreview },
+      { openScope: null, toggleEnvironment },
+      { openScope: null, toggleTasks },
+      scope,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Terminal for flaky-pipe" }));
+    await user.click(screen.getByRole("button", { name: "Preview for flaky-pipe" }));
+    await user.click(screen.getByRole("button", { name: "Environment for flaky-pipe" }));
+    await user.click(screen.getByRole("button", { name: "Tasks for flaky-pipe" }));
+
+    expect(toggleTerminal).toHaveBeenCalledWith(scope);
+    expect(togglePreview).toHaveBeenCalledWith(scope);
+    expect(toggleEnvironment).toHaveBeenCalledWith(scope);
+    expect(toggleTasks).toHaveBeenCalledWith(scope);
   });
 });

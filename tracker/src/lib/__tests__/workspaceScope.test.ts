@@ -3,6 +3,7 @@ import {
   issueWorkspaceScope,
   threadWorkspaceScope,
   workspaceScopeKey,
+  workspaceScopeLabel,
   workspaceScopeProvisioned,
   workspaceScopesEqual,
 } from "@/lib/workspaceScope";
@@ -33,6 +34,14 @@ describe("workspaceScope", () => {
   it("stable keys for dock state", () => {
     expect(workspaceScopeKey(issueWorkspaceScope("p", "510"))).toBe("issue:p:510");
     expect(workspaceScopeKey(threadWorkspaceScope("p", 8076, null))).toBe("thread:p:8076");
+  });
+
+  it("labels issue and thread scopes for workspace chrome", () => {
+    expect(workspaceScopeLabel(issueWorkspaceScope("p", "510"))).toBe("510");
+    expect(workspaceScopeLabel(threadWorkspaceScope("p", 8076, "/ws/flaky-pipe/"))).toBe(
+      "flaky-pipe",
+    );
+    expect(workspaceScopeLabel(threadWorkspaceScope("p", 8076, null))).toBe("thread-8076");
   });
 
   it("detects provisioned scopes", () => {
