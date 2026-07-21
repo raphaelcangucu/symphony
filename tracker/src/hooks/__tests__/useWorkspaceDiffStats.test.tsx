@@ -51,6 +51,27 @@ describe("useWorkspaceDiffStats", () => {
     expect(getThreadGitDiffStats).toHaveBeenCalledWith(42, "uncommitted", { signal: expect.any(AbortSignal) });
   });
 
+  it("uses the issue stats endpoint when both issue and thread identifiers are present", async () => {
+    vi.mocked(getGitDiffStats).mockResolvedValue({
+      stats: [{ repo: "frontend", branch: null, base: null, filesChanged: 1, additions: 7, deletions: 2, untracked: 0 }],
+      workspace: { path: "/tmp/issue", available: true },
+    });
+
+    const { result } = renderHook(() =>
+      useWorkspaceDiffStats({
+        projectSlug: "macro-markets",
+        issueIdentifier: "510",
+        threadId: 7996,
+      }),
+    );
+
+    await waitFor(() => expect(result.current).toEqual({ additions: 7, deletions: 2 }));
+    expect(getGitDiffStats).toHaveBeenCalledWith("macro-markets", "510", "uncommitted", {
+      signal: expect.any(AbortSignal),
+    });
+    expect(getThreadGitDiffStats).not.toHaveBeenCalled();
+  });
+
   it("does not fetch when disabled or missing identifiers", () => {
     renderHook(() => useWorkspaceDiffStats({ enabled: false, projectSlug: "demo", issueIdentifier: "ABC-1" }));
     renderHook(() => useWorkspaceDiffStats({}));

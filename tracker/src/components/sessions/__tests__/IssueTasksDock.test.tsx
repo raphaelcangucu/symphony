@@ -66,13 +66,15 @@ const THREAD_SCOPE = threadWorkspaceScope(
 );
 
 function FeedPublisher({
+  scope,
   tasks,
   tools,
 }: {
+  scope: WorkspaceScope;
   tasks: AgentTaskSnapshot | null;
   tools: readonly AssistantToolCall[];
 }) {
-  usePublishSessionTasksDockFeed({ tasks, toolItems: tools });
+  usePublishSessionTasksDockFeed(scope, { tasks, toolItems: tools });
   return null;
 }
 
@@ -93,7 +95,7 @@ function TasksDockHarness({
     <MemoryRouter>
       <SessionTasksDockContext.Provider value={dockControls}>
         <SessionTasksDockFeedProvider>
-          <FeedPublisher tasks={tasks} tools={tools} />
+          <FeedPublisher scope={ISSUE_SCOPE} tasks={tasks} tools={tools} />
           <div ref={splitContainerRef} style={{ width: 1200 }} className="flex">
             <IssueWorkingTreeToolbar
               projectSlug="macro-markets"
@@ -170,6 +172,40 @@ describe("IssueTasksDock", () => {
     );
 
     expect(screen.getByText("No agent tasks for this session yet.")).toBeInTheDocument();
+  });
+
+  it("shows only the feed published for the dock scope", () => {
+    const splitContainerRef = createRef<HTMLDivElement>();
+    const otherSnapshot: AgentTaskSnapshot = {
+      source: "plan",
+      tasks: [
+        {
+          id: "other-1",
+          text: "Task from another workspace",
+          status: "in_progress",
+          source: "plan",
+        },
+      ],
+    };
+
+    render(
+      <SessionTasksDockFeedProvider>
+        <FeedPublisher scope={ISSUE_SCOPE} tasks={snapshot} tools={EMPTY_TOOLS} />
+        <FeedPublisher scope={THREAD_SCOPE} tasks={otherSnapshot} tools={EMPTY_TOOLS} />
+        <div ref={splitContainerRef}>
+          <IssueTasksDock
+            scope={ISSUE_SCOPE}
+            splitContainerRef={splitContainerRef}
+            fullscreen={false}
+            onToggleFullscreen={vi.fn()}
+            onClose={vi.fn()}
+          />
+        </div>
+      </SessionTasksDockFeedProvider>,
+    );
+
+    expect(screen.getByText("Verify branches integrated")).toBeInTheDocument();
+    expect(screen.queryByText("Task from another workspace")).not.toBeInTheDocument();
   });
 
   it("identifies a thread-scoped dock by its workspace label", () => {

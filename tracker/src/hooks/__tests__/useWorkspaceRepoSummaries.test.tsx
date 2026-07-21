@@ -14,30 +14,31 @@ describe("useWorkspaceRepoSummaries", () => {
     vi.clearAllMocks();
   });
 
-  it("prefers thread summaries when a thread id is provided", async () => {
-    vi.mocked(getThreadGitDiffSummaries).mockResolvedValue({
-      summaries: [{ repo: "frontend", branch: "feat/thread", aheadCount: 2, dirty: true }],
+  it("prefers issue summaries when both issue and thread identifiers are present", async () => {
+    vi.mocked(getGitDiffSummaries).mockResolvedValue({
+      summaries: [{ repo: "frontend", branch: "issue/510-environment", aheadCount: 2, dirty: true }],
+      workspace: { path: "/tmp/issue", available: true },
     });
 
     const { result } = renderHook(() =>
       useWorkspaceRepoSummaries({
-        projectSlug: "demo",
-        issueIdentifier: "ABC-1",
-        threadId: 42,
+        projectSlug: "macro-markets",
+        issueIdentifier: "510",
+        threadId: 7996,
       }),
     );
 
     await waitFor(() => expect(result.current.loading).toBe(false));
 
-    expect(getThreadGitDiffSummaries).toHaveBeenCalledWith(42, {
+    expect(getGitDiffSummaries).toHaveBeenCalledWith("macro-markets", "510", {
       signal: expect.any(AbortSignal),
     });
-    expect(getGitDiffSummaries).not.toHaveBeenCalled();
+    expect(getThreadGitDiffSummaries).not.toHaveBeenCalled();
     expect(result.current).toMatchObject({
-      localBranch: "feat/thread",
+      localBranch: "issue/510-environment",
       aheadCount: 2,
       dirty: true,
-      summaries: [{ repo: "frontend", branch: "feat/thread", aheadCount: 2, dirty: true }],
+      summaries: [{ repo: "frontend", branch: "issue/510-environment", aheadCount: 2, dirty: true }],
       loading: false,
       error: null,
     });

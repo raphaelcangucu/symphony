@@ -33,22 +33,28 @@ export function useWorkspaceRepoSummaries({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [requestVersion, setRequestVersion] = useState(0);
+  const normalizedProjectSlug = projectSlug?.trim() ?? "";
+  const normalizedIssueIdentifier = issueIdentifier?.trim() || null;
+  const hasIssueScope = normalizedIssueIdentifier !== null;
+  const resolvedThreadId =
+    !hasIssueScope && Number.isInteger(threadId) && (threadId ?? 0) > 0 ? threadId : null;
 
   const refetch = useCallback(() => {
     setRequestVersion((current) => current + 1);
   }, []);
 
   useEffect(() => {
-    if (!enabled || (!threadId && (!projectSlug || !issueIdentifier))) {
+    if (
+      !enabled ||
+      (hasIssueScope && !normalizedProjectSlug) ||
+      (!hasIssueScope && resolvedThreadId === null)
+    ) {
       setSummaries(EMPTY_SUMMARIES);
       setLoading(false);
       setError(null);
       return;
     }
 
-    const resolvedProjectSlug = projectSlug;
-    const resolvedIssueIdentifier = issueIdentifier;
-    const resolvedThreadId = threadId;
     const controller = new AbortController();
 
     async function load() {
@@ -56,11 +62,11 @@ export function useWorkspaceRepoSummaries({
       setError(null);
 
       try {
-        const result = resolvedThreadId
-          ? await getThreadGitDiffSummaries(resolvedThreadId, { signal: controller.signal })
-          : await getGitDiffSummaries(resolvedProjectSlug ?? "", resolvedIssueIdentifier ?? "", {
+        const result = hasIssueScope
+          ? await getGitDiffSummaries(normalizedProjectSlug, normalizedIssueIdentifier, {
               signal: controller.signal,
-            });
+            })
+          : await getThreadGitDiffSummaries(resolvedThreadId!, { signal: controller.signal });
         setSummaries(result.summaries);
       } catch (cause) {
         if (isAbortError(cause)) return;
@@ -76,7 +82,14 @@ export function useWorkspaceRepoSummaries({
     return () => {
       controller.abort();
     };
-  }, [enabled, issueIdentifier, projectSlug, requestVersion, threadId]);
+  }, [
+    enabled,
+    hasIssueScope,
+    normalizedIssueIdentifier,
+    normalizedProjectSlug,
+    requestVersion,
+    resolvedThreadId,
+  ]);
 
   return useMemo(() => {
     const localBranch =

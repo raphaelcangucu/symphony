@@ -18,6 +18,11 @@ export function useWorkspaceDiffStats({
   enabled = true,
 }: UseWorkspaceDiffStatsArgs): DiffStats | null {
   const [stats, setStats] = useState<DiffStats | null>(null);
+  const normalizedProjectSlug = projectSlug?.trim() ?? "";
+  const normalizedIssueIdentifier = issueIdentifier?.trim() || null;
+  const hasIssueScope = normalizedIssueIdentifier !== null;
+  const resolvedThreadId =
+    !hasIssueScope && Number.isInteger(threadId) && (threadId ?? 0) > 0 ? threadId : null;
 
   useEffect(() => {
     if (!enabled) {
@@ -25,7 +30,10 @@ export function useWorkspaceDiffStats({
       return;
     }
 
-    if (!threadId && (!projectSlug || !issueIdentifier)) {
+    if (
+      (hasIssueScope && !normalizedProjectSlug) ||
+      (!hasIssueScope && resolvedThreadId === null)
+    ) {
       setStats(null);
       return;
     }
@@ -34,9 +42,11 @@ export function useWorkspaceDiffStats({
 
     async function load() {
       try {
-        const result = threadId
-          ? await getThreadGitDiffStats(threadId, "uncommitted", { signal: controller.signal })
-          : await getGitDiffStats(projectSlug ?? "", issueIdentifier ?? "", "uncommitted", {
+        const result = hasIssueScope
+          ? await getGitDiffStats(normalizedProjectSlug, normalizedIssueIdentifier, "uncommitted", {
+              signal: controller.signal,
+            })
+          : await getThreadGitDiffStats(resolvedThreadId!, "uncommitted", {
               signal: controller.signal,
             });
         const combined = combineDiffStats(
@@ -54,7 +64,13 @@ export function useWorkspaceDiffStats({
     return () => {
       controller.abort();
     };
-  }, [enabled, issueIdentifier, projectSlug, threadId]);
+  }, [
+    enabled,
+    hasIssueScope,
+    normalizedIssueIdentifier,
+    normalizedProjectSlug,
+    resolvedThreadId,
+  ]);
 
   return stats;
 }

@@ -22,6 +22,7 @@ import { canResumeExecution } from "@/lib/agentExecutionDisplay";
 import { buildExecutionSessionFallbackIssue } from "@/lib/executionSessionIssue";
 import { messagesFromSessionLogFeed } from "@/lib/sessionLogFeed";
 import { cn } from "@/lib/utils";
+import { issueWorkspaceScope } from "@/lib/workspaceScope";
 import { isWaitState, parseWorkflowTrackerConfig } from "@/lib/workflowTracker";
 import { dispatchIssueAgent } from "@/services/issueDispatch";
 import { getIssue } from "@/services/issues";
@@ -106,7 +107,11 @@ export function ExecutionSessionPanel({
     () => messagesFromSessionLogFeed(session.feedItems).flatMap((message) => message.toolCalls),
     [session.feedItems],
   );
-  usePublishSessionTasksDockFeed({ tasks: session.taskSnapshot, toolItems });
+  const tasksDockScope = useMemo(
+    () => issueWorkspaceScope(projectSlug, issueIdentifier, threadId),
+    [issueIdentifier, projectSlug, threadId],
+  );
+  usePublishSessionTasksDockFeed(tasksDockScope, { tasks: session.taskSnapshot, toolItems });
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const stickToBottomRef = useRef(true);

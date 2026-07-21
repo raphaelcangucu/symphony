@@ -8,16 +8,24 @@ vi.mock("../GitDiffModal", () => ({
   default: ({
     open,
     onOpenChange,
+    identifier,
+    threadId,
     initialFocusPath,
     initialFocusCommit,
   }: {
     open: boolean;
     onOpenChange: (open: boolean) => void;
+    identifier?: string | null;
+    threadId?: number | null;
     initialFocusPath?: string | null;
     initialFocusCommit?: { repo: string; sha: string } | null;
   }) =>
     open ? (
-      <div role="dialog">
+      <div
+        role="dialog"
+        data-identifier={identifier ?? ""}
+        data-thread-id={threadId == null ? "" : String(threadId)}
+      >
         diff-modal
         <span data-testid="initial-focus-path">{initialFocusPath ?? ""}</span>
         <span data-testid="initial-focus-commit">
@@ -38,6 +46,22 @@ describe("GitDiffLauncher", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /diff/i }));
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("drops the thread id when an issue identifier is present", async () => {
+    const user = userEvent.setup();
+    render(
+      <GitDiffLauncher
+        projectSlug="macro-markets"
+        identifier="510"
+        threadId={7996}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /diff/i }));
+
+    expect(await screen.findByRole("dialog")).toHaveAttribute("data-identifier", "510");
+    expect(screen.getByRole("dialog")).toHaveAttribute("data-thread-id", "");
   });
 
   it("opens on Ctrl+G when not typing into an input", async () => {

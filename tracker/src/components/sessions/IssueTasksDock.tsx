@@ -29,7 +29,7 @@ export function IssueTasksDock({
   onClose,
 }: IssueTasksDockProps) {
   const { t } = useTranslation();
-  const { tasks } = useSessionTasksDockFeed();
+  const { tasks } = useSessionTasksDockFeed(scope);
   const scopeLabel = workspaceScopeLabel(scope);
   const { width, isResizing, onResizePointerDown, onResizePointerUp } = useHorizontalPanelResize({
     containerRef: splitContainerRef,

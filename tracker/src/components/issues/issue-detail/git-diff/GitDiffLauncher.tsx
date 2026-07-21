@@ -71,7 +71,9 @@ export function GitDiffLauncher({
     repo: string;
     sha: string;
   } | null>(null);
-  const unavailable = !identifier && !threadId;
+  const resolvedIdentifier = identifier?.trim() || null;
+  const resolvedThreadId = resolvedIdentifier ? null : threadId;
+  const unavailable = !resolvedIdentifier && !resolvedThreadId;
   const launcherDisabled = disabled || unavailable;
   const openModal = useCallback(() => {
     if (launcherDisabled) return;
@@ -128,8 +130,8 @@ export function GitDiffLauncher({
             open={open}
             onOpenChange={setOpen}
             projectSlug={projectSlug}
-            identifier={identifier}
-            threadId={threadId}
+            identifier={resolvedIdentifier}
+            threadId={resolvedThreadId}
             onSendReview={onSendReview}
             initialCommitDialogOpen={openCommitDialog}
             onCommitDialogOpened={() => setOpenCommitDialog(false)}

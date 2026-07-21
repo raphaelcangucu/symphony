@@ -1808,7 +1808,6 @@ function InteractiveProjectAssistantPanel({
     if (!fromTools) return;
     setNotionImport((current) => (current?.importId === fromTools.importId ? current : fromTools));
   }, [visibleMessages]);
-  usePublishSessionTasksDockFeed({ tasks: taskSnapshot, toolItems });
   const hasTasks = (taskSnapshot?.tasks.length ?? 0) > 0;
   const tasksDone = taskSnapshot ? completedTaskCount(taskSnapshot) : 0;
   const tasksTotal = taskSnapshot?.tasks.length ?? 0;
@@ -1827,6 +1826,7 @@ function InteractiveProjectAssistantPanel({
     }
     return null;
   }, [issueIdentifier, projectSlug, threadId]);
+  usePublishSessionTasksDockFeed(tasksDockScope, { tasks: taskSnapshot, toolItems });
   const usesWorkspaceTasksDock = sessionTasksDock != null && tasksDockScope != null;
   const [localTasksDockOpen, setLocalTasksDockOpen] = useState<boolean>(
     () => window.localStorage.getItem(TASKS_DOCK_STORAGE_KEY) !== "false",
