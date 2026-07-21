@@ -22,7 +22,9 @@ defmodule SymphonyElixirWeb.Tracker.WorkspaceDiffController do
     with {:ok, type} <- diff_type(Map.get(params, "type", "branch")),
          {:ok, workspace} <- issue_workspace(project_slug, identifier),
          {:ok, repos} <-
-           WorkspaceDiff.changes(workspace, type, default_branches: Context.repo_default_branches(project_slug)) do
+           WorkspaceDiff.changes(workspace, type,
+             default_branches: Context.repo_default_branches(project_slug)
+           ) do
       json(conn, %{data: repos, workspace: workspace_brief(workspace)})
     else
       {:error, reason} -> TrackerErrors.render(conn, reason)

@@ -303,6 +303,12 @@ defmodule SymphonyElixirWeb.Tracker.WorkspaceDiffControllerTest do
            } = json_response(conn, 200)
   end
 
+  test "summaries_thread reports 404 for an unknown thread id" do
+    conn = get(authorized_conn(), "/api/tracker/v1/assistant/threads/999999999/diff/summaries")
+
+    assert %{"error" => %{"code" => _}} = json_response(conn, 404)
+  end
+
   test "push returns no results when no workspace branch is ahead", %{issue: issue} do
     conn =
       post(
