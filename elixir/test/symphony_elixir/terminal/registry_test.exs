@@ -26,6 +26,25 @@ defmodule SymphonyElixir.Terminal.RegistryTest do
     def available?, do: false
   end
 
+  defmodule WorkspaceTmux do
+    def available?, do: true
+
+    def has_session?(session_name) do
+      send(self(), {:workspace_has_session, session_name})
+      false
+    end
+
+    def new_session(session_name, cwd) do
+      send(self(), {:workspace_new_session, session_name, cwd})
+      :ok
+    end
+
+    def capture_pane(session_name) do
+      send(self(), {:workspace_capture, session_name})
+      {:ok, "workspace ready\n"}
+    end
+  end
+
   defmodule ResumeLaunchTmux do
     def available?, do: true
     def has_session?("sym-issue-macro-markets-MAC-1"), do: false
@@ -192,5 +211,51 @@ defmodule SymphonyElixir.Terminal.RegistryTest do
                tmux: FakeTmux,
                workspace: FakeWorkspace
              )
+  end
+
+  test "opens a workspace session in the expanded existing directory" do
+    workspace_path =
+      Path.join([
+        System.tmp_dir!(),
+        "symphony-terminal-workspace-#{System.unique_integer([:positive])}",
+        "nested",
+        ".."
+      ])
+
+    expanded_path = Path.expand(workspace_path)
+    File.mkdir_p!(expanded_path)
+    on_exit(fn -> File.rm_rf!(expanded_path) end)
+
+    assert {:ok,
+            %{
+              project_slug: "macro-markets",
+              issue_identifier: nil,
+              workspace_path: ^expanded_path,
+              cwd: ^expanded_path,
+              session_name: session_name,
+              state: "running",
+              output: "workspace ready\n"
+            }} =
+             Registry.open_workspace_session("macro-markets", workspace_path, tmux: WorkspaceTmux)
+
+    assert String.starts_with?(session_name, "sym-workspace-macro-markets-")
+    assert_receive {:workspace_has_session, ^session_name}
+    assert_receive {:workspace_new_session, ^session_name, ^expanded_path}
+    assert_receive {:workspace_capture, ^session_name}
+  end
+
+  test "rejects a missing workspace before opening tmux" do
+    missing_path =
+      Path.join(
+        System.tmp_dir!(),
+        "symphony-terminal-missing-#{System.unique_integer([:positive])}"
+      )
+
+    refute File.dir?(missing_path)
+
+    assert {:error, :workspace_missing} =
+             Registry.open_workspace_session("macro-markets", missing_path, tmux: WorkspaceTmux)
+
+    refute_receive {:workspace_has_session, _session_name}
   end
 end

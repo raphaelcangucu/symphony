@@ -22,6 +22,21 @@ export function TerminalTabContent({ activeTab, activeTabId, projectSlug, t }: T
     );
   }
 
+  if (activeTab?.kind === "thread-terminal") {
+    return (
+      <TerminalView
+        key={activeTab.id}
+        kind="thread"
+        projectSlug={projectSlug}
+        threadId={activeTab.threadId}
+        enabled={activeTabId === activeTab.id}
+        ariaLabel={t("workspace.terminal.threadAriaLabel", {
+          threadId: String(activeTab.threadId),
+        })}
+      />
+    );
+  }
+
   if (activeTab?.kind === "project-terminal") {
     return (
       <TerminalView

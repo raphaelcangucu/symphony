@@ -5,19 +5,36 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { IssueTerminalDock } from "@/components/sessions/IssueTerminalDock";
 import { initTestI18n } from "@/i18n/testUtils";
+import { issueWorkspaceScope, threadWorkspaceScope, type WorkspaceScope } from "@/lib/workspaceScope";
 import * as floatingSurfaceStore from "@/stores/floatingSurfaceStore";
 
 vi.mock("@/components/terminal/TerminalWorkspacePanel", () => ({
-  TerminalWorkspacePanel: ({ trailingActions }: { trailingActions?: React.ReactNode }) => (
-    <div data-testid="terminal-panel">{trailingActions}</div>
+  TerminalWorkspacePanel: ({
+    issueIdentifier,
+    threadId,
+    trailingActions,
+  }: {
+    issueIdentifier?: string;
+    threadId?: number;
+    trailingActions?: React.ReactNode;
+  }) => (
+    <div
+      data-testid="terminal-panel"
+      data-issue-identifier={issueIdentifier}
+      data-thread-id={threadId}
+    >
+      {trailingActions}
+    </div>
   ),
 }));
 
 function renderDock({
+  scope = issueWorkspaceScope("macro-markets", "510"),
   fullscreen = false,
   onToggleFullscreen = () => {},
   onClose = () => {},
 }: {
+  scope?: WorkspaceScope;
   fullscreen?: boolean;
   onToggleFullscreen?: () => void;
   onClose?: () => void;
@@ -27,8 +44,7 @@ function renderDock({
   return render(
     <div ref={splitContainerRef} style={{ width: 1200 }}>
       <IssueTerminalDock
-        projectSlug="macro-markets"
-        issueIdentifier="510"
+        scope={scope}
         splitContainerRef={splitContainerRef}
         fullscreen={fullscreen}
         onToggleFullscreen={onToggleFullscreen}
@@ -52,6 +68,24 @@ describe("IssueTerminalDock", () => {
     expect(screen.getByRole("button", { name: "Open in floating window" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Close terminal panel" })).toBeInTheDocument();
     expect(screen.getByTestId("terminal-panel")).toBeInTheDocument();
+  });
+
+  it("mounts the terminal panel with a thread id for thread scope", () => {
+    renderDock({
+      scope: threadWorkspaceScope(
+        "macro-markets",
+        8076,
+        "/workspaces/macro-markets/flaky-pipe",
+      ),
+    });
+
+    expect(screen.getByTestId("terminal-panel")).toHaveAttribute(
+      "data-thread-id",
+      "8076",
+    );
+    expect(screen.getByTestId("terminal-panel")).not.toHaveAttribute(
+      "data-issue-identifier",
+    );
   });
 
   it("hides the resize handle in full screen mode", () => {

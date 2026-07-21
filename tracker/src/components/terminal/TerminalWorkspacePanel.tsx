@@ -11,7 +11,9 @@ import {
   createDynamicTerminalTab,
   createIssueTerminalTab,
   createProjectTerminalTab,
+  createThreadTerminalTab,
   issueTerminalTabId,
+  threadTerminalTabId,
 } from "@/lib/workspaceTabs/types";
 import {
   TerminalTabsApiUnavailableError,
@@ -20,47 +22,93 @@ import {
   listTerminalTabs,
 } from "@/services/terminalTabs";
 
-interface TerminalWorkspacePanelProps {
+interface TerminalWorkspacePanelBaseProps {
   projectSlug: string;
-  issueIdentifier: string;
   variant?: "default" | "embedded";
   /** Extra controls appended to the tab bar (e.g. fullscreen toggle when docked). */
   trailingActions?: ReactNode;
 }
 
+type TerminalWorkspacePanelProps = TerminalWorkspacePanelBaseProps &
+  (
+    | { issueIdentifier: string; threadId?: never }
+    | { issueIdentifier?: never; threadId: number }
+  );
+
 export function TerminalWorkspacePanel({
   projectSlug,
   issueIdentifier,
+  threadId,
   variant = "default",
   trailingActions = null,
 }: TerminalWorkspacePanelProps) {
   const { t } = useTranslation();
+  const normalizedIssueIdentifier = issueIdentifier?.trim() ?? "";
+  const normalizedThreadId =
+    typeof threadId === "number" && Number.isInteger(threadId) && threadId > 0
+      ? threadId
+      : null;
+  const issueMode = normalizedIssueIdentifier.length > 0;
+  const threadMode = normalizedThreadId !== null;
+
+  if (issueMode === threadMode) {
+    throw new Error("TerminalWorkspacePanel requires exactly one valid issueIdentifier or threadId");
+  }
+
   const [creatingTab, setCreatingTab] = useState(false);
-  const [loadingTabs, setLoadingTabs] = useState(true);
-  const [dynamicTabsEnabled, setDynamicTabsEnabled] = useState(true);
+  const [loadingTabs, setLoadingTabs] = useState(issueMode);
+  const [dynamicTabsEnabled, setDynamicTabsEnabled] = useState(issueMode);
 
   const canonicalTabs = useMemo(
-    () => [
-      createIssueTerminalTab(issueIdentifier, t("workspace.terminal.issueShell")),
-      createProjectTerminalTab(projectSlug, t("workspace.terminal.projectShell")),
+    () =>
+      normalizedThreadId !== null
+        ? [
+            createThreadTerminalTab(
+              normalizedThreadId,
+              t("workspace.terminal.threadShell"),
+            ),
+          ]
+        : [
+            createIssueTerminalTab(
+              normalizedIssueIdentifier,
+              t("workspace.terminal.issueShell"),
+            ),
+            createProjectTerminalTab(projectSlug, t("workspace.terminal.projectShell")),
+          ],
+    [
+      normalizedIssueIdentifier,
+      normalizedThreadId,
+      projectSlug,
+      t,
     ],
-    [issueIdentifier, projectSlug, t],
   );
 
   const { tabs, activeTabId, activeTab, selectTab, openTab, closeTab } = useWorkspaceTabs({
-    scope: `issue-terminal:${issueIdentifier}`,
+    scope: threadMode
+      ? `thread-terminal:${normalizedThreadId}`
+      : `issue-terminal:${normalizedIssueIdentifier}`,
     projectSlug,
     canonicalTabs,
-    defaultActiveTabId: issueTerminalTabId(issueIdentifier),
+    defaultActiveTabId: normalizedThreadId !== null
+      ? threadTerminalTabId(normalizedThreadId)
+      : issueTerminalTabId(normalizedIssueIdentifier),
   });
 
   const loadDynamicTabs = useCallback(async () => {
+    if (!issueMode) return;
+
     setLoadingTabs(true);
     try {
-      const remoteTabs = await listTerminalTabs(projectSlug, issueIdentifier);
+      const remoteTabs = await listTerminalTabs(projectSlug, normalizedIssueIdentifier);
       setDynamicTabsEnabled(true);
       for (const remoteTab of remoteTabs) {
-        openTab(createDynamicTerminalTab(remoteTab.id, issueIdentifier, remoteTab.title));
+        openTab(
+          createDynamicTerminalTab(
+            remoteTab.id,
+            normalizedIssueIdentifier,
+            remoteTab.title,
+          ),
+        );
       }
     } catch (cause) {
       if (cause instanceof TerminalTabsApiUnavailableError) {
@@ -71,11 +119,12 @@ export function TerminalWorkspacePanel({
     } finally {
       setLoadingTabs(false);
     }
-  }, [issueIdentifier, openTab, projectSlug, t]);
+  }, [issueMode, normalizedIssueIdentifier, openTab, projectSlug, t]);
 
   useEffect(() => {
+    if (!issueMode) return;
     void loadDynamicTabs();
-  }, [loadDynamicTabs]);
+  }, [issueMode, loadDynamicTabs]);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -92,13 +141,17 @@ export function TerminalWorkspacePanel({
   }, [selectTab, tabs]);
 
   const handleCreateTab = useCallback(async () => {
-    if (creatingTab || !dynamicTabsEnabled) return;
+    if (!issueMode || creatingTab || !dynamicTabsEnabled) return;
     setCreatingTab(true);
     try {
-      const remoteTab = await createTerminalTab(projectSlug, issueIdentifier, {
+      const remoteTab = await createTerminalTab(projectSlug, normalizedIssueIdentifier, {
         title: t("workspace.terminal.newTabTitle"),
       });
-      const tab = createDynamicTerminalTab(remoteTab.id, issueIdentifier, remoteTab.title);
+      const tab = createDynamicTerminalTab(
+        remoteTab.id,
+        normalizedIssueIdentifier,
+        remoteTab.title,
+      );
       openTab(tab);
       selectTab(tab.id);
     } catch (cause) {
@@ -111,7 +164,16 @@ export function TerminalWorkspacePanel({
     } finally {
       setCreatingTab(false);
     }
-  }, [creatingTab, dynamicTabsEnabled, issueIdentifier, openTab, projectSlug, selectTab, t]);
+  }, [
+    creatingTab,
+    dynamicTabsEnabled,
+    issueMode,
+    normalizedIssueIdentifier,
+    openTab,
+    projectSlug,
+    selectTab,
+    t,
+  ]);
 
   const handleCloseTab = useCallback(
     async (tabId: string) => {
@@ -119,7 +181,7 @@ export function TerminalWorkspacePanel({
       if (!tab || tab.kind !== "dynamic-terminal") return;
 
       try {
-        await closeTerminalTab(projectSlug, issueIdentifier, tab.tabId);
+        await closeTerminalTab(projectSlug, normalizedIssueIdentifier, tab.tabId);
         closeTab(tabId);
       } catch (cause) {
         if (cause instanceof TerminalTabsApiUnavailableError) {
@@ -129,7 +191,7 @@ export function TerminalWorkspacePanel({
         toast.error(cause instanceof Error ? cause.message : t("workspace.terminal.closeTabFailed"));
       }
     },
-    [closeTab, issueIdentifier, projectSlug, t, tabs],
+    [closeTab, normalizedIssueIdentifier, projectSlug, t, tabs],
   );
 
   return (
@@ -149,9 +211,9 @@ export function TerminalWorkspacePanel({
         ariaLabel={t("workspace.terminal.tabsAria")}
         shortcutHints
         trailing={
-          dynamicTabsEnabled || trailingActions ? (
+          (issueMode && dynamicTabsEnabled) || trailingActions ? (
             <>
-              {dynamicTabsEnabled ? (
+              {issueMode && dynamicTabsEnabled ? (
                 <Button
                   type="button"
                   variant="ghost"

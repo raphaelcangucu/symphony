@@ -10,12 +10,13 @@ defmodule SymphonyElixir.Terminal.Registry do
   alias SymphonyElixir.Workspace
 
   @type session :: %{
-          project_slug: String.t(),
-          issue_identifier: String.t(),
-          session_name: String.t(),
-          cwd: Path.t(),
-          state: String.t(),
-          output: String.t()
+          required(:project_slug) => String.t(),
+          required(:session_name) => String.t(),
+          required(:cwd) => Path.t(),
+          required(:state) => String.t(),
+          required(:output) => String.t(),
+          optional(:issue_identifier) => String.t() | nil,
+          optional(:workspace_path) => Path.t()
         }
 
   @spec session_name(String.t()) :: String.t()
@@ -75,6 +76,31 @@ defmodule SymphonyElixir.Terminal.Registry do
       else
         start_issue_session(project_slug, issue_identifier, opts)
       end
+    end
+  end
+
+  @spec open_workspace_session(String.t(), String.t(), keyword()) ::
+          {:ok, session()} | {:error, String.t() | atom()}
+  def open_workspace_session(project_slug, workspace_path, opts \\ [])
+      when is_binary(project_slug) and is_binary(workspace_path) do
+    expanded_path = Path.expand(workspace_path)
+    tmux = dependency(opts, :tmux, :terminal_tmux, Tmux)
+    session_name = workspace_session_name(project_slug, expanded_path)
+
+    with :ok <- ensure_workspace_directory(expanded_path),
+         :ok <- ensure_tmux_available(tmux),
+         {:ok, _session_state} <- ensure_session(tmux, session_name, expanded_path),
+         {:ok, output} <- capture_output(tmux, session_name) do
+      {:ok,
+       %{
+         project_slug: project_slug,
+         issue_identifier: nil,
+         workspace_path: expanded_path,
+         session_name: session_name,
+         cwd: expanded_path,
+         state: "running",
+         output: output
+       }}
     end
   end
 
@@ -189,6 +215,23 @@ defmodule SymphonyElixir.Terminal.Registry do
     tmux.resize(session_name(project_slug, issue_identifier), cols, rows)
   end
 
+  @spec send_input_workspace(String.t(), String.t(), String.t(), keyword()) ::
+          :ok | {:error, String.t()}
+  def send_input_workspace(project_slug, workspace_path, data, opts \\ [])
+      when is_binary(project_slug) and is_binary(workspace_path) and is_binary(data) do
+    tmux = dependency(opts, :tmux, :terminal_tmux, Tmux)
+    tmux.send_keys(workspace_session_name(project_slug, Path.expand(workspace_path)), data)
+  end
+
+  @spec resize_workspace(String.t(), String.t(), pos_integer(), pos_integer(), keyword()) ::
+          :ok | {:error, String.t()}
+  def resize_workspace(project_slug, workspace_path, cols, rows, opts \\ [])
+      when is_binary(project_slug) and is_binary(workspace_path) and is_integer(cols) and
+             is_integer(rows) and cols > 0 and rows > 0 do
+    tmux = dependency(opts, :tmux, :terminal_tmux, Tmux)
+    tmux.resize(workspace_session_name(project_slug, Path.expand(workspace_path)), cols, rows)
+  end
+
   @spec capture_dev_session(String.t(), String.t(), String.t(), keyword()) ::
           {:ok, String.t()} | {:error, String.t()}
   def capture_dev_session(project_slug, issue_identifier, slug, opts \\ [])
@@ -233,6 +276,14 @@ defmodule SymphonyElixir.Terminal.Registry do
   def capture(project_slug, issue_identifier, opts \\ []) when is_binary(project_slug) and is_binary(issue_identifier) do
     tmux = dependency(opts, :tmux, :terminal_tmux, Tmux)
     tmux.capture_pane(session_name(project_slug, issue_identifier))
+  end
+
+  @spec capture_workspace(String.t(), String.t(), keyword()) ::
+          {:ok, String.t()} | {:error, String.t()}
+  def capture_workspace(project_slug, workspace_path, opts \\ [])
+      when is_binary(project_slug) and is_binary(workspace_path) do
+    tmux = dependency(opts, :tmux, :terminal_tmux, Tmux)
+    tmux.capture_pane(workspace_session_name(project_slug, Path.expand(workspace_path)))
   end
 
   @spec tab_session_name(String.t(), String.t()) :: String.t()
@@ -413,6 +464,10 @@ defmodule SymphonyElixir.Terminal.Registry do
     if tmux.available?(), do: :ok, else: {:error, :tmux_unavailable}
   end
 
+  defp ensure_workspace_directory(workspace_path) do
+    if File.dir?(workspace_path), do: :ok, else: {:error, :workspace_missing}
+  end
+
   defp create_workspace(workspace, issue) do
     issue_workspace_key = Map.put(issue, :identifier, workspace_identifier(issue.identifier))
 
@@ -468,6 +523,16 @@ defmodule SymphonyElixir.Terminal.Registry do
       "" -> fallback
       value -> if Regex.match?(~r/[a-zA-Z0-9]/, value), do: value, else: fallback
     end
+  end
+
+  defp workspace_session_name(project_slug, expanded_path) do
+    path_hash =
+      :sha256
+      |> :crypto.hash(expanded_path)
+      |> Base.encode16(case: :lower)
+      |> binary_part(0, 12)
+
+    "sym-workspace-#{safe_segment(project_slug, "project")}-#{path_hash}"
   end
 
   defp generate_tab_id do

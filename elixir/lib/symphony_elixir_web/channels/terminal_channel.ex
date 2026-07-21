@@ -6,6 +6,7 @@ defmodule SymphonyElixirWeb.TerminalChannel do
 
   alias Gettext, as: GettextCore
   alias Phoenix.Socket
+  alias SymphonyElixir.Assistant.History
   alias SymphonyElixir.Config
   alias SymphonyElixir.Terminal.{ErrorMessages, Registry}
   alias SymphonyElixirWeb.TrackerAuth
@@ -22,6 +23,26 @@ defmodule SymphonyElixirWeb.TerminalChannel do
         socket
         |> assign(:project_slug, project_slug)
         |> assign(:devenv, true)
+
+      {:ok, %{session: session_payload(session)}, socket}
+    else
+      {:error, reason} -> {:error, %{reason: error_reason(socket, reason)}}
+    end
+  end
+
+  def join("terminal:thread:" <> raw_thread_id, payload, socket) when is_map(payload) do
+    with :ok <- authorize(socket),
+         {:ok, thread_id} <- parse_thread_id(raw_thread_id),
+         {:ok, thread} <- History.get_thread(thread_id),
+         :ok <- validate_thread_project(thread, Map.get(payload, "project_slug")),
+         {:ok, workspace_path} <- thread_workspace_path(thread),
+         {:ok, session} <- Registry.open_workspace_session(thread.project_slug, workspace_path) do
+      socket =
+        socket
+        |> assign(:project_slug, thread.project_slug)
+        |> assign(:thread_id, thread_id)
+        |> assign(:workspace_path, session.cwd)
+        |> assign(:thread_terminal, true)
 
       {:ok, %{session: session_payload(session)}, socket}
     else
@@ -109,6 +130,24 @@ defmodule SymphonyElixirWeb.TerminalChannel do
     end
   end
 
+  def handle_in(
+        "input",
+        %{"data" => data},
+        %{assigns: %{thread_terminal: true, project_slug: project_slug, workspace_path: workspace_path}} = socket
+      )
+      when is_binary(data) do
+    case Registry.send_input_workspace(project_slug, workspace_path, data) do
+      :ok ->
+        push_workspace_capture(socket, project_slug, workspace_path)
+        schedule_followup_workspace_captures(project_slug, workspace_path)
+        {:noreply, socket}
+
+      {:error, message} ->
+        push(socket, "error", %{message: present_error(socket, message)})
+        {:noreply, socket}
+    end
+  end
+
   def handle_in("input", %{"data" => data}, %{assigns: %{tab: true, project_slug: project_slug, tab_id: tab_id}} = socket)
       when is_binary(data) do
     case Registry.send_input_tab(project_slug, tab_id, data) do
@@ -164,6 +203,23 @@ defmodule SymphonyElixirWeb.TerminalChannel do
 
   def handle_in("resize", _payload, %{assigns: %{devenv: true}} = socket) do
     {:noreply, socket}
+  end
+
+  def handle_in(
+        "resize",
+        %{"cols" => cols, "rows" => rows},
+        %{assigns: %{thread_terminal: true, project_slug: project_slug, workspace_path: workspace_path}} = socket
+      )
+      when is_integer(cols) and is_integer(rows) do
+    case Registry.resize_workspace(project_slug, workspace_path, cols, rows) do
+      :ok ->
+        push_workspace_capture(socket, project_slug, workspace_path)
+        {:noreply, socket}
+
+      {:error, message} ->
+        push(socket, "error", %{message: present_error(socket, message)})
+        {:noreply, socket}
+    end
   end
 
   def handle_in("resize", %{"cols" => cols, "rows" => rows}, %{assigns: %{tab: true, project_slug: project_slug, tab_id: tab_id}} = socket)
@@ -222,6 +278,11 @@ defmodule SymphonyElixirWeb.TerminalChannel do
     {:noreply, socket}
   end
 
+  def handle_info({:capture_workspace_terminal, project_slug, workspace_path}, socket) do
+    push_workspace_capture(socket, project_slug, workspace_path)
+    {:noreply, socket}
+  end
+
   def handle_info({:capture_devenv, project_slug}, socket) do
     push_devenv_capture(socket, project_slug)
     {:noreply, socket}
@@ -254,6 +315,12 @@ defmodule SymphonyElixirWeb.TerminalChannel do
     end)
   end
 
+  defp schedule_followup_workspace_captures(project_slug, workspace_path) do
+    Enum.each(@capture_delays_ms, fn delay_ms ->
+      Process.send_after(self(), {:capture_workspace_terminal, project_slug, workspace_path}, delay_ms)
+    end)
+  end
+
   defp schedule_followup_tab_captures(project_slug, tab_id) do
     Enum.each(@capture_delays_ms, fn delay_ms ->
       Process.send_after(self(), {:capture_tab, project_slug, tab_id}, delay_ms)
@@ -262,6 +329,13 @@ defmodule SymphonyElixirWeb.TerminalChannel do
 
   defp push_capture(socket, project_slug, issue_identifier) do
     case Registry.capture(project_slug, issue_identifier) do
+      {:ok, output} -> push(socket, "output", %{data: output})
+      {:error, message} -> push(socket, "error", %{message: present_error(socket, message)})
+    end
+  end
+
+  defp push_workspace_capture(socket, project_slug, workspace_path) do
+    case Registry.capture_workspace(project_slug, workspace_path) do
       {:ok, output} -> push(socket, "output", %{data: output})
       {:error, message} -> push(socket, "error", %{message: present_error(socket, message)})
     end
@@ -323,7 +397,8 @@ defmodule SymphonyElixirWeb.TerminalChannel do
       session_name: session.session_name,
       cwd: session.cwd,
       state: session.state,
-      output: session.output
+      output: session.output,
+      workspace_path: Map.get(session, :workspace_path)
     }
   end
 
@@ -394,4 +469,27 @@ defmodule SymphonyElixirWeb.TerminalChannel do
       {:error, "invalid_topic"}
     end
   end
+
+  defp parse_thread_id(raw_thread_id) do
+    case Integer.parse(raw_thread_id) do
+      {thread_id, ""} when thread_id > 0 -> {:ok, thread_id}
+      _invalid -> {:error, "invalid_topic"}
+    end
+  end
+
+  defp validate_thread_project(%{project_slug: project_slug}, nil)
+       when is_binary(project_slug) and project_slug != "",
+       do: :ok
+
+  defp validate_thread_project(%{project_slug: project_slug}, project_slug)
+       when is_binary(project_slug) and project_slug != "",
+       do: :ok
+
+  defp validate_thread_project(_thread, _payload_project_slug), do: {:error, "project_mismatch"}
+
+  defp thread_workspace_path(%{workspace_path: workspace_path})
+       when is_binary(workspace_path) and workspace_path != "",
+       do: {:ok, workspace_path}
+
+  defp thread_workspace_path(_thread), do: {:error, :workspace_missing}
 end

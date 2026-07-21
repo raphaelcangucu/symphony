@@ -109,6 +109,22 @@ describe("TerminalWorkspacePanel", () => {
     expect(screen.getByRole("button", { name: "New tab" })).toBeInTheDocument();
   });
 
+  it("renders a thread terminal and joins the thread topic without issue APIs", async () => {
+    renderWithI18n(<TerminalWorkspacePanel projectSlug="demo" threadId={8076} />);
+
+    await waitFor(() =>
+      expect(channel).toHaveBeenCalledWith("terminal:thread:8076", {
+        project_slug: "demo",
+      }),
+    );
+
+    expect(screen.getByRole("tab", { name: /Workspace/i })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: /Project/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "New tab" })).not.toBeInTheDocument();
+    expect(openTerminalSession).not.toHaveBeenCalled();
+    expect(listTerminalTabs).not.toHaveBeenCalled();
+  });
+
   it("joins the project devenv channel when the project tab is selected", async () => {
     renderWithI18n(<TerminalWorkspacePanel projectSlug="demo" issueIdentifier="DEMO-1" />);
 

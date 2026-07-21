@@ -27,6 +27,7 @@ const projectAssistantPanel = vi.fn((props: { contentMaxWidth?: string }) => (
 
 const navigateMock = vi.hoisted(() => vi.fn());
 const environmentDockMock = vi.hoisted(() => vi.fn());
+const terminalDockMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/hooks/useProjectSessions", () => ({ useProjectSessions: vi.fn() }));
 vi.mock("@/services/assistantThreads", () => ({
@@ -47,6 +48,12 @@ vi.mock("@/components/sessions/IssueEnvironmentDock", () => ({
   IssueEnvironmentDock: (props: unknown) => {
     environmentDockMock(props);
     return <div data-testid="environment-dock" />;
+  },
+}));
+vi.mock("@/components/sessions/IssueTerminalDock", () => ({
+  IssueTerminalDock: (props: unknown) => {
+    terminalDockMock(props);
+    return <div data-testid="terminal-dock" />;
   },
 }));
 vi.mock("@/components/layout/WorkspaceContext", () => ({
@@ -161,6 +168,45 @@ describe("ProjectSessionsWorkspace", () => {
 
     expect(screen.getByTestId("environment-dock")).toBeInTheDocument();
     expect(environmentDockMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scope: {
+          kind: "thread",
+          projectSlug: "demo",
+          threadId: 42,
+          workspacePath: "/tmp/freeform-42",
+        },
+      }),
+    );
+  });
+
+  it("mounts the terminal dock for a freeform thread scope", async () => {
+    const user = userEvent.setup();
+    vi.mocked(getAssistantThread).mockResolvedValue({
+      id: 42,
+      scope: "freeform",
+      agentKind: null,
+      projectSlug: "demo",
+      projectName: "Demo",
+      issueIdentifier: null,
+      workspacePath: "/tmp/freeform-42",
+      labels: [],
+      needsReview: false,
+      title: "Freeform workspace",
+      status: "active",
+      preview: null,
+      updatedAt: "2026-07-15T12:00:00Z",
+    });
+
+    renderWithI18n(
+      <MemoryRouter initialEntries={["/projects/demo/workspaces/42"]}>
+        <ProjectSessionsWorkspace projectSlug="demo" activeThreadId={42} />
+      </MemoryRouter>,
+    );
+
+    await user.click(await screen.findByRole("button", { name: "Terminal for freeform-42" }));
+
+    expect(screen.getByTestId("terminal-dock")).toBeInTheDocument();
+    expect(terminalDockMock).toHaveBeenCalledWith(
       expect.objectContaining({
         scope: {
           kind: "thread",

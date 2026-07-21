@@ -6,13 +6,13 @@ import { TerminalWorkspacePanel } from "@/components/terminal/TerminalWorkspaceP
 import { Button } from "@/components/ui/button";
 import { useHorizontalPanelResize } from "@/hooks/useHorizontalPanelResize";
 import { cn } from "@/lib/utils";
+import { workspaceScopeKey, type WorkspaceScope } from "@/lib/workspaceScope";
 import { openFloatingSurfaceOrToast } from "@/stores/floatingSurfaceStore";
 
 const TERMINAL_DOCK_WIDTH_STORAGE_KEY = "symphony:issue-terminal-dock-width";
 
 interface IssueTerminalDockProps {
-  projectSlug: string;
-  issueIdentifier: string;
+  scope: WorkspaceScope;
   splitContainerRef: RefObject<HTMLDivElement | null>;
   fullscreen: boolean;
   onToggleFullscreen: () => void;
@@ -20,8 +20,7 @@ interface IssueTerminalDockProps {
 }
 
 export function IssueTerminalDock({
-  projectSlug,
-  issueIdentifier,
+  scope,
   splitContainerRef,
   fullscreen,
   onToggleFullscreen,
@@ -50,6 +49,59 @@ export function IssueTerminalDock({
   const fullscreenLabel = fullscreen
     ? t("workspace.terminal.exitFullscreen")
     : t("workspace.terminal.expandFullscreen");
+  const projectSlug = scope.projectSlug;
+
+  const trailingActions = (
+    <>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="h-7 w-7 text-muted-foreground hover:text-foreground"
+        aria-label={fullscreenLabel}
+        title={fullscreenLabel}
+        onClick={onToggleFullscreen}
+      >
+        {fullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+      </Button>
+      {scope.kind === "issue" ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 text-muted-foreground hover:text-foreground"
+          aria-label={t("floatingSurface.popout")}
+          title={t("floatingSurface.popout")}
+          onClick={() =>
+            openFloatingSurfaceOrToast(
+              {
+                kind: "issue-terminal",
+                projectSlug,
+                issueIdentifier: scope.issueIdentifier,
+                title: t("workspace.terminal.popoutTitle", {
+                  identifier: scope.issueIdentifier,
+                }),
+              },
+              t("floatingSurface.maxSurfaces"),
+            )
+          }
+        >
+          <SquareArrowOutUpRight className="h-3.5 w-3.5" />
+        </Button>
+      ) : null}
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="h-7 w-7 text-muted-foreground hover:text-foreground"
+        aria-label={t("workspace.terminal.closeDock")}
+        title={t("workspace.terminal.closeDock")}
+        onClick={onClose}
+      >
+        <X className="h-3.5 w-3.5" />
+      </Button>
+    </>
+  );
 
   return (
     <aside
@@ -80,59 +132,23 @@ export function IssueTerminalDock({
         </button>
       ) : null}
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <TerminalWorkspacePanel
-          key={`${projectSlug}:${issueIdentifier}`}
-          projectSlug={projectSlug}
-          issueIdentifier={issueIdentifier}
-          variant="embedded"
-          trailingActions={
-            <>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 text-muted-foreground hover:text-foreground"
-                aria-label={fullscreenLabel}
-                title={fullscreenLabel}
-                onClick={onToggleFullscreen}
-              >
-                {fullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 text-muted-foreground hover:text-foreground"
-                aria-label={t("floatingSurface.popout")}
-                title={t("floatingSurface.popout")}
-                onClick={() =>
-                  openFloatingSurfaceOrToast(
-                    {
-                      kind: "issue-terminal",
-                      projectSlug,
-                      issueIdentifier,
-                      title: t("workspace.terminal.popoutTitle", { identifier: issueIdentifier }),
-                    },
-                    t("floatingSurface.maxSurfaces"),
-                  )
-                }
-              >
-                <SquareArrowOutUpRight className="h-3.5 w-3.5" />
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 text-muted-foreground hover:text-foreground"
-                aria-label={t("workspace.terminal.closeDock")}
-                title={t("workspace.terminal.closeDock")}
-                onClick={onClose}
-              >
-                <X className="h-3.5 w-3.5" />
-              </Button>
-            </>
-          }
-        />
+        {scope.kind === "issue" ? (
+          <TerminalWorkspacePanel
+            key={workspaceScopeKey(scope)}
+            projectSlug={projectSlug}
+            issueIdentifier={scope.issueIdentifier}
+            variant="embedded"
+            trailingActions={trailingActions}
+          />
+        ) : (
+          <TerminalWorkspacePanel
+            key={workspaceScopeKey(scope)}
+            projectSlug={projectSlug}
+            threadId={scope.threadId}
+            variant="embedded"
+            trailingActions={trailingActions}
+          />
+        )}
       </div>
     </aside>
   );

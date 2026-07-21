@@ -1005,10 +1005,9 @@ export function ProjectSessionsWorkspace({
 
       </section>
 
-      {terminalDockScope?.kind === "issue" ? (
+      {terminalDockScope ? (
         <IssueTerminalDock
-          projectSlug={projectSlug}
-          issueIdentifier={terminalDockScope.issueIdentifier}
+          scope={terminalDockScope}
           splitContainerRef={splitContainerRef}
           fullscreen={terminalFullscreen}
           onToggleFullscreen={toggleTerminalFullscreen}

@@ -1,5 +1,6 @@
 export type WorkspaceTabKind =
   | "issue-terminal"
+  | "thread-terminal"
   | "project-terminal"
   | "dynamic-terminal"
   | "assistant-session"
@@ -17,6 +18,11 @@ export interface WorkspaceTabBase {
 export interface IssueTerminalTab extends WorkspaceTabBase {
   kind: "issue-terminal";
   issueIdentifier: string;
+}
+
+export interface ThreadTerminalTab extends WorkspaceTabBase {
+  kind: "thread-terminal";
+  threadId: number;
 }
 
 export interface ProjectTerminalTab extends WorkspaceTabBase {
@@ -50,6 +56,7 @@ export interface NewIssueTab extends WorkspaceTabBase {
 
 export type WorkspaceTab =
   | IssueTerminalTab
+  | ThreadTerminalTab
   | ProjectTerminalTab
   | DynamicTerminalTab
   | AssistantSessionTab
@@ -64,6 +71,13 @@ export interface WorkspaceTabsState {
 
 export function issueTerminalTabId(issueIdentifier: string): string {
   return `issue-terminal:${issueIdentifier.trim()}`;
+}
+
+export function threadTerminalTabId(threadId: number): string {
+  if (!Number.isInteger(threadId) || threadId <= 0) {
+    throw new Error("threadId must be a positive integer");
+  }
+  return `thread-terminal:${threadId}`;
 }
 
 export function projectTerminalTabId(projectSlug: string): string {
@@ -103,6 +117,16 @@ export function createIssueTerminalTab(issueIdentifier: string, title: string): 
     title: title.trim() || identifier,
     closable: false,
     issueIdentifier: identifier,
+  };
+}
+
+export function createThreadTerminalTab(threadId: number, title: string): ThreadTerminalTab {
+  return {
+    id: threadTerminalTabId(threadId),
+    kind: "thread-terminal",
+    title: title.trim() || `Thread ${threadId}`,
+    closable: false,
+    threadId,
   };
 }
 

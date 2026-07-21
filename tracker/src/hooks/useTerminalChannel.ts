@@ -9,12 +9,13 @@ import { createTrackerSocket } from "@/services/phoenix/socket";
 import { openTerminalSession } from "@/services/terminal";
 import { terminalTabTopic } from "@/services/terminalTabs";
 
-export type TerminalConnectionKind = "issue" | "project-devenv" | "dynamic-tab" | "dev-server";
+export type TerminalConnectionKind = "issue" | "thread" | "project-devenv" | "dynamic-tab" | "dev-server";
 
 interface UseTerminalChannelArgs {
   kind: TerminalConnectionKind;
   projectSlug: string;
   issueIdentifier?: string;
+  threadId?: number;
   tabId?: string;
   serverSlug?: string;
   enabled?: boolean;
@@ -43,6 +44,7 @@ export function useTerminalChannel({
   kind,
   projectSlug,
   issueIdentifier,
+  threadId,
   tabId,
   serverSlug,
   enabled = true,
@@ -55,6 +57,7 @@ export function useTerminalChannel({
   useEffect(() => {
     const project = projectSlug.trim();
     const identifier = issueIdentifier?.trim() ?? "";
+    const validThreadId = Number.isInteger(threadId) && (threadId ?? 0) > 0 ? threadId : null;
     const dynamicTabId = tabId?.trim() ?? "";
     const devServerSlug = serverSlug?.trim() ?? "";
     const container = containerRef.current;
@@ -68,6 +71,12 @@ export function useTerminalChannel({
     if (kind === "issue" && !identifier) {
       setConnected(false);
       setError(i18n.t("workspace.terminal.missingIssue"));
+      return undefined;
+    }
+
+    if (kind === "thread" && validThreadId === null) {
+      setConnected(false);
+      setError("threadId must be a positive integer");
       return undefined;
     }
 
@@ -171,6 +180,11 @@ export function useTerminalChannel({
 
     const bootstrap = async () => {
       try {
+        if (kind === "thread" && validThreadId !== null) {
+          joinChannel(`terminal:thread:${validThreadId}`, { project_slug: project });
+          return;
+        }
+
         if (kind === "issue") {
           const session = await openTerminalSession(project, identifier);
           if (cancelled) return;
@@ -217,7 +231,7 @@ export function useTerminalChannel({
       terminal.dispose();
       setConnected(false);
     };
-  }, [enabled, issueIdentifier, kind, onActivated, projectSlug, serverSlug, tabId]);
+  }, [enabled, issueIdentifier, kind, onActivated, projectSlug, serverSlug, tabId, threadId]);
 
   return { containerRef, error, connected };
 }

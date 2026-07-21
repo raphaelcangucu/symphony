@@ -7,6 +7,7 @@ interface TerminalViewProps {
   kind: TerminalConnectionKind;
   projectSlug: string;
   issueIdentifier?: string;
+  threadId?: number;
   tabId?: string;
   serverSlug?: string;
   enabled?: boolean;
@@ -18,6 +19,7 @@ export function TerminalView({
   kind,
   projectSlug,
   issueIdentifier,
+  threadId,
   tabId,
   serverSlug,
   enabled = true,
@@ -32,6 +34,7 @@ export function TerminalView({
     kind,
     projectSlug,
     issueIdentifier,
+    threadId,
     tabId,
     serverSlug,
     enabled,
