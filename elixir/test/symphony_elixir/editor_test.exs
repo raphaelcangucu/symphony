@@ -295,6 +295,49 @@ defmodule SymphonyElixir.EditorTest do
     end
   end
 
+  describe "workspace_path_cursor_desktop_target/2" do
+    test "builds Cursor URL when directory exists" do
+      load_workflow_with_front_matter(editor_front_matter())
+      enable_editor!()
+      put_status_fun(fn -> :ready end)
+
+      dir =
+        Path.join(
+          System.tmp_dir!(),
+          "symphony-cursor-ws-#{System.unique_integer([:positive])}"
+        )
+
+      File.mkdir_p!(dir)
+      on_exit(fn -> File.rm_rf(dir) end)
+
+      previous_wsl = System.get_env("WSL_DISTRO_NAME")
+      System.delete_env("WSL_DISTRO_NAME")
+      on_exit(fn -> restore_env("WSL_DISTRO_NAME", previous_wsl) end)
+
+      expected_url = "cursor://file/" <> URI.encode(Path.expand(dir))
+
+      assert Editor.workspace_path_cursor_desktop_target("macro-markets", dir) ==
+               {:ok, expected_url}
+    end
+
+    test "returns workspace_missing when path is absent" do
+      load_workflow_with_front_matter(editor_front_matter())
+      enable_editor!()
+      put_status_fun(fn -> :ready end)
+
+      missing_path =
+        Path.join(
+          System.tmp_dir!(),
+          "symphony-cursor-missing-#{System.unique_integer([:positive])}"
+        )
+
+      refute File.dir?(missing_path)
+
+      assert Editor.workspace_path_cursor_desktop_target("macro-markets", missing_path) ==
+               {:error, :workspace_missing}
+    end
+  end
+
   describe "cursor_desktop_target/2" do
     test "returns {:error, :workspace_missing} when the workspace is absent" do
       path = SymphonyElixir.Workspace.path_for_issue("MAC-EXISTS")

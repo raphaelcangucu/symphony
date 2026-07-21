@@ -154,6 +154,35 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadControllerTest do
            } = json_response(conn, 200)
   end
 
+  test "GET editor returns workspace_missing when the thread workspace path is empty" do
+    {:ok, thread} =
+      History.create_freeform_thread(%{
+        title: "Missing editor workspace",
+        workspace_path: System.tmp_dir!()
+      })
+
+    Ecto.Adapters.SQL.query!(
+      Repo,
+      "UPDATE assistant_threads SET workspace_path = '' WHERE id = ?",
+      [thread.id]
+    )
+
+    conn = get(authorize(), "/api/tracker/v1/assistant/threads/#{thread.id}/editor")
+
+    assert %{
+             "data" => %{
+               "available" => false,
+               "url" => nil,
+               "reason" => "workspace_missing",
+               "cursor_desktop" => %{
+                 "available" => false,
+                 "url" => nil,
+                 "reason" => "workspace_missing"
+               }
+             }
+           } = json_response(conn, 200)
+  end
+
   test "POST archive hides thread from list" do
     {:ok, thread} = History.create_freeform_thread(%{title: "Old", workspace_path: System.tmp_dir!()})
     id = thread.id
