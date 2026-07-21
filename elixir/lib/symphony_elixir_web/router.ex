@@ -136,6 +136,7 @@ defmodule SymphonyElixirWeb.Router do
     delete("/assistant/threads/:thread_id/contexts/:id", AttachedContextController, :delete_assistant)
     get("/assistant/threads/:thread_id/diff", WorkspaceDiffController, :thread)
     get("/assistant/threads/:thread_id/diff/stats", WorkspaceDiffController, :stats_thread)
+    get("/assistant/threads/:thread_id/diff/summaries", WorkspaceDiffController, :summaries_thread)
     get("/assistant/threads/:thread_id/diff/files", WorkspaceDiffController, :files_thread)
     get("/assistant/threads/:thread_id/diff/patch", WorkspaceDiffController, :file_patch_thread)
     post("/assistant/threads/:thread_id/diff/commit", WorkspaceDiffController, :commit_thread)

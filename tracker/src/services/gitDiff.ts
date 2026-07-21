@@ -340,6 +340,20 @@ export async function getGitDiffSummaries(
   };
 }
 
+export async function getThreadGitDiffSummaries(
+  threadId: number,
+  options?: GitDiffRequestOptions,
+): Promise<{ summaries: GitDiffRepoSummary[] }> {
+  const response = await http.get<BackendGitDiffSummariesEnvelope>(
+    trackerPath(`/assistant/threads/${encodeURIComponent(String(threadId))}/diff/summaries`),
+    { signal: options?.signal },
+  );
+
+  return {
+    summaries: (response.data?.data ?? []).map(normalizeRepoSummary),
+  };
+}
+
 export async function pushGitDiff(projectSlug: string, identifier: string): Promise<GitDiffPushResponse> {
   const slug = requireProjectSlug(projectSlug);
   const issueIdentifier = requireNonBlank(normalizeIssueIdentifier(identifier), "identifier");

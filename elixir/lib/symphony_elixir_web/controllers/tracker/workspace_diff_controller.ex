@@ -22,9 +22,7 @@ defmodule SymphonyElixirWeb.Tracker.WorkspaceDiffController do
     with {:ok, type} <- diff_type(Map.get(params, "type", "branch")),
          {:ok, workspace} <- issue_workspace(project_slug, identifier),
          {:ok, repos} <-
-           WorkspaceDiff.changes(workspace, type,
-             default_branches: Context.repo_default_branches(project_slug)
-           ) do
+           WorkspaceDiff.changes(workspace, type, default_branches: Context.repo_default_branches(project_slug)) do
       json(conn, %{data: repos, workspace: workspace_brief(workspace)})
     else
       {:error, reason} -> TrackerErrors.render(conn, reason)
@@ -157,6 +155,20 @@ defmodule SymphonyElixirWeb.Tracker.WorkspaceDiffController do
       })
     else
       {:error, reason} -> TrackerErrors.render(conn, reason)
+    end
+  end
+
+  @spec summaries_thread(Conn.t(), map()) :: Conn.t()
+  def summaries_thread(conn, %{"thread_id" => raw_id}) do
+    with {:ok, workspace} <- thread_workspace(raw_id),
+         {:ok, summaries} <- WorkspaceDiff.repo_summaries(workspace) do
+      json(conn, %{
+        data: Enum.map(summaries, &summary_json/1),
+        workspace: workspace_brief(workspace)
+      })
+    else
+      {:error, reason} -> TrackerErrors.render(conn, reason)
+      :no_workspace -> json(conn, %{data: [], workspace: workspace_brief(nil)})
     end
   end
 

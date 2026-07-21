@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { isAbortError } from "@/lib/httpAbort";
-import { getGitDiffSummaries } from "@/services/gitDiff";
+import { getGitDiffSummaries, getThreadGitDiffSummaries } from "@/services/gitDiff";
 import type { GitDiffRepoSummary } from "@/types/gitDiff";
 
 interface UseWorkspaceRepoSummariesArgs {
   projectSlug?: string;
   issueIdentifier?: string | null;
+  threadId?: number | null;
   enabled?: boolean;
 }
 
@@ -25,6 +26,7 @@ const EMPTY_SUMMARIES: GitDiffRepoSummary[] = [];
 export function useWorkspaceRepoSummaries({
   projectSlug,
   issueIdentifier,
+  threadId = null,
   enabled = true,
 }: UseWorkspaceRepoSummariesArgs): UseWorkspaceRepoSummariesResult {
   const [summaries, setSummaries] = useState<GitDiffRepoSummary[]>(EMPTY_SUMMARIES);
@@ -37,7 +39,7 @@ export function useWorkspaceRepoSummaries({
   }, []);
 
   useEffect(() => {
-    if (!enabled || !projectSlug || !issueIdentifier) {
+    if (!enabled || (!threadId && (!projectSlug || !issueIdentifier))) {
       setSummaries(EMPTY_SUMMARIES);
       setLoading(false);
       setError(null);
@@ -46,6 +48,7 @@ export function useWorkspaceRepoSummaries({
 
     const resolvedProjectSlug = projectSlug;
     const resolvedIssueIdentifier = issueIdentifier;
+    const resolvedThreadId = threadId;
     const controller = new AbortController();
 
     async function load() {
@@ -53,9 +56,11 @@ export function useWorkspaceRepoSummaries({
       setError(null);
 
       try {
-        const result = await getGitDiffSummaries(resolvedProjectSlug, resolvedIssueIdentifier, {
-          signal: controller.signal,
-        });
+        const result = resolvedThreadId
+          ? await getThreadGitDiffSummaries(resolvedThreadId, { signal: controller.signal })
+          : await getGitDiffSummaries(resolvedProjectSlug ?? "", resolvedIssueIdentifier ?? "", {
+              signal: controller.signal,
+            });
         setSummaries(result.summaries);
       } catch (cause) {
         if (isAbortError(cause)) return;
@@ -71,7 +76,7 @@ export function useWorkspaceRepoSummaries({
     return () => {
       controller.abort();
     };
-  }, [enabled, issueIdentifier, projectSlug, requestVersion]);
+  }, [enabled, issueIdentifier, projectSlug, requestVersion, threadId]);
 
   return useMemo(() => {
     const localBranch =

@@ -13,6 +13,7 @@ import {
   getThreadGitDiffFiles,
   getThreadGitDiffPatch,
   getThreadGitDiffStats,
+  getThreadGitDiffSummaries,
   pushGitDiff,
 } from "@/services/gitDiff";
 import { http } from "@/services/http";
@@ -329,7 +330,9 @@ describe("getGitDiffSummaries", () => {
 
     const result = await getGitDiffSummaries("demo", "ABC-1");
 
-    expect(http.get).toHaveBeenCalledWith("/api/tracker/v1/projects/demo/issues/ABC-1/diff/summaries");
+    expect(http.get).toHaveBeenCalledWith("/api/tracker/v1/projects/demo/issues/ABC-1/diff/summaries", {
+      signal: undefined,
+    });
     expect(result).toEqual({
       summaries: [
         { repo: "frontend", branch: "feat/x", aheadCount: 2, dirty: true },
@@ -352,6 +355,23 @@ describe("getGitDiffSummaries", () => {
       aheadCount: 0,
       dirty: false,
     });
+  });
+
+  it("loads a thread's repository summaries", async () => {
+    vi.mocked(http.get).mockResolvedValue({
+      data: {
+        data: [{ repo: "frontend", branch: "feat/x", ahead_count: 2, dirty: true }],
+        workspace: { path: "/tmp/thread", available: true },
+      },
+    });
+
+    const controller = new AbortController();
+    const result = await getThreadGitDiffSummaries(42, { signal: controller.signal });
+
+    expect(http.get).toHaveBeenCalledWith("/api/tracker/v1/assistant/threads/42/diff/summaries", {
+      signal: controller.signal,
+    });
+    expect(result.summaries).toEqual([{ repo: "frontend", branch: "feat/x", aheadCount: 2, dirty: true }]);
   });
 });
 

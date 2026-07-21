@@ -256,6 +256,53 @@ defmodule SymphonyElixirWeb.Tracker.WorkspaceDiffControllerTest do
     assert is_integer(ahead_count)
   end
 
+  test "summaries_thread returns repo summaries for thread workspace", %{issue: issue, workspace: workspace} do
+    {:ok, thread} =
+      History.ensure_issue_thread("advising", issue.identifier, %{workspace_path: workspace})
+
+    conn =
+      get(
+        authorized_conn(),
+        "/api/tracker/v1/assistant/threads/#{thread.id}/diff/summaries"
+      )
+
+    assert %{
+             "data" => [
+               %{
+                 "repo" => "advising",
+                 "branch" => branch,
+                 "ahead_count" => ahead_count,
+                 "dirty" => true
+               }
+             ],
+             "workspace" => %{"path" => ^workspace, "available" => true}
+           } = json_response(conn, 200)
+
+    assert is_binary(branch)
+    assert is_integer(ahead_count)
+  end
+
+  test "summaries_thread returns empty data when thread has no workspace" do
+    thread =
+      Repo.insert!(%SymphonyElixir.Assistant.Thread{
+        scope: "freeform",
+        title: "Workspace-less thread",
+        workspace_path: "",
+        status: "active"
+      })
+
+    conn =
+      get(
+        authorized_conn(),
+        "/api/tracker/v1/assistant/threads/#{thread.id}/diff/summaries"
+      )
+
+    assert %{
+             "data" => [],
+             "workspace" => %{"path" => "", "available" => false}
+           } = json_response(conn, 200)
+  end
+
   test "push returns no results when no workspace branch is ahead", %{issue: issue} do
     conn =
       post(
