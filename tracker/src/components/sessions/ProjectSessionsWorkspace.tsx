@@ -1029,11 +1029,9 @@ export function ProjectSessionsWorkspace({
         />
       ) : null}
 
-      {environmentDockScope?.kind === "issue" ? (
+      {environmentDockScope ? (
         <IssueEnvironmentDock
-          projectSlug={projectSlug}
-          issueIdentifier={environmentDockScope.issueIdentifier}
-          view={view}
+          scope={environmentDockScope}
           splitContainerRef={splitContainerRef}
           onClose={closeEnvironmentDock}
         />

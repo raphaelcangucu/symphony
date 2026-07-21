@@ -7,61 +7,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { IssueEnvironmentDock } from "@/components/sessions/IssueEnvironmentDock";
 import { initTestI18n } from "@/i18n/testUtils";
 
-vi.mock("@/hooks/useWorkspaceDiffStats", () => ({
-  useWorkspaceDiffStats: () => ({ additions: 12, deletions: 4 }),
-}));
-
-vi.mock("@/hooks/useWorkspaceRepoSummaries", () => ({
-  useWorkspaceRepoSummaries: () => ({
-    localBranch: "feature/local-work",
-    aheadCount: 2,
-    dirty: true,
-    summaries: [],
-    loading: false,
-    error: null,
-    refetch: vi.fn(),
-  }),
-}));
-
-vi.mock("@/hooks/useIssuePullRequests", () => ({
-  useIssuePullRequests: () => ({
-    pullRequests: [
-      {
-        number: 42,
-        title: "Add Ambiente branches",
-        url: "https://github.com/example/symphony/pull/42",
-        state: "open",
-        repo: "example/symphony",
-        origin: "auto",
-        rawState: "OPEN",
-        isDraft: false,
-        merged: false,
-        headRef: "feature/local-work",
-        baseRef: "main",
-        author: null,
-        createdAt: null,
-        updatedAt: null,
-        mergedAt: null,
-        mergeable: null,
-        checksState: null,
-        pipelines: [],
-        statuses: [],
-        conversation: [],
-        baseBehindBy: null,
-        monitor: null,
-      },
-    ],
-    children: [],
-    supported: true,
-    available: true,
-    loading: false,
-    error: null,
-    refetch: vi.fn(),
-  }),
-}));
-
-vi.mock("@/hooks/useIssueCommitEvidence", () => ({
-  useIssueCommitEvidence: () => ({
+const mocks = vi.hoisted(() => ({
+  getIssue: vi.fn().mockResolvedValue({ branchName: "issue/510-ambiente" }),
+  useIssueCommitEvidence: vi.fn(() => ({
     commits: [
       {
         repo: "symphony",
@@ -96,11 +44,71 @@ vi.mock("@/hooks/useIssueCommitEvidence", () => ({
     error: null,
     loadMore: vi.fn(),
     refetch: vi.fn(),
-  }),
+  })),
+  useIssuePullRequests: vi.fn(() => ({
+    pullRequests: [
+      {
+        number: 42,
+        title: "Add Ambiente branches",
+        url: "https://github.com/example/symphony/pull/42",
+        state: "open",
+        repo: "example/symphony",
+        origin: "auto",
+        rawState: "OPEN",
+        isDraft: false,
+        merged: false,
+        headRef: "feature/local-work",
+        baseRef: "main",
+        author: null,
+        createdAt: null,
+        updatedAt: null,
+        mergedAt: null,
+        mergeable: null,
+        checksState: null,
+        pipelines: [],
+        statuses: [],
+        conversation: [],
+        baseBehindBy: null,
+        monitor: null,
+      },
+    ],
+    children: [],
+    supported: true,
+    available: true,
+    loading: false,
+    error: null,
+    refetch: vi.fn(),
+  })),
+  useWorkspaceDiffStats: vi.fn(() => ({ additions: 12, deletions: 4 })),
+  useWorkspaceRepoSummaries: vi.fn(() => ({
+    localBranch: "feature/local-work",
+    aheadCount: 2,
+    dirty: true,
+    summaries: [],
+    loading: false,
+    error: null,
+    refetch: vi.fn(),
+  })),
+}));
+
+vi.mock("@/hooks/useWorkspaceDiffStats", () => ({
+  useWorkspaceDiffStats: mocks.useWorkspaceDiffStats,
+}));
+
+vi.mock("@/hooks/useWorkspaceRepoSummaries", () => ({
+  useWorkspaceRepoSummaries: mocks.useWorkspaceRepoSummaries,
+}));
+
+vi.mock("@/hooks/useIssuePullRequests", () => ({
+  useIssuePullRequests: mocks.useIssuePullRequests,
+}));
+
+vi.mock("@/hooks/useIssueCommitEvidence", () => ({
+  useIssueCommitEvidence: mocks.useIssueCommitEvidence,
 }));
 
 vi.mock("@/services/issues", () => ({
-  getIssue: vi.fn().mockResolvedValue({ branchName: "issue/510-ambiente" }),
+  getIssue: mocks.getIssue,
 }));
 
 vi.mock("@/hooks/useHorizontalPanelResize", () => ({
@@ -130,7 +138,45 @@ vi.mock("@/components/issues/issue-detail/git-diff/GitDiffLauncher", () => ({
 
 describe("IssueEnvironmentDock", () => {
   beforeEach(async () => {
+    vi.clearAllMocks();
     await initTestI18n("en");
+  });
+
+  it("renders thread workspace branch and diff without issue evidence", () => {
+    const containerRef = createRef<HTMLDivElement>();
+
+    render(
+      <MemoryRouter>
+        <div ref={containerRef}>
+          <IssueEnvironmentDock
+            scope={{
+              kind: "thread",
+              projectSlug: "macro-markets",
+              threadId: 77,
+              workspacePath: "/tmp/thread-77",
+            }}
+            splitContainerRef={containerRef}
+            onClose={vi.fn()}
+          />
+        </div>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("+12")).toBeInTheDocument();
+    expect(screen.getByText("−4")).toBeInTheDocument();
+    expect(screen.getByText("feature/local-work")).toBeInTheDocument();
+    expect(screen.queryByText("Linked PRs")).not.toBeInTheDocument();
+    expect(screen.queryByText("#42")).not.toBeInTheDocument();
+    expect(screen.queryByText("feat: dock commits")).not.toBeInTheDocument();
+    expect(mocks.useWorkspaceDiffStats).toHaveBeenCalledWith(
+      expect.objectContaining({ threadId: 77 }),
+    );
+    expect(mocks.useWorkspaceRepoSummaries).toHaveBeenCalledWith(
+      expect.objectContaining({ threadId: 77 }),
+    );
+    expect(mocks.getIssue).not.toHaveBeenCalled();
+    expect(mocks.useIssuePullRequests).not.toHaveBeenCalled();
+    expect(mocks.useIssueCommitEvidence).not.toHaveBeenCalled();
   });
 
   it("renders changes, sources, and closes from the header", async () => {
@@ -142,9 +188,11 @@ describe("IssueEnvironmentDock", () => {
       <MemoryRouter>
         <div ref={containerRef}>
           <IssueEnvironmentDock
-            projectSlug="macro-markets"
-            issueIdentifier="510"
-            view="board"
+            scope={{
+              kind: "issue",
+              projectSlug: "macro-markets",
+              issueIdentifier: "510",
+            }}
             splitContainerRef={containerRef}
             onClose={onClose}
           />
@@ -178,9 +226,11 @@ describe("IssueEnvironmentDock", () => {
       <MemoryRouter>
         <div ref={containerRef}>
           <IssueEnvironmentDock
-            projectSlug="macro-markets"
-            issueIdentifier="510"
-            view="board"
+            scope={{
+              kind: "issue",
+              projectSlug: "macro-markets",
+              issueIdentifier: "510",
+            }}
             splitContainerRef={containerRef}
             onClose={vi.fn()}
           />
@@ -201,9 +251,11 @@ describe("IssueEnvironmentDock", () => {
       <MemoryRouter>
         <div ref={containerRef}>
           <IssueEnvironmentDock
-            projectSlug="macro-markets"
-            issueIdentifier="510"
-            view="board"
+            scope={{
+              kind: "issue",
+              projectSlug: "macro-markets",
+              issueIdentifier: "510",
+            }}
             splitContainerRef={containerRef}
             onClose={vi.fn()}
           />

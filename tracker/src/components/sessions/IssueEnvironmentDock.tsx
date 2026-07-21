@@ -11,7 +11,7 @@ import { useIssuePullRequests } from "@/hooks/useIssuePullRequests";
 import { useWorkspaceDiffStats } from "@/hooks/useWorkspaceDiffStats";
 import { useWorkspaceRepoSummaries } from "@/hooks/useWorkspaceRepoSummaries";
 import { cn } from "@/lib/utils";
-import type { WorkspaceView } from "@/lib/workspaceRoutes";
+import type { WorkspaceScope } from "@/lib/workspaceScope";
 import { getIssue } from "@/services/issues";
 
 const ENVIRONMENT_DOCK_WIDTH_STORAGE_KEY = "symphony:issue-environment-dock-width";
@@ -20,43 +20,33 @@ const ENVIRONMENT_DOCK_MIN_WIDTH = 240;
 const RECENT_COMMITS_LIMIT = 3;
 
 interface IssueEnvironmentDockProps {
-  projectSlug: string;
-  issueIdentifier: string;
-  view: WorkspaceView;
+  scope: WorkspaceScope;
   splitContainerRef: RefObject<HTMLDivElement | null>;
   onClose: () => void;
 }
 
 export function IssueEnvironmentDock({
-  projectSlug,
-  issueIdentifier,
+  scope,
   splitContainerRef,
   onClose,
 }: IssueEnvironmentDockProps) {
   const { t } = useTranslation();
   const [compareRequestId, setCompareRequestId] = useState(0);
   const [commitRequestId, setCommitRequestId] = useState(0);
-  const [issueBranch, setIssueBranch] = useState<string | null>(null);
+  const projectSlug = scope.projectSlug;
+  const issueIdentifier = scope.kind === "issue" ? scope.issueIdentifier : null;
+  const threadId = scope.threadId ?? null;
   const diffStats = useWorkspaceDiffStats({
-    projectSlug,
-    issueIdentifier,
+    ...(scope.kind === "thread"
+      ? { threadId: scope.threadId }
+      : { projectSlug, issueIdentifier, threadId }),
     enabled: true,
   });
   const workspaceSummaries = useWorkspaceRepoSummaries({
-    projectSlug,
-    issueIdentifier,
+    ...(scope.kind === "thread"
+      ? { threadId: scope.threadId }
+      : { projectSlug, issueIdentifier, threadId }),
     enabled: true,
-  });
-  const pullRequestResult = useIssuePullRequests({
-    projectSlug,
-    identifier: issueIdentifier,
-    enabled: true,
-  });
-  const recentCommits = useIssueCommitEvidence({
-    projectSlug,
-    identifier: issueIdentifier,
-    enabled: true,
-    limit: RECENT_COMMITS_LIMIT,
   });
   const { width, isResizing, onResizePointerDown, onResizePointerUp } = useHorizontalPanelResize({
     containerRef: splitContainerRef,
@@ -64,23 +54,6 @@ export function IssueEnvironmentDock({
     defaultWidth: ENVIRONMENT_DOCK_DEFAULT_WIDTH,
     minWidth: ENVIRONMENT_DOCK_MIN_WIDTH,
   });
-
-  useEffect(() => {
-    let current = true;
-    setIssueBranch(null);
-
-    void getIssue(projectSlug, issueIdentifier)
-      .then((issue) => {
-        if (current) setIssueBranch(issue.branchName);
-      })
-      .catch(() => {
-        if (current) setIssueBranch(null);
-      });
-
-    return () => {
-      current = false;
-    };
-  }, [issueIdentifier, projectSlug]);
 
   const openCompare = useCallback(() => {
     setCompareRequestId((current) => current + 1);
@@ -92,16 +65,6 @@ export function IssueEnvironmentDock({
 
   const additions = diffStats?.additions ?? 0;
   const deletions = diffStats?.deletions ?? 0;
-  const linkedPullRequests = useMemo(() => {
-    const ownUrls = new Set(
-      pullRequestResult.pullRequests.map((pullRequest) => pullRequest.url).filter((url): url is string => Boolean(url)),
-    );
-    const childPullRequests = pullRequestResult.children
-      .flatMap((group) => group.pullRequests)
-      .filter((pullRequest) => !pullRequest.url || !ownUrls.has(pullRequest.url));
-
-    return [...pullRequestResult.pullRequests, ...childPullRequests];
-  }, [pullRequestResult.children, pullRequestResult.pullRequests]);
   const localBranch = workspaceSummaries.localBranch;
 
   return (
@@ -162,105 +125,26 @@ export function IssueEnvironmentDock({
             <span className="truncate">{t("assistant.environment.local")}</span>
           </div>
 
-          {localBranch || issueBranch ? (
-            <div className="flex flex-col gap-1.5 text-xs text-muted-foreground">
-              {localBranch ? (
-                <div className="flex items-center gap-1.5">
-                  <GitBranch className="h-3.5 w-3.5 shrink-0" />
-                  <span className="shrink-0">{t("assistant.environment.localBranch")}</span>
-                  <span className="truncate font-mono" title={localBranch}>
-                    {localBranch}
-                  </span>
-                </div>
-              ) : null}
-              {issueBranch ? (
-                <div className="flex items-center gap-1.5">
-                  <GitBranch className="h-3.5 w-3.5 shrink-0" />
-                  <span className="shrink-0">{t("assistant.environment.issueBranch")}</span>
-                  <span className="truncate font-mono" title={issueBranch}>
-                    {issueBranch}
-                  </span>
-                </div>
-              ) : null}
+          {localBranch ? (
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <GitBranch className="h-3.5 w-3.5 shrink-0" />
+              <span className="shrink-0">{t("assistant.environment.localBranch")}</span>
+              <span className="truncate font-mono" title={localBranch}>
+                {localBranch}
+              </span>
             </div>
           ) : null}
 
-          <div className="flex flex-col gap-1.5">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="justify-start gap-2"
-              aria-label={t("assistant.environment.commitPush")}
-              onClick={openCommitPush}
-            >
-              <GitCommitHorizontal className="h-3.5 w-3.5 shrink-0" />
-              <span className="truncate">{t("assistant.environment.commitPush")}</span>
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="justify-start gap-2"
-              aria-label={t("assistant.environment.compare")}
-              onClick={openCompare}
-            >
-              <GitCompare className="h-3.5 w-3.5 shrink-0" />
-              <span className="truncate">{t("assistant.environment.compare")}</span>
-            </Button>
-          </div>
-
-          {recentCommits.commits.length > 0 ? (
-            <div className="flex flex-col gap-1.5 border-t border-border/60 pt-2">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                {t("assistant.environment.commits")}
-              </p>
-              <div className="flex flex-col gap-1">
-                {recentCommits.commits.slice(0, RECENT_COMMITS_LIMIT).map((commit) => (
-                  <button
-                    key={`${commit.repo}:${commit.sha}`}
-                    type="button"
-                    className="flex w-full flex-col gap-0.5 rounded-md px-1.5 py-1 text-left hover:bg-muted/50"
-                    onClick={openCompare}
-                    title={commit.message}
-                  >
-                    <span className="truncate text-xs font-medium">{commit.message}</span>
-                    <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-                      <span className="font-mono">{commit.shortSha}</span>
-                      <span
-                        className={cn(
-                          "rounded px-1 py-px font-medium",
-                          commit.online
-                            ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
-                            : "bg-muted text-muted-foreground",
-                        )}
-                      >
-                        {commit.online
-                          ? t("issue.commits.online")
-                          : t("issue.commits.local")}
-                      </span>
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : null}
-
-          {linkedPullRequests.length > 0 ? (
-            <div className="flex flex-col gap-1.5 border-t border-border/60 pt-2">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                {t("assistant.environment.linkedPullRequests")}
-              </p>
-              <div className="flex flex-wrap gap-1.5">
-                {linkedPullRequests.map((pullRequest) => (
-                  <PullRequestLink
-                    key={pullRequest.url ?? `${pullRequest.repo}#${pullRequest.number}`}
-                    pullRequest={pullRequest}
-                  />
-                ))}
-              </div>
-            </div>
-          ) : null}
+          {scope.kind === "issue" ? (
+            <IssueEnvironmentEvidence
+              projectSlug={projectSlug}
+              issueIdentifier={scope.issueIdentifier}
+              onCommitPush={openCommitPush}
+              onCompare={openCompare}
+            />
+          ) : (
+            <EnvironmentActions onCommitPush={openCommitPush} onCompare={openCompare} />
+          )}
 
           <div className="flex flex-col gap-1 border-t border-border/60 pt-2">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
@@ -276,11 +160,171 @@ export function IssueEnvironmentDock({
       <GitDiffLauncher
         projectSlug={projectSlug}
         identifier={issueIdentifier}
+        threadId={threadId}
         openRequestId={compareRequestId}
         openCommitDialogRequestId={commitRequestId}
         showTrigger={false}
       />
     </aside>
+  );
+}
+
+function EnvironmentActions({
+  onCommitPush,
+  onCompare,
+}: {
+  onCommitPush: () => void;
+  onCompare: () => void;
+}) {
+  const { t } = useTranslation();
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="justify-start gap-2"
+        aria-label={t("assistant.environment.commitPush")}
+        onClick={onCommitPush}
+      >
+        <GitCommitHorizontal className="h-3.5 w-3.5 shrink-0" />
+        <span className="truncate">{t("assistant.environment.commitPush")}</span>
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="justify-start gap-2"
+        aria-label={t("assistant.environment.compare")}
+        onClick={onCompare}
+      >
+        <GitCompare className="h-3.5 w-3.5 shrink-0" />
+        <span className="truncate">{t("assistant.environment.compare")}</span>
+      </Button>
+    </div>
+  );
+}
+
+function IssueEnvironmentEvidence({
+  projectSlug,
+  issueIdentifier,
+  onCommitPush,
+  onCompare,
+}: {
+  projectSlug: string;
+  issueIdentifier: string;
+  onCommitPush: () => void;
+  onCompare: () => void;
+}) {
+  const { t } = useTranslation();
+  const [issueBranch, setIssueBranch] = useState<string | null>(null);
+  const pullRequestResult = useIssuePullRequests({
+    projectSlug,
+    identifier: issueIdentifier,
+    enabled: true,
+  });
+  const recentCommits = useIssueCommitEvidence({
+    projectSlug,
+    identifier: issueIdentifier,
+    enabled: true,
+    limit: RECENT_COMMITS_LIMIT,
+  });
+
+  useEffect(() => {
+    let current = true;
+    setIssueBranch(null);
+
+    void getIssue(projectSlug, issueIdentifier)
+      .then((issue) => {
+        if (current) setIssueBranch(issue.branchName);
+      })
+      .catch(() => {
+        if (current) setIssueBranch(null);
+      });
+
+    return () => {
+      current = false;
+    };
+  }, [issueIdentifier, projectSlug]);
+
+  const linkedPullRequests = useMemo(() => {
+    const ownUrls = new Set(
+      pullRequestResult.pullRequests
+        .map((pullRequest) => pullRequest.url)
+        .filter((url): url is string => Boolean(url)),
+    );
+    const childPullRequests = pullRequestResult.children
+      .flatMap((group) => group.pullRequests)
+      .filter((pullRequest) => !pullRequest.url || !ownUrls.has(pullRequest.url));
+
+    return [...pullRequestResult.pullRequests, ...childPullRequests];
+  }, [pullRequestResult.children, pullRequestResult.pullRequests]);
+
+  return (
+    <>
+      {issueBranch ? (
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <GitBranch className="h-3.5 w-3.5 shrink-0" />
+          <span className="shrink-0">{t("assistant.environment.issueBranch")}</span>
+          <span className="truncate font-mono" title={issueBranch}>
+            {issueBranch}
+          </span>
+        </div>
+      ) : null}
+
+      <EnvironmentActions onCommitPush={onCommitPush} onCompare={onCompare} />
+
+      {recentCommits.commits.length > 0 ? (
+        <div className="flex flex-col gap-1.5 border-t border-border/60 pt-2">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            {t("assistant.environment.commits")}
+          </p>
+          <div className="flex flex-col gap-1">
+            {recentCommits.commits.slice(0, RECENT_COMMITS_LIMIT).map((commit) => (
+              <button
+                key={`${commit.repo}:${commit.sha}`}
+                type="button"
+                className="flex w-full flex-col gap-0.5 rounded-md px-1.5 py-1 text-left hover:bg-muted/50"
+                onClick={onCompare}
+                title={commit.message}
+              >
+                <span className="truncate text-xs font-medium">{commit.message}</span>
+                <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                  <span className="font-mono">{commit.shortSha}</span>
+                  <span
+                    className={cn(
+                      "rounded px-1 py-px font-medium",
+                      commit.online
+                        ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
+                        : "bg-muted text-muted-foreground",
+                    )}
+                  >
+                    {commit.online ? t("issue.commits.online") : t("issue.commits.local")}
+                  </span>
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {linkedPullRequests.length > 0 ? (
+        <div className="flex flex-col gap-1.5 border-t border-border/60 pt-2">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            {t("assistant.environment.linkedPullRequests")}
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {linkedPullRequests.map((pullRequest) => (
+              <PullRequestLink
+                key={pullRequest.url ?? `${pullRequest.repo}#${pullRequest.number}`}
+                pullRequest={pullRequest}
+              />
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </>
   );
 }
 
