@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -15,6 +15,9 @@ vi.mock("@/hooks/useWorkspaceDiffStats", () => ({
   useWorkspaceDiffStats: () => ({ additions: 12, deletions: 3 }),
 }));
 
+const knowledgeBaseControlChangeMock = vi.hoisted(() => vi.fn());
+const openKnowledgeBaseMock = vi.hoisted(() => vi.fn());
+
 vi.mock("@/components/assistant/ProjectAssistantPanel", () => ({
   ProjectAssistantPanel: ({
     diffRequestId,
@@ -24,14 +27,17 @@ vi.mock("@/components/assistant/ProjectAssistantPanel", () => ({
     diffRequestId?: number;
     executionMode?: boolean;
     onKnowledgeBaseControlChange?: unknown;
-  }) => (
-    <div
-      data-testid={executionMode ? "execution-session-panel" : "assistant-panel"}
-      data-diff-request-id={diffRequestId ?? 0}
-      data-execution-mode={executionMode ? "true" : "false"}
-      data-has-kb-control={onKnowledgeBaseControlChange ? "true" : "false"}
-    />
-  ),
+  }) => {
+    knowledgeBaseControlChangeMock(onKnowledgeBaseControlChange);
+    return (
+      <div
+        data-testid={executionMode ? "execution-session-panel" : "assistant-panel"}
+        data-diff-request-id={diffRequestId ?? 0}
+        data-execution-mode={executionMode ? "true" : "false"}
+        data-has-kb-control={onKnowledgeBaseControlChange ? "true" : "false"}
+      />
+    );
+  },
 }));
 
 const useIssueEditorMock = vi.hoisted(() => vi.fn());
@@ -59,6 +65,8 @@ describe("AssistantSessionTabContent", () => {
     useIssueEditorMock.mockReset();
     useIssueEditorMock.mockReturnValue(availableEditor);
     getAssistantThreadMock.mockReset();
+    knowledgeBaseControlChangeMock.mockReset();
+    openKnowledgeBaseMock.mockReset();
     getAssistantThreadMock.mockResolvedValue({
       id: 7996,
       scope: "issue_session",
@@ -138,6 +146,19 @@ describe("AssistantSessionTabContent", () => {
       enabled: true,
     });
     expect(screen.getByTestId("assistant-panel")).toHaveAttribute("data-has-kb-control", "true");
+
+    const reportKnowledgeBaseControl = knowledgeBaseControlChangeMock.mock.lastCall?.[0] as
+      | ((control: { open: () => void; changedDocCount: number }) => void)
+      | undefined;
+    expect(reportKnowledgeBaseControl).toBeTypeOf("function");
+    act(() => {
+      reportKnowledgeBaseControl?.({
+        open: openKnowledgeBaseMock,
+        changedDocCount: 0,
+      });
+    });
+    await user.click(screen.getByRole("button", { name: "Documents" }));
+    expect(openKnowledgeBaseMock).toHaveBeenCalledOnce();
 
     const scope = threadWorkspaceScope(
       "macro-markets",

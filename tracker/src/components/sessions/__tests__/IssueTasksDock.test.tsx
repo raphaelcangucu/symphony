@@ -16,6 +16,7 @@ import {
 import { initTestI18n } from "@/i18n/testUtils";
 import {
   issueWorkspaceScope,
+  threadWorkspaceScope,
   workspaceScopesEqual,
   type WorkspaceScope,
 } from "@/lib/workspaceScope";
@@ -58,6 +59,11 @@ const toolItems: AssistantToolCall[] = [
 
 const EMPTY_TOOLS: AssistantToolCall[] = [];
 const ISSUE_SCOPE = issueWorkspaceScope("macro-markets", "510");
+const THREAD_SCOPE = threadWorkspaceScope(
+  "macro-markets",
+  8076,
+  "/workspaces/macro-markets/flaky-pipe",
+);
 
 function FeedPublisher({
   tasks,
@@ -164,5 +170,26 @@ describe("IssueTasksDock", () => {
     );
 
     expect(screen.getByText("No agent tasks for this session yet.")).toBeInTheDocument();
+  });
+
+  it("identifies a thread-scoped dock by its workspace label", () => {
+    const splitContainerRef = createRef<HTMLDivElement>();
+
+    render(
+      <SessionTasksDockFeedProvider>
+        <div ref={splitContainerRef}>
+          <IssueTasksDock
+            scope={THREAD_SCOPE}
+            splitContainerRef={splitContainerRef}
+            fullscreen={false}
+            onToggleFullscreen={vi.fn()}
+            onClose={vi.fn()}
+          />
+        </div>
+      </SessionTasksDockFeedProvider>,
+    );
+
+    expect(screen.getByTestId("tasks-dock")).toHaveAccessibleName("Tasks for flaky-pipe");
+    expect(screen.getByText("flaky-pipe")).toBeInTheDocument();
   });
 });

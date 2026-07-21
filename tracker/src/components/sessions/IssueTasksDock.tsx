@@ -92,6 +92,7 @@ export function IssueTasksDock({
           <div className="flex min-w-0 items-center gap-2">
             <ListChecks className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
             <span className="truncate text-sm font-medium">{t("workspace.tasks.title")}</span>
+            <span className="truncate text-xs text-muted-foreground">{scopeLabel}</span>
             {total > 0 ? (
               <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
                 {t("issue.tasks.progress", { done, total })}
