@@ -54,4 +54,34 @@ describe("useIssueEditor", () => {
     await waitFor(() => expect(result.current.browser.reason).toBe("workspace_missing"));
     expect(result.current.browser.available).toBe(false);
   });
+
+  it("prefers the thread editor target when threadId is set", async () => {
+    const issueSpy = vi.spyOn(editorService, "fetchEditorTargets");
+    const threadSpy = vi.spyOn(editorService, "fetchThreadEditorTargets").mockResolvedValue({
+      browser: {
+        available: true,
+        url: "https://editor.example.com/?folder=%2Ftmp%2Fthread-42",
+        reason: null,
+      },
+      cursorDesktop: {
+        available: true,
+        url: "cursor://file//tmp/thread-42",
+        reason: null,
+      },
+    });
+
+    const { result } = renderHook(() =>
+      useIssueEditor({
+        projectSlug: "macro-markets",
+        identifier: "MAC-1",
+        threadId: 42,
+        enabled: true,
+      }),
+    );
+
+    await waitFor(() => expect(result.current.browser.available).toBe(true));
+    expect(threadSpy).toHaveBeenCalledWith(42);
+    expect(issueSpy).not.toHaveBeenCalled();
+    expect(result.current.cursorDesktop.url).toBe("cursor://file//tmp/thread-42");
+  });
 });

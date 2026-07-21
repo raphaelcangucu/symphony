@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { buildCursorUrlFromCodeServerUrl, fetchProjectEditorTargets } from "@/services/editor";
+import {
+  buildCursorUrlFromCodeServerUrl,
+  fetchProjectEditorTargets,
+  fetchThreadEditorTargets,
+} from "@/services/editor";
 import { http } from "@/services/http";
 
 describe("buildCursorUrlFromCodeServerUrl", () => {
@@ -40,5 +44,36 @@ describe("buildCursorUrlFromCodeServerUrl", () => {
       cursorDesktop: { available: true, url: "cursor://file//tmp/macro-markets", reason: null },
     });
     expect(http.get).toHaveBeenCalledWith("/api/tracker/v1/projects/macro-markets/editor");
+  });
+
+  it("fetches thread-level editor targets", async () => {
+    vi.spyOn(http, "get").mockResolvedValueOnce({
+      data: {
+        data: {
+          available: true,
+          url: "https://editor.example.com/?folder=%2Ftmp%2Fthread-42",
+          reason: null,
+          cursor_desktop: {
+            available: true,
+            url: "cursor://file//tmp/thread-42",
+            reason: null,
+          },
+        },
+      },
+    });
+
+    await expect(fetchThreadEditorTargets(42)).resolves.toEqual({
+      browser: {
+        available: true,
+        url: "https://editor.example.com/?folder=%2Ftmp%2Fthread-42",
+        reason: null,
+      },
+      cursorDesktop: {
+        available: true,
+        url: "cursor://file//tmp/thread-42",
+        reason: null,
+      },
+    });
+    expect(http.get).toHaveBeenCalledWith("/api/tracker/v1/assistant/threads/42/editor");
   });
 });

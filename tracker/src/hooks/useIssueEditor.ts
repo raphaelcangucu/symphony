@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useWindowFocus } from "@/hooks/useWindowFocus";
 import {
   fetchEditorTargets,
+  fetchThreadEditorTargets,
   type EditorReason,
   type EditorTarget,
   type EditorTargets,
@@ -13,7 +14,8 @@ const TARGET_CACHE_TTL_MS = 30_000;
 
 interface UseIssueEditorArgs {
   projectSlug: string;
-  identifier: string | null;
+  identifier?: string | null;
+  threadId?: number | null;
   enabled?: boolean;
 }
 
@@ -32,22 +34,18 @@ type CacheEntry = { targets: EditorTargets; at: number };
 
 const targetCache = new Map<string, CacheEntry>();
 
-function cacheKey(projectSlug: string, identifier: string): string {
-  return `${projectSlug}\0${identifier}`;
-}
-
-function readCache(projectSlug: string, identifier: string): EditorTargets | null {
-  const entry = targetCache.get(cacheKey(projectSlug, identifier));
+function readCache(key: string): EditorTargets | null {
+  const entry = targetCache.get(key);
   if (!entry) return null;
   if (Date.now() - entry.at > TARGET_CACHE_TTL_MS) {
-    targetCache.delete(cacheKey(projectSlug, identifier));
+    targetCache.delete(key);
     return null;
   }
   return entry.targets;
 }
 
-function writeCache(projectSlug: string, identifier: string, targets: EditorTargets): void {
-  targetCache.set(cacheKey(projectSlug, identifier), { targets, at: Date.now() });
+function writeCache(key: string, targets: EditorTargets): void {
+  targetCache.set(key, { targets, at: Date.now() });
 }
 
 /** @internal test helper */
@@ -55,7 +53,12 @@ export function clearIssueEditorTargetCache(): void {
   targetCache.clear();
 }
 
-export function useIssueEditor({ projectSlug, identifier, enabled = true }: UseIssueEditorArgs): UseIssueEditorResult {
+export function useIssueEditor({
+  projectSlug,
+  identifier,
+  threadId,
+  enabled = true,
+}: UseIssueEditorArgs): UseIssueEditorResult {
   const [browser, setBrowser] = useState(EMPTY_TARGET);
   const [cursorDesktop, setCursorDesktop] = useState(EMPTY_TARGET);
   const [loading, setLoading] = useState(false);
@@ -64,13 +67,24 @@ export function useIssueEditor({ projectSlug, identifier, enabled = true }: UseI
   const focusedRef = useRef(focused);
   focusedRef.current = focused;
 
-  const active = enabled && Boolean(identifier && projectSlug);
+  const normalizedIdentifier = identifier?.trim() || null;
+  const threadRequested = threadId != null;
+  const validThreadId =
+    threadRequested && Number.isInteger(threadId) && threadId > 0 ? threadId : null;
+  const requestCacheKey = threadRequested
+    ? validThreadId
+      ? `thread\0${validThreadId}`
+      : null
+    : normalizedIdentifier && projectSlug
+      ? `issue\0${projectSlug}\0${normalizedIdentifier}`
+      : null;
+  const active = enabled && requestCacheKey !== null;
 
   const refetch = useCallback(async (opts?: { force?: boolean }) => {
-    if (!identifier || !projectSlug || inFlightRef.current) return;
+    if (!requestCacheKey || inFlightRef.current) return;
 
     if (!opts?.force) {
-      const cached = readCache(projectSlug, identifier);
+      const cached = readCache(requestCacheKey);
       if (cached) {
         setBrowser(cached.browser);
         setCursorDesktop(cached.cursorDesktop);
@@ -82,8 +96,10 @@ export function useIssueEditor({ projectSlug, identifier, enabled = true }: UseI
     inFlightRef.current = true;
     setLoading(true);
     try {
-      const targets = await fetchEditorTargets(projectSlug, identifier);
-      writeCache(projectSlug, identifier, targets);
+      const targets = validThreadId
+        ? await fetchThreadEditorTargets(validThreadId)
+        : await fetchEditorTargets(projectSlug, normalizedIdentifier!);
+      writeCache(requestCacheKey, targets);
       setBrowser(targets.browser);
       setCursorDesktop(targets.cursorDesktop);
     } catch {
@@ -93,7 +109,7 @@ export function useIssueEditor({ projectSlug, identifier, enabled = true }: UseI
       inFlightRef.current = false;
       setLoading(false);
     }
-  }, [identifier, projectSlug]);
+  }, [normalizedIdentifier, projectSlug, requestCacheKey, validThreadId]);
 
   useEffect(() => {
     if (!active) {

@@ -34,13 +34,17 @@ vi.mock("@/components/assistant/ProjectAssistantPanel", () => ({
   ),
 }));
 
+const useIssueEditorMock = vi.hoisted(() => vi.fn());
+
 vi.mock("@/hooks/useIssueEditor", () => ({
-  useIssueEditor: () => ({
-    browser: { available: true, url: "https://code.example/510", reason: null },
-    cursorDesktop: { available: false, url: null, reason: "workspace_missing" },
-    loading: false,
-  }),
+  useIssueEditor: (...args: unknown[]) => useIssueEditorMock(...args),
 }));
+
+const availableEditor = {
+  browser: { available: true, url: "https://code.example/510", reason: null },
+  cursorDesktop: { available: false, url: null, reason: "workspace_missing" },
+  loading: false,
+};
 
 const getAssistantThreadMock = vi.hoisted(() => vi.fn());
 
@@ -52,6 +56,8 @@ vi.mock("@/services/assistantThreads", () => ({
 describe("AssistantSessionTabContent", () => {
   beforeEach(async () => {
     await initTestI18n("en");
+    useIssueEditorMock.mockReset();
+    useIssueEditorMock.mockReturnValue(availableEditor);
     getAssistantThreadMock.mockReset();
     getAssistantThreadMock.mockResolvedValue({
       id: 7996,
@@ -124,6 +130,13 @@ describe("AssistantSessionTabContent", () => {
     expect(await screen.findByRole("button", { name: /diff/i })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /open issue/i })).toBeNull();
     expect(screen.getByText(/flaky-pipe/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /open in code/i })).toBeInTheDocument();
+    expect(useIssueEditorMock).toHaveBeenCalledWith({
+      projectSlug: "macro-markets",
+      identifier: null,
+      threadId: 8076,
+      enabled: true,
+    });
     expect(screen.getByTestId("assistant-panel")).toHaveAttribute("data-has-kb-control", "true");
 
     const scope = threadWorkspaceScope(
@@ -140,6 +153,40 @@ describe("AssistantSessionTabContent", () => {
     expect(togglePreview).toHaveBeenCalledWith(scope);
     expect(toggleEnvironment).toHaveBeenCalledWith(scope);
     expect(toggleTasks).toHaveBeenCalledWith(scope);
+  });
+
+  it("disables Code with the workspace-missing tooltip for an unprovisioned thread", async () => {
+    getAssistantThreadMock.mockResolvedValue({
+      id: 8080,
+      scope: "freeform",
+      agentKind: "codex",
+      projectSlug: "macro-markets",
+      projectName: "Macro Markets",
+      issueIdentifier: null,
+      workspacePath: null,
+      title: "Unprovisioned workspace",
+      status: "active",
+      preview: null,
+      updatedAt: "2026-07-20T00:00:00Z",
+    });
+    useIssueEditorMock.mockReturnValue({
+      browser: { available: false, url: null, reason: "workspace_missing" },
+      cursorDesktop: { available: false, url: null, reason: "workspace_missing" },
+      loading: false,
+    });
+
+    render(
+      <MemoryRouter>
+        <AssistantSessionTabContent projectSlug="macro-markets" threadId={8080} view="board" />
+      </MemoryRouter>,
+    );
+
+    const codeButton = await screen.findByRole("button", { name: /open in code/i });
+    expect(codeButton).toBeDisabled();
+    expect(codeButton).toHaveAttribute(
+      "title",
+      "Workspace not created yet — run the agent or open the terminal first",
+    );
   });
 
   it("toggles the workspace terminal dock instead of navigating to the issue drawer", async () => {

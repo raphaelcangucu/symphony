@@ -60,6 +60,7 @@ export function IssueSessionSplitLayout({
         <IssueWorkingTreeToolbar
           projectSlug={scope.projectSlug}
           issueIdentifier={issueIdentifier}
+          threadId={scope.kind === "thread" ? scope.threadId : null}
           workspaceLabel={workspaceLabel}
           view={view}
           leading={toolbarLeading}

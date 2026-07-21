@@ -19,15 +19,22 @@ import { cn } from "@/lib/utils";
 
 interface IssueEditorMenuProps {
   projectSlug: string;
-  identifier: string;
+  identifier?: string | null;
+  threadId?: number | null;
   enabled?: boolean;
   /** Tighter trigger for dense toolbars (session header row). */
   compact?: boolean;
 }
 
-export function IssueEditorMenu({ projectSlug, identifier, enabled = true, compact = false }: IssueEditorMenuProps) {
+export function IssueEditorMenu({
+  projectSlug,
+  identifier = null,
+  threadId = null,
+  enabled = true,
+  compact = false,
+}: IssueEditorMenuProps) {
   const { t } = useTranslation();
-  const editor = useIssueEditor({ projectSlug, identifier, enabled });
+  const editor = useIssueEditor({ projectSlug, identifier, threadId, enabled });
 
   const openBrowserEditor = useCallback(() => {
     if (editor.browser.available && editor.browser.url) {

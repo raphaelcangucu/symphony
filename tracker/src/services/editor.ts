@@ -1,4 +1,8 @@
-import { requireNonBlank, requireProjectSlug } from "@/lib/serviceValidation";
+import {
+  requireNonBlank,
+  requirePositiveInteger,
+  requireProjectSlug,
+} from "@/lib/serviceValidation";
 
 import { http, trackerPath, unwrapData } from "./http";
 
@@ -79,6 +83,12 @@ function resolveCursorDesktop(dto: BackendEditorDto, browser: EditorTarget): Edi
   return { available: false, url: null, reason: browser.reason ?? "unavailable" };
 }
 
+function mapEditorTargets(dto: BackendEditorDto): EditorTargets {
+  const browser = mapEditorTarget(dto);
+  const cursorDesktop = resolveCursorDesktop(dto, browser);
+  return { browser, cursorDesktop };
+}
+
 export async function fetchEditorTargets(projectSlug: string, identifier: string): Promise<EditorTargets> {
   const slug = requireProjectSlug(projectSlug);
   const issueId = requireNonBlank(identifier, "identifier");
@@ -88,10 +98,7 @@ export async function fetchEditorTargets(projectSlug: string, identifier: string
   );
 
   const dto = unwrapData<BackendEditorDto>(response);
-  const browser = mapEditorTarget(dto);
-  const cursorDesktop = resolveCursorDesktop(dto, browser);
-
-  return { browser, cursorDesktop };
+  return mapEditorTargets(dto);
 }
 
 export async function fetchProjectEditorTargets(projectSlug: string): Promise<EditorTargets> {
@@ -100,10 +107,14 @@ export async function fetchProjectEditorTargets(projectSlug: string): Promise<Ed
   const response = await http.get(trackerPath(`/projects/${encodeURIComponent(slug)}/editor`));
 
   const dto = unwrapData<BackendEditorDto>(response);
-  const browser = mapEditorTarget(dto);
-  const cursorDesktop = resolveCursorDesktop(dto, browser);
+  return mapEditorTargets(dto);
+}
 
-  return { browser, cursorDesktop };
+export async function fetchThreadEditorTargets(threadId: number): Promise<EditorTargets> {
+  const id = requirePositiveInteger(threadId, "threadId");
+  const response = await http.get(trackerPath(`/assistant/threads/${id}/editor`));
+  const dto = unwrapData<BackendEditorDto>(response);
+  return mapEditorTargets(dto);
 }
 
 /** @deprecated Use fetchEditorTargets — returns the browser (code-server) target only. */

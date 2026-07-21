@@ -23,6 +23,7 @@ import { issuePath, type WorkspaceView } from "@/lib/workspaceRoutes";
 interface IssueWorkingTreeToolbarProps {
   projectSlug: string;
   issueIdentifier?: string | null;
+  threadId?: number | null;
   /** Label used by workspace actions when the scope is not issue-bound. */
   workspaceLabel?: string | null;
   view: WorkspaceView;
@@ -54,6 +55,7 @@ interface IssueWorkingTreeToolbarProps {
 export function IssueWorkingTreeToolbar({
   projectSlug,
   issueIdentifier,
+  threadId,
   workspaceLabel,
   view,
   leading = null,
@@ -73,6 +75,8 @@ export function IssueWorkingTreeToolbar({
 }: IssueWorkingTreeToolbarProps) {
   const { t } = useTranslation();
   const normalizedIssueIdentifier = issueIdentifier?.trim() || null;
+  const editorThreadId =
+    typeof threadId === "number" && Number.isInteger(threadId) && threadId > 0 ? threadId : null;
   const actionIdentifier = normalizedIssueIdentifier ?? (workspaceLabel?.trim() || null);
   const issueHref = normalizedIssueIdentifier
     ? issuePath(projectSlug, view, normalizedIssueIdentifier, "sessions")
@@ -196,10 +200,11 @@ export function IssueWorkingTreeToolbar({
           <ListChecks className="h-4 w-4" />
         </button>
       ) : null}
-      {normalizedIssueIdentifier && pathActionsEnabled ? (
+      {normalizedIssueIdentifier || editorThreadId ? (
         <IssueEditorMenu
           projectSlug={projectSlug}
           identifier={normalizedIssueIdentifier}
+          threadId={editorThreadId}
           compact
         />
       ) : null}
