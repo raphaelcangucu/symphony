@@ -24,9 +24,9 @@ defmodule SymphonyElixir.CLITest do
     }
 
     assert {:error, banner} = CLI.evaluate([], deps)
-    assert banner =~ "This Symphony implementation is a low key engineering preview."
+    assert banner =~ "This Dev10x implementation is a low key engineering preview."
     assert banner =~ "Codex will run without any guardrails."
-    assert banner =~ "SymphonyElixir is not a supported product and is presented as-is."
+    assert banner =~ "Dev10x is not a supported product and is presented as-is."
     assert banner =~ @ack_flag
     refute_received :logs_root_set
     refute_received :port_set
@@ -95,7 +95,7 @@ defmodule SymphonyElixir.CLITest do
     }
 
     assert {:error, message} = CLI.evaluate([@ack_flag], deps)
-    assert message =~ "Failed to start Symphony"
+    assert message =~ "Failed to start Dev10x"
     assert message =~ ":boom"
   end
 

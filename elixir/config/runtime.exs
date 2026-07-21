@@ -62,6 +62,17 @@ if config_env() != :test do
         nil
     end
 
+  branding = %{
+    product_name: System.get_env("SYMPHONY_BRAND_PRODUCT_NAME") || "Dev10x",
+    tracker_title: System.get_env("SYMPHONY_BRAND_TRACKER_TITLE") || "Dev10x",
+    cli_product_name: System.get_env("SYMPHONY_BRAND_CLI_PRODUCT_NAME") || "Dev10x",
+    icon_path: System.get_env("SYMPHONY_BRAND_ICON_PATH") || "dev10x_icon.png",
+    favicon_path: System.get_env("SYMPHONY_BRAND_FAVICON_PATH") || "favicon.png",
+    logo_color_path: System.get_env("SYMPHONY_BRAND_LOGO_COLOR_PATH") || "dev10x_logo_color.png",
+    logo_black_path: System.get_env("SYMPHONY_BRAND_LOGO_BLACK_PATH") || "dev10x_logo_black.png",
+    logo_white_path: System.get_env("SYMPHONY_BRAND_LOGO_WHITE_PATH") || "dev10x_logo_white.png"
+  }
+
   config :symphony_elixir,
     poll_interval_ms: parse_int.("SYMPHONY_POLL_INTERVAL_MS", 60_000),
     pr_monitor_interval_ms: pr_monitor_interval_ms,
@@ -84,6 +95,7 @@ if config_env() != :test do
     observability_enabled: System.get_env("SYMPHONY_OBSERVABILITY_ENABLED") != "false",
     observability_hub_url: maybe.("SYMPHONY_OBSERVABILITY_HUB_URL"),
     observability_label: maybe.("SYMPHONY_OBSERVABILITY_LABEL"),
+    branding: branding,
     codex_command:
       System.get_env("SYMPHONY_CODEX_COMMAND") ||
         "codex --config shell_environment_policy.inherit=all app-server",

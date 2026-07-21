@@ -2,7 +2,10 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
 import { App } from "./App";
+import { applyTrackerDocumentBranding } from "./lib/branding";
 import "./index.css";
+
+applyTrackerDocumentBranding();
 
 const rootElement = document.getElementById("root");
 

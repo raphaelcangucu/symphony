@@ -1,11 +1,11 @@
-# Symphony — Installation Guide
+# Dev10x — Installation Guide
 
 > Step-oriented document, designed to be executed by a human **or** by an LLM agent.
 > Each step has the exact command, the working directory, and the expected verification.
 
 ## Overview
 
-Symphony is an agent orchestration service written in **Elixir** (directory `elixir/`) with a
+Dev10x is an agent orchestration service written in **Elixir** (directory `elixir/`) with a
 tracker frontend in **TypeScript/React** (directory `tracker/`). It imports "projects"
 (e.g. `projects/gamba.yaml`), dispatches GitHub issues to coding agents
 (**Codex**, **Claude**, or **Cursor**), and exposes a web tracker on port `4000`.
@@ -27,7 +27,7 @@ Important rules for an agent following this guide:
 |-----------|------------------|----------|
 | `mise` | toolchain manager (`~/.local/bin/mise`) | provides Erlang/Elixir |
 | Erlang | `28` (OTP 28) — via `mise` | BEAM runtime |
-| Elixir | `1.19.5-otp-28` — via `mise` | compile/run Symphony |
+| Elixir | `1.19.5-otp-28` — via `mise` | compile/run Dev10x |
 | `gh` | GitHub CLI **authenticated** | tokens + repository clones |
 | `node` + `npm` | LTS | tracker frontend |
 | `git`, `curl`, `openssl` | base | clones, downloads, generating secrets |

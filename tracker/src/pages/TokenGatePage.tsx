@@ -1,4 +1,3 @@
-import { KeyRound } from "lucide-react";
 import type { TFunction } from "i18next";
 import { FormEvent, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -8,8 +7,15 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { TRACKER_TOKEN_KEY, clearTrackerToken, getTrackerToken, setTrackerToken } from "@/config";
+import { getTrackerBranding, resolveTrackerAssetPath } from "@/lib/branding";
 import { validateTrackerToken } from "@/services/auth";
 import { ViewerNotConfiguredError, fetchViewer } from "@/services/viewer";
+
+const TRACKER_BRANDING = getTrackerBranding();
+const TRACKER_LOGO_COLOR_SRC = resolveTrackerAssetPath(
+  import.meta.env.BASE_URL,
+  TRACKER_BRANDING.logoColorPath,
+);
 
 const VIEWER_ERROR_CODES = new Set([
   "github_token_missing",
@@ -120,9 +126,12 @@ export function TokenGatePage() {
     <div className="flex min-h-screen items-center justify-center bg-muted/30 p-6">
       <Card className="w-full max-w-md">
         <CardHeader>
-          <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <KeyRound className="h-5 w-5" />
-          </div>
+          <img
+            src={TRACKER_LOGO_COLOR_SRC}
+            alt={TRACKER_BRANDING.productName}
+            className="mx-auto mb-3 block h-10 w-auto max-w-[220px] object-contain"
+            decoding="async"
+          />
           <CardTitle>{t("auth.title")}</CardTitle>
           <CardDescription>{t("auth.description")}</CardDescription>
         </CardHeader>

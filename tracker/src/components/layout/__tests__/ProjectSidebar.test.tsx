@@ -158,14 +158,28 @@ describe("ProjectSidebar", () => {
     expect(screen.getByRole("treeitem", { name: /^Active Project,/ })).toBeTruthy();
   });
 
-  it("uses the tracker favicon artwork as the sidebar brand icon", async () => {
+  it("uses the color logo as the expanded sidebar brand mark in light mode", async () => {
+    document.documentElement.classList.remove("dark");
+    document.documentElement.classList.add("light");
     vi.mocked(listProjects).mockResolvedValue([activeProject]);
 
     renderProjectSidebar();
 
-    expect(await screen.findByAltText("Symphony Tracker icon")).toHaveAttribute(
+    expect(await screen.findByRole("img", { name: "Dev10x" })).toHaveAttribute(
       "src",
-      resolveTrackerAssetPath(import.meta.env.BASE_URL, "favicon.svg"),
+      resolveTrackerAssetPath(import.meta.env.BASE_URL, "dev10x_logo_color.png"),
+    );
+  });
+
+  it("uses the square icon when the sidebar is collapsed", async () => {
+    window.localStorage.setItem(LEGACY_SIDEBAR_COLLAPSED_STORAGE_KEY, "true");
+    vi.mocked(listProjects).mockResolvedValue([activeProject]);
+
+    renderProjectSidebar();
+
+    expect(await screen.findByAltText("Dev10x icon")).toHaveAttribute(
+      "src",
+      resolveTrackerAssetPath(import.meta.env.BASE_URL, "dev10x_icon.png"),
     );
   });
 
@@ -262,11 +276,11 @@ describe("ProjectSidebar", () => {
     renderProjectSidebar();
     await waitFor(() => expect(listProjects).toHaveBeenCalledTimes(1));
     expect(screen.getByRole("button", { name: "Expand sidebar" })).toBeTruthy();
-    expect(screen.queryByText("Symphony Tracker")).toBeNull();
+    expect(screen.queryByText("Dev10x")).toBeNull();
     expect(window.localStorage.getItem(SIDEBAR_PREFERENCES_STORAGE_KEY)).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Expand sidebar" }));
-    expect(screen.getByText("Symphony Tracker")).toBeTruthy();
+    expect(screen.getByRole("img", { name: "Dev10x" })).toBeTruthy();
     await waitFor(() => {
       const stored = window.localStorage.getItem(SIDEBAR_PREFERENCES_STORAGE_KEY);
       expect(stored).toBeTruthy();
@@ -288,7 +302,7 @@ describe("ProjectSidebar", () => {
     await waitFor(() => expect(listProjects).toHaveBeenCalledTimes(1));
 
     expect(screen.getByRole("button", { name: "Expand sidebar" })).toBeTruthy();
-    expect(screen.queryByText("Symphony Tracker")).toBeNull();
+    expect(screen.queryByText("Dev10x")).toBeNull();
     expect(screen.getByRole("navigation", { name: "Collapsed sidebar" })).toBeTruthy();
   });
 

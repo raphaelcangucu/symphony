@@ -386,7 +386,7 @@ function MockSidebarTree({
 
       {!compact ? (
         <MockProjectRow
-          title="Symphony"
+          title="Dev10x"
           count={3}
           iconMode={iconMode}
           loadingMode="parent-icon"

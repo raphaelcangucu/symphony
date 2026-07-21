@@ -1,11 +1,11 @@
-# Symphony Elixir
+# Dev10x Elixir
 
-This directory contains the current Elixir/OTP implementation of Symphony — a multi-project agent
+This directory contains the current Elixir/OTP implementation of Dev10x — a multi-project agent
 orchestrator with a React tracker UI, local-first remote sync, and optional public preview tunnels —
 based on [`SPEC.md`](../SPEC.md) at the repository root.
 
 > [!WARNING]
-> Symphony Elixir is prototype software intended for evaluation only and is presented as-is.
+> Dev10x Elixir is prototype software intended for evaluation only and is presented as-is.
 > We recommend implementing your own hardened version based on `SPEC.md`.
 
 ## Screenshot

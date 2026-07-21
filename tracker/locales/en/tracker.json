@@ -3486,7 +3486,7 @@
     }
   },
   "nav": {
-    "brandTitle": "Symphony Tracker",
+    "brandTitle": "Dev10x",
     "brandSubtitle": "Local project board",
     "expandSidebar": "Expand sidebar",
     "collapseSidebar": "Collapse sidebar",
@@ -3500,7 +3500,7 @@
     "boards": "Boards",
     "noProjects": "No local projects yet.",
     "resetToken": "Reset token",
-    "brandIconAlt": "Symphony Tracker icon",
+    "brandIconAlt": "Dev10x icon",
     "theme": {
       "toggleAria": "Toggle theme",
       "light": "Light",

@@ -22,6 +22,7 @@ import {
 } from "@/hooks/useSidebarActions";
 import { stashPendingThreadSeed } from "@/lib/pendingThreadSeed";
 import { resolveSidebarRouteSelection } from "@/lib/sidebarRouteResolution";
+import { getTrackerBranding, resolveTrackerAssetPath } from "@/lib/branding";
 import { cn } from "@/lib/utils";
 import type {
   SidebarCapabilityContext,
@@ -31,23 +32,47 @@ import type {
   SidebarWorkspaceNode,
 } from "@/types/sidebar";
 
+export { resolveTrackerAssetPath };
+
 const TRACKER_BRAND_ICON_ALT_KEY = "nav.brandIconAlt";
-const TRACKER_BRAND_ICON_SRC = resolveTrackerAssetPath(import.meta.env.BASE_URL, "favicon.svg");
+const TRACKER_BRANDING = getTrackerBranding();
+const TRACKER_BRAND_ICON_SRC = resolveTrackerAssetPath(import.meta.env.BASE_URL, TRACKER_BRANDING.iconPath);
+const TRACKER_BRAND_LOGO_COLOR_SRC = resolveTrackerAssetPath(
+  import.meta.env.BASE_URL,
+  TRACKER_BRANDING.logoColorPath,
+);
+const TRACKER_BRAND_LOGO_WHITE_SRC = resolveTrackerAssetPath(
+  import.meta.env.BASE_URL,
+  TRACKER_BRANDING.logoWhitePath,
+);
+
+function useResolvedColorScheme(): "light" | "dark" {
+  const [scheme, setScheme] = useState<"light" | "dark">(() => {
+    if (typeof document === "undefined") return "light";
+    return document.documentElement.classList.contains("dark") ? "dark" : "light";
+  });
+
+  useEffect(() => {
+    if (typeof document === "undefined" || typeof MutationObserver === "undefined") return;
+
+    const root = document.documentElement;
+    const sync = () => {
+      setScheme(root.classList.contains("dark") ? "dark" : "light");
+    };
+
+    sync();
+    const observer = new MutationObserver(sync);
+    observer.observe(root, { attributes: true, attributeFilter: ["class"] });
+    return () => observer.disconnect();
+  }, []);
+
+  return scheme;
+}
 
 export type ProjectSidebarVariant = "desktop" | "drawer";
 
 export interface ProjectSidebarProps {
   variant?: ProjectSidebarVariant;
-}
-
-export function resolveTrackerAssetPath(baseUrl: string, assetName: string): string {
-  const normalizedAssetName = assetName.replace(/^\/+/, "");
-  if (normalizedAssetName.length === 0) {
-    throw new Error("Tracker asset name must not be empty");
-  }
-
-  const normalizedBaseUrl = baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`;
-  return `${normalizedBaseUrl}${normalizedAssetName}`;
 }
 
 export function ProjectSidebar({ variant = "desktop" }: ProjectSidebarProps) {
@@ -58,6 +83,7 @@ export function ProjectSidebar({ variant = "desktop" }: ProjectSidebarProps) {
   const { t } = useTranslation();
   const location = useLocation();
   const navigate = useNavigate();
+  const colorScheme = useResolvedColorScheme();
   const {
     tree,
     projectsLoading,
@@ -287,17 +313,20 @@ export function ProjectSidebar({ variant = "desktop" }: ProjectSidebarProps) {
       )}
     >
       <div className={cn("mb-5 flex items-center gap-2.5 px-1", collapsed && "mb-3 flex-col gap-3")}>
-        <img
-          src={TRACKER_BRAND_ICON_SRC}
-          alt={t(TRACKER_BRAND_ICON_ALT_KEY)}
-          className="h-8 w-8 rounded-lg shadow-sm"
-          decoding="async"
-        />
-        {collapsed ? null : (
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-sm font-semibold tracking-tight">{t("nav.brandTitle")}</div>
-            <div className="truncate text-xs text-muted-foreground">{t("nav.brandSubtitle")}</div>
-          </div>
+        {collapsed ? (
+          <img
+            src={TRACKER_BRAND_ICON_SRC}
+            alt={t(TRACKER_BRAND_ICON_ALT_KEY)}
+            className="h-8 w-8 rounded-lg shadow-sm"
+            decoding="async"
+          />
+        ) : (
+          <img
+            src={colorScheme === "dark" ? TRACKER_BRAND_LOGO_WHITE_SRC : TRACKER_BRAND_LOGO_COLOR_SRC}
+            alt={TRACKER_BRANDING.productName}
+            className="h-8 w-auto max-w-[180px] min-w-0 flex-1 object-contain object-left"
+            decoding="async"
+          />
         )}
         {isDrawer ? null : (
           <Button

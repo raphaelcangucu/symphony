@@ -43,8 +43,11 @@ defmodule SymphonyElixirWeb.TrackerStaticTest do
 
   test "serves the tracker SPA index at /tracker" do
     conn = get(build_conn(), "/tracker")
+    body = html_response(conn, 200)
 
-    assert html_response(conn, 200) =~ ~s(<div id="root"></div>)
+    assert body =~ ~s(<div id="root"></div>)
+    assert body =~ ~s(window.__SYMPHONY_BRANDING__)
+    assert body =~ ~s("productName":"Dev10x")
   end
 
   test "serves the tracker SPA index for browser-routed tracker paths" do

@@ -1,6 +1,8 @@
 defmodule SymphonyElixirWeb.StaticAssets do
   @moduledoc false
 
+  alias SymphonyElixir.Branding
+
   @dashboard_css_path Path.expand("../../priv/static/dashboard.css", __DIR__)
   @source_tracker_static_root Path.expand("../../priv/static/tracker", __DIR__)
   @phoenix_html_js_path Application.app_dir(:phoenix_html, "priv/static/phoenix_html.js")
@@ -34,7 +36,13 @@ defmodule SymphonyElixirWeb.StaticAssets do
 
   @spec fetch_tracker_index() :: {:ok, String.t(), binary()} | :error
   def fetch_tracker_index do
-    fetch_tracker_file(["index.html"], "text/html")
+    case fetch_tracker_file(["index.html"], "text/html") do
+      {:ok, content_type, body} ->
+        {:ok, content_type, Branding.inject_into_html(body)}
+
+      :error ->
+        :error
+    end
   end
 
   @spec fetch_tracker_asset([String.t()]) :: {:ok, String.t(), binary()} | :error

@@ -86,7 +86,10 @@ function LegacyIssueAssistantRedirect() {
 
 export function App() {
   return (
-    <BrowserRouter basename={routerBasename}>
+    // TipTap's useEditor uses useSyncExternalStore; RR7's default
+    // startTransition navigations can push the URL without committing the
+    // location state, leaving the KB page stuck when navigating away.
+    <BrowserRouter basename={routerBasename} useTransitions={false}>
       <I18nProvider>
         <Routes>
           <Route path="/token" element={<TokenGatePage />} />

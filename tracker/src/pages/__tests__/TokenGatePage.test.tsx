@@ -52,6 +52,16 @@ describe("TokenGatePage", () => {
     expect(screen.getByText(/saved token no longer matches/i)).toBeTruthy();
   });
 
+  it("shows the Dev10x color logo on the token gate", async () => {
+    renderTokenGate();
+
+    const logo = await screen.findByRole("img", { name: "Dev10x" });
+    expect(logo).toHaveAttribute(
+      "src",
+      expect.stringMatching(/dev10x_logo_color\.png$/),
+    );
+  });
+
   it("validates the token before saving and navigating to projects", async () => {
     vi.mocked(authService.validateTrackerToken).mockResolvedValue(undefined);
     vi.mocked(viewerService.fetchViewer).mockResolvedValue({

@@ -184,7 +184,7 @@ defmodule SymphonyElixir.Codex.ModelCatalog do
         "capabilities" => %{"experimentalApi" => true},
         "clientInfo" => %{
           "name" => "symphony-tracker",
-          "title" => "Symphony Tracker",
+          "title" => "Dev10x",
           "version" => @version
         }
       }

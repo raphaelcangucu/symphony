@@ -1,6 +1,6 @@
-# Symphony
+# Dev10x
 
-Symphony turns project work into isolated, autonomous implementation runs, allowing teams to manage
+Dev10x turns project work into isolated, autonomous implementation runs, allowing teams to manage
 work instead of supervising coding agents.
 
 The reference implementation is an Elixir/OTP **multi-project orchestrator** with a React **tracker
@@ -9,24 +9,24 @@ preview tunnels.
 
 [![Symphony demo video preview](.github/media/symphony-demo-poster.jpg)](.github/media/symphony-demo.mp4)
 
-_In this [demo video](.github/media/symphony-demo.mp4), Symphony monitors a Linear board for work and spawns agents to handle the tasks. The agents complete the tasks and provide proof of work: CI status, PR review feedback, complexity analysis, and walkthrough videos. When accepted, the agents land the PR safely. Engineers do not need to supervise Codex; they can manage the work at a higher level._
+_In this [demo video](.github/media/symphony-demo.mp4), Dev10x monitors a Linear board for work and spawns agents to handle the tasks. The agents complete the tasks and provide proof of work: CI status, PR review feedback, complexity analysis, and walkthrough videos. When accepted, the agents land the PR safely. Engineers do not need to supervise Codex; they can manage the work at a higher level._
 
 > [!WARNING]
-> Symphony is a low-key engineering preview for testing in trusted environments.
+> Dev10x is a low-key engineering preview for testing in trusted environments.
 
-## Running Symphony
+## Running Dev10x
 
 ### Requirements
 
-Symphony works best in codebases that have adopted
-[harness engineering](https://openai.com/index/harness-engineering/). Symphony is the next step —
+Dev10x works best in codebases that have adopted
+[harness engineering](https://openai.com/index/harness-engineering/). Dev10x is the next step —
 moving from managing coding agents to managing work that needs to get done.
 
 ### Option 1. Make your own
 
-Tell your favorite coding agent to build Symphony in a programming language of your choice:
+Tell your favorite coding agent to build Dev10x in a programming language of your choice:
 
-> Implement Symphony according to the following spec:
+> Implement Dev10x according to the following spec:
 > [`SPEC.md`](SPEC.md)
 
 ### Option 2. Use the Elixir reference implementation
@@ -66,7 +66,7 @@ make stop               # shut down the daemon
 
 Ask a coding agent to walk through setup:
 
-> Set up Symphony for my repository based on
+> Set up Dev10x for my repository based on
 > [`elixir/README.md`](elixir/README.md)
 
 #### What you get
@@ -77,7 +77,7 @@ Ask a coding agent to walk through setup:
 - **Optional**: browser VS Code (`make install-code-server`), Cursor Desktop, dev-server previews,
   Cloudflare public tunnel (`cloudflared`)
 
-For wait-state issues with linked PRs, Symphony now follows PR outcomes in the background: merged PRs
+For wait-state issues with linked PRs, Dev10x now follows PR outcomes in the background: merged PRs
 can auto-move issues to `Done`, fixable CI/review-bot failures can auto-route to `Rework`, and
 unrelated/flaky failures stay in `Human Review` with rerun guidance.
 
