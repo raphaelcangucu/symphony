@@ -97,10 +97,11 @@
 - Create: `mobile/app/_layout.tsx`
 - Create: `mobile/app/index.tsx`
 
-- [ ] **Step 1: Create configuration-only scaffold**
+- [x] **Step 1: Create configuration-only scaffold**
 
-Use the dependency versions proven by the inspected Orca mobile reference for
-Expo/React Native, plus the tracker-compatible data packages:
+Use the Expo 55 dependency matrix validated by Expo Doctor, plus the
+tracker-compatible data packages. Orca remains the architecture/UX reference,
+while native module versions follow Expo's supported runtime contract:
 
 ```json
 {
@@ -115,41 +116,44 @@ Expo/React Native, plus the tracker-compatible data packages:
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint .",
+    "lint": "oxlint",
     "doctor": "expo-doctor"
   },
   "dependencies": {
+    "@expo/metro-runtime": "^55.0.11",
     "@react-native-async-storage/async-storage": "^2.2.0",
-    "@tanstack/react-query": "^5.83.0",
+    "@tanstack/react-query": "^5.101.4",
     "expo": "^55.0.27",
     "expo-constants": "^55.0.16",
-    "expo-linking": "^55.0.13",
+    "expo-font": "~55.0.8",
+    "expo-linking": "^55.0.15",
     "expo-router": "^55.0.14",
     "expo-secure-store": "^55.0.13",
+    "expo-splash-screen": "^55.0.20",
     "expo-status-bar": "^55.0.6",
-    "lucide-react-native": "^0.468.0",
-    "phoenix": "^1.8.1",
-    "react": "^19.2.6",
-    "react-native": "^0.83.9",
-    "react-native-safe-area-context": "^5.7.0",
-    "react-native-screens": "^4.24.0",
-    "react-native-svg": "^15.15.4",
+    "lucide-react-native": "^1.25.0",
+    "phoenix": "^1.8.9",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "react-native": "0.83.6",
+    "react-native-gesture-handler": "~2.30.0",
+    "react-native-reanimated": "4.2.1",
+    "react-native-safe-area-context": "~5.6.2",
+    "react-native-screens": "~4.23.0",
+    "react-native-svg": "15.15.3",
+    "react-native-web": "^0.21.2",
+    "react-native-worklets": "0.7.4",
     "zod": "^4.4.3",
     "zustand": "^5.0.13"
   },
   "devDependencies": {
-    "@eslint/js": "^9.39.0",
-    "@testing-library/jest-native": "^5.4.3",
-    "@testing-library/react-native": "^13.3.3",
     "@types/react": "^19.2.14",
-    "@vitest/coverage-v8": "^4.0.17",
-    "eslint": "^9.39.0",
-    "eslint-plugin-react-hooks": "^7.0.1",
-    "eslint-plugin-react-refresh": "^0.4.24",
-    "react-test-renderer": "^19.2.6",
-    "typescript": "^6.0.3",
-    "typescript-eslint": "^8.46.0",
-    "vitest": "^4.0.17"
+    "expo-doctor": "1.20.1",
+    "oxfmt": "^0.52.0",
+    "oxlint": "^1.71.0",
+    "typescript": "~5.9.2",
+    "vite": "^8.0.16",
+    "vitest": "^4.1.10"
   }
 }
 ```
@@ -158,7 +162,7 @@ Configure the app name as `Dev10x`, slug `symphony-mobile`, scheme `symphony`,
 bundle id `dev.dev10x.symphony`, Android package
 `dev.dev10x.symphony`, and enable typed Expo Router routes.
 
-- [ ] **Step 2: Install dependencies**
+- [x] **Step 2: Install dependencies**
 
 Run:
 
@@ -169,7 +173,10 @@ npm install
 
 Expected: `mobile/package-lock.json` is created and install exits 0.
 
-- [ ] **Step 3: Add a minimal provider-free route**
+Result: PASS. The clean install added 797 packages. A transient registry
+`ETIMEDOUT` was recovered with npm fetch retries; the final lockfile is present.
+
+- [x] **Step 3: Add a minimal provider-free route**
 
 `app/index.tsx` must temporarily render:
 
@@ -187,7 +194,7 @@ export default function IndexRoute() {
 
 `app/_layout.tsx` must render an Expo Router `Stack`.
 
-- [ ] **Step 4: Verify the generated application**
+- [x] **Step 4: Verify the generated application**
 
 Run:
 
@@ -199,7 +206,10 @@ npx expo export --platform web
 
 Expected: all commands exit 0 and Expo writes `dist/`.
 
-- [ ] **Step 5: Commit**
+Result: PASS. `npm test` passed 10 tests, typecheck and oxlint exited 0,
+Expo Doctor passed 19/19 checks, and the web export wrote `mobile/dist`.
+
+- [x] **Step 5: Commit**
 
 ```bash
 git add mobile
@@ -306,7 +316,7 @@ git commit -m "feat(mobile): add native design system"
 - Create: `mobile/src/auth/connection-storage.test.ts`
 - Create: `mobile/src/auth/ConnectionProvider.tsx`
 
-- [ ] **Step 1: Write failing profile tests**
+- [x] **Step 1: Write failing profile tests**
 
 Tests must prove:
 
@@ -325,7 +335,7 @@ expect(redactSecret("Bearer secret-value", "secret-value")).toBe(
 );
 ```
 
-- [ ] **Step 2: Run profile tests and verify RED**
+- [x] **Step 2: Run profile tests and verify RED**
 
 Run:
 
@@ -335,7 +345,11 @@ npm test -- src/auth/connection-profile.test.ts
 
 Expected: FAIL because functions do not exist.
 
-- [ ] **Step 3: Implement profile normalization**
+Result: RED observed: Vitest failed to resolve `./connection-profile`, then
+failed two added profile-construction cases because
+`createConnectionProfile` did not exist.
+
+- [x] **Step 3: Implement profile normalization**
 
 Use:
 
@@ -358,7 +372,7 @@ Profile ids are stable UUIDs. URL normalization strips `/tracker` and trailing
 slashes, rejects credentials/fragments, and permits only HTTP(S). Deep links
 require both URL and non-blank token.
 
-- [ ] **Step 4: Run profile tests and verify GREEN**
+- [x] **Step 4: Run profile tests and verify GREEN**
 
 Run:
 
@@ -367,6 +381,8 @@ npm test -- src/auth/connection-profile.test.ts
 ```
 
 Expected: PASS.
+
+Result: GREEN observed: 10/10 profile tests passed.
 
 - [ ] **Step 5: Write failing storage contract tests**
 
@@ -1150,4 +1166,3 @@ complete.
 git add mobile README.md docs
 git commit -m "docs(mobile): document companion development"
 ```
-
