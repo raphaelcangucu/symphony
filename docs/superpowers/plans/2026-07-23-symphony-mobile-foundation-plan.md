@@ -4,7 +4,9 @@
 
 **Architecture:** Add an independent Expo Router application in `mobile/`. Pure TypeScript modules own profile validation, API mapping, and assistant event reduction; React Query owns server state; a small connection provider binds SecureStore credentials to REST and Phoenix clients; feature screens compose focused mobile primitives.
 
-**Tech Stack:** Expo 55, React Native 0.83, Expo Router, TypeScript 6, TanStack Query, Zustand, Phoenix JS, Expo SecureStore, AsyncStorage, Vitest, React Native Testing Library.
+**Tech Stack:** Expo 55, React Native 0.83, Expo Router, TypeScript 5.9,
+TanStack Query, Zustand, Phoenix JS, Expo SecureStore, AsyncStorage, Vitest,
+Jest 29, and React Native Testing Library 13.
 
 ---
 
@@ -113,7 +115,9 @@ while native module versions follow Expo's supported runtime contract:
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
-    "test": "vitest run",
+    "test": "npm run test:unit && npm run test:ui",
+    "test:unit": "vitest run",
+    "test:ui": "jest --runInBand",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "lint": "oxlint",
@@ -147,10 +151,15 @@ while native module versions follow Expo's supported runtime contract:
     "zustand": "^5.0.13"
   },
   "devDependencies": {
+    "@testing-library/react-native": "13.3.3",
+    "@types/jest": "29.5.14",
     "@types/react": "^19.2.14",
     "expo-doctor": "1.20.1",
+    "jest": "29.7.0",
+    "jest-expo": "55.0.20",
     "oxfmt": "^0.52.0",
     "oxlint": "^1.71.0",
+    "react-test-renderer": "19.2.0",
     "typescript": "~5.9.2",
     "vite": "^8.0.16",
     "vitest": "^4.1.10"
@@ -232,7 +241,7 @@ git commit -m "feat(mobile): scaffold Expo companion"
 - Create: `mobile/src/components/__tests__/PressableCard.test.tsx`
 - Modify: `mobile/app/_layout.tsx`
 
-- [ ] **Step 1: Write failing primitive tests**
+- [x] **Step 1: Write failing primitive tests**
 
 Cover:
 
@@ -252,7 +261,7 @@ it("renders status text in addition to color", () => {
 });
 ```
 
-- [ ] **Step 2: Run tests and verify RED**
+- [x] **Step 2: Run tests and verify RED**
 
 Run:
 
@@ -262,7 +271,10 @@ npm test -- src/components/__tests__/PressableCard.test.tsx
 
 Expected: FAIL because shared primitives do not exist.
 
-- [ ] **Step 3: Implement semantic tokens and primitives**
+Result: RED observed after aligning Jest with the Expo 55 preset. The suite
+failed to resolve `ConnectionBadge`, `PressableCard`, and `ThemeProvider`.
+
+- [x] **Step 3: Implement semantic tokens and primitives**
 
 Define dark and light palettes with the token keys:
 
@@ -288,7 +300,7 @@ accessibility role. `StateView` accepts exactly one of loading, error, or empty
 presentation. `ConnectionBadge` maps `live`, `connecting`, `cached`, and
 `offline` to text plus icon/dot.
 
-- [ ] **Step 4: Run tests and verify GREEN**
+- [x] **Step 4: Run tests and verify GREEN**
 
 Run:
 
@@ -299,7 +311,11 @@ npm run typecheck
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+Result: PASS. Six component tests cover accessible press handling, all four
+connection labels, and loading, empty, and error presentations. TypeScript and
+Oxlint also pass.
+
+- [x] **Step 5: Commit**
 
 ```bash
 git add mobile/src mobile/app/_layout.tsx

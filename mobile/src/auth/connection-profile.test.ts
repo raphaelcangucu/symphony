@@ -9,32 +9,28 @@ import {
 
 describe("normalizeTrackerOrigin", () => {
   it("normalizes a tracker page URL to its server origin", () => {
-    expect(normalizeTrackerOrigin(" https://demo.test/tracker/ ")).toBe(
+    expect(normalizeTrackerOrigin(" https://demo.test/tracker/ ")).toBe("https://demo.test");
+    expect(normalizeTrackerOrigin("https://demo.test/tracker/projects/demo/workspaces")).toBe(
       "https://demo.test",
     );
-    expect(
-      normalizeTrackerOrigin(
-        "https://demo.test/tracker/projects/demo/workspaces",
-      ),
-    ).toBe("https://demo.test");
   });
 
   it("keeps an explicit reverse-proxy base path", () => {
     expect(normalizeTrackerOrigin("https://demo.test/symphony/")).toBe(
       "https://demo.test/symphony",
     );
-    expect(
-      normalizeTrackerOrigin("https://demo.test/symphony/tracker/projects"),
-    ).toBe("https://demo.test/symphony");
+    expect(normalizeTrackerOrigin("https://demo.test/symphony/tracker/projects")).toBe(
+      "https://demo.test/symphony",
+    );
   });
 
   it("rejects unsupported schemes and embedded credentials", () => {
     expect(() => normalizeTrackerOrigin("javascript:alert(1)")).toThrow(
       "Only http and https tracker URLs are supported",
     );
-    expect(() =>
-      normalizeTrackerOrigin("https://user:password@demo.test"),
-    ).toThrow("Tracker URLs must not contain credentials");
+    expect(() => normalizeTrackerOrigin("https://user:password@demo.test")).toThrow(
+      "Tracker URLs must not contain credentials",
+    );
   });
 
   it("rejects fragments and missing hosts", () => {
@@ -61,29 +57,20 @@ describe("parseConnectionDeepLink", () => {
 
   it("rejects other routes and missing connection secrets", () => {
     expect(() =>
-      parseConnectionDeepLink(
-        "symphony://session/42?url=https%3A%2F%2Fdemo.test&token=secret",
-      ),
+      parseConnectionDeepLink("symphony://session/42?url=https%3A%2F%2Fdemo.test&token=secret"),
     ).toThrow("Unsupported Symphony connection link");
     expect(() =>
-      parseConnectionDeepLink(
-        "symphony://connect?url=https%3A%2F%2Fdemo.test&token=%20",
-      ),
+      parseConnectionDeepLink("symphony://connect?url=https%3A%2F%2Fdemo.test&token=%20"),
     ).toThrow("Connection link must include a tracker token");
   });
 });
 
 describe("redactSecret", () => {
   it("redacts every direct occurrence without changing unrelated text", () => {
-    expect(
-      redactSecret(
-        "Bearer secret-value failed; token=secret-value",
-        "secret-value",
-      ),
-    ).toBe("Bearer [REDACTED] failed; token=[REDACTED]");
-    expect(redactSecret("network failed", "secret-value")).toBe(
-      "network failed",
+    expect(redactSecret("Bearer secret-value failed; token=secret-value", "secret-value")).toBe(
+      "Bearer [REDACTED] failed; token=[REDACTED]",
     );
+    expect(redactSecret("network failed", "secret-value")).toBe("network failed");
   });
 
   it("does not treat a blank value as a replacement pattern", () => {

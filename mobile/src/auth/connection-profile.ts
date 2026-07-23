@@ -76,8 +76,7 @@ export function normalizeTrackerOrigin(input: string): string {
   }
 
   const trackerIndex = trackerSegmentIndex(url.pathname);
-  const basePath =
-    trackerIndex >= 0 ? url.pathname.slice(0, trackerIndex) : url.pathname;
+  const basePath = trackerIndex >= 0 ? url.pathname.slice(0, trackerIndex) : url.pathname;
   const normalizedPath = basePath.replace(/\/+$/, "");
 
   return `${url.origin}${normalizedPath}`;
