@@ -4,13 +4,16 @@ import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
+import { ConnectionProvider } from "@/auth/ConnectionProvider";
 import { ThemeProvider, useAppTheme } from "@/theme/ThemeProvider";
 
 export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <ThemeProvider>
-        <ThemedStack />
+        <ConnectionProvider>
+          <ThemedStack />
+        </ConnectionProvider>
       </ThemeProvider>
     </SafeAreaProvider>
   );

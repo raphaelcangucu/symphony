@@ -400,14 +400,14 @@ Expected: PASS.
 
 Result: GREEN observed: 10/10 profile tests passed.
 
-- [ ] **Step 5: Write failing storage contract tests**
+- [x] **Step 5: Write failing storage contract tests**
 
 Use injected AsyncStorage and SecureStore adapters. Prove that metadata is
 written to AsyncStorage, token is written only to SecureStore under
 `symphony.connection.<id>.token`, removing a profile deletes both, and active
 profile falls back to the first remaining profile.
 
-- [ ] **Step 6: Run storage tests and verify RED**
+- [x] **Step 6: Run storage tests and verify RED**
 
 Run:
 
@@ -417,7 +417,9 @@ npm test -- src/auth/connection-storage.test.ts
 
 Expected: FAIL because storage is missing.
 
-- [ ] **Step 7: Implement storage and provider**
+Result: RED observed: Vitest could not resolve `./connection-storage`.
+
+- [x] **Step 7: Implement storage and provider**
 
 The provider exposes:
 
@@ -436,7 +438,7 @@ type ConnectionContextValue = {
 
 Hydration must never place a token in persisted Zustand/AsyncStorage state.
 
-- [ ] **Step 8: Run tests and verify GREEN**
+- [x] **Step 8: Run tests and verify GREEN**
 
 Run:
 
@@ -447,7 +449,12 @@ npm run typecheck
 
 Expected: PASS.
 
-- [ ] **Step 9: Commit**
+Result: PASS. All 15 auth tests pass. The storage contract proves tokens never
+enter AsyncStorage, credential replacement does not rewrite metadata, removal
+deletes SecureStore data, and active selection falls back safely. TypeScript and
+Oxlint pass with the provider mounted at the application root.
+
+- [x] **Step 9: Commit**
 
 ```bash
 git add mobile/src/auth
