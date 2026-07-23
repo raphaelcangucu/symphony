@@ -344,6 +344,28 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
     assert Keyword.get(opts, :codex_config)["approval_policy"] == "never"
   end
 
+  test "send_message_to_thread/4 forwards the persisted Codex thread for resume" do
+    {:ok, thread} =
+      History.create_freeform_thread(%{
+        title: "Resume Codex",
+        workspace_path: tmp_dir(),
+        agent_kind: "codex"
+      })
+
+    {:ok, thread} = History.put_agent_thread_id(thread, "codex", "codex-thread-existing")
+
+    runner = fn _workspace, _prompt, _issue, opts ->
+      send(self(), {:resume_opts, opts})
+      {:ok, %{assistant_message: "ok", tool_calls: [], codex_thread_id: "codex-thread-existing", turn_id: "t-2"}}
+    end
+
+    assert {:ok, _result} =
+             AgentSession.send_message_to_thread(thread, "continue", %{}, runner: runner)
+
+    assert_receive {:resume_opts, opts}
+    assert Keyword.fetch!(opts, :resume_thread_id) == "codex-thread-existing"
+  end
+
   test "send_message_to_thread/4 ignores malformed Codex stream payloads without crashing", %{workspace_root: workspace_root} do
     {:ok, thread} =
       History.create_freeform_thread(%{

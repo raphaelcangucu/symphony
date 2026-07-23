@@ -697,16 +697,15 @@ defmodule SymphonyElixir.Codex.CodingAgent do
     end
   end
 
-  # Goal-mode runs reuse the issue's durable Codex thread so the native goal
-  # state, history and accounting persist across orchestrator dispatches.
-  # Non-goal runs keep the previous behavior of starting a fresh thread each time
-  # and relying on the workspace git state plus resume prompts for continuity.
+  # Goal-mode runs may resolve the issue's durable Codex thread from the
+  # workspace sidecar. Interactive callers can explicitly provide their own
+  # persisted thread id. Runs with neither source start a fresh thread.
   defp start_or_resume_thread(port, workspace, session_policies, opts, section) do
     case resumable_thread_id(workspace, opts, section) do
       {:ok, thread_id} ->
         case resume_thread(port, thread_id, session_policies, opts) do
           {:ok, resumed_id} ->
-            Logger.info("Codex resumed durable thread thread_id=#{resumed_id} for goal-mode run")
+            Logger.info("Codex resumed thread thread_id=#{resumed_id}")
             {:ok, resumed_id, :resumed}
 
           {:error, reason} ->
@@ -727,17 +726,18 @@ defmodule SymphonyElixir.Codex.CodingAgent do
     end
   end
 
-  # Resume only when the run is in goal mode and goals are enabled. The resume
-  # target is the issue's durable Codex thread id (passed explicitly by the
-  # runner) or the workspace session sidecar written by a previous run.
+  # An explicit resume target belongs to the caller and is honored for both
+  # interactive and goal-mode runs. Resolving a workspace sidecar remains
+  # goal-only so ordinary orchestrator turns still start independent threads.
   defp resumable_thread_id(workspace, opts, section) do
-    if goal_opt?(opts) and CodexConfig.goals_enabled?(section) do
-      case Keyword.get(opts, :resume_thread_id) do
-        id when is_binary(id) and id != "" -> {:ok, id}
-        _ -> Session.resolve(workspace, opts)
-      end
-    else
-      :error
+    case Keyword.get(opts, :resume_thread_id) do
+      id when is_binary(id) and id != "" ->
+        {:ok, id}
+
+      _ ->
+        if goal_opt?(opts) and CodexConfig.goals_enabled?(section),
+          do: Session.resolve(workspace, opts),
+          else: :error
     end
   end
 
@@ -806,15 +806,19 @@ defmodule SymphonyElixir.Codex.CodingAgent do
   end
 
   defp establish_goal(port, thread_id, :resumed, opts, section) do
-    case request_goal_get(port, thread_id) do
-      {:ok, %{} = goal} ->
-        {:ok, goal_state_from_status(goal_status_value(goal)), goal}
+    if goal_opt?(opts) do
+      case request_goal_get(port, thread_id) do
+        {:ok, %{} = goal} ->
+          {:ok, goal_state_from_status(goal_status_value(goal)), goal}
 
-      {:ok, nil} ->
-        maybe_set_goal(port, thread_id, Keyword.get(opts, :goal), section)
+        {:ok, nil} ->
+          maybe_set_goal(port, thread_id, Keyword.get(opts, :goal), section)
 
-      {:error, reason} ->
-        {:error, {:goal_status_failed, reason}}
+        {:error, reason} ->
+          {:error, {:goal_status_failed, reason}}
+      end
+    else
+      {:ok, :not_requested, nil}
     end
   end
 
