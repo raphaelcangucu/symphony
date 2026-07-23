@@ -10,6 +10,7 @@ import { DevServerOutputPanel } from "@/components/issues/issue-detail/DevServer
 import { useIssueDevServers, type UseIssueDevServersResult } from "@/hooks/useIssueDevServers";
 import {
   localPreviewUrl,
+  publicTunnelPreviewUrl,
   readyPreviewUrl,
   selectPrimaryServer,
 } from "@/lib/devServerUrls";
@@ -116,6 +117,7 @@ export function PreviewPanel({
   const primaryServer = selectPrimaryServer(data?.servers ?? []);
   const primaryUrl = readyPreviewUrl(primaryServer);
   const primaryLocalUrl = localPreviewUrl(primaryServer);
+  const primaryTunnelUrl = publicTunnelPreviewUrl(primaryServer);
   const hasRequiredIdentifiers =
     projectSlug.trim().length > 0 &&
     (issueScoped
@@ -206,7 +208,9 @@ export function PreviewPanel({
         />
         <SecondaryPreviewControls disabled={controlsDisabled} onRestart={restart} onStop={stop} />
       </div>
-      {openPrimaryUrl ? <ReadyUrlLine url={openPrimaryUrl} /> : null}
+      {openPrimaryUrl || primaryTunnelUrl || primaryLocalUrl ? (
+        <ReadyUrlLine fallbackUrl={openPrimaryUrl} localUrl={primaryLocalUrl} tunnelUrl={primaryTunnelUrl} />
+      ) : null}
 
       {unavailableMessage ? (
         <StateCallout tone="warning" title={unavailableMessage.title}>
@@ -388,13 +392,47 @@ function SecondaryPreviewControls({
   );
 }
 
-function ReadyUrlLine({ url }: { url: string }) {
+function ReadyUrlLine({
+  fallbackUrl,
+  localUrl,
+  tunnelUrl,
+}: {
+  fallbackUrl: string | null;
+  localUrl: string | null;
+  tunnelUrl: string | null;
+}) {
   const { t } = useTranslation();
+  const rows: Array<{ key: string; label: string; url: string }> = [];
+
+  if (tunnelUrl) {
+    rows.push({ key: "tunnel", label: t("issue.preview.publicTunnel"), url: tunnelUrl });
+  }
+  if (localUrl && localUrl !== tunnelUrl) {
+    rows.push({ key: "local", label: t("issue.preview.local"), url: localUrl });
+  }
+  if (rows.length === 0 && fallbackUrl) {
+    rows.push({ key: "ready", label: t("issue.preview.readyUrl"), url: fallbackUrl });
+  }
+
+  if (rows.length === 0) {
+    return null;
+  }
 
   return (
-    <div className="flex flex-col gap-1 rounded-lg border bg-emerald-500/10 px-3 py-2 text-xs sm:flex-row sm:items-center">
-      <span className="font-medium text-emerald-800 dark:text-emerald-200">{t("issue.preview.readyUrl")}</span>
-      <code className="break-all font-mono text-emerald-700 dark:text-emerald-300">{url}</code>
+    <div className="space-y-1.5 rounded-lg border bg-emerald-500/10 px-3 py-2 text-xs">
+      {rows.map((row) => (
+        <div key={row.key} className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:gap-2">
+          <span className="shrink-0 font-medium text-emerald-800 dark:text-emerald-200">{row.label}</span>
+          <a
+            href={row.url}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="break-all font-mono text-emerald-700 underline-offset-2 hover:underline dark:text-emerald-300"
+          >
+            {row.url}
+          </a>
+        </div>
+      ))}
     </div>
   );
 }

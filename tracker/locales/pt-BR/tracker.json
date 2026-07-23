@@ -1008,7 +1008,7 @@
       "readyFrom": "Preview pronto a partir de {{slug}}.",
       "ready": "Preview pronto.",
       "readyUrl": "URL pronta",
-      "publicTunnel": "Público (túnel Cloudflare):",
+      "publicTunnel": "Túnel:",
       "local": "Local:",
       "openPreview": "Abrir preview",
       "provisioningTitle": "Preview sendo provisionado...",
