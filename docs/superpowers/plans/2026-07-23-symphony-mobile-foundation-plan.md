@@ -1189,3 +1189,33 @@ complete.
 git add mobile README.md docs
 git commit -m "docs(mobile): document companion development"
 ```
+
+## Android build evidence
+
+The Android build uses Expo SDK 55, React Native 0.83.10, JDK 17, compile and
+target SDK 36, and NDK 27.1.12297006. React Native 0.83.10 is intentionally
+excluded from `expo install --check`: the installed Expo 55.0.28 native-module
+manifest selects 0.83.10, `expo prebuild` recommends it, and Gradle validates it
+with a successful native release build.
+
+Run the reproducible arm64 build with:
+
+```bash
+cd mobile
+npm run build:android:release
+```
+
+Validated on 2026-07-23:
+
+- Gradle `assembleRelease`: `BUILD SUCCESSFUL`
+- package: `dev.dev10x.symphony`
+- version: `0.1.0` (`versionCode` 1)
+- minimum SDK: 24
+- target and compile SDK: 36
+- ABI: `arm64-v8a`
+- offline JavaScript bundle: `assets/index.android.bundle`
+- signature: APK Signature Scheme v2, using the development Android key
+- SHA-256: `e6da791c3ff15f23bc17cae08742e15bb83bdfdc50dde2ddc2678e764c6ad248`
+
+The release artifact is installable for internal testing. A private production
+keystore is still required before publishing to Google Play.

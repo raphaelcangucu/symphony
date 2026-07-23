@@ -19,7 +19,6 @@ const config: ExpoConfig = {
       foregroundImage: "./assets/adaptive-icon.png",
       backgroundColor: "#111111",
     },
-    edgeToEdgeEnabled: true,
   },
   web: {
     bundler: "metro",
