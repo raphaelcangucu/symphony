@@ -32,6 +32,10 @@ export function classifySessionOutcome(initialMessageCount, finalMessageCount) {
   return finalMessageCount > initialMessageCount ? "completed" : "failed";
 }
 
+export function issueStatusName(issue) {
+  return typeof issue?.status === "string" ? issue.status : issue?.status?.name ?? null;
+}
+
 function requiredEnvironment(env) {
   const runtimeRoot = env.SYMPHONY_BENCH_RUNTIME?.trim();
   const runId = env.SYMPHONY_BENCH_RUN_ID?.trim();

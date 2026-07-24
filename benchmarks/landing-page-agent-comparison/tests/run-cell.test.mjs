@@ -5,6 +5,7 @@ import {
   artifactSlug,
   classifySessionOutcome,
   issueRoute,
+  issueStatusName,
   selectRun,
   sessionRoute,
 } from "../src/run-cell.mjs";
@@ -51,4 +52,12 @@ test("tracker routes target the real session and issue surfaces", () => {
 test("session outcome preserves fast provider failures without a fake response", () => {
   assert.equal(classifySessionOutcome(0, 1), "completed");
   assert.equal(classifySessionOutcome(0, 0), "failed");
+});
+
+test("issue status normalizes tracker string and presenter object shapes", () => {
+  assert.equal(issueStatusName({ status: "Human Review" }), "Human Review");
+  assert.equal(
+    issueStatusName({ status: { name: "In Progress", category: "active" } }),
+    "In Progress",
+  );
 });

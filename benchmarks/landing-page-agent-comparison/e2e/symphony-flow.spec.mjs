@@ -7,6 +7,7 @@ import { readCanonicalPrompt } from "../src/contract.mjs";
 import {
   classifySessionOutcome,
   issueRoute,
+  issueStatusName,
   selectRun,
   sessionRoute,
 } from "../src/run-cell.mjs";
@@ -30,11 +31,12 @@ async function waitForIssueCompletion(api, projectSlug, identifier, timeoutMs) {
     issue = await api.request(
       `/projects/${encodeURIComponent(projectSlug)}/issues/${encodeURIComponent(identifier)}`,
     );
-    if (issue.status === "Human Review" || issue.status === "Done") return issue;
+    const status = issueStatusName(issue);
+    if (status === "Human Review" || status === "Done") return issue;
     await new Promise((resolvePromise) => setTimeout(resolvePromise, 2_000));
   }
   throw new Error(
-    `orchestrator issue ${identifier} did not complete; last status=${issue?.status ?? "unknown"}`,
+    `orchestrator issue ${identifier} did not complete; last status=${issueStatusName(issue) ?? "unknown"}`,
   );
 }
 
@@ -113,17 +115,19 @@ test("executes one provider cell through the real Symphony tracker", async ({
     } else {
       const route = issueRoute(manifest.project_slug, run.issue_identifier);
       result.tracker_url = new URL(route, baseUrl).href;
-      await api.request(
-        `/projects/${encodeURIComponent(manifest.project_slug)}/issues/${encodeURIComponent(run.issue_identifier)}/dispatch`,
-        {
+      const issuePath = `/projects/${encodeURIComponent(manifest.project_slug)}/issues/${encodeURIComponent(run.issue_identifier)}`;
+      const issueBefore = await api.request(issuePath);
+      if (!["Human Review", "Done"].includes(issueStatusName(issueBefore))) {
+        await api.request(`${issuePath}/dispatch`, {
           method: "POST",
           body: {
-            action: "hard_reset",
-            agent: run.provider,
-            mode: run.execution_mode,
+              action: "hard_reset",
+              agent: run.provider,
+              mode: run.execution_mode,
+            },
           },
-        },
-      );
+        );
+      }
       await page.goto(route, { waitUntil: "domcontentloaded" });
       await waitForIssueCompletion(
         api,
