@@ -2641,7 +2641,7 @@ git commit -m "feat(daemon): drain active work on shutdown"
 - Create: `elixir/test/release/installed_release_test.sh`
 - Test: `elixir/test/symphony_elixir/daemon/release_smoke_test.exs`
 
-- [ ] **Step 1: Write the failing smoke harness**
+- [x] **Step 1: Write the failing smoke harness**
 
 Create `test/release/installed_release_test.sh`:
 
@@ -2735,7 +2735,7 @@ defmodule SymphonyElixir.Daemon.ReleaseSmokeTest do
 end
 ```
 
-- [ ] **Step 2: Run the smoke test and observe missing bootstrap behavior**
+- [x] **Step 2: Run the smoke test and observe missing bootstrap behavior**
 
 Run:
 
@@ -2748,7 +2748,7 @@ mix test test/symphony_elixir/daemon/release_smoke_test.exs
 Expected: FAIL until release entrypoints, migrations, runtime paths, and assets
 all work together.
 
-- [ ] **Step 3: Add Make targets and automatic artifact selection**
+- [x] **Step 3: Add Make targets and automatic artifact selection**
 
 Add:
 
@@ -2775,7 +2775,7 @@ When `mix symphony.daemon install` has no `--artifact`, its bootstrap path runs
 `MIX_ENV=prod mix release symphony --overwrite` with argv, resolves the tar
 using `Mix.Project.config()[:version]`, then calls `Install.run/2`.
 
-- [ ] **Step 4: Run release smoke outside the checkout**
+- [x] **Step 4: Run release smoke outside the checkout**
 
 Run:
 
@@ -2792,7 +2792,7 @@ test ! -e _build
 
 The ExUnit smoke must already have booted this extracted release successfully.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add elixir/Makefile elixir/lib/mix/tasks/symphony.daemon.ex \

@@ -1,4 +1,4 @@
-.PHONY: help all setup deps ensure-deps build fmt fmt-check lint test coverage ci dialyzer repo-ci \
+.PHONY: help all setup deps ensure-deps build fmt fmt-check lint test coverage ci dialyzer repo-ci release release-smoke daemon-install daemon-status \
 	check-tools env-setup install-code-server configure-code-server db-create db-migrate migrate migration new-migration rollback \
 	backup backup-list backup-stats backup-cleanup serve update stop tracker-setup tracker-deps tracker-build tracker-lint tracker-test tracker-ci \
 	tracker-api tracker-api-escript tracker-dev project-import project-export
@@ -27,6 +27,7 @@ help:
 	@echo "Database: migrate (create+migrate), migration (alias), new-migration name=<desc>, rollback, db-create"
 	@echo "Backup:   backup (create SQLite snapshot), backup-list, backup-stats, backup-cleanup"
 	@echo "Run:      serve (boot daemon), update (restart web by default; ARGS=--orchestrator/--code-server/--all), stop, check-tools, env-setup"
+	@echo "Daemon:   release, release-smoke, daemon-install, daemon-status"
 	@echo "Editor:   install-code-server, configure-code-server (browser VS Code for task workspaces)"
 	@echo "Tracker:  tracker-setup, tracker-deps, tracker-build, tracker-lint, tracker-test, tracker-ci, tracker-dev, preview-serve, preview-tracker-dev, repo-ci"
 	@echo "Project:  project-export SLUG=name [FILE=out.yaml], project-import FILE=path.yaml [INTO=slug]"
@@ -82,6 +83,23 @@ ci:
 	$(MAKE) dialyzer
 
 all: ci
+
+release:
+	MIX_ENV=prod SYMPHONY_BUILD_COMMIT="$$(git rev-parse HEAD)" ERL_FLAGS="$${ERL_FLAGS:-+S 4:4}" \
+		$(MIX) compile --force
+	MIX_ENV=prod SYMPHONY_BUILD_COMMIT="$$(git rev-parse HEAD)" ERL_FLAGS="$${ERL_FLAGS:-+S 4:4}" \
+		$(MIX) release symphony --overwrite
+
+release-smoke: release
+	ERL_FLAGS="$${ERL_FLAGS:-+S 4:4}" $(MIX) test test/symphony_elixir/daemon/release_smoke_test.exs
+
+daemon-install: release
+	$(MIX) symphony.daemon install \
+		--artifact "_build/prod/symphony-$$( $(MIX) run --no-start -e 'IO.write(Mix.Project.config()[:version])' ).tar.gz" \
+		$(ARGS)
+
+daemon-status:
+	$(MIX) symphony.daemon status $(ARGS)
 
 repo-ci:
 	$(MAKE) ci
