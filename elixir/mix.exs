@@ -193,6 +193,7 @@ defmodule SymphonyElixir.MixProject do
 
   defp copy_release_assets(%Mix.Release{} = release) do
     app_version = to_string(release.version)
+    File.rm(Path.join(release.path, "manifest.json"))
 
     app_priv =
       Path.join([
