@@ -1291,7 +1291,7 @@ git commit -m "feat(daemon): add systemd service adapter"
 - Test: `elixir/test/symphony_elixir/daemon/preflight_test.exs`
 - Test: `elixir/test/symphony_elixir/daemon/status_test.exs`
 
-- [ ] **Step 1: Write failing health and status classification tests**
+- [x] **Step 1: Write failing health and status classification tests**
 
 ```elixir
 defmodule SymphonyElixir.Daemon.HealthProbeTest do
@@ -1440,7 +1440,7 @@ defp permissive_deps do
 end
 ```
 
-- [ ] **Step 2: Run tests and observe missing modules**
+- [x] **Step 2: Run tests and observe missing modules**
 
 Run:
 
@@ -1453,7 +1453,7 @@ mix test test/symphony_elixir/daemon/health_probe_test.exs \
 
 Expected: FAIL.
 
-- [ ] **Step 3: Implement the local HTTP probe**
+- [x] **Step 3: Implement the local HTTP probe**
 
 ```elixir
 defmodule SymphonyElixir.Daemon.HealthProbe do
@@ -1514,7 +1514,7 @@ defmodule SymphonyElixir.Daemon.HealthProbe do
 end
 ```
 
-- [ ] **Step 4: Implement status composition**
+- [x] **Step 4: Implement status composition**
 
 `Status.inspect/2` returns:
 
@@ -1553,7 +1553,7 @@ commit_drift =
 Set `healthy?` only when active, listener PID matches, health status is `ok`,
 and version/commit/unit drift are absent.
 
-- [ ] **Step 5: Implement preflight with explicit failures**
+- [x] **Step 5: Implement preflight with explicit failures**
 
 `Preflight.run/1` merges the supplied dependency map over the runtime
 dependencies, then validates in this order:
@@ -1606,7 +1606,7 @@ messages:
 
 Never invoke a kill or stop command.
 
-- [ ] **Step 6: Run tests and commit**
+- [x] **Step 6: Run tests and commit**
 
 Run:
 
