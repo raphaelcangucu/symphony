@@ -28,6 +28,10 @@ export function issueRoute(projectSlug, identifier) {
   return `/tracker/projects/${encodeURIComponent(projectSlug)}/board/issues/${encodeURIComponent(identifier)}/sessions?surface=autonomous`;
 }
 
+export function classifySessionOutcome(initialMessageCount, finalMessageCount) {
+  return finalMessageCount > initialMessageCount ? "completed" : "failed";
+}
+
 function requiredEnvironment(env) {
   const runtimeRoot = env.SYMPHONY_BENCH_RUNTIME?.trim();
   const runId = env.SYMPHONY_BENCH_RUN_ID?.trim();

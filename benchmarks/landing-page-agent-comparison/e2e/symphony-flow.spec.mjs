@@ -5,6 +5,7 @@ import { join, resolve } from "node:path";
 import { createApi } from "../src/api.mjs";
 import { readCanonicalPrompt } from "../src/contract.mjs";
 import {
+  classifySessionOutcome,
   issueRoute,
   selectRun,
   sessionRoute,
@@ -61,6 +62,7 @@ test("executes one provider cell through the real Symphony tracker", async ({
     status: "running",
     tracker_url: null,
     preview: null,
+    agent_outcome: null,
     error: null,
     artifact_root: artifactRoot,
   };
@@ -94,12 +96,20 @@ test("executes one provider cell through the real Symphony tracker", async ({
 
       await composer.fill(prompt);
       await page.getByRole("button", { name: "Send message" }).click();
-      await expect
-        .poll(() => assistantMessages.count(), { timeout: 25 * 60 * 1000 })
-        .toBeGreaterThan(initialMessageCount);
+      await page
+        .getByRole("status")
+        .waitFor({ state: "visible", timeout: 10_000 })
+        .catch(() => {});
       await expect(page.getByRole("status")).toHaveCount(0, {
         timeout: 25 * 60 * 1000,
       });
+      result.agent_outcome = classifySessionOutcome(
+        initialMessageCount,
+        await assistantMessages.count(),
+      );
+      if (result.agent_outcome === "failed") {
+        result.error = "session ended without an assistant response";
+      }
     } else {
       const route = issueRoute(manifest.project_slug, run.issue_identifier);
       result.tracker_url = new URL(route, baseUrl).href;
@@ -129,7 +139,8 @@ test("executes one provider cell through the real Symphony tracker", async ({
       path: join(artifactRoot, "symphony-final.png"),
       fullPage: true,
     });
-    result.status = "completed";
+    result.status =
+      result.agent_outcome === "failed" ? "blocked" : "completed";
   } catch (error) {
     result.status = "blocked";
     result.error = error?.stack ?? String(error);

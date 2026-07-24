@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   artifactSlug,
+  classifySessionOutcome,
   issueRoute,
   selectRun,
   sessionRoute,
@@ -45,4 +46,9 @@ test("tracker routes target the real session and issue surfaces", () => {
     issueRoute(manifest.project_slug, "SYM-6"),
     "/tracker/projects/symphony-landing-benchmark/board/issues/SYM-6/sessions?surface=autonomous",
   );
+});
+
+test("session outcome preserves fast provider failures without a fake response", () => {
+  assert.equal(classifySessionOutcome(0, 1), "completed");
+  assert.equal(classifySessionOutcome(0, 0), "failed");
 });
