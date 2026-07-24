@@ -26,6 +26,13 @@ The local Orca checkout is a development reference only. No Orca source code or
 assets will ship in Symphony Mobile. This keeps the implementation aligned with
 Symphony's own API model and avoids accidental product or protocol coupling.
 
+The Codex mobile app screenshots supplied on 2026-07-24 are the primary
+interaction reference for browsing and creating sessions. They establish a
+quieter hierarchy than the original dashboard proposal: sessions grouped under
+projects, a persistent search/new-chat dock, and a full-screen composer where
+host, project, workspace, branch, model, and effort are compact contextual
+selectors rather than a form wizard. No Codex assets or source code are used.
+
 ## Approaches Considered
 
 ### 1. Fork Orca Mobile and replace its transport
@@ -60,9 +67,9 @@ and make the requested Orca-like navigation difficult to achieve.
    - respond to approvals and user questions;
    - inspect diffs, pull requests, files, terminals, and previews;
    - receive actionable notifications.
-4. Mirror Orca's information density, dark graphite visual language, touch
-   targets, drawers, cards, and focused full-screen work surfaces while keeping
-   Dev10x/Symphony branding.
+4. Use the Codex-style session hierarchy as the primary mobile shell: restrained
+   chrome, project-grouped sessions, progressive context selectors, and a
+   composer-first new-session flow, while keeping Dev10x/Symphony branding.
 5. Reuse the tracker API as the source of truth rather than introducing a
    second business-logic implementation.
 6. Continue to function sensibly on an unreliable mobile network using cached
@@ -87,7 +94,7 @@ The root native stack contains:
 
 - `welcome`: first-run explanation and connection setup;
 - `connections`: saved Symphony server profiles and health;
-- `home`: dashboard for the active connection;
+- `home`: primary session library for the active connection;
 - `project/:projectSlug`: project overview;
 - `tasks`: searchable/filterable task list;
 - `issue/:projectSlug/:identifier`: task details and actions;
@@ -96,9 +103,16 @@ The root native stack contains:
   tools;
 - `settings`, `notifications`, `connection-log`, and `troubleshoot`.
 
-The main application uses a bottom tab bar for Home, Tasks, Sessions, and
-Settings. Deep work surfaces use a native stack above the tabs. A compact
-connection switcher in the Home header plays the role of Orca's host switcher.
+The main application opens on the session library. The root header identifies
+the active Symphony connection and its live/offline state. Projects appear as
+collapsible groups containing their sessions, while freeform sessions live in a
+separate group. A persistent bottom dock contains session search and the primary
+`Chat` action.
+
+Tasks and Settings remain first-class routes opened from the root menu; they do
+not compete with session creation in a permanent four-item tab bar. Deep work
+surfaces use the native stack. This keeps the frequent mobile path—resume or
+start a session—one tap away without removing access to the broader tracker.
 
 ### Mapping Orca concepts to Symphony
 
@@ -137,25 +151,64 @@ symphony://connect?url=https%3A%2F%2Fexample.test&token=<tracker-token>
 The token is never logged, rendered after validation, placed in analytics, or
 stored in AsyncStorage.
 
-### Home
+### Session library
 
-The dashboard follows Orca's mobile hierarchy:
+The root screen follows the supplied Codex mobile hierarchy:
 
-- compact brand and connection-state header;
-- greeting and aggregate cards for projects, active sessions, tasks needing
-  attention, and agent usage;
-- current connection card;
-- resumable/recent sessions;
-- account usage;
-- quick actions for new task, new session, connection switch, and refresh.
+- compact active-connection header with remote/local identity and socket state;
+- projects as collapsible text-first groups;
+- session rows showing title plus only the state indicator needed at that
+  moment: running, needs attention, queued, or idle;
+- freeform sessions in their own group rather than a synthetic project;
+- search and a high-contrast `Chat` button in a persistent bottom dock;
+- root menu access to Tasks, notifications, connections, diagnostics, and
+  Settings.
 
-Home aggregates existing project, recent-session, assistant-thread, agent
-execution, and usage APIs. Cards show whether data is live, cached, or
-unavailable.
+The screen avoids aggregate statistic cards and a competing tab bar. It
+aggregates projects, recent sessions, assistant threads, and executions, but
+presents them as one deduplicated session tree. Search filters project names,
+session titles, issue identifiers, and the latest stable message without
+changing group ordering.
+
+### Create session
+
+Tapping `Chat` opens a focused full-screen composer. Context is shown as a
+vertical stack of compact selector rows above the prompt:
+
+1. active Symphony connection;
+2. session scope: Free or Project;
+3. project, when Project is selected;
+4. workspace strategy:
+   - use an existing Symphony workspace;
+   - create an isolated workspace for the session;
+   - use a shared/local project workspace when isolation is not required;
+5. issue binding, when the user chooses an issue-scoped session;
+6. branch, when the chosen workspace exposes branch selection.
+
+The composer itself is the dominant control. Its toolbar contains attachment,
+agent/model, effort, voice, and Send controls. Advanced selectors stay collapsed
+unless changed. Defaults come from the current connection, project, route, and
+server catalog, so the user can type and send immediately in the common case.
+
+There is no required title field. The initial prompt is sent as the session
+seed, and the server/client derives a short title from that prompt. An optional
+rename action remains available after creation.
+
+Submitting performs one atomic user-visible flow:
+
+1. validate the selected context locally;
+2. create or resolve the workspace when required;
+3. create the matching freeform, project, workspace, or issue thread;
+4. navigate to the session immediately;
+5. send the seed only after the thread channel is ready.
+
+Creation failure preserves the draft and selected context. Retrying must not
+create duplicate threads or workspaces. Unavailable server capabilities disable
+only the affected selector and explain why.
 
 ### Tasks
 
-The Tasks tab aggregates issues from the selected project or all projects. It
+The Tasks route aggregates issues from the selected project or all projects. It
 offers project, status, priority, assignee, and search filters in bottom
 drawers. Rows show status, title, identifier, priority, assignee, agent state,
 labels, and last activity. Issue detail supports editing, comments, blockers,
@@ -163,11 +216,13 @@ subtasks, agent dispatch/resume, and opening its active workspace tools.
 
 ### Sessions
 
-The Sessions tab groups running, needs-attention, recent, pinned, and archived
-threads. A session screen renders the assistant timeline, streaming deltas,
-tool activity, the current goal/turn state, approvals, user questions, queued
-messages, attachments, model/effort/mode selection, and resume/interrupt
-controls.
+The session library groups first by project because project/workspace context is
+the user's primary navigation model. Inside a project, visible ordering is:
+needs attention, running, queued, pinned, and recent; archived sessions appear
+only when explicitly requested. A session screen renders the assistant
+timeline, streaming deltas, tool activity, the current goal/turn state,
+approvals, user questions, queued messages, attachments, model/effort/mode
+selection, and resume/interrupt controls.
 
 The initial session implementation supports the common read/compose/stream
 path. Approval cards, user questions, attachments, and goal controls are added
@@ -255,15 +310,16 @@ leases so switching screens does not create duplicate channels.
 
 ### Theme
 
-The visual system is inspired by Orca's graphite mobile palette while using
-Symphony branding:
+The visual system uses the restrained graphite language visible in the supplied
+Codex reference while retaining Symphony branding:
 
 - base `#111111`, panel `#1A1A1A`, raised `#242424`;
 - subtle border `#2A2A2A`;
 - primary text `#E8E8E8`, secondary `#969696`, muted `#606060`;
 - semantic green/amber/red/purple only for state;
 - blue for links and selection;
-- 44-point minimum interactive targets, 14-point cards, 8-point rhythm;
+- 44-point minimum interactive targets, sparing use of cards, and 8-point
+  rhythm;
 - light theme uses the same semantic tokens rather than hard-coded component
   colors.
 
@@ -298,14 +354,16 @@ for code, paths, diffs, and terminal content.
 - Vitest covers URL normalization, auth/profile storage contracts, DTO mapping,
   API errors, query behavior, and reducers.
 - React Native Testing Library covers screens, navigation triggers, offline
-  states, and mutations.
+  states, mutations, session-tree grouping, progressive selectors, preserved
+  drafts, and idempotent submission.
 - Mock Service Worker or fetch fixtures provide deterministic REST contracts.
 - Phoenix channel adapters are tested behind a small transport interface.
 - Expo typecheck and lint run on every change.
-- Maestro smoke flows cover connect, dashboard, task navigation, session
-  messaging, and connection switching on Android and iOS simulators.
-- Manual validation compares phone screenshots against the Orca-inspired
-  reference hierarchy at 390×844 and 430×932.
+- Maestro smoke flows cover connect, session search, context selection, new
+  session creation, task navigation, session messaging, and connection
+  switching on Android and iOS simulators.
+- Manual validation compares phone screenshots against the supplied Codex-style
+  session hierarchy at 390×844 and 430×932.
 
 ## Delivery Slices
 
@@ -313,7 +371,8 @@ The full parity target spans independent subsystems and is delivered in these
 working increments:
 
 1. **Foundation and core companion:** Expo shell, secure connection profiles,
-   theme, home, projects, task list, session list, read/compose assistant chat.
+   theme, Codex-style session library and composer, projects, task list, and
+   read/compose assistant chat.
 2. **Task operations:** issue detail/edit/create, comments, blockers, subtasks,
    dispatch, and goal control.
 3. **Session control:** streaming tool cards, approvals, questions, attachments,
@@ -334,17 +393,21 @@ The overall objective is complete only when:
 
 1. `mobile/` builds as an Expo app for iOS and Android.
 2. A valid Symphony URL/token profile can be saved securely and re-opened.
-3. Home exposes connection health, aggregate activity, recent/resumable work,
-   usage, and quick actions.
+3. The root header exposes active-connection identity and health, with
+   connection switching and diagnostics available from the root menu.
 4. Projects, tasks, sessions, and their important states are navigable and
    refresh in real time.
-5. A user can create/update a task and steer an assistant session from mobile.
-6. Terminal, preview, files, diff/source-control, and pull-request workflows are
+5. The root session library is grouped by project, searchable, and exposes a
+   persistent `Chat` action without a dashboard-card prerequisite.
+6. A user can create a session from a composer-first screen, accept contextual
+   defaults or select connection/project/workspace/issue/branch, and keep the
+   draft when creation fails.
+7. A user can create/update a task and steer an assistant session from mobile.
+8. Terminal, preview, files, diff/source-control, and pull-request workflows are
    usable from the relevant workspace.
-7. Native notifications and deep links open the correct task/session.
-8. Offline, reconnecting, invalid-auth, and incompatible-server states are
+9. Native notifications and deep links open the correct task/session.
+10. Offline, reconnecting, invalid-auth, and incompatible-server states are
    explicit and recoverable.
-9. Automated tests, typecheck, lint, Expo doctor, and mobile smoke flows pass.
-10. Visual and interaction review confirms the app preserves the reference
-    hierarchy and density without copying Orca branding or assets.
-
+11. Automated tests, typecheck, lint, Expo doctor, and mobile smoke flows pass.
+12. Visual and interaction review confirms the app preserves the reference
+    hierarchy and density without copying Codex branding or assets.
