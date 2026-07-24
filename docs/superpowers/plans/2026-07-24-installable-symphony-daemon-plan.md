@@ -1639,7 +1639,7 @@ git commit -m "feat(daemon): report health and configuration drift"
 - Test: `elixir/test/symphony_elixir/daemon/cli_test.exs`
 - Test: `elixir/test/mix/tasks/symphony_daemon_test.exs`
 
-- [ ] **Step 1: Write failing parser and lifecycle tests**
+- [x] **Step 1: Write failing parser and lifecycle tests**
 
 ```elixir
 test "parses every supported command and option" do
@@ -1700,7 +1700,7 @@ test "forced restart kills the cgroup and waits for health" do
 end
 ```
 
-- [ ] **Step 2: Run tests and observe missing modules**
+- [x] **Step 2: Run tests and observe missing modules**
 
 Run:
 
@@ -1713,7 +1713,7 @@ mix test test/symphony_elixir/daemon/lifecycle_test.exs \
 
 Expected: FAIL.
 
-- [ ] **Step 3: Implement lifecycle operations**
+- [x] **Step 3: Implement lifecycle operations**
 
 Implement:
 
@@ -1763,7 +1763,7 @@ The default `wait_healthy` polls `Status.inspect/2` every 250 ms for 30 seconds,
 returns immediately on `:healthy`, and returns
 `{:error, {:health_timeout, last_status}}` at the deadline.
 
-- [ ] **Step 4: Implement CLI parsing and output**
+- [x] **Step 4: Implement CLI parsing and output**
 
 `CLI.parse/1` uses strict `OptionParser` switches per command. `CLI.run/2`
 returns:
@@ -1793,7 +1793,7 @@ def main(["daemon" | rest]) do
 end
 ```
 
-- [ ] **Step 5: Run focused tests and commit**
+- [x] **Step 5: Run focused tests and commit**
 
 Run:
 
