@@ -1680,27 +1680,62 @@ defmodule SymphonyElixir.Assistant.AgentSession do
 
   defp tool_call_from_payload(payload, event, result) do
     params = Map.get(payload, "params") || Map.get(payload, :params) || %{}
-    raw_name = Map.get(params, "name") || Map.get(params, "tool") || Map.get(params, :name) || Map.get(params, :tool) || "unknown"
+    item = Map.get(params, "item") || Map.get(params, :item) || params
+
+    raw_name =
+      Map.get(item, "name") ||
+        Map.get(item, :name) ||
+        Map.get(params, "name") ||
+        Map.get(params, "tool") ||
+        Map.get(params, :name) ||
+        Map.get(params, :tool) ||
+        "unknown"
+
     # Strip the MCP gateway prefix that the Claude adapter emits for tools registered
     # via the ToolGateway. Codex names are unaffected (no-op for names without the prefix).
     name = String.replace_prefix(raw_name, "mcp__symphony__", "")
+    result = nested_tool_result(item, result)
 
     %{
-      id: provider_tool_call_id(payload),
+      id: provider_tool_call_id(payload, item),
       name: name,
       status: tool_call_status(event),
-      arguments: ToolCallPresenter.arguments(payload),
-      output: ToolCallPresenter.output(result),
+      arguments: Map.get(item, "input") || Map.get(item, :input) || ToolCallPresenter.arguments(payload),
+      output: nested_tool_output(item, result),
       result: result
     }
   end
 
-  defp provider_tool_call_id(payload) do
-    case Map.get(payload, "id") || Map.get(payload, :id) do
+  defp provider_tool_call_id(payload, item) do
+    case Map.get(item, "tool_use_id") ||
+           Map.get(item, :tool_use_id) ||
+           Map.get(item, "id") ||
+           Map.get(item, :id) ||
+           Map.get(payload, "id") ||
+           Map.get(payload, :id) do
       nil -> nil
       id when is_binary(id) -> id
       id when is_integer(id) -> Integer.to_string(id)
       id -> id
+    end
+  end
+
+  defp nested_tool_result(item, result) when is_map(item) and is_map(result) do
+    case Map.get(item, "type") || Map.get(item, :type) do
+      "tool_result" ->
+        result
+        |> Map.put_new("content", Map.get(item, "content") || Map.get(item, :content))
+        |> Map.put_new("is_error", Map.get(item, "is_error") || Map.get(item, :is_error) || false)
+
+      _type ->
+        result
+    end
+  end
+
+  defp nested_tool_output(item, result) do
+    case Map.get(item, "content") || Map.get(item, :content) do
+      nil -> ToolCallPresenter.output(result)
+      content -> format_cursor_tool_output(content)
     end
   end
 
