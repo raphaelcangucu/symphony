@@ -986,7 +986,7 @@ git commit -m "feat(daemon): add atomic installation primitives"
 - Test: `elixir/test/symphony_elixir/daemon/systemd_test.exs`
 - Test: `elixir/test/symphony_elixir/daemon/listener_test.exs`
 
-- [ ] **Step 1: Write failing unit and adapter tests**
+- [x] **Step 1: Write failing unit and adapter tests**
 
 ```elixir
 defmodule SymphonyElixir.Daemon.Systemd.UnitTest do
@@ -1060,7 +1060,7 @@ defmodule SymphonyElixir.Daemon.ListenerTest do
 end
 ```
 
-- [ ] **Step 2: Run tests and observe missing modules**
+- [x] **Step 2: Run tests and observe missing modules**
 
 Run:
 
@@ -1073,7 +1073,7 @@ mix test test/symphony_elixir/daemon/systemd/unit_test.exs \
 
 Expected: FAIL.
 
-- [ ] **Step 3: Implement deterministic unit rendering**
+- [x] **Step 3: Implement deterministic unit rendering**
 
 ```elixir
 defmodule SymphonyElixir.Daemon.Systemd.Unit do
@@ -1119,7 +1119,7 @@ defmodule SymphonyElixir.Daemon.Systemd.Unit do
 end
 ```
 
-- [ ] **Step 4: Implement systemd argv calls and parsing**
+- [x] **Step 4: Implement systemd argv calls and parsing**
 
 ```elixir
 defmodule SymphonyElixir.Daemon.Systemd do
@@ -1219,7 +1219,7 @@ defmodule SymphonyElixir.Daemon.Systemd do
 end
 ```
 
-- [ ] **Step 5: Implement the Linux listener probe**
+- [x] **Step 5: Implement the Linux listener probe**
 
 ```elixir
 defmodule SymphonyElixir.Daemon.Listener do
@@ -1257,7 +1257,7 @@ defmodule SymphonyElixir.Daemon.Listener do
 end
 ```
 
-- [ ] **Step 6: Run tests and commit**
+- [x] **Step 6: Run tests and commit**
 
 Run:
 
