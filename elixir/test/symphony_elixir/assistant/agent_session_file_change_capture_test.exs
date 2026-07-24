@@ -9,13 +9,21 @@ defmodule SymphonyElixir.Assistant.AgentSessionFileChangeCaptureTest do
   alias SymphonyElixir.Assistant.{AgentSession, History, Thread}
   alias SymphonyElixir.GitFixtures
   alias SymphonyElixir.Repo
+  alias SymphonyElixir.Workflow
 
   @fake_codex_app_server Path.expand("../../support/fixtures/fake_codex_app_server.py", __DIR__)
 
   setup do
     Repo.delete_all(Thread)
     workspace = Path.join(System.tmp_dir!(), "file-change-capture-#{System.unique_integer([:positive])}")
+    workflow_root = Path.join(System.tmp_dir!(), "file-change-workflow-#{System.unique_integer([:positive])}")
+    workflow_file = Path.join(workflow_root, "WORKFLOW.md")
+    previous_workflow_file = Application.get_env(:symphony_elixir, :workflow_file_path)
+
     File.mkdir_p!(workspace)
+    File.mkdir_p!(workflow_root)
+    File.write!(workflow_file, Workflow.to_markdown(%{"workspace" => %{"root" => System.tmp_dir!()}}, ""))
+    Workflow.set_workflow_file_path(workflow_file)
 
     GitFixtures.sh!(workspace, """
     git init -b main . &&
@@ -26,6 +34,13 @@ defmodule SymphonyElixir.Assistant.AgentSessionFileChangeCaptureTest do
     on_exit(fn ->
       Repo.delete_all(Thread)
       File.rm_rf!(workspace)
+      File.rm_rf!(workflow_root)
+
+      if is_binary(previous_workflow_file) do
+        Workflow.set_workflow_file_path(previous_workflow_file)
+      else
+        Workflow.clear_workflow_file_path()
+      end
     end)
 
     %{workspace: workspace}

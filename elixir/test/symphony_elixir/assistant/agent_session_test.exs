@@ -567,7 +567,7 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
       File.rm_rf!(thread_workspace)
       File.ln_s!(outside, thread_workspace)
 
-      assert {:error, {:authoring_goal_unavailable, :workspace_not_executable}} =
+      assert {:error, {:workspace_symlink_escape, ^thread_workspace, ^workspace_root}} =
                AgentSession.send_message_to_issue_thread(session_thread, "blocked", %{}, runner: runner)
 
       refute_receive {:explicit_session_runner, _workspace}
