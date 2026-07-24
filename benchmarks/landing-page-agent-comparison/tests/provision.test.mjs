@@ -49,15 +49,9 @@ test("preview uses one explicit canonical serve step", () => {
   assert.equal(steps.length, 1);
   assert.equal(steps[0].role, "serve");
   assert.equal(steps[0].working_dir, "site");
-  assert.deepEqual(steps[0].run_spec.start, [[
-      "npm",
-      "run",
-      "dev",
-      "--",
-      "--host",
-      "0.0.0.0",
-      "--port",
-      "${PORT}",
-    ],
-  ]);
+  assert.equal(
+    steps[0].command,
+    `sh -c 'npm run dev -- --host 0.0.0.0 --port "$PORT"'`,
+  );
+  assert.equal(steps[0].run_spec, undefined);
 });

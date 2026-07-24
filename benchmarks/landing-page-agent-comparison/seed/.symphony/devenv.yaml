@@ -7,16 +7,4 @@ steps:
     url_path: /
     ready: http
     ready_path: /
-    command: symphony-preview-runner
-    run_spec:
-      cwd: .
-      prepare:
-        - [npm, install]
-      start:
-        - [npm, run, dev, "--", "--host", "0.0.0.0", "--port", "${PORT}"]
-      health:
-        path: /
-        timeout_ms: 120000
-      stop:
-        signal: TERM
-        grace_ms: 5000
+    command: sh -c 'npm run dev -- --host 0.0.0.0 --port "$PORT"'

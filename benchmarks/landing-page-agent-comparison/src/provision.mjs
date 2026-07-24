@@ -181,7 +181,7 @@ export function devEnvironmentSteps() {
   return [
     {
       description: "Symphony landing preview",
-      command: "symphony-preview-runner",
+      command: `sh -c 'npm run dev -- --host 0.0.0.0 --port "$PORT"'`,
       working_dir: "site",
       source: "convention",
       role: "serve",
@@ -191,24 +191,6 @@ export function devEnvironmentSteps() {
       ready_path: "/",
       primary: true,
       optional: false,
-      run_spec: {
-        cwd: ".",
-        prepare: [["npm", "install"]],
-        start: [
-          [
-            "npm",
-            "run",
-            "dev",
-            "--",
-            "--host",
-            "0.0.0.0",
-            "--port",
-            "${PORT}",
-          ],
-        ],
-        health: { path: "/", timeout_ms: 120000 },
-        stop: { signal: "TERM", grace_ms: 5000 },
-      },
     },
   ];
 }
