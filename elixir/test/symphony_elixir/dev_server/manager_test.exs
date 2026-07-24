@@ -44,6 +44,7 @@ defmodule SymphonyElixir.DevServer.ManagerTest do
     TestSupport.write_workflow_file!(workflow_file)
     Workflow.set_workflow_file_path(workflow_file)
 
+    stop_live_instances()
     clear_reservation_table()
     migrate_repo()
     clean_repo()
@@ -952,18 +953,20 @@ defmodule SymphonyElixir.DevServer.ManagerTest do
         session_name: "sym-dev-test"
       })
 
-    result =
-      Manager.start_instance_for_server(project.slug, identifier, record.id, ready_timeout_ms: 50)
-
-    refute match?({:ok, [^old_pid]}, result)
-
-    new_pid =
-      case Registry.lookup(instance_registry(), key) do
-        [{pid, _}] -> pid
-        [] -> nil
-      end
+    assert {:ok, [new_pid]} =
+             Manager.start_instance_for_server(project.slug, identifier, record.id,
+               ready_timeout_ms: 0,
+               instance_opts: [
+                 tmux: FakeTmux,
+                 command_sender: fn _session_name, _data -> :ok end,
+                 probe: fn _host, _port, _probe, _path -> {:error, :timeout} end,
+                 probe_interval_ms: 60_000,
+                 max_probe_attempts: 1_000
+               ]
+             )
 
     assert is_pid(new_pid)
+    assert Registry.lookup(instance_registry(), key) == [{new_pid, nil}]
     refute new_pid == old_pid
     refute Process.alive?(old_pid)
   end
@@ -1133,6 +1136,26 @@ defmodule SymphonyElixir.DevServer.ManagerTest do
     end
   rescue
     ArgumentError -> :ok
+  end
+
+  defp stop_live_instances do
+    instance_supervisor = Module.concat(Manager, InstanceSupervisor)
+
+    case Process.whereis(instance_supervisor) do
+      pid when is_pid(pid) ->
+        instance_supervisor
+        |> DynamicSupervisor.which_children()
+        |> Enum.each(fn
+          {_id, child_pid, _type, _modules} when is_pid(child_pid) ->
+            DynamicSupervisor.terminate_child(instance_supervisor, child_pid)
+
+          _child ->
+            :ok
+        end)
+
+      nil ->
+        :ok
+    end
   end
 
   test "serve_step_with_setup chains matching setup commands in the dev-server session", %{project: project} do

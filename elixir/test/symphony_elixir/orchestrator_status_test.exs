@@ -306,7 +306,7 @@ defmodule SymphonyElixir.OrchestratorStatusTest do
     Application.put_env(:symphony_elixir, :memory_tracker_recipient, self())
 
     orchestrator_name = Module.concat(__MODULE__, :TransitionOrchestrator)
-    {:ok, pid} = Orchestrator.start_link(name: orchestrator_name)
+    {:ok, pid} = Orchestrator.start_link(name: orchestrator_name, schedule_initial_tick?: false)
 
     on_exit(fn -> if Process.alive?(pid), do: Process.exit(pid, :normal) end)
 
@@ -334,7 +334,12 @@ defmodule SymphonyElixir.OrchestratorStatusTest do
 
     assert_receive {:memory_tracker_state_update, ^issue_id, "Human Review"}, 1_000
 
-    state = :sys.get_state(pid)
+    state =
+      wait_for_state(pid, fn state ->
+        not MapSet.member?(state.claimed, issue_id) and
+          not Map.has_key?(state.running, issue_id)
+      end)
+
     refute MapSet.member?(state.claimed, issue_id)
     refute Map.has_key?(state.retry_attempts, issue_id)
     refute Map.has_key?(state.running, issue_id)
@@ -1830,6 +1835,27 @@ defmodule SymphonyElixir.OrchestratorStatusTest do
   defp wait_for_snapshot(pid, predicate, timeout_ms \\ 200) when is_function(predicate, 1) do
     deadline_ms = System.monotonic_time(:millisecond) + timeout_ms
     do_wait_for_snapshot(pid, predicate, deadline_ms)
+  end
+
+  defp wait_for_state(pid, predicate, timeout_ms \\ 2_000) when is_function(predicate, 1) do
+    deadline_ms = System.monotonic_time(:millisecond) + timeout_ms
+    do_wait_for_state(pid, predicate, deadline_ms)
+  end
+
+  defp do_wait_for_state(pid, predicate, deadline_ms) do
+    state = :sys.get_state(pid)
+
+    cond do
+      predicate.(state) ->
+        state
+
+      System.monotonic_time(:millisecond) >= deadline_ms ->
+        flunk("timed out waiting for orchestrator state: #{inspect(state)}")
+
+      true ->
+        Process.sleep(5)
+        do_wait_for_state(pid, predicate, deadline_ms)
+    end
   end
 
   defp do_wait_for_snapshot(pid, predicate, deadline_ms) do

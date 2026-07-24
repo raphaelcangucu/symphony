@@ -157,8 +157,8 @@ defmodule SymphonyElixir.Workspace.InventoryTest do
     fast = create_issue!("Fast probe")
     slow_ws = workspace_dir!(ctx.segment_root, slow.identifier)
     fast_ws = workspace_dir!(ctx.segment_root, fast.identifier)
-    _slow_repo = GitFixtures.make_repo!(ctx.tmp, slow_ws, "backend")
-    _fast_repo = GitFixtures.make_repo!(ctx.tmp, fast_ws, "backend")
+    _slow_repo = GitFixtures.make_repo!(Path.join(ctx.tmp, "slow"), slow_ws, "backend")
+    _fast_repo = GitFixtures.make_repo!(Path.join(ctx.tmp, "fast"), fast_ws, "backend")
 
     slow_size_fun = fn path ->
       if String.starts_with?(path, slow_ws) do

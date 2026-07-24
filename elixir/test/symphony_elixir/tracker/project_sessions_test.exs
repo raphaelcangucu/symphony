@@ -21,7 +21,7 @@ defmodule SymphonyElixir.Tracker.ProjectSessionsTest do
     newer = insert_thread!("Newer title", ~U[2026-07-01 11:00:00.000000Z])
 
     assert {:ok, %{data: [row], meta: %{next_cursor: next_cursor, project_activity_at: activity_at}}} =
-             ProjectSessions.list("sessions", limit: 1)
+             list_sessions(limit: 1)
 
     assert row.id == "thread:#{newer.id}"
     assert row.title == "Newer title"
@@ -38,10 +38,10 @@ defmodule SymphonyElixir.Tracker.ProjectSessionsTest do
     _newer = insert_thread!("Newer title", ~U[2026-07-01 11:00:00.000000Z])
 
     assert {:ok, %{data: [_newer_row], meta: %{next_cursor: cursor}}} =
-             ProjectSessions.list("sessions", limit: 1)
+             list_sessions(limit: 1)
 
     assert {:ok, %{data: [older_row], meta: %{next_cursor: nil}}} =
-             ProjectSessions.list("sessions", limit: 1, cursor: cursor)
+             list_sessions(limit: 1, cursor: cursor)
 
     assert older_row.id == "thread:#{older.id}"
     assert older_row.title == "Older title"
@@ -51,7 +51,7 @@ defmodule SymphonyElixir.Tracker.ProjectSessionsTest do
     huge_description = String.duplicate("x", 50_000)
     {:ok, issue} = Context.create_issue("sessions", %{title: "Huge description issue", description: huge_description})
 
-    assert {:ok, %{data: rows}} = ProjectSessions.list("sessions", limit: 20)
+    assert {:ok, %{data: rows}} = list_sessions(limit: 20)
 
     refute Enum.any?(rows, &(&1.id == "issue:#{issue.id}"))
     refute inspect(rows) =~ huge_description
@@ -262,7 +262,7 @@ defmodule SymphonyElixir.Tracker.ProjectSessionsTest do
       })
       |> Repo.insert()
 
-    assert {:ok, %{data: [row]}} = ProjectSessions.list("sessions", limit: 20)
+    assert {:ok, %{data: [row]}} = list_sessions(limit: 20)
 
     assert row.id == "thread:#{thread.id}"
     assert row.title == "Legacy project chat"
@@ -277,7 +277,7 @@ defmodule SymphonyElixir.Tracker.ProjectSessionsTest do
     live =
       insert_thread!("Live older", ~U[2026-07-16 10:00:00.000000Z], status: "active")
 
-    assert {:ok, %{data: rows}} = ProjectSessions.list("sessions", limit: 20)
+    assert {:ok, %{data: rows}} = list_sessions(limit: 20)
 
     assert Enum.map(rows, & &1.id) == ["thread:#{live.id}", "thread:#{idle.id}"]
   end
@@ -296,7 +296,7 @@ defmodule SymphonyElixir.Tracker.ProjectSessionsTest do
       })
       |> Repo.insert()
 
-    assert {:ok, %{data: [row]}} = ProjectSessions.list("sessions", limit: 20)
+    assert {:ok, %{data: [row]}} = list_sessions(limit: 20)
 
     assert row.id == "thread:#{thread.id}"
     assert row.execution_mode == "plan"
@@ -320,6 +320,16 @@ defmodule SymphonyElixir.Tracker.ProjectSessionsTest do
 
     {1, _} = Repo.update_all(from(thread in Thread, where: thread.id == ^thread.id), set: [updated_at: updated_at])
     Repo.get!(Thread, thread.id)
+  end
+
+  defp list_sessions(opts) do
+    ProjectSessions.list(
+      "sessions",
+      Keyword.merge(
+        [executions: fn -> [] end, workspace_sessions: fn -> [] end],
+        opts
+      )
+    )
   end
 
   defp migrate_repo do

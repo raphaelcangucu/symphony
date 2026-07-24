@@ -1,7 +1,17 @@
+defmodule SymphonyElixir.DevServer.PreviewRunnerManagerTest.FakeTmux do
+  @moduledoc false
+
+  def open_dev_session(_project_slug, _identifier, _slug, _cwd, _opts \\ []),
+    do: {:ok, %{session_name: "sym-preview-runner-test"}}
+
+  def kill_dev_session(_project_slug, _identifier, _slug, _opts \\ []), do: :ok
+end
+
 defmodule SymphonyElixir.DevServer.PreviewRunnerManagerTest do
   use ExUnit.Case, async: false
 
   alias SymphonyElixir.DevServer.Manager
+  alias SymphonyElixir.DevServer.PreviewRunnerManagerTest.FakeTmux
   alias SymphonyElixir.LocalTracker.{Context, DevEnv}
   alias SymphonyElixir.TestSupport
   alias SymphonyElixir.Workflow
@@ -24,6 +34,7 @@ defmodule SymphonyElixir.DevServer.PreviewRunnerManagerTest do
     Workflow.set_workflow_file_path(workflow_file)
 
     TestSupport.truncate_tracker!()
+    stop_live_instances()
     clear_reservation_table()
 
     {:ok, project} =
@@ -122,7 +133,16 @@ defmodule SymphonyElixir.DevServer.PreviewRunnerManagerTest do
       ])
 
     assert {:ok, [pid]} =
-             Manager.start_for_issue(project.slug, identifier, ready_timeout_ms: 0)
+             Manager.start_for_issue(project.slug, identifier,
+               ready_timeout_ms: 0,
+               instance_opts: [
+                 tmux: FakeTmux,
+                 command_sender: fn _session_name, _data -> :ok end,
+                 probe: fn _host, _port, _probe, _path -> {:error, :timeout} end,
+                 probe_interval_ms: 60_000,
+                 max_probe_attempts: 1_000
+               ]
+             )
 
     runner_path = Application.app_dir(:symphony_elixir, "priv/preview/run.sh")
     launch_command = :sys.get_state(pid).step.command
@@ -186,6 +206,26 @@ defmodule SymphonyElixir.DevServer.PreviewRunnerManagerTest do
     end
   rescue
     ArgumentError -> :ok
+  end
+
+  defp stop_live_instances do
+    instance_supervisor = Module.concat(Manager, InstanceSupervisor)
+
+    case Process.whereis(instance_supervisor) do
+      pid when is_pid(pid) ->
+        instance_supervisor
+        |> DynamicSupervisor.which_children()
+        |> Enum.each(fn
+          {_id, child_pid, _type, _modules} when is_pid(child_pid) ->
+            DynamicSupervisor.terminate_child(instance_supervisor, child_pid)
+
+          _child ->
+            :ok
+        end)
+
+      nil ->
+        :ok
+    end
   end
 
   defp restore_application_env(key, nil),

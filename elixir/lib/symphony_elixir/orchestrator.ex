@@ -105,7 +105,10 @@ defmodule SymphonyElixir.Orchestrator do
     }
 
     run_terminal_workspace_cleanup()
-    :ok = schedule_tick(0)
+
+    if Keyword.get(opts, :schedule_initial_tick?, true) do
+      :ok = schedule_tick(0)
+    end
 
     {:ok, state}
   end

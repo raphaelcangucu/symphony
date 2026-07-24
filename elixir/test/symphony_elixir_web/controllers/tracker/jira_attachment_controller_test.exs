@@ -17,6 +17,7 @@ defmodule SymphonyElixirWeb.Tracker.JiraAttachmentControllerTest do
   setup do
     start_supervised!(SymphonyElixirWeb.Endpoint)
     migrate_repo()
+    SymphonyElixir.TestSupport.truncate_tracker!()
 
     previous_token = System.get_env(@token_env)
     previous_request_fun = Application.get_env(:symphony_elixir, :jira_attachment_request_fun)

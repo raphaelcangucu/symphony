@@ -1460,7 +1460,7 @@ defmodule SymphonyElixir.DevServer.Manager do
 
     with {:ok, launch_step} <-
            managed_launch_step(project.slug, workspace_path, step_map, contract) do
-      opts =
+      base_opts =
         [
           registry_name: {:via, Registry, {@registry, key}},
           project_id: project.id,
@@ -1476,6 +1476,8 @@ defmodule SymphonyElixir.DevServer.Manager do
           record_scope: Map.get(runtime_options, :record_scope, {:issue, identifier}),
           port_allocator: fn _range, _claimed_ports -> {:ok, port} end
         ] ++ serve_probe_opts(project.slug, launch_step)
+
+      opts = Keyword.merge(base_opts, Map.get(runtime_options, :instance_opts, []))
 
       case DynamicSupervisor.start_child(@instance_supervisor, instance_child_spec(key, opts)) do
         {:ok, pid} ->
@@ -2097,10 +2099,31 @@ defmodule SymphonyElixir.DevServer.Manager do
   # turn for minutes. The instance keeps booting asynchronously regardless; the
   # caller just stops *waiting* and reports the in-flight status instead.
   defp apply_runtime_overrides(runtime_options, opts) do
-    case Keyword.get(opts, :ready_timeout_ms) do
-      ms when is_integer(ms) and ms >= 0 -> Map.put(runtime_options, :ready_timeout_ms, ms)
-      _ -> runtime_options
-    end
+    runtime_options =
+      case Keyword.get(opts, :ready_timeout_ms) do
+        ms when is_integer(ms) and ms >= 0 -> Map.put(runtime_options, :ready_timeout_ms, ms)
+        _ -> runtime_options
+      end
+
+    instance_opts =
+      opts
+      |> Keyword.get(:instance_opts, [])
+      |> case do
+        values when is_list(values) ->
+          Keyword.take(values, [
+            :tmux,
+            :command_sender,
+            :probe,
+            :probe_interval_ms,
+            :max_probe_attempts,
+            :capture_output
+          ])
+
+        _ ->
+          []
+      end
+
+    Map.put(runtime_options, :instance_opts, instance_opts)
   end
 
   defp project_workflow_config(project) do

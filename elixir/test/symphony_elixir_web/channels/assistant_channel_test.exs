@@ -1507,7 +1507,7 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
     assert_push(
       "assistant_completed",
       %{message: %{role: "assistant", content: "Continued the issue session goal."}},
-      2_000
+      10_000
     )
   end
 
@@ -1561,11 +1561,11 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
       ref = push(scope_socket, "goal_resume", %{})
       assert_reply(ref, :ok, %{}, 2_000)
 
-      assert_receive {:continued_scope, ^scope, ^workspace, prompt, thread_id}, 2_000
+      assert_receive {:continued_scope, ^scope, ^workspace, prompt, thread_id}, 10_000
       assert thread_id == enabled.id
       assert prompt =~ "Continue pursuing the chat goal"
       refute prompt =~ "dispatch the orchestrator"
-      assert_push("assistant_completed", %{message: %{role: "assistant", content: content}}, 2_000)
+      assert_push("assistant_completed", %{message: %{role: "assistant", content: content}}, 10_000)
       assert content == "Continued #{scope}"
       assert History.list_messages_for_thread(enabled.id) |> Enum.map(& &1.role) == ["assistant"]
     end
@@ -2096,7 +2096,7 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
 
     ref = push(socket, "send_message", %{"message" => "write doc"})
     assert_reply(ref, :ok)
-    assert_push("assistant_document_changed", %{identifier: "MAC-1"})
+    assert_push("assistant_document_changed", %{identifier: "MAC-1"}, 1_000)
   end
 
   test "join assistant:thread:<id> with unknown id is rejected", %{socket: socket} do
