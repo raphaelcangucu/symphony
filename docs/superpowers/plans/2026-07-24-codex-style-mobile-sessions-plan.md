@@ -376,7 +376,7 @@ git commit -m "feat(mobile): add project session tree"
 - Create: `mobile/src/features/sessions/useSessionLibrary.ts`
 - Modify: `mobile/app/index.tsx`
 
-- [ ] **Step 1: Write failing screen tests**
+- [x] **Step 1: Write failing screen tests**
 
 Prove the screen renders:
 
@@ -396,7 +396,7 @@ expect(screen.getByPlaceholderText("Search chats")).toBeTruthy();
 expect(screen.getByText("symphony")).toBeTruthy();
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run:
 
@@ -406,13 +406,13 @@ cd mobile && npm run test:ui -- src/features/sessions/SessionLibraryScreen.test.
 
 Expected: FAIL because the screen is missing.
 
-- [ ] **Step 3: Implement query composition**
+- [x] **Step 3: Implement query composition**
 
 `useSessionLibrary` loads projects and all visible thread scopes in parallel,
 then loads up to 50 project-session rows per project. React Query keys include
 the active profile id. A profile switch clears only profile-bound queries.
 
-- [ ] **Step 4: Implement the screen**
+- [x] **Step 4: Implement the screen**
 
 Use `SectionList` or a flattened `FlatList` with:
 
@@ -423,7 +423,7 @@ Use `SectionList` or a flattened `FlatList` with:
 - an absolutely positioned rounded search/chat dock;
 - persisted collapsed project slugs in AsyncStorage.
 
-- [ ] **Step 5: Verify GREEN**
+- [x] **Step 5: Verify GREEN**
 
 Run:
 
@@ -435,7 +435,7 @@ npm run typecheck
 
 Expected: library tests and TypeScript pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add mobile/src/features/sessions/SessionLibraryScreen.tsx \
