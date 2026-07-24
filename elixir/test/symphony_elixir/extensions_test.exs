@@ -276,6 +276,12 @@ defmodule SymphonyElixir.ExtensionsTest do
                  "last_message" => "rendered",
                  "started_at" => state_payload["running"] |> List.first() |> Map.fetch!("started_at"),
                  "last_event_at" => nil,
+                 "status" => "live",
+                 "bundle_role" => nil,
+                 "parent_identifier" => nil,
+                 "unit_id" => nil,
+                 "repo" => nil,
+                 "child_identifiers" => [],
                  "tokens" => %{"input_tokens" => 4, "output_tokens" => 8, "total_tokens" => 12}
                }
              ],

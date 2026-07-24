@@ -198,7 +198,7 @@ defmodule SymphonyElixir.Codex.DynamicToolTest do
 
     assert response["success"] == false
     text = hd(response["contentItems"])["text"]
-    assert Jason.decode!(text)["error"]["message"] =~ "requires a `comment_id`"
+    assert Jason.decode!(text)["error"]["message"] =~ "require a `comment_id`"
   end
 
   describe "comment tools against the local-first board" do
@@ -265,6 +265,7 @@ defmodule SymphonyElixir.Codex.DynamicToolTest do
         )
 
       assert created["success"] == true
+
       comment_id =
         created["contentItems"]
         |> hd()

@@ -194,9 +194,9 @@ defmodule SymphonyElixir.AgentExecutionTest do
       assert execution.goal.kind == "goal"
       assert execution.goal.source == "native"
       assert execution.goal.objective == "Pursue the native goal"
-      # Projected (non-live-thread) capabilities only — native pause/resume require
-      # a live resolvable thread the UI dispatches into instead.
-      assert execution.goal.capabilities == ["get", "edit", "clear"]
+      # Projected (non-live-thread) capabilities include stopping the live
+      # orchestrator run; native pause/resume still require a resolvable thread.
+      assert execution.goal.capabilities == ["get", "edit", "clear", "stop"]
       assert execution.long_running
       assert execution.long_running_label == "Pursuing goal"
     end

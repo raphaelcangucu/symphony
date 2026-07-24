@@ -7,15 +7,18 @@ defmodule SymphonyElixir.BootInstanceConfigTest do
 
   setup do
     saved_editor_enabled = System.get_env("SYMPHONY_EDITOR_ENABLED")
+    saved_editor_port = System.get_env("SYMPHONY_EDITOR_PORT")
     saved_workflow = System.get_env("SYMPHONY_WORKFLOW")
 
     on_exit(fn ->
       restore_env("SYMPHONY_EDITOR_ENABLED", saved_editor_enabled)
+      restore_env("SYMPHONY_EDITOR_PORT", saved_editor_port)
       restore_env("SYMPHONY_WORKFLOW", saved_workflow)
       File.rm(@workflow_path)
     end)
 
     System.delete_env("SYMPHONY_EDITOR_ENABLED")
+    System.delete_env("SYMPHONY_EDITOR_PORT")
     System.delete_env("SYMPHONY_WORKFLOW")
     :ok
   end
