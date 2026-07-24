@@ -725,7 +725,7 @@ git commit -m "feat(daemon): package a self-contained OTP release"
 - Test: `elixir/test/symphony_elixir/daemon/environment_test.exs`
 - Test: `elixir/test/symphony_elixir/daemon/manifest_test.exs`
 
-- [ ] **Step 1: Write failing atomic-write and rendering tests**
+- [x] **Step 1: Write failing atomic-write and rendering tests**
 
 ```elixir
 defmodule SymphonyElixir.Daemon.FilesTest do
@@ -821,7 +821,7 @@ defmodule SymphonyElixir.Daemon.ManifestTest do
 end
 ```
 
-- [ ] **Step 2: Run tests and observe missing modules**
+- [x] **Step 2: Run tests and observe missing modules**
 
 Run:
 
@@ -834,7 +834,7 @@ mix test test/symphony_elixir/daemon/files_test.exs \
 
 Expected: FAIL with undefined modules.
 
-- [ ] **Step 3: Implement atomic files**
+- [x] **Step 3: Implement atomic files**
 
 ```elixir
 defmodule SymphonyElixir.Daemon.Files do
@@ -890,7 +890,7 @@ end
 During implementation, use `:file.sync(file)` with the actual IO device shape
 accepted by OTP 28; the test must prove the final helper works on this runtime.
 
-- [ ] **Step 4: Implement safe environment and manifest modules**
+- [x] **Step 4: Implement safe environment and manifest modules**
 
 ```elixir
 defmodule SymphonyElixir.Daemon.Environment do
@@ -952,7 +952,7 @@ defmodule SymphonyElixir.Daemon.Manifest do
 end
 ```
 
-- [ ] **Step 5: Run tests and specs**
+- [x] **Step 5: Run tests and specs**
 
 Run:
 
@@ -966,7 +966,7 @@ mix specs.check
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add elixir/lib/symphony_elixir/daemon/{files,environment,manifest}.ex \
