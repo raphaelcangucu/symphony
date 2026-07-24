@@ -8,6 +8,7 @@
     "provision": "node src/provision.mjs",
     "run:cell": "node src/run-cell.mjs",
     "collect": "node src/collect.mjs",
+    "capture:visuals": "node src/capture-visuals.mjs",
     "e2e": "playwright test e2e/symphony-flow.spec.mjs --workers=1"
   },
   "devDependencies": {

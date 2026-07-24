@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { RUN_MATRIX } from "../src/contract.mjs";
+import { RUN_MATRIX, workflowPromptTemplate } from "../src/contract.mjs";
 import {
   buildRunRecords,
   devEnvironmentSteps,
@@ -28,9 +28,11 @@ test("workspace project payload configures preview, evidence and local clone", (
 test("workflow prompt injects the issue description without provider branches", () => {
   const markdown = workflowMarkdown("/tmp/landing-workspaces");
 
-  assert.match(markdown, /Execute exatamente a tarefa descrita abaixo/);
   assert.match(markdown, /\{\{ issue\.description \}\}/);
   assert.doesNotMatch(markdown, /if.*codex|if.*claude|if.*cursor/i);
+  assert.equal(workflowPromptTemplate(markdown), "{{ issue.description }}");
+  assert.equal(markdown.endsWith("{{ issue.description }}"), true);
+  assert.equal(markdown.endsWith("{{ issue.description }}\n"), false);
 });
 
 test("all six run records carry the same prompt hash", () => {

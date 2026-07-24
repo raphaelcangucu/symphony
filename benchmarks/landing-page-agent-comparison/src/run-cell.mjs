@@ -1,9 +1,12 @@
-import { execFile } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import { executeProcess } from "./process.mjs";
+
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const PLAYWRIGHT_TIMEOUT_MS = 50 * 60 * 1000;
 
 export function selectRun(manifest, runId) {
   const matches = manifest?.runs?.filter((run) => run.id === runId) ?? [];
@@ -20,6 +23,23 @@ export function artifactSlug(runId) {
   return runId;
 }
 
+export function attemptSlug(attemptId) {
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/.test(attemptId)) {
+    throw new Error(`invalid benchmark attempt id: ${attemptId}`);
+  }
+  return attemptId;
+}
+
+export function attemptArtifactPath(runtimeRoot, runId, attemptId) {
+  return join(
+    resolve(runtimeRoot),
+    "artifacts",
+    artifactSlug(runId),
+    "attempts",
+    attemptSlug(attemptId),
+  );
+}
+
 export function sessionRoute(projectSlug, threadId) {
   return `/tracker/projects/${encodeURIComponent(projectSlug)}/workspaces/${encodeURIComponent(threadId)}`;
 }
@@ -28,12 +48,90 @@ export function issueRoute(projectSlug, identifier) {
   return `/tracker/projects/${encodeURIComponent(projectSlug)}/board/issues/${encodeURIComponent(identifier)}/sessions?surface=autonomous`;
 }
 
-export function classifySessionOutcome(initialMessageCount, finalMessageCount) {
-  return finalMessageCount > initialMessageCount ? "completed" : "failed";
+export function classifySessionOutcome(
+  initialMessageCount,
+  finalMessageCount,
+  thread,
+  provider,
+) {
+  if (finalMessageCount <= initialMessageCount) return "failed";
+  if (!thread || thread.agent_kind !== provider) return "failed";
+  if (thread.status === "error" || sessionProviderError(thread)) return "failed";
+  return "completed";
 }
 
 export function issueStatusName(issue) {
   return typeof issue?.status === "string" ? issue.status : issue?.status?.name ?? null;
+}
+
+export function shouldDispatchIssue(issue) {
+  return issueStatusName(issue) === "Backlog";
+}
+
+export function sessionProviderError(thread) {
+  const turn = thread?.metadata?.current_turn;
+  if (!turn?.error && !turn?.error_detail) return null;
+  const raw = typeof turn.error === "string" ? turn.error : null;
+  const summary =
+    raw?.includes("invalid_union") && raw.includes("mcpServers")
+      ? "Cursor ACP rejected mcpServers payload (invalid_union)"
+      : turn.error_detail?.message ?? raw ?? "Agent operation failed";
+  return {
+    code: turn.error_code ?? turn.error_detail?.code ?? null,
+    category: turn.error_detail?.category ?? null,
+    retryable: turn.error_detail?.retryable ?? null,
+    summary,
+    raw,
+  };
+}
+
+export function selectIssueExecutionThread(threads, issueIdentifier) {
+  return (
+    (Array.isArray(threads) ? threads : [])
+      .filter(
+        (thread) =>
+          thread?.scope === "issue_execution" &&
+          thread.issue_identifier === issueIdentifier,
+      )
+      .sort((left, right) => Number(right.id) - Number(left.id))[0] ?? null
+  );
+}
+
+export function selectIssueAgentExecution(executions, issueIdentifier) {
+  return (
+    (Array.isArray(executions) ? executions : [])
+      .filter((execution) => execution?.issue_identifier === issueIdentifier)
+      .sort((left, right) =>
+        String(right.started_at ?? "").localeCompare(String(left.started_at ?? "")),
+      )[0] ?? null
+  );
+}
+
+export function isTerminalAgentExecution(execution) {
+  return new Set([
+    "aborted",
+    "cancelled",
+    "canceled",
+    "completed",
+    "error",
+    "failed",
+    "saved",
+  ]).has(execution?.status);
+}
+
+export function isTerminalExecutionThread(thread) {
+  return thread?.status === "closed" || thread?.status === "error";
+}
+
+export function classifyOrchestratorOutcome(thread, execution = null) {
+  if (
+    thread?.status === "closed" &&
+    isTerminalAgentExecution(execution)
+  ) {
+    return "completed";
+  }
+  if (thread?.status === "error") return "failed";
+  return "incomplete";
 }
 
 function requiredEnvironment(env) {
@@ -46,22 +144,18 @@ function requiredEnvironment(env) {
 }
 
 function executePlaywright(env) {
-  return new Promise((resolvePromise) => {
-    const child = execFile(
-      "npx",
-      ["playwright", "test", "e2e/symphony-flow.spec.mjs", "--workers=1"],
-      {
-        cwd: packageRoot,
-        env,
-        maxBuffer: 16 * 1024 * 1024,
-      },
-      (error) => {
-        resolvePromise(error?.code ?? 0);
-      },
-    );
-    child.stdout?.pipe(process.stdout);
-    child.stderr?.pipe(process.stderr);
-  });
+  return executeProcess(
+    "npx",
+    ["playwright", "test", "e2e/symphony-flow.spec.mjs", "--workers=1"],
+    {
+      cwd: packageRoot,
+      env,
+      timeout: PLAYWRIGHT_TIMEOUT_MS,
+      maxOutput: 16 * 1024 * 1024,
+      onStdout: (text) => process.stdout.write(text),
+      onStderr: (text) => process.stderr.write(text),
+    },
+  );
 }
 
 export async function runCell(env = process.env) {
@@ -69,37 +163,52 @@ export async function runCell(env = process.env) {
   const manifest = JSON.parse(await readFile(join(runtimeRoot, "runs.json"), "utf8"));
   selectRun(manifest, runId);
 
-  const artifactRoot = join(runtimeRoot, "artifacts", runId);
+  const attemptId = attemptSlug(
+    `${new Date().toISOString().replace(/[-:.]/g, "")}-${randomUUID()}`,
+  );
+  const artifactRoot = attemptArtifactPath(runtimeRoot, runId, attemptId);
   const resultPath = join(runtimeRoot, "results", `${runId}.json`);
   await mkdir(artifactRoot, { recursive: true });
 
-  const exitCode = await executePlaywright({
+  const execution = await executePlaywright({
     ...env,
     SYMPHONY_BENCH_RUN_ID: runId,
+    SYMPHONY_BENCH_ATTEMPT_ID: attemptId,
     SYMPHONY_BENCH_ARTIFACT_ROOT: artifactRoot,
   });
 
+  let recordedResult = null;
   try {
-    await readFile(resultPath, "utf8");
+    recordedResult = JSON.parse(await readFile(resultPath, "utf8"));
   } catch (error) {
-    if (error?.code !== "ENOENT") throw error;
+    if (error?.code !== "ENOENT" && !(error instanceof SyntaxError)) throw error;
+  }
+  if (recordedResult?.attempt_id !== attemptId) {
+    const fallbackResult = `${JSON.stringify(
+      {
+        id: runId,
+        attempt_id: attemptId,
+        status: "blocked",
+        finished_at: new Date().toISOString(),
+        error:
+          execution.status === "timed_out"
+            ? `Playwright timed out after ${PLAYWRIGHT_TIMEOUT_MS} ms`
+            : `Playwright exited with code ${execution.exit_code} before writing a result`,
+        artifact_root: artifactRoot,
+      },
+      null,
+      2,
+    )}\n`;
     await writeFile(
       resultPath,
-      `${JSON.stringify(
-        {
-          id: runId,
-          status: "blocked",
-          finished_at: new Date().toISOString(),
-          error: `Playwright exited with code ${exitCode} before writing a result`,
-          artifact_root: artifactRoot,
-        },
-        null,
-        2,
-      )}\n`,
+      fallbackResult,
     );
+    const attemptResultRoot = join(runtimeRoot, "results", "attempts", runId);
+    await mkdir(attemptResultRoot, { recursive: true });
+    await writeFile(join(attemptResultRoot, `${attemptId}.json`), fallbackResult);
   }
 
-  return exitCode;
+  return execution.exit_code ?? (execution.status === "timed_out" ? 124 : 1);
 }
 
 const invokedPath = process.argv[1]

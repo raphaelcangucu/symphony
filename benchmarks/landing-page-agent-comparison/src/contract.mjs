@@ -23,3 +23,11 @@ export async function readCanonicalPrompt() {
 export function promptSha256(prompt) {
   return createHash("sha256").update(prompt, "utf8").digest("hex");
 }
+
+export function workflowPromptTemplate(workflowMarkdown) {
+  const match = String(workflowMarkdown ?? "").match(
+    /^---\r?\n[\s\S]*?\r?\n---\r?\n([\s\S]*)$/,
+  );
+  if (!match) throw new Error("workflow markdown has no prompt body");
+  return match[1];
+}

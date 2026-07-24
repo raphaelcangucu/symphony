@@ -163,7 +163,8 @@ The spec must:
 - for `orchestrator`, dispatch the prepared issue through the real API, open its
   issue route and wait for completion/failure;
 - wait on durable status, not an arbitrary fixed delay;
-- capture `video: "on"`, `screenshot: "on"` and `trace: "on"`;
+- capture tracker `video: "on"` and `screenshot: "on"`; keep tracker trace off
+  so the bearer token is not serialized (generated landing E2Es still trace);
 - write a per-cell result JSON even when a run times out or is blocked.
 
 - [ ] **Step 4: Verify GREEN**

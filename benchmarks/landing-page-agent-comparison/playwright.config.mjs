@@ -7,7 +7,7 @@ const artifactRoot = resolve(
 
 export default defineConfig({
   testDir: "./e2e",
-  timeout: 30 * 60 * 1000,
+  timeout: 45 * 60 * 1000,
   expect: { timeout: 30_000 },
   fullyParallel: false,
   workers: 1,
@@ -21,7 +21,7 @@ export default defineConfig({
     reducedMotion: "reduce",
     viewport: { width: 1440, height: 960 },
     screenshot: "on",
-    trace: "on",
+    trace: "off",
     video: "on",
   },
 });

@@ -1,4 +1,3 @@
-import { execFile } from "node:child_process";
 import {
   access,
   mkdir,
@@ -8,9 +7,9 @@ import {
 } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { promisify } from "node:util";
 
-const execFileAsync = promisify(execFile);
+import { executeProcess } from "./process.mjs";
+
 const IGNORED_DIRECTORIES = new Set([".git", "node_modules", "dist", "test-results"]);
 
 async function exists(path) {
@@ -39,6 +38,177 @@ async function filesBelow(root, current = root) {
 async function hasE2eTests(workspacePath) {
   const root = join(workspacePath, "tests", "e2e");
   return (await filesBelow(root)).some((path) => /\.(spec|test)\.[cm]?[jt]sx?$/.test(path));
+}
+
+export async function gitFacts(workspacePath) {
+  const rootResult = await executeProcess(
+    "git",
+    ["-C", workspacePath, "rev-parse", "--show-toplevel"],
+    { cwd: workspacePath, timeout: 10_000 },
+  );
+  if (rootResult.status !== "passed") {
+    return {
+      available: false,
+      reason: "workspace is not a Git working tree",
+      root: null,
+      head_sha: null,
+      clean: null,
+      changed_files: null,
+      changed_lines: null,
+    };
+  }
+
+  const root = rootResult.output.trim().split("\n").at(-1);
+  const [head, status, numstat, untracked] = await Promise.all([
+    executeProcess("git", ["-C", root, "rev-parse", "HEAD"], {
+      cwd: root,
+      timeout: 10_000,
+    }),
+    executeProcess("git", ["-C", root, "status", "--porcelain=v1", "-uall"], {
+      cwd: root,
+      timeout: 10_000,
+    }),
+    executeProcess("git", ["-C", root, "diff", "--numstat", "HEAD"], {
+      cwd: root,
+      timeout: 10_000,
+    }),
+    executeProcess(
+      "git",
+      ["-C", root, "ls-files", "--others", "--exclude-standard"],
+      { cwd: root, timeout: 10_000 },
+    ),
+  ]);
+  const failedFact = [head, status, numstat, untracked].find(
+    (result) => result.status !== "passed",
+  );
+  if (failedFact) {
+    return {
+      available: false,
+      reason: `Git fact command failed: ${failedFact.command}`,
+      root,
+      head_sha: null,
+      clean: null,
+      changed_files: null,
+      changed_lines: null,
+    };
+  }
+  const statusLines = status.output.split("\n").filter(Boolean);
+  const trackedLines = numstat.output
+    .split("\n")
+    .filter(Boolean)
+    .reduce((sum, line) => {
+      const [added, deleted] = line.split("\t");
+      return (
+        sum +
+        (Number.isFinite(Number(added)) ? Number(added) : 0) +
+        (Number.isFinite(Number(deleted)) ? Number(deleted) : 0)
+      );
+    }, 0);
+  let untrackedLines = 0;
+  for (const relativePath of untracked.output.split("\n").filter(Boolean)) {
+    try {
+      const content = await readFile(join(root, relativePath), "utf8");
+      untrackedLines += content
+        ? content.split(/\r?\n/).length - (content.endsWith("\n") ? 1 : 0)
+        : 0;
+    } catch {
+      // Binary and transient files still count as changed files, not text lines.
+    }
+  }
+
+  return {
+    available: true,
+    reason: null,
+    root,
+    head_sha: head.output.trim(),
+    clean: statusLines.length === 0,
+    changed_files: statusLines.length,
+    changed_lines: trackedLines + untrackedLines,
+  };
+}
+
+export async function inventoryArtifacts(locations) {
+  const inventory = { screenshots: [], videos: [], traces: [] };
+  for (const location of locations) {
+    if (!location?.root || !(await exists(location.root))) continue;
+    for (const relativePath of await filesBelow(location.root)) {
+      const item = {
+        source: location.source,
+        path: join(location.root, relativePath),
+      };
+      if (/\.png$/i.test(relativePath)) inventory.screenshots.push(item);
+      else if (/\.webm$/i.test(relativePath)) inventory.videos.push(item);
+      else if (/\.zip$/i.test(relativePath)) inventory.traces.push(item);
+    }
+  }
+  for (const values of Object.values(inventory)) {
+    values.sort((left, right) => left.path.localeCompare(right.path));
+  }
+  return inventory;
+}
+
+export function summarizeAttempts(attempts, canonicalAttemptId = null) {
+  return {
+    count: attempts.length,
+    canonical_attempt_id: canonicalAttemptId,
+    attempt_ids: attempts
+      .map((attempt) => attempt?.attempt_id)
+      .filter(Boolean)
+      .sort(),
+  };
+}
+
+export function resolveRunIdentity(run, runResult) {
+  if (runResult?.identity) {
+    return { ...runResult.identity, source: "tracker_snapshot" };
+  }
+  if (run?.path === "session" && run.thread_id != null) {
+    return {
+      assistant_thread_id: run.thread_id,
+      agent_kind: run.provider,
+      status: null,
+      provider_matches: null,
+      source: "manifest",
+    };
+  }
+  return null;
+}
+
+export function observedExecutionDuration(runResult) {
+  const executionStartedAt = Date.parse(
+    runResult?.identity?.agent_execution_started_at ?? "",
+  );
+  const executionLastEventAt = Date.parse(
+    runResult?.identity?.agent_execution_last_event_at ?? "",
+  );
+  const observedExecutionDuration =
+    Number.isFinite(executionStartedAt) &&
+    Number.isFinite(executionLastEventAt) &&
+    executionLastEventAt >= executionStartedAt
+      ? executionLastEventAt - executionStartedAt
+      : null;
+  const candidates = [
+    observedExecutionDuration,
+    Number.isFinite(runResult?.identity?.agent_execution_runtime_seconds)
+      ? runResult.identity.agent_execution_runtime_seconds * 1_000
+      : null,
+  ].filter(Number.isFinite);
+  return candidates.length > 0 ? Math.max(...candidates) : null;
+}
+
+async function readAttemptResults(runtimeRoot, runId) {
+  const root = join(runtimeRoot, "results", "attempts", runId);
+  if (!(await exists(root))) return [];
+  const attempts = [];
+  for (const entry of await readdir(root, { withFileTypes: true })) {
+    if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
+    try {
+      attempts.push(JSON.parse(await readFile(join(root, entry.name), "utf8")));
+    } catch {
+      // A malformed attempt is omitted from metrics but remains on disk for audit.
+    }
+  }
+  return attempts;
 }
 
 export async function inspectWorkspace(workspacePath) {
@@ -97,32 +267,8 @@ function contractPassed(contract) {
   );
 }
 
-async function executeValidation(command, args, cwd, timeout) {
-  const startedAt = Date.now();
-  try {
-    const { stdout, stderr } = await execFileAsync(command, args, {
-      cwd,
-      timeout,
-      maxBuffer: 8 * 1024 * 1024,
-      env: process.env,
-    });
-    return {
-      command: [command, ...args].join(" "),
-      status: "passed",
-      exit_code: 0,
-      duration_ms: Date.now() - startedAt,
-      output: `${stdout}${stderr}`.slice(-20_000),
-    };
-  } catch (error) {
-    return {
-      command: [command, ...args].join(" "),
-      status: error?.killed ? "timed_out" : "failed",
-      exit_code: Number.isInteger(error?.code) ? error.code : null,
-      duration_ms: Date.now() - startedAt,
-      output: `${error?.stdout ?? ""}${error?.stderr ?? ""}`.slice(-20_000),
-      error: error?.message ?? String(error),
-    };
-  }
+export async function executeValidation(command, args, cwd, timeout) {
+  return executeProcess(command, args, { cwd, timeout });
 }
 
 async function validateWorkspace(workspacePath) {
@@ -147,18 +293,30 @@ export function renderComparison({ prompt_sha256: promptHash, rows }) {
     "",
     `Prompt SHA-256: \`${promptHash}\``,
     "",
-    "| Célula | Caminho | Provedor | Symphony | Contrato | Build/E2E | Duração |",
-    "| --- | --- | --- | --- | --- | --- | ---: |",
+    "| Célula | Caminho | Provedor | Symphony | Contrato | Validação | Duração observada | Observação |",
+    "| --- | --- | --- | --- | --- | --- | ---: | --- |",
   ];
 
   for (const row of rows) {
-    const validation =
+    const validationStatus =
       row.validation?.length > 0 &&
       row.validation.every((step) => step.status === "passed")
         ? "passed"
         : row.validation?.at(-1)?.status ?? "not-run";
+    const e2eOutput =
+      row.validation?.find((step) => step.command.includes("test:e2e"))?.output ??
+      "";
+    const e2eCount = [...e2eOutput.matchAll(/(\d+) passed\b/g)].at(-1)?.[1];
+    const validation = e2eCount
+      ? `${validationStatus} (${e2eCount} E2E)`
+      : validationStatus;
+    const observation = row.stale_process_recovered
+      ? "processo obsoleto recuperado"
+      : row.error
+        ? String(row.error).split("\n")[0]
+        : "—";
     lines.push(
-      `| ${row.id} | ${row.path} | ${row.provider} | ${row.status} | ${row.contract_passed ? "passed" : "failed"} | ${validation} | ${row.duration_ms ?? 0} ms |`,
+      `| ${row.id} | ${row.path} | ${row.provider} | ${row.status} | ${row.contract_passed ? "passed" : "failed"} | ${validation} | ${formatDuration(row.execution_observed_duration_ms ?? row.duration_ms)} | ${observation} |`,
     );
   }
 
@@ -171,7 +329,12 @@ export function renderComparison({ prompt_sha256: promptHash, rows }) {
       "",
       `- Workspace: \`${row.workspace_path}\``,
       `- Arquivos gerados: ${row.file_count ?? 0}`,
-      `- Artefatos Symphony: \`${row.artifact_root ?? "indisponível"}\``,
+      `- Artefatos Symphony: \`${row.artifacts_root ?? row.artifact_root ?? "indisponível"}\``,
+      `- Tentativas: ${row.attempts?.count ?? 0} (canônica: ${row.attempts?.canonical_attempt_id ?? "n/a"})`,
+      `- Preview: ${row.preview?.servers?.[0]?.url ?? "indisponível"}`,
+      `- Identidade: ${row.identity ? `thread=${row.identity.assistant_thread_id ?? "n/a"}, agent=${row.identity.agent_kind ?? "n/a"}, status=${row.identity.status ?? "n/a"}, source=${row.identity.source ?? "n/a"}` : "indisponível"}`,
+      `- Git: ${row.git?.available ? `${row.git.changed_files} arquivos / ${row.git.changed_lines} linhas alteradas` : row.git?.reason ?? "indisponível"}`,
+      `- Evidências: ${row.artifacts ? `${row.artifacts.screenshots.length} screenshots, ${row.artifacts.videos.length} vídeos, ${row.artifacts.traces.length} traces` : "indisponível"}`,
       `- Erro: ${row.error ? `\`${String(row.error).split("\n")[0]}\`` : "nenhum registrado"}`,
       "",
     ]),
@@ -181,6 +344,19 @@ export function renderComparison({ prompt_sha256: promptHash, rows }) {
     "",
   );
   return lines.join("\n");
+}
+
+export function formatDuration(durationMs) {
+  if (!Number.isFinite(durationMs) || durationMs < 0) return "n/a";
+  const totalSeconds = Math.round(durationMs / 1_000);
+  const hours = Math.floor(totalSeconds / 3_600);
+  const minutes = Math.floor((totalSeconds % 3_600) / 60);
+  const seconds = totalSeconds % 60;
+  return [
+    ...(hours ? [`${hours}h`] : []),
+    ...(hours || minutes ? [`${minutes}m`] : []),
+    `${seconds}s`,
+  ].join(" ");
 }
 
 function workspaceForRun(manifest, run) {
@@ -214,19 +390,43 @@ export async function collect(env = process.env) {
     } catch {
       runResult = { status: "not-run", error: "run result is missing" };
     }
+    const attemptResults = await readAttemptResults(runtimeRoot, run.id);
+    const attempts = summarizeAttempts(attemptResults, runResult.attempt_id ?? null);
 
     const validation =
       facts.exists && contractPassed(facts.contract)
         ? await validateWorkspace(workspacePath)
         : [];
+    const git = facts.exists ? await gitFacts(workspacePath) : {
+      available: false,
+      reason: "workspace is missing",
+      changed_lines: null,
+    };
+    const artifacts = await inventoryArtifacts([
+      {
+        source: "tracker",
+        root: runResult.artifact_root,
+      },
+      {
+        source: "generated_e2e",
+        root: join(workspacePath, "test-results"),
+      },
+    ]);
     const row = {
       ...run,
       ...runResult,
       workspace_path: workspacePath,
+      artifacts_root: runResult.artifact_root ?? null,
+      attempts,
+      duration_ms: runResult.duration_ms ?? null,
+      execution_observed_duration_ms: observedExecutionDuration(runResult),
+      identity: resolveRunIdentity(run, runResult),
       file_count: facts.file_count,
       contract: facts.contract,
       contract_passed: contractPassed(facts.contract),
       validation,
+      git,
+      artifacts,
     };
     rows.push(row);
     await writeFile(

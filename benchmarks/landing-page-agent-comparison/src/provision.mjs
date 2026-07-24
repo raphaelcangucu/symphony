@@ -66,11 +66,7 @@ codex:
   approval_policy: never
   thread_sandbox: danger-full-access
 ---
-
-Execute exatamente a tarefa descrita abaixo, preservando todos os critérios e sem substituir o provedor selecionado.
-
-{{ issue.description }}
-`;
+{{ issue.description }}`;
 }
 
 export function projectPayload({

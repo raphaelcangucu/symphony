@@ -3,17 +3,29 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
 import { createApi } from "../src/api.mjs";
-import { readCanonicalPrompt } from "../src/contract.mjs";
+import {
+  promptSha256,
+  readCanonicalPrompt,
+  workflowPromptTemplate,
+} from "../src/contract.mjs";
 import {
   classifySessionOutcome,
+  classifyOrchestratorOutcome,
   issueRoute,
   issueStatusName,
+  isTerminalAgentExecution,
+  isTerminalExecutionThread,
   selectRun,
+  selectIssueAgentExecution,
+  selectIssueExecutionThread,
   sessionRoute,
+  sessionProviderError,
+  shouldDispatchIssue,
 } from "../src/run-cell.mjs";
 
 const runtimeRoot = resolve(process.env.SYMPHONY_BENCH_RUNTIME ?? "");
 const runId = process.env.SYMPHONY_BENCH_RUN_ID ?? "";
+const attemptId = process.env.SYMPHONY_BENCH_ATTEMPT_ID ?? "";
 const baseUrl = process.env.SYMPHONY_BENCH_URL ?? "";
 const token = process.env.SYMPHONY_BENCH_TOKEN ?? "";
 const artifactRoot = resolve(process.env.SYMPHONY_BENCH_ARTIFACT_ROOT ?? "");
@@ -26,17 +38,41 @@ async function loadRun() {
 
 async function waitForIssueCompletion(api, projectSlug, identifier, timeoutMs) {
   const startedAt = Date.now();
+  const inconsistentStateGraceMs = 10_000;
   let issue;
+  let execution;
+  let executionThread;
+  let terminalSignalAt = null;
   while (Date.now() - startedAt < timeoutMs) {
     issue = await api.request(
       `/projects/${encodeURIComponent(projectSlug)}/issues/${encodeURIComponent(identifier)}`,
     );
-    const status = issueStatusName(issue);
-    if (status === "Human Review" || status === "Done") return issue;
+    const executions = await api.request("/agent_executions");
+    execution = selectIssueAgentExecution(executions, identifier);
+    const threads = await api.request(
+      `/assistant/threads?project_slug=${encodeURIComponent(projectSlug)}`,
+    );
+    executionThread = selectIssueExecutionThread(threads, identifier);
+    const executionTerminal = isTerminalAgentExecution(execution);
+    const threadTerminal = isTerminalExecutionThread(executionThread);
+    if (executionTerminal && threadTerminal) {
+      return { issue, execution, executionThread };
+    }
+    if (executionTerminal || threadTerminal) {
+      terminalSignalAt ??= Date.now();
+      if (Date.now() - terminalSignalAt >= inconsistentStateGraceMs) {
+        return { issue, execution, executionThread };
+      }
+    } else {
+      terminalSignalAt = null;
+    }
     await new Promise((resolvePromise) => setTimeout(resolvePromise, 2_000));
   }
   throw new Error(
-    `orchestrator issue ${identifier} did not complete; last status=${issueStatusName(issue) ?? "unknown"}`,
+    `orchestrator issue ${identifier} did not settle; ` +
+      `last issue status=${issueStatusName(issue) ?? "unknown"}, ` +
+      `execution status=${execution?.status ?? "missing"}, ` +
+      `thread status=${executionThread?.status ?? "missing"}`,
   );
 }
 
@@ -54,12 +90,21 @@ test("executes one provider cell through the real Symphony tracker", async ({
   const startedAt = new Date();
   const { manifest, run } = await loadRun();
   const prompt = await readCanonicalPrompt();
+  const actualPromptHash = promptSha256(prompt);
+  if (run.prompt_sha256 !== actualPromptHash) {
+    throw new Error(
+      `manifest prompt hash mismatch for ${run.id}: ` +
+        `${run.prompt_sha256} != ${actualPromptHash}`,
+    );
+  }
   const api = createApi({ baseUrl, token });
   const result = {
     id: run.id,
+    attempt_id: attemptId,
     path: run.path,
     provider: run.provider,
-    prompt_sha256: run.prompt_sha256,
+    prompt_sha256: actualPromptHash,
+    effective_prompt_sha256: actualPromptHash,
     started_at: startedAt.toISOString(),
     status: "running",
     tracker_url: null,
@@ -105,19 +150,48 @@ test("executes one provider cell through the real Symphony tracker", async ({
       await expect(page.getByRole("status")).toHaveCount(0, {
         timeout: 25 * 60 * 1000,
       });
+      const thread = await api
+        .request(`/assistant/threads/${run.thread_id}`)
+        .catch(() => null);
       result.agent_outcome = classifySessionOutcome(
         initialMessageCount,
         await assistantMessages.count(),
+        thread,
+        run.provider,
       );
+      result.identity = {
+        assistant_thread_id: thread?.id ?? run.thread_id,
+        agent_kind: thread?.agent_kind ?? null,
+        status: thread?.status ?? null,
+        provider_matches: thread?.agent_kind === run.provider,
+      };
       if (result.agent_outcome === "failed") {
-        result.error = "session ended without an assistant response";
+        result.provider_error = sessionProviderError(thread);
+        result.error =
+          result.provider_error?.summary ??
+          "session ended without an assistant response";
       }
     } else {
       const route = issueRoute(manifest.project_slug, run.issue_identifier);
       result.tracker_url = new URL(route, baseUrl).href;
       const issuePath = `/projects/${encodeURIComponent(manifest.project_slug)}/issues/${encodeURIComponent(run.issue_identifier)}`;
       const issueBefore = await api.request(issuePath);
-      if (!["Human Review", "Done"].includes(issueStatusName(issueBefore))) {
+      const project = await api.request(
+        `/projects/${encodeURIComponent(manifest.project_slug)}`,
+      );
+      const promptTemplate = workflowPromptTemplate(
+        project?.setup?.workflow_markdown,
+      );
+      if (promptTemplate !== "{{ issue.description }}") {
+        throw new Error("orchestrator workflow prompt body is not canonical");
+      }
+      if (issueBefore?.description !== prompt) {
+        throw new Error(
+          `orchestrator issue ${run.issue_identifier} description differs from canonical prompt`,
+        );
+      }
+      result.effective_prompt_sha256 = promptSha256(issueBefore.description);
+      if (shouldDispatchIssue(issueBefore)) {
         await api.request(`${issuePath}/dispatch`, {
           method: "POST",
           body: {
@@ -129,13 +203,39 @@ test("executes one provider cell through the real Symphony tracker", async ({
         );
       }
       await page.goto(route, { waitUntil: "domcontentloaded" });
-      await waitForIssueCompletion(
+      const settlement = await waitForIssueCompletion(
         api,
         manifest.project_slug,
         run.issue_identifier,
-        25 * 60 * 1000,
+        40 * 60 * 1000,
       );
       await page.reload({ waitUntil: "domcontentloaded" });
+      const executionThread = settlement.executionThread;
+      result.agent_outcome = classifyOrchestratorOutcome(
+        executionThread,
+        settlement.execution,
+      );
+      result.identity = {
+        assistant_thread_id: executionThread?.id ?? null,
+        issue_identifier: run.issue_identifier,
+        agent_kind: executionThread?.agent_kind ?? null,
+        status: executionThread?.status ?? null,
+        provider_matches: executionThread?.agent_kind === run.provider,
+        agent_execution_status: settlement.execution?.status ?? null,
+        agent_execution_runtime_seconds:
+          settlement.execution?.runtime_seconds ?? null,
+        agent_execution_started_at: settlement.execution?.started_at ?? null,
+        agent_execution_last_event_at:
+          settlement.execution?.last_event_at ?? null,
+      };
+      if (
+        result.agent_outcome !== "completed" ||
+        !result.identity.provider_matches
+      ) {
+        result.error =
+          `orchestrator execution ${result.identity.status ?? "missing"} ` +
+          `for provider ${result.identity.agent_kind ?? "unknown"}`;
+      }
     }
 
     result.preview = await startPreview(api, run, manifest.project_slug);
@@ -144,7 +244,10 @@ test("executes one provider cell through the real Symphony tracker", async ({
       fullPage: true,
     });
     result.status =
-      result.agent_outcome === "failed" ? "blocked" : "completed";
+      result.agent_outcome === "completed" &&
+      result.identity?.provider_matches !== false
+        ? "completed"
+        : "blocked";
   } catch (error) {
     result.status = "blocked";
     result.error = error?.stack ?? String(error);
@@ -158,7 +261,19 @@ test("executes one provider cell through the real Symphony tracker", async ({
   } finally {
     result.finished_at = new Date().toISOString();
     result.duration_ms = Date.now() - startedAt.getTime();
-    await writeFile(resultPath, `${JSON.stringify(result, null, 2)}\n`);
+    const serializedResult = `${JSON.stringify(result, null, 2)}\n`;
+    const attemptResultRoot = join(
+      runtimeRoot,
+      "results",
+      "attempts",
+      run.id,
+    );
+    await mkdir(attemptResultRoot, { recursive: true });
+    await writeFile(resultPath, serializedResult);
+    await writeFile(
+      join(attemptResultRoot, `${attemptId}.json`),
+      serializedResult,
+    );
     await testInfo.attach("benchmark-result", {
       body: Buffer.from(JSON.stringify(result, null, 2)),
       contentType: "application/json",

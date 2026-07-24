@@ -123,7 +123,11 @@ token in the same local-storage key used by the product. It:
 3. waits for the durable assistant turn to finish;
 4. captures the completed session and preview state;
 5. opens each orchestrator issue and records status/progress/result;
-6. writes named video, screenshot and trace artifacts.
+6. writes named video and screenshot artifacts for the tracker flow.
+
+The outer tracker trace is disabled because it can record the bearer token used
+to authenticate local storage and API requests. Each generated landing still
+must produce its own Playwright trace, which contains no tracker credential.
 
 Provider generation is intentionally sequential on WSL. The E2E runner records
 one path at a time and never launches a broad test matrix.
@@ -138,7 +142,7 @@ comparable facts:
 - presence of required page, config and E2E files;
 - `npm install`, build and focused E2E outcome;
 - preview readiness and URL;
-- screenshot/video/trace paths;
+- tracker screenshot/video paths and generated-E2E trace paths;
 - provider conversation/run identity where available.
 
 `comparison.md` links each output and leaves a compact human-review section for
@@ -162,7 +166,8 @@ visual quality, copy quality and maintainability.
 4. Generated projects are isolated from each other.
 5. Preview configuration is present and exercised where generation succeeds.
 6. The landing prompt explicitly requires Playwright E2E generation.
-7. At least one real Symphony tracker flow has screenshot, video and trace.
+7. At least one real Symphony tracker flow has screenshot/video and its
+   generated landing has a credential-free E2E trace.
 8. A machine-readable and human-readable comparison is produced.
 9. Only focused tests are run sequentially on WSL.
 
