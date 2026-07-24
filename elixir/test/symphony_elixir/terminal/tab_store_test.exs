@@ -4,9 +4,9 @@ defmodule SymphonyElixir.Terminal.TabStoreTest do
   alias SymphonyElixir.Terminal.TabStore
 
   setup do
-    start = TabStore.start_link(name: TabStoreTest)
-    on_exit(fn -> GenServer.stop(TabStoreTest, :normal, 5000) end)
-    start
+    cleanup_tabs()
+    on_exit(&cleanup_tabs/0)
+    :ok
   end
 
   test "stores and lists tabs scoped to project and issue" do
@@ -46,5 +46,11 @@ defmodule SymphonyElixir.Terminal.TabStoreTest do
 
     assert :ok = TabStore.delete("demo", "DEMO-1", "tab-2")
     assert {:error, :not_found} = TabStore.get("demo", "tab-2")
+  end
+
+  defp cleanup_tabs do
+    Enum.each(["tab-1", "tab-2"], fn id ->
+      TabStore.delete("demo", "DEMO-1", id)
+    end)
   end
 end
