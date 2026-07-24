@@ -61,4 +61,21 @@ defmodule SymphonyElixir.Daemon.LifecycleTest do
     refute File.exists?(current)
     assert Enum.all?(persistent, &File.exists?(Path.join(root, &1)))
   end
+
+  test "uninstall is idempotent when the unit and pointers are already absent" do
+    root = Path.join(System.tmp_dir!(), "daemon-uninstall-absent-#{System.unique_integer([:positive])}")
+    on_exit(fn -> File.rm_rf!(root) end)
+
+    deps = %{
+      disable_now: fn ->
+        {:error, {:command_failed, 5, "Unit symphony.service does not exist"}}
+      end,
+      daemon_reload: fn -> :ok end,
+      unit_file: Path.join(root, "symphony.service"),
+      launcher: Path.join(root, "symphony"),
+      current_link: Path.join(root, "current")
+    }
+
+    assert :ok = Lifecycle.uninstall(deps: deps)
+  end
 end

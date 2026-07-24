@@ -1,10 +1,12 @@
 defmodule SymphonyElixir.Daemon.Migration do
   @moduledoc "Consistent, source-preserving SQLite migration for daemon install."
 
+  alias SymphonyElixir.Daemon.Files
+
   @spec snapshot(Path.t(), Path.t()) :: :ok | {:error, term()}
   def snapshot(source, destination) do
     temp = destination <> ".tmp.#{System.unique_integer([:positive, :monotonic])}"
-    :ok = File.mkdir_p(Path.dirname(destination))
+    :ok = Files.ensure_private_dir(Path.dirname(destination))
 
     with {:ok, db} <- Exqlite.Sqlite3.open(source, mode: :readonly),
          {:ok, binary} <- Exqlite.Sqlite3.serialize(db),
@@ -30,6 +32,28 @@ defmodule SymphonyElixir.Daemon.Migration do
       :ok
     else
       other -> {:error, {:integrity_check_failed, other}}
+    end
+  end
+
+  @spec valid?(Path.t()) :: boolean()
+  def valid?(path) do
+    with :ok <- integrity(path),
+         {:ok, db} <- Exqlite.Sqlite3.open(path, mode: :readonly) do
+      try do
+        with {:ok, statement} <-
+               Exqlite.Sqlite3.prepare(db, "SELECT COUNT(*) FROM schema_migrations"),
+             {:row, [count]} when is_integer(count) and count > 0 <-
+               Exqlite.Sqlite3.step(db, statement),
+             :ok <- Exqlite.Sqlite3.release(db, statement) do
+          true
+        else
+          _ -> false
+        end
+      after
+        Exqlite.Sqlite3.close(db)
+      end
+    else
+      _ -> false
     end
   end
 
@@ -76,29 +100,94 @@ defmodule SymphonyElixir.Daemon.Migration do
     end
   end
 
-  defp perform_migration(source, destination, backup_dir, migrate_fun) do
-    source_hash = sha256(source)
+  @spec prepare_upgrade(Path.t(), Path.t()) :: {:ok, map()} | {:error, term()}
+  def prepare_upgrade(database, backup_dir) do
+    database_existed? = File.exists?(database)
 
-    with {:ok, previous_backup} <- backup_existing(destination, backup_dir),
-         :ok <- activate_snapshot(source, destination),
-         :ok <- migrate_fun.(destination),
-         :ok <- integrity(destination),
-         ^source_hash <- sha256(source) do
+    with {:ok, previous_backup} <- backup_existing(database, backup_dir) do
       {:ok,
        %{
-         source_sha256: source_hash,
-         destination_sha256: sha256(destination),
+         database_existed?: database_existed?,
          previous_backup: previous_backup
        }}
-    else
-      changed when is_binary(changed) -> {:error, :source_changed_during_migration}
+    end
+  end
+
+  @spec migrate_in_place(Path.t(), Path.t()) :: {:ok, map()} | {:error, term()}
+  def migrate_in_place(database, backup_dir) do
+    with {:ok, rollback} <- prepare_upgrade(database, backup_dir) do
+      result =
+        with :ok <- migrate_release(database),
+             :ok <- integrity(database) do
+          {:ok,
+           Map.merge(rollback, %{
+             source_sha256: nil,
+             destination_sha256: sha256(database)
+           })}
+        end
+
+      restore_on_error(result, database, rollback)
+    end
+  end
+
+  @spec restore(Path.t(), map()) :: :ok | {:error, term()}
+  def restore(database, %{previous_backup: backup}) when is_binary(backup) do
+    snapshot(backup, database)
+  end
+
+  def restore(database, %{database_existed?: false}) do
+    case File.rm(database) do
+      :ok -> :ok
+      {:error, :enoent} -> :ok
       {:error, _reason} = error -> error
+    end
+  end
+
+  def restore(_database, _migration), do: :ok
+
+  defp perform_migration(source, destination, backup_dir, migrate_fun) do
+    source_hash = sha256(source)
+    database_existed? = File.exists?(destination)
+
+    with {:ok, previous_backup} <- backup_existing(destination, backup_dir) do
+      rollback = %{
+        database_existed?: database_existed?,
+        previous_backup: previous_backup
+      }
+
+      result =
+        with :ok <- activate_snapshot(source, destination),
+             :ok <- migrate_fun.(destination),
+             :ok <- integrity(destination),
+             ^source_hash <- sha256(source) do
+          {:ok,
+           %{
+             source_sha256: source_hash,
+             destination_sha256: sha256(destination),
+             previous_backup: previous_backup,
+             database_existed?: database_existed?
+           }}
+        else
+          changed when is_binary(changed) -> {:error, :source_changed_during_migration}
+          {:error, _reason} = error -> error
+        end
+
+      restore_on_error(result, destination, rollback)
+    end
+  end
+
+  defp restore_on_error({:ok, _migration} = success, _destination, _rollback), do: success
+
+  defp restore_on_error({:error, _reason} = error, destination, rollback) do
+    case restore(destination, rollback) do
+      :ok -> error
+      {:error, restore_reason} -> {:error, {:migration_rollback_failed, error, restore_reason}}
     end
   end
 
   defp backup_existing(destination, backup_dir) do
     if File.exists?(destination) do
-      :ok = File.mkdir_p(backup_dir)
+      :ok = Files.ensure_private_dir(backup_dir)
 
       timestamp =
         DateTime.utc_now()

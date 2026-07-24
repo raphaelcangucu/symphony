@@ -30,4 +30,9 @@ defmodule Mix.Tasks.Symphony.DaemonTest do
 
     assert argv == ["install", "--artifact", "/tmp/custom.tar.gz"]
   end
+
+  test "default artifact name includes target OS and architecture" do
+    architecture = :erlang.system_info(:system_architecture) |> to_string() |> String.split("-") |> hd()
+    assert Task.default_artifact_path() =~ "-linux-#{architecture}.tar.gz"
+  end
 end

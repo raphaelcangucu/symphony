@@ -84,18 +84,26 @@ ci:
 
 all: ci
 
-release:
+release: tracker-build
 	MIX_ENV=prod SYMPHONY_BUILD_COMMIT="$$(git rev-parse HEAD)" ERL_FLAGS="$${ERL_FLAGS:-+S 4:4}" \
 		$(MIX) compile --force
 	MIX_ENV=prod SYMPHONY_BUILD_COMMIT="$$(git rev-parse HEAD)" ERL_FLAGS="$${ERL_FLAGS:-+S 4:4}" \
 		$(MIX) release symphony --overwrite
+	@set -eu; \
+		source="$$(find _build/prod -maxdepth 1 -type f -name 'symphony-*.tar.gz' ! -name '*-linux-*' -print -quit)"; \
+		test -n "$$source"; \
+		target="$${source%.tar.gz}-linux-$$(uname -m).tar.gz"; \
+		mv -f "$$source" "$$target"; \
+		echo "Release artifact: $$target"
 
 release-smoke: release
 	ERL_FLAGS="$${ERL_FLAGS:-+S 4:4}" $(MIX) test test/symphony_elixir/daemon/release_smoke_test.exs
 
 daemon-install: release
+	@artifact="$$(find _build/prod -maxdepth 1 -type f -name "symphony-*-linux-$$(uname -m).tar.gz" -print -quit)"; \
+	test -n "$$artifact"; \
 	$(MIX) symphony.daemon install \
-		--artifact "_build/prod/symphony-$$( $(MIX) run --no-start -e 'IO.write(Mix.Project.config()[:version])' ).tar.gz" \
+		--artifact "$$artifact" \
 		$(ARGS)
 
 daemon-status:

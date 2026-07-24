@@ -20,11 +20,19 @@ defmodule SymphonyElixir.Daemon.BuildInfo do
         mode: runtime_mode()
       })
 
+    endpoint =
+      case SymphonyElixir.Daemon.Configuration.endpoint() do
+        {:ok, value} -> value
+        {:error, _reason} -> %{host: "invalid", port: 0}
+      end
+
     %{
       version: to_string(configured[:version] || @default_version),
       git_commit: to_string(configured[:git_commit] || @default_commit),
       mode: to_string(configured[:mode] || runtime_mode()),
-      started_at: started_at() |> DateTime.to_iso8601()
+      started_at: started_at() |> DateTime.to_iso8601(),
+      tracker_host: endpoint.host,
+      tracker_port: endpoint.port
     }
   end
 

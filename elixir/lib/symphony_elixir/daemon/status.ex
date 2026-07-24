@@ -2,6 +2,7 @@ defmodule SymphonyElixir.Daemon.Status do
   @moduledoc "Composes service, listener, health, and configuration drift."
 
   alias SymphonyElixir.Daemon.{
+    Configuration,
     HealthProbe,
     Listener,
     Manifest,
@@ -15,6 +16,7 @@ defmodule SymphonyElixir.Daemon.Status do
   @type t :: %{
           state: state(),
           installed?: boolean(),
+          retained?: boolean(),
           enabled?: boolean(),
           active?: boolean(),
           listening?: boolean(),
@@ -27,14 +29,19 @@ defmodule SymphonyElixir.Daemon.Status do
           service: map()
         }
 
-  @spec inspect(Paths.t(), keyword()) :: {:ok, t()}
+  @spec inspect(Paths.t(), keyword()) :: {:ok, t()} | {:error, String.t()}
   def inspect(%Paths{} = paths, opts \\ []) do
-    host = Keyword.get(opts, :host, "127.0.0.1")
-    port = Keyword.get(opts, :port, 4_000)
+    with {:ok, %{host: host, port: port}} <- Configuration.endpoint(opts) do
+      inspect_endpoint(paths, host, port, opts)
+    end
+  end
+
+  defp inspect_endpoint(paths, host, port, opts) do
     deps = Map.merge(default_deps(opts), Map.new(Keyword.get(opts, :deps, %{})))
 
     manifest = result_map(deps.manifest.(paths.install_manifest))
     installed_unit = result_value(deps.unit_contents.(paths.unit_file))
+    current_release = result_value(deps.current_link.(paths.current_link))
     expected_unit = deps.expected_unit.(paths)
     service = result_map(deps.service.(paths.unit_name)) || %{}
     main_pid = positive_integer(service["MainPID"])
@@ -43,7 +50,8 @@ defmodule SymphonyElixir.Daemon.Status do
     health = result_map(deps.health.(host, port))
     linger? = deps.linger.() == {:ok, true}
 
-    installed? = not is_nil(manifest) or service["LoadState"] == "loaded"
+    retained? = not is_nil(manifest)
+    installed? = not is_nil(installed_unit) or not is_nil(current_release) or service["LoadState"] == "loaded"
     enabled? = service["UnitFileState"] == "enabled"
     active? = service["ActiveState"] == "active"
     listening? = listener_pids != []
@@ -51,15 +59,20 @@ defmodule SymphonyElixir.Daemon.Status do
     drift =
       []
       |> maybe_drift(installed_unit != expected_unit, :unit)
+      |> maybe_drift(release_drift?(installed?, current_release, manifest, paths), :release)
       |> maybe_drift(listener_pids != [] and main_pid not in listener_pids, :foreign_listener)
       |> maybe_drift(value(health, "version") != value(manifest, "version"), :version)
       |> maybe_drift(commit_drift?(health, manifest), :commit)
+      |> maybe_drift(configuration_drift?(health, host, port), :configuration)
       |> Enum.reverse()
 
     healthy? =
       active? and is_integer(main_pid) and main_pid in listener_pids and
         value(health, "status") == "ok" and
-        Enum.all?([:unit, :foreign_listener, :version, :commit], &(&1 not in drift))
+        Enum.all?(
+          [:unit, :release, :foreign_listener, :version, :commit, :configuration],
+          &(&1 not in drift)
+        )
 
     state =
       cond do
@@ -73,6 +86,7 @@ defmodule SymphonyElixir.Daemon.Status do
      %{
        state: state,
        installed?: installed?,
+       retained?: retained?,
        enabled?: enabled?,
        active?: active?,
        listening?: listening?,
@@ -81,6 +95,9 @@ defmodule SymphonyElixir.Daemon.Status do
        restart_count: restart_count,
        health: health,
        drift: drift,
+       host: host,
+       port: port,
+       unit_name: paths.unit_name,
        linger?: linger?,
        service: service
      }}
@@ -95,6 +112,7 @@ defmodule SymphonyElixir.Daemon.Status do
     %{
       manifest: &Manifest.read/1,
       unit_contents: &File.read/1,
+      current_link: &File.read_link/1,
       expected_unit: &Unit.render/1,
       service: &Systemd.show(&1, systemd_opts),
       listener: &Listener.probe(&1, listener_opts),
@@ -136,6 +154,26 @@ defmodule SymphonyElixir.Daemon.Status do
     health_commit not in [nil, "unknown"] and
       manifest_commit not in [nil, "unknown"] and
       health_commit != manifest_commit
+  end
+
+  defp release_drift?(false, _current_release, _manifest, _paths), do: false
+
+  defp release_drift?(true, current_release, manifest, paths) do
+    case value(manifest, "version") do
+      version when is_binary(version) and version != "" ->
+        current_release != Path.join(paths.releases_dir, version)
+
+      _ ->
+        true
+    end
+  end
+
+  defp configuration_drift?(health, host, port) do
+    health_host = value(health, "tracker_host")
+    health_port = value(health, "tracker_port")
+
+    (not is_nil(health_host) and health_host != host) or
+      (not is_nil(health_port) and non_negative_integer(health_port) != port)
   end
 
   defp maybe_drift(drift, true, name), do: [name | drift]

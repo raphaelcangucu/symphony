@@ -217,15 +217,29 @@ defmodule SymphonyElixir.MixProject do
           _ -> "unknown"
         end
 
+    checksums =
+      release.path
+      |> Path.join("**/*")
+      |> Path.wildcard(match_dot: true)
+      |> Enum.filter(&File.regular?/1)
+      |> Enum.reject(&(&1 == Path.join([release.path, "releases", app_version, "manifest.json"])))
+      |> Map.new(fn path ->
+        relative = Path.relative_to(path, release.path)
+        digest = path |> File.read!() |> then(&:crypto.hash(:sha256, &1)) |> Base.encode16(case: :lower)
+        {relative, digest}
+      end)
+
     manifest = %{
       "version" => to_string(release.version),
       "git_commit" => build_commit,
+      "target_os" => "linux",
       "system_architecture" => :erlang.system_info(:system_architecture) |> to_string(),
+      "checksums" => checksums,
       "built_at" => DateTime.utc_now() |> DateTime.truncate(:second) |> DateTime.to_iso8601()
     }
 
     File.write!(
-      Path.join(release.path, "manifest.json"),
+      Path.join([release.path, "releases", app_version, "manifest.json"]),
       Jason.encode_to_iodata!(manifest, pretty: true)
     )
 

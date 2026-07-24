@@ -19,6 +19,43 @@ defmodule SymphonyElixir.OrchestratorStatusTest do
              Orchestrator.request_dispatch(orchestrator_name, "SYM-1")
   end
 
+  test "scheduled retry releases its claim without dispatching while daemon is draining" do
+    orchestrator_name = Module.concat(__MODULE__, :DrainingRetryOrchestrator)
+    issue_id = "issue-draining-retry"
+    :ok = Shutdown.begin_drain()
+    on_exit(fn -> Shutdown.reset() end)
+
+    start_supervised!({Orchestrator, name: orchestrator_name, schedule_initial_tick?: false})
+    pid = Process.whereis(orchestrator_name)
+
+    :sys.replace_state(pid, fn state ->
+      retry = %{
+        attempt: 1,
+        timer_ref: nil,
+        due_at_ms: System.monotonic_time(:millisecond),
+        identifier: "SYM-DRAIN",
+        project_slug: nil,
+        error: "retry"
+      }
+
+      %{
+        state
+        | retry_attempts: %{issue_id => retry},
+          claimed: MapSet.put(state.claimed, issue_id)
+      }
+    end)
+
+    send(pid, {:retry_issue, issue_id})
+
+    state =
+      wait_for_state(pid, fn state ->
+        not Map.has_key?(state.retry_attempts, issue_id) and
+          not MapSet.member?(state.claimed, issue_id)
+      end)
+
+    assert state.running == %{}
+  end
+
   test "snapshot returns :timeout when snapshot server is unresponsive" do
     server_name = Module.concat(__MODULE__, :UnresponsiveSnapshotServer)
     parent = self()

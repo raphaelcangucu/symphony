@@ -53,8 +53,10 @@ defmodule Mix.Tasks.Symphony.Daemon do
       {"ERL_FLAGS", System.get_env("ERL_FLAGS") || "+S 4:4"}
     ]
 
-    with :ok <- run_mix(mix, ["compile", "--force"], env),
-         :ok <- run_mix(mix, ["release", "symphony", "--overwrite"], env) do
+    with :ok <- build_tracker(),
+         :ok <- run_mix(mix, ["compile", "--force"], env),
+         :ok <- run_mix(mix, ["release", "symphony", "--overwrite"], env),
+         :ok <- rename_release_artifact() do
       :ok
     end
   end
@@ -70,9 +72,37 @@ defmodule Mix.Tasks.Symphony.Daemon do
     end
   end
 
-  defp default_artifact_path do
+  defp build_tracker do
+    npm = System.find_executable("npm") || "npm"
+    tracker = Path.expand("../../../tracker", __DIR__)
+
+    case System.cmd(npm, ["run", "build"], cd: tracker, stderr_to_stdout: true) do
+      {output, 0} ->
+        Mix.shell().info(output)
+        :ok
+
+      {output, status} ->
+        {:error, {:tracker_build_failed, status, output}}
+    end
+  end
+
+  @doc false
+  @spec default_artifact_path() :: Path.t()
+  def default_artifact_path do
     version = Mix.Project.config()[:version]
-    Path.expand("_build/prod/symphony-#{version}.tar.gz")
+    architecture = :erlang.system_info(:system_architecture) |> to_string() |> String.split("-") |> hd()
+    Path.expand("_build/prod/symphony-#{version}-linux-#{architecture}.tar.gz")
+  end
+
+  defp rename_release_artifact do
+    version = Mix.Project.config()[:version]
+    source = Path.expand("_build/prod/symphony-#{version}.tar.gz")
+    target = default_artifact_path()
+
+    case File.rename(source, target) do
+      :ok -> :ok
+      {:error, reason} -> {:error, {:artifact_rename_failed, source, target, reason}}
+    end
   end
 
   defp git_commit do

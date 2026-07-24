@@ -35,7 +35,9 @@ defmodule SymphonyElixirWeb.HealthControllerTest do
              "version" => "0.3.0",
              "git_commit" => "test-commit",
              "started_at" => "2026-07-24T12:00:00Z",
-             "mode" => "development"
+             "mode" => "development",
+             "tracker_host" => "127.0.0.1",
+             "tracker_port" => 4000
            }
   end
 end

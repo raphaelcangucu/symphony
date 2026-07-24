@@ -51,4 +51,16 @@ defmodule SymphonyElixir.Daemon.PathsTest do
       })
     end
   end
+
+  test "honors explicit database and backup overrides" do
+    paths =
+      Paths.resolve(%{
+        "HOME" => "/home/alice",
+        "SYMPHONY_LOCAL_TRACKER_DATABASE" => "/private/tracker.sqlite3",
+        "SYMPHONY_BACKUP_DIR" => "/private/backups"
+      })
+
+    assert paths.database == "/private/tracker.sqlite3"
+    assert paths.backup_dir == "/private/backups"
+  end
 end

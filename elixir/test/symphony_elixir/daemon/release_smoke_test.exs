@@ -3,16 +3,45 @@ defmodule SymphonyElixir.Daemon.ReleaseSmokeTest do
 
   @tag timeout: 120_000
   test "production release boots with SQLite, assets, migrations, and skills" do
-    release_root = Path.expand("_build/prod/rel/symphony")
-
     scratch =
       Path.join(
         System.tmp_dir!(),
         "symphony-release-smoke-#{System.unique_integer([:positive, :monotonic])}"
       )
 
+    architecture = :erlang.system_info(:system_architecture) |> to_string() |> String.split("-") |> hd()
+    artifact = Path.expand("_build/prod/symphony-0.3.0-linux-#{architecture}.tar.gz")
+    release_root = Path.join(scratch, "release")
     port = unused_port()
     on_exit(fn -> File.rm_rf!(scratch) end)
+
+    File.mkdir_p!(release_root)
+
+    assert :ok =
+             :erl_tar.extract(
+               String.to_charlist(artifact),
+               [:compressed, {:cwd, String.to_charlist(release_root)}]
+             )
+
+    refute File.exists?(Path.join(release_root, "mix.exs"))
+    refute File.exists?(Path.join(release_root, "deps"))
+    refute File.exists?(Path.join(release_root, "_build"))
+
+    source_skills_root = Path.expand("../../../../skills", __DIR__)
+
+    source_skills =
+      source_skills_root
+      |> File.ls!()
+      |> Enum.filter(&File.dir?(Path.join(source_skills_root, &1)))
+      |> Enum.sort()
+
+    packaged_skills =
+      Path.join(release_root, "lib/symphony_elixir-0.3.0/priv/skills")
+      |> File.ls!()
+      |> Enum.filter(&File.dir?(Path.join(release_root, "lib/symphony_elixir-0.3.0/priv/skills/#{&1}")))
+      |> Enum.sort()
+
+    assert packaged_skills == source_skills
 
     {output, status} =
       System.cmd(

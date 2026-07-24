@@ -2811,7 +2811,7 @@ git commit -m "test(daemon): prove checkout-independent release boot"
 - Create: `elixir/test/symphony_elixir/daemon/systemd_integration_test.exs`
 - Create: `elixir/scripts/daemon-acceptance.sh`
 
-- [ ] **Step 1: Add a fake-systemd end-to-end test**
+- [x] **Step 1: Add a fake-systemd end-to-end test**
 
 The test creates a temporary HOME/XDG tree and a fake command runner that stores
 unit state in an Agent. Exercise:
@@ -2841,7 +2841,7 @@ mix test test/symphony_elixir/daemon/systemd_integration_test.exs
 
 Expected: PASS.
 
-- [ ] **Step 2: Document the exact operator workflow**
+- [x] **Step 2: Document the exact operator workflow**
 
 `INSTALL.md` must contain:
 
@@ -2862,7 +2862,7 @@ the fact that `make serve` remains the development daemon.
 `elixir/README.md` must document release build/smoke commands and the separation
 between source hot reload and installed service mode.
 
-- [ ] **Step 3: Add an isolated real-systemd acceptance script**
+- [x] **Step 3: Add an isolated real-systemd acceptance script**
 
 `scripts/daemon-acceptance.sh` must:
 
@@ -2890,7 +2890,7 @@ set -eu
 
 repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 elixir_root="$repo_root/elixir"
-artifact="$elixir_root/_build/prod/symphony-0.3.0.tar.gz"
+artifact="$elixir_root/_build/prod/symphony-0.3.0-linux-$(uname -m).tar.gz"
 unit="symphony-acceptance-$$.service"
 scratch=$(mktemp -d)
 real_home=${HOME:?HOME is required}
@@ -2976,7 +2976,12 @@ bash scripts/daemon-acceptance.sh
 Expected: PASS on the current WSL user systemd manager without touching the
 canonical service or development process.
 
-- [ ] **Step 4: Run all targeted daemon tests**
+Blocked evidence on 2026-07-24: the current shell has no active or lingering
+`systemd --user` manager (`/run/user/1000/bus` is absent). The script exited 77
+before creating or changing any unit. Run it again from a normal login session,
+or after the operator explicitly enables lingering.
+
+- [x] **Step 4: Run all targeted daemon tests**
 
 Run:
 
@@ -2991,6 +2996,10 @@ mix test test/symphony_elixir/daemon \
 
 Expected: PASS.
 
+Executed under the WSL rule as separate test files and narrow filters rather
+than the prohibited directory/multi-file command. All selected daemon tests
+passed; evidence is stored outside the repository worktree.
+
 - [ ] **Step 5: Run repository quality gates**
 
 Run:
@@ -3004,6 +3013,10 @@ make release-smoke
 
 Expected: format, Credo, tests with coverage, Dialyzer, public-spec validation,
 and release smoke all PASS.
+
+The broad `make all` gate is intentionally not run locally because the operator
+forbids large WSL test runs. Targeted format, public-spec, shell syntax, daemon
+unit/integration tests, and release smoke passed; the broad gate remains for CI.
 
 - [ ] **Step 6: Verify the diff and commit**
 
@@ -3028,17 +3041,18 @@ git commit -m "docs(daemon): document and validate service operations"
 
 ## Final Acceptance Checklist
 
-- [ ] Artifact boots outside the checkout with bundled ERTS, Exqlite, assets,
+- [x] Artifact boots outside the checkout with bundled ERTS, Exqlite, assets,
   migrations, and skills.
 - [ ] `systemd --user` owns foreground process restart and start-limit policy.
-- [ ] Invalid preflight exits `78` and does not restart-loop.
-- [ ] CLI install/start/stop/restart/status/uninstall are idempotent.
-- [ ] Human and JSON status separate service, listener, health, and drift.
-- [ ] SQLite migration preserves and verifies the source plus forced backup.
-- [ ] Candidate health failure restores the prior release and unit.
-- [ ] Ordinary shutdown closes admission and drains for up to five minutes.
-- [ ] Forced restart produces honest interrupted/resumable assistant state.
-- [ ] Uninstall preserves configuration, database, backups, logs, and releases.
-- [ ] Development `make serve/update/stop` behavior remains unchanged.
+- [x] Invalid preflight exits `78` and does not restart-loop.
+- [x] CLI install/start/stop/restart/status/uninstall are idempotent.
+- [x] Human and JSON status separate service, listener, health, and drift.
+- [x] SQLite migration preserves and verifies the source plus forced backup.
+- [x] Candidate health failure restores the prior release and unit.
+- [x] Ordinary shutdown closes admission and drains for up to five minutes.
+- [x] Forced restart produces honest interrupted/resumable assistant state.
+- [x] Uninstall preserves configuration, database, backups, logs, and releases.
+- [x] Development `make serve/update/stop` behavior remains unchanged.
 - [ ] Real unique-unit SIGKILL acceptance proves systemd restart.
-- [ ] Full repository gates and release smoke pass.
+- [x] Checkout-independent release smoke passes from the extracted tar.
+- [ ] Full repository gates pass outside WSL or in CI.

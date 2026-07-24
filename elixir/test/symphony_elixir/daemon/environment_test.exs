@@ -28,4 +28,16 @@ defmodule SymphonyElixir.Daemon.EnvironmentTest do
       Environment.render(%{"SYMPHONY_BAD" => "one\0two"})
     end
   end
+
+  test "parse accepts rendered values and rejects shell syntax" do
+    rendered =
+      Environment.render(%{
+        "PATH" => "/usr/bin",
+        "SYMPHONY_TRACKER_TOKEN" => "quote\"slash\\"
+      })
+
+    assert {:ok, env} = Environment.parse(rendered)
+    assert env["SYMPHONY_TRACKER_TOKEN"] == "quote\"slash\\"
+    assert {:error, :invalid} = Environment.parse("SYMPHONY_BAD=$(touch /tmp/escape)\n")
+  end
 end

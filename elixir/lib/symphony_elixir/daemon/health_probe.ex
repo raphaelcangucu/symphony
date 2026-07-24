@@ -1,21 +1,32 @@
 defmodule SymphonyElixir.Daemon.HealthProbe do
   @moduledoc "Small dependency-free HTTP probe for the local health endpoint."
 
+  @max_response_bytes 1_048_576
+
   @spec get(String.t(), non_neg_integer(), timeout()) ::
           {:ok, map()} | {:error, term()}
   def get(host, port, timeout \\ 2_000) do
     address = String.to_charlist(host)
     options = [:binary, active: false, packet: :raw]
+    deadline = System.monotonic_time(:millisecond) + timeout
 
-    with {:ok, socket} <- :gen_tcp.connect(address, port, options, timeout),
-         :ok <-
-           :gen_tcp.send(
-             socket,
-             "GET /api/health HTTP/1.1\r\nHost: #{host}\r\nConnection: close\r\n\r\n"
-           ),
-         {:ok, response} <- recv_all(socket, "", timeout) do
-      :gen_tcp.close(socket)
-      parse(response)
+    case :gen_tcp.connect(address, port, options, timeout) do
+      {:ok, socket} ->
+        try do
+          with :ok <-
+                 :gen_tcp.send(
+                   socket,
+                   "GET /api/health HTTP/1.1\r\nHost: #{host}\r\nConnection: close\r\n\r\n"
+                 ),
+               {:ok, response} <- recv_all(socket, [], 0, deadline) do
+            parse(response)
+          end
+        after
+          :gen_tcp.close(socket)
+        end
+
+      {:error, _reason} = error ->
+        error
     end
   end
 
@@ -46,11 +57,25 @@ defmodule SymphonyElixir.Daemon.HealthProbe do
     end
   end
 
-  defp recv_all(socket, acc, timeout) do
-    case :gen_tcp.recv(socket, 0, timeout) do
-      {:ok, bytes} -> recv_all(socket, acc <> bytes, timeout)
-      {:error, :closed} -> {:ok, acc}
-      error -> error
+  defp recv_all(socket, acc, size, deadline) do
+    remaining = deadline - System.monotonic_time(:millisecond)
+
+    if remaining <= 0 do
+      {:error, :timeout}
+    else
+      case :gen_tcp.recv(socket, 8_192, remaining) do
+        {:ok, bytes} when size + byte_size(bytes) <= @max_response_bytes ->
+          recv_all(socket, [bytes | acc], size + byte_size(bytes), deadline)
+
+        {:ok, _bytes} ->
+          {:error, :response_too_large}
+
+        {:error, :closed} ->
+          {:ok, acc |> Enum.reverse() |> IO.iodata_to_binary()}
+
+        error ->
+          error
+      end
     end
   end
 end

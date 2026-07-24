@@ -21,6 +21,78 @@ Important rules for an agent following this guide:
 
 ---
 
+## Installed user service
+
+The source checkout and the installed daemon are separate operating modes.
+`make serve`, `make update`, and `make stop` continue to manage the development
+daemon from the checkout. The commands below build a self-contained OTP release
+and install it as `symphony.service` under the current user's systemd manager:
+
+```bash
+cd elixir
+make daemon-install ARGS="--i-understand-that-this-will-be-running-without-the-usual-guardrails"
+symphony daemon status
+symphony daemon status --json
+symphony daemon restart
+symphony daemon restart --force
+journalctl --user-unit symphony.service
+symphony daemon uninstall
+```
+
+Installation requires the explicit guardrail acknowledgement shown above.
+Invalid service configuration fails preflight with exit code `78`, which
+systemd does not restart-loop. `restart --force` kills only the service cgroup
+and records interrupted assistant work honestly; ordinary restart allows up to
+five minutes for active assistant turns and issue runs to drain.
+
+Default installed paths follow XDG conventions:
+
+| Purpose | Default path |
+|---|---|
+| Environment | `~/.config/symphony/symphony.env` |
+| User unit | `~/.config/systemd/user/symphony.service` |
+| Database | `~/.local/share/symphony/tracker.sqlite3` |
+| Install metadata | `~/.local/share/symphony/install.json` |
+| Backups | `~/.local/share/symphony/backups/` |
+| Logs/state | `~/.local/state/symphony/log/` |
+| Versioned releases | `~/.local/lib/symphony/releases/` |
+| Active release | `~/.local/lib/symphony/current` |
+| Launcher | `~/.local/bin/symphony` |
+
+The generated environment file is mode `0600`, and private config, data, state,
+backup, and release directories are mode `0700`. The environment contains only
+supported keys and escaped values; it is parsed as data by management commands,
+so arbitrary shell from `elixir/.env` is not copied or sourced. Ensure
+`~/.local/bin` is on `PATH`.
+
+To migrate an existing development database during first installation:
+
+```bash
+make daemon-install ARGS="--migrate-from /path/to/symphony/elixir --i-understand-that-this-will-be-running-without-the-usual-guardrails"
+```
+
+The source database is never changed. Replacing existing destination data
+requires `--force` and creates a verified backup first. To keep the user service
+running before login, add `--enable-linger`; this is never enabled implicitly.
+
+The installed service binds to `127.0.0.1:4000` by default. Stop the development
+daemon or select another `SYMPHONY_TRACKER_PORT` before installation if that
+port is occupied. A foreign listener is reported as unhealthy drift.
+
+Release activation is atomic. The previous symlink, unit, launcher, manifest,
+and same-version release contents are restored if the candidate does not become
+healthy. `symphony daemon uninstall` removes only the unit, launcher, and
+`current` link; configuration, database, backups, logs, install metadata, and
+versioned releases remain for recovery or a later reinstall.
+
+Release archives are named
+`symphony-<version>-linux-<architecture>.tar.gz`. Their manifest pins Linux,
+the Erlang system architecture, and a SHA-256 checksum for every packaged file;
+installation rejects incompatible, incomplete, modified, or path-unsafe
+archives before activation.
+
+---
+
 ## 1. Prerequisites
 
 | Tool | Version / source | Used for |

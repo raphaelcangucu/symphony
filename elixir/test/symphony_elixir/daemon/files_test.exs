@@ -30,4 +30,17 @@ defmodule SymphonyElixir.Daemon.FilesTest do
     assert File.dir?(one)
     assert File.dir?(two)
   end
+
+  test "ensure_private_dir creates and tightens a directory to mode 0700" do
+    root = Path.join(System.tmp_dir!(), "daemon-private-#{System.unique_integer([:positive])}")
+    path = Path.join(root, "private")
+    on_exit(fn -> File.rm_rf!(root) end)
+
+    File.mkdir_p!(path)
+    File.chmod!(path, 0o755)
+
+    assert :ok = Files.ensure_private_dir(path)
+    assert {:ok, %{mode: mode}} = File.stat(path)
+    assert Bitwise.band(mode, 0o777) == 0o700
+  end
 end

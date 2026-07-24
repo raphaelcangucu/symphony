@@ -31,8 +31,18 @@ attempt=0
 while [ "$attempt" -lt 120 ]; do
   if response=$(curl -fsS "http://127.0.0.1:$port/api/health"); then
     printf '%s' "$response" | grep '"mode":"installed"' >/dev/null
+    curl -fsS "http://127.0.0.1:$port/dashboard.css" | grep 'font-family' >/dev/null
+    curl -fsS "http://127.0.0.1:$port/tracker/" | grep '<div id="root">' >/dev/null
     test -f "$SYMPHONY_LOCAL_TRACKER_DATABASE"
     test -f "$release_root/lib/symphony_elixir-0.3.0/priv/skills/superpowers/using-superpowers/SKILL.md"
+    "$release_root/bin/symphony" eval '
+      {:ok, db} = Exqlite.Sqlite3.open(System.fetch_env!("SYMPHONY_LOCAL_TRACKER_DATABASE"), mode: :readonly)
+      {:ok, statement} = Exqlite.Sqlite3.prepare(db, "SELECT COUNT(*) FROM schema_migrations")
+      {:row, [count]} = Exqlite.Sqlite3.step(db, statement)
+      :ok = Exqlite.Sqlite3.release(db, statement)
+      :ok = Exqlite.Sqlite3.close(db)
+      System.halt(if count > 0, do: 0, else: 1)
+    '
     exit 0
   fi
 

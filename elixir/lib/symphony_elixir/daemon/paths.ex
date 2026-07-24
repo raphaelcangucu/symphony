@@ -73,6 +73,8 @@ defmodule SymphonyElixir.Daemon.Paths do
 
     data_dir = Path.join(data_home, "symphony")
     state_dir = Path.join(state_home, "symphony")
+    database = value(env, "SYMPHONY_LOCAL_TRACKER_DATABASE", Path.join(data_dir, "tracker.sqlite3"))
+    backup_dir = value(env, "SYMPHONY_BACKUP_DIR", Path.join(data_dir, "backups"))
 
     %__MODULE__{
       home: home,
@@ -81,8 +83,8 @@ defmodule SymphonyElixir.Daemon.Paths do
       unit_file: Path.join(systemd_user_dir, unit_name),
       data_dir: data_dir,
       install_manifest: Path.join(data_dir, "install.json"),
-      database: Path.join(data_dir, "tracker.sqlite3"),
-      backup_dir: Path.join(data_dir, "backups"),
+      database: database,
+      backup_dir: backup_dir,
       state_dir: state_dir,
       log_dir: Path.join(state_dir, "log"),
       install_root: install_root,

@@ -56,6 +56,39 @@ defmodule SymphonyElixir.Daemon.MigrationTest do
     assert query_value(destination, "SELECT value FROM migration_fixture") == "new"
   end
 
+  test "failed migration restores the existing destination" do
+    root = tmp_root()
+    source = Path.join(root, "source.sqlite3")
+    destination = Path.join(root, "tracker.sqlite3")
+    backups = Path.join(root, "backups")
+    create_fixture(source, "new")
+    create_fixture(destination, "old")
+
+    assert {:error, :migration_failed} =
+             Migration.migrate(source, destination,
+               backup_dir: backups,
+               force: true,
+               dev_daemon_running?: fn -> false end,
+               migrate: fn _path -> {:error, :migration_failed} end
+             )
+
+    assert query_value(destination, "SELECT value FROM migration_fixture") == "old"
+  end
+
+  test "valid requires integrity and an applied schema migration" do
+    root = tmp_root()
+    database = Path.join(root, "tracker.sqlite3")
+    create_fixture(database, "value")
+    refute Migration.valid?(database)
+
+    {:ok, db} = Exqlite.Sqlite3.open(database)
+    :ok = Exqlite.Sqlite3.execute(db, "CREATE TABLE schema_migrations (version INTEGER)")
+    :ok = Exqlite.Sqlite3.execute(db, "INSERT INTO schema_migrations(version) VALUES (1)")
+    :ok = Exqlite.Sqlite3.close(db)
+
+    assert Migration.valid?(database)
+  end
+
   defp tmp_root do
     root =
       Path.join(

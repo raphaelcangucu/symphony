@@ -51,7 +51,7 @@ defmodule SymphonyElixir.Daemon.Lifecycle do
   def uninstall(opts \\ []) do
     deps = deps(opts)
 
-    with :ok <- deps.disable_now.(),
+    with :ok <- disable_if_present(deps.disable_now.()),
          :ok <- remove_if_present(deps.unit_file),
          :ok <- remove_if_present(deps.launcher),
          :ok <- remove_if_present(deps.current_link),
@@ -109,4 +109,16 @@ defmodule SymphonyElixir.Daemon.Lifecycle do
       {:error, _reason} = error -> error
     end
   end
+
+  defp disable_if_present(:ok), do: :ok
+
+  defp disable_if_present({:error, {:command_failed, _status, message}} = error) do
+    normalized = String.downcase(message)
+
+    if Enum.any?(["does not exist", "not found", "not loaded"], &String.contains?(normalized, &1)),
+      do: :ok,
+      else: error
+  end
+
+  defp disable_if_present(error), do: error
 end

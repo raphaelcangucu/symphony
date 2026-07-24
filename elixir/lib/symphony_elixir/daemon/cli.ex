@@ -131,7 +131,17 @@ defmodule SymphonyElixir.Daemon.CLI do
     do: {:error, %{exit_code: 1, output: "daemon command failed: #{Kernel.inspect(reason)}"}}
 
   defp human_status(status) do
-    "state=#{status[:state]} active=#{status[:active?]} healthy=#{status[:healthy?]} drift=#{Kernel.inspect(status[:drift] || [])}"
+    service = status[:service] || %{}
+    unit = status[:unit_name] || "symphony.service"
+
+    [
+      "state=#{status[:state]} installed=#{status[:installed?]} enabled=#{status[:enabled?]} active=#{status[:active?]} listening=#{status[:listening?]} healthy=#{status[:healthy?]}",
+      "linger=#{status[:linger?]} pid=#{status[:main_pid]} restarts=#{status[:restart_count]} result=#{service["Result"] || "unknown"}",
+      "endpoint=#{status[:host]}:#{status[:port]} drift=#{Kernel.inspect(status[:drift] || [])}",
+      "repair=symphony daemon install --force",
+      "journal=journalctl --user -u #{unit} --no-pager -n 100"
+    ]
+    |> Enum.join("\n")
   end
 
   defp human_value(value) when is_binary(value), do: value
