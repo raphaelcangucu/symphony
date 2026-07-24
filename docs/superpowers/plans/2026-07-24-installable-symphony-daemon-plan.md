@@ -2059,7 +2059,7 @@ git commit -m "feat(daemon): migrate SQLite state safely"
 - Test: `elixir/test/symphony_elixir/daemon/install_test.exs`
 - Test: `elixir/test/symphony_elixir/daemon/lifecycle_test.exs`
 
-- [ ] **Step 1: Write failing archive safety and rollback tests**
+- [x] **Step 1: Write failing archive safety and rollback tests**
 
 ```elixir
 test "rejects absolute and parent-traversal tar entries" do
@@ -2190,7 +2190,7 @@ defp successful_deps(root, test_pid) do
 end
 ```
 
-- [ ] **Step 2: Run tests and observe missing modules**
+- [x] **Step 2: Run tests and observe missing modules**
 
 Run:
 
@@ -2202,7 +2202,7 @@ mix test test/symphony_elixir/daemon/artifact_test.exs \
 
 Expected: FAIL.
 
-- [ ] **Step 3: Implement safe tar staging**
+- [x] **Step 3: Implement safe tar staging**
 
 `Artifact.stage/2` must:
 
@@ -2235,7 +2235,7 @@ def validate_entries(entries) do
 end
 ```
 
-- [ ] **Step 4: Implement installation transaction**
+- [x] **Step 4: Implement installation transaction**
 
 `Install.run/2` must capture before mutation:
 
@@ -2298,7 +2298,7 @@ exec "$install_root/current/bin/symphony-daemon" "$@"
 
 Use mode `0755`.
 
-- [ ] **Step 5: Add uninstall without persistent-data deletion**
+- [x] **Step 5: Add uninstall without persistent-data deletion**
 
 Add `Lifecycle.uninstall/1`:
 
@@ -2320,7 +2320,7 @@ end
 Tests must assert that environment, install manifest, database, backups, logs,
 and versioned releases still exist.
 
-- [ ] **Step 6: Run tests and commit**
+- [x] **Step 6: Run tests and commit**
 
 Run:
 

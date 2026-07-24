@@ -144,9 +144,9 @@ defmodule SymphonyElixir.Daemon.CLI do
       stop: fn -> Lifecycle.stop() end,
       restart: fn force? -> Lifecycle.restart(force: force?) end,
       install: fn options ->
-        apply(SymphonyElixir.Daemon.Install, :run, [options.artifact, Map.to_list(options)])
+        SymphonyElixir.Daemon.Install.run(options.artifact, Map.to_list(options))
       end,
-      uninstall: fn -> apply(SymphonyElixir.Daemon.Install, :uninstall, [[]]) end
+      uninstall: fn -> Lifecycle.uninstall() end
     }
   end
 

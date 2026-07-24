@@ -32,4 +32,33 @@ defmodule SymphonyElixir.Daemon.LifecycleTest do
     assert_received :killed
     assert_received :healthy
   end
+
+  test "uninstall removes service pointers but preserves persistent data" do
+    root = Path.join(System.tmp_dir!(), "daemon-uninstall-#{System.unique_integer([:positive])}")
+    unit = Path.join(root, "symphony.service")
+    launcher = Path.join(root, "bin/symphony")
+    current = Path.join(root, "current")
+    persistent = ~w(symphony.env install.json tracker.sqlite3 backups logs releases)
+
+    Enum.each([unit, launcher, current | Enum.map(persistent, &Path.join(root, &1))], fn path ->
+      File.mkdir_p!(Path.dirname(path))
+      File.write!(path, "keep")
+    end)
+
+    on_exit(fn -> File.rm_rf!(root) end)
+
+    deps = %{
+      disable_now: fn -> :ok end,
+      daemon_reload: fn -> :ok end,
+      unit_file: unit,
+      launcher: launcher,
+      current_link: current
+    }
+
+    assert :ok = Lifecycle.uninstall(deps: deps)
+    refute File.exists?(unit)
+    refute File.exists?(launcher)
+    refute File.exists?(current)
+    assert Enum.all?(persistent, &File.exists?(Path.join(root, &1)))
+  end
 end

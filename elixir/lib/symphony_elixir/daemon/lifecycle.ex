@@ -47,6 +47,19 @@ defmodule SymphonyElixir.Daemon.Lifecycle do
   @spec status(keyword()) :: {:ok, map()} | {:error, term()}
   def status(opts \\ []), do: deps(opts).status.()
 
+  @spec uninstall(keyword()) :: :ok | {:error, term()}
+  def uninstall(opts \\ []) do
+    deps = deps(opts)
+
+    with :ok <- deps.disable_now.(),
+         :ok <- remove_if_present(deps.unit_file),
+         :ok <- remove_if_present(deps.launcher),
+         :ok <- remove_if_present(deps.current_link),
+         :ok <- deps.daemon_reload.() do
+      :ok
+    end
+  end
+
   defp deps(opts) do
     paths = Keyword.get_lazy(opts, :paths, &Paths.resolve/0)
     status_opts = Keyword.get(opts, :status_opts, [])
@@ -58,7 +71,12 @@ defmodule SymphonyElixir.Daemon.Lifecycle do
       systemd_stop: fn -> Systemd.stop(paths.unit_name, systemd_opts) end,
       restart: fn -> Systemd.restart(paths.unit_name, systemd_opts) end,
       force_restart: fn -> Systemd.force_restart(paths.unit_name, systemd_opts) end,
-      wait_healthy: fn -> wait_healthy(paths, status_opts) end
+      wait_healthy: fn -> wait_healthy(paths, status_opts) end,
+      disable_now: fn -> Systemd.disable_now(paths.unit_name, systemd_opts) end,
+      daemon_reload: fn -> Systemd.daemon_reload(systemd_opts) end,
+      unit_file: paths.unit_file,
+      launcher: paths.launcher,
+      current_link: paths.current_link
     }
 
     Map.merge(defaults, Map.new(Keyword.get(opts, :deps, %{})))
@@ -81,6 +99,14 @@ defmodule SymphonyElixir.Daemon.Lifecycle do
           Process.sleep(250)
           do_wait_healthy(paths, status_opts, deadline)
         end
+    end
+  end
+
+  defp remove_if_present(path) do
+    case File.rm(path) do
+      :ok -> :ok
+      {:error, :enoent} -> :ok
+      {:error, _reason} = error -> error
     end
   end
 end
