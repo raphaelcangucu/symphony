@@ -39,10 +39,10 @@ test("artifactSlug accepts only safe canonical run identifiers", () => {
 test("tracker routes target the real session and issue surfaces", () => {
   assert.equal(
     sessionRoute(manifest.project_slug, 41),
-    "/projects/symphony-landing-benchmark/workspaces/41",
+    "/tracker/projects/symphony-landing-benchmark/workspaces/41",
   );
   assert.equal(
     issueRoute(manifest.project_slug, "SYM-6"),
-    "/projects/symphony-landing-benchmark/board/issues/SYM-6/sessions?surface=autonomous",
+    "/tracker/projects/symphony-landing-benchmark/board/issues/SYM-6/sessions?surface=autonomous",
   );
 });

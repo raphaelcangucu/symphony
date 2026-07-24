@@ -21,11 +21,11 @@ export function artifactSlug(runId) {
 }
 
 export function sessionRoute(projectSlug, threadId) {
-  return `/projects/${encodeURIComponent(projectSlug)}/workspaces/${encodeURIComponent(threadId)}`;
+  return `/tracker/projects/${encodeURIComponent(projectSlug)}/workspaces/${encodeURIComponent(threadId)}`;
 }
 
 export function issueRoute(projectSlug, identifier) {
-  return `/projects/${encodeURIComponent(projectSlug)}/board/issues/${encodeURIComponent(identifier)}/sessions?surface=autonomous`;
+  return `/tracker/projects/${encodeURIComponent(projectSlug)}/board/issues/${encodeURIComponent(identifier)}/sessions?surface=autonomous`;
 }
 
 function requiredEnvironment(env) {
