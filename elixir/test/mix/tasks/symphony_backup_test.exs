@@ -10,13 +10,22 @@ defmodule Mix.Tasks.Symphony.BackupTest do
     db = Path.join(tmp, "tracker.sqlite3")
     backup_root = Path.join(tmp, "backups")
 
-    File.mkdir_p!(Path.dirname(db))
-    File.write!(db, "mix-task-db")
+    SymphonyElixir.SqliteFixtures.create_database!(db)
+
+    previous_app_env =
+      Map.new(
+        [SymphonyElixir.Repo, :backup_local_dir],
+        &{&1, Application.fetch_env(:symphony_elixir, &1)}
+      )
 
     Application.put_env(:symphony_elixir, SymphonyElixir.Repo, database: db)
     Application.put_env(:symphony_elixir, :backup_local_dir, backup_root)
 
-    on_exit(fn -> File.rm_rf(tmp) end)
+    on_exit(fn ->
+      Enum.each(previous_app_env, fn {key, previous} -> restore_app_env(key, previous) end)
+      File.rm_rf(tmp)
+    end)
+
     :ok
   end
 
@@ -34,4 +43,10 @@ defmodule Mix.Tasks.Symphony.BackupTest do
     assert output =~ "✓  Backup id="
     assert output =~ "Backups (1)"
   end
+
+  defp restore_app_env(key, {:ok, value}),
+    do: Application.put_env(:symphony_elixir, key, value)
+
+  defp restore_app_env(key, :error),
+    do: Application.delete_env(:symphony_elixir, key)
 end
