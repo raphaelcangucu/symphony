@@ -9,8 +9,11 @@ function Icon(props: IconProps) {
 
 export const ChevronDown = Icon;
 export const ChevronRight = Icon;
+export const ArrowLeft = Icon;
 export const Folder = Icon;
 export const MoreHorizontal = Icon;
 export const Search = Icon;
+export const SendHorizontal = Icon;
+export const SlidersHorizontal = Icon;
 export const SquarePen = Icon;
 export const SquareTerminal = Icon;

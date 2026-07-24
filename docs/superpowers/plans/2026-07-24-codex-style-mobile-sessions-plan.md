@@ -454,7 +454,7 @@ git commit -m "feat(mobile): add Codex-style session library"
 - Create: `mobile/src/features/sessions/NewSessionScreen.test.tsx`
 - Create: `mobile/app/new-session.tsx`
 
-- [ ] **Step 1: Write failing state tests**
+- [x] **Step 1: Write failing state tests**
 
 Prove defaults and payloads independently of React Native:
 
@@ -486,7 +486,7 @@ Also prove freeform ignores project fields, issue-isolated maps
 blank prompts are rejected, and title derives from the first 160 prompt
 characters without requiring input.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run:
 
@@ -496,7 +496,7 @@ cd mobile && npm run test:unit -- src/features/sessions/new-session-state.test.t
 
 Expected: FAIL because the state module is missing.
 
-- [ ] **Step 3: Implement pure state**
+- [x] **Step 3: Implement pure state**
 
 Export a reducer with these stable actions:
 
@@ -515,7 +515,7 @@ type NewSessionAction =
 Changing scope/project clears invalid dependent selections but preserves the
 prompt.
 
-- [ ] **Step 4: Write failing screen tests**
+- [x] **Step 4: Write failing screen tests**
 
 Prove:
 
@@ -528,7 +528,7 @@ Prove:
 - success navigates to `/session/<id>?seed=<encoded prompt>`;
 - no title field, dead attachment button, or dead voice button is rendered.
 
-- [ ] **Step 5: Verify screen RED**
+- [x] **Step 5: Verify screen RED**
 
 Run:
 
@@ -538,7 +538,7 @@ cd mobile && npm run test:ui -- src/features/sessions/NewSessionScreen.test.tsx
 
 Expected: FAIL because the screen is missing.
 
-- [ ] **Step 6: Implement the screen**
+- [x] **Step 6: Implement the screen**
 
 Use compact pressable selector rows and bottom sheets implemented with native
 `Modal` for this slice. Fetch project catalog only after a project is selected.
@@ -546,7 +546,7 @@ Persist a single new-session draft per active profile in AsyncStorage. Clear it
 only after thread creation succeeds and the seed handoff is stored in the
 route.
 
-- [ ] **Step 7: Verify GREEN**
+- [x] **Step 7: Verify GREEN**
 
 Run:
 
@@ -559,7 +559,7 @@ npm run typecheck
 
 Expected: state, screen, and TypeScript checks pass.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add mobile/src/features/sessions/new-session-state.ts \
