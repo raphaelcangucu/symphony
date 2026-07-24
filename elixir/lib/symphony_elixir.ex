@@ -34,6 +34,15 @@ defmodule SymphonyElixir.Application do
   end
 
   @impl true
+  def prep_stop(state) do
+    if SymphonyElixir.Daemon.BuildInfo.snapshot().mode == "installed" do
+      _ = SymphonyElixir.Daemon.Shutdown.drain(300_000)
+    end
+
+    state
+  end
+
+  @impl true
   def stop(_state) do
     SymphonyElixir.StatusDashboard.render_offline_status()
     :ok

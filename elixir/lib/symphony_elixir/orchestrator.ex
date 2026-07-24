@@ -24,9 +24,11 @@ defmodule SymphonyElixir.Orchestrator do
   }
 
   alias SymphonyElixir.Agent.ExecutionSession
+  alias SymphonyElixir.Daemon.Shutdown
   alias SymphonyElixir.Evidence
   alias SymphonyElixir.GitHub.IssueMarker
   alias SymphonyElixir.LocalTracker.{Context, IssueMapper, Repository}
+
   alias SymphonyElixir.Orchestrator.{
     AgentTotals,
     BundleCoordinator,
@@ -35,6 +37,7 @@ defmodule SymphonyElixir.Orchestrator do
     IncompleteReason,
     RunUpdate
   }
+
   alias SymphonyElixir.PublicRouting
   alias SymphonyElixir.PushNotifications.Dispatcher, as: PushDispatcher
   alias SymphonyElixir.RunContract.Finalizer
@@ -274,26 +277,30 @@ defmodule SymphonyElixir.Orchestrator do
   end
 
   defp maybe_dispatch(%State{} = state) do
-    # Non-forced so the engine's per-project pull gate (tracker_sync_min_pull_ms)
-    # coalesces remote pulls; the poll still flushes queued outbox writes.
-    Engine.request_sync()
-    state = reconcile_running_issues(state)
+    if Shutdown.admitting?() do
+      # Non-forced so the engine's per-project pull gate (tracker_sync_min_pull_ms)
+      # coalesces remote pulls; the poll still flushes queued outbox writes.
+      Engine.request_sync()
+      state = reconcile_running_issues(state)
 
-    with :ok <- global_config_gate(),
-         {:ok, issues} <- Tracker.fetch_candidate_issues(),
-         true <- available_slots(state) > 0 do
-      choose_issues(issues, state)
+      with :ok <- global_config_gate(),
+           {:ok, issues} <- Tracker.fetch_candidate_issues(),
+           true <- available_slots(state) > 0 do
+        choose_issues(issues, state)
+      else
+        {:error, reason} when is_binary(reason) ->
+          Logger.error(reason)
+          state
+
+        {:error, reason} ->
+          Logger.error("Failed to fetch from tracker: #{inspect(reason)}")
+          state
+
+        false ->
+          state
+      end
     else
-      {:error, reason} when is_binary(reason) ->
-        Logger.error(reason)
-        state
-
-      {:error, reason} ->
-        Logger.error("Failed to fetch from tracker: #{inspect(reason)}")
-        state
-
-      false ->
-        state
+      state
     end
   end
 
@@ -2834,38 +2841,10 @@ defmodule SymphonyElixir.Orchestrator do
 
   # credo:disable-for-lines:40
   def handle_call({:request_dispatch, identifier}, _from, state) do
-    normalized = String.trim(identifier)
-
-    case fetch_issue_by_identifier(normalized) do
-      {:ok, %Issue{} = issue} ->
-        cond do
-          Map.has_key?(state.running, issue.id) ->
-            {:reply, {:error, :already_running}, state}
-
-          manual_dispatch_candidate?(issue) ->
-            state =
-              state
-              |> cancel_retry_in_state(normalized)
-              |> release_issue_claim(issue.id)
-              |> unmark_issue_paused(issue.id)
-
-            if dispatch_slots_available?(issue, state) do
-              state = dispatch_issue_for_manual_resume(state, issue)
-              notify_dashboard()
-              {:reply, {:ok, %{dispatched: true, issue_identifier: issue.identifier}}, state}
-            else
-              {:reply, {:error, :no_slots}, state}
-            end
-
-          true ->
-            {:reply, {:error, :not_dispatchable}, state}
-        end
-
-      {:error, :not_found} ->
-        {:reply, {:error, :issue_not_found}, state}
-
-      {:error, reason} ->
-        {:reply, {:error, reason}, state}
+    if Shutdown.admitting?() do
+      handle_request_dispatch(identifier, state)
+    else
+      {:reply, {:error, :daemon_draining}, state}
     end
   end
 
@@ -2901,6 +2880,42 @@ defmodule SymphonyElixir.Orchestrator do
         %{pid: pid} = find_running_by_identifier(state, identifier)
         send(pid, {:codex_steer, input, reply_to})
         {:reply, :ok, state}
+    end
+  end
+
+  defp handle_request_dispatch(identifier, state) do
+    normalized = String.trim(identifier)
+
+    case fetch_issue_by_identifier(normalized) do
+      {:ok, %Issue{} = issue} ->
+        cond do
+          Map.has_key?(state.running, issue.id) ->
+            {:reply, {:error, :already_running}, state}
+
+          manual_dispatch_candidate?(issue) ->
+            state =
+              state
+              |> cancel_retry_in_state(normalized)
+              |> release_issue_claim(issue.id)
+              |> unmark_issue_paused(issue.id)
+
+            if dispatch_slots_available?(issue, state) do
+              state = dispatch_issue_for_manual_resume(state, issue)
+              notify_dashboard()
+              {:reply, {:ok, %{dispatched: true, issue_identifier: issue.identifier}}, state}
+            else
+              {:reply, {:error, :no_slots}, state}
+            end
+
+          true ->
+            {:reply, {:error, :not_dispatchable}, state}
+        end
+
+      {:error, :not_found} ->
+        {:reply, {:error, :issue_not_found}, state}
+
+      {:error, reason} ->
+        {:reply, {:error, reason}, state}
     end
   end
 
@@ -3086,8 +3101,7 @@ defmodule SymphonyElixir.Orchestrator do
     %{
       state
       | agent_totals: AgentTotals.apply_delta(agent_totals, token_delta),
-        agent_totals_by_project:
-          AgentTotals.apply_project_delta(by_project, project_slug, token_delta)
+        agent_totals_by_project: AgentTotals.apply_project_delta(by_project, project_slug, token_delta)
     }
   end
 

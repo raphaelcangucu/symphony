@@ -2357,7 +2357,7 @@ git commit -m "feat(daemon): install releases with health rollback"
 - Test: `elixir/test/symphony_elixir/assistant/turn_manager_test.exs`
 - Test: `elixir/test/symphony_elixir/orchestrator_status_test.exs`
 
-- [ ] **Step 1: Write failing gate and drain tests**
+- [x] **Step 1: Write failing gate and drain tests**
 
 ```elixir
 test "begin_drain closes admission immediately" do
@@ -2448,7 +2448,7 @@ end
 
 Reset `Shutdown` to admitting in test setup/on-exit.
 
-- [ ] **Step 2: Run focused tests and observe failures**
+- [x] **Step 2: Run focused tests and observe failures**
 
 Run:
 
@@ -2460,7 +2460,7 @@ mix test test/symphony_elixir/daemon/shutdown_test.exs \
 
 Expected: FAIL.
 
-- [ ] **Step 3: Implement the gate and drain coordinator**
+- [x] **Step 3: Implement the gate and drain coordinator**
 
 ```elixir
 defmodule SymphonyElixir.Daemon.Shutdown do
@@ -2550,7 +2550,7 @@ defmodule SymphonyElixir.Daemon.Shutdown do
 end
 ```
 
-- [ ] **Step 4: Wire admission into assistant and issue dispatch**
+- [x] **Step 4: Wire admission into assistant and issue dispatch**
 
 Add `Shutdown` before `TurnManager` in `SharedSupervisor.child_specs/0`.
 
@@ -2584,7 +2584,7 @@ In the manual `request_dispatch` handler, return
 sites to return a visible retryable error when `TurnManager.enqueue/3` returns
 that value.
 
-- [ ] **Step 5: Drain only installed-mode OTP shutdown**
+- [x] **Step 5: Drain only installed-mode OTP shutdown**
 
 Add:
 
@@ -2601,7 +2601,7 @@ end
 
 to `SymphonyElixir.Application`. Development `make stop` remains immediate.
 
-- [ ] **Step 6: Run focused suites and commit**
+- [x] **Step 6: Run focused suites and commit**
 
 Run:
 

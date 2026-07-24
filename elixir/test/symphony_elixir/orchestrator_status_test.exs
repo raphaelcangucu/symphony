@@ -3,9 +3,21 @@ defmodule SymphonyElixir.OrchestratorStatusTest do
 
   alias SymphonyElixir.Codex.CodingAgent, as: CodexCodingAgent
   alias SymphonyElixir.Cursor.CodingAgent, as: CursorCodingAgent
+  alias SymphonyElixir.Daemon.Shutdown
 
   defp normalize(event), do: CodexCodingAgent.normalize_event(event)
   defp normalize_cursor(event), do: CursorCodingAgent.normalize_event(event)
+
+  test "manual dispatch rejects new work while daemon is draining" do
+    orchestrator_name = Module.concat(__MODULE__, :DrainingOrchestrator)
+    :ok = Shutdown.begin_drain()
+    on_exit(fn -> Shutdown.reset() end)
+
+    start_supervised!({Orchestrator, name: orchestrator_name, schedule_initial_tick?: false})
+
+    assert {:error, :daemon_draining} =
+             Orchestrator.request_dispatch(orchestrator_name, "SYM-1")
+  end
 
   test "snapshot returns :timeout when snapshot server is unresponsive" do
     server_name = Module.concat(__MODULE__, :UnresponsiveSnapshotServer)

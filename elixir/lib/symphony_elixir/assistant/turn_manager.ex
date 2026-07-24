@@ -21,6 +21,7 @@ defmodule SymphonyElixir.Assistant.TurnManager do
   use GenServer
 
   alias SymphonyElixir.Assistant.{GoalRun, History, TitleGenerator}
+  alias SymphonyElixir.Daemon.Shutdown
 
   require Logger
 
@@ -80,9 +81,27 @@ defmodule SymphonyElixir.Assistant.TurnManager do
   end
 
   @doc "Append a turn to the thread's FIFO queue (runs when the current turn finishes)."
-  @spec enqueue(integer(), String.t(), start_opts()) :: :ok
+  @spec enqueue(integer(), String.t(), start_opts()) :: :ok | {:error, :daemon_draining}
   def enqueue(thread_id, prompt, opts) when is_integer(thread_id) do
-    GenServer.cast(__MODULE__, {:enqueue, thread_id, prompt, opts})
+    GenServer.call(__MODULE__, {:enqueue, thread_id, prompt, opts})
+  end
+
+  @doc "Thread ids whose assistant workers are currently active."
+  @spec active_thread_ids() :: [integer()]
+  def active_thread_ids do
+    GenServer.call(__MODULE__, :active_thread_ids)
+  end
+
+  @doc "Interrupt every active assistant worker with a shared reason."
+  @spec interrupt_all(String.t()) :: :ok
+  def interrupt_all(reason) when is_binary(reason) do
+    interrupt_all(active_thread_ids(), reason)
+  end
+
+  @spec interrupt_all([integer()], String.t()) :: :ok
+  def interrupt_all(ids, reason) when is_list(ids) and is_binary(reason) do
+    Enum.each(ids, &interrupt(&1, reason))
+    :ok
   end
 
   @doc "Interrupt the live worker for a thread and persist an interrupted turn state."
@@ -275,11 +294,44 @@ defmodule SymphonyElixir.Assistant.TurnManager do
   end
 
   def handle_call({:start_turn, thread_id, prompt, opts}, _from, state) do
-    if running?(thread_id) or Map.has_key?(state, {:goal_mutation, thread_id}) do
-      {:reply, {:error, :turn_in_progress}, state}
-    else
-      do_start_turn(thread_id, prompt, opts, state)
+    cond do
+      not Shutdown.admitting?() ->
+        {:reply, {:error, :daemon_draining}, state}
+
+      running?(thread_id) or Map.has_key?(state, {:goal_mutation, thread_id}) ->
+        {:reply, {:error, :turn_in_progress}, state}
+
+      true ->
+        do_start_turn(thread_id, prompt, opts, state)
     end
+  end
+
+  def handle_call({:enqueue, thread_id, prompt, opts}, _from, state) do
+    cond do
+      not Shutdown.admitting?() ->
+        {:reply, {:error, :daemon_draining}, state}
+
+      Map.has_key?(state, {:turn, thread_id}) or
+          Map.has_key?(state, {:goal_mutation, thread_id}) ->
+        queued = Map.get(state, {:queue, thread_id}, [])
+        state = Map.put(state, {:queue, thread_id}, queued ++ [%{prompt: prompt, opts: opts}])
+        {:reply, :ok, state}
+
+      true ->
+        case do_start_turn(thread_id, prompt, ensure_run(opts, prompt), state) do
+          {:reply, {:ok, _turn}, new_state} -> {:reply, :ok, new_state}
+          {:reply, error, new_state} -> {:reply, error, new_state}
+        end
+    end
+  end
+
+  def handle_call(:active_thread_ids, _from, state) do
+    ids =
+      for {{:turn, thread_id}, _entry} <- state,
+          is_integer(thread_id),
+          do: thread_id
+
+    {:reply, ids, state}
   end
 
   @impl true
@@ -370,18 +422,6 @@ defmodule SymphonyElixir.Assistant.TurnManager do
     end
 
     {:noreply, state}
-  end
-
-  def handle_cast({:enqueue, thread_id, prompt, opts}, state) do
-    if Map.has_key?(state, {:turn, thread_id}) or Map.has_key?(state, {:goal_mutation, thread_id}) do
-      queued = Map.get(state, {:queue, thread_id}, [])
-      {:noreply, Map.put(state, {:queue, thread_id}, queued ++ [%{prompt: prompt, opts: opts}])}
-    else
-      case do_start_turn(thread_id, prompt, ensure_run(opts, prompt), state) do
-        {:reply, {:ok, _}, new_state} -> {:noreply, new_state}
-        {:reply, _err, new_state} -> {:noreply, new_state}
-      end
-    end
   end
 
   @impl true
@@ -826,6 +866,14 @@ defmodule SymphonyElixir.Assistant.TurnManager do
   end
 
   defp drain_queue(thread_id, state) do
+    if Shutdown.admitting?() do
+      do_drain_queue(thread_id, state)
+    else
+      Map.delete(state, {:queue, thread_id})
+    end
+  end
+
+  defp do_drain_queue(thread_id, state) do
     case Map.get(state, {:queue, thread_id}, []) do
       [] ->
         state
@@ -838,7 +886,7 @@ defmodule SymphonyElixir.Assistant.TurnManager do
 
         case do_start_turn(thread_id, next.prompt, ensure_run(next.opts, next.prompt), state) do
           {:reply, {:ok, _}, new_state} -> new_state
-          {:reply, _err, new_state} -> drain_queue(thread_id, new_state)
+          {:reply, _err, new_state} -> do_drain_queue(thread_id, new_state)
         end
     end
   end

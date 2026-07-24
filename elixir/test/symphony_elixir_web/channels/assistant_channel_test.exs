@@ -5,6 +5,7 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
 
   alias Ecto.Adapters.SQL
   alias SymphonyElixir.Assistant.{History, Thread, TurnManager}
+  alias SymphonyElixir.Daemon.Shutdown
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.Repo
   alias SymphonyElixir.Settings.Setting
@@ -36,6 +37,7 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
 
   setup do
     start_supervised!(SymphonyElixirWeb.Endpoint)
+    :ok = Shutdown.reset()
     migrate_repo()
     clean_repo()
     Repo.delete_all(Setting)
@@ -51,6 +53,7 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
       restore_app_env(:assistant_runner, previous_runner)
       restore_app_env(:push_dispatcher, previous_push_dispatcher)
       restore_app_env(:push_test_pid, previous_push_test_pid)
+      Shutdown.reset()
     end)
 
     {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
@@ -66,6 +69,22 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
 
     socket = socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
     {:ok, socket: socket}
+  end
+
+  test "send_message returns a retryable error while daemon is draining" do
+    {:ok, _reply, socket} =
+      socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
+      |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, "assistant:macro-markets")
+
+    assert_push("history_loaded", %{messages: []})
+    :ok = Shutdown.begin_drain()
+
+    ref = push(socket, "send_message", %{"message" => "later"})
+
+    assert_reply(ref, :error, %{
+      reason: "daemon is shutting down; retry after it restarts",
+      retryable: true
+    })
   end
 
   test "joins assistant topic, streams a turn, and replays persisted history" do

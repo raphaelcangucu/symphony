@@ -1560,6 +1560,9 @@ defmodule SymphonyElixirWeb.AssistantChannel do
       {:error, :turn_in_progress} ->
         steer_or_queue(thread, trimmed, start_opts, socket)
 
+      {:error, :daemon_draining} ->
+        {:reply, {:error, %{reason: "daemon is shutting down; retry after it restarts", retryable: true}}, socket}
+
       {:error, _reason} ->
         {:reply, {:error, %{reason: "assistant could not start the turn"}}, socket}
     end
@@ -1644,8 +1647,17 @@ defmodule SymphonyElixirWeb.AssistantChannel do
 
       :error ->
         maybe_persist_steer(socket, trimmed)
-        TurnManager.enqueue(thread.id, trimmed, start_opts)
-        {:reply, {:ok, %{queued: true}}, socket}
+
+        case TurnManager.enqueue(thread.id, trimmed, start_opts) do
+          :ok ->
+            {:reply, {:ok, %{queued: true}}, socket}
+
+          {:error, :daemon_draining} ->
+            {:reply, {:error, %{reason: "daemon is shutting down; retry after it restarts", retryable: true}}, socket}
+
+          {:error, _reason} ->
+            {:reply, {:error, %{reason: "assistant could not queue the turn"}}, socket}
+        end
     end
   end
 
