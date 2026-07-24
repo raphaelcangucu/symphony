@@ -91,6 +91,7 @@ export type ProjectSessionListOptions = {
 };
 
 type CreateThreadSettings = {
+  requestKey: string;
   agentKind: AgentKind;
   model?: string;
   effort?: string;

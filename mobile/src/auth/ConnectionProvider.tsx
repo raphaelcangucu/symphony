@@ -38,7 +38,7 @@ export type ConnectionContextValue = {
 
 type ConnectionProviderProps = {
   children: ReactNode;
-  storage?: ConnectionStorage;
+  storage?: ConnectionStorage | undefined;
 };
 
 const defaultStorage = createConnectionStorage({

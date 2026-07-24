@@ -50,11 +50,6 @@ export function NewSessionRoute() {
     },
     [profileId],
   );
-  const clearDraft = useCallback(async () => {
-    if (!profileId) return;
-    await AsyncStorage.removeItem(draftStorageKey(profileId));
-  }, [profileId]);
-
   if (!client || !activeProfile) return null;
   if (!draft || projectsQuery.isPending) {
     return <StateView kind="loading" title="Preparing a new chat" />;
@@ -78,7 +73,6 @@ export function NewSessionRoute() {
       initialState={draft}
       loadCatalog={(projectSlug) => client.assistantCatalog(projectSlug)}
       onBack={() => router.back()}
-      onClearDraft={clearDraft}
       onCreated={(threadId, prompt) =>
         router.replace(`/session/${threadId}?seed=${encodeURIComponent(prompt)}`)
       }
@@ -100,6 +94,10 @@ function parseDraft(value: string | null): NewSessionState {
     const initial = createInitialNewSessionState();
     return {
       ...initial,
+      requestKey:
+        typeof parsed.requestKey === "string" && parsed.requestKey.trim()
+          ? parsed.requestKey
+          : initial.requestKey,
       prompt: typeof parsed.prompt === "string" ? parsed.prompt : "",
       scope: parsed.scope === "project" ? "project" : "free",
       projectSlug: optionalString(parsed.projectSlug),

@@ -19,7 +19,8 @@ defmodule SymphonyElixir.Assistant.Thread do
     :status,
     :metadata,
     :agent_kind,
-    :agent_thread_ids
+    :agent_thread_ids,
+    :client_request_id
   ]
 
   schema "assistant_threads" do
@@ -33,6 +34,7 @@ defmodule SymphonyElixir.Assistant.Thread do
     field(:metadata, :map, default: %{})
     field(:agent_kind, :string)
     field(:agent_thread_ids, :map, default: %{})
+    field(:client_request_id, :string)
 
     has_many(:messages, Message, foreign_key: :thread_id)
 
@@ -52,6 +54,7 @@ defmodule SymphonyElixir.Assistant.Thread do
     |> unique_constraint(:project_slug, name: :assistant_threads_active_project_index)
     |> unique_constraint(:project_slug, name: :assistant_threads_active_project_explore_index)
     |> unique_constraint(:issue_identifier, name: :assistant_threads_active_issue_index)
+    |> unique_constraint(:client_request_id, name: :assistant_threads_client_request_id_index)
   end
 
   defp validate_scope_fields(changeset) do

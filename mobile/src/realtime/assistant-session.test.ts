@@ -53,14 +53,34 @@ class FakeSocket implements AssistantSocketLike {
   disconnect = vi.fn();
   channel = vi.fn(() => this.channelInstance);
   openCallbacks: (() => void)[] = [];
+  closeCallbacks: (() => void)[] = [];
+  errorCallbacks: (() => void)[] = [];
 
   onOpen(callback: () => void) {
     this.openCallbacks.push(callback);
     return 1;
   }
 
+  onClose(callback: () => void) {
+    this.closeCallbacks.push(callback);
+    return 1;
+  }
+
+  onError(callback: () => void) {
+    this.errorCallbacks.push(callback);
+    return 1;
+  }
+
   triggerOpen() {
     this.openCallbacks.forEach((callback) => callback());
+  }
+
+  triggerClose() {
+    this.closeCallbacks.forEach((callback) => callback());
+  }
+
+  triggerError() {
+    this.errorCallbacks.forEach((callback) => callback());
   }
 }
 
@@ -130,10 +150,133 @@ describe("assistant session adapter", () => {
 
     const sends = socket.channelInstance.pushes.filter((item) => item.event === "send_message");
     expect(sends).toHaveLength(1);
-    expect(sends[0]?.payload).toEqual({ message: "Build it" });
+    expect(sends[0]?.payload).toEqual({
+      message: "Build it",
+      client_message_id: "mobile-seed-42",
+    });
     sends[0]?.push.trigger("ok");
     await Promise.resolve();
     expect(onSeedAccepted).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a rejected seed retryable until it is accepted", async () => {
+    const socket = new FakeSocket();
+    const onAction = vi.fn();
+    const onSeedAccepted = vi.fn();
+    const session = createAssistantSession({
+      threadId: 42,
+      origin: "https://demo.test",
+      token: "secret",
+      seed: "Build it",
+      socketFactory: () => socket,
+      onAction,
+      onSeedAccepted,
+    });
+
+    session.connect();
+    socket.channelInstance.joinPush.trigger("ok");
+    socket.channelInstance.pushes[0]?.push.trigger("timeout");
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(onAction).toHaveBeenCalledWith({ type: "error", message: "Message send timed out" });
+
+    const retry = session.retrySeed();
+    socket.channelInstance.trigger("history_synced", { messages: [] });
+    const sends = socket.channelInstance.pushes.filter((item) => item.event === "send_message");
+    expect(sends).toHaveLength(2);
+    sends[1]?.push.trigger("ok");
+    await expect(retry).resolves.toBeUndefined();
+    expect(onSeedAccepted).toHaveBeenCalledTimes(1);
+  });
+
+  it("reconciles an ambiguously accepted seed without sending it twice", async () => {
+    const socket = new FakeSocket();
+    const onSeedAccepted = vi.fn();
+    const session = createAssistantSession({
+      threadId: 42,
+      origin: "https://demo.test",
+      token: "secret",
+      seed: "Build it",
+      socketFactory: () => socket,
+      onAction: vi.fn(),
+      onSeedAccepted,
+    });
+
+    session.connect();
+    socket.channelInstance.joinPush.trigger("ok");
+    socket.channelInstance.pushes[0]?.push.trigger("timeout");
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const retry = session.retrySeed();
+    socket.channelInstance.trigger("history_synced", {
+      messages: [{ id: 7, role: "user", content: "Build it" }],
+    });
+    await expect(retry).resolves.toBeUndefined();
+    expect(
+      socket.channelInstance.pushes.filter((item) => item.event === "send_message"),
+    ).toHaveLength(1);
+    expect(onSeedAccepted).toHaveBeenCalledTimes(1);
+  });
+
+  it("shares one reconciliation across concurrent seed retry taps", async () => {
+    const socket = new FakeSocket();
+    const session = createAssistantSession({
+      threadId: 42,
+      origin: "https://demo.test",
+      token: "secret",
+      seed: "Build it",
+      socketFactory: () => socket,
+      onAction: vi.fn(),
+    });
+    session.connect();
+    socket.channelInstance.joinPush.trigger("ok");
+    socket.channelInstance.pushes[0]?.push.trigger("timeout");
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const first = session.retrySeed();
+    const second = session.retrySeed();
+    expect(first).toBe(second);
+    socket.channelInstance.trigger("history_synced", {
+      messages: [{ id: 7, role: "user", content: "Build it" }],
+    });
+    await expect(Promise.all([first, second])).resolves.toEqual([undefined, undefined]);
+    expect(
+      socket.channelInstance.pushes.filter((item) => item.event === "sync_history"),
+    ).toHaveLength(1);
+  });
+
+  it("reports socket errors, closures, and reconnects", async () => {
+    const socket = new FakeSocket();
+    const onAction = vi.fn();
+    const session = createAssistantSession({
+      threadId: 42,
+      origin: "https://demo.test",
+      token: "secret",
+      socketFactory: () => socket,
+      onAction,
+    });
+
+    session.connect();
+    socket.channelInstance.joinPush.trigger("ok");
+    socket.triggerError();
+    socket.triggerClose();
+    await expect(session.sendMessage("Offline mutation")).rejects.toThrow("not connected");
+    socket.channelInstance.joinPush.trigger("ok");
+    const afterRejoin = session.sendMessage("After rejoin");
+    socket.channelInstance.pushes.at(-1)?.push.trigger("ok");
+    await expect(afterRejoin).resolves.toBeUndefined();
+    socket.triggerOpen();
+
+    expect(onAction).toHaveBeenCalledWith({
+      type: "connection_changed",
+      state: "reconnecting",
+    });
+    expect(onAction).toHaveBeenCalledWith({ type: "connection_changed", state: "offline" });
+    expect(socket.channelInstance.pushes).toContainEqual(
+      expect.objectContaining({ event: "sync_history", payload: {} }),
+    );
   });
 
   it("sends composer messages with the channel payload contract", async () => {

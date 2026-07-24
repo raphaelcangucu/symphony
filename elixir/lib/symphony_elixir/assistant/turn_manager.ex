@@ -31,6 +31,7 @@ defmodule SymphonyElixir.Assistant.TurnManager do
           agent_kind: String.t() | nil,
           model: String.t() | nil,
           effort: String.t() | nil,
+          client_message_id: String.t() | nil,
           codex_thread_id: String.t() | nil,
           reply_to: pid(),
           run: (-> {:ok, map()} | {:error, term()}),
@@ -59,7 +60,9 @@ defmodule SymphonyElixir.Assistant.TurnManager do
   the thread (the channel then routes the message to steer/queue).
   """
   @spec start_turn(integer(), String.t(), start_opts()) ::
-          {:ok, %{pid: pid(), generation: String.t()}} | {:error, :turn_in_progress | term()}
+          {:ok, %{pid: pid(), generation: String.t()}}
+          | {:ok, :duplicate}
+          | {:error, :turn_in_progress | term()}
   def start_turn(thread_id, prompt, opts)
       when is_integer(thread_id) and is_binary(prompt) and is_list(opts) do
     GenServer.call(__MODULE__, {:start_turn, thread_id, prompt, opts})
@@ -275,10 +278,15 @@ defmodule SymphonyElixir.Assistant.TurnManager do
   end
 
   def handle_call({:start_turn, thread_id, prompt, opts}, _from, state) do
-    if running?(thread_id) or Map.has_key?(state, {:goal_mutation, thread_id}) do
-      {:reply, {:error, :turn_in_progress}, state}
-    else
-      do_start_turn(thread_id, prompt, opts, state)
+    cond do
+      duplicate_running_client_message?(state, thread_id, opts) ->
+        {:reply, {:ok, :duplicate}, state}
+
+      running?(thread_id) or Map.has_key?(state, {:goal_mutation, thread_id}) ->
+        {:reply, {:error, :turn_in_progress}, state}
+
+      true ->
+        do_start_turn(thread_id, prompt, opts, state)
     end
   end
 
@@ -625,7 +633,8 @@ defmodule SymphonyElixir.Assistant.TurnManager do
             monitor_ref: ref,
             pid: pid,
             reply_to: reply_to,
-            generation: generation
+            generation: generation,
+            client_message_id: Keyword.get(opts, :client_message_id)
           })
 
         {:reply, {:ok, %{pid: pid, generation: generation}}, state}
@@ -652,6 +661,16 @@ defmodule SymphonyElixir.Assistant.TurnManager do
     end
   end
 
+  defp duplicate_running_client_message?(state, thread_id, opts) do
+    client_message_id = Keyword.get(opts, :client_message_id)
+
+    is_binary(client_message_id) and client_message_id != "" and
+      match?(
+        %{client_message_id: ^client_message_id},
+        Map.get(state, {:turn, thread_id})
+      )
+  end
+
   defp start_attrs(prompt, opts, generation) do
     %{
       generation: generation,
@@ -660,6 +679,7 @@ defmodule SymphonyElixir.Assistant.TurnManager do
       agent_kind: Keyword.get(opts, :agent_kind),
       model: Keyword.get(opts, :model),
       effort: Keyword.get(opts, :effort),
+      client_message_id: Keyword.get(opts, :client_message_id),
       codex_thread_id: Keyword.get(opts, :codex_thread_id)
     }
   end

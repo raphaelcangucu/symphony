@@ -35,6 +35,7 @@ type RequestOptions = {
   body?: unknown;
   signal?: AbortSignal | undefined;
   tracker?: boolean;
+  idempotencyKey?: string;
 };
 
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -63,6 +64,9 @@ export function createTrackerClient(options: CreateTrackerClientOptions): Tracke
     };
     if (requestOptions.body !== undefined) {
       headers["Content-Type"] = "application/json";
+    }
+    if (requestOptions.idempotencyKey) {
+      headers["Idempotency-Key"] = requestOptions.idempotencyKey;
     }
 
     try {
@@ -170,6 +174,7 @@ export function createTrackerClient(options: CreateTrackerClientOptions): Tracke
           await request("/assistant/threads", {
             method: "POST",
             body: payload,
+            idempotencyKey: input.requestKey,
             signal,
           }),
         ),

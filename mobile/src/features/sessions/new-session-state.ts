@@ -4,6 +4,7 @@ export type NewSessionScope = "free" | "project";
 export type WorkspaceMode = "default" | "existing" | "isolated" | "parent";
 
 export type NewSessionState = {
+  requestKey: string;
   prompt: string;
   scope: NewSessionScope;
   projectSlug: string | null;
@@ -26,8 +27,11 @@ export type NewSessionAction =
   | { type: "set_agent"; agentKind: AgentKind }
   | { type: "set_model"; model: string | null; effort: string | null };
 
-export function createInitialNewSessionState(): NewSessionState {
+export function createInitialNewSessionState(
+  createRequestKey: () => string = defaultRequestKey,
+): NewSessionState {
   return {
+    requestKey: createRequestKey(),
     prompt: "",
     scope: "free",
     projectSlug: null,
@@ -76,12 +80,17 @@ export function newSessionReducer(
         workspacePath: action.path?.trim() || null,
         branch: action.mode === "isolated" ? state.branch : null,
       };
-    case "set_issue":
+    case "set_issue": {
+      const issueIdentifier = action.identifier?.trim() || null;
+      const issueWorkspace = state.workspaceMode === "isolated" || state.workspaceMode === "parent";
       return {
         ...state,
-        issueIdentifier: action.identifier?.trim() || null,
-        branch: action.identifier ? state.branch : null,
+        issueIdentifier,
+        workspaceMode: !issueIdentifier && issueWorkspace ? "default" : state.workspaceMode,
+        workspacePath: !issueIdentifier && issueWorkspace ? null : state.workspacePath,
+        branch: issueIdentifier ? state.branch : null,
       };
+    }
     case "set_branch":
       return { ...state, branch: action.branch?.trim() || null };
     case "set_agent":
@@ -98,6 +107,7 @@ export function newSessionReducer(
 
 export function buildCreateThreadInput(state: NewSessionState): CreateThreadInput {
   const settings = {
+    requestKey: state.requestKey,
     agentKind: state.agentKind,
     ...(state.model ? { model: state.model } : {}),
     ...(state.effort ? { effort: state.effort } : {}),
@@ -107,6 +117,9 @@ export function buildCreateThreadInput(state: NewSessionState): CreateThreadInpu
   }
   if (!state.projectSlug) {
     throw new Error("Choose a project");
+  }
+  if (state.workspaceMode === "existing" && !state.workspacePath) {
+    throw new Error("Enter the existing workspace path");
   }
   if (!state.issueIdentifier) {
     return {
@@ -142,6 +155,28 @@ export function validateSessionPrompt(prompt: string): {
     : { valid: false, message: "Write a message to start the session" };
 }
 
+export function validateNewSession(state: NewSessionState): {
+  valid: boolean;
+  message: string | null;
+} {
+  const prompt = validateSessionPrompt(state.prompt);
+  if (!prompt.valid) return prompt;
+  if (state.scope === "project" && !state.projectSlug) {
+    return { valid: false, message: "Choose a project" };
+  }
+  if (state.scope === "project" && state.workspaceMode === "existing" && !state.workspacePath) {
+    return { valid: false, message: "Enter the existing workspace path" };
+  }
+  return { valid: true, message: null };
+}
+
 export function deriveSessionTitle(prompt: string): string {
   return prompt.trim().replace(/\s+/g, " ").slice(0, 160);
+}
+
+function defaultRequestKey(): string {
+  if (typeof globalThis.crypto?.randomUUID === "function") {
+    return globalThis.crypto.randomUUID();
+  }
+  return `mobile-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }

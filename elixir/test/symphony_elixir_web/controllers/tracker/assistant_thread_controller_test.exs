@@ -60,6 +60,23 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadControllerTest do
              json_response(conn, 201)
   end
 
+  test "POST reuses a thread when the idempotency key is retried" do
+    request =
+      authorize()
+      |> put_req_header("idempotency-key", "mobile-create-42")
+
+    first = post(request, "/api/tracker/v1/assistant/threads", %{scope: "freeform"})
+
+    second =
+      authorize()
+      |> put_req_header("idempotency-key", "mobile-create-42")
+      |> post("/api/tracker/v1/assistant/threads", %{scope: "freeform"})
+
+    assert %{"data" => %{"id" => id}} = json_response(first, 201)
+    assert %{"data" => %{"id" => ^id}} = json_response(second, 200)
+    assert Repo.aggregate(Thread, :count) == 1
+  end
+
   test "POST freeform thread persists agent_kind and model/effort metadata" do
     conn =
       authorize()

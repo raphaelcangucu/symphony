@@ -85,7 +85,7 @@ describe("NewSessionRoute", () => {
     jest.mocked(AsyncStorage.removeItem).mockResolvedValue();
   });
 
-  it("persists the profile draft and hands the encoded seed to the created session", async () => {
+  it("keeps the profile draft until the created session accepts its seed", async () => {
     const view = renderRoute();
     const message = await screen.findByLabelText("Message");
 
@@ -101,7 +101,7 @@ describe("NewSessionRoute", () => {
     await waitFor(() =>
       expect(router.replace).toHaveBeenCalledWith("/session/42?seed=Build%20clean%20%26%20fast"),
     );
-    expect(AsyncStorage.removeItem).toHaveBeenCalledWith("symphony.new-session.draft.remote-1");
+    expect(AsyncStorage.removeItem).not.toHaveBeenCalled();
     view.queryClient.clear();
   });
 });

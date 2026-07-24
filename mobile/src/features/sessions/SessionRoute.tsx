@@ -1,15 +1,17 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useReducer } from "react";
 
 import { useConnection } from "@/auth/ConnectionProvider";
 import { StateView } from "@/components/StateView";
-import { createAssistantSession } from "@/realtime/assistant-session";
+import { useAppRuntime } from "@/runtime/AppRuntime";
 
 import { createSessionTimelineState, sessionTimelineReducer } from "./session-reducer";
 import { SessionScreen } from "./SessionScreen";
 
 export function SessionRoute() {
   const router = useRouter();
+  const { createAssistantSession } = useAppRuntime();
   const params = useLocalSearchParams<{ threadId?: string | string[]; seed?: string | string[] }>();
   const { activeProfile, activeToken } = useConnection();
   const [timeline, dispatch] = useReducer(
@@ -28,7 +30,11 @@ export function SessionRoute() {
       locale: resolvedLocale(),
       seed,
       onAction: dispatch,
-      onSeedAccepted: () => router.replace(`/session/${threadId}`),
+      onSeedAccepted: () => {
+        void AsyncStorage.removeItem(`symphony.new-session.draft.${activeProfile.id}`)
+          .catch(() => undefined)
+          .then(() => router.replace(`/session/${threadId}`));
+      },
     });
   }, [activeProfile, activeToken, router, seed, threadId]);
 
@@ -52,6 +58,7 @@ export function SessionRoute() {
   return (
     <SessionScreen
       onBack={() => router.back()}
+      onRetrySeed={seed ? () => session.retrySeed() : undefined}
       onSend={(message) => session.sendMessage(message)}
       threadId={threadId}
       timeline={timeline}

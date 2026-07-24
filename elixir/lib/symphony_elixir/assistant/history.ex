@@ -11,6 +11,7 @@ defmodule SymphonyElixir.Assistant.History do
     TitleGenerator,
     TurnTimeline
   }
+
   alias SymphonyElixir.{ExecutionMode, Workspace}
   alias SymphonyElixir.LocalTracker.{Context, IssueAdapter}
   alias SymphonyElixir.Recents.Broadcaster, as: RecentsBroadcaster
@@ -33,6 +34,11 @@ defmodule SymphonyElixir.Assistant.History do
         nil -> create_thread(normalized_slug, attrs)
       end
     end
+  end
+
+  @spec thread_by_client_request_id(String.t()) :: Thread.t() | nil
+  def thread_by_client_request_id(client_request_id) when is_binary(client_request_id) do
+    Repo.get_by(Thread, client_request_id: client_request_id)
   end
 
   @spec ensure_project_explore_thread(String.t(), attrs()) :: {:ok, Thread.t()} | {:error, term()}
@@ -434,6 +440,7 @@ defmodule SymphonyElixir.Assistant.History do
       "agent_kind" => stringify(Map.get(attrs, :agent_kind)),
       "model" => stringify(Map.get(attrs, :model)),
       "effort" => stringify(Map.get(attrs, :effort)),
+      "client_message_id" => stringify(Map.get(attrs, :client_message_id)),
       "codex_thread_id" => stringify(Map.get(attrs, :codex_thread_id)),
       "turn_id" => nil,
       "session_id" => nil,
@@ -586,6 +593,18 @@ defmodule SymphonyElixir.Assistant.History do
   @spec current_turn(Thread.t()) :: map() | nil
   def current_turn(%Thread{metadata: %{@current_turn_key => turn}}) when is_map(turn), do: turn
   def current_turn(%Thread{}), do: nil
+
+  @spec client_message_recorded?(integer(), String.t()) :: boolean()
+  def client_message_recorded?(thread_id, client_message_id)
+      when is_integer(thread_id) and is_binary(client_message_id) do
+    Repo.exists?(
+      from(message in Message,
+        where:
+          message.thread_id == ^thread_id and
+            message.client_message_id == ^client_message_id
+      )
+    )
+  end
 
   @doc "True when the thread's current turn is running."
   @spec turn_running?(Thread.t()) :: boolean()
@@ -1055,7 +1074,7 @@ defmodule SymphonyElixir.Assistant.History do
   # `:activity` keeps in-progress threads in the fetch window ahead of idle/closed
   # ones so project-session pagination does not drop live work.
   defp order_threads(query, :activity) do
-    order_by(query, [t], [
+    order_by(query, [t],
       asc:
         fragment(
           "CASE ? WHEN 'active' THEN 0 WHEN 'error' THEN 1 WHEN 'closed' THEN 2 WHEN 'archived' THEN 3 ELSE 4 END",
@@ -1063,7 +1082,7 @@ defmodule SymphonyElixir.Assistant.History do
         ),
       desc: t.updated_at,
       desc: t.id
-    ])
+    )
   end
 
   defp order_threads(query, _order) do
@@ -1924,12 +1943,22 @@ defmodule SymphonyElixir.Assistant.History do
 
   defp normalize_message_attrs(attrs) do
     tool_calls = Map.get(attrs, :tool_calls, Map.get(attrs, "tool_calls", []))
+    metadata = Map.get(attrs, :metadata, Map.get(attrs, "metadata", %{}))
+
+    client_message_id =
+      Map.get(metadata, "client_message_id", Map.get(metadata, :client_message_id))
 
     attrs
     |> Map.delete(:tool_calls)
     |> Map.delete("tool_calls")
     |> Map.put(:tool_calls, normalize_tool_calls(tool_calls))
+    |> maybe_put_client_message_id(client_message_id)
   end
+
+  defp maybe_put_client_message_id(attrs, value) when is_binary(value) and value != "",
+    do: Map.put(attrs, :client_message_id, value)
+
+  defp maybe_put_client_message_id(attrs, _value), do: attrs
 
   defp normalize_tool_calls(tool_calls) when is_list(tool_calls), do: %{"calls" => tool_calls}
   defp normalize_tool_calls(%{"calls" => calls}) when is_list(calls), do: %{"calls" => calls}

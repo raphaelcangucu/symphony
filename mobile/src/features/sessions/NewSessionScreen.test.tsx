@@ -40,7 +40,6 @@ function renderScreen(overrides: Partial<React.ComponentProps<typeof NewSessionS
     onBack: jest.fn(),
     onCreated: jest.fn(),
     onDraftChange: jest.fn(),
-    onClearDraft: jest.fn().mockResolvedValue(undefined),
     ...overrides,
   };
   return {
@@ -60,8 +59,8 @@ describe("NewSessionScreen", () => {
     expect(screen.getByLabelText("Message")).toHaveProp("autoFocus", true);
     expect(screen.getByText("Remote")).toBeTruthy();
     expect(screen.getByText("Free")).toBeTruthy();
-    expect(screen.getByText("Default workspace")).toBeTruthy();
-    expect(screen.getByText("No branch")).toBeTruthy();
+    expect(screen.queryByText("Default workspace")).toBeNull();
+    expect(screen.queryByText("No branch")).toBeNull();
     expect(screen.getByRole("button", { name: "Show advanced options" })).toBeTruthy();
     expect(screen.queryByText("Agent")).toBeNull();
     expect(screen.queryByLabelText("Session title")).toBeNull();
@@ -72,20 +71,91 @@ describe("NewSessionScreen", () => {
   it("creates the common freeform path from only a message and Send", async () => {
     const createThread = jest.fn().mockResolvedValue(createdThread);
     const onCreated = jest.fn();
-    const onClearDraft = jest.fn().mockResolvedValue(undefined);
-    renderScreen({ createThread, onCreated, onClearDraft });
+    renderScreen({ createThread, onCreated });
 
     fireEvent.changeText(screen.getByLabelText("Message"), "Build the clean flow");
     fireEvent.press(screen.getByRole("button", { name: "Send" }));
 
     await waitFor(() =>
-      expect(createThread).toHaveBeenCalledWith({
-        scope: "freeform",
-        agentKind: "codex",
-      } satisfies CreateThreadInput),
+      expect(createThread).toHaveBeenCalledWith(
+        expect.objectContaining({
+          scope: "freeform",
+          agentKind: "codex",
+          requestKey: expect.any(String),
+        } satisfies CreateThreadInput),
+      ),
     );
-    expect(onClearDraft).toHaveBeenCalledTimes(1);
     expect(onCreated).toHaveBeenCalledWith(42, "Build the clean flow");
+  });
+
+  it("wires issue, workspace, branch, agent, and model context into creation", async () => {
+    const createThread = jest.fn().mockResolvedValue(createdThread);
+    renderScreen({
+      createThread,
+      loadCatalog: jest.fn().mockResolvedValue({
+        defaultAgent: "codex",
+        agents: [
+          {
+            agent: "codex",
+            agentLabel: "Codex",
+            defaultModel: "gpt-5.6-sol",
+            models: [
+              {
+                model: "gpt-5.6-sol",
+                label: "GPT-5.6 Sol",
+                efforts: [
+                  { effort: "medium", label: "Medium" },
+                  { effort: "high", label: "High" },
+                ],
+              },
+            ],
+          },
+        ],
+      }),
+    });
+
+    fireEvent.press(screen.getByRole("button", { name: "Choose project" }));
+    fireEvent.press(screen.getByRole("button", { name: "Use Symphony project" }));
+    fireEvent.changeText(screen.getByLabelText("Issue identifier"), "MOB-7");
+    fireEvent.press(screen.getByRole("button", { name: "Choose workspace" }));
+    fireEvent.press(screen.getByText("New isolated workspace"));
+    fireEvent.changeText(screen.getByLabelText("Clone branch"), "main");
+    fireEvent.press(screen.getByRole("button", { name: "Show advanced options" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Choose model" })).toBeTruthy());
+    fireEvent.press(screen.getByRole("button", { name: "Choose model" }));
+    fireEvent.press(screen.getByText("GPT-5.6 Sol"));
+    fireEvent.press(screen.getByRole("button", { name: "Choose effort" }));
+    fireEvent.press(screen.getByText("High"));
+    fireEvent.changeText(screen.getByLabelText("Message"), "Build it");
+    fireEvent.press(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() =>
+      expect(createThread).toHaveBeenCalledWith(
+        expect.objectContaining({
+          scope: "issue_session",
+          projectSlug: "symphony",
+          issueIdentifier: "MOB-7",
+          isolatedWorkspace: true,
+          cloneBranch: "main",
+          agentKind: "codex",
+          model: "gpt-5.6-sol",
+          effort: "high",
+        }),
+      ),
+    );
+  });
+
+  it("requires an existing workspace path before enabling Send", async () => {
+    renderScreen();
+    fireEvent.press(screen.getByRole("button", { name: "Choose project" }));
+    fireEvent.press(screen.getByRole("button", { name: "Use Symphony project" }));
+    fireEvent.press(screen.getByRole("button", { name: "Choose workspace" }));
+    fireEvent.press(screen.getByText("Existing workspace"));
+    fireEvent.changeText(screen.getByLabelText("Message"), "Build it");
+
+    expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+    fireEvent.changeText(screen.getByLabelText("Workspace path"), "/work/symphony");
+    await waitFor(() => expect(screen.getByRole("button", { name: "Send" })).toBeEnabled());
   });
 
   it("guards double taps while creating", () => {

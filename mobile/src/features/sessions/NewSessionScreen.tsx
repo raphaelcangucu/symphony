@@ -27,7 +27,7 @@ import {
   buildCreateThreadInput,
   type NewSessionState,
   newSessionReducer,
-  validateSessionPrompt,
+  validateNewSession,
   type WorkspaceMode,
 } from "./new-session-state";
 
@@ -40,7 +40,6 @@ type NewSessionScreenProps = {
   onBack(): void;
   onCreated(threadId: number, prompt: string): void;
   onDraftChange(state: NewSessionState): void;
-  onClearDraft(): Promise<void>;
 };
 
 export function NewSessionScreen({
@@ -52,13 +51,15 @@ export function NewSessionScreen({
   onBack,
   onCreated,
   onDraftChange,
-  onClearDraft,
 }: NewSessionScreenProps) {
   const { colors } = useAppTheme();
   const [state, dispatch] = useReducer(newSessionReducer, initialState);
   const [advanced, setAdvanced] = useState(false);
   const [projectModal, setProjectModal] = useState(false);
   const [workspaceModal, setWorkspaceModal] = useState(false);
+  const [agentModal, setAgentModal] = useState(false);
+  const [modelModal, setModelModal] = useState(false);
+  const [effortModal, setEffortModal] = useState(false);
   const [catalog, setCatalog] = useState<AssistantCatalog | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -80,16 +81,19 @@ export function NewSessionScreen({
   }, [loadCatalog, state.projectSlug]);
 
   const project = projects.find((item) => item.slug === state.projectSlug) ?? null;
-  const canSubmit = validateSessionPrompt(state.prompt).valid && !submitting;
+  const canSubmit = validateNewSession(state).valid && !submitting;
 
   async function submit() {
-    if (submittingRef.current || !validateSessionPrompt(state.prompt).valid) return;
+    const validation = validateNewSession(state);
+    if (submittingRef.current || !validation.valid) {
+      if (!validation.valid) setError(validation.message);
+      return;
+    }
     submittingRef.current = true;
     setSubmitting(true);
     setError(null);
     try {
       const thread = await createThread(buildCreateThreadInput(state));
-      await onClearDraft();
       onCreated(thread.id, state.prompt.trim());
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not create session");
@@ -161,13 +165,47 @@ export function NewSessionScreen({
               onPress={() => setProjectModal(true)}
               value={project?.name ?? "Free"}
             />
-            <ContextRow
-              accessibilityLabel="Choose workspace"
-              label="Workspace"
-              onPress={() => setWorkspaceModal(true)}
-              value={workspaceLabel(state.workspaceMode, state.workspacePath)}
-            />
-            <ContextRow label="Branch" value={state.branch ?? "No branch"} />
+            {state.scope === "project" ? (
+              <>
+                <ContextInputRow
+                  accessibilityLabel="Issue identifier"
+                  label="Issue"
+                  onChangeText={(identifier) =>
+                    dispatch({ type: "set_issue", identifier: identifier || null })
+                  }
+                  placeholder="Optional"
+                  value={state.issueIdentifier ?? ""}
+                />
+                <ContextRow
+                  accessibilityLabel="Choose workspace"
+                  label="Workspace"
+                  onPress={() => setWorkspaceModal(true)}
+                  value={workspaceLabel(state.workspaceMode, state.workspacePath)}
+                />
+                {state.workspaceMode === "existing" ? (
+                  <ContextInputRow
+                    accessibilityLabel="Workspace path"
+                    label="Path"
+                    onChangeText={(path) =>
+                      dispatch({ type: "set_workspace", mode: "existing", path })
+                    }
+                    placeholder="/path/to/workspace"
+                    value={state.workspacePath ?? ""}
+                  />
+                ) : null}
+                {state.workspaceMode === "isolated" ? (
+                  <ContextInputRow
+                    accessibilityLabel="Clone branch"
+                    label="Branch"
+                    onChangeText={(branch) =>
+                      dispatch({ type: "set_branch", branch: branch || null })
+                    }
+                    placeholder="Optional"
+                    value={state.branch ?? ""}
+                  />
+                ) : null}
+              </>
+            ) : null}
           </View>
 
           <Pressable
@@ -189,8 +227,32 @@ export function NewSessionScreen({
                 { backgroundColor: colors.bgPanel, borderColor: colors.borderSubtle },
               ]}
             >
-              <ContextRow label="Agent" value={agentLabel(state.agentKind, catalog)} />
-              <ContextRow label="Model" value={state.model ?? "Default"} />
+              <ContextRow
+                accessibilityLabel="Choose agent"
+                label="Agent"
+                onPress={catalog ? () => setAgentModal(true) : undefined}
+                value={agentLabel(state.agentKind, catalog)}
+              />
+              <ContextRow
+                accessibilityLabel="Choose model"
+                label="Model"
+                onPress={
+                  activeAgent(catalog, state.agentKind) ? () => setModelModal(true) : undefined
+                }
+                value={state.model ?? "Default"}
+              />
+              {state.model ? (
+                <ContextRow
+                  accessibilityLabel="Choose effort"
+                  label="Effort"
+                  onPress={
+                    activeModel(catalog, state.agentKind, state.model)
+                      ? () => setEffortModal(true)
+                      : undefined
+                  }
+                  value={effortLabel(catalog, state.agentKind, state.model, state.effort)}
+                />
+              ) : null}
             </View>
           ) : null}
         </ScrollView>
@@ -256,8 +318,13 @@ export function NewSessionScreen({
         {(
           [
             ["default", "Default workspace"],
-            ["parent", "Parent workspace"],
-            ["isolated", "New isolated workspace"],
+            ["existing", "Existing workspace"],
+            ...(state.issueIdentifier
+              ? ([
+                  ["parent", "Parent workspace"],
+                  ["isolated", "New isolated workspace"],
+                ] satisfies [WorkspaceMode, string][])
+              : []),
           ] satisfies [WorkspaceMode, string][]
         ).map(([mode, label]) => (
           <Choice
@@ -270,7 +337,87 @@ export function NewSessionScreen({
           />
         ))}
       </ChoiceModal>
+
+      <ChoiceModal onClose={() => setAgentModal(false)} title="Agent" visible={agentModal}>
+        {catalog?.agents.map((agent) => (
+          <Choice
+            key={agent.agent}
+            label={agent.agentLabel}
+            onPress={() => {
+              dispatch({ type: "set_agent", agentKind: agent.agent });
+              setAgentModal(false);
+            }}
+          />
+        ))}
+      </ChoiceModal>
+
+      <ChoiceModal onClose={() => setModelModal(false)} title="Model" visible={modelModal}>
+        <Choice
+          label="Default"
+          onPress={() => {
+            dispatch({ type: "set_model", model: null, effort: null });
+            setModelModal(false);
+          }}
+        />
+        {activeAgent(catalog, state.agentKind)?.models.map((model) => (
+          <Choice
+            key={model.model}
+            label={model.label}
+            onPress={() => {
+              dispatch({
+                type: "set_model",
+                model: model.model,
+                effort: model.efforts[0]?.effort ?? null,
+              });
+              setModelModal(false);
+            }}
+          />
+        ))}
+      </ChoiceModal>
+
+      <ChoiceModal onClose={() => setEffortModal(false)} title="Effort" visible={effortModal}>
+        {activeModel(catalog, state.agentKind, state.model)?.efforts.map((effort) => (
+          <Choice
+            key={effort.effort}
+            label={effort.label}
+            onPress={() => {
+              dispatch({ type: "set_model", model: state.model, effort: effort.effort });
+              setEffortModal(false);
+            }}
+          />
+        ))}
+      </ChoiceModal>
     </SafeAreaView>
+  );
+}
+
+function ContextInputRow({
+  accessibilityLabel,
+  label,
+  onChangeText,
+  placeholder,
+  value,
+}: {
+  accessibilityLabel: string;
+  label: string;
+  onChangeText(value: string): void;
+  placeholder: string;
+  value: string;
+}) {
+  const { colors } = useAppTheme();
+  return (
+    <View style={styles.contextRow}>
+      <Text style={[styles.contextLabel, { color: colors.textMuted }]}>{label}</Text>
+      <TextInput
+        accessibilityLabel={accessibilityLabel}
+        autoCapitalize="none"
+        onChangeText={onChangeText}
+        placeholder={placeholder}
+        placeholderTextColor={colors.textMuted}
+        style={[styles.contextInput, { color: colors.textPrimary }]}
+        value={value}
+      />
+    </View>
   );
 }
 
@@ -282,7 +429,7 @@ function ContextRow({
 }: {
   accessibilityLabel?: string;
   label: string;
-  onPress?: () => void;
+  onPress?: (() => void) | undefined;
   value: string;
 }) {
   const { colors } = useAppTheme();
@@ -382,6 +529,31 @@ function agentLabel(
   );
 }
 
+function activeAgent(catalog: AssistantCatalog | null, agentKind: NewSessionState["agentKind"]) {
+  return catalog?.agents.find((agent) => agent.agent === agentKind) ?? null;
+}
+
+function activeModel(
+  catalog: AssistantCatalog | null,
+  agentKind: NewSessionState["agentKind"],
+  model: string | null,
+) {
+  return activeAgent(catalog, agentKind)?.models.find((item) => item.model === model) ?? null;
+}
+
+function effortLabel(
+  catalog: AssistantCatalog | null,
+  agentKind: NewSessionState["agentKind"],
+  model: string,
+  effort: string | null,
+) {
+  if (!effort) return "Default";
+  return (
+    activeModel(catalog, agentKind, model)?.efforts.find((item) => item.effort === effort)?.label ??
+    effort
+  );
+}
+
 const styles = StyleSheet.create({
   advancedButton: {
     alignItems: "center",
@@ -417,6 +589,12 @@ const styles = StyleSheet.create({
   contextLabel: {
     fontSize: 12,
     width: 82,
+  },
+  contextInput: {
+    flex: 1,
+    fontSize: 15,
+    minHeight: 44,
+    paddingVertical: 0,
   },
   contextRow: {
     alignItems: "center",

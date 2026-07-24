@@ -24,9 +24,11 @@ export type AssistantSocketLike = {
   disconnect(): void;
   channel(topic: string, params: Record<string, unknown>): AssistantChannelLike;
   onOpen(callback: () => void): unknown;
+  onClose(callback: () => void): unknown;
+  onError(callback: () => void): unknown;
 };
 
-type CreateAssistantSessionOptions = {
+export type CreateAssistantSessionOptions = {
   threadId: number;
   origin: string;
   token: string;
@@ -41,6 +43,7 @@ export type AssistantSession = {
   connect(): void;
   disconnect(): void;
   sendMessage(message: string): Promise<void>;
+  retrySeed(): Promise<void>;
 };
 
 export function assistantThreadTopic(threadId: number): string {
@@ -65,7 +68,33 @@ export function createAssistantSession({
   let channel: AssistantChannelLike | null = null;
   let started = false;
   let joined = false;
-  let seedDispatched = false;
+  let seedState: "idle" | "sending" | "uncertain" | "accepted" = "idle";
+  let seedReconcile: ((messages: AssistantMessage[]) => void) | null = null;
+  let seedRetryPromise: Promise<void> | null = null;
+  const seedMessageId = `mobile-seed-${threadId}`;
+
+  function acceptSeed() {
+    if (seedState === "accepted") return;
+    seedState = "accepted";
+    onSeedAccepted?.();
+  }
+
+  function sendSeed(): Promise<void> {
+    const normalized = seed?.trim();
+    if (!normalized || seedState === "accepted") return Promise.resolve();
+    if (seedState === "sending") return Promise.reject(new Error("First message is sending"));
+    if (!channel || !joined) return Promise.reject(new Error("Session is not connected"));
+    seedState = "sending";
+    return pushMessage(channel, normalized, seedMessageId).then(
+      () => {
+        acceptSeed();
+      },
+      (error: unknown) => {
+        seedState = "uncertain";
+        throw error;
+      },
+    );
+  }
 
   function connect() {
     if (started) return;
@@ -73,11 +102,21 @@ export function createAssistantSession({
     socket = socketFactory(socketEndpoint(origin), { token, locale });
     const nextChannel = socket.channel(topic, {});
     channel = nextChannel;
-    bindEvents(nextChannel, onAction);
+    bindEvents(nextChannel, onAction, (messages) => {
+      if (historyContainsSeed(messages, seed)) acceptSeed();
+      seedReconcile?.(messages);
+    });
     socket.onOpen(() => {
-      if (!joined || !channel) return;
       onAction({ type: "connection_changed", state: "reconnecting" });
-      channel.push("sync_history", {});
+      if (joined && channel) channel.push("sync_history", {});
+    });
+    socket.onError(() => {
+      joined = false;
+      if (started) onAction({ type: "connection_changed", state: "reconnecting" });
+    });
+    socket.onClose(() => {
+      joined = false;
+      if (started) onAction({ type: "connection_changed", state: "offline" });
     });
     onAction({ type: "connection_changed", state: "connecting" });
     nextChannel
@@ -85,11 +124,10 @@ export function createAssistantSession({
       .receive("ok", () => {
         joined = true;
         onAction({ type: "connection_changed", state: "live" });
-        if (!seedDispatched && seed?.trim()) {
-          seedDispatched = true;
-          pushMessage(nextChannel, seed.trim())
-            .then(() => onSeedAccepted?.())
-            .catch((error: unknown) => onAction({ type: "error", message: errorMessage(error) }));
+        if (seed?.trim() && seedState === "idle") {
+          sendSeed().catch((error: unknown) =>
+            onAction({ type: "error", message: errorMessage(error) }),
+          );
         }
       })
       .receive("error", (reason) => {
@@ -122,18 +160,73 @@ export function createAssistantSession({
     return pushMessage(channel, normalized);
   }
 
-  return { connect, disconnect, sendMessage };
+  function retrySeed(): Promise<void> {
+    if (seedRetryPromise) return seedRetryPromise;
+    const operation =
+      seedState === "uncertain"
+        ? reconcileSeed()
+        : seedState === "accepted"
+          ? Promise.resolve()
+          : sendSeed();
+    seedRetryPromise = operation
+      .catch((error: unknown) => {
+        onAction({ type: "error", message: errorMessage(error) });
+        throw error;
+      })
+      .finally(() => {
+        seedRetryPromise = null;
+      });
+    return seedRetryPromise;
+  }
+
+  function reconcileSeed(): Promise<void> {
+    if (!channel || !joined) return Promise.reject(new Error("Session is not connected"));
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const finish = (operation: () => void) => {
+        if (settled) return;
+        settled = true;
+        seedReconcile = null;
+        operation();
+      };
+      seedReconcile = (messages) => {
+        if (historyContainsSeed(messages, seed)) {
+          finish(resolve);
+          return;
+        }
+        seedState = "idle";
+        finish(() => {
+          sendSeed().then(resolve, reject);
+        });
+      };
+      channel
+        ?.push("sync_history", {})
+        .receive("error", (reason) =>
+          finish(() => reject(new Error(receiveError(reason, "Could not verify first message")))),
+        )
+        .receive("timeout", () =>
+          finish(() => reject(new Error("First message verification timed out"))),
+        );
+    });
+  }
+
+  return { connect, disconnect, retrySeed, sendMessage };
 }
 
 function bindEvents(
   channel: AssistantChannelLike,
   onAction: (action: SessionTimelineAction) => void,
+  onHistory: (messages: AssistantMessage[]) => void,
 ) {
   channel.on("history_loaded", (payload) => {
-    onAction({ type: "history_loaded", messages: readMessages(payload) });
+    const messages = readMessages(payload);
+    onAction({ type: "history_loaded", messages });
+    onHistory(messages);
   });
   channel.on("history_synced", (payload) => {
-    onAction({ type: "history_synced", messages: readMessages(payload) });
+    const messages = readMessages(payload);
+    onAction({ type: "history_synced", messages });
+    onHistory(messages);
   });
   channel.on("message_created", (payload) => {
     const message = readMessageField(payload);
@@ -163,10 +256,25 @@ function bindEvents(
   });
 }
 
-function pushMessage(channel: AssistantChannelLike, message: string): Promise<void> {
+function historyContainsSeed(messages: AssistantMessage[], seed: string | null | undefined) {
+  const normalized = seed?.trim();
+  return Boolean(
+    normalized &&
+    messages.some((message) => message.role === "user" && message.content.trim() === normalized),
+  );
+}
+
+function pushMessage(
+  channel: AssistantChannelLike,
+  message: string,
+  clientMessageId?: string,
+): Promise<void> {
   return new Promise((resolve, reject) => {
     channel
-      .push("send_message", { message })
+      .push("send_message", {
+        message,
+        ...(clientMessageId ? { client_message_id: clientMessageId } : {}),
+      })
       .receive("ok", () => resolve())
       .receive("error", (reason) =>
         reject(new Error(receiveError(reason, "Could not send message"))),

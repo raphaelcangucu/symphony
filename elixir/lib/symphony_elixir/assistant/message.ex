@@ -17,6 +17,7 @@ defmodule SymphonyElixir.Assistant.Message do
     field(:turn_id, :string)
     field(:tool_calls, :map, default: %{"calls" => []})
     field(:metadata, :map, default: %{})
+    field(:client_message_id, :string)
 
     belongs_to(:thread, Thread)
 
@@ -28,7 +29,16 @@ defmodule SymphonyElixir.Assistant.Message do
     raw_content = fetch_content(attrs)
 
     message
-    |> cast(attrs, [:thread_id, :sequence, :role, :content, :turn_id, :tool_calls, :metadata])
+    |> cast(attrs, [
+      :thread_id,
+      :sequence,
+      :role,
+      :content,
+      :turn_id,
+      :tool_calls,
+      :metadata,
+      :client_message_id
+    ])
     |> restore_assistant_whitespace(raw_content)
     |> validate_required([:thread_id, :sequence, :role, :content])
     |> validate_number(:sequence, greater_than: 0)
@@ -36,6 +46,9 @@ defmodule SymphonyElixir.Assistant.Message do
     |> validate_content()
     |> foreign_key_constraint(:thread_id)
     |> unique_constraint(:sequence, name: :assistant_messages_thread_id_sequence_index)
+    |> unique_constraint(:client_message_id,
+      name: :assistant_messages_thread_client_message_id_index
+    )
   end
 
   defp fetch_content(attrs) do

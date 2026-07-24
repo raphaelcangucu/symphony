@@ -244,6 +244,37 @@ defmodule SymphonyElixir.Assistant.TurnManagerTest do
     assert_receive {:assistant_turn_finished, _generation, _result}, 1_000
   end
 
+  test "a concurrent replay with the same client message id is acknowledged atomically", %{
+    thread: thread
+  } do
+    test_pid = self()
+
+    run = fn ->
+      send(test_pid, {:idempotent_worker, self()})
+      receive do: (:go -> :ok)
+      {:ok, %{}}
+    end
+
+    opts = [
+      run: run,
+      reply_to: self(),
+      client_message_id: "mobile-seed-42"
+    ]
+
+    assert {:ok, %{pid: worker}} = TurnManager.start_turn(thread.id, "seed", opts)
+    assert_receive {:idempotent_worker, ^worker}, 1_000
+
+    assert {:ok, :duplicate} =
+             TurnManager.start_turn(
+               thread.id,
+               "seed",
+               Keyword.put(opts, :run, fn -> flunk("duplicate replay started a second worker") end)
+             )
+
+    send(worker, :go)
+    assert_receive {:assistant_turn_finished, _generation, _result}, 1_000
+  end
+
   test "abnormal worker exit interrupts the current turn (task_crash)", %{thread: thread} do
     test_pid = self()
 

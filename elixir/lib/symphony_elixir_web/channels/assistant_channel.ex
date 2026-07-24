@@ -174,8 +174,25 @@ defmodule SymphonyElixirWeb.AssistantChannel do
       {:reply, {:error, %{reason: "assistant is busy"}}, socket}
     else
       case assistant_thread(socket) do
-        {:ok, current_thread} -> do_send_message(message, payload, assign(socket, :thread, current_thread))
-        {:error, reason} -> {:reply, {:error, %{reason: error_reason(reason)}}, socket}
+        {:ok, current_thread} ->
+          case client_message_id(payload) do
+            {:ok, message_id} ->
+              if duplicate_client_message?(current_thread, message_id) do
+                {:reply, :ok, assign(socket, :thread, current_thread)}
+              else
+                do_send_message(
+                  message,
+                  put_client_message_context(payload, message_id),
+                  assign(socket, :thread, current_thread)
+                )
+              end
+
+            {:error, :invalid_client_message_id} ->
+              {:reply, {:error, %{reason: "client_message_id must contain 1 to 128 characters"}}, socket}
+          end
+
+        {:error, reason} ->
+          {:reply, {:error, %{reason: error_reason(reason)}}, socket}
       end
     end
   end
@@ -346,7 +363,6 @@ defmodule SymphonyElixirWeb.AssistantChannel do
         {:reply, {:error, %{reason: error_reason(reason)}}, socket}
     end
   end
-
 
   def handle_in("goal_status", _payload, socket) do
     case assistant_thread(socket) do
@@ -1358,6 +1374,45 @@ defmodule SymphonyElixirWeb.AssistantChannel do
 
   defp should_push_turn_stream?(_socket, _event, _payload), do: false
 
+  defp client_message_id(payload) do
+    case Map.get(payload, "client_message_id") do
+      nil ->
+        {:ok, nil}
+
+      value when is_binary(value) ->
+        trimmed = String.trim(value)
+
+        if byte_size(trimmed) in 1..128,
+          do: {:ok, trimmed},
+          else: {:error, :invalid_client_message_id}
+
+      _ ->
+        {:error, :invalid_client_message_id}
+    end
+  end
+
+  defp duplicate_client_message?(_thread, nil), do: false
+
+  defp duplicate_client_message?(%{id: thread_id} = thread, client_message_id)
+       when is_integer(thread_id) do
+    match?(%{"client_message_id" => ^client_message_id}, History.current_turn(thread)) or
+      History.client_message_recorded?(thread_id, client_message_id)
+  end
+
+  defp duplicate_client_message?(_thread, _client_message_id), do: false
+
+  defp put_client_message_context(payload, nil), do: payload
+
+  defp put_client_message_context(payload, client_message_id) do
+    context =
+      payload
+      |> Map.get("context", %{})
+      |> normalize_context()
+      |> Map.put("client_message_id", client_message_id)
+
+    Map.put(payload, "context", context)
+  end
+
   defp canceled_tool_completion?("tool_call_completed", %{tool_call: %{status: "canceled"}}), do: true
   defp canceled_tool_completion?("tool_call_completed", %{"tool_call" => %{"status" => "canceled"}}), do: true
   defp canceled_tool_completion?(_event, _payload), do: false
@@ -1534,7 +1589,8 @@ defmodule SymphonyElixirWeb.AssistantChannel do
       trigger: "user",
       agent_kind: turn_agent_kind(context),
       model: Map.get(context, "model"),
-      effort: Map.get(context, "effort")
+      effort: Map.get(context, "effort"),
+      client_message_id: Map.get(context, "client_message_id")
     ]
 
     case TurnManager.start_turn(thread.id, trimmed, start_opts) do
@@ -1546,6 +1602,9 @@ defmodule SymphonyElixirWeb.AssistantChannel do
           |> assign(:turn_generation, generation)
           |> assign(:codex_turn_id, nil)
 
+        {:reply, :ok, socket}
+
+      {:ok, :duplicate} ->
         {:reply, :ok, socket}
 
       {:error, :turn_in_progress} ->

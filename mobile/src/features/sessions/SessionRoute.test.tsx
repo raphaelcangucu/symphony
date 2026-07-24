@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
 import { useConnection } from "@/auth/ConnectionProvider";
@@ -15,12 +16,16 @@ jest.mock("@/auth/ConnectionProvider", () => ({ useConnection: jest.fn() }));
 jest.mock("@/realtime/assistant-session", () => ({
   createAssistantSession: jest.fn(),
 }));
+jest.mock("@react-native-async-storage/async-storage", () => ({
+  removeItem: jest.fn().mockResolvedValue(undefined),
+}));
 
 const router = { back: jest.fn(), replace: jest.fn() };
 const session = {
   connect: jest.fn(),
   disconnect: jest.fn(),
   sendMessage: jest.fn().mockResolvedValue(undefined),
+  retrySeed: jest.fn().mockResolvedValue(undefined),
 };
 
 describe("SessionRoute", () => {
@@ -43,7 +48,7 @@ describe("SessionRoute", () => {
     jest.mocked(createAssistantSession).mockReturnValue(session);
   });
 
-  it("connects the route, consumes the seed after acceptance, and disconnects", () => {
+  it("connects the route, clears the draft only after seed acceptance, and disconnects", async () => {
     const view = render(
       <ThemeProvider colorScheme="dark">
         <SessionRoute />
@@ -61,10 +66,39 @@ describe("SessionRoute", () => {
     expect(session.connect).toHaveBeenCalledTimes(1);
     const options = jest.mocked(createAssistantSession).mock.calls[0]?.[0];
     act(() => options?.onSeedAccepted?.());
+    await waitFor(() =>
+      expect(AsyncStorage.removeItem).toHaveBeenCalledWith("symphony.new-session.draft.remote-1"),
+    );
     expect(router.replace).toHaveBeenCalledWith("/session/42");
 
     view.unmount();
     expect(session.disconnect).toHaveBeenCalledTimes(1);
+  });
+
+  it("consumes the route seed even when draft cleanup fails", async () => {
+    jest.mocked(AsyncStorage.removeItem).mockRejectedValueOnce(new Error("storage unavailable"));
+    render(
+      <ThemeProvider colorScheme="dark">
+        <SessionRoute />
+      </ThemeProvider>,
+    );
+    const options = jest.mocked(createAssistantSession).mock.calls[0]?.[0];
+    act(() => options?.onSeedAccepted?.());
+
+    await waitFor(() => expect(router.replace).toHaveBeenCalledWith("/session/42"));
+  });
+
+  it("surfaces an explicit seed retry after a push failure", async () => {
+    render(
+      <ThemeProvider colorScheme="dark">
+        <SessionRoute />
+      </ThemeProvider>,
+    );
+    const options = jest.mocked(createAssistantSession).mock.calls[0]?.[0];
+    act(() => options?.onAction({ type: "error", message: "Message send timed out" }));
+
+    fireEvent.press(screen.getByRole("button", { name: "Retry first message" }));
+    await waitFor(() => expect(session.retrySeed).toHaveBeenCalledTimes(1));
   });
 
   it("forwards channel actions to the screen and sends follow-ups", async () => {

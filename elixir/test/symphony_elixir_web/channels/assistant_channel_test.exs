@@ -1927,6 +1927,55 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
     Application.delete_env(:symphony_elixir, :assistant_runner)
   end
 
+  test "duplicate client_message_id is acknowledged without starting or persisting twice", %{
+    socket: socket
+  } do
+    test_pid = self()
+
+    Application.put_env(:symphony_elixir, :assistant_runner, fn _w, _p, _i, _o ->
+      send(test_pid, {:idempotent_runner_started, self()})
+
+      receive do
+        :finish_idempotent_turn -> :ok
+      end
+
+      {:ok, %{assistant_message: "one reply", tool_calls: []}}
+    end)
+
+    workspace_path =
+      Path.join(
+        System.tmp_dir!(),
+        "symphony-assistant-idempotent-#{System.unique_integer([:positive])}"
+      )
+
+    File.mkdir_p!(workspace_path)
+    on_exit(fn -> File.rm_rf!(workspace_path) end)
+
+    {:ok, thread} =
+      History.create_freeform_thread(%{title: "Idempotent", workspace_path: workspace_path})
+
+    {:ok, _payload, socket} =
+      subscribe_and_join(socket, "assistant:thread:#{thread.id}", %{})
+
+    payload = %{"message" => "seed", "client_message_id" => "mobile-seed-42"}
+    first = push(socket, "send_message", payload)
+    assert_reply(first, :ok)
+    assert_receive {:idempotent_runner_started, runner_pid}
+
+    duplicate = push(socket, "send_message", payload)
+    assert_reply(duplicate, :ok)
+    refute_receive {:idempotent_runner_started, _}, 100
+
+    send(runner_pid, :finish_idempotent_turn)
+    assert_push("assistant_completed", %{message: %{content: "one reply"}})
+
+    messages = History.list_messages_for_thread(thread.id)
+    assert Enum.count(messages, &(&1.role == "user" and &1.content == "seed")) == 1
+    assert Enum.find(messages, &(&1.role == "user")).client_message_id == "mobile-seed-42"
+  after
+    Application.delete_env(:symphony_elixir, :assistant_runner)
+  end
+
   test "issue_execution threads reject interactive send_message with a stable reason", %{socket: socket} do
     alias SymphonyElixir.Agent.ExecutionSession
 

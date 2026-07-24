@@ -25,9 +25,16 @@ type SessionScreenProps = {
   timeline: SessionTimelineState;
   onBack(): void;
   onSend(message: string): Promise<void>;
+  onRetrySeed?: (() => Promise<void>) | undefined;
 };
 
-export function SessionScreen({ threadId, timeline, onBack, onSend }: SessionScreenProps) {
+export function SessionScreen({
+  threadId,
+  timeline,
+  onBack,
+  onSend,
+  onRetrySeed,
+}: SessionScreenProps) {
   const { colors } = useAppTheme();
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
@@ -96,9 +103,20 @@ export function SessionScreen({ threadId, timeline, onBack, onSend }: SessionScr
         />
 
         {timeline.error || sendError ? (
-          <Text accessibilityRole="alert" style={[styles.error, { color: colors.statusRed }]}>
-            {sendError ?? timeline.error}
-          </Text>
+          <View style={styles.errorRow}>
+            <Text accessibilityRole="alert" style={[styles.error, { color: colors.statusRed }]}>
+              {sendError ?? timeline.error}
+            </Text>
+            {timeline.error && onRetrySeed ? (
+              <Pressable
+                accessibilityLabel="Retry first message"
+                accessibilityRole="button"
+                onPress={() => void onRetrySeed()}
+              >
+                <Text style={[styles.retry, { color: colors.accent }]}>Retry</Text>
+              </Pressable>
+            ) : null}
+          </View>
         ) : null}
 
         <View
@@ -228,8 +246,18 @@ const styles = StyleSheet.create({
     padding: spacing.xs,
   },
   error: {
+    flex: 1,
     fontSize: 13,
+  },
+  errorRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: spacing.sm,
     paddingHorizontal: spacing.md,
+  },
+  retry: {
+    fontSize: 13,
+    fontWeight: "700",
   },
   header: {
     alignItems: "center",

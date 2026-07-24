@@ -2,7 +2,6 @@ import {
   ChevronDown,
   ChevronRight,
   Folder,
-  MoreHorizontal,
   Search,
   SquarePen,
   SquareTerminal,
@@ -63,16 +62,9 @@ export function SessionLibraryScreen({
       style={[styles.safeArea, { backgroundColor: colors.bgBase }]}
     >
       <View style={styles.header}>
-        <Pressable
-          accessibilityLabel="Open navigation menu"
-          accessibilityRole="button"
-          style={[
-            styles.headerButton,
-            { backgroundColor: colors.bgPanel, borderColor: colors.borderSubtle },
-          ]}
-        >
+        <View style={styles.headerBrand}>
           <SquareTerminal color={colors.textPrimary} size={22} strokeWidth={1.8} />
-        </Pressable>
+        </View>
 
         <View style={styles.connection}>
           <Text style={[styles.connectionName, { color: colors.textPrimary }]}>
@@ -86,16 +78,7 @@ export function SessionLibraryScreen({
           </View>
         </View>
 
-        <Pressable
-          accessibilityLabel="Open connection options"
-          accessibilityRole="button"
-          style={[
-            styles.headerButton,
-            { backgroundColor: colors.bgPanel, borderColor: colors.borderSubtle },
-          ]}
-        >
-          <MoreHorizontal color={colors.textPrimary} size={22} />
-        </Pressable>
+        <View style={styles.headerBrand} />
       </View>
 
       <Text style={[styles.heading, { color: colors.textPrimary }]}>Projects</Text>
@@ -313,10 +296,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },
-  headerButton: {
+  headerBrand: {
     alignItems: "center",
-    borderRadius: radii.pill,
-    borderWidth: StyleSheet.hairlineWidth,
     height: 48,
     justifyContent: "center",
     width: 48,

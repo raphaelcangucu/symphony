@@ -177,6 +177,7 @@ describe("createTrackerClient", () => {
       includeArchived: true,
     });
     await client.createThread({
+      requestKey: "create-mobile-7",
       scope: "issue_session",
       projectSlug: "mobile app",
       issueIdentifier: "MOB-7",
@@ -191,6 +192,9 @@ describe("createTrackerClient", () => {
       "https://demo.test/api/tracker/v1/assistant/threads?scopes=freeform%2Cproject_session&project_slug=mobile+app&limit=100&include_archived=true",
     );
     expect(fetchImpl.mock.calls[1]?.[0]).toBe("https://demo.test/api/tracker/v1/assistant/threads");
+    expect(fetchImpl.mock.calls[1]?.[1]?.headers).toEqual(
+      expect.objectContaining({ "Idempotency-Key": "create-mobile-7" }),
+    );
     expect(JSON.parse(String(fetchImpl.mock.calls[1]?.[1]?.body))).toEqual({
       scope: "issue_session",
       project_slug: "mobile app",

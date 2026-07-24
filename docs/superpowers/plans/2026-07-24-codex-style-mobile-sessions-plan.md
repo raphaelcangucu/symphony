@@ -666,7 +666,7 @@ git commit -m "feat(mobile): add live assistant session screen"
 - Modify: `mobile/e2e/android-smoke.sh`
 - Modify: `docs/superpowers/plans/2026-07-24-codex-style-mobile-sessions-plan.md`
 
-- [ ] **Step 1: Extend the Android smoke flow**
+- [x] **Step 1: Extend the Android smoke flow**
 
 Run the app with a deterministic local fixture transport enabled only by an E2E
 launch argument. Record:
@@ -680,7 +680,7 @@ launch argument. Record:
 
 Production builds without the launch argument must never use fixture data.
 
-- [ ] **Step 2: Run the complete mobile gate**
+- [x] **Step 2: Run the complete mobile gate**
 
 Run:
 
@@ -697,19 +697,19 @@ npm run test:e2e:android
 
 Expected: every command exits zero.
 
-- [ ] **Step 3: Inspect evidence**
+- [x] **Step 3: Inspect evidence**
 
 Use `ffprobe` to require H.264, at least five seconds, and more than five
 frames. Extract a contact sheet and visually confirm the library, composer, and
 created session are readable with no blank frames.
 
-- [ ] **Step 4: Mark plan evidence**
+- [x] **Step 4: Mark plan evidence**
 
 Record exact test counts, Expo Doctor count, APK SHA-256, video SHA-256,
 duration, frame count, and artifact paths under a final `## Validation Results`
 section in this plan.
 
-- [ ] **Step 5: Commit and publish**
+- [x] **Step 5: Commit and publish**
 
 ```bash
 git add mobile/e2e/android-smoke.sh \
@@ -719,3 +719,28 @@ git push origin agent/mobile-companion-e2e
 ```
 
 Update draft PR #7 with the new flow summary and the refreshed video link.
+
+## Validation Results
+
+- Mobile quality gate: formatting, lint, and TypeScript passed.
+- Mobile tests: 48 Vitest unit tests and 40 Jest UI tests passed (88 total).
+- Expo Doctor: 19/19 checks passed.
+- Backend idempotency/controller gate: 47 scoped ExUnit tests passed.
+- Android release E2E build: passed.
+- Android E2E: passed through the real `/`, `/new-session`, and
+  `/session/[threadId]` routes using the fixture only at storage, API, and
+  session transport boundaries.
+- APK SHA-256:
+  `1d0b33f4270cd355c105aea8f2506589b5477ea43d0a6314f7ce0c7207d781e4`.
+- Video SHA-256:
+  `a7218c3242143b261ebecf872205d206e76cba4663eec3cc34b2ea42a6146723`.
+- Video: H.264, 46.629533 seconds, 258 frames, 576x1280.
+- Video artifact:
+  `mobile/artifacts/e2e/pr-7-codex-style-mobile-session-flow.mp4`.
+- Final screenshot:
+  `mobile/artifacts/e2e/pr-7-codex-style-mobile-session-flow.png`.
+- Contact sheet:
+  `mobile/artifacts/e2e/pr-7-codex-style-mobile-session-flow-contact-sheet.png`.
+- Trace:
+  `mobile/artifacts/e2e/pr-7-codex-style-mobile-session-flow-trace.txt`.
+- Independent review: no Critical or Important findings remained.
