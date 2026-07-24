@@ -1824,7 +1824,7 @@ git commit -m "feat(daemon): add lifecycle management CLI"
 - Create: `elixir/lib/symphony_elixir/daemon/migration.ex`
 - Test: `elixir/test/symphony_elixir/daemon/migration_test.exs`
 
-- [ ] **Step 1: Write failing migration tests using a WAL fixture**
+- [x] **Step 1: Write failing migration tests using a WAL fixture**
 
 ```elixir
 test "migrates a consistent database while preserving the source" do
@@ -1934,7 +1934,7 @@ end
 The fixture helper opens Exqlite, enables WAL, creates one table, inserts the
 value, and closes the connection.
 
-- [ ] **Step 2: Run the test and observe missing module**
+- [x] **Step 2: Run the test and observe missing module**
 
 Run:
 
@@ -1945,7 +1945,7 @@ mix test test/symphony_elixir/daemon/migration_test.exs
 
 Expected: FAIL.
 
-- [ ] **Step 3: Implement consistent snapshot and integrity check**
+- [x] **Step 3: Implement consistent snapshot and integrity check**
 
 Use Exqlite serialization so WAL content is included without relying on an
 external `sqlite3` executable:
@@ -1987,7 +1987,7 @@ end
 `write_synced/2` opens `[:write, :binary, :exclusive]`, writes the bytes,
 calls `:file.sync/1`, and closes the file.
 
-- [ ] **Step 4: Implement migration orchestration and Ecto release migration**
+- [x] **Step 4: Implement migration orchestration and Ecto release migration**
 
 `Migration.migrate/3` must:
 
@@ -2028,7 +2028,7 @@ def migrate_release(database) do
 end
 ```
 
-- [ ] **Step 5: Run migration tests and commit**
+- [x] **Step 5: Run migration tests and commit**
 
 Run:
 
