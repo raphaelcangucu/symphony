@@ -317,7 +317,7 @@ git commit -m "feat(daemon): define installed XDG paths"
 - Test: `elixir/test/symphony_elixir/daemon/build_info_test.exs`
 - Test: `elixir/test/symphony_elixir_web/health_controller_test.exs`
 
-- [ ] **Step 1: Write failing identity and health tests**
+- [x] **Step 1: Write failing identity and health tests**
 
 ```elixir
 defmodule SymphonyElixir.Daemon.BuildInfoTest do
@@ -372,7 +372,7 @@ test "GET /api/health returns build identity without authentication" do
 end
 ```
 
-- [ ] **Step 2: Run the tests and observe failure**
+- [x] **Step 2: Run the tests and observe failure**
 
 Run:
 
@@ -385,7 +385,7 @@ mix test test/symphony_elixir/daemon/build_info_test.exs \
 Expected: FAIL because `BuildInfo` is undefined and health only returns
 `status`.
 
-- [ ] **Step 3: Implement build identity and health serialization**
+- [x] **Step 3: Implement build identity and health serialization**
 
 ```elixir
 defmodule SymphonyElixir.Daemon.BuildInfo do
@@ -449,7 +449,7 @@ def show(conn, _params) do
 end
 ```
 
-- [ ] **Step 4: Configure installed paths only at runtime**
+- [x] **Step 4: Configure installed paths only at runtime**
 
 Append inside the existing non-test block of `config/runtime.exs`:
 
@@ -492,7 +492,7 @@ config :symphony_elixir,
   git_commit: System.get_env("SYMPHONY_BUILD_COMMIT") || "development"
 ```
 
-- [ ] **Step 5: Run focused and config tests**
+- [x] **Step 5: Run focused and config tests**
 
 Run:
 
@@ -505,7 +505,7 @@ mix specs.check
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add elixir/config/config.exs elixir/config/runtime.exs elixir/mix.exs \

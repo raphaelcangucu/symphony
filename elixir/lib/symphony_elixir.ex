@@ -21,6 +21,7 @@ defmodule SymphonyElixir.Application do
 
   @impl true
   def start(_type, _args) do
+    :ok = SymphonyElixir.Daemon.BuildInfo.mark_started()
     :ok = SymphonyElixir.LogFile.configure()
     :ok = SymphonyElixir.Observability.SlowQueryLogger.attach()
     :ok = SymphonyElixir.Observability.SqlLog.attach()

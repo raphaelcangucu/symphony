@@ -2,9 +2,11 @@ defmodule SymphonyElixir.MixProject do
   use Mix.Project
 
   def project do
+    app_version = "0.3.0"
+
     [
       app: :symphony_elixir,
-      version: "0.3.0",
+      version: app_version,
       elixir: "~> 1.19",
       compilers: [:phoenix_live_view] ++ Mix.compilers(),
       start_permanent: Mix.env() == :prod,

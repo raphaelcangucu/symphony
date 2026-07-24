@@ -7,6 +7,7 @@ defmodule SymphonyElixirWeb.HealthController do
 
   @spec show(Conn.t(), map()) :: Conn.t()
   def show(conn, _params) do
-    json(conn, %{status: "ok"})
+    identity = SymphonyElixir.Daemon.BuildInfo.snapshot()
+    json(conn, Map.put(identity, :status, "ok"))
   end
 end

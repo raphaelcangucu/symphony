@@ -122,4 +122,24 @@ if config_env() != :test do
       vapid_private_key: vapid_private_key,
       vapid_subject: vapid_subject
   end
+
+  if System.get_env("SYMPHONY_RUNTIME_MODE") == "installed" do
+    paths = SymphonyElixir.Daemon.Paths.resolve()
+    version = System.get_env("RELEASE_VSN") || "unknown"
+    git_commit = System.get_env("SYMPHONY_BUILD_COMMIT") || "unknown"
+
+    config :symphony_elixir,
+      root_dir: paths.data_dir,
+      backup_local_dir: paths.backup_dir,
+      skills_root: Application.app_dir(:symphony_elixir, "priv/skills"),
+      log_file: Path.join(paths.log_dir, "symphony.log"),
+      sql_log_file: Path.join(paths.log_dir, "symphony.sql.log"),
+      build_info: %{
+        version: version,
+        git_commit: git_commit,
+        mode: "installed"
+      }
+
+    config :symphony_elixir, SymphonyElixir.Repo, database: paths.database
+  end
 end
