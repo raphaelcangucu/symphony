@@ -4,6 +4,7 @@ import test from "node:test";
 import { RUN_MATRIX } from "../src/contract.mjs";
 import {
   buildRunRecords,
+  devEnvironmentSteps,
   projectPayload,
   workflowMarkdown,
 } from "../src/provision.mjs";
@@ -39,4 +40,23 @@ test("all six run records carry the same prompt hash", () => {
   assert.equal(records.length, RUN_MATRIX.length);
   assert.equal(new Set(records.map((run) => run.prompt_sha256)).size, 1);
   assert.deepEqual(records.map((run) => run.id), RUN_MATRIX.map((run) => run.id));
+});
+
+test("preview uses one explicit canonical serve step", () => {
+  const steps = devEnvironmentSteps();
+
+  assert.equal(steps.length, 1);
+  assert.equal(steps[0].role, "serve");
+  assert.equal(steps[0].working_dir, "site");
+  assert.deepEqual(steps[0].run_spec.start, [[
+      "npm",
+      "run",
+      "dev",
+      "--",
+      "--host",
+      "0.0.0.0",
+      "--port",
+      "${PORT}",
+    ],
+  ]);
 });

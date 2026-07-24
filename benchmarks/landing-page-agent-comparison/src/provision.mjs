@@ -176,20 +176,46 @@ function requireEnvironment(env) {
   };
 }
 
+export function devEnvironmentSteps() {
+  return [
+    {
+      description: "Symphony landing preview",
+      command: "symphony-preview-runner",
+      working_dir: "site",
+      source: "convention",
+      role: "serve",
+      port_env: "PORT",
+      url_path: "/",
+      ready_probe: "http",
+      ready_path: "/",
+      primary: true,
+      optional: false,
+      run_spec: {
+        cwd: ".",
+        prepare: [["npm", "install"]],
+        start: [
+          [
+            "npm",
+            "run",
+            "dev",
+            "--",
+            "--host",
+            "0.0.0.0",
+            "--port",
+            "${PORT}",
+          ],
+        ],
+        health: { path: "/", timeout_ms: 120000 },
+        stop: { signal: "TERM", grace_ms: 5000 },
+      },
+    },
+  ];
+}
+
 async function saveDevEnvironment(api) {
-  const proposals = await api.request(
-    `/projects/${PROJECT_SLUG}/dev_env/propose`,
-    { method: "POST", body: {} },
-  );
-  const serveSteps = proposals.filter((step) => step.role === "serve");
-
-  if (serveSteps.length !== 1) {
-    throw new Error(`expected one preview serve step, received ${serveSteps.length}`);
-  }
-
   await api.request(`/projects/${PROJECT_SLUG}/dev_env/steps`, {
     method: "PUT",
-    body: { steps: proposals },
+    body: { steps: devEnvironmentSteps() },
   });
 }
 
