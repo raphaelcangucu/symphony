@@ -897,6 +897,7 @@ defmodule SymphonyElixir.DevServer.ManagerTest do
     enable_project_dev_server!(project, port_range: [4100, 4199], max_concurrent: 2)
     identifier = "535-start-restart"
     workspace = prepare_workspace!(identifier)
+    File.mkdir_p!(Path.join(workspace, "front"))
     ensure_manager_started!()
 
     {:ok, _steps} =
@@ -932,7 +933,7 @@ defmodule SymphonyElixir.DevServer.ManagerTest do
         },
         idle_timeout_ms: 60_000,
         tmux: FakeTmux,
-        command_sender: &FakeTmux.send_keys/2,
+        command_sender: fn _session_name, _data -> {:error, :launch_failed} end,
         port_allocator: fn _range, _claimed -> {:ok, 4101} end,
         probe: fn "127.0.0.1", 4101, "tcp", "/" -> {:error, :timeout} end,
         probe_interval_ms: 5,
@@ -951,7 +952,9 @@ defmodule SymphonyElixir.DevServer.ManagerTest do
         session_name: "sym-dev-test"
       })
 
-    result = Manager.start_instance_for_server(project.slug, identifier, record.id)
+    result =
+      Manager.start_instance_for_server(project.slug, identifier, record.id, ready_timeout_ms: 50)
+
     refute match?({:ok, [^old_pid]}, result)
 
     new_pid =

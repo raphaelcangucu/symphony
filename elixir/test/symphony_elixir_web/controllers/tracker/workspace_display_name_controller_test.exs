@@ -171,10 +171,11 @@ defmodule SymphonyElixirWeb.Tracker.WorkspaceDisplayNameControllerTest do
     assert %{"error" => %{"code" => "validation_failed"}} = json_response(conn, 422)
   end
 
-  test "PUT rejects the exact project root when inventory does not contain it", %{project_root: project_root} do
+  test "PUT accepts an existing empty project root emitted by inventory", %{project_root: project_root} do
     conn = put(authorized_conn(), @base_path, %{"path" => project_root, "display_name" => "Project"})
 
-    assert %{"error" => %{"code" => "validation_failed"}} = json_response(conn, 422)
+    assert %{"data" => %{"workspace_path" => ^project_root, "display_name" => "Project"}} =
+             json_response(conn, 200)
   end
 
   test "PUT accepts the exact project root when inventory contains it", %{project_root: project_root, tmp: tmp} do
