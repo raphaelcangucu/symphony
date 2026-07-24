@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-24
 
-**Status:** Concept approved; pending user review of this written specification
+**Status:** Approved for implementation
 
 **Area:** `elixir/` release packaging, daemon lifecycle, configuration, persistence, and operator CLI
 
