@@ -119,6 +119,7 @@ export function buildRunRecords(prompt) {
   return RUN_MATRIX.map((run) => ({
     ...run,
     prompt_sha256: hash,
+    execution_mode: "yolo",
     status: "provisioned",
     thread_id: null,
     issue_identifier: null,
@@ -227,7 +228,7 @@ async function provisionSessions(api, records) {
         name: record.id,
         title: `Landing benchmark · session · ${record.provider}`,
         agent_kind: record.provider,
-        execution_mode: "build",
+        execution_mode: record.execution_mode,
       },
     });
 

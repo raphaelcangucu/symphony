@@ -39,6 +39,7 @@ test("all six run records carry the same prompt hash", () => {
 
   assert.equal(records.length, RUN_MATRIX.length);
   assert.equal(new Set(records.map((run) => run.prompt_sha256)).size, 1);
+  assert.deepEqual(new Set(records.map((run) => run.execution_mode)), new Set(["yolo"]));
   assert.deepEqual(records.map((run) => run.id), RUN_MATRIX.map((run) => run.id));
 });
 

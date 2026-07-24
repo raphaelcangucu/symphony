@@ -81,6 +81,14 @@ test("executes one provider cell through the real Symphony tracker", async ({
 
       const composer = page.getByPlaceholder("Write a message...");
       await expect(composer).toBeVisible({ timeout: 60_000 });
+      const executionMode = page.getByTestId("execution-mode-menu");
+      await expect(executionMode).toBeVisible();
+      if (!((await executionMode.textContent()) ?? "").toLowerCase().includes(run.execution_mode)) {
+        await executionMode.click();
+        await page
+          .getByRole("menuitemradio", { name: new RegExp(run.execution_mode, "i") })
+          .click();
+      }
       const assistantMessages = page.locator('[data-testid="assistant-chat-message"]');
       const initialMessageCount = await assistantMessages.count();
 
@@ -102,7 +110,7 @@ test("executes one provider cell through the real Symphony tracker", async ({
           body: {
             action: "hard_reset",
             agent: run.provider,
-            mode: "yolo",
+            mode: run.execution_mode,
           },
         },
       );
