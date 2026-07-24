@@ -581,13 +581,13 @@ git commit -m "feat(mobile): add composer-first session creation"
 - Create: `mobile/src/features/sessions/SessionScreen.test.tsx`
 - Create: `mobile/app/session/[threadId].tsx`
 
-- [ ] **Step 1: Write failing reducer tests**
+- [x] **Step 1: Write failing reducer tests**
 
 Prove history replacement, message deduplication, streaming delta accumulation,
 tool-state updates, completion, and reconnect sync using the existing
 snake_case channel event contract.
 
-- [ ] **Step 2: Verify reducer RED**
+- [x] **Step 2: Verify reducer RED**
 
 Run:
 
@@ -597,7 +597,7 @@ cd mobile && npm run test:unit -- src/features/sessions/session-reducer.test.ts
 
 Expected: FAIL because the reducer is missing.
 
-- [ ] **Step 3: Implement the deterministic reducer**
+- [x] **Step 3: Implement the deterministic reducer**
 
 Use:
 
@@ -610,7 +610,7 @@ export type SessionTimelineState = {
 };
 ```
 
-- [ ] **Step 4: Write failing channel tests**
+- [x] **Step 4: Write failing channel tests**
 
 With a fake Phoenix socket/channel, prove:
 
@@ -621,7 +621,7 @@ With a fake Phoenix socket/channel, prove:
 - reconnect requests history sync;
 - seed is sent at most once after a successful join.
 
-- [ ] **Step 5: Verify channel RED**
+- [x] **Step 5: Verify channel RED**
 
 Run:
 
@@ -631,14 +631,14 @@ cd mobile && npm run test:unit -- src/realtime/assistant-session.test.ts
 
 Expected: FAIL because the adapter is missing.
 
-- [ ] **Step 6: Implement the adapter and screen**
+- [x] **Step 6: Implement the adapter and screen**
 
 The screen uses a bottom-anchored message list, explicit socket state, and a
 multiline composer. It consumes the route seed exactly once, removes it from
 navigation state after acceptance, and preserves it when channel join/send
 fails.
 
-- [ ] **Step 7: Verify GREEN**
+- [x] **Step 7: Verify GREEN**
 
 Run:
 
@@ -651,7 +651,7 @@ npm run typecheck
 
 Expected: session adapter, reducer, UI, and TypeScript checks pass.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add mobile/src/realtime mobile/src/features/sessions/session-reducer* \
