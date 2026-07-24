@@ -240,7 +240,13 @@ defmodule SymphonyElixir.KnowledgeBase.Writer do
   # round-trip that produced byte-identical markdown) must not error or create an
   # empty commit: it is a successful no-op.
   defp stage_and_commit(ws, paths, message, opts) do
-    git_opts = Keyword.take(opts, [:runner, :name, :email])
+    git_opts =
+      [
+        runner: opts[:runner],
+        name: opts[:author_name],
+        email: opts[:author_email]
+      ]
+      |> Enum.reject(fn {_key, value} -> is_nil(value) end)
 
     with :ok <- Git.add(ws.worktree, paths, git_opts) do
       if Git.staged_changes?(ws.worktree, git_opts) do
