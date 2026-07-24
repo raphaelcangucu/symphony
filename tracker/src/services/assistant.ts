@@ -75,7 +75,7 @@ export interface AssistantChatMessage {
   content: string;
   contentBlocks?: AssistantContentBlock[];
   toolCalls: AssistantToolCall[];
-  turnId?: string | null;
+  runId?: string | null;
   sequence?: number | null;
   insertedAt?: string | null;
   metadata: Record<string, unknown>;
@@ -173,7 +173,7 @@ export interface BackendAssistantChatMessageDto {
   content?: string | null;
   content_blocks?: unknown;
   tool_calls?: BackendAssistantToolCallDto[] | null;
-  turn_id?: string | null;
+  run_id?: string | null;
   sequence?: number | null;
   inserted_at?: string | null;
   metadata?: Record<string, unknown> | null;
@@ -455,7 +455,7 @@ export function normalizeAssistantChatMessage(dto: BackendAssistantChatMessageDt
     content: dto.content ?? "",
     contentBlocks: normalizeAssistantContentBlocks(dto, metadata),
     toolCalls: (dto.tool_calls ?? []).map(normalizeToolCall),
-    turnId: dto.turn_id ?? null,
+    runId: dto.run_id ?? null,
     sequence: dto.sequence ?? null,
     insertedAt: dto.inserted_at ?? null,
     metadata,

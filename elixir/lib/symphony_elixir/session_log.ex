@@ -28,25 +28,17 @@ defmodule SymphonyElixir.SessionLog do
   @doc """
   Resolves the best available session log for a workspace.
 
-  Tries the preferred agent first, then falls back to other backends so prior
-  agent history remains visible after switching agents.
+  Resolves only the requested provider. Provider substitution is never implicit.
   """
   @spec resolve_log_source(String.t(), Path.t(), keyword()) :: {:ok, String.t(), Path.t()} | :error
   def resolve_log_source(preferred_kind, workspace, opts \\ []) when is_binary(workspace) do
-    kinds =
-      [preferred_kind | @agent_kinds]
-      |> Enum.uniq()
-      |> Enum.reject(&is_nil/1)
-
-    Enum.find_value(kinds, fn kind ->
-      case resolve_log_path(kind, workspace, opts) do
-        {:ok, path} -> {kind, path}
-        :error -> nil
+    if preferred_kind in @agent_kinds do
+      case resolve_log_path(preferred_kind, workspace, opts) do
+        {:ok, path} -> {:ok, preferred_kind, path}
+        :error -> :error
       end
-    end)
-    |> case do
-      {kind, path} -> {:ok, kind, path}
-      nil -> :error
+    else
+      :error
     end
   end
 
@@ -56,8 +48,7 @@ defmodule SymphonyElixir.SessionLog do
   Resolution order:
 
   1. The session's own per-session transcript (`SessionStore`).
-  2. The rollout/transcript identified by the session's own backend thread id
-     (`agent_thread_ids[agent_kind]`, or legacy `codex_thread_id`). Sibling
+  2. The rollout/transcript identified by `provider_bindings[agent_kind]`. Sibling
      sessions share a working tree, so workspace-level resolution can point at
      ANOTHER session's log; the backend thread id is exact.
   3. Workspace-level resolution (`resolve_log_source/3`) as a last resort.
@@ -67,7 +58,7 @@ defmodule SymphonyElixir.SessionLog do
 
   def resolve_for_session(%{id: session_id, workspace_path: workspace} = session, opts)
       when is_binary(workspace) do
-    agent_kind = Map.get(session, :agent_kind) || "codex"
+    agent_kind = Map.get(session, :agent_kind)
 
     cond do
       SessionStore.exists?(workspace, session_id) ->
@@ -97,11 +88,10 @@ defmodule SymphonyElixir.SessionLog do
   end
 
   defp backend_thread_id(session, agent_kind) do
-    thread_ids = Map.get(session, :agent_thread_ids)
-    mapped = if is_map(thread_ids), do: Map.get(thread_ids, agent_kind), else: nil
-    legacy = if agent_kind == "codex", do: Map.get(session, :codex_thread_id), else: nil
+    bindings = Map.get(session, :provider_bindings)
+    conversation_id = if is_map(bindings), do: Map.get(bindings, agent_kind), else: nil
 
-    case mapped || legacy do
+    case conversation_id do
       id when is_binary(id) and id != "" -> id
       _ -> nil
     end
@@ -118,7 +108,7 @@ defmodule SymphonyElixir.SessionLog do
   def resolve_log_path("claude", workspace, opts), do: ClaudeLog.resolve_log_path(workspace, opts)
   def resolve_log_path("cursor", workspace, opts), do: CursorLog.resolve_log_path(workspace, opts)
   def resolve_log_path("opencode", workspace, opts), do: OpenCodeLog.resolve_log_path(workspace, opts)
-  def resolve_log_path(_agent_kind, workspace, opts), do: CodexLog.resolve_rollout_path(workspace, opts)
+  def resolve_log_path(_agent_kind, _workspace, _opts), do: :error
 
   @doc """
   Resolves the workspace directory whose session log should be tailed for a run.
@@ -166,7 +156,8 @@ defmodule SymphonyElixir.SessionLog do
   def tail("claude", path, opts), do: tail_with_events(ClaudeLog.tail(path, opts), opts)
   def tail("cursor", path, opts), do: tail_with_events(CursorLog.tail(path, opts), opts)
   def tail("opencode", path, opts), do: tail_with_events(OpenCodeLog.tail(path, opts), opts)
-  def tail(_agent_kind, path, opts), do: tail_with_events(CodexLog.tail(path, opts), opts)
+  def tail("codex", path, opts), do: tail_with_events(CodexLog.tail(path, opts), opts)
+  def tail(_agent_kind, _path, _opts), do: {:error, :unsupported_agent_kind}
 
   @spec read_from(String.t(), Path.t(), non_neg_integer(), keyword()) ::
           {:ok, [map()], non_neg_integer()} | {:error, term()}
@@ -181,8 +172,10 @@ defmodule SymphonyElixir.SessionLog do
   def read_from("opencode", path, offset, opts),
     do: read_from_with_events(OpenCodeLog.read_from(path, offset), offset, opts)
 
-  def read_from(_agent_kind, path, offset, opts),
+  def read_from("codex", path, offset, opts),
     do: read_from_with_events(CodexLog.read_from(path, offset), offset, opts)
+
+  def read_from(_agent_kind, _path, _offset, _opts), do: {:error, :unsupported_agent_kind}
 
   @doc """
   Resolves a SUBAGENT transcript path for the given agent kind.

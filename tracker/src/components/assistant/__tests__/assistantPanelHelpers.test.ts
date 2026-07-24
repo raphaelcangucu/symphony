@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   displayMessages,
+  errorMessage,
   extractKbDocumentReferencesFromMessage,
 } from "@/components/assistant/assistantPanelHelpers";
 import type { AssistantChatMessage, AssistantToolCall } from "@/services/assistant";
@@ -58,6 +59,29 @@ describe("displayMessages", () => {
   it("returns real messages unchanged when the transcript is non-empty", () => {
     const existing = [message({ content: "hello" })];
     expect(displayMessages(existing, t, "cursor")).toBe(existing);
+  });
+});
+
+describe("errorMessage", () => {
+  const t = vi.fn(() => "request failed") as unknown as import("i18next").TFunction;
+
+  it("reads the canonical error message", () => {
+    expect(
+      errorMessage(
+        {
+          code: "assistant_busy",
+          category: "lifecycle",
+          retryable: true,
+          message: "assistant is busy",
+          details: {},
+        },
+        t,
+      ),
+    ).toBe("assistant is busy");
+  });
+
+  it("does not accept the removed reason alias", () => {
+    expect(errorMessage({ reason: "legacy failure" }, t)).toBe("request failed");
   });
 });
 

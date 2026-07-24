@@ -1,6 +1,8 @@
 defmodule SymphonyElixir.Codex.CodingAgentTest do
   use SymphonyElixir.TestSupport
 
+  alias SymphonyElixir.Agent.ConversationRef
+
   describe "goal mode" do
     test "sets the trimmed thread goal after thread start and before turn start when goals are enabled" do
       with_fake_goal_server(fn workspace, issue, trace_file ->
@@ -18,7 +20,14 @@ defmodule SymphonyElixir.Codex.CodingAgentTest do
                  "params" => %{"threadId" => "thread-goal", "objective" => "Ship the feature", "status" => "active"}
                }
 
-        assert message_order(messages) == ["initialize", "initialized", "thread/start", "thread/goal/set", "turn/start"]
+        assert message_order(messages) == [
+                 "initialize",
+                 "initialized",
+                 "thread/start",
+                 "thread/goal/set",
+                 "turn/start",
+                 "thread/goal/get"
+               ]
       end)
     end
 
@@ -189,6 +198,55 @@ defmodule SymphonyElixir.Codex.CodingAgentTest do
     end
   end
 
+  describe "explicit interactive thread resume" do
+    test "resumes the provided thread outside goal mode without reading goal state" do
+      with_fake_resume_server(:present, fn workspace, issue, trace_file ->
+        assert {:ok, result} =
+                 AppServer.run(workspace, "Continue the chat", issue,
+                   conversation_ref: %ConversationRef{
+                     provider: "codex",
+                     conversation_id: "thread-resume"
+                   }
+                 )
+
+        messages = outbound_messages(trace_file)
+
+        assert result.conversation_id == "thread-resume"
+
+        assert message_order(messages) == [
+                 "initialize",
+                 "initialized",
+                 "thread/resume",
+                 "turn/start"
+               ]
+
+        refute message_with_method(messages, "thread/start")
+        refute message_with_method(messages, "thread/goal/get")
+        refute File.exists?(Path.join([Path.expand(workspace), ".symphony", "codex-session.json"]))
+      end)
+    end
+
+    test "returns a stable error when the explicit resume target no longer exists" do
+      with_fake_resume_server(:missing, fn workspace, issue, trace_file ->
+        assert {:error, {:resume_conversation_failed, "thread-missing", _reason}} =
+                 AppServer.run(workspace, "Continue the chat", issue,
+                   conversation_ref: %ConversationRef{
+                     provider: "codex",
+                     conversation_id: "thread-missing"
+                   }
+                 )
+
+        messages = outbound_messages(trace_file)
+
+        assert message_order(messages) == [
+                 "initialize",
+                 "initialized",
+                 "thread/resume"
+               ]
+      end)
+    end
+  end
+
   describe "durable goal threads" do
     test "resumes the stored thread and reads the native goal instead of overwriting it" do
       with_fake_resume_server(:present, fn workspace, issue, trace_file ->
@@ -239,6 +297,25 @@ defmodule SymphonyElixir.Codex.CodingAgentTest do
                  AppServer.run(workspace, "Build the feature", issue, goal: "Ship the feature")
 
         refute File.exists?(trace_file)
+        assert {:ok, "thread-resume"} = SymphonyElixir.Codex.Session.resolve(workspace)
+      end)
+    end
+
+    test "does not replace a stale durable goal conversation with a fresh thread" do
+      with_fake_resume_server(:missing, fn workspace, _issue, trace_file ->
+        enable_goals!()
+        write_session_sidecar!(workspace, "thread-resume")
+
+        assert {:error, {:resume_conversation_failed, "thread-resume", _reason}} =
+                 AppServer.ensure_goal(
+                   workspace,
+                   %{objective: "Ship the feature", status: "active"},
+                   workspace_root: Path.dirname(workspace)
+                 )
+
+        messages = outbound_messages(trace_file)
+        assert message_order(messages) == ["initialize", "initialized", "thread/resume"]
+        refute message_with_method(messages, "thread/start")
         assert {:ok, "thread-resume"} = SymphonyElixir.Codex.Session.resolve(workspace)
       end)
     end
@@ -523,13 +600,25 @@ defmodule SymphonyElixir.Codex.CodingAgentTest do
   end
 
   defp write_resume_fake_codex!(codex_binary, trace_file, goal_get_mode) do
-    goal_get_response =
+    {resume_response, goal_get_response} =
       case goal_get_mode do
         :present ->
-          ~s({"id":6,"result":{"goal":{"threadId":"thread-resume","objective":"Resume the migration","status":"active","tokenBudget":200000,"tokensUsed":10,"timeUsedSeconds":5}}})
+          {
+            ~s({"id":5,"result":{"thread":{"id":"thread-resume"}}}),
+            ~s({"id":6,"result":{"goal":{"threadId":"thread-resume","objective":"Resume the migration","status":"active","tokenBudget":200000,"tokensUsed":10,"timeUsedSeconds":5}}})
+          }
 
         :null ->
-          ~s({"id":6,"result":{"goal":null}})
+          {
+            ~s({"id":5,"result":{"thread":{"id":"thread-resume"}}}),
+            ~s({"id":6,"result":{"goal":null}})
+          }
+
+        :missing ->
+          {
+            ~s({"id":5,"error":{"code":-32004,"message":"Thread not found"}}),
+            ~s({"id":6,"result":{"goal":null}})
+          }
       end
 
     File.write!(codex_binary, """
@@ -549,7 +638,7 @@ defmodule SymphonyElixir.Codex.CodingAgentTest do
           printf '%s\\n' '{"id":2,"result":{"thread":{"id":"thread-resume"}}}'
           ;;
         *'"method":"thread/resume"'*)
-          printf '%s\\n' '{"id":5,"result":{"thread":{"id":"thread-resume"}}}'
+          printf '%s\\n' '#{resume_response}'
           ;;
         *'"method":"thread/goal/get"'*)
           printf '%s\\n' '#{goal_get_response}'
@@ -829,6 +918,22 @@ defmodule SymphonyElixir.Codex.CodingAgentTest do
 
     turn_completion_count = length(turn_completion_statuses(response_mode))
 
+    goal_get_exit =
+      if response_mode == :goal_ok,
+        do: "          exit 0",
+        else: ""
+
+    completion_exit =
+      if response_mode == :goal_ok do
+        ""
+      else
+        """
+          if [ "$turn_count" -ge #{turn_completion_count} ]; then
+            exit 0
+          fi
+        """
+      end
+
     File.write!(codex_binary, """
     #!/bin/sh
     trace_file="#{trace_file}"
@@ -851,6 +956,7 @@ defmodule SymphonyElixir.Codex.CodingAgentTest do
           ;;
         *'"method":"thread/goal/get"'*)
           printf '%s\\n' '#{goal_get_response}'
+    #{goal_get_exit}
           ;;
         *'"method":"turn/start"'*)
           turn_count=$((turn_count + 1))
@@ -861,9 +967,7 @@ defmodule SymphonyElixir.Codex.CodingAgentTest do
               printf '%s\\n' '{"method":"turn/completed"}'
               ;;
           esac
-          if [ "$turn_count" -ge #{turn_completion_count} ]; then
-            exit 0
-          fi
+    #{completion_exit}
           ;;
         *)
           ;;

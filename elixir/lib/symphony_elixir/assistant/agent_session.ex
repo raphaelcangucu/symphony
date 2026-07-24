@@ -2,9 +2,11 @@ defmodule SymphonyElixir.Assistant.AgentSession do
   @moduledoc """
   Shared assistant turn runner for all agent backends.
 
-  Codex is the primary backend; Claude, Cursor, and OpenCode share the same
-  runner contracts through this module.
+  Codex, Claude, Cursor, and OpenCode share provider-neutral conversation and
+  run contracts through this module.
   """
+
+  alias SymphonyElixir.Agent.{ConversationRef, RunResult}
 
   alias SymphonyElixir.Assistant.{
     AuthoringGoalControl,
@@ -41,9 +43,26 @@ defmodule SymphonyElixir.Assistant.AgentSession do
           required(:assistant_message) => String.t(),
           required(:tool_calls) => [map()],
           optional(:content_blocks) => [map()],
-          optional(:codex_thread_id) => String.t(),
-          optional(:turn_id) => String.t()
+          optional(:provider) => String.t(),
+          optional(:conversation_id) => String.t(),
+          optional(:run_id) => String.t(),
+          optional(:execution_id) => String.t()
         }
+
+  @doc """
+  Executes one provider-neutral turn without creating or loading an assistant
+  database thread. This is the runner used by the standalone agent client.
+  """
+  @spec run_standalone(Path.t(), String.t(), keyword()) :: {:ok, map()} | {:error, term()}
+  def run_standalone(workspace, prompt, opts)
+      when is_binary(workspace) and is_binary(prompt) and is_list(opts) do
+    provider = Keyword.get(opts, :agent_kind)
+    runner = Keyword.get(opts, :runner, &default_runner/4)
+    issue = freeform_issue() |> Map.put(:agent_kind, provider)
+
+    runner.(Path.expand(workspace), prompt, issue, opts)
+    |> normalize_runner_result(provider)
+  end
 
   @spec send_message(String.t(), String.t(), map(), keyword()) :: {:ok, turn_result()} | {:error, term()}
   def send_message(project_slug, message, context, opts \\ [])
@@ -76,7 +95,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
          {:ok, opts} <-
            opts
            |> Keyword.put(:agent_kind, agent_kind)
-           |> Keyword.put(:agent_thread_id, History.agent_thread_id(thread, agent_kind))
+           |> put_conversation_opts(thread, agent_kind)
            |> Keyword.put(:assistant_thread_id, thread.id)
            |> maybe_put_authoring_goal(thread, agent_kind),
          history_before_turn <- thread_id |> History.list_messages_for_thread() |> Enum.map(&History.message_payload/1),
@@ -97,11 +116,10 @@ defmodule SymphonyElixir.Assistant.AgentSession do
        %{
          assistant_message: assistant_message.content,
          tool_calls: assistant_message.tool_calls,
-         codex_thread_id: Map.get(runner_result, :codex_thread_id) || Map.get(runner_result, "codex_thread_id"),
-         turn_id: Map.get(runner_result, :turn_id) || Map.get(runner_result, "turn_id"),
          user_message: History.message_payload(user_message),
          assistant_chat_message: assistant_payload
-       }}
+       }
+       |> Map.merge(turn_identity_fields(runner_result))}
     end
   end
 
@@ -114,7 +132,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
          {:ok, opts} <-
            opts
            |> Keyword.put(:agent_kind, agent_kind)
-           |> Keyword.put(:agent_thread_id, History.agent_thread_id(thread, agent_kind))
+           |> put_conversation_opts(thread, agent_kind)
            |> Keyword.put(:assistant_thread_id, thread.id)
            |> maybe_put_authoring_goal(thread, agent_kind),
          {:ok, trimmed} <- normalize_message(message),
@@ -133,11 +151,10 @@ defmodule SymphonyElixir.Assistant.AgentSession do
        %{
          assistant_message: assistant_message.content,
          tool_calls: assistant_message.tool_calls,
-         codex_thread_id: Map.get(runner_result, :codex_thread_id),
-         turn_id: Map.get(runner_result, :turn_id),
          user_message: History.message_payload(user_message),
          assistant_chat_message: History.message_payload(assistant_message)
-       }}
+       }
+       |> Map.merge(turn_identity_fields(runner_result))}
     end
   end
 
@@ -156,7 +173,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
          {:ok, opts} <-
            opts
            |> Keyword.put(:agent_kind, agent_kind)
-           |> Keyword.put(:agent_thread_id, History.agent_thread_id(thread, agent_kind))
+           |> put_conversation_opts(thread, agent_kind)
            |> Keyword.put(:assistant_thread_id, thread.id)
            |> maybe_put_authoring_goal(thread, agent_kind),
          {:ok, trimmed} <- normalize_message(message),
@@ -174,11 +191,10 @@ defmodule SymphonyElixir.Assistant.AgentSession do
        %{
          assistant_message: assistant_message.content,
          tool_calls: assistant_message.tool_calls,
-         codex_thread_id: Map.get(runner_result, :codex_thread_id),
-         turn_id: Map.get(runner_result, :turn_id),
          user_message: History.message_payload(user_message),
          assistant_chat_message: History.message_payload(assistant_message)
-       }}
+       }
+       |> Map.merge(turn_identity_fields(runner_result))}
     end
   end
 
@@ -198,7 +214,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
          {:ok, opts} <-
            opts
            |> Keyword.put(:agent_kind, agent_kind)
-           |> Keyword.put(:agent_thread_id, History.agent_thread_id(thread, agent_kind))
+           |> put_conversation_opts(thread, agent_kind)
            |> Keyword.put(:assistant_thread_id, thread.id)
            |> maybe_put_authoring_goal(thread, agent_kind),
          {:ok, trimmed} <- normalize_message(message),
@@ -218,11 +234,10 @@ defmodule SymphonyElixir.Assistant.AgentSession do
        %{
          assistant_message: assistant_message.content,
          tool_calls: assistant_message.tool_calls,
-         codex_thread_id: Map.get(runner_result, :codex_thread_id),
-         turn_id: Map.get(runner_result, :turn_id),
          user_message: History.message_payload(user_message),
          assistant_chat_message: History.message_payload(assistant_message)
-       }}
+       }
+       |> Map.merge(turn_identity_fields(runner_result))}
     end
   end
 
@@ -260,7 +275,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
          {:ok, opts} <-
            opts
            |> Keyword.put(:agent_kind, agent_kind)
-           |> Keyword.put(:agent_thread_id, History.agent_thread_id(thread, agent_kind))
+           |> put_conversation_opts(thread, agent_kind)
            |> Keyword.put(:assistant_thread_id, thread.id)
            |> maybe_put_authoring_goal(thread, agent_kind),
          {:ok, trimmed} <- normalize_message(message),
@@ -280,11 +295,10 @@ defmodule SymphonyElixir.Assistant.AgentSession do
        %{
          assistant_message: assistant_message.content,
          tool_calls: assistant_message.tool_calls,
-         codex_thread_id: Map.get(runner_result, :codex_thread_id),
-         turn_id: Map.get(runner_result, :turn_id),
          user_message: History.message_payload(user_message),
          assistant_chat_message: History.message_payload(assistant_message)
-       }}
+       }
+       |> Map.merge(turn_identity_fields(runner_result))}
     end
   end
 
@@ -307,7 +321,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
          {:ok, opts} <-
            opts
            |> Keyword.put(:agent_kind, agent_kind)
-           |> Keyword.put(:agent_thread_id, History.agent_thread_id(thread, agent_kind))
+           |> put_conversation_opts(thread, agent_kind)
            |> Keyword.put(:assistant_thread_id, thread.id)
            |> maybe_put_authoring_goal(thread, agent_kind) do
       continue_goal_turn(thread, context, opts, agent_kind)
@@ -392,7 +406,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
       |> maybe_put_project_codex_config(project_slug)
 
     runner.(workspace, prompt, assistant_issue(project_slug), runner_opts)
-    |> normalize_runner_result()
+    |> normalize_runner_result(Keyword.get(opts, :agent_kind))
   end
 
   defp run_project_explore_turn(workspace, prompt, project_slug, opts) do
@@ -408,7 +422,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
       |> maybe_put_project_codex_config(project_slug)
 
     runner.(workspace, prompt, project_explore_issue(project_slug), runner_opts)
-    |> normalize_runner_result()
+    |> normalize_runner_result(Keyword.get(opts, :agent_kind))
   end
 
   defp run_freeform_turn(workspace, prompt, opts) do
@@ -421,10 +435,17 @@ defmodule SymphonyElixir.Assistant.AgentSession do
       |> maybe_put_instance_codex_config()
 
     runner.(workspace, prompt, freeform_issue(), runner_opts)
-    |> normalize_runner_result()
+    |> normalize_runner_result(Keyword.get(opts, :agent_kind))
   end
 
-  defp ensure_issue_workspace(%{scope: "issue_session"} = thread), do: provision_thread_workspace(thread)
+  defp ensure_issue_workspace(%{scope: "issue_session"} = thread) do
+    case provision_thread_workspace(thread) do
+      {:ok, workspace} -> {:ok, workspace}
+      {:error, {:workspace_symlink_escape, _path, _root}} -> workspace_not_executable()
+      {:error, :invalid_workspace_cwd} -> workspace_not_executable()
+      {:error, reason} -> {:error, reason}
+    end
+  end
 
   # Honor the working tree persisted on the legacy issue thread so the authoring turn writes where the
   # document viewer reads. If that path is unusable (e.g. a thread created while a divergent serve
@@ -508,7 +529,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
       |> maybe_put_project_codex_config(project_slug)
 
     runner.(workspace, prompt, assistant_issue(project_slug), runner_opts)
-    |> normalize_runner_result()
+    |> normalize_runner_result(Keyword.get(opts, :agent_kind))
   end
 
   # Freeform chats have no project; they use instance-level codex settings
@@ -676,8 +697,8 @@ defmodule SymphonyElixir.Assistant.AgentSession do
   defp persisted_goal_agent(thread) do
     cond do
       thread.agent_kind in ["codex", "claude"] -> {:ok, thread.agent_kind}
-      is_binary(History.agent_thread_id(thread, "claude")) -> {:ok, "claude"}
-      is_binary(History.agent_thread_id(thread, "codex")) -> {:ok, "codex"}
+      match?({:ok, %ConversationRef{}}, History.conversation_ref(thread, "claude")) -> {:ok, "claude"}
+      match?({:ok, %ConversationRef{}}, History.conversation_ref(thread, "codex")) -> {:ok, "codex"}
       true -> {:error, {:authoring_goal_unavailable, {:unsupported_agent, "unknown"}}}
     end
   end
@@ -762,13 +783,13 @@ defmodule SymphonyElixir.Assistant.AgentSession do
   defp persist_continuation(thread, runner_result, agent_kind) do
     with {:ok, updated_thread} <- maybe_update_agent_thread(thread, runner_result, agent_kind),
          {:ok, assistant_message} <- persist_assistant_message(updated_thread, runner_result) do
-      result = %{
-        assistant_message: assistant_message.content,
-        tool_calls: assistant_message.tool_calls,
-        codex_thread_id: Map.get(runner_result, :codex_thread_id),
-        turn_id: Map.get(runner_result, :turn_id),
-        assistant_chat_message: History.message_payload(assistant_message)
-      }
+      result =
+        %{
+          assistant_message: assistant_message.content,
+          tool_calls: assistant_message.tool_calls,
+          assistant_chat_message: History.message_payload(assistant_message)
+        }
+        |> Map.merge(turn_identity_fields(runner_result))
 
       {:ok, result, assistant_message}
     end
@@ -1347,14 +1368,6 @@ defmodule SymphonyElixir.Assistant.AgentSession do
     agent_kind = Keyword.get(opts, :agent_kind)
 
     with {:ok, session} <- RootCodingAgent.start_session(workspace, agent_kind, opts) do
-      # Resume a claude session if a prior backend thread id is known.
-      # For codex sessions the map gets an extra key that Codex.CodingAgent ignores harmlessly.
-      session =
-        case Keyword.get(opts, :agent_thread_id) do
-          id when is_binary(id) -> Map.put(session, :cli_session_id, id)
-          _ -> session
-        end
-
       {:ok, collector} = Agent.start_link(&TurnTimeline.new/0)
 
       try do
@@ -1428,29 +1441,6 @@ defmodule SymphonyElixir.Assistant.AgentSession do
             :ok
         end
 
-      Map.get(message, :event) == :tool_call_started ->
-        tool_call = tool_call_from_payload(payload, :tool_call_started, %{})
-        normalized = collect_tool_call(collector, tool_call)
-        maybe_call(opts, :on_tool_call_started, normalized)
-
-      Map.get(message, :event) in [:tool_call_completed, :tool_call_failed, :unsupported_tool_call] ->
-        tool_call = tool_call_from_payload(payload, Map.get(message, :event), Map.get(message, :result) || %{})
-        normalized = collect_tool_call(collector, tool_call)
-        maybe_call(opts, :on_tool_call_completed, normalized)
-
-      Map.get(message, :event) == :user_input_required ->
-        maybe_call(opts, :on_user_input_required, %{
-          request_id: Map.get(message, :request_id),
-          item_id: Map.get(message, :item_id),
-          questions: Map.get(message, :questions) || []
-        })
-
-      Map.get(message, :event) == :approval_required ->
-        maybe_call(opts, :on_approval_required, approval_request_from_event(message, payload, method))
-
-      match?(%{}, goal = goal_from_codex_event(message)) ->
-        maybe_call(opts, :on_goal_updated, goal)
-
       # The Claude adapter streams partial assistant text as item/progress deltas.
       # Forward them for live token streaming in the UI. The persisted message is
       # assembled from the final item/created text item below, so we don't accumulate
@@ -1465,7 +1455,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
       # Claude adapter emits tool activity as :notification events with method "item/created".
       # Route tool_call items through the same upsert/callback path as :tool_call_started,
       # and tool_result items through the :tool_call_completed path, so chips reach the relay.
-      Map.get(message, :event) == :notification and method == "item/created" ->
+      method == "item/created" ->
         item = get_in(payload, ["params", "item"]) || get_in(payload, [:params, :item]) || %{}
         item_type = Map.get(item, "type") || Map.get(item, :type)
 
@@ -1518,6 +1508,29 @@ defmodule SymphonyElixir.Assistant.AgentSession do
           true ->
             :ok
         end
+
+      Map.get(message, :event) == :tool_call_started ->
+        tool_call = tool_call_from_payload(payload, :tool_call_started, %{})
+        normalized = collect_tool_call(collector, tool_call)
+        maybe_call(opts, :on_tool_call_started, normalized)
+
+      Map.get(message, :event) in [:tool_call_completed, :tool_call_failed, :unsupported_tool_call] ->
+        tool_call = tool_call_from_payload(payload, Map.get(message, :event), Map.get(message, :result) || %{})
+        normalized = collect_tool_call(collector, tool_call)
+        maybe_call(opts, :on_tool_call_completed, normalized)
+
+      Map.get(message, :event) == :user_input_required ->
+        maybe_call(opts, :on_user_input_required, %{
+          request_id: Map.get(message, :request_id),
+          item_id: Map.get(message, :item_id),
+          questions: Map.get(message, :questions) || []
+        })
+
+      Map.get(message, :event) == :approval_required ->
+        maybe_call(opts, :on_approval_required, approval_request_from_event(message, payload, method))
+
+      match?(%{}, goal = goal_from_codex_event(message)) ->
+        maybe_call(opts, :on_goal_updated, goal)
 
       true ->
         :ok
@@ -1652,11 +1665,19 @@ defmodule SymphonyElixir.Assistant.AgentSession do
 
   defp maybe_forward_turn_started(message, opts) when is_map(message) do
     if Map.get(message, :event) == :session_started do
-      turn_id = Map.get(message, :turn_id) || Map.get(message, "turn_id")
+      conversation_id =
+        Map.get(message, :conversation_id) || Map.get(message, "conversation_id")
+
+      run_id = Map.get(message, :run_id) || Map.get(message, "run_id")
 
       case Keyword.get(opts, :on_turn_started) do
-        callback when is_function(callback, 1) and is_binary(turn_id) -> callback.(turn_id)
-        _ -> :ok
+        callback
+        when is_function(callback, 2) and is_binary(conversation_id) and
+               is_binary(run_id) ->
+          callback.(conversation_id, run_id)
+
+        _ ->
+          :ok
       end
     end
 
@@ -1815,51 +1836,44 @@ defmodule SymphonyElixir.Assistant.AgentSession do
   defp agent_label(_), do: "The agent"
 
   # credo:disable-for-next-line Credo.Check.Refactor.CyclomaticComplexity
-  defp normalize_runner_result({:ok, result}) when is_map(result) do
-    assistant_message = Map.get(result, :assistant_message) || Map.get(result, "assistant_message")
-
-    if is_binary(assistant_message) and assistant_message != "" do
-      normalized = %{
-        assistant_message: assistant_message,
-        tool_calls: Map.get(result, :tool_calls) || Map.get(result, "tool_calls") || [],
-        codex_thread_id: Map.get(result, :codex_thread_id) || Map.get(result, "codex_thread_id") || Map.get(result, :thread_id),
-        cli_session_id: Map.get(result, :cli_session_id) || Map.get(result, "cli_session_id"),
-        turn_id: Map.get(result, :turn_id) || Map.get(result, "turn_id")
-      }
-
-      {:ok,
-       cond do
-         Map.has_key?(result, :content_blocks) -> Map.put(normalized, :content_blocks, Map.get(result, :content_blocks))
-         Map.has_key?(result, "content_blocks") -> Map.put(normalized, :content_blocks, Map.get(result, "content_blocks"))
-         true -> normalized
-       end}
-    else
-      {:error, :assistant_message_required}
+  defp normalize_runner_result({:ok, result}, provider) when is_map(result) do
+    with {:ok, provider} <- result_provider(provider),
+         {:ok, normalized} <- RunResult.normalize(provider, result) do
+      {:ok, RunResult.to_map(normalized)}
     end
   end
 
-  defp normalize_runner_result({:error, reason}), do: {:error, reason}
-  defp normalize_runner_result(_other), do: {:error, :invalid_runner_result}
+  defp normalize_runner_result({:error, reason}, _provider), do: {:error, reason}
+  defp normalize_runner_result(_other, _provider), do: {:error, :invalid_runner_result}
 
-  # Replaces the legacy maybe_update_codex_thread/2.
-  # Persists the backend session/thread id for the resolved agent kind and updates
+  defp result_provider(nil), do: {:ok, Settings.Agents.default_agent_kind()}
+
+  defp result_provider(provider) do
+    case AgentPreference.normalize(provider) do
+      nil -> {:error, {:unsupported_provider, provider}}
+      normalized -> {:ok, normalized}
+    end
+  end
+
+  # Persists the canonical provider conversation id and updates
   # the thread's agent_kind when something meaningful happened:
-  #   - backend returned a session/thread id → persist kind + id
+  #   - backend returned a conversation id → persist kind + id
   #   - agent kind changed vs what the thread had stored → persist kind only
   #   - nothing changed, no id returned → no write (preserves O(0) writes for
   #     fast stub runners and avoids timing regressions in tests)
   defp maybe_update_agent_thread(thread, runner_result, agent_kind) do
-    backend_id =
-      Map.get(runner_result, :codex_thread_id) || Map.get(runner_result, "codex_thread_id") ||
-        Map.get(runner_result, :cli_session_id) || Map.get(runner_result, :thread_id)
+    conversation_ref =
+      case ConversationRef.new(agent_kind, Map.get(runner_result, :conversation_id)) do
+        {:ok, ref} -> ref
+        {:error, _reason} -> nil
+      end
 
     stored_kind = Map.get(thread, :agent_kind)
 
     cond do
-      is_binary(backend_id) ->
-        # Backend returned a session/thread id: persist both the agent kind and the id.
+      match?(%ConversationRef{}, conversation_ref) ->
         with {:ok, thread} <- History.set_thread_agent(thread, agent_kind) do
-          History.put_agent_thread_id(thread, agent_kind, backend_id)
+          History.put_conversation_ref(thread, conversation_ref)
         end
 
       stored_kind != agent_kind and is_binary(stored_kind) ->
@@ -1873,6 +1887,28 @@ defmodule SymphonyElixir.Assistant.AgentSession do
         {:ok, thread}
     end
   end
+
+  defp put_conversation_opts(opts, thread, agent_kind) do
+    case History.conversation_ref(thread, agent_kind) do
+      {:ok, %ConversationRef{} = ref} ->
+        Keyword.put(opts, :conversation_ref, ref)
+
+      :error ->
+        Keyword.delete(opts, :conversation_ref)
+    end
+  end
+
+  defp turn_identity_fields(runner_result) do
+    %{
+      provider: Map.get(runner_result, :provider),
+      conversation_id: Map.get(runner_result, :conversation_id),
+      run_id: Map.get(runner_result, :run_id),
+      execution_id: Map.get(runner_result, :execution_id)
+    }
+  end
+
+  defp workspace_not_executable,
+    do: {:error, {:authoring_goal_unavailable, :workspace_not_executable}}
 
   # Resolves the effective agent kind for a turn with the priority chain:
   # active Goal provider > context (per-message) > thread's stored kind > operator default.
@@ -1900,7 +1936,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
     attrs = %{
       role: "assistant",
       content: Map.fetch!(runner_result, :assistant_message),
-      turn_id: Map.get(runner_result, :turn_id),
+      run_id: Map.get(runner_result, :run_id),
       tool_calls: Map.get(runner_result, :tool_calls, [])
     }
 

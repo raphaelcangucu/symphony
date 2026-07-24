@@ -4,7 +4,7 @@ defmodule SymphonyElixir.Gateways.Router do
   require Logger
 
   alias SymphonyElixir.Gateways
-  alias SymphonyElixir.Assistant.AgentSession
+  alias SymphonyElixir.Assistant.{AgentSession, TurnManager}
   alias SymphonyElixir.Gateways.{Binding, CommandParser, InboundMessage, SessionResolver}
   alias SymphonyElixir.Settings
   alias SymphonyElixir.Settings.Gateways, as: GatewaySettings
@@ -234,9 +234,40 @@ defmodule SymphonyElixir.Gateways.Router do
   defp dispatch_plain_text(%Binding{} = binding, %InboundMessage{} = message, adapter, opts) do
     with {:ok, thread, updated_binding} <- SessionResolver.ensure_thread(binding),
          :ok <- adapter.send_typing(message, []),
-         {:ok, result} <- run_assistant_turn(thread, updated_binding, message, opts),
+         {:ok, result} <- run_serialized_assistant_turn(thread, updated_binding, message, opts),
          :ok <- send_text(adapter, message, Map.fetch!(result, :assistant_message)) do
       {:ok, :sent}
+    end
+  end
+
+  defp run_serialized_assistant_turn(thread, binding, message, opts) do
+    reply_to = self()
+
+    start_opts = [
+      run: fn -> run_assistant_turn(thread, binding, message, opts) end,
+      reply_to: reply_to,
+      trigger: "gateway",
+      provider: binding.default_agent_kind
+    ]
+
+    case TurnManager.start_turn(thread.id, message.raw_text, start_opts) do
+      {:ok, _turn} ->
+        await_assistant_turn()
+
+      {:error, :turn_in_progress} ->
+        case TurnManager.enqueue(thread.id, message.raw_text, start_opts) do
+          :ok -> await_assistant_turn()
+          {:error, reason} -> {:error, reason}
+        end
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp await_assistant_turn do
+    receive do
+      {:assistant_turn_finished, _execution_id, result} -> result
     end
   end
 

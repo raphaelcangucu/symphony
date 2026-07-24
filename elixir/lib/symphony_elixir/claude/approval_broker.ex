@@ -37,10 +37,26 @@ defmodule SymphonyElixir.Claude.ApprovalBroker do
   @spec await(String.t(), non_neg_integer()) :: decision()
   def await(request_id, timeout_ms)
       when is_binary(request_id) and is_integer(timeout_ms) and timeout_ms >= 0 do
+    await(request_id, timeout_ms, fn -> :ok end)
+  end
+
+  @doc """
+  Registers the waiter before publishing the request through `on_registered`.
+
+  Use this form when the caller exposes the request ID to another process. It
+  closes the race where a fast decision could otherwise arrive before the
+  waiting process was registered.
+  """
+  @spec await(String.t(), non_neg_integer(), (-> term())) :: decision()
+  def await(request_id, timeout_ms, on_registered)
+      when is_binary(request_id) and is_integer(timeout_ms) and timeout_ms >= 0 and
+             is_function(on_registered, 0) do
     ensure_registry()
 
     case Registry.register(@registry, request_id, nil) do
       {:ok, _owner} ->
+        _ = on_registered.()
+
         receive do
           {:approval_decision, ^request_id, decision} when decision in [:approve, :deny] ->
             decision

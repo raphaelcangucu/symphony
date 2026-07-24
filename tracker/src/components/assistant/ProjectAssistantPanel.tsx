@@ -1081,8 +1081,8 @@ function InteractiveProjectAssistantPanel({
         onDocumentChangedRef.current?.(payload);
       },
       onAssistantIssueCreated: (payload) => onIssueCreatedRef.current?.(payload),
-      onSteerFailed: ({ message }) => {
-        if (!message) return;
+      onSteerFailed: ({ prompt }) => {
+        if (!prompt) return;
         const activeBundle = bundleRef.current ?? fallbackCatalogBundle();
         const activeCatalog = catalogFor(activeBundle, activeBundle.defaultAgent);
         setQueued((current) => [
@@ -1091,7 +1091,7 @@ function InteractiveProjectAssistantPanel({
             id: crypto.randomUUID(),
             payload: {
               kind: "message",
-              message,
+              message: prompt,
               agent: activeBundle.defaultAgent,
               settings: defaultComposerSettings(activeCatalog),
               attachments: [],
@@ -2039,8 +2039,10 @@ function InteractiveProjectAssistantPanel({
       const channel = channelRef.current;
       if (!channel) return;
       killTool(channel, toolCallId).receive("error", (reason) => {
-        const payload = (reason ?? {}) as { can_stop_turn?: boolean; reason?: string };
-        if (payload.can_stop_turn === true) {
+        const payload = (reason ?? {}) as {
+          details?: { can_stop_turn?: boolean };
+        };
+        if (payload.details?.can_stop_turn === true) {
           toast.error(t("assistant.working.killFailed"));
           return;
         }

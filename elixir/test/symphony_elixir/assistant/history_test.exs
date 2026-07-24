@@ -1,6 +1,9 @@
 defmodule SymphonyElixir.Assistant.HistoryTest do
   use ExUnit.Case, async: false
 
+  import Ecto.Query, only: [from: 2]
+
+  alias SymphonyElixir.Agent.ConversationRef
   alias SymphonyElixir.Assistant.{History, Message, Thread}
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.Repo
@@ -41,18 +44,18 @@ defmodule SymphonyElixir.Assistant.HistoryTest do
 
     assert {:ok, %Thread{} = thread} =
              History.ensure_thread("macro-markets", %{
-               codex_thread_id: "thread-1",
+               provider_bindings: %{"codex" => "thread-1"},
                workspace_path: "/tmp/assistant/macro-markets"
              })
 
     assert {:ok, %Thread{} = same_thread} =
              History.ensure_thread("macro-markets", %{
-               codex_thread_id: "thread-ignored",
+               provider_bindings: %{"codex" => "thread-ignored"},
                workspace_path: "/tmp/assistant/ignored"
              })
 
     assert same_thread.id == thread.id
-    assert same_thread.codex_thread_id == "thread-1"
+    assert same_thread.provider_bindings == %{"codex" => "thread-1"}
     assert same_thread.workspace_path == "/tmp/assistant/macro-markets"
   end
 
@@ -179,7 +182,7 @@ defmodule SymphonyElixir.Assistant.HistoryTest do
              History.append_message(thread, %{
                role: "assistant",
                content: "Oi! Como posso ajudar?",
-               turn_id: "turn-1",
+               run_id: "turn-1",
                tool_calls: [%{"name" => "list_issues", "status" => "complete"}]
              })
 
@@ -292,13 +295,13 @@ defmodule SymphonyElixir.Assistant.HistoryTest do
 
     assert {:ok, project_thread} =
              History.ensure_thread("macro-markets", %{
-               codex_thread_id: "project-thread",
+               provider_bindings: %{"codex" => "project-thread"},
                workspace_path: "/tmp/assistant/macro-markets"
              })
 
     assert project_thread.scope == "project"
     assert project_thread.issue_identifier == nil
-    assert project_thread.codex_thread_id == "project-thread"
+    assert project_thread.provider_bindings == %{"codex" => "project-thread"}
 
     assert {:ok, []} = History.list_messages("macro-markets")
   end
@@ -349,6 +352,38 @@ defmodule SymphonyElixir.Assistant.HistoryTest do
     assert {:ok, thread} = History.create_freeform_thread(%{title: "Ideas", workspace_path: "/tmp/f"})
     assert thread.scope == "freeform"
     assert thread.project_slug == nil
+  end
+
+  test "provider conversation bindings are the only persisted conversation identity" do
+    {:ok, thread} = History.create_freeform_thread(%{title: "Bindings", workspace_path: "/tmp/bindings"})
+    {:ok, ref} = ConversationRef.new("codex", "codex-thread-1")
+
+    assert {:ok, updated} = History.put_conversation_ref(thread, ref)
+    assert {:ok, ^ref} = History.conversation_ref(updated, "codex")
+    assert updated.provider_bindings["codex"] == "codex-thread-1"
+  end
+
+  test "provider conversation lookup rejects legacy nested bindings" do
+    {:ok, thread} =
+      History.create_freeform_thread(%{
+        title: "Legacy binding",
+        workspace_path: "/tmp/legacy-binding"
+      })
+
+    legacy_bindings = %{
+      "claude" => %{
+        "provider" => "claude",
+        "external_id" => "claude-session-1"
+      }
+    }
+
+    Repo.update_all(
+      from(candidate in Thread, where: candidate.id == ^thread.id),
+      set: [provider_bindings: legacy_bindings]
+    )
+
+    legacy_thread = Repo.get!(Thread, thread.id)
+    assert :error = History.conversation_ref(legacy_thread, "claude")
   end
 
   test "archive_thread/1 removes thread from default list_threads" do
@@ -448,7 +483,7 @@ defmodule SymphonyElixir.Assistant.HistoryTest do
         metadata: %{"existing" => true}
       })
 
-    concurrent_turn = %{"status" => "running", "generation" => "later"}
+    concurrent_turn = %{"status" => "running", "execution_id" => "later"}
 
     assert {:ok, _concurrent_update} =
              History.update_thread(initially_read, %{
@@ -636,7 +671,7 @@ defmodule SymphonyElixir.Assistant.HistoryTest do
       History.append_message(project_thread, %{
         role: "assistant",
         content: "Drafted MAC-7",
-        turn_id: "turn-7",
+        run_id: "turn-7",
         tool_calls: [%{"name" => "create_draft_issue", "status" => "complete"}]
       })
 
@@ -648,7 +683,7 @@ defmodule SymphonyElixir.Assistant.HistoryTest do
     assert Enum.map(copied_messages, & &1.role) == ["user", "assistant"]
     assert Enum.map(copied_messages, & &1.content) == ["Draft the billing issue", "Drafted MAC-7"]
     assert hd(copied_messages).metadata == %{"view" => "board"}
-    assert List.last(copied_messages).turn_id == "turn-7"
+    assert List.last(copied_messages).run_id == "turn-7"
 
     assert History.message_payload(List.last(copied_messages)).tool_calls == [
              %{"name" => "create_draft_issue", "status" => "complete"}

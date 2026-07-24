@@ -1,6 +1,7 @@
 defmodule SymphonyElixir.Assistant.ForkSessionTest do
   use ExUnit.Case, async: false
 
+  alias SymphonyElixir.Agent.ConversationRef
   alias SymphonyElixir.Assistant.{ForkSession, History, Thread}
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.Repo
@@ -36,7 +37,8 @@ defmodule SymphonyElixir.Assistant.ForkSessionTest do
         execution_mode: "build"
       })
 
-    {:ok, source} = History.put_agent_thread_id(source, "claude", "claude-native-abc")
+    {:ok, ref} = ConversationRef.new("claude", "claude-native-abc")
+    {:ok, source} = History.put_conversation_ref(source, ref)
     {:ok, _} = History.append_message(source, %{role: "user", content: "context please"})
     {:ok, _} = History.append_message(source, %{role: "assistant", content: "got it"})
 
@@ -52,8 +54,7 @@ defmodule SymphonyElixir.Assistant.ForkSessionTest do
     assert fork.metadata["workspace_kind"] == "isolated"
 
     # Clean fork: no native agent brain carried over.
-    assert fork.agent_thread_ids == %{}
-    assert fork.codex_thread_id == nil
+    assert fork.provider_bindings == %{}
 
     copied = History.list_messages_for_thread(fork.id)
     assert Enum.map(copied, & &1.role) == ["user", "assistant"]

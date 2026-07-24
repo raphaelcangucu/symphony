@@ -8,6 +8,7 @@ defmodule SymphonyElixir.Codex.CodingAgent do
   @behaviour SymphonyElixir.CodingAgent
 
   require Logger
+  alias SymphonyElixir.Agent.ConversationRef
   alias SymphonyElixir.Codex.Config, as: CodexConfig
   alias SymphonyElixir.Codex.DynamicTool
   alias SymphonyElixir.Codex.Session
@@ -41,6 +42,9 @@ defmodule SymphonyElixir.Codex.CodingAgent do
           workspace: Path.t()
         }
 
+  @impl true
+  def capabilities, do: SymphonyElixir.Agent.BackendCapabilities.for("codex")
+
   @spec run(Path.t(), String.t(), map(), keyword()) :: {:ok, map()} | {:error, term()}
   def run(workspace, prompt, issue, opts \\ []) do
     with {:ok, session} <- start_session(workspace, opts) do
@@ -53,6 +57,7 @@ defmodule SymphonyElixir.Codex.CodingAgent do
   end
 
   @spec start_session(Path.t(), keyword()) :: {:ok, session()} | {:error, term()}
+  @impl true
   def start_session(workspace, opts \\ []) do
     codex_section = codex_section(opts)
     goals_section = goals_section(opts)
@@ -147,8 +152,8 @@ defmodule SymphonyElixir.Codex.CodingAgent do
   Ensure the issue's Codex thread exists and set a goal on it without running a
   turn.
 
-  Resolves and resumes the durable thread (sidecar/opts), or starts a fresh
-  durable thread when the issue has none yet, then applies a native
+  Resolves and resumes the durable thread (sidecar/opts), or starts a new
+  durable thread only when the issue has none yet, then applies a native
   `thread/goal/set`. Writes the workspace session sidecar so future runs resume
   the same thread, mirrors the native goal into the sidecar for dormant display,
   and returns the resolved/created `thread_id` so callers can persist the
@@ -196,6 +201,7 @@ defmodule SymphonyElixir.Codex.CodingAgent do
   end
 
   @spec run_turn(session(), String.t(), map(), keyword()) :: {:ok, map()} | {:error, term()}
+  @impl true
   def run_turn(%{} = session, prompt, issue, opts \\ []) do
     on_message = Keyword.get(opts, :on_message, &default_on_message/1)
 
@@ -290,9 +296,9 @@ defmodule SymphonyElixir.Codex.CodingAgent do
           on_message,
           :session_started,
           %{
-            session_id: session_id,
-            thread_id: thread_id,
-            turn_id: turn_id
+            provider: "codex",
+            conversation_id: thread_id,
+            run_id: turn_id
           },
           metadata
         )
@@ -317,9 +323,9 @@ defmodule SymphonyElixir.Codex.CodingAgent do
                result: :turn_completed,
                completion_payload: completion_payload,
                goal_update: goal_update,
-               session_id: session_id,
-               thread_id: thread_id,
-               turn_id: turn_id
+               provider: "codex",
+               conversation_id: thread_id,
+               run_id: turn_id
              }}
 
           {:error, reason} ->
@@ -405,12 +411,11 @@ defmodule SymphonyElixir.Codex.CodingAgent do
     end
   end
 
-  defp emit_turn_error(on_message, metadata, session_id, reason) do
+  defp emit_turn_error(on_message, metadata, _session_id, reason) do
     emit_message(
       on_message,
       :turn_ended_with_error,
       %{
-        session_id: session_id,
         reason: reason
       },
       metadata
@@ -533,6 +538,7 @@ defmodule SymphonyElixir.Codex.CodingAgent do
   defp normalize_goal_status(_status), do: nil
 
   @spec stop_session(session()) :: :ok
+  @impl true
   def stop_session(%{port: port}) when is_port(port) do
     stop_port(port)
   end
@@ -697,22 +703,19 @@ defmodule SymphonyElixir.Codex.CodingAgent do
     end
   end
 
-  # Goal-mode runs reuse the issue's durable Codex thread so the native goal
-  # state, history and accounting persist across orchestrator dispatches.
-  # Non-goal runs keep the previous behavior of starting a fresh thread each time
-  # and relying on the workspace git state plus resume prompts for continuity.
+  # Goal-mode runs may resolve the issue's durable Codex thread from the
+  # workspace sidecar. Interactive callers can explicitly provide their own
+  # persisted thread id. Runs with neither source start a fresh thread.
   defp start_or_resume_thread(port, workspace, session_policies, opts, section) do
     case resumable_thread_id(workspace, opts, section) do
       {:ok, thread_id} ->
         case resume_thread(port, thread_id, session_policies, opts) do
           {:ok, resumed_id} ->
-            Logger.info("Codex resumed durable thread thread_id=#{resumed_id} for goal-mode run")
+            Logger.info("Codex resumed thread thread_id=#{resumed_id}")
             {:ok, resumed_id, :resumed}
 
           {:error, reason} ->
-            Logger.warning("Codex thread resume failed thread_id=#{thread_id}; starting a fresh thread: #{inspect(reason)}")
-
-            start_fresh_thread(port, workspace, session_policies, opts)
+            {:error, {:resume_conversation_failed, thread_id, reason}}
         end
 
       :error ->
@@ -727,17 +730,18 @@ defmodule SymphonyElixir.Codex.CodingAgent do
     end
   end
 
-  # Resume only when the run is in goal mode and goals are enabled. The resume
-  # target is the issue's durable Codex thread id (passed explicitly by the
-  # runner) or the workspace session sidecar written by a previous run.
+  # An explicit resume target belongs to the caller and is honored for both
+  # interactive and goal-mode runs. Resolving a workspace sidecar remains
+  # goal-only so ordinary orchestrator turns still start independent threads.
   defp resumable_thread_id(workspace, opts, section) do
-    if goal_opt?(opts) and CodexConfig.goals_enabled?(section) do
-      case Keyword.get(opts, :resume_thread_id) do
-        id when is_binary(id) and id != "" -> {:ok, id}
-        _ -> Session.resolve(workspace, opts)
-      end
-    else
-      :error
+    case Keyword.get(opts, :conversation_ref) do
+      %ConversationRef{provider: "codex", conversation_id: conversation_id} ->
+        {:ok, conversation_id}
+
+      _ ->
+        if goal_opt?(opts) and CodexConfig.goals_enabled?(section),
+          do: Session.resolve(workspace, opts),
+          else: :error
     end
   end
 
@@ -806,15 +810,19 @@ defmodule SymphonyElixir.Codex.CodingAgent do
   end
 
   defp establish_goal(port, thread_id, :resumed, opts, section) do
-    case request_goal_get(port, thread_id) do
-      {:ok, %{} = goal} ->
-        {:ok, goal_state_from_status(goal_status_value(goal)), goal}
+    if goal_opt?(opts) do
+      case request_goal_get(port, thread_id) do
+        {:ok, %{} = goal} ->
+          {:ok, goal_state_from_status(goal_status_value(goal)), goal}
 
-      {:ok, nil} ->
-        maybe_set_goal(port, thread_id, Keyword.get(opts, :goal), section)
+        {:ok, nil} ->
+          maybe_set_goal(port, thread_id, Keyword.get(opts, :goal), section)
 
-      {:error, reason} ->
-        {:error, {:goal_status_failed, reason}}
+        {:error, reason} ->
+          {:error, {:goal_status_failed, reason}}
+      end
+    else
+      {:ok, :not_requested, nil}
     end
   end
 
@@ -861,9 +869,9 @@ defmodule SymphonyElixir.Codex.CodingAgent do
     end
   end
 
-  # Resolve and resume the durable control thread, or start a fresh durable
-  # thread when the issue has none yet. Lets `ensure_goal/3` create the thread a
-  # newly-defined goal lives on.
+  # Resolve and resume the durable control thread, or start a new durable thread
+  # only when the issue has none yet. A stale stored identity is an explicit
+  # error: replacing it would silently sever the native goal history.
   defp ensure_control_thread(port, workspace, session_policies, opts) do
     case control_thread_id(workspace, opts) do
       {:ok, thread_id} ->
@@ -872,9 +880,7 @@ defmodule SymphonyElixir.Codex.CodingAgent do
             {:ok, resumed_id, :resumed}
 
           {:error, reason} ->
-            Logger.warning("Codex control thread resume failed thread_id=#{thread_id}; starting a fresh thread: #{inspect(reason)}")
-
-            start_control_thread(port, workspace, session_policies, opts)
+            {:error, {:resume_conversation_failed, thread_id, reason}}
         end
 
       {:error, :no_codex_thread} ->
@@ -2032,6 +2038,7 @@ defmodule SymphonyElixir.Codex.CodingAgent do
   end
 
   @spec normalize_event(map()) :: map()
+  @impl true
   def normalize_event(event) when is_map(event) do
     event
     |> normalize_usage()

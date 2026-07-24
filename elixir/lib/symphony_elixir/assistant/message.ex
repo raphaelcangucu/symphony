@@ -14,7 +14,7 @@ defmodule SymphonyElixir.Assistant.Message do
     field(:sequence, :integer)
     field(:role, :string)
     field(:content, :string)
-    field(:turn_id, :string)
+    field(:run_id, :string)
     field(:tool_calls, :map, default: %{"calls" => []})
     field(:metadata, :map, default: %{})
 
@@ -28,7 +28,7 @@ defmodule SymphonyElixir.Assistant.Message do
     raw_content = fetch_content(attrs)
 
     message
-    |> cast(attrs, [:thread_id, :sequence, :role, :content, :turn_id, :tool_calls, :metadata])
+    |> cast(attrs, [:thread_id, :sequence, :role, :content, :run_id, :tool_calls, :metadata])
     |> restore_assistant_whitespace(raw_content)
     |> validate_required([:thread_id, :sequence, :role, :content])
     |> validate_number(:sequence, greater_than: 0)

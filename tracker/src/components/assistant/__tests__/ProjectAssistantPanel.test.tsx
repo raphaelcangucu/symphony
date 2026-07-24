@@ -620,9 +620,12 @@ describe("ProjectAssistantPanel", () => {
           ? callback({
               last_turn: {
                 status: "running",
+                provider: "codex",
+                conversation_id: "conversation-1",
+                run_id: "run-1",
+                execution_id: "execution-1",
                 started_at: "2026-07-16T12:00:00Z",
                 finished_at: null,
-                session_id: "s1",
                 can_resume: false,
                 active_tools: [],
               },
@@ -670,8 +673,12 @@ describe("ProjectAssistantPanel", () => {
       turnRunning: true,
       lastTurn: {
         status: "running",
-        generation: "g1",
-        sessionId: "s1",
+        provider: "codex",
+        conversationId: "conversation-1",
+        runId: "run-1",
+        executionId: "execution-1",
+        queuedCount: 0,
+        error: null,
         startedAt: "2026-07-17T10:00:00.000Z",
         finishedAt: null,
         canResume: false,
@@ -831,7 +838,10 @@ describe("ProjectAssistantPanel", () => {
       expect(push).toHaveBeenCalledWith("steer_turn", expect.objectContaining({ message: "prefer the simpler fix" })),
     );
 
-    channelHandlers["steer_failed"]({ reason: "ActiveTurnNotSteerable", message: "prefer the simpler fix" });
+    channelHandlers["steer_failed"]({
+      code: "active_turn_not_steerable",
+      prompt: "prefer the simpler fix",
+    });
     expect(await screen.findByText("prefer the simpler fix")).toBeTruthy();
   });
 
@@ -903,7 +913,7 @@ describe("ProjectAssistantPanel", () => {
     );
 
     const goalCallIndex = push.mock.calls.findIndex(([event]) => event === "set_goal_mode");
-    act(() => pushReceives[goalCallIndex]?.error?.({ reason: "native goal failed" }));
+    act(() => pushReceives[goalCallIndex]?.error?.({ message: "native goal failed" }));
 
     expect(onIssueGoalModeError).toHaveBeenCalledWith("native goal failed");
     expect(push).not.toHaveBeenCalledWith(
@@ -1157,7 +1167,7 @@ describe("ProjectAssistantPanel", () => {
 
     const firstClearIndex = push.mock.calls.findIndex(([event]) => event === "goal_clear");
     expect(firstClearIndex).toBeGreaterThanOrEqual(0);
-    act(() => pushReceives[firstClearIndex]?.error?.({ reason: "assistant is busy" }));
+    act(() => pushReceives[firstClearIndex]?.error?.({ message: "assistant is busy" }));
 
     await waitFor(() => expect(push).toHaveBeenCalledWith("stop_turn", {}));
     const stopIndex = push.mock.calls.findIndex(([event]) => event === "stop_turn");
@@ -1207,7 +1217,7 @@ describe("ProjectAssistantPanel", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "Remove goal" }));
     const clearIndex = push.mock.calls.findIndex(([event]) => event === "goal_clear");
-    act(() => pushReceives[clearIndex]?.error?.({ reason: "native goal clear failed" }));
+    act(() => pushReceives[clearIndex]?.error?.({ message: "native goal clear failed" }));
 
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith("native goal clear failed"));
     expect(screen.getByRole("region", { name: "Goal" })).toBeInTheDocument();

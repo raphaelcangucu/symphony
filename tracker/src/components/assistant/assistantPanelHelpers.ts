@@ -251,7 +251,9 @@ function stringFromRecord(record: Record<string, unknown>, key: string): string 
 }
 
 export function errorMessage(reason: unknown, t: TFunction = i18n.t.bind(i18n) as TFunction): string {
-  if (reason && typeof reason === "object" && "reason" in reason && typeof reason.reason === "string") return reason.reason;
+  if (reason && typeof reason === "object") {
+    if ("message" in reason && typeof reason.message === "string") return reason.message;
+  }
   if (reason instanceof Error) return reason.message;
   return t("assistant.panel.requestFailed");
 }

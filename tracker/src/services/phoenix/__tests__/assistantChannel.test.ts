@@ -11,9 +11,11 @@ import {
   killTool,
   loadOlderMessages,
   normalizeGoalStatus,
+  normalizeAssistantError,
   normalizeTurnStatus,
   pauseAuthoringGoal,
   readGoalStatus,
+  readAgentCapabilities,
   readLastTurn,
   requestGoalStatus,
   requestHistorySync,
@@ -148,10 +150,75 @@ describe("assistant channel binding", () => {
     expect(onToolCallStarted).toHaveBeenCalledWith(expect.objectContaining({ name: "list_issues", status: "running" }));
     expect(onToolCallCompleted).toHaveBeenCalledWith(expect.objectContaining({ name: "list_issues", status: "complete" }));
     expect(onAssistantCompleted).toHaveBeenCalledWith(expect.objectContaining({ role: "assistant", content: "Olá!" }));
-    expect(onAssistantError).toHaveBeenCalledWith("Codex unavailable");
+    expect(onAssistantError).toHaveBeenCalledWith("Invalid assistant error payload.", {
+      code: "invalid_error_payload",
+      category: "protocol",
+      retryable: false,
+      message: "Invalid assistant error payload.",
+      details: {},
+    });
     expect(onAssistantDocumentChanged).toHaveBeenCalledWith({ identifier: "MAC-1" });
     expect(onAssistantDocumentChanged).toHaveBeenCalledWith({ threadId: 7006 });
     expect(onAssistantIssueCreated).toHaveBeenCalledWith({ identifier: "MAC-7", threadId: 42 });
+  });
+
+  it("forwards stable structured assistant errors without breaking the message callback", () => {
+    const handlers: Record<string, (payload: unknown) => void> = {};
+    const channel = { on: (event: string, cb: (payload: unknown) => void) => (handlers[event] = cb) } as never;
+    const onAssistantError = vi.fn();
+
+    bindAssistantEvents(channel, {
+      onHistoryLoaded: vi.fn(),
+      onMessageCreated: vi.fn(),
+      onAssistantDelta: vi.fn(),
+      onToolCallStarted: vi.fn(),
+      onToolCallCompleted: vi.fn(),
+      onAssistantCompleted: vi.fn(),
+      onAssistantError,
+    });
+
+    handlers["assistant_error"]({
+      code: "provider_disconnected",
+      category: "provider",
+      retryable: true,
+      message: "Provider disconnected",
+      details: { provider: "claude" },
+    });
+
+    expect(onAssistantError).toHaveBeenCalledWith("Provider disconnected", {
+      code: "provider_disconnected",
+      category: "provider",
+      retryable: true,
+      message: "Provider disconnected",
+      details: { provider: "claude" },
+    });
+  });
+
+  it("forwards steer failures with canonical code and prompt fields", () => {
+    const handlers: Record<string, (payload: unknown) => void> = {};
+    const channel = { on: (event: string, cb: (payload: unknown) => void) => (handlers[event] = cb) } as never;
+    const onSteerFailed = vi.fn();
+
+    bindAssistantEvents(channel, {
+      onHistoryLoaded: vi.fn(),
+      onMessageCreated: vi.fn(),
+      onAssistantDelta: vi.fn(),
+      onToolCallStarted: vi.fn(),
+      onToolCallCompleted: vi.fn(),
+      onAssistantCompleted: vi.fn(),
+      onAssistantError: vi.fn(),
+      onSteerFailed,
+    });
+
+    handlers["steer_failed"]({
+      code: "active_turn_not_steerable",
+      prompt: "prefer the simpler fix",
+    });
+
+    expect(onSteerFailed).toHaveBeenCalledWith({
+      code: "active_turn_not_steerable",
+      prompt: "prefer the simpler fix",
+    });
   });
 
   it("normalizes user_input_required questions", () => {
@@ -223,6 +290,40 @@ describe("assistant channel binding", () => {
 
   it("fails fast for blank project slugs", () => {
     expect(() => assistantTopic(" ")).toThrow("projectSlug is required");
+  });
+});
+
+describe("provider capabilities", () => {
+  it("normalizes backend capabilities exposed by the join payload", () => {
+    expect(
+      readAgentCapabilities({
+        agent_capabilities: {
+          provider: "codex",
+          resume: true,
+          interrupt: true,
+          steer: true,
+          native_goal: true,
+          model_selection: true,
+          reasoning_effort: true,
+          multi_agent: true,
+        },
+      }),
+    ).toEqual({
+      provider: "codex",
+      resume: true,
+      interrupt: true,
+      steer: true,
+      nativeGoal: true,
+      modelSelection: true,
+      reasoningEffort: true,
+      multiAgent: true,
+    });
+
+    expect(readAgentCapabilities({ agent_capabilities: {} })).toBeNull();
+  });
+
+  it("rejects malformed structured errors", () => {
+    expect(normalizeAssistantError({ message: "missing machine fields" })).toBeNull();
   });
 });
 
@@ -457,10 +558,24 @@ describe("turn status channel", () => {
       onTurnStatus,
     });
 
-    handlers["turn_status"]({ status: "interrupted", session_id: "ct-tn", can_resume: true });
+    handlers["turn_status"]({
+      status: "interrupted",
+      provider: "codex",
+      conversation_id: "ct-tn",
+      run_id: "run-tn",
+      execution_id: "execution-tn",
+      can_resume: true,
+    });
 
     expect(onTurnStatus).toHaveBeenCalledWith(
-      expect.objectContaining({ status: "interrupted", sessionId: "ct-tn", canResume: true }),
+      expect.objectContaining({
+        status: "interrupted",
+        provider: "codex",
+        conversationId: "ct-tn",
+        runId: "run-tn",
+        executionId: "execution-tn",
+        canResume: true,
+      }),
     );
   });
 
@@ -468,7 +583,10 @@ describe("turn status channel", () => {
     expect(
       normalizeTurnStatus({
         status: "running",
-        session_id: "ct-1",
+        provider: "codex",
+        conversation_id: "ct-1",
+        run_id: "run-1",
+        execution_id: "execution-1",
         started_at: "2026-06-22T12:00:00Z",
         finished_at: null,
         can_resume: false,
@@ -484,8 +602,12 @@ describe("turn status channel", () => {
       }),
     ).toEqual({
       status: "running",
-      generation: null,
-      sessionId: "ct-1",
+      provider: "codex",
+      conversationId: "ct-1",
+      runId: "run-1",
+      executionId: "execution-1",
+      queuedCount: 0,
+      error: null,
       startedAt: "2026-06-22T12:00:00Z",
       finishedAt: null,
       canResume: false,
@@ -502,14 +624,53 @@ describe("turn status channel", () => {
 
     expect(normalizeTurnStatus(null)).toEqual({
       status: "unknown",
-      generation: null,
-      sessionId: null,
+      provider: null,
+      conversationId: null,
+      runId: null,
+      executionId: null,
+      queuedCount: 0,
+      error: null,
       startedAt: null,
       finishedAt: null,
       canResume: false,
       activeTools: [],
       lastActivityAt: null,
     });
+  });
+
+  it("keeps provider-neutral run identity, durable queue count, and structured errors", () => {
+    expect(
+      normalizeTurnStatus({
+        status: "failed",
+        provider: "claude",
+        conversation_id: "claude-chat-7",
+        run_id: "run-7",
+        execution_id: "execution-7",
+        queued_count: 2,
+        error: {
+          code: "provider_disconnected",
+          category: "provider",
+          retryable: true,
+          message: "The provider disconnected.",
+          details: {},
+        },
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        provider: "claude",
+        conversationId: "claude-chat-7",
+        runId: "run-7",
+        executionId: "execution-7",
+        queuedCount: 2,
+        error: {
+          code: "provider_disconnected",
+          category: "provider",
+          retryable: true,
+          message: "The provider disconnected.",
+          details: {},
+        },
+      }),
+    );
   });
 
   it("reads last_turn from a join payload, or null when absent", () => {
@@ -614,13 +775,22 @@ describe("fetchToolOutput", () => {
     await expect(promise).resolves.toBe("");
   });
 
-  it("rejects with the server reason on error", async () => {
+  it("rejects with the canonical server message on error", async () => {
     const { channel, responders } = mockReceiveChannel();
 
     const promise = fetchToolOutput(channel, 12, "call-1");
-    responders.error({ reason: "not found" });
+    responders.error({ message: "not found" });
 
     await expect(promise).rejects.toThrow("not found");
+  });
+
+  it("does not read the removed reason alias", async () => {
+    const { channel, responders } = mockReceiveChannel();
+
+    const promise = fetchToolOutput(channel, 12, "call-1");
+    responders.error({ reason: "legacy error" });
+
+    await expect(promise).rejects.toThrow("fetch_tool_output failed");
   });
 
   it("rejects for a blank tool call id without pushing", async () => {
@@ -650,11 +820,11 @@ describe("loadOlderMessages", () => {
     expect(push).toHaveBeenCalledWith("load_older_messages", { before_sequence: 42 });
   });
 
-  it("rejects with the server reason on error", async () => {
+  it("rejects with the canonical server message on error", async () => {
     const { channel, responders } = mockReceiveChannel();
 
     const promise = loadOlderMessages(channel, 42);
-    responders.error({ reason: "invalid cursor" });
+    responders.error({ message: "invalid cursor" });
 
     await expect(promise).rejects.toThrow("invalid cursor");
   });

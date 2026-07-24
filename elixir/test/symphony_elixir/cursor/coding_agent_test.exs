@@ -33,8 +33,9 @@ defmodule SymphonyElixir.Cursor.CodingAgentTest do
     on_message = fn message -> Agent.update(collector, &[message | &1]) end
 
     assert {:ok, result} = CodingAgent.run_turn(session, "do it", @issue, on_message: on_message)
-    assert result.session_id =~ session.session_uuid
-    assert result.cli_session_id == "chat-123"
+    assert result.provider == "cursor"
+    assert result.conversation_id == "chat-123"
+    assert is_binary(result.run_id)
 
     events = collector |> Agent.get(&Enum.reverse/1) |> Enum.map(& &1.event)
     assert :session_started in events
@@ -49,7 +50,7 @@ defmodule SymphonyElixir.Cursor.CodingAgentTest do
       CodingAgent.start_session(ws, workspace_root: root, cursor_command: "FAKE_CURSOR_MODE=happy #{@fake}")
 
     {:ok, result} = CodingAgent.run_turn(session, "turn 1", @issue, [])
-    session = Map.put(session, :cli_session_id, result.cli_session_id)
+    session = Map.put(session, :cli_session_id, result.conversation_id)
 
     args =
       SymphonyElixir.Cursor.CliRunner.build_args(%{
@@ -167,9 +168,7 @@ defmodule SymphonyElixir.Cursor.CodingAgentTest do
     on_message = fn message -> Agent.update(collector, &[message | &1]) end
 
     assert {:ok, turn} =
-             CodingAgent.run_turn(session, "do the thing", %{id: "1", identifier: "T-1"},
-               on_message: on_message
-             )
+             CodingAgent.run_turn(session, "do the thing", %{id: "1", identifier: "T-1"}, on_message: on_message)
 
     messages = Agent.get(collector, &Enum.reverse/1)
     Agent.stop(collector)

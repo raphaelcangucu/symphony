@@ -1,6 +1,7 @@
 defmodule SymphonyElixir.Assistant.AgentSessionAgentTest do
   use ExUnit.Case, async: false
 
+  alias SymphonyElixir.Agent.ConversationRef
   alias SymphonyElixir.Assistant.{AgentSession, History}
   alias SymphonyElixir.Claude.GoalStore
   alias SymphonyElixir.Repo
@@ -19,24 +20,42 @@ defmodule SymphonyElixir.Assistant.AgentSessionAgentTest do
     :ok
   end
 
-  test "the runner receives the resolved agent kind and the per-agent backend thread id" do
+  test "the runner receives the resolved agent kind and canonical conversation ref" do
     {:ok, thread} = History.create_freeform_thread(%{workspace_path: "/tmp/agent-test"})
-    {:ok, thread} = History.put_agent_thread_id(thread, "claude", "sess-prev")
+    {:ok, ref} = ConversationRef.new("claude", "sess-prev")
+    {:ok, thread} = History.put_conversation_ref(thread, ref)
 
     test_pid = self()
 
     runner = fn _workspace, _prompt, _issue, opts ->
-      send(test_pid, {:runner_opts, Keyword.get(opts, :agent_kind), Keyword.get(opts, :agent_thread_id)})
-      {:ok, %{assistant_message: "ok", tool_calls: [], thread_id: "sess-new", turn_id: "t1"}}
+      send(
+        test_pid,
+        {:runner_opts, Keyword.get(opts, :agent_kind), Keyword.get(opts, :conversation_ref)}
+      )
+
+      {:ok,
+       %{
+         assistant_message: "ok",
+         tool_calls: [],
+         conversation_id: "sess-new",
+         run_id: "t1"
+       }}
     end
 
     {:ok, _result} =
       AgentSession.send_message_to_thread(thread, "hello", %{"agent" => "claude"}, runner: runner)
 
-    assert_received {:runner_opts, "claude", "sess-prev"}
+    assert_received {:runner_opts, "claude",
+                     %ConversationRef{
+                       provider: "claude",
+                       conversation_id: "sess-prev"
+                     }}
 
     reloaded = Repo.get!(SymphonyElixir.Assistant.Thread, thread.id)
-    assert History.agent_thread_id(reloaded, "claude") == "sess-new"
+
+    assert {:ok, %ConversationRef{conversation_id: "sess-new"}} =
+             History.conversation_ref(reloaded, "claude")
+
     assert reloaded.agent_kind == "claude"
   end
 
@@ -48,7 +67,7 @@ defmodule SymphonyElixir.Assistant.AgentSessionAgentTest do
 
     runner = fn _w, _p, _i, opts ->
       send(test_pid, {:agent, Keyword.get(opts, :agent_kind)})
-      {:ok, %{assistant_message: "ok", tool_calls: [], thread_id: "x", turn_id: "t"}}
+      {:ok, %{assistant_message: "ok", tool_calls: [], conversation_id: "x", run_id: "t"}}
     end
 
     {:ok, _} = AgentSession.send_message_to_thread(thread, "hi", %{}, runner: runner)
@@ -60,16 +79,16 @@ defmodule SymphonyElixir.Assistant.AgentSessionAgentTest do
     test_pid = self()
 
     runner = fn _w, _p, _i, opts ->
-      send(test_pid, {:thread_id_opt, Keyword.get(opts, :agent_thread_id)})
-      {:ok, %{assistant_message: "ok", tool_calls: [], cli_session_id: "cl-1", turn_id: "t"}}
+      send(test_pid, {:conversation_ref, Keyword.get(opts, :conversation_ref)})
+      {:ok, %{assistant_message: "ok", tool_calls: [], conversation_id: "cl-1", run_id: "t"}}
     end
 
     {:ok, _} = AgentSession.send_message_to_thread(thread, "turn 1", %{"agent" => "claude"}, runner: runner)
-    assert_received {:thread_id_opt, nil}
+    assert_received {:conversation_ref, nil}
 
     # Same STALE struct (simulates the channel's frozen assign) — the session layer must reload.
     {:ok, _} = AgentSession.send_message_to_thread(thread, "turn 2", %{"agent" => "claude"}, runner: runner)
-    assert_received {:thread_id_opt, "cl-1"}
+    assert_received {:conversation_ref, %ConversationRef{provider: "claude", conversation_id: "cl-1"}}
   end
 
   test "rejects a provider switch while an enabled Goal is bound to another provider" do
@@ -83,9 +102,7 @@ defmodule SymphonyElixir.Assistant.AgentSessionAgentTest do
     {:ok, thread} = History.set_goal_mode(thread, true, "Audit")
 
     assert {:error, {:authoring_goal_provider_mismatch, "codex", "claude"}} =
-             AgentSession.send_message_to_thread(thread, "switch", %{"agent" => "claude"},
-               runner: fn _, _, _, _ -> flunk("provider mismatch must fail before running") end
-             )
+             AgentSession.send_message_to_thread(thread, "switch", %{"agent" => "claude"}, runner: fn _, _, _, _ -> flunk("provider mismatch must fail before running") end)
 
     assert Repo.get!(SymphonyElixir.Assistant.Thread, thread.id).agent_kind == "codex"
     assert :error = GoalStore.read(workspace, :authoring, thread.id)

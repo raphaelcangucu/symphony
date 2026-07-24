@@ -22,10 +22,10 @@ export interface AssistantChannelHandlers {
   onToolCallStarted: (toolCall: AssistantToolCall) => void;
   onToolCallCompleted: (toolCall: AssistantToolCall) => void;
   onAssistantCompleted: (message: AssistantChatMessage) => void;
-  onAssistantError: (message: string) => void;
+  onAssistantError: (message: string, error?: AssistantTurnError) => void;
   onAssistantDocumentChanged?: (payload: AssistantDocumentChangedPayload) => void;
   onAssistantIssueCreated?: (payload: AssistantIssueCreatedPayload) => void;
-  onSteerFailed?: (payload: { reason: string; message: string }) => void;
+  onSteerFailed?: (payload: { code: string; prompt: string }) => void;
   onUserInputRequired?: (request: UserQuestionsRequest) => void;
   onBtwDelta?: (payload: { btwId: string; delta: string }) => void;
   onBtwCompleted?: (payload: { btwId: string; message: string }) => void;
@@ -176,13 +176,25 @@ export interface AssistantActiveTool {
 
 export interface AssistantTurnStatus {
   status: string;
-  generation: string | null;
-  sessionId: string | null;
+  provider: string | null;
+  conversationId: string | null;
+  runId: string | null;
+  executionId: string | null;
+  queuedCount: number;
+  error: AssistantTurnError | null;
   startedAt: string | null;
   finishedAt: string | null;
   canResume: boolean;
   activeTools: AssistantActiveTool[];
   lastActivityAt: string | null;
+}
+
+export interface AssistantTurnError {
+  code: string;
+  category: string;
+  retryable: boolean;
+  message: string;
+  details: Record<string, unknown>;
 }
 
 export interface AssistantApprovalRequest {
@@ -203,8 +215,12 @@ interface BackendActiveToolPayload {
 
 interface BackendTurnStatusPayload {
   status?: string | null;
-  generation?: string | null;
-  session_id?: string | null;
+  provider?: string | null;
+  conversation_id?: string | null;
+  run_id?: string | null;
+  execution_id?: string | null;
+  queued_count?: number | null;
+  error?: BackendTurnErrorPayload | null;
   started_at?: string | null;
   finished_at?: string | null;
   can_resume?: boolean | null;
@@ -212,18 +228,56 @@ interface BackendTurnStatusPayload {
   last_activity_at?: string | null;
 }
 
+interface BackendTurnErrorPayload {
+  code?: string | null;
+  category?: string | null;
+  retryable?: boolean | null;
+  message?: string | null;
+  details?: Record<string, unknown> | null;
+}
+
 export function normalizeTurnStatus(payload: unknown): AssistantTurnStatus {
   const data = (payload ?? {}) as BackendTurnStatusPayload;
   return {
     status: typeof data.status === "string" ? data.status : "unknown",
-    generation: typeof data.generation === "string" ? data.generation : null,
-    sessionId: typeof data.session_id === "string" ? data.session_id : null,
+    provider: nonEmptyString(data.provider),
+    conversationId: nonEmptyString(data.conversation_id),
+    runId: nonEmptyString(data.run_id),
+    executionId: nonEmptyString(data.execution_id),
+    queuedCount:
+      typeof data.queued_count === "number" && Number.isFinite(data.queued_count)
+        ? Math.max(0, Math.trunc(data.queued_count))
+        : 0,
+    error: normalizeTurnError(data.error),
     startedAt: typeof data.started_at === "string" ? data.started_at : null,
     finishedAt: typeof data.finished_at === "string" ? data.finished_at : null,
     canResume: data.can_resume === true,
     activeTools: normalizeActiveTools(data.active_tools),
     lastActivityAt: typeof data.last_activity_at === "string" ? data.last_activity_at : null,
   };
+}
+
+function normalizeTurnError(error: BackendTurnErrorPayload | null | undefined): AssistantTurnError | null {
+  if (!error || typeof error !== "object") return null;
+
+  const code = nonEmptyString(error.code);
+  const category = nonEmptyString(error.category);
+  const message = nonEmptyString(error.message);
+  if (!code || !category || !message) return null;
+
+  return {
+    code,
+    category,
+    retryable: error.retryable === true,
+    message,
+    details: error.details && typeof error.details === "object" ? error.details : {},
+  };
+}
+
+export function normalizeAssistantError(payload: unknown): AssistantTurnError | null {
+  return normalizeTurnError(
+    payload && typeof payload === "object" ? (payload as BackendTurnErrorPayload) : null,
+  );
 }
 
 function normalizeActiveTools(tools: BackendActiveToolPayload[] | null | undefined): AssistantActiveTool[] {
@@ -251,6 +305,37 @@ function normalizeActiveTools(tools: BackendActiveToolPayload[] | null | undefin
 export function readLastTurn(joinPayload: unknown): AssistantTurnStatus | null {
   const data = (joinPayload ?? {}) as { last_turn?: unknown };
   return data.last_turn ? normalizeTurnStatus(data.last_turn) : null;
+}
+
+export interface AssistantBackendCapabilities {
+  provider: string;
+  resume: boolean;
+  interrupt: boolean;
+  steer: boolean;
+  nativeGoal: boolean;
+  modelSelection: boolean;
+  reasoningEffort: boolean;
+  multiAgent: boolean;
+}
+
+export function readAgentCapabilities(joinPayload: unknown): AssistantBackendCapabilities | null {
+  const capabilities = (joinPayload as { agent_capabilities?: unknown } | null)?.agent_capabilities;
+  if (!capabilities || typeof capabilities !== "object") return null;
+
+  const data = capabilities as Record<string, unknown>;
+  const provider = nonEmptyString(data.provider);
+  if (!provider) return null;
+
+  return {
+    provider,
+    resume: data.resume === true,
+    interrupt: data.interrupt === true,
+    steer: data.steer === true,
+    nativeGoal: data.native_goal === true,
+    modelSelection: data.model_selection === true,
+    reasoningEffort: data.reasoning_effort === true,
+    multiAgent: data.multi_agent === true,
+  };
 }
 
 export interface AssistantDocumentChangedPayload {
@@ -283,10 +368,6 @@ interface DeltaPayload {
 
 interface ToolCallPayload {
   tool_call?: Parameters<typeof normalizeToolCall>[0] | null;
-}
-
-interface ErrorPayload {
-  message?: string | null;
 }
 
 interface ApprovalRequiredPayload {
@@ -404,7 +485,15 @@ export function bindAssistantEvents(channel: Channel, handlers: AssistantChannel
   });
 
   channel.on("assistant_error", (payload) => {
-    handlers.onAssistantError((payload as ErrorPayload).message ?? "Assistant request failed");
+    const error = normalizeAssistantError(payload) ?? {
+      code: "invalid_error_payload",
+      category: "protocol",
+      retryable: false,
+      message: "Invalid assistant error payload.",
+      details: {},
+    };
+
+    handlers.onAssistantError(error.message, error);
   });
 
   channel.on("assistant_document_changed", (payload) => {
@@ -441,10 +530,10 @@ export function bindAssistantEvents(channel: Channel, handlers: AssistantChannel
   });
 
   channel.on("steer_failed", (payload) => {
-    const data = payload as { reason?: string | null; message?: string | null };
+    const data = payload as { code?: string | null; prompt?: string | null };
     handlers.onSteerFailed?.({
-      reason: data.reason ?? "steer_failed",
-      message: data.message ?? "",
+      code: data.code ?? "steer_failed",
+      prompt: data.prompt ?? "",
     });
   });
 
@@ -575,9 +664,10 @@ export function loadOlderMessages(channel: Channel, beforeSequence: number): Pro
 }
 
 function readReceiveErrorReason(response: unknown): string | null {
-  if (typeof response === "object" && response !== null && "reason" in response) {
-    const reason = (response as { reason?: unknown }).reason;
-    return typeof reason === "string" && reason.trim() !== "" ? reason : null;
+  if (typeof response === "object" && response !== null) {
+    const data = response as { message?: unknown };
+    const message = typeof data.message === "string" ? data.message.trim() : "";
+    if (message !== "") return message;
   }
   return null;
 }

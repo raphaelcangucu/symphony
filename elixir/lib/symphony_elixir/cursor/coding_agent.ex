@@ -20,7 +20,7 @@ defmodule SymphonyElixir.Cursor.CodingAgent do
 
   require Logger
 
-  alias SymphonyElixir.Agent.SessionTranscript
+  alias SymphonyElixir.Agent.{ConversationRef, SessionTranscript}
   alias SymphonyElixir.Assistant.ToolExecutor
   alias SymphonyElixir.Claude.ApprovalBroker
   alias SymphonyElixir.Claude.AppServer.ToolGateway
@@ -45,6 +45,9 @@ defmodule SymphonyElixir.Cursor.CodingAgent do
         }
 
   @impl true
+  def capabilities, do: SymphonyElixir.Agent.BackendCapabilities.for("cursor")
+
+  @impl true
   def start_session(workspace, opts \\ []) do
     with :ok <- validate_workspace_cwd(workspace, opts),
          {:ok, gateway} <- maybe_register_tools(workspace, opts) do
@@ -53,7 +56,7 @@ defmodule SymphonyElixir.Cursor.CodingAgent do
          session_uuid: generate_uuid(),
          workspace: Path.expand(workspace),
          command: resolve_command(opts),
-         cli_session_id: nil,
+         cli_session_id: conversation_id(opts, "cursor"),
          model: Keyword.get(opts, :model),
          gateway_token: Map.get(gateway, :token),
          mcp_config_path: Map.get(gateway, :path),
@@ -67,10 +70,14 @@ defmodule SymphonyElixir.Cursor.CodingAgent do
   def run_turn(session, prompt, issue, opts \\ []) do
     on_message = Keyword.get(opts, :on_message, &default_on_message/1)
     turn_id = generate_uuid()
-    session_id = "#{session.session_uuid}-#{turn_id}"
     prior_totals = session_usage_totals(session)
 
-    emit_message(on_message, :session_started, %{session_id: session_id, thread_id: session.session_uuid, turn_id: turn_id}, %{})
+    emit_message(
+      on_message,
+      :session_started,
+      %{provider: "cursor", conversation_id: session.cli_session_id, run_id: turn_id},
+      %{}
+    )
 
     write_transcript_sidecar(session, opts)
 
@@ -112,32 +119,29 @@ defmodule SymphonyElixir.Cursor.CodingAgent do
         {:ok,
          %{
            result: :turn_completed,
-           session_id: session_id,
-           thread_id: session.session_uuid,
-           turn_id: turn_id,
-           cli_session_id: result.cli_session_id,
+           provider: "cursor",
+           conversation_id: result.cli_session_id,
+           run_id: turn_id,
            usage: usage_totals,
            usage_totals: usage_totals,
            cost_usd: result.cost_usd
          }}
 
       {:error, {:resume_session_not_found, stale_id}} when session.cli_session_id != nil ->
-        # The persisted chat no longer exists in cursor-agent's local store.
-        # Restart the turn as a fresh session instead of hard-failing the
-        # thread forever; the fresh cli_session_id is persisted upstream, so
-        # the thread self-heals for subsequent turns.
-        Logger.warning("Cursor resume chat #{inspect(stale_id)} not found for #{issue_context(issue)}; retrying with a fresh session")
-
-        run_turn(%{session | cli_session_id: nil}, prompt, issue, opts)
+        reason = {:resume_conversation_failed, stale_id, :not_found}
+        Logger.warning("Cursor turn failed for #{issue_context(issue)}: #{inspect(reason)}")
+        emit_message(on_message, :turn_ended_with_error, %{reason: reason}, %{})
+        {:error, reason}
 
       {:error, {:turn_failed, "cursor-agent exited with code 1"}} when session.cli_session_id != nil ->
-        Logger.warning("Cursor resumed chat #{inspect(session.cli_session_id)} exited for #{issue_context(issue)}; retrying with a fresh session")
-
-        run_turn(%{session | cli_session_id: nil}, prompt, issue, opts)
+        reason = {:resume_conversation_failed, session.cli_session_id, :provider_exit}
+        Logger.warning("Cursor turn failed for #{issue_context(issue)}: #{inspect(reason)}")
+        emit_message(on_message, :turn_ended_with_error, %{reason: reason}, %{})
+        {:error, reason}
 
       {:error, reason} ->
         Logger.warning("Cursor turn failed for #{issue_context(issue)}: #{inspect(reason)}")
-        emit_message(on_message, :turn_ended_with_error, %{session_id: session_id, reason: reason}, %{})
+        emit_message(on_message, :turn_ended_with_error, %{reason: reason}, %{})
         {:error, reason}
     end
   end
@@ -173,6 +177,16 @@ defmodule SymphonyElixir.Cursor.CodingAgent do
       execution_mode: Keyword.get(opts, :execution_mode),
       timeout_ms: Config.agent_turn_timeout_ms()
     }
+  end
+
+  defp conversation_id(opts, provider) do
+    case Keyword.get(opts, :conversation_ref) do
+      %ConversationRef{provider: ^provider, conversation_id: conversation_id} ->
+        conversation_id
+
+      _ ->
+        nil
+    end
   end
 
   defp acp_turn_args(runner_args, opts) do
@@ -277,7 +291,7 @@ defmodule SymphonyElixir.Cursor.CodingAgent do
     request_id = generate_uuid()
 
     if is_function(on_approval_required, 1) do
-      on_approval_required.(%{
+      request = %{
         request_id: request_id,
         agent: "cursor",
         tool_name: tool,
@@ -285,9 +299,9 @@ defmodule SymphonyElixir.Cursor.CodingAgent do
         cwd: workspace,
         input: arguments,
         reason: "Cursor requested approval to run Symphony MCP tool #{tool}"
-      })
+      }
 
-      case ApprovalBroker.await(request_id, timeout_ms) do
+      case ApprovalBroker.await(request_id, timeout_ms, fn -> on_approval_required.(request) end) do
         :approve -> executor.(tool, arguments)
         :deny -> tool_error("Denied by operator: #{tool}")
       end
@@ -504,6 +518,7 @@ defmodule SymphonyElixir.Cursor.CodingAgent do
   defp extract_notification_usage(_notification), do: nil
 
   @doc false
+  @spec bridge_event_to_message(map()) :: {atom(), %{payload: map(), raw: String.t()}}
   def bridge_event_to_message(%{"method" => "item/created", "params" => %{"item" => item}} = notification) do
     event =
       case item do
