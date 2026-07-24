@@ -59,7 +59,7 @@ defmodule SymphonyElixir.Evidence.Manifest do
   def artifact_label(entry) do
     case artifact_path(entry) do
       nil -> nil
-      path -> path |> Path.basename() |> Path.rootname()
+      path -> Path.basename(path)
     end
   end
 
