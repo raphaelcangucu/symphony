@@ -83,7 +83,7 @@ describe("PreviewTab", () => {
     expect(screen.queryByRole("link", { name: /^open api preview$/i })).not.toBeInTheDocument();
   });
 
-  it("shows tunnel state inline and one ready URL when the tunnel is running", () => {
+  it("shows tunnel state inline and both tunnel and local ready URLs when the tunnel is running", () => {
     renderPreview(
       response(
         [
@@ -106,8 +106,15 @@ describe("PreviewTab", () => {
       "href",
       "https://macro-markets-510-back.example.tracker.cods.dev/admin",
     );
-    expect(screen.getAllByText("https://macro-markets-510-back.example.tracker.cods.dev/admin")).toHaveLength(1);
-    expect(screen.queryByText("http://localhost:4102/admin")).not.toBeInTheDocument();
+    expect(screen.getByText(/^Tunnel:$/)).toBeInTheDocument();
+    expect(screen.getByText(/^Local:$/)).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "https://macro-markets-510-back.example.tracker.cods.dev/admin" }),
+    ).toHaveAttribute("href", "https://macro-markets-510-back.example.tracker.cods.dev/admin");
+    expect(screen.getByRole("link", { name: "http://localhost:4102/admin" })).toHaveAttribute(
+      "href",
+      "http://localhost:4102/admin",
+    );
   });
 
   it("does not duplicate a localhost URL when the preview already points at loopback", () => {
@@ -233,7 +240,7 @@ describe("PreviewTab", () => {
     expect(hookActions.restartServer).toHaveBeenCalledWith(10);
   });
 
-  it("shows stopped tunnel state inline and only the localhost ready URL", () => {
+  it("shows stopped tunnel state inline with both tunnel and local ready URLs", () => {
     renderPreview(
       response(
         [
@@ -253,14 +260,19 @@ describe("PreviewTab", () => {
     expect(screen.getByText(/tunnel: stopped/i)).toBeInTheDocument();
     expect(screen.queryByText(/cloudflare tunnel is not running/i)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /start tunnel/i })).toBeInTheDocument();
-    expect(
-      screen.queryByRole("link", { name: "https://macro-markets-510-back.example.tracker.cods.dev/admin" }),
-    ).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: /^open preview$/i })).toHaveAttribute(
       "href",
       "http://localhost:4102/admin",
     );
-    expect(screen.getAllByText("http://localhost:4102/admin")).toHaveLength(1);
+    expect(screen.getByText(/^Tunnel:$/)).toBeInTheDocument();
+    expect(screen.getByText(/^Local:$/)).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "https://macro-markets-510-back.example.tracker.cods.dev/admin" }),
+    ).toHaveAttribute("href", "https://macro-markets-510-back.example.tracker.cods.dev/admin");
+    expect(screen.getByRole("link", { name: "http://localhost:4102/admin" })).toHaveAttribute(
+      "href",
+      "http://localhost:4102/admin",
+    );
     expect(screen.queryByRole("link", { name: /^open back preview$/i })).not.toBeInTheDocument();
   });
 
