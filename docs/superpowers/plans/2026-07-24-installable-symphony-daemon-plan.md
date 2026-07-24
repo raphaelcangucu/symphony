@@ -529,7 +529,7 @@ git commit -m "feat(daemon): expose installed build identity"
 - Create: `elixir/lib/symphony_elixir/release.ex`
 - Test: `elixir/test/symphony_elixir/release_test.exs`
 
-- [ ] **Step 1: Write a failing release contract test**
+- [x] **Step 1: Write a failing release contract test**
 
 ```elixir
 defmodule SymphonyElixir.ReleaseTest do
@@ -555,7 +555,7 @@ defmodule SymphonyElixir.ReleaseTest do
 end
 ```
 
-- [ ] **Step 2: Run the test and observe missing release configuration**
+- [x] **Step 2: Run the test and observe missing release configuration**
 
 Run:
 
@@ -566,7 +566,7 @@ mix test test/symphony_elixir/release_test.exs
 
 Expected: FAIL because `:releases` and overlay files do not exist.
 
-- [ ] **Step 3: Add the named release and asset-copy step**
+- [x] **Step 3: Add the named release and asset-copy step**
 
 Add `releases: releases()` to `project/0`, then:
 
@@ -626,7 +626,7 @@ defp copy_release_assets(%Mix.Release{} = release) do
 end
 ```
 
-- [ ] **Step 4: Add release entrypoints and templates**
+- [x] **Step 4: Add release entrypoints and templates**
 
 Create `lib/symphony_elixir/release.ex`:
 
@@ -685,7 +685,7 @@ exec "$release_root/bin/symphony" eval \
 
 Make both overlays executable in git.
 
-- [ ] **Step 5: Run unit and real release smoke checks**
+- [x] **Step 5: Run unit and real release smoke checks**
 
 Run:
 
@@ -704,7 +704,7 @@ _build/prod/rel/symphony/bin/symphony eval \
 
 Expected: tests PASS and the last command prints `sqlite-ok`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add elixir/mix.exs elixir/rel \
