@@ -23,6 +23,10 @@ services, ExUnit, POSIX shell launchers, Make.
 - Run Elixir commands from `elixir/`.
 - Follow TDD for each behavior: failing test, observed failure, minimal
   implementation, passing test.
+- Under WSL, run exactly one test file or one narrowly targeted test filter per
+  process, sequentially. Split every multi-file command below. Never run a
+  directory-wide suite or repository-wide gate unless the user explicitly
+  approves that specific run.
 - Every public `def` under `lib/` needs an adjacent `@spec`.
 - Do not stop or modify the canonical development daemon during unit work.
 - Real systemd acceptance uses a unique unit name and isolated port/database.
@@ -90,7 +94,7 @@ services, ExUnit, POSIX shell launchers, Make.
 - Create: `elixir/lib/symphony_elixir/daemon/paths.ex`
 - Test: `elixir/test/symphony_elixir/daemon/paths_test.exs`
 
-- [ ] **Step 1: Write failing XDG path tests**
+- [x] **Step 1: Write failing XDG path tests**
 
 ```elixir
 defmodule SymphonyElixir.Daemon.PathsTest do
@@ -150,7 +154,7 @@ defmodule SymphonyElixir.Daemon.PathsTest do
 end
 ```
 
-- [ ] **Step 2: Run the test and observe the missing module**
+- [x] **Step 2: Run the test and observe the missing module**
 
 Run:
 
@@ -161,7 +165,7 @@ mix test test/symphony_elixir/daemon/paths_test.exs
 
 Expected: FAIL because `SymphonyElixir.Daemon.Paths` is undefined.
 
-- [ ] **Step 3: Implement the path struct and resolver**
+- [x] **Step 3: Implement the path struct and resolver**
 
 ```elixir
 defmodule SymphonyElixir.Daemon.Paths do
@@ -281,7 +285,7 @@ defmodule SymphonyElixir.Daemon.Paths do
 end
 ```
 
-- [ ] **Step 4: Run the focused test**
+- [x] **Step 4: Run the focused test**
 
 Run:
 
@@ -293,7 +297,7 @@ mix specs.check
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add elixir/lib/symphony_elixir/daemon/paths.ex \
@@ -2799,7 +2803,7 @@ git commit -m "test(daemon): prove checkout-independent release boot"
 
 ---
 
-### Task 12: Operator docs, fake-systemd integration, real WSL acceptance, and full gates
+### Task 12: Operator docs, fake-systemd integration, real WSL acceptance, and approved gates
 
 **Files:**
 - Modify: `INSTALL.md`
