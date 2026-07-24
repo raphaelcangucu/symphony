@@ -341,6 +341,7 @@ defmodule SymphonyElixir.Assistant.TurnManager do
     case persist_interrupt(thread_id, reason) do
       {:ok, updated_thread} ->
         if is_pid(worker_pid), do: send(worker_pid, {:agent_interrupt})
+        state |> Map.get({:turn, thread_id}) |> notify_reply_to({:error, :interrupted})
         state = cleanup_interrupted_turn(thread_id, preserve_queue?, state)
         broadcast_from(self(), thread_id, {:turn_status, :interrupted, History.turn_payload(updated_thread)})
         {:reply, :ok, state}

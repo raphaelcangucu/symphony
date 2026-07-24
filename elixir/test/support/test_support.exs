@@ -63,6 +63,8 @@ defmodule SymphonyElixir.TestSupport do
               :observability_render_interval_ms,
               :default_agent_kind,
               :codex_command,
+              :codex_approval_policy,
+              :codex_thread_sandbox,
               :claude_command
             ],
             &Application.delete_env(:symphony_elixir, &1)
@@ -108,7 +110,9 @@ defmodule SymphonyElixir.TestSupport do
       {:observability_refresh_ms, Keyword.get(config, :observability_refresh_ms)},
       {:observability_render_interval_ms, Keyword.get(config, :observability_render_interval_ms)},
       {:server_port, Keyword.get(config, :server_port)},
-      {:server_host, Keyword.get(config, :server_host)}
+      {:server_host, Keyword.get(config, :server_host)},
+      {:codex_approval_policy, Keyword.get(config, :codex_approval_policy)},
+      {:codex_thread_sandbox, Keyword.get(config, :codex_thread_sandbox)}
     ]
     |> Enum.each(fn {key, value} -> Application.put_env(:symphony_elixir, key, value) end)
 
