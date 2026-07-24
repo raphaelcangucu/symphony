@@ -284,7 +284,7 @@ git commit -m "feat(mobile): add secure connection onboarding"
 - Create: `mobile/src/features/sessions/session-tree.ts`
 - Create: `mobile/src/features/sessions/session-tree.test.ts`
 
-- [ ] **Step 1: Write failing grouping tests**
+- [x] **Step 1: Write failing grouping tests**
 
 Define the desired API in tests:
 
@@ -321,7 +321,7 @@ Prove:
 - archived rows are excluded unless requested;
 - untitled sessions use issue identifier, preview, then `New session`.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run:
 
@@ -331,7 +331,7 @@ cd mobile && npm run test:unit -- src/features/sessions/session-tree.test.ts
 
 Expected: FAIL because `buildSessionTree` is missing.
 
-- [ ] **Step 3: Implement the pure tree**
+- [x] **Step 3: Implement the pure tree**
 
 Export:
 
@@ -350,7 +350,7 @@ export function buildSessionTree(input: BuildSessionTreeInput): SessionTreeGroup
 
 Keep all React, navigation, and network imports out of this file.
 
-- [ ] **Step 4: Verify GREEN**
+- [x] **Step 4: Verify GREEN**
 
 Run:
 
@@ -360,7 +360,7 @@ cd mobile && npm run test:unit -- src/features/sessions/session-tree.test.ts
 
 Expected: all grouping tests pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add mobile/src/features/sessions/session-tree.ts mobile/src/features/sessions/session-tree.test.ts
