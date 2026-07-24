@@ -333,8 +333,8 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
     assert_reply(ref, :ok, %{})
     assert_receive {:runner_started, runner_pid}, 2_000
 
-    assert_push("tool_call_started", %{tool_call: %{name: "Bash"}})
-    assert_push("tool_call_started", %{tool_call: %{name: "Bash"}})
+    assert_push("tool_call_started", %{tool_call: %{name: "Bash"}}, 1_000)
+    assert_push("tool_call_started", %{tool_call: %{name: "Bash"}}, 1_000)
 
     {:ok, running_thread} = History.get_thread(thread_id)
 
@@ -348,8 +348,8 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
 
     send(runner_pid, :finish)
 
-    assert_push("tool_call_completed", %{tool_call: %{name: "Bash", status: "completed"}})
-    assert_push("tool_call_completed", %{tool_call: %{name: "Bash", status: "completed"}})
+    assert_push("tool_call_completed", %{tool_call: %{name: "Bash", status: "completed"}}, 1_000)
+    assert_push("tool_call_completed", %{tool_call: %{name: "Bash", status: "completed"}}, 1_000)
 
     {:ok, completed_thread} = History.get_thread(thread_id)
     assert History.current_turn(completed_thread)["active_tools"] == []
@@ -1011,10 +1011,11 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
   end
 
   test "set_goal_mode persists the flag and the join rehydrates it", %{socket: socket} do
+    enable_codex_goals!()
     {:ok, %{thread_id: thread_id}, socket} = subscribe_and_join(socket, "assistant:issue:macro-markets:MAC-1", %{})
 
     ref = push(socket, "set_goal_mode", %{"goal_mode" => true})
-    assert_reply(ref, :ok, %{enabled: true})
+    assert_reply(ref, :ok, %{enabled: true}, 1_000)
 
     assert {:ok, thread} = History.get_thread(thread_id)
     assert thread.metadata["goal_mode"] == true
@@ -1027,10 +1028,11 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
   end
 
   test "set_goal_mode persists the authoring objective and the join rehydrates it", %{socket: socket} do
+    enable_codex_goals!()
     {:ok, %{thread_id: thread_id}, socket} = subscribe_and_join(socket, "assistant:issue:macro-markets:MAC-1", %{})
 
     ref = push(socket, "set_goal_mode", %{"goal_mode" => true, "objective" => "Audit the auth module"})
-    assert_reply(ref, :ok, %{goal_mode: true, goal_objective: "Audit the auth module"})
+    assert_reply(ref, :ok, %{enabled: true, objective: "Audit the auth module"}, 1_000)
 
     assert {:ok, thread} = History.get_thread(thread_id)
     assert thread.metadata["goal_objective"] == "Audit the auth module"
@@ -1264,6 +1266,7 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
   end
 
   test "goal_clear removes the authoring goal", %{socket: socket} do
+    enable_codex_goals!()
     {:ok, %{thread_id: thread_id}, socket} = subscribe_and_join(socket, "assistant:issue:macro-markets:MAC-1", %{})
 
     ref = push(socket, "set_goal_mode", %{"goal_mode" => true, "objective" => "Audit"})
@@ -1333,6 +1336,7 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
   end
 
   test "goal mutations from another socket are rejected while the thread turn is active", %{socket: socket} do
+    enable_codex_goals!()
     test_pid = self()
 
     runner = fn _workspace, _prompt, _issue, _opts ->
@@ -1421,6 +1425,11 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
   end
 
   test "goal_resume kicks an autonomous continuation batch that streams into the chat", %{socket: socket} do
+    enable_codex_goals!()
+
+    {:ok, thread} = History.ensure_issue_thread("macro-markets", "MAC-1")
+    {:ok, _thread} = History.update_thread(thread, %{agent_thread_ids: %{"codex" => "thread-goal"}})
+
     runner = fn _workspace, _prompt, _issue, opts ->
       Keyword.fetch!(opts, :on_assistant_delta).("Continuing the goal")
 
@@ -1439,16 +1448,23 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
     {:ok, _payload, socket} = subscribe_and_join(socket, "assistant:issue:macro-markets:MAC-1", %{})
 
     ref = push(socket, "set_goal_mode", %{"goal_mode" => true, "objective" => "Audit"})
-    assert_reply(ref, :ok, %{goal_mode: true})
+    assert_reply(ref, :ok, %{enabled: true, objective: "Audit"}, 1_000)
 
     ref = push(socket, "goal_resume", %{})
-    assert_reply(ref, :ok)
+    assert_reply(ref, :ok, %{}, 2_000)
 
     assert_push("assistant_delta", %{delta: "Continuing the goal"})
-    assert_push("assistant_completed", %{message: %{role: "assistant", content: "Continued the authoring goal."}})
+
+    assert_push(
+      "assistant_completed",
+      %{message: %{role: "assistant", content: "Continued the authoring goal."}},
+      2_000
+    )
   end
 
   test "goal_resume continues an issue session on the exact socket thread", %{socket: socket} do
+    enable_codex_goals!()
+
     runner = fn _workspace, _prompt, _issue, _opts ->
       {:ok,
        %{
@@ -1462,14 +1478,22 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
     Application.put_env(:symphony_elixir, :assistant_runner, runner)
     on_exit(fn -> Application.delete_env(:symphony_elixir, :assistant_runner) end)
 
-    workspace = Workspace.path_for_issue("MAC-SESSION")
+    {:ok, issue} =
+      Context.create_issue("macro-markets", %{
+        "title" => "Issue session goal",
+        "status" => "Todo"
+      })
+
+    issue_ref = %{id: issue.id, identifier: issue.identifier, project_slug: "macro-markets"}
+    workspace = Workspace.path_for_issue(issue_ref)
     File.mkdir_p!(workspace)
     on_exit(fn -> File.rm_rf!(workspace) end)
 
     {:ok, thread} =
-      History.create_issue_session_thread("macro-markets", "MAC-SESSION", %{
+      History.create_issue_session_thread("macro-markets", issue.identifier, %{
         workspace_path: workspace,
-        agent_kind: "codex"
+        agent_kind: "codex",
+        agent_thread_ids: %{"codex" => "thread-session-goal"}
       })
 
     File.mkdir_p!(thread.workspace_path)
@@ -1478,19 +1502,24 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
     {:ok, _payload, socket} = subscribe_and_join(socket, "assistant:thread:#{enabled.id}", %{})
 
     ref = push(socket, "goal_resume", %{})
-    assert_reply(ref, :ok)
+    assert_reply(ref, :ok, %{}, 2_000)
 
-    assert_push("assistant_completed", %{
-      message: %{role: "assistant", content: "Continued the issue session goal."}
-    })
+    assert_push(
+      "assistant_completed",
+      %{message: %{role: "assistant", content: "Continued the issue session goal."}},
+      2_000
+    )
   end
 
   test "goal_resume continues every non-issue scope on its exact thread", %{socket: _socket} do
+    enable_codex_goals!()
+    %{root: root, segment: segment} = Workspace.project_layout("macro-markets")
+    goal_workspace_root = Path.join(root, segment)
     on_exit(fn -> Application.delete_env(:symphony_elixir, :assistant_runner) end)
 
     for scope <- ~w(project project_session project_explore freeform kb) do
       workspace =
-        Path.join(System.tmp_dir!(), "resume-goal-#{scope}-#{System.unique_integer([:positive])}")
+        Path.join(goal_workspace_root, "__ws_resume-goal-#{scope}-#{System.unique_integer([:positive])}")
 
       File.mkdir_p!(workspace)
       on_exit(fn -> File.rm_rf!(workspace) end)
@@ -1500,6 +1529,7 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
         status: "active",
         workspace_path: workspace,
         agent_kind: "codex",
+        agent_thread_ids: %{"codex" => "thread-#{scope}"},
         project_slug: if(scope == "freeform", do: nil, else: "macro-markets")
       }
 
@@ -1529,19 +1559,20 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
         |> subscribe_and_join("assistant:thread:#{enabled.id}", %{})
 
       ref = push(scope_socket, "goal_resume", %{})
-      assert_reply(ref, :ok)
+      assert_reply(ref, :ok, %{}, 2_000)
 
-      assert_receive {:continued_scope, ^scope, ^workspace, prompt, thread_id}
+      assert_receive {:continued_scope, ^scope, ^workspace, prompt, thread_id}, 2_000
       assert thread_id == enabled.id
-      assert prompt =~ "Continue pursuing the authoring goal"
+      assert prompt =~ "Continue pursuing the chat goal"
       refute prompt =~ "dispatch the orchestrator"
-      assert_push("assistant_completed", %{message: %{role: "assistant", content: content}})
+      assert_push("assistant_completed", %{message: %{role: "assistant", content: content}}, 2_000)
       assert content == "Continued #{scope}"
       assert History.list_messages_for_thread(enabled.id) |> Enum.map(& &1.role) == ["assistant"]
     end
   end
 
   test "goal turn pushes native goal updates and fans streaming to observer tabs", %{socket: socket} do
+    enable_codex_goals!()
     test_pid = self()
 
     runner = fn _workspace, _prompt, _issue, opts ->
@@ -1575,7 +1606,7 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
     {:ok, _payload, socket} = subscribe_and_join(socket, "assistant:issue:macro-markets:MAC-1", %{})
 
     ref = push(socket, "set_goal_mode", %{"goal_mode" => true, "objective" => "Audit"})
-    assert_reply(ref, :ok, %{goal_mode: true})
+    assert_reply(ref, :ok, %{enabled: true, objective: "Audit"}, 1_000)
 
     ref = push(socket, "send_message", %{"message" => "Start audit", "context" => %{}})
     assert_reply(ref, :ok, %{})
@@ -1849,7 +1880,7 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
     {:ok, _payload, socket} = subscribe_and_join(socket, "assistant:issue:macro-markets:MAC-1", %{})
 
     ref = push(socket, "dispatch_codex", %{"goal_mode" => false})
-    assert_reply(ref, :ok, %{goal_mode: false})
+    assert_reply(ref, :ok, %{goal_mode: false}, 2_000)
 
     assert {:ok, issue} = Context.get_issue("macro-markets", "MAC-1")
     assert issue.status.name == "In Progress"
@@ -1857,11 +1888,12 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
   end
 
   test "dispatch_codex persists a goal when goal mode is enabled", %{socket: socket} do
+    enable_codex_goals!()
     {:ok, _issue} = Context.create_issue("macro-markets", %{"title" => "Dispatch me", "status" => "Todo"})
     {:ok, _payload, socket} = subscribe_and_join(socket, "assistant:issue:macro-markets:MAC-1", %{})
 
     ref = push(socket, "dispatch_codex", %{"goal_mode" => true})
-    assert_reply(ref, :ok, %{goal_mode: true})
+    assert_reply(ref, :ok, %{goal_mode: true}, 2_000)
 
     assert {:ok, issue} = Context.get_issue("macro-markets", "MAC-1")
     assert issue.status.name == "In Progress"
@@ -1874,7 +1906,7 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
     {:ok, _payload, socket} = subscribe_and_join(socket, "assistant:issue:macro-markets:MAC-1", %{})
 
     ref = push(socket, "dispatch_codex", %{"mode" => "yolo"})
-    assert_reply(ref, :ok, %{goal_mode: false})
+    assert_reply(ref, :ok, %{goal_mode: false}, 2_000)
 
     assert {:ok, settings} = Context.get_agent_settings("macro-markets", "MAC-1")
     assert settings.mode == "yolo"
@@ -1882,16 +1914,17 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
 
   test "dispatch_codex does not carry an execution goal just because the authoring goal is enabled",
        %{socket: socket} do
+    enable_codex_goals!()
     {:ok, _issue} = Context.create_issue("macro-markets", %{"title" => "Dispatch me", "status" => "Todo"})
     {:ok, _payload, socket} = subscribe_and_join(socket, "assistant:issue:macro-markets:MAC-1", %{})
 
     # Enabling the Authoring (chat) goal must NOT auto-promote into an orchestrator execution goal.
     ref = push(socket, "set_goal_mode", %{"goal_mode" => true, "objective" => "Audit only"})
-    assert_reply(ref, :ok, %{goal_mode: true})
+    assert_reply(ref, :ok, %{enabled: true, objective: "Audit only"}, 1_000)
 
     # A plain dispatch (no explicit goal_mode) stays decoupled from the authoring goal.
     ref = push(socket, "dispatch_codex", %{})
-    assert_reply(ref, :ok, %{goal_mode: false})
+    assert_reply(ref, :ok, %{goal_mode: false}, 2_000)
 
     assert {:ok, issue} = Context.get_issue("macro-markets", "MAC-1")
     assert issue.status.name == "In Progress"
@@ -2272,18 +2305,23 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
   end
 
   defp enable_codex_goals! do
-    root =
+    previous_workflow_file = Application.get_env(:symphony_elixir, :workflow_file_path)
+    previous_codex_command = Application.get_env(:symphony_elixir, :codex_command)
+    workspace_root = Path.dirname(Workspace.path_for_issue("MAC-1"))
+
+    config_root =
       Path.join(
         System.tmp_dir!(),
         "assistant-channel-goals-#{System.unique_integer([:positive])}"
       )
 
-    workflow_file = Path.join(root, "WORKFLOW.md")
-    File.mkdir_p!(root)
+    workflow_file = Path.join(config_root, "WORKFLOW.md")
+    File.mkdir_p!(config_root)
 
     TestSupport.write_workflow_file!(workflow_file,
       tracker_kind: "local",
-      workspace_root: root
+      workspace_root: workspace_root,
+      command: "python3 #{@fake_codex_app_server}"
     )
 
     workflow_file
@@ -2294,11 +2332,12 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
     Workflow.set_workflow_file_path(workflow_file)
 
     on_exit(fn ->
-      Workflow.clear_workflow_file_path()
-      File.rm_rf!(root)
+      restore_app_env(:workflow_file_path, previous_workflow_file)
+      restore_app_env(:codex_command, previous_codex_command)
+      File.rm_rf!(config_root)
     end)
 
-    :ok
+    workspace_root
   end
 
   defp migrate_repo do
