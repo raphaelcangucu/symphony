@@ -207,7 +207,7 @@ git commit -m "feat(mobile): add typed tracker client"
 - Create: `mobile/app/connect.tsx`
 - Modify: `mobile/app/index.tsx`
 
-- [ ] **Step 1: Write failing screen tests**
+- [x] **Step 1: Write failing screen tests**
 
 Use an injected `validateConnection` and connection context:
 
@@ -234,7 +234,7 @@ Prove blank fields disable Connect, the token uses secure text entry, invalid
 auth never renders the token, double submission is ignored, and success calls
 `router.replace("/")`.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run:
 
@@ -244,7 +244,7 @@ cd mobile && npm run test:ui -- src/features/connect/ConnectScreen.test.tsx
 
 Expected: FAIL because `ConnectScreen` is missing.
 
-- [ ] **Step 3: Implement the screen and redirect**
+- [x] **Step 3: Implement the screen and redirect**
 
 Use a text-first black surface with:
 
@@ -258,7 +258,7 @@ Use a text-first black surface with:
 redirects to `/connect`; with an active profile it renders the session library
 delivered in Task 4.
 
-- [ ] **Step 4: Verify GREEN**
+- [x] **Step 4: Verify GREEN**
 
 Run:
 
@@ -270,7 +270,7 @@ npm run typecheck
 
 Expected: onboarding tests and TypeScript pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add mobile/src/features/connect mobile/app/connect.tsx mobile/app/index.tsx

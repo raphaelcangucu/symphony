@@ -1,10 +1,14 @@
 import { StyleSheet, Text, View } from "react-native";
 
+import { ConnectionGate } from "@/features/connect/ConnectionGate";
+
 export default function IndexRoute() {
   return (
-    <View style={styles.screen}>
-      <Text style={styles.title}>Dev10x Mobile</Text>
-    </View>
+    <ConnectionGate>
+      <View style={styles.screen}>
+        <Text style={styles.title}>Dev10x Mobile</Text>
+      </View>
+    </ConnectionGate>
   );
 }
 
