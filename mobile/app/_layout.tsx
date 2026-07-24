@@ -4,6 +4,7 @@ import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
+import { TrackerClientProvider } from "@/api/TrackerClientProvider";
 import { ConnectionProvider } from "@/auth/ConnectionProvider";
 import { ThemeProvider, useAppTheme } from "@/theme/ThemeProvider";
 
@@ -12,7 +13,9 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <ThemeProvider>
         <ConnectionProvider>
-          <ThemedStack />
+          <TrackerClientProvider>
+            <ThemedStack />
+          </TrackerClientProvider>
         </ConnectionProvider>
       </ThemeProvider>
     </SafeAreaProvider>

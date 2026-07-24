@@ -55,7 +55,7 @@ must not appear as non-functional affordances in this slice.
 - Create: `mobile/src/api/TrackerClientProvider.tsx`
 - Modify: `mobile/app/_layout.tsx`
 
-- [ ] **Step 1: Write the failing transport tests**
+- [x] **Step 1: Write the failing transport tests**
 
 Cover authenticated URLs, envelope unwrapping, query encoding, redacted 401
 errors, protocol errors, and abort/timeout behavior:
@@ -97,7 +97,7 @@ client.assistantCatalog("symphony");
 client.createThread({ scope: "freeform", agentKind: "codex" });
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run:
 
@@ -107,7 +107,7 @@ cd mobile && npm run test:unit -- src/api/client.test.ts
 
 Expected: FAIL because `createTrackerClient` and the contracts do not exist.
 
-- [ ] **Step 3: Implement contracts, errors, and client**
+- [x] **Step 3: Implement contracts, errors, and client**
 
 Export these stable app-facing contracts:
 
@@ -171,7 +171,7 @@ export type CreateThreadInput =
   `TrackerProtocolError`, or `TrackerRequestError`;
 - redact the bearer token from all error messages.
 
-- [ ] **Step 4: Implement the active-client provider**
+- [x] **Step 4: Implement the active-client provider**
 
 `TrackerClientProvider` reads `activeProfile`, `activeToken`, and the device
 locale. It exposes `client: TrackerClient | null`; it never persists or logs the
@@ -179,7 +179,7 @@ token.
 
 Mount it inside `ConnectionProvider` and above all routes.
 
-- [ ] **Step 5: Verify GREEN**
+- [x] **Step 5: Verify GREEN**
 
 Run:
 
@@ -191,7 +191,7 @@ npm run typecheck
 
 Expected: client tests and TypeScript pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add mobile/src/api mobile/app/_layout.tsx
