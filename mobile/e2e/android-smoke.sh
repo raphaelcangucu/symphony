@@ -4,13 +4,13 @@ set -euo pipefail
 
 readonly APP_PACKAGE="dev.dev10x.symphony"
 readonly APP_ACTIVITY="${APP_PACKAGE}/.MainActivity"
-readonly EXPECTED_TEXT="Projects"
-readonly E2E_DEEP_LINK="symphony:///?fixture=1"
+readonly EXPECTED_TEXT="Connect to Symphony"
+readonly E2E_DEEP_LINK="symphony:///connect?fixture=1"
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly MOBILE_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 readonly APK_PATH="${1:-${MOBILE_DIR}/android/app/build/outputs/apk/release/app-release.apk}"
 readonly OUTPUT_DIR="${E2E_OUTPUT_DIR:-${MOBILE_DIR}/artifacts/e2e}"
-readonly ARTIFACT_SLUG="pr-7-codex-style-mobile-session-flow"
+readonly ARTIFACT_SLUG="pr-7-complete-mobile-app-experience"
 readonly VIDEO_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}.mp4"
 readonly SCREENSHOT_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}.png"
 readonly UI_DUMP_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}.xml"
@@ -18,7 +18,7 @@ readonly TRACE_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}-trace.txt"
 readonly REPORT_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}.json"
 readonly RECORDING_LOG_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}-screenrecord.log"
 readonly REMOTE_VIDEO="/sdcard/${ARTIFACT_SLUG}.mp4"
-readonly RECORDING_SECONDS=90
+readonly RECORDING_SECONDS=150
 readonly RECORDING_SIZE="576x1280"
 
 resolve_adb() {
@@ -84,6 +84,17 @@ tap_selector() {
   trace_step "tap ${attribute}=${value}"
 }
 
+tap_accessible_text() {
+  local value="$1"
+  dump_ui
+
+  if grep -Fq "content-desc=\"${value}\"" "${UI_DUMP_PATH}"; then
+    tap_selector "content-desc" "${value}"
+  else
+    tap_selector "text" "${value}"
+  fi
+}
+
 hide_keyboard_if_visible() {
   local label="$1"
   "${ADB}" shell input keyevent KEYCODE_ESCAPE
@@ -93,7 +104,7 @@ hide_keyboard_if_visible() {
 
 stop_recording() {
   if [[ -n "${recording_pid}" ]]; then
-    "${ADB}" shell pkill -INT screenrecord >/dev/null 2>&1 || true
+    "${ADB}" shell pkill -l 2 screenrecord >/dev/null 2>&1 || true
     wait "${recording_pid}" 2>/dev/null || true
     recording_pid=""
   fi
@@ -187,6 +198,31 @@ fi
 recording_pid=$!
 sleep 1
 
+tap_selector "content-desc" "Connection name"
+"${ADB}" shell input text "Remote"
+trace_step "input Connection name=Remote"
+
+tap_selector "content-desc" "Tracker URL"
+"${ADB}" shell input text "https\\://fixture.symphony.test"
+trace_step "input Tracker URL=https://fixture.symphony.test"
+
+tap_selector "content-desc" "Tracker token"
+"${ADB}" shell input text "fixture-token"
+trace_step "input Tracker token=[redacted]"
+hide_keyboard_if_visible "connection"
+tap_accessible_text "Connect"
+wait_for_selector "text" "Projects"
+wait_for_selector "text" "Implement mobile sessions"
+trace_step "assert connection onboarding reached Projects"
+sleep 2
+
+tap_selector "text" "Implement mobile sessions"
+wait_for_selector "text" "Session 42"
+wait_for_selector "text" "Fixture session ready"
+trace_step "assert existing session opened"
+tap_selector "content-desc" "Go back"
+wait_for_selector "text" "Projects"
+
 tap_selector "content-desc" "Search chats"
 "${ADB}" shell input text "mobile"
 trace_step "input Search chats=mobile"
@@ -215,12 +251,31 @@ tap_selector "content-desc" "Message"
 "${ADB}" shell input text "Build%sthe%smobile%ssession"
 trace_step "input Message=Build the mobile session"
 hide_keyboard_if_visible "composer"
+
+tap_selector "content-desc" "Show advanced options"
+tap_selector "content-desc" "Choose agent"
+tap_selector "text" "Codex"
+tap_selector "content-desc" "Choose model"
+tap_selector "text" "GPT-5.6 Sol"
+tap_selector "content-desc" "Choose effort"
+tap_selector "text" "High"
+trace_step "select Codex, GPT-5.6 Sol, High"
+
 tap_selector "content-desc" "Send"
 
 wait_for_selector "text" "Session 42"
 wait_for_selector "text" "Build the mobile session"
 wait_for_selector "text" "Fixture session ready"
 trace_step "assert Session 42 with submitted seed"
+
+tap_selector "content-desc" "Message"
+"${ADB}" shell input text "Ship%sthe%smobile%sapp"
+trace_step "input Message=Ship the mobile app"
+hide_keyboard_if_visible "session"
+tap_selector "content-desc" "Send"
+wait_for_selector "text" "Ship the mobile app"
+wait_for_selector "text" "Fixture response received"
+trace_step "assert follow-up message and assistant response"
 sleep 3
 
 "${ADB}" exec-out screencap -p >"${SCREENSHOT_PATH}"
@@ -284,7 +339,7 @@ generated_at="$(date --iso-8601=seconds)"
 
 printf '{\n' >"${REPORT_PATH}"
 printf '  "status": "passed",\n' >>"${REPORT_PATH}"
-printf '  "test": "Android E2E traverses the real connection, library, creation, and session routes",\n' >>"${REPORT_PATH}"
+printf '  "test": "Android E2E records the complete first-run connection, library, creation, and live session experience",\n' >>"${REPORT_PATH}"
 printf '  "generated_at": "%s",\n' "${generated_at}" >>"${REPORT_PATH}"
 printf '  "package": "%s",\n' "${APP_PACKAGE}" >>"${REPORT_PATH}"
 printf '  "activity": "%s",\n' "${foreground_activity}" >>"${REPORT_PATH}"
@@ -301,7 +356,7 @@ printf '  "screenshot": "%s",\n' "${SCREENSHOT_PATH}" >>"${REPORT_PATH}"
 printf '  "trace": "%s"\n' "${TRACE_PATH}" >>"${REPORT_PATH}"
 printf '}\n' >>"${REPORT_PATH}"
 
-printf "PASS: Android E2E traversed the real app routes from %s\n" "${EXPECTED_TEXT}"
+printf "PASS: Android E2E recorded the complete real-route app experience from %s\n" "${EXPECTED_TEXT}"
 printf "Video: %s\n" "${VIDEO_PATH}"
 printf "Screenshot: %s\n" "${SCREENSHOT_PATH}"
 printf "Trace: %s\n" "${TRACE_PATH}"

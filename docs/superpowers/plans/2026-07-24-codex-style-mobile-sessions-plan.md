@@ -720,6 +720,57 @@ git push origin agent/mobile-companion-e2e
 
 Update draft PR #7 with the new flow summary and the refreshed video link.
 
+### Task 8: Record the complete first-run app experience
+
+**Files:**
+
+- Modify: `mobile/src/features/connect/ConnectScreen.test.tsx`
+- Modify: `mobile/src/features/connect/ConnectScreen.tsx`
+- Modify: `mobile/e2e/android-smoke.sh`
+- Modify: `docs/superpowers/plans/2026-07-24-codex-style-mobile-sessions-plan.md`
+
+- [x] **Step 1: Prove connection validation uses the injected runtime**
+
+Add a UI test that renders `ConnectScreen` without a `validateConnection`
+override, injects a runtime tracker client, submits the connection form, and
+asserts calls to `health()` and `viewer()`.
+
+Run:
+
+```bash
+cd mobile
+npm run test:ui -- src/features/connect/ConnectScreen.test.tsx
+```
+
+Expected: FAIL until the screen resolves its default validator from
+`AppRuntime`.
+
+- [x] **Step 2: Inject the tracker client into onboarding**
+
+Use `useAppRuntime().createTrackerClient` for the default onboarding validator.
+Keep the explicit `validateConnection` prop as the test and integration
+override, and preserve token redaction and normalized origin behavior.
+
+- [x] **Step 3: Extend the continuous Android recording**
+
+Launch the real `/connect` route with `fixture=1`, then record:
+
+1. secure connection form completion;
+2. validated transition to the session library;
+3. project/session browsing and search;
+4. composer-first session creation with issue and isolated workspace context;
+5. created session with the submitted seed;
+6. a follow-up message and assistant response.
+
+The recording must remain a single continuous `screenrecord` artifact.
+
+- [x] **Step 4: Validate and publish refreshed evidence**
+
+Run the focused connection UI test, Android E2E build, and Android E2E script.
+Inspect the final screenshot and contact sheet, verify the MP4 codec, duration,
+frame count, and SHA-256, then replace the video and JSON report in the existing
+gist and refresh PR #7.
+
 ## Validation Results
 
 - Mobile quality gate: formatting, lint, and TypeScript passed.
@@ -744,3 +795,28 @@ Update draft PR #7 with the new flow summary and the refreshed video link.
 - Trace:
   `mobile/artifacts/e2e/pr-7-codex-style-mobile-session-flow-trace.txt`.
 - Independent review: no Critical or Important findings remained.
+
+### Complete app experience refresh
+
+- Focused onboarding UI tests: 5/5 passed.
+- Changed-source formatting, lint, shell syntax, and TypeScript checks passed.
+- Android E2E release build: passed.
+- Continuous Android E2E: passed through `/connect`, `/`, `/session/42`,
+  `/new-session`, and `/session/42`.
+- The flow covers connection validation, the project library, an existing
+  session, search, issue/workspace/agent/model/effort context, session creation,
+  the submitted seed, a follow-up message, and its assistant response.
+- APK SHA-256:
+  `c4a01fc5d5ea0bf87eda87d5cade025e8918bf10730bcb1d6d16bcc1150640cf`.
+- Video SHA-256:
+  `914a3d279d26689e3a1697a1d23d27244f604ec06e8d0b753ea65afdc0b894ad`.
+- Video: H.264, 73.227722 seconds, 574 frames, 576x1280.
+- Video artifact:
+  `mobile/artifacts/e2e/pr-7-complete-mobile-app-experience.mp4`.
+- Final screenshot:
+  `mobile/artifacts/e2e/pr-7-complete-mobile-app-experience.png`.
+- Contact sheet:
+  `mobile/artifacts/e2e/pr-7-complete-mobile-app-experience-contact-sheet.png`.
+- Gist:
+  `https://gist.github.com/raphaelcangucu/89652c626c9583cb9b0c52d8d5b2a708`.
+- Independent evidence-aware review: no Critical or Important findings.

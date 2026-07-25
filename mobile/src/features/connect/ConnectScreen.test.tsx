@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 
 import { TrackerAuthError } from "@/api/errors";
+import { AppRuntimeProvider, productionRuntime, type AppRuntime } from "@/runtime/AppRuntime";
 import { ThemeProvider } from "@/theme/ThemeProvider";
 
 import { ConnectScreen } from "./ConnectScreen";
@@ -65,6 +66,41 @@ describe("ConnectScreen", () => {
       origin: "https://demo.test",
       token: "secret-token",
     });
+    expect(onConnected).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses the injected runtime client for default connection validation", async () => {
+    const health = jest.fn().mockResolvedValue({ status: "ok" });
+    const viewer = jest.fn().mockResolvedValue({ id: "viewer-1", name: "Raphael" });
+    const createTrackerClient = jest.fn(() => ({ health, viewer }));
+    const onConnected = jest.fn();
+
+    render(
+      <AppRuntimeProvider
+        runtime={{
+          ...productionRuntime,
+          createTrackerClient: createTrackerClient as unknown as AppRuntime["createTrackerClient"],
+        }}
+      >
+        <ThemeProvider colorScheme="dark">
+          <ConnectScreen onConnected={onConnected} />
+        </ThemeProvider>
+      </AppRuntimeProvider>,
+    );
+    fillValidForm();
+
+    fireEvent.press(screen.getByRole("button", { name: "Connect" }));
+
+    await waitFor(() =>
+      expect(createTrackerClient).toHaveBeenCalledWith({
+        origin: "https://demo.test",
+        token: "secret-token",
+        locale: expect.any(String),
+      }),
+    );
+    expect(health).toHaveBeenCalledTimes(1);
+    expect(viewer).toHaveBeenCalledTimes(1);
+    expect(mockSaveProfile).toHaveBeenCalledTimes(1);
     expect(onConnected).toHaveBeenCalledTimes(1);
   });
 

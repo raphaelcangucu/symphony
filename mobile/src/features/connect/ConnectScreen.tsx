@@ -2,12 +2,12 @@ import { router } from "expo-router";
 import { useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
-import { createTrackerClient } from "@/api/client";
 import { TrackerAuthError } from "@/api/errors";
 import { normalizeTrackerOrigin, redactSecret } from "@/auth/connection-profile";
 import { useConnection } from "@/auth/ConnectionProvider";
 import { AppScreen } from "@/components/AppScreen";
 import { BrandMark } from "@/components/BrandMark";
+import { useAppRuntime, type AppRuntime } from "@/runtime/AppRuntime";
 import { radii, spacing } from "@/theme/tokens";
 import { useAppTheme } from "@/theme/ThemeProvider";
 
@@ -21,12 +21,14 @@ type ConnectScreenProps = {
   validateConnection?: (input: { origin: string; token: string }) => Promise<ConnectionValidation>;
 };
 
-export function ConnectScreen({
-  onConnected,
-  validateConnection = validateTrackerConnection,
-}: ConnectScreenProps) {
+export function ConnectScreen({ onConnected, validateConnection }: ConnectScreenProps) {
   const { colors } = useAppTheme();
   const { saveProfile } = useConnection();
+  const { createTrackerClient } = useAppRuntime();
+  const validate =
+    validateConnection ??
+    ((input: { origin: string; token: string }) =>
+      validateTrackerConnection(input, createTrackerClient));
   const [name, setName] = useState("");
   const [origin, setOrigin] = useState("");
   const [token, setToken] = useState("");
@@ -44,7 +46,7 @@ export function ConnectScreen({
     try {
       const normalizedOrigin = normalizeTrackerOrigin(origin);
       const normalizedToken = token.trim();
-      await validateConnection({
+      await validate({
         origin: normalizedOrigin,
         token: normalizedToken,
       });
@@ -163,11 +165,14 @@ function Field({ label, ...props }: FieldProps) {
   );
 }
 
-async function validateTrackerConnection(input: {
-  origin: string;
-  token: string;
-}): Promise<ConnectionValidation> {
-  const client = createTrackerClient({
+async function validateTrackerConnection(
+  input: {
+    origin: string;
+    token: string;
+  },
+  createClient: AppRuntime["createTrackerClient"],
+): Promise<ConnectionValidation> {
+  const client = createClient({
     origin: input.origin,
     token: input.token,
     locale: resolvedLocale(),
