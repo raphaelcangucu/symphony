@@ -21,6 +21,8 @@ defmodule SymphonyElixir.Agent.SessionLogMigrator do
   alias SymphonyElixir.SessionLog
   alias SymphonyElixir.Workspace
 
+  @migration_thread_fields [:id, :workspace_path, :agent_kind]
+
   @type result :: %{
           created: non_neg_integer(),
           migrated: non_neg_integer(),
@@ -178,7 +180,10 @@ defmodule SymphonyElixir.Agent.SessionLogMigrator do
   end
 
   defp list_threads(nil) do
-    from(t in Thread, where: not is_nil(t.workspace_path) and t.workspace_path != "")
+    from(t in Thread,
+      where: not is_nil(t.workspace_path) and t.workspace_path != "",
+      select: struct(t, ^@migration_thread_fields)
+    )
     |> Repo.all()
   end
 
@@ -186,8 +191,8 @@ defmodule SymphonyElixir.Agent.SessionLogMigrator do
     slug = String.trim(project_slug)
 
     from(t in Thread,
-      where:
-        not is_nil(t.workspace_path) and t.workspace_path != "" and t.project_slug == ^slug
+      where: not is_nil(t.workspace_path) and t.workspace_path != "" and t.project_slug == ^slug,
+      select: struct(t, ^@migration_thread_fields)
     )
     |> Repo.all()
   end
