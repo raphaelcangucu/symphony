@@ -199,7 +199,7 @@ test("gitFacts counts every untracked file instead of collapsing directories", a
   );
   await executeValidation(
     "git",
-    ["config", "user.name", "Symphony Benchmark"],
+    ["config", "user.name", "Dev10x Benchmark"],
     workspace,
     5_000,
   );

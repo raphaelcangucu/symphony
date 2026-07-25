@@ -24,7 +24,7 @@ import {
 } from "../src/run-cell.mjs";
 
 const manifest = {
-  project_slug: "symphony-landing-benchmark",
+  project_slug: "dev10x-landing-benchmark",
   runs: [
     {
       id: "session-codex",
@@ -48,12 +48,16 @@ test("selectRun resolves exactly one canonical matrix cell", () => {
 
 test("artifactSlug accepts only safe canonical run identifiers", () => {
   assert.equal(
-    artifactSlug("providers-default-orchestrator-claude"),
-    "providers-default-orchestrator-claude",
+    artifactSlug("orchestrator-claude-sonnet5-medium"),
+    "orchestrator-claude-sonnet5-medium",
   );
   assert.equal(
-    artifactSlug("codex-5.6-defaults-session-sol"),
-    "codex-5.6-defaults-session-sol",
+    artifactSlug("session-codex-gpt5.6.sol-low"),
+    "session-codex-gpt5.6.sol-low",
+  );
+  assert.equal(
+    artifactSlug("orchestrator-codex-gpt5.6.terra-medium"),
+    "orchestrator-codex-gpt5.6.terra-medium",
   );
   assert.throws(() => artifactSlug("../../escape"), /invalid benchmark run id/);
 });
@@ -67,21 +71,21 @@ test("attempt artifacts are immutable and path-safe", () => {
   assert.equal(
     attemptArtifactPath(
       "/tmp/runtime",
-      "providers-default-orchestrator-claude",
+      "orchestrator-claude-sonnet5-medium",
       "attempt-01",
     ),
-    "/tmp/runtime/artifacts/providers-default-orchestrator-claude/attempts/attempt-01",
+    "/tmp/runtime/artifacts/orchestrator-claude-sonnet5-medium/attempts/attempt-01",
   );
 });
 
 test("tracker routes target the real session and issue surfaces", () => {
   assert.equal(
     sessionRoute(manifest.project_slug, 41),
-    "/tracker/projects/symphony-landing-benchmark/workspaces/41",
+    "/tracker/projects/dev10x-landing-benchmark/workspaces/41",
   );
   assert.equal(
     issueRoute(manifest.project_slug, "SYM-6"),
-    "/tracker/projects/symphony-landing-benchmark/board/issues/SYM-6/sessions?surface=autonomous",
+    "/tracker/projects/dev10x-landing-benchmark/board/issues/SYM-6/sessions?surface=autonomous",
   );
 });
 
@@ -311,11 +315,32 @@ test("issue status normalizes tracker string and presenter object shapes", () =>
   );
 });
 
-test("orchestrator capture resumes active and completed issues without resetting them", () => {
+test("orchestrator capture retries only failed review-state executions", () => {
   assert.equal(shouldDispatchIssue({ status: "Backlog" }), true);
   assert.equal(shouldDispatchIssue({ status: { name: "In Progress" } }), false);
   assert.equal(
     shouldDispatchIssue({ status: { name: "Human Review" } }),
+    false,
+  );
+  assert.equal(
+    shouldDispatchIssue(
+      { status: { name: "Human Review" } },
+      { status: "aborted" },
+    ),
+    true,
+  );
+  assert.equal(
+    shouldDispatchIssue(
+      { status: { name: "Human Review" } },
+      { status: "failed" },
+    ),
+    true,
+  );
+  assert.equal(
+    shouldDispatchIssue(
+      { status: { name: "Human Review" } },
+      { status: "completed" },
+    ),
     false,
   );
   assert.equal(shouldDispatchIssue({ status: "Done" }), false);

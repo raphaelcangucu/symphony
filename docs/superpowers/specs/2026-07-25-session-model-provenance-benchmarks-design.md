@@ -156,8 +156,8 @@ update and live runtime probe established Opus 5 as the current base.
 
 ### `codex-5.6-defaults`
 
-Run direct sessions only, isolating the model family from orchestrator
-differences:
+Run both direct session and orchestrator paths so the Codex model family is
+compared under the same two execution contracts as the provider matrices:
 
 | Variant | Requested model | Runtime-advertised default effort |
 | --- | --- | --- |

@@ -12,8 +12,8 @@ Esses quatro valores são persistidos em colunas canônicas de
 incluídos nos relatórios. A interface mostra confirmação pendente ou
 redirecionamento quando o resolvido diverge do solicitado.
 
-O benchmark real concluiu as 15 células, aprovou os 15 contratos de
-proveniência e as 45 etapas de validação. Os valores persistidos foram:
+O benchmark Dev10x concluiu as 18 células, aprovou os 18 contratos de
+proveniência e as 54 etapas de validação. Os valores persistidos foram:
 
 | Matriz | Caminho | Agente | Solicitado | Resolvido |
 | --- | --- | --- | --- | --- |
@@ -30,8 +30,11 @@ proveniência e as 45 etapas de validação. Os valores persistidos foram:
 | advanced | orquestrador | Cursor | `cursor-grok-4.5-high` | `cursor-grok-4.5-high` |
 | advanced | orquestrador | Claude | `claude-opus-5` / high | `claude-opus-5` / high |
 | Codex 5.6 | sessão | Sol | `gpt-5.6-sol` / low | `gpt-5.6-sol` / low |
+| Codex 5.6 | orquestrador | Sol | `gpt-5.6-sol` / low | `gpt-5.6-sol` / low |
 | Codex 5.6 | sessão | Terra | `gpt-5.6-terra` / medium | `gpt-5.6-terra` / medium |
+| Codex 5.6 | orquestrador | Terra | `gpt-5.6-terra` / medium | `gpt-5.6-terra` / medium |
 | Codex 5.6 | sessão | Luna | `gpt-5.6-luna` / medium | `gpt-5.6-luna` / medium |
+| Codex 5.6 | orquestrador | Luna | `gpt-5.6-luna` / medium | `gpt-5.6-luna` / medium |
 
 No Cursor, `high` já faz parte do slug canônico
 `cursor-grok-4.5-high`; por isso `requested_effort` e `resolved_effort`
@@ -88,10 +91,20 @@ atualizado para os aliases efetivos da CLI instalada.
 10. Falhas de descoberta de catálogo podiam desaparecer silenciosamente. O
     bundle retorna indisponibilidade explícita por provider e a UI apresenta o
     erro, sem catálogo parcial tratado como sucesso.
+11. Ao entrar em um estado de espera, o orquestrador encerrava o processo sem
+    fechar a sessão de execução. O ciclo agora persiste `completed` e fecha a
+    thread antes de interromper o agente.
+12. Uma landing Terra atingiu o limite de 30 turnos depois de já produzir
+    build, E2E e commits. O benchmark elevou o orçamento para 45 turnos e o
+    retry agora redispatcha somente issues em revisão cuja última execução
+    terminou em `aborted`, `failed` ou `error`.
+13. O runner de matriz era sequencial e parava no primeiro erro. Ele agora usa
+    concorrência limitada (máximo seis), preserva as demais execuções e retorna
+    um resumo agregado de falhas.
 
 ## Robustez operacional
 
-As sessões reais foram paralelizadas por matriz. Testes unitários e de
+Sessões e orquestradores foram paralelizados em lotes de três. Testes unitários e de
 integração do repositório foram mantidos focados e sequenciais para não
 sobrecarregar o WSL. O runner visual usa uma porta isolada por célula, converte
 WebM para MP4 com `faststart` e só conclui depois de abrir a rota real da aba

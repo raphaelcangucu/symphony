@@ -10,7 +10,7 @@ import { RUN_MATRIX, promptSha256, readCanonicalPrompt } from "./contract.mjs";
 const execFileAsync = promisify(execFile);
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
-export const PROJECT_SLUG = "symphony-landing-benchmark";
+export const PROJECT_SLUG = "dev10x-landing-benchmark";
 
 const WORKFLOW_STATUSES = Object.freeze([
   { name: "Backlog", category: "backlog", position: 0, is_terminal: false },
@@ -55,7 +55,7 @@ evidence:
 agent:
   kind: codex
   max_concurrent_agents: 1
-  max_turns: 30
+  max_turns: 45
   completion_transitions:
     In Progress: Human Review
 codex:
@@ -71,14 +71,14 @@ export function projectPayload({
   workspaceRoot,
 }) {
   return {
-    name: "Symphony Landing Benchmark",
+    name: "Dev10x Landing Benchmark",
     slug: PROJECT_SLUG,
     description:
-      "Comparação local e isolada entre sessões e orquestrador usando Codex, Cursor e Claude.",
+      "Comparação local e isolada de landings Dev10x entre sessões e orquestrador usando Codex, Cursor e Claude.",
     workflow_statuses: WORKFLOW_STATUSES,
     repositories: [
       {
-        github_full_name: "local/symphony-landing-benchmark",
+        github_full_name: "local/dev10x-landing-benchmark",
         clone_url: seedBarePath,
         default_branch: "main",
         selected_branch: "main",
@@ -140,9 +140,9 @@ async function createSeedRepository(runtimeRoot) {
   await git(
     [
       "-c",
-      "user.name=Symphony Benchmark",
+      "user.name=Dev10x Benchmark",
       "-c",
-      "user.email=benchmark@symphony.local",
+      "user.email=benchmark@dev10x.local",
       "commit",
       "-m",
       "chore: initialize landing benchmark",
@@ -175,7 +175,7 @@ function requireEnvironment(env) {
 export function devEnvironmentSteps() {
   return [
     {
-      description: "Symphony landing preview",
+      description: "Dev10x landing preview",
       command: `sh -c 'npm run dev -- --host 0.0.0.0 --port "$PORT"'`,
       working_dir: "site",
       source: "convention",

@@ -23,32 +23,63 @@ const CODEX_56_DEFAULTS = Object.freeze([
   Object.freeze({ variant: "luna", model: "gpt-5.6-luna", effort: "medium" }),
 ]);
 
+const MODEL_FILE_NAMES = Object.freeze({
+  "gpt-5.5": "gpt5.5",
+  "gpt-5.6-sol": "gpt5.6.sol",
+  "gpt-5.6-terra": "gpt5.6.terra",
+  "gpt-5.6-luna": "gpt5.6.luna",
+  "claude-sonnet-5": "sonnet5",
+  "claude-opus-5": "opus5",
+  "composer-2.5": "composer2.5",
+  "cursor-grok-4.5-high": "grok4.5-high",
+});
+
+export function benchmarkRunId({ path, provider, model, effort }) {
+  const modelName = MODEL_FILE_NAMES[model];
+  if (!PATHS.includes(path) || !PROVIDERS.includes(provider) || !modelName) {
+    throw new Error(
+      `invalid benchmark identity: ${path}/${provider}/${model}/${effort ?? "none"}`,
+    );
+  }
+  const effortSuffix =
+    effort && !modelName.endsWith(`-${effort}`) ? `-${effort}` : "";
+  return `${path}-${provider}-${modelName}${effortSuffix}`;
+}
+
 const providerRuns = Object.entries(PROVIDER_MATRICES).flatMap(
   ([matrix, settings]) =>
     PATHS.flatMap((path) =>
-      PROVIDERS.map((provider) =>
-        Object.freeze({
-          id: `${matrix}-${path}-${provider}`,
+      PROVIDERS.map((provider) => {
+        const requested = settings[provider];
+        return Object.freeze({
+          id: benchmarkRunId({
+            path,
+            provider,
+            model: requested.model,
+            effort: requested.effort,
+          }),
           matrix,
           path,
           provider,
-          requested_model: settings[provider].model,
-          requested_effort: settings[provider].effort,
-        }),
-      ),
+          requested_model: requested.model,
+          requested_effort: requested.effort,
+        });
+      }),
     ),
 );
 
-const codexRuns = CODEX_56_DEFAULTS.map(({ variant, model, effort }) =>
-  Object.freeze({
-    id: `codex-5.6-defaults-session-${variant}`,
-    matrix: "codex-5.6-defaults",
-    path: "session",
-    provider: "codex",
-    variant,
-    requested_model: model,
-    requested_effort: effort,
-  }),
+const codexRuns = CODEX_56_DEFAULTS.flatMap(({ variant, model, effort }) =>
+  PATHS.map((path) =>
+    Object.freeze({
+      id: benchmarkRunId({ path, provider: "codex", model, effort }),
+      matrix: "codex-5.6-defaults",
+      path,
+      provider: "codex",
+      variant,
+      requested_model: model,
+      requested_effort: effort,
+    }),
+  ),
 );
 
 export const RUN_MATRIX = Object.freeze([...providerRuns, ...codexRuns]);

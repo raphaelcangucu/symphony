@@ -1,10 +1,22 @@
-# Tarefa: landing page do Symphony
+# Tarefa: landing page da Dev10x
 
 Implemente diretamente, sem delegar a outros agentes e sem fazer perguntas.
 Trabalhe no repositório `site/` deste workspace. Fora dele, escreva somente a
 evidência canônica em `.symphony/evidence/` na raiz do workspace.
 
-Crie uma landing page completa, responsiva e visualmente marcante, em português, apresentando o Symphony como uma plataforma de orquestração de agentes de engenharia. A página deve explicar de forma concreta como o Symphony organiza sessões, tarefas, previews e evidências usando Codex, Cursor e Claude.
+Crie uma landing page completa, responsiva e visualmente marcante, em
+português, apresentando a **Dev10x** como uma plataforma de engenharia que
+orquestra agentes, sessões, tarefas, workspaces, previews e evidências usando
+Codex, Cursor e Claude.
+
+A marca visível do produto é Dev10x. Use “Dev10x” como wordmark principal;
+“DEV10X” pode aparecer em labels editoriais e “dev10x” em detalhes com linguagem
+de terminal. Não apresente “Symphony” como marca, produto ou título visível da
+landing page.
+
+O copy deve ser concreto, confiante e conciso: mais contexto preservado, execução
+paralela quando útil e prova verificável antes da revisão. Evite promessas vagas
+de produtividade “10x”, superlativos sem evidência e jargão genérico de IA.
 
 ## Stack obrigatória
 
@@ -17,19 +29,23 @@ Crie uma landing page completa, responsiva e visualmente marcante, em português
 
 ## Conteúdo obrigatório
 
-- Navegação superior com a marca “Symphony” e links para Visão, Fluxo, Agentes e Evidências.
-- Hero com proposta de valor clara, uma chamada principal e uma secundária.
+- Navegação superior com a marca “Dev10x” e links para Visão, Fluxo, Agentes e Evidências.
+- Hero que conecte Dev10x a execução de engenharia verificável, com uma chamada principal e uma secundária.
 - Uma visualização do fluxo: tarefa → agente → workspace isolado → preview → evidência → revisão.
 - Cards distintos para Codex, Cursor e Claude, sem declarar que um deles é objetivamente melhor.
 - Seção sobre sessões interativas e execução pelo orquestrador.
 - Seção de evidências citando testes, screenshots, vídeo e trace.
-- CTA final para iniciar um projeto.
-- Rodapé.
+- CTA final coerente com a voz Dev10x para iniciar um projeto.
+- Rodapé com a marca Dev10x.
 
 ## Direção visual
 
 - Aparência editorial e técnica, não um template SaaS genérico.
-- Fundo escuro com contraste alto, tipografia expressiva, gradientes contidos e detalhes que lembrem uma linha de execução.
+- Construa uma identidade Dev10x própria: tipografia expressiva, alto contraste,
+  composição precisa e um acento cromático memorável. A solução pode ser escura,
+  clara ou híbrida, desde que pareça intencional e mantenha unidade visual.
+- Use detalhes que remetam a uma linha de execução, telemetria ou passagem da
+  intenção à prova, sem transformar toda a página em uma imitação de terminal.
 - Layout legível em desktop e mobile.
 - Use somente recursos locais: CSS, SVG inline ou elementos HTML. Não dependa de imagens remotas.
 - Animações sutis devem respeitar `prefers-reduced-motion`.
@@ -40,17 +56,20 @@ Crie uma landing page completa, responsiva e visualmente marcante, em português
 - Navegação e CTAs acessíveis por teclado, com foco visível.
 - Contraste adequado e `aria-label` quando necessário.
 - Não deixe warnings de TypeScript ou erros no console da página.
+- O conteúdo visível deve usar Dev10x/DEV10X/dev10x de forma coerente e não pode
+  conter Symphony como marca do produto.
 
 ## Testes E2E obrigatórios
 
 Gere `playwright.config.ts` e pelo menos um arquivo em `tests/e2e/`.
 Os testes devem abrir a aplicação real por HTTP e validar:
 
-1. o heading principal e as duas chamadas do hero;
-2. os cards de Codex, Cursor e Claude;
-3. a seção do fluxo e a seção de evidências;
-4. a navegação por âncora ao clicar em pelo menos um link;
-5. ausência de overflow horizontal em viewport mobile.
+1. a marca Dev10x, o heading principal e as duas chamadas do hero;
+2. ausência de “Symphony” no conteúdo visível da página;
+3. os cards de Codex, Cursor e Claude;
+4. a seção do fluxo e a seção de evidências;
+5. a navegação por âncora ao clicar em pelo menos um link;
+6. ausência de overflow horizontal em viewport mobile.
 
 Configure Playwright para produzir screenshot, vídeo e trace. O `baseURL` deve
 aceitar `PLAYWRIGHT_BASE_URL`. Não configure `webServer` no

@@ -9,9 +9,9 @@ import {
   readCanonicalPrompt,
 } from "../src/contract.mjs";
 
-test("defines 15 unique model-pinned benchmark runs", () => {
-  assert.equal(RUN_MATRIX.length, 15);
-  assert.equal(new Set(RUN_MATRIX.map((run) => run.id)).size, 15);
+test("defines 18 unique model-pinned benchmark runs", () => {
+  assert.equal(RUN_MATRIX.length, 18);
+  assert.equal(new Set(RUN_MATRIX.map((run) => run.id)).size, 18);
   assert.deepEqual(
     new Set(RUN_MATRIX.map((run) => run.provider)),
     new Set(PROVIDERS),
@@ -28,11 +28,34 @@ test("defines 15 unique model-pinned benchmark runs", () => {
   );
   assert.equal(
     RUN_MATRIX.filter((run) => run.matrix === "codex-5.6-defaults").length,
-    3,
+    6,
   );
   assert.equal(
     RUN_MATRIX.every((run) => run.requested_model),
     true,
+  );
+  assert.deepEqual(
+    RUN_MATRIX.map((run) => run.id),
+    [
+      "session-codex-gpt5.5-medium",
+      "session-cursor-composer2.5",
+      "session-claude-sonnet5-medium",
+      "orchestrator-codex-gpt5.5-medium",
+      "orchestrator-cursor-composer2.5",
+      "orchestrator-claude-sonnet5-medium",
+      "session-codex-gpt5.5-high",
+      "session-cursor-grok4.5-high",
+      "session-claude-opus5-high",
+      "orchestrator-codex-gpt5.5-high",
+      "orchestrator-cursor-grok4.5-high",
+      "orchestrator-claude-opus5-high",
+      "session-codex-gpt5.6.sol-low",
+      "orchestrator-codex-gpt5.6.sol-low",
+      "session-codex-gpt5.6.terra-medium",
+      "orchestrator-codex-gpt5.6.terra-medium",
+      "session-codex-gpt5.6.luna-medium",
+      "orchestrator-codex-gpt5.6.luna-medium",
+    ],
   );
 
   assert.deepEqual(
@@ -52,15 +75,19 @@ test("defines 15 unique model-pinned benchmark runs", () => {
 
   assert.deepEqual(
     RUN_MATRIX.filter((run) => run.matrix === "codex-5.6-defaults").map(
-      ({ requested_model, requested_effort }) => [
+      ({ path, requested_model, requested_effort }) => [
+        path,
         requested_model,
         requested_effort,
       ],
     ),
     [
-      ["gpt-5.6-sol", "low"],
-      ["gpt-5.6-terra", "medium"],
-      ["gpt-5.6-luna", "medium"],
+      ["session", "gpt-5.6-sol", "low"],
+      ["orchestrator", "gpt-5.6-sol", "low"],
+      ["session", "gpt-5.6-terra", "medium"],
+      ["orchestrator", "gpt-5.6-terra", "medium"],
+      ["session", "gpt-5.6-luna", "medium"],
+      ["orchestrator", "gpt-5.6-luna", "medium"],
     ],
   );
 });
@@ -74,5 +101,7 @@ test("the canonical prompt requires preview-compatible Playwright E2E", async ()
   assert.match(prompt, /node scripts\/run-e2e\.mjs/);
   assert.match(prompt, /Não configure `webServer`/);
   assert.match(prompt, /Codex, Cursor e Claude/);
+  assert.match(prompt, /Dev10x/);
+  assert.doesNotMatch(prompt, /marca [“"]Symphony[”"]/);
   assert.equal(promptSha256(prompt).length, 64);
 });

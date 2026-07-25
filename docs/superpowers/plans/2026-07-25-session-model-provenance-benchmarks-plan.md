@@ -165,7 +165,8 @@ Playwright, FFmpeg, SQLite.
 
 1. Verify the local Symphony daemon, agent authentication, browser dependencies,
    and FFmpeg.
-2. Provision and execute all 15 cells sequentially.
+2. Provision all 18 cells and execute independent session/orchestrator cells in
+   bounded parallel groups.
 3. For every generated page, run its focused E2E test and capture:
    - desktop full-page PNG;
    - mobile full-page PNG;

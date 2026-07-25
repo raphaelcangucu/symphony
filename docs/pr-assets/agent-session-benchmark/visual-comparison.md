@@ -2,182 +2,317 @@
 
 Viewports: desktop 1280 × 720 e mobile 390 × 844; páginas completas, movimento reduzido e servidor isolado por célula.
 
-## providers-default-session-codex
+## Resultado objetivo
 
-![Hero de providers-default-session-codex](screens/providers-default-session-codex-hero.png)
+O vencedor geral foi **`session-codex-gpt5.6.terra-medium`** (97/100), seguido
+por Luna (95) e Sol (94). Consulte o
+[rubric e ranking detalhado](evaluation.md).
 
-![Página completa de providers-default-session-codex](screens/providers-default-session-codex-full.png)
+Os players abaixo usam os MP4/H.264 versionados. Cada seção também mantém um
+link direto como alternativa para renderizadores que removam a tag `<video>`.
 
-![Página mobile completa de providers-default-session-codex](screens/providers-default-session-codex-mobile-full.png)
+## session-codex-gpt5.5-medium
 
-![Run renderizado na aba Evidências de providers-default-session-codex](screens/providers-default-session-codex-evidence-tab.png)
+![Hero de session-codex-gpt5.5-medium](screens/session-codex-gpt5.5-medium-hero.png)
 
-[Vídeo E2E MP4 de providers-default-session-codex](videos/providers-default-session-codex-e2e.mp4)
+![Página completa de session-codex-gpt5.5-medium](screens/session-codex-gpt5.5-medium-full.png)
 
-## providers-default-session-cursor
+![Página mobile completa de session-codex-gpt5.5-medium](screens/session-codex-gpt5.5-medium-mobile-full.png)
 
-![Hero de providers-default-session-cursor](screens/providers-default-session-cursor-hero.png)
+![Run renderizado na aba Evidências de session-codex-gpt5.5-medium](screens/session-codex-gpt5.5-medium-evidence-tab.png)
 
-![Página completa de providers-default-session-cursor](screens/providers-default-session-cursor-full.png)
+<video controls preload="metadata" width="960">
+  <source src="videos/session-codex-gpt5.5-medium-e2e.mp4" type="video/mp4">
+  Seu navegador não conseguiu reproduzir o vídeo. Use o link MP4 abaixo.
+</video>
 
-![Página mobile completa de providers-default-session-cursor](screens/providers-default-session-cursor-mobile-full.png)
+[Vídeo E2E MP4 de session-codex-gpt5.5-medium](videos/session-codex-gpt5.5-medium-e2e.mp4)
 
-![Run renderizado na aba Evidências de providers-default-session-cursor](screens/providers-default-session-cursor-evidence-tab.png)
+## session-cursor-composer2.5
 
-[Vídeo E2E MP4 de providers-default-session-cursor](videos/providers-default-session-cursor-e2e.mp4)
+![Hero de session-cursor-composer2.5](screens/session-cursor-composer2.5-hero.png)
 
-## providers-default-session-claude
+![Página completa de session-cursor-composer2.5](screens/session-cursor-composer2.5-full.png)
 
-![Hero de providers-default-session-claude](screens/providers-default-session-claude-hero.png)
+![Página mobile completa de session-cursor-composer2.5](screens/session-cursor-composer2.5-mobile-full.png)
 
-![Página completa de providers-default-session-claude](screens/providers-default-session-claude-full.png)
+![Run renderizado na aba Evidências de session-cursor-composer2.5](screens/session-cursor-composer2.5-evidence-tab.png)
 
-![Página mobile completa de providers-default-session-claude](screens/providers-default-session-claude-mobile-full.png)
+<video controls preload="metadata" width="960">
+  <source src="videos/session-cursor-composer2.5-e2e.mp4" type="video/mp4">
+  Seu navegador não conseguiu reproduzir o vídeo. Use o link MP4 abaixo.
+</video>
 
-![Run renderizado na aba Evidências de providers-default-session-claude](screens/providers-default-session-claude-evidence-tab.png)
+[Vídeo E2E MP4 de session-cursor-composer2.5](videos/session-cursor-composer2.5-e2e.mp4)
 
-[Vídeo E2E MP4 de providers-default-session-claude](videos/providers-default-session-claude-e2e.mp4)
+## session-claude-sonnet5-medium
 
-## providers-default-orchestrator-codex
+![Hero de session-claude-sonnet5-medium](screens/session-claude-sonnet5-medium-hero.png)
 
-![Hero de providers-default-orchestrator-codex](screens/providers-default-orchestrator-codex-hero.png)
+![Página completa de session-claude-sonnet5-medium](screens/session-claude-sonnet5-medium-full.png)
 
-![Página completa de providers-default-orchestrator-codex](screens/providers-default-orchestrator-codex-full.png)
+![Página mobile completa de session-claude-sonnet5-medium](screens/session-claude-sonnet5-medium-mobile-full.png)
 
-![Página mobile completa de providers-default-orchestrator-codex](screens/providers-default-orchestrator-codex-mobile-full.png)
+![Run renderizado na aba Evidências de session-claude-sonnet5-medium](screens/session-claude-sonnet5-medium-evidence-tab.png)
 
-![Run renderizado na aba Evidências de providers-default-orchestrator-codex](screens/providers-default-orchestrator-codex-evidence-tab.png)
+<video controls preload="metadata" width="960">
+  <source src="videos/session-claude-sonnet5-medium-e2e.mp4" type="video/mp4">
+  Seu navegador não conseguiu reproduzir o vídeo. Use o link MP4 abaixo.
+</video>
 
-[Vídeo E2E MP4 de providers-default-orchestrator-codex](videos/providers-default-orchestrator-codex-e2e.mp4)
+[Vídeo E2E MP4 de session-claude-sonnet5-medium](videos/session-claude-sonnet5-medium-e2e.mp4)
 
-## providers-default-orchestrator-cursor
+## orchestrator-codex-gpt5.5-medium
 
-![Hero de providers-default-orchestrator-cursor](screens/providers-default-orchestrator-cursor-hero.png)
+![Hero de orchestrator-codex-gpt5.5-medium](screens/orchestrator-codex-gpt5.5-medium-hero.png)
 
-![Página completa de providers-default-orchestrator-cursor](screens/providers-default-orchestrator-cursor-full.png)
+![Página completa de orchestrator-codex-gpt5.5-medium](screens/orchestrator-codex-gpt5.5-medium-full.png)
 
-![Página mobile completa de providers-default-orchestrator-cursor](screens/providers-default-orchestrator-cursor-mobile-full.png)
+![Página mobile completa de orchestrator-codex-gpt5.5-medium](screens/orchestrator-codex-gpt5.5-medium-mobile-full.png)
 
-![Run renderizado na aba Evidências de providers-default-orchestrator-cursor](screens/providers-default-orchestrator-cursor-evidence-tab.png)
+![Run renderizado na aba Evidências de orchestrator-codex-gpt5.5-medium](screens/orchestrator-codex-gpt5.5-medium-evidence-tab.png)
 
-[Vídeo E2E MP4 de providers-default-orchestrator-cursor](videos/providers-default-orchestrator-cursor-e2e.mp4)
+<video controls preload="metadata" width="960">
+  <source src="videos/orchestrator-codex-gpt5.5-medium-e2e.mp4" type="video/mp4">
+  Seu navegador não conseguiu reproduzir o vídeo. Use o link MP4 abaixo.
+</video>
 
-## providers-default-orchestrator-claude
+[Vídeo E2E MP4 de orchestrator-codex-gpt5.5-medium](videos/orchestrator-codex-gpt5.5-medium-e2e.mp4)
 
-![Hero de providers-default-orchestrator-claude](screens/providers-default-orchestrator-claude-hero.png)
+## orchestrator-cursor-composer2.5
 
-![Página completa de providers-default-orchestrator-claude](screens/providers-default-orchestrator-claude-full.png)
+![Hero de orchestrator-cursor-composer2.5](screens/orchestrator-cursor-composer2.5-hero.png)
 
-![Página mobile completa de providers-default-orchestrator-claude](screens/providers-default-orchestrator-claude-mobile-full.png)
+![Página completa de orchestrator-cursor-composer2.5](screens/orchestrator-cursor-composer2.5-full.png)
 
-![Run renderizado na aba Evidências de providers-default-orchestrator-claude](screens/providers-default-orchestrator-claude-evidence-tab.png)
+![Página mobile completa de orchestrator-cursor-composer2.5](screens/orchestrator-cursor-composer2.5-mobile-full.png)
 
-[Vídeo E2E MP4 de providers-default-orchestrator-claude](videos/providers-default-orchestrator-claude-e2e.mp4)
+![Run renderizado na aba Evidências de orchestrator-cursor-composer2.5](screens/orchestrator-cursor-composer2.5-evidence-tab.png)
 
-## providers-advanced-session-codex
+<video controls preload="metadata" width="960">
+  <source src="videos/orchestrator-cursor-composer2.5-e2e.mp4" type="video/mp4">
+  Seu navegador não conseguiu reproduzir o vídeo. Use o link MP4 abaixo.
+</video>
 
-![Hero de providers-advanced-session-codex](screens/providers-advanced-session-codex-hero.png)
+[Vídeo E2E MP4 de orchestrator-cursor-composer2.5](videos/orchestrator-cursor-composer2.5-e2e.mp4)
 
-![Página completa de providers-advanced-session-codex](screens/providers-advanced-session-codex-full.png)
+## orchestrator-claude-sonnet5-medium
 
-![Página mobile completa de providers-advanced-session-codex](screens/providers-advanced-session-codex-mobile-full.png)
+![Hero de orchestrator-claude-sonnet5-medium](screens/orchestrator-claude-sonnet5-medium-hero.png)
 
-![Run renderizado na aba Evidências de providers-advanced-session-codex](screens/providers-advanced-session-codex-evidence-tab.png)
+![Página completa de orchestrator-claude-sonnet5-medium](screens/orchestrator-claude-sonnet5-medium-full.png)
 
-[Vídeo E2E MP4 de providers-advanced-session-codex](videos/providers-advanced-session-codex-e2e.mp4)
+![Página mobile completa de orchestrator-claude-sonnet5-medium](screens/orchestrator-claude-sonnet5-medium-mobile-full.png)
 
-## providers-advanced-session-cursor
+![Run renderizado na aba Evidências de orchestrator-claude-sonnet5-medium](screens/orchestrator-claude-sonnet5-medium-evidence-tab.png)
 
-![Hero de providers-advanced-session-cursor](screens/providers-advanced-session-cursor-hero.png)
+<video controls preload="metadata" width="960">
+  <source src="videos/orchestrator-claude-sonnet5-medium-e2e.mp4" type="video/mp4">
+  Seu navegador não conseguiu reproduzir o vídeo. Use o link MP4 abaixo.
+</video>
 
-![Página completa de providers-advanced-session-cursor](screens/providers-advanced-session-cursor-full.png)
+[Vídeo E2E MP4 de orchestrator-claude-sonnet5-medium](videos/orchestrator-claude-sonnet5-medium-e2e.mp4)
 
-![Página mobile completa de providers-advanced-session-cursor](screens/providers-advanced-session-cursor-mobile-full.png)
+## session-codex-gpt5.5-high
 
-![Run renderizado na aba Evidências de providers-advanced-session-cursor](screens/providers-advanced-session-cursor-evidence-tab.png)
+![Hero de session-codex-gpt5.5-high](screens/session-codex-gpt5.5-high-hero.png)
 
-[Vídeo E2E MP4 de providers-advanced-session-cursor](videos/providers-advanced-session-cursor-e2e.mp4)
+![Página completa de session-codex-gpt5.5-high](screens/session-codex-gpt5.5-high-full.png)
 
-## providers-advanced-session-claude
+![Página mobile completa de session-codex-gpt5.5-high](screens/session-codex-gpt5.5-high-mobile-full.png)
 
-![Hero de providers-advanced-session-claude](screens/providers-advanced-session-claude-hero.png)
+![Run renderizado na aba Evidências de session-codex-gpt5.5-high](screens/session-codex-gpt5.5-high-evidence-tab.png)
 
-![Página completa de providers-advanced-session-claude](screens/providers-advanced-session-claude-full.png)
+<video controls preload="metadata" width="960">
+  <source src="videos/session-codex-gpt5.5-high-e2e.mp4" type="video/mp4">
+  Seu navegador não conseguiu reproduzir o vídeo. Use o link MP4 abaixo.
+</video>
 
-![Página mobile completa de providers-advanced-session-claude](screens/providers-advanced-session-claude-mobile-full.png)
+[Vídeo E2E MP4 de session-codex-gpt5.5-high](videos/session-codex-gpt5.5-high-e2e.mp4)
 
-![Run renderizado na aba Evidências de providers-advanced-session-claude](screens/providers-advanced-session-claude-evidence-tab.png)
+## session-cursor-grok4.5-high
 
-[Vídeo E2E MP4 de providers-advanced-session-claude](videos/providers-advanced-session-claude-e2e.mp4)
+![Hero de session-cursor-grok4.5-high](screens/session-cursor-grok4.5-high-hero.png)
 
-## providers-advanced-orchestrator-codex
+![Página completa de session-cursor-grok4.5-high](screens/session-cursor-grok4.5-high-full.png)
 
-![Hero de providers-advanced-orchestrator-codex](screens/providers-advanced-orchestrator-codex-hero.png)
+![Página mobile completa de session-cursor-grok4.5-high](screens/session-cursor-grok4.5-high-mobile-full.png)
 
-![Página completa de providers-advanced-orchestrator-codex](screens/providers-advanced-orchestrator-codex-full.png)
+![Run renderizado na aba Evidências de session-cursor-grok4.5-high](screens/session-cursor-grok4.5-high-evidence-tab.png)
 
-![Página mobile completa de providers-advanced-orchestrator-codex](screens/providers-advanced-orchestrator-codex-mobile-full.png)
+<video controls preload="metadata" width="960">
+  <source src="videos/session-cursor-grok4.5-high-e2e.mp4" type="video/mp4">
+  Seu navegador não conseguiu reproduzir o vídeo. Use o link MP4 abaixo.
+</video>
 
-![Run renderizado na aba Evidências de providers-advanced-orchestrator-codex](screens/providers-advanced-orchestrator-codex-evidence-tab.png)
+[Vídeo E2E MP4 de session-cursor-grok4.5-high](videos/session-cursor-grok4.5-high-e2e.mp4)
 
-[Vídeo E2E MP4 de providers-advanced-orchestrator-codex](videos/providers-advanced-orchestrator-codex-e2e.mp4)
+## session-claude-opus5-high
 
-## providers-advanced-orchestrator-cursor
+![Hero de session-claude-opus5-high](screens/session-claude-opus5-high-hero.png)
 
-![Hero de providers-advanced-orchestrator-cursor](screens/providers-advanced-orchestrator-cursor-hero.png)
+![Página completa de session-claude-opus5-high](screens/session-claude-opus5-high-full.png)
 
-![Página completa de providers-advanced-orchestrator-cursor](screens/providers-advanced-orchestrator-cursor-full.png)
+![Página mobile completa de session-claude-opus5-high](screens/session-claude-opus5-high-mobile-full.png)
 
-![Página mobile completa de providers-advanced-orchestrator-cursor](screens/providers-advanced-orchestrator-cursor-mobile-full.png)
+![Run renderizado na aba Evidências de session-claude-opus5-high](screens/session-claude-opus5-high-evidence-tab.png)
 
-![Run renderizado na aba Evidências de providers-advanced-orchestrator-cursor](screens/providers-advanced-orchestrator-cursor-evidence-tab.png)
+<video controls preload="metadata" width="960">
+  <source src="videos/session-claude-opus5-high-e2e.mp4" type="video/mp4">
+  Seu navegador não conseguiu reproduzir o vídeo. Use o link MP4 abaixo.
+</video>
 
-[Vídeo E2E MP4 de providers-advanced-orchestrator-cursor](videos/providers-advanced-orchestrator-cursor-e2e.mp4)
+[Vídeo E2E MP4 de session-claude-opus5-high](videos/session-claude-opus5-high-e2e.mp4)
 
-## providers-advanced-orchestrator-claude
+## orchestrator-codex-gpt5.5-high
 
-![Hero de providers-advanced-orchestrator-claude](screens/providers-advanced-orchestrator-claude-hero.png)
+![Hero de orchestrator-codex-gpt5.5-high](screens/orchestrator-codex-gpt5.5-high-hero.png)
 
-![Página completa de providers-advanced-orchestrator-claude](screens/providers-advanced-orchestrator-claude-full.png)
+![Página completa de orchestrator-codex-gpt5.5-high](screens/orchestrator-codex-gpt5.5-high-full.png)
 
-![Página mobile completa de providers-advanced-orchestrator-claude](screens/providers-advanced-orchestrator-claude-mobile-full.png)
+![Página mobile completa de orchestrator-codex-gpt5.5-high](screens/orchestrator-codex-gpt5.5-high-mobile-full.png)
 
-![Run renderizado na aba Evidências de providers-advanced-orchestrator-claude](screens/providers-advanced-orchestrator-claude-evidence-tab.png)
+![Run renderizado na aba Evidências de orchestrator-codex-gpt5.5-high](screens/orchestrator-codex-gpt5.5-high-evidence-tab.png)
 
-[Vídeo E2E MP4 de providers-advanced-orchestrator-claude](videos/providers-advanced-orchestrator-claude-e2e.mp4)
+<video controls preload="metadata" width="960">
+  <source src="videos/orchestrator-codex-gpt5.5-high-e2e.mp4" type="video/mp4">
+  Seu navegador não conseguiu reproduzir o vídeo. Use o link MP4 abaixo.
+</video>
 
-## codex-5.6-defaults-session-sol
+[Vídeo E2E MP4 de orchestrator-codex-gpt5.5-high](videos/orchestrator-codex-gpt5.5-high-e2e.mp4)
 
-![Hero de codex-5.6-defaults-session-sol](screens/codex-5.6-defaults-session-sol-hero.png)
+## orchestrator-cursor-grok4.5-high
 
-![Página completa de codex-5.6-defaults-session-sol](screens/codex-5.6-defaults-session-sol-full.png)
+![Hero de orchestrator-cursor-grok4.5-high](screens/orchestrator-cursor-grok4.5-high-hero.png)
 
-![Página mobile completa de codex-5.6-defaults-session-sol](screens/codex-5.6-defaults-session-sol-mobile-full.png)
+![Página completa de orchestrator-cursor-grok4.5-high](screens/orchestrator-cursor-grok4.5-high-full.png)
 
-![Run renderizado na aba Evidências de codex-5.6-defaults-session-sol](screens/codex-5.6-defaults-session-sol-evidence-tab.png)
+![Página mobile completa de orchestrator-cursor-grok4.5-high](screens/orchestrator-cursor-grok4.5-high-mobile-full.png)
 
-[Vídeo E2E MP4 de codex-5.6-defaults-session-sol](videos/codex-5.6-defaults-session-sol-e2e.mp4)
+![Run renderizado na aba Evidências de orchestrator-cursor-grok4.5-high](screens/orchestrator-cursor-grok4.5-high-evidence-tab.png)
 
-## codex-5.6-defaults-session-terra
+<video controls preload="metadata" width="960">
+  <source src="videos/orchestrator-cursor-grok4.5-high-e2e.mp4" type="video/mp4">
+  Seu navegador não conseguiu reproduzir o vídeo. Use o link MP4 abaixo.
+</video>
 
-![Hero de codex-5.6-defaults-session-terra](screens/codex-5.6-defaults-session-terra-hero.png)
+[Vídeo E2E MP4 de orchestrator-cursor-grok4.5-high](videos/orchestrator-cursor-grok4.5-high-e2e.mp4)
 
-![Página completa de codex-5.6-defaults-session-terra](screens/codex-5.6-defaults-session-terra-full.png)
+## orchestrator-claude-opus5-high
 
-![Página mobile completa de codex-5.6-defaults-session-terra](screens/codex-5.6-defaults-session-terra-mobile-full.png)
+![Hero de orchestrator-claude-opus5-high](screens/orchestrator-claude-opus5-high-hero.png)
 
-![Run renderizado na aba Evidências de codex-5.6-defaults-session-terra](screens/codex-5.6-defaults-session-terra-evidence-tab.png)
+![Página completa de orchestrator-claude-opus5-high](screens/orchestrator-claude-opus5-high-full.png)
 
-[Vídeo E2E MP4 de codex-5.6-defaults-session-terra](videos/codex-5.6-defaults-session-terra-e2e.mp4)
+![Página mobile completa de orchestrator-claude-opus5-high](screens/orchestrator-claude-opus5-high-mobile-full.png)
 
-## codex-5.6-defaults-session-luna
+![Run renderizado na aba Evidências de orchestrator-claude-opus5-high](screens/orchestrator-claude-opus5-high-evidence-tab.png)
 
-![Hero de codex-5.6-defaults-session-luna](screens/codex-5.6-defaults-session-luna-hero.png)
+<video controls preload="metadata" width="960">
+  <source src="videos/orchestrator-claude-opus5-high-e2e.mp4" type="video/mp4">
+  Seu navegador não conseguiu reproduzir o vídeo. Use o link MP4 abaixo.
+</video>
 
-![Página completa de codex-5.6-defaults-session-luna](screens/codex-5.6-defaults-session-luna-full.png)
+[Vídeo E2E MP4 de orchestrator-claude-opus5-high](videos/orchestrator-claude-opus5-high-e2e.mp4)
 
-![Página mobile completa de codex-5.6-defaults-session-luna](screens/codex-5.6-defaults-session-luna-mobile-full.png)
+## session-codex-gpt5.6.sol-low
 
-![Run renderizado na aba Evidências de codex-5.6-defaults-session-luna](screens/codex-5.6-defaults-session-luna-evidence-tab.png)
+![Hero de session-codex-gpt5.6.sol-low](screens/session-codex-gpt5.6.sol-low-hero.png)
 
-[Vídeo E2E MP4 de codex-5.6-defaults-session-luna](videos/codex-5.6-defaults-session-luna-e2e.mp4)
+![Página completa de session-codex-gpt5.6.sol-low](screens/session-codex-gpt5.6.sol-low-full.png)
+
+![Página mobile completa de session-codex-gpt5.6.sol-low](screens/session-codex-gpt5.6.sol-low-mobile-full.png)
+
+![Run renderizado na aba Evidências de session-codex-gpt5.6.sol-low](screens/session-codex-gpt5.6.sol-low-evidence-tab.png)
+
+<video controls preload="metadata" width="960">
+  <source src="videos/session-codex-gpt5.6.sol-low-e2e.mp4" type="video/mp4">
+  Seu navegador não conseguiu reproduzir o vídeo. Use o link MP4 abaixo.
+</video>
+
+[Vídeo E2E MP4 de session-codex-gpt5.6.sol-low](videos/session-codex-gpt5.6.sol-low-e2e.mp4)
+
+## orchestrator-codex-gpt5.6.sol-low
+
+![Hero de orchestrator-codex-gpt5.6.sol-low](screens/orchestrator-codex-gpt5.6.sol-low-hero.png)
+
+![Página completa de orchestrator-codex-gpt5.6.sol-low](screens/orchestrator-codex-gpt5.6.sol-low-full.png)
+
+![Página mobile completa de orchestrator-codex-gpt5.6.sol-low](screens/orchestrator-codex-gpt5.6.sol-low-mobile-full.png)
+
+![Run renderizado na aba Evidências de orchestrator-codex-gpt5.6.sol-low](screens/orchestrator-codex-gpt5.6.sol-low-evidence-tab.png)
+
+<video controls preload="metadata" width="960">
+  <source src="videos/orchestrator-codex-gpt5.6.sol-low-e2e.mp4" type="video/mp4">
+  Seu navegador não conseguiu reproduzir o vídeo. Use o link MP4 abaixo.
+</video>
+
+[Vídeo E2E MP4 de orchestrator-codex-gpt5.6.sol-low](videos/orchestrator-codex-gpt5.6.sol-low-e2e.mp4)
+
+## session-codex-gpt5.6.terra-medium
+
+![Hero de session-codex-gpt5.6.terra-medium](screens/session-codex-gpt5.6.terra-medium-hero.png)
+
+![Página completa de session-codex-gpt5.6.terra-medium](screens/session-codex-gpt5.6.terra-medium-full.png)
+
+![Página mobile completa de session-codex-gpt5.6.terra-medium](screens/session-codex-gpt5.6.terra-medium-mobile-full.png)
+
+![Run renderizado na aba Evidências de session-codex-gpt5.6.terra-medium](screens/session-codex-gpt5.6.terra-medium-evidence-tab.png)
+
+<video controls preload="metadata" width="960">
+  <source src="videos/session-codex-gpt5.6.terra-medium-e2e.mp4" type="video/mp4">
+  Seu navegador não conseguiu reproduzir o vídeo. Use o link MP4 abaixo.
+</video>
+
+[Vídeo E2E MP4 de session-codex-gpt5.6.terra-medium](videos/session-codex-gpt5.6.terra-medium-e2e.mp4)
+
+## orchestrator-codex-gpt5.6.terra-medium
+
+![Hero de orchestrator-codex-gpt5.6.terra-medium](screens/orchestrator-codex-gpt5.6.terra-medium-hero.png)
+
+![Página completa de orchestrator-codex-gpt5.6.terra-medium](screens/orchestrator-codex-gpt5.6.terra-medium-full.png)
+
+![Página mobile completa de orchestrator-codex-gpt5.6.terra-medium](screens/orchestrator-codex-gpt5.6.terra-medium-mobile-full.png)
+
+![Run renderizado na aba Evidências de orchestrator-codex-gpt5.6.terra-medium](screens/orchestrator-codex-gpt5.6.terra-medium-evidence-tab.png)
+
+<video controls preload="metadata" width="960">
+  <source src="videos/orchestrator-codex-gpt5.6.terra-medium-e2e.mp4" type="video/mp4">
+  Seu navegador não conseguiu reproduzir o vídeo. Use o link MP4 abaixo.
+</video>
+
+[Vídeo E2E MP4 de orchestrator-codex-gpt5.6.terra-medium](videos/orchestrator-codex-gpt5.6.terra-medium-e2e.mp4)
+
+## session-codex-gpt5.6.luna-medium
+
+![Hero de session-codex-gpt5.6.luna-medium](screens/session-codex-gpt5.6.luna-medium-hero.png)
+
+![Página completa de session-codex-gpt5.6.luna-medium](screens/session-codex-gpt5.6.luna-medium-full.png)
+
+![Página mobile completa de session-codex-gpt5.6.luna-medium](screens/session-codex-gpt5.6.luna-medium-mobile-full.png)
+
+![Run renderizado na aba Evidências de session-codex-gpt5.6.luna-medium](screens/session-codex-gpt5.6.luna-medium-evidence-tab.png)
+
+<video controls preload="metadata" width="960">
+  <source src="videos/session-codex-gpt5.6.luna-medium-e2e.mp4" type="video/mp4">
+  Seu navegador não conseguiu reproduzir o vídeo. Use o link MP4 abaixo.
+</video>
+
+[Vídeo E2E MP4 de session-codex-gpt5.6.luna-medium](videos/session-codex-gpt5.6.luna-medium-e2e.mp4)
+
+## orchestrator-codex-gpt5.6.luna-medium
+
+![Hero de orchestrator-codex-gpt5.6.luna-medium](screens/orchestrator-codex-gpt5.6.luna-medium-hero.png)
+
+![Página completa de orchestrator-codex-gpt5.6.luna-medium](screens/orchestrator-codex-gpt5.6.luna-medium-full.png)
+
+![Página mobile completa de orchestrator-codex-gpt5.6.luna-medium](screens/orchestrator-codex-gpt5.6.luna-medium-mobile-full.png)
+
+![Run renderizado na aba Evidências de orchestrator-codex-gpt5.6.luna-medium](screens/orchestrator-codex-gpt5.6.luna-medium-evidence-tab.png)
+
+<video controls preload="metadata" width="960">
+  <source src="videos/orchestrator-codex-gpt5.6.luna-medium-e2e.mp4" type="video/mp4">
+  Seu navegador não conseguiu reproduzir o vídeo. Use o link MP4 abaixo.
+</video>
+
+[Vídeo E2E MP4 de orchestrator-codex-gpt5.6.luna-medium](videos/orchestrator-codex-gpt5.6.luna-medium-e2e.mp4)

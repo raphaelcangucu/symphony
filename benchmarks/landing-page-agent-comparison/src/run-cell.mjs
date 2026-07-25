@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import { RUN_MATRIX } from "./contract.mjs";
 import { executeProcess } from "./process.mjs";
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -17,11 +18,9 @@ export function selectRun(manifest, runId) {
 }
 
 export function artifactSlug(runId) {
-  if (
-    !/^(providers-(default|advanced)-(session|orchestrator)-(codex|cursor|claude)|codex-5\.6-defaults-session-(sol|terra|luna))$/.test(
-      runId,
-    )
-  ) {
+  const pathSafe = /^[a-z0-9][a-z0-9.-]{0,127}$/.test(runId);
+  const canonical = RUN_MATRIX.some((run) => run.id === runId);
+  if (!pathSafe || !canonical) {
     throw new Error(`invalid benchmark run id: ${runId}`);
   }
   return runId;
@@ -156,8 +155,13 @@ export function issueStatusName(issue) {
     : (issue?.status?.name ?? null);
 }
 
-export function shouldDispatchIssue(issue) {
-  return issueStatusName(issue) === "Backlog";
+export function shouldDispatchIssue(issue, execution = null) {
+  const status = issueStatusName(issue);
+  if (status === "Backlog") return true;
+  return (
+    status === "Human Review" &&
+    ["aborted", "failed", "error"].includes(execution?.status)
+  );
 }
 
 export function sessionProviderError(thread) {

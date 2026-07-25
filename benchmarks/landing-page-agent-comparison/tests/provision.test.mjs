@@ -18,7 +18,7 @@ test("workspace project payload configures preview, evidence and local clone", (
     workspaceRoot: "/tmp/landing-workspaces",
   });
 
-  assert.equal(payload.slug, "symphony-landing-benchmark");
+  assert.equal(payload.slug, "dev10x-landing-benchmark");
   assert.equal(payload.repositories[0].clone_url, "/tmp/landing-seed.git");
   assert.equal(payload.repositories[0].local_path, "/tmp/landing-seed");
   assert.equal(payload.repositories[0].workspace_path, "site");
@@ -28,7 +28,7 @@ test("workspace project payload configures preview, evidence and local clone", (
     /dispatch_states:\n    - In Progress/,
   );
   assert.match(payload.setup.workflow_markdown, /test:e2e/);
-  assert.match(payload.setup.workflow_markdown, /max_turns: 30/);
+  assert.match(payload.setup.workflow_markdown, /max_turns: 45/);
   assert.match(payload.setup.workflow_markdown, /required: true/);
 });
 
@@ -42,7 +42,7 @@ test("workflow prompt injects the issue description without provider branches", 
   assert.equal(markdown.endsWith("{{ issue.description }}\n"), false);
 });
 
-test("all 15 run records carry the same prompt hash and explicit model contract", () => {
+test("all 18 run records carry the same prompt hash and explicit model contract", () => {
   const prompt = "identical prompt\n";
   const records = buildRunRecords(prompt);
 

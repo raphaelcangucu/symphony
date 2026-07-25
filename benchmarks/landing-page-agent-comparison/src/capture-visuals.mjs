@@ -67,6 +67,11 @@ export function renderVisualComparison(captures) {
         "",
         `![Run renderizado na aba Evidências de ${capture.id}](screens/${capture.id}-evidence-tab.png)`,
         "",
+        `<video controls preload="metadata" width="960">`,
+        `  <source src="videos/${capture.id}-e2e.mp4" type="video/mp4">`,
+        `  Seu navegador não conseguiu reproduzir o vídeo. Use o link MP4 abaixo.`,
+        `</video>`,
+        "",
         `[Vídeo E2E MP4 de ${capture.id}](videos/${capture.id}-e2e.mp4)`,
       );
     } else {

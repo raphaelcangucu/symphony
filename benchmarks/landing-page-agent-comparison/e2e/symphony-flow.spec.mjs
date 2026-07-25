@@ -205,7 +205,12 @@ test("executes one provider cell through the real Symphony tracker", async ({
         );
       }
       result.effective_prompt_sha256 = promptSha256(issueBefore.description);
-      if (shouldDispatchIssue(issueBefore)) {
+      const executionsBefore = await api.request("/agent_executions");
+      const previousExecution = selectIssueAgentExecution(
+        executionsBefore,
+        run.issue_identifier,
+      );
+      if (shouldDispatchIssue(issueBefore, previousExecution)) {
         await api.request(`${issuePath}/dispatch`, {
           method: "POST",
           body: {

@@ -325,11 +325,11 @@ async function validateWorkspace(workspacePath, index) {
 
 export function renderComparison({ prompt_sha256: promptHash, rows }) {
   const lines = [
-    "# Comparação de agentes — landing page Symphony",
+    "# Comparação de agentes — landing page Dev10x",
     "",
     `Prompt SHA-256: \`${promptHash}\``,
     "",
-    "| Célula | Matriz | Caminho | Provedor | Solicitado | Resolvido | Symphony | Contrato | Validação | Duração observada | Observação |",
+    "| Célula | Matriz | Caminho | Provedor | Solicitado | Resolvido | Execução | Contrato | Validação | Duração observada | Observação |",
     "| --- | --- | --- | --- | --- | --- | --- | --- | --- | ---: | --- |",
   ];
 
@@ -365,7 +365,7 @@ export function renderComparison({ prompt_sha256: promptHash, rows }) {
       "",
       `- Workspace: \`${row.workspace_path}\``,
       `- Arquivos gerados: ${row.file_count ?? 0}`,
-      `- Artefatos Symphony: \`${row.artifacts_root ?? row.artifact_root ?? "indisponível"}\``,
+      `- Artefatos do fluxo: \`${row.artifacts_root ?? row.artifact_root ?? "indisponível"}\``,
       `- Tentativas: ${row.attempts?.count ?? 0} (canônica: ${row.attempts?.canonical_attempt_id ?? "n/a"})`,
       `- Preview: ${row.preview?.servers?.[0]?.url ?? "indisponível"}`,
       `- Identidade: ${row.identity ? `thread=${row.identity.assistant_thread_id ?? "n/a"}, agent=${row.identity.agent_kind ?? "n/a"}, status=${row.identity.status ?? "n/a"}, source=${row.identity.source ?? "n/a"}` : "indisponível"}`,

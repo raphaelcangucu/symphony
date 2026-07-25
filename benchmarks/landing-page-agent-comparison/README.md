@@ -6,13 +6,13 @@ Symphony:
 - sessão interativa;
 - issue despachado pelo orquestrador.
 
-A matriz fixa modelo e esforço e contém 15 células:
+A matriz fixa modelo e esforço e contém 18 células:
 
 - `providers-default`: sessão e orquestrador com Codex `gpt-5.5` medium,
   Claude `claude-sonnet-5` medium e Cursor `composer-2.5`;
 - `providers-advanced`: sessão e orquestrador com Codex `gpt-5.5` high,
   Claude `claude-opus-5` high e Cursor `cursor-grok-4.5-high`;
-- `codex-5.6-defaults`: sessão direta com `gpt-5.6-sol` low,
+- `codex-5.6-defaults`: sessão e orquestrador com `gpt-5.6-sol` low,
   `gpt-5.6-terra` medium e `gpt-5.6-luna` medium.
 
 O prompt canônico fica em [`prompt.md`](prompt.md); seu SHA-256 é gravado em
@@ -57,13 +57,15 @@ Execute uma matriz por vez, ou células independentes em paralelo quando houver
 capacidade. Os testes unitários do Symphony continuam focados e sequenciais:
 
 ```bash
-npm run run:default
-npm run run:advanced
-npm run run:codex-5.6
+SYMPHONY_BENCH_CONCURRENCY=3 npm run run:default
+SYMPHONY_BENCH_CONCURRENCY=3 npm run run:advanced
+SYMPHONY_BENCH_CONCURRENCY=3 npm run run:codex-5.6
 ```
 
 Para repetir apenas uma célula, use
 `SYMPHONY_BENCH_RUN_ID=<id> npm run run:cell`.
+O runner limita a concorrência a seis células e, se houver falhas, aguarda as
+demais células do lote e apresenta um resumo agregado.
 
 Colete build/E2E e gere as capturas visuais padronizadas:
 

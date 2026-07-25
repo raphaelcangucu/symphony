@@ -1,34 +1,37 @@
-# Comparação de agentes — landing page Symphony
+# Comparação de agentes — landing page Dev10x
 
-Prompt SHA-256: `f9ea44a4d5952da71a896d5d7623f694bb445f52064f563ecf9a3d81744ca297`
+Prompt SHA-256: `21315a3c30282f0813eb486ba8e2b124cd744d3528dd275a32ab75b2f9bf38f5`
 
-| Célula | Matriz | Caminho | Provedor | Solicitado | Resolvido | Symphony | Contrato | Validação | Duração observada | Observação |
+| Célula | Matriz | Caminho | Provedor | Solicitado | Resolvido | Execução | Contrato | Validação | Duração observada | Observação |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---: | --- |
-| providers-default-session-codex | providers-default | session | codex | gpt-5.5 (medium) | gpt-5.5 (medium) | completed | passed | passed (1 E2E) | 10m 40s | — |
-| providers-default-session-cursor | providers-default | session | cursor | composer-2.5 | composer-2.5 | completed | passed | passed (5 E2E) | 1m 41s | — |
-| providers-default-session-claude | providers-default | session | claude | claude-sonnet-5 (medium) | claude-sonnet-5 (medium) | completed | passed | passed (10 E2E) | 9m 48s | — |
-| providers-default-orchestrator-codex | providers-default | orchestrator | codex | gpt-5.5 (medium) | gpt-5.5 (medium) | completed | passed | passed (1 E2E) | 7m 37s | — |
-| providers-default-orchestrator-cursor | providers-default | orchestrator | cursor | composer-2.5 | composer-2.5 | completed | passed | passed (1 E2E) | 2m 24s | — |
-| providers-default-orchestrator-claude | providers-default | orchestrator | claude | claude-sonnet-5 (medium) | claude-sonnet-5 (medium) | completed | passed | passed (1 E2E) | 2m 47s | — |
-| providers-advanced-session-codex | providers-advanced | session | codex | gpt-5.5 (high) | gpt-5.5 (high) | completed | passed | passed (2 E2E) | 14m 5s | — |
-| providers-advanced-session-cursor | providers-advanced | session | cursor | cursor-grok-4.5-high | cursor-grok-4.5-high | completed | passed | passed (1 E2E) | 1m 37s | — |
-| providers-advanced-session-claude | providers-advanced | session | claude | claude-opus-5 (high) | claude-opus-5 (high) | completed | passed | passed (8 E2E) | 21m 37s | — |
-| providers-advanced-orchestrator-codex | providers-advanced | orchestrator | codex | gpt-5.5 (high) | gpt-5.5 (high) | completed | passed | passed (1 E2E) | 6m 32s | — |
-| providers-advanced-orchestrator-cursor | providers-advanced | orchestrator | cursor | cursor-grok-4.5-high | cursor-grok-4.5-high | completed | passed | passed (1 E2E) | 57s | — |
-| providers-advanced-orchestrator-claude | providers-advanced | orchestrator | claude | claude-opus-5 (high) | claude-opus-5 (high) | completed | passed | passed (1 E2E) | 42m 36s | — |
-| codex-5.6-defaults-session-sol | codex-5.6-defaults | session | codex | gpt-5.6-sol (low) | gpt-5.6-sol (low) | completed | passed | passed (1 E2E) | 9m 32s | — |
-| codex-5.6-defaults-session-terra | codex-5.6-defaults | session | codex | gpt-5.6-terra (medium) | gpt-5.6-terra (medium) | completed | passed | passed (2 E2E) | 34m 37s | — |
-| codex-5.6-defaults-session-luna | codex-5.6-defaults | session | codex | gpt-5.6-luna (medium) | gpt-5.6-luna (medium) | completed | passed | passed (4 E2E) | 34m 12s | — |
+| session-codex-gpt5.5-medium | providers-default | session | codex | gpt-5.5 (medium) | gpt-5.5 (medium) | completed | passed | passed (1 E2E) | 12m 1s | — |
+| session-cursor-composer2.5 | providers-default | session | cursor | composer-2.5 | composer-2.5 | completed | passed | passed (7 E2E) | 2m 41s | — |
+| session-claude-sonnet5-medium | providers-default | session | claude | claude-sonnet-5 (medium) | claude-sonnet-5 (medium) | completed | passed | passed (7 E2E) | 8m 29s | — |
+| orchestrator-codex-gpt5.5-medium | providers-default | orchestrator | codex | gpt-5.5 (medium) | gpt-5.5 (medium) | completed | passed | passed (1 E2E) | 8m 12s | — |
+| orchestrator-cursor-composer2.5 | providers-default | orchestrator | cursor | composer-2.5 | composer-2.5 | completed | passed | passed (1 E2E) | 2m 37s | — |
+| orchestrator-claude-sonnet5-medium | providers-default | orchestrator | claude | claude-sonnet-5 (medium) | claude-sonnet-5 (medium) | completed | passed | passed (6 E2E) | 7m 47s | — |
+| session-codex-gpt5.5-high | providers-advanced | session | codex | gpt-5.5 (high) | gpt-5.5 (high) | completed | passed | passed (1 E2E) | 14m 4s | — |
+| session-cursor-grok4.5-high | providers-advanced | session | cursor | cursor-grok-4.5-high | cursor-grok-4.5-high | completed | passed | passed (1 E2E) | 4m 32s | — |
+| session-claude-opus5-high | providers-advanced | session | claude | claude-opus-5 (high) | claude-opus-5 (high) | completed | passed | passed (6 E2E) | 22m 42s | — |
+| orchestrator-codex-gpt5.5-high | providers-advanced | orchestrator | codex | gpt-5.5 (high) | gpt-5.5 (high) | completed | passed | passed (1 E2E) | 8m 14s | — |
+| orchestrator-cursor-grok4.5-high | providers-advanced | orchestrator | cursor | cursor-grok-4.5-high | cursor-grok-4.5-high | completed | passed | passed (1 E2E) | 2m 46s | — |
+| orchestrator-claude-opus5-high | providers-advanced | orchestrator | claude | claude-opus-5 (high) | claude-opus-5 (high) | completed | passed | passed (1 E2E) | 8m 31s | — |
+| session-codex-gpt5.6.sol-low | codex-5.6-defaults | session | codex | gpt-5.6-sol (low) | gpt-5.6-sol (low) | completed | passed | passed (1 E2E) | 10m 3s | — |
+| orchestrator-codex-gpt5.6.sol-low | codex-5.6-defaults | orchestrator | codex | gpt-5.6-sol (low) | gpt-5.6-sol (low) | completed | passed | passed (1 E2E) | 4m 56s | — |
+| session-codex-gpt5.6.terra-medium | codex-5.6-defaults | session | codex | gpt-5.6-terra (medium) | gpt-5.6-terra (medium) | completed | passed | passed (2 E2E) | 7m 40s | — |
+| orchestrator-codex-gpt5.6.terra-medium | codex-5.6-defaults | orchestrator | codex | gpt-5.6-terra (medium) | gpt-5.6-terra (medium) | completed | passed | passed (1 E2E) | 2m 41s | — |
+| session-codex-gpt5.6.luna-medium | codex-5.6-defaults | session | codex | gpt-5.6-luna (medium) | gpt-5.6-luna (medium) | completed | passed | passed (1 E2E) | 8m 29s | — |
+| orchestrator-codex-gpt5.6.luna-medium | codex-5.6-defaults | orchestrator | codex | gpt-5.6-luna (medium) | gpt-5.6-luna (medium) | completed | passed | passed (1 E2E) | 2m 37s | — |
 
 ## Saídas
 
-### providers-default-session-codex
+### session-codex-gpt5.5-medium
 
-- Workspace: `/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-1__p1/site`
-- Arquivos gerados: 38
-- Artefatos Symphony: `/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-default-session-codex/attempts/20260725T161157791Z-5730f273-bf14-4d61-b076-23d185652029`
-- Tentativas: 1 (canônica: 20260725T161157791Z-5730f273-bf14-4d61-b076-23d185652029)
-- Preview: http://127.0.0.1:10000/
+- Workspace: `/tmp/dev10x-bench-model-provenance-pr6-v3/runtime/workspaces/dev10x-landing-benchmark/DEV-1__p1/site`
+- Arquivos gerados: 39
+- Artefatos do fluxo: `/tmp/dev10x-bench-model-provenance-pr6-v3/runtime/artifacts/session-codex-gpt5.5-medium/attempts/20260725T202024557Z-4f1b581d-856f-454c-9c9a-580c836a7ca5`
+- Tentativas: 1 (canônica: 20260725T202024557Z-4f1b581d-856f-454c-9c9a-580c836a7ca5)
+- Preview: http://127.0.0.1:10032/
 - Identidade: thread=1, agent=codex, status=active, source=tracker_snapshot
 - Modelo solicitado: gpt-5.5 (medium)
 - Modelo resolvido: gpt-5.5 (medium)
@@ -36,125 +39,125 @@ Prompt SHA-256: `f9ea44a4d5952da71a896d5d7623f694bb445f52064f563ecf9a3d81744ca29
 - Evidências: 5 screenshots, 2 vídeos, 1 traces
 - Erro: nenhum registrado
 
-### providers-default-session-cursor
+### session-cursor-composer2.5
 
-- Workspace: `/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-2__p1/site`
-- Arquivos gerados: 58
-- Artefatos Symphony: `/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-default-session-cursor/attempts/20260725T192211953Z-aeae40d2-5b05-48db-8fa2-c7045e6f6bd3`
-- Tentativas: 2 (canônica: 20260725T192211953Z-aeae40d2-5b05-48db-8fa2-c7045e6f6bd3)
-- Preview: http://127.0.0.1:10016/
+- Workspace: `/tmp/dev10x-bench-model-provenance-pr6-v3/runtime/workspaces/dev10x-landing-benchmark/DEV-2__p1/site`
+- Arquivos gerados: 59
+- Artefatos do fluxo: `/tmp/dev10x-bench-model-provenance-pr6-v3/runtime/artifacts/session-cursor-composer2.5/attempts/20260725T202024558Z-d0280b07-b257-4229-9701-6d679923ba02`
+- Tentativas: 1 (canônica: 20260725T202024558Z-d0280b07-b257-4229-9701-6d679923ba02)
+- Preview: http://127.0.0.1:10001/
 - Identidade: thread=2, agent=cursor, status=active, source=tracker_snapshot
 - Modelo solicitado: composer-2.5
 - Modelo resolvido: composer-2.5
 - Git: 0 arquivos / 0 linhas alteradas
-- Evidências: 7 screenshots, 6 vídeos, 5 traces
+- Evidências: 9 screenshots, 8 vídeos, 7 traces
 - Erro: nenhum registrado
 
-### providers-default-session-claude
+### session-claude-sonnet5-medium
 
-- Workspace: `/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-3__p1/site`
-- Arquivos gerados: 78
-- Artefatos Symphony: `/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-default-session-claude/attempts/20260725T163541009Z-a03a8f15-d512-450a-af16-9607f9dd1da0`
-- Tentativas: 1 (canônica: 20260725T163541009Z-a03a8f15-d512-450a-af16-9607f9dd1da0)
-- Preview: http://127.0.0.1:10016/
+- Workspace: `/tmp/dev10x-bench-model-provenance-pr6-v3/runtime/workspaces/dev10x-landing-benchmark/DEV-3__p1/site`
+- Arquivos gerados: 66
+- Artefatos do fluxo: `/tmp/dev10x-bench-model-provenance-pr6-v3/runtime/artifacts/session-claude-sonnet5-medium/attempts/20260725T202024562Z-03aa1ce0-3017-4218-bf74-b8dce5035768`
+- Tentativas: 1 (canônica: 20260725T202024562Z-03aa1ce0-3017-4218-bf74-b8dce5035768)
+- Preview: http://127.0.0.1:10003/
 - Identidade: thread=3, agent=claude, status=active, source=tracker_snapshot
 - Modelo solicitado: claude-sonnet-5 (medium)
 - Modelo resolvido: claude-sonnet-5 (medium)
 - Git: 0 arquivos / 0 linhas alteradas
-- Evidências: 12 screenshots, 11 vídeos, 10 traces
+- Evidências: 11 screenshots, 8 vídeos, 7 traces
 - Erro: nenhum registrado
 
-### providers-default-orchestrator-codex
+### orchestrator-codex-gpt5.5-medium
 
-- Workspace: `/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-4/site`
-- Arquivos gerados: 39
-- Artefatos Symphony: `/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-default-orchestrator-codex/attempts/20260725T164530112Z-fbf5a6da-7c6a-4275-b851-d10894b74eb9`
-- Tentativas: 1 (canônica: 20260725T164530112Z-fbf5a6da-7c6a-4275-b851-d10894b74eb9)
-- Preview: http://127.0.0.1:10001/
+- Workspace: `/tmp/dev10x-bench-model-provenance-pr6-v3/runtime/workspaces/dev10x-landing-benchmark/DEV-4/site`
+- Arquivos gerados: 15
+- Artefatos do fluxo: `/tmp/dev10x-bench-model-provenance-pr6-v3/runtime/artifacts/orchestrator-codex-gpt5.5-medium/attempts/20260725T202306899Z-eefbcb48-3c75-48fd-b170-f38e0a02bb68`
+- Tentativas: 1 (canônica: 20260725T202306899Z-eefbcb48-3c75-48fd-b170-f38e0a02bb68)
+- Preview: http://127.0.0.1:10004/
 - Identidade: thread=10, agent=codex, status=closed, source=tracker_snapshot
 - Modelo solicitado: gpt-5.5 (medium)
 - Modelo resolvido: gpt-5.5 (medium)
 - Git: 0 arquivos / 0 linhas alteradas
-- Evidências: 3 screenshots, 2 vídeos, 1 traces
+- Evidências: 2 screenshots, 1 vídeos, 0 traces
 - Erro: nenhum registrado
 
-### providers-default-orchestrator-cursor
+### orchestrator-cursor-composer2.5
 
-- Workspace: `/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-5/site`
-- Arquivos gerados: 39
-- Artefatos Symphony: `/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-default-orchestrator-cursor/attempts/20260725T192212005Z-3637f179-0bb7-4441-b3a6-915348e43c8b`
-- Tentativas: 2 (canônica: 20260725T192212005Z-3637f179-0bb7-4441-b3a6-915348e43c8b)
+- Workspace: `/tmp/dev10x-bench-model-provenance-pr6-v3/runtime/workspaces/dev10x-landing-benchmark/DEV-5/site`
+- Arquivos gerados: 45
+- Artefatos do fluxo: `/tmp/dev10x-bench-model-provenance-pr6-v3/runtime/artifacts/orchestrator-cursor-composer2.5/attempts/20260725T202855779Z-b79de2f1-03db-478b-a9a1-92580dabe594`
+- Tentativas: 1 (canônica: 20260725T202855779Z-b79de2f1-03db-478b-a9a1-92580dabe594)
 - Preview: http://127.0.0.1:10024/
-- Identidade: thread=18, agent=cursor, status=closed, source=tracker_snapshot
+- Identidade: thread=11, agent=cursor, status=closed, source=tracker_snapshot
 - Modelo solicitado: composer-2.5
 - Modelo resolvido: composer-2.5
 - Git: 0 arquivos / 0 linhas alteradas
 - Evidências: 3 screenshots, 2 vídeos, 1 traces
 - Erro: nenhum registrado
 
-### providers-default-orchestrator-claude
+### orchestrator-claude-sonnet5-medium
 
-- Workspace: `/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-6/site`
-- Arquivos gerados: 39
-- Artefatos Symphony: `/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-default-orchestrator-claude/attempts/20260725T165436000Z-cf7de322-40cf-4acb-aa15-f6950ef0b0a5`
-- Tentativas: 1 (canônica: 20260725T165436000Z-cf7de322-40cf-4acb-aa15-f6950ef0b0a5)
+- Workspace: `/tmp/dev10x-bench-model-provenance-pr6-v3/runtime/workspaces/dev10x-landing-benchmark/DEV-6/site`
+- Arquivos gerados: 20
+- Artefatos do fluxo: `/tmp/dev10x-bench-model-provenance-pr6-v3/runtime/artifacts/orchestrator-claude-sonnet5-medium/attempts/20260725T203123569Z-9fbb2718-d12f-4c7f-82f8-cffa29897a8d`
+- Tentativas: 1 (canônica: 20260725T203123569Z-9fbb2718-d12f-4c7f-82f8-cffa29897a8d)
 - Preview: http://127.0.0.1:10040/
 - Identidade: thread=12, agent=claude, status=closed, source=tracker_snapshot
 - Modelo solicitado: claude-sonnet-5 (medium)
 - Modelo resolvido: claude-sonnet-5 (medium)
+- Git: 2 arquivos / 2 linhas alteradas
+- Evidências: 8 screenshots, 7 vídeos, 6 traces
+- Erro: nenhum registrado
+
+### session-codex-gpt5.5-high
+
+- Workspace: `/tmp/dev10x-bench-model-provenance-pr6-v3/runtime/workspaces/dev10x-landing-benchmark/DEV-7__p1/site`
+- Arquivos gerados: 38
+- Artefatos do fluxo: `/tmp/dev10x-bench-model-provenance-pr6-v3/runtime/artifacts/session-codex-gpt5.5-high/attempts/20260725T203929673Z-928edd3a-bcfd-4393-8618-a8b0e3f13d83`
+- Tentativas: 1 (canônica: 20260725T203929673Z-928edd3a-bcfd-4393-8618-a8b0e3f13d83)
+- Preview: http://127.0.0.1:10064/
+- Identidade: thread=4, agent=codex, status=active, source=tracker_snapshot
+- Modelo solicitado: gpt-5.5 (high)
+- Modelo resolvido: gpt-5.5 (high)
 - Git: 0 arquivos / 0 linhas alteradas
 - Evidências: 3 screenshots, 2 vídeos, 1 traces
 - Erro: nenhum registrado
 
-### providers-advanced-session-codex
+### session-cursor-grok4.5-high
 
-- Workspace: `/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-7__p1/site`
-- Arquivos gerados: 40
-- Artefatos Symphony: `/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-advanced-session-codex/attempts/20260725T165912884Z-f9ca83f9-e57c-4319-8302-78345a33bffe`
-- Tentativas: 1 (canônica: 20260725T165912884Z-f9ca83f9-e57c-4319-8302-78345a33bffe)
-- Preview: http://127.0.0.1:10000/
-- Identidade: thread=4, agent=codex, status=active, source=tracker_snapshot
-- Modelo solicitado: gpt-5.5 (high)
-- Modelo resolvido: gpt-5.5 (high)
-- Git: 10 arquivos / 2982 linhas alteradas
-- Evidências: 4 screenshots, 3 vídeos, 2 traces
-- Erro: nenhum registrado
-
-### providers-advanced-session-cursor
-
-- Workspace: `/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-8__p1/site`
-- Arquivos gerados: 41
-- Artefatos Symphony: `/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-advanced-session-cursor/attempts/20260725T192211975Z-1055e439-6bc2-4b7b-a825-1ee908be7162`
-- Tentativas: 4 (canônica: 20260725T192211975Z-1055e439-6bc2-4b7b-a825-1ee908be7162)
-- Preview: http://127.0.0.1:10008/
+- Workspace: `/tmp/dev10x-bench-model-provenance-pr6-v3/runtime/workspaces/dev10x-landing-benchmark/DEV-8__p1/site`
+- Arquivos gerados: 42
+- Artefatos do fluxo: `/tmp/dev10x-bench-model-provenance-pr6-v3/runtime/artifacts/session-cursor-grok4.5-high/attempts/20260725T203929674Z-7036ef9d-edcc-4cdb-816b-a44a690f1176`
+- Tentativas: 1 (canônica: 20260725T203929674Z-7036ef9d-edcc-4cdb-816b-a44a690f1176)
+- Preview: http://127.0.0.1:10048/
 - Identidade: thread=5, agent=cursor, status=active, source=tracker_snapshot
 - Modelo solicitado: cursor-grok-4.5-high
 - Modelo resolvido: cursor-grok-4.5-high
 - Git: 0 arquivos / 0 linhas alteradas
-- Evidências: 5 screenshots, 2 vídeos, 1 traces
+- Evidências: 3 screenshots, 2 vídeos, 1 traces
 - Erro: nenhum registrado
 
-### providers-advanced-session-claude
+### session-claude-opus5-high
 
-- Workspace: `/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-9__p1/site`
-- Arquivos gerados: 71
-- Artefatos Symphony: `/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-advanced-session-claude/attempts/20260725T171646061Z-659188a0-843a-45b4-a8d4-05e156d5abe7`
-- Tentativas: 1 (canônica: 20260725T171646061Z-659188a0-843a-45b4-a8d4-05e156d5abe7)
-- Preview: http://127.0.0.1:10016/
+- Workspace: `/tmp/dev10x-bench-model-provenance-pr6-v3/runtime/workspaces/dev10x-landing-benchmark/DEV-9__p1/site`
+- Arquivos gerados: 68
+- Artefatos do fluxo: `/tmp/dev10x-bench-model-provenance-pr6-v3/runtime/artifacts/session-claude-opus5-high/attempts/20260725T203929674Z-5883dce5-8e3f-4042-a895-0e151d1aaf79`
+- Tentativas: 1 (canônica: 20260725T203929674Z-5883dce5-8e3f-4042-a895-0e151d1aaf79)
+- Preview: http://127.0.0.1:10080/
 - Identidade: thread=6, agent=claude, status=active, source=tracker_snapshot
 - Modelo solicitado: claude-opus-5 (high)
 - Modelo resolvido: claude-opus-5 (high)
 - Git: 0 arquivos / 0 linhas alteradas
-- Evidências: 12 screenshots, 9 vídeos, 8 traces
+- Evidências: 10 screenshots, 7 vídeos, 6 traces
 - Erro: nenhum registrado
 
-### providers-advanced-orchestrator-codex
+### orchestrator-codex-gpt5.5-high
 
-- Workspace: `/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-10/site`
-- Arquivos gerados: 39
-- Artefatos Symphony: `/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-advanced-orchestrator-codex/attempts/20260725T173824362Z-cd39b870-992c-4966-bb6d-ab2a8a5c6d56`
-- Tentativas: 1 (canônica: 20260725T173824362Z-cd39b870-992c-4966-bb6d-ab2a8a5c6d56)
-- Preview: http://127.0.0.1:10002/
+- Workspace: `/tmp/dev10x-bench-model-provenance-pr6-v3/runtime/workspaces/dev10x-landing-benchmark/DEV-10/site`
+- Arquivos gerados: 44
+- Artefatos do fluxo: `/tmp/dev10x-bench-model-provenance-pr6-v3/runtime/artifacts/orchestrator-codex-gpt5.5-high/attempts/20260725T204403580Z-d1f69eee-28da-4740-9a29-627de00781e0`
+- Tentativas: 1 (canônica: 20260725T204403580Z-d1f69eee-28da-4740-9a29-627de00781e0)
+- Preview: http://127.0.0.1:10056/
 - Identidade: thread=13, agent=codex, status=closed, source=tracker_snapshot
 - Modelo solicitado: gpt-5.5 (high)
 - Modelo resolvido: gpt-5.5 (high)
@@ -162,41 +165,41 @@ Prompt SHA-256: `f9ea44a4d5952da71a896d5d7623f694bb445f52064f563ecf9a3d81744ca29
 - Evidências: 3 screenshots, 2 vídeos, 1 traces
 - Erro: nenhum registrado
 
-### providers-advanced-orchestrator-cursor
+### orchestrator-cursor-grok4.5-high
 
-- Workspace: `/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-11/site`
-- Arquivos gerados: 39
-- Artefatos Symphony: `/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-advanced-orchestrator-cursor/attempts/20260725T192212010Z-88e7b9e9-f09c-4d19-af96-c13a8002bab4`
-- Tentativas: 3 (canônica: 20260725T192212010Z-88e7b9e9-f09c-4d19-af96-c13a8002bab4)
-- Preview: http://127.0.0.1:10000/
-- Identidade: thread=17, agent=cursor, status=closed, source=tracker_snapshot
+- Workspace: `/tmp/dev10x-bench-model-provenance-pr6-v3/runtime/workspaces/dev10x-landing-benchmark/DEV-11/site`
+- Arquivos gerados: 44
+- Artefatos do fluxo: `/tmp/dev10x-bench-model-provenance-pr6-v3/runtime/artifacts/orchestrator-cursor-grok4.5-high/attempts/20260725T205223536Z-db5a2900-615e-4532-8016-dd27f8f018ac`
+- Tentativas: 1 (canônica: 20260725T205223536Z-db5a2900-615e-4532-8016-dd27f8f018ac)
+- Preview: http://127.0.0.1:10005/
+- Identidade: thread=14, agent=cursor, status=closed, source=tracker_snapshot
 - Modelo solicitado: cursor-grok-4.5-high
 - Modelo resolvido: cursor-grok-4.5-high
 - Git: 0 arquivos / 0 linhas alteradas
 - Evidências: 3 screenshots, 2 vídeos, 1 traces
 - Erro: nenhum registrado
 
-### providers-advanced-orchestrator-claude
+### orchestrator-claude-opus5-high
 
-- Workspace: `/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-12/site`
-- Arquivos gerados: 39
-- Artefatos Symphony: `/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-advanced-orchestrator-claude/attempts/20260725T183754214Z-58c7ba31-6a82-463e-8258-39dd29c71cf7`
-- Tentativas: 2 (canônica: 20260725T183754214Z-58c7ba31-6a82-463e-8258-39dd29c71cf7)
-- Preview: http://127.0.0.1:10017/
-- Identidade: thread=16, agent=claude, status=closed, source=tracker_snapshot
+- Workspace: `/tmp/dev10x-bench-model-provenance-pr6-v3/runtime/workspaces/dev10x-landing-benchmark/DEV-12/site`
+- Arquivos gerados: 44
+- Artefatos do fluxo: `/tmp/dev10x-bench-model-provenance-pr6-v3/runtime/artifacts/orchestrator-claude-opus5-high/attempts/20260725T205335037Z-fc6491de-353a-4789-85f9-1564c9d57194`
+- Tentativas: 1 (canônica: 20260725T205335037Z-fc6491de-353a-4789-85f9-1564c9d57194)
+- Preview: http://127.0.0.1:10000/
+- Identidade: thread=15, agent=claude, status=closed, source=tracker_snapshot
 - Modelo solicitado: claude-opus-5 (high)
 - Modelo resolvido: claude-opus-5 (high)
 - Git: 0 arquivos / 0 linhas alteradas
 - Evidências: 3 screenshots, 2 vídeos, 1 traces
 - Erro: nenhum registrado
 
-### codex-5.6-defaults-session-sol
+### session-codex-gpt5.6.sol-low
 
-- Workspace: `/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-13__p1/site`
-- Arquivos gerados: 39
-- Artefatos Symphony: `/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/codex-5.6-defaults-session-sol/attempts/20260725T183048865Z-0c5de4cc-b836-4fc4-8cbf-80cdc1ba6119`
-- Tentativas: 2 (canônica: 20260725T183048865Z-0c5de4cc-b836-4fc4-8cbf-80cdc1ba6119)
-- Preview: http://127.0.0.1:10018/
+- Workspace: `/tmp/dev10x-bench-model-provenance-pr6-v3/runtime/workspaces/dev10x-landing-benchmark/DEV-13__p1/site`
+- Arquivos gerados: 41
+- Artefatos do fluxo: `/tmp/dev10x-bench-model-provenance-pr6-v3/runtime/artifacts/session-codex-gpt5.6.sol-low/attempts/20260725T210223227Z-7ca59d3c-7b31-4944-b73f-75c11e37fd28`
+- Tentativas: 1 (canônica: 20260725T210223227Z-7ca59d3c-7b31-4944-b73f-75c11e37fd28)
+- Preview: http://127.0.0.1:10112/
 - Identidade: thread=7, agent=codex, status=active, source=tracker_snapshot
 - Modelo solicitado: gpt-5.6-sol (low)
 - Modelo resolvido: gpt-5.6-sol (low)
@@ -204,32 +207,74 @@ Prompt SHA-256: `f9ea44a4d5952da71a896d5d7623f694bb445f52064f563ecf9a3d81744ca29
 - Evidências: 5 screenshots, 2 vídeos, 1 traces
 - Erro: nenhum registrado
 
-### codex-5.6-defaults-session-terra
+### orchestrator-codex-gpt5.6.sol-low
 
-- Workspace: `/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-14__p1/site`
-- Arquivos gerados: 41
-- Artefatos Symphony: `/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/codex-5.6-defaults-session-terra/attempts/20260725T175432843Z-d0577e50-6917-4eb9-adb9-4b966ef43413`
-- Tentativas: 1 (canônica: 20260725T175432843Z-d0577e50-6917-4eb9-adb9-4b966ef43413)
-- Preview: http://127.0.0.1:10032/
+- Workspace: `/tmp/dev10x-bench-model-provenance-pr6-v3/runtime/workspaces/dev10x-landing-benchmark/DEV-14/site`
+- Arquivos gerados: 44
+- Artefatos do fluxo: `/tmp/dev10x-bench-model-provenance-pr6-v3/runtime/artifacts/orchestrator-codex-gpt5.6.sol-low/attempts/20260725T210223229Z-2c3ed896-af2b-4108-90e9-e5dd67697d61`
+- Tentativas: 1 (canônica: 20260725T210223229Z-2c3ed896-af2b-4108-90e9-e5dd67697d61)
+- Preview: http://127.0.0.1:10006/
+- Identidade: thread=16, agent=codex, status=closed, source=tracker_snapshot
+- Modelo solicitado: gpt-5.6-sol (low)
+- Modelo resolvido: gpt-5.6-sol (low)
+- Git: 0 arquivos / 0 linhas alteradas
+- Evidências: 3 screenshots, 2 vídeos, 1 traces
+- Erro: nenhum registrado
+
+### session-codex-gpt5.6.terra-medium
+
+- Workspace: `/tmp/dev10x-bench-model-provenance-pr6-v3/runtime/workspaces/dev10x-landing-benchmark/DEV-15__p1/site`
+- Arquivos gerados: 16
+- Artefatos do fluxo: `/tmp/dev10x-bench-model-provenance-pr6-v3/runtime/artifacts/session-codex-gpt5.6.terra-medium/attempts/20260725T210223227Z-5ba67b61-37cc-4f56-a6ab-3c3c88e04221`
+- Tentativas: 1 (canônica: 20260725T210223227Z-5ba67b61-37cc-4f56-a6ab-3c3c88e04221)
+- Preview: http://127.0.0.1:10104/
 - Identidade: thread=8, agent=codex, status=active, source=tracker_snapshot
 - Modelo solicitado: gpt-5.6-terra (medium)
 - Modelo resolvido: gpt-5.6-terra (medium)
-- Git: 11 arquivos / 1565 linhas alteradas
-- Evidências: 4 screenshots, 3 vídeos, 2 traces
+- Git: 11 arquivos / 2091 linhas alteradas
+- Evidências: 6 screenshots, 3 vídeos, 2 traces
 - Erro: nenhum registrado
 
-### codex-5.6-defaults-session-luna
+### orchestrator-codex-gpt5.6.terra-medium
 
-- Workspace: `/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-15__p1/site`
-- Arquivos gerados: 46
-- Artefatos Symphony: `/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/codex-5.6-defaults-session-luna/attempts/20260725T175432833Z-c5e29205-5279-4f0f-9d9b-b7089bda93dc`
-- Tentativas: 1 (canônica: 20260725T175432833Z-c5e29205-5279-4f0f-9d9b-b7089bda93dc)
+- Workspace: `/tmp/dev10x-bench-model-provenance-pr6-v3/runtime/workspaces/dev10x-landing-benchmark/DEV-16/site`
+- Arquivos gerados: 44
+- Artefatos do fluxo: `/tmp/dev10x-bench-model-provenance-pr6-v3/runtime/artifacts/orchestrator-codex-gpt5.6.terra-medium/attempts/20260725T211925243Z-1dda70ec-6743-40cc-b733-b7b0f1a49862`
+- Tentativas: 2 (canônica: 20260725T211925243Z-1dda70ec-6743-40cc-b733-b7b0f1a49862)
 - Preview: http://127.0.0.1:10016/
+- Identidade: thread=19, agent=codex, status=closed, source=tracker_snapshot
+- Modelo solicitado: gpt-5.6-terra (medium)
+- Modelo resolvido: gpt-5.6-terra (medium)
+- Git: 0 arquivos / 0 linhas alteradas
+- Evidências: 3 screenshots, 2 vídeos, 1 traces
+- Erro: nenhum registrado
+
+### session-codex-gpt5.6.luna-medium
+
+- Workspace: `/tmp/dev10x-bench-model-provenance-pr6-v3/runtime/workspaces/dev10x-landing-benchmark/DEV-17__p1/site`
+- Arquivos gerados: 38
+- Artefatos do fluxo: `/tmp/dev10x-bench-model-provenance-pr6-v3/runtime/artifacts/session-codex-gpt5.6.luna-medium/attempts/20260725T211005245Z-fd6987c8-81ff-4f20-bb5e-aab939c88779`
+- Tentativas: 1 (canônica: 20260725T211005245Z-fd6987c8-81ff-4f20-bb5e-aab939c88779)
+- Preview: http://127.0.0.1:10128/
 - Identidade: thread=9, agent=codex, status=active, source=tracker_snapshot
 - Modelo solicitado: gpt-5.6-luna (medium)
 - Modelo resolvido: gpt-5.6-luna (medium)
+- Git: 1 arquivos / 1 linhas alteradas
+- Evidências: 5 screenshots, 2 vídeos, 1 traces
+- Erro: nenhum registrado
+
+### orchestrator-codex-gpt5.6.luna-medium
+
+- Workspace: `/tmp/dev10x-bench-model-provenance-pr6-v3/runtime/workspaces/dev10x-landing-benchmark/DEV-18/site`
+- Arquivos gerados: 44
+- Artefatos do fluxo: `/tmp/dev10x-bench-model-provenance-pr6-v3/runtime/artifacts/orchestrator-codex-gpt5.6.luna-medium/attempts/20260725T211228017Z-eeaa50c0-fc2f-425b-9dd5-b97261fa3a22`
+- Tentativas: 1 (canônica: 20260725T211228017Z-eeaa50c0-fc2f-425b-9dd5-b97261fa3a22)
+- Preview: http://127.0.0.1:10120/
+- Identidade: thread=18, agent=codex, status=closed, source=tracker_snapshot
+- Modelo solicitado: gpt-5.6-luna (medium)
+- Modelo resolvido: gpt-5.6-luna (medium)
 - Git: 0 arquivos / 0 linhas alteradas
-- Evidências: 6 screenshots, 5 vídeos, 4 traces
+- Evidências: 3 screenshots, 2 vídeos, 1 traces
 - Erro: nenhum registrado
 
 ## Revisão visual humana

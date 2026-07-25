@@ -2,54 +2,49 @@
 
 ## Persistência na aba Evidências
 
-O capturador importou um run final por célula, navegou para a rota HTTP real da
-aba Evidências da issue e esperou o DOM confirmar duas imagens carregadas e
-dois vídeos com metadata. Só então gravou o screenshot full-page da própria
-aba. Os 15 retornaram `evidence_tab_verified=true`, rota observada, screenshot
-da aba e contagens `2 + 2`.
+O capturador importou um run final por célula, abriu a rota HTTP real da aba
+Evidências e esperou o DOM confirmar duas imagens carregadas e dois vídeos com
+metadata. Todas as 18 células retornaram `evidence_tab_verified=true`.
 
-| Célula | Issue | Evidence run | Desktop full-page | Mobile full-page | Mídia renderizada |
+| Célula | Issue | Evidence run | Desktop full-page | Mobile full-page | Mídia |
 | --- | --- | --- | ---: | ---: | ---: |
-| providers-default-session-codex | SYM-1 | `20260725192722-189826` | 1280 × 4543 | 390 × 6603 | 2 + 2 |
-| providers-default-session-cursor | SYM-2 | `20260725192729-194754` | 1280 × 4097 | 390 × 7185 | 2 + 2 |
-| providers-default-session-claude | SYM-3 | `20260725192738-200130` | 1280 × 3747 | 390 × 5680 | 2 + 2 |
-| providers-default-orchestrator-codex | SYM-4 | `20260725192746-96004` | 1280 × 3976 | 390 × 5461 | 2 + 2 |
-| providers-default-orchestrator-cursor | SYM-5 | `20260725192753-214466` | 1280 × 3976 | 390 × 5461 | 2 + 2 |
-| providers-default-orchestrator-claude | SYM-6 | `20260725192801-156483` | 1280 × 3976 | 390 × 5461 | 2 + 2 |
-| providers-advanced-session-codex | SYM-7 | `20260725192809-232898` | 1280 × 4389 | 390 × 6754 | 2 + 2 |
-| providers-advanced-session-cursor | SYM-8 | `20260725192816-238146` | 1280 × 3729 | 390 × 5020 | 2 + 2 |
-| providers-advanced-session-claude | SYM-9 | `20260725192823-109637` | 1280 × 6465 | 390 × 9618 | 2 + 2 |
-| providers-advanced-orchestrator-codex | SYM-10 | `20260725192830-186051` | 1280 × 4030 | 390 × 5515 | 2 + 2 |
-| providers-advanced-orchestrator-cursor | SYM-11 | `20260725192837-195011` | 1280 × 3620 | 390 × 4979 | 2 + 2 |
-| providers-advanced-orchestrator-claude | SYM-12 | `20260725192845-271042` | 1280 × 3796 | 390 × 6073 | 2 + 2 |
-| codex-5.6-defaults-session-sol | SYM-13 | `20260725192853-276930` | 1280 × 4769 | 390 × 7916 | 2 + 2 |
-| codex-5.6-defaults-session-terra | SYM-14 | `20260725192902-287106` | 1280 × 4567 | 390 × 5625 | 2 + 2 |
-| codex-5.6-defaults-session-luna | SYM-15 | `20260725192909-298562` | 1280 × 4430 | 390 × 5961 | 2 + 2 |
+| session-codex-gpt5.5-medium | DEV-1 | `20260725212503-2414403` | 1280 × 4585 | 390 × 5456 | 2 + 2 |
+| session-cursor-composer2.5 | DEV-2 | `20260725212511-2428739` | 1280 × 3497 | 390 × 5943 | 2 + 2 |
+| session-claude-sonnet5-medium | DEV-3 | `20260725212517-2434563` | 1280 × 3767 | 390 × 5610 | 2 + 2 |
+| orchestrator-codex-gpt5.5-medium | DEV-4 | `20260725212523-3631490` | 1280 × 5005 | 390 × 6138 | 2 + 2 |
+| orchestrator-cursor-composer2.5 | DEV-5 | `20260725212530-1340356` | 1280 × 3230 | 390 × 5681 | 2 + 2 |
+| orchestrator-claude-sonnet5-medium | DEV-6 | `20260725212536-3647490` | 1280 × 3963 | 390 × 7009 | 2 + 2 |
+| session-codex-gpt5.5-high | DEV-7 | `20260725212544-3659202` | 1280 × 4654 | 390 × 6793 | 2 + 2 |
+| session-cursor-grok4.5-high | DEV-8 | `20260725212550-2476355` | 1280 × 3859 | 390 × 5036 | 2 + 2 |
+| session-claude-opus5-high | DEV-9 | `20260725212557-3680706` | 1280 × 7507 | 390 × 11241 | 2 + 2 |
+| orchestrator-codex-gpt5.5-high | DEV-10 | `20260725212603-3695426` | 1280 × 3963 | 390 × 7009 | 2 + 2 |
+| orchestrator-cursor-grok4.5-high | DEV-11 | `20260725212610-401285` | 1280 × 3906 | 390 × 6819 | 2 + 2 |
+| orchestrator-claude-opus5-high | DEV-12 | `20260725212617-1368004` | 1280 × 4033 | 390 × 7071 | 2 + 2 |
+| session-codex-gpt5.6.sol-low | DEV-13 | `20260725212623-3727426` | 1280 × 4582 | 390 × 6949 | 2 + 2 |
+| orchestrator-codex-gpt5.6.sol-low | DEV-14 | `20260725212629-1387076` | 1280 × 4033 | 390 × 7071 | 2 + 2 |
+| session-codex-gpt5.6.terra-medium | DEV-15 | `20260725212635-2531267` | 1280 × 4402 | 390 × 5230 | 2 + 2 |
+| orchestrator-codex-gpt5.6.terra-medium | DEV-16 | `20260725212642-2546499` | 1280 × 4033 | 390 × 7071 | 2 + 2 |
+| session-codex-gpt5.6.luna-medium | DEV-17 | `20260725212648-408709` | 1280 × 4368 | 390 × 5685 | 2 + 2 |
+| orchestrator-codex-gpt5.6.luna-medium | DEV-18 | `20260725212654-412485` | 1280 × 4033 | 390 × 7071 | 2 + 2 |
 
-As 30 capturas full-page das landings, os 15 heros e os 15 screenshots
-full-page da aba Evidências foram gerados com movimento reduzido e
-inspecionados. Não houve página em branco, corte estrutural ou overflow
-horizontal.
+As 36 capturas full-page, os 18 heros e os 18 screenshots da aba Evidências
+foram gerados com movimento reduzido. Não houve página em branco, corte
+estrutural ou overflow horizontal observado pelos E2Es.
 
 ## Vídeo e trace
 
-Os 15 MP4:
+Os 18 MP4:
 
-- usam vídeo H.264, pixel format `yuv420p` e resolução 1280 × 720;
-- têm o átomo `moov` antes de `mdat` (`faststart`);
+- usam H.264, `yuv420p` e resolução 1280 × 720;
+- têm `moov` antes de `mdat` (`faststart`);
 - decodificaram integralmente com `ffmpeg -v error`;
 - foram derivados do WebM gravado pelo Playwright.
 
-Os 15 traces passaram em `unzip -t`. WebM e traces ZIP estão anexados aos runs
-da aba Evidências; os MP4 reproduzíveis estão em [`videos/`](videos/).
+Os 18 traces canônicos passaram em `unzip -t`; nenhum artefato canônico é
+symlink. Os MP4 reproduzíveis estão em [`videos/`](videos/).
 
 ## Validação independente
 
-Cada célula executou uma allowlist sequencial e focada no projeto gerado:
-
-- instalação de dependências sem scripts arbitrários;
-- build;
-- suíte E2E produzida pelo agente.
-
-O coletor registrou 15/15 `contract_passed=true` e 45/45 resultados `passed`.
-Esses subprocessos não receberam credenciais dos providers ou do tracker.
+Cada célula executou instalação sem lifecycle scripts arbitrários, build e a
+suíte E2E gerada pelo agente. O coletor registrou 18/18
+`contract_passed=true` e 54/54 resultados `passed`, sem repassar credenciais.

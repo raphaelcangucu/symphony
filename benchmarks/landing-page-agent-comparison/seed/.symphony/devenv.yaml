@@ -1,5 +1,5 @@
 steps:
-  - description: Symphony landing preview
+  - description: Dev10x landing preview
     role: serve
     working_dir: .
     port_env: PORT

@@ -16,6 +16,53 @@ export function selectMatrixRuns(manifest, matrix) {
   return runs;
 }
 
+export function parseConcurrency(value) {
+  if (value == null || String(value).trim() === "") return 1;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 1) {
+    throw new Error("SYMPHONY_BENCH_CONCURRENCY must be a positive integer");
+  }
+  if (parsed > 6) {
+    throw new Error("SYMPHONY_BENCH_CONCURRENCY must be at most 6");
+  }
+  return parsed;
+}
+
+export async function runWithConcurrency(items, concurrency, worker) {
+  const failures = [];
+  let nextIndex = 0;
+
+  async function consume() {
+    while (nextIndex < items.length) {
+      const item = items[nextIndex];
+      nextIndex += 1;
+      try {
+        await worker(item);
+      } catch (error) {
+        failures.push({
+          id: item?.id ?? String(item),
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+  }
+
+  await Promise.all(
+    Array.from(
+      { length: Math.min(concurrency, items.length) },
+      () => consume(),
+    ),
+  );
+
+  if (failures.length > 0) {
+    throw new Error(
+      `benchmark cells failed:\n${failures
+        .map(({ id, message }) => `- ${id}: ${message}`)
+        .join("\n")}`,
+    );
+  }
+}
+
 export async function runMatrix(env = process.env) {
   const runtimeRoot = env.SYMPHONY_BENCH_RUNTIME?.trim();
   const matrix = env.SYMPHONY_BENCH_MATRIX?.trim();
@@ -29,7 +76,10 @@ export async function runMatrix(env = process.env) {
     await readFile(join(resolve(runtimeRoot), "runs.json"), "utf8"),
   );
 
-  for (const run of selectMatrixRuns(manifest, matrix)) {
+  const runs = selectMatrixRuns(manifest, matrix);
+  const concurrency = parseConcurrency(env.SYMPHONY_BENCH_CONCURRENCY);
+
+  await runWithConcurrency(runs, concurrency, async (run) => {
     const result = await executeProcess(process.execPath, [runCellPath], {
       cwd: packageRoot,
       env: {
@@ -46,7 +96,7 @@ export async function runMatrix(env = process.env) {
         `benchmark cell failed: ${run.id} (${result.status}, exit ${result.exit_code})`,
       );
     }
-  }
+  });
 }
 
 const invokedPath = process.argv[1]

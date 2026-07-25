@@ -426,11 +426,31 @@ defmodule SymphonyElixir.Orchestrator do
       true ->
         Logger.info("Issue moved to non-active state: #{issue_context(issue)} state=#{issue.state}; stopping active agent")
 
-        terminate_running_issue(state, issue.id, false)
+        state
+        |> finish_wait_state_execution_session(issue)
+        |> terminate_running_issue(issue.id, false)
     end
   end
 
   defp reconcile_issue_state(_issue, state, _active_states, _terminal_states), do: state
+
+  defp finish_wait_state_execution_session(%State{} = state, %Issue{} = issue) do
+    if wait_issue_state?(issue) do
+      state.running
+      |> Map.get(issue.id)
+      |> finish_execution_session("completed")
+    end
+
+    state
+  end
+
+  defp wait_issue_state?(%Issue{state: state_name, project_slug: slug})
+       when is_binary(state_name) do
+    normalized = normalize_issue_state(state_name)
+    Enum.any?(wait_states_for_slug(slug), fn wait_state -> normalize_issue_state(wait_state) == normalized end)
+  end
+
+  defp wait_issue_state?(_issue), do: false
 
   defp refresh_running_issue_state(%State{} = state, %Issue{} = issue) do
     case Map.get(state.running, issue.id) do

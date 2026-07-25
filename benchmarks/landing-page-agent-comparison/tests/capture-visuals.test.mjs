@@ -60,11 +60,11 @@ test("visual preview probe aborts an HTTP request that never answers", async () 
 test("visual capture records one failure and continues the remaining matrix", async () => {
   const captures = await captureRunMatrix(
     [
-      { id: "providers-default-session-codex" },
-      { id: "providers-default-session-cursor" },
+      { id: "session-codex-gpt5.5-medium" },
+      { id: "session-cursor-composer2.5" },
     ],
     async (run) => {
-      if (run.id === "providers-default-session-codex")
+      if (run.id === "session-codex-gpt5.5-medium")
         throw new Error("ffmpeg failed");
       return { id: run.id, status: "captured" };
     },
@@ -72,11 +72,11 @@ test("visual capture records one failure and continues the remaining matrix", as
 
   assert.deepEqual(captures, [
     {
-      id: "providers-default-session-codex",
+      id: "session-codex-gpt5.5-medium",
       status: "capture-failed",
       error: "ffmpeg failed",
     },
-    { id: "providers-default-session-cursor", status: "captured" },
+    { id: "session-cursor-composer2.5", status: "captured" },
   ]);
 });
 
@@ -84,7 +84,7 @@ test("visual capture rejects a blocked or incompletely validated benchmark cell"
   assert.equal(typeof captureVisuals.assertCaptureEligible, "function");
 
   const run = {
-    id: "providers-default-session-cursor",
+    id: "session-cursor-composer2.5",
     provider: "cursor",
     requested_model: "composer-2.5",
     requested_effort: null,
@@ -134,15 +134,15 @@ test("visual capture rejects a blocked or incompletely validated benchmark cell"
 
 test("visual captures use safe stable report names", () => {
   assert.deepEqual(
-    visualScreenshotNames("providers-advanced-orchestrator-claude"),
+    visualScreenshotNames("orchestrator-claude-opus5-high"),
     {
-      hero: "providers-advanced-orchestrator-claude-hero.png",
-      full: "providers-advanced-orchestrator-claude-full.png",
-      mobileFull: "providers-advanced-orchestrator-claude-mobile-full.png",
+      hero: "orchestrator-claude-opus5-high-hero.png",
+      full: "orchestrator-claude-opus5-high-full.png",
+      mobileFull: "orchestrator-claude-opus5-high-mobile-full.png",
       evidenceTab:
-        "providers-advanced-orchestrator-claude-evidence-tab.png",
-      video: "providers-advanced-orchestrator-claude-e2e.webm",
-      mp4: "providers-advanced-orchestrator-claude-e2e.mp4",
+        "orchestrator-claude-opus5-high-evidence-tab.png",
+      video: "orchestrator-claude-opus5-high-e2e.webm",
+      mp4: "orchestrator-claude-opus5-high-e2e.mp4",
     },
   );
   assert.throws(
@@ -153,22 +153,27 @@ test("visual captures use safe stable report names", () => {
 
 test("visual report preserves captured and blocked cells", () => {
   const report = renderVisualComparison([
-    { id: "codex-5.6-defaults-session-sol", status: "captured" },
-    { id: "providers-default-session-cursor", status: "skipped-contract" },
+    { id: "session-codex-gpt5.6.sol-low", status: "captured" },
+    { id: "session-cursor-composer2.5", status: "skipped-contract" },
   ]);
-  assert.match(report, /screens\/codex-5\.6-defaults-session-sol-hero\.png/);
+  assert.match(report, /screens\/session-codex-gpt5\.6\.sol-low-hero\.png/);
   assert.match(
     report,
-    /screens\/codex-5\.6-defaults-session-sol-mobile-full\.png/,
+    /screens\/session-codex-gpt5\.6\.sol-low-mobile-full\.png/,
   );
-  assert.match(report, /videos\/codex-5\.6-defaults-session-sol-e2e\.mp4/);
-  assert.match(report, /providers-default-session-cursor/);
+  assert.match(report, /<video controls preload="metadata" width="960">/);
+  assert.match(
+    report,
+    /<source src="videos\/session-codex-gpt5\.6\.sol-low-e2e\.mp4" type="video\/mp4">/,
+  );
+  assert.match(report, /videos\/session-codex-gpt5\.6\.sol-low-e2e\.mp4/);
+  assert.match(report, /session-cursor-composer2\.5/);
   assert.match(report, /skipped-contract/);
 });
 
 test("canonical manifest exposes desktop, mobile, WebM, MP4, trace, and real navigation", () => {
   const run = {
-    id: "providers-default-session-cursor",
+    id: "session-cursor-composer2.5",
     issue_identifier: "SYM-2",
   };
   const names = visualScreenshotNames(run.id);
@@ -198,20 +203,20 @@ test("canonical manifest exposes desktop, mobile, WebM, MP4, trace, and real nav
   assert.deepEqual(
     e2e.screenshots.map((entry) => entry.path),
     [
-      "artifacts/screens/providers-default-session-cursor-full.png",
-      "artifacts/screens/providers-default-session-cursor-mobile-full.png",
+      "artifacts/screens/session-cursor-composer2.5-full.png",
+      "artifacts/screens/session-cursor-composer2.5-mobile-full.png",
     ],
   );
   assert.deepEqual(
     e2e.videos.map((entry) => entry.path),
     [
-      "artifacts/videos/providers-default-session-cursor-e2e.webm",
-      "artifacts/videos/providers-default-session-cursor-e2e.mp4",
+      "artifacts/videos/session-cursor-composer2.5-e2e.webm",
+      "artifacts/videos/session-cursor-composer2.5-e2e.mp4",
     ],
   );
   assert.equal(
     e2e.trace,
-    "artifacts/traces/providers-default-session-cursor-e2e.zip",
+    "artifacts/traces/session-cursor-composer2.5-e2e.zip",
   );
   assert.deepEqual(e2e.navigations, [
     "http://127.0.0.1:23001/observed-by-playwright",
