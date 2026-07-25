@@ -97,7 +97,7 @@ git commit -m "docs(mobile): plan Orca-first Dev10x migration"
 
 Expected: one documentation commit and a clean worktree.
 
-- [ ] **Step 2: Enable recorded conflict resolution**
+- [x] **Step 2: Enable recorded conflict resolution**
 
 Run:
 
@@ -110,7 +110,7 @@ git status --short --branch
 Expected: current branch is `agent/mobile-companion-e2e` and the worktree is
 clean.
 
-- [ ] **Step 3: Fetch and fast-forward the remote feature branch**
+- [x] **Step 3: Fetch and fast-forward the remote feature branch**
 
 Run:
 
@@ -122,7 +122,7 @@ git pull --ff-only origin "$(git branch --show-current)"
 Expected: the branch is current with `origin/agent/mobile-companion-e2e`; the
 command must not create a rebase.
 
-- [ ] **Step 4: Merge the latest main branch**
+- [x] **Step 4: Merge the latest main branch**
 
 Run:
 
@@ -134,7 +134,7 @@ Expected: a merge commit or a conflict list. If conflicts exist, inspect each
 with `git diff --merge`, preserve both the current mobile RPC architecture and
 new main behavior, stage resolved files, then run `git merge --continue`.
 
-- [ ] **Step 5: Verify the merged baseline without a heavy suite**
+- [x] **Step 5: Verify the merged baseline without a heavy suite**
 
 Run:
 
@@ -148,7 +148,7 @@ npm run lint
 Expected: no conflict markers, TypeScript errors or lint errors. If main
 changes a mobile contract, update this plan's exact type names before Task 2.
 
-- [ ] **Step 6: Record the merge result**
+- [x] **Step 6: Record the merge result**
 
 Run:
 
@@ -173,7 +173,7 @@ Expected: clean worktree with `origin/main` in branch ancestry.
 - Modify: `mobile/app.config.ts`
 - Modify: `mobile/package.json`
 
-- [ ] **Step 1: Write the failing brand and provenance test**
+- [x] **Step 1: Write the failing brand and provenance test**
 
 Create `mobile/src/brand/dev10x-brand.test.ts`:
 
@@ -204,7 +204,7 @@ describe("Dev10x mobile brand", () => {
 });
 ```
 
-- [ ] **Step 2: Run the test and confirm the missing files fail**
+- [x] **Step 2: Run the test and confirm the missing files fail**
 
 Run:
 
@@ -216,7 +216,7 @@ npx vitest run src/brand/dev10x-brand.test.ts
 Expected: FAIL because `dev10x.ts`, `ORCA_UPSTREAM.md` and
 `THIRD_PARTY_NOTICES.md` do not exist.
 
-- [ ] **Step 3: Add the canonical brand constants**
+- [x] **Step 3: Add the canonical brand constants**
 
 Create `mobile/src/brand/dev10x.ts`:
 
@@ -235,7 +235,7 @@ import date, copied directories, excluded Orca crypto/host-store files and the
 command used to compare future upstream changes. Write
 `mobile/THIRD_PARTY_NOTICES.md` with the complete Orca MIT license text.
 
-- [ ] **Step 4: Copy the canonical Dev10x assets**
+- [x] **Step 4: Copy the canonical Dev10x assets**
 
 Run:
 
@@ -249,7 +249,7 @@ Expected: the three mobile assets are byte-identical to the canonical tracker
 assets. `app.config.ts` continues to declare `name: "Dev10x"` and uses Dev10x
 permission copy; it does not declare Orca as a display name.
 
-- [ ] **Step 5: Run the focused test**
+- [x] **Step 5: Run the focused test**
 
 Run:
 
@@ -260,7 +260,7 @@ npx vitest run src/brand/dev10x-brand.test.ts
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit the brand and provenance**
+- [x] **Step 6: Commit the brand and provenance**
 
 Run:
 

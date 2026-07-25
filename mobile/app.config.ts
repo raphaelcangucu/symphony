@@ -8,7 +8,7 @@ const config: ExpoConfig = {
   slug: "symphony-mobile",
   version: "0.1.0",
   orientation: "default",
-  icon: "./assets/icon.png",
+  icon: "./assets/dev10x-icon.png",
   scheme: "symphony",
   userInterfaceStyle: "automatic",
   newArchEnabled: true,
@@ -19,7 +19,7 @@ const config: ExpoConfig = {
   android: {
     package: "dev.dev10x.symphony",
     adaptiveIcon: {
-      foregroundImage: "./assets/adaptive-icon.png",
+      foregroundImage: "./assets/dev10x-icon.png",
       backgroundColor: "#111111",
     },
   },
