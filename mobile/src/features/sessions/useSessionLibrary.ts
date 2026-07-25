@@ -28,15 +28,15 @@ export function useSessionLibrary({
   collapsedProjectSlugs,
 }: UseSessionLibraryOptions): SessionLibraryResult {
   const viewerQuery = useQuery({
-    queryKey: ["session-library", profileId, "viewer"],
+    queryKey: ["host", profileId, "session-library", "viewer"],
     queryFn: ({ signal }) => client.viewer(signal),
   });
   const projectsQuery = useQuery({
-    queryKey: ["session-library", profileId, "projects"],
+    queryKey: ["host", profileId, "session-library", "projects"],
     queryFn: ({ signal }) => client.projects(signal),
   });
   const threadsQuery = useQuery({
-    queryKey: ["session-library", profileId, "threads"],
+    queryKey: ["host", profileId, "session-library", "threads"],
     queryFn: ({ signal }) =>
       client.threads(
         {
@@ -48,7 +48,7 @@ export function useSessionLibrary({
   });
   const sessionQueries = useQueries({
     queries: (projectsQuery.data ?? []).map((project) => ({
-      queryKey: ["session-library", profileId, "project-sessions", project.slug],
+      queryKey: ["host", profileId, "session-library", "project-sessions", project.slug],
       queryFn: ({ signal }: { signal: AbortSignal }) =>
         client.projectSessions(project.slug, { limit: 50 }, signal),
     })),

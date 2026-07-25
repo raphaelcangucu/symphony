@@ -18,10 +18,10 @@ export function NewSessionRoute() {
   const client = useTrackerClient();
   const { dictate } = useAppRuntime();
   const { activeProfile } = useConnection();
-  const profileId = activeProfile?.id ?? null;
+  const profileId = activeProfile?.hostId ?? activeProfile?.id ?? null;
   const [draft, setDraft] = useState<NewSessionState | null>(null);
   const projectsQuery = useQuery({
-    queryKey: ["new-session", profileId, "projects"],
+    queryKey: ["host", profileId, "new-session", "projects"],
     enabled: Boolean(client && profileId),
     queryFn: ({ signal }) => {
       if (!client) throw new Error("No active connection");

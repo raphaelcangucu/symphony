@@ -12,9 +12,10 @@ export function CreateTaskRoute() {
   const queryClient = useQueryClient();
   const client = useTrackerClient();
   const { activeProfile } = useConnection();
+  const hostId = activeProfile?.hostId ?? activeProfile?.id;
   const [projectSlug, setProjectSlug] = useState<string | null>(null);
   const projectsQuery = useQuery({
-    queryKey: ["task-create-projects", activeProfile?.id],
+    queryKey: ["host", hostId, "task-create-projects"],
     enabled: Boolean(client && activeProfile),
     queryFn: ({ signal }) => client!.projects(signal),
   });
@@ -22,7 +23,7 @@ export function CreateTaskRoute() {
     if (!projectSlug && projectsQuery.data?.[0]) setProjectSlug(projectsQuery.data[0].slug);
   }, [projectSlug, projectsQuery.data]);
   const optionsQuery = useQuery({
-    queryKey: ["task-create-options", activeProfile?.id, projectSlug],
+    queryKey: ["host", hostId, "task-create-options", projectSlug],
     enabled: Boolean(client && activeProfile && projectSlug),
     queryFn: ({ signal }) => client!.issueFormOptions(projectSlug!, signal),
   });
@@ -32,7 +33,7 @@ export function CreateTaskRoute() {
       return client.createIssue(projectSlug, input);
     },
     onSuccess: async (issue) => {
-      await queryClient.invalidateQueries({ queryKey: ["tasks", activeProfile?.id] });
+      await queryClient.invalidateQueries({ queryKey: ["host", hostId, "tasks"] });
       router.replace(
         `/issue/${encodeURIComponent(issue.projectSlug)}/${encodeURIComponent(issue.identifier)}`,
       );

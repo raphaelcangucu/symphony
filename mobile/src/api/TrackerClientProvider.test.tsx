@@ -1,18 +1,33 @@
-import { render, screen } from "@testing-library/react-native";
+import { act, render, screen } from "@testing-library/react-native";
 import { Text } from "react-native";
 
 import type { TrackerClient } from "./contracts";
-import { TrackerClientProvider, useTrackerClient } from "./TrackerClientProvider";
+import {
+  TrackerClientProvider,
+  useHostTransportState,
+  useTrackerClient,
+} from "./TrackerClientProvider";
 
 const mockUseConnection = jest.fn();
 
 jest.mock("@/auth/ConnectionProvider", () => ({
   useConnection: () => mockUseConnection(),
 }));
+jest.mock("@/rpc/client", () => ({
+  RpcClient: jest.fn(),
+}));
+jest.mock("@/rpc/websocket-adapter", () => ({
+  HandshakeWebSocketAdapter: jest.fn(),
+}));
 
 function ClientState() {
   const client = useTrackerClient();
   return <Text>{client ? "bound" : "missing"}</Text>;
+}
+
+function TransportState() {
+  const state = useHostTransportState();
+  return <Text>{state ? `${state.hostId}:${state.status}` : "no-transport"}</Text>;
 }
 
 describe("TrackerClientProvider", () => {
@@ -95,5 +110,50 @@ describe("TrackerClientProvider", () => {
       token: "token-two",
       locale: "en",
     });
+  });
+
+  it("connects the selected encrypted host and exposes its live state", () => {
+    let callbacks: { onStateChange(state: string): void } | undefined;
+    const connect = jest.fn();
+    const close = jest.fn();
+    const Adapter = jest.requireMock("@/rpc/websocket-adapter")
+      .HandshakeWebSocketAdapter as jest.Mock;
+    const RpcClient = jest.requireMock("@/rpc/client").RpcClient as jest.Mock;
+    Adapter.mockImplementation((_offer, nextCallbacks) => {
+      callbacks = nextCallbacks;
+      return { close, connect, onMessage: jest.fn(() => jest.fn()), send: jest.fn() };
+    });
+    RpcClient.mockImplementation(() => ({ close: jest.fn() }));
+    const createClient = jest.fn();
+    mockUseConnection.mockReturnValue({
+      activeProfile: {
+        id: "profile-rpc",
+        name: "Studio",
+        origin: "https://studio.test",
+        transport: "rpc",
+        hostId: "host-studio",
+        endpoint: "wss://studio.test/mobile/rpc",
+      },
+      activeHostCredential: {
+        deviceId: "device-1",
+        deviceToken: "device-secret",
+        hostPublicKey: "host-public-key",
+      },
+      activeToken: "device-secret",
+    });
+
+    render(
+      <TrackerClientProvider createClient={createClient} locale="pt-BR">
+        <TransportState />
+      </TrackerClientProvider>,
+    );
+
+    expect(createClient).not.toHaveBeenCalled();
+    expect(connect).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("host-studio:connecting")).toBeTruthy();
+
+    act(() => callbacks?.onStateChange("online"));
+
+    expect(screen.getByText("host-studio:online")).toBeTruthy();
   });
 });

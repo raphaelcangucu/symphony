@@ -19,7 +19,7 @@ export function useIssueDetail({
   identifier: string;
 }) {
   const queryClient = useQueryClient();
-  const queryKey = ["issue-detail", profileId, projectSlug, identifier] as const;
+  const queryKey = ["host", profileId, "issue-detail", projectSlug, identifier] as const;
   const query = useQuery({
     queryKey,
     queryFn: async ({ signal }) => {
@@ -40,8 +40,8 @@ export function useIssueDetail({
   const invalidate = async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey }),
-      queryClient.invalidateQueries({ queryKey: ["tasks", profileId] }),
-      queryClient.invalidateQueries({ queryKey: ["session-library", profileId] }),
+      queryClient.invalidateQueries({ queryKey: ["host", profileId, "tasks"] }),
+      queryClient.invalidateQueries({ queryKey: ["host", profileId, "session-library"] }),
     ]);
   };
   const saveMutation = useMutation({

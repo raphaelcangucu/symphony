@@ -2,6 +2,11 @@ import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { Alert } from "react-native";
 
+import {
+  type HostTransportState,
+  useHostTransport,
+  useHostTransportState,
+} from "@/api/TrackerClientProvider";
 import { useConnection } from "@/auth/ConnectionProvider";
 import { useAppRuntime } from "@/runtime/AppRuntime";
 
@@ -10,6 +15,8 @@ import { ConnectionsScreen, type ConnectionHealth } from "./ConnectionsScreen";
 export function ConnectionsRoute() {
   const router = useRouter();
   const runtime = useAppRuntime();
+  const hostTransport = useHostTransport();
+  const hostTransportState = useHostTransportState();
   const { activeProfile, loadToken, profiles, removeProfile, replaceToken, selectProfile } =
     useConnection();
   const [health, setHealth] = useState<Record<string, ConnectionHealth>>({});
@@ -18,7 +25,14 @@ export function ConnectionsRoute() {
 
   useEffect(() => {
     let active = true;
-    setHealth(Object.fromEntries(profiles.map((profile) => [profile.id, "checking"])));
+    setHealth(
+      Object.fromEntries(
+        profiles.map((profile) => [
+          profile.id,
+          profile.transport === "rpc" ? "offline" : "checking",
+        ]),
+      ),
+    );
     void Promise.all(
       profiles.map(async (profile) => {
         if (profile.transport === "rpc") return;
@@ -47,6 +61,14 @@ export function ConnectionsRoute() {
     };
   }, [loadToken, profiles, runtime.createTrackerClient]);
 
+  useEffect(() => {
+    if (activeProfile?.transport !== "rpc") return;
+    setHealth((current) => ({
+      ...current,
+      [activeProfile.id]: rpcConnectionHealth(hostTransportState?.status),
+    }));
+  }, [activeProfile?.id, activeProfile?.transport, hostTransportState?.status]);
+
   async function perform(profileId: string, operation: () => Promise<void>) {
     if (busyProfileId) return;
     setBusyProfileId(profileId);
@@ -66,7 +88,11 @@ export function ConnectionsRoute() {
     await perform(profileId, async () => {
       setHealth((current) => ({ ...current, [profileId]: "checking" }));
       if (profile.transport === "rpc") {
-        await selectProfile(profileId);
+        if (activeProfile?.id === profileId) {
+          hostTransport?.reconnect();
+        } else {
+          await selectProfile(profileId);
+        }
         return;
       }
       const token = await loadToken(profileId);
@@ -117,6 +143,14 @@ export function ConnectionsRoute() {
       profiles={profiles}
     />
   );
+}
+
+function rpcConnectionHealth(state: HostTransportState["status"] | undefined): ConnectionHealth {
+  if (state === "online") return "live";
+  if (state === "connecting" || state === "handshaking" || state === "authenticating") {
+    return "checking";
+  }
+  return "offline";
 }
 
 function resolvedLocale(): string {

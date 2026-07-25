@@ -27,7 +27,7 @@ export function QueryProvider({ children }: { children: ReactNode }) {
   );
 
   useEffect(() => {
-    const nextIds = new Set(profiles.map((profile) => profile.id));
+    const nextIds = new Set(profiles.map((profile) => profile.hostId ?? profile.id));
     for (const previousId of previousProfileIds.current) {
       if (!nextIds.has(previousId)) {
         removeProfileQueries(client, previousId);
@@ -38,7 +38,7 @@ export function QueryProvider({ children }: { children: ReactNode }) {
   }, [client, profiles]);
 
   useEffect(() => {
-    const profileId = activeProfile?.id;
+    const profileId = activeProfile?.hostId ?? activeProfile?.id;
     if (!profileId) return;
     let active = true;
     let unsubscribe: () => void = () => undefined;
@@ -53,7 +53,7 @@ export function QueryProvider({ children }: { children: ReactNode }) {
       unsubscribe();
       void saveProfileQueries(client, profileId, AsyncStorage);
     };
-  }, [activeProfile?.id, client]);
+  }, [activeProfile?.hostId, activeProfile?.id, client]);
 
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }

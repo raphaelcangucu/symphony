@@ -15,7 +15,7 @@ export function FilesRoute() {
   const threadId = parseThreadId(firstParam(params.threadId));
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const list = useQuery({
-    queryKey: ["thread-files", activeProfile?.id, threadId],
+    queryKey: ["host", activeProfile?.hostId ?? activeProfile?.id, "thread-files", threadId],
     enabled: Boolean(client && threadId),
     queryFn: ({ signal }) => client!.threadFiles(threadId!, signal),
   });
@@ -25,7 +25,13 @@ export function FilesRoute() {
     }
   }, [list.data?.files, selectedPath]);
   const file = useQuery({
-    queryKey: ["thread-file", activeProfile?.id, threadId, selectedPath],
+    queryKey: [
+      "host",
+      activeProfile?.hostId ?? activeProfile?.id,
+      "thread-file",
+      threadId,
+      selectedPath,
+    ],
     enabled: Boolean(client && threadId && selectedPath),
     queryFn: ({ signal }) => client!.threadFile(threadId!, selectedPath!, signal),
   });

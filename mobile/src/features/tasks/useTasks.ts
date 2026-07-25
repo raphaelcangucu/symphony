@@ -15,7 +15,7 @@ export function useTasks({
   filters: TaskFilters;
 }) {
   const query = useQuery({
-    queryKey: ["tasks", profileId],
+    queryKey: ["host", profileId, "tasks"],
     queryFn: async ({ signal }) => {
       const projects = await client.projects(signal);
       const issues = await Promise.all(

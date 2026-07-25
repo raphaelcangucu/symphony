@@ -44,5 +44,5 @@ export function removeProfileQueries(client: QueryClient, profileId: string): vo
 }
 
 function queryBelongsToProfile(query: Query, profileId: string): boolean {
-  return query.queryKey[1] === profileId;
+  return query.queryKey[0] === "host" && query.queryKey[1] === profileId;
 }

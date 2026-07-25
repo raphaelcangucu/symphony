@@ -19,6 +19,7 @@ describe("QueryProvider", () => {
     const onClient = jest.fn();
     jest.mocked(useConnection).mockReturnValue({
       activeProfile: { id: "remote-1" },
+      profiles: [{ id: "remote-1" }],
     } as ReturnType<typeof useConnection>);
     const view = render(
       <QueryProvider>
@@ -26,11 +27,12 @@ describe("QueryProvider", () => {
       </QueryProvider>,
     );
     const client = onClient.mock.calls[0]?.[0] as QueryClient;
-    client.setQueryData(["session-library", "remote-1", "projects"], ["old"]);
+    client.setQueryData(["host", "remote-1", "session-library", "projects"], ["old"]);
     client.setQueryData(["unrelated"], ["keep"]);
 
     jest.mocked(useConnection).mockReturnValue({
       activeProfile: { id: "remote-2" },
+      profiles: [{ id: "remote-2" }],
     } as ReturnType<typeof useConnection>);
     view.rerender(
       <QueryProvider>
@@ -39,7 +41,9 @@ describe("QueryProvider", () => {
     );
 
     await waitFor(() =>
-      expect(client.getQueryData(["session-library", "remote-1", "projects"])).toBeUndefined(),
+      expect(
+        client.getQueryData(["host", "remote-1", "session-library", "projects"]),
+      ).toBeUndefined(),
     );
     expect(client.getQueryData(["unrelated"])).toEqual(["keep"]);
     client.clear();

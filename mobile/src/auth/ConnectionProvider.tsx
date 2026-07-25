@@ -37,6 +37,7 @@ export type ConnectionContextValue = {
   activeProfile: ConnectionProfile | null;
   activeHostId: string | null;
   activeToken: string | null;
+  activeHostCredential: HostCredential | null;
   hydrated: boolean;
   loadToken(id: string): Promise<string | null>;
   selectProfile(id: string): Promise<void>;
@@ -74,6 +75,7 @@ export function ConnectionProvider({
   const runtime = useAppRuntime();
   const [snapshot, setSnapshot] = useState(emptySnapshot);
   const [activeToken, setActiveToken] = useState<string | null>(null);
+  const [activeHostCredential, setActiveHostCredential] = useState<HostCredential | null>(null);
   const [hydrated, setHydrated] = useState(false);
 
   const loadActiveToken = useCallback(
@@ -81,7 +83,11 @@ export function ConnectionProvider({
       const token = nextSnapshot.activeProfileId
         ? await storage.loadToken(nextSnapshot.activeProfileId)
         : null;
+      const hostCredential = nextSnapshot.activeProfileId
+        ? await storage.loadHostCredential(nextSnapshot.activeProfileId)
+        : null;
       setActiveToken(token);
+      setActiveHostCredential(hostCredential);
     },
     [storage],
   );
@@ -92,18 +98,23 @@ export function ConnectionProvider({
     void storage
       .loadSnapshot()
       .then(async (storedSnapshot) => {
-        const token = storedSnapshot.activeProfileId
-          ? await storage.loadToken(storedSnapshot.activeProfileId)
-          : null;
+        const [token, hostCredential] = storedSnapshot.activeProfileId
+          ? await Promise.all([
+              storage.loadToken(storedSnapshot.activeProfileId),
+              storage.loadHostCredential(storedSnapshot.activeProfileId),
+            ])
+          : [null, null];
         if (!cancelled) {
           setSnapshot(storedSnapshot);
           setActiveToken(token);
+          setActiveHostCredential(hostCredential);
         }
       })
       .catch(() => {
         if (!cancelled) {
           setSnapshot(emptySnapshot);
           setActiveToken(null);
+          setActiveHostCredential(null);
         }
       })
       .finally(() => {
@@ -200,8 +211,9 @@ export function ConnectionProvider({
     () => ({
       profiles: snapshot.profiles,
       activeProfile,
-      activeHostId: activeProfile?.id ?? null,
+      activeHostId: activeProfile?.hostId ?? activeProfile?.id ?? null,
       activeToken,
+      activeHostCredential,
       hydrated,
       loadToken,
       selectProfile,
@@ -213,6 +225,7 @@ export function ConnectionProvider({
     [
       activeProfile,
       activeToken,
+      activeHostCredential,
       hydrated,
       loadToken,
       removeProfile,

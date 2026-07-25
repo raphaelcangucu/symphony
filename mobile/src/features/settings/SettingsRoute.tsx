@@ -10,9 +10,9 @@ export function SettingsRoute() {
   const router = useRouter();
   const client = useTrackerClient();
   const { activeProfile } = useConnection();
-  const profileId = activeProfile?.id ?? null;
+  const profileId = activeProfile?.hostId ?? activeProfile?.id ?? null;
   const availability = useQuery({
-    queryKey: ["settings", profileId, "agent-availability"],
+    queryKey: ["host", profileId, "settings", "agent-availability"],
     enabled: Boolean(client && profileId),
     queryFn: ({ signal }) => {
       if (!client) throw new Error("No active connection");
@@ -20,7 +20,7 @@ export function SettingsRoute() {
     },
   });
   const usage = useQuery({
-    queryKey: ["settings", profileId, "agent-usage"],
+    queryKey: ["host", profileId, "settings", "agent-usage"],
     enabled: Boolean(client && profileId),
     queryFn: ({ signal }) => {
       if (!client) throw new Error("No active connection");

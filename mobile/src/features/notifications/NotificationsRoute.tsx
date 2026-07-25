@@ -46,7 +46,7 @@ export function NotificationsRoute() {
         deviceId,
         platform,
         port: notifications.port,
-        profileId: activeProfile.id,
+        profileId: activeProfile.hostId ?? activeProfile.id,
       });
       setState(result.state);
       setMessage(
@@ -68,7 +68,7 @@ export function NotificationsRoute() {
           unregister: (input) => client.unregisterMobilePush(input),
         },
         deviceId: await notifications.deviceId(),
-        profileId: activeProfile.id,
+        profileId: activeProfile.hostId ?? activeProfile.id,
       });
       setState("inactive");
       setMessage("Notifications disabled for this connection.");

@@ -358,28 +358,28 @@ Commit: `feat(mobile): add encrypted Symphony host pairing`
 - Modify: `mobile/src/features/sessions/SessionLibraryRoute.tsx`
 - Modify: `mobile/src/diagnostics/diagnostic-log.ts`
 
-- [ ] **Step 1: Write failing two-host isolation tests**
+- [x] **Step 1: Write failing two-host isolation tests**
 
 Prove that two hosts may reuse project/thread/issue ids without sharing Query
 data, drafts, sockets or notification routes. Prove host switch closes old
 subscriptions before hydrating the new host cache.
 
-- [ ] **Step 2: Write failing reconnection tests**
+- [x] **Step 2: Write failing reconnection tests**
 
 Use fake timers to prove heartbeat ageing, two missed acknowledgements, capped
 exponential backoff with jitter, foreground/network retry, revoked/key-mismatch
 terminal states and protocol incompatibility.
 
-- [ ] **Step 3: Verify RED**
+- [x] **Step 3: Verify RED**
 
 Run the two focused Vitest files in WSL.
 
-- [ ] **Step 4: Implement manager and states**
+- [x] **Step 4: Implement manager and states**
 
 Every Query key begins with `["host", hostId, ...]`. Diagnostics expose only
 endpoint, fingerprint, negotiated version, heartbeat age and redacted codes.
 
-- [ ] **Step 5: Verify GREEN and commit**
+- [x] **Step 5: Verify GREEN and commit**
 
 Commit: `feat(mobile): isolate and reconnect multiple Symphony hosts`
 

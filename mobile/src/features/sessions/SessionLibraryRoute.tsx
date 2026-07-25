@@ -15,7 +15,8 @@ export function SessionLibraryRoute() {
   const client = useTrackerClient();
   const { activeProfile } = useConnection();
   const [query, setQuery] = useState("");
-  const [collapsed, setCollapsed] = useCollapsedProjects(activeProfile?.id ?? null);
+  const hostId = activeProfile?.hostId ?? activeProfile?.id ?? null;
+  const [collapsed, setCollapsed] = useCollapsedProjects(hostId);
 
   if (!client || !activeProfile) return null;
 
@@ -33,7 +34,7 @@ export function SessionLibraryRoute() {
       onOpenTasks={() => router.push("/tasks")}
       onOpenSession={(threadId) => router.push(`/session/${threadId}`)}
       onQueryChange={setQuery}
-      profileId={activeProfile.id}
+      profileId={hostId ?? activeProfile.id}
       query={query}
     />
   );

@@ -31,7 +31,9 @@ export function SessionRoute() {
       seed,
       onAction: dispatch,
       onSeedAccepted: () => {
-        void AsyncStorage.removeItem(`symphony.new-session.draft.${activeProfile.id}`)
+        void AsyncStorage.removeItem(
+          `symphony.new-session.draft.${activeProfile.hostId ?? activeProfile.id}`,
+        )
           .catch(() => undefined)
           .then(() => router.replace(`/session/${threadId}`));
       },

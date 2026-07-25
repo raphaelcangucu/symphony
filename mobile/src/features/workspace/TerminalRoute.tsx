@@ -17,7 +17,7 @@ export function TerminalRoute() {
   const { createTerminalSession } = useAppRuntime();
   const threadId = parseThreadId(firstParam(params.threadId));
   const threadQuery = useQuery({
-    queryKey: ["terminal-thread", activeProfile?.id, threadId],
+    queryKey: ["host", activeProfile?.hostId ?? activeProfile?.id, "terminal-thread", threadId],
     enabled: Boolean(client && threadId),
     queryFn: async ({ signal }) => {
       const threads = await client!.threads({ limit: 100, includeArchived: true }, signal);

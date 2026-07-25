@@ -35,7 +35,13 @@ export function PullRequestRoute() {
   const projectSlug = firstParam(params.projectSlug);
   const identifier = firstParam(params.identifier);
   const [notice, setNotice] = useState<Notice | null>(null);
-  const queryKey = ["issue-pull-requests", activeProfile?.id, projectSlug, identifier] as const;
+  const queryKey = [
+    "host",
+    activeProfile?.hostId ?? activeProfile?.id,
+    "issue-pull-requests",
+    projectSlug,
+    identifier,
+  ] as const;
   const pullRequests = useQuery({
     queryKey,
     enabled: Boolean(client && projectSlug && identifier),

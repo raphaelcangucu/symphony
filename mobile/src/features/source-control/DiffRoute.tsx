@@ -22,8 +22,9 @@ export function DiffRoute() {
   const threadId = parseThreadId(firstParam(params.threadId));
   const [selectedFile, setSelectedFile] = useState<GitDiffFileEntry | null>(null);
   const [notice, setNotice] = useState<ActionNotice | null>(null);
-  const statsKey = ["thread-diff-stats", activeProfile?.id, threadId, "uncommitted"] as const;
-  const filesKey = ["thread-diff-files", activeProfile?.id, threadId, "uncommitted"] as const;
+  const hostId = activeProfile?.hostId ?? activeProfile?.id;
+  const statsKey = ["host", hostId, "thread-diff-stats", threadId, "uncommitted"] as const;
+  const filesKey = ["host", hostId, "thread-diff-files", threadId, "uncommitted"] as const;
 
   const stats = useQuery({
     queryKey: statsKey,
@@ -48,8 +49,9 @@ export function DiffRoute() {
   });
   const patch = useQuery({
     queryKey: [
+      "host",
+      hostId,
       "thread-diff-patch",
-      activeProfile?.id,
       threadId,
       "uncommitted",
       selectedFile?.repo,

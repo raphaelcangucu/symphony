@@ -27,8 +27,8 @@ function storage() {
 describe("profile query cache", () => {
   it("persists and restores only read models for the selected safe profile id", async () => {
     const source = new QueryClient();
-    source.setQueryData(["tasks", "profile-1"], [{ id: "one" }]);
-    source.setQueryData(["tasks", "profile-2"], [{ id: "two" }]);
+    source.setQueryData(["host", "profile-1", "tasks"], [{ id: "one" }]);
+    source.setQueryData(["host", "profile-2", "tasks"], [{ id: "two" }]);
     const cacheStorage = storage();
 
     await saveProfileQueries(source, "profile-1", cacheStorage.adapter);
@@ -37,20 +37,20 @@ describe("profile query cache", () => {
 
     const target = new QueryClient();
     await restoreProfileQueries(target, "profile-1", cacheStorage.adapter);
-    expect(target.getQueryData(["tasks", "profile-1"])).toEqual([{ id: "one" }]);
-    expect(target.getQueryData(["tasks", "profile-2"])).toBeUndefined();
+    expect(target.getQueryData(["host", "profile-1", "tasks"])).toEqual([{ id: "one" }]);
+    expect(target.getQueryData(["host", "profile-2", "tasks"])).toBeUndefined();
   });
 
   it("removes every query belonging to a deleted profile without touching others", () => {
     const client = new QueryClient();
-    client.setQueryData(["settings", "profile-1", "usage"], {});
-    client.setQueryData(["tasks", "profile-1"], []);
-    client.setQueryData(["tasks", "profile-2"], []);
+    client.setQueryData(["host", "profile-1", "settings", "usage"], {});
+    client.setQueryData(["host", "profile-1", "tasks"], []);
+    client.setQueryData(["host", "profile-2", "tasks"], []);
 
     removeProfileQueries(client, "profile-1");
 
-    expect(client.getQueryData(["settings", "profile-1", "usage"])).toBeUndefined();
-    expect(client.getQueryData(["tasks", "profile-1"])).toBeUndefined();
-    expect(client.getQueryData(["tasks", "profile-2"])).toEqual([]);
+    expect(client.getQueryData(["host", "profile-1", "settings", "usage"])).toBeUndefined();
+    expect(client.getQueryData(["host", "profile-1", "tasks"])).toBeUndefined();
+    expect(client.getQueryData(["host", "profile-2", "tasks"])).toEqual([]);
   });
 });

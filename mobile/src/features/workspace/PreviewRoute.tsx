@@ -13,7 +13,12 @@ export function PreviewRoute() {
   const { activeProfile } = useConnection();
   const queryClient = useQueryClient();
   const threadId = parseThreadId(firstParam(params.threadId));
-  const queryKey = ["thread-preview", activeProfile?.id, threadId] as const;
+  const queryKey = [
+    "host",
+    activeProfile?.hostId ?? activeProfile?.id,
+    "thread-preview",
+    threadId,
+  ] as const;
   const preview = useQuery({
     queryKey,
     enabled: Boolean(client && threadId),
