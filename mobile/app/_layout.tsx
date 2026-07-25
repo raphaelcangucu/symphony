@@ -8,8 +8,9 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { QueryProvider } from "@/api/QueryProvider";
 import { TrackerClientProvider } from "@/api/TrackerClientProvider";
-import { ConnectionProvider } from "@/auth/ConnectionProvider";
+import { ConnectionProvider, useConnection } from "@/auth/ConnectionProvider";
 import { createFixtureRuntime, fixtureModeFromUrl } from "@/e2e/fixture-runtime";
+import { activateNotificationDestination } from "@/native/notifications";
 import { AppRuntimeProvider, productionRuntime, useAppRuntime } from "@/runtime/AppRuntime";
 import { ThemeProvider, useAppTheme } from "@/theme/ThemeProvider";
 
@@ -52,18 +53,31 @@ function ThemedStack() {
   const theme = useAppTheme();
   const router = useRouter();
   const { notifications } = useAppRuntime();
+  const { hydrated, profiles, selectProfile } = useConnection();
 
   useEffect(() => {
+    if (!hydrated) return;
     let active = true;
-    void notifications.router.initialRoute().then((route) => {
-      if (active && route) router.push(route as never);
+    const openDestination = (destination: { route: string; hostId: string | null }) =>
+      activateNotificationDestination({
+        destination,
+        profiles,
+        selectProfile,
+        openRoute: (route) => {
+          if (active) router.push(route as never);
+        },
+      });
+    void notifications.router.initialRoute().then((destination) => {
+      if (active && destination) void openDestination(destination);
     });
-    const subscription = notifications.router.subscribe((route) => router.push(route as never));
+    const subscription = notifications.router.subscribe((destination) => {
+      void openDestination(destination);
+    });
     return () => {
       active = false;
       subscription.remove();
     };
-  }, [notifications, router]);
+  }, [hydrated, notifications, profiles, router, selectProfile]);
 
   return (
     <>

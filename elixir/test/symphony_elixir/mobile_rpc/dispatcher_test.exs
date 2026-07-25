@@ -26,12 +26,35 @@ defmodule SymphonyElixir.MobileRpc.DispatcherTest do
     end
   end
 
+  defmodule SubscribeMethod do
+    @behaviour SymphonyElixir.MobileRpc.Method
+    def name, do: "test.subscribe"
+    def scope, do: :mobile
+    def timeout_ms, do: 100
+    def validate(params), do: {:ok, params}
+
+    def call(_params, context) do
+      subscription_id = "sub_test"
+      parent = context.connection_pid
+
+      {:ok,
+       {:subscription, subscription_id, %{"subscription_id" => subscription_id}, fn -> send(parent, :subscription_cleaned) end,
+        fn ->
+          send(
+            parent,
+            {:mobile_rpc_event, subscription_id, "sessions.history_loaded", %{"messages" => []}}
+          )
+        end}}
+    end
+  end
+
   setup do
     context = %{
       host_id: "host_01",
       host_name: "Mac Studio",
       protocol: 1,
-      device_id: "device_01"
+      device_id: "device_01",
+      connection_pid: self()
     }
 
     dispatcher =
@@ -143,6 +166,47 @@ defmodule SymphonyElixir.MobileRpc.DispatcherTest do
     assert :ok = Subscriptions.cleanup(subscriptions)
     assert_receive :cleaned_2
     refute_receive :cleaned_1
+  end
+
+  test "registers stream cleanup before emitting monotonic subscription events" do
+    dispatcher =
+      Dispatcher.new(
+        %{
+          host_id: "host_01",
+          host_name: "Mac Studio",
+          protocol: 1,
+          device_id: "device_01",
+          connection_pid: self()
+        },
+        methods: [SubscribeMethod]
+      )
+
+    assert {:noreply, running} =
+             Dispatcher.handle_frame(rpc("subscribe", "test.subscribe", %{}), dispatcher)
+
+    assert_receive task_message
+    assert {:reply, response, subscribed} = Dispatcher.handle_info(task_message, running)
+    assert Jason.decode!(response)["result"]["subscription_id"] == "sub_test"
+
+    assert_receive event_message
+    assert {:reply, event, subscribed} = Dispatcher.handle_info(event_message, subscribed)
+
+    assert Jason.decode!(event) == %{
+             "type" => "event",
+             "subscription_id" => "sub_test",
+             "sequence" => 1,
+             "event" => "sessions.history_loaded",
+             "payload" => %{"messages" => []}
+           }
+
+    assert {:reply, _response, unsubscribed} =
+             Dispatcher.handle_frame(
+               ~s({"type":"unsubscribe","subscription_id":"sub_test"}),
+               subscribed
+             )
+
+    assert_receive :subscription_cleaned
+    assert unsubscribed.subscriptions.entries == %{}
   end
 
   test "envelope rejects oversized deadlines and malformed event sequences" do

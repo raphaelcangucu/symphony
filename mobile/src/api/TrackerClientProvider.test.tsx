@@ -145,12 +145,14 @@ describe("TrackerClientProvider", () => {
     render(
       <TrackerClientProvider createClient={createClient} locale="pt-BR">
         <TransportState />
+        <ClientState />
       </TrackerClientProvider>,
     );
 
     expect(createClient).not.toHaveBeenCalled();
     expect(connect).toHaveBeenCalledTimes(1);
     expect(screen.getByText("host-studio:connecting")).toBeTruthy();
+    expect(screen.getByText("bound")).toBeTruthy();
 
     act(() => callbacks?.onStateChange("online"));
 

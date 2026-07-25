@@ -64,6 +64,7 @@ export type IssueSummary = {
   agentKind: AgentKind | null;
   agentGoal: string | null;
   branchName: string | null;
+  parentIdentifier?: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -533,6 +534,13 @@ export type TrackerClient = {
     signal?: AbortSignal,
   ): Promise<IssueComment>;
   blockers(projectSlug: string, identifier: string, signal?: AbortSignal): Promise<IssueBlocker[]>;
+  subtasks(projectSlug: string, identifier: string, signal?: AbortSignal): Promise<IssueSummary[]>;
+  createSubtask(
+    projectSlug: string,
+    identifier: string,
+    input: CreateIssueInput,
+    signal?: AbortSignal,
+  ): Promise<IssueSummary>;
   dispatchIssue(
     projectSlug: string,
     identifier: string,

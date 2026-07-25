@@ -33,6 +33,8 @@ defmodule SymphonyElixir.SharedSupervisor do
       SymphonyElixir.Assistant.UserInputBroker.registry_child_spec(),
       SymphonyElixir.Cursor.CreatePlanBroker.registry_child_spec(),
       {Registry, keys: :duplicate, name: SymphonyElixir.MobileRpc.ConnectionRegistry},
+      {Registry, keys: :unique, name: SymphonyElixir.MobileRpc.SessionRegistry},
+      {DynamicSupervisor, strategy: :one_for_one, name: SymphonyElixir.MobileRpc.SessionSupervisor},
       SymphonyElixir.MobileRpc.AuthLimiter,
       SymphonyElixir.Claude.AppServer.ToolGateway,
       SymphonyElixir.Observability.Registry,

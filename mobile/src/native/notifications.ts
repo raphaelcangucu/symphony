@@ -19,8 +19,18 @@ export type NotificationResponsePort = {
 };
 
 export type NotificationRouter = {
-  initialRoute(): Promise<string | null>;
-  subscribe(listener: (route: string) => void): NotificationRouteSubscription;
+  initialRoute(): Promise<NotificationDestination | null>;
+  subscribe(listener: (destination: NotificationDestination) => void): NotificationRouteSubscription;
+};
+
+export type NotificationDestination = {
+  route: string;
+  hostId: string | null;
+};
+
+type NotificationProfile = {
+  id: string;
+  hostId?: string;
 };
 
 export type NativeNotificationService = {
@@ -96,15 +106,49 @@ export function createNotificationRouter(port: NotificationResponsePort): Notifi
   return {
     async initialRoute() {
       const data = await port.getLastResponseData();
-      return data ? notificationRoute(data) : null;
+      return data ? notificationDestination(data) : null;
     },
     subscribe(listener) {
       return port.addResponseListener((data) => {
-        const route = notificationRoute(data);
-        if (route) listener(route);
+        const destination = notificationDestination(data);
+        if (destination) listener(destination);
       });
     },
   };
+}
+
+export function notificationDestination(
+  data: Record<string, unknown>,
+): NotificationDestination | null {
+  const route = notificationRoute(data);
+  if (!route) return null;
+  return {
+    route,
+    hostId: stringValue(data.host_id) ?? stringValue(data.profile_id),
+  };
+}
+
+export async function activateNotificationDestination({
+  destination,
+  profiles,
+  selectProfile,
+  openRoute,
+}: {
+  destination: NotificationDestination;
+  profiles: NotificationProfile[];
+  selectProfile(profileId: string): Promise<void>;
+  openRoute(route: string): void;
+}): Promise<boolean> {
+  if (destination.hostId) {
+    const profile = profiles.find(
+      (candidate) =>
+        candidate.hostId === destination.hostId || candidate.id === destination.hostId,
+    );
+    if (!profile) return false;
+    await selectProfile(profile.id);
+  }
+  openRoute(destination.route);
+  return true;
 }
 
 export async function loadOrCreateDeviceId(

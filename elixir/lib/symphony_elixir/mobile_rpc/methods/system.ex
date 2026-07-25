@@ -9,7 +9,10 @@ defmodule SymphonyElixir.MobileRpc.Methods.System do
       SymphonyElixir.MobileRpc.Methods.System.Capabilities,
       SymphonyElixir.MobileRpc.Methods.System.Heartbeat,
       SymphonyElixir.MobileRpc.Methods.System.Usage,
-      SymphonyElixir.MobileRpc.Methods.System.SelfRevoke
+      SymphonyElixir.MobileRpc.Methods.System.ListDevices,
+      SymphonyElixir.MobileRpc.Methods.System.RevokeDevice,
+      SymphonyElixir.MobileRpc.Methods.System.SelfRevoke,
+      SymphonyElixir.MobileRpc.Methods.System.Tracker
     ]
   end
 
@@ -83,6 +86,63 @@ defmodule SymphonyElixir.MobileRpc.Methods.System do
     end
   end
 
+  defmodule ListDevices do
+    @behaviour SymphonyElixir.MobileRpc.Method
+    alias SymphonyElixir.MobileRpc.Devices
+
+    def name, do: "devices.list"
+    def scope, do: :mobile
+    def timeout_ms, do: 1_000
+    def validate(params) when map_size(params) == 0, do: {:ok, params}
+    def validate(_params), do: {:error, :invalid_params}
+
+    def call(_params, context) do
+      devices =
+        Devices.list_paired()
+        |> Enum.map(fn device ->
+          %{
+            "device_id" => device.device_id,
+            "name" => device.name,
+            "scope" => device.scope,
+            "paired_at" => iso8601(device.paired_at),
+            "last_seen_at" => iso8601(device.last_seen_at),
+            "protocol_version" => device.protocol_version,
+            "current" => device.device_id == context.device_id
+          }
+        end)
+
+      {:ok, %{"devices" => devices}}
+    end
+
+    defp iso8601(nil), do: nil
+    defp iso8601(%DateTime{} = value), do: DateTime.to_iso8601(value)
+  end
+
+  defmodule RevokeDevice do
+    @behaviour SymphonyElixir.MobileRpc.Method
+    alias SymphonyElixir.MobileRpc.Devices
+
+    def name, do: "devices.revoke"
+    def scope, do: :mobile
+    def timeout_ms, do: 1_000
+
+    def validate(%{"device_id" => device_id} = params)
+        when is_binary(device_id) and device_id != "" and map_size(params) == 1,
+        do: {:ok, params}
+
+    def validate(_params), do: {:error, :invalid_params}
+
+    def call(%{"device_id" => device_id}, %{device_id: device_id}),
+      do: {:error, :use_self_revoke}
+
+    def call(%{"device_id" => device_id}, _context) do
+      with {:ok, _device} <- Devices.get_paired(device_id),
+           :ok <- Devices.revoke(device_id) do
+        {:ok, %{"revoked" => true}}
+      end
+    end
+  end
+
   defmodule SelfRevoke do
     @behaviour SymphonyElixir.MobileRpc.Method
     def name, do: "devices.self_revoke"
@@ -95,5 +155,16 @@ defmodule SymphonyElixir.MobileRpc.Methods.System do
       :ok = SymphonyElixir.MobileRpc.Devices.revoke(context.device_id)
       {:ok, %{"revoked" => true}}
     end
+  end
+
+  defmodule Tracker do
+    @behaviour SymphonyElixir.MobileRpc.Method
+    alias SymphonyElixir.MobileRpc.TrackerRequest
+
+    def name, do: "system.tracker"
+    def scope, do: :mobile
+    def timeout_ms, do: 30_000
+    defdelegate validate(params), to: TrackerRequest
+    def call(params, context), do: TrackerRequest.call(:system, params, context)
   end
 end

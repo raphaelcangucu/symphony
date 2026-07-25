@@ -243,6 +243,7 @@ export function createFixtureConnectionStorage(): ConnectionStorage {
 export function createFixtureTrackerClient(): TrackerClient {
   let issue = fixtureIssue;
   const comments = [fixtureComment];
+  const subtasks: IssueSummary[] = [];
   return {
     health: async () => ({ status: "ok" }),
     viewer: async () => ({ id: "fixture-user", name: "raphael" }),
@@ -327,6 +328,21 @@ export function createFixtureTrackerClient(): TrackerClient {
       return comment;
     },
     blockers: async () => [],
+    subtasks: async () => subtasks,
+    createSubtask: async (_projectSlug, identifier, input) => {
+      const subtask: IssueSummary = {
+        ...fixtureIssue,
+        id: `subtask-${subtasks.length + 1}`,
+        identifier: `MOB-${8 + subtasks.length}`,
+        displayIdentifier: `MOB-${8 + subtasks.length}`,
+        title: input.title,
+        description: input.description ?? null,
+        status: input.status,
+        parentIdentifier: identifier,
+      };
+      subtasks.push(subtask);
+      return subtask;
+    },
     dispatchIssue: async (_projectSlug, _identifier, input) => ({
       action: input.action,
       message: "Fixture agent action accepted",

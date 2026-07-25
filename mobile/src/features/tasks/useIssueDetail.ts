@@ -23,16 +23,18 @@ export function useIssueDetail({
   const query = useQuery({
     queryKey,
     queryFn: async ({ signal }) => {
-      const [issue, comments, blockers, threads] = await Promise.all([
+      const [issue, comments, blockers, subtasks, threads] = await Promise.all([
         client.issue(projectSlug, identifier, signal),
         client.comments(projectSlug, identifier, signal),
         client.blockers(projectSlug, identifier, signal),
+        client.subtasks(projectSlug, identifier, signal),
         client.threads({ projectSlug, issueIdentifier: identifier, limit: 20 }, signal),
       ]);
       return {
         issue,
         comments,
         blockers,
+        subtasks,
         threadId: threads[0]?.id ?? null,
       };
     },
@@ -52,6 +54,14 @@ export function useIssueDetail({
     mutationFn: (body: string) => client.createComment(projectSlug, identifier, body),
     onSuccess: invalidate,
   });
+  const subtaskMutation = useMutation({
+    mutationFn: (title: string) =>
+      client.createSubtask(projectSlug, identifier, {
+        title,
+        status: query.data?.issue.status ?? "Todo",
+      }),
+    onSuccess: invalidate,
+  });
   const dispatchMutation = useMutation({
     mutationFn: (action: IssueDispatchInput["action"]) =>
       client.dispatchIssue(projectSlug, identifier, { action }),
@@ -63,20 +73,26 @@ export function useIssueDetail({
     onSuccess: invalidate,
   });
   const mutationError =
-    saveMutation.error ?? commentMutation.error ?? dispatchMutation.error ?? goalMutation.error;
+    saveMutation.error ??
+    commentMutation.error ??
+    subtaskMutation.error ??
+    dispatchMutation.error ??
+    goalMutation.error;
 
   return {
     issue: query.data?.issue ?? null,
     comments: query.data?.comments ?? [],
     blockers: query.data?.blockers ?? [],
+    subtasks: query.data?.subtasks ?? [],
     threadId: query.data?.threadId ?? null,
     loading: query.isLoading,
     error:
       (mutationError instanceof Error ? mutationError.message : null) ??
       (query.error instanceof Error ? query.error.message : null),
-    saving: saveMutation.isPending || commentMutation.isPending,
+    saving: saveMutation.isPending || commentMutation.isPending || subtaskMutation.isPending,
     dispatching: dispatchMutation.isPending || goalMutation.isPending,
     addComment: commentMutation.mutate,
+    createSubtask: subtaskMutation.mutate,
     dispatch: dispatchMutation.mutate,
     goalAction: goalMutation.mutate,
     refresh: query.refetch,

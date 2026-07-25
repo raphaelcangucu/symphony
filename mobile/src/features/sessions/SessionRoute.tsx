@@ -2,8 +2,10 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useReducer } from "react";
 
+import { useHostTransport } from "@/api/HostTransportContext";
 import { useConnection } from "@/auth/ConnectionProvider";
 import { StateView } from "@/components/StateView";
+import { createRpcAssistantSession } from "@/realtime/rpc-assistant-session";
 import { useAppRuntime } from "@/runtime/AppRuntime";
 
 import { createSessionTimelineState, sessionTimelineReducer } from "./session-reducer";
@@ -12,6 +14,7 @@ import { SessionScreen } from "./SessionScreen";
 export function SessionRoute() {
   const router = useRouter();
   const { createAssistantSession, dictate } = useAppRuntime();
+  const hostTransport = useHostTransport();
   const params = useLocalSearchParams<{ threadId?: string | string[]; seed?: string | string[] }>();
   const { activeProfile, activeToken } = useConnection();
   const [timeline, dispatch] = useReducer(
@@ -22,7 +25,25 @@ export function SessionRoute() {
   const threadId = parseThreadId(firstParam(params.threadId));
   const seed = firstParam(params.seed);
   const session = useMemo(() => {
-    if (!threadId || !activeProfile || !activeToken) return null;
+    if (!threadId || !activeProfile) return null;
+    const onSeedAccepted = () => {
+      void AsyncStorage.removeItem(
+        `symphony.new-session.draft.${activeProfile.hostId ?? activeProfile.id}`,
+      )
+        .catch(() => undefined)
+        .then(() => router.replace(`/session/${threadId}`));
+    };
+    if (activeProfile.transport === "rpc") {
+      if (!hostTransport) return null;
+      return createRpcAssistantSession({
+        threadId,
+        transport: hostTransport,
+        seed,
+        onAction: dispatch,
+        onSeedAccepted,
+      });
+    }
+    if (!activeToken) return null;
     return createAssistantSession({
       threadId,
       origin: activeProfile.origin,
@@ -30,15 +51,9 @@ export function SessionRoute() {
       locale: resolvedLocale(),
       seed,
       onAction: dispatch,
-      onSeedAccepted: () => {
-        void AsyncStorage.removeItem(
-          `symphony.new-session.draft.${activeProfile.hostId ?? activeProfile.id}`,
-        )
-          .catch(() => undefined)
-          .then(() => router.replace(`/session/${threadId}`));
-      },
+      onSeedAccepted,
     });
-  }, [activeProfile, activeToken, router, seed, threadId]);
+  }, [activeProfile, activeToken, createAssistantSession, hostTransport, router, seed, threadId]);
 
   useEffect(() => {
     session?.connect();

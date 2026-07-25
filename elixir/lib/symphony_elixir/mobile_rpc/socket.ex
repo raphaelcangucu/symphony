@@ -52,7 +52,8 @@ defmodule SymphonyElixir.MobileRpc.Socket do
             host_id: next_state.identity.host_id,
             host_name: next_state.identity.name,
             protocol: 1,
-            device_id: next_state.device_id
+            device_id: next_state.device_id,
+            connection_pid: self()
           })
 
         {:push, {:binary, response}, %{next_state | dispatcher: dispatcher}}

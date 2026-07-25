@@ -83,6 +83,17 @@ defmodule SymphonyElixir.MobileRpc.Envelope do
     })
   end
 
+  @spec event(String.t(), pos_integer(), String.t(), term()) :: String.t()
+  def event(subscription_id, sequence, event, payload) do
+    Jason.encode!(%{
+      "type" => "event",
+      "subscription_id" => subscription_id,
+      "sequence" => sequence,
+      "event" => event,
+      "payload" => payload
+    })
+  end
+
   defp metadata(context) do
     %{
       "host_id" => Map.fetch!(context, :host_id),

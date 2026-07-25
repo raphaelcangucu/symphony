@@ -4,7 +4,7 @@ export interface HostTransport {
   subscribe<TEvent>(
     method: string,
     params: unknown,
-    onEvent: (event: TEvent) => void,
+    onEvent: (event: TEvent, eventName?: string) => void,
   ): Promise<() => void>;
   reconnect(): void;
   close(): void;

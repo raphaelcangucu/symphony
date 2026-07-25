@@ -19,7 +19,7 @@ export function IssueRoute() {
     <ConnectedIssueRoute
       client={client}
       identifier={identifier}
-      profileId={activeProfile.id}
+      profileId={activeProfile.hostId ?? activeProfile.id}
       projectSlug={projectSlug}
       router={router}
     />
@@ -55,6 +55,7 @@ function ConnectedIssueRoute({
       onBack={() => router.back()}
       onDispatch={detail.dispatch}
       onGoalAction={detail.goalAction}
+      onCreateSubtask={detail.createSubtask}
       onOpenDiff={() => threadRoute("/diff")}
       onOpenFiles={() => threadRoute("/files")}
       onOpenPreview={() => threadRoute("/preview")}
@@ -63,11 +64,17 @@ function ConnectedIssueRoute({
           `/issue/${encodeURIComponent(projectSlug)}/${encodeURIComponent(identifier)}/pull-request`,
         )
       }
+      onOpenRelatedTask={(relatedIdentifier) =>
+        router.push(
+          `/issue/${encodeURIComponent(projectSlug)}/${encodeURIComponent(relatedIdentifier)}`,
+        )
+      }
       onOpenSession={() => threadRoute()}
       onOpenTerminal={() => threadRoute("/terminal")}
       onRefresh={() => void detail.refresh()}
       onSave={detail.save}
       saving={detail.saving}
+      subtasks={detail.subtasks}
     />
   );
 }

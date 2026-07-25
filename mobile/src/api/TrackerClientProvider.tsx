@@ -10,6 +10,8 @@ import { HandshakeWebSocketAdapter } from "@/rpc/websocket-adapter";
 
 import { createTrackerClient } from "./client";
 import type { TrackerClient } from "./contracts";
+import { HostTransportContextProvider, type HostTransportState } from "./HostTransportContext";
+import { createRpcTrackerClient } from "./rpc-tracker-client";
 
 type TrackerClientProviderProps = {
   children: ReactNode;
@@ -19,13 +21,6 @@ type TrackerClientProviderProps = {
 };
 
 const TrackerClientContext = createContext<TrackerClient | null>(null);
-const HostTransportContext = createContext<HostTransport | null>(null);
-export type HostTransportState = {
-  hostId: string;
-  status: HandshakeState | "offline";
-  error: string | null;
-};
-const HostTransportStateContext = createContext<HostTransportState | null>(null);
 
 export function TrackerClientProvider({
   children,
@@ -102,6 +97,11 @@ export function TrackerClientProvider({
     return () => transport?.close();
   }, [activeProfile?.transport, transport]);
 
+  const trackerClient = useMemo(
+    () =>
+      activeProfile?.transport === "rpc" && transport ? createRpcTrackerClient(transport) : client,
+    [activeProfile?.transport, client, transport],
+  );
   const transportState =
     activeProfile?.transport === "rpc" && activeProfile.hostId
       ? rpcState?.hostId === activeProfile.hostId
@@ -110,11 +110,11 @@ export function TrackerClientProvider({
       : null;
 
   return (
-    <HostTransportStateContext.Provider value={transportState}>
-      <HostTransportContext.Provider value={transport}>
-        <TrackerClientContext.Provider value={client}>{children}</TrackerClientContext.Provider>
-      </HostTransportContext.Provider>
-    </HostTransportStateContext.Provider>
+    <HostTransportContextProvider state={transportState} transport={transport}>
+      <TrackerClientContext.Provider value={trackerClient}>
+        {children}
+      </TrackerClientContext.Provider>
+    </HostTransportContextProvider>
   );
 }
 
@@ -122,17 +122,12 @@ export function useTrackerClient(): TrackerClient | null {
   return useContext(TrackerClientContext);
 }
 
-export function useHostTransport(): HostTransport | null {
-  return useContext(HostTransportContext);
-}
-
-export function useHostTransportState(): HostTransportState | null {
-  return useContext(HostTransportStateContext);
-}
-
 function createLegacyTransport(hostId: string, client: TrackerClient): HostTransport {
   return new LegacyHostTransport(hostId, client);
 }
+
+export { useHostTransport, useHostTransportState } from "./HostTransportContext";
+export type { HostTransportState } from "./HostTransportContext";
 
 function createRpcId(): string {
   return globalThis.crypto?.randomUUID?.() ?? `rpc-${Date.now().toString(36)}-${Math.random()}`;

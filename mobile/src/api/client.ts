@@ -73,13 +73,15 @@ type CreateTrackerClientOptions = {
   diagnostics?: DiagnosticLog;
 };
 
-type RequestOptions = {
+export type TrackerRequestOptions = {
   method?: "GET" | "POST" | "PATCH" | "DELETE";
   body?: unknown;
   signal?: AbortSignal | undefined;
   tracker?: boolean;
   idempotencyKey?: string;
 };
+
+export type TrackerRequest = (path: string, options?: TrackerRequestOptions) => Promise<unknown>;
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 const AGENT_KINDS: readonly AgentKind[] = ["codex", "claude", "cursor", "opencode"];
@@ -90,7 +92,10 @@ export function createTrackerClient(options: CreateTrackerClientOptions): Tracke
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const diagnostics = options.diagnostics ?? diagnosticLog;
 
-  async function request(path: string, requestOptions: RequestOptions = {}): Promise<unknown> {
+  async function request(
+    path: string,
+    requestOptions: TrackerRequestOptions = {},
+  ): Promise<unknown> {
     const controller = new AbortController();
     let timedOut = false;
     const timeout = setTimeout(() => {
@@ -198,6 +203,10 @@ export function createTrackerClient(options: CreateTrackerClientOptions): Tracke
     }
   }
 
+  return createTrackerClientFromRequest(request);
+}
+
+export function createTrackerClientFromRequest(request: TrackerRequest): TrackerClient {
   return {
     async health(signal) {
       return mapHealth(await request("/health", { signal, tracker: false }));
@@ -339,6 +348,25 @@ export function createTrackerClient(options: CreateTrackerClientOptions): Tracke
         ),
         "blockers",
       ).map(mapBlocker);
+    },
+    async subtasks(projectSlug, identifier, signal) {
+      return readArray(
+        unwrapData(
+          await request(`${issuePath(projectSlug)}/${segment(identifier)}/subtasks`, { signal }),
+        ),
+        "subtasks",
+      ).map(mapIssue);
+    },
+    async createSubtask(projectSlug, identifier, input, signal) {
+      return mapIssue(
+        unwrapData(
+          await request(`${issuePath(projectSlug)}/${segment(identifier)}/subtasks`, {
+            method: "POST",
+            body: issueMutationPayload(input),
+            signal,
+          }),
+        ),
+      );
     },
     async dispatchIssue(projectSlug, identifier, input, signal) {
       return mapDispatchResult(
@@ -913,6 +941,7 @@ function mapIssue(payload: unknown): IssueSummary {
     agentKind: readAgentKind(record.agent_kind),
     agentGoal: optionalText(record.agent_goal),
     branchName: optionalText(record.branch_name),
+    parentIdentifier: optionalText(record.parent_identifier),
     createdAt: optionalText(record.inserted_at) ?? "",
     updatedAt: optionalText(record.updated_at) ?? "",
   };

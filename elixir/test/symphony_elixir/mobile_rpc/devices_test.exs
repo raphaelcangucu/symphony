@@ -2,6 +2,7 @@ defmodule SymphonyElixir.MobileRpc.DevicesTest do
   use ExUnit.Case, async: false
 
   alias SymphonyElixir.MobileRpc.{Device, Devices, HostIdentity}
+  alias SymphonyElixir.MobileRpc.Methods.System
   alias SymphonyElixir.Repo
   alias SymphonyElixir.Settings.Vault
 
@@ -63,6 +64,43 @@ defmodule SymphonyElixir.MobileRpc.DevicesTest do
     assert current_tablet.revoked_at == nil
 
     assert Enum.map(Devices.list_paired(), & &1.device_id) == [tablet.device_id]
+  end
+
+  test "mobile RPC lists safe device metadata and revokes another device individually" do
+    assert {:ok, %{device: phone, token: phone_token}} =
+             Devices.create_pairing("Raphael iPhone")
+
+    assert {:ok, phone} = Devices.activate(phone.device_id, phone_token, 1)
+
+    assert {:ok, %{device: tablet, token: tablet_token}} =
+             Devices.create_pairing("Raphael iPad")
+
+    assert {:ok, tablet} = Devices.activate(tablet.device_id, tablet_token, 1)
+
+    assert {:ok, %{"devices" => summaries}} =
+             System.ListDevices.call(%{}, %{device_id: phone.device_id})
+
+    encoded = Jason.encode!(summaries)
+    refute encoded =~ "token"
+    refute encoded =~ Base.encode64(tablet.token_digest)
+
+    assert Enum.find(summaries, &(&1["device_id"] == phone.device_id))["current"]
+    refute Enum.find(summaries, &(&1["device_id"] == tablet.device_id))["current"]
+
+    assert {:error, :use_self_revoke} =
+             System.RevokeDevice.call(
+               %{"device_id" => phone.device_id},
+               %{device_id: phone.device_id}
+             )
+
+    assert {:ok, %{"revoked" => true}} =
+             System.RevokeDevice.call(
+               %{"device_id" => tablet.device_id},
+               %{device_id: phone.device_id}
+             )
+
+    assert {:error, :revoked} = Devices.validate_token(tablet.device_id, tablet_token)
+    assert {:ok, _current_phone} = Devices.validate_token(phone.device_id, phone_token)
   end
 
   defp migrate_repo do

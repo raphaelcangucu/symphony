@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  activateNotificationDestination,
   createNotificationRouter,
   loadOrCreateDeviceId,
   notificationRoute,
@@ -100,7 +101,9 @@ describe("notification response routing", () => {
   it("routes the last response and future responses through the same allowlist", async () => {
     let responseListener: ((data: Record<string, unknown>) => void) | null = null;
     const port = {
-      getLastResponseData: vi.fn().mockResolvedValue({ type: "session", thread_id: 42 }),
+      getLastResponseData: vi
+        .fn()
+        .mockResolvedValue({ type: "session", thread_id: 42, host_id: "host-a" }),
       addResponseListener: vi.fn((listener: (data: Record<string, unknown>) => void) => {
         responseListener = listener;
         return { remove: vi.fn() };
@@ -109,17 +112,46 @@ describe("notification response routing", () => {
     const router = createNotificationRouter(port);
     const listener = vi.fn();
 
-    await expect(router.initialRoute()).resolves.toBe("/session/42");
+    await expect(router.initialRoute()).resolves.toEqual({
+      route: "/session/42",
+      hostId: "host-a",
+    });
     router.subscribe(listener);
     responseListener?.({ route: "/settings" });
     responseListener?.({
       type: "issue",
       project_slug: "symphony",
       identifier: "MOB-7",
+      profile_id: "host-b",
     });
 
     expect(listener).toHaveBeenCalledTimes(1);
-    expect(listener).toHaveBeenCalledWith("/issue/symphony/MOB-7");
+    expect(listener).toHaveBeenCalledWith({
+      route: "/issue/symphony/MOB-7",
+      hostId: "host-b",
+    });
+  });
+
+  it("selects the notification host before opening its route", async () => {
+    const calls: string[] = [];
+
+    await expect(
+      activateNotificationDestination({
+        destination: { hostId: "host-b", route: "/session/42" },
+        profiles: [
+          { id: "profile-a", hostId: "host-a" },
+          { id: "profile-b", hostId: "host-b" },
+        ],
+        selectProfile: async (profileId) => {
+          calls.push(`select:${profileId}`);
+        },
+        openRoute: (route) => {
+          calls.push(`open:${route}`);
+        },
+      }),
+    ).resolves.toBe(true);
+
+    expect(calls).toEqual(["select:profile-b", "open:/session/42"]);
   });
 });
 

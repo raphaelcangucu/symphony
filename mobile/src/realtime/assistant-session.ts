@@ -283,54 +283,83 @@ function bindEvents(
   onAction: (action: SessionTimelineAction) => void,
   onHistory: (messages: AssistantMessage[]) => void,
 ) {
-  channel.on("history_loaded", (payload) => {
-    const messages = readMessages(payload);
-    onAction({ type: "history_loaded", messages });
-    onHistory(messages);
-  });
-  channel.on("history_synced", (payload) => {
-    const messages = readMessages(payload);
-    onAction({ type: "history_synced", messages });
-    onHistory(messages);
-  });
-  channel.on("message_created", (payload) => {
-    const message = readMessageField(payload);
-    if (message) onAction({ type: "message_created", message });
-  });
-  channel.on("assistant_delta", (payload) => {
-    const delta = readStringField(payload, "delta");
-    if (delta) onAction({ type: "assistant_delta", delta });
-  });
-  channel.on("tool_call_started", (payload) => {
-    const toolCall = readToolField(payload);
-    if (toolCall) onAction({ type: "tool_call_started", toolCall });
-  });
-  channel.on("tool_call_completed", (payload) => {
-    const toolCall = readToolField(payload);
-    if (toolCall) onAction({ type: "tool_call_completed", toolCall });
-  });
-  channel.on("assistant_completed", (payload) => {
-    const message = readMessageField(payload);
-    if (message) onAction({ type: "assistant_completed", message });
-  });
-  channel.on("assistant_error", (payload) => {
-    onAction({
-      type: "error",
-      message: readStringField(payload, "message") ?? "Assistant request failed",
-    });
-  });
-  channel.on("approval_required", (payload) => {
-    const request = readApproval(payload);
-    if (request) onAction({ type: "approval_required", request });
-  });
-  channel.on("user_input_required", (payload) => {
-    const request = readUserInput(payload);
-    if (request) onAction({ type: "user_input_required", request });
-  });
-  channel.on("turn_status", (payload) => {
-    const status = readTurnStatus(payload);
-    if (status) onAction({ type: "turn_status", status });
-  });
+  for (const event of assistantEvents) {
+    channel.on(event, (payload) => handleAssistantEvent(event, payload, onAction, onHistory));
+  }
+}
+
+const assistantEvents = [
+  "history_loaded",
+  "history_synced",
+  "message_created",
+  "assistant_delta",
+  "tool_call_started",
+  "tool_call_completed",
+  "assistant_completed",
+  "assistant_error",
+  "approval_required",
+  "user_input_required",
+  "turn_status",
+] as const;
+
+export function handleAssistantEvent(
+  rawEvent: string,
+  payload: unknown,
+  onAction: (action: SessionTimelineAction) => void,
+  onHistory: (messages: AssistantMessage[]) => void = () => undefined,
+): void {
+  const event = rawEvent.replace(/^sessions\./, "");
+  switch (event) {
+    case "history_loaded":
+    case "history_synced": {
+      const messages = readMessages(payload);
+      onAction({ type: event, messages });
+      onHistory(messages);
+      break;
+    }
+    case "message_created": {
+      const message = readMessageField(payload);
+      if (message) onAction({ type: "message_created", message });
+      break;
+    }
+    case "assistant_delta": {
+      const delta = readStringField(payload, "delta");
+      if (delta) onAction({ type: "assistant_delta", delta });
+      break;
+    }
+    case "tool_call_started":
+    case "tool_call_completed": {
+      const toolCall = readToolField(payload);
+      if (toolCall) onAction({ type: event, toolCall });
+      break;
+    }
+    case "assistant_completed": {
+      const message = readMessageField(payload);
+      if (message) onAction({ type: "assistant_completed", message });
+      break;
+    }
+    case "assistant_error":
+      onAction({
+        type: "error",
+        message: readStringField(payload, "message") ?? "Assistant request failed",
+      });
+      break;
+    case "approval_required": {
+      const request = readApproval(payload);
+      if (request) onAction({ type: "approval_required", request });
+      break;
+    }
+    case "user_input_required": {
+      const request = readUserInput(payload);
+      if (request) onAction({ type: "user_input_required", request });
+      break;
+    }
+    case "turn_status": {
+      const status = readTurnStatus(payload);
+      if (status) onAction({ type: "turn_status", status });
+      break;
+    }
+  }
 }
 
 function historyContainsSeed(messages: AssistantMessage[], seed: string | null | undefined) {

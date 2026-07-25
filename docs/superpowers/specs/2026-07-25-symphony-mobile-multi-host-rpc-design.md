@@ -269,9 +269,18 @@ Migration is method-by-method:
 7. Keep REST and Phoenix Channels for web/desktop and legacy mobile profiles
    during a documented compatibility window.
 
-RPC handlers call extracted application services. They do not call HTTP
-controllers internally and do not duplicate tracker logic. Existing controllers
-and channels may be refactored to call the same services.
+Native RPC handlers call extracted application services and do not duplicate
+tracker logic. During the compatibility phase, an explicitly allowlisted
+in-process `TrackerBridge` may invoke an existing controller with a reconstructed
+local `Plug.Conn`; it never performs a network HTTP request, never accepts an
+absolute URL and never reuses tracker bearer authentication. This bridge is a
+transitional parity adapter, not the final service boundary. Controllers and
+RPC handlers move to the same extracted services domain by domain.
+
+The implemented capability and migration status is recorded in
+`fixtures/mobile-rpc-capabilities-v1.json`. New RPC profiles never fall back to
+REST or Phoenix on the wire: compatibility adapters execute only inside the
+selected Symphony host after encrypted device authentication.
 
 A profile records `transport: "rpc" | "legacy"`. New QR pairings always create
 `rpc` profiles. Existing profiles migrate only after explicit successful
@@ -287,6 +296,8 @@ pairing; credentials are not silently transformed.
 - File and terminal methods preserve existing workspace sandbox boundaries.
 - Dangerous Git/PR operations retain current server-side authorization and
   audit behavior.
+- Native notification payloads include the owning host/profile id; the mobile
+  selects that paired host before opening the allowlisted task/session route.
 - Diagnostics expose endpoint reachability, pinned fingerprint, protocol
   negotiation, heartbeat age and redacted failure codes.
 - Exported diagnostics never include device tokens, private/session keys,

@@ -25,14 +25,14 @@ export class RpcHostTransport implements HostTransport {
   async subscribe<TEvent>(
     method: string,
     params: unknown,
-    onEvent: (event: TEvent) => void,
+    onEvent: (event: TEvent, eventName?: string) => void,
   ): Promise<() => void> {
     const subscriptionMethod = method.endsWith(".events")
       ? `${method.slice(0, -".events".length)}.subscribe`
       : method;
     const result = await this.client.call<{ subscription_id: string }>(subscriptionMethod, params);
-    return this.client.trackSubscription(result.subscription_id, (payload) =>
-      onEvent(payload as TEvent),
+    return this.client.trackSubscription(result.subscription_id, (payload, event) =>
+      onEvent(payload as TEvent, event),
     );
   }
 

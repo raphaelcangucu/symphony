@@ -8,31 +8,49 @@ import { useAppTheme } from "@/theme/ThemeProvider";
 
 export type ConnectionHealth = "checking" | "live" | "offline";
 
+export type PairedDevice = {
+  deviceId: string;
+  name: string;
+  current: boolean;
+  lastSeenAt: string | null;
+  protocolVersion: number | null;
+};
+
 type ConnectionsScreenProps = {
   profiles: ConnectionProfile[];
   activeProfileId: string | null;
   health: Record<string, ConnectionHealth>;
   busyProfileId: string | null;
+  busyDeviceId: string | null;
+  devicesLoading: boolean;
   error: string | null;
+  pairedDevices: PairedDevice[];
   onAdd(): void;
   onBack(): void;
+  onRefreshDevices(): void;
   onReconnect(profileId: string): void;
   onRemove(profileId: string): void;
+  onRevokeDevice(deviceId: string): void;
   onReplaceToken(profileId: string, token: string): void;
   onSelect(profileId: string): void;
 };
 
 export function ConnectionsScreen({
   activeProfileId,
+  busyDeviceId,
   busyProfileId,
+  devicesLoading,
   error,
   health,
   onAdd,
   onBack,
+  onRefreshDevices,
   onReconnect,
   onRemove,
+  onRevokeDevice,
   onReplaceToken,
   onSelect,
+  pairedDevices,
   profiles,
 }: ConnectionsScreenProps) {
   const { colors } = useAppTheme();
@@ -152,6 +170,48 @@ export function ConnectionsScreen({
                   onPress={() => onRemove(profile.id)}
                 />
               </View>
+
+              {active && profile.transport === "rpc" ? (
+                <View style={[styles.devices, { borderTopColor: colors.borderSubtle }]}>
+                  <View style={styles.row}>
+                    <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+                      Paired devices
+                    </Text>
+                    <Action
+                      disabled={devicesLoading}
+                      label="Refresh paired devices"
+                      onPress={onRefreshDevices}
+                    />
+                  </View>
+                  {pairedDevices.map((device) => (
+                    <View key={device.deviceId} style={styles.deviceRow}>
+                      <View style={styles.grow}>
+                        <Text style={[styles.deviceName, { color: colors.textPrimary }]}>
+                          {device.name}
+                        </Text>
+                        <Text style={{ color: colors.textMuted }}>
+                          {device.current
+                            ? "This device"
+                            : device.lastSeenAt
+                              ? `Last seen ${device.lastSeenAt}`
+                              : "Not seen recently"}
+                        </Text>
+                      </View>
+                      {!device.current ? (
+                        <Action
+                          destructive
+                          disabled={busyDeviceId === device.deviceId}
+                          label={`Revoke ${device.name}`}
+                          onPress={() => onRevokeDevice(device.deviceId)}
+                        />
+                      ) : null}
+                    </View>
+                  ))}
+                  {!devicesLoading && pairedDevices.length === 0 ? (
+                    <Text style={{ color: colors.textMuted }}>No paired devices reported.</Text>
+                  ) : null}
+                </View>
+              ) : null}
             </View>
           );
         })}
@@ -239,6 +299,9 @@ const styles = StyleSheet.create({
   badges: { alignItems: "flex-end", gap: spacing.xxs },
   card: { borderRadius: radii.md, borderWidth: 1, gap: spacing.md, padding: spacing.md },
   content: { gap: spacing.sm, padding: spacing.md },
+  deviceName: { fontSize: 15, fontWeight: "600" },
+  deviceRow: { alignItems: "center", flexDirection: "row", gap: spacing.sm },
+  devices: { borderTopWidth: 1, gap: spacing.sm, paddingTop: spacing.sm },
   editor: { gap: spacing.xs },
   error: { marginHorizontal: spacing.md, marginTop: spacing.xs },
   grow: { flex: 1, gap: spacing.xxs },
@@ -264,6 +327,7 @@ const styles = StyleSheet.create({
   },
   name: { fontSize: 17, fontWeight: "700" },
   row: { alignItems: "flex-start", flexDirection: "row", gap: spacing.sm },
+  sectionTitle: { fontSize: 16, fontWeight: "700" },
   safeArea: { flex: 1 },
   title: { fontSize: 20, fontWeight: "700" },
 });

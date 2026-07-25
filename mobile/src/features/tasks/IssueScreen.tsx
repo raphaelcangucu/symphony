@@ -18,6 +18,7 @@ type IssueScreenProps = {
   issue: IssueSummary | null;
   comments: IssueComment[];
   blockers: IssueBlocker[];
+  subtasks: IssueSummary[];
   loading: boolean;
   error: string | null;
   saving: boolean;
@@ -26,10 +27,12 @@ type IssueScreenProps = {
   onAddComment(body: string): void;
   onDispatch(action: IssueDispatchInput["action"]): void;
   onGoalAction(action: GoalControlInput["action"]): void;
+  onCreateSubtask(title: string): void;
   onOpenDiff(): void;
   onOpenFiles(): void;
   onOpenPreview(): void;
   onOpenPullRequest(): void;
+  onOpenRelatedTask(identifier: string): void;
   onOpenSession(): void;
   onOpenTerminal(): void;
   onRefresh(): void;
@@ -40,6 +43,7 @@ export function IssueScreen({
   issue,
   comments,
   blockers,
+  subtasks = [],
   loading,
   error,
   saving,
@@ -48,10 +52,12 @@ export function IssueScreen({
   onAddComment,
   onDispatch,
   onGoalAction,
+  onCreateSubtask,
   onOpenDiff,
   onOpenFiles,
   onOpenPreview,
   onOpenPullRequest,
+  onOpenRelatedTask,
   onOpenSession,
   onOpenTerminal,
   onRefresh,
@@ -61,6 +67,7 @@ export function IssueScreen({
   const [title, setTitle] = useState(issue?.title ?? "");
   const [description, setDescription] = useState(issue?.description ?? "");
   const [comment, setComment] = useState("");
+  const [subtaskTitle, setSubtaskTitle] = useState("");
 
   useEffect(() => {
     setTitle(issue?.title ?? "");
@@ -183,12 +190,54 @@ export function IssueScreen({
           <>
             <SectionTitle>Blocked by</SectionTitle>
             {blockers.map((blocker) => (
-              <Text key={blocker.identifier} style={{ color: colors.statusAmber }}>
-                {blocker.identifier} {blocker.title}
-              </Text>
+              <RelatedTask
+                accessibilityLabel={`Open blocker ${blocker.identifier}`}
+                identifier={blocker.identifier}
+                key={blocker.identifier}
+                onPress={() => onOpenRelatedTask(blocker.identifier)}
+                status={blocker.status}
+                title={blocker.title}
+              />
             ))}
           </>
         ) : null}
+
+        <SectionTitle>Subtasks</SectionTitle>
+        {subtasks.map((subtask) => (
+          <RelatedTask
+            accessibilityLabel={`Open subtask ${subtask.identifier}`}
+            identifier={subtask.identifier}
+            key={subtask.id}
+            onPress={() => onOpenRelatedTask(subtask.identifier)}
+            status={subtask.status}
+            title={subtask.title}
+          />
+        ))}
+        <TextInput
+          accessibilityLabel="New subtask title"
+          onChangeText={setSubtaskTitle}
+          placeholder="Add a subtask"
+          placeholderTextColor={colors.textMuted}
+          style={[
+            styles.input,
+            {
+              backgroundColor: colors.bgPanel,
+              borderColor: colors.borderSubtle,
+              color: colors.textPrimary,
+            },
+          ]}
+          value={subtaskTitle}
+        />
+        <Action
+          disabled={!subtaskTitle.trim()}
+          label="Create subtask"
+          onPress={() => {
+            const title = subtaskTitle.trim();
+            if (!title) return;
+            onCreateSubtask(title);
+            setSubtaskTitle("");
+          }}
+        />
 
         <SectionTitle>Comments</SectionTitle>
         {comments.map((item) => (
@@ -231,6 +280,37 @@ export function IssueScreen({
         />
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+function RelatedTask({
+  accessibilityLabel,
+  identifier,
+  onPress,
+  status,
+  title,
+}: {
+  accessibilityLabel: string;
+  identifier: string;
+  onPress(): void;
+  status: string | null;
+  title: string;
+}) {
+  const { colors } = useAppTheme();
+  return (
+    <Pressable
+      accessibilityLabel={accessibilityLabel}
+      accessibilityRole="button"
+      onPress={onPress}
+      style={[styles.relatedTask, { backgroundColor: colors.bgPanel }]}
+    >
+      <View style={styles.grow}>
+        <Text style={{ color: colors.textPrimary, fontWeight: "700" }}>{identifier}</Text>
+        <Text style={{ color: colors.textSecondary }}>{title}</Text>
+      </View>
+      {status ? <Text style={{ color: colors.textMuted }}>{status}</Text> : null}
+      <Text style={{ color: colors.textMuted }}>›</Text>
+    </Pressable>
   );
 }
 
@@ -312,11 +392,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
   },
   headerText: { flex: 1 },
+  grow: { flex: 1 },
   iconButton: { alignItems: "center", justifyContent: "center", minHeight: 44, minWidth: 44 },
   identifier: { fontSize: 13, fontWeight: "700" },
+  input: {
+    borderRadius: radii.md,
+    borderWidth: 1,
+    minHeight: 48,
+    paddingHorizontal: spacing.md,
+  },
   metaLabel: { fontSize: 11, textTransform: "uppercase" },
   metadata: { flexDirection: "row", flexWrap: "wrap", gap: spacing.lg },
   safeArea: { flex: 1 },
+  relatedTask: {
+    alignItems: "center",
+    borderRadius: radii.md,
+    flexDirection: "row",
+    gap: spacing.sm,
+    minHeight: 56,
+    padding: spacing.sm,
+  },
   saveButton: { alignItems: "center", justifyContent: "center", minHeight: 44, minWidth: 64 },
   sectionTitle: { fontSize: 17, fontWeight: "700", marginTop: spacing.sm },
   status: { fontSize: 12 },

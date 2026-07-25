@@ -2,7 +2,19 @@ defmodule SymphonyElixir.MobileRpc.Dispatcher do
   @moduledoc "Bounded, allowlisted dispatcher for decrypted mobile RPC envelopes."
 
   alias SymphonyElixir.MobileRpc.{Envelope, Subscriptions}
-  alias SymphonyElixir.MobileRpc.Methods.System
+
+  alias SymphonyElixir.MobileRpc.Methods.{
+    Git,
+    Notifications,
+    Previews,
+    Projects,
+    PullRequests,
+    Sessions,
+    System,
+    Tasks,
+    Terminal,
+    Workspace
+  }
 
   defstruct context: %{},
             methods: %{},
@@ -16,7 +28,22 @@ defmodule SymphonyElixir.MobileRpc.Dispatcher do
 
   @spec new(map(), keyword()) :: t()
   def new(context, opts \\ []) do
-    modules = Keyword.get(opts, :methods, System.modules())
+    modules =
+      Keyword.get(
+        opts,
+        :methods,
+        System.modules() ++
+          Projects.modules() ++
+          Tasks.modules() ++
+          Sessions.modules() ++
+          Workspace.modules() ++
+          Git.modules() ++
+          Previews.modules() ++
+          PullRequests.modules() ++
+          Notifications.modules() ++
+          Terminal.modules()
+      )
+
     methods = Map.new(modules, fn module -> {module.name(), module} end)
     capabilities = methods |> Map.keys() |> Enum.sort()
 
@@ -51,7 +78,7 @@ defmodule SymphonyElixir.MobileRpc.Dispatcher do
         Process.demonitor(ref, [:flush])
         cancel_timer(request.timer)
         next = drop_request(state, ref)
-        {:reply, method_response(request.id, result, next), next}
+        complete_method(request.id, result, next)
     end
   end
 
@@ -92,6 +119,21 @@ defmodule SymphonyElixir.MobileRpc.Dispatcher do
            false,
            next
          ), next}
+    end
+  end
+
+  def handle_info(
+        {:mobile_rpc_event, subscription_id, event, payload},
+        %__MODULE__{} = state
+      )
+      when is_binary(subscription_id) and is_binary(event) do
+    case Subscriptions.next_event(state.subscriptions, subscription_id) do
+      {:ok, sequence, subscriptions} ->
+        next = %{state | subscriptions: subscriptions}
+        {:reply, Envelope.event(subscription_id, sequence, event, payload), next}
+
+      {:error, :not_found} ->
+        {:noreply, state}
     end
   end
 
@@ -215,6 +257,22 @@ defmodule SymphonyElixir.MobileRpc.Dispatcher do
   defp method_response(id, _unexpected, state) do
     error_response(id, "invalid_method_result", "RPC method returned an invalid result", false, state)
   end
+
+  defp complete_method(
+         id,
+         {:ok, {:subscription, subscription_id, result, cleanup, activate}},
+         state
+       )
+       when is_binary(subscription_id) and is_function(cleanup, 0) and
+              is_function(activate, 0) do
+    subscriptions = Subscriptions.put(state.subscriptions, subscription_id, cleanup)
+    next = %{state | subscriptions: subscriptions}
+    activate.()
+    {:reply, Envelope.result(id, result, next.context), next}
+  end
+
+  defp complete_method(id, result, state),
+    do: {:reply, method_response(id, result, state), state}
 
   defp error_response(id, code, message, retryable, state) do
     Envelope.error(id, code, message, retryable, state.context)

@@ -101,6 +101,17 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
     end
   end
 
+  @spec subtasks(Conn.t(), map()) :: Conn.t()
+  def subtasks(conn, %{"project_slug" => project_slug, "identifier" => parent_identifier}) do
+    with {:ok, project} <- Context.get_project(project_slug),
+         {:ok, identifiers} <- Context.list_subtask_children(project_slug, parent_identifier),
+         {:ok, issues} <- load_subtasks(project, identifiers) do
+      json(conn, %{data: Enum.map(issues, &present_issue(project, &1))})
+    else
+      {:error, reason} -> TrackerErrors.render(conn, reason)
+    end
+  end
+
   @spec set_parent(Conn.t(), map()) :: Conn.t()
   def set_parent(conn, %{
         "project_slug" => project_slug,
@@ -168,6 +179,19 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
 
       _ ->
         issue
+    end
+  end
+
+  defp load_subtasks(project, identifiers) do
+    Enum.reduce_while(identifiers, {:ok, []}, fn identifier, {:ok, issues} ->
+      case IssueAdapter.dispatch(project, :get_issue, [identifier]) do
+        {:ok, issue} -> {:cont, {:ok, [issue | issues]}}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+    |> case do
+      {:ok, issues} -> {:ok, Enum.reverse(issues)}
+      error -> error
     end
   end
 
@@ -402,7 +426,9 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
 
       true ->
         case Context.get_agent_settings(project.slug, identifier) do
-          {:ok, %{agent_kind: kind}} when is_binary(kind) and kind != "" -> kind
+          {:ok, %{agent_kind: kind}} when is_binary(kind) and kind != "" ->
+            kind
+
           _ ->
             case IssueAdapter.dispatch(project, :get_issue, [identifier]) do
               {:ok, %{agent: agent}} when is_binary(agent) and agent != "" -> agent
@@ -598,9 +624,7 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
               :ok
 
             {:error, reason} ->
-              Logger.warning(
-                "Failed to persist execution settings project=#{project.slug} identifier=#{identifier} reason=#{inspect(reason)}"
-              )
+              Logger.warning("Failed to persist execution settings project=#{project.slug} identifier=#{identifier} reason=#{inspect(reason)}")
 
               :ok
           end

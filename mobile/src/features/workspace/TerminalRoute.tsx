@@ -3,7 +3,9 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 
 import { useTrackerClient } from "@/api/TrackerClientProvider";
+import { useHostTransport } from "@/api/HostTransportContext";
 import { useConnection } from "@/auth/ConnectionProvider";
+import { createRpcTerminalSession } from "@/realtime/rpc-terminal-session";
 import type { TerminalConnectionState } from "@/realtime/terminal-session";
 import { useAppRuntime } from "@/runtime/AppRuntime";
 
@@ -13,6 +15,7 @@ export function TerminalRoute() {
   const params = useLocalSearchParams<{ threadId?: string | string[] }>();
   const router = useRouter();
   const client = useTrackerClient();
+  const hostTransport = useHostTransport();
   const { activeProfile, activeToken } = useConnection();
   const { createTerminalSession } = useAppRuntime();
   const threadId = parseThreadId(firstParam(params.threadId));
@@ -30,7 +33,19 @@ export function TerminalRoute() {
   const [generation, setGeneration] = useState(0);
   const session = useMemo(() => {
     const projectSlug = threadQuery.data?.projectSlug;
-    if (!threadId || !projectSlug || !activeProfile || !activeToken) return null;
+    if (!threadId || !projectSlug || !activeProfile) return null;
+    if (activeProfile.transport === "rpc") {
+      if (!hostTransport) return null;
+      return createRpcTerminalSession({
+        threadId,
+        projectSlug,
+        transport: hostTransport,
+        onOutput: setOutput,
+        onState: setConnectionState,
+        onError: setError,
+      });
+    }
+    if (!activeToken) return null;
     return createTerminalSession({
       threadId,
       projectSlug,
@@ -45,6 +60,7 @@ export function TerminalRoute() {
     activeToken,
     createTerminalSession,
     generation,
+    hostTransport,
     threadId,
     threadQuery.data?.projectSlug,
   ]);

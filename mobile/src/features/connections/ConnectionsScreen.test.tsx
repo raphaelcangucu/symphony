@@ -30,10 +30,15 @@ function renderScreen(props: Partial<React.ComponentProps<typeof ConnectionsScre
     health: { "profile-1": "live", "profile-2": "offline" },
     onAdd: jest.fn(),
     onBack: jest.fn(),
+    onRefreshDevices: jest.fn(),
     onReconnect: jest.fn(),
     onRemove: jest.fn(),
+    onRevokeDevice: jest.fn(),
     onReplaceToken: jest.fn(),
     onSelect: jest.fn(),
+    pairedDevices: [],
+    busyDeviceId: null,
+    devicesLoading: false,
     profiles,
   };
   return render(
@@ -70,5 +75,50 @@ describe("ConnectionsScreen", () => {
     renderScreen({ error: "Server is offline" });
     expect(screen.getByText("Remote")).toBeTruthy();
     expect(screen.getByText("Server is offline")).toBeTruthy();
+  });
+
+  it("shows device-scoped pairings for the active RPC host and revokes them individually", () => {
+    const onRevokeDevice = jest.fn();
+    const rpcProfile: ConnectionProfile = {
+      id: "host-1",
+      hostId: "host-1",
+      name: "Mac Studio",
+      origin: "https://mac.test",
+      endpoint: "wss://mac.test/mobile/rpc",
+      hostPublicKeyFingerprint: "sha256:host-key",
+      transport: "rpc",
+      protocolVersion: 1,
+      createdAt: "2026-07-25T00:00:00Z",
+      lastConnectedAt: "2026-07-25T01:00:00Z",
+    };
+
+    renderScreen({
+      activeProfileId: rpcProfile.id,
+      profiles: [rpcProfile],
+      health: { [rpcProfile.id]: "live" },
+      pairedDevices: [
+        {
+          deviceId: "device-current",
+          name: "Raphael iPhone",
+          current: true,
+          lastSeenAt: "2026-07-25T01:00:00Z",
+          protocolVersion: 1,
+        },
+        {
+          deviceId: "device-tablet",
+          name: "Raphael iPad",
+          current: false,
+          lastSeenAt: "2026-07-24T20:00:00Z",
+          protocolVersion: 1,
+        },
+      ],
+      onRevokeDevice,
+    });
+
+    expect(screen.getByText("Paired devices")).toBeTruthy();
+    expect(screen.getByText("This device")).toBeTruthy();
+    fireEvent.press(screen.getByRole("button", { name: "Revoke Raphael iPad" }));
+    expect(onRevokeDevice).toHaveBeenCalledWith("device-tablet");
+    expect(screen.queryByRole("button", { name: "Revoke Raphael iPhone" })).toBeNull();
   });
 });

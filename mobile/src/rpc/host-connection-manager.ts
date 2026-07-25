@@ -96,7 +96,7 @@ export class HostConnectionManager {
   async subscribe<TEvent>(
     method: string,
     params: unknown,
-    onEvent: (event: TEvent) => void,
+    onEvent: (event: TEvent, eventName?: string) => void,
   ): Promise<() => void> {
     const host = this.activeHost();
     const cleanup = await host.transport.subscribe(method, params, onEvent);

@@ -67,7 +67,7 @@ export class LegacyHostTransport implements HostTransport {
   subscribe<TEvent>(
     method: string,
     params: unknown,
-    onEvent: (event: TEvent) => void,
+    onEvent: (event: TEvent, eventName?: string) => void,
   ): Promise<() => void> {
     if (!this.options.subscribe) {
       return Promise.reject(

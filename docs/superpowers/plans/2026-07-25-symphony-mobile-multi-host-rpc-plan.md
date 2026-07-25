@@ -410,11 +410,11 @@ For each domain operation, compare RPC and legacy DTOs. Include navigable
 blockers, subtask list/create, session history, streaming deltas, queued
 messages, goal state, approvals, questions, interrupt and resume.
 
-- [ ] **Step 3: Verify RED**
+- [x] **Step 3: Verify RED**
 
 Run mobile feature tests in WSL; run host RPC parity tests in CI.
 
-- [ ] **Step 4: Implement methods and subscriptions**
+- [x] **Step 4: Implement methods and subscriptions**
 
 Use `projects.*`, `tasks.*`, `sessions.*`, `approvals.*` and `questions.*`.
 Bind all stream cursors to the authenticated device and current host.
@@ -446,11 +446,11 @@ Prove terminal snapshot/delta/input/resize, source/Markdown/image files,
 traversal/symlink/size rejection, diff patch, commit/push, PR checks/actions and
 preview lifecycle all target the selected host.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run focused mobile tests in WSL and host integration tests in CI.
 
-- [ ] **Step 3: Implement bounded RPC methods**
+- [x] **Step 3: Implement bounded RPC methods**
 
 Preserve existing workspace sandbox and Git/PR authorization. Use binary
 encrypted frames only where they materially reduce terminal/file overhead.
@@ -472,17 +472,17 @@ Commit: `feat(mobile-rpc): migrate workspace and source control`
 - Modify: `mobile/src/native/expo-services.ts`
 - Modify: `mobile/src/features/notifications/NotificationsRoute.tsx`
 
-- [ ] **Step 1: Write failing revocation and routing tests**
+- [x] **Step 1: Write failing revocation and routing tests**
 
 Prove list/revoke-by-device, current-device self-revoke, live socket
 termination, push subscription ownership by host/device and deep links that
 select the host before opening a task/session.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run focused mobile tests in WSL and host tests in CI.
 
-- [ ] **Step 3: Implement methods and UI**
+- [x] **Step 3: Implement methods and UI**
 
 Never return token digests. Show device name, scope, paired time, last seen,
 protocol and status only.
@@ -501,7 +501,7 @@ Commit: `feat(mobile-rpc): add paired devices and host notifications`
 - Modify: `docs/superpowers/specs/2026-07-23-symphony-mobile-companion-design.md`
 - Modify: `docs/superpowers/specs/2026-07-25-symphony-mobile-multi-host-rpc-design.md`
 
-- [ ] **Step 1: Build the capability matrix**
+- [x] **Step 1: Build the capability matrix**
 
 Record every mobile operation, its RPC method, legacy endpoint/channel,
 required scope, streaming behavior and evidence.

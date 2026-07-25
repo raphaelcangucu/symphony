@@ -30,7 +30,7 @@ export function TasksRoute() {
       client={client}
       filters={filters}
       onActiveStatusChange={setActiveStatus}
-      profileId={activeProfile.id}
+      profileId={activeProfile.hostId ?? activeProfile.id}
       query={query}
       router={router}
       setQuery={setQuery}

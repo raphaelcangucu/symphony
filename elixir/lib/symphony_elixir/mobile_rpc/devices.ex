@@ -102,6 +102,22 @@ defmodule SymphonyElixir.MobileRpc.Devices do
     )
   end
 
+  @spec get_paired(String.t()) :: {:ok, Device.t()} | {:error, :not_found}
+  def get_paired(device_id) when is_binary(device_id) do
+    case Repo.one(
+           from(device in Device,
+             where:
+               device.device_id == ^device_id and not is_nil(device.paired_at) and
+                 is_nil(device.revoked_at)
+           )
+         ) do
+      %Device{} = device -> {:ok, device}
+      nil -> {:error, :not_found}
+    end
+  end
+
+  def get_paired(_device_id), do: {:error, :not_found}
+
   @spec revoke(String.t()) :: :ok
   def revoke(device_id) when is_binary(device_id) do
     current_time = now()

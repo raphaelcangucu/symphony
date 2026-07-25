@@ -20,10 +20,12 @@ export function NotificationsRoute() {
 
   useEffect(() => {
     let active = true;
-    void notifications.router.initialRoute().then((route) => {
-      if (active && route) setLastRoute(route);
+    void notifications.router.initialRoute().then((destination) => {
+      if (active && destination) setLastRoute(destination.route);
     });
-    const subscription = notifications.router.subscribe(setLastRoute);
+    const subscription = notifications.router.subscribe((destination) =>
+      setLastRoute(destination.route),
+    );
     return () => {
       active = false;
       subscription.remove();

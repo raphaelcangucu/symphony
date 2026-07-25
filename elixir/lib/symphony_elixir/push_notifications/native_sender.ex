@@ -23,7 +23,9 @@ defmodule SymphonyElixir.PushNotifications.NativeSender do
                 data:
                   payload
                   |> Map.new(fn {key, value} -> {to_string(key), value} end)
-                  |> Map.put("kind", kind),
+                  |> Map.put("kind", kind)
+                  |> Map.put("profile_id", subscription.profile_id)
+                  |> Map.put("host_id", subscription.profile_id),
                 sound: "default"
               }
             ]
