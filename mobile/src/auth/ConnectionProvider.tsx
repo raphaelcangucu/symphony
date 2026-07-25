@@ -40,6 +40,7 @@ export type ConnectionContextValue = {
   activeHostCredential: HostCredential | null;
   hydrated: boolean;
   loadToken(id: string): Promise<string | null>;
+  loadHostCredential(id: string): Promise<HostCredential | null>;
   selectProfile(id: string): Promise<void>;
   saveProfile(input: SaveConnectionInput): Promise<ConnectionProfile>;
   saveHostProfile(profile: HostProfile, credential: HostCredential): Promise<HostProfile>;
@@ -212,6 +213,10 @@ export function ConnectionProvider({
     [runtime.createTrackerClient, snapshot.activeProfileId, snapshot.profiles, storage],
   );
   const loadToken = useCallback((id: string) => storage.loadToken(id), [storage]);
+  const loadHostCredential = useCallback(
+    (id: string) => storage.loadHostCredential(id),
+    [storage],
+  );
 
   const activeProfile =
     snapshot.profiles.find((profile) => profile.id === snapshot.activeProfileId) ?? null;
@@ -227,6 +232,7 @@ export function ConnectionProvider({
       activeHostCredential,
       hydrated,
       loadToken,
+      loadHostCredential,
       selectProfile,
       saveProfile,
       saveHostProfile,
@@ -238,6 +244,7 @@ export function ConnectionProvider({
       activeToken,
       activeHostCredential,
       hydrated,
+      loadHostCredential,
       loadToken,
       removeProfile,
       replaceToken,

@@ -594,7 +594,7 @@ that Orca wire crypto and host persistence were excluded.
 - Modify: `mobile/src/api/TrackerClientProvider.tsx`
 - Modify: `mobile/app/_layout.tsx`
 
-- [ ] **Step 1: Write the failing facade contract test**
+- [x] **Step 1: Write the failing facade contract test**
 
 Create `mobile/src/orca/transport/rpc-client.test.ts`:
 
@@ -623,7 +623,7 @@ it("returns Orca failure envelopes without exposing encrypted transport details"
 });
 ```
 
-- [ ] **Step 2: Run the test and confirm failure**
+- [x] **Step 2: Run the test and confirm failure**
 
 Run:
 
@@ -634,7 +634,7 @@ npx vitest run src/orca/transport/rpc-client.test.ts
 
 Expected: FAIL because the facade does not exist.
 
-- [ ] **Step 3: Implement the narrow Orca client contract**
+- [x] **Step 3: Implement the narrow Orca client contract**
 
 `createSymphonyOrcaRpcClient` wraps `HostTransport`:
 
@@ -682,7 +682,7 @@ export function createSymphonyOrcaRpcClient(
 The facade retains the upstream `RpcClient` type. It does not implement another
 WebSocket or cryptographic handshake.
 
-- [ ] **Step 4: Lift connection ownership above the two shells**
+- [x] **Step 4: Lift connection ownership above the two shells**
 
 `HostRuntimeProvider` owns one `HostConnectionManager`, registers every RPC
 profile after `ConnectionProvider` hydration and exposes:
@@ -702,7 +702,7 @@ but does not destroy the stored host or duplicate credentials. Update
 `TrackerClientProvider` to consume the selected transport instead of creating
 its own manager.
 
-- [ ] **Step 5: Prove both shells share one transport**
+- [x] **Step 5: Prove both shells share one transport**
 
 Add a provider test that mounts one Orca consumer and one Codex tracker client,
 selects `host-a`, and asserts the injected `createTransport` ran once. Change
@@ -719,7 +719,7 @@ npx jest src/runtime/HostRuntimeProvider.test.tsx \
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add mobile/src/runtime mobile/src/orca/transport \

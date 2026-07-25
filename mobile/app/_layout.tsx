@@ -11,8 +11,10 @@ import { TrackerClientProvider } from "@/api/TrackerClientProvider";
 import { ConnectionProvider, useConnection } from "@/auth/ConnectionProvider";
 import { createFixtureRuntime, fixtureModeFromUrl } from "@/e2e/fixture-runtime";
 import { activateNotificationDestination } from "@/native/notifications";
+import { RpcClientProvider } from "@/orca/transport/client-context";
 import { ViewModeProvider } from "@/preferences/ViewModeProvider";
 import { AppRuntimeProvider, productionRuntime, useAppRuntime } from "@/runtime/AppRuntime";
+import { HostRuntimeProvider } from "@/runtime/HostRuntimeProvider";
 import { ThemeProvider, useAppTheme } from "@/theme/ThemeProvider";
 
 export default function RootLayout() {
@@ -39,11 +41,15 @@ export default function RootLayout() {
         <ViewModeProvider>
           <AppRuntimeProvider runtime={runtime}>
             <ConnectionProvider storage={runtime.connectionStorage}>
-              <TrackerClientProvider createClient={runtime.createTrackerClient}>
-                <QueryProvider>
-                  <ThemedStack />
-                </QueryProvider>
-              </TrackerClientProvider>
+              <HostRuntimeProvider>
+                <RpcClientProvider>
+                  <TrackerClientProvider createClient={runtime.createTrackerClient}>
+                    <QueryProvider>
+                      <ThemedStack />
+                    </QueryProvider>
+                  </TrackerClientProvider>
+                </RpcClientProvider>
+              </HostRuntimeProvider>
             </ConnectionProvider>
           </AppRuntimeProvider>
         </ViewModeProvider>

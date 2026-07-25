@@ -17,7 +17,7 @@ export type ManagedHost = {
   transport: HostTransport;
 };
 
-type HostState = {
+export type HostState = {
   status: HostConnectionStatus;
   missedHeartbeats: number;
   lastHeartbeatAt: number | null;
@@ -44,6 +44,7 @@ export class HostConnectionManager {
   private readonly hosts = new Map<string, ManagedHost>();
   private readonly states = new Map<string, HostState>();
   private readonly cleanups = new Map<string, Set<() => void>>();
+  private readonly listeners = new Map<string, Set<() => void>>();
   private readonly heartbeatIntervalMs: number;
   private readonly baseReconnectDelayMs: number;
   private readonly maxReconnectDelayMs: number;
@@ -68,9 +69,38 @@ export class HostConnectionManager {
     if (host.hostId !== host.transport.hostId) {
       throw new Error("Managed host and transport identities differ");
     }
+    if (this.hosts.has(host.hostId)) return;
     this.hosts.set(host.hostId, host);
     this.states.set(host.hostId, initialState());
     this.cleanups.set(host.hostId, new Set());
+    this.listeners.set(host.hostId, new Set());
+  }
+
+  unregister(hostId: string): void {
+    if (!this.hosts.has(hostId)) return;
+    this.cleanupSubscriptions(hostId);
+    this.clearReconnect(hostId);
+    this.hosts.get(hostId)?.transport.close();
+    this.hosts.delete(hostId);
+    this.states.delete(hostId);
+    this.cleanups.delete(hostId);
+    this.listeners.delete(hostId);
+    if (this.selectedHostId === hostId) this.selectedHostId = null;
+  }
+
+  registeredHostIds(): string[] {
+    return [...this.hosts.keys()];
+  }
+
+  transport(hostId: string): HostTransport | null {
+    return this.hosts.get(hostId)?.transport ?? null;
+  }
+
+  subscribeState(hostId: string, listener: () => void): () => void {
+    const listeners = this.listeners.get(hostId);
+    if (!listeners) return () => undefined;
+    listeners.add(listener);
+    return () => listeners.delete(listener);
   }
 
   select(hostId: string): void {
@@ -87,6 +117,7 @@ export class HostConnectionManager {
     this.selectedHostId = next.hostId;
     const state = this.requireState(hostId);
     if (!terminalStates.has(state.status)) state.status = "connecting";
+    this.notifyState(hostId);
   }
 
   call<TResult>(method: string, params: unknown, signal?: AbortSignal): Promise<TResult> {
@@ -126,6 +157,7 @@ export class HostConnectionManager {
     } else {
       this.scheduleReconnect(hostId);
     }
+    this.notifyState(hostId);
   }
 
   markOnline(hostId: string): void {
@@ -136,6 +168,7 @@ export class HostConnectionManager {
     state.failureCode = null;
     state.reconnectAttempt = 0;
     this.clearReconnect(hostId);
+    this.notifyState(hostId);
   }
 
   onForeground(): void {
@@ -191,6 +224,7 @@ export class HostConnectionManager {
       state.failureCode = null;
       state.reconnectAttempt = 0;
       this.clearReconnect(hostId);
+      this.notifyState(hostId);
     } catch {
       state.missedHeartbeats += 1;
       state.failureCode = "heartbeat_missed";
@@ -198,6 +232,7 @@ export class HostConnectionManager {
         state.status = "reconnecting";
         this.scheduleReconnect(hostId);
       }
+      this.notifyState(hostId);
     }
   }
 
@@ -217,6 +252,7 @@ export class HostConnectionManager {
       if (terminalStates.has(state.status)) return;
       this.requireHost(hostId).transport.reconnect();
       state.reconnectAttempt += 1;
+      this.notifyState(hostId);
       this.scheduleReconnect(hostId);
     }, delay);
   }
@@ -228,6 +264,7 @@ export class HostConnectionManager {
     this.clearReconnect(this.selectedHostId);
     this.requireHost(this.selectedHostId).transport.reconnect();
     state.status = "reconnecting";
+    this.notifyState(this.selectedHostId);
   }
 
   private clearReconnect(hostId: string): void {
@@ -259,6 +296,10 @@ export class HostConnectionManager {
     const state = this.states.get(hostId);
     if (!state) throw new Error("Symphony host is not registered");
     return state;
+  }
+
+  private notifyState(hostId: string): void {
+    for (const listener of this.listeners.get(hostId) ?? []) listener();
   }
 }
 
