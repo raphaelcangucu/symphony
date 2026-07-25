@@ -2,19 +2,25 @@
 
 **Goal:** Complete Symphony Mobile's Orca-inspired operational workflows while preserving the approved clean, Codex-style session shell.
 
-**Architecture:** Extend the injected `TrackerClient` with small domain-specific API modules and keep React Query responsible for server state. Add a root drawer-style menu and focused Expo Router screens for tasks, workspace tools, source control, notifications, and diagnostics. Phoenix adapters remain isolated behind testable interfaces for assistant control and terminal streaming.
+**Architecture:** Keep React Query responsible for server state and preserve the clean session-first Expo Router UX. The selected `HostTransport` routes every operation to one directly paired Symphony host; encrypted WebSocket RPC is primary and the existing REST/Phoenix implementation is a migration adapter. Each host owns its projects, workspaces, sessions and agents, with no mandatory central hub.
 
-**Tech Stack:** Expo SDK 55, React Native 0.83, Expo Router, TanStack Query, Zod, Phoenix Channels, Expo Notifications, Expo Speech Recognition, Vitest, Jest, React Native Testing Library, Android E2E.
+**Tech Stack:** Expo SDK 55, React Native 0.83, Expo Router, TanStack Query, Zod, X25519/HKDF/ChaCha20-Poly1305, raw WebSocket RPC, legacy Phoenix Channels/REST, Expo Notifications, Expo Speech Recognition, Vitest, Jest, React Native Testing Library, Android/iOS E2E.
 
 ---
 
 ## Delivery contract
 
 The work is complete only when every acceptance criterion in
-`docs/superpowers/specs/2026-07-23-symphony-mobile-companion-design.md` has
-direct automated or runtime evidence. The existing session experience remains
-the root surface; Orca-inspired operational tools are opened from the root menu,
-issue detail, or session toolbar.
+`docs/superpowers/specs/2026-07-23-symphony-mobile-companion-design.md` and
+`docs/superpowers/specs/2026-07-25-symphony-mobile-multi-host-rpc-design.md`
+has direct automated or runtime evidence. The existing session experience
+remains the root surface; Orca-inspired operational tools are opened from the
+root menu, issue detail, or session toolbar.
+
+The multi-host communication migration is defined in
+`docs/superpowers/plans/2026-07-25-symphony-mobile-multi-host-rpc-plan.md` and
+is mandatory scope for this PR. No final E2E/video claim may use only the legacy
+single-tracker fixture.
 
 ### Task 1: Root navigation and task operations
 
@@ -392,7 +398,15 @@ Expected: PASS.
 
 Commit message: `feat(mobile): add connection diagnostics and settings`
 
-### Task 8: Cross-platform parity hardening and complete E2E evidence
+### Task 8: Direct multi-host encrypted RPC migration
+
+- [ ] Execute Tasks 1–11 in
+  `docs/superpowers/plans/2026-07-25-symphony-mobile-multi-host-rpc-plan.md`.
+- [ ] Prove two independent hosts, per-device revocation, E2EE handshake,
+  protocol compatibility, host-scoped operations and legacy compatibility.
+- [ ] Keep all heavy Elixir/native/E2E jobs out of WSL.
+
+### Task 9: Cross-platform parity hardening and complete E2E evidence
 
 **Files:**
 
@@ -404,12 +418,13 @@ Commit message: `feat(mobile): add connection diagnostics and settings`
 
 - [ ] **Step 1: Extend deterministic fixture boundaries**
 
-Fixture only storage, REST and channel/native-service boundaries. Real Expo
-Router screens must cover connection, tasks, issue edit/comment/dispatch,
-session approval/question, terminal, preview, files, diff, commit/push, PR,
-notifications, voice affordance, profile switch and diagnostics.
+Fixture only storage, encrypted RPC/legacy transport and native-service
+boundaries. Real Expo Router screens must cover pairing two hosts, host switch,
+tasks, issue edit/comment/dispatch/subtasks, session approval/question,
+terminal, preview, files, diff, commit/push, PR, notifications, voice
+affordance, per-device revocation and diagnostics.
 
-- [ ] **Step 2: Run full quality gate**
+- [ ] **Step 2: Run full quality gate in CI/dedicated runners**
 
 Run:
 `cd mobile && npm test && npm run typecheck && npm run lint && npm run format:check && npm run doctor && npm run build:android:e2e`
@@ -437,9 +452,9 @@ demo references from the PR description.
 
 - [ ] **Step 6: Requirement-by-requirement completion audit**
 
-For all twelve acceptance criteria in the design spec, record the exact test,
-runtime artifact, route or API response that proves it. Any missing or indirect
-evidence keeps this plan incomplete.
+For every acceptance criterion in both mobile design specs, record the exact
+test, runtime artifact, route or RPC response that proves it. Any missing or
+indirect evidence keeps this plan incomplete.
 
 - [ ] **Step 7: Commit and push**
 

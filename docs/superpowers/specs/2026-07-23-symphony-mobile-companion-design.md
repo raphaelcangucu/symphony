@@ -2,6 +2,15 @@
 
 Date: 2026-07-23
 
+> **Architecture update — 2026-07-25:** The approved multi-host communication
+> design in
+> `2026-07-25-symphony-mobile-multi-host-rpc-design.md` supersedes this
+> document wherever it describes a shared tracker bearer token, REST as the
+> primary mobile transport, or direct use of Phoenix Channels by new mobile
+> pairings. The UX and product surfaces below remain approved. REST and Phoenix
+> are compatibility transports while host-local encrypted WebSocket RPC becomes
+> the primary mobile boundary.
+
 ## Context
 
 The Symphony tracker is currently a React/Vite web application backed by the
@@ -23,8 +32,9 @@ Native application with these major surfaces:
 - notifications, voice/dictation, diagnostics, and settings.
 
 The local Orca checkout is a development reference only. No Orca source code or
-assets will ship in Symphony Mobile. This keeps the implementation aligned with
-Symphony's own API model and avoids accidental product or protocol coupling.
+assets will ship in Symphony Mobile. Symphony adopts Orca's direct multi-host
+pairing and encrypted RPC methodology while defining and testing a
+Symphony-owned protocol and domain model.
 
 The Codex mobile app screenshots supplied on 2026-07-24 are the primary
 interaction reference for browsing and creating sessions. They establish a
@@ -42,13 +52,13 @@ to Orca's encrypted WebSocket RPC schema, worktree identifiers, terminal
 protocol, and desktop pairing lifecycle. Replacing those dependencies would
 leave a large fork that is difficult to validate and keep current.
 
-### 2. Build a Symphony-native Expo app using Orca's product patterns
+### 2. Build a Symphony-native Expo app using Orca's product and communication patterns
 
 This uses the same broad technical shape as Orca—Expo Router, React Native,
-native secure storage, native notifications, and mobile-first navigation—but
-binds directly to Symphony's tracker REST API and Phoenix Channels. It provides
-high UX parity without importing the wrong domain model. This is the selected
-approach.
+native secure storage, native notifications, mobile-first navigation,
+direct-host pairing, per-device credentials and application-layer encrypted
+WebSocket RPC. RPC handlers reuse Symphony services; REST and Phoenix remain
+compatibility transports. This is the selected approach.
 
 ### 3. Wrap the existing tracker web UI
 
@@ -70,21 +80,24 @@ and make the requested Orca-like navigation difficult to achieve.
 4. Use the Codex-style session hierarchy as the primary mobile shell: restrained
    chrome, project-grouped sessions, progressive context selectors, and a
    composer-first new-session flow, while keeping Dev10x/Symphony branding.
-5. Reuse the tracker API as the source of truth rather than introducing a
-   second business-logic implementation.
+5. Reuse Symphony contexts and application services as the source of truth
+   behind REST, Phoenix and mobile RPC rather than introducing a second
+   business-logic implementation.
 6. Continue to function sensibly on an unreliable mobile network using cached
    read models, explicit stale/offline states, and reconnecting channels.
+7. Pair and control multiple independent Symphony hosts directly without a
+   mandatory central hub.
 
 ## Non-goals
 
 - Embedding the existing tracker website in a WebView.
-- Copying Orca branding, illustrations, proprietary connection assumptions, or
-  source code.
+- Copying Orca branding, illustrations, source code, or wire protocol.
 - Replacing the existing browser tracker.
 - Exposing a tracker that is not already reachable from the phone. Symphony's
-  existing tunnel feature remains the supported remote-access mechanism.
+  existing tunnel feature remains one supported remote-access mechanism.
+- Requiring a central Symphony hub to operate paired hosts.
 - Reimplementing unsupported backend capabilities only in the client. Missing
-  server contracts are added to Phoenix first.
+  server contracts are added to shared host services first.
 
 ## Information Architecture
 
@@ -118,38 +131,38 @@ start a session—one tap away without removing access to the broader tracker.
 
 | Orca mobile concept | Symphony Mobile equivalent |
 | --- | --- |
-| Desktop host | Saved Symphony tracker connection |
-| Host connectivity | `/api/health`, authenticated `/viewer`, and socket state |
+| Desktop host | Paired Symphony host profile |
+| Host connectivity | Encrypted `system.identity`, `system.health`, heartbeat and RPC state |
 | Worktree | Symphony workspace/session with `workspace_id` and `workspace_path` |
 | Worktree agent | Assistant thread / issue execution |
 | Tasks | Tracker issues across projects |
 | Session | Assistant thread timeline and composer |
 | Agent history | Project session history and archived threads |
-| Terminal | Existing `terminal:*` Phoenix channel |
+| Terminal | Host-local `terminal.*` RPC stream backed by existing terminal services |
 | Browser | Issue/thread dev-server preview |
 | Source control | Workspace diff, files, commit, and push APIs |
 | Pull request | Existing issue/project pull-request APIs |
-| Account usage | `/settings/agents/usage` |
-| Mobile pairing | Tracker URL plus bearer token, stored in SecureStore |
+| Account usage | Host-local `system.usage` RPC |
+| Mobile pairing | QR/deep link with endpoint, device credential and pinned host public key |
 
 ## Core User Flows
 
 ### Connect
 
-The user enters or scans a Symphony tracker URL and tracker bearer token. The
-app normalizes the URL, calls `/api/health`, then calls the authenticated
-`/api/tracker/v1/viewer` endpoint. Only a fully validated profile is saved.
-Secrets are stored in `expo-secure-store`; non-secret profile metadata and the
-active profile id are stored in AsyncStorage.
+The user scans or pastes a `symphony://pair` offer generated by one Symphony
+host. The app validates its version, reachable endpoint, host identity, pinned
+public key, mobile-scoped device credential and protocol range before opening
+the encrypted handshake. Only a successfully authenticated host profile is
+saved.
 
-The connection setup also accepts a deep link:
+Device credentials and pinned host keys are stored in `expo-secure-store`;
+non-secret host metadata and the active host id are stored in AsyncStorage.
+Legacy URL/tracker-token profiles remain usable only through the explicit
+compatibility adapter until they are re-paired.
 
-```text
-symphony://connect?url=https%3A%2F%2Fexample.test&token=<tracker-token>
-```
-
-The token is never logged, rendered after validation, placed in analytics, or
-stored in AsyncStorage.
+The app exposes host diagnostics, redacted RPC/socket history, reconnect,
+device self-revocation and profile removal. Device listing and revocation are
+also available on the owning Symphony host.
 
 ### Session library
 
@@ -248,8 +261,9 @@ will gain a device-token subscription contract for Expo push tokens while
 retaining the existing Web Push contract. Notifications deep-link to a task or
 session.
 
-The app exposes connection diagnostics, request/socket history with secrets
-redacted, reconnect, token replacement, and profile removal.
+The app exposes host diagnostics, redacted RPC/socket history, reconnect,
+device self-revocation and profile removal. Token replacement remains visible
+only for legacy profiles.
 
 ## Technical Architecture
 
@@ -262,11 +276,12 @@ mobile/
 ├── app/                  # Expo Router routes
 ├── assets/               # Dev10x/Symphony app assets
 ├── src/
-│   ├── api/              # REST client, DTO validation, domain mappers
-│   ├── auth/             # connection profiles and SecureStore
+│   ├── api/              # domain contracts and legacy REST compatibility
+│   ├── auth/             # host profiles, pairing and SecureStore
 │   ├── components/       # reusable native UI
 │   ├── features/         # home, tasks, sessions, workspace tools, settings
-│   ├── realtime/         # Phoenix socket/channel lifecycle
+│   ├── realtime/         # transport-neutral session/terminal lifecycle
+│   ├── rpc/              # encrypted WebSocket RPC and stream adapters
 │   ├── state/            # small Zustand stores
 │   ├── theme/            # tokens and themed primitives
 │   └── test/             # test helpers and fixtures
@@ -285,28 +300,26 @@ components.
   optimistic mutations.
 - Zustand owns only local UI/session state such as active connection,
   connection drawer state, and pending composer drafts.
-- SecureStore owns tokens.
+- SecureStore owns device credentials and pinned host keys.
 - AsyncStorage persists safe connection metadata, Query cache, and drafts.
-- Phoenix Channels deliver project changes, assistant streaming, agent
-  execution changes, and terminal events. Channel events update or invalidate
-  Query data.
+- The selected host's encrypted RPC connection delivers project changes,
+  assistant streaming, agent execution changes and terminal events. Legacy
+  Phoenix events update or invalidate the same Query data through the
+  compatibility adapter.
 
 ### Transport
 
-Every REST request uses:
+New host profiles connect to `<host-endpoint>/mobile/rpc`. A fresh mobile
+ephemeral X25519 key and the pinned static host key establish directional
+session keys. Device authentication occurs only inside the encrypted channel.
+RPC requests, results and streams then use authenticated encryption, heartbeat,
+protocol negotiation and bounded reconnect behavior described in the
+multi-host RPC design.
 
-```http
-Authorization: Bearer <tracker token>
-X-Symphony-Locale: <locale>
-```
-
-The base URL is profile-specific and the tracker prefix remains
-`/api/tracker/v1`. A single client factory binds a profile to request helpers.
-Requests use a 30-second default timeout and abort on screen unmount.
-
-Phoenix connects to `<profile-origin>/socket` with `token` and `locale` params.
-The socket manager exposes connection state and reference-counted channel
-leases so switching screens does not create duplicate channels.
+The `HostTransport` interface binds all calls and subscriptions to one
+`host_id`. Its RPC implementation is primary. The REST/Phoenix implementation
+continues to use `/api/tracker/v1` and `/socket` only for legacy profiles while
+methods migrate.
 
 ### Theme
 
@@ -392,8 +405,9 @@ before the next slice is considered complete.
 The overall objective is complete only when:
 
 1. `mobile/` builds as an Expo app for iOS and Android.
-2. A valid Symphony URL/token profile can be saved securely and re-opened.
-3. The root header exposes active-connection identity and health, with
+2. Two valid Symphony hosts can be paired with separate device credentials and
+   pinned keys, saved securely, re-opened and switched without a central hub.
+3. The root header exposes active-host identity, fingerprint and health, with
    connection switching and diagnostics available from the root menu.
 4. Projects, tasks, sessions, and their important states are navigable and
    refresh in real time.
@@ -408,6 +422,9 @@ The overall objective is complete only when:
 9. Native notifications and deep links open the correct task/session.
 10. Offline, reconnecting, invalid-auth, and incompatible-server states are
    explicit and recoverable.
-11. Automated tests, typecheck, lint, Expo doctor, and mobile smoke flows pass.
-12. Visual and interaction review confirms the app preserves the reference
+11. Encrypted RPC rejects pre-authentication calls, revoked devices, replay,
+    host-key mismatch and incompatible protocol versions; fixed
+    cross-language crypto vectors pass.
+12. Automated tests, typecheck, lint, Expo doctor, and mobile smoke flows pass.
+13. Visual and interaction review confirms the app preserves the reference
     hierarchy and density without copying Codex branding or assets.
