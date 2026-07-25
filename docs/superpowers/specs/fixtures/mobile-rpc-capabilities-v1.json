@@ -11,6 +11,49 @@
       "migration": "native_rpc"
     },
     {
+      "operation": "Dev10x workspace host status, settings, preflight, usage and accounts",
+      "rpc": [
+        "status.get",
+        "settings.get",
+        "settings.update",
+        "preflight.check",
+        "preflight.detectAgents",
+        "preflight.detectRemoteAgents",
+        "stats.summary",
+        "accounts.list",
+        "accounts.subscribe"
+      ],
+      "legacy": [],
+      "stream": true,
+      "migration": "orca_compatible_native_rpc"
+    },
+    {
+      "operation": "Dev10x workspace repositories, UI state and workspaces",
+      "rpc": [
+        "repo.list",
+        "repo.hooks",
+        "repo.searchRefs",
+        "repo.baseRefDefault",
+        "repo.sparsePresets",
+        "repo.saveSparsePreset",
+        "ui.get",
+        "ui.set",
+        "worktree.ps",
+        "worktree.show",
+        "worktree.create",
+        "worktree.activate",
+        "worktree.set",
+        "worktree.sleep",
+        "worktree.rm"
+      ],
+      "legacy": [
+        "GET /api/tracker/v1/projects",
+        "GET|POST /api/tracker/v1/assistant/threads"
+      ],
+      "stream": false,
+      "migration": "orca_compatible_service_adapter"
+    },
+    {
       "operation": "paired device list, individual revocation and self-revocation",
       "rpc": ["devices.list", "devices.revoke", "devices.self_revoke"],
       "legacy": [],

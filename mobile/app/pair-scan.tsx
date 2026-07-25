@@ -12,22 +12,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { CameraView, useCameraPermissions } from 'expo-camera'
 import { useRouter } from 'expo-router'
 import { ChevronLeft, Clipboard as ClipboardIcon, QrCode } from 'lucide-react-native'
+import { encodePairingOffer } from '../src/auth/pairing-offer'
 import { decodePairingUrl, parsePairingCode } from '../src/orca/transport/pairing'
-import {
-  startPairingConnectionAttempt,
-  type PairingConnectionAttempt
-} from '../src/orca/transport/pairing-connection-attempt'
-import { connect } from '../src/orca/transport/rpc-client'
-import { saveHost, getNextHostName } from '../src/orca/transport/host-store'
-import type { ConnectionLogEntry, PairingOffer, RpcResponse } from '../src/orca/transport/types'
+import type { PairingOffer } from '../src/orca/transport/types'
 import { colors, spacing, radii, typography } from '../src/orca/theme/mobile-theme'
 import { TextInputModal } from '../src/orca/components/TextInputModal'
-import { ConnectionLog } from '../src/orca/components/ConnectionLog'
 
-// Why: see pair-confirm.tsx — cap initial-pair "Connecting…" so a broken
-// route surfaces as a real error with the log visible instead of a
-// silent infinite spinner.
-const PAIRING_OVERALL_TIMEOUT_MS = 25_000
 const SCAN_RETICLE_SCALE = 0.62
 const SCAN_RETICLE_MAX_SIZE = 360
 
@@ -46,27 +36,27 @@ export default function PairScanScreen() {
   const router = useRouter()
   const insets = useSafeAreaInsets()
   const [permission, requestPermission] = useCameraPermissions()
-  const [status, setStatus] = useState<'scanning' | 'connecting' | 'error'>('scanning')
+  const [status, setStatus] = useState<'scanning' | 'error'>('scanning')
   const [errorMessage, setErrorMessage] = useState('')
   const [pasteVisible, setPasteVisible] = useState(false)
   const [cameraBounds, setCameraBounds] = useState({ width: 0, height: 0 })
-  const [logs, setLogs] = useState<ConnectionLogEntry[]>([])
-  const logsRef = useRef<ConnectionLogEntry[]>([])
   const processingRef = useRef(false)
-  const mountedRef = useRef(true)
-  const activePairingAttemptRef = useRef<PairingConnectionAttempt | null>(null)
 
-  const setPairScanRootRef = useCallback((node: View | null): void => {
-    if (node !== null) {
-      mountedRef.current = true
-      return
-    }
-    // Why: pairing attempts can outlive the visible route; dispose them when
-    // the scan screen detaches without a passive cleanup-only Effect.
-    mountedRef.current = false
-    activePairingAttemptRef.current?.dispose()
-    activePairingAttemptRef.current = null
-  }, [])
+  const setPairScanRootRef = useCallback((_node: View | null): void => undefined, [])
+
+  const openConfirmation = useCallback(
+    (offer: PairingOffer) => {
+      const code = new URL(encodePairingOffer(offer)).searchParams.get('code')
+      if (!code) {
+        setStatus('error')
+        setErrorMessage('Could not prepare the Symphony pairing confirmation')
+        processingRef.current = false
+        return
+      }
+      router.replace({ pathname: '/pair-confirm', params: { code } })
+    },
+    [router]
+  )
 
   const handleBarCodeScanned = useCallback(
     ({ data }: { data: string }) => {
@@ -78,33 +68,38 @@ export default function PairScanScreen() {
       const offer = decodePairingUrl(data)
       if (!offer) {
         setStatus('error')
-        setErrorMessage('Not a valid Orca QR code')
+        setErrorMessage('Not a valid Symphony QR code')
         processingRef.current = false
         return
       }
 
-      void testAndSave(offer)
+      openConfirmation(offer)
     },
-    [router]
+    [openConfirmation]
   )
 
-  const handlePasteSubmit = useCallback((input: string) => {
-    setPasteVisible(false)
-    if (processingRef.current) {
-      return
-    }
-    processingRef.current = true
+  const handlePasteSubmit = useCallback(
+    (input: string) => {
+      setPasteVisible(false)
+      if (processingRef.current) {
+        return
+      }
+      processingRef.current = true
 
-    const offer = parsePairingCode(input)
-    if (!offer) {
-      setStatus('error')
-      setErrorMessage('Not a valid pairing code — copy it from your computer and paste again')
-      processingRef.current = false
-      return
-    }
+      const offer = parsePairingCode(input)
+      if (!offer) {
+        setStatus('error')
+        setErrorMessage(
+          'Not a valid Symphony pairing code — copy it from Dev10x on your computer and paste again'
+        )
+        processingRef.current = false
+        return
+      }
 
-    void testAndSave(offer)
-  }, [])
+      openConfirmation(offer)
+    },
+    [openConfirmation]
+  )
 
   const handleCameraLayout = useCallback((event: LayoutChangeEvent) => {
     const { width, height } = event.nativeEvent.layout
@@ -119,112 +114,9 @@ export default function PairScanScreen() {
     )
   }, [])
 
-  async function testAndSave(offer: PairingOffer) {
-    setStatus('connecting')
-    logsRef.current = []
-    setLogs([])
-    let client: ReturnType<typeof connect> | null = null
-    activePairingAttemptRef.current?.dispose()
-
-    // Why: split the try/catch around the network call vs the local save
-    // so a Keychain or AsyncStorage failure doesn't masquerade as a
-    // "Cannot connect — same network?" error. Pairing reached the
-    // desktop fine; the failure is local persistence.
-    let response: RpcResponse
-    const attempt = startPairingConnectionAttempt({
-      timeoutMs: PAIRING_OVERALL_TIMEOUT_MS,
-      closeClient: () => client?.close()
-    })
-    activePairingAttemptRef.current = attempt
-    try {
-      client = connect(offer.endpoint, offer.deviceToken, offer.publicKeyB64, {
-        onLog: (entry) => {
-          if (!mountedRef.current || activePairingAttemptRef.current !== attempt) {
-            return
-          }
-          logsRef.current = [...logsRef.current, entry]
-          setLogs(logsRef.current)
-        }
-      })
-      response = await client.sendRequest('status.get')
-      const attemptIsCurrent = activePairingAttemptRef.current === attempt
-      attempt.dispose()
-      if (activePairingAttemptRef.current === attempt) {
-        activePairingAttemptRef.current = null
-      }
-      if (!mountedRef.current || !attemptIsCurrent) {
-        return
-      }
-    } catch (err) {
-      const timedOut = attempt.timedOut
-      const attemptIsCurrent = activePairingAttemptRef.current === attempt
-      attempt.dispose()
-      if (activePairingAttemptRef.current === attempt) {
-        activePairingAttemptRef.current = null
-      }
-      if (!mountedRef.current || !attemptIsCurrent) {
-        return
-      }
-      console.warn('[pair] connect failed', err)
-      setStatus('error')
-      setErrorMessage(
-        timedOut
-          ? `Couldn't connect within ${PAIRING_OVERALL_TIMEOUT_MS / 1000}s — see log below for where it stalled`
-          : 'Cannot connect — check that your computer is on the same network'
-      )
-      processingRef.current = false
-      return
-    }
-
-    if (!response.ok) {
-      if (!mountedRef.current) {
-        return
-      }
-      if (response.error.code === 'unauthorized') {
-        setStatus('error')
-        setErrorMessage('Authentication failed — token may be expired')
-        processingRef.current = false
-        return
-      }
-      setStatus('error')
-      setErrorMessage(`Server error: ${response.error.message}`)
-      processingRef.current = false
-      return
-    }
-
-    try {
-      const hostId = `host-${Date.now()}`
-      const hostName = await getNextHostName()
-      await saveHost({
-        id: hostId,
-        name: hostName,
-        endpoint: offer.endpoint,
-        deviceToken: offer.deviceToken,
-        publicKeyB64: offer.publicKeyB64,
-        lastConnected: Date.now()
-      })
-      if (!mountedRef.current) {
-        return
-      }
-      router.replace(`/h/${hostId}`)
-    } catch (err) {
-      if (!mountedRef.current) {
-        return
-      }
-      console.warn('[pair] save failed', err)
-      setStatus('error')
-      setErrorMessage(
-        `Pairing succeeded but couldn't save the host: ${err instanceof Error ? err.message : String(err)}`
-      )
-      processingRef.current = false
-    }
-  }
-
   function retry() {
     setStatus('scanning')
     setErrorMessage('')
-    logsRef.current = []
-    setLogs([])
     processingRef.current = false
   }
 
@@ -259,11 +151,11 @@ export default function PairScanScreen() {
         </Pressable>
         <View style={styles.centered}>
           <Text style={styles.title}>
-            {canAskAgain ? 'Pair with desktop' : 'Camera Access Disabled'}
+            {canAskAgain ? 'Pair a Symphony host' : 'Camera Access Disabled'}
           </Text>
           <Text style={styles.subtitle}>
             {canAskAgain
-              ? 'Scan the QR code from Orca on your desktop, or paste the pairing code instead.'
+              ? 'Scan the Dev10x QR code from your Symphony machine, or paste the pairing code instead.'
               : 'Enable camera access in Settings, or paste the pairing code instead.'}
           </Text>
           <Pressable
@@ -287,7 +179,7 @@ export default function PairScanScreen() {
           visible={pasteVisible}
           title="Paste pairing code"
           message="Copy the code shown under the QR on your computer."
-          placeholder="orca://pair?code=... or paste the code"
+          placeholder="symphony://pair?code=... or paste the code"
           onSubmit={handlePasteSubmit}
           onCancel={() => setPasteVisible(false)}
         />
@@ -302,8 +194,8 @@ export default function PairScanScreen() {
       </Pressable>
 
       <View style={styles.steps}>
-        <Step number={1} text="Open Orca on your computer" />
-        <Step number={2} text="Go to Settings → Mobile" />
+        <Step number={1} text="Open Dev10x on your computer" />
+        <Step number={2} text="Open Symphony host pairing" />
         <Step number={3} text="Scan the QR code" />
       </View>
 
@@ -343,24 +235,9 @@ export default function PairScanScreen() {
         </>
       )}
 
-      {status === 'connecting' && (
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color={colors.textSecondary} />
-          <Text style={styles.connectingText}>Connecting…</Text>
-          <View style={styles.logSlot}>
-            <ConnectionLog entries={logs} title="Pairing log" />
-          </View>
-        </View>
-      )}
-
       {status === 'error' && (
         <View style={styles.centered}>
           <Text style={styles.errorText}>{errorMessage}</Text>
-          {logs.length > 0 && (
-            <View style={styles.logSlot}>
-              <ConnectionLog entries={logs} title="Pairing log" />
-            </View>
-          )}
           <View style={styles.errorActions}>
             <Pressable style={styles.primaryButton} onPress={retry}>
               <Text style={styles.primaryButtonText}>Try Again</Text>
@@ -385,7 +262,7 @@ export default function PairScanScreen() {
         visible={pasteVisible}
         title="Paste pairing code"
         message="Copy the code shown under the QR on your computer."
-        placeholder="orca://pair?code=... or paste the code"
+        placeholder="symphony://pair?code=... or paste the code"
         onSubmit={handlePasteSubmit}
         onCancel={() => setPasteVisible(false)}
       />
@@ -510,16 +387,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: spacing.xl,
     lineHeight: 20
-  },
-  connectingText: {
-    color: colors.textSecondary,
-    fontSize: typography.bodySize,
-    marginTop: spacing.lg
-  },
-  logSlot: {
-    width: '100%',
-    marginTop: spacing.lg,
-    paddingHorizontal: spacing.sm
   },
   errorText: {
     color: colors.statusRed,

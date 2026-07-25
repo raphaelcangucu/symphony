@@ -748,7 +748,7 @@ git commit -m "feat(mobile): share Symphony host runtime across interfaces"
 - Modify: `elixir/lib/symphony_elixir/mobile_rpc/dispatcher.ex`
 - Modify: `docs/superpowers/specs/fixtures/mobile-rpc-capabilities-v1.json`
 
-- [ ] **Step 1: Write failing host compatibility tests**
+- [x] **Step 1: Write failing host compatibility tests**
 
 Add focused ExUnit cases asserting these allowlisted methods and result keys:
 
@@ -792,7 +792,7 @@ worktree.sleep
 worktree.rm
 ```
 
-- [ ] **Step 2: Run the focused server tests and confirm method rejection**
+- [x] **Step 2: Run the focused server tests and confirm method rejection**
 
 Run:
 
@@ -805,7 +805,7 @@ mix test \
 
 Expected: FAIL with `method_not_allowed`.
 
-- [ ] **Step 3: Implement allowlisted presenters over existing services**
+- [x] **Step 3: Implement allowlisted presenters over existing services**
 
 `OrcaSystem` and `OrcaWorkspaces` register one method module per exact upstream
 name. Each validator accepts only documented keys. Calls delegate to existing
@@ -827,7 +827,7 @@ def present_host(identity, capabilities) do
 end
 ```
 
-- [ ] **Step 4: Adapt the copied pairing flow without changing its layout**
+- [x] **Step 4: Adapt the copied pairing flow without changing its layout**
 
 `pairing.ts` re-exports `parsePairingOffer` semantics for
 `symphony://pair?code=...`. `host-store.ts` adapts copied calls to
@@ -843,7 +843,7 @@ Dev10x will connect directly to this machine.
 The profile is saved only after the encrypted handshake and `status.get`
 succeed.
 
-- [ ] **Step 5: Run focused mobile and server tests**
+- [x] **Step 5: Run focused mobile and server tests**
 
 Run:
 
@@ -861,7 +861,7 @@ mix test \
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add mobile/app mobile/src/orca/transport mobile/src/orca/routes \

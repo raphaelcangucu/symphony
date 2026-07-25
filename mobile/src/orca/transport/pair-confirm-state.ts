@@ -12,7 +12,7 @@ export function resolvePairConfirmRouteState(code: string | undefined): PairConf
 
   const offer = parsePairingCode(code)
   if (!offer) {
-    return { kind: 'error', offer: null, errorMessage: 'Not a valid pairing code' }
+    return { kind: 'error', offer: null, errorMessage: 'Not a valid Symphony pairing code' }
   }
 
   return { kind: 'ready', offer, errorMessage: '' }

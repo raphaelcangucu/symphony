@@ -3,14 +3,11 @@ import { View, Text, StyleSheet, Pressable, ActivityIndicator, BackHandler } fro
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router'
 import { ChevronLeft } from 'lucide-react-native'
+import { useConnection } from '../src/auth/ConnectionProvider'
+import { redactPairingSecrets } from '../src/auth/pairing-offer'
+import { pairHostOffer } from '../src/features/connect/pair-host'
 import { resolvePairConfirmRouteState } from '../src/orca/transport/pair-confirm-state'
-import {
-  startPairingConnectionAttempt,
-  type PairingConnectionAttempt
-} from '../src/orca/transport/pairing-connection-attempt'
-import { connect } from '../src/orca/transport/rpc-client'
-import { saveHost, getNextHostName } from '../src/orca/transport/host-store'
-import type { ConnectionLogEntry, RpcResponse } from '../src/orca/transport/types'
+import type { ConnectionLogEntry } from '../src/orca/transport/types'
 import { colors, spacing, radii, typography } from '../src/orca/theme/mobile-theme'
 import { ConnectionLog } from '../src/orca/components/ConnectionLog'
 
@@ -25,17 +22,16 @@ const PAIRING_OVERALL_TIMEOUT_MS = 25_000
 
 export default function PairConfirmScreen() {
   const router = useRouter()
+  const { saveHostProfile } = useConnection()
   const insets = useSafeAreaInsets()
   const params = useLocalSearchParams<{ code?: string }>()
   const [status, setStatus] = useState<Status>('awaiting-confirm')
   const [errorMessage, setErrorMessage] = useState('')
   const [logs, setLogs] = useState<ConnectionLogEntry[]>([])
-  // Why: collect logs in a ref so the rpc-client callback (which closures
-  // over the initial state setter) always sees the freshest list and we
-  // batch fewer setState calls when entries arrive in bursts.
+  // Keep the current pairing milestones available while React commits the
+  // copied connection-log presentation.
   const logsRef = useRef<ConnectionLogEntry[]>([])
   const mountedRef = useRef(true)
-  const activePairingAttemptRef = useRef<PairingConnectionAttempt | null>(null)
 
   const routeState = resolvePairConfirmRouteState(params.code)
   const offer = routeState.offer
@@ -65,11 +61,8 @@ export default function PairConfirmScreen() {
       mountedRef.current = true
       return
     }
-    // Why: pairing attempts can outlive the visible route; dispose them when
-    // the confirm screen detaches without a passive cleanup-only Effect.
+    // Ignore the result if navigation detaches the confirmation route.
     mountedRef.current = false
-    activePairingAttemptRef.current?.dispose()
-    activePairingAttemptRef.current = null
   }, [])
 
   async function confirm() {
@@ -77,95 +70,47 @@ export default function PairConfirmScreen() {
       return
     }
     setStatus('connecting')
-    logsRef.current = []
-    setLogs([])
-    let client: ReturnType<typeof connect> | null = null
-    activePairingAttemptRef.current?.dispose()
-
-    // Why: split the try/catch around the network call vs the local save
-    // so a Keychain or AsyncStorage failure doesn't masquerade as a
-    // "Cannot connect" error.
-    let response: RpcResponse
-    const attempt = startPairingConnectionAttempt({
-      timeoutMs: PAIRING_OVERALL_TIMEOUT_MS,
-      closeClient: () => client?.close()
-    })
-    activePairingAttemptRef.current = attempt
+    const startedAt = Date.now()
+    logsRef.current = [
+      {
+        id: `pair-${startedAt}`,
+        ts: startedAt,
+        level: 'info',
+        message: 'Opening encrypted Symphony channel',
+        detail: offer.endpoint
+      }
+    ]
+    setLogs(logsRef.current)
     try {
-      client = connect(offer.endpoint, offer.deviceToken, offer.publicKeyB64, {
-        onLog: (entry) => {
-          if (!mountedRef.current || activePairingAttemptRef.current !== attempt) {
-            return
-          }
-          logsRef.current = [...logsRef.current, entry]
-          setLogs(logsRef.current)
+      await pairHostOffer(offer, saveHostProfile)
+      if (!mountedRef.current) {
+        return
+      }
+      const verifiedAt = Date.now()
+      logsRef.current = [
+        ...logsRef.current,
+        {
+          id: `verified-${verifiedAt}`,
+          ts: verifiedAt,
+          level: 'success',
+          message: 'Host identity verified',
+          detail: `${offer.hostName} · Symphony`
         }
-      })
-      response = await client.sendRequest('status.get')
-      const attemptIsCurrent = activePairingAttemptRef.current === attempt
-      attempt.dispose()
-      if (activePairingAttemptRef.current === attempt) {
-        activePairingAttemptRef.current = null
-      }
-      if (!mountedRef.current || !attemptIsCurrent) {
-        return
-      }
+      ]
+      setLogs(logsRef.current)
+      router.replace(`/h/${offer.hostId}`)
     } catch (err) {
-      const timedOut = attempt.timedOut
-      const attemptIsCurrent = activePairingAttemptRef.current === attempt
-      attempt.dispose()
-      if (activePairingAttemptRef.current === attempt) {
-        activePairingAttemptRef.current = null
-      }
-      if (!mountedRef.current || !attemptIsCurrent) {
+      if (!mountedRef.current) {
         return
       }
-      console.warn('[pair-confirm] connect failed', err)
+      const rawMessage = err instanceof Error ? err.message : 'Cannot connect to this Symphony host'
+      const safeMessage = redactPairingSecrets(rawMessage, offer)
+      console.warn('[pair-confirm] connect failed', safeMessage)
       setStatus('error')
       setErrorMessage(
-        timedOut
+        Date.now() - startedAt >= PAIRING_OVERALL_TIMEOUT_MS
           ? `Couldn't connect within ${PAIRING_OVERALL_TIMEOUT_MS / 1000}s — see log below for where it stalled`
-          : 'Cannot connect — check that your computer is on the same network'
-      )
-      return
-    }
-
-    if (!response.ok) {
-      if (!mountedRef.current) {
-        return
-      }
-      setStatus('error')
-      setErrorMessage(
-        response.error.code === 'unauthorized'
-          ? 'Authentication failed — token may be expired'
-          : `Server error: ${response.error.message}`
-      )
-      return
-    }
-
-    try {
-      const hostId = `host-${Date.now()}`
-      const hostName = await getNextHostName()
-      await saveHost({
-        id: hostId,
-        name: hostName,
-        endpoint: offer.endpoint,
-        deviceToken: offer.deviceToken,
-        publicKeyB64: offer.publicKeyB64,
-        lastConnected: Date.now()
-      })
-      if (!mountedRef.current) {
-        return
-      }
-      router.replace(`/h/${hostId}`)
-    } catch (err) {
-      if (!mountedRef.current) {
-        return
-      }
-      console.warn('[pair-confirm] save failed', err)
-      setStatus('error')
-      setErrorMessage(
-        `Pairing succeeded but couldn't save the host: ${err instanceof Error ? err.message : String(err)}`
+          : safeMessage
       )
     }
   }
@@ -181,13 +126,11 @@ export default function PairConfirmScreen() {
       <View style={styles.content}>
         {offer && resolvedStatus === 'awaiting-confirm' && (
           <>
-            <Text style={styles.title}>Pair with this desktop?</Text>
-            <Text style={styles.subtitle}>
-              You opened a pairing link from your desktop. Confirm to add it to your hosts.
-            </Text>
+            <Text style={styles.title}>Pair with this Symphony host?</Text>
+            <Text style={styles.subtitle}>Dev10x will connect directly to this machine.</Text>
             <View style={styles.actionStack}>
               <Pressable style={styles.primaryButton} onPress={() => void confirm()}>
-                <Text style={styles.primaryButtonText}>Pair</Text>
+                <Text style={styles.primaryButtonText}>Pair host</Text>
               </Pressable>
               <Pressable style={styles.secondaryButton} onPress={cancel}>
                 <Text style={styles.secondaryButtonText}>Cancel</Text>

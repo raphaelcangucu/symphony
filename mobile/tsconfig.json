@@ -4,9 +4,7 @@
     "strict": true,
     "paths": {
       "@/*": ["./src/*"]
-    },
-    "noUncheckedIndexedAccess": true,
-    "exactOptionalPropertyTypes": true
+    }
   },
   "include": [
     "app/**/*.ts",

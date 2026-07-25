@@ -15,11 +15,7 @@ type SubscribeOptions = {
 type StreamingListener = (result: unknown) => void;
 
 export type RpcClient = {
-  sendRequest(
-    method: string,
-    params?: unknown,
-    options?: SendRequestOptions,
-  ): Promise<RpcResponse>;
+  sendRequest(method: string, params?: unknown, options?: SendRequestOptions): Promise<RpcResponse>;
   subscribe(
     method: string,
     params: unknown,
@@ -71,7 +67,7 @@ export function createSymphonyOrcaRpcClient(
       let disposed = false;
       let cleanup: (() => void) | null = null;
       void transport
-        .subscribe(method, params, (payload) => {
+        .subscribe(method, params ?? {}, (payload) => {
           if (disposed) return;
           if (isBrowserScreencastFrame(payload) && options?.onBinaryFrame) {
             options.onBinaryFrame(payload);
@@ -138,9 +134,6 @@ function timeoutSignal(timeoutMs: number | undefined): {
 
 function isBrowserScreencastFrame(payload: unknown): payload is BrowserScreencastFrame {
   return (
-    typeof payload === "object" &&
-    payload !== null &&
-    "data" in payload &&
-    "metadata" in payload
+    typeof payload === "object" && payload !== null && "data" in payload && "metadata" in payload
   );
 }

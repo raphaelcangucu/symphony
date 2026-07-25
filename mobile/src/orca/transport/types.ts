@@ -1,4 +1,4 @@
-import { z } from 'zod'
+import type { PairingOfferV1 } from '@/auth/pairing-offer'
 
 export type RpcRequest = {
   id: string
@@ -24,16 +24,9 @@ export type RpcFailure = {
 
 export type RpcResponse = RpcSuccess | RpcFailure
 
-const PAIRING_OFFER_VERSION = 2
-
-export const PairingOfferSchema = z.object({
-  v: z.literal(PAIRING_OFFER_VERSION),
-  endpoint: z.string().min(1),
-  deviceToken: z.string().min(1),
-  publicKeyB64: z.string().min(1)
-})
-
-export type PairingOffer = z.infer<typeof PairingOfferSchema>
+export type PairingOffer = PairingOfferV1 & {
+  publicKeyB64: string
+}
 
 export type ConnectionLogLevel = 'info' | 'success' | 'warn' | 'error'
 
@@ -59,31 +52,12 @@ export type ConnectionState =
 
 export type HostProfile = {
   id: string
+  hostId: string
   name: string
   endpoint: string
+  deviceId: string
   deviceToken: string
   publicKeyB64: string
+  protocolVersion: number
   lastConnected: number
 }
-
-export const HostProfileSchema = z.object({
-  id: z.string().min(1),
-  name: z.string().min(1),
-  endpoint: z.string().min(1),
-  deviceToken: z.string().min(1),
-  publicKeyB64: z.string().min(1),
-  lastConnected: z.number().finite()
-})
-
-// Why: persisted host record after the v0.0.3 keychain split. The
-// deviceToken is held in iOS Keychain via expo-secure-store and joined
-// in at load time; it must NOT appear in AsyncStorage anymore.
-export const StoredHostProfileSchema = z.object({
-  id: z.string().min(1),
-  name: z.string().min(1),
-  endpoint: z.string().min(1),
-  publicKeyB64: z.string().min(1),
-  lastConnected: z.number().finite()
-})
-
-export type StoredHostProfile = z.infer<typeof StoredHostProfileSchema>

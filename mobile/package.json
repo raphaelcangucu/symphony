@@ -26,6 +26,7 @@
     "doctor": "expo-doctor"
   },
   "dependencies": {
+    "@dev10x/expo-two-way-audio": "file:packages/expo-two-way-audio",
     "@expo/metro-runtime": "^55.0.11",
     "@noble/ciphers": "^2.2.0",
     "@noble/curves": "^2.2.0",

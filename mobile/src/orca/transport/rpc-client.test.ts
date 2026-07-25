@@ -3,10 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { RpcError } from "@/rpc/client";
 import type { HostTransport } from "@/transport/HostTransport";
 
-import {
-  createSymphonyOrcaRpcClient,
-  type OrcaConnectionStateSource,
-} from "./rpc-client";
+import { createSymphonyOrcaRpcClient, type OrcaConnectionStateSource } from "./rpc-client";
 
 function fakeTransport(responses: Record<string, unknown>): HostTransport {
   return {
@@ -62,5 +59,20 @@ describe("Symphony Orca RPC facade", () => {
       ok: false,
       error: { code: "offline", message: "Host offline" },
     });
+  });
+
+  it("normalizes upstream null subscription params to the Symphony map envelope", async () => {
+    const transport = fakeTransport({});
+    const client = createSymphonyOrcaRpcClient("host-a", transport, stateSource("connected"));
+
+    const cleanup = client.subscribe("accounts.subscribe", null, vi.fn());
+    await vi.waitFor(() => expect(transport.subscribe).toHaveBeenCalled());
+
+    expect(transport.subscribe).toHaveBeenCalledWith(
+      "accounts.subscribe",
+      {},
+      expect.any(Function),
+    );
+    cleanup();
   });
 });
