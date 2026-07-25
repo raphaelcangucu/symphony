@@ -67,6 +67,32 @@ defmodule SymphonyElixir.MobileRpc.HandshakeTest do
              "host_id" => identity.host_id,
              "protocol" => 1
            }
+
+    rpc_request = Jason.encode!(%{"type" => "rpc", "id" => "rpc_1", "method" => "system.health", "params" => %{}})
+
+    assert {:ok, rpc_ciphertext} =
+             Crypto.encrypt_frame(
+               ready.session.client_to_host,
+               :client_to_host,
+               2,
+               rpc_request
+             )
+
+    assert {:ok, ^rpc_request, rpc_state} =
+             Handshake.decrypt_rpc(<<2::unsigned-big-64, rpc_ciphertext::binary>>, ready)
+
+    rpc_response = Jason.encode!(%{"type" => "result", "id" => "rpc_1", "ok" => true})
+
+    assert {:ok, <<2::unsigned-big-64, response_ciphertext::binary>>, response_state} =
+             Handshake.encrypt_rpc(rpc_response, rpc_state)
+
+    assert {:ok, ^rpc_response} =
+             Crypto.decrypt_frame(
+               response_state.session.host_to_client,
+               :host_to_client,
+               2,
+               response_ciphertext
+             )
   end
 
   test "rejects incompatible protocol, wrong host and malformed client key", %{identity: identity} do

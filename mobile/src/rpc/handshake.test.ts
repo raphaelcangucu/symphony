@@ -75,6 +75,23 @@ describe("MobileHandshake", () => {
       host_id: offer.hostId,
     });
     expect(handshake.state).toBe("online");
+
+    const clientRpcFrame = handshake.encryptRpcMessage(
+      JSON.stringify({ type: "rpc", id: "rpc_1", method: "system.health", params: {} }),
+    );
+    expect(decodeSequence(clientRpcFrame)).toBe(2n);
+
+    const rpcResult = JSON.stringify({
+      type: "result",
+      id: "rpc_1",
+      ok: true,
+      result: { status: "healthy" },
+    });
+    const encryptedResult = encodeSequenceFrame(
+      2n,
+      encryptFrame(keys.hostToClient, "h2c", 2n, new TextEncoder().encode(rpcResult)),
+    );
+    expect(handshake.decryptRpcFrame(encryptedResult)).toBe(rpcResult);
   });
 
   it("fails closed when the host id or pinned static key changes", () => {
@@ -212,4 +229,10 @@ function concat(left: Uint8Array, right: Uint8Array): Uint8Array {
   output.set(left);
   output.set(right, left.length);
   return output;
+}
+
+function decodeSequence(frame: Uint8Array): bigint {
+  let sequence = 0n;
+  for (const byte of frame.slice(0, 8)) sequence = (sequence << 8n) | BigInt(byte);
+  return sequence;
 }

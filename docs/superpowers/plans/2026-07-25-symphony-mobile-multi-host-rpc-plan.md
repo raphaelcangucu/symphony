@@ -223,7 +223,7 @@ Commit: `feat(mobile-rpc): add encrypted websocket handshake`
 - Create: `mobile/src/rpc/client.ts`
 - Create: `mobile/src/rpc/client.test.ts`
 
-- [ ] **Step 1: Write failing envelope and dispatcher tests**
+- [x] **Step 1: Write failing envelope and dispatcher tests**
 
 Prove unique ids, schema validation, mobile allowlist, per-method timeout,
 structured errors, concurrency limits, heartbeat, cancellation, subscription
@@ -238,17 +238,17 @@ defmodule SymphonyElixir.MobileRpc.Method do
 end
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run the mobile RPC client test in WSL and dispatcher tests in CI.
 
-- [ ] **Step 3: Implement `system.*`**
+- [x] **Step 3: Implement `system.*`**
 
 Add `system.identity`, `system.health`, `system.capabilities`,
 `system.heartbeat`, `system.usage` and `devices.self_revoke`. Every response
 contains `host_id`, negotiated protocol and server timestamp metadata.
 
-- [ ] **Step 4: Verify GREEN and commit**
+- [x] **Step 4: Verify GREEN and commit**
 
 Commit: `feat(mobile-rpc): add versioned dispatcher and host health`
 

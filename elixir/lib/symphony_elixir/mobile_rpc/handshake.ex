@@ -23,7 +23,9 @@ defmodule SymphonyElixir.MobileRpc.Handshake do
             server_nonce: nil,
             device_id: nil,
             auth_key: nil,
-            timeout_ref: nil
+            timeout_ref: nil,
+            sent_sequence: 0,
+            dispatcher: nil
 
   @type t :: %__MODULE__{}
 
@@ -103,7 +105,8 @@ defmodule SymphonyElixir.MobileRpc.Handshake do
              session: encrypted_session,
              private_key: nil,
              client_nonce: nil,
-             server_nonce: nil
+             server_nonce: nil,
+             sent_sequence: 1
          }}
       end
     else
@@ -132,6 +135,34 @@ defmodule SymphonyElixir.MobileRpc.Handshake do
   end
 
   def receive_binary(_frame, %__MODULE__{} = state), do: {:error, :unexpected_binary_frame, state}
+
+  @spec decrypt_rpc(binary(), t()) :: {:ok, binary(), t()} | {:error, atom(), t()}
+  def decrypt_rpc(frame, %__MODULE__{phase: :ready} = state) do
+    with {:ok, sequence, ciphertext} <- unpack_frame(frame),
+         {:ok, plaintext, session} <-
+           Crypto.decrypt(state.session, :client_to_host, sequence, ciphertext) do
+      {:ok, plaintext, %{state | session: session}}
+    else
+      {:error, reason} -> {:error, reason, state}
+    end
+  end
+
+  def decrypt_rpc(_frame, state), do: {:error, :not_ready, state}
+
+  @spec encrypt_rpc(binary(), t()) :: {:ok, binary(), t()} | {:error, atom(), t()}
+  def encrypt_rpc(plaintext, %__MODULE__{phase: :ready} = state) when is_binary(plaintext) do
+    sequence = state.sent_sequence + 1
+
+    case Crypto.encrypt(state.session, :host_to_client, sequence, plaintext) do
+      {:ok, ciphertext, session} ->
+        {:ok, <<sequence::unsigned-big-64, ciphertext::binary>>, %{state | session: session, sent_sequence: sequence}}
+
+      {:error, reason} ->
+        {:error, reason, state}
+    end
+  end
+
+  def encrypt_rpc(_plaintext, state), do: {:error, :not_ready, state}
 
   @spec transcript_hash(binary(), binary()) :: binary()
   def transcript_hash(client_hello_raw, server_hello_raw) do

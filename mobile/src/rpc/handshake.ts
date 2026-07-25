@@ -49,6 +49,8 @@ export class MobileHandshake {
   private ephemeralSecret: Uint8Array | null = null;
   private transcriptHash: Uint8Array | null = null;
   private cipher: SessionCipher | null = null;
+  private nextClientSequence = 2n;
+  private nextServerSequence = 2n;
   private currentState: HandshakeState = "connecting";
 
   constructor(offer: PairingOfferV1, options: MobileHandshakeOptions) {
@@ -200,6 +202,32 @@ export class MobileHandshake {
 
     this.currentState = "online";
     return message as AuthenticatedV1;
+  }
+
+  encryptRpcMessage(message: string): Uint8Array {
+    if (this.currentState !== "online" || !this.cipher) {
+      throw new Error("Symphony RPC channel is not online");
+    }
+    const sequence = this.nextClientSequence;
+    const frame = encodeSequenceFrame(
+      sequence,
+      this.cipher.encrypt("c2h", sequence, encoder.encode(message)),
+    );
+    this.nextClientSequence += 1n;
+    return frame;
+  }
+
+  decryptRpcFrame(frame: Uint8Array): string {
+    if (this.currentState !== "online" || !this.cipher) {
+      throw new Error("Symphony RPC channel is not online");
+    }
+    const { sequence, ciphertext } = decodeSequenceFrame(frame);
+    if (sequence !== this.nextServerSequence) {
+      throw new Error("Invalid encrypted RPC frame sequence");
+    }
+    const plaintext = this.cipher.decrypt("h2c", sequence, ciphertext);
+    this.nextServerSequence += 1n;
+    return decoder.decode(plaintext);
   }
 }
 

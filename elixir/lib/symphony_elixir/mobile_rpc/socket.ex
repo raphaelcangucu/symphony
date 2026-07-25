@@ -3,7 +3,7 @@ defmodule SymphonyElixir.MobileRpc.Socket do
 
   @behaviour WebSock
 
-  alias SymphonyElixir.MobileRpc.{AuthLimiter, Handshake, HostIdentity}
+  alias SymphonyElixir.MobileRpc.{AuthLimiter, Dispatcher, Handshake, HostIdentity}
 
   @registry SymphonyElixir.MobileRpc.ConnectionRegistry
   @handshake_timeout_ms 10_000
@@ -46,7 +46,16 @@ defmodule SymphonyElixir.MobileRpc.Socket do
         cancel_timeout(next_state.timeout_ref)
         AuthLimiter.reset(next_state.auth_key)
         register_device(next_state.device_id)
-        {:push, {:binary, response}, next_state}
+
+        dispatcher =
+          Dispatcher.new(%{
+            host_id: next_state.identity.host_id,
+            host_name: next_state.identity.name,
+            protocol: 1,
+            device_id: next_state.device_id
+          })
+
+        {:push, {:binary, response}, %{next_state | dispatcher: dispatcher}}
 
       {:error, reason, encrypted_error, next_state} ->
         AuthLimiter.record_failure(next_state.auth_key)
@@ -62,6 +71,21 @@ defmodule SymphonyElixir.MobileRpc.Socket do
     {:stop, :plaintext_frame_forbidden, {1008, "RPC frames must be encrypted"}, state}
   end
 
+  def handle_in({frame, opcode: :binary}, %{phase: :ready} = state) do
+    with {:ok, plaintext, decrypted} <- Handshake.decrypt_rpc(frame, state) do
+      case Dispatcher.handle_frame(plaintext, decrypted.dispatcher) do
+        {:noreply, dispatcher} ->
+          {:ok, %{decrypted | dispatcher: dispatcher}}
+
+        {_kind, response, dispatcher} ->
+          push_rpc_response(response, %{decrypted | dispatcher: dispatcher})
+      end
+    else
+      {:error, reason, next_state} ->
+        {:stop, reason, {1008, "invalid encrypted RPC frame"}, next_state}
+    end
+  end
+
   def handle_in({_frame, opcode: :binary}, state), do: {:ok, state}
 
   @impl WebSock
@@ -75,9 +99,25 @@ defmodule SymphonyElixir.MobileRpc.Socket do
     {:stop, :device_revoked, {4003, "mobile device revoked"}, state}
   end
 
+  def handle_info(message, %{phase: :ready, dispatcher: dispatcher} = state)
+      when not is_nil(dispatcher) do
+    case Dispatcher.handle_info(message, dispatcher) do
+      {:reply, response, next_dispatcher} ->
+        push_rpc_response(response, %{state | dispatcher: next_dispatcher})
+
+      {:noreply, next_dispatcher} ->
+        {:ok, %{state | dispatcher: next_dispatcher}}
+    end
+  end
+
   def handle_info(_message, state), do: {:ok, state}
 
   @impl WebSock
+  def terminate(_reason, %{dispatcher: %Dispatcher{} = dispatcher, timeout_ref: timeout_ref}) do
+    cancel_timeout(timeout_ref)
+    Dispatcher.close(dispatcher)
+  end
+
   def terminate(_reason, %{timeout_ref: timeout_ref}) do
     cancel_timeout(timeout_ref)
     :ok
@@ -116,6 +156,13 @@ defmodule SymphonyElixir.MobileRpc.Socket do
   defp cancel_timeout(timeout_ref) do
     Process.cancel_timer(timeout_ref)
     :ok
+  end
+
+  defp push_rpc_response(response, state) do
+    case Handshake.encrypt_rpc(response, state) do
+      {:ok, frame, next_state} -> {:push, {:binary, frame}, next_state}
+      {:error, reason, next_state} -> {:stop, reason, next_state}
+    end
   end
 
   defp default_host_name do
