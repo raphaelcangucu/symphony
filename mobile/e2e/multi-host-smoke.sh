@@ -74,6 +74,19 @@ wait_for_text() {
   wait_for_selector "text" "$1" "${2:-45}"
 }
 
+scroll_until_text() {
+  local value="$1"
+  local attempts="${2:-8}"
+  for _ in $(seq 1 "${attempts}"); do
+    dump_ui
+    grep -Fq "text=\"${value}\"" "${UI_DUMP_PATH}" && return 0
+    "${ADB}" shell input swipe 540 2100 540 750 450
+    sleep 1
+  done
+  printf "Text not found while scrolling: %s\n" "${value}" >&2
+  return 1
+}
+
 tap_selector() {
   local attribute="$1"
   local value="$2"
@@ -277,12 +290,9 @@ tap_accessible "Tasks"
 wait_for_text "${HOST_A_NAME}: encrypted mobile control"
 tap_accessible "Open task ${host_a_issue}"
 wait_for_text "${HOST_A_NAME}: encrypted mobile control"
-wait_for_text "${HOST_A_NAME}: verify host isolation"
-wait_for_text "${HOST_A_NAME}: record native evidence"
-"${ADB}" shell input swipe 540 2100 540 750 450
-trace_step "scroll to Host A task comments"
-sleep 1
-wait_for_text "This task is served by ${HOST_A_NAME} over its own encrypted RPC connection."
+scroll_until_text "${HOST_A_NAME}: verify host isolation"
+scroll_until_text "${HOST_A_NAME}: record native evidence"
+scroll_until_text "This task is served by ${HOST_A_NAME} over its own encrypted RPC connection."
 trace_step "assert task, blocker, subtask and comment parity on Host A"
 "${ADB}" shell input swipe 540 700 540 2100 450
 "${ADB}" shell input swipe 540 700 540 2100 450
