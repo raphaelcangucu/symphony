@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "suite": "X25519-HKDF-SHA256-CHACHA20POLY1305",
+  "x25519": {
+    "client_secret_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+    "client_public_hex": "8f40c5adb68f25624ae5b214ea767a6ec94d829d3d7b5e1ad1ba6f3e2138285f",
+    "host_secret_hex": "202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f",
+    "host_public_hex": "358072d6365880d1aeea329adf9121383851ed21a28e3b75e965d0d2cd166254",
+    "shared_secret_hex": "9663aa1da97e848a914a436d04163dfbb89178f107f1b5b77ed3854203382854"
+  },
+  "session": {
+    "salt_hex": "1dd6c090c6705078d2fac3d7e8ed1e8cc8b612c2e06aa62c4908f00710651bd0",
+    "transcript_hash_hex": "da47f236a9a4a5d94772f32e60945ff83df737043e2ae105dfad6e9d33ca79d5",
+    "client_to_host_key_hex": "13a0eaf1a1599a13f5de30e1ad73c6cd9b47d942a708f39c9d8ca032564a0aaf",
+    "host_to_client_key_hex": "7cb404a5d70a1cb3d3744568e13813e76d52870112cfcee341870342581a0309"
+  },
+  "client_to_host": {
+    "sequence": "1",
+    "nonce_hex": "000000000000000000000001",
+    "aad_hex": "73796d70686f6e792d6d6f62696c652d7270632d76317c6332687c0000000000000001",
+    "plaintext_utf8": "{\"type\":\"auth\",\"device_id\":\"device_test\"}",
+    "ciphertext_hex": "530776a250e37cc4c90e85af59cc7408bce00584f27f974fab6a3e7d6e71c88f70bb0a729437a4d49e",
+    "tag_hex": "ec989693c16fc0978c51d8659f25550f"
+  },
+  "hkdf_rfc5869_case_1": {
+    "ikm_hex": "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
+    "salt_hex": "000102030405060708090a0b0c",
+    "info_hex": "f0f1f2f3f4f5f6f7f8f9",
+    "length": 42,
+    "prk_hex": "077709362c2e32df0ddc3f0dc47bba6390b6c73bb50f9c3122ec844ad7c2b3e5",
+    "okm_hex": "3cb25f25faacd57a90434f64d0362f2a2d2d0a90cf1a5a4c5db02d56ecc4c5bf34007208d5b887185865"
+  }
+}
