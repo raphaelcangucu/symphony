@@ -463,6 +463,94 @@ describe("createTrackerClient", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(3);
   });
 
+  it("lists source files and reads text or authenticated image content safely", async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          data: {
+            available: true,
+            reason: null,
+            files: [
+              {
+                id: "mobile/src/App.tsx",
+                path: "mobile/src/App.tsx",
+                name: "App.tsx",
+                kind: "text",
+                size: 120,
+                updated_at: "2026-07-24T02:00:00Z",
+              },
+              {
+                id: "assets/icon.png",
+                path: "assets/icon.png",
+                name: "icon.png",
+                kind: "image",
+                size: 68,
+                updated_at: null,
+              },
+            ],
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          data: {
+            path: "mobile/src/App.tsx",
+            kind: "text",
+            mime_type: "text/typescript",
+            content: "export default App;",
+            content_base64: null,
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          data: {
+            path: "assets/icon.png",
+            kind: "image",
+            mime_type: "image/png",
+            content: null,
+            content_base64: "iVBORw0KGgo=",
+          },
+        }),
+      );
+    const client = createTrackerClient({
+      origin: "https://demo.test",
+      token: "secret",
+      locale: "en",
+      fetchImpl,
+    });
+
+    await expect(client.threadFiles(42)).resolves.toEqual({
+      available: true,
+      reason: null,
+      files: [
+        expect.objectContaining({ path: "mobile/src/App.tsx", kind: "text", size: 120 }),
+        expect.objectContaining({ path: "assets/icon.png", kind: "image", size: 68 }),
+      ],
+    });
+    await expect(client.threadFile(42, "mobile/src/App.tsx")).resolves.toEqual({
+      path: "mobile/src/App.tsx",
+      kind: "text",
+      mimeType: "text/typescript",
+      content: "export default App;",
+      dataUri: null,
+    });
+    await expect(client.threadFile(42, "assets/icon.png")).resolves.toEqual({
+      path: "assets/icon.png",
+      kind: "image",
+      mimeType: "image/png",
+      content: null,
+      dataUri: "data:image/png;base64,iVBORw0KGgo=",
+    });
+    expect(fetchImpl.mock.calls.map(([url]) => url)).toEqual([
+      "https://demo.test/api/tracker/v1/assistant/threads/42/files",
+      "https://demo.test/api/tracker/v1/assistant/threads/42/files/mobile/src/App.tsx",
+      "https://demo.test/api/tracker/v1/assistant/threads/42/files/assets/icon.png",
+    ]);
+    await expect(client.threadFile(42, "../secret.env")).rejects.toThrow("safe relative");
+  });
+
   it("loads thread diff stats, paginated files, and one patch independently", async () => {
     const workspace = { path: "/tmp/mobile app", available: true };
     const fetchImpl = vi

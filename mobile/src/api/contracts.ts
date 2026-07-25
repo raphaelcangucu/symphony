@@ -162,6 +162,32 @@ export type ThreadDocumentContent = {
   content: string;
 };
 
+export type ThreadFileKind = "markdown" | "text" | "image";
+
+export type ThreadFile = {
+  id: string;
+  path: string;
+  name: string;
+  title: string;
+  kind: ThreadFileKind;
+  size: number;
+  updatedAt: string | null;
+};
+
+export type ThreadFileList = {
+  available: boolean;
+  reason: string | null;
+  files: ThreadFile[];
+};
+
+export type ThreadFileContent = {
+  path: string;
+  kind: ThreadFileKind;
+  mimeType: string;
+  content: string | null;
+  dataUri: string | null;
+};
+
 export type DevServer = {
   id: number;
   slug: string;
@@ -525,6 +551,8 @@ export type TrackerClient = {
     path: string,
     signal?: AbortSignal,
   ): Promise<ThreadDocumentContent>;
+  threadFiles(threadId: number, signal?: AbortSignal): Promise<ThreadFileList>;
+  threadFile(threadId: number, path: string, signal?: AbortSignal): Promise<ThreadFileContent>;
   threadDevServers(threadId: number, signal?: AbortSignal): Promise<DevServerList>;
   startThreadDevServers(threadId: number, signal?: AbortSignal): Promise<DevServerList>;
   restartThreadDevServers(threadId: number, signal?: AbortSignal): Promise<DevServerList>;

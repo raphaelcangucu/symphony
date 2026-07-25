@@ -337,6 +337,56 @@ export function createFixtureTrackerClient(): TrackerClient {
       path,
       content: "# Mobile parity plan\n\nComplete the Orca-inspired experience.",
     }),
+    threadFiles: async () => ({
+      available: true,
+      reason: null,
+      files: [
+        {
+          id: "mobile/src/App.tsx",
+          path: "mobile/src/App.tsx",
+          name: "App.tsx",
+          title: "App.tsx",
+          kind: "text",
+          size: 120,
+          updatedAt: "2026-07-24T02:00:00Z",
+        },
+        {
+          id: "docs/mobile-plan.md",
+          path: "docs/mobile-plan.md",
+          name: "mobile-plan.md",
+          title: "Mobile parity plan",
+          kind: "markdown",
+          size: 80,
+          updatedAt: "2026-07-24T02:00:00Z",
+        },
+        {
+          id: "assets/orca-preview.png",
+          path: "assets/orca-preview.png",
+          name: "orca-preview.png",
+          title: "Orca preview",
+          kind: "image",
+          size: 68,
+          updatedAt: "2026-07-24T02:00:00Z",
+        },
+      ],
+    }),
+    threadFile: async (_threadId, path) => ({
+      path,
+      kind: path.endsWith(".png") ? "image" : path.endsWith(".md") ? "markdown" : "text",
+      mimeType: path.endsWith(".png")
+        ? "image/png"
+        : path.endsWith(".md")
+          ? "text/markdown"
+          : "text/typescript",
+      content: path.endsWith(".png")
+        ? null
+        : path.endsWith(".md")
+          ? "# Mobile parity plan\n\nComplete the Orca-inspired experience."
+          : 'export const experience = "Orca operations";\n',
+      dataUri: path.endsWith(".png")
+        ? "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEAQH/7KHdJwAAAABJRU5ErkJggg=="
+        : null,
+    }),
     threadDevServers: async () => fixtureDevServers(),
     startThreadDevServers: async () => fixtureDevServers(),
     restartThreadDevServers: async () => fixtureDevServers(),

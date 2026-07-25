@@ -175,7 +175,7 @@ Keep ANSI output as selectable monospace text in the first native slice.
 Reject parent traversal before requests and rely on the backend sandbox as the
 authoritative boundary.
 
-- [ ] **Step 4: Build focused workspace screens**
+- [x] **Step 4: Build focused workspace screens**
 
 Terminal has reconnect and keyboard controls. Preview opens the primary ready
 dev-server URL with explicit unavailable/offline states. Files provide search,
@@ -388,7 +388,7 @@ Run:
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 Commit message: `feat(mobile): add connection diagnostics and settings`
 

@@ -15,31 +15,31 @@ export function FilesRoute() {
   const threadId = parseThreadId(firstParam(params.threadId));
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const list = useQuery({
-    queryKey: ["thread-documents", activeProfile?.id, threadId],
+    queryKey: ["thread-files", activeProfile?.id, threadId],
     enabled: Boolean(client && threadId),
-    queryFn: ({ signal }) => client!.threadDocuments(threadId!, signal),
+    queryFn: ({ signal }) => client!.threadFiles(threadId!, signal),
   });
   useEffect(() => {
-    if (!selectedPath && list.data?.documents[0]) {
-      setSelectedPath(list.data.documents[0].path);
+    if (!selectedPath && list.data?.files[0]) {
+      setSelectedPath(list.data.files[0].path);
     }
-  }, [list.data?.documents, selectedPath]);
-  const document = useQuery({
-    queryKey: ["thread-document", activeProfile?.id, threadId, selectedPath],
+  }, [list.data?.files, selectedPath]);
+  const file = useQuery({
+    queryKey: ["thread-file", activeProfile?.id, threadId, selectedPath],
     enabled: Boolean(client && threadId && selectedPath),
-    queryFn: ({ signal }) => client!.threadDocument(threadId!, selectedPath!, signal),
+    queryFn: ({ signal }) => client!.threadFile(threadId!, selectedPath!, signal),
   });
   if (!threadId) return null;
-  const queryError = list.error ?? document.error;
+  const queryError = list.error ?? file.error;
   return (
     <FilesScreen
-      content={document.data?.content ?? null}
-      documents={list.data?.documents ?? []}
+      files={list.data?.files ?? []}
       error={queryError instanceof Error ? queryError.message : (list.data?.reason ?? null)}
-      loading={list.isLoading || document.isFetching}
+      loading={list.isLoading || file.isFetching}
       onBack={() => router.back()}
       onOpenDocument={setSelectedPath}
       onRefresh={() => void list.refetch()}
+      preview={file.data ?? null}
       selectedPath={selectedPath}
     />
   );

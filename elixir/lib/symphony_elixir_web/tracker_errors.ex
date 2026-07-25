@@ -384,6 +384,36 @@ defmodule SymphonyElixirWeb.TrackerErrors do
   def render(conn, :too_large),
     do: error(conn, 413, "issue_document_too_large", dgettext("errors", "Issue document is too large."))
 
+  def render(conn, :invalid_workspace_file_path),
+    do:
+      error(
+        conn,
+        422,
+        "invalid_workspace_file_path",
+        dgettext("errors", "Workspace file path must stay inside the assistant workspace.")
+      )
+
+  def render(conn, :workspace_file_not_found),
+    do: not_found(conn, "workspace_file_not_found", dgettext("errors", "Workspace file not found."))
+
+  def render(conn, :workspace_file_too_large),
+    do:
+      error(
+        conn,
+        413,
+        "workspace_file_too_large",
+        dgettext("errors", "Workspace file is too large to preview.")
+      )
+
+  def render(conn, :unsupported_workspace_file),
+    do:
+      error(
+        conn,
+        422,
+        "unsupported_workspace_file",
+        dgettext("errors", "This workspace file type cannot be previewed.")
+      )
+
   def render(conn, :attachment_not_found),
     do: not_found(conn, "attachment_not_found", dgettext("errors", "Attachment not found"))
 

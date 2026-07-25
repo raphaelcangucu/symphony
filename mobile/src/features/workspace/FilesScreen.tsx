@@ -1,16 +1,25 @@
 import { useMemo, useState } from "react";
-import { Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import {
+  Image,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import type { ThreadDocument } from "@/api/contracts";
+import type { ThreadFile, ThreadFileContent } from "@/api/contracts";
 import { StateView } from "@/components/StateView";
 import { radii, spacing } from "@/theme/tokens";
 import { useAppTheme } from "@/theme/ThemeProvider";
 
 type FilesScreenProps = {
-  documents: ThreadDocument[];
+  files: ThreadFile[];
   selectedPath: string | null;
-  content: string | null;
+  preview: ThreadFileContent | null;
   loading: boolean;
   error: string | null;
   onBack(): void;
@@ -19,9 +28,9 @@ type FilesScreenProps = {
 };
 
 export function FilesScreen({
-  documents,
+  files,
   selectedPath,
-  content,
+  preview,
   loading,
   error,
   onBack,
@@ -32,11 +41,11 @@ export function FilesScreen({
   const [query, setQuery] = useState("");
   const visible = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase();
-    if (!normalized) return documents;
-    return documents.filter((document) =>
-      `${document.title} ${document.path}`.toLocaleLowerCase().includes(normalized),
+    if (!normalized) return files;
+    return files.filter((file) =>
+      `${file.title} ${file.path}`.toLocaleLowerCase().includes(normalized),
     );
-  }, [documents, query]);
+  }, [files, query]);
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.bgBase }]}>
@@ -76,9 +85,9 @@ export function FilesScreen({
         ]}
         value={query}
       />
-      {loading && documents.length === 0 ? (
+      {loading && files.length === 0 ? (
         <StateView kind="loading" title="Loading files" />
-      ) : error && documents.length === 0 ? (
+      ) : error && files.length === 0 ? (
         <StateView
           actionLabel="Retry"
           description={error}
@@ -89,24 +98,24 @@ export function FilesScreen({
       ) : (
         <View style={styles.workspace}>
           <ScrollView style={[styles.fileList, { borderColor: colors.borderSubtle }]}>
-            {visible.map((document) => {
-              const selected = selectedPath === document.path;
+            {visible.map((file) => {
+              const selected = selectedPath === file.path;
               return (
                 <Pressable
-                  accessibilityLabel={`Open file ${document.path}`}
+                  accessibilityLabel={`Open file ${file.path}`}
                   accessibilityRole="button"
-                  key={document.id}
-                  onPress={() => onOpenDocument(document.path)}
+                  key={file.id}
+                  onPress={() => onOpenDocument(file.path)}
                   style={[
                     styles.fileRow,
                     { backgroundColor: selected ? colors.accentSoft : colors.bgBase },
                   ]}
                 >
                   <Text style={{ color: selected ? colors.accent : colors.textPrimary }}>
-                    {document.title}
+                    {file.title}
                   </Text>
                   <Text numberOfLines={1} style={{ color: colors.textMuted, fontSize: 12 }}>
-                    {document.path}
+                    {file.path}
                   </Text>
                 </Pressable>
               );
@@ -119,9 +128,7 @@ export function FilesScreen({
             {selectedPath ? (
               <>
                 <Text style={[styles.path, { color: colors.textMuted }]}>{selectedPath}</Text>
-                <Text selectable style={[styles.source, { color: colors.textPrimary }]}>
-                  {content ?? "Loading preview…"}
-                </Text>
+                <FilePreview preview={preview} selectedPath={selectedPath} />
               </>
             ) : (
               <Text style={{ color: colors.textMuted }}>Select a file to preview.</Text>
@@ -130,6 +137,66 @@ export function FilesScreen({
         </View>
       )}
     </SafeAreaView>
+  );
+}
+
+function FilePreview({
+  preview,
+  selectedPath,
+}: {
+  preview: ThreadFileContent | null;
+  selectedPath: string;
+}) {
+  const { colors } = useAppTheme();
+  if (!preview || preview.path !== selectedPath) {
+    return <Text style={{ color: colors.textMuted }}>Loading preview…</Text>;
+  }
+  if (preview.kind === "image" && preview.dataUri) {
+    return (
+      <Image
+        accessibilityLabel={`Preview image ${selectedPath}`}
+        resizeMode="contain"
+        source={{ uri: preview.dataUri }}
+        style={styles.image}
+      />
+    );
+  }
+  if (preview.kind === "markdown" && preview.content !== null) {
+    return <MarkdownPreview content={preview.content} />;
+  }
+  return (
+    <Text selectable style={[styles.source, { color: colors.textPrimary }]}>
+      {preview.content ?? "Preview unavailable."}
+    </Text>
+  );
+}
+
+function MarkdownPreview({ content }: { content: string }) {
+  const { colors } = useAppTheme();
+  return (
+    <View style={styles.markdown}>
+      {content.split("\n").map((line, index) => {
+        const heading = line.match(/^(#{1,3})\s+(.+)$/);
+        if (heading) {
+          return (
+            <Text
+              key={index}
+              style={[
+                styles.markdownHeading,
+                { color: colors.textPrimary, fontSize: heading[1]!.length === 1 ? 24 : 19 },
+              ]}
+            >
+              {heading[2]}
+            </Text>
+          );
+        }
+        return (
+          <Text key={index} selectable style={[styles.markdownText, { color: colors.textPrimary }]}>
+            {line.replace(/^[-*]\s+/, "• ")}
+          </Text>
+        );
+      })}
+    </View>
   );
 }
 
@@ -146,6 +213,10 @@ const styles = StyleSheet.create({
   },
   headerAction: { alignItems: "center", justifyContent: "center", minHeight: 44, minWidth: 56 },
   heading: { fontSize: 18, fontWeight: "700" },
+  image: { height: 320, width: "100%" },
+  markdown: { gap: spacing.xs },
+  markdownHeading: { fontWeight: "800", marginTop: spacing.sm },
+  markdownText: { fontSize: 15, lineHeight: 22 },
   path: { fontSize: 12 },
   preview: { flex: 0.58 },
   previewContent: { gap: spacing.sm, padding: spacing.md },

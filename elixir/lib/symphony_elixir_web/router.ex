@@ -153,6 +153,8 @@ defmodule SymphonyElixirWeb.Router do
     post("/assistant/threads/:thread_id/diff/push", WorkspaceDiffController, :push_thread)
     get("/assistant/threads/:thread_id/documents", AssistantThreadDocumentController, :index)
     get("/assistant/threads/:thread_id/documents/*path", AssistantThreadDocumentController, :show)
+    get("/assistant/threads/:thread_id/files", AssistantThreadFileController, :index)
+    get("/assistant/threads/:thread_id/files/*path", AssistantThreadFileController, :show)
     get("/recents", RecentsController, :index)
     get("/projects/:project_slug/assistant/config", AssistantController, :config)
     get("/projects/:project_slug/prompt-templates", PromptTemplateController, :project_index)

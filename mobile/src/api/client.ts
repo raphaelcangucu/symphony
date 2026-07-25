@@ -50,6 +50,9 @@ import type {
   PullRequestRerunResult,
   PullRequestState,
   ThreadDocumentList,
+  ThreadFileContent,
+  ThreadFileKind,
+  ThreadFileList,
   ThreadListOptions,
   TrackerClient,
   Viewer,
@@ -375,6 +378,20 @@ export function createTrackerClient(options: CreateTrackerClientOptions): Tracke
         path: requireText(payload.path, "thread document path"),
         content: typeof payload.content === "string" ? payload.content : "",
       };
+    },
+    async threadFiles(threadId, signal) {
+      return mapThreadFileList(
+        unwrapData(await request(`${threadPath(threadId)}/files`, { signal })),
+      );
+    },
+    async threadFile(threadId, path, signal) {
+      const encodedPath = safeRelativePath(path, "workspace file path")
+        .split("/")
+        .map(encodeURIComponent)
+        .join("/");
+      return mapThreadFileContent(
+        unwrapData(await request(`${threadPath(threadId)}/files/${encodedPath}`, { signal })),
+      );
     },
     async threadDevServers(threadId, signal) {
       return mapDevServerList(
@@ -761,6 +778,46 @@ function mapViewer(payload: unknown): Viewer {
     id: requireText(record.id, "viewer id"),
     name: requireText(record.name, "viewer name"),
   };
+}
+
+function mapThreadFileList(payload: unknown): ThreadFileList {
+  const record = asRecord(payload, "thread files");
+  return {
+    available: record.available === true,
+    reason: optionalText(record.reason),
+    files: readArray(record.files ?? [], "thread files").map((value) => {
+      const file = asRecord(value, "thread file");
+      const path = requireText(file.path, "thread file path");
+      return {
+        id: typeof file.id === "string" ? file.id : path,
+        path,
+        name: typeof file.name === "string" ? file.name : path.split("/").at(-1) || path,
+        title: typeof file.title === "string" ? file.title : path.split("/").at(-1) || path,
+        kind: threadFileKind(file.kind),
+        size: finiteNumber(file.size, 0),
+        updatedAt: optionalText(file.updated_at),
+      };
+    }),
+  };
+}
+
+function mapThreadFileContent(payload: unknown): ThreadFileContent {
+  const record = asRecord(payload, "thread file content");
+  const kind = threadFileKind(record.kind);
+  const mimeType = requireText(record.mime_type, "thread file mime type");
+  const encoded = optionalText(record.content_base64);
+  return {
+    path: requireText(record.path, "thread file path"),
+    kind,
+    mimeType,
+    content: typeof record.content === "string" ? record.content : null,
+    dataUri: kind === "image" && encoded ? `data:${mimeType};base64,${encoded}` : null,
+  };
+}
+
+function threadFileKind(value: unknown): ThreadFileKind {
+  if (value === "markdown" || value === "text" || value === "image") return value;
+  throw new TrackerProtocolError("Tracker returned an unsupported workspace file kind");
 }
 
 function mapAgentAvailability(payload: unknown): AgentAvailabilityMap {
