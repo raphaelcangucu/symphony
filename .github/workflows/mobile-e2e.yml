@@ -64,7 +64,7 @@ jobs:
         run: |
           mix deps.get
           mix compile
-          mix test \
+          MIX_ENV=test mix test \
             test/symphony_elixir/mobile_rpc \
             test/symphony_elixir_web/mobile_rpc_socket_test.exs \
             test/symphony_elixir_web/controllers/tracker/mobile_rpc_controller_test.exs \
