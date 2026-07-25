@@ -8,7 +8,7 @@ defmodule SymphonyElixir.MobileRpc.Devices do
 
   import Ecto.Query
 
-  alias SymphonyElixir.MobileRpc.Device
+  alias SymphonyElixir.MobileRpc.{Device, Socket}
   alias SymphonyElixir.Repo
 
   @scope "mobile"
@@ -111,6 +111,7 @@ defmodule SymphonyElixir.MobileRpc.Devices do
     )
     |> Repo.update_all(set: [revoked_at: current_time, updated_at: current_time])
 
+    Socket.disconnect_device(device_id)
     :ok
   end
 

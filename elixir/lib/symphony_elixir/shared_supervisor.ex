@@ -32,6 +32,8 @@ defmodule SymphonyElixir.SharedSupervisor do
       SymphonyElixir.Claude.ApprovalBroker.registry_child_spec(),
       SymphonyElixir.Assistant.UserInputBroker.registry_child_spec(),
       SymphonyElixir.Cursor.CreatePlanBroker.registry_child_spec(),
+      {Registry, keys: :duplicate, name: SymphonyElixir.MobileRpc.ConnectionRegistry},
+      SymphonyElixir.MobileRpc.AuthLimiter,
       SymphonyElixir.Claude.AppServer.ToolGateway,
       SymphonyElixir.Observability.Registry,
       SymphonyElixir.Repo,

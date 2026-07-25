@@ -163,7 +163,7 @@ Commit: `feat(mobile-rpc): add host identity and device pairing`
 - Create: `mobile/src/rpc/handshake.test.ts`
 - Create: `mobile/src/rpc/websocket-adapter.ts`
 
-- [ ] **Step 1: Write failing handshake state-machine tests**
+- [x] **Step 1: Write failing handshake state-machine tests**
 
 Cover valid negotiation, no common version, wrong host id, malformed keys,
 plaintext auth rejection, invalid/revoked token, transcript mismatch, timeout,
@@ -180,12 +180,12 @@ export type HandshakeState =
   | "protocol_incompatible";
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run only `mobile/src/rpc/handshake.test.ts` in WSL. Run WebSock integration in
 CI.
 
-- [ ] **Step 3: Implement `/mobile/rpc`**
+- [x] **Step 3: Implement `/mobile/rpc`**
 
 Use `WebSockAdapter` to upgrade one raw WebSocket. Accept no query-string
 credential. The socket may process only `hello` before key derivation and only
@@ -199,13 +199,13 @@ def handle_in({frame, opcode: :text}, %{phase: :awaiting_hello} = state)
 def handle_in({frame, opcode: :binary}, %{phase: :awaiting_auth} = state)
 ```
 
-- [ ] **Step 4: Add connection supervision and cleanup**
+- [x] **Step 4: Add connection supervision and cleanup**
 
 Track sockets by `device_id`, terminate all of one device on revocation, clear
 session keys and subscriptions on disconnect, and rate-limit pairing/auth
 failures.
 
-- [ ] **Step 5: Verify GREEN and commit**
+- [x] **Step 5: Verify GREEN and commit**
 
 Commit: `feat(mobile-rpc): add encrypted websocket handshake`
 

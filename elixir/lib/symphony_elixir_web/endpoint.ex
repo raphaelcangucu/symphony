@@ -23,6 +23,7 @@ defmodule SymphonyElixirWeb.Endpoint do
 
   plug(Plug.RequestId)
   plug(Plug.Telemetry, event_prefix: [:phoenix, :endpoint])
+  plug(SymphonyElixirWeb.MobileRpcUpgradePlug)
 
   # Reverse-proxy preview-host traffic before Plug.Parsers so the upstream
   # receives the raw request body. Parsing here would consume the body and
