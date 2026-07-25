@@ -54,6 +54,15 @@ defmodule SymphonyElixir.Codex.CodingAgentTest do
       end)
     end
 
+    test "preserves a completed turn when auxiliary archival cannot be sent" do
+      with_fake_archive_disconnect_server(fn workspace, issue ->
+        assert {:ok, result} =
+                 AppServer.run(workspace, "Generate a title", issue, archive_on_stop: true)
+
+        assert result[:result] == :turn_completed
+      end)
+    end
+
     test "renames an existing native thread out of band" do
       with_fake_lifecycle_server(fn workspace, _issue, trace_file ->
         assert :ok =
@@ -638,6 +647,66 @@ defmodule SymphonyElixir.Codex.CodingAgentTest do
       }
 
       fun.(workspace, issue, trace_file)
+    after
+      File.rm_rf(test_root)
+    end
+  end
+
+  defp with_fake_archive_disconnect_server(fun) when is_function(fun, 2) do
+    test_root =
+      Path.join(
+        System.tmp_dir!(),
+        "symphony-elixir-coding-agent-archive-disconnect-#{System.unique_integer([:positive])}"
+      )
+
+    try do
+      workspace_root = Path.join(test_root, "workspaces")
+      workspace = Path.join(workspace_root, "MT-ARCHIVE")
+      codex_binary = Path.join(test_root, "fake-codex")
+
+      File.mkdir_p!(workspace)
+
+      File.write!(codex_binary, """
+      #!/bin/sh
+      while IFS= read -r line; do
+        case "$line" in
+          *'"method":"initialize"'*)
+            printf '%s\\n' '{"id":1,"result":{}}'
+            ;;
+          *'"method":"initialized"'*)
+            ;;
+          *'"method":"thread/start"'*)
+            printf '%s\\n' '{"id":2,"result":{"thread":{"id":"thread-archive-disconnect"}}}'
+            ;;
+          *'"method":"turn/start"'*)
+            printf '%s\\n' '{"id":3,"result":{"turn":{"id":"turn-archive-disconnect"}}}'
+            printf '%s\\n' '{"method":"turn/completed"}'
+            exit 0
+            ;;
+          *)
+            ;;
+        esac
+      done
+      """)
+
+      File.chmod!(codex_binary, 0o755)
+
+      write_workflow_file!(Workflow.workflow_file_path(),
+        workspace_root: workspace_root,
+        command: "#{codex_binary} app-server"
+      )
+
+      issue = %Issue{
+        id: "issue-archive-disconnect",
+        identifier: "MT-ARCHIVE",
+        title: "Archive disconnect",
+        description: "Exercise best-effort archival after app-server exit",
+        state: "In Progress",
+        url: "https://example.org/issues/MT-ARCHIVE",
+        labels: ["backend"]
+      }
+
+      fun.(workspace, issue)
     after
       File.rm_rf(test_root)
     end

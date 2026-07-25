@@ -798,18 +798,29 @@ defmodule SymphonyElixir.Codex.CodingAgent do
 
   defp maybe_archive_on_stop(%{port: port, thread_id: thread_id}, opts) do
     if Keyword.get(opts, :archive_on_stop, false) == true do
-      send_message(port, %{
-        "method" => "thread/archive",
-        "id" => @thread_archive_id,
-        "params" => %{"threadId" => thread_id}
-      })
+      try do
+        # The completed turn is authoritative. A server that disconnects while
+        # handling this optional request must not take down the linked caller.
+        :erlang.unlink(port)
 
-      case await_response(port, @thread_archive_id) do
-        {:ok, _result} ->
-          :ok
+        send_message(port, %{
+          "method" => "thread/archive",
+          "id" => @thread_archive_id,
+          "params" => %{"threadId" => thread_id}
+        })
 
-        {:error, reason} ->
-          Logger.warning("Codex auxiliary thread archive failed thread_id=#{thread_id}: #{inspect(reason)}")
+        case await_response(port, @thread_archive_id) do
+          {:ok, _result} ->
+            :ok
+
+          {:error, reason} ->
+            Logger.warning("Codex auxiliary thread archive failed thread_id=#{thread_id}: #{inspect(reason)}")
+
+            :ok
+        end
+      catch
+        kind, reason ->
+          Logger.warning("Codex auxiliary thread archive failed thread_id=#{thread_id}: #{inspect({kind, reason})}")
 
           :ok
       end
@@ -2122,6 +2133,9 @@ defmodule SymphonyElixir.Codex.CodingAgent do
           :ok
         rescue
           ArgumentError ->
+            :ok
+        catch
+          :exit, _reason ->
             :ok
         end
     end

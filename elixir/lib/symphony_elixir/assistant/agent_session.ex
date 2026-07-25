@@ -13,6 +13,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
     GitHubAuthoring,
     History,
     IssueDocuments,
+    NativeThreadNames,
     ProjectExploreWorkspace,
     SkillProfiles,
     SubtaskAuthoring,
@@ -1870,8 +1871,9 @@ defmodule SymphonyElixir.Assistant.AgentSession do
     cond do
       is_binary(backend_id) ->
         # Backend returned a session/thread id: persist both the agent kind and the id.
-        with {:ok, thread} <- History.set_thread_agent(thread, agent_kind) do
-          History.put_agent_thread_id(thread, agent_kind, backend_id)
+        with {:ok, updated_thread} <- History.set_thread_agent(thread, agent_kind),
+             {:ok, updated_thread} <- History.put_agent_thread_id(updated_thread, agent_kind, backend_id) do
+          {:ok, maybe_sync_fresh_codex_thread(thread, updated_thread, agent_kind)}
         end
 
       stored_kind != agent_kind and is_binary(stored_kind) ->
@@ -1895,14 +1897,37 @@ defmodule SymphonyElixir.Assistant.AgentSession do
 
   defp maybe_put_codex_resume_thread_id(opts, _agent_kind), do: opts
 
-  defp maybe_put_codex_thread_name(opts, %{title: title}, "codex") when is_binary(title) do
-    case String.trim(title) do
-      "" -> opts
-      trimmed -> Keyword.put(opts, :thread_name, trimmed)
+  defp maybe_put_codex_thread_name(opts, thread, "codex") do
+    if codex_thread_id(thread) do
+      opts
+    else
+      case Map.get(thread, :title) do
+        title when is_binary(title) ->
+          case String.trim(title) do
+            "" -> opts
+            trimmed -> Keyword.put(opts, :thread_name, trimmed)
+          end
+
+        _other ->
+          opts
+      end
     end
   end
 
   defp maybe_put_codex_thread_name(opts, _thread, _agent_kind), do: opts
+
+  defp maybe_sync_fresh_codex_thread(previous_thread, updated_thread, "codex") do
+    if codex_thread_id(previous_thread), do: updated_thread, else: NativeThreadNames.sync(updated_thread)
+  end
+
+  defp maybe_sync_fresh_codex_thread(_previous_thread, updated_thread, _agent_kind), do: updated_thread
+
+  defp codex_thread_id(thread) do
+    case History.agent_thread_id(thread, "codex") || Map.get(thread, :codex_thread_id) do
+      id when is_binary(id) and id != "" -> id
+      _other -> nil
+    end
+  end
 
   # Resolves the effective agent kind for a turn with the priority chain:
   # active Goal provider > context (per-message) > thread's stored kind > operator default.

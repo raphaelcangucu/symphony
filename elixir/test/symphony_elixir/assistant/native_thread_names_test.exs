@@ -98,4 +98,81 @@ defmodule SymphonyElixir.Assistant.NativeThreadNamesTest do
     assert log =~ "native thread name sync failed"
     assert log =~ "codex-thread-15"
   end
+
+  test "contains setter exceptions, exits, and unexpected results" do
+    thread = %Thread{
+      id: 16,
+      title: "Keep this title",
+      workspace_path: "/tmp/SYM-16",
+      agent_thread_ids: %{"codex" => "codex-thread-16"}
+    }
+
+    for setter <- [
+          fn _, _, _, _ -> raise "port closed" end,
+          fn _, _, _, _ -> exit(:epipe) end,
+          fn _, _, _, _ -> :unexpected end
+        ] do
+      log =
+        capture_log(fn ->
+          assert NativeThreadNames.sync(thread, setter: setter) == thread
+        end)
+
+      assert log =~ "native thread name sync failed"
+    end
+  end
+
+  test "reloads the canonical title inside the serialized sync" do
+    test_pid = self()
+
+    stale = %Thread{
+      id: 17,
+      title: "Stale title",
+      workspace_path: "/tmp/SYM-17",
+      agent_thread_ids: %{"codex" => "codex-thread-17"}
+    }
+
+    current = %{stale | title: "Current title"}
+
+    assert NativeThreadNames.sync(stale,
+             reloader: fn 17 -> {:ok, current} end,
+             setter: fn _, _, name, _ ->
+               send(test_pid, {:canonical_name, name})
+               :ok
+             end
+           ) == current
+
+    assert_receive {:canonical_name, "Current title"}
+  end
+
+  test "serializes concurrent native updates for the same Symphony thread" do
+    test_pid = self()
+
+    thread = %Thread{
+      id: 18,
+      title: "Canonical title",
+      workspace_path: "/tmp/SYM-18",
+      agent_thread_ids: %{"codex" => "codex-thread-18"}
+    }
+
+    setter = fn _, _, _, _ ->
+      send(test_pid, {:setter_entered, self()})
+
+      receive do
+        :release_setter -> :ok
+      end
+    end
+
+    first = Task.async(fn -> NativeThreadNames.sync(thread, setter: setter) end)
+    assert_receive {:setter_entered, first_pid}
+
+    second = Task.async(fn -> NativeThreadNames.sync(thread, setter: setter) end)
+    refute_receive {:setter_entered, _second_pid}, 50
+
+    send(first_pid, :release_setter)
+    assert Task.await(first) == thread
+
+    assert_receive {:setter_entered, second_pid}, 1_000
+    send(second_pid, :release_setter)
+    assert Task.await(second) == thread
+  end
 end

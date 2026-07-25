@@ -216,7 +216,7 @@ git status --short
 
 Expected: no whitespace errors and only intended files changed.
 
-- [ ] **Step 3: Request code review and address findings**
+- [x] **Step 3: Request code review and address findings**
 
 Review the diff against the three requested behaviors, fix all Critical and
 Important findings, then rerun the affected focused tests and full quality gate.

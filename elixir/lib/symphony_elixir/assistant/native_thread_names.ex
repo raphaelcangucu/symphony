@@ -13,10 +13,33 @@ defmodule SymphonyElixir.Assistant.NativeThreadNames do
   alias SymphonyElixir.Assistant.{History, Thread}
   alias SymphonyElixir.Codex.CodingAgent
 
-  @type setter :: (Path.t(), String.t(), String.t(), keyword() -> :ok | {:error, term()})
+  @type setter :: (Path.t(), String.t(), String.t(), keyword() -> term())
 
   @spec sync(Thread.t(), keyword()) :: Thread.t()
   def sync(%Thread{} = thread, opts \\ []) when is_list(opts) do
+    try do
+      result =
+        :global.trans({{__MODULE__, lock_id(thread)}, self()}, fn ->
+          current = reload_thread(thread, opts)
+          do_sync(current, opts)
+        end)
+
+      case result do
+        %Thread{} = current ->
+          current
+
+        unexpected ->
+          log_failure(native_thread_id(thread), {:lock_failed, unexpected})
+          thread
+      end
+    catch
+      kind, reason ->
+        log_failure(native_thread_id(thread), {kind, reason})
+        thread
+    end
+  end
+
+  defp do_sync(thread, opts) do
     with {:ok, workspace, thread_id, title} <- sync_context(thread) do
       setter =
         Keyword.get(opts, :setter) ||
@@ -25,13 +48,22 @@ defmodule SymphonyElixir.Assistant.NativeThreadNames do
 
       coding_agent_opts = Keyword.get(opts, :coding_agent_opts, [])
 
-      case setter.(workspace, thread_id, title, coding_agent_opts) do
-        :ok ->
-          thread
+      try do
+        case setter.(workspace, thread_id, title, coding_agent_opts) do
+          :ok ->
+            thread
 
-        {:error, reason} ->
-          Logger.warning("Codex native thread name sync failed thread_id=#{thread_id}: #{inspect(reason)}")
+          {:error, reason} ->
+            log_failure(thread_id, reason)
+            thread
 
+          unexpected ->
+            log_failure(thread_id, {:unexpected_result, unexpected})
+            thread
+        end
+      catch
+        kind, reason ->
+          log_failure(thread_id, {kind, reason})
           thread
       end
     else
@@ -39,9 +71,20 @@ defmodule SymphonyElixir.Assistant.NativeThreadNames do
     end
   end
 
+  defp reload_thread(%Thread{id: id} = thread, opts) when is_integer(id) and id > 0 do
+    reloader = Keyword.get(opts, :reloader, &History.get_thread/1)
+
+    case reloader.(id) do
+      {:ok, %Thread{} = current} -> current
+      _other -> thread
+    end
+  end
+
+  defp reload_thread(thread, _opts), do: thread
+
   defp sync_context(%Thread{} = thread) do
     workspace = nonblank(thread.workspace_path)
-    thread_id = nonblank(History.agent_thread_id(thread, "codex")) || nonblank(thread.codex_thread_id)
+    thread_id = native_thread_id(thread)
     title = nonblank(thread.title)
 
     if workspace && thread_id && title do
@@ -49,6 +92,17 @@ defmodule SymphonyElixir.Assistant.NativeThreadNames do
     else
       :skip
     end
+  end
+
+  defp native_thread_id(%Thread{} = thread) do
+    nonblank(History.agent_thread_id(thread, "codex")) || nonblank(thread.codex_thread_id)
+  end
+
+  defp lock_id(%Thread{id: id}) when is_integer(id) and id > 0, do: id
+  defp lock_id(%Thread{} = thread), do: native_thread_id(thread) || make_ref()
+
+  defp log_failure(thread_id, reason) do
+    Logger.warning("Codex native thread name sync failed thread_id=#{thread_id || "unknown"}: #{inspect(reason)}")
   end
 
   defp nonblank(value) when is_binary(value) do
