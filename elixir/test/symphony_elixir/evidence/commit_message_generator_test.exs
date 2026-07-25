@@ -23,11 +23,12 @@ defmodule SymphonyElixir.Evidence.CommitMessageGeneratorTest do
   end
 
   test "build_prompt asks for conventional commit only" do
-    prompt = CommitMessageGenerator.build_prompt(%{
-      identifier: "510",
-      title: "Dock",
-      diff_summary: "+ foo"
-    })
+    prompt =
+      CommitMessageGenerator.build_prompt(%{
+        identifier: "510",
+        title: "Dock",
+        diff_summary: "+ foo"
+      })
 
     assert prompt =~ "Return only the final commit message"
     assert prompt =~ "510"

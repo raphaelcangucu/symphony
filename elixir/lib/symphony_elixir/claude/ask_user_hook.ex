@@ -53,6 +53,7 @@ defmodule SymphonyElixir.Claude.AskUserHook do
     timeout_ms = Keyword.get(opts, :timeout_ms, 300_000)
 
     unless is_binary(token) and token != "", do: raise(ArgumentError, "session_token required")
+
     unless is_binary(base_url) and String.starts_with?(base_url, "http://127.0.0.1"),
       do: raise(ArgumentError, "gateway_base_url must be loopback http")
 

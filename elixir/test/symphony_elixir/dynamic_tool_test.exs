@@ -265,6 +265,7 @@ defmodule SymphonyElixir.Codex.DynamicToolTest do
         )
 
       assert created["success"] == true
+
       comment_id =
         created["contentItems"]
         |> hd()

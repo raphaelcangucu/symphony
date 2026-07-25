@@ -27,6 +27,7 @@ defmodule SymphonyElixir.Orchestrator do
   alias SymphonyElixir.Evidence
   alias SymphonyElixir.GitHub.IssueMarker
   alias SymphonyElixir.LocalTracker.{Context, IssueMapper, Repository}
+
   alias SymphonyElixir.Orchestrator.{
     AgentTotals,
     BundleCoordinator,
@@ -35,6 +36,7 @@ defmodule SymphonyElixir.Orchestrator do
     IncompleteReason,
     RunUpdate
   }
+
   alias SymphonyElixir.PublicRouting
   alias SymphonyElixir.PushNotifications.Dispatcher, as: PushDispatcher
   alias SymphonyElixir.RunContract.Finalizer
@@ -3083,8 +3085,7 @@ defmodule SymphonyElixir.Orchestrator do
     %{
       state
       | agent_totals: AgentTotals.apply_delta(agent_totals, token_delta),
-        agent_totals_by_project:
-          AgentTotals.apply_project_delta(by_project, project_slug, token_delta)
+        agent_totals_by_project: AgentTotals.apply_project_delta(by_project, project_slug, token_delta)
     }
   end
 

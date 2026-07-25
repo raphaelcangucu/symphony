@@ -167,9 +167,7 @@ defmodule SymphonyElixir.Cursor.CodingAgentTest do
     on_message = fn message -> Agent.update(collector, &[message | &1]) end
 
     assert {:ok, turn} =
-             CodingAgent.run_turn(session, "do the thing", %{id: "1", identifier: "T-1"},
-               on_message: on_message
-             )
+             CodingAgent.run_turn(session, "do the thing", %{id: "1", identifier: "T-1"}, on_message: on_message)
 
     messages = Agent.get(collector, &Enum.reverse/1)
     Agent.stop(collector)

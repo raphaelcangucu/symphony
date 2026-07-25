@@ -24,9 +24,7 @@ defmodule SymphonyElixir.Assistant.HistoryTitleUserSetTest do
       History.create_freeform_thread(%{title: "Chat", workspace_path: "/tmp/title-auto-set"})
 
     assert {:ok, updated} =
-             History.update_thread_sidebar_metadata(thread.id, %{title: "Auto title"},
-               mark_user_title: false
-             )
+             History.update_thread_sidebar_metadata(thread.id, %{title: "Auto title"}, mark_user_title: false)
 
     assert updated.title == "Auto title"
     refute updated.metadata["title_user_set"] == true

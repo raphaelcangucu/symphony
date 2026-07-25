@@ -194,8 +194,7 @@ defmodule SymphonyElixir.Assistant.GoalTools do
       },
       "objective" => %{
         "type" => ["string", "null"],
-        "description" =>
-          "Required for set_objective. Only set when the user activated goal mode via `/goal` or an explicit request."
+        "description" => "Required for set_objective. Only set when the user activated goal mode via `/goal` or an explicit request."
       },
       "token_budget" => %{
         "type" => ["integer", "null"],

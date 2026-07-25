@@ -136,8 +136,10 @@ defmodule SymphonyElixir.Evidence.SessionAuditTest do
 
     prev = Application.get_env(:symphony_elixir, :codex_sessions_dir)
     Application.put_env(:symphony_elixir, :codex_sessions_dir, sessions_dir)
+
     on_exit(fn ->
-      if prev, do: Application.put_env(:symphony_elixir, :codex_sessions_dir, prev),
+      if prev,
+        do: Application.put_env(:symphony_elixir, :codex_sessions_dir, prev),
         else: Application.delete_env(:symphony_elixir, :codex_sessions_dir)
     end)
 

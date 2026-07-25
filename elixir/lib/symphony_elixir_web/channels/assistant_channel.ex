@@ -347,7 +347,6 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     end
   end
 
-
   def handle_in("goal_status", _payload, socket) do
     case assistant_thread(socket) do
       {:ok, thread} ->

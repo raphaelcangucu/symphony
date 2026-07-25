@@ -1096,8 +1096,7 @@ defmodule SymphonyElixir.Codex.DynamicTool do
   defp comment_tool_error_payload(:missing_comment_id) do
     %{
       "error" => %{
-        "message" =>
-          "`update_comment` / `delete_comment` require a `comment_id`. Call `list_comments` first to find the comment id."
+        "message" => "`update_comment` / `delete_comment` require a `comment_id`. Call `list_comments` first to find the comment id."
       }
     }
   end

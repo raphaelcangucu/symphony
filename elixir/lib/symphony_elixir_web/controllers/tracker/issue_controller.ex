@@ -402,7 +402,9 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
 
       true ->
         case Context.get_agent_settings(project.slug, identifier) do
-          {:ok, %{agent_kind: kind}} when is_binary(kind) and kind != "" -> kind
+          {:ok, %{agent_kind: kind}} when is_binary(kind) and kind != "" ->
+            kind
+
           _ ->
             case IssueAdapter.dispatch(project, :get_issue, [identifier]) do
               {:ok, %{agent: agent}} when is_binary(agent) and agent != "" -> agent
@@ -598,9 +600,7 @@ defmodule SymphonyElixirWeb.Tracker.IssueController do
               :ok
 
             {:error, reason} ->
-              Logger.warning(
-                "Failed to persist execution settings project=#{project.slug} identifier=#{identifier} reason=#{inspect(reason)}"
-              )
+              Logger.warning("Failed to persist execution settings project=#{project.slug} identifier=#{identifier} reason=#{inspect(reason)}")
 
               :ok
           end

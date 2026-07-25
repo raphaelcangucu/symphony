@@ -150,8 +150,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
 
   # Tools that never mutate tracker/workspace state. Used by Cursor interactive
   # `build` to skip the composer approval card for safe reads.
-  @read_only_tools MapSet.new(
-                     ~w(
+  @read_only_tools MapSet.new(~w(
                        list_issues
                        list_comments
                        list_pull_requests
@@ -182,8 +181,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
                        kb_list_repositories
                        kb_search_pages
                        kb_read_page
-                     ) ++ @read_tools ++ @discovery_tools
-                   )
+                     ) ++ @read_tools ++ @discovery_tools)
 
   @spec supported_tools() :: [String.t()]
   def supported_tools, do: @supported_tools
@@ -1978,9 +1976,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
   end
 
   defp codex_failure_response(:missing_api_key) do
-    codex_failure_response(
-      "Notion API key is not configured. Set Settings → Providers → Notion, or NOTION_API_KEY."
-    )
+    codex_failure_response("Notion API key is not configured. Set Settings → Providers → Notion, or NOTION_API_KEY.")
   end
 
   defp codex_failure_response(:invalid_notion_url) do
@@ -1988,9 +1984,7 @@ defmodule SymphonyElixir.Assistant.ToolExecutor do
   end
 
   defp codex_failure_response(:forbidden) do
-    codex_failure_response(
-      "Notion returned 403 Forbidden. Share the page/database with the Integration and check the token."
-    )
+    codex_failure_response("Notion returned 403 Forbidden. Share the page/database with the Integration and check the token.")
   end
 
   defp codex_failure_response({:missing_field, field}) do
