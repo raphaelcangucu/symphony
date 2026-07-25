@@ -10,7 +10,7 @@ defmodule SymphonyElixir.Assistant.TitleGenerator do
 
   require Logger
 
-  alias SymphonyElixir.Assistant.{History, Thread}
+  alias SymphonyElixir.Assistant.{History, NativeThreadNames, Thread}
   alias SymphonyElixir.Codex.CodingAgent
 
   @sidebar_title_max_graphemes 160
@@ -140,12 +140,14 @@ defmodule SymphonyElixir.Assistant.TitleGenerator do
          :ok <- check_mode(thread, mode),
          messages <- history_payloads(thread_id),
          {:ok, title} <-
-           generate(messages,
+           generate(
+             messages,
              Keyword.take(opts, [:runner]) ++
                [workspace: thread.workspace_path || System.tmp_dir!()]
            ),
          {:ok, updated} <-
            History.update_thread_sidebar_metadata(thread_id, %{title: title}, mark_user_title: false),
+         updated <- NativeThreadNames.sync(updated),
          {:ok, stamped} <- maybe_stamp_auto(updated, mode) do
       {:ok, stamped}
     end
@@ -259,11 +261,12 @@ defmodule SymphonyElixir.Assistant.TitleGenerator do
   defp resolve_runner(opts) do
     Keyword.get(opts, :runner) ||
       Application.get_env(:symphony_elixir, :title_generator_runner) ||
-      &default_runner/4
+      (&default_runner/4)
   end
 
   defp runner_opts(_opts) do
     [
+      archive_on_stop: true,
       dynamic_tools: [],
       tool_executor: fn _tool, _arguments -> {:error, :no_tools} end
     ]

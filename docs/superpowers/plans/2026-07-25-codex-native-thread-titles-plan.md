@@ -14,7 +14,7 @@
 - Modify: `elixir/lib/symphony_elixir/codex/coding_agent.ex`
 - Test: `elixir/test/symphony_elixir/codex/coding_agent_test.exs`
 
-- [ ] **Step 1: Write failing protocol tests**
+- [x] **Step 1: Write failing protocol tests**
 
 Add tests that assert:
 
@@ -27,7 +27,7 @@ assert message_order(messages) |> Enum.take(-1) == ["thread/archive"]
 
 Cover a nonblank `:thread_name`, whitespace omission, and `:archive_on_stop`.
 
-- [ ] **Step 2: Run tests and verify RED**
+- [x] **Step 2: Run tests and verify RED**
 
 Run:
 
@@ -38,7 +38,7 @@ mix test test/symphony_elixir/codex/coding_agent_test.exs
 
 Expected: failures because neither JSON-RPC request is emitted.
 
-- [ ] **Step 3: Implement minimal protocol operations**
+- [x] **Step 3: Implement minimal protocol operations**
 
 Add request IDs and helpers that emit:
 
@@ -61,7 +61,7 @@ and:
 Apply a nonblank `:thread_name` after start/resume and perform best-effort
 archival in `run/4` teardown when `:archive_on_stop` is true.
 
-- [ ] **Step 4: Run tests and verify GREEN**
+- [x] **Step 4: Run tests and verify GREEN**
 
 Run:
 
@@ -78,7 +78,7 @@ Expected: all tests pass.
 - Modify: `elixir/lib/symphony_elixir/assistant/agent_session.ex`
 - Test: `elixir/test/symphony_elixir/assistant/agent_session_test.exs`
 
-- [ ] **Step 1: Write a failing option-propagation test**
+- [x] **Step 1: Write a failing option-propagation test**
 
 For a titled Codex-backed assistant thread, assert the injected runner receives:
 
@@ -86,7 +86,7 @@ For a titled Codex-backed assistant thread, assert the injected runner receives:
 assert Keyword.fetch!(opts, :thread_name) == thread.title
 ```
 
-- [ ] **Step 2: Run the focused test and verify RED**
+- [x] **Step 2: Run the focused test and verify RED**
 
 Run:
 
@@ -97,12 +97,12 @@ mix test test/symphony_elixir/assistant/agent_session_test.exs
 
 Expected: failure because `:thread_name` is absent.
 
-- [ ] **Step 3: Add the canonical title to Codex runner options**
+- [x] **Step 3: Add the canonical title to Codex runner options**
 
 Introduce one helper that adds `:thread_name` only for Codex-backed threads and
 call it from every persistent assistant scope before starting the runner.
 
-- [ ] **Step 4: Run tests and verify GREEN**
+- [x] **Step 4: Run tests and verify GREEN**
 
 Run:
 
@@ -123,13 +123,13 @@ Expected: all tests pass.
 - Test: `elixir/test/symphony_elixir/assistant/title_generator_test.exs`
 - Test: `elixir/test/symphony_elixir_web/controllers/tracker/assistant_thread_controller_test.exs`
 
-- [ ] **Step 1: Write failing reconciliation tests**
+- [x] **Step 1: Write failing reconciliation tests**
 
 Verify that Codex threads with a native ID, workspace, and nonblank title invoke
 an injected name setter, while non-Codex or incomplete threads are skipped.
 Verify manual controller renames and generated titles call the reconciler.
 
-- [ ] **Step 2: Run focused tests and verify RED**
+- [x] **Step 2: Run focused tests and verify RED**
 
 Run:
 
@@ -142,13 +142,13 @@ mix test test/symphony_elixir_web/controllers/tracker/assistant_thread_controlle
 
 Expected: failures because reconciliation does not exist.
 
-- [ ] **Step 3: Implement best-effort reconciliation**
+- [x] **Step 3: Implement best-effort reconciliation**
 
 Add a focused module that calls `CodingAgent.set_thread_name/4`, returns the
 thread unchanged, and logs failures without rolling back Symphony's persisted
 title. Call it after title persistence in both manual and generated paths.
 
-- [ ] **Step 4: Run focused tests and verify GREEN**
+- [x] **Step 4: Run focused tests and verify GREEN**
 
 Run the same three commands. Expected: all tests pass.
 
@@ -158,7 +158,7 @@ Run the same three commands. Expected: all tests pass.
 - Modify: `elixir/lib/symphony_elixir/assistant/title_generator.ex`
 - Test: `elixir/test/symphony_elixir/assistant/title_generator_test.exs`
 
-- [ ] **Step 1: Write a failing runner-options test**
+- [x] **Step 1: Write a failing runner-options test**
 
 Assert the title generator invokes its runner with:
 
@@ -166,7 +166,7 @@ Assert the title generator invokes its runner with:
 assert Keyword.fetch!(runner_opts, :archive_on_stop)
 ```
 
-- [ ] **Step 2: Run the focused test and verify RED**
+- [x] **Step 2: Run the focused test and verify RED**
 
 Run:
 
@@ -177,12 +177,12 @@ mix test test/symphony_elixir/assistant/title_generator_test.exs
 
 Expected: failure because the option is absent.
 
-- [ ] **Step 3: Enable teardown archival**
+- [x] **Step 3: Enable teardown archival**
 
 Add `archive_on_stop: true` only to the title generator's one-shot runner
 options.
 
-- [ ] **Step 4: Run the focused test and verify GREEN**
+- [x] **Step 4: Run the focused test and verify GREEN**
 
 Run the same command. Expected: all tests pass.
 
@@ -201,7 +201,11 @@ make -C elixir all
 
 Expected: exit 0 with no failures.
 
-- [ ] **Step 2: Review the final diff**
+Executed on 2026-07-25. Focused formatting and 96 affected tests pass. The
+repository-wide gate remains blocked by pre-existing formatting drift and
+three missing `@spec` declarations outside this diff.
+
+- [x] **Step 2: Review the final diff**
 
 Run:
 

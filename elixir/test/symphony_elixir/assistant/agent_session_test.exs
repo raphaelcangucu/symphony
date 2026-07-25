@@ -226,6 +226,7 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
 
     assert is_function(Keyword.get(opts, :tool_executor), 2)
     assert Keyword.get(opts, :assistant_thread_id) == thread.id
+    assert Keyword.fetch!(opts, :thread_name) == "F"
   end
 
   test "each persistent scope binds its exact thread into the goal ToolExecutor", %{

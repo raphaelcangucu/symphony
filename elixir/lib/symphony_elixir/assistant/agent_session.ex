@@ -78,6 +78,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
            |> Keyword.put(:agent_kind, agent_kind)
            |> Keyword.put(:agent_thread_id, History.agent_thread_id(thread, agent_kind))
            |> maybe_put_codex_resume_thread_id(agent_kind)
+           |> maybe_put_codex_thread_name(thread, agent_kind)
            |> Keyword.put(:assistant_thread_id, thread.id)
            |> maybe_put_authoring_goal(thread, agent_kind),
          history_before_turn <- thread_id |> History.list_messages_for_thread() |> Enum.map(&History.message_payload/1),
@@ -117,6 +118,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
            |> Keyword.put(:agent_kind, agent_kind)
            |> Keyword.put(:agent_thread_id, History.agent_thread_id(thread, agent_kind))
            |> maybe_put_codex_resume_thread_id(agent_kind)
+           |> maybe_put_codex_thread_name(thread, agent_kind)
            |> Keyword.put(:assistant_thread_id, thread.id)
            |> maybe_put_authoring_goal(thread, agent_kind),
          {:ok, trimmed} <- normalize_message(message),
@@ -160,6 +162,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
            |> Keyword.put(:agent_kind, agent_kind)
            |> Keyword.put(:agent_thread_id, History.agent_thread_id(thread, agent_kind))
            |> maybe_put_codex_resume_thread_id(agent_kind)
+           |> maybe_put_codex_thread_name(thread, agent_kind)
            |> Keyword.put(:assistant_thread_id, thread.id)
            |> maybe_put_authoring_goal(thread, agent_kind),
          {:ok, trimmed} <- normalize_message(message),
@@ -203,6 +206,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
            |> Keyword.put(:agent_kind, agent_kind)
            |> Keyword.put(:agent_thread_id, History.agent_thread_id(thread, agent_kind))
            |> maybe_put_codex_resume_thread_id(agent_kind)
+           |> maybe_put_codex_thread_name(thread, agent_kind)
            |> Keyword.put(:assistant_thread_id, thread.id)
            |> maybe_put_authoring_goal(thread, agent_kind),
          {:ok, trimmed} <- normalize_message(message),
@@ -266,6 +270,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
            |> Keyword.put(:agent_kind, agent_kind)
            |> Keyword.put(:agent_thread_id, History.agent_thread_id(thread, agent_kind))
            |> maybe_put_codex_resume_thread_id(agent_kind)
+           |> maybe_put_codex_thread_name(thread, agent_kind)
            |> Keyword.put(:assistant_thread_id, thread.id)
            |> maybe_put_authoring_goal(thread, agent_kind),
          {:ok, trimmed} <- normalize_message(message),
@@ -314,6 +319,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
            |> Keyword.put(:agent_kind, agent_kind)
            |> Keyword.put(:agent_thread_id, History.agent_thread_id(thread, agent_kind))
            |> maybe_put_codex_resume_thread_id(agent_kind)
+           |> maybe_put_codex_thread_name(thread, agent_kind)
            |> Keyword.put(:assistant_thread_id, thread.id)
            |> maybe_put_authoring_goal(thread, agent_kind) do
       continue_goal_turn(thread, context, opts, agent_kind)
@@ -1888,6 +1894,15 @@ defmodule SymphonyElixir.Assistant.AgentSession do
   end
 
   defp maybe_put_codex_resume_thread_id(opts, _agent_kind), do: opts
+
+  defp maybe_put_codex_thread_name(opts, %{title: title}, "codex") when is_binary(title) do
+    case String.trim(title) do
+      "" -> opts
+      trimmed -> Keyword.put(opts, :thread_name, trimmed)
+    end
+  end
+
+  defp maybe_put_codex_thread_name(opts, _thread, _agent_kind), do: opts
 
   # Resolves the effective agent kind for a turn with the priority chain:
   # active Goal provider > context (per-message) > thread's stored kind > operator default.
