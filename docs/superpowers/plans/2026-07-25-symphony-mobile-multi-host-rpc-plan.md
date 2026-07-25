@@ -31,9 +31,8 @@
 - Create: `mobile/src/rpc/crypto.ts`
 - Create: `mobile/src/rpc/crypto.test.ts`
 - Modify: `mobile/package.json`
-- Modify: `mobile/pnpm-lock.yaml`
 
-- [ ] **Step 1: Add fixed interoperability vectors**
+- [x] **Step 1: Add fixed interoperability vectors**
 
 Define one deterministic X25519 shared secret, transcript hash, HKDF salt/info,
 directional keys, nonce, AAD, plaintext, ciphertext and tag. The fixture must
@@ -50,13 +49,13 @@ contain public inputs and test-only private keys, never production material.
 }
 ```
 
-- [ ] **Step 2: Write failing Elixir and TypeScript vector tests**
+- [x] **Step 2: Write failing Elixir and TypeScript vector tests**
 
 The Elixir and mobile implementations must derive exactly the same bytes,
 decrypt each other's frame, reject a changed tag/AAD and reject replayed
 sequence numbers.
 
-- [ ] **Step 3: Verify RED in safe environments**
+- [x] **Step 3: Verify RED in safe environments**
 
 Run in WSL:
 
@@ -74,7 +73,7 @@ cd elixir
 mix test test/symphony_elixir/mobile_rpc/crypto_test.exs
 ```
 
-- [ ] **Step 4: Implement the crypto providers**
+- [x] **Step 4: Implement the crypto providers**
 
 Mobile uses Expo Crypto for random bytes and the pinned Noble packages for
 X25519, HKDF-SHA-256 and ChaCha20-Poly1305. Elixir uses OTP `:crypto` for the
@@ -93,7 +92,7 @@ export interface SessionCipher {
 def derive_session(shared_secret, transcript_hash, salt)
 ```
 
-- [ ] **Step 5: Verify GREEN and commit**
+- [x] **Step 5: Verify GREEN and commit**
 
 Run the mobile vector test, typecheck and format in WSL; run the Elixir vector
 test in CI.
