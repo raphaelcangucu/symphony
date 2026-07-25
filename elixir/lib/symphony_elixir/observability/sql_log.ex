@@ -47,7 +47,8 @@ defmodule SymphonyElixir.Observability.SqlLog do
   @doc false
   @spec handle_event(list(), map(), map(), map()) :: :ok
   def handle_event(_event, measurements, metadata, _config) when is_map(measurements) do
-    # `domain` is consumed by the dedicated :logger handler filters, not rendered metadata.
+    # The domain routes events to a dedicated handler; it is intentionally not
+    # rendered by the default formatter.
     # credo:disable-for-next-line Credo.Check.Warning.MissedMetadataKeyInLoggerConfig
     Logger.debug(fn -> format_entry(measurements, metadata) end, domain: @domain)
     :ok

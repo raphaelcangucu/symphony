@@ -31,6 +31,7 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadControllerTest do
 
     previous_token = System.get_env(@token_env)
     previous_inventory_module = Application.get_env(:symphony_elixir, @inventory_module_env)
+    previous_native_name_setter = Application.get_env(:symphony_elixir, :native_thread_name_setter)
     System.put_env(@token_env, "secret")
 
     tmp = Path.join(System.tmp_dir!(), "assistant-thread-controller-#{System.unique_integer([:positive])}")
@@ -45,6 +46,11 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadControllerTest do
       restore_inventory_module(previous_inventory_module)
       Application.delete_env(:symphony_elixir, @scan_result_env)
       Application.delete_env(:symphony_elixir, :workflow_file_path)
+
+      if previous_native_name_setter,
+        do: Application.put_env(:symphony_elixir, :native_thread_name_setter, previous_native_name_setter),
+        else: Application.delete_env(:symphony_elixir, :native_thread_name_setter)
+
       File.rm_rf(tmp)
     end)
 
@@ -227,6 +233,13 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadControllerTest do
   test "PATCH updates title labels and review state" do
     workspace_path = Path.join(System.tmp_dir!(), "assistant-thread-update")
     {:ok, thread} = History.create_freeform_thread(%{title: "Old", workspace_path: workspace_path})
+    {:ok, thread} = History.put_agent_thread_id(thread, "codex", "native-thread-update")
+    test_pid = self()
+
+    Application.put_env(:symphony_elixir, :native_thread_name_setter, fn workspace, thread_id, name, _opts ->
+      send(test_pid, {:native_name_set, workspace, thread_id, name})
+      :ok
+    end)
 
     conn =
       authorize()
@@ -247,6 +260,7 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadControllerTest do
            } = json_response(conn, 200)
 
     assert id == thread.id
+    assert_receive {:native_name_set, ^workspace_path, "native-thread-update", "New title"}
   end
 
   test "PATCH updates agent_kind on an assistant thread" do
@@ -345,6 +359,14 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadControllerTest do
     {:ok, thread} =
       History.create_freeform_thread(%{title: "Project session", workspace_path: System.tmp_dir!()})
 
+    {:ok, thread} = History.put_agent_thread_id(thread, "codex", "native-thread-generated")
+    test_pid = self()
+
+    Application.put_env(:symphony_elixir, :native_thread_name_setter, fn workspace, thread_id, name, _opts ->
+      send(test_pid, {:native_name_set, workspace, thread_id, name})
+      :ok
+    end)
+
     {:ok, _} = History.append_message(thread, %{role: "user", content: "cleanup goapi"})
     {:ok, _} = History.append_message(thread, %{role: "assistant", content: "Sure, drafting a plan."})
 
@@ -352,6 +374,7 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadControllerTest do
 
     assert %{"data" => %{"id" => id, "title" => "Cleanup goapi GAM-19"}} = json_response(conn, 200)
     assert id == thread.id
+    assert_receive {:native_name_set, _, "native-thread-generated", "Cleanup goapi GAM-19"}
   end
 
   test "POST generate_title returns not_enough_context without an exchange" do

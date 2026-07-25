@@ -4,7 +4,16 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
   use Phoenix.Controller, formats: [:json]
 
   alias Plug.Conn
-  alias SymphonyElixir.Assistant.{AgentSession, History, ProjectExploreWorkspace, Thread, TitleGenerator}
+
+  alias SymphonyElixir.Assistant.{
+    AgentSession,
+    History,
+    NativeThreadNames,
+    ProjectExploreWorkspace,
+    Thread,
+    TitleGenerator
+  }
+
   alias SymphonyElixir.Editor
   alias SymphonyElixir.Workspace.Provision
   alias SymphonyElixir.Workspace.PathOwnership
@@ -224,7 +233,8 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
     with {:ok, id} <- parse_thread_id(raw_id),
          {:ok, agent_kind} <- parse_optional_agent_kind(params),
          {:ok, thread} <- History.update_thread_sidebar_metadata(id, attrs),
-         {:ok, thread} <- maybe_set_thread_agent(thread, agent_kind) do
+         {:ok, thread} <- maybe_set_thread_agent(thread, agent_kind),
+         thread <- maybe_sync_native_title(thread, attrs) do
       json(conn, %{data: TrackerPresenter.assistant_thread(with_preview(thread))})
     else
       {:error, :not_found} ->
@@ -402,6 +412,10 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
       runner when is_function(runner, 4) -> [runner: runner]
       _ -> []
     end
+  end
+
+  defp maybe_sync_native_title(thread, attrs) do
+    if Map.has_key?(attrs, "title"), do: NativeThreadNames.sync(thread), else: thread
   end
 
   defp put_opt(opts, _key, nil), do: opts

@@ -56,6 +56,9 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
     SymphonyElixir.TestSupport.write_workflow_file!(workflow_file, tracker_kind: "local", workspace_root: tmp_dir)
     Workflow.set_workflow_file_path(workflow_file)
     previous_inventory_module = Application.get_env(:symphony_elixir, @inventory_module_env)
+    previous_native_name_setter = Application.get_env(:symphony_elixir, :native_thread_name_setter)
+
+    Application.put_env(:symphony_elixir, :native_thread_name_setter, fn _, _, _, _ -> :ok end)
 
     Application.put_env(
       :symphony_elixir,
@@ -66,6 +69,7 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
     on_exit(fn ->
       Workflow.clear_workflow_file_path()
       restore_inventory_module(previous_inventory_module)
+      restore_native_name_setter(previous_native_name_setter)
       Application.delete_env(:symphony_elixir, @inventory_result_env)
       File.rm_rf!(tmp_dir)
     end)
@@ -226,6 +230,7 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
 
     assert is_function(Keyword.get(opts, :tool_executor), 2)
     assert Keyword.get(opts, :assistant_thread_id) == thread.id
+    assert Keyword.fetch!(opts, :thread_name) == "F"
   end
 
   test "each persistent scope binds its exact thread into the goal ToolExecutor", %{
@@ -353,8 +358,15 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
       })
 
     {:ok, thread} = History.put_agent_thread_id(thread, "codex", "codex-thread-existing")
+    test_pid = self()
+
+    Application.put_env(:symphony_elixir, :native_thread_name_setter, fn _, thread_id, name, _ ->
+      send(test_pid, {:native_name_retried, thread_id, name})
+      :ok
+    end)
 
     runner = fn _workspace, _prompt, _issue, opts ->
+      assert_receive {:native_name_retried, "codex-thread-existing", "Resume Codex"}
       send(self(), {:resume_opts, opts})
       {:ok, %{assistant_message: "ok", tool_calls: [], codex_thread_id: "codex-thread-existing", turn_id: "t-2"}}
     end
@@ -364,6 +376,77 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
 
     assert_receive {:resume_opts, opts}
     assert Keyword.fetch!(opts, :resume_thread_id) == "codex-thread-existing"
+    refute Keyword.has_key?(opts, :thread_name)
+    assert_receive {:native_name_retried, "codex-thread-existing", "Resume Codex"}
+  end
+
+  test "reconciles the latest canonical title after persisting a fresh Codex thread id" do
+    {:ok, thread} =
+      History.create_freeform_thread(%{
+        title: "Initial title",
+        workspace_path: tmp_dir(),
+        agent_kind: "codex"
+      })
+
+    test_pid = self()
+
+    Application.put_env(:symphony_elixir, :native_thread_name_setter, fn _, thread_id, name, _ ->
+      send(test_pid, {:native_name_set, thread_id, name})
+      :ok
+    end)
+
+    runner = fn _workspace, _prompt, _issue, _opts ->
+      assert {:ok, _renamed} =
+               History.update_thread_sidebar_metadata(thread.id, %{title: "Latest title"})
+
+      {:ok,
+       %{
+         assistant_message: "ok",
+         tool_calls: [],
+         codex_thread_id: "codex-thread-fresh",
+         turn_id: "t-1"
+       }}
+    end
+
+    assert {:ok, _result} =
+             AgentSession.send_message_to_thread(thread, "hi", %{}, runner: runner)
+
+    assert_receive {:native_name_set, "codex-thread-fresh", "Latest title"}
+  end
+
+  test "reconciles a replacement Codex thread returned after a stale resume id" do
+    {:ok, thread} =
+      History.create_freeform_thread(%{
+        title: "Replacement title",
+        workspace_path: tmp_dir(),
+        agent_kind: "codex"
+      })
+
+    {:ok, thread} = History.put_agent_thread_id(thread, "codex", "codex-thread-stale")
+    test_pid = self()
+
+    Application.put_env(:symphony_elixir, :native_thread_name_setter, fn _, thread_id, name, _ ->
+      send(test_pid, {:replacement_name_set, thread_id, name})
+      :ok
+    end)
+
+    runner = fn _workspace, _prompt, _issue, opts ->
+      assert Keyword.fetch!(opts, :resume_thread_id) == "codex-thread-stale"
+      assert_receive {:replacement_name_set, "codex-thread-stale", "Replacement title"}
+
+      {:ok,
+       %{
+         assistant_message: "ok",
+         tool_calls: [],
+         codex_thread_id: "codex-thread-replacement",
+         turn_id: "t-replacement"
+       }}
+    end
+
+    assert {:ok, _result} =
+             AgentSession.send_message_to_thread(thread, "continue", %{}, runner: runner)
+
+    assert_receive {:replacement_name_set, "codex-thread-replacement", "Replacement title"}
   end
 
   test "send_message_to_thread/4 ignores malformed Codex stream payloads without crashing", %{workspace_root: workspace_root} do
@@ -1101,6 +1184,12 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
 
   defp restore_inventory_module(module),
     do: Application.put_env(:symphony_elixir, @inventory_module_env, module)
+
+  defp restore_native_name_setter(nil),
+    do: Application.delete_env(:symphony_elixir, :native_thread_name_setter)
+
+  defp restore_native_name_setter(setter),
+    do: Application.put_env(:symphony_elixir, :native_thread_name_setter, setter)
 
   defp clean_repo do
     for table <- [
