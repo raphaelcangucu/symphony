@@ -1,0 +1,69 @@
+{
+  "prompt_sha256": "a081d32f102932dc95e64333aaef7f2c2aa47b1d8834667bc8163cb0809e4b38",
+  "runs": [
+    {
+      "id": "session-codex",
+      "path": "session",
+      "provider": "codex",
+      "symphony_status": "completed",
+      "contract": "passed",
+      "build": "passed",
+      "e2e": { "status": "passed", "passed": 1, "failed": 0 },
+      "duration_seconds": 1292
+    },
+    {
+      "id": "session-cursor",
+      "path": "session",
+      "provider": "cursor",
+      "symphony_status": "blocked",
+      "contract": "failed",
+      "build": "not_run",
+      "e2e": { "status": "not_run", "passed": 0, "failed": 0 },
+      "duration_seconds": 20,
+      "error": "Cursor ACP rejected mcpServers payload (invalid_union)"
+    },
+    {
+      "id": "session-claude",
+      "path": "session",
+      "provider": "claude",
+      "symphony_status": "completed",
+      "contract": "passed",
+      "build": "passed",
+      "e2e": { "status": "passed", "passed": 6, "failed": 0 },
+      "duration_seconds": 689
+    },
+    {
+      "id": "orchestrator-codex",
+      "path": "orchestrator",
+      "provider": "codex",
+      "symphony_status": "blocked",
+      "thread": { "id": 7, "status": "error", "provider_matches": true },
+      "contract": "passed",
+      "build": "passed",
+      "e2e": { "status": "passed", "passed": 2, "failed": 0 },
+      "duration_seconds": 1742
+    },
+    {
+      "id": "orchestrator-cursor",
+      "path": "orchestrator",
+      "provider": "cursor",
+      "symphony_status": "blocked",
+      "thread": { "id": 8, "status": "error", "provider_matches": true },
+      "contract": "passed",
+      "build": "passed",
+      "e2e": { "status": "failed", "passed": 0, "failed": 1 },
+      "duration_seconds": 389
+    },
+    {
+      "id": "orchestrator-claude",
+      "path": "orchestrator",
+      "provider": "claude",
+      "symphony_status": "blocked",
+      "thread": { "id": 9, "status": "error", "provider_matches": true },
+      "contract": "passed",
+      "build": "passed",
+      "e2e": { "status": "passed", "passed": 6, "failed": 0 },
+      "duration_seconds": 715
+    }
+  ]
+}
