@@ -220,6 +220,109 @@ describe("Symphony mock RPC handlers", () => {
     });
   });
 
+  it("serves copied file previews and chunked clipboard uploads", () => {
+    const sent: RpcResponse[] = [];
+    const send = (message: RpcResponse) => sent.push(message);
+
+    handleRequest(
+      {
+        type: "rpc",
+        id: "directory",
+        method: "files.readDir",
+        params: { worktree: "id:101", relativePath: "" },
+      },
+      send,
+      socket,
+    );
+    handleRequest(
+      {
+        type: "rpc",
+        id: "read",
+        method: "files.read",
+        params: { worktree: "id:101", relativePath: "README.md" },
+      },
+      send,
+      socket,
+    );
+    handleRequest(
+      {
+        type: "rpc",
+        id: "preview",
+        method: "files.readPreview",
+        params: { worktree: "id:101", relativePath: "assets/logo.png" },
+      },
+      send,
+      socket,
+    );
+    handleRequest(
+      {
+        type: "rpc",
+        id: "upload-start",
+        method: "clipboard.startImageUpload",
+        params: { expectedBase64Length: 8, connectionId: "mock-mobile" },
+      },
+      send,
+      socket,
+    );
+
+    const uploadId = (sent[3] as { result: { uploadId: string } }).result.uploadId;
+    handleRequest(
+      {
+        type: "rpc",
+        id: "upload-chunk",
+        method: "clipboard.appendImageUploadChunk",
+        params: { uploadId, offset: 0, contentBase64: "ZGV2MTB4" },
+      },
+      send,
+      socket,
+    );
+    handleRequest(
+      {
+        type: "rpc",
+        id: "upload-commit",
+        method: "clipboard.commitImageUpload",
+        params: { uploadId },
+      },
+      send,
+      socket,
+    );
+
+    expect(sent[0]).toMatchObject({
+      ok: true,
+      result: [
+        { name: "assets", isDirectory: true, isSymlink: false },
+        { name: "dist", isDirectory: true, isSymlink: false },
+        { name: "public", isDirectory: true, isSymlink: false },
+        { name: "src", isDirectory: true, isSymlink: false },
+        { name: "README.md", isDirectory: false, isSymlink: false },
+      ],
+    });
+    expect(sent[1]).toMatchObject({
+      ok: true,
+      result: {
+        relativePath: "README.md",
+        content: expect.stringContaining("Dev10x"),
+        truncated: false,
+      },
+    });
+    expect(sent[2]).toMatchObject({
+      ok: true,
+      result: {
+        isBinary: true,
+        isImage: true,
+        mimeType: "image/png",
+      },
+    });
+    expect(sent[4]).toMatchObject({
+      ok: true,
+      result: { receivedBase64Length: 8 },
+    });
+    expect(sent[5]).toMatchObject({
+      ok: true,
+      result: expect.stringContaining("dev10x-mobile-clipboard"),
+    });
+  });
+
   it("fails closed for unknown methods without reflecting params", () => {
     const sent: RpcResponse[] = [];
     handleRequest(

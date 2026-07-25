@@ -988,7 +988,7 @@ git commit -m "feat(mobile): connect Orca sessions and terminal to Symphony"
 - Modify: `mobile/scripts/mock-server-file-preview-data.ts`
 - Modify: `mobile/scripts/mock-server-rpc-handlers.ts`
 
-- [ ] **Step 1: Write failing method-shape tests**
+- [x] **Step 1: Write failing method-shape tests**
 
 Cover:
 
@@ -1016,7 +1016,7 @@ clipboard.saveImageAsTempFile
 Validate every path through the existing workspace sandbox and cap upload/read
 sizes before allocation.
 
-- [ ] **Step 2: Run tests and confirm missing methods**
+- [x] **Step 2: Run tests and confirm missing methods**
 
 Run:
 
@@ -1027,14 +1027,14 @@ mix test test/symphony_elixir/mobile_rpc/methods/orca_files_test.exs
 
 Expected: FAIL with method rejection.
 
-- [ ] **Step 3: Implement handlers and copied UI transport wiring**
+- [x] **Step 3: Implement handlers and copied UI transport wiring**
 
 Use existing workspace and preview services. Return upstream file tree,
 preview, syntax and artifact shapes through `OrcaPresenter`. Browser
 screencast controls are capability-gated; if the selected host does not
 advertise them, the copied upstream unavailable state renders.
 
-- [ ] **Step 4: Run focused tests**
+- [x] **Step 4: Run focused tests**
 
 Run:
 
@@ -1050,7 +1050,7 @@ mix test test/symphony_elixir/mobile_rpc/methods/orca_files_test.exs
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add mobile/app/h mobile/src/orca/files mobile/src/orca/browser \

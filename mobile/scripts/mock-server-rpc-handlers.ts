@@ -1,5 +1,7 @@
 import type { WebSocket } from "ws";
 
+import { handleMockFilePreviewRequest } from "./mock-server-file-preview-data";
+
 const HOST_ID = process.env.MOCK_HOST_ID || "host_mock";
 const DEFAULT_DELAY_MS = readDelay("MOCK_RPC_DELAY_MS", 0);
 const METHODS = [
@@ -41,6 +43,21 @@ const METHODS = [
   "terminal.setAutoRestoreFit",
   "markdown.readTab",
   "markdown.saveTab",
+  "files.list",
+  "files.readDir",
+  "files.read",
+  "files.readPreview",
+  "files.open",
+  "files.openDiff",
+  "files.resolveTerminalPath",
+  "files.readTerminalArtifact",
+  "files.readTerminalArtifactPreview",
+  "files.writeTerminalArtifact",
+  "clipboard.startImageUpload",
+  "clipboard.appendImageUploadChunk",
+  "clipboard.commitImageUpload",
+  "clipboard.abortImageUpload",
+  "clipboard.saveImageAsTempFile",
 ] as const;
 
 export type RpcRequest = {
@@ -102,6 +119,11 @@ let mockActiveTabId = "thread:101";
 let mockAutoRestoreFitMs: number | null = null;
 const mockDisplayModes = new Map<string, "auto" | "desktop">();
 let mockSessionTabs = [mockPrimaryTerminalTab()];
+const mockClipboardUploads = new Map<
+  string,
+  { expected: number; received: number; chunks: string[] }
+>();
+let nextClipboardUpload = 0;
 
 export const mockScenarioSummary = {
   projectCount: 1,
@@ -314,10 +336,36 @@ export function handleRequest(request: RpcRequest, send: Send, ws: WebSocket): v
           error(request.id, "read_only", "Symphony markdown tabs are read-only on mobile", false),
         );
         break;
-      default:
+      case "clipboard.startImageUpload":
+        startMockClipboardUpload(request, respond);
+        break;
+      case "clipboard.appendImageUploadChunk":
+        appendMockClipboardChunk(request, respond);
+        break;
+      case "clipboard.commitImageUpload":
+        commitMockClipboardUpload(request, respond);
+        break;
+      case "clipboard.abortImageUpload":
+        mockClipboardUploads.delete(text(request.params.uploadId));
+        respond(success(request.id, { aborted: true }));
+        break;
+      case "clipboard.saveImageAsTempFile":
+        respond(success(request.id, "/tmp/dev10x-mobile-clipboard/mock-image.png"));
+        break;
+      case "files.writeTerminalArtifact":
         respond(
-          error(request.id, "method_not_allowed", "RPC method is not available to mobile", false),
+          success(request.id, {
+            written: true,
+            byteLength: rawText(request.params.content).length,
+          }),
         );
+        break;
+      default:
+        if (!handleMockFilePreviewRequest(request, respond, success, error)) {
+          respond(
+            error(request.id, "method_not_allowed", "RPC method is not available to mobile", false),
+          );
+        }
     }
   } catch {
     respond(
@@ -633,6 +681,48 @@ function copiedMarkdownTab(params: Record<string, unknown>): Record<string, unkn
     editable: false,
     readOnlyReason: "Symphony markdown tabs are read-only on mobile",
   };
+}
+
+function startMockClipboardUpload(request: RpcRequest, send: Send): void {
+  const expected = Number(request.params.expectedBase64Length);
+  if (!Number.isInteger(expected) || expected < 0 || expected > 24 * 1024 * 1024) {
+    send(error(request.id, "image_too_large", "Clipboard image is too large"));
+    return;
+  }
+  const uploadId = `mock-upload-${++nextClipboardUpload}`;
+  mockClipboardUploads.set(uploadId, { expected, received: 0, chunks: [] });
+  send(success(request.id, { uploadId }));
+}
+
+function appendMockClipboardChunk(request: RpcRequest, send: Send): void {
+  const uploadId = text(request.params.uploadId);
+  const upload = mockClipboardUploads.get(uploadId);
+  const offset = Number(request.params.offset);
+  const chunk = rawText(request.params.contentBase64);
+  if (!upload) {
+    send(error(request.id, "upload_not_found", "Clipboard image upload was not found"));
+    return;
+  }
+  if (offset !== upload.received || upload.received + chunk.length > upload.expected) {
+    send(
+      error(request.id, "invalid_upload_offset", "Clipboard image chunk offset is out of order"),
+    );
+    return;
+  }
+  upload.chunks.push(chunk);
+  upload.received += chunk.length;
+  send(success(request.id, { receivedBase64Length: upload.received }));
+}
+
+function commitMockClipboardUpload(request: RpcRequest, send: Send): void {
+  const uploadId = text(request.params.uploadId);
+  const upload = mockClipboardUploads.get(uploadId);
+  mockClipboardUploads.delete(uploadId);
+  if (!upload || upload.received !== upload.expected) {
+    send(error(request.id, "incomplete_upload", "Clipboard image upload is incomplete"));
+    return;
+  }
+  send(success(request.id, `/tmp/dev10x-mobile-clipboard/${uploadId}.png`));
 }
 
 function emitCopiedSessionUpdate(

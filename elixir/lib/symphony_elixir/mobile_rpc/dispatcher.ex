@@ -6,6 +6,7 @@ defmodule SymphonyElixir.MobileRpc.Dispatcher do
   alias SymphonyElixir.MobileRpc.Methods.{
     Git,
     Notifications,
+    OrcaFiles,
     OrcaSessions,
     OrcaSystem,
     OrcaWorkspaces,
@@ -39,6 +40,7 @@ defmodule SymphonyElixir.MobileRpc.Dispatcher do
           OrcaSystem.modules() ++
           OrcaWorkspaces.modules() ++
           OrcaSessions.modules() ++
+          OrcaFiles.modules() ++
           Projects.modules() ++
           Tasks.modules() ++
           Sessions.modules() ++

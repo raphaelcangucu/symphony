@@ -126,6 +126,38 @@
       "migration": "shared_channel_state_machine"
     },
     {
+      "operation": "Dev10x workspace files, previews, terminal artifacts, browser input and clipboard images",
+      "rpc": [
+        "files.list",
+        "files.readDir",
+        "files.read",
+        "files.readPreview",
+        "files.open",
+        "files.openDiff",
+        "files.resolveTerminalPath",
+        "files.readTerminalArtifact",
+        "files.readTerminalArtifactPreview",
+        "files.writeTerminalArtifact",
+        "browser.screencast",
+        "browser.mouseDown",
+        "browser.mouseMove",
+        "browser.mouseUp",
+        "browser.mouseWheel",
+        "clipboard.startImageUpload",
+        "clipboard.appendImageUploadChunk",
+        "clipboard.commitImageUpload",
+        "clipboard.abortImageUpload",
+        "clipboard.saveImageAsTempFile"
+      ],
+      "legacy": [
+        "GET /api/tracker/v1/assistant/threads/:id/files/*",
+        "POST /api/tracker/v1/assistant/threads/:id/files/*",
+        "GET /api/tracker/v1/assistant/threads/:id/dev_servers/*"
+      ],
+      "stream": true,
+      "migration": "orca_compatible_sandboxed_service_adapter"
+    },
+    {
       "operation": "workspace source, Markdown and image files",
       "rpc": ["workspace.request"],
       "legacy": ["GET /api/tracker/v1/assistant/threads/:id/files/*", "GET /api/tracker/v1/assistant/threads/:id/documents/*"],
