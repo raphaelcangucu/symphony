@@ -13,7 +13,7 @@ screens that already work, instead of recreating visually similar screens.
 
 Frontend divergence is intentionally narrow:
 
-- replace Orca identity with the Dev10x logo and Symphony product name;
+- replace Orca identity with the Dev10x logo, name and product identity;
 - rewrite product names, labels and messages for Symphony hosts, projects,
   workspaces, sessions and agents;
 - replace Orca's concrete backend integration with Symphony's direct,
@@ -48,7 +48,9 @@ of copied Orca code.
 
 The existing Dev10x assets under `tracker/public/` are the branding source.
 Mobile-safe copies are generated or added under `mobile/assets/` without
-modifying the original tracker assets.
+modifying the original tracker assets. **Dev10x is the primary and visible app
+brand.** Symphony names the technical runtime, RPC protocol and paired hosts;
+it is not presented as a competing consumer brand.
 
 ## Approaches Considered
 
@@ -149,11 +151,13 @@ kind and resource id. The active shell then maps that target to its own route.
 Unsupported optional targets open the closest resource overview instead of
 silently changing visual mode.
 
-## Branding and Product Language
+## Dev10x Brand and Product Language
 
 `OrcaLogo` and Orca-specific assets are replaced with a Dev10x-branded
-component using the existing Dev10x icon/logo. App name, package display name,
-splash, adaptive icon, settings/about text and pairing pages use `Symphony`.
+component using the existing Dev10x icon/logo. The app name, package display
+name, splash, adaptive icon, settings/about identity and primary onboarding
+headings use `Dev10x`. `Symphony host` remains the technical name for the
+machine/runtime being paired and controlled.
 
 Copied messages are rewritten without changing their behavioral purpose:
 
@@ -272,8 +276,8 @@ enter logs, screenshots, analytics or exported diagnostics.
 
 The implementation is divided into independently verifiable slices:
 
-1. Record Orca provenance, license notices, compatible dependencies and
-   Dev10x mobile branding.
+1. Record Orca provenance, license notices, compatible dependencies and make
+   Dev10x the primary mobile brand.
 2. Establish the shared core and `SymphonyHostTransport` contract without
    changing the approved RPC cryptography.
 3. Import the Orca application shell, pairing and host dashboard; connect them
@@ -327,8 +331,9 @@ passes solely from mock output.
 
 1. The default application experience is the copied Orca production flow, not
    a visual approximation.
-2. Dev10x/Symphony branding and product language replace all visible Orca
-   branding while MIT attribution remains intact.
+2. Dev10x is the primary visible brand; Symphony is limited to runtime, host
+   and RPC terminology; all visible Orca branding is removed while MIT
+   attribution remains intact.
 3. Copied frontend behavior changes only for branding, Symphony terminology,
    capability handling and the RPC/domain adapter.
 4. The app pairs with and directly controls multiple real Symphony hosts using

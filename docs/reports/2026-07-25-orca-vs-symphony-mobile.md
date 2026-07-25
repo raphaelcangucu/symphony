@@ -82,9 +82,10 @@ The comparison led to a stronger decision than visual inspiration. Symphony
 will use the production Orca Mobile implementation as its default frontend
 baseline, preserving its onboarding, host dashboard, responsive navigation,
 workspace/session, terminal, files, Source Control, PR/review, diagnostics and
-offline behavior. The frontend changes are limited to Dev10x/Symphony
-branding, Symphony terminology, negotiated capability states and a focused
-adapter to Symphony's RPC/domain model.
+offline behavior. The frontend changes are limited to the Dev10x brand,
+Symphony runtime/domain terminology, negotiated capability states and a
+focused adapter to Symphony's RPC/domain model. Dev10x is the primary visible
+app identity; Symphony identifies the host/runtime and RPC.
 
 The existing clean Codex-style session library remains as a parallel,
 device-wide selectable view over the same selected host, transport, caches and
