@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useTrackerClient } from "@/api/TrackerClientProvider";
 import { useConnection } from "@/auth/ConnectionProvider";
 import { StateView } from "@/components/StateView";
+import { useAppRuntime } from "@/runtime/AppRuntime";
 
 import { NewSessionScreen } from "./NewSessionScreen";
 import { createInitialNewSessionState, type NewSessionState } from "./new-session-state";
@@ -15,6 +16,7 @@ const DRAFT_KEY_PREFIX = "symphony.new-session.draft";
 export function NewSessionRoute() {
   const router = useRouter();
   const client = useTrackerClient();
+  const { dictate } = useAppRuntime();
   const { activeProfile } = useConnection();
   const profileId = activeProfile?.id ?? null;
   const [draft, setDraft] = useState<NewSessionState | null>(null);
@@ -76,6 +78,7 @@ export function NewSessionRoute() {
       onCreated={(threadId, prompt) =>
         router.replace(`/session/${threadId}?seed=${encodeURIComponent(prompt)}`)
       }
+      onDictate={() => dictate(resolvedLocale())}
       onDraftChange={persistDraft}
       projects={projectsQuery.data ?? []}
     />
@@ -132,4 +135,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Could not load projects";
+}
+
+function resolvedLocale(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().locale || "en";
+  } catch {
+    return "en";
+  }
 }

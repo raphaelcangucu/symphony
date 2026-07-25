@@ -325,6 +325,16 @@ export type MergePullRequestResult = {
   issue: IssueSummary | null;
 };
 
+export type MobilePushIdentity = {
+  profileId: string;
+  deviceId: string;
+};
+
+export type MobilePushRegistrationInput = MobilePushIdentity & {
+  platform: "android" | "ios";
+  token: string;
+};
+
 export type AssistantThread = {
   id: number;
   scope: string;
@@ -548,4 +558,13 @@ export type TrackerClient = {
     input: MergePullRequestInput,
     signal?: AbortSignal,
   ): Promise<MergePullRequestResult>;
+  registerMobilePush(
+    input: MobilePushRegistrationInput,
+    signal?: AbortSignal,
+  ): Promise<{ registered: boolean; deviceId: string }>;
+  unregisterMobilePush(
+    input: MobilePushIdentity,
+    signal?: AbortSignal,
+  ): Promise<{ deleted: boolean }>;
+  sendTestMobilePush(signal?: AbortSignal): Promise<{ sent: boolean; deviceCount: number }>;
 };

@@ -4,7 +4,7 @@
 
 **Architecture:** Extend the injected `TrackerClient` with small domain-specific API modules and keep React Query responsible for server state. Add a root drawer-style menu and focused Expo Router screens for tasks, workspace tools, source control, notifications, and diagnostics. Phoenix adapters remain isolated behind testable interfaces for assistant control and terminal streaming.
 
-**Tech Stack:** Expo SDK 55, React Native 0.83, Expo Router, TanStack Query, Zod, Phoenix Channels, Expo Notifications, Expo Speech, Vitest, Jest, React Native Testing Library, Android E2E.
+**Tech Stack:** Expo SDK 55, React Native 0.83, Expo Router, TanStack Query, Zod, Phoenix Channels, Expo Notifications, Expo Speech Recognition, Vitest, Jest, React Native Testing Library, Android E2E.
 
 ---
 
@@ -278,7 +278,7 @@ Run:
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Commit message: `feat(mobile): add pull request operations`
 
@@ -299,26 +299,26 @@ Commit message: `feat(mobile): add pull request operations`
 - Create: `elixir/lib/symphony_elixir_web/controllers/tracker/mobile_push_controller.ex`
 - Create: `elixir/test/symphony_elixir_web/controllers/tracker/mobile_push_controller_test.exs`
 
-- [ ] **Step 1: Install compatible Expo native libraries**
+- [x] **Step 1: Install compatible Expo native libraries**
 
 Run:
-`cd mobile && npx expo install expo-notifications expo-device expo-speech expo-audio`
+`cd mobile && npx expo install expo-notifications expo-device expo-speech-recognition`
 
 Expected: Expo SDK-compatible versions added without peer conflicts.
 
-- [ ] **Step 2: Write failing registration and routing tests**
+- [x] **Step 2: Write failing registration and routing tests**
 
 Prove tokens register per profile/device, unregister on profile removal, and
 notification payloads deep-link only to allowed issue/session routes. Prove
 dictation appends transcript without replacing an existing draft.
 
-- [ ] **Step 3: Implement backend Expo-token contract and native adapters**
+- [x] **Step 3: Implement backend Expo-token contract and native adapters**
 
 Store native subscriptions separately from Web Push subscriptions. Never log
 tokens. Route issue/session payloads through Expo Router and expose permission
 denial as a recoverable settings state.
 
-- [ ] **Step 4: Add notification screen and voice controls**
+- [x] **Step 4: Add notification screen and voice controls**
 
 Add accessible voice controls to both composers and a notifications route with
 permission, registration, test-notification and deep-link state.
@@ -329,6 +329,10 @@ Run:
 `mix test elixir/test/symphony_elixir_web/controllers/tracker/mobile_push_controller_test.exs && cd mobile && npm test && npm run typecheck && npm run doctor`
 
 Expected: PASS.
+
+WSL safety note: focused mobile unit/UI tests, typecheck, lint and formatting
+passed. The focused Elixir controller test and Expo Doctor remain deferred to
+CI or a dedicated native runner so this workstation is not overloaded.
 
 - [ ] **Step 6: Commit**
 

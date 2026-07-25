@@ -33,6 +33,8 @@ import type {
   IssuePriority,
   IssueSummary,
   MergePullRequestResult,
+  MobilePushIdentity,
+  MobilePushRegistrationInput,
   ProjectSessionRow,
   ProjectSummary,
   PullRequest,
@@ -474,6 +476,50 @@ export function createTrackerClient(options: CreateTrackerClientOptions): Tracke
         method,
       );
     },
+    async registerMobilePush(input, signal) {
+      const payload = asRecord(
+        unwrapData(
+          await request("/mobile_push/subscriptions", {
+            method: "POST",
+            body: mobilePushRegistrationPayload(input),
+            signal,
+          }),
+        ),
+        "mobile push registration",
+      );
+      return {
+        registered: payload.registered === true,
+        deviceId: requireText(payload.device_id, "mobile push device id"),
+      };
+    },
+    async unregisterMobilePush(input, signal) {
+      const payload = asRecord(
+        unwrapData(
+          await request("/mobile_push/subscriptions", {
+            method: "DELETE",
+            body: mobilePushIdentityPayload(input),
+            signal,
+          }),
+        ),
+        "mobile push deletion",
+      );
+      return { deleted: payload.deleted === true };
+    },
+    async sendTestMobilePush(signal) {
+      const payload = asRecord(
+        unwrapData(
+          await request("/mobile_push/test", {
+            method: "POST",
+            signal,
+          }),
+        ),
+        "mobile push test",
+      );
+      return {
+        sent: payload.sent === true,
+        deviceCount: finiteNumber(payload.device_count, 0),
+      };
+    },
   };
 }
 
@@ -572,6 +618,23 @@ function issueMutationPayload(
     ...(input.goal !== undefined ? { goal: input.goal } : {}),
     ...(input.model !== undefined ? { model: input.model } : {}),
     ...(input.effort !== undefined ? { effort: input.effort } : {}),
+  };
+}
+
+function mobilePushIdentityPayload(input: MobilePushIdentity): Record<string, unknown> {
+  return {
+    profile_id: requireText(input.profileId, "mobile push profile id"),
+    device_id: requireText(input.deviceId, "mobile push device id"),
+  };
+}
+
+function mobilePushRegistrationPayload(
+  input: MobilePushRegistrationInput,
+): Record<string, unknown> {
+  return {
+    ...mobilePushIdentityPayload(input),
+    platform: input.platform,
+    token: requireText(input.token, "Expo push token"),
   };
 }
 

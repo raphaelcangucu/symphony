@@ -1,4 +1,10 @@
-import { ArrowLeft, ChevronRight, SendHorizontal, SlidersHorizontal } from "lucide-react-native";
+import {
+  ArrowLeft,
+  ChevronRight,
+  Mic,
+  SendHorizontal,
+  SlidersHorizontal,
+} from "lucide-react-native";
 import { useEffect, useReducer, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -20,6 +26,7 @@ import type {
   CreateThreadInput,
   ProjectSummary,
 } from "@/api/contracts";
+import { appendTranscript } from "@/native/dictation";
 import { radii, spacing } from "@/theme/tokens";
 import { useAppTheme } from "@/theme/ThemeProvider";
 
@@ -39,6 +46,7 @@ type NewSessionScreenProps = {
   loadCatalog(projectSlug: string): Promise<AssistantCatalog>;
   onBack(): void;
   onCreated(threadId: number, prompt: string): void;
+  onDictate?: (() => Promise<string>) | undefined;
   onDraftChange(state: NewSessionState): void;
 };
 
@@ -50,6 +58,7 @@ export function NewSessionScreen({
   loadCatalog,
   onBack,
   onCreated,
+  onDictate,
   onDraftChange,
 }: NewSessionScreenProps) {
   const { colors } = useAppTheme();
@@ -62,6 +71,7 @@ export function NewSessionScreen({
   const [effortModal, setEffortModal] = useState(false);
   const [catalog, setCatalog] = useState<AssistantCatalog | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [dictating, setDictating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const submittingRef = useRef(false);
 
@@ -100,6 +110,23 @@ export function NewSessionScreen({
     } finally {
       submittingRef.current = false;
       setSubmitting(false);
+    }
+  }
+
+  async function dictate() {
+    if (!onDictate || dictating) return;
+    setDictating(true);
+    setError(null);
+    try {
+      const transcript = await onDictate();
+      dispatch({
+        type: "set_prompt",
+        prompt: appendTranscript(state.prompt, transcript),
+      });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not recognize speech");
+    } finally {
+      setDictating(false);
     }
   }
 
@@ -266,6 +293,24 @@ export function NewSessionScreen({
           <Text style={[styles.sendHint, { color: colors.textMuted }]}>
             {state.scope === "free" ? "Free session" : project?.name}
           </Text>
+          {onDictate ? (
+            <Pressable
+              accessibilityLabel={dictating ? "Listening" : "Dictate message"}
+              accessibilityRole="button"
+              disabled={dictating || submitting}
+              onPress={() => void dictate()}
+              style={[
+                styles.voiceButton,
+                { backgroundColor: dictating ? colors.accentSoft : colors.bgPressed },
+              ]}
+            >
+              {dictating ? (
+                <ActivityIndicator color={colors.accent} size="small" />
+              ) : (
+                <Mic color={colors.textSecondary} size={21} />
+              )}
+            </Pressable>
+          ) : null}
           <Pressable
             accessibilityLabel={submitting ? "Creating session" : error ? "Retry" : "Send"}
             accessibilityRole="button"
@@ -678,5 +723,13 @@ const styles = StyleSheet.create({
   sendHint: {
     flex: 1,
     fontSize: 13,
+  },
+  voiceButton: {
+    alignItems: "center",
+    borderRadius: radii.pill,
+    height: 48,
+    justifyContent: "center",
+    marginRight: spacing.xs,
+    width: 48,
   },
 });

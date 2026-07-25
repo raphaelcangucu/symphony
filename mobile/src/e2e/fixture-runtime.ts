@@ -10,6 +10,7 @@ import type {
 import type { ConnectionProfile } from "@/auth/connection-profile";
 import type { ConnectionStorage, ConnectionStorageSnapshot } from "@/auth/connection-storage";
 import type { AssistantMessage } from "@/features/sessions/session-reducer";
+import { createNotificationRouter } from "@/native/notifications";
 import type { CreateAssistantSessionOptions } from "@/realtime/assistant-session";
 import type { AppRuntime } from "@/runtime/AppRuntime";
 
@@ -111,6 +112,10 @@ export function fixtureModeFromUrl(buildFlag: string | undefined, initialUrl: st
 
 export function createFixtureRuntime(): AppRuntime {
   const persistedSeeds = new Map<number, string>();
+  const notificationRouter = createNotificationRouter({
+    getLastResponseData: async () => null,
+    addResponseListener: () => ({ remove() {} }),
+  });
 
   return {
     connectionStorage: createFixtureConnectionStorage(),
@@ -141,6 +146,19 @@ export function createFixtureRuntime(): AppRuntime {
         },
         resize() {},
       };
+    },
+    dictate: async () => "Add the Orca workflow by voice",
+    notifications: {
+      platform: "android",
+      port: {
+        isPhysicalDevice: true,
+        getPermission: async () => "granted",
+        requestPermission: async () => "granted",
+        getExpoPushToken: async () => "ExponentPushToken[fixture]",
+      },
+      router: notificationRouter,
+      deviceId: async () => "fixture-device",
+      openSettings: async () => undefined,
     },
   };
 }
@@ -364,6 +382,12 @@ export function createFixtureTrackerClient(): TrackerClient {
       message: "Fixture pull request merged",
       issue,
     }),
+    registerMobilePush: async (input) => ({
+      registered: true,
+      deviceId: input.deviceId,
+    }),
+    unregisterMobilePush: async () => ({ deleted: true }),
+    sendTestMobilePush: async () => ({ sent: true, deviceCount: 1 }),
   };
 }
 

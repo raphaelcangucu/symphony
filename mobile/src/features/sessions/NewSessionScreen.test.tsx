@@ -39,6 +39,7 @@ function renderScreen(overrides: Partial<React.ComponentProps<typeof NewSessionS
     } satisfies AssistantCatalog),
     onBack: jest.fn(),
     onCreated: jest.fn(),
+    onDictate: jest.fn().mockResolvedValue(""),
     onDraftChange: jest.fn(),
     ...overrides,
   };
@@ -65,7 +66,18 @@ describe("NewSessionScreen", () => {
     expect(screen.queryByText("Agent")).toBeNull();
     expect(screen.queryByLabelText("Session title")).toBeNull();
     expect(screen.queryByRole("button", { name: /attach/i })).toBeNull();
-    expect(screen.queryByRole("button", { name: /voice/i })).toBeNull();
+    expect(screen.getByRole("button", { name: "Dictate message" })).toBeTruthy();
+  });
+
+  it("appends dictated text to the existing prompt", async () => {
+    renderScreen({ onDictate: jest.fn().mockResolvedValue("and add voice") });
+
+    fireEvent.changeText(screen.getByLabelText("Message"), "Keep this draft");
+    fireEvent.press(screen.getByRole("button", { name: "Dictate message" }));
+
+    await waitFor(() =>
+      expect(screen.getByLabelText("Message")).toHaveProp("value", "Keep this draft and add voice"),
+    );
   });
 
   it("creates the common freeform path from only a message and Send", async () => {

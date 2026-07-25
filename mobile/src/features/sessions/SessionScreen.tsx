@@ -1,4 +1,4 @@
-import { ArrowLeft, SendHorizontal } from "lucide-react-native";
+import { ArrowLeft, Mic, SendHorizontal } from "lucide-react-native";
 import { useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ConnectionBadge, type ConnectionState } from "@/components/ConnectionBadge";
+import { appendTranscript } from "@/native/dictation";
 import { StatusDot } from "@/components/StatusDot";
 import { radii, spacing } from "@/theme/tokens";
 import { useAppTheme } from "@/theme/ThemeProvider";
@@ -25,6 +26,7 @@ type SessionScreenProps = {
   threadId: number;
   timeline: SessionTimelineState;
   onBack(): void;
+  onDictate?: (() => Promise<string>) | undefined;
   onApproval(requestId: string | number, action: "approve" | "cancel"): Promise<void>;
   onResumeTurn(): Promise<void>;
   onSend(message: string): Promise<void>;
@@ -37,6 +39,7 @@ export function SessionScreen({
   threadId,
   timeline,
   onBack,
+  onDictate,
   onApproval,
   onResumeTurn,
   onSend,
@@ -47,6 +50,7 @@ export function SessionScreen({
   const { colors } = useAppTheme();
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
+  const [dictating, setDictating] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const sendingRef = useRef(false);
   const canSend = Boolean(message.trim()) && !sending;
@@ -65,6 +69,20 @@ export function SessionScreen({
     } finally {
       sendingRef.current = false;
       setSending(false);
+    }
+  }
+
+  async function dictate() {
+    if (!onDictate || dictating) return;
+    setDictating(true);
+    setSendError(null);
+    try {
+      const transcript = await onDictate();
+      setMessage((current) => appendTranscript(current, transcript));
+    } catch (cause) {
+      setSendError(cause instanceof Error ? cause.message : "Could not recognize speech");
+    } finally {
+      setDictating(false);
     }
   }
 
@@ -155,6 +173,24 @@ export function SessionScreen({
             style={[styles.input, { color: colors.textPrimary }]}
             value={message}
           />
+          {onDictate ? (
+            <Pressable
+              accessibilityLabel={dictating ? "Listening" : "Dictate message"}
+              accessibilityRole="button"
+              disabled={dictating || sending}
+              onPress={() => void dictate()}
+              style={[
+                styles.voiceButton,
+                { backgroundColor: dictating ? colors.accentSoft : colors.bgPressed },
+              ]}
+            >
+              {dictating ? (
+                <ActivityIndicator color={colors.accent} size="small" />
+              ) : (
+                <Mic color={colors.textSecondary} size={20} />
+              )}
+            </Pressable>
+          ) : null}
           <Pressable
             accessibilityLabel={sending ? "Sending" : "Send"}
             accessibilityRole="button"
@@ -494,6 +530,13 @@ const styles = StyleSheet.create({
   retry: {
     fontSize: 13,
     fontWeight: "700",
+  },
+  voiceButton: {
+    alignItems: "center",
+    borderRadius: radii.pill,
+    height: 44,
+    justifyContent: "center",
+    width: 44,
   },
   answerInput: {
     borderRadius: radii.sm,

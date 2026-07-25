@@ -43,6 +43,7 @@ function renderScreen(overrides: Partial<React.ComponentProps<typeof SessionScre
     threadId: 42,
     timeline,
     onBack: jest.fn(),
+    onDictate: jest.fn().mockResolvedValue(""),
     onSend: jest.fn().mockResolvedValue(undefined),
     onApproval: jest.fn().mockResolvedValue(undefined),
     onResumeTurn: jest.fn().mockResolvedValue(undefined),
@@ -94,6 +95,17 @@ describe("SessionScreen", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/Socket offline/);
     expect(screen.getByLabelText("Message")).toHaveProp("value", "Do not lose this");
+  });
+
+  it("appends dictated text to a pending follow-up", async () => {
+    renderScreen({ onDictate: jest.fn().mockResolvedValue("and spoken words") });
+
+    fireEvent.changeText(screen.getByLabelText("Message"), "Keep draft");
+    fireEvent.press(screen.getByRole("button", { name: "Dictate message" }));
+
+    await waitFor(() =>
+      expect(screen.getByLabelText("Message")).toHaveProp("value", "Keep draft and spoken words"),
+    );
   });
 
   it("renders and resolves approval and question cards", async () => {

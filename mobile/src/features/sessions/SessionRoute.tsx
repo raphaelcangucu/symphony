@@ -11,7 +11,7 @@ import { SessionScreen } from "./SessionScreen";
 
 export function SessionRoute() {
   const router = useRouter();
-  const { createAssistantSession } = useAppRuntime();
+  const { createAssistantSession, dictate } = useAppRuntime();
   const params = useLocalSearchParams<{ threadId?: string | string[]; seed?: string | string[] }>();
   const { activeProfile, activeToken } = useConnection();
   const [timeline, dispatch] = useReducer(
@@ -59,6 +59,7 @@ export function SessionRoute() {
     <SessionScreen
       onApproval={(requestId, action) => session.submitApproval(requestId, action)}
       onBack={() => router.back()}
+      onDictate={() => dictate(resolvedLocale())}
       onResumeTurn={() => session.resumeTurn()}
       onRetrySeed={seed ? () => session.retrySeed() : undefined}
       onSend={(message) => session.sendMessage(message)}

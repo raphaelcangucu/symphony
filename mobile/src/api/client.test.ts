@@ -813,6 +813,54 @@ describe("createTrackerClient", () => {
     });
   });
 
+  it("registers, unregisters, and tests native push without exposing tokens in results", async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        jsonResponse({ data: { registered: true, device_id: "device-1" } }, { status: 201 }),
+      )
+      .mockResolvedValueOnce(jsonResponse({ data: { deleted: true } }))
+      .mockResolvedValueOnce(jsonResponse({ data: { sent: true, device_count: 1 } }));
+    const client = createTrackerClient({
+      origin: "https://demo.test",
+      token: "secret",
+      locale: "en",
+      fetchImpl,
+    });
+
+    await expect(
+      client.registerMobilePush({
+        profileId: "profile-1",
+        deviceId: "device-1",
+        platform: "android",
+        token: "ExponentPushToken[private]",
+      }),
+    ).resolves.toEqual({ registered: true, deviceId: "device-1" });
+    await expect(
+      client.unregisterMobilePush({
+        profileId: "profile-1",
+        deviceId: "device-1",
+      }),
+    ).resolves.toEqual({ deleted: true });
+    await expect(client.sendTestMobilePush()).resolves.toEqual({
+      sent: true,
+      deviceCount: 1,
+    });
+
+    expect(fetchImpl.mock.calls.map(([url]) => url)).toEqual([
+      "https://demo.test/api/tracker/v1/mobile_push/subscriptions",
+      "https://demo.test/api/tracker/v1/mobile_push/subscriptions",
+      "https://demo.test/api/tracker/v1/mobile_push/test",
+    ]);
+    expect(JSON.parse(String(fetchImpl.mock.calls[0]?.[1]?.body))).toEqual({
+      profile_id: "profile-1",
+      device_id: "device-1",
+      platform: "android",
+      token: "ExponentPushToken[private]",
+    });
+    expect(fetchImpl.mock.calls[1]?.[1]?.method).toBe("DELETE");
+  });
+
   it("throws a redacted auth error for unauthorized responses", async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
       jsonResponse(
