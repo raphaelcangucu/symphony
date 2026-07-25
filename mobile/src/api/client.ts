@@ -8,7 +8,18 @@ import type {
   AssistantModelOption,
   AssistantThread,
   CreateThreadInput,
+  CreateIssueInput,
+  GoalControlInput,
   Health,
+  IssueBlocker,
+  IssueComment,
+  IssueDispatchInput,
+  IssueDispatchResult,
+  IssueFormOptions,
+  IssueListOptions,
+  IssueMutationInput,
+  IssuePriority,
+  IssueSummary,
   ProjectSessionRow,
   ProjectSummary,
   ThreadListOptions,
@@ -31,7 +42,7 @@ type CreateTrackerClientOptions = {
 };
 
 type RequestOptions = {
-  method?: "GET" | "POST";
+  method?: "GET" | "POST" | "PATCH" | "DELETE";
   body?: unknown;
   signal?: AbortSignal | undefined;
   tracker?: boolean;
@@ -180,6 +191,154 @@ export function createTrackerClient(options: CreateTrackerClientOptions): Tracke
         ),
       );
     },
+    async issues(projectSlug, issueOptions = {}, signal) {
+      const query = issueListQuery(issueOptions);
+      const suffix = query.size > 0 ? `?${query.toString()}` : "";
+      return readArray(
+        unwrapData(
+          await request(`${issuePath(projectSlug)}${suffix}`, {
+            signal,
+          }),
+        ),
+        "issues",
+      ).map(mapIssue);
+    },
+    async issue(projectSlug, identifier, signal) {
+      return mapIssue(
+        unwrapData(await request(`${issuePath(projectSlug)}/${segment(identifier)}`, { signal })),
+      );
+    },
+    async issueFormOptions(projectSlug, signal) {
+      return mapIssueFormOptions(
+        unwrapData(await request(`${issuePath(projectSlug)}/form_options`, { signal })),
+      );
+    },
+    async createIssue(projectSlug, input, signal) {
+      return mapIssue(
+        unwrapData(
+          await request(issuePath(projectSlug), {
+            method: "POST",
+            body: issueMutationPayload(input),
+            signal,
+          }),
+        ),
+      );
+    },
+    async updateIssue(projectSlug, identifier, input, signal) {
+      return mapIssue(
+        unwrapData(
+          await request(`${issuePath(projectSlug)}/${segment(identifier)}`, {
+            method: "PATCH",
+            body: issueMutationPayload(input),
+            signal,
+          }),
+        ),
+      );
+    },
+    async comments(projectSlug, identifier, signal) {
+      return readArray(
+        unwrapData(
+          await request(`${issuePath(projectSlug)}/${segment(identifier)}/comments`, { signal }),
+        ),
+        "comments",
+      ).map(mapComment);
+    },
+    async createComment(projectSlug, identifier, body, signal) {
+      return mapComment(
+        unwrapData(
+          await request(`${issuePath(projectSlug)}/${segment(identifier)}/comments`, {
+            method: "POST",
+            body: { body: requireText(body, "comment body") },
+            signal,
+          }),
+        ),
+      );
+    },
+    async blockers(projectSlug, identifier, signal) {
+      return readArray(
+        unwrapData(
+          await request(`${issuePath(projectSlug)}/${segment(identifier)}/blockers`, { signal }),
+        ),
+        "blockers",
+      ).map(mapBlocker);
+    },
+    async dispatchIssue(projectSlug, identifier, input, signal) {
+      return mapDispatchResult(
+        unwrapData(
+          await request(`${issuePath(projectSlug)}/${segment(identifier)}/dispatch`, {
+            method: "POST",
+            body: dispatchPayload(input),
+            signal,
+          }),
+        ),
+      );
+    },
+    async goalControl(projectSlug, identifier, input, signal) {
+      return asRecord(
+        unwrapData(
+          await request(`${issuePath(projectSlug)}/${segment(identifier)}/goal`, {
+            method: "POST",
+            body: goalPayload(input),
+            signal,
+          }),
+        ),
+        "goal",
+      );
+    },
+  };
+}
+
+function issuePath(projectSlug: string): string {
+  return `/projects/${segment(requireText(projectSlug, "project slug"))}/issues`;
+}
+
+function segment(value: string): string {
+  return encodeURIComponent(requireText(value, "path segment"));
+}
+
+function issueListQuery(options: IssueListOptions): URLSearchParams {
+  const query = new URLSearchParams();
+  if (options.query?.trim()) query.set("q", options.query.trim());
+  if (options.assignee?.trim()) query.set("assignee", options.assignee.trim());
+  if (options.creator?.trim()) query.set("creator", options.creator.trim());
+  return query;
+}
+
+function issueMutationPayload(
+  input: CreateIssueInput | IssueMutationInput,
+): Record<string, unknown> {
+  return {
+    ...("title" in input && input.title !== undefined ? { title: input.title } : {}),
+    ...(input.description !== undefined ? { description: input.description } : {}),
+    ...(input.status !== undefined ? { status: input.status } : {}),
+    ...(input.priority !== undefined ? { priority: input.priority } : {}),
+    ...(input.labelIds !== undefined ? { label_ids: input.labelIds } : {}),
+    ...(input.assigneeIds !== undefined ? { assignee_ids: input.assigneeIds } : {}),
+    ...(input.agent !== undefined ? { agent: input.agent } : {}),
+    ...(input.goal !== undefined ? { goal: input.goal } : {}),
+    ...(input.model !== undefined ? { model: input.model } : {}),
+    ...(input.effort !== undefined ? { effort: input.effort } : {}),
+  };
+}
+
+function dispatchPayload(input: IssueDispatchInput): Record<string, unknown> {
+  return {
+    action: input.action,
+    ...(input.agent ? { agent: input.agent } : {}),
+    ...(input.goal ? { goal: input.goal } : {}),
+    ...(input.instructions ? { instructions: input.instructions } : {}),
+    ...(input.targetStatus ? { target_status: input.targetStatus } : {}),
+    ...(input.model ? { model: input.model } : {}),
+    ...(input.effort ? { effort: input.effort } : {}),
+    ...(input.mode ? { mode: input.mode } : {}),
+  };
+}
+
+function goalPayload(input: GoalControlInput): Record<string, unknown> {
+  return {
+    action: input.action,
+    ...(input.objective ? { objective: input.objective } : {}),
+    ...(input.tokenBudget !== undefined ? { token_budget: input.tokenBudget } : {}),
   };
 }
 
@@ -243,6 +402,149 @@ function mapProject(payload: unknown): ProjectSummary {
     slug: requireText(record.slug, "project slug"),
     name: requireText(record.name, "project name"),
   };
+}
+
+function mapIssue(payload: unknown): IssueSummary {
+  const record = asRecord(payload, "issue");
+  return {
+    id: requireText(record.id, "issue id"),
+    identifier: requireText(record.identifier, "issue identifier"),
+    displayIdentifier:
+      optionalText(record.display_identifier) ?? requireText(record.identifier, "issue identifier"),
+    projectSlug: requireText(record.project_slug, "issue project slug"),
+    title: requireText(record.title, "issue title"),
+    description: optionalText(record.description),
+    status: issueStatus(record.status),
+    priority: issuePriority(record.priority),
+    position: finiteNumber(record.position, 0),
+    labels: issueLabels(record.labels),
+    assignee: optionalText(record.assignee_id),
+    creator: optionalText(record.creator),
+    agentKind: readAgentKind(record.agent_kind),
+    agentGoal: optionalText(record.agent_goal),
+    branchName: optionalText(record.branch_name),
+    createdAt: optionalText(record.inserted_at) ?? "",
+    updatedAt: optionalText(record.updated_at) ?? "",
+  };
+}
+
+function mapComment(payload: unknown): IssueComment {
+  const record = asRecord(payload, "comment");
+  return {
+    id: requireText(record.id, "comment id"),
+    body: requireText(record.body, "comment body"),
+    author: optionalText(record.author),
+    kind: optionalText(record.kind) ?? "comment",
+    createdAt: optionalText(record.inserted_at) ?? "",
+    updatedAt: optionalText(record.updated_at) ?? "",
+  };
+}
+
+function mapIssueFormOptions(payload: unknown): IssueFormOptions {
+  const record = asRecord(payload, "issue form options");
+  const agents = readArray(record.agents ?? [], "issue agents").flatMap((value) => {
+    const agent = asRecord(value, "issue agent");
+    const kind = readAgentKind(agent.value);
+    return kind
+      ? [
+          {
+            value: kind,
+            label: optionalText(agent.label) ?? kind,
+            default: agent.default === true,
+          },
+        ]
+      : [];
+  });
+  const effectiveAgent =
+    readAgentKind(record.effective_agent) ?? agents.find((agent) => agent.default)?.value;
+  if (!effectiveAgent) {
+    throw new TrackerProtocolError("Tracker issue form options have no effective agent");
+  }
+  return {
+    statuses: readArray(record.statuses ?? [], "issue statuses").map(issueStatus),
+    labels: readArray(record.labels ?? [], "issue labels").map((value) => {
+      const label = asRecord(value, "issue label");
+      return {
+        id: optionalText(label.id),
+        name: requireText(label.name, "issue label name"),
+        color: optionalText(label.color),
+      };
+    }),
+    assignees: readArray(record.assignees ?? [], "issue assignees").map((value) => {
+      const assignee = asRecord(value, "issue assignee");
+      return {
+        id: optionalText(assignee.id),
+        login: optionalText(assignee.login),
+        name: optionalText(assignee.name),
+      };
+    }),
+    agents,
+    effectiveAgent,
+  };
+}
+
+function mapBlocker(payload: unknown): IssueBlocker {
+  const record = asRecord(payload, "blocker");
+  return {
+    identifier: requireText(record.identifier ?? record.target_identifier, "blocker identifier"),
+    title: optionalText(record.title) ?? "",
+    status: issueStatusOrNull(record.status),
+    relationType: optionalText(record.relation_type ?? record.type) ?? "blocked_by",
+  };
+}
+
+function mapDispatchResult(payload: unknown): IssueDispatchResult {
+  const record = asRecord(payload, "issue dispatch");
+  const action = record.action;
+  if (
+    action !== "resume" &&
+    action !== "hard_reset" &&
+    action !== "stop" &&
+    action !== "continue_work"
+  ) {
+    throw new TrackerProtocolError("Tracker issue dispatch action is invalid");
+  }
+  return {
+    action,
+    message: optionalText(record.message) ?? "",
+    issue: mapIssue(record.issue),
+  };
+}
+
+function issueStatus(value: unknown): string {
+  const status = issueStatusOrNull(value);
+  if (!status) throw new TrackerProtocolError("Tracker issue status is missing");
+  return status;
+}
+
+function issueStatusOrNull(value: unknown): string | null {
+  if (typeof value === "string" && value.trim()) return value.trim();
+  if (isRecord(value)) return optionalText(value.name);
+  return null;
+}
+
+function issuePriority(value: unknown): IssuePriority | null {
+  const priority = Number(value);
+  return Number.isInteger(priority) && priority >= 0 && priority <= 4
+    ? (priority as IssuePriority)
+    : null;
+}
+
+function issueLabels(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((label) => {
+    if (typeof label === "string" && label.trim()) return [label.trim()];
+    if (isRecord(label)) {
+      const name = optionalText(label.name);
+      return name ? [name] : [];
+    }
+    return [];
+  });
+}
+
+function finiteNumber(value: unknown, fallback: number): number {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
 }
 
 function mapThread(payload: unknown): AssistantThread {

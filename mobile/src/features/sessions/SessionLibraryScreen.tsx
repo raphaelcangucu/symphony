@@ -7,6 +7,7 @@ import {
   SquareTerminal,
 } from "lucide-react-native";
 import { Pressable, SectionList, StyleSheet, Text, TextInput, View } from "react-native";
+import { useState } from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import type { ConnectionState } from "@/components/ConnectionBadge";
@@ -15,6 +16,7 @@ import { StateView } from "@/components/StateView";
 import { StatusDot, type StatusTone } from "@/components/StatusDot";
 import { radii, spacing } from "@/theme/tokens";
 import { useAppTheme } from "@/theme/ThemeProvider";
+import { RootMenu } from "@/features/navigation/RootMenu";
 
 import type { SessionTreeGroup, SessionTreeRow, SessionTreeState } from "./session-tree";
 
@@ -27,6 +29,11 @@ type SessionLibraryScreenProps = {
   loading: boolean;
   error: string | null;
   onNewChat(): void;
+  onOpenConnections(): void;
+  onOpenDiagnostics(): void;
+  onOpenNotifications(): void;
+  onOpenSettings(): void;
+  onOpenTasks(): void;
   onOpenSession(threadId: number): void;
   onQueryChange(query: string): void;
   onRefresh(): void;
@@ -49,12 +56,18 @@ export function SessionLibraryScreen({
   loading,
   error,
   onNewChat,
+  onOpenConnections,
+  onOpenDiagnostics,
+  onOpenNotifications,
+  onOpenSettings,
+  onOpenTasks,
   onOpenSession,
   onQueryChange,
   onRefresh,
   onToggleGroup,
 }: SessionLibraryScreenProps) {
   const { colors } = useAppTheme();
+  const [menuOpen, setMenuOpen] = useState(false);
 
   return (
     <SafeAreaView
@@ -62,9 +75,14 @@ export function SessionLibraryScreen({
       style={[styles.safeArea, { backgroundColor: colors.bgBase }]}
     >
       <View style={styles.header}>
-        <View style={styles.headerBrand}>
+        <Pressable
+          accessibilityLabel="Open main menu"
+          accessibilityRole="button"
+          onPress={() => setMenuOpen((open) => !open)}
+          style={styles.headerBrand}
+        >
           <SquareTerminal color={colors.textPrimary} size={22} strokeWidth={1.8} />
-        </View>
+        </Pressable>
 
         <View style={styles.connection}>
           <Text style={[styles.connectionName, { color: colors.textPrimary }]}>
@@ -80,6 +98,17 @@ export function SessionLibraryScreen({
 
         <View style={styles.headerBrand} />
       </View>
+
+      {menuOpen ? (
+        <RootMenu
+          onClose={() => setMenuOpen(false)}
+          onOpenConnections={onOpenConnections}
+          onOpenDiagnostics={onOpenDiagnostics}
+          onOpenNotifications={onOpenNotifications}
+          onOpenSettings={onOpenSettings}
+          onOpenTasks={onOpenTasks}
+        />
+      ) : null}
 
       <Text style={[styles.heading, { color: colors.textPrimary }]}>Projects</Text>
 

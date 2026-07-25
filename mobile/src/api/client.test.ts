@@ -207,6 +207,172 @@ describe("createTrackerClient", () => {
     });
   });
 
+  it("maps issue operations and binds encoded issue routes", async () => {
+    const issueDto = {
+      id: "issue-7",
+      identifier: "MOB-7",
+      display_identifier: "MOB-7",
+      project_slug: "mobile app",
+      title: "Bring Orca workflows",
+      description: "Complete task operations",
+      status: { id: "started", name: "In Progress", category: "started" },
+      priority: 1,
+      position: 2,
+      labels: ["mobile", "orca"],
+      blocked_by: [],
+      assignee_id: "raphael",
+      creator: "raphael",
+      agent_kind: "codex",
+      agent_goal: "Ship the app",
+      branch_name: "agent/mobile",
+      inserted_at: "2026-07-24T01:00:00Z",
+      updated_at: "2026-07-24T02:00:00Z",
+    };
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ data: [issueDto] }))
+      .mockResolvedValueOnce(jsonResponse({ data: issueDto }))
+      .mockResolvedValueOnce(jsonResponse({ data: issueDto }, { status: 201 }))
+      .mockResolvedValueOnce(jsonResponse({ data: { ...issueDto, title: "Updated" } }))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          data: [
+            {
+              id: "comment-1",
+              body: "Continue",
+              author: "raphael",
+              kind: "comment",
+              inserted_at: "2026-07-24T02:30:00Z",
+              updated_at: "2026-07-24T02:30:00Z",
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(
+          {
+            data: {
+              id: "comment-2",
+              body: "Done",
+              author: "raphael",
+              kind: "comment",
+              inserted_at: "2026-07-24T02:40:00Z",
+              updated_at: "2026-07-24T02:40:00Z",
+            },
+          },
+          { status: 201 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          data: [
+            {
+              identifier: "MOB-3",
+              title: "Foundation",
+              status: "In Progress",
+              relation_type: "blocked_by",
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          data: {
+            action: "continue_work",
+            message: "Agent continued",
+            issue: issueDto,
+          },
+        }),
+      )
+      .mockResolvedValueOnce(jsonResponse({ data: { status: "running" } }));
+    const client = createTrackerClient({
+      origin: "https://demo.test",
+      token: "secret",
+      locale: "en",
+      fetchImpl,
+    });
+
+    await expect(client.issues("mobile app", { query: "Orca" })).resolves.toEqual([
+      expect.objectContaining({
+        identifier: "MOB-7",
+        projectSlug: "mobile app",
+        status: "In Progress",
+        labels: ["mobile", "orca"],
+      }),
+    ]);
+    await client.issue("mobile app", "MOB/7");
+    await client.createIssue("mobile app", {
+      title: "Bring Orca workflows",
+      status: "In Progress",
+      priority: 1,
+    });
+    await client.updateIssue("mobile app", "MOB/7", { title: "Updated" });
+    await expect(client.comments("mobile app", "MOB/7")).resolves.toEqual([
+      expect.objectContaining({ id: "comment-1", body: "Continue" }),
+    ]);
+    await client.createComment("mobile app", "MOB/7", "Done");
+    await expect(client.blockers("mobile app", "MOB/7")).resolves.toEqual([
+      expect.objectContaining({ identifier: "MOB-3", relationType: "blocked_by" }),
+    ]);
+    await client.dispatchIssue("mobile app", "MOB/7", {
+      action: "continue_work",
+      instructions: "Finish mobile parity",
+    });
+    await client.goalControl("mobile app", "MOB/7", { action: "resume" });
+
+    expect(fetchImpl.mock.calls.map(([url]) => url)).toEqual([
+      "https://demo.test/api/tracker/v1/projects/mobile%20app/issues?q=Orca",
+      "https://demo.test/api/tracker/v1/projects/mobile%20app/issues/MOB%2F7",
+      "https://demo.test/api/tracker/v1/projects/mobile%20app/issues",
+      "https://demo.test/api/tracker/v1/projects/mobile%20app/issues/MOB%2F7",
+      "https://demo.test/api/tracker/v1/projects/mobile%20app/issues/MOB%2F7/comments",
+      "https://demo.test/api/tracker/v1/projects/mobile%20app/issues/MOB%2F7/comments",
+      "https://demo.test/api/tracker/v1/projects/mobile%20app/issues/MOB%2F7/blockers",
+      "https://demo.test/api/tracker/v1/projects/mobile%20app/issues/MOB%2F7/dispatch",
+      "https://demo.test/api/tracker/v1/projects/mobile%20app/issues/MOB%2F7/goal",
+    ]);
+    expect(fetchImpl.mock.calls[2]?.[1]?.method).toBe("POST");
+    expect(fetchImpl.mock.calls[3]?.[1]?.method).toBe("PATCH");
+    expect(JSON.parse(String(fetchImpl.mock.calls[7]?.[1]?.body))).toEqual({
+      action: "continue_work",
+      instructions: "Finish mobile parity",
+    });
+  });
+
+  it("maps issue creation options", async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse({
+        data: {
+          statuses: [
+            { id: "todo", name: "Todo", category: "unstarted", position: 1 },
+            { id: "started", name: "In Progress", category: "started", position: 2 },
+          ],
+          labels: [{ id: "mobile", name: "Mobile", color: "#60a5fa" }],
+          assignees: [{ id: "user-1", login: "raphael", name: "Raphael" }],
+          agents: [{ value: "codex", label: "Codex", default: true }],
+          effective_agent: "codex",
+        },
+      }),
+    );
+    const client = createTrackerClient({
+      origin: "https://demo.test",
+      token: "secret",
+      locale: "en",
+      fetchImpl,
+    });
+
+    await expect(client.issueFormOptions("mobile app")).resolves.toEqual({
+      statuses: ["Todo", "In Progress"],
+      labels: [{ id: "mobile", name: "Mobile", color: "#60a5fa" }],
+      assignees: [{ id: "user-1", login: "raphael", name: "Raphael" }],
+      agents: [{ value: "codex", label: "Codex", default: true }],
+      effectiveAgent: "codex",
+    });
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe(
+      "https://demo.test/api/tracker/v1/projects/mobile%20app/issues/form_options",
+    );
+  });
+
   it("throws a redacted auth error for unauthorized responses", async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
       jsonResponse(

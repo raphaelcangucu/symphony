@@ -15,6 +15,103 @@ export type ProjectSummary = {
   name: string;
 };
 
+export type IssuePriority = 0 | 1 | 2 | 3 | 4;
+
+export type IssueSummary = {
+  id: string;
+  identifier: string;
+  displayIdentifier: string;
+  projectSlug: string;
+  title: string;
+  description: string | null;
+  status: string;
+  priority: IssuePriority | null;
+  position: number;
+  labels: string[];
+  assignee: string | null;
+  creator: string | null;
+  agentKind: AgentKind | null;
+  agentGoal: string | null;
+  branchName: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type IssueListOptions = {
+  query?: string;
+  assignee?: string;
+  creator?: string;
+};
+
+export type IssueMutationInput = {
+  title?: string;
+  description?: string | null;
+  status?: string;
+  priority?: IssuePriority | null;
+  labelIds?: string[];
+  assigneeIds?: string[];
+  agent?: AgentKind | null;
+  goal?: string | null;
+  model?: string | null;
+  effort?: string | null;
+};
+
+export type CreateIssueInput = IssueMutationInput & {
+  title: string;
+  status: string;
+};
+
+export type IssueComment = {
+  id: string;
+  body: string;
+  author: string | null;
+  kind: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type IssueFormOptions = {
+  statuses: string[];
+  labels: Array<{ id: string | null; name: string; color: string | null }>;
+  assignees: Array<{
+    id: string | null;
+    login: string | null;
+    name: string | null;
+  }>;
+  agents: Array<{ value: AgentKind; label: string; default: boolean }>;
+  effectiveAgent: AgentKind;
+};
+
+export type IssueBlocker = {
+  identifier: string;
+  title: string;
+  status: string | null;
+  relationType: string;
+};
+
+export type IssueDispatchInput = {
+  action: "resume" | "hard_reset" | "stop" | "continue_work";
+  agent?: AgentKind;
+  goal?: string;
+  instructions?: string;
+  targetStatus?: string;
+  model?: string;
+  effort?: string;
+  mode?: "plan" | "build" | "yolo";
+};
+
+export type IssueDispatchResult = {
+  action: IssueDispatchInput["action"];
+  message: string;
+  issue: IssueSummary;
+};
+
+export type GoalControlInput = {
+  action: "get" | "pause" | "resume" | "clear" | "set_objective" | "set_budget";
+  objective?: string;
+  tokenBudget?: number;
+};
+
 export type AssistantThread = {
   id: number;
   scope: string;
@@ -128,4 +225,42 @@ export type TrackerClient = {
   ): Promise<ProjectSessionsPage>;
   assistantCatalog(projectSlug: string, signal?: AbortSignal): Promise<AssistantCatalog>;
   createThread(input: CreateThreadInput, signal?: AbortSignal): Promise<AssistantThread>;
+  issues(
+    projectSlug: string,
+    options?: IssueListOptions,
+    signal?: AbortSignal,
+  ): Promise<IssueSummary[]>;
+  issue(projectSlug: string, identifier: string, signal?: AbortSignal): Promise<IssueSummary>;
+  issueFormOptions(projectSlug: string, signal?: AbortSignal): Promise<IssueFormOptions>;
+  createIssue(
+    projectSlug: string,
+    input: CreateIssueInput,
+    signal?: AbortSignal,
+  ): Promise<IssueSummary>;
+  updateIssue(
+    projectSlug: string,
+    identifier: string,
+    input: IssueMutationInput,
+    signal?: AbortSignal,
+  ): Promise<IssueSummary>;
+  comments(projectSlug: string, identifier: string, signal?: AbortSignal): Promise<IssueComment[]>;
+  createComment(
+    projectSlug: string,
+    identifier: string,
+    body: string,
+    signal?: AbortSignal,
+  ): Promise<IssueComment>;
+  blockers(projectSlug: string, identifier: string, signal?: AbortSignal): Promise<IssueBlocker[]>;
+  dispatchIssue(
+    projectSlug: string,
+    identifier: string,
+    input: IssueDispatchInput,
+    signal?: AbortSignal,
+  ): Promise<IssueDispatchResult>;
+  goalControl(
+    projectSlug: string,
+    identifier: string,
+    input: GoalControlInput,
+    signal?: AbortSignal,
+  ): Promise<Record<string, unknown>>;
 };

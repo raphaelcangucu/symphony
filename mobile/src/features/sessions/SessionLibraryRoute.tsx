@@ -26,6 +26,11 @@ export function SessionLibraryRoute() {
       connectionName={activeProfile.name}
       onCollapsedChange={setCollapsed}
       onNewChat={() => router.push("/new-session")}
+      onOpenConnections={() => router.push("/connections")}
+      onOpenDiagnostics={() => router.push("/diagnostics")}
+      onOpenNotifications={() => router.push("/notifications")}
+      onOpenSettings={() => router.push("/settings")}
+      onOpenTasks={() => router.push("/tasks")}
       onOpenSession={(threadId) => router.push(`/session/${threadId}`)}
       onQueryChange={setQuery}
       profileId={activeProfile.id}
@@ -40,6 +45,11 @@ function ConnectedSessionLibrary({
   connectionName,
   onCollapsedChange,
   onNewChat,
+  onOpenConnections,
+  onOpenDiagnostics,
+  onOpenNotifications,
+  onOpenSettings,
+  onOpenTasks,
   onOpenSession,
   onQueryChange,
   profileId,
@@ -50,6 +60,11 @@ function ConnectedSessionLibrary({
   connectionName: string;
   onCollapsedChange(value: Set<string>): void;
   onNewChat(): void;
+  onOpenConnections(): void;
+  onOpenDiagnostics(): void;
+  onOpenNotifications(): void;
+  onOpenSettings(): void;
+  onOpenTasks(): void;
   onOpenSession(threadId: number): void;
   onQueryChange(query: string): void;
   profileId: string;
@@ -81,6 +96,11 @@ function ConnectedSessionLibrary({
       groups={library.groups}
       loading={library.loading || library.refreshing}
       onNewChat={onNewChat}
+      onOpenConnections={onOpenConnections}
+      onOpenDiagnostics={onOpenDiagnostics}
+      onOpenNotifications={onOpenNotifications}
+      onOpenSettings={onOpenSettings}
+      onOpenTasks={onOpenTasks}
       onOpenSession={onOpenSession}
       onQueryChange={onQueryChange}
       onRefresh={() => void library.refresh()}

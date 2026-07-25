@@ -24,6 +24,9 @@ describe("fixture runtime boundary", () => {
     await expect(client.projects()).resolves.toEqual([
       expect.objectContaining({ slug: "symphony" }),
     ]);
+    await expect(client.issues("symphony")).resolves.toEqual([
+      expect.objectContaining({ identifier: "MOB-7" }),
+    ]);
     const session = runtime.createAssistantSession({
       threadId: 42,
       origin: "https://fixture.test",

@@ -1,6 +1,8 @@
 import type {
   AssistantCatalog,
   AssistantThread,
+  IssueComment,
+  IssueSummary,
   ProjectSessionRow,
   ProjectSummary,
   TrackerClient,
@@ -23,6 +25,33 @@ const snapshot: ConnectionStorageSnapshot = {
   activeProfileId: profile.id,
 };
 const projects: ProjectSummary[] = [{ id: "project-symphony", slug: "symphony", name: "Symphony" }];
+const fixtureIssue: IssueSummary = {
+  id: "issue-mob-7",
+  identifier: "MOB-7",
+  displayIdentifier: "MOB-7",
+  projectSlug: "symphony",
+  title: "Complete Orca mobile parity",
+  description: "Bring task and workspace operations to Symphony Mobile.",
+  status: "In Progress",
+  priority: 1,
+  position: 1,
+  labels: ["mobile", "orca"],
+  assignee: "raphael",
+  creator: "raphael",
+  agentKind: "codex",
+  agentGoal: "Ship the complete mobile experience",
+  branchName: "agent/mobile-companion-e2e",
+  createdAt: "2026-07-24T01:00:00Z",
+  updatedAt: "2026-07-24T02:00:00Z",
+};
+const fixtureComment: IssueComment = {
+  id: "comment-1",
+  body: "Continue from the native task screen.",
+  author: "raphael",
+  kind: "comment",
+  createdAt: "2026-07-24T01:30:00Z",
+  updatedAt: "2026-07-24T01:30:00Z",
+};
 const fixtureThread: AssistantThread = {
   id: 42,
   scope: "project_session",
@@ -107,6 +136,8 @@ export function createFixtureConnectionStorage(): ConnectionStorage {
 }
 
 export function createFixtureTrackerClient(): TrackerClient {
+  let issue = fixtureIssue;
+  const comments = [fixtureComment];
   return {
     health: async () => ({ status: "ok" }),
     viewer: async () => ({ id: "fixture-user", name: "raphael" }),
@@ -123,6 +154,53 @@ export function createFixtureTrackerClient(): TrackerClient {
       projectName: input.scope === "freeform" ? null : "Symphony",
       issueIdentifier: input.scope === "issue_session" ? input.issueIdentifier : null,
       workspacePath: "workspacePath" in input ? (input.workspacePath ?? null) : null,
+    }),
+    issues: async () => [issue],
+    issue: async () => issue,
+    issueFormOptions: async () => ({
+      statuses: ["Todo", "In Progress", "Done"],
+      labels: [{ id: "mobile", name: "Mobile", color: "#60a5fa" }],
+      assignees: [{ id: "fixture-user", login: "raphael", name: "Raphael" }],
+      agents: [{ value: "codex", label: "Codex", default: true }],
+      effectiveAgent: "codex",
+    }),
+    createIssue: async (_projectSlug, input) => {
+      issue = {
+        ...fixtureIssue,
+        title: input.title,
+        description: input.description ?? null,
+        status: input.status,
+        priority: input.priority ?? null,
+        agentKind: input.agent ?? null,
+        agentGoal: input.goal ?? null,
+      };
+      return issue;
+    },
+    updateIssue: async (_projectSlug, _identifier, input) => {
+      issue = {
+        ...issue,
+        ...(input.title !== undefined ? { title: input.title } : {}),
+        ...(input.description !== undefined ? { description: input.description } : {}),
+        ...(input.status !== undefined ? { status: input.status } : {}),
+        ...(input.priority !== undefined ? { priority: input.priority } : {}),
+      };
+      return issue;
+    },
+    comments: async () => comments,
+    createComment: async (_projectSlug, _identifier, body) => {
+      const comment = { ...fixtureComment, id: `comment-${comments.length + 1}`, body };
+      comments.push(comment);
+      return comment;
+    },
+    blockers: async () => [],
+    dispatchIssue: async (_projectSlug, _identifier, input) => ({
+      action: input.action,
+      message: "Fixture agent action accepted",
+      issue,
+    }),
+    goalControl: async (_projectSlug, _identifier, input) => ({
+      action: input.action,
+      status: input.action === "pause" ? "paused" : "running",
     }),
   };
 }
