@@ -91,7 +91,7 @@ Run:
 
 Expected: PASS.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 Commit message: `feat(mobile): add Orca-style task operations`
 
@@ -181,14 +181,14 @@ Terminal has reconnect and keyboard controls. Preview opens the primary ready
 dev-server URL with explicit unavailable/offline states. Files provide search,
 tree/list, source text, Markdown text and authenticated image preview.
 
-- [ ] **Step 5: Verify**
+- [x] **Step 5: Verify**
 
 Run:
 `cd mobile && npm run test:unit -- src/realtime/terminal-session.test.ts src/api/client.test.ts && npm run test:ui -- src/features/workspace && npm run typecheck`
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 Commit message: `feat(mobile): add terminal preview and files`
 
@@ -208,25 +208,25 @@ Commit message: `feat(mobile): add terminal preview and files`
 - Modify: `elixir/lib/symphony_elixir_web/router.ex`
 - Modify: `elixir/lib/symphony_elixir_web/controllers/tracker/workspace_diff_controller.ex`
 
-- [ ] **Step 1: Write failing diff API tests**
+- [x] **Step 1: Write failing diff API tests**
 
 Prove stats, paginated file metadata and one-file patches are loaded separately.
 Prove commit/push mutations require explicit messages and surface structured
 server failures.
 
-- [ ] **Step 2: Run tests and verify RED**
+- [x] **Step 2: Run tests and verify RED**
 
 Run: `cd mobile && npm run test:unit -- src/api/client.test.ts src/features/source-control`
 
 Expected: FAIL because diff contracts are absent.
 
-- [ ] **Step 3: Add thread-scoped push when absent and implement client**
+- [x] **Step 3: Add thread-scoped push when absent and implement client**
 
 Add the thread push route with the same workspace resolution and sandbox rules
 as thread commit. Implement stats/files/patch/commit/push methods in the mobile
 client.
 
-- [ ] **Step 4: Implement diff and commit/push UI**
+- [x] **Step 4: Implement diff and commit/push UI**
 
 Render per-repository stats, lazy file patches and semantic add/delete colors.
 Require confirmation before commit or push and refresh stats after success.

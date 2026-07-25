@@ -147,6 +147,7 @@ defmodule SymphonyElixirWeb.Router do
     get("/assistant/threads/:thread_id/diff/files", WorkspaceDiffController, :files_thread)
     get("/assistant/threads/:thread_id/diff/patch", WorkspaceDiffController, :file_patch_thread)
     post("/assistant/threads/:thread_id/diff/commit", WorkspaceDiffController, :commit_thread)
+    post("/assistant/threads/:thread_id/diff/push", WorkspaceDiffController, :push_thread)
     get("/assistant/threads/:thread_id/documents", AssistantThreadDocumentController, :index)
     get("/assistant/threads/:thread_id/documents/*path", AssistantThreadDocumentController, :show)
     get("/recents", RecentsController, :index)

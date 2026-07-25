@@ -147,6 +147,93 @@ export type DevServerList = {
   servers: DevServer[];
 };
 
+export type GitDiffType = "branch" | "uncommitted";
+
+export type GitDiffWorkspace = {
+  path: string;
+  available: boolean;
+};
+
+export type GitDiffRepoStat = {
+  repo: string;
+  branch: string | null;
+  base: string | null;
+  filesChanged: number;
+  additions: number;
+  deletions: number;
+  untracked: number;
+};
+
+export type GitDiffStatsResult = {
+  stats: GitDiffRepoStat[];
+  workspace: GitDiffWorkspace;
+};
+
+export type GitDiffFileEntry = {
+  repo: string;
+  path: string;
+  oldPath: string | null;
+  status: string;
+  additions: number | null;
+  deletions: number | null;
+  binary: boolean;
+};
+
+export type GitDiffFilesOptions = {
+  type?: GitDiffType;
+  repo?: string;
+  query?: string;
+  limit?: number;
+  cursor?: string;
+};
+
+export type GitDiffFilesPage = {
+  files: GitDiffFileEntry[];
+  total: number;
+  limit: number;
+  nextCursor: string | null;
+  workspace: GitDiffWorkspace;
+};
+
+export type GitDiffPatchOptions = {
+  type?: GitDiffType;
+  repo: string;
+  path: string;
+};
+
+export type GitDiffPatchResult = {
+  repo: string;
+  path: string;
+  status: string;
+  binary: boolean;
+  truncated: boolean;
+  patch: string;
+  workspace: GitDiffWorkspace;
+};
+
+export type GitDiffCommitResult = {
+  repo: string;
+  sha: string;
+  message: string;
+  files: string[];
+};
+
+export type GitDiffCommitResponse = {
+  commits: GitDiffCommitResult[];
+  workspace: GitDiffWorkspace;
+};
+
+export type GitDiffPushResult = {
+  repo: string;
+  ok: boolean;
+  error?: string;
+};
+
+export type GitDiffPushResponse = {
+  results: GitDiffPushResult[];
+  workspace: GitDiffWorkspace;
+};
+
 export type AssistantThread = {
   id: number;
   scope: string;
@@ -307,4 +394,25 @@ export type TrackerClient = {
   threadDevServers(threadId: number, signal?: AbortSignal): Promise<DevServerList>;
   startThreadDevServers(threadId: number, signal?: AbortSignal): Promise<DevServerList>;
   restartThreadDevServers(threadId: number, signal?: AbortSignal): Promise<DevServerList>;
+  threadDiffStats(
+    threadId: number,
+    type?: GitDiffType,
+    signal?: AbortSignal,
+  ): Promise<GitDiffStatsResult>;
+  threadDiffFiles(
+    threadId: number,
+    options?: GitDiffFilesOptions,
+    signal?: AbortSignal,
+  ): Promise<GitDiffFilesPage>;
+  threadDiffPatch(
+    threadId: number,
+    options: GitDiffPatchOptions,
+    signal?: AbortSignal,
+  ): Promise<GitDiffPatchResult>;
+  commitThreadDiff(
+    threadId: number,
+    message: string,
+    signal?: AbortSignal,
+  ): Promise<GitDiffCommitResponse>;
+  pushThreadDiff(threadId: number, signal?: AbortSignal): Promise<GitDiffPushResponse>;
 };

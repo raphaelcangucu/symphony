@@ -462,6 +462,191 @@ describe("createTrackerClient", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(3);
   });
 
+  it("loads thread diff stats, paginated files, and one patch independently", async () => {
+    const workspace = { path: "/tmp/mobile app", available: true };
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          data: [
+            {
+              repo: ".",
+              branch: "agent/mobile",
+              base: "main",
+              files_changed: 2,
+              additions: 12,
+              deletions: 3,
+              untracked: 1,
+            },
+          ],
+          workspace,
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          files: [
+            {
+              repo: ".",
+              path: "mobile/src/App.tsx",
+              old_path: null,
+              status: "modified",
+              additions: 12,
+              deletions: 3,
+              binary: false,
+            },
+          ],
+          total: 2,
+          limit: 1,
+          next_cursor: "mobile/src/App.tsx",
+          workspace,
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          data: {
+            repo: ".",
+            path: "mobile/src/App.tsx",
+            status: "modified",
+            binary: false,
+            truncated: false,
+            patch: "@@ -1 +1 @@\n-old\n+new",
+          },
+          workspace,
+        }),
+      );
+    const client = createTrackerClient({
+      origin: "https://demo.test",
+      token: "secret",
+      locale: "en",
+      fetchImpl,
+    });
+
+    await expect(client.threadDiffStats(42, "uncommitted")).resolves.toEqual({
+      stats: [
+        {
+          repo: ".",
+          branch: "agent/mobile",
+          base: "main",
+          filesChanged: 2,
+          additions: 12,
+          deletions: 3,
+          untracked: 1,
+        },
+      ],
+      workspace,
+    });
+    await expect(
+      client.threadDiffFiles(42, {
+        type: "uncommitted",
+        query: "App",
+        limit: 1,
+        cursor: "start",
+      }),
+    ).resolves.toEqual({
+      files: [
+        {
+          repo: ".",
+          path: "mobile/src/App.tsx",
+          oldPath: null,
+          status: "modified",
+          additions: 12,
+          deletions: 3,
+          binary: false,
+        },
+      ],
+      total: 2,
+      limit: 1,
+      nextCursor: "mobile/src/App.tsx",
+      workspace,
+    });
+    await expect(
+      client.threadDiffPatch(42, {
+        type: "uncommitted",
+        repo: ".",
+        path: "mobile/src/App.tsx",
+      }),
+    ).resolves.toEqual({
+      repo: ".",
+      path: "mobile/src/App.tsx",
+      status: "modified",
+      binary: false,
+      truncated: false,
+      patch: "@@ -1 +1 @@\n-old\n+new",
+      workspace,
+    });
+
+    expect(fetchImpl.mock.calls.map(([url]) => url)).toEqual([
+      "https://demo.test/api/tracker/v1/assistant/threads/42/diff/stats?type=uncommitted",
+      "https://demo.test/api/tracker/v1/assistant/threads/42/diff/files?type=uncommitted&q=App&limit=1&cursor=start",
+      "https://demo.test/api/tracker/v1/assistant/threads/42/diff/patch?type=uncommitted&repo=.&path=mobile%2Fsrc%2FApp.tsx",
+    ]);
+  });
+
+  it("requires a commit message and preserves per-repository push failures", async () => {
+    const workspace = { path: "/tmp/mobile", available: true };
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          data: [
+            {
+              repo: ".",
+              sha: "abc123",
+              message: "feat: ship mobile diff",
+              files: ["mobile/src/App.tsx"],
+            },
+          ],
+          workspace,
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          data: [
+            { repo: ".", ok: true },
+            { repo: "tracker", ok: false, error: "no upstream branch" },
+          ],
+          workspace,
+        }),
+      );
+    const client = createTrackerClient({
+      origin: "https://demo.test",
+      token: "secret",
+      locale: "en",
+      fetchImpl,
+    });
+
+    await expect(client.commitThreadDiff(42, "  ")).rejects.toThrow("commit message");
+    expect(fetchImpl).not.toHaveBeenCalled();
+    await expect(client.commitThreadDiff(42, " feat: ship mobile diff ")).resolves.toEqual({
+      commits: [
+        {
+          repo: ".",
+          sha: "abc123",
+          message: "feat: ship mobile diff",
+          files: ["mobile/src/App.tsx"],
+        },
+      ],
+      workspace,
+    });
+    await expect(client.pushThreadDiff(42)).resolves.toEqual({
+      results: [
+        { repo: ".", ok: true },
+        { repo: "tracker", ok: false, error: "no upstream branch" },
+      ],
+      workspace,
+    });
+
+    expect(fetchImpl.mock.calls.map(([url]) => url)).toEqual([
+      "https://demo.test/api/tracker/v1/assistant/threads/42/diff/commit",
+      "https://demo.test/api/tracker/v1/assistant/threads/42/diff/push",
+    ]);
+    expect(fetchImpl.mock.calls[0]?.[1]?.method).toBe("POST");
+    expect(JSON.parse(String(fetchImpl.mock.calls[0]?.[1]?.body))).toEqual({
+      message: "feat: ship mobile diff",
+    });
+    expect(fetchImpl.mock.calls[1]?.[1]?.method).toBe("POST");
+  });
+
   it("throws a redacted auth error for unauthorized responses", async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
       jsonResponse(

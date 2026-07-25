@@ -11,6 +11,16 @@ import type {
   CreateIssueInput,
   DevServer,
   DevServerList,
+  GitDiffCommitResponse,
+  GitDiffFileEntry,
+  GitDiffFilesOptions,
+  GitDiffFilesPage,
+  GitDiffPatchOptions,
+  GitDiffPatchResult,
+  GitDiffPushResponse,
+  GitDiffRepoStat,
+  GitDiffType,
+  GitDiffWorkspace,
   GoalControlInput,
   Health,
   IssueBlocker,
@@ -329,6 +339,62 @@ export function createTrackerClient(options: CreateTrackerClientOptions): Tracke
         ),
       );
     },
+    async threadDiffStats(threadId, type = "uncommitted", signal) {
+      const query = diffTypeQuery(type);
+      const payload = asRecord(
+        await request(`${threadPath(threadId)}/diff/stats?${query.toString()}`, { signal }),
+        "thread diff stats",
+      );
+      return {
+        stats: readArray(payload.data, "thread diff stats").map(mapGitDiffRepoStat),
+        workspace: mapGitDiffWorkspace(payload.workspace),
+      };
+    },
+    async threadDiffFiles(threadId, diffOptions = {}, signal) {
+      const query = diffFilesQuery(diffOptions);
+      return mapGitDiffFilesPage(
+        await request(`${threadPath(threadId)}/diff/files?${query.toString()}`, { signal }),
+      );
+    },
+    async threadDiffPatch(threadId, diffOptions, signal) {
+      const query = diffPatchQuery(diffOptions);
+      const payload = asRecord(
+        await request(`${threadPath(threadId)}/diff/patch?${query.toString()}`, { signal }),
+        "thread diff patch",
+      );
+      return {
+        ...mapGitDiffPatch(unwrapData(payload)),
+        workspace: mapGitDiffWorkspace(payload.workspace),
+      };
+    },
+    async commitThreadDiff(threadId, message, signal) {
+      const commitMessage = requireText(message, "commit message");
+      const payload = asRecord(
+        await request(`${threadPath(threadId)}/diff/commit`, {
+          method: "POST",
+          body: { message: commitMessage },
+          signal,
+        }),
+        "thread diff commit",
+      );
+      return {
+        commits: readArray(payload.data, "thread diff commits").map(mapGitDiffCommit),
+        workspace: mapGitDiffWorkspace(payload.workspace),
+      };
+    },
+    async pushThreadDiff(threadId, signal) {
+      const payload = asRecord(
+        await request(`${threadPath(threadId)}/diff/push`, {
+          method: "POST",
+          signal,
+        }),
+        "thread diff push",
+      );
+      return {
+        results: readArray(payload.data, "thread diff push results").map(mapGitDiffPushResult),
+        workspace: mapGitDiffWorkspace(payload.workspace),
+      };
+    },
   };
 }
 
@@ -348,6 +414,40 @@ function safeDocumentPath(path: string): string {
     segments.some((item) => item === "" || item === "." || item === "..")
   ) {
     throw new TrackerProtocolError("Tracker document path must be a safe relative markdown path");
+  }
+  return normalized;
+}
+
+function diffTypeQuery(type: GitDiffType): URLSearchParams {
+  const query = new URLSearchParams();
+  query.set("type", type);
+  return query;
+}
+
+function diffFilesQuery(options: GitDiffFilesOptions): URLSearchParams {
+  const query = diffTypeQuery(options.type ?? "uncommitted");
+  if (options.repo?.trim()) query.set("repo", options.repo.trim());
+  if (options.query?.trim()) query.set("q", options.query.trim());
+  if (options.limit !== undefined) query.set("limit", String(options.limit));
+  if (options.cursor?.trim()) query.set("cursor", options.cursor.trim());
+  return query;
+}
+
+function diffPatchQuery(options: GitDiffPatchOptions): URLSearchParams {
+  const query = diffTypeQuery(options.type ?? "uncommitted");
+  query.set("repo", requireText(options.repo, "diff repository"));
+  query.set("path", safeRelativePath(options.path, "diff file path"));
+  return query;
+}
+
+function safeRelativePath(path: string, label: string): string {
+  const normalized = requireText(path, label).replaceAll("\\", "/");
+  const segments = normalized.split("/");
+  if (
+    normalized.startsWith("/") ||
+    segments.some((item) => item === "" || item === "." || item === "..")
+  ) {
+    throw new TrackerProtocolError(`Tracker ${label} must be a safe relative path`);
   }
   return normalized;
 }
@@ -591,6 +691,91 @@ function mapDevServer(payload: unknown): DevServer | null {
     publicUrl: optionalText(record.public_url),
     status: optionalText(record.status) ?? "unknown",
     primary: record.primary === true,
+  };
+}
+
+function mapGitDiffWorkspace(payload: unknown): GitDiffWorkspace {
+  const record = asRecord(payload, "diff workspace");
+  return {
+    path: typeof record.path === "string" ? record.path : "",
+    available: record.available === true,
+  };
+}
+
+function mapGitDiffRepoStat(payload: unknown): GitDiffRepoStat {
+  const record = asRecord(payload, "diff repository stat");
+  return {
+    repo: requireText(record.repo, "diff repository"),
+    branch: optionalText(record.branch),
+    base: optionalText(record.base),
+    filesChanged: finiteNumber(record.files_changed, 0),
+    additions: finiteNumber(record.additions, 0),
+    deletions: finiteNumber(record.deletions, 0),
+    untracked: finiteNumber(record.untracked, 0),
+  };
+}
+
+function mapGitDiffFilesPage(payload: unknown): GitDiffFilesPage {
+  const record = asRecord(payload, "thread diff files");
+  return {
+    files: readArray(record.files, "thread diff files").map(mapGitDiffFileEntry),
+    total: finiteNumber(record.total, 0),
+    limit: finiteNumber(record.limit, 0),
+    nextCursor: optionalText(record.next_cursor),
+    workspace: mapGitDiffWorkspace(record.workspace),
+  };
+}
+
+function mapGitDiffFileEntry(payload: unknown): GitDiffFileEntry {
+  const record = asRecord(payload, "diff file");
+  return {
+    repo: requireText(record.repo, "diff file repository"),
+    path: requireText(record.path, "diff file path"),
+    oldPath: optionalText(record.old_path),
+    status: requireText(record.status, "diff file status"),
+    additions:
+      record.additions === null || record.additions === undefined
+        ? null
+        : finiteNumber(record.additions, 0),
+    deletions:
+      record.deletions === null || record.deletions === undefined
+        ? null
+        : finiteNumber(record.deletions, 0),
+    binary: record.binary === true,
+  };
+}
+
+function mapGitDiffPatch(payload: unknown): Omit<GitDiffPatchResult, "workspace"> {
+  const record = asRecord(payload, "diff patch");
+  return {
+    repo: requireText(record.repo, "diff patch repository"),
+    path: requireText(record.path, "diff patch path"),
+    status: requireText(record.status, "diff patch status"),
+    binary: record.binary === true,
+    truncated: record.truncated === true,
+    patch: typeof record.patch === "string" ? record.patch : "",
+  };
+}
+
+function mapGitDiffCommit(payload: unknown): GitDiffCommitResponse["commits"][number] {
+  const record = asRecord(payload, "diff commit");
+  return {
+    repo: requireText(record.repo, "diff commit repository"),
+    sha: requireText(record.sha, "diff commit sha"),
+    message: requireText(record.message, "diff commit message"),
+    files: readArray(record.files ?? [], "diff commit files").map((path) =>
+      requireText(path, "diff commit file"),
+    ),
+  };
+}
+
+function mapGitDiffPushResult(payload: unknown): GitDiffPushResponse["results"][number] {
+  const record = asRecord(payload, "diff push result");
+  const error = optionalText(record.error);
+  return {
+    repo: requireText(record.repo, "diff push repository"),
+    ok: record.ok === true,
+    ...(error ? { error } : {}),
   };
 }
 

@@ -243,6 +243,71 @@ export function createFixtureTrackerClient(): TrackerClient {
     threadDevServers: async () => fixtureDevServers(),
     startThreadDevServers: async () => fixtureDevServers(),
     restartThreadDevServers: async () => fixtureDevServers(),
+    threadDiffStats: async () => ({
+      stats: [
+        {
+          repo: "symphony",
+          branch: "agent/mobile-companion-e2e",
+          base: "main",
+          filesChanged: 2,
+          additions: 48,
+          deletions: 6,
+          untracked: 1,
+        },
+      ],
+      workspace: { path: "/work/symphony", available: true },
+    }),
+    threadDiffFiles: async () => ({
+      files: [
+        {
+          repo: "symphony",
+          path: "mobile/src/features/source-control/DiffScreen.tsx",
+          oldPath: null,
+          status: "modified",
+          additions: 42,
+          deletions: 6,
+          binary: false,
+        },
+        {
+          repo: "symphony",
+          path: "mobile/app/session/[threadId]/diff.tsx",
+          oldPath: null,
+          status: "added",
+          additions: 6,
+          deletions: 0,
+          binary: false,
+        },
+      ],
+      total: 2,
+      limit: 50,
+      nextCursor: null,
+      workspace: { path: "/work/symphony", available: true },
+    }),
+    threadDiffPatch: async (_threadId, options) => ({
+      repo: options.repo,
+      path: options.path,
+      status: "modified",
+      binary: false,
+      truncated: false,
+      patch:
+        '@@ -1,2 +1,3 @@\n import React from "react";\n-old experience\n+clean mobile experience\n+Orca operations',
+      workspace: { path: "/work/symphony", available: true },
+    }),
+    commitThreadDiff: async (_threadId, message) => ({
+      commits: [
+        {
+          repo: "symphony",
+          sha: "abc123456789",
+          message,
+          files: ["mobile/src/features/source-control/DiffScreen.tsx"],
+        },
+      ],
+      workspace: { path: "/work/symphony", available: true },
+    }),
+    pushThreadDiff: async () => ({
+      results: [{ repo: "symphony", ok: true }],
+      workspace: { path: "/work/symphony", available: true },
+    }),
   };
 }
 
