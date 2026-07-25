@@ -18,9 +18,12 @@ tracker bearer token. The existing REST and Phoenix contracts remain supported
 during migration and continue serving the web/desktop app. Their business
 services are reused behind the new RPC boundary.
 
-The clean Codex-style session hierarchy remains the primary UX. The connection
-shown in that hierarchy is now a concrete Symphony machine rather than an
-abstract central tracker profile.
+The host, credential and transport decisions in this document are independent
+of presentation. The later approved
+`2026-07-25-orca-first-symphony-mobile-design.md` makes the copied Orca shell
+the default UX and preserves the clean Codex-style hierarchy as a
+device-selectable alternate view. Both shells connect to the concrete selected
+Symphony machine through the same transport and state core.
 
 ## Approaches Considered
 
@@ -322,9 +325,10 @@ Lightweight unit tests run in WSL:
 - adapter contract tests proving RPC and legacy transports return the same
   mobile domain models.
 
-Elixir integration tests, native dependency builds, Expo prebuild, emulators,
-Maestro and MP4 recording run in GitHub Actions or a dedicated native runner,
-never as heavy jobs in WSL.
+Focused Elixir integration tests, native dependency builds, Expo prebuild,
+emulators and MP4 recording may run locally in WSL. Heavy full unit suites and
+unbounded all-project routines do not run there. iOS-native validation runs on
+the user's Mac.
 
 ## Acceptance Criteria
 
@@ -343,8 +347,9 @@ never as heavy jobs in WSL.
 8. REST/Phoenix web and desktop behavior remains compatible while mobile
    methods migrate to shared services behind RPC.
 9. No mandatory central hub is required.
-10. The approved clean session UX remains intact.
-11. Cross-language crypto vectors, focused unit/integration tests and CI-native
-    E2E evidence pass.
+10. The copied Orca shell is the default and the approved clean Codex-style
+    session UX remains available as a global device view mode.
+11. Cross-language crypto vectors and focused unit/integration tests pass, and
+    local real-host E2E evidence is captured without requiring a remote build.
 12. The final PR description contains the compatibility report and complete
     MP4 walkthrough.

@@ -78,16 +78,19 @@ pass mock payloads through the real mobile DTO mappers.
 
 ## Product direction
 
-Symphony should keep the already approved clean Codex-style session library,
-while borrowing Orca's proven operational ideas:
+The comparison led to a stronger decision than visual inspiration. Symphony
+will use the production Orca Mobile implementation as its default frontend
+baseline, preserving its onboarding, host dashboard, responsive navigation,
+workspace/session, terminal, files, Source Control, PR/review, diagnostics and
+offline behavior. The frontend changes are limited to Dev10x/Symphony
+branding, Symphony terminology, negotiated capability states and a focused
+adapter to Symphony's RPC/domain model.
 
-- retain explicit host identity and health;
-- keep file, terminal, Git and PR tools close to the task/session;
-- evolve Source Control toward Orca's staged/unstaged clarity;
-- add a short explicit pair-confirmation step before storing a new host;
-- preserve direct multi-host control and never require a central hub.
+The existing clean Codex-style session library remains as a parallel,
+device-wide selectable view over the same selected host, transport, caches and
+domain state. It is not a second app or transport stack.
 
-Visual similarity alone is not the goal. The Orca contribution is the direct
-paired-host operating model and the standalone production-path mock workflow;
-Symphony's differentiator remains projects/tasks/agents plus a clean chat-first
-experience across multiple independent hosts.
+The standalone mock remains a development accelerator for deterministic
+states. Release E2E evidence is captured against real local Symphony hosts.
+Direct multi-host control, per-device E2EE pairing, projects/tasks/agents and
+the absence of a mandatory central hub remain Symphony requirements.
