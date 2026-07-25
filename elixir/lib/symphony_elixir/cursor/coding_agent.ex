@@ -504,6 +504,7 @@ defmodule SymphonyElixir.Cursor.CodingAgent do
   defp extract_notification_usage(_notification), do: nil
 
   @doc false
+  @spec bridge_event_to_message(map()) :: {atom(), %{payload: map(), raw: String.t()}}
   def bridge_event_to_message(%{"method" => "item/created", "params" => %{"item" => item}} = notification) do
     event =
       case item do

@@ -4,6 +4,7 @@ defmodule SymphonyElixir.MobileRpc.TrackerRequest do
   @methods ~w(GET POST PATCH DELETE)
   @keys ~w(path method body idempotency_key)
 
+  @spec validate(map()) :: {:ok, map()} | {:error, :invalid_params}
   def validate(%{"path" => path} = params)
       when is_binary(path) and byte_size(path) in 1..2_048 do
     method = Map.get(params, "method", "GET")
@@ -29,6 +30,7 @@ defmodule SymphonyElixir.MobileRpc.TrackerRequest do
 
   def validate(_params), do: {:error, :invalid_params}
 
+  @spec call(atom(), map(), map()) :: term()
   def call(domain, params, context) do
     bridge = Map.get(context, :tracker_bridge, SymphonyElixir.MobileRpc.TrackerBridge)
 

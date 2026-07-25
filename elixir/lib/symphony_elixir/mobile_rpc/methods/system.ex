@@ -18,12 +18,17 @@ defmodule SymphonyElixir.MobileRpc.Methods.System do
 
   defmodule Identity do
     @behaviour SymphonyElixir.MobileRpc.Method
+    @impl true
     def name, do: "system.identity"
+    @impl true
     def scope, do: :mobile
+    @impl true
     def timeout_ms, do: 1_000
+    @impl true
     def validate(params) when map_size(params) == 0, do: {:ok, params}
     def validate(_params), do: {:error, :invalid_params}
 
+    @impl true
     def call(_params, context) do
       {:ok, %{"host_id" => context.host_id, "name" => context.host_name}}
     end
@@ -31,22 +36,32 @@ defmodule SymphonyElixir.MobileRpc.Methods.System do
 
   defmodule Health do
     @behaviour SymphonyElixir.MobileRpc.Method
+    @impl true
     def name, do: "system.health"
+    @impl true
     def scope, do: :mobile
+    @impl true
     def timeout_ms, do: 1_000
+    @impl true
     def validate(params) when map_size(params) == 0, do: {:ok, params}
     def validate(_params), do: {:error, :invalid_params}
+    @impl true
     def call(_params, _context), do: {:ok, %{"status" => "healthy"}}
   end
 
   defmodule Capabilities do
     @behaviour SymphonyElixir.MobileRpc.Method
+    @impl true
     def name, do: "system.capabilities"
+    @impl true
     def scope, do: :mobile
+    @impl true
     def timeout_ms, do: 1_000
+    @impl true
     def validate(params) when map_size(params) == 0, do: {:ok, params}
     def validate(_params), do: {:error, :invalid_params}
 
+    @impl true
     def call(_params, context) do
       {:ok,
        %{
@@ -60,22 +75,32 @@ defmodule SymphonyElixir.MobileRpc.Methods.System do
 
   defmodule Heartbeat do
     @behaviour SymphonyElixir.MobileRpc.Method
+    @impl true
     def name, do: "system.heartbeat"
+    @impl true
     def scope, do: :mobile
+    @impl true
     def timeout_ms, do: 1_000
+    @impl true
     def validate(%{"nonce" => nonce} = params) when is_binary(nonce), do: {:ok, params}
     def validate(_params), do: {:error, :invalid_params}
+    @impl true
     def call(%{"nonce" => nonce}, _context), do: {:ok, %{"nonce" => nonce}}
   end
 
   defmodule Usage do
     @behaviour SymphonyElixir.MobileRpc.Method
+    @impl true
     def name, do: "system.usage"
+    @impl true
     def scope, do: :mobile
+    @impl true
     def timeout_ms, do: 1_000
+    @impl true
     def validate(params) when map_size(params) == 0, do: {:ok, params}
     def validate(_params), do: {:error, :invalid_params}
 
+    @impl true
     def call(_params, _context) do
       {:ok,
        %{
@@ -90,12 +115,17 @@ defmodule SymphonyElixir.MobileRpc.Methods.System do
     @behaviour SymphonyElixir.MobileRpc.Method
     alias SymphonyElixir.MobileRpc.Devices
 
+    @impl true
     def name, do: "devices.list"
+    @impl true
     def scope, do: :mobile
+    @impl true
     def timeout_ms, do: 1_000
+    @impl true
     def validate(params) when map_size(params) == 0, do: {:ok, params}
     def validate(_params), do: {:error, :invalid_params}
 
+    @impl true
     def call(_params, context) do
       devices =
         Devices.list_paired()
@@ -109,16 +139,21 @@ defmodule SymphonyElixir.MobileRpc.Methods.System do
     @behaviour SymphonyElixir.MobileRpc.Method
     alias SymphonyElixir.MobileRpc.Devices
 
+    @impl true
     def name, do: "devices.revoke"
+    @impl true
     def scope, do: :mobile
+    @impl true
     def timeout_ms, do: 1_000
 
+    @impl true
     def validate(%{"device_id" => device_id} = params)
         when is_binary(device_id) and device_id != "" and map_size(params) == 1,
         do: {:ok, params}
 
     def validate(_params), do: {:error, :invalid_params}
 
+    @impl true
     def call(%{"device_id" => device_id}, %{device_id: device_id}),
       do: {:error, :use_self_revoke}
 
@@ -132,12 +167,17 @@ defmodule SymphonyElixir.MobileRpc.Methods.System do
 
   defmodule SelfRevoke do
     @behaviour SymphonyElixir.MobileRpc.Method
+    @impl true
     def name, do: "devices.self_revoke"
+    @impl true
     def scope, do: :mobile
+    @impl true
     def timeout_ms, do: 1_000
+    @impl true
     def validate(params) when map_size(params) == 0, do: {:ok, params}
     def validate(_params), do: {:error, :invalid_params}
 
+    @impl true
     def call(_params, context) do
       :ok = SymphonyElixir.MobileRpc.Devices.revoke(context.device_id)
       {:ok, %{"revoked" => true}}
@@ -148,10 +188,15 @@ defmodule SymphonyElixir.MobileRpc.Methods.System do
     @behaviour SymphonyElixir.MobileRpc.Method
     alias SymphonyElixir.MobileRpc.TrackerRequest
 
+    @impl true
     def name, do: "system.tracker"
+    @impl true
     def scope, do: :mobile
+    @impl true
     def timeout_ms, do: 30_000
+    @impl true
     defdelegate validate(params), to: TrackerRequest
+    @impl true
     def call(params, context), do: TrackerRequest.call(:system, params, context)
   end
 end

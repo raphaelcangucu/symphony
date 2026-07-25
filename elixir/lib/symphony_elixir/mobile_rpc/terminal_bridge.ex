@@ -6,6 +6,8 @@ defmodule SymphonyElixir.MobileRpc.TerminalBridge do
   @registry SymphonyElixir.MobileRpc.SessionRegistry
   @supervisor SymphonyElixir.MobileRpc.SessionSupervisor
 
+  @spec subscribe(pid(), pos_integer(), String.t(), String.t()) ::
+          {:ok, pid()} | {:ok, pid(), term()} | {:error, term()}
   def subscribe(connection_pid, thread_id, project_slug, subscription_id) do
     key = {connection_pid, {:terminal, thread_id}}
 
@@ -32,6 +34,7 @@ defmodule SymphonyElixir.MobileRpc.TerminalBridge do
     end
   end
 
+  @spec lookup(pid(), pos_integer()) :: {:ok, pid()} | {:error, :not_found}
   def lookup(connection_pid, thread_id) do
     case Registry.lookup(@registry, {connection_pid, {:terminal, thread_id}}) do
       [{pid, _value}] -> {:ok, pid}

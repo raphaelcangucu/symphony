@@ -1,16 +1,22 @@
 defmodule SymphonyElixir.MobileRpc.Methods.Sessions do
   @moduledoc "Allowlisted session operations over the encrypted mobile channel."
 
+  @spec modules() :: [module()]
   def modules, do: [__MODULE__.Request, __MODULE__.Subscribe, __MODULE__.Command]
 
   defmodule Request do
     @behaviour SymphonyElixir.MobileRpc.Method
     alias SymphonyElixir.MobileRpc.TrackerRequest
 
+    @impl true
     def name, do: "sessions.request"
+    @impl true
     def scope, do: :mobile
+    @impl true
     def timeout_ms, do: 30_000
+    @impl true
     defdelegate validate(params), to: TrackerRequest
+    @impl true
     def call(params, context), do: TrackerRequest.call(:sessions, params, context)
   end
 
@@ -18,16 +24,21 @@ defmodule SymphonyElixir.MobileRpc.Methods.Sessions do
     @behaviour SymphonyElixir.MobileRpc.Method
     alias SymphonyElixir.MobileRpc.SessionBridge
 
+    @impl true
     def name, do: "sessions.subscribe"
+    @impl true
     def scope, do: :mobile
+    @impl true
     def timeout_ms, do: 5_000
 
+    @impl true
     def validate(%{"thread_id" => thread_id} = params)
         when is_integer(thread_id) and thread_id > 0 and map_size(params) == 1,
         do: {:ok, params}
 
     def validate(_params), do: {:error, :invalid_params}
 
+    @impl true
     def call(%{"thread_id" => thread_id}, context) do
       subscription_id =
         "session:" <>
@@ -63,10 +74,14 @@ defmodule SymphonyElixir.MobileRpc.Methods.Sessions do
       resume_turn
     )
 
+    @impl true
     def name, do: "sessions.command"
+    @impl true
     def scope, do: :mobile
+    @impl true
     def timeout_ms, do: 30_000
 
+    @impl true
     def validate(
           %{
             "thread_id" => thread_id,
@@ -80,6 +95,7 @@ defmodule SymphonyElixir.MobileRpc.Methods.Sessions do
 
     def validate(_params), do: {:error, :invalid_params}
 
+    @impl true
     def call(%{"thread_id" => thread_id, "event" => event, "payload" => payload}, context) do
       with connection_pid when is_pid(connection_pid) <- Map.get(context, :connection_pid),
            {:ok, bridge} <- SessionBridge.lookup(connection_pid, thread_id),

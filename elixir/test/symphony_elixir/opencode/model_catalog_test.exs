@@ -20,7 +20,7 @@ defmodule SymphonyElixir.OpenCode.ModelCatalogTest do
     stub = fn -> {"error", 1} end
 
     assert {:ok, catalog} = ModelCatalog.list_models(list_models_fun: stub)
-    assert length(catalog.models) >= 1
+    assert catalog.models != []
     assert Enum.any?(catalog.models, & &1.is_default)
   end
 end
