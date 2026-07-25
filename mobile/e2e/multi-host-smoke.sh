@@ -339,10 +339,8 @@ scroll_until_text "${HOST_A_NAME}: verify host isolation"
 scroll_until_text "${HOST_A_NAME}: record native evidence"
 scroll_until_text "This task is served by ${HOST_A_NAME} over its own encrypted RPC connection."
 trace_step "assert task, blocker, subtask and comment parity on Host A"
-swipe_down
-swipe_down
+scroll_until_selector "content-desc" "Files" "down"
 trace_step "return to Host A workspace controls"
-sleep 1
 
 tap_accessible "Files"
 wait_for_text "README.md"
