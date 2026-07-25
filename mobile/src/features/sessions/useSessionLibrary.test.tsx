@@ -76,7 +76,9 @@ describe("useSessionLibrary", () => {
       { limit: 50 },
       expect.any(AbortSignal),
     );
-    expect(queryClient.getQueryData(["session-library", "remote-1", "projects"])).toBeTruthy();
+    expect(
+      queryClient.getQueryData(["host", "remote-1", "session-library", "projects"]),
+    ).toBeTruthy();
     expect(result.current.groups.flatMap((group) => group.sessions)).toHaveLength(1);
   });
 

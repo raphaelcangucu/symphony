@@ -39,7 +39,9 @@ describe("RPC assistant session", () => {
     });
 
     session.disconnect();
-    expect(vi.mocked(transport.subscribe).mock.results[0]?.value).resolves.toBeTypeOf("function");
+    await expect(vi.mocked(transport.subscribe).mock.results[0]?.value).resolves.toBeTypeOf(
+      "function",
+    );
   });
 
   it("submits approvals, questions and a first message without a tracker token", async () => {
