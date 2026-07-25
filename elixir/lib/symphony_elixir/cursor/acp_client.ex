@@ -11,6 +11,8 @@ defmodule SymphonyElixir.Cursor.AcpClient do
 
   require Logger
 
+  alias SymphonyElixir.Agent.CliRunner.Base
+
   @port_line_bytes 1_048_576
 
   @type on_server_request :: (String.t(), term(), map() -> :ok)
@@ -42,6 +44,17 @@ defmodule SymphonyElixir.Cursor.AcpClient do
     send(pid, {:inbound_line, line})
     :ok
   end
+
+  @doc false
+  @spec command_args(String.t() | nil) :: [String.t()]
+  def command_args(model) when is_binary(model) do
+    case String.trim(model) do
+      "" -> ["acp"]
+      value -> ["--model", value, "acp"]
+    end
+  end
+
+  def command_args(_model), do: ["acp"]
 
   @impl true
   def init(opts) do
@@ -78,7 +91,7 @@ defmodule SymphonyElixir.Cursor.AcpClient do
 
   @impl true
   def terminate(_reason, %{port: port}) when is_port(port) do
-    Port.close(port)
+    Base.kill_port(port)
   rescue
     _ -> :ok
   end
@@ -141,13 +154,27 @@ defmodule SymphonyElixir.Cursor.AcpClient do
           path
       end
 
+    cursor_args =
+      opts
+      |> Keyword.get(:model)
+      |> command_args()
+
+    {port_executable, port_args} =
+      case System.find_executable("setsid") do
+        nil ->
+          {executable, cursor_args}
+
+        setsid ->
+          {setsid, ["--wait", executable | cursor_args]}
+      end
+
     Port.open(
-      {:spawn_executable, String.to_charlist(executable)},
+      {:spawn_executable, String.to_charlist(port_executable)},
       [
         :binary,
         :exit_status,
         :use_stdio,
-        args: [~c"acp"],
+        args: Enum.map(port_args, &String.to_charlist/1),
         cd: String.to_charlist(workspace),
         line: @port_line_bytes
       ]

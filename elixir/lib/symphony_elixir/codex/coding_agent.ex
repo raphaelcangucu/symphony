@@ -8,6 +8,7 @@ defmodule SymphonyElixir.Codex.CodingAgent do
   @behaviour SymphonyElixir.CodingAgent
 
   require Logger
+  alias SymphonyElixir.Agent.ConversationRef
   alias SymphonyElixir.Codex.Config, as: CodexConfig
   alias SymphonyElixir.Codex.DynamicTool
   alias SymphonyElixir.Codex.Session
@@ -43,6 +44,9 @@ defmodule SymphonyElixir.Codex.CodingAgent do
           workspace: Path.t()
         }
 
+  @impl true
+  def capabilities, do: SymphonyElixir.Agent.BackendCapabilities.for("codex")
+
   @spec run(Path.t(), String.t(), map(), keyword()) :: {:ok, map()} | {:error, term()}
   def run(workspace, prompt, issue, opts \\ []) do
     with {:ok, session} <- start_session(workspace, opts) do
@@ -57,6 +61,7 @@ defmodule SymphonyElixir.Codex.CodingAgent do
   end
 
   @spec start_session(Path.t(), keyword()) :: {:ok, session()} | {:error, term()}
+  @impl true
   def start_session(workspace, opts \\ []) do
     codex_section = codex_section(opts)
     goals_section = goals_section(opts)
@@ -68,7 +73,7 @@ defmodule SymphonyElixir.Codex.CodingAgent do
       expanded_workspace = Path.expand(workspace)
 
       with {:ok, session_policies} <- session_policies(expanded_workspace, codex_section, opts),
-           {:ok, thread_id, origin} <-
+           {:ok, %{thread_id: thread_id} = thread_context, origin} <-
              do_start_session(port, expanded_workspace, session_policies, opts, goals_section),
            :ok <- maybe_set_thread_name(port, thread_id, Keyword.get(opts, :thread_name)),
            {:ok, goal_state, goal_map} <-
@@ -90,6 +95,8 @@ defmodule SymphonyElixir.Codex.CodingAgent do
            thread_sandbox: session_policies.thread_sandbox,
            turn_sandbox_policy: session_policies.turn_sandbox_policy,
            thread_id: thread_id,
+           resolved_model: thread_context.resolved_model,
+           resolved_effort: thread_context.resolved_effort,
            workspace: expanded_workspace,
            goals_section: goals_section,
            thread_origin: origin,
@@ -182,8 +189,8 @@ defmodule SymphonyElixir.Codex.CodingAgent do
   Ensure the issue's Codex thread exists and set a goal on it without running a
   turn.
 
-  Resolves and resumes the durable thread (sidecar/opts), or starts a fresh
-  durable thread when the issue has none yet, then applies a native
+  Resolves and resumes the durable thread (sidecar/opts), or starts a new
+  durable thread only when the issue has none yet, then applies a native
   `thread/goal/set`. Writes the workspace session sidecar so future runs resume
   the same thread, mirrors the native goal into the sidecar for dormant display,
   and returns the resolved/created `thread_id` so callers can persist the
@@ -231,6 +238,7 @@ defmodule SymphonyElixir.Codex.CodingAgent do
   end
 
   @spec run_turn(session(), String.t(), map(), keyword()) :: {:ok, map()} | {:error, term()}
+  @impl true
   def run_turn(%{} = session, prompt, issue, opts \\ []) do
     on_message = Keyword.get(opts, :on_message, &default_on_message/1)
 
@@ -325,9 +333,9 @@ defmodule SymphonyElixir.Codex.CodingAgent do
           on_message,
           :session_started,
           %{
-            session_id: session_id,
-            thread_id: thread_id,
-            turn_id: turn_id
+            provider: "codex",
+            conversation_id: thread_id,
+            run_id: turn_id
           },
           metadata
         )
@@ -340,11 +348,19 @@ defmodule SymphonyElixir.Codex.CodingAgent do
           interactive_user_input: Keyword.get(opts, :interactive_user_input, false),
           turn_error: nil,
           agent_message?: false,
-          latest_goal_update: nil
+          latest_goal_update: nil,
+          resolved_model: Map.get(session, :resolved_model),
+          resolved_effort: Map.get(session, :resolved_effort)
         }
 
         case await_turn_completion(port, on_message, tool_executor, auto_approve_requests, turn_ctx) do
-          {:ok, %{completion_payload: completion_payload, goal_update: goal_update}} ->
+          {:ok,
+           %{
+             completion_payload: completion_payload,
+             goal_update: goal_update,
+             resolved_model: resolved_model,
+             resolved_effort: resolved_effort
+           }} ->
             Logger.info("Codex session completed for #{issue_context(issue)} session_id=#{session_id}")
 
             {:ok,
@@ -352,9 +368,11 @@ defmodule SymphonyElixir.Codex.CodingAgent do
                result: :turn_completed,
                completion_payload: completion_payload,
                goal_update: goal_update,
-               session_id: session_id,
-               thread_id: thread_id,
-               turn_id: turn_id
+               provider: "codex",
+               conversation_id: thread_id,
+               run_id: turn_id,
+               resolved_model: resolved_model,
+               resolved_effort: resolved_effort
              }}
 
           {:error, reason} ->
@@ -440,12 +458,11 @@ defmodule SymphonyElixir.Codex.CodingAgent do
     end
   end
 
-  defp emit_turn_error(on_message, metadata, session_id, reason) do
+  defp emit_turn_error(on_message, metadata, _session_id, reason) do
     emit_message(
       on_message,
       :turn_ended_with_error,
       %{
-        session_id: session_id,
         reason: reason
       },
       metadata
@@ -568,6 +585,7 @@ defmodule SymphonyElixir.Codex.CodingAgent do
   defp normalize_goal_status(_status), do: nil
 
   @spec stop_session(session()) :: :ok
+  @impl true
   def stop_session(%{port: port}) when is_port(port) do
     stop_port(port)
   end
@@ -738,15 +756,13 @@ defmodule SymphonyElixir.Codex.CodingAgent do
   defp start_or_resume_thread(port, workspace, session_policies, opts, section) do
     case resumable_thread_id(workspace, opts, section) do
       {:ok, thread_id} ->
-        case resume_thread(port, thread_id, session_policies, opts) do
-          {:ok, resumed_id} ->
+        case resume_thread_with_provenance(port, thread_id, session_policies, opts) do
+          {:ok, %{thread_id: resumed_id} = thread_context} ->
             Logger.info("Codex resumed thread thread_id=#{resumed_id}")
-            {:ok, resumed_id, :resumed}
+            {:ok, thread_context, :resumed}
 
           {:error, reason} ->
-            Logger.warning("Codex thread resume failed thread_id=#{thread_id}; starting a fresh thread: #{inspect(reason)}")
-
-            start_fresh_thread(port, workspace, session_policies, opts)
+            {:error, {:resume_conversation_failed, thread_id, reason}}
         end
 
       :error ->
@@ -755,8 +771,8 @@ defmodule SymphonyElixir.Codex.CodingAgent do
   end
 
   defp start_fresh_thread(port, workspace, session_policies, opts) do
-    case start_thread(port, workspace, session_policies, opts) do
-      {:ok, thread_id} -> {:ok, thread_id, :started}
+    case start_thread_with_provenance(port, workspace, session_policies, opts) do
+      {:ok, thread_context} -> {:ok, thread_context, :started}
       other -> other
     end
   end
@@ -833,9 +849,9 @@ defmodule SymphonyElixir.Codex.CodingAgent do
   # interactive and goal-mode runs. Resolving a workspace sidecar remains
   # goal-only so ordinary orchestrator turns still start independent threads.
   defp resumable_thread_id(workspace, opts, section) do
-    case Keyword.get(opts, :resume_thread_id) do
-      id when is_binary(id) and id != "" ->
-        {:ok, id}
+    case Keyword.get(opts, :conversation_ref) do
+      %ConversationRef{provider: "codex", conversation_id: conversation_id} ->
+        {:ok, conversation_id}
 
       _ ->
         if goal_opt?(opts) and CodexConfig.goals_enabled?(section),
@@ -852,23 +868,47 @@ defmodule SymphonyElixir.Codex.CodingAgent do
       end
   end
 
-  defp start_thread(port, workspace, %{approval_policy: approval_policy, thread_sandbox: thread_sandbox}, opts) do
-    send_message(port, %{
-      "method" => "thread/start",
-      "id" => @thread_start_id,
-      "params" => %{
+  defp start_thread(port, workspace, session_policies, opts) do
+    with {:ok, %{thread_id: thread_id}} <-
+           start_thread_with_provenance(port, workspace, session_policies, opts) do
+      {:ok, thread_id}
+    end
+  end
+
+  defp start_thread_with_provenance(
+         port,
+         workspace,
+         %{approval_policy: approval_policy, thread_sandbox: thread_sandbox},
+         opts
+       ) do
+    params =
+      %{
         "approvalPolicy" => approval_policy,
         "sandbox" => thread_sandbox,
         "cwd" => Path.expand(workspace),
         "dynamicTools" => Keyword.get(opts, :dynamic_tools, DynamicTool.coding_agent_tool_specs())
       }
+      |> maybe_put_param("model", Keyword.get(opts, :model))
+
+    send_message(port, %{
+      "method" => "thread/start",
+      "id" => @thread_start_id,
+      "params" => params
     })
 
     case await_response(port, @thread_start_id) do
-      {:ok, %{"thread" => thread_payload}} ->
+      {:ok, %{"thread" => thread_payload} = result} ->
         case thread_payload do
-          %{"id" => thread_id} -> {:ok, thread_id}
-          _ -> {:error, {:invalid_thread_payload, thread_payload}}
+          %{"id" => thread_id} ->
+            {:ok,
+             %{
+               thread_id: thread_id,
+               resolved_model: normalize_native_string(Map.get(result, "model")),
+               resolved_effort: normalize_native_string(Map.get(result, "reasoningEffort"))
+             }}
+
+          _ ->
+            {:error, {:invalid_thread_payload, thread_payload}}
         end
 
       other ->
@@ -878,23 +918,58 @@ defmodule SymphonyElixir.Codex.CodingAgent do
 
   # Codex restores persisted dynamicTools on resume when none are supplied, so we
   # intentionally omit them here and reuse the recorded session configuration.
-  defp resume_thread(port, thread_id, %{approval_policy: approval_policy, thread_sandbox: thread_sandbox}, _opts) do
-    send_message(port, %{
-      "method" => "thread/resume",
-      "id" => @thread_resume_id,
-      "params" => %{
+  defp resume_thread(port, thread_id, session_policies, opts) do
+    with {:ok, %{thread_id: resumed_id}} <-
+           resume_thread_with_provenance(port, thread_id, session_policies, opts) do
+      {:ok, resumed_id}
+    end
+  end
+
+  defp resume_thread_with_provenance(
+         port,
+         thread_id,
+         %{approval_policy: approval_policy, thread_sandbox: thread_sandbox},
+         opts
+       ) do
+    params =
+      %{
         "threadId" => thread_id,
         "approvalPolicy" => approval_policy,
         "sandbox" => thread_sandbox
       }
+      |> maybe_put_param("model", Keyword.get(opts, :model))
+
+    send_message(port, %{
+      "method" => "thread/resume",
+      "id" => @thread_resume_id,
+      "params" => params
     })
 
     case await_response(port, @thread_resume_id) do
-      {:ok, %{"thread" => %{"id" => resumed_id}}} when is_binary(resumed_id) -> {:ok, resumed_id}
-      {:ok, %{"thread" => thread_payload}} -> {:error, {:invalid_thread_payload, thread_payload}}
-      other -> other
+      {:ok, %{"thread" => %{"id" => resumed_id}} = result} when is_binary(resumed_id) ->
+        {:ok,
+         %{
+           thread_id: resumed_id,
+           resolved_model: normalize_native_string(Map.get(result, "model")),
+           resolved_effort: normalize_native_string(Map.get(result, "reasoningEffort"))
+         }}
+
+      {:ok, %{"thread" => thread_payload}} ->
+        {:error, {:invalid_thread_payload, thread_payload}}
+
+      other ->
+        other
     end
   end
+
+  defp normalize_native_string(value) when is_binary(value) do
+    case String.trim(value) do
+      "" -> nil
+      normalized -> normalized
+    end
+  end
+
+  defp normalize_native_string(_value), do: nil
 
   # Goal state is owned by the Codex thread. On a freshly started thread we set
   # the initial objective (the operator's intent). On a resumed thread we read
@@ -968,9 +1043,9 @@ defmodule SymphonyElixir.Codex.CodingAgent do
     end
   end
 
-  # Resolve and resume the durable control thread, or start a fresh durable
-  # thread when the issue has none yet. Lets `ensure_goal/3` create the thread a
-  # newly-defined goal lives on.
+  # Resolve and resume the durable control thread, or start a new durable thread
+  # only when the issue has none yet. A stale stored identity is an explicit
+  # error: replacing it would silently sever the native goal history.
   defp ensure_control_thread(port, workspace, session_policies, opts) do
     case control_thread_id(workspace, opts) do
       {:ok, thread_id} ->
@@ -979,9 +1054,7 @@ defmodule SymphonyElixir.Codex.CodingAgent do
             {:ok, resumed_id, :resumed}
 
           {:error, reason} ->
-            Logger.warning("Codex control thread resume failed thread_id=#{thread_id}; starting a fresh thread: #{inspect(reason)}")
-
-            start_control_thread(port, workspace, session_policies, opts)
+            {:error, {:resume_conversation_failed, thread_id, reason}}
         end
 
       {:error, :no_codex_thread} ->
@@ -1144,7 +1217,7 @@ defmodule SymphonyElixir.Codex.CodingAgent do
         "sandboxPolicy" => turn_sandbox_policy
       }
       |> maybe_put_param("model", Keyword.get(opts, :model))
-      |> maybe_put_param("reasoningEffort", reasoning_effort(Keyword.get(opts, :effort)))
+      |> maybe_put_param("effort", reasoning_effort(Keyword.get(opts, :effort)))
 
     send_message(port, %{
       "method" => "turn/start",
@@ -1260,7 +1333,9 @@ defmodule SymphonyElixir.Codex.CodingAgent do
             {:ok,
              %{
                completion_payload: payload,
-               goal_update: Map.get(turn_ctx, :latest_goal_update)
+               goal_update: Map.get(turn_ctx, :latest_goal_update),
+               resolved_model: Map.get(turn_ctx, :resolved_model),
+               resolved_effort: Map.get(turn_ctx, :resolved_effort)
              }}
 
           {:error, {:turn_failed, reason}} ->
@@ -1559,7 +1634,12 @@ defmodule SymphonyElixir.Codex.CodingAgent do
          turn_ctx
        ) do
     metadata = metadata_from_message(port, payload)
-    turn_ctx = record_goal_update(turn_ctx, method, payload)
+
+    turn_ctx =
+      turn_ctx
+      |> record_goal_update(method, payload)
+      |> record_model_reroute(method, payload)
+      |> record_thread_settings(method, payload)
 
     case maybe_handle_approval_request(
            port,
@@ -1630,6 +1710,39 @@ defmodule SymphonyElixir.Codex.CodingAgent do
   end
 
   defp record_goal_update(turn_ctx, _method, _payload), do: turn_ctx
+
+  defp record_model_reroute(
+         turn_ctx,
+         "model/rerouted",
+         %{"params" => %{"toModel" => model}}
+       )
+       when is_binary(model) do
+    Map.put(turn_ctx, :resolved_model, String.trim(model))
+  end
+
+  defp record_model_reroute(turn_ctx, _method, _payload), do: turn_ctx
+
+  defp record_thread_settings(
+         turn_ctx,
+         "thread/settings/updated",
+         %{"params" => %{"threadSettings" => settings}}
+       )
+       when is_map(settings) do
+    turn_ctx
+    |> maybe_record_native_setting(:resolved_model, Map.get(settings, "model"))
+    |> maybe_record_native_setting(:resolved_effort, Map.get(settings, "effort"))
+  end
+
+  defp record_thread_settings(turn_ctx, _method, _payload), do: turn_ctx
+
+  defp maybe_record_native_setting(turn_ctx, key, value) when is_binary(value) do
+    case String.trim(value) do
+      "" -> turn_ctx
+      normalized -> Map.put(turn_ctx, key, normalized)
+    end
+  end
+
+  defp maybe_record_native_setting(turn_ctx, _key, _value), do: turn_ctx
 
   defp maybe_handle_approval_request(
          port,
@@ -2142,6 +2255,7 @@ defmodule SymphonyElixir.Codex.CodingAgent do
   end
 
   @spec normalize_event(map()) :: map()
+  @impl true
   def normalize_event(event) when is_map(event) do
     event
     |> normalize_usage()

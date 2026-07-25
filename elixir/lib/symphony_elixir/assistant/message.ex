@@ -14,7 +14,7 @@ defmodule SymphonyElixir.Assistant.Message do
     field(:sequence, :integer)
     field(:role, :string)
     field(:content, :string)
-    field(:turn_id, :string)
+    field(:run_id, :string)
     field(:tool_calls, :map, default: %{"calls" => []})
     field(:metadata, :map, default: %{})
     field(:client_message_id, :string)
@@ -34,7 +34,7 @@ defmodule SymphonyElixir.Assistant.Message do
       :sequence,
       :role,
       :content,
-      :turn_id,
+      :run_id,
       :tool_calls,
       :metadata,
       :client_message_id

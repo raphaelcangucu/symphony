@@ -4,7 +4,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { StartIssueSessionDialog } from "@/components/sessions/StartIssueSessionDialog";
-import { fallbackCatalogBundle } from "@/lib/assistantSettings";
+import { createMockAssistantCatalogBundle } from "@/test-fixtures/assistantCatalog";
 import { mockAssistantCodexCatalog } from "@/test-fixtures/assistantCatalog";
 import type { WorkspaceCloneRepoOption } from "@/lib/workspaceCloneRepos";
 import type { PullRequest } from "@/types/pull-request";
@@ -112,7 +112,7 @@ function openPullRequest(headRef: string): PullRequest {
 }
 
 const catalogBundle = (() => {
-  const bundle = fallbackCatalogBundle();
+  const bundle = createMockAssistantCatalogBundle();
   bundle.agents = [
     { ...mockAssistantCodexCatalog },
     ...bundle.agents.filter((agent) => agent.agent !== "codex"),
@@ -328,7 +328,10 @@ describe("StartIssueSessionDialog", () => {
     const titleInput = screen.getByLabelText(/session title/i);
     await user.clear(titleInput);
     await user.type(titleInput, "Build pass 2");
-    await user.click(await screen.findByRole("button", { name: /codex/i }));
+    const codexMenu = (await screen.findAllByRole("button", { name: /codex/i }))
+      .find((button) => button.getAttribute("aria-haspopup") === "menu");
+    expect(codexMenu).toBeDefined();
+    await user.click(codexMenu as HTMLButtonElement);
     await user.click(screen.getByRole("menuitemradio", { name: /claude/i }));
 
     rerender(

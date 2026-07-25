@@ -1,6 +1,8 @@
 defmodule SymphonyElixir.Codex.CodingAgentTest do
   use SymphonyElixir.TestSupport
 
+  alias SymphonyElixir.Agent.ConversationRef
+
   describe "native thread presentation" do
     test "sets a trimmed native thread name before starting the turn" do
       with_fake_lifecycle_server(fn workspace, issue, trace_file ->
@@ -106,12 +108,13 @@ defmodule SymphonyElixir.Codex.CodingAgentTest do
                  "params" => %{"threadId" => "thread-goal", "objective" => "Ship the feature", "status" => "active"}
                }
 
-        assert Enum.take(message_order(messages), 5) == [
+        assert message_order(messages) == [
                  "initialize",
                  "initialized",
                  "thread/start",
                  "thread/goal/set",
-                 "turn/start"
+                 "turn/start",
+                 "thread/goal/get"
                ]
       end)
     end
@@ -284,14 +287,42 @@ defmodule SymphonyElixir.Codex.CodingAgentTest do
   end
 
   describe "explicit interactive thread resume" do
+    test "sends the requested model on resume and the current effort field on turn start" do
+      with_fake_resume_server(:present, fn workspace, issue, trace_file ->
+        assert {:ok, _result} =
+                 AppServer.run(workspace, "Continue the chat", issue,
+                   conversation_ref: %ConversationRef{
+                     provider: "codex",
+                     conversation_id: "thread-resume"
+                   },
+                   model: "gpt-5.5",
+                   effort: "medium"
+                 )
+
+        messages = outbound_messages(trace_file)
+        thread_resume = message_with_method(messages, "thread/resume")
+        turn_start = message_with_method(messages, "turn/start")
+
+        assert thread_resume["params"]["model"] == "gpt-5.5"
+        assert turn_start["params"]["model"] == "gpt-5.5"
+        assert turn_start["params"]["effort"] == "medium"
+        refute Map.has_key?(turn_start["params"], "reasoningEffort")
+      end)
+    end
+
     test "resumes the provided thread outside goal mode without reading goal state" do
       with_fake_resume_server(:present, fn workspace, issue, trace_file ->
         assert {:ok, result} =
-                 AppServer.run(workspace, "Continue the chat", issue, resume_thread_id: "thread-resume")
+                 AppServer.run(workspace, "Continue the chat", issue,
+                   conversation_ref: %ConversationRef{
+                     provider: "codex",
+                     conversation_id: "thread-resume"
+                   }
+                 )
 
         messages = outbound_messages(trace_file)
 
-        assert result.thread_id == "thread-resume"
+        assert result.conversation_id == "thread-resume"
 
         assert message_order(messages) == [
                  "initialize",
@@ -306,21 +337,22 @@ defmodule SymphonyElixir.Codex.CodingAgentTest do
       end)
     end
 
-    test "starts a fresh thread when the explicit resume target no longer exists" do
+    test "returns a stable error when the explicit resume target no longer exists" do
       with_fake_resume_server(:missing, fn workspace, issue, trace_file ->
-        assert {:ok, result} =
-                 AppServer.run(workspace, "Continue the chat", issue, resume_thread_id: "thread-missing")
+        assert {:error, {:resume_conversation_failed, "thread-missing", _reason}} =
+                 AppServer.run(workspace, "Continue the chat", issue,
+                   conversation_ref: %ConversationRef{
+                     provider: "codex",
+                     conversation_id: "thread-missing"
+                   }
+                 )
 
         messages = outbound_messages(trace_file)
-
-        assert result.thread_id == "thread-resume"
 
         assert message_order(messages) == [
                  "initialize",
                  "initialized",
-                 "thread/resume",
-                 "thread/start",
-                 "turn/start"
+                 "thread/resume"
                ]
       end)
     end
@@ -376,6 +408,25 @@ defmodule SymphonyElixir.Codex.CodingAgentTest do
                  AppServer.run(workspace, "Build the feature", issue, goal: "Ship the feature")
 
         refute File.exists?(trace_file)
+        assert {:ok, "thread-resume"} = SymphonyElixir.Codex.Session.resolve(workspace)
+      end)
+    end
+
+    test "does not replace a stale durable goal conversation with a fresh thread" do
+      with_fake_resume_server(:missing, fn workspace, _issue, trace_file ->
+        enable_goals!()
+        write_session_sidecar!(workspace, "thread-resume")
+
+        assert {:error, {:resume_conversation_failed, "thread-resume", _reason}} =
+                 AppServer.ensure_goal(
+                   workspace,
+                   %{objective: "Ship the feature", status: "active"},
+                   workspace_root: Path.dirname(workspace)
+                 )
+
+        messages = outbound_messages(trace_file)
+        assert message_order(messages) == ["initialize", "initialized", "thread/resume"]
+        refute message_with_method(messages, "thread/start")
         assert {:ok, "thread-resume"} = SymphonyElixir.Codex.Session.resolve(workspace)
       end)
     end
@@ -538,6 +589,27 @@ defmodule SymphonyElixir.Codex.CodingAgentTest do
   end
 
   describe "execution mode sandbox" do
+    test "sends requested model and current effort fields and returns the native settings" do
+      with_fake_goal_server(fn workspace, issue, trace_file ->
+        assert {:ok, result} =
+                 AppServer.run(workspace, "Build the feature", issue,
+                   model: "gpt-5.5",
+                   effort: "medium"
+                 )
+
+        messages = outbound_messages(trace_file)
+        thread_start = message_with_method(messages, "thread/start")
+        turn_start = message_with_method(messages, "turn/start")
+
+        assert thread_start["params"]["model"] == "gpt-5.5"
+        assert turn_start["params"]["model"] == "gpt-5.5"
+        assert turn_start["params"]["effort"] == "medium"
+        refute Map.has_key?(turn_start["params"], "reasoningEffort")
+        assert result.resolved_model == "gpt-5.5"
+        assert result.resolved_effort == "medium"
+      end)
+    end
+
     test "plan mode starts the thread in a read-only sandbox" do
       with_fake_goal_server(fn workspace, issue, trace_file ->
         assert {:ok, _result} =
@@ -845,6 +917,7 @@ defmodule SymphonyElixir.Codex.CodingAgentTest do
           ;;
         *'"method":"turn/start"'*)
           printf '%s\\n' '{"id":3,"result":{"turn":{"id":"turn-resume"}}}'
+          printf '%s\\n' '{"method":"thread/settings/updated","params":{"threadId":"thread-resume","threadSettings":{"model":"gpt-5.5","modelProvider":"openai","effort":"medium","approvalPolicy":"never","approvalsReviewer":"user","collaborationMode":{"mode":"default","settings":{}},"cwd":".","sandboxPolicy":{"type":"dangerFullAccess"}}}}'
           printf '%s\\n' '{"method":"thread/goal/updated","params":{"threadId":"thread-resume","goal":{"status":"completed"}}}'
           printf '%s\\n' '{"method":"turn/completed"}'
           exit 0
@@ -1110,6 +1183,24 @@ defmodule SymphonyElixir.Codex.CodingAgentTest do
         """
       end)
 
+    turn_completion_count = length(turn_completion_statuses(response_mode))
+
+    goal_get_exit =
+      if response_mode == :goal_ok,
+        do: "          exit 0",
+        else: ""
+
+    completion_exit =
+      if response_mode == :goal_ok do
+        ""
+      else
+        """
+          if [ "$turn_count" -ge #{turn_completion_count} ]; then
+            exit 0
+          fi
+        """
+      end
+
     File.write!(codex_binary, """
     #!/bin/sh
     trace_file="#{trace_file}"
@@ -1125,23 +1216,26 @@ defmodule SymphonyElixir.Codex.CodingAgentTest do
         *'"method":"initialized"'*)
           ;;
         *'"method":"thread/start"'*)
-          printf '%s\\n' '{"id":2,"result":{"thread":{"id":"thread-goal"}}}'
+          printf '%s\\n' '{"id":2,"result":{"thread":{"id":"thread-goal"},"model":"gpt-5.5","reasoningEffort":"low"}}'
           ;;
         *'"method":"thread/goal/set"'*)
           printf '%s\\n' '#{goal_response}'
           ;;
         *'"method":"thread/goal/get"'*)
           printf '%s\\n' '#{goal_get_response}'
+    #{goal_get_exit}
           ;;
         *'"method":"turn/start"'*)
           turn_count=$((turn_count + 1))
           printf '%s\\n' '{"id":3,"result":{"turn":{"id":"turn-goal"}}}'
+          printf '%s\\n' '{"method":"thread/settings/updated","params":{"threadId":"thread-goal","threadSettings":{"model":"gpt-5.5","modelProvider":"openai","effort":"medium","approvalPolicy":"never","approvalsReviewer":"user","collaborationMode":{"mode":"default","settings":{}},"cwd":".","sandboxPolicy":{"type":"dangerFullAccess"}}}}'
           case "$turn_count" in
     #{turn_completion_cases}
             *)
               printf '%s\\n' '{"method":"turn/completed"}'
               ;;
           esac
+    #{completion_exit}
           ;;
         *)
           ;;

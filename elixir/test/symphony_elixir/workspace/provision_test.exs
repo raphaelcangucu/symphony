@@ -245,6 +245,129 @@ defmodule SymphonyElixir.Workspace.ProvisionTest do
     assert File.read!(completed) == "done\n"
   end
 
+  test "issue workspace clones configured repositories on their selected branches without overrides", %{
+    workspace_root: workspace_root
+  } do
+    project_slug = "provision-default-clone-#{System.unique_integer([:positive])}"
+    seed = Path.join(workspace_root, "default-clone-seed")
+    bare = Path.join(workspace_root, "default-clone-seed.git")
+
+    File.mkdir_p!(seed)
+    assert {"", 0} = System.cmd("git", ["init", "--quiet", "--initial-branch=main"], cd: seed)
+    File.write!(Path.join(seed, "README.md"), "canonical seed\n")
+    assert {"", 0} = System.cmd("git", ["add", "README.md"], cd: seed)
+
+    assert {_output, 0} =
+             System.cmd(
+               "git",
+               [
+                 "-c",
+                 "user.name=Symphony Test",
+                 "-c",
+                 "user.email=symphony-test@example.com",
+                 "commit",
+                 "--quiet",
+                 "-m",
+                 "seed"
+               ],
+               cd: seed
+             )
+
+    assert {_output, 0} = System.cmd("git", ["clone", "--quiet", "--bare", seed, bare])
+
+    assert {:ok, _project} =
+             Context.create_workspace_project(%{
+               name: "Provision Default Clone",
+               slug: project_slug,
+               repositories: [
+                 %{
+                   github_full_name: "local/default-clone",
+                   clone_url: bare,
+                   default_branch: "main",
+                   selected_branch: "main",
+                   workspace_path: "site",
+                   role: "application"
+                 }
+               ],
+               setup: %{
+                 workflow_markdown: Workflow.to_markdown(%{"workspace" => %{"root" => workspace_root}}, "")
+               }
+             })
+
+    issue = %{identifier: "DEFAULT-CLONE", project_slug: project_slug}
+
+    assert {:ok, workspace} = Workspace.create_for_issue(issue)
+    assert File.read!(Path.join([workspace, "site", "README.md"])) == "canonical seed\n"
+    assert File.regular?(Path.join(workspace, @readiness_marker))
+  end
+
+  test "issue workspace materializes a root repository configured at dot", %{
+    workspace_root: workspace_root
+  } do
+    project_slug = "provision-root-clone-#{System.unique_integer([:positive])}"
+    seed = Path.join(workspace_root, "root-clone-seed")
+    bare = Path.join(workspace_root, "root-clone-seed.git")
+    create_bare_seed!(seed, bare, "root repository\n")
+
+    assert {:ok, _project} =
+             Context.create_workspace_project(%{
+               name: "Provision Root Clone",
+               slug: project_slug,
+               repositories: [
+                 %{
+                   github_full_name: "local/root-clone",
+                   clone_url: bare,
+                   default_branch: "main",
+                   selected_branch: "main",
+                   workspace_path: ".",
+                   role: "application"
+                 }
+               ],
+               setup: %{
+                 workflow_markdown: Workflow.to_markdown(%{"workspace" => %{"root" => workspace_root}}, "")
+               }
+             })
+
+    issue = %{identifier: "ROOT-CLONE", project_slug: project_slug}
+
+    assert {:ok, workspace} = Workspace.create_for_issue(issue)
+    assert File.read!(Path.join(workspace, "README.md")) == "root repository\n"
+    assert File.dir?(Path.join(workspace, ".git"))
+    assert File.regular?(Path.join(workspace, @readiness_marker))
+  end
+
+  test "configured after_create hook remains the sole repository materializer", %{
+    workspace_root: workspace_root
+  } do
+    project_slug = "provision-hook-clone-#{System.unique_integer([:positive])}"
+
+    assert {:ok, _project} =
+             Context.create_workspace_project(%{
+               name: "Provision Hook Clone",
+               slug: project_slug,
+               repositories: [
+                 %{
+                   github_full_name: "local/hook-owned",
+                   clone_url: "/does/not/exist.git",
+                   default_branch: "main",
+                   selected_branch: "main",
+                   workspace_path: "site",
+                   role: "application"
+                 }
+               ]
+             })
+
+    workspace = Path.join(workspace_root, "HOOK-CLONE")
+
+    assert {:ok, ^workspace} =
+             Provision.ensure(workspace,
+               project_slug: project_slug,
+               after_create: "mkdir site; printf 'hook owned\\n' > site/README.md"
+             )
+
+    assert File.read!(Path.join(workspace, "site/README.md")) == "hook owned\n"
+  end
+
   test "workspace-internal skill links remain valid after staging is renamed", %{
     workspace_root: workspace_root,
     skills_root: skills_root
@@ -991,6 +1114,31 @@ defmodule SymphonyElixir.Workspace.ProvisionTest do
     skill_dir = Path.join(skills_root, name)
     File.mkdir_p!(skill_dir)
     File.write!(Path.join(skill_dir, "SKILL.md"), "# #{name}\n")
+  end
+
+  defp create_bare_seed!(seed, bare, content) do
+    File.mkdir_p!(seed)
+    assert {"", 0} = System.cmd("git", ["init", "--quiet", "--initial-branch=main"], cd: seed)
+    File.write!(Path.join(seed, "README.md"), content)
+    assert {"", 0} = System.cmd("git", ["add", "README.md"], cd: seed)
+
+    assert {_output, 0} =
+             System.cmd(
+               "git",
+               [
+                 "-c",
+                 "user.name=Symphony Test",
+                 "-c",
+                 "user.email=symphony-test@example.com",
+                 "commit",
+                 "--quiet",
+                 "-m",
+                 "seed"
+               ],
+               cd: seed
+             )
+
+    assert {_output, 0} = System.cmd("git", ["clone", "--quiet", "--bare", seed, bare])
   end
 
   defp shell_quote(value) do

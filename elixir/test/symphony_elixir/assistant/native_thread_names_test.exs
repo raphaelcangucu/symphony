@@ -11,7 +11,7 @@ defmodule SymphonyElixir.Assistant.NativeThreadNamesTest do
     thread = %Thread{
       title: "  Chat · SYM-13 · Native titles  ",
       workspace_path: "/tmp/SYM-13",
-      agent_thread_ids: %{"codex" => "codex-thread-13"}
+      provider_bindings: %{"codex" => "codex-thread-13"}
     }
 
     setter = fn workspace, thread_id, name, opts ->
@@ -22,25 +22,6 @@ defmodule SymphonyElixir.Assistant.NativeThreadNamesTest do
     assert NativeThreadNames.sync(thread, setter: setter, coding_agent_opts: [workspace_root: "/tmp"]) == thread
 
     assert_receive {:set_name, "/tmp/SYM-13", "codex-thread-13", "Chat · SYM-13 · Native titles", [workspace_root: "/tmp"]}
-  end
-
-  test "uses the legacy native Codex thread id when the backend map is empty" do
-    test_pid = self()
-
-    thread = %Thread{
-      title: "Legacy title",
-      workspace_path: "/tmp/SYM-14",
-      codex_thread_id: "legacy-codex-thread",
-      agent_thread_ids: %{}
-    }
-
-    setter = fn _workspace, thread_id, _name, _opts ->
-      send(test_pid, {:set_name, thread_id})
-      :ok
-    end
-
-    assert NativeThreadNames.sync(thread, setter: setter) == thread
-    assert_receive {:set_name, "legacy-codex-thread"}
   end
 
   test "uses the configured application setter when no explicit setter is supplied" do
@@ -61,7 +42,7 @@ defmodule SymphonyElixir.Assistant.NativeThreadNamesTest do
     thread = %Thread{
       title: "Configured title",
       workspace_path: "/tmp/configured",
-      agent_thread_ids: %{"codex" => "configured-thread"}
+      provider_bindings: %{"codex" => "configured-thread"}
     }
 
     assert NativeThreadNames.sync(thread) == thread
@@ -72,10 +53,13 @@ defmodule SymphonyElixir.Assistant.NativeThreadNamesTest do
     setter = fn _workspace, _thread_id, _name, _opts -> flunk("setter must not run") end
 
     assert NativeThreadNames.sync(%Thread{title: "No native id", workspace_path: "/tmp"}, setter: setter)
-    assert NativeThreadNames.sync(%Thread{title: "No workspace", agent_thread_ids: %{"codex" => "id"}}, setter: setter)
+
+    assert NativeThreadNames.sync(%Thread{title: "No workspace", provider_bindings: %{"codex" => "id"}},
+             setter: setter
+           )
 
     assert NativeThreadNames.sync(
-             %Thread{title: "   ", workspace_path: "/tmp", agent_thread_ids: %{"codex" => "id"}},
+             %Thread{title: "   ", workspace_path: "/tmp", provider_bindings: %{"codex" => "id"}},
              setter: setter
            )
   end
@@ -87,7 +71,7 @@ defmodule SymphonyElixir.Assistant.NativeThreadNamesTest do
       title: "Claude session",
       workspace_path: "/tmp/claude",
       agent_kind: "claude",
-      agent_thread_ids: %{"codex" => "historical-codex-id"}
+      provider_bindings: %{"codex" => "historical-codex-id"}
     }
 
     assert NativeThreadNames.sync(thread, setter: setter) == thread
@@ -97,7 +81,7 @@ defmodule SymphonyElixir.Assistant.NativeThreadNamesTest do
     thread = %Thread{
       title: "Keep this title",
       workspace_path: "/tmp/SYM-15",
-      agent_thread_ids: %{"codex" => "codex-thread-15"}
+      provider_bindings: %{"codex" => "codex-thread-15"}
     }
 
     log =
@@ -113,7 +97,7 @@ defmodule SymphonyElixir.Assistant.NativeThreadNamesTest do
     thread = %Thread{
       title: "Keep this title",
       workspace_path: "/tmp/SYM-16",
-      agent_thread_ids: %{"codex" => "codex-thread-16"}
+      provider_bindings: %{"codex" => "codex-thread-16"}
     }
 
     for setter <- [
@@ -137,7 +121,7 @@ defmodule SymphonyElixir.Assistant.NativeThreadNamesTest do
       id: 17,
       title: "Stale title",
       workspace_path: "/tmp/SYM-17",
-      agent_thread_ids: %{"codex" => "codex-thread-17"}
+      provider_bindings: %{"codex" => "codex-thread-17"}
     }
 
     current = %{stale | title: "Current title"}
@@ -158,7 +142,7 @@ defmodule SymphonyElixir.Assistant.NativeThreadNamesTest do
       id: 19,
       title: "Potentially stale",
       workspace_path: "/tmp/SYM-19",
-      agent_thread_ids: %{"codex" => "codex-thread-19"}
+      provider_bindings: %{"codex" => "codex-thread-19"}
     }
 
     setter = fn _workspace, _thread_id, _name, _opts -> flunk("setter must not run") end
@@ -175,7 +159,7 @@ defmodule SymphonyElixir.Assistant.NativeThreadNamesTest do
     thread = %Thread{
       title: "Canonical title",
       workspace_path: "/tmp/SYM-18",
-      agent_thread_ids: %{"codex" => "codex-thread-18"}
+      provider_bindings: %{"codex" => "codex-thread-18"}
     }
 
     setter = fn _, _, _, _ ->

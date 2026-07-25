@@ -57,6 +57,26 @@ defmodule SymphonyElixir.Agent.ExecutionSession do
     end
   end
 
+  @spec put_model_provenance(integer(), keyword() | map()) ::
+          {:ok, Thread.t()} | {:error, term()}
+  def put_model_provenance(session_id, attrs)
+      when is_integer(session_id) and (is_list(attrs) or is_map(attrs)) do
+    attrs = Map.new(attrs)
+
+    with {:ok, thread} <- History.get_thread(session_id) do
+      thread
+      |> Thread.changeset(
+        Map.take(attrs, [
+          :requested_model,
+          :requested_effort,
+          :resolved_model,
+          :resolved_effort
+        ])
+      )
+      |> Repo.update()
+    end
+  end
+
   @doc """
   Archives the latest non-archived `issue_execution` for an issue so the next
   `ensure/3` creates a fresh session (hard reset / new thread).
@@ -122,10 +142,15 @@ defmodule SymphonyElixir.Agent.ExecutionSession do
   end
 
   defp reactivate(%Thread{} = thread, opts) when is_list(opts) do
+    agent_kind = Keyword.get(opts, :agent_kind)
+
     attrs =
-      %{status: "active"}
-      |> maybe_put_attr(:agent_kind, Keyword.get(opts, :agent_kind))
+      %{status: "active", resolved_model: nil, resolved_effort: nil}
+      |> maybe_put_attr(:agent_kind, agent_kind)
       |> maybe_put_attr(:workspace_path, Keyword.get(opts, :workspace_path))
+      |> maybe_put_option(opts, :requested_model)
+      |> maybe_put_option(opts, :requested_effort)
+      |> normalize_requested_effort(agent_kind)
 
     case thread
          |> Thread.changeset(attrs)
@@ -168,6 +193,8 @@ defmodule SymphonyElixir.Agent.ExecutionSession do
            issue_identifier: issue_identifier,
            workspace_path: workspace,
            agent_kind: agent_kind,
+           requested_model: Keyword.get(opts, :requested_model),
+           requested_effort: canonical_requested_effort(agent_kind, Keyword.get(opts, :requested_effort)),
            title: title,
            status: "active",
            metadata: metadata
@@ -185,6 +212,20 @@ defmodule SymphonyElixir.Agent.ExecutionSession do
   defp maybe_put_attr(attrs, _key, nil), do: attrs
   defp maybe_put_attr(attrs, _key, ""), do: attrs
   defp maybe_put_attr(attrs, key, value), do: Map.put(attrs, key, value)
+
+  defp maybe_put_option(attrs, opts, key) do
+    if Keyword.has_key?(opts, key),
+      do: Map.put(attrs, key, Keyword.get(opts, key)),
+      else: attrs
+  end
+
+  defp normalize_requested_effort(attrs, "cursor"),
+    do: Map.put(attrs, :requested_effort, nil)
+
+  defp normalize_requested_effort(attrs, _agent_kind), do: attrs
+
+  defp canonical_requested_effort("cursor", _effort), do: nil
+  defp canonical_requested_effort(_agent_kind, effort), do: effort
 
   defp notify_execution_change do
     _ = Recents.Broadcaster.notify()

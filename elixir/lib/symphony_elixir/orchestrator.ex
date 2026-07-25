@@ -197,6 +197,7 @@ defmodule SymphonyElixir.Orchestrator do
 
       running_entry ->
         {updated_running_entry, token_delta} = RunUpdate.integrate(running_entry, update)
+        persist_execution_model_provenance(updated_running_entry, update)
 
         state =
           state
@@ -425,11 +426,31 @@ defmodule SymphonyElixir.Orchestrator do
       true ->
         Logger.info("Issue moved to non-active state: #{issue_context(issue)} state=#{issue.state}; stopping active agent")
 
-        terminate_running_issue(state, issue.id, false)
+        state
+        |> finish_wait_state_execution_session(issue)
+        |> terminate_running_issue(issue.id, false)
     end
   end
 
   defp reconcile_issue_state(_issue, state, _active_states, _terminal_states), do: state
+
+  defp finish_wait_state_execution_session(%State{} = state, %Issue{} = issue) do
+    if wait_issue_state?(issue) do
+      state.running
+      |> Map.get(issue.id)
+      |> finish_execution_session("completed")
+    end
+
+    state
+  end
+
+  defp wait_issue_state?(%Issue{state: state_name, project_slug: slug})
+       when is_binary(state_name) do
+    normalized = normalize_issue_state(state_name)
+    Enum.any?(wait_states_for_slug(slug), fn wait_state -> normalize_issue_state(wait_state) == normalized end)
+  end
+
+  defp wait_issue_state?(_issue), do: false
 
   defp refresh_running_issue_state(%State{} = state, %Issue{} = issue) do
     case Map.get(state.running, issue.id) do
@@ -592,6 +613,8 @@ defmodule SymphonyElixir.Orchestrator do
         case ExecutionSession.ensure(issue.project_slug, issue.identifier,
                workspace_path: workspace,
                agent_kind: Map.get(running_entry, :agent_kind),
+               requested_model: Map.get(running_entry, :model),
+               requested_effort: Map.get(running_entry, :effort),
                unit_id: bundle_ctx.unit_id,
                bundle_role: to_string(bundle_ctx.role)
              ) do
@@ -628,6 +651,38 @@ defmodule SymphonyElixir.Orchestrator do
   end
 
   defp finish_execution_session(_running_entry, _status), do: :ok
+
+  defp persist_execution_model_provenance(running_entry, update)
+       when is_map(running_entry) and is_map(update) do
+    session_id = Map.get(running_entry, :execution_session_id)
+
+    attrs =
+      []
+      |> maybe_put_provenance(:resolved_model, Map.get(update, :resolved_model))
+      |> maybe_put_provenance(:resolved_effort, Map.get(update, :resolved_effort))
+
+    if is_integer(session_id) and attrs != [] do
+      case ExecutionSession.put_model_provenance(session_id, attrs) do
+        {:ok, _thread} -> :ok
+        {:error, reason} -> Logger.warning("ExecutionSession provenance update failed: #{inspect(reason)}")
+      end
+    end
+
+    :ok
+  rescue
+    error ->
+      Logger.warning("ExecutionSession provenance update failed: #{Exception.message(error)}")
+      :ok
+  end
+
+  defp maybe_put_provenance(attrs, _key, value) when not is_binary(value), do: attrs
+
+  defp maybe_put_provenance(attrs, key, value) do
+    case String.trim(value) do
+      "" -> attrs
+      normalized -> Keyword.put(attrs, key, normalized)
+    end
+  end
 
   defp execution_completion_status(running_entry) when is_map(running_entry) do
     case Map.get(running_entry, :agent_outcome) do
@@ -1101,13 +1156,16 @@ defmodule SymphonyElixir.Orchestrator do
   end
 
   defp dispatch_running_entry(pid, ref, %Issue{} = issue, agent_kind, attempt, bundle_ctx) do
+    agent_settings = AgentRunner.agent_settings_opts(issue)
+
     %{
       pid: pid,
       ref: ref,
       identifier: issue.identifier,
       issue: issue,
       agent_kind: agent_kind,
-      model: Keyword.get(AgentRunner.agent_settings_opts(issue), :model),
+      model: Keyword.get(agent_settings, :model),
+      effort: Keyword.get(agent_settings, :effort),
       agent_goal: Map.get(issue, :agent_goal),
       goal: nil,
       session_id: nil,

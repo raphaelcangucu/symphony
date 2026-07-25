@@ -252,8 +252,8 @@ defmodule SymphonyElixir.AgentGoal do
 
   defp inferred_thread_agent(%Thread{} = thread) do
     cond do
-      is_binary(History.agent_thread_id(thread, "claude")) -> "claude"
-      is_binary(History.agent_thread_id(thread, "codex")) -> "codex"
+      match?({:ok, _ref}, History.conversation_ref(thread, "claude")) -> "claude"
+      match?({:ok, _ref}, History.conversation_ref(thread, "codex")) -> "codex"
       true -> nil
     end
   end

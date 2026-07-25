@@ -141,6 +141,16 @@ defmodule SymphonyElixirWeb.TrackerErrors do
     error(conn, 503, "github_network_error", dgettext("errors", "Failed to reach GitHub. Try again in a moment."))
   end
 
+  def render(conn, {:assistant_catalog_unavailable, failures}) when is_map(failures) do
+    error(
+      conn,
+      503,
+      "assistant_catalog_unavailable",
+      dgettext("errors", "One or more agent model catalogs are unavailable."),
+      %{agents: failures |> Map.keys() |> Enum.map(&to_string/1) |> Enum.sort()}
+    )
+  end
+
   def render(conn, {:malformed_response, _body}) do
     error(conn, 502, "github_malformed_response", dgettext("errors", "GitHub returned an unexpected response."))
   end

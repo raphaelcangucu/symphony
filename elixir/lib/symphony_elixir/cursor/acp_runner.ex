@@ -61,7 +61,8 @@ defmodule SymphonyElixir.Cursor.AcpRunner do
           client_opts =
             [
               workspace: workspace,
-              on_server_request: on_server_request
+              on_server_request: on_server_request,
+              model: Map.get(args, :model)
             ] ++
               if Map.has_key?(args, :writer) do
                 [writer: Map.fetch!(args, :writer)]
@@ -79,22 +80,23 @@ defmodule SymphonyElixir.Cursor.AcpRunner do
     try do
       with {:ok, _} <- initialize(client),
            {:ok, _} <- authenticate(client),
-           {:ok, session_id} <- open_session(client, args, workspace),
-           {:ok, prompt_result} <- prompt_and_drain(client, session_id, args.prompt, timeout_ms) do
+           {:ok, session} <- open_session(client, args, workspace),
+           {:ok, prompt_result} <- prompt_and_drain(client, session.id, args.prompt, timeout_ms) do
         on_event.(%{
           "method" => "turn/completed",
           "params" => %{
-            "session_id" => session_id,
+            "session_id" => session.id,
             "stopReason" => Map.get(prompt_result, "stopReason")
           }
         })
 
         {:ok,
          %{
-           cli_session_id: session_id,
+           cli_session_id: session.id,
            status: :completed,
            usage: nil,
-           cost_usd: nil
+           cost_usd: nil,
+           provider_model: session.provider_model
          }}
       else
         {:error, reason} = err ->
@@ -204,7 +206,7 @@ defmodule SymphonyElixir.Cursor.AcpRunner do
   end
 
   defp open_session(client, args, workspace) do
-    mcp_servers = mcp_servers_from_config(Map.get(args, :mcp_config_path))
+    mcp_servers = []
 
     case Map.get(args, :cli_session_id) do
       id when is_binary(id) and id != "" ->
@@ -214,7 +216,7 @@ defmodule SymphonyElixir.Cursor.AcpRunner do
                "mcpServers" => mcp_servers
              }) do
           {:ok, result} ->
-            {:ok, Map.get(result, "sessionId") || id}
+            session_identity(result, id)
 
           {:error, _} ->
             new_session(client, workspace, mcp_servers, args)
@@ -238,8 +240,8 @@ defmodule SymphonyElixir.Cursor.AcpRunner do
       end
 
     case AcpClient.request(client, "session/new", params) do
-      {:ok, %{"sessionId" => session_id}} when is_binary(session_id) ->
-        {:ok, session_id}
+      {:ok, %{"sessionId" => session_id} = result} when is_binary(session_id) ->
+        session_identity(result, session_id)
 
       {:ok, other} ->
         {:error, {:session_new_invalid, other}}
@@ -248,6 +250,22 @@ defmodule SymphonyElixir.Cursor.AcpRunner do
         {:error, reason}
     end
   end
+
+  defp session_identity(result, fallback_id) when is_map(result) and is_binary(fallback_id) do
+    session_id = Map.get(result, "sessionId") || fallback_id
+    provider_model = get_in(result, ["models", "currentModelId"])
+
+    {:ok, %{id: session_id, provider_model: normalize_model(provider_model)}}
+  end
+
+  defp normalize_model(model) when is_binary(model) do
+    case String.trim(model) do
+      "" -> nil
+      value -> value
+    end
+  end
+
+  defp normalize_model(_model), do: nil
 
   defp prompt_and_drain(client, session_id, prompt, timeout_ms) do
     task =
@@ -303,26 +321,6 @@ defmodule SymphonyElixir.Cursor.AcpRunner do
       0 -> :ok
     end
   end
-
-  defp mcp_servers_from_config(path) when is_binary(path) do
-    case File.read(path) do
-      {:ok, raw} ->
-        case Jason.decode(raw) do
-          {:ok, %{"mcpServers" => servers}} when is_map(servers) ->
-            Enum.map(servers, fn {name, cfg} ->
-              Map.put(cfg || %{}, "name", name)
-            end)
-
-          _ ->
-            []
-        end
-
-      _ ->
-        []
-    end
-  end
-
-  defp mcp_servers_from_config(_), do: []
 
   defp flatten_answers(normalized) when is_map(normalized) do
     Map.new(normalized, fn {qid, value} ->

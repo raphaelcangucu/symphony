@@ -51,7 +51,7 @@ defmodule SymphonyElixir.SessionLogTest do
     )
   end
 
-  test "resolve_log_source/3 falls back to another agent when preferred has no log" do
+  test "resolve_log_source/3 never substitutes another provider" do
     workspace = Path.join(System.tmp_dir!(), "session-log-fallback-#{System.unique_integer()}")
 
     claude_dir =
@@ -78,7 +78,7 @@ defmodule SymphonyElixir.SessionLogTest do
       File.rm_rf(Path.dirname(claude_dir))
     end)
 
-    assert {:ok, "claude", ^path} =
+    assert :error =
              SessionLog.resolve_log_source("cursor", workspace, projects_dir: Path.dirname(claude_dir))
   end
 
@@ -111,6 +111,11 @@ defmodule SymphonyElixir.SessionLogTest do
     # without bound after a user_stop pause.
     assert {:ok, read_entries, _read_offset} = SessionLog.read_from("claude", path, 0, opts)
     refute Enum.any?(read_entries, &symphony_abort?/1)
+  end
+
+  test "tail and read_from reject unknown providers instead of using Codex" do
+    assert {:error, :unsupported_agent_kind} = SessionLog.tail("unknown", "/tmp/log")
+    assert {:error, :unsupported_agent_kind} = SessionLog.read_from("unknown", "/tmp/log", 0)
   end
 
   defp symphony_abort?(entry) when is_map(entry) do
@@ -168,14 +173,14 @@ defmodule SymphonyElixir.SessionLogTest do
         id: 9,
         workspace_path: workspace,
         agent_kind: "codex",
-        agent_thread_ids: %{"codex" => "own-thread"}
+        provider_bindings: %{"codex" => "own-thread"}
       }
 
       assert {:ok, "codex", ^own_path} =
                SymphonyElixir.SessionLog.resolve_for_session(session, sessions_dir: sessions_dir)
     end
 
-    test "uses the legacy codex_thread_id when agent_thread_ids is empty" do
+    test "does not read removed legacy identity fields" do
       workspace = Path.join(System.tmp_dir!(), "rfs-legacy-#{System.unique_integer([:positive])}")
       sessions_dir = Path.join(System.tmp_dir!(), "rfs-rollouts-#{System.unique_integer([:positive])}")
       File.mkdir_p!(workspace)
@@ -186,9 +191,6 @@ defmodule SymphonyElixir.SessionLogTest do
         File.rm_rf!(sessions_dir)
       end)
 
-      own_path = Path.join(sessions_dir, "rollout-2026-07-18T00-00-00-legacy-thread.jsonl")
-      File.write!(own_path, "")
-
       session = %{
         id: 10,
         workspace_path: workspace,
@@ -197,7 +199,7 @@ defmodule SymphonyElixir.SessionLogTest do
         codex_thread_id: "legacy-thread"
       }
 
-      assert {:ok, "codex", ^own_path} =
+      assert :error =
                SymphonyElixir.SessionLog.resolve_for_session(session, sessions_dir: sessions_dir)
     end
 
@@ -220,7 +222,7 @@ defmodule SymphonyElixir.SessionLogTest do
         Jason.encode!(%{"thread_id" => "durable-thread"})
       )
 
-      session = %{id: 11, workspace_path: workspace, agent_kind: "codex", agent_thread_ids: %{}}
+      session = %{id: 11, workspace_path: workspace, agent_kind: "codex", provider_bindings: %{}}
 
       assert {:ok, "codex", ^sidecar_rollout} =
                SymphonyElixir.SessionLog.resolve_for_session(session, sessions_dir: sessions_dir)
@@ -254,7 +256,7 @@ defmodule SymphonyElixir.SessionLogTest do
       File.touch!(stale_path, 1_784_595_360)
       File.touch!(live_path, 1_784_596_380)
 
-      session = %{id: 12, workspace_path: workspace, agent_kind: "codex", agent_thread_ids: %{}}
+      session = %{id: 12, workspace_path: workspace, agent_kind: "codex", provider_bindings: %{}}
 
       assert {:ok, "codex", ^live_path} =
                SymphonyElixir.SessionLog.resolve_for_session(session, sessions_dir: sessions_dir)

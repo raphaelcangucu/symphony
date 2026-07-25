@@ -5,7 +5,7 @@ defmodule SymphonyElixir.Assistant.AuthoringGoalControl do
 
   This is the authoring counterpart to `SymphonyElixir.Codex.GoalControl` (which
   drives the orchestrator/execution goal keyed by issue). Here the native goal
-  lives on the *assistant thread's* Codex thread (`agent_thread_ids["codex"]`), so
+  lives on the *assistant thread's* Codex conversation binding, so
   every control resumes that specific thread via `CodingAgent.manage_goal/3`.
 
   Thread metadata (`goal_mode` + `goal_objective`) stays as the enabled-flag and
@@ -132,13 +132,29 @@ defmodule SymphonyElixir.Assistant.AuthoringGoalControl do
 
   @doc """
   Flips the native authoring goal back to active. Codex only — Claude has no
-  pause/resume on `/goal`.
+  pause/resume on `/goal`. Before the first provider conversation exists, the
+  metadata-only goal is already active, so resume succeeds without a native
+  round-trip and lets the continuation establish that conversation.
   """
   @spec resume(Thread.t()) :: result()
   def resume(%Thread{} = thread) do
-    if supports_capability?(thread, "resume"),
-      do: with_native(thread, {:set, %{status: "active"}}),
-      else: {:error, :unsupported_for_agent}
+    cond do
+      not supports_capability?(thread, "resume") ->
+        {:error, :unsupported_for_agent}
+
+      is_nil(codex_conversation_id(thread)) ->
+        with {:ok, updated} <- History.bump_goal_revision(thread) do
+          {:ok,
+           build_payload(
+             History.thread_goal_mode(updated),
+             History.thread_goal_objective(updated),
+             nil
+           ), updated}
+        end
+
+      true ->
+        with_native(thread, {:set, %{status: "active"}})
+    end
   end
 
   @doc "Removes the authoring goal after native/storage clear succeeds."
@@ -308,7 +324,7 @@ defmodule SymphonyElixir.Assistant.AuthoringGoalControl do
         end
 
       _ ->
-        case codex_thread_id(thread) do
+        case codex_conversation_id(thread) do
           nil -> {:error, :no_codex_thread}
           _id -> do_manage(thread, :get)
         end
@@ -316,7 +332,7 @@ defmodule SymphonyElixir.Assistant.AuthoringGoalControl do
   end
 
   defp safe_manage(%Thread{} = thread, command) do
-    case codex_thread_id(thread) do
+    case codex_conversation_id(thread) do
       nil -> {:error, :no_codex_thread}
       _id -> do_manage(thread, command)
     end
@@ -346,7 +362,7 @@ defmodule SymphonyElixir.Assistant.AuthoringGoalControl do
   end
 
   defp require_codex_thread(%Thread{} = thread) do
-    case codex_thread_id(thread) do
+    case codex_conversation_id(thread) do
       id when is_binary(id) ->
         case String.trim(id) do
           "" -> {:error, :no_codex_thread}
@@ -358,17 +374,12 @@ defmodule SymphonyElixir.Assistant.AuthoringGoalControl do
     end
   end
 
-  defp codex_thread_id(%Thread{agent_thread_ids: ids, codex_thread_id: legacy}) do
-    from_map =
-      case ids do
-        %{} -> Map.get(ids, @native_agent_kind) || Map.get(ids, :codex)
-        _ -> nil
-      end
-
-    from_map || legacy
+  defp codex_conversation_id(%Thread{} = thread) do
+    case History.conversation_ref(thread, @native_agent_kind) do
+      {:ok, %{conversation_id: conversation_id}} -> conversation_id
+      :error -> nil
+    end
   end
-
-  defp codex_thread_id(_thread), do: nil
 
   defp codex_config(slug) when is_binary(slug) do
     case Context.get_project(slug) do
@@ -449,9 +460,9 @@ defmodule SymphonyElixir.Assistant.AuthoringGoalControl do
   end
 
   defp present_agent_thread?(thread, kind) do
-    case History.agent_thread_id(thread, kind) do
-      id when is_binary(id) and id != "" -> true
-      _ -> false
+    case History.conversation_ref(thread, kind) do
+      {:ok, _ref} -> true
+      :error -> false
     end
   end
 

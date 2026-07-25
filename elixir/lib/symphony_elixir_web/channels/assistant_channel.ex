@@ -1,9 +1,11 @@
 defmodule SymphonyElixirWeb.AssistantChannel do
-  @moduledoc "Project-scoped realtime channel for Codex-backed tracker assistant chat."
+  @moduledoc "Realtime channel for provider-neutral tracker assistant chat."
 
   use Phoenix.Channel
 
   alias Phoenix.Socket
+
+  alias SymphonyElixir.Agent.Error, as: AgentError
 
   alias SymphonyElixir.Assistant.{
     AuthoringGoalControl,
@@ -17,7 +19,17 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     UserInputBroker
   }
 
-  alias SymphonyElixir.{AgentPreference, Config, LocalTracker.Context, ProjectConfig, Repo, Settings, Workspace}
+  alias SymphonyElixir.{
+    AgentPreference,
+    CodingAgent,
+    Config,
+    LocalTracker.Context,
+    ProjectConfig,
+    Repo,
+    Settings,
+    Workspace
+  }
+
   alias SymphonyElixir.Claude.ApprovalBroker
   alias SymphonyElixir.Observability.Metrics
   alias SymphonyElixirWeb.TrackerAuth
@@ -56,15 +68,15 @@ defmodule SymphonyElixirWeb.AssistantChannel do
         |> assign(:thread, thread)
         |> assign(:project_slug, thread.project_slug)
         |> assign(:issue_identifier, thread.issue_identifier)
-        |> assign(:turn_generation, current_turn_generation(thread))
+        |> assign(:turn_execution_id, current_turn_execution_id(thread))
         |> remember_goal_status(payload.goal_status)
 
       send(self(), {:assistant_history_loaded, thread, payload})
       {:ok, payload, socket}
     else
-      false -> {:error, %{reason: "unauthorized"}}
-      {:error, reason} -> {:error, %{reason: error_reason(reason)}}
-      _ -> {:error, %{reason: "invalid_topic"}}
+      false -> {:error, assistant_error_payload("unauthorized")}
+      {:error, reason} -> {:error, assistant_error_payload(reason)}
+      _ -> {:error, assistant_error_payload("invalid_topic")}
     end
   end
 
@@ -80,15 +92,15 @@ defmodule SymphonyElixirWeb.AssistantChannel do
         socket
         |> assign(:thread, thread)
         |> assign(:project_slug, thread.project_slug)
-        |> assign(:turn_generation, current_turn_generation(thread))
+        |> assign(:turn_execution_id, current_turn_execution_id(thread))
         |> remember_goal_status(payload.goal_status)
 
       send(self(), {:assistant_history_loaded, thread, payload})
       {:ok, payload, socket}
     else
-      false -> {:error, %{reason: "unauthorized"}}
-      {:error, reason} -> {:error, %{reason: error_reason(reason)}}
-      _ -> {:error, %{reason: "invalid_topic"}}
+      false -> {:error, assistant_error_payload("unauthorized")}
+      {:error, reason} -> {:error, assistant_error_payload(reason)}
+      _ -> {:error, assistant_error_payload("invalid_topic")}
     end
   end
 
@@ -104,15 +116,15 @@ defmodule SymphonyElixirWeb.AssistantChannel do
         socket
         |> assign(:thread, thread)
         |> assign(:project_slug, thread.project_slug)
-        |> assign(:turn_generation, current_turn_generation(thread))
+        |> assign(:turn_execution_id, current_turn_execution_id(thread))
         |> remember_goal_status(payload.goal_status)
 
       send(self(), {:assistant_history_loaded, thread, payload})
       {:ok, payload, socket}
     else
-      false -> {:error, %{reason: "unauthorized"}}
-      {:error, reason} -> {:error, %{reason: error_reason(reason)}}
-      _ -> {:error, %{reason: "invalid_topic"}}
+      false -> {:error, assistant_error_payload("unauthorized")}
+      {:error, reason} -> {:error, assistant_error_payload(reason)}
+      _ -> {:error, assistant_error_payload("invalid_topic")}
     end
   end
 
@@ -128,15 +140,15 @@ defmodule SymphonyElixirWeb.AssistantChannel do
         socket
         |> assign(:thread, thread)
         |> assign(:project_slug, thread.project_slug)
-        |> assign(:turn_generation, current_turn_generation(thread))
+        |> assign(:turn_execution_id, current_turn_execution_id(thread))
         |> remember_goal_status(payload.goal_status)
 
       send(self(), {:assistant_history_loaded, thread, payload})
       {:ok, payload, socket}
     else
-      false -> {:error, %{reason: "unauthorized"}}
-      {:error, :not_found} -> {:error, %{reason: "thread not found"}}
-      _ -> {:error, %{reason: "invalid_topic"}}
+      false -> {:error, assistant_error_payload("unauthorized")}
+      {:error, :not_found} -> {:error, assistant_error_payload("thread not found")}
+      _ -> {:error, assistant_error_payload("invalid_topic")}
     end
   end
 
@@ -152,18 +164,18 @@ defmodule SymphonyElixirWeb.AssistantChannel do
         socket
         |> assign(:thread, thread)
         |> assign(:project_slug, project_slug)
-        |> assign(:turn_generation, current_turn_generation(thread))
+        |> assign(:turn_execution_id, current_turn_execution_id(thread))
         |> remember_goal_status(payload.goal_status)
 
       send(self(), {:assistant_history_loaded, thread, payload})
       {:ok, payload, socket}
     else
-      false -> {:error, %{reason: "unauthorized"}}
-      {:error, reason} -> {:error, %{reason: error_reason(reason)}}
+      false -> {:error, assistant_error_payload("unauthorized")}
+      {:error, reason} -> {:error, assistant_error_payload(reason)}
     end
   end
 
-  def join(_topic, _payload, _socket), do: {:error, %{reason: "invalid_topic"}}
+  def join(_topic, _payload, _socket), do: {:error, assistant_error_payload("invalid_topic")}
 
   @impl true
   def handle_in("send_message", %{"message" => message} = payload, socket) when is_binary(message) do
@@ -171,7 +183,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
 
     if socket.assigns[:turn_status] == :running and
          (is_nil(thread) or Map.get(thread, :scope) == "project") do
-      {:reply, {:error, %{reason: "assistant is busy"}}, socket}
+      {:reply, {:error, assistant_error_payload(:assistant_busy)}, socket}
     else
       case assistant_thread(socket) do
         {:ok, current_thread} ->
@@ -188,16 +200,16 @@ defmodule SymphonyElixirWeb.AssistantChannel do
               end
 
             {:error, :invalid_client_message_id} ->
-              {:reply, {:error, %{reason: "client_message_id must contain 1 to 128 characters"}}, socket}
+              {:reply, {:error, assistant_error_payload("client_message_id must contain 1 to 128 characters")}, socket}
           end
 
         {:error, reason} ->
-          {:reply, {:error, %{reason: error_reason(reason)}}, socket}
+          {:reply, {:error, assistant_error_payload(reason)}, socket}
       end
     end
   end
 
-  def handle_in("send_message", _payload, socket), do: {:reply, {:error, %{reason: "message is required"}}, socket}
+  def handle_in("send_message", _payload, socket), do: {:reply, {:error, assistant_error_payload("message is required")}, socket}
 
   def handle_in("sync_history", _payload, socket) do
     push_history_sync(socket)
@@ -217,8 +229,8 @@ defmodule SymphonyElixirWeb.AssistantChannel do
 
       {:reply, {:ok, page}, socket}
     else
-      nil -> {:reply, {:error, %{reason: "thread is required"}}, socket}
-      :error -> {:reply, {:error, %{reason: "before_sequence is required"}}, socket}
+      nil -> {:reply, {:error, assistant_error_payload("thread is required")}, socket}
+      :error -> {:reply, {:error, assistant_error_payload("before_sequence is required")}, socket}
     end
   end
 
@@ -237,14 +249,14 @@ defmodule SymphonyElixirWeb.AssistantChannel do
           output_byte_size: result.output_byte_size
         }}, socket}
     else
-      nil -> {:reply, {:error, %{reason: "thread is required"}}, socket}
-      :error -> {:reply, {:error, %{reason: "message_id and tool_call_id are required"}}, socket}
-      {:error, :not_found} -> {:reply, {:error, %{reason: "tool call not found"}}, socket}
+      nil -> {:reply, {:error, assistant_error_payload("thread is required")}, socket}
+      :error -> {:reply, {:error, assistant_error_payload("message_id and tool_call_id are required")}, socket}
+      {:error, :not_found} -> {:reply, {:error, assistant_error_payload("tool call not found")}, socket}
     end
   end
 
   def handle_in("fetch_tool_output", _payload, socket),
-    do: {:reply, {:error, %{reason: "message_id and tool_call_id are required"}}, socket}
+    do: {:reply, {:error, assistant_error_payload("message_id and tool_call_id are required")}, socket}
 
   def handle_in("stop_turn", _payload, socket) do
     case thread_id_from_socket(socket) do
@@ -262,11 +274,11 @@ defmodule SymphonyElixirWeb.AssistantChannel do
             {:reply, :ok, reconcile_finished_turn(socket, thread_id)}
 
           {:error, reason} ->
-            {:reply, {:error, %{reason: error_reason(reason)}}, socket}
+            {:reply, {:error, assistant_error_payload(reason)}, socket}
         end
 
       _ ->
-        {:reply, {:error, %{reason: "thread is required"}}, socket}
+        {:reply, {:error, assistant_error_payload("thread is required")}, socket}
     end
   end
 
@@ -279,15 +291,15 @@ defmodule SymphonyElixirWeb.AssistantChannel do
         end
 
       {_thread_id, nil} ->
-        {:reply, {:error, %{reason: "tool_call_id is required"}}, socket}
+        {:reply, {:error, assistant_error_payload("tool_call_id is required")}, socket}
 
       _ ->
-        {:reply, {:error, %{reason: "thread is required"}}, socket}
+        {:reply, {:error, assistant_error_payload("thread is required")}, socket}
     end
   end
 
   def handle_in("kill_tool", _payload, socket),
-    do: {:reply, {:error, %{reason: "tool_call_id is required"}}, socket}
+    do: {:reply, {:error, assistant_error_payload("tool_call_id is required")}, socket}
 
   def handle_in("set_goal_mode", %{"goal_mode" => false}, socket) do
     start_async_goal_mutation(socket, :disable, false, &AuthoringGoalControl.clear/1)
@@ -325,12 +337,12 @@ defmodule SymphonyElixirWeb.AssistantChannel do
 
       {:noreply, socket}
     else
-      {:error, reason} -> {:reply, {:error, %{reason: error_reason(reason)}}, socket}
+      {:error, reason} -> {:reply, {:error, assistant_error_payload(reason)}, socket}
     end
   end
 
   def handle_in("set_goal_mode", _payload, socket),
-    do: {:reply, {:error, %{reason: "goal_mode is required"}}, socket}
+    do: {:reply, {:error, assistant_error_payload("goal_mode is required")}, socket}
 
   # Thread-scoped Authoring Goal controls. Durable thread/provider state is the
   # source of truth; GoalRun contributes only live process presence.
@@ -356,11 +368,11 @@ defmodule SymphonyElixirWeb.AssistantChannel do
             {:reply, {:ok, reply}, socket}
 
           {:error, reason} ->
-            {:reply, {:error, %{reason: error_reason(reason)}}, socket}
+            {:reply, {:error, assistant_error_payload(reason)}, socket}
         end
 
       {:error, reason} ->
-        {:reply, {:error, %{reason: error_reason(reason)}}, socket}
+        {:reply, {:error, assistant_error_payload(reason)}, socket}
     end
   end
 
@@ -408,7 +420,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
         )
 
       {:error, reason} ->
-        {:reply, {:error, %{reason: error_reason(reason)}}, socket}
+        {:reply, {:error, assistant_error_payload(reason)}, socket}
     end
   end
 
@@ -452,12 +464,12 @@ defmodule SymphonyElixirWeb.AssistantChannel do
         {:noreply, socket}
 
       {:error, reason} ->
-        {:reply, {:error, %{reason: error_reason(reason)}}, socket}
+        {:reply, {:error, assistant_error_payload(reason)}, socket}
     end
   end
 
   def handle_in("goal_set_objective", _payload, socket),
-    do: {:reply, {:error, %{reason: "objective is required"}}, socket}
+    do: {:reply, {:error, assistant_error_payload("objective is required")}, socket}
 
   def handle_in("dispatch_coding_agent", payload, socket), do: do_dispatch(payload, socket)
 
@@ -469,22 +481,25 @@ defmodule SymphonyElixirWeb.AssistantChannel do
       |> inject_assistant_context_refs(message, socket.assigns[:thread], Map.get(payload, "context_refs", []))
       |> String.trim()
 
-    case {trimmed, steer_target(socket)} do
-      {"", _} ->
-        {:reply, {:error, %{reason: "message is required"}}, socket}
+    case {trimmed, active_provider_supports?(socket, :steer), steer_target(socket)} do
+      {"", _, _} ->
+        {:reply, {:error, assistant_error_payload("message is required")}, socket}
 
-      {_text, {:ok, pid, _codex_turn_id}} ->
+      {_text, false, _target} ->
+        {:reply, {:error, assistant_error_payload("ActiveTurnNotSteerable")}, socket}
+
+      {_text, true, {:ok, pid, _run_id}} ->
         maybe_persist_steer(socket, trimmed)
         send(pid, {:codex_steer, [%{"type" => "text", "text" => trimmed}], self()})
         {:reply, :ok, assign(socket, :last_steer_text, trimmed)}
 
-      {_text, :error} ->
-        {:reply, {:error, %{reason: "ActiveTurnNotSteerable"}}, socket}
+      {_text, true, :error} ->
+        {:reply, {:error, assistant_error_payload("ActiveTurnNotSteerable")}, socket}
     end
   end
 
   def handle_in("steer_turn", _payload, socket),
-    do: {:reply, {:error, %{reason: "message is required"}}, socket}
+    do: {:reply, {:error, assistant_error_payload("message is required")}, socket}
 
   def handle_in("resume_turn", _payload, socket) do
     with %{id: thread_id} when is_integer(thread_id) <- socket.assigns[:thread],
@@ -497,14 +512,14 @@ defmodule SymphonyElixirWeb.AssistantChannel do
           do_resume_turn(reloaded, History.current_turn(reloaded), socket)
 
         History.current_turn(reloaded) == nil ->
-          {:reply, {:error, %{reason: "no turn to resume"}}, socket}
+          {:reply, {:error, assistant_error_payload("no turn to resume")}, socket}
 
         true ->
-          {:reply, {:error, %{reason: "turn is not interrupted"}}, socket}
+          {:reply, {:error, assistant_error_payload("turn is not interrupted")}, socket}
       end
     else
-      {:error, _} -> {:reply, {:error, %{reason: "cannot resume"}}, socket}
-      _ -> {:reply, {:error, %{reason: "cannot resume"}}, socket}
+      {:error, _} -> {:reply, {:error, assistant_error_payload("cannot resume")}, socket}
+      _ -> {:reply, {:error, assistant_error_payload("cannot resume")}, socket}
     end
   end
 
@@ -517,42 +532,46 @@ defmodule SymphonyElixirWeb.AssistantChannel do
       push(socket, "turn_status", normalize_turn_payload(payload))
       {:reply, :ok, assign(socket, :thread, updated)}
     else
-      true -> {:reply, {:error, %{reason: "assistant is busy"}}, socket}
-      {:error, :not_interrupted} -> {:reply, {:error, %{reason: "turn is not interrupted"}}, socket}
-      {:error, _} -> {:reply, {:error, %{reason: "cannot dismiss"}}, socket}
-      _ -> {:reply, {:error, %{reason: "cannot dismiss"}}, socket}
+      true -> {:reply, {:error, assistant_error_payload(:assistant_busy)}, socket}
+      {:error, :not_interrupted} -> {:reply, {:error, assistant_error_payload("turn is not interrupted")}, socket}
+      {:error, _} -> {:reply, {:error, assistant_error_payload("cannot dismiss")}, socket}
+      _ -> {:reply, {:error, assistant_error_payload("cannot dismiss")}, socket}
     end
   end
 
   def handle_in("submit_user_input", %{"request_id" => request_id, "answers" => answers}, socket)
       when is_map(answers) do
     if socket.assigns[:turn_status] != :running or not is_pid(socket.assigns[:turn_pid]) do
-      {:reply, {:error, %{reason: "ActiveTurnNotAwaitingInput"}}, socket}
+      {:reply, {:error, assistant_error_payload("ActiveTurnNotAwaitingInput")}, socket}
     else
       pending = socket.assigns[:pending_user_inputs] || %{}
       {questions, rest} = Map.pop(pending, request_id, [])
       normalized = normalize_user_answers(answers)
 
-      maybe_persist_user_questions(socket, questions, answers)
-      deliver_user_input(socket, request_id, normalized)
+      case deliver_user_input(socket, request_id, normalized) do
+        :ok ->
+          maybe_persist_user_questions(socket, questions, answers)
+          {:reply, :ok, assign(socket, :pending_user_inputs, rest)}
 
-      {:reply, :ok, assign(socket, :pending_user_inputs, rest)}
+        {:error, reason} ->
+          {:reply, {:error, assistant_error_payload(reason)}, socket}
+      end
     end
   end
 
   def handle_in("submit_user_input", _payload, socket),
-    do: {:reply, {:error, %{reason: "answers are required"}}, socket}
+    do: {:reply, {:error, assistant_error_payload("answers are required")}, socket}
 
   def handle_in("submit_approval", %{"request_id" => request_id, "action" => action}, socket)
       when action in ["approve", "cancel"] do
     if socket.assigns[:turn_status] != :running or not is_pid(socket.assigns[:turn_pid]) do
-      {:reply, {:error, %{reason: "ActiveTurnNotAwaitingApproval"}}, socket}
+      {:reply, {:error, assistant_error_payload("ActiveTurnNotAwaitingApproval")}, socket}
     else
       pending = socket.assigns[:pending_approvals] || %{}
 
       case Map.pop(pending, request_id) do
         {nil, _rest} ->
-          {:reply, {:error, %{reason: "approval request not found"}}, socket}
+          {:reply, {:error, assistant_error_payload("approval request not found")}, socket}
 
         {request, rest} ->
           deliver_approval(socket.assigns.turn_pid, request_id, action, request)
@@ -562,18 +581,18 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   end
 
   def handle_in("submit_approval", _payload, socket),
-    do: {:reply, {:error, %{reason: "approval action is required"}}, socket}
+    do: {:reply, {:error, assistant_error_payload("approval action is required")}, socket}
 
   def handle_in("submit_create_plan", %{"request_id" => request_id, "action" => action}, socket)
       when action in ["accept", "reject"] do
     if socket.assigns[:turn_status] != :running do
-      {:reply, {:error, %{reason: "ActiveTurnNotAwaitingCreatePlan"}}, socket}
+      {:reply, {:error, assistant_error_payload("ActiveTurnNotAwaitingCreatePlan")}, socket}
     else
       pending = socket.assigns[:pending_create_plans] || %{}
 
       case Map.pop(pending, request_id) do
         {nil, _rest} ->
-          {:reply, {:error, %{reason: "create_plan request not found"}}, socket}
+          {:reply, {:error, assistant_error_payload("create_plan request not found")}, socket}
 
         {_request, rest} ->
           decision = if action == "accept", do: :accept, else: :reject
@@ -584,13 +603,13 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   end
 
   def handle_in("submit_create_plan", _payload, socket),
-    do: {:reply, {:error, %{reason: "create_plan action is required"}}, socket}
+    do: {:reply, {:error, assistant_error_payload("create_plan action is required")}, socket}
 
   # credo:disable-for-lines:25
   def handle_in("btw", %{"message" => message}, socket) when is_binary(message) do
     case String.trim(message) do
       "" ->
-        {:reply, {:error, %{reason: "message is required"}}, socket}
+        {:reply, {:error, assistant_error_payload("message is required")}, socket}
 
       question ->
         thread = ensure_btw_thread(socket)
@@ -608,13 +627,16 @@ defmodule SymphonyElixirWeb.AssistantChannel do
                  {:error, reason} -> send(channel_pid, {:btw_finished, btw_id, {:error, reason}})
                end
              end) do
-          {:ok, _pid} -> {:reply, {:ok, %{btw_id: btw_id}}, socket}
-          {:error, reason} -> {:reply, {:error, %{reason: error_reason({:btw_start_failed, reason})}}, socket}
+          {:ok, _pid} ->
+            {:reply, {:ok, %{btw_id: btw_id}}, socket}
+
+          {:error, reason} ->
+            {:reply, {:error, assistant_error_payload({:btw_start_failed, reason})}, socket}
         end
     end
   end
 
-  def handle_in("btw", _payload, socket), do: {:reply, {:error, %{reason: "message is required"}}, socket}
+  def handle_in("btw", _payload, socket), do: {:reply, {:error, assistant_error_payload("message is required")}, socket}
 
   defp do_dispatch(payload, socket) do
     case issue_thread(socket) do
@@ -629,11 +651,11 @@ defmodule SymphonyElixirWeb.AssistantChannel do
             {:reply, {:ok, %{message: result.message, issue: result.data, goal_mode: goal_mode}}, socket}
 
           {:error, reason} ->
-            {:reply, {:error, %{reason: error_reason(reason)}}, socket}
+            {:reply, {:error, assistant_error_payload(reason)}, socket}
         end
 
       {:error, reason} ->
-        {:reply, {:error, %{reason: error_reason(reason)}}, socket}
+        {:reply, {:error, assistant_error_payload(reason)}, socket}
     end
   end
 
@@ -651,7 +673,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
       )
 
     push(socket, "history_loaded", payload)
-    {:noreply, socket}
+    {:noreply, recover_pending_turns(thread, socket)}
   end
 
   def handle_info({:goal_mutation_finished, ref, :disable, {:ok, _payload, updated}}, socket) do
@@ -682,23 +704,23 @@ defmodule SymphonyElixirWeb.AssistantChannel do
             {:noreply, socket}
 
           {:error, reason} ->
-            reply(ref, {:error, %{reason: error_reason(reason)}})
+            reply(ref, {:error, assistant_error_payload(reason)})
             {:noreply, socket}
         end
 
       _ ->
-        reply(ref, {:error, %{reason: "goal mutation was superseded"}})
+        reply(ref, {:error, assistant_error_payload("goal mutation was superseded")})
         {:noreply, socket}
     end
   end
 
   def handle_info({:goal_mutation_finished, ref, _action, {:error, reason}}, socket) do
-    reply(ref, {:error, %{reason: error_reason(reason)}})
+    reply(ref, {:error, assistant_error_payload(reason)})
     {:noreply, socket}
   end
 
-  def handle_info({:assistant_turn_started, turn_id}, socket) do
-    socket = assign(socket, :codex_turn_id, turn_id)
+  def handle_info({:assistant_turn_started, run_id}, socket) do
+    socket = assign(socket, :run_id, run_id)
 
     if authoring_goal_active?(socket) do
       {:noreply, schedule_authoritative_goal_status(socket, process_running: true, broadcast: true)}
@@ -707,16 +729,16 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     end
   end
 
-  def handle_info({:assistant_turn_finished, generation, {:ok, result}}, socket) do
-    if stale_turn_generation?(socket, generation) do
+  def handle_info({:assistant_turn_finished, execution_id, {:ok, result}}, socket) do
+    if stale_turn_execution_id?(socket, execution_id) do
       {:noreply, socket}
     else
       finish_successful_turn(result, socket)
     end
   end
 
-  def handle_info({:assistant_turn_finished, generation, {:error, reason}}, socket) do
-    if stale_turn_generation?(socket, generation) do
+  def handle_info({:assistant_turn_finished, execution_id, {:error, reason}}, socket) do
+    if stale_turn_execution_id?(socket, execution_id) do
       {:noreply, socket}
     else
       finish_failed_turn(reason, socket)
@@ -729,7 +751,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
         :ok
 
       socket.assigns[:turn_status] == :running ->
-        push(socket, "assistant_error", %{message: error_reason({:turn_crashed, reason})})
+        push(socket, "assistant_error", assistant_error_payload({:turn_crashed, reason}))
 
       true ->
         :ok
@@ -789,8 +811,8 @@ defmodule SymphonyElixirWeb.AssistantChannel do
 
   def handle_info({:steer_error, _error}, socket) do
     push(socket, "steer_failed", %{
-      reason: "ActiveTurnNotSteerable",
-      message: socket.assigns[:last_steer_text] || ""
+      code: "active_turn_not_steerable",
+      prompt: socket.assigns[:last_steer_text] || ""
     })
 
     {:noreply, socket}
@@ -837,8 +859,21 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   end
 
   def handle_info({:authoring_goal_updated, native_goal}, socket) do
-    _ = native_goal
-    {:noreply, schedule_authoritative_goal_status(socket, broadcast: true)}
+    case socket.assigns[:thread] do
+      %{id: thread_id} = thread when is_integer(thread_id) and is_map(native_goal) ->
+        request_order = System.unique_integer([:positive, :monotonic])
+        status = goal_status_from_native_update(thread, native_goal, request_order)
+        {accepted?, socket} = accept_goal_status(socket, status, true)
+
+        if accepted? do
+          GoalRun.broadcast_from(self(), thread_id, {:authoring_goal_changed, status})
+        end
+
+        {:noreply, socket}
+
+      _ ->
+        {:noreply, schedule_authoritative_goal_status(socket, broadcast: true)}
+    end
   end
 
   def handle_info({:authoring_goal_changed, status_payload}, socket) do
@@ -875,8 +910,8 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   end
 
   def handle_info({:goal_status_resolution_failed, request_order, metadata, reason}, socket) do
-    reply_goal_status_refs(metadata, {:error, %{reason: error_reason(reason)}})
-    push(socket, "assistant_error", %{message: error_reason(reason)})
+    reply_goal_status_refs(metadata, {:error, assistant_error_payload(reason)})
+    push(socket, "assistant_error", assistant_error_payload(reason))
     push_history_sync(socket)
 
     fallback =
@@ -923,7 +958,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     socket =
       socket
       |> assign(:turn_status, :running)
-      |> assign(:turn_generation, turn_payload_generation(payload))
+      |> assign(:turn_execution_id, turn_payload_execution_id(payload))
 
     {:noreply, socket}
   end
@@ -971,18 +1006,23 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   end
 
   # Claude AskUserQuestion and Cursor ACP ask_question wait on UserInputBroker;
-  # Codex answers land on the turn process as {:codex_user_input, ...}.
+  # Codex answers land on the turn process as {:codex_user_input, ...}. The
+  # canonical current-turn provider is required; this path never guesses.
   defp deliver_user_input(socket, request_id, normalized) do
     case current_turn_agent(socket) do
       agent when agent in ["claude", "cursor"] ->
         UserInputBroker.resolve(to_string(request_id), normalized)
 
-      _ ->
+      "codex" ->
         send(socket.assigns.turn_pid, {:codex_user_input, request_id, normalized, self()})
+        :ok
+
+      _unsupported ->
+        {:error, "CurrentTurnProviderMissing"}
     end
   end
 
-  defp current_turn_agent(%Socket{assigns: %{thread: thread}} = socket) when is_map(thread) do
+  defp current_turn_agent(%Socket{assigns: %{thread: thread}}) when is_map(thread) do
     live_thread =
       case Map.get(thread, :id) do
         id when is_integer(id) ->
@@ -997,16 +1037,10 @@ defmodule SymphonyElixirWeb.AssistantChannel do
 
     turn = History.current_turn(live_thread) || %{}
 
-    AgentPreference.normalize(Map.get(turn, "agent_kind") || Map.get(turn, :agent_kind)) ||
-      AgentPreference.normalize(Map.get(live_thread, :agent_kind)) ||
-      ask_user_agent_fallback(socket) ||
-      "codex"
+    AgentPreference.normalize(Map.get(turn, "provider") || Map.get(turn, :provider))
   end
 
-  defp current_turn_agent(_socket), do: "codex"
-
-  defp ask_user_agent_fallback(%Socket{assigns: %{ask_user_token: token}}) when is_binary(token), do: "claude"
-  defp ask_user_agent_fallback(_socket), do: nil
+  defp current_turn_agent(_socket), do: nil
 
   defp notify_assistant_input_needed(socket, request_kind) do
     dispatcher = Application.get_env(:symphony_elixir, :push_dispatcher, SymphonyElixir.PushNotifications.Dispatcher)
@@ -1089,25 +1123,51 @@ defmodule SymphonyElixirWeb.AssistantChannel do
 
   defp finish_successful_turn(result, socket) do
     push(socket, "assistant_completed", %{message: result.assistant_chat_message})
+    socket = push_model_provenance(socket)
     socket = push_history_sync(socket)
     _ = maybe_push_created_issue(result, socket)
     socket = schedule_authoritative_goal_status(socket, process_running: false, broadcast: true)
     {:noreply, socket |> clear_goal_paused() |> reset_turn()}
   end
 
+  defp push_model_provenance(%Socket{assigns: %{thread: %{id: id}}} = socket)
+       when is_integer(id) do
+    case History.get_thread(id) do
+      {:ok, thread} ->
+        push(socket, "model_provenance", %{
+          requested_model: History.requested_model(thread),
+          requested_effort: History.requested_effort(thread),
+          resolved_model: History.resolved_model(thread),
+          resolved_effort: History.resolved_effort(thread)
+        })
+
+        assign(socket, :thread, thread)
+
+      _ ->
+        socket
+    end
+  end
+
+  defp push_model_provenance(socket), do: socket
+
   defp finish_failed_turn(reason, socket) do
     # `or`/`and` require a strict boolean on the left; `:goal_paused` may be
     # unset (nil) on freshly joined sockets, which used to crash this clause
     # and swallow the assistant_error push for Cursor turn failures.
-    if socket.assigns[:goal_paused] == true or goal_pause_interruption?(socket) do
+    if reason == :interrupted or socket.assigns[:goal_paused] == true or
+         goal_pause_interruption?(socket) do
       :ok
     else
-      push(socket, "assistant_error", %{message: error_reason(reason)})
+      push(socket, "assistant_error", assistant_error_payload(reason))
     end
 
     socket = rollback_deferred_goal_activation(socket)
     socket = schedule_authoritative_goal_status(socket, process_running: false, broadcast: true)
-    {:noreply, socket |> clear_goal_paused() |> reset_turn()}
+    socket = clear_goal_paused(socket)
+
+    if reason == :interrupted,
+      do: {:noreply, reset_turn_preserving_execution_id(socket)},
+      else: {:noreply, reset_turn(socket)}
   end
 
   defp rollback_deferred_goal_activation(%Socket{assigns: %{thread: %{id: id}}} = socket)
@@ -1145,14 +1205,14 @@ defmodule SymphonyElixirWeb.AssistantChannel do
 
   defp maybe_reset_stale_running_turn(socket) do
     if socket.assigns[:turn_status] == :running,
-      do: reset_turn_preserving_generation(socket),
+      do: reset_turn_preserving_execution_id(socket),
       else: socket
   end
 
   defp handle_terminal_turn_status(payload, socket) do
-    generation = turn_payload_generation(payload)
+    execution_id = turn_payload_execution_id(payload)
 
-    if stale_turn_generation?(socket, generation) do
+    if stale_turn_execution_id?(socket, execution_id) do
       {:noreply, socket}
     else
       push(socket, "turn_status", normalize_turn_payload(payload))
@@ -1160,34 +1220,34 @@ defmodule SymphonyElixirWeb.AssistantChannel do
 
       socket =
         if socket.assigns[:turn_status] == :running,
-          do: reset_turn_preserving_generation(socket),
+          do: reset_turn_preserving_execution_id(socket),
           else: socket
 
       {:noreply, socket}
     end
   end
 
-  defp turn_payload_generation(payload) when is_map(payload) do
-    Map.get(payload, :generation) || Map.get(payload, "generation")
+  defp turn_payload_execution_id(payload) when is_map(payload) do
+    Map.get(payload, :execution_id) || Map.get(payload, "execution_id")
   end
 
-  defp turn_payload_generation(_payload), do: nil
+  defp turn_payload_execution_id(_payload), do: nil
 
-  defp current_turn_generation(thread) do
+  defp current_turn_execution_id(thread) do
     thread
     |> History.current_turn()
-    |> turn_payload_generation()
+    |> turn_payload_execution_id()
   end
 
-  defp stale_turn_generation?(socket, generation) when is_binary(generation) do
-    socket.assigns[:turn_generation] != generation
+  defp stale_turn_execution_id?(socket, execution_id) when is_binary(execution_id) do
+    socket.assigns[:turn_execution_id] != execution_id
   end
 
-  defp stale_turn_generation?(_socket, _generation), do: true
+  defp stale_turn_execution_id?(_socket, _execution_id), do: true
 
-  defp reset_turn_preserving_generation(socket) do
-    generation = socket.assigns[:turn_generation]
-    socket |> reset_turn() |> assign(:turn_generation, generation)
+  defp reset_turn_preserving_execution_id(socket) do
+    execution_id = socket.assigns[:turn_execution_id]
+    socket |> reset_turn() |> assign(:turn_execution_id, execution_id)
   end
 
   defp reset_turn(socket) do
@@ -1200,8 +1260,8 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     |> assign(:turn_status, :idle)
     |> assign(:turn_pid, nil)
     |> assign(:turn_ref, nil)
-    |> assign(:turn_generation, nil)
-    |> assign(:codex_turn_id, nil)
+    |> assign(:turn_execution_id, nil)
+    |> assign(:run_id, nil)
     |> assign(:pending_user_inputs, %{})
     |> assign(:ask_user_token, nil)
   end
@@ -1210,7 +1270,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   # (works cross-channel / post-refresh); fall back to this socket's own assigns.
   defp steer_target(%Socket{assigns: %{thread: %{id: id}}} = socket) when is_integer(id) do
     case TurnManager.steer_target(id) do
-      {:ok, pid, codex_turn_id} -> {:ok, pid, codex_turn_id}
+      {:ok, pid, run_id} -> {:ok, pid, run_id}
       :error -> local_steer_target(socket)
     end
   end
@@ -1219,8 +1279,8 @@ defmodule SymphonyElixirWeb.AssistantChannel do
 
   defp local_steer_target(%Socket{assigns: assigns}) do
     if assigns[:turn_status] == :running and is_pid(assigns[:turn_pid]) and
-         not is_nil(assigns[:codex_turn_id]) do
-      {:ok, assigns[:turn_pid], assigns[:codex_turn_id]}
+         not is_nil(assigns[:run_id]) do
+      {:ok, assigns[:turn_pid], assigns[:run_id]}
     else
       :error
     end
@@ -1363,14 +1423,19 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   end
 
   defp kill_tool_error_payload(reason) when reason in [:tool_not_running, :no_worker] do
-    %{reason: Atom.to_string(reason), can_stop_turn: true}
+    reason
+    |> assistant_error_payload()
+    |> put_in([:details, "can_stop_turn"], true)
   end
 
-  defp kill_tool_error_payload(reason), do: %{reason: error_reason(reason)}
+  defp kill_tool_error_payload(reason), do: assistant_error_payload(reason)
 
-  defp should_push_turn_stream?(socket, event, payload) when is_binary(event) and is_map(payload) do
-    socket.assigns[:turn_status] != :running or canceled_tool_completion?(event, payload)
-  end
+  # The originating channel is excluded by `GoalRun.broadcast_from/3`, so every
+  # channel that receives this PubSub message is an observer and must keep
+  # receiving the live stream while its lifecycle status is `running`.
+  defp should_push_turn_stream?(_socket, event, payload)
+       when is_binary(event) and is_map(payload),
+       do: true
 
   defp should_push_turn_stream?(_socket, _event, _payload), do: false
 
@@ -1413,10 +1478,6 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     Map.put(payload, "context", context)
   end
 
-  defp canceled_tool_completion?("tool_call_completed", %{tool_call: %{status: "canceled"}}), do: true
-  defp canceled_tool_completion?("tool_call_completed", %{"tool_call" => %{"status" => "canceled"}}), do: true
-  defp canceled_tool_completion?(_event, _payload), do: false
-
   # credo:disable-for-next-line Credo.Check.Refactor.CyclomaticComplexity
   defp do_send_message(message, payload, socket) do
     project_slug = socket.assigns[:project_slug]
@@ -1433,13 +1494,13 @@ defmodule SymphonyElixirWeb.AssistantChannel do
 
     cond do
       trimmed == "" ->
-        {:reply, {:error, %{reason: "message is required"}}, socket}
+        {:reply, {:error, assistant_error_payload("message is required")}, socket}
 
       is_map(thread) and Map.get(thread, :scope) == "issue_execution" ->
-        {:reply, {:error, %{reason: error_reason(:execution_thread_not_interactive)}}, socket}
+        {:reply, {:error, assistant_error_payload(:execution_thread_not_interactive)}, socket}
 
       raw_attachments != [] and attachments == [] ->
-        {:reply, {:error, %{reason: "One or more attachments could not be processed. Try a smaller image (max 4 MB)."}}, socket}
+        {:reply, {:error, assistant_error_payload("One or more attachments could not be processed. Try a smaller image (max 4 MB).")}, socket}
 
       true ->
         channel_pid = self()
@@ -1501,9 +1562,9 @@ defmodule SymphonyElixirWeb.AssistantChannel do
           thread
       end
 
-    {turn_pid, codex_turn_id} =
+    {turn_pid, run_id} =
       case TurnManager.steer_target(thread.id) do
-        {:ok, pid, turn_id} -> {pid, turn_id}
+        {:ok, pid, provider_run_id} -> {pid, provider_run_id}
         :error -> {nil, nil}
       end
 
@@ -1519,57 +1580,83 @@ defmodule SymphonyElixirWeb.AssistantChannel do
       |> assign(:thread, thread)
       |> assign(:turn_status, :running)
       |> assign(:turn_pid, turn_pid)
-      |> assign(:turn_generation, current_turn_generation(thread))
-      |> assign(:codex_turn_id, codex_turn_id)
+      |> assign(:turn_execution_id, current_turn_execution_id(thread))
+      |> assign(:run_id, run_id)
 
     {:reply, :ok, socket}
   end
 
   # Re-dispatches a thread's interrupted current turn as a brand-new turn that
-  # re-uses the saved prompt + codex_thread_id. Codex continuity is automatic:
-  # run_send_turn -> AgentSession reloads the thread and continues the persisted
-  # agent conversation; the codex_thread_id here is for display/trace only.
+  # reuses its canonical provider conversation.
   defp do_resume_turn(thread, turn, socket) do
     channel_pid = self()
     context = normalize_context(%{})
     prompt = turn["prompt"] || ""
-    codex_thread_id = turn["codex_thread_id"]
 
-    opts =
-      turn_stream_opts(socket, thread, channel_pid, %{})
-      |> Keyword.put(:on_turn_started, fn turn_id ->
-        notify_turn_started(channel_pid, thread, turn_id)
-        TurnManager.note_codex_turn(thread.id, codex_thread_id, turn_id)
-      end)
+    with {:ok, provider, conversation_id} <- resumable_turn_identity(thread, turn) do
+      context = Map.put(context, "agent", provider)
 
-    start_opts = [
-      run: fn -> run_send_turn(thread, thread.project_slug, prompt, context, opts) end,
-      reply_to: channel_pid,
-      trigger: "resume",
-      codex_thread_id: codex_thread_id,
-      agent_kind: turn["agent_kind"],
-      model: turn["model"],
-      effort: turn["effort"]
-    ]
+      opts =
+        turn_stream_opts(socket, thread, channel_pid, context)
+        |> Keyword.put(:on_turn_started, fn started_conversation_id, run_id ->
+          notify_turn_started(
+            channel_pid,
+            thread,
+            provider,
+            started_conversation_id,
+            run_id
+          )
+        end)
 
-    case TurnManager.start_turn(thread.id, prompt, start_opts) do
-      {:ok, %{pid: pid, generation: generation}} ->
-        socket =
-          socket
-          |> assign(:turn_status, :running)
-          |> assign(:turn_pid, pid)
-          |> assign(:turn_generation, generation)
-          |> assign(:codex_turn_id, nil)
+      start_opts = [
+        run: fn -> run_send_turn(thread, thread.project_slug, prompt, context, opts) end,
+        reply_to: channel_pid,
+        trigger: "resume",
+        provider: provider,
+        conversation_id: conversation_id,
+        model: History.requested_model(thread),
+        effort: History.requested_effort(thread)
+      ]
 
-        {:reply, :ok, socket}
+      case TurnManager.start_turn(thread.id, prompt, start_opts) do
+        {:ok, %{pid: pid, execution_id: execution_id}} ->
+          socket =
+            socket
+            |> assign(:turn_status, :running)
+            |> assign(:turn_pid, pid)
+            |> assign(:turn_execution_id, execution_id)
+            |> assign(:run_id, nil)
 
-      {:error, :turn_in_progress} ->
-        {:reply, {:error, %{reason: "assistant is busy"}}, socket}
+          {:reply, :ok, socket}
 
-      {:error, _reason} ->
-        {:reply, {:error, %{reason: "could not resume the turn"}}, socket}
+        {:error, reason} ->
+          {:reply, {:error, assistant_error_payload(reason)}, socket}
+      end
+    else
+      {:error, reason} ->
+        {:reply, {:error, assistant_error_payload(reason)}, socket}
     end
   end
+
+  defp resumable_turn_identity(
+         thread,
+         %{"provider" => provider, "conversation_id" => conversation_id}
+       )
+       when is_binary(provider) and provider != "" and is_binary(conversation_id) and
+              conversation_id != "" do
+    case History.conversation_ref(thread, provider) do
+      {:ok, %{conversation_id: ^conversation_id}} ->
+        {:ok, provider, conversation_id}
+
+      {:ok, _different_ref} ->
+        {:error, {:resume_conversation_failed, conversation_id, :binding_mismatch}}
+
+      :error ->
+        {:error, {:resume_conversation_failed, conversation_id, :binding_missing}}
+    end
+  end
+
+  defp resumable_turn_identity(_thread, _turn), do: {:error, :conversation_id_required}
 
   # Durable threads route through TurnManager so it owns the metadata.current_turn
   # lifecycle + the cross-channel pid registry (steer/interrupt + re-attach after a
@@ -1577,6 +1664,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   defp start_tracked_turn(thread, project_slug, trimmed, context, opts, socket) do
     channel_pid = self()
     goal_run? = goal_thread?(thread)
+    agent_kind = turn_agent_kind(context) || thread_effective_agent(thread)
 
     run_builder = fn prompt_text ->
       fn -> run_tracked_turn(thread, project_slug, prompt_text, context, opts, goal_run?, channel_pid) end
@@ -1587,20 +1675,21 @@ defmodule SymphonyElixirWeb.AssistantChannel do
       run_builder: run_builder,
       reply_to: channel_pid,
       trigger: "user",
-      agent_kind: turn_agent_kind(context),
+      provider: agent_kind,
       model: Map.get(context, "model"),
       effort: Map.get(context, "effort"),
+      queue_context: context,
       client_message_id: Map.get(context, "client_message_id")
     ]
 
     case TurnManager.start_turn(thread.id, trimmed, start_opts) do
-      {:ok, %{pid: pid, generation: generation}} ->
+      {:ok, %{pid: pid, execution_id: execution_id}} ->
         socket =
           socket
           |> assign(:turn_status, :running)
           |> assign(:turn_pid, pid)
-          |> assign(:turn_generation, generation)
-          |> assign(:codex_turn_id, nil)
+          |> assign(:turn_execution_id, execution_id)
+          |> assign(:run_id, nil)
 
         {:reply, :ok, socket}
 
@@ -1611,7 +1700,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
         steer_or_queue(thread, trimmed, start_opts, socket)
 
       {:error, _reason} ->
-        {:reply, {:error, %{reason: "assistant could not start the turn"}}, socket}
+        {:reply, {:error, assistant_error_payload("assistant could not start the turn")}, socket}
     end
   end
 
@@ -1619,12 +1708,12 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   # spawn + monitor lifecycle since there is no thread metadata to track.
   defp start_legacy_turn(thread, project_slug, trimmed, context, opts, socket) do
     channel_pid = self()
-    generation = System.unique_integer([:positive, :monotonic]) |> Integer.to_string()
+    execution_id = System.unique_integer([:positive, :monotonic]) |> Integer.to_string()
 
     {:ok, pid} =
       Task.Supervisor.start_child(SymphonyElixir.TaskSupervisor, fn ->
         result = run_send_turn(thread, project_slug, trimmed, context, opts)
-        send(channel_pid, {:assistant_turn_finished, generation, result})
+        send(channel_pid, {:assistant_turn_finished, execution_id, result})
       end)
 
     ref = Process.monitor(pid)
@@ -1634,8 +1723,8 @@ defmodule SymphonyElixirWeb.AssistantChannel do
       |> assign(:turn_status, :running)
       |> assign(:turn_pid, pid)
       |> assign(:turn_ref, ref)
-      |> assign(:turn_generation, generation)
-      |> assign(:codex_turn_id, nil)
+      |> assign(:turn_execution_id, execution_id)
+      |> assign(:run_id, nil)
 
     {:reply, :ok, socket}
   end
@@ -1651,6 +1740,57 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   defp run_tracked_turn(thread, project_slug, prompt_text, context, opts, goal_run?, channel_pid) do
     run = fn -> run_send_turn(thread, project_slug, prompt_text, context, opts) end
     if goal_run?, do: run_goal_process(thread.id, channel_pid, run), else: run.()
+  end
+
+  defp recover_pending_turns(thread, socket) do
+    case History.pending_turns(thread) do
+      [] ->
+        socket
+
+      _pending ->
+        channel_pid = self()
+        goal_run? = goal_thread?(thread)
+
+        recovery_builder = fn entry ->
+          context =
+            case Map.get(entry, "context") do
+              value when is_map(value) -> value
+              _ -> %{}
+            end
+
+          context =
+            case entry["provider"] do
+              provider when is_binary(provider) and provider != "" ->
+                Map.put(context, "agent", provider)
+
+              _provider ->
+                context
+            end
+
+          stream_opts = turn_stream_opts(socket, thread, channel_pid, context)
+
+          fn ->
+            run_tracked_turn(
+              thread,
+              thread.project_slug,
+              entry["prompt"],
+              context,
+              stream_opts,
+              goal_run?,
+              channel_pid
+            )
+          end
+        end
+
+        case TurnManager.recover_pending(thread.id, recovery_builder, reply_to: channel_pid) do
+          {:ok, _count} ->
+            socket
+
+          {:error, reason} ->
+            push(socket, "assistant_error", assistant_error_payload(reason))
+            socket
+        end
+    end
   end
 
   defp run_goal_process(thread_id, channel_pid, run) when is_function(run, 0) do
@@ -1674,29 +1814,66 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   end
 
   # Channel-side turn-started fan-out: notify the originating socket and record the
-  # codex turn id on the durable thread so a reloaded/other tab can steer it.
-  defp notify_turn_started(channel_pid, thread, turn_id) do
-    send(channel_pid, {:assistant_turn_started, turn_id})
+  # provider run ID on the durable thread so a reloaded/other tab can steer it.
+  defp notify_turn_started(channel_pid, thread, provider, conversation_id, run_id) do
+    send(channel_pid, {:assistant_turn_started, run_id})
 
-    if is_map(thread) and is_integer(Map.get(thread, :id)),
-      do: TurnManager.note_codex_turn(thread.id, nil, turn_id)
+    if is_map(thread) and is_integer(Map.get(thread, :id)) and is_binary(provider) and
+         is_binary(conversation_id) do
+      TurnManager.note_run(thread.id, provider, conversation_id, run_id)
+    end
   end
 
   # A send arrived while a turn is running. Prefer steering the live turn; if there
   # is no steerable worker, queue it so it runs next. Either way the message is
   # persisted to history so it is never lost.
   defp steer_or_queue(thread, trimmed, start_opts, socket) do
-    case TurnManager.steer_target(thread.id) do
-      {:ok, pid, _codex_turn_id} ->
+    provider =
+      thread
+      |> History.current_turn()
+      |> case do
+        %{"provider" => active_provider} when is_binary(active_provider) ->
+          active_provider
+
+        _turn ->
+          nil
+      end
+
+    supports_steer? = is_binary(provider) and CodingAgent.capabilities(provider).steer
+
+    case {supports_steer?, TurnManager.steer_target(thread.id)} do
+      {true, {:ok, pid, _run_id}} ->
         maybe_persist_steer(socket, trimmed)
         send(pid, {:codex_steer, [%{"type" => "text", "text" => trimmed}], self()})
         {:reply, :ok, assign(socket, :last_steer_text, trimmed)}
 
-      :error ->
-        maybe_persist_steer(socket, trimmed)
-        TurnManager.enqueue(thread.id, trimmed, start_opts)
-        {:reply, {:ok, %{queued: true}}, socket}
+      {_supports_steer, _target} ->
+        case TurnManager.enqueue(thread.id, trimmed, start_opts) do
+          :ok -> {:reply, {:ok, %{queued: true}}, socket}
+          {:error, reason} -> {:reply, {:error, assistant_error_payload(reason)}, socket}
+        end
     end
+  end
+
+  defp active_provider_supports?(socket, capability) when is_atom(capability) do
+    provider =
+      case thread_id_from_socket(socket) do
+        id when is_integer(id) ->
+          case History.get_thread(id) do
+            {:ok, thread} ->
+              turn = History.current_turn(thread) || %{}
+              turn["provider"]
+
+            _ ->
+              nil
+          end
+
+        _ ->
+          nil
+      end
+
+    CodingAgent.capabilities(provider)
+    |> Map.get(capability, false)
   end
 
   defp resolve_attachments(_payload, %{scope: "freeform"}, _project_slug), do: {[], []}
@@ -2048,7 +2225,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
         {:noreply, socket}
 
       _ ->
-        reply(ref, {:error, %{reason: "goal mutation was superseded"}})
+        reply(ref, {:error, assistant_error_payload("goal mutation was superseded")})
         {:noreply, socket}
     end
   end
@@ -2067,12 +2244,16 @@ defmodule SymphonyElixirWeb.AssistantChannel do
         {:noreply, socket}
 
       {:error, reason} ->
-        reply(ref, {:error, %{reason: error_reason({:goal_mutation_start_failed, reason})}})
+        reply(
+          ref,
+          {:error, assistant_error_payload({:goal_mutation_start_failed, reason})}
+        )
+
         {:noreply, schedule_authoritative_goal_status(socket)}
     end
   end
 
-  # Resolves a fresh assistant thread (reloaded from the DB so agent_thread_ids written
+  # Resolves a fresh assistant thread (reloaded from the DB so provider bindings written
   # by a prior turn are visible) that has the Authoring goal enabled.
   defp authoring_goal_thread(socket) do
     with {:ok, thread} <- assistant_thread(socket) do
@@ -2108,6 +2289,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   defp join_metadata_payload(thread) do
     turn_running = TurnManager.running?(thread.id)
     thread = maybe_heal_running_turn_metadata(thread, turn_running)
+    effective_agent = thread_effective_agent(thread)
 
     %{
       thread_id: thread.id,
@@ -2117,10 +2299,16 @@ defmodule SymphonyElixirWeb.AssistantChannel do
       turn_running: turn_running,
       turn_elapsed_seconds: History.turn_elapsed_seconds(thread),
       goal_status: joined_authoritative_goal_status(thread),
-      effective_agent: thread_effective_agent(thread),
+      effective_agent: effective_agent,
+      agent_capabilities:
+        effective_agent
+        |> CodingAgent.capabilities()
+        |> Map.from_struct(),
       execution_mode: History.thread_execution_mode(thread),
-      model: History.thread_model(thread),
-      effort: History.thread_effort(thread),
+      requested_model: History.requested_model(thread),
+      requested_effort: History.requested_effort(thread),
+      resolved_model: History.resolved_model(thread),
+      resolved_effort: History.resolved_effort(thread),
       skill_profile: History.thread_skill_profile(thread),
       scope: thread.scope
     }
@@ -2239,7 +2427,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
       run: run,
       reply_to: channel_pid,
       trigger: "authoring_goal_changed",
-      agent_kind: Map.get(thread, :agent_kind)
+      provider: Map.get(thread, :agent_kind)
     )
   end
 
@@ -2284,6 +2472,8 @@ defmodule SymphonyElixirWeb.AssistantChannel do
       thread_id: thread.id,
       enabled: payload.enabled,
       objective: payload.objective,
+      goal_mode: payload.enabled,
+      goal_objective: payload.objective,
       native: payload.native,
       status: Map.get(payload, :status),
       provider: Map.get(payload, :provider),
@@ -2306,6 +2496,59 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     }
   end
 
+  defp goal_status_from_native_update(thread, native_goal, request_order) do
+    payload =
+      thread
+      |> AuthoringGoalControl.payload_from_native_update(native_goal)
+      |> normalize_goal_payload_provider(thread)
+      |> with_runtime_stop_capability(true)
+
+    process_started_at = goal_process_started_at(thread.id)
+    process_elapsed = GoalRun.elapsed_seconds(thread.id)
+
+    goal =
+      payload.goal
+      |> patch_goal_runtime(process_elapsed)
+      |> normalize_snapshot_goal(payload)
+
+    updated_at =
+      History.thread_goal_updated_at(thread) ||
+        Map.get(payload, :updated_at) ||
+        thread_updated_at(thread)
+
+    revision =
+      History.thread_goal_revision(thread) ||
+        Map.get(payload, :revision) ||
+        updated_at
+
+    %{
+      thread_id: thread.id,
+      enabled: payload.enabled,
+      objective: payload.objective,
+      goal_mode: payload.enabled,
+      goal_objective: payload.objective,
+      native: true,
+      status: payload.status,
+      provider: payload.provider,
+      source: payload.source,
+      capabilities: payload.capabilities,
+      goal: goal,
+      token_budget: goal_field(goal, :tokenBudget),
+      tokens_used: goal_field(goal, :tokensUsed),
+      time_used_seconds: goal_field(goal, :timeUsedSeconds),
+      process_running: true,
+      process_started_at: process_started_at,
+      process_elapsed_seconds: process_elapsed,
+      resumable: false,
+      interrupted: false,
+      revision: revision,
+      updated_at: updated_at,
+      running: true,
+      request_order: request_order,
+      error: nil
+    }
+  end
+
   defp unavailable_goal_status(%{id: thread_id} = thread, reason, request_order)
        when is_integer(thread_id) do
     provider = thread_effective_agent(thread)
@@ -2314,6 +2557,8 @@ defmodule SymphonyElixirWeb.AssistantChannel do
       thread_id: thread_id,
       enabled: false,
       objective: nil,
+      goal_mode: false,
+      goal_objective: nil,
       native: false,
       status: nil,
       provider: provider,
@@ -2341,6 +2586,8 @@ defmodule SymphonyElixirWeb.AssistantChannel do
       thread_id: nil,
       enabled: false,
       objective: nil,
+      goal_mode: false,
+      goal_objective: nil,
       native: false,
       status: nil,
       provider: nil,
@@ -2634,6 +2881,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     goal_thread = goal_thread?(thread)
     thread_id = if is_map(thread), do: Map.get(thread, :id), else: nil
     durable_thread = durable_thread?(thread)
+    provider = turn_agent_kind(context) || thread_effective_agent(thread)
 
     push_stream = fn event, payload ->
       push(socket, event, payload)
@@ -2664,7 +2912,9 @@ defmodule SymphonyElixirWeb.AssistantChannel do
       |> Keyword.put(:on_thread_documents_changed, fn tid ->
         push(socket, "assistant_document_changed", %{thread_id: tid})
       end)
-      |> Keyword.put(:on_turn_started, fn turn_id -> notify_turn_started(channel_pid, thread, turn_id) end)
+      |> Keyword.put(:on_turn_started, fn conversation_id, run_id ->
+        notify_turn_started(channel_pid, thread, provider, conversation_id, run_id)
+      end)
       |> Keyword.put(:interactive_user_input, true)
       |> Keyword.put(:on_user_input_required, fn request ->
         send(channel_pid, {:assistant_user_input_required, request})
@@ -2852,18 +3102,18 @@ defmodule SymphonyElixirWeb.AssistantChannel do
       run: run,
       reply_to: channel_pid,
       trigger: "goal_resume",
-      agent_kind: Map.get(thread, :agent_kind)
+      provider: Map.get(thread, :agent_kind)
     ]
 
     case TurnManager.start_turn(thread_id, prompt, start_opts) do
-      {:ok, %{pid: pid, generation: generation}} ->
+      {:ok, %{pid: pid, execution_id: execution_id}} ->
         socket =
           socket
           |> assign(:turn_status, :running)
           |> assign(:turn_pid, pid)
           |> assign(:turn_ref, nil)
-          |> assign(:turn_generation, generation)
-          |> assign(:codex_turn_id, nil)
+          |> assign(:turn_execution_id, execution_id)
+          |> assign(:run_id, nil)
           |> assign(:goal_paused, false)
 
         {:ok, socket}
@@ -2992,4 +3242,33 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   defp error_reason({:turn_crashed, reason}), do: "assistant turn crashed: #{inspect(reason)}"
   defp error_reason(%Ecto.Changeset{}), do: "failed to persist thread metadata"
   defp error_reason(reason), do: inspect(reason)
+
+  defp assistant_error_payload(reason) do
+    normalized = AgentError.to_map(reason)
+    generic? = normalized["code"] == "agent_operation_failed"
+    generic_string? = generic? and is_binary(reason)
+
+    %{
+      code: if(generic?, do: channel_error_code(reason), else: normalized["code"]),
+      category: if(generic_string?, do: "validation", else: normalized["category"]),
+      retryable: normalized["retryable"],
+      message: if(generic?, do: error_reason(reason), else: normalized["message"]),
+      details: if(generic_string?, do: %{}, else: normalized["details"])
+    }
+  end
+
+  defp channel_error_code(reason) when is_atom(reason), do: Atom.to_string(reason)
+
+  defp channel_error_code(reason) when is_binary(reason) do
+    normalized =
+      reason
+      |> String.replace(~r/([a-z0-9])([A-Z])/, "\\1_\\2")
+      |> String.downcase()
+      |> String.replace(~r/[^a-z0-9]+/, "_")
+      |> String.trim("_")
+
+    if normalized == "", do: "assistant_request_failed", else: normalized
+  end
+
+  defp channel_error_code(_reason), do: "assistant_request_failed"
 end

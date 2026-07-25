@@ -5,6 +5,7 @@ defmodule SymphonyElixir.Gateways do
 
   alias SymphonyElixir.Gateways.{Binding, PairingCode}
   alias SymphonyElixir.Repo
+  alias SymphonyElixir.Settings
 
   @default_account_id "default"
   @default_pairing_ttl_seconds 15 * 60
@@ -36,6 +37,7 @@ defmodule SymphonyElixir.Gateways do
       |> Map.put_new("status", "active")
       |> Map.put("default_mode", "freeform")
       |> Map.put("active_mode", "freeform")
+      |> Map.put_new("default_agent_kind", Settings.Agents.default_agent_kind())
       |> Map.put_new("metadata", %{})
 
     case active_direct_binding(attrs["provider"], attrs["account_id"], attrs["sender_id"]) do
@@ -54,6 +56,7 @@ defmodule SymphonyElixir.Gateways do
       |> Map.put_new("status", "active")
       |> Map.put("default_mode", "freeform")
       |> Map.put("active_mode", "freeform")
+      |> Map.put_new("default_agent_kind", Settings.Agents.default_agent_kind())
       |> Map.put_new("metadata", %{})
 
     case get_active_binding(attrs["provider"], attrs["account_id"], attrs["conversation_id"]) do

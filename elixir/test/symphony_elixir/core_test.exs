@@ -370,6 +370,77 @@ defmodule SymphonyElixir.CoreTest do
     end
   end
 
+  test "wait issue state closes the execution session before stopping the active agent" do
+    slug =
+      seed_prompt_project!("Prompt", %{
+        "tracker" => %{
+          "active_states" => ["In Progress"],
+          "wait_states" => ["Human Review"],
+          "terminal_states" => ["Done"]
+        }
+      })
+
+    issue_id = "issue-wait"
+    issue_identifier = "MT-WAIT"
+    workspace = Path.join(System.tmp_dir!(), "symphony-elixir-wait-reconcile-#{System.unique_integer([:positive])}")
+    File.mkdir_p!(workspace)
+
+    on_exit(fn -> File.rm_rf(workspace) end)
+
+    {:ok, execution_session} =
+      SymphonyElixir.Agent.ExecutionSession.ensure(slug, issue_identifier,
+        workspace_path: workspace,
+        agent_kind: "codex",
+        requested_model: "gpt-5.6-luna",
+        requested_effort: "medium"
+      )
+
+    agent_pid =
+      spawn(fn ->
+        receive do
+          :stop -> :ok
+        end
+      end)
+
+    state = %Orchestrator.State{
+      running: %{
+        issue_id => %{
+          pid: agent_pid,
+          ref: nil,
+          identifier: issue_identifier,
+          execution_session_id: execution_session.id,
+          issue: %Issue{
+            id: issue_id,
+            identifier: issue_identifier,
+            project_slug: slug,
+            state: "In Progress"
+          },
+          started_at: DateTime.utc_now()
+        }
+      },
+      claimed: MapSet.new([issue_id]),
+      agent_totals: %{input_tokens: 0, output_tokens: 0, total_tokens: 0, seconds_running: 0},
+      retry_attempts: %{}
+    }
+
+    issue = %Issue{
+      id: issue_id,
+      identifier: issue_identifier,
+      project_slug: slug,
+      state: "Human Review",
+      title: "Ready for review",
+      description: "Completed by the agent",
+      labels: []
+    }
+
+    updated_state = Orchestrator.reconcile_issue_states_for_test([issue], state)
+
+    refute Map.has_key?(updated_state.running, issue_id)
+    refute Process.alive?(agent_pid)
+    assert {:ok, closed_session} = SymphonyElixir.Assistant.History.get_thread(execution_session.id)
+    assert closed_session.status == "closed"
+  end
+
   test "terminal issue state stops running agent and cleans workspace" do
     test_root =
       Path.join(

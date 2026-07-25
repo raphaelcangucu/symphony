@@ -5,11 +5,11 @@ defmodule SymphonyElixir.Assistant.AgentSessionTurnStartedTest do
 
   # default_runner builds live Codex sessions (requires the codex binary), so the
   # turn-id forwarding is exercised end-to-end through the channel tests. This test
-  # locks the public `on_turn_started` option contract that later tasks depend on.
-  test "on_turn_started is a 1-arity callback option the runner accepts" do
-    callback = fn turn_id -> turn_id end
+  # locks the canonical `on_turn_started` identity contract.
+  test "on_turn_started receives conversation_id and run_id" do
+    callback = fn conversation_id, run_id -> {conversation_id, run_id} end
 
-    assert is_function(callback, 1)
+    assert is_function(callback, 2)
     assert Code.ensure_loaded?(AgentSession)
   end
 end

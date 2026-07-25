@@ -9,13 +9,14 @@ defmodule SymphonyElixir.Claude.ModelCatalogTest do
     assert catalog.agent == "claude"
     assert catalog.agent_label == "Claude Code"
     assert is_binary(catalog.command)
-    assert catalog.default_model == "claude-opus-4-8"
+    assert catalog.default_model == "claude-opus-5"
 
     ids = Enum.map(catalog.models, & &1.id)
 
     assert ids == [
-             "claude-opus-4-8",
+             "claude-opus-5",
              "claude-fable-5",
+             "claude-opus-4-8",
              "claude-opus-4-7",
              "claude-opus-4-6",
              "claude-sonnet-5",
@@ -23,7 +24,7 @@ defmodule SymphonyElixir.Claude.ModelCatalogTest do
              "claude-haiku-4-5"
            ]
 
-    assert Enum.find(catalog.models, & &1.is_default).id == "claude-opus-4-8"
+    assert Enum.find(catalog.models, & &1.is_default).id == "claude-opus-5"
   end
 
   test "exposes reasoning efforts per model with Claude Code's default rung" do
@@ -32,7 +33,7 @@ defmodule SymphonyElixir.Claude.ModelCatalogTest do
 
     # Opus 4.7+ carries the full effort ladder, including xhigh and the
     # flagship-only max rung, and defaults to xhigh like Claude Code itself.
-    opus = by_id["claude-opus-4-8"]
+    opus = by_id["claude-opus-5"]
     assert Enum.map(opus.efforts, & &1.id) == ["low", "medium", "high", "xhigh", "max"]
     assert opus.default_effort == "xhigh"
     assert %{id: "xhigh", label: "Extra high"} in opus.efforts

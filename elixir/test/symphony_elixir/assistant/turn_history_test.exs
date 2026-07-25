@@ -18,7 +18,7 @@ defmodule SymphonyElixir.Assistant.TurnHistoryTest do
              History.start_turn_state(thread, %{
                trigger: "user",
                prompt: "do the thing",
-               agent_kind: "codex",
+               provider: "codex",
                model: "gpt-5-codex",
                effort: "high"
              })
@@ -26,34 +26,60 @@ defmodule SymphonyElixir.Assistant.TurnHistoryTest do
     turn = History.current_turn(updated)
     assert turn["status"] == "running"
     assert turn["prompt"] == "do the thing"
-    assert turn["agent_kind"] == "codex"
+    assert turn["provider"] == "codex"
+    refute Map.has_key?(turn, "agent_kind")
+    refute Map.has_key?(turn, "model")
+    refute Map.has_key?(turn, "effort")
     assert is_binary(turn["started_at"])
     assert turn["finished_at"] == nil
     assert History.turn_running?(updated)
   end
 
-  test "note_turn_codex fills codex ids and composes session_id", %{thread: thread} do
+  test "note_run_identity writes only canonical identity fields", %{thread: thread} do
     {:ok, thread} = History.start_turn_state(thread, %{trigger: "user", prompt: "x"})
 
     assert {:ok, updated} =
-             History.note_turn_codex(thread, %{codex_thread_id: "ct-1", turn_id: "tn-9"})
+             History.note_run_identity(thread, %{
+               provider: "codex",
+               conversation_id: "ct-1",
+               run_id: "tn-9"
+             })
 
     turn = History.current_turn(updated)
-    assert turn["codex_thread_id"] == "ct-1"
-    assert turn["turn_id"] == "tn-9"
-    assert turn["session_id"] == "ct-1-tn-9"
+    assert turn["provider"] == "codex"
+    assert turn["conversation_id"] == "ct-1"
+    assert turn["run_id"] == "tn-9"
+    refute Map.has_key?(turn, "codex_thread_id")
+    refute Map.has_key?(turn, "turn_id")
+    refute Map.has_key?(turn, "session_id")
+  end
+
+  test "note_run_identity rejects an incomplete conversation identity", %{thread: thread} do
+    {:ok, thread} = History.start_turn_state(thread, %{trigger: "user", prompt: "x"})
+
+    assert {:error, :conversation_id_required} =
+             History.note_run_identity(thread, %{provider: "codex", run_id: "tn-9"})
+
+    assert {:ok, reloaded} = History.get_thread(thread.id)
+    assert History.current_turn(reloaded)["run_id"] == nil
+    assert reloaded.provider_bindings == %{}
   end
 
   test "complete_turn_state marks completed with finished_at", %{thread: thread} do
     {:ok, thread} = History.start_turn_state(thread, %{trigger: "user", prompt: "x"})
 
     assert {:ok, updated} =
-             History.complete_turn_state(thread, %{codex_thread_id: "ct-2", turn_id: "tn-2"})
+             History.complete_turn_state(thread, %{
+               provider: "codex",
+               conversation_id: "ct-2",
+               run_id: "tn-2"
+             })
 
     turn = History.current_turn(updated)
     assert turn["status"] == "completed"
     assert is_binary(turn["finished_at"])
-    assert turn["session_id"] == "ct-2-tn-2"
+    assert turn["conversation_id"] == "ct-2"
+    assert turn["run_id"] == "tn-2"
     refute History.turn_running?(updated)
   end
 
@@ -66,6 +92,29 @@ defmodule SymphonyElixir.Assistant.TurnHistoryTest do
     assert is_binary(turn["finished_at"])
   end
 
+  test "fail_turn_state persists a stable structured error alongside legacy text", %{
+    thread: thread
+  } do
+    {:ok, thread} = History.start_turn_state(thread, %{trigger: "user", prompt: "x"})
+
+    assert {:ok, failed} =
+             History.fail_turn_state(
+               thread,
+               {:workspace_symlink_escape, "/private/path", "/allowed/root"}
+             )
+
+    turn = History.current_turn(failed)
+    assert turn["error_code"] == "workspace_not_executable"
+    assert turn["error_detail"]["category"] == "workspace"
+    assert turn["error_detail"]["retryable"] == false
+    refute turn["error_detail"]["message"] =~ "/private/path"
+
+    payload = History.turn_payload(failed)
+    assert payload.error.code == "workspace_not_executable"
+    assert payload.error.category == "workspace"
+    assert payload.error.retryable == false
+  end
+
   test "interrupt_turn_state marks interrupted with a reason", %{thread: thread} do
     {:ok, thread} = History.start_turn_state(thread, %{trigger: "user", prompt: "x"})
     assert {:ok, updated} = History.interrupt_turn_state(thread, "task_crash")
@@ -76,7 +125,7 @@ defmodule SymphonyElixir.Assistant.TurnHistoryTest do
 
   test "upsert_active_tool records tool and last_activity_at", %{thread: thread} do
     assert {:ok, thread} =
-             History.start_turn_state(thread, %{trigger: "user", prompt: "go", agent_kind: "claude"})
+             History.start_turn_state(thread, %{trigger: "user", prompt: "go", provider: "claude"})
 
     tool = %{
       "id" => "tool-1",
@@ -98,7 +147,7 @@ defmodule SymphonyElixir.Assistant.TurnHistoryTest do
 
   test "upsert_active_tool replaces existing tool by id", %{thread: thread} do
     assert {:ok, thread} =
-             History.start_turn_state(thread, %{trigger: "user", prompt: "go", agent_kind: "claude"})
+             History.start_turn_state(thread, %{trigger: "user", prompt: "go", provider: "claude"})
 
     assert {:ok, thread} =
              History.upsert_active_tool(thread, %{
@@ -128,7 +177,7 @@ defmodule SymphonyElixir.Assistant.TurnHistoryTest do
 
   test "remove_active_tool drops matching id", %{thread: thread} do
     assert {:ok, thread} =
-             History.start_turn_state(thread, %{trigger: "user", prompt: "go", agent_kind: "claude"})
+             History.start_turn_state(thread, %{trigger: "user", prompt: "go", provider: "claude"})
 
     {:ok, thread} =
       History.upsert_active_tool(thread, %{
@@ -147,7 +196,7 @@ defmodule SymphonyElixir.Assistant.TurnHistoryTest do
 
   test "touch_turn_activity bumps last_activity_at", %{thread: thread} do
     assert {:ok, thread} =
-             History.start_turn_state(thread, %{trigger: "user", prompt: "go", agent_kind: "claude"})
+             History.start_turn_state(thread, %{trigger: "user", prompt: "go", provider: "claude"})
 
     assert {:ok, updated} = History.touch_turn_activity(thread)
     assert is_binary(History.current_turn(updated)["last_activity_at"])
@@ -155,7 +204,7 @@ defmodule SymphonyElixir.Assistant.TurnHistoryTest do
 
   test "terminal turn states clear active_tools", %{thread: thread} do
     assert {:ok, thread} =
-             History.start_turn_state(thread, %{trigger: "user", prompt: "go", agent_kind: "claude"})
+             History.start_turn_state(thread, %{trigger: "user", prompt: "go", provider: "claude"})
 
     {:ok, thread} =
       History.upsert_active_tool(thread, %{
@@ -195,6 +244,90 @@ defmodule SymphonyElixir.Assistant.TurnHistoryTest do
     assert History.turn_running?(thread)
   end
 
+  test "stale current-turn and queue writers preserve each other's metadata", %{
+    thread: original
+  } do
+    {:ok, running} =
+      History.start_turn_state(original, %{
+        trigger: "user",
+        prompt: "running",
+        provider: "codex"
+      })
+
+    {:ok, queued, first} =
+      History.enqueue_pending_turn(original, %{
+        prompt: "queued first",
+        trigger: "user",
+        provider: "claude"
+      })
+
+    assert History.current_turn(queued)["prompt"] == "running"
+
+    {:ok, queued_again, second} =
+      History.enqueue_pending_turn(original, %{
+        prompt: "queued second",
+        trigger: "user",
+        provider: "cursor"
+      })
+
+    assert Enum.map(History.pending_turns(queued_again), & &1["id"]) == [
+             first["id"],
+             second["id"]
+           ]
+
+    {:ok, identified} =
+      History.note_run_identity(running, %{
+        provider: "codex",
+        conversation_id: "codex-conversation",
+        run_id: "codex-run"
+      })
+
+    assert Enum.map(History.pending_turns(identified), & &1["id"]) == [
+             first["id"],
+             second["id"]
+           ]
+
+    assert History.current_turn(identified)["conversation_id"] == "codex-conversation"
+  end
+
+  test "stale preference and goal writers preserve current and queued turns", %{
+    thread: original
+  } do
+    {:ok, running} =
+      History.start_turn_state(original, %{
+        trigger: "user",
+        prompt: "running",
+        provider: "codex"
+      })
+
+    {:ok, queued, entry} =
+      History.enqueue_pending_turn(running, %{
+        prompt: "queued",
+        trigger: "user",
+        provider: "claude"
+      })
+
+    assert {:ok, preferences} =
+             History.set_turn_preferences(original, %{
+               execution_mode: "build",
+               skill_profile: "default"
+             })
+
+    assert History.current_turn(preferences)["prompt"] == "running"
+    assert Enum.map(History.pending_turns(preferences), & &1["id"]) == [entry["id"]]
+
+    assert {:ok, goal} = History.set_goal_mode(original, true, "Finish safely")
+    assert History.current_turn(goal)["prompt"] == "running"
+    assert Enum.map(History.pending_turns(goal), & &1["id"]) == [entry["id"]]
+    assert History.thread_goal_objective(goal) == "Finish safely"
+
+    assert {:ok, bumped} = History.bump_goal_revision(original)
+    assert History.current_turn(bumped)["prompt"] == "running"
+    assert Enum.map(History.pending_turns(bumped), & &1["id"]) == [entry["id"]]
+    assert History.thread_goal_objective(bumped) == "Finish safely"
+    assert History.thread_goal_revision(bumped) != History.thread_goal_revision(queued)
+  end
+
   test "reconcile_orphaned_turns flips running threads to interrupted(serve_restart)", %{thread: thread} do
     {:ok, _running} = History.start_turn_state(thread, %{trigger: "user", prompt: "stuck"})
 
@@ -209,16 +342,86 @@ defmodule SymphonyElixir.Assistant.TurnHistoryTest do
 
   test "turn_payload exposes the channel/UI shape with can_resume", %{thread: thread} do
     {:ok, thread} = History.start_turn_state(thread, %{trigger: "user", prompt: "x"})
-    {:ok, thread} = History.note_turn_codex(thread, %{codex_thread_id: "ct", turn_id: "tn"})
+
+    {:ok, thread} =
+      History.note_run_identity(thread, %{
+        provider: "codex",
+        conversation_id: "ct",
+        run_id: "tn"
+      })
+
     {:ok, thread} = History.interrupt_turn_state(thread, "serve_restart")
 
     payload = History.turn_payload(thread)
     assert payload.status == "interrupted"
-    assert payload.session_id == "ct-tn"
+    assert payload.provider == "codex"
+    assert payload.conversation_id == "ct"
+    assert payload.run_id == "tn"
+    refute Map.has_key?(payload, :session_id)
     assert payload.can_resume == true
     assert is_binary(payload.started_at)
 
     assert History.turn_payload(nil) == nil
+  end
+
+  test "pending turns survive reload and preserve FIFO order", %{thread: thread} do
+    assert {:ok, thread, first} =
+             History.enqueue_pending_turn(thread, %{
+               prompt: "first",
+               trigger: "gateway",
+               provider: "codex"
+             })
+
+    assert {:ok, _thread, second} =
+             History.enqueue_pending_turn(thread, %{
+               prompt: "second",
+               trigger: "user",
+               provider: "claude",
+               model: "sonnet"
+             })
+
+    assert {:ok, reloaded} = History.get_thread(thread.id)
+    assert Enum.map(History.pending_turns(reloaded), & &1["prompt"]) == ["first", "second"]
+    assert first["id"] != second["id"]
+    assert History.turn_payload(reloaded).queued_count == 2
+
+    assert {:ok, updated, ^first} = History.take_pending_turn(reloaded)
+    assert Enum.map(History.pending_turns(updated), & &1["prompt"]) == ["second"]
+
+    assert {:ok, emptied, ^second} = History.take_pending_turn(updated)
+    assert History.pending_turns(emptied) == []
+    assert {:ok, ^emptied, nil} = History.take_pending_turn(emptied)
+  end
+
+  test "pending turns require the canonical provider field", %{thread: thread} do
+    assert {:error, :provider_required} =
+             History.enqueue_pending_turn(thread, %{prompt: "legacy", agent_kind: "codex"})
+
+    assert {:ok, reloaded} = History.get_thread(thread.id)
+    assert History.pending_turns(reloaded) == []
+  end
+
+  test "starting a durable queued turn removes it in the same metadata transition", %{
+    thread: thread
+  } do
+    assert {:ok, queued, entry} =
+             History.enqueue_pending_turn(thread, %{
+               prompt: "durable",
+               trigger: "user",
+               provider: "claude"
+             })
+
+    assert {:ok, running} =
+             History.start_turn_state(queued, %{
+               prompt: entry["prompt"],
+               trigger: entry["trigger"],
+               provider: entry["provider"],
+               queue_id: entry["id"]
+             })
+
+    assert History.pending_turns(running) == []
+    assert History.current_turn(running)["status"] == "running"
+    assert History.current_turn(running)["provider"] == "claude"
   end
 
   test "current_turn is nil before any turn starts", %{thread: thread} do

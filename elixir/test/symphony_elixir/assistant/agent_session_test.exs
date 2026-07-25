@@ -96,8 +96,8 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
       {:ok,
        %{
          assistant_message: "Oi! Eu sou o assistant do projeto Macro Markets.",
-         codex_thread_id: "thread-1",
-         turn_id: "turn-1",
+         conversation_id: "thread-1",
+         run_id: "turn-1",
          tool_calls: []
        }}
     end
@@ -136,7 +136,7 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
     {:ok, thread} = History.ensure_thread("macro-markets", %{workspace_path: workspace, agent_kind: "codex"})
 
     first_runner = fn _workspace, _prompt, _issue, _opts ->
-      {:ok, %{assistant_message: "Oi!", codex_thread_id: "thread-1", turn_id: "turn-1", tool_calls: []}}
+      {:ok, %{assistant_message: "Oi!", conversation_id: "thread-1", run_id: "turn-1", tool_calls: []}}
     end
 
     assert {:ok, _result} =
@@ -146,7 +146,7 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
 
     second_runner = fn _workspace, prompt, _issue, _opts ->
       send(parent, {:second_prompt, prompt})
-      {:ok, %{assistant_message: "Eu lembro do seu oi.", codex_thread_id: "thread-1", turn_id: "turn-2", tool_calls: []}}
+      {:ok, %{assistant_message: "Eu lembro do seu oi.", conversation_id: "thread-1", run_id: "turn-2", tool_calls: []}}
     end
 
     assert {:ok, _result} =
@@ -181,7 +181,7 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
 
     runner = fn workspace, _prompt, _issue, _opts ->
       send(self(), {:workspace, workspace})
-      {:ok, %{assistant_message: "ok", tool_calls: [], codex_thread_id: "ct-1", turn_id: "t-1"}}
+      {:ok, %{assistant_message: "ok", tool_calls: [], conversation_id: "ct-1", run_id: "t-1"}}
     end
 
     assert {:ok, _result} =
@@ -199,7 +199,7 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
 
     runner = fn _workspace, _prompt, _issue, opts ->
       send(self(), {:opts, opts})
-      {:ok, %{assistant_message: "ok", tool_calls: [], codex_thread_id: "ct-1", turn_id: "t-1"}}
+      {:ok, %{assistant_message: "ok", tool_calls: [], conversation_id: "ct-1", run_id: "t-1"}}
     end
 
     assert {:ok, result} =
@@ -293,7 +293,7 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
            })}
         )
 
-        {:ok, %{assistant_message: "ok", tool_calls: [], codex_thread_id: "ct-#{thread.id}", turn_id: "turn"}}
+        {:ok, %{assistant_message: "ok", tool_calls: [], conversation_id: "ct-#{thread.id}", run_id: "turn"}}
       end
 
       result =
@@ -339,7 +339,7 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
 
     runner = fn _workspace, _prompt, _issue, opts ->
       send(self(), {:freeform_opts, opts})
-      {:ok, %{assistant_message: "ok", tool_calls: [], codex_thread_id: "ct-1", turn_id: "t-1"}}
+      {:ok, %{assistant_message: "ok", tool_calls: [], conversation_id: "ct-1", run_id: "t-1"}}
     end
 
     assert {:ok, _result} =
@@ -357,7 +357,10 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
         agent_kind: "codex"
       })
 
-    {:ok, thread} = History.put_agent_thread_id(thread, "codex", "codex-thread-existing")
+    {:ok, ref} =
+      SymphonyElixir.Agent.ConversationRef.new("codex", "codex-thread-existing")
+
+    {:ok, thread} = History.put_conversation_ref(thread, ref)
     test_pid = self()
 
     Application.put_env(:symphony_elixir, :native_thread_name_setter, fn _, thread_id, name, _ ->
@@ -368,16 +371,76 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
     runner = fn _workspace, _prompt, _issue, opts ->
       assert_receive {:native_name_retried, "codex-thread-existing", "Resume Codex"}
       send(self(), {:resume_opts, opts})
-      {:ok, %{assistant_message: "ok", tool_calls: [], codex_thread_id: "codex-thread-existing", turn_id: "t-2"}}
+      {:ok, %{assistant_message: "ok", tool_calls: [], conversation_id: "codex-thread-existing", run_id: "t-2"}}
     end
 
-    assert {:ok, _result} =
+    assert {:ok, result} =
              AgentSession.send_message_to_thread(thread, "continue", %{}, runner: runner)
 
     assert_receive {:resume_opts, opts}
-    assert Keyword.fetch!(opts, :resume_thread_id) == "codex-thread-existing"
+
+    assert opts[:conversation_ref] == %SymphonyElixir.Agent.ConversationRef{
+             provider: "codex",
+             conversation_id: "codex-thread-existing"
+           }
+
+    refute Keyword.has_key?(opts, :resume_thread_id)
+    refute Keyword.has_key?(opts, :agent_thread_id)
     refute Keyword.has_key?(opts, :thread_name)
+    assert result.provider == "codex"
+    assert result.conversation_id == "codex-thread-existing"
+    assert result.run_id == "t-2"
     assert_receive {:native_name_retried, "codex-thread-existing", "Resume Codex"}
+  end
+
+  test "send_message_to_thread/4 resumes and persists Claude through the generic conversation contract" do
+    {:ok, thread} =
+      History.create_freeform_thread(%{
+        title: "Resume Claude",
+        workspace_path: tmp_dir(),
+        agent_kind: "claude"
+      })
+
+    {:ok, ref} =
+      SymphonyElixir.Agent.ConversationRef.new("claude", "claude-session-existing")
+
+    {:ok, thread} = History.put_conversation_ref(thread, ref)
+
+    runner = fn _workspace, _prompt, _issue, opts ->
+      send(self(), {:claude_resume_opts, opts})
+
+      {:ok,
+       %{
+         assistant_message: "ok",
+         tool_calls: [],
+         conversation_id: "claude-session-updated",
+         run_id: "claude-run-2"
+       }}
+    end
+
+    assert {:ok, result} =
+             AgentSession.send_message_to_thread(
+               thread,
+               "continue",
+               %{"agent" => "claude"},
+               runner: runner
+             )
+
+    assert_receive {:claude_resume_opts, opts}
+
+    assert opts[:conversation_ref] == %SymphonyElixir.Agent.ConversationRef{
+             provider: "claude",
+             conversation_id: "claude-session-existing"
+           }
+
+    refute Keyword.has_key?(opts, :resume_thread_id)
+    assert result.provider == "claude"
+    assert result.conversation_id == "claude-session-updated"
+    assert result.run_id == "claude-run-2"
+
+    assert {:ok, persisted} = History.get_thread(thread.id)
+    assert {:ok, ref} = History.conversation_ref(persisted, "claude")
+    assert ref.conversation_id == "claude-session-updated"
   end
 
   test "reconciles the latest canonical title after persisting a fresh Codex thread id" do
@@ -403,8 +466,8 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
        %{
          assistant_message: "ok",
          tool_calls: [],
-         codex_thread_id: "codex-thread-fresh",
-         turn_id: "t-1"
+         conversation_id: "codex-thread-fresh",
+         run_id: "t-1"
        }}
     end
 
@@ -422,7 +485,10 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
         agent_kind: "codex"
       })
 
-    {:ok, thread} = History.put_agent_thread_id(thread, "codex", "codex-thread-stale")
+    {:ok, ref} =
+      SymphonyElixir.Agent.ConversationRef.new("codex", "codex-thread-stale")
+
+    {:ok, thread} = History.put_conversation_ref(thread, ref)
     test_pid = self()
 
     Application.put_env(:symphony_elixir, :native_thread_name_setter, fn _, thread_id, name, _ ->
@@ -431,15 +497,22 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
     end)
 
     runner = fn _workspace, _prompt, _issue, opts ->
-      assert Keyword.fetch!(opts, :resume_thread_id) == "codex-thread-stale"
+      assert opts[:conversation_ref] == %SymphonyElixir.Agent.ConversationRef{
+               provider: "codex",
+               conversation_id: "codex-thread-stale"
+             }
+
+      refute Keyword.has_key?(opts, :resume_thread_id)
+      refute Keyword.has_key?(opts, :agent_thread_id)
+      refute Keyword.has_key?(opts, :thread_name)
       assert_receive {:replacement_name_set, "codex-thread-stale", "Replacement title"}
 
       {:ok,
        %{
          assistant_message: "ok",
          tool_calls: [],
-         codex_thread_id: "codex-thread-replacement",
-         turn_id: "t-replacement"
+         conversation_id: "codex-thread-replacement",
+         run_id: "t-replacement"
        }}
     end
 
@@ -545,8 +618,8 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
            %{"type" => "text", "text" => "Wrong"},
            %{"type" => "tool", "tool_call_id" => "tool-1"}
          ],
-         codex_thread_id: "thread-mismatch",
-         turn_id: "turn-mismatch"
+         conversation_id: "thread-mismatch",
+         run_id: "turn-mismatch"
        }}
     end
 
@@ -581,7 +654,7 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
 
       runner = fn workspace, _prompt, _issue, _opts ->
         send(test_pid, {:workspace, workspace})
-        {:ok, %{assistant_message: "done", tool_calls: [], codex_thread_id: "ct", turn_id: "t1"}}
+        {:ok, %{assistant_message: "done", tool_calls: [], conversation_id: "ct", run_id: "t1"}}
       end
 
       assert {:ok, result} =
@@ -590,6 +663,37 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
       assert result.assistant_message == "done"
       expected = Workspace.path_for_issue("MAC-1")
       assert_receive {:workspace, ^expected}
+    end
+
+    test "normalizes Cursor requested effort to the model slug invariant", %{thread: thread} do
+      runner = fn _workspace, _prompt, _issue, _opts ->
+        {:ok,
+         %{
+           assistant_message: "done",
+           tool_calls: [],
+           conversation_id: "cursor-session",
+           run_id: "cursor-turn",
+           resolved_model: "cursor-grok-4.5-high"
+         }}
+      end
+
+      assert {:ok, _result} =
+               AgentSession.send_message_to_issue_thread(
+                 thread,
+                 "hi",
+                 %{
+                   "agent" => "cursor",
+                   "model" => "cursor-grok-4.5-high",
+                   "effort" => "high"
+                 },
+                 runner: runner
+               )
+
+      persisted = Repo.get!(Thread, thread.id)
+      assert persisted.requested_model == "cursor-grok-4.5-high"
+      assert persisted.requested_effort == nil
+      assert persisted.resolved_model == "cursor-grok-4.5-high"
+      assert persisted.resolved_effort == nil
     end
 
     test "runs the turn for an issue_session-scoped thread" do
@@ -609,7 +713,7 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
 
       runner = fn workspace, _prompt, _issue, _opts ->
         send(test_pid, {:session_workspace, workspace})
-        {:ok, %{assistant_message: "ack", tool_calls: [], codex_thread_id: "ct", turn_id: "t1"}}
+        {:ok, %{assistant_message: "ack", tool_calls: [], conversation_id: "ct", run_id: "t1"}}
       end
 
       assert {:ok, result} =
@@ -637,7 +741,7 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
 
       runner = fn workspace, _prompt, _issue, _opts ->
         send(test_pid, {:explicit_session_runner, workspace})
-        {:ok, %{assistant_message: "ack", tool_calls: [], codex_thread_id: "ct", turn_id: "t1"}}
+        {:ok, %{assistant_message: "ack", tool_calls: [], conversation_id: "ct", run_id: "t1"}}
       end
 
       assert {:ok, _result} =
@@ -687,7 +791,7 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
 
       runner = fn workspace, _prompt, _issue, opts ->
         send(test_pid, {:issue_run, workspace, opts})
-        {:ok, %{assistant_message: "ok", tool_calls: [], codex_thread_id: "ct", turn_id: "t1"}}
+        {:ok, %{assistant_message: "ok", tool_calls: [], conversation_id: "ct", run_id: "t1"}}
       end
 
       assert {:ok, _result} = AgentSession.send_message_to_issue_thread(thread, "hi", %{}, runner: runner)
@@ -712,7 +816,7 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
 
       runner = fn workspace, _prompt, _issue, _opts ->
         send(test_pid, {:workspace, workspace})
-        {:ok, %{assistant_message: "ok", tool_calls: [], codex_thread_id: "ct", turn_id: "t1"}}
+        {:ok, %{assistant_message: "ok", tool_calls: [], conversation_id: "ct", run_id: "t1"}}
       end
 
       assert {:ok, _result} =
@@ -737,7 +841,7 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
 
       runner = fn workspace, _prompt, _issue, _opts ->
         send(test_pid, {:workspace, workspace})
-        {:ok, %{assistant_message: "ok", tool_calls: [], codex_thread_id: "ct", turn_id: "t1"}}
+        {:ok, %{assistant_message: "ok", tool_calls: [], conversation_id: "ct", run_id: "t1"}}
       end
 
       assert {:ok, _result} =
@@ -758,8 +862,10 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
          %{
            assistant_message: "updated",
            tool_calls: [%{name: "update_issue", status: "complete"}],
-           codex_thread_id: "ct",
-           turn_id: "t1"
+           conversation_id: "ct",
+           run_id: "t1",
+           resolved_model: "gpt-5.6-sol",
+           resolved_effort: "low"
          }}
       end
 
@@ -773,8 +879,9 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
 
       assert result.assistant_message == "updated"
       assert result.tool_calls == [%{name: "update_issue", status: "complete"}]
-      assert result.codex_thread_id == "ct"
-      assert result.turn_id == "t1"
+      assert result.provider == "codex"
+      assert result.conversation_id == "ct"
+      assert result.run_id == "t1"
       assert result.user_message.role == "user"
       assert result.user_message.content == "hi"
       assert result.user_message.metadata == %{"source" => "test"}
@@ -799,7 +906,9 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
       assert error_text =~ "issue_identifier_mismatch"
 
       persisted_thread = Repo.get!(SymphonyElixir.Assistant.Thread, thread.id)
-      assert persisted_thread.codex_thread_id == "ct"
+      assert persisted_thread.provider_bindings["codex"] == "ct"
+      assert persisted_thread.resolved_model == "gpt-5.6-sol"
+      assert persisted_thread.resolved_effort == "low"
 
       messages = thread.id |> History.list_messages_for_thread() |> Enum.map(&History.message_payload/1)
       assert Enum.map(messages, & &1.role) == ["user", "assistant"]
@@ -816,7 +925,7 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
 
       runner = fn _workspace, _prompt, _issue, opts ->
         send(test_pid, {:runner_opts, opts})
-        {:ok, %{assistant_message: "safe", tool_calls: [], codex_thread_id: "ct", turn_id: "t1"}}
+        {:ok, %{assistant_message: "safe", tool_calls: [], conversation_id: "ct", run_id: "t1"}}
       end
 
       assert {:ok, _result} =
@@ -857,7 +966,7 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
 
       runner = fn _workspace, _prompt, _issue, opts ->
         send(test_pid, {:runner_opts, opts})
-        {:ok, %{assistant_message: "ok", tool_calls: [], codex_thread_id: "ct", turn_id: "t1"}}
+        {:ok, %{assistant_message: "ok", tool_calls: [], conversation_id: "ct", run_id: "t1"}}
       end
 
       assert {:ok, _result} =
@@ -877,7 +986,7 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
 
       runner = fn _workspace, prompt, _issue, _opts ->
         send(test_pid, {:prompt, prompt})
-        {:ok, %{assistant_message: "ok", tool_calls: [], codex_thread_id: "ct", turn_id: "t1"}}
+        {:ok, %{assistant_message: "ok", tool_calls: [], conversation_id: "ct", run_id: "t1"}}
       end
 
       assert {:ok, _result} =
@@ -893,7 +1002,7 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
 
       runner = fn _workspace, prompt, _issue, _opts ->
         send(test_pid, {:prompt, prompt})
-        {:ok, %{assistant_message: "ok", tool_calls: [], codex_thread_id: "ct", turn_id: "t1"}}
+        {:ok, %{assistant_message: "ok", tool_calls: [], conversation_id: "ct", run_id: "t1"}}
       end
 
       assert {:ok, _result} =
@@ -918,7 +1027,7 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
 
       runner = fn _workspace, prompt, _issue, _opts ->
         send(test_pid, {:prompt, prompt})
-        {:ok, %{assistant_message: "ok", tool_calls: [], codex_thread_id: "ct", turn_id: "t1"}}
+        {:ok, %{assistant_message: "ok", tool_calls: [], conversation_id: "ct", run_id: "t1"}}
       end
 
       assert {:ok, _result} =
@@ -943,7 +1052,7 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
 
       runner = fn _workspace, prompt, _issue, _opts ->
         send(test_pid, {:prompt, prompt})
-        {:ok, %{assistant_message: "ok", tool_calls: [], codex_thread_id: "ct", turn_id: "t1"}}
+        {:ok, %{assistant_message: "ok", tool_calls: [], conversation_id: "ct", run_id: "t1"}}
       end
 
       assert {:ok, _result} =
@@ -965,7 +1074,7 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
 
       runner = fn _workspace, prompt, _issue, _opts ->
         send(test_pid, {:prompt, prompt})
-        {:ok, %{assistant_message: "ok", tool_calls: [], codex_thread_id: "ct", turn_id: "t1"}}
+        {:ok, %{assistant_message: "ok", tool_calls: [], conversation_id: "ct", run_id: "t1"}}
       end
 
       assert {:ok, _result} =
@@ -983,7 +1092,7 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
 
       runner = fn _workspace, prompt, _issue, _opts ->
         send(test_pid, {:prompt, prompt})
-        {:ok, %{assistant_message: "ok", tool_calls: [], codex_thread_id: "ct", turn_id: "t1"}}
+        {:ok, %{assistant_message: "ok", tool_calls: [], conversation_id: "ct", run_id: "t1"}}
       end
 
       assert {:ok, _result} =
@@ -999,7 +1108,7 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
 
       runner = fn _workspace, prompt, _issue, _opts ->
         send(test_pid, {:prompt, prompt})
-        {:ok, %{assistant_message: "ok", tool_calls: [], codex_thread_id: "ct", turn_id: "t1"}}
+        {:ok, %{assistant_message: "ok", tool_calls: [], conversation_id: "ct", run_id: "t1"}}
       end
 
       assert {:ok, _result} =
@@ -1016,7 +1125,7 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
 
       runner = fn _workspace, prompt, _issue, _opts ->
         send(test_pid, {:prompt, prompt})
-        {:ok, %{assistant_message: "ok", tool_calls: [], codex_thread_id: "c", turn_id: "t"}}
+        {:ok, %{assistant_message: "ok", tool_calls: [], conversation_id: "c", run_id: "t"}}
       end
 
       assert {:ok, _result} =
@@ -1042,7 +1151,7 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
 
       runner = fn _workspace, prompt, _issue, opts ->
         send(test_pid, {:prompt, prompt, opts})
-        {:ok, %{assistant_message: "ok", tool_calls: [], codex_thread_id: "ct", turn_id: "t1"}}
+        {:ok, %{assistant_message: "ok", tool_calls: [], conversation_id: "ct", run_id: "t1"}}
       end
 
       assert {:ok, _result} =
@@ -1070,7 +1179,7 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
 
       runner = fn _workspace, prompt, _issue, opts ->
         send(test_pid, {:prompt, prompt, opts})
-        {:ok, %{assistant_message: "ok", tool_calls: [], codex_thread_id: "ct", turn_id: "t1"}}
+        {:ok, %{assistant_message: "ok", tool_calls: [], conversation_id: "ct", run_id: "t1"}}
       end
 
       assert {:ok, _result} =
@@ -1088,7 +1197,7 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
       runner = fn _workspace, _prompt, _issue, _opts ->
         File.mkdir_p!(Path.join([ws, "docs", "superpowers", "specs"]))
         File.write!(Path.join([ws, "docs", "superpowers", "specs", "new.md"]), "# New")
-        {:ok, %{assistant_message: "wrote spec", tool_calls: [], codex_thread_id: "c", turn_id: "t"}}
+        {:ok, %{assistant_message: "wrote spec", tool_calls: [], conversation_id: "c", run_id: "t"}}
       end
 
       assert {:ok, _result} =
@@ -1113,7 +1222,7 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
       runner = fn _workspace, _prompt, _issue, _opts ->
         File.write!(existing_path, "# Existing\n\nnew")
         File.touch!(existing_path, fixed_mtime)
-        {:ok, %{assistant_message: "updated spec", tool_calls: [], codex_thread_id: "c", turn_id: "t"}}
+        {:ok, %{assistant_message: "updated spec", tool_calls: [], conversation_id: "c", run_id: "t"}}
       end
 
       assert {:ok, _result} =
@@ -1129,7 +1238,7 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
       test_pid = self()
 
       runner = fn _workspace, _prompt, _issue, _opts ->
-        {:ok, %{assistant_message: "no docs", tool_calls: [], codex_thread_id: "c", turn_id: "t"}}
+        {:ok, %{assistant_message: "no docs", tool_calls: [], conversation_id: "c", run_id: "t"}}
       end
 
       assert {:ok, _result} =

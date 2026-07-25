@@ -19,7 +19,6 @@ import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import {
   catalogFor,
   defaultComposerSettings,
-  fallbackCatalogBundle,
   type AssistantCatalogBundle,
 } from "@/lib/assistantSettings";
 import type { SidebarRouteSelection } from "@/lib/sidebarRouteResolution";
@@ -89,7 +88,7 @@ export function SidebarNewSessionFlow({
   const [agent, setAgent] = useState<AgentKind>("codex");
   const [model, setModel] = useState<string | null>(null);
   const [effort, setEffort] = useState<string | null>(null);
-  const [bundle, setBundle] = useState<AssistantCatalogBundle>(() => fallbackCatalogBundle());
+  const [bundle, setBundle] = useState<AssistantCatalogBundle | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [serviceError, setServiceError] = useState<string | null>(null);
   const [newWorkspaceOpen, setNewWorkspaceOpen] = useState(false);
@@ -136,7 +135,7 @@ export function SidebarNewSessionFlow({
       setAgent("codex");
       setModel(null);
       setEffort(null);
-      setBundle(fallbackCatalogBundle());
+      setBundle(null);
       setSubmitting(false);
       setServiceError(null);
       setNewWorkspaceOpen(false);
@@ -231,26 +230,28 @@ export function SidebarNewSessionFlow({
     if (!open) return;
     let active = true;
     const slug = selectedProject?.projectSlug;
-    if (!slug) {
-      setBundle(fallbackCatalogBundle());
-      return;
-    }
+    setBundle(null);
     void fetchAssistantCatalogBundle(slug)
       .then((next) => {
         if (!active) return;
         setBundle(next);
-        const defaults = defaultComposerSettings(catalogFor(next, agent));
-        setModel((current) => current ?? defaults.model);
-        setEffort((current) => current ?? defaults.effort);
       })
       .catch(() => {
         if (!active) return;
-        setBundle(fallbackCatalogBundle());
+        setBundle(null);
+        setServiceError(t("assistant.catalog.errors.loadFailed"));
       });
     return () => {
       active = false;
     };
-  }, [agent, open, selectedProject?.projectSlug]);
+  }, [open, selectedProject?.projectSlug, t]);
+
+  useEffect(() => {
+    if (!open || !bundle) return;
+    const defaults = defaultComposerSettings(catalogFor(bundle, agent));
+    setModel((current) => current ?? defaults.model);
+    setEffort((current) => current ?? defaults.effort);
+  }, [agent, bundle, open]);
 
   useEffect(() => {
     if (!open || topType !== "projeto" || projectKind !== "issue" || !selectedProject) {
@@ -675,16 +676,20 @@ export function SidebarNewSessionFlow({
               </>
             ) : null}
 
-            <ExecutionSettingsFields
-              bundle={bundle}
-              agent={agent}
-              model={model}
-              effort={effort}
-              disabled={submitting}
-              onAgentChange={(next) => setAgent(next ?? "codex")}
-              onModelChange={setModel}
-              onEffortChange={setEffort}
-            />
+            {bundle ? (
+              <ExecutionSettingsFields
+                bundle={bundle}
+                agent={agent}
+                model={model}
+                effort={effort}
+                disabled={submitting}
+                onAgentChange={(next) => setAgent(next ?? bundle.defaultAgent)}
+                onModelChange={setModel}
+                onEffortChange={setEffort}
+              />
+            ) : (
+              <p className="text-xs text-muted-foreground">{t("common.loading")}</p>
+            )}
 
             <label className="grid gap-1 text-sm">
               <span>{t("layout.sidebar.newSession.seed")}</span>
@@ -740,7 +745,7 @@ export function SidebarNewSessionFlow({
             </DialogClose>
             <Button
               type="button"
-              disabled={Boolean(unavailableReason) || submitting}
+              disabled={Boolean(unavailableReason) || submitting || !bundle}
               onClick={(event) => {
                 if (event.detail > 1) return;
                 void submit();

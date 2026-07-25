@@ -70,6 +70,28 @@ defmodule SymphonyElixir.IssueDispatchTest do
     assert resume_comment.body =~ "slice evidence"
   end
 
+  test "resume appends a lifecycle boundary after an earlier failure", %{issue: issue} do
+    {:ok, _} = Context.move_issue("pref", issue.identifier, %{"status" => "In Progress"})
+    {:ok, project} = Context.get_project("pref")
+
+    workspace =
+      Workspace.path_for_issue(%{
+        id: issue.id,
+        identifier: issue.identifier,
+        project_slug: "pref"
+      })
+
+    File.mkdir_p!(workspace)
+    on_exit(fn -> File.rm_rf(workspace) end)
+    assert :ok = SessionEvents.clear(workspace)
+    assert :ok = SessionEvents.append_run_failure(workspace, {:turn_failed, "old failure"})
+
+    assert {:ok, _result} = IssueDispatch.resume(project, issue.identifier, %{})
+
+    assert {:ok, entries, _offset} = SessionEvents.tail(workspace)
+    assert Enum.map(entries, & &1["title"]) == ["Agent run failed", "Run resumed"]
+  end
+
   test "resume injects draft context refs into dispatch guidance", %{issue: issue} do
     {:ok, _} = Context.move_issue("pref", issue.identifier, %{"status" => "In Progress"})
     {:ok, context_issue} = Context.create_issue("pref", %{"title" => "Context source", "status" => "Todo"})

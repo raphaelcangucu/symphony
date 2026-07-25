@@ -405,7 +405,7 @@ defmodule SymphonyElixir.Claude.AppServer.Server do
         # Best-effort group kill first (tears down grandchildren via setsid group).
         if runner_os_pid do
           try do
-            System.cmd("kill", ["-9", "-#{runner_os_pid}"], stderr_to_stdout: true)
+            System.cmd("kill", ["-9", "--", "-#{runner_os_pid}"], stderr_to_stdout: true)
           rescue
             _ -> :ok
           end

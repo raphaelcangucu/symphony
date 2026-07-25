@@ -2304,6 +2304,14 @@
       "addToContext": "Add to context",
       "loadingModels": "Loading assistant models...",
       "catalogLoadFailed": "Failed to load assistant models.",
+      "modelProvenance": {
+        "requested": "Requested",
+        "resolved": "Resolved",
+        "notSpecified": "Not specified",
+        "awaitingConfirmation": "Awaiting provider confirmation",
+        "reroutedFrom": "rerouted from {{value}}",
+        "requestedAwaiting": "requested {{model}} · awaiting confirmation"
+      },
       "renderErrorTitle": "This conversation hit a rendering error.",
       "renderErrorDescription": "Navigation and the composer still work. Retry to redraw the transcript.",
       "renderErrorRetry": "Reload conversation",
@@ -2423,6 +2431,7 @@
       },
       "errors": {
         "noCodexModels": "Codex CLI returned no models",
+        "noModels": "The server returned no usable assistant models.",
         "loadFailed": "Failed to load assistant models.",
         "apiMissing": "Assistant API is missing on the server. Restart Symphony to load the latest tracker routes."
       }

@@ -34,6 +34,24 @@ defmodule SymphonyElixir.Claude.ApprovalBrokerTest do
     assert_receive {:result, :deny}, 1_000
   end
 
+  test "registration callback closes the request publication race" do
+    request_id = "req-#{System.unique_integer([:positive])}"
+    parent = self()
+
+    spawn(fn ->
+      decision =
+        ApprovalBroker.await(request_id, 5_000, fn ->
+          send(parent, {:registered, request_id})
+        end)
+
+      send(parent, {:result, decision})
+    end)
+
+    assert_receive {:registered, ^request_id}
+    ApprovalBroker.resolve(request_id, :deny)
+    assert_receive {:result, :deny}, 1_000
+  end
+
   test "await returns :deny on timeout" do
     request_id = "req-#{System.unique_integer([:positive])}"
     assert ApprovalBroker.await(request_id, 30) == :deny

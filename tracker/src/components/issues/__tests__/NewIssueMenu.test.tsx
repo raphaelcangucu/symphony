@@ -68,7 +68,8 @@ const issueCreateDialog = vi.fn(
 );
 
 vi.mock("@/components/issues/IssueCreateDialog", () => ({
-  IssueCreateDialog: (props: Parameters<typeof issueCreateDialog>[0]) => issueCreateDialog(props),
+  IssueCreateDialog: (props: Parameters<typeof issueCreateDialog>[0]) =>
+    issueCreateDialog(props),
 }));
 
 const issueSessionPickerDialog = vi.fn(
@@ -92,8 +93,9 @@ const issueSessionPickerDialog = vi.fn(
 );
 
 vi.mock("@/components/sessions/IssueSessionPickerDialog", () => ({
-  IssueSessionPickerDialog: (props: Parameters<typeof issueSessionPickerDialog>[0]) =>
-    issueSessionPickerDialog(props),
+  IssueSessionPickerDialog: (
+    props: Parameters<typeof issueSessionPickerDialog>[0],
+  ) => issueSessionPickerDialog(props),
 }));
 
 describe("NewIssueMenu", () => {
@@ -113,14 +115,19 @@ describe("NewIssueMenu", () => {
             path="/projects/macro-markets/board"
             element={<NewIssueMenu projectSlug="macro-markets" />}
           />
-          <Route path="/projects/macro-markets/workspaces" element={<div>Assistant issue authoring</div>} />
+          <Route
+            path="/projects/macro-markets/workspaces"
+            element={<div>Assistant issue authoring</div>}
+          />
         </Routes>
       </MemoryRouter>,
     );
 
     await user.click(screen.getByRole("link", { name: "New issue" }));
 
-    expect(await screen.findByText("Assistant issue authoring")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Assistant issue authoring"),
+    ).toBeInTheDocument();
   });
 
   it("opens quick create from the menu with the seeded status", async () => {
@@ -133,9 +140,13 @@ describe("NewIssueMenu", () => {
     );
 
     await user.click(screen.getByRole("button", { name: "New issue options" }));
-    await user.click(await screen.findByRole("menuitem", { name: "Quick create" }));
+    await user.click(
+      await screen.findByRole("menuitem", { name: "Quick create" }),
+    );
 
-    expect(screen.getByRole("region", { name: "mock quick create dialog" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("region", { name: "mock quick create dialog" }),
+    ).toBeInTheDocument();
     expect(screen.getByText("project:macro-markets")).toBeInTheDocument();
     expect(screen.getByText("status:In Progress")).toBeInTheDocument();
   });
@@ -146,6 +157,10 @@ describe("NewIssueMenu", () => {
       id: 42,
       scope: "project_session",
       agentKind: null,
+      requestedModel: null,
+      requestedEffort: null,
+      resolvedModel: null,
+      resolvedEffort: null,
       projectSlug: "macro-markets",
       projectName: "Macro Markets",
       issueIdentifier: null,
@@ -165,16 +180,23 @@ describe("NewIssueMenu", () => {
             path="/projects/macro-markets/board"
             element={<NewIssueMenu projectSlug="macro-markets" />}
           />
-          <Route path="/projects/macro-markets/workspaces/:threadId" element={<div>Opened session</div>} />
+          <Route
+            path="/projects/macro-markets/workspaces/:threadId"
+            element={<div>Opened session</div>}
+          />
         </Routes>
       </MemoryRouter>,
     );
 
     await user.click(screen.getByRole("button", { name: "New issue options" }));
-    await user.click(await screen.findByRole("menuitem", { name: "New project session" }));
+    await user.click(
+      await screen.findByRole("menuitem", { name: "New project session" }),
+    );
 
     await waitFor(() =>
-      expect(createProjectSessionThread).toHaveBeenCalledWith("macro-markets", { title: "Project session" }),
+      expect(createProjectSessionThread).toHaveBeenCalledWith("macro-markets", {
+        title: "Project session",
+      }),
     );
     expect(await screen.findByText("Opened session")).toBeInTheDocument();
   });
@@ -189,9 +211,13 @@ describe("NewIssueMenu", () => {
     );
 
     await user.click(screen.getByRole("button", { name: "New issue options" }));
-    await user.click(await screen.findByRole("menuitem", { name: "New issue session" }));
+    await user.click(
+      await screen.findByRole("menuitem", { name: "New issue session" }),
+    );
 
-    expect(screen.getByRole("region", { name: "mock issue session picker" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("region", { name: "mock issue session picker" }),
+    ).toBeInTheDocument();
     expect(screen.getByText("project:macro-markets")).toBeInTheDocument();
   });
 
@@ -205,13 +231,18 @@ describe("NewIssueMenu", () => {
             path="/projects/macro-markets/board"
             element={<NewIssueMenu projectSlug="macro-markets" />}
           />
-          <Route path="/projects/macro-markets/terminal" element={<div>Project terminal</div>} />
+          <Route
+            path="/projects/macro-markets/terminal"
+            element={<div>Project terminal</div>}
+          />
         </Routes>
       </MemoryRouter>,
     );
 
     await user.click(screen.getByRole("button", { name: "New issue options" }));
-    await user.click(await screen.findByRole("menuitem", { name: "New project terminal" }));
+    await user.click(
+      await screen.findByRole("menuitem", { name: "New project terminal" }),
+    );
 
     expect(await screen.findByText("Project terminal")).toBeInTheDocument();
   });
@@ -224,21 +255,40 @@ describe("NewIssueMenu", () => {
         <Routes>
           <Route
             path="/projects/macro-markets/board"
-            element={<NewIssueMenu projectSlug="macro-markets" status="Backlog" variant="icon" />}
+            element={
+              <NewIssueMenu
+                projectSlug="macro-markets"
+                status="Backlog"
+                variant="icon"
+              />
+            }
           />
-          <Route path="/projects/macro-markets/workspaces" element={<div>Assistant issue authoring</div>} />
+          <Route
+            path="/projects/macro-markets/workspaces"
+            element={<div>Assistant issue authoring</div>}
+          />
         </Routes>
       </MemoryRouter>,
     );
 
-    await user.click(screen.getByRole("button", { name: "Add issue to Backlog" }));
+    await user.click(
+      screen.getByRole("button", { name: "Add issue to Backlog" }),
+    );
 
-    expect(await screen.findByRole("menuitem", { name: "New issue with assistant" })).toBeInTheDocument();
-    expect(screen.getByRole("menuitem", { name: "Quick create" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("menuitem", { name: "New issue with assistant" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("menuitem", { name: "Quick create" }),
+    ).toBeInTheDocument();
 
-    await user.click(screen.getByRole("menuitem", { name: "New issue with assistant" }));
+    await user.click(
+      screen.getByRole("menuitem", { name: "New issue with assistant" }),
+    );
 
-    expect(await screen.findByText("Assistant issue authoring")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Assistant issue authoring"),
+    ).toBeInTheDocument();
   });
 
   it("opens quick create from the dashed empty-state variant", async () => {
@@ -246,14 +296,24 @@ describe("NewIssueMenu", () => {
 
     render(
       <MemoryRouter>
-        <NewIssueMenu projectSlug="macro-markets" status="Backlog" variant="dashed" />
+        <NewIssueMenu
+          projectSlug="macro-markets"
+          status="Backlog"
+          variant="dashed"
+        />
       </MemoryRouter>,
     );
 
-    await user.click(screen.getByRole("button", { name: "Add issue to Backlog" }));
-    await user.click(await screen.findByRole("menuitem", { name: "Quick create" }));
+    await user.click(
+      screen.getByRole("button", { name: "Add issue to Backlog" }),
+    );
+    await user.click(
+      await screen.findByRole("menuitem", { name: "Quick create" }),
+    );
 
-    expect(screen.getByRole("region", { name: "mock quick create dialog" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("region", { name: "mock quick create dialog" }),
+    ).toBeInTheDocument();
     expect(screen.getByText("status:Backlog")).toBeInTheDocument();
   });
 
@@ -263,15 +323,25 @@ describe("NewIssueMenu", () => {
 
     render(
       <MemoryRouter>
-        <NewIssueMenu projectSlug="macro-markets" status="In Progress" onCreated={onCreated} />
+        <NewIssueMenu
+          projectSlug="macro-markets"
+          status="In Progress"
+          onCreated={onCreated}
+        />
       </MemoryRouter>,
     );
 
     await user.click(screen.getByRole("button", { name: "New issue options" }));
-    await user.click(await screen.findByRole("menuitem", { name: "Quick create" }));
-    await user.click(screen.getByRole("button", { name: "emit created issue" }));
+    await user.click(
+      await screen.findByRole("menuitem", { name: "Quick create" }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "emit created issue" }),
+    );
 
     expect(onCreated).toHaveBeenCalledWith(createdIssue);
-    expect(screen.queryByRole("region", { name: "mock quick create dialog" })).toBeNull();
+    expect(
+      screen.queryByRole("region", { name: "mock quick create dialog" }),
+    ).toBeNull();
   });
 });

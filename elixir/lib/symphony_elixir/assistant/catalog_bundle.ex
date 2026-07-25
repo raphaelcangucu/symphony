@@ -13,50 +13,81 @@ defmodule SymphonyElixir.Assistant.CatalogBundle do
   @ttl_ms 30_000
   @fetch_timeout_ms 8_000
 
-  @spec fetch() :: %{agents: [map()], default_agent: String.t()}
-  def fetch do
-    case HotpathCache.fetch(@cache_key) do
-      {:ok, bundle} ->
-        bundle
+  @spec fetch(keyword()) ::
+          {:ok, %{agents: [map()], default_agent: String.t()}}
+          | {:error, {:assistant_catalog_unavailable, map()}}
+  def fetch(opts \\ []) do
+    fetchers = Keyword.get(opts, :fetchers, default_fetchers())
 
-      :miss ->
-        bundle = build()
-        HotpathCache.put(@cache_key, bundle, @ttl_ms)
-        bundle
+    if Keyword.has_key?(opts, :fetchers) do
+      build(fetchers)
+    else
+      case HotpathCache.fetch(@cache_key) do
+        {:ok, bundle} ->
+          {:ok, bundle}
+
+        :miss ->
+          case build(fetchers) do
+            {:ok, bundle} = ok ->
+              HotpathCache.put(@cache_key, bundle, @ttl_ms)
+              ok
+
+            {:error, _reason} = error ->
+              error
+          end
+      end
     end
   end
 
   @spec invalidate() :: :ok
   def invalidate, do: HotpathCache.invalidate(@cache_key)
 
-  defp build do
-    agents =
-      [
-        &SymphonyElixir.Codex.ModelCatalog.list_models/0,
-        &SymphonyElixir.Claude.ModelCatalog.list_models/0,
-        &SymphonyElixir.Cursor.ModelCatalog.list_models/0,
-        &SymphonyElixir.OpenCode.ModelCatalog.list_models/0
-      ]
+  defp build(fetchers) do
+    results =
+      fetchers
       |> Task.async_stream(
-        fn fun ->
-          case fun.() do
-            {:ok, catalog} -> catalog
-            {:error, _reason} -> nil
-          end
-        end,
+        fn {_agent, fun} -> fun.() end,
         timeout: @fetch_timeout_ms,
         on_timeout: :kill_task,
         ordered: true,
         max_concurrency: 4
       )
-      |> Enum.flat_map(fn
-        {:ok, catalog} when is_map(catalog) -> [catalog]
-        _ -> []
+      |> Enum.to_list()
+
+    {agents, failures} =
+      fetchers
+      |> Enum.zip(results)
+      |> Enum.reduce({[], %{}}, fn
+        {{_agent, _fun}, {:ok, {:ok, catalog}}}, {agents, failures} when is_map(catalog) ->
+          {[catalog | agents], failures}
+
+        {{agent, _fun}, {:ok, {:error, reason}}}, {agents, failures} ->
+          {agents, Map.put(failures, agent, reason)}
+
+        {{agent, _fun}, {:exit, reason}}, {agents, failures} ->
+          {agents, Map.put(failures, agent, reason)}
+
+        {{agent, _fun}, result}, {agents, failures} ->
+          {agents, Map.put(failures, agent, {:invalid_catalog_result, result})}
       end)
 
-    %{
-      agents: agents,
-      default_agent: Settings.Agents.default_agent_kind()
-    }
+    if map_size(failures) == 0 do
+      {:ok,
+       %{
+         agents: Enum.reverse(agents),
+         default_agent: Settings.Agents.default_agent_kind()
+       }}
+    else
+      {:error, {:assistant_catalog_unavailable, failures}}
+    end
+  end
+
+  defp default_fetchers do
+    [
+      codex: &SymphonyElixir.Codex.ModelCatalog.list_models/0,
+      claude: &SymphonyElixir.Claude.ModelCatalog.list_models/0,
+      cursor: &SymphonyElixir.Cursor.ModelCatalog.list_models/0,
+      opencode: &SymphonyElixir.OpenCode.ModelCatalog.list_models/0
+    ]
   end
 end

@@ -1,4 +1,11 @@
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { StrictMode } from "react";
 import { MemoryRouter } from "react-router-dom";
@@ -11,7 +18,9 @@ import {
   resetAssistantSessionStoreForTests,
 } from "@/stores/assistantSessionStore";
 
-vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), message: vi.fn() } }));
+vi.mock("sonner", () => ({
+  toast: { success: vi.fn(), error: vi.fn(), message: vi.fn() },
+}));
 
 let ProjectAssistantPanel: typeof import("@/components/assistant/ProjectAssistantPanel").ProjectAssistantPanel;
 
@@ -32,7 +41,11 @@ const push = vi.fn((event: string, payload?: unknown) => {
   pushReceives.push(callbacks);
   return result;
 });
-const join = vi.fn(() => ({ receive: (status: string, callback: (response: unknown) => void) => (status === "ok" ? callback({}) : undefined) }));
+let joinResponse: Record<string, unknown> = {};
+const join = vi.fn(() => ({
+  receive: (status: string, callback: (response: unknown) => void) =>
+    status === "ok" ? callback(joinResponse) : undefined,
+}));
 const leave = vi.fn(() => ({ receive: vi.fn() }));
 const channel = {
   on: (event: string, callback: (payload: unknown) => void) => {
@@ -77,24 +90,45 @@ function goalSnapshot(overrides: Record<string, unknown> = {}) {
 }
 
 vi.mock("@assistant-ui/react", () => ({
-  AssistantRuntimeProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  AssistantRuntimeProvider: ({ children }: { children: React.ReactNode }) => (
+    <>{children}</>
+  ),
   useExternalStoreRuntime: () => ({}),
 }));
 
 vi.mock("react-router-dom", async (importOriginal) => ({
   ...(await importOriginal<typeof import("react-router-dom")>()),
-  useLocation: () => ({ pathname: "/", search: "", hash: "", state: null, key: "test" }),
+  useLocation: () => ({
+    pathname: "/",
+    search: "",
+    hash: "",
+    state: null,
+    key: "test",
+  }),
   useNavigate: () => navigateMock,
 }));
 
 vi.mock("@/services/assistant", async () => {
-  const actual = await vi.importActual<typeof import("@/services/assistant")>("@/services/assistant");
+  const actual = await vi.importActual<typeof import("@/services/assistant")>(
+    "@/services/assistant",
+  );
   const mockCodexCatalog = {
     agent: "codex" as const,
     agentLabel: "Codex CLI",
     command: "codex app-server",
     defaultModel: "gpt-5.3-codex",
     models: [
+      {
+        id: "gpt-5.5",
+        model: "gpt-5.5",
+        label: "GPT-5.5",
+        isDefault: false,
+        defaultEffort: "medium",
+        efforts: [
+          { id: "medium", label: "Medium" },
+          { id: "high", label: "High" },
+        ],
+      },
       {
         id: "gpt-5.3-codex",
         model: "gpt-5.3-codex",
@@ -105,10 +139,42 @@ vi.mock("@/services/assistant", async () => {
       },
     ],
   };
+  const mockClaudeCatalog = {
+    agent: "claude" as const,
+    agentLabel: "Claude Code",
+    command: "claude",
+    defaultModel: "claude-sonnet-5",
+    models: [
+      {
+        id: "claude-sonnet-5",
+        model: "claude-sonnet-5",
+        label: "Claude Sonnet 5",
+        isDefault: true,
+        defaultEffort: "medium",
+        efforts: [{ id: "medium", label: "Medium" }],
+      },
+    ],
+  };
+  const mockCursorCatalog = {
+    agent: "cursor" as const,
+    agentLabel: "Cursor",
+    command: "cursor-agent",
+    defaultModel: "composer-2.5",
+    models: [
+      {
+        id: "composer-2.5",
+        model: "composer-2.5",
+        label: "Composer 2.5",
+        isDefault: true,
+        defaultEffort: "",
+        efforts: [],
+      },
+    ],
+  };
   return {
     ...actual,
     fetchAssistantCatalogBundle: vi.fn(async () => ({
-      agents: [mockCodexCatalog],
+      agents: [mockCodexCatalog, mockClaudeCatalog, mockCursorCatalog],
       defaultAgent: "codex" as const,
     })),
     fetchAssistantCodexCatalog: vi.fn(async () => mockCodexCatalog),
@@ -150,7 +216,8 @@ vi.mock("@/services/issues", async (importOriginal) => ({
 }));
 
 vi.mock("@/services/workspaceFiles", () => ({
-  searchWorkspaceFiles: (...args: unknown[]) => searchWorkspaceFilesMock(...args),
+  searchWorkspaceFiles: (...args: unknown[]) =>
+    searchWorkspaceFilesMock(...args),
 }));
 
 vi.mock("@/services/pullRequests", async (importOriginal) => ({
@@ -161,12 +228,15 @@ vi.mock("@/services/pullRequests", async (importOriginal) => ({
 vi.mock("@/services/gitDiff", () => ({
   getThreadGitDiff: (...args: unknown[]) => getThreadGitDiffMock(...args),
   getGitDiff: (...args: unknown[]) => getGitDiffMock(...args),
-  getThreadGitDiffStats: (...args: unknown[]) => getThreadGitDiffStatsMock(...args),
+  getThreadGitDiffStats: (...args: unknown[]) =>
+    getThreadGitDiffStatsMock(...args),
   getGitDiffStats: (...args: unknown[]) => getGitDiffStatsMock(...args),
   getGitDiffFiles: (...args: unknown[]) => getGitDiffFilesMock(...args),
-  getThreadGitDiffFiles: (...args: unknown[]) => getThreadGitDiffFilesMock(...args),
+  getThreadGitDiffFiles: (...args: unknown[]) =>
+    getThreadGitDiffFilesMock(...args),
   getGitDiffPatch: (...args: unknown[]) => getGitDiffPatchMock(...args),
-  getThreadGitDiffPatch: (...args: unknown[]) => getThreadGitDiffPatchMock(...args),
+  getThreadGitDiffPatch: (...args: unknown[]) =>
+    getThreadGitDiffPatchMock(...args),
   getGitDiffSummaries: (...args: unknown[]) => getGitDiffSummariesMock(...args),
   commitGitDiff: vi.fn(),
   commitThreadGitDiff: vi.fn(),
@@ -186,64 +256,75 @@ const mockModalFocusPath = vi.hoisted(() => ({ current: "" }));
  * GitDiffModal in this suite, so the panel e2e asserts chip → focus → review
  * through the launcher props instead.
  */
-vi.mock("@/components/issues/issue-detail/git-diff/GitDiffLauncher", async () => {
-  const React = await import("react");
-  return {
-    GitDiffLauncher: ({
-      focusPathRequestId = 0,
-      focusPath = null,
-      onSendReview,
-    }: {
-      focusPathRequestId?: number;
-      focusPath?: string | null;
-      onSendReview?: (review: string) => void;
-    }) => {
-      const [open, setOpen] = React.useState(false);
+vi.mock(
+  "@/components/issues/issue-detail/git-diff/GitDiffLauncher",
+  async () => {
+    const React = await import("react");
+    return {
+      GitDiffLauncher: ({
+        focusPathRequestId = 0,
+        focusPath = null,
+        onSendReview,
+      }: {
+        focusPathRequestId?: number;
+        focusPath?: string | null;
+        onSendReview?: (review: string) => void;
+      }) => {
+        const [open, setOpen] = React.useState(false);
 
-      React.useEffect(() => {
-        if (focusPathRequestId <= 0) return;
-        if (typeof focusPath === "string" && focusPath.trim()) {
-          mockModalFocusPath.current = focusPath.trim();
-        }
-        setOpen(true);
-      }, [focusPath, focusPathRequestId]);
+        React.useEffect(() => {
+          if (focusPathRequestId <= 0) return;
+          if (typeof focusPath === "string" && focusPath.trim()) {
+            mockModalFocusPath.current = focusPath.trim();
+          }
+          setOpen(true);
+        }, [focusPath, focusPathRequestId]);
 
-      if (!open) return null;
+        if (!open) return null;
 
-      return (
-        <div role="dialog" aria-label="Workspace diff">
-          <h2>Workspace diff</h2>
-          <button type="button" role="tab" aria-selected="true" data-state="active">
-            Uncommitted
-          </button>
-          <p>Click a line number to comment</p>
-          <div data-testid="git-diff-viewer" data-focus-path={mockModalFocusPath.current}>
-            {mockModalFocusPath.current || "no-focus"}
-          </div>
-          {onSendReview ? (
+        return (
+          <div role="dialog" aria-label="Workspace diff">
+            <h2>Workspace diff</h2>
             <button
               type="button"
-              onClick={() => {
-                onSendReview(
-                  [
-                    "## Diff review",
-                    "",
-                    "### (uncommitted) — tracker.json:3",
-                    "",
-                    "Please revert this change",
-                  ].join("\n"),
-                );
-                setOpen(false);
-              }}
+              role="tab"
+              aria-selected="true"
+              data-state="active"
             >
-              Send 1 to agent
+              Uncommitted
             </button>
-          ) : null}
-        </div>
-      );
-    },
-  };
-});
+            <p>Click a line number to comment</p>
+            <div
+              data-testid="git-diff-viewer"
+              data-focus-path={mockModalFocusPath.current}
+            >
+              {mockModalFocusPath.current || "no-focus"}
+            </div>
+            {onSendReview ? (
+              <button
+                type="button"
+                onClick={() => {
+                  onSendReview(
+                    [
+                      "## Diff review",
+                      "",
+                      "### (uncommitted) — tracker.json:3",
+                      "",
+                      "Please revert this change",
+                    ].join("\n"),
+                  );
+                  setOpen(false);
+                }}
+              >
+                Send 1 to agent
+              </button>
+            ) : null}
+          </div>
+        );
+      },
+    };
+  },
+);
 
 vi.mock("@/services/knowledgeBase", () => ({
   getProjectOverview: (...args: unknown[]) => getProjectOverviewMock(...args),
@@ -253,16 +334,21 @@ vi.mock("@/services/knowledgeBase", () => ({
 }));
 
 beforeAll(async () => {
-  ({ ProjectAssistantPanel } = await import("@/components/assistant/ProjectAssistantPanel"));
+  ({ ProjectAssistantPanel } =
+    await import("@/components/assistant/ProjectAssistantPanel"));
 });
 
 describe("ProjectAssistantPanel", () => {
   beforeEach(() => {
+    joinResponse = {};
     vi.resetAllMocks();
     resetAssistantSessionStoreForTests();
     mockModalFocusPath.current = "";
     window.localStorage.clear();
-    if (typeof CSSStyleSheet !== "undefined" && !CSSStyleSheet.prototype.replaceSync) {
+    if (
+      typeof CSSStyleSheet !== "undefined" &&
+      !CSSStyleSheet.prototype.replaceSync
+    ) {
       Object.defineProperty(CSSStyleSheet.prototype, "replaceSync", {
         configurable: true,
         value: vi.fn(),
@@ -272,11 +358,30 @@ describe("ProjectAssistantPanel", () => {
     listIssuesMock.mockResolvedValue([]);
     searchWorkspaceFilesMock.mockResolvedValue([]);
     listPullRequestsMock.mockResolvedValue({ data: [] });
-    getThreadGitDiffMock.mockResolvedValue({ repos: [], workspace: { path: "", available: false } });
-    getGitDiffMock.mockResolvedValue({ repos: [], workspace: { path: "", available: false } });
-    getThreadGitDiffStatsMock.mockResolvedValue({ stats: [], workspace: { path: "/tmp/ws", available: true } });
+    getThreadGitDiffMock.mockResolvedValue({
+      repos: [],
+      workspace: { path: "", available: false },
+    });
+    getGitDiffMock.mockResolvedValue({
+      repos: [],
+      workspace: { path: "", available: false },
+    });
+    getThreadGitDiffStatsMock.mockResolvedValue({
+      stats: [],
+      workspace: { path: "/tmp/ws", available: true },
+    });
     getGitDiffStatsMock.mockResolvedValue({
-      stats: [{ repo: "tracker", branch: null, base: null, filesChanged: 1, additions: 1, deletions: 1, untracked: 0 }],
+      stats: [
+        {
+          repo: "tracker",
+          branch: null,
+          base: null,
+          filesChanged: 1,
+          additions: 1,
+          deletions: 1,
+          untracked: 0,
+        },
+      ],
       workspace: { path: "/tmp/ws", available: true },
     });
     getGitDiffFilesMock.mockResolvedValue({
@@ -319,7 +424,8 @@ describe("ProjectAssistantPanel", () => {
       status: "modified",
       binary: false,
       truncated: false,
-      patch: "diff --git a/tracker.json b/tracker.json\n@@ -1 +1 @@\n-old\n+new\n",
+      patch:
+        "diff --git a/tracker.json b/tracker.json\n@@ -1 +1 @@\n-old\n+new\n",
       workspace: { path: "/tmp/ws", available: true },
     });
     getThreadGitDiffPatchMock.mockResolvedValue({
@@ -328,7 +434,8 @@ describe("ProjectAssistantPanel", () => {
       status: "modified",
       binary: false,
       truncated: false,
-      patch: "diff --git a/tracker.json b/tracker.json\n@@ -1 +1 @@\n-old\n+new\n",
+      patch:
+        "diff --git a/tracker.json b/tracker.json\n@@ -1 +1 @@\n-old\n+new\n",
       workspace: { path: "/tmp/ws", available: true },
     });
     getGitDiffSummariesMock.mockResolvedValue({
@@ -415,24 +522,172 @@ describe("ProjectAssistantPanel", () => {
     });
   });
 
+  it("sends the canonical requested model from thread join metadata", async () => {
+    joinResponse = {
+      effective_agent: "codex",
+      requested_model: "gpt-5.5",
+      requested_effort: "high",
+    };
+
+    render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        threadId={42}
+        view="board"
+        mode="page"
+      />,
+    );
+
+    await waitFor(() =>
+      expect(channelHandlers["history_loaded"]).toEqual(expect.any(Function)),
+    );
+    act(() => {
+      channelHandlers["history_loaded"]({
+        messages: [],
+        effective_agent: "codex",
+        requested_model: "gpt-5.5",
+        requested_effort: "high",
+        resolved_model: null,
+        resolved_effort: null,
+      });
+    });
+    expect(
+      await screen.findByText(
+        "Codex · requested gpt-5.5 · awaiting confirmation",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText("High")).toBeInTheDocument();
+
+    const textarea = screen.getByPlaceholderText("Write a message...");
+    fireEvent.change(textarea, { target: { value: "Execute" } });
+    fireEvent.keyDown(textarea, { key: "Enter", code: "Enter" });
+
+    await waitFor(() =>
+      expect(push).toHaveBeenCalledWith(
+        "send_message",
+        expect.objectContaining({
+          message: "Execute",
+          context: expect.objectContaining({
+            agent: "codex",
+            model: "gpt-5.5",
+            effort: "high",
+          }),
+        }),
+      ),
+    );
+  });
+
+  it("clears persisted model settings when rebinding to a thread without provenance", async () => {
+    const view = render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        threadId={42}
+        view="board"
+        mode="page"
+      />,
+    );
+
+    await waitFor(() =>
+      expect(channelHandlers["history_loaded"]).toEqual(expect.any(Function)),
+    );
+    act(() => {
+      channelHandlers["history_loaded"]({
+        messages: [],
+        effective_agent: "codex",
+        requested_model: "gpt-5.5",
+        requested_effort: "high",
+      });
+    });
+    expect(
+      await screen.findByText(
+        "Codex · requested gpt-5.5 · awaiting confirmation",
+      ),
+    ).toBeInTheDocument();
+
+    view.rerender(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        threadId={43}
+        view="board"
+        mode="page"
+      />,
+    );
+
+    await waitFor(() => expect(socketChannel).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(screen.queryByText(/requested gpt-5\.5/i)).not.toBeInTheDocument(),
+    );
+    act(() => {
+      channelHandlers["history_loaded"]({
+        messages: [],
+        effective_agent: "codex",
+        requested_model: null,
+        requested_effort: null,
+        resolved_model: null,
+        resolved_effort: null,
+      });
+    });
+
+    expect(screen.queryByText(/requested gpt-5\.5/i)).not.toBeInTheDocument();
+
+    const textarea = screen.getByPlaceholderText("Write a message...");
+    fireEvent.change(textarea, { target: { value: "Execute cleanly" } });
+    fireEvent.keyDown(textarea, { key: "Enter", code: "Enter" });
+
+    await waitFor(() =>
+      expect(push).toHaveBeenCalledWith(
+        "send_message",
+        expect.objectContaining({
+          message: "Execute cleanly",
+          context: expect.not.objectContaining({ model: "gpt-5.5" }),
+        }),
+      ),
+    );
+  });
+
   it("uses a compact page header for project assistants", () => {
-    render(<ProjectAssistantPanel projectSlug="macro-markets" view="board" mode="page" />);
+    render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        view="board"
+        mode="page"
+      />,
+    );
 
     const header = screen.getByTestId("project-assistant-compact-header");
     expect(header).toHaveClass("py-2");
-    expect(within(header).getByRole("heading", { name: "Project assistant" })).toBeTruthy();
+    expect(
+      within(header).getByRole("heading", { name: "Project assistant" }),
+    ).toBeTruthy();
     expect(within(header).getByText("macro-markets")).toBeTruthy();
-    expect(screen.queryByText(/AI coding assistant for/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/AI coding assistant for/i),
+    ).not.toBeInTheDocument();
   });
 
   it("renders a routed project assistant page, loads history, streams a response, and sends through the channel", async () => {
-    render(<ProjectAssistantPanel projectSlug="macro-markets" view="board" mode="page" />);
+    render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        view="board"
+        mode="page"
+      />,
+    );
 
-    expect(screen.getByRole("region", { name: "Project assistant" })).toBeTruthy();
+    expect(
+      screen.getByRole("region", { name: "Project assistant" }),
+    ).toBeTruthy();
     expect(socketChannel).toHaveBeenCalledWith("assistant:macro-markets");
 
     channelHandlers["history_loaded"]({
-      messages: [{ id: 1, role: "assistant", content: "Historico carregado", tool_calls: [] }],
+      messages: [
+        {
+          id: 1,
+          role: "assistant",
+          content: "Historico carregado",
+          tool_calls: [],
+        },
+      ],
     });
 
     expect(await screen.findByText("Historico carregado")).toBeTruthy();
@@ -458,7 +713,9 @@ describe("ProjectAssistantPanel", () => {
       ),
     );
 
-    channelHandlers["message_created"]({ message: { id: 2, role: "user", content: "Oi", tool_calls: [] } });
+    channelHandlers["message_created"]({
+      message: { id: 2, role: "user", content: "Oi", tool_calls: [] },
+    });
     channelHandlers["assistant_delta"]({ delta: "Olá" });
     channelHandlers["assistant_delta"]({ delta: ", posso ajudar." });
     channelHandlers["assistant_completed"]({
@@ -466,13 +723,14 @@ describe("ProjectAssistantPanel", () => {
         id: 3,
         role: "assistant",
         content: "Olá, posso ajudar.",
-        tool_calls: [{ name: "list_issues", status: "complete", result: { issues: [] } }],
+        tool_calls: [
+          { name: "list_issues", status: "complete", result: { issues: [] } },
+        ],
       },
     });
 
     expect(await screen.findByText("Oi")).toBeTruthy();
     expect(await screen.findByText("Olá, posso ajudar.")).toBeTruthy();
-    expect(screen.getByText("List issues")).toBeTruthy();
   });
 
   it("reports KB document references found in assistant messages", async () => {
@@ -513,71 +771,113 @@ describe("ProjectAssistantPanel", () => {
     );
   });
 
-  it("keeps the composer controls in place while assistant config is loading", () => {
-    vi.mocked(fetchAssistantCatalogBundle).mockImplementationOnce(() => new Promise(() => {}));
+  it("does not expose synthetic composer controls while assistant config is loading", () => {
+    vi.mocked(fetchAssistantCatalogBundle).mockImplementationOnce(
+      () => new Promise(() => {}),
+    );
 
-    render(<ProjectAssistantPanel projectSlug="macro-markets" view="board" mode="page" />);
+    render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        view="board"
+        mode="page"
+      />,
+    );
 
-    const textarea = screen.getByPlaceholderText("Write a message...");
-    fireEvent.change(textarea, { target: { value: "oi" } });
-
-    expect(textarea).not.toBeDisabled();
-    expect(screen.getByRole("button", { name: "Codex" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: /gpt-5/i })).toBeDisabled();
-    expect(screen.getByRole("button", { name: /low|medium/i })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Attach file" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Record audio" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Send message" })).toBeDisabled();
-
-    fireEvent.keyDown(textarea, { key: "Enter", code: "Enter" });
+    expect(screen.getByRole("status")).toHaveTextContent("Loading assistant models...");
+    expect(screen.queryByPlaceholderText("Write a message...")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Codex" })).not.toBeInTheDocument();
     expect(push).not.toHaveBeenCalledWith("send_message", expect.anything());
   });
 
   it("opens the project knowledge base from the composer button and shortcut", async () => {
     render(
       <MemoryRouter>
-        <ProjectAssistantPanel projectSlug="macro-markets" threadId={7990} view="board" mode="page" />
+        <ProjectAssistantPanel
+          projectSlug="macro-markets"
+          threadId={7990}
+          view="board"
+          mode="page"
+        />
       </MemoryRouter>,
     );
 
     await openComposerMoreMenu();
-    const kbButton = await screen.findByRole("button", { name: /knowledge base/i });
+    const kbButton = await screen.findByRole("button", {
+      name: /knowledge base/i,
+    });
     await waitFor(() => expect(kbButton).not.toBeDisabled());
     fireEvent.click(kbButton);
-    expect(await screen.findByRole("dialog", { name: "Knowledge Base" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("dialog", { name: "Knowledge Base" }),
+    ).toBeInTheDocument();
 
     fireEvent.keyDown(document, { key: "Escape", code: "Escape" });
-    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Knowledge Base" })).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Knowledge Base" }),
+      ).not.toBeInTheDocument(),
+    );
     await userEvent.keyboard("{Control>}{Shift>}k{/Shift}{/Control}");
-    expect(await screen.findByRole("dialog", { name: "Knowledge Base" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("dialog", { name: "Knowledge Base" }),
+    ).toBeInTheDocument();
   });
 
   it("shows uncommitted diff totals in the session header", async () => {
     getThreadGitDiffStatsMock.mockResolvedValue({
       stats: [
-        { repo: "front", branch: null, base: null, filesChanged: 1, additions: 2, deletions: 1, untracked: 0 },
+        {
+          repo: "front",
+          branch: null,
+          base: null,
+          filesChanged: 1,
+          additions: 2,
+          deletions: 1,
+          untracked: 0,
+        },
       ],
       workspace: { path: "/tmp/ws", available: true },
     });
 
-    render(<ProjectAssistantPanel projectSlug="macro-markets" threadId={7990} view="board" mode="page" />);
+    render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        threadId={7990}
+        view="board"
+        mode="page"
+      />,
+    );
 
     await waitFor(() =>
-      expect(getThreadGitDiffStatsMock).toHaveBeenCalledWith(7990, "uncommitted", { signal: expect.any(AbortSignal) }),
+      expect(getThreadGitDiffStatsMock).toHaveBeenCalledWith(
+        7990,
+        "uncommitted",
+        { signal: expect.any(AbortSignal) },
+      ),
     );
     expect(await screen.findByText("+2")).toBeInTheDocument();
     expect(screen.getByText("-1")).toBeInTheDocument();
   });
 
   it("queues a message submitted while running and auto-sends it on completion", async () => {
-    render(<ProjectAssistantPanel projectSlug="macro-markets" view="board" mode="page" />);
+    render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        view="board"
+        mode="page"
+      />,
+    );
 
     const textarea = await screen.findByPlaceholderText("Write a message...");
 
     fireEvent.change(textarea, { target: { value: "first" } });
     fireEvent.keyDown(textarea, { key: "Enter", code: "Enter" });
     await waitFor(() =>
-      expect(push).toHaveBeenCalledWith("send_message", expect.objectContaining({ message: "first" })),
+      expect(push).toHaveBeenCalledWith(
+        "send_message",
+        expect.objectContaining({ message: "first" }),
+      ),
     );
     channelHandlers["assistant_delta"]({ delta: "working" });
 
@@ -585,23 +885,41 @@ describe("ProjectAssistantPanel", () => {
     fireEvent.keyDown(textarea, { key: "Enter", code: "Enter" });
 
     expect(await screen.findByText("second")).toBeTruthy();
-    expect(push).not.toHaveBeenCalledWith("send_message", expect.objectContaining({ message: "second" }));
+    expect(push).not.toHaveBeenCalledWith(
+      "send_message",
+      expect.objectContaining({ message: "second" }),
+    );
 
-    channelHandlers["assistant_completed"]({ message: { id: 9, role: "assistant", content: "done", tool_calls: [] } });
+    channelHandlers["assistant_completed"]({
+      message: { id: 9, role: "assistant", content: "done", tool_calls: [] },
+    });
 
     await waitFor(() =>
-      expect(push).toHaveBeenCalledWith("send_message", expect.objectContaining({ message: "second" })),
+      expect(push).toHaveBeenCalledWith(
+        "send_message",
+        expect.objectContaining({ message: "second" }),
+      ),
     );
   });
 
   it("restores a queued message after the panel remounts (page refresh)", async () => {
-    const view = render(<ProjectAssistantPanel projectSlug="macro-markets" threadId={42} view="board" mode="page" />);
+    const view = render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        threadId={42}
+        view="board"
+        mode="page"
+      />,
+    );
 
     const textarea = await screen.findByPlaceholderText("Write a message...");
     fireEvent.change(textarea, { target: { value: "first" } });
     fireEvent.keyDown(textarea, { key: "Enter", code: "Enter" });
     await waitFor(() =>
-      expect(push).toHaveBeenCalledWith("send_message", expect.objectContaining({ message: "first" })),
+      expect(push).toHaveBeenCalledWith(
+        "send_message",
+        expect.objectContaining({ message: "first" }),
+      ),
     );
     channelHandlers["assistant_delta"]({ delta: "working" });
 
@@ -620,9 +938,12 @@ describe("ProjectAssistantPanel", () => {
           ? callback({
               last_turn: {
                 status: "running",
+                provider: "codex",
+                conversation_id: "conversation-1",
+                run_id: "run-1",
+                execution_id: "execution-1",
                 started_at: "2026-07-16T12:00:00Z",
                 finished_at: null,
-                session_id: "s1",
                 can_resume: false,
                 active_tools: [],
               },
@@ -630,7 +951,14 @@ describe("ProjectAssistantPanel", () => {
           : undefined,
     }));
 
-    render(<ProjectAssistantPanel projectSlug="macro-markets" threadId={42} view="board" mode="page" />);
+    render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        threadId={42}
+        view="board"
+        mode="page"
+      />,
+    );
 
     expect(await screen.findByText("survive refresh")).toBeTruthy();
     expect(push).not.toHaveBeenCalledWith(
@@ -670,8 +998,12 @@ describe("ProjectAssistantPanel", () => {
       turnRunning: true,
       lastTurn: {
         status: "running",
-        generation: "g1",
-        sessionId: "s1",
+        provider: "codex",
+        conversationId: "conversation-1",
+        runId: "run-1",
+        executionId: "execution-1",
+        queuedCount: 0,
+        error: null,
         startedAt: "2026-07-17T10:00:00.000Z",
         finishedAt: null,
         canResume: false,
@@ -691,16 +1023,27 @@ describe("ProjectAssistantPanel", () => {
       updatedAt: Date.now(),
     });
 
-    render(<ProjectAssistantPanel projectSlug="macro-markets" threadId={8051} view="board" mode="page" />);
+    render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        threadId={8051}
+        view="board"
+        mode="page"
+      />,
+    );
 
     expect(await screen.findByText("build it")).toBeInTheDocument();
     expect(screen.getByText(/Running yarn build/)).toBeInTheDocument();
 
-    await waitFor(() => expect(channelHandlers["history_loaded"]).toEqual(expect.any(Function)));
+    await waitFor(() =>
+      expect(channelHandlers["history_loaded"]).toEqual(expect.any(Function)),
+    );
 
     await act(async () => {
       channelHandlers["history_loaded"]({
-        messages: [{ id: 1, role: "user", content: "build it", tool_calls: [] }],
+        messages: [
+          { id: 1, role: "user", content: "build it", tool_calls: [] },
+        ],
       });
     });
 
@@ -709,13 +1052,22 @@ describe("ProjectAssistantPanel", () => {
   });
 
   it("moves a queued message back into the composer when edit is clicked", async () => {
-    render(<ProjectAssistantPanel projectSlug="macro-markets" view="board" mode="page" />);
+    render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        view="board"
+        mode="page"
+      />,
+    );
 
     const textarea = await screen.findByPlaceholderText("Write a message...");
     fireEvent.change(textarea, { target: { value: "first" } });
     fireEvent.keyDown(textarea, { key: "Enter", code: "Enter" });
     await waitFor(() =>
-      expect(push).toHaveBeenCalledWith("send_message", expect.objectContaining({ message: "first" })),
+      expect(push).toHaveBeenCalledWith(
+        "send_message",
+        expect.objectContaining({ message: "first" }),
+      ),
     );
     channelHandlers["assistant_delta"]({ delta: "working" });
 
@@ -724,16 +1076,26 @@ describe("ProjectAssistantPanel", () => {
     expect(await screen.findByText("edit me in queue")).toBeTruthy();
 
     fireEvent.change(textarea, { target: { value: "composer draft" } });
-    fireEvent.click(screen.getByRole("button", { name: /edit queued message/i }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /edit queued message/i }),
+    );
 
     await waitFor(() =>
-      expect(screen.queryByRole("button", { name: /edit queued message/i })).toBeNull(),
+      expect(
+        screen.queryByRole("button", { name: /edit queued message/i }),
+      ).toBeNull(),
     );
     expect(textarea).toHaveValue("edit me in queue");
   });
 
   it("removes a queued message when its chip remove button is clicked", async () => {
-    render(<ProjectAssistantPanel projectSlug="macro-markets" view="board" mode="page" />);
+    render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        view="board"
+        mode="page"
+      />,
+    );
     const textarea = await screen.findByPlaceholderText("Write a message...");
 
     fireEvent.change(textarea, { target: { value: "first" } });
@@ -744,14 +1106,22 @@ describe("ProjectAssistantPanel", () => {
     fireEvent.change(textarea, { target: { value: "queued one" } });
     fireEvent.keyDown(textarea, { key: "Enter", code: "Enter" });
 
-    const removeButton = await screen.findByRole("button", { name: /remove queued message/i });
+    const removeButton = await screen.findByRole("button", {
+      name: /remove queued message/i,
+    });
     fireEvent.click(removeButton);
 
     await waitFor(() => expect(screen.queryByText("queued one")).toBeNull());
   });
 
   it("force-sends a queued message via steer when its send button is clicked", async () => {
-    render(<ProjectAssistantPanel projectSlug="macro-markets" view="board" mode="page" />);
+    render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        view="board"
+        mode="page"
+      />,
+    );
     const textarea = await screen.findByPlaceholderText("Write a message...");
 
     fireEvent.change(textarea, { target: { value: "first" } });
@@ -762,11 +1132,16 @@ describe("ProjectAssistantPanel", () => {
     fireEvent.change(textarea, { target: { value: "send me now" } });
     fireEvent.keyDown(textarea, { key: "Enter", code: "Enter" });
 
-    const sendNow = await screen.findByRole("button", { name: /send queued message now/i });
+    const sendNow = await screen.findByRole("button", {
+      name: /send queued message now/i,
+    });
     fireEvent.click(sendNow);
 
     await waitFor(() =>
-      expect(push).toHaveBeenCalledWith("steer_turn", expect.objectContaining({ message: "send me now" })),
+      expect(push).toHaveBeenCalledWith(
+        "steer_turn",
+        expect.objectContaining({ message: "send me now" }),
+      ),
     );
     await waitFor(() => expect(screen.queryByText("send me now")).toBeNull());
   });
@@ -789,7 +1164,12 @@ describe("ProjectAssistantPanel", () => {
     }));
 
     render(
-      <ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="page" />,
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        issueIdentifier="MAC-1"
+        view="board"
+        mode="page"
+      />,
     );
     await screen.findByRole("region", { name: "Goal" });
 
@@ -803,7 +1183,9 @@ describe("ProjectAssistantPanel", () => {
       expect.objectContaining({ message: "send despite hold" }),
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: /send queued message now/i }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: /send queued message now/i }),
+    );
 
     await waitFor(() =>
       expect(push).toHaveBeenCalledWith(
@@ -811,47 +1193,78 @@ describe("ProjectAssistantPanel", () => {
         expect.objectContaining({ message: "send despite hold" }),
       ),
     );
-    await waitFor(() => expect(screen.queryByText("send despite hold")).toBeNull());
+    await waitFor(() =>
+      expect(screen.queryByText("send despite hold")).toBeNull(),
+    );
   });
 
   it("steers a running turn when /infer is submitted, and falls back to queue on steer_failed", async () => {
-    render(<ProjectAssistantPanel projectSlug="macro-markets" view="board" mode="page" />);
+    render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        view="board"
+        mode="page"
+      />,
+    );
     const textarea = await screen.findByPlaceholderText("Write a message...");
 
     fireEvent.change(textarea, { target: { value: "do work" } });
     fireEvent.keyDown(textarea, { key: "Enter", code: "Enter" });
     await waitFor(() =>
-      expect(push).toHaveBeenCalledWith("send_message", expect.objectContaining({ message: "do work" })),
+      expect(push).toHaveBeenCalledWith(
+        "send_message",
+        expect.objectContaining({ message: "do work" }),
+      ),
     );
     channelHandlers["assistant_delta"]({ delta: "..." });
 
-    fireEvent.change(textarea, { target: { value: "/infer prefer the simpler fix" } });
+    fireEvent.change(textarea, {
+      target: { value: "/infer prefer the simpler fix" },
+    });
     fireEvent.keyDown(textarea, { key: "Enter", code: "Enter" });
     await waitFor(() =>
-      expect(push).toHaveBeenCalledWith("steer_turn", expect.objectContaining({ message: "prefer the simpler fix" })),
+      expect(push).toHaveBeenCalledWith(
+        "steer_turn",
+        expect.objectContaining({ message: "prefer the simpler fix" }),
+      ),
     );
 
-    channelHandlers["steer_failed"]({ reason: "ActiveTurnNotSteerable", message: "prefer the simpler fix" });
+    channelHandlers["steer_failed"]({
+      code: "active_turn_not_steerable",
+      prompt: "prefer the simpler fix",
+    });
     expect(await screen.findByText("prefer the simpler fix")).toBeTruthy();
   });
 
   it("runs an authoring goal in the chat and shows its banner when /goal is submitted", async () => {
-    render(<ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="page" />);
+    render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        issueIdentifier="MAC-1"
+        view="board"
+        mode="page"
+      />,
+    );
     const textarea = await screen.findByPlaceholderText("Write a message...");
 
     fireEvent.change(textarea, { target: { value: "/goal ship the feature" } });
     fireEvent.keyDown(textarea, { key: "Enter", code: "Enter" });
 
     await waitFor(() =>
-      expect(push).toHaveBeenCalledWith("set_goal_mode", { goal_mode: true, objective: "ship the feature" }),
+      expect(push).toHaveBeenCalledWith("set_goal_mode", {
+        goal_mode: true,
+        objective: "ship the feature",
+      }),
     );
     // Resolving the set_goal_mode push surfaces the canonical Goal dock.
-    const goalCallIndex = push.mock.calls.findIndex(([event]) => event === "set_goal_mode");
+    const goalCallIndex = push.mock.calls.findIndex(
+      ([event]) => event === "set_goal_mode",
+    );
     pushReceives[goalCallIndex]?.ok?.(
       goalSnapshot({
         objective: "ship the feature",
         goal: {
-          ...goalSnapshot().goal as Record<string, unknown>,
+          ...(goalSnapshot().goal as Record<string, unknown>),
           objective: "ship the feature",
         },
       }),
@@ -860,7 +1273,9 @@ describe("ProjectAssistantPanel", () => {
     await waitFor(() =>
       expect(push).toHaveBeenCalledWith(
         "send_message",
-        expect.objectContaining({ message: expect.stringContaining("ship the feature") }),
+        expect.objectContaining({
+          message: expect.stringContaining("ship the feature"),
+        }),
       ),
     );
     // The framed instruction is authoring-only: it explicitly tells Codex NOT to dispatch the
@@ -902,13 +1317,19 @@ describe("ProjectAssistantPanel", () => {
       }),
     );
 
-    const goalCallIndex = push.mock.calls.findIndex(([event]) => event === "set_goal_mode");
-    act(() => pushReceives[goalCallIndex]?.error?.({ reason: "native goal failed" }));
+    const goalCallIndex = push.mock.calls.findIndex(
+      ([event]) => event === "set_goal_mode",
+    );
+    act(() =>
+      pushReceives[goalCallIndex]?.error?.({ message: "native goal failed" }),
+    );
 
     expect(onIssueGoalModeError).toHaveBeenCalledWith("native goal failed");
     expect(push).not.toHaveBeenCalledWith(
       "send_message",
-      expect.objectContaining({ message: expect.stringContaining("ship safely") }),
+      expect.objectContaining({
+        message: expect.stringContaining("ship safely"),
+      }),
     );
   });
 
@@ -928,14 +1349,22 @@ describe("ProjectAssistantPanel", () => {
     fireEvent.change(textarea, { target: { value: "/goal ship eventually" } });
     fireEvent.keyDown(textarea, { key: "Enter", code: "Enter" });
 
-    await waitFor(() => expect(push).toHaveBeenCalledWith("set_goal_mode", expect.anything()));
-    const goalCallIndex = push.mock.calls.findIndex(([event]) => event === "set_goal_mode");
+    await waitFor(() =>
+      expect(push).toHaveBeenCalledWith("set_goal_mode", expect.anything()),
+    );
+    const goalCallIndex = push.mock.calls.findIndex(
+      ([event]) => event === "set_goal_mode",
+    );
     act(() => pushReceives[goalCallIndex]?.timeout?.({}));
 
-    expect(onIssueGoalModeError).toHaveBeenCalledWith("Assistant goal mode update timed out");
+    expect(onIssueGoalModeError).toHaveBeenCalledWith(
+      "Assistant goal mode update timed out",
+    );
     expect(push).not.toHaveBeenCalledWith(
       "send_message",
-      expect.objectContaining({ message: expect.stringContaining("ship eventually") }),
+      expect.objectContaining({
+        message: expect.stringContaining("ship eventually"),
+      }),
     );
   });
 
@@ -950,7 +1379,7 @@ describe("ProjectAssistantPanel", () => {
                 provider: "claude",
                 source: "claude",
                 goal: {
-                  ...goalSnapshot().goal as Record<string, unknown>,
+                  ...(goalSnapshot().goal as Record<string, unknown>),
                   source: "claude",
                   objective: "Audit the auth module",
                 },
@@ -959,7 +1388,14 @@ describe("ProjectAssistantPanel", () => {
           : undefined,
     }));
 
-    render(<ProjectAssistantPanel projectSlug="macro-markets" threadId={1} view="board" mode="page" />);
+    render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        threadId={1}
+        view="board"
+        mode="page"
+      />,
+    );
 
     const banner = await screen.findByRole("region", { name: "Goal" });
     expect(banner).toHaveTextContent("Audit the auth module");
@@ -978,7 +1414,14 @@ describe("ProjectAssistantPanel", () => {
           : undefined,
     }));
 
-    render(<ProjectAssistantPanel projectSlug="macro-markets" threadId={1} view="board" mode="page" />);
+    render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        threadId={1}
+        view="board"
+        mode="page"
+      />,
+    );
 
     const agentMenu = await screen.findByRole("button", { name: "Codex" });
     expect(agentMenu).toBeDisabled();
@@ -1005,11 +1448,21 @@ describe("ProjectAssistantPanel", () => {
     join.mockImplementation(() => ({
       receive: (status: string, callback: (response: unknown) => void) =>
         status === "ok"
-          ? callback({ messages: [], thread_id: 1, last_turn: { status: "interrupted", can_resume: true } })
+          ? callback({
+              messages: [],
+              thread_id: 1,
+              last_turn: { status: "interrupted", can_resume: true },
+            })
           : undefined,
     }));
 
-    render(<ProjectAssistantPanel projectSlug="macro-markets" view="board" mode="page" />);
+    render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        view="board"
+        mode="page"
+      />,
+    );
 
     const button = await screen.findByRole("button", { name: /resume/i });
     fireEvent.click(button);
@@ -1020,11 +1473,21 @@ describe("ProjectAssistantPanel", () => {
     join.mockImplementation(() => ({
       receive: (status: string, callback: (response: unknown) => void) =>
         status === "ok"
-          ? callback({ messages: [], thread_id: 1, last_turn: { status: "interrupted", can_resume: true } })
+          ? callback({
+              messages: [],
+              thread_id: 1,
+              last_turn: { status: "interrupted", can_resume: true },
+            })
           : undefined,
     }));
 
-    render(<ProjectAssistantPanel projectSlug="macro-markets" view="board" mode="page" />);
+    render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        view="board"
+        mode="page"
+      />,
+    );
 
     const cancel = await screen.findByRole("button", { name: /^cancel$/i });
     const dismissIndex = pushReceives.length;
@@ -1033,7 +1496,9 @@ describe("ProjectAssistantPanel", () => {
 
     act(() => pushReceives[dismissIndex]?.ok?.({}));
     await waitFor(() => {
-      expect(screen.queryByText(/previous turn was interrupted/i)).not.toBeInTheDocument();
+      expect(
+        screen.queryByText(/previous turn was interrupted/i),
+      ).not.toBeInTheDocument();
     });
   });
 
@@ -1050,27 +1515,50 @@ describe("ProjectAssistantPanel", () => {
           : undefined,
     }));
 
-    render(<ProjectAssistantPanel projectSlug="macro-markets" threadId={1} view="board" mode="page" />);
+    render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        threadId={1}
+        view="board"
+        mode="page"
+      />,
+    );
 
     await waitFor(() => {
-      expect(screen.queryByRole("button", { name: /resume/i })).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: /resume/i }),
+      ).not.toBeInTheDocument();
     });
-    expect(await screen.findByRole("button", { name: /stop/i })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", { name: /stop/i }),
+    ).toBeInTheDocument();
   });
 
   it("shows pause when a newer Goal event reports a running process", async () => {
     join.mockImplementation(() => ({
       receive: (status: string, callback: (response: unknown) => void) =>
         status === "ok"
-          ? callback({ thread_id: 1, goal_status: goalSnapshot({ process_running: false }) })
+          ? callback({
+              thread_id: 1,
+              goal_status: goalSnapshot({ process_running: false }),
+            })
           : undefined,
     }));
 
-    render(<ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="page" />);
+    render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        issueIdentifier="MAC-1"
+        view="board"
+        mode="page"
+      />,
+    );
     await screen.findByRole("region", { name: "Goal" });
 
     // A newer canonical snapshot reports that the Goal process is running.
-    channelHandlers["goal_status"](goalSnapshot({ revision: "11", request_order: 11 }));
+    channelHandlers["goal_status"](
+      goalSnapshot({ revision: "11", request_order: 11 }),
+    );
 
     const pause = await screen.findByRole("button", { name: "Pause goal" });
     const pill = screen.getByRole("region", { name: "Goal" });
@@ -1096,7 +1584,14 @@ describe("ProjectAssistantPanel", () => {
           : undefined,
     }));
 
-    render(<ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="page" />);
+    render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        issueIdentifier="MAC-1"
+        view="board"
+        mode="page"
+      />,
+    );
 
     const resume = await screen.findByRole("button", { name: "Resume goal" });
     fireEvent.click(resume);
@@ -1117,15 +1612,28 @@ describe("ProjectAssistantPanel", () => {
           : undefined,
     }));
 
-    render(<ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="page" />);
+    render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        issueIdentifier="MAC-1"
+        view="board"
+        mode="page"
+      />,
+    );
     await screen.findByRole("region", { name: "Goal" });
 
     // Edit: open inline editor, change the objective, save.
-    fireEvent.click(await screen.findByRole("button", { name: "Edit objective" }));
-    const editor = await screen.findByPlaceholderText("Describe the goal objective…");
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Edit objective" }),
+    );
+    const editor = await screen.findByPlaceholderText(
+      "Describe the goal objective…",
+    );
     fireEvent.change(editor, { target: { value: "Audit the admin UI" } });
     fireEvent.click(screen.getByRole("button", { name: "Save objective" }));
-    expect(push).toHaveBeenCalledWith("goal_set_objective", { objective: "Audit the admin UI" });
+    expect(push).toHaveBeenCalledWith("goal_set_objective", {
+      objective: "Audit the admin UI",
+    });
 
     // Remove: clears the goal entirely.
     fireEvent.click(await screen.findByRole("button", { name: "Remove goal" }));
@@ -1149,25 +1657,40 @@ describe("ProjectAssistantPanel", () => {
     }));
 
     render(
-      <ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="page" />,
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        issueIdentifier="MAC-1"
+        view="board"
+        mode="page"
+      />,
     );
     await screen.findByRole("region", { name: "Goal" });
 
     fireEvent.click(await screen.findByRole("button", { name: "Remove goal" }));
 
-    const firstClearIndex = push.mock.calls.findIndex(([event]) => event === "goal_clear");
+    const firstClearIndex = push.mock.calls.findIndex(
+      ([event]) => event === "goal_clear",
+    );
     expect(firstClearIndex).toBeGreaterThanOrEqual(0);
-    act(() => pushReceives[firstClearIndex]?.error?.({ reason: "assistant is busy" }));
+    act(() =>
+      pushReceives[firstClearIndex]?.error?.({ message: "assistant is busy" }),
+    );
 
     await waitFor(() => expect(push).toHaveBeenCalledWith("stop_turn", {}));
-    const stopIndex = push.mock.calls.findIndex(([event]) => event === "stop_turn");
+    const stopIndex = push.mock.calls.findIndex(
+      ([event]) => event === "stop_turn",
+    );
     act(() => pushReceives[stopIndex]?.ok?.({}));
 
     await waitFor(() => {
-      expect(push.mock.calls.filter(([event]) => event === "goal_clear")).toHaveLength(2);
+      expect(
+        push.mock.calls.filter(([event]) => event === "goal_clear"),
+      ).toHaveLength(2);
     });
 
-    const secondClearIndex = push.mock.calls.map(([event]) => event).lastIndexOf("goal_clear");
+    const secondClearIndex = push.mock.calls
+      .map(([event]) => event)
+      .lastIndexOf("goal_clear");
     act(() =>
       pushReceives[secondClearIndex]?.ok?.(
         goalSnapshot({
@@ -1182,7 +1705,11 @@ describe("ProjectAssistantPanel", () => {
       ),
     );
 
-    await waitFor(() => expect(screen.queryByRole("region", { name: "Goal" })).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("region", { name: "Goal" }),
+      ).not.toBeInTheDocument(),
+    );
     expect(toast.error).not.toHaveBeenCalled();
   });
 
@@ -1201,15 +1728,28 @@ describe("ProjectAssistantPanel", () => {
     }));
 
     render(
-      <ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="page" />,
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        issueIdentifier="MAC-1"
+        view="board"
+        mode="page"
+      />,
     );
     await screen.findByRole("region", { name: "Goal" });
 
     fireEvent.click(await screen.findByRole("button", { name: "Remove goal" }));
-    const clearIndex = push.mock.calls.findIndex(([event]) => event === "goal_clear");
-    act(() => pushReceives[clearIndex]?.error?.({ reason: "native goal clear failed" }));
+    const clearIndex = push.mock.calls.findIndex(
+      ([event]) => event === "goal_clear",
+    );
+    act(() =>
+      pushReceives[clearIndex]?.error?.({
+        message: "native goal clear failed",
+      }),
+    );
 
-    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("native goal clear failed"));
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith("native goal clear failed"),
+    );
     expect(screen.getByRole("region", { name: "Goal" })).toBeInTheDocument();
   });
 
@@ -1221,20 +1761,47 @@ describe("ProjectAssistantPanel", () => {
           : undefined,
     }));
 
-    render(<ProjectAssistantPanel projectSlug="macro-markets" threadId={1} view="board" mode="page" />);
+    render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        threadId={1}
+        view="board"
+        mode="page"
+      />,
+    );
     expect(await screen.findByText("Pursuing goal")).toBeInTheDocument();
 
     channelHandlers["assistant_completed"]({
-      message: { id: 5, role: "assistant", content: "ordinary turn complete", tool_calls: [] },
+      message: {
+        id: 5,
+        role: "assistant",
+        content: "ordinary turn complete",
+        tool_calls: [],
+      },
     });
     channelHandlers["history_synced"]({
-      messages: [{ id: 5, role: "assistant", content: "transcript reconciled", tool_calls: [] }],
-      goal_status: goalSnapshot({ enabled: false, revision: "99", request_order: 99 }),
+      messages: [
+        {
+          id: 5,
+          role: "assistant",
+          content: "transcript reconciled",
+          tool_calls: [],
+        },
+      ],
+      goal_status: goalSnapshot({
+        enabled: false,
+        revision: "99",
+        request_order: 99,
+      }),
     });
 
-    expect(await screen.findByText("transcript reconciled")).toBeInTheDocument();
+    expect(
+      await screen.findByText("transcript reconciled"),
+    ).toBeInTheDocument();
     expect(screen.getByText("Pursuing goal")).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Goal" })).toHaveTextContent("Audit");
+    expect(screen.getByRole("region", { name: "Goal" })).toHaveTextContent(
+      "Audit",
+    );
   });
 
   it("rejects stale Goal events after a complete join snapshot", async () => {
@@ -1243,12 +1810,22 @@ describe("ProjectAssistantPanel", () => {
         status === "ok"
           ? callback({
               thread_id: 1,
-              goal_status: goalSnapshot({ objective: "Newest objective", revision: "20" }),
+              goal_status: goalSnapshot({
+                objective: "Newest objective",
+                revision: "20",
+              }),
             })
           : undefined,
     }));
 
-    render(<ProjectAssistantPanel projectSlug="macro-markets" threadId={1} view="board" mode="page" />);
+    render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        threadId={1}
+        view="board"
+        mode="page"
+      />,
+    );
     expect(await screen.findByText("Newest objective")).toBeInTheDocument();
 
     channelHandlers["authoring_goal_changed"](
@@ -1267,14 +1844,26 @@ describe("ProjectAssistantPanel", () => {
     join.mockImplementation(() => ({
       receive: (status: string, callback: (response: unknown) => void) =>
         status === "ok"
-          ? callback({ thread_id: 1, goal_status: goalSnapshot({ revision: "30" }) })
+          ? callback({
+              thread_id: 1,
+              goal_status: goalSnapshot({ revision: "30" }),
+            })
           : undefined,
     }));
 
-    render(<ProjectAssistantPanel projectSlug="macro-markets" threadId={1} view="board" mode="page" />);
+    render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        threadId={1}
+        view="board"
+        mode="page"
+      />,
+    );
     fireEvent.click(await screen.findByRole("button", { name: "Pause goal" }));
 
-    const pauseCallIndex = push.mock.calls.findIndex(([event]) => event === "goal_pause");
+    const pauseCallIndex = push.mock.calls.findIndex(
+      ([event]) => event === "goal_pause",
+    );
     pushReceives[pauseCallIndex]?.ok?.(
       goalSnapshot({
         status: "paused",
@@ -1312,19 +1901,32 @@ describe("ProjectAssistantPanel", () => {
           : undefined,
     }));
 
-    render(<ProjectAssistantPanel projectSlug="macro-markets" threadId={1} view="board" mode="page" />);
+    render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        threadId={1}
+        view="board"
+        mode="page"
+      />,
+    );
     const textarea = await screen.findByPlaceholderText("Write a message...");
     fireEvent.change(textarea, { target: { value: "continue after resume" } });
     fireEvent.keyDown(textarea, { key: "Enter", code: "Enter" });
 
-    expect(await screen.findByText("continue after resume")).toBeInTheDocument();
+    expect(
+      await screen.findByText("continue after resume"),
+    ).toBeInTheDocument();
     expect(push).not.toHaveBeenCalledWith(
       "send_message",
       expect.objectContaining({ message: "continue after resume" }),
     );
 
     channelHandlers["goal_status"](
-      goalSnapshot({ revision: "11", request_order: 11, process_running: true }),
+      goalSnapshot({
+        revision: "11",
+        request_order: 11,
+        process_running: true,
+      }),
     );
 
     await waitFor(() =>
@@ -1347,7 +1949,7 @@ describe("ProjectAssistantPanel", () => {
                 source: "claude",
                 capabilities: ["pause"],
                 goal: {
-                  ...goalSnapshot().goal as Record<string, unknown>,
+                  ...(goalSnapshot().goal as Record<string, unknown>),
                   source: "claude",
                   capabilities: ["pause"],
                 },
@@ -1356,40 +1958,77 @@ describe("ProjectAssistantPanel", () => {
           : undefined,
     }));
 
-    render(<ProjectAssistantPanel projectSlug="macro-markets" threadId={1} view="board" mode="page" />);
+    render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        threadId={1}
+        view="board"
+        mode="page"
+      />,
+    );
 
-    expect(await screen.findByText("Claude Code")).toBeInTheDocument();
+    expect((await screen.findAllByText("Claude Code")).length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole("button", { name: "Pause goal" }));
     expect(push).toHaveBeenCalledWith("goal_pause", {});
-    expect(screen.queryByRole("button", { name: "Stop goal process" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Remove goal" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Stop goal process" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Remove goal" }),
+    ).not.toBeInTheDocument();
   });
 
   it("opens an overlay and streams the answer when /btw is submitted", async () => {
-    render(<ProjectAssistantPanel projectSlug="macro-markets" view="board" mode="page" />);
+    render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        view="board"
+        mode="page"
+      />,
+    );
     const textarea = await screen.findByPlaceholderText("Write a message...");
 
     fireEvent.change(textarea, { target: { value: "/btw what is useMemo" } });
     fireEvent.keyDown(textarea, { key: "Enter", code: "Enter" });
 
     await waitFor(() =>
-      expect(push).toHaveBeenCalledWith("btw", expect.objectContaining({ message: "what is useMemo" })),
+      expect(push).toHaveBeenCalledWith(
+        "btw",
+        expect.objectContaining({ message: "what is useMemo" }),
+      ),
     );
 
-    const btwCallIndex = push.mock.calls.findIndex(([event]) => event === "btw");
+    const btwCallIndex = push.mock.calls.findIndex(
+      ([event]) => event === "btw",
+    );
     pushReceives[btwCallIndex]?.ok?.({ btw_id: "btw-1" });
 
-    channelHandlers["btw_delta"]({ btw_id: "btw-1", delta: "useMemo memoizes" });
+    channelHandlers["btw_delta"]({
+      btw_id: "btw-1",
+      delta: "useMemo memoizes",
+    });
     expect(await screen.findByText(/useMemo memoizes/)).toBeTruthy();
 
-    channelHandlers["btw_completed"]({ btw_id: "btw-1", message: "useMemo memoizes a value." });
+    channelHandlers["btw_completed"]({
+      btw_id: "btw-1",
+      message: "useMemo memoizes a value.",
+    });
     expect(await screen.findByText("useMemo memoizes a value.")).toBeTruthy();
   });
 
   it("joins an issue-scoped assistant topic when an issue identifier is provided", () => {
-    render(<ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="page" />);
+    render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        issueIdentifier="MAC-1"
+        view="board"
+        mode="page"
+      />,
+    );
 
-    expect(socketChannel).toHaveBeenCalledWith("assistant:issue:macro-markets:MAC-1");
+    expect(socketChannel).toHaveBeenCalledWith(
+      "assistant:issue:macro-markets:MAC-1",
+    );
   });
 
   it("reports a created draft issue when the completed assistant message includes create_draft_issue", async () => {
@@ -1404,7 +2043,11 @@ describe("ProjectAssistantPanel", () => {
       />,
     );
 
-    await waitFor(() => expect(channelHandlers["assistant_completed"]).toEqual(expect.any(Function)));
+    await waitFor(() =>
+      expect(channelHandlers["assistant_completed"]).toEqual(
+        expect.any(Function),
+      ),
+    );
 
     channelHandlers["assistant_completed"]({
       message: {
@@ -1440,11 +2083,21 @@ describe("ProjectAssistantPanel", () => {
       />,
     );
 
-    await waitFor(() => expect(channelHandlers["assistant_issue_created"]).toEqual(expect.any(Function)));
+    await waitFor(() =>
+      expect(channelHandlers["assistant_issue_created"]).toEqual(
+        expect.any(Function),
+      ),
+    );
 
-    channelHandlers["assistant_issue_created"]({ identifier: "MAC-8", thread_id: 88 });
+    channelHandlers["assistant_issue_created"]({
+      identifier: "MAC-8",
+      thread_id: 88,
+    });
 
-    expect(onIssueCreated).toHaveBeenCalledWith({ identifier: "MAC-8", threadId: 88 });
+    expect(onIssueCreated).toHaveBeenCalledWith({
+      identifier: "MAC-8",
+      threadId: 88,
+    });
   });
 
   it("sends set_goal_mode through the issue channel when goal mode is enabled", async () => {
@@ -1471,14 +2124,18 @@ describe("ProjectAssistantPanel", () => {
       />,
     );
 
-    await waitFor(() => expect(push).toHaveBeenCalledWith("set_goal_mode", { goal_mode: true }));
+    await waitFor(() =>
+      expect(push).toHaveBeenCalledWith("set_goal_mode", { goal_mode: true }),
+    );
   });
 
   it("rehydrates an enabled goal mode from the join response", async () => {
     const onIssueGoalModeChanged = vi.fn();
     join.mockImplementation(() => ({
       receive: (status: string, callback: (response: unknown) => void) =>
-        status === "ok" ? callback({ goal_mode: true, thread_id: 1 }) : undefined,
+        status === "ok"
+          ? callback({ goal_mode: true, thread_id: 1 })
+          : undefined,
     }));
 
     render(
@@ -1492,7 +2149,9 @@ describe("ProjectAssistantPanel", () => {
       />,
     );
 
-    await waitFor(() => expect(onIssueGoalModeChanged).toHaveBeenCalledWith(true));
+    await waitFor(() =>
+      expect(onIssueGoalModeChanged).toHaveBeenCalledWith(true),
+    );
   });
 
   it("pushes dispatch_coding_agent with the current goal mode when dispatch is requested", async () => {
@@ -1510,7 +2169,10 @@ describe("ProjectAssistantPanel", () => {
     );
 
     await waitFor(() => expect(join).toHaveBeenCalled());
-    expect(push).not.toHaveBeenCalledWith("dispatch_coding_agent", expect.anything());
+    expect(push).not.toHaveBeenCalledWith(
+      "dispatch_coding_agent",
+      expect.anything(),
+    );
 
     rerender(
       <ProjectAssistantPanel
@@ -1525,18 +2187,36 @@ describe("ProjectAssistantPanel", () => {
     );
 
     await waitFor(() =>
-      expect(push).toHaveBeenCalledWith("dispatch_coding_agent", expect.objectContaining({ goal_mode: true })),
+      expect(push).toHaveBeenCalledWith(
+        "dispatch_coding_agent",
+        expect.objectContaining({ goal_mode: true }),
+      ),
     );
 
-    const dispatchCallIndex = push.mock.calls.findIndex(([event]) => event === "dispatch_coding_agent");
-    pushReceives[dispatchCallIndex]?.ok?.({ message: "Requested Codex work on MAC-1" });
-    expect(onDispatchSucceeded).toHaveBeenCalledWith("Requested Codex work on MAC-1");
+    const dispatchCallIndex = push.mock.calls.findIndex(
+      ([event]) => event === "dispatch_coding_agent",
+    );
+    pushReceives[dispatchCallIndex]?.ok?.({
+      message: "Requested Codex work on MAC-1",
+    });
+    expect(onDispatchSucceeded).toHaveBeenCalledWith(
+      "Requested Codex work on MAC-1",
+    );
   });
 
   it("renders plan approval actions and continues in-session under the selected mode", async () => {
-    render(<ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="page" />);
+    render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        issueIdentifier="MAC-1"
+        view="board"
+        mode="page"
+      />,
+    );
 
-    await waitFor(() => expect(channelHandlers["history_loaded"]).toEqual(expect.any(Function)));
+    await waitFor(() =>
+      expect(channelHandlers["history_loaded"]).toEqual(expect.any(Function)),
+    );
 
     channelHandlers["history_loaded"]({
       messages: [
@@ -1571,7 +2251,10 @@ describe("ProjectAssistantPanel", () => {
         }),
       ),
     );
-    expect(push).not.toHaveBeenCalledWith("dispatch_coding_agent", expect.anything());
+    expect(push).not.toHaveBeenCalledWith(
+      "dispatch_coding_agent",
+      expect.anything(),
+    );
 
     // Finish the in-session implementation turn so a later plan can offer approval again.
     act(() => {
@@ -1581,7 +2264,10 @@ describe("ProjectAssistantPanel", () => {
         content: "Implemented under YOLO.",
         tool_calls: [],
       });
-      channelHandlers["turn_status"]?.({ status: "completed", can_resume: false });
+      channelHandlers["turn_status"]?.({
+        status: "completed",
+        can_resume: false,
+      });
     });
 
     push.mockClear();
@@ -1614,13 +2300,25 @@ describe("ProjectAssistantPanel", () => {
         }),
       ),
     );
-    expect(push).not.toHaveBeenCalledWith("dispatch_coding_agent", expect.anything());
+    expect(push).not.toHaveBeenCalledWith(
+      "dispatch_coding_agent",
+      expect.anything(),
+    );
   });
 
   it("hides stale plan approval actions once the user has followed up", async () => {
-    render(<ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="page" />);
+    render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        issueIdentifier="MAC-1"
+        view="board"
+        mode="page"
+      />,
+    );
 
-    await waitFor(() => expect(channelHandlers["history_loaded"]).toEqual(expect.any(Function)));
+    await waitFor(() =>
+      expect(channelHandlers["history_loaded"]).toEqual(expect.any(Function)),
+    );
 
     channelHandlers["history_loaded"]({
       messages: [
@@ -1636,13 +2334,24 @@ describe("ProjectAssistantPanel", () => {
             },
           ],
         },
-        { id: 21, role: "user", content: "Wait, change the scope.", tool_calls: [] },
+        {
+          id: 21,
+          role: "user",
+          content: "Wait, change the scope.",
+          tool_calls: [],
+        },
       ],
     });
 
-    expect(await screen.findByText("Wait, change the scope.")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "YOLO" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Approve" })).not.toBeInTheDocument();
+    expect(
+      await screen.findByText("Wait, change the scope."),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "YOLO" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Approve" }),
+    ).not.toBeInTheDocument();
   });
 
   /**
@@ -1651,7 +2360,9 @@ describe("ProjectAssistantPanel", () => {
    */
   async function openComposerMoreMenu() {
     const user = userEvent.setup();
-    const trigger = await screen.findByRole("button", { name: "More composer tools" });
+    const trigger = await screen.findByRole("button", {
+      name: "More composer tools",
+    });
     await waitFor(() => expect(trigger).not.toBeDisabled());
     if (trigger.getAttribute("aria-expanded") !== "true") {
       await user.click(trigger);
@@ -1668,29 +2379,53 @@ describe("ProjectAssistantPanel", () => {
 
   it("keeps the execution mode menu enabled while a turn is running", async () => {
     const user = userEvent.setup();
-    render(<ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="page" />);
+    render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        issueIdentifier="MAC-1"
+        view="board"
+        mode="page"
+      />,
+    );
 
     const textarea = await screen.findByPlaceholderText("Write a message...");
     fireEvent.change(textarea, { target: { value: "keep going" } });
     fireEvent.keyDown(textarea, { key: "Enter", code: "Enter" });
 
-    await waitFor(() => expect(push).toHaveBeenCalledWith("send_message", expect.anything()));
+    await waitFor(() =>
+      expect(push).toHaveBeenCalledWith("send_message", expect.anything()),
+    );
 
     const modeTrigger = await screen.findByTestId("execution-mode-menu");
     expect(modeTrigger).not.toBeDisabled();
     expect(modeTrigger).toHaveTextContent(/plan/i);
 
     await user.click(modeTrigger);
-    await user.click(await screen.findByRole("menuitemradio", { name: /build/i }));
-    expect(screen.getByTestId("execution-mode-menu")).toHaveTextContent(/build/i);
+    await user.click(
+      await screen.findByRole("menuitemradio", { name: /build/i }),
+    );
+    expect(screen.getByTestId("execution-mode-menu")).toHaveTextContent(
+      /build/i,
+    );
   });
 
   it("auto-approves a pending command when switching to YOLO mid-run", async () => {
     const user = userEvent.setup();
-    render(<ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="page" />);
+    render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        issueIdentifier="MAC-1"
+        view="board"
+        mode="page"
+      />,
+    );
 
     await selectComposerExecutionMode(/build/i);
-    await waitFor(() => expect(channelHandlers["approval_required"]).toEqual(expect.any(Function)));
+    await waitFor(() =>
+      expect(channelHandlers["approval_required"]).toEqual(
+        expect.any(Function),
+      ),
+    );
 
     act(() => {
       channelHandlers["approval_required"]({
@@ -1701,12 +2436,16 @@ describe("ProjectAssistantPanel", () => {
       });
     });
 
-    expect(await screen.findByText("Codex wants to run a command")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Codex wants to run a command"),
+    ).toBeInTheDocument();
     push.mockClear();
     pushReceives.length = 0;
 
     await user.click(screen.getByTestId("execution-mode-menu"));
-    await user.click(await screen.findByRole("menuitemradio", { name: /yolo/i }));
+    await user.click(
+      await screen.findByRole("menuitemradio", { name: /yolo/i }),
+    );
 
     await waitFor(() =>
       expect(push).toHaveBeenCalledWith("submit_approval", {
@@ -1715,20 +2454,39 @@ describe("ProjectAssistantPanel", () => {
       }),
     );
 
-    const approvalCallIndex = push.mock.calls.findIndex(([event]) => event === "submit_approval");
+    const approvalCallIndex = push.mock.calls.findIndex(
+      ([event]) => event === "submit_approval",
+    );
     act(() => {
       pushReceives[approvalCallIndex]?.ok?.({});
     });
 
-    await waitFor(() => expect(screen.queryByText("Codex wants to run a command")).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(
+        screen.queryByText("Codex wants to run a command"),
+      ).not.toBeInTheDocument(),
+    );
   });
 
   it("auto-approves incoming command approvals while YOLO is selected", async () => {
-    render(<ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="page" />);
+    render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        issueIdentifier="MAC-1"
+        view="board"
+        mode="page"
+      />,
+    );
 
     await selectComposerExecutionMode(/yolo/i);
-    await waitFor(() => expect(channelHandlers["approval_required"]).toEqual(expect.any(Function)));
-    expect(await screen.findByTestId("execution-mode-menu")).toHaveTextContent(/yolo/i);
+    await waitFor(() =>
+      expect(channelHandlers["approval_required"]).toEqual(
+        expect.any(Function),
+      ),
+    );
+    expect(await screen.findByTestId("execution-mode-menu")).toHaveTextContent(
+      /yolo/i,
+    );
 
     act(() => {
       channelHandlers["approval_required"]({
@@ -1745,7 +2503,9 @@ describe("ProjectAssistantPanel", () => {
         action: "approve",
       }),
     );
-    expect(screen.queryByText("Codex wants to run a command")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Codex wants to run a command"),
+    ).not.toBeInTheDocument();
   });
 
   it("submits a pending approval once when switching to YOLO under StrictMode", async () => {
@@ -1753,12 +2513,21 @@ describe("ProjectAssistantPanel", () => {
 
     render(
       <StrictMode>
-        <ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="page" />
+        <ProjectAssistantPanel
+          projectSlug="macro-markets"
+          issueIdentifier="MAC-1"
+          view="board"
+          mode="page"
+        />
       </StrictMode>,
     );
 
     await selectComposerExecutionMode(/build/i);
-    await waitFor(() => expect(channelHandlers["approval_required"]).toEqual(expect.any(Function)));
+    await waitFor(() =>
+      expect(channelHandlers["approval_required"]).toEqual(
+        expect.any(Function),
+      ),
+    );
 
     act(() => {
       channelHandlers["approval_required"]({
@@ -1770,7 +2539,9 @@ describe("ProjectAssistantPanel", () => {
     });
 
     await user.click(screen.getByTestId("execution-mode-menu"));
-    await user.click(await screen.findByRole("menuitemradio", { name: /yolo/i }));
+    await user.click(
+      await screen.findByRole("menuitemradio", { name: /yolo/i }),
+    );
 
     await waitFor(() => {
       const submissions = push.mock.calls.filter(
@@ -1783,10 +2554,21 @@ describe("ProjectAssistantPanel", () => {
   });
 
   it("renders inline command approval requests and submits approval through the channel", async () => {
-    render(<ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="page" />);
+    render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        issueIdentifier="MAC-1"
+        view="board"
+        mode="page"
+      />,
+    );
 
     await selectComposerExecutionMode(/build/i);
-    await waitFor(() => expect(channelHandlers["approval_required"]).toEqual(expect.any(Function)));
+    await waitFor(() =>
+      expect(channelHandlers["approval_required"]).toEqual(
+        expect.any(Function),
+      ),
+    );
 
     channelHandlers["approval_required"]({
       request_id: "cmd-1",
@@ -1795,7 +2577,9 @@ describe("ProjectAssistantPanel", () => {
       reason: "unknown",
     });
 
-    expect(await screen.findByText("Codex wants to run a command")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Codex wants to run a command"),
+    ).toBeInTheDocument();
     expect(screen.getByText("npm test -- --runInBand")).toBeInTheDocument();
     expect(screen.getByText("/workspace/app")).toBeInTheDocument();
 
@@ -1810,10 +2594,21 @@ describe("ProjectAssistantPanel", () => {
   });
 
   it("labels the approval card with the requesting agent for Claude approvals", async () => {
-    render(<ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="page" />);
+    render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        issueIdentifier="MAC-1"
+        view="board"
+        mode="page"
+      />,
+    );
 
     await selectComposerExecutionMode(/build/i);
-    await waitFor(() => expect(channelHandlers["approval_required"]).toEqual(expect.any(Function)));
+    await waitFor(() =>
+      expect(channelHandlers["approval_required"]).toEqual(
+        expect.any(Function),
+      ),
+    );
 
     channelHandlers["approval_required"]({
       request_id: "claude-1",
@@ -1824,7 +2619,9 @@ describe("ProjectAssistantPanel", () => {
       reason: "Claude requested approval to run Bash",
     });
 
-    expect(await screen.findByText("Claude wants to run a command")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Claude wants to run a command"),
+    ).toBeInTheDocument();
     expect(screen.getByText("rm -rf build")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Approve" }));
@@ -1839,10 +2636,21 @@ describe("ProjectAssistantPanel", () => {
 
   it("adds agent command approval details to composer context", async () => {
     const user = userEvent.setup();
-    render(<ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="page" />);
+    render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        issueIdentifier="MAC-1"
+        view="board"
+        mode="page"
+      />,
+    );
 
     await selectComposerExecutionMode(/build/i);
-    await waitFor(() => expect(channelHandlers["approval_required"]).toEqual(expect.any(Function)));
+    await waitFor(() =>
+      expect(channelHandlers["approval_required"]).toEqual(
+        expect.any(Function),
+      ),
+    );
 
     channelHandlers["approval_required"]({
       request_id: "cmd-1",
@@ -1851,10 +2659,14 @@ describe("ProjectAssistantPanel", () => {
       reason: "unknown",
     });
 
-    await user.click(await screen.findByRole("button", { name: "Add to context" }));
+    await user.click(
+      await screen.findByRole("button", { name: "Add to context" }),
+    );
 
     expect(screen.getByText("permission:cmd-1")).toBeInTheDocument();
-    expect(screen.getAllByText("Codex wants to run a command").length).toBeGreaterThan(1);
+    expect(
+      screen.getAllByText("Codex wants to run a command").length,
+    ).toBeGreaterThan(1);
 
     await user.click(screen.getByRole("button", { name: "Send message" }));
 
@@ -1878,42 +2690,77 @@ describe("ProjectAssistantPanel", () => {
     const user = userEvent.setup();
     render(
       <MemoryRouter>
-        <ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="page" />
+        <ProjectAssistantPanel
+          projectSlug="macro-markets"
+          issueIdentifier="MAC-1"
+          view="board"
+          mode="page"
+        />
       </MemoryRouter>,
     );
 
     await openComposerMoreMenu();
-    const kbButton = await screen.findByRole("button", { name: "Knowledge Base" });
+    const kbButton = await screen.findByRole("button", {
+      name: "Knowledge Base",
+    });
     await waitFor(() => expect(kbButton).not.toBeDisabled());
     await user.click(kbButton);
 
-    expect(await screen.findByRole("dialog", { name: "Knowledge Base" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("dialog", { name: "Knowledge Base" }),
+    ).toBeInTheDocument();
     expect(await screen.findByText("front")).toBeInTheDocument();
     expect(await screen.findByText("Setup")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Add Setup to context" }));
+    await user.click(
+      screen.getByRole("button", { name: "Add Setup to context" }),
+    );
 
-    expect(await screen.findByText("kb:front:guides/setup.md")).toBeInTheDocument();
+    expect(
+      await screen.findByText("kb:front:guides/setup.md"),
+    ).toBeInTheDocument();
 
     await user.click(screen.getByRole("link", { name: "Setup" }));
 
-    expect(await screen.findByText("Configure the project.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Show tree" })).toBeInTheDocument();
-    expect(navigateMock).not.toHaveBeenCalledWith("/projects/macro-markets/kb/front/guides/setup.md");
+    expect(
+      await screen.findByText("Configure the project."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Show tree" }),
+    ).toBeInTheDocument();
+    expect(navigateMock).not.toHaveBeenCalledWith(
+      "/projects/macro-markets/kb/front/guides/setup.md",
+    );
   });
 
   it("renders an embedded assistant without viewport height", () => {
-    render(<ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="embedded" />);
+    render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        issueIdentifier="MAC-1"
+        view="board"
+        mode="embedded"
+      />,
+    );
 
     const region = screen.getByRole("region", { name: "Project assistant" });
     expect(region).toHaveClass("h-full");
     expect(region).not.toHaveClass("h-[calc(100vh-4rem)]");
     expect(region).not.toHaveClass("h-screen");
-    expect(socketChannel).toHaveBeenCalledWith("assistant:issue:macro-markets:MAC-1");
+    expect(socketChannel).toHaveBeenCalledWith(
+      "assistant:issue:macro-markets:MAC-1",
+    );
   });
 
   it("renders a nested issue assistant page without viewport height", () => {
-    render(<ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="page" />);
+    render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        issueIdentifier="MAC-1"
+        view="board"
+        mode="page"
+      />,
+    );
 
     const region = screen.getByRole("region", { name: "Project assistant" });
     expect(region).toHaveClass("h-full");
@@ -1921,7 +2768,14 @@ describe("ProjectAssistantPanel", () => {
   });
 
   it("renders a thread assistant page without viewport height", () => {
-    render(<ProjectAssistantPanel projectSlug="macro-markets" threadId={42} view="board" mode="page" />);
+    render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        threadId={42}
+        view="board"
+        mode="page"
+      />,
+    );
 
     const region = screen.getByRole("region", { name: "Project assistant" });
     expect(region).toHaveClass("h-full");
@@ -1955,7 +2809,11 @@ describe("ProjectAssistantPanel", () => {
       />,
     );
 
-    await waitFor(() => expect(channelHandlers["assistant_document_changed"]).toEqual(expect.any(Function)));
+    await waitFor(() =>
+      expect(channelHandlers["assistant_document_changed"]).toEqual(
+        expect.any(Function),
+      ),
+    );
 
     channelHandlers["assistant_document_changed"]({ identifier: "MAC-1" });
 
@@ -1994,9 +2852,19 @@ describe("ProjectAssistantPanel", () => {
   });
 
   it("renders file-edit tool calls as a file-activity card and keeps other tools generic", async () => {
-    render(<ProjectAssistantPanel projectSlug="macro-markets" view="board" mode="page" />);
+    render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        view="board"
+        mode="page"
+      />,
+    );
 
-    await waitFor(() => expect(channelHandlers["assistant_completed"]).toEqual(expect.any(Function)));
+    await waitFor(() =>
+      expect(channelHandlers["assistant_completed"]).toEqual(
+        expect.any(Function),
+      ),
+    );
 
     channelHandlers["assistant_completed"]({
       message: {
@@ -2004,7 +2872,16 @@ describe("ProjectAssistantPanel", () => {
         role: "assistant",
         content: "Done.",
         tool_calls: [
-          { name: "apply_patch", status: "complete", result: { paths: ["lib/foo.ex"], additions: 12, deletions: 3, diff: "@@\n+a" } },
+          {
+            name: "apply_patch",
+            status: "complete",
+            result: {
+              paths: ["lib/foo.ex"],
+              additions: 12,
+              deletions: 3,
+              diff: "@@\n+a",
+            },
+          },
           { name: "list_issues", status: "complete", result: { issues: [] } },
         ],
       },
@@ -2013,8 +2890,7 @@ describe("ProjectAssistantPanel", () => {
     expect(await screen.findByText("lib/foo.ex")).toBeInTheDocument();
     expect(screen.getByText("+12")).toBeInTheDocument();
     expect(screen.getByText("−3")).toBeInTheDocument();
-    // Non-file tool call still uses the generic block.
-    expect(screen.getByText("List issues")).toBeInTheDocument();
+    expect(screen.getByText("Done.")).toBeInTheDocument();
   });
 
   it("opens workspace diff from an edited-file chip and can send a line review to the agent", async () => {
@@ -2028,7 +2904,11 @@ describe("ProjectAssistantPanel", () => {
       />,
     );
 
-    await waitFor(() => expect(channelHandlers["assistant_completed"]).toEqual(expect.any(Function)));
+    await waitFor(() =>
+      expect(channelHandlers["assistant_completed"]).toEqual(
+        expect.any(Function),
+      ),
+    );
 
     channelHandlers["assistant_completed"]({
       message: {
@@ -2045,14 +2925,16 @@ describe("ProjectAssistantPanel", () => {
                 {
                   path: "tracker.json",
                   status: "modified",
-                  patch: "diff --git a/tracker.json b/tracker.json\n@@ -1 +1 @@\n-old\n+new\n",
+                  patch:
+                    "diff --git a/tracker.json b/tracker.json\n@@ -1 +1 @@\n-old\n+new\n",
                   additions: 1,
                   deletions: 1,
                 },
                 {
                   path: "ProjectConfigEditor.tsx",
                   status: "modified",
-                  patch: "diff --git a/ProjectConfigEditor.tsx b/ProjectConfigEditor.tsx\n@@ -1 +1 @@\n-a\n+b\n",
+                  patch:
+                    "diff --git a/ProjectConfigEditor.tsx b/ProjectConfigEditor.tsx\n@@ -1 +1 @@\n-a\n+b\n",
                   additions: 1,
                   deletions: 1,
                 },
@@ -2066,16 +2948,29 @@ describe("ProjectAssistantPanel", () => {
     expect(await screen.findByText("Edited 2 files:")).toBeInTheDocument();
     expect(screen.queryByText("Edited file diff")).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "View changes to tracker.json" }));
+    await user.click(
+      screen.getByRole("button", { name: "View changes to tracker.json" }),
+    );
 
-    const dialog = await screen.findByRole("dialog", { name: /workspace diff/i });
-    expect(within(dialog).getByRole("tab", { name: /uncommitted/i })).toHaveAttribute("data-state", "active");
-    expect(within(dialog).getByText(/click a line number to comment/i)).toBeInTheDocument();
+    const dialog = await screen.findByRole("dialog", {
+      name: /workspace diff/i,
+    });
+    expect(
+      within(dialog).getByRole("tab", { name: /uncommitted/i }),
+    ).toHaveAttribute("data-state", "active");
+    expect(
+      within(dialog).getByText(/click a line number to comment/i),
+    ).toBeInTheDocument();
     await waitFor(() => {
-      expect(within(dialog).getByTestId("git-diff-viewer")).toHaveAttribute("data-focus-path", "tracker.json");
+      expect(within(dialog).getByTestId("git-diff-viewer")).toHaveAttribute(
+        "data-focus-path",
+        "tracker.json",
+      );
     });
 
-    await user.click(within(dialog).getByRole("button", { name: /send 1 to agent/i }));
+    await user.click(
+      within(dialog).getByRole("button", { name: /send 1 to agent/i }),
+    );
 
     await waitFor(() =>
       expect(push).toHaveBeenCalledWith(
@@ -2088,9 +2983,18 @@ describe("ProjectAssistantPanel", () => {
   });
 
   it("replaces the transcript when history_synced arrives after a terminal turn_status", async () => {
-    render(<ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="page" />);
+    render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        issueIdentifier="MAC-1"
+        view="board"
+        mode="page"
+      />,
+    );
 
-    await waitFor(() => expect(channelHandlers["history_synced"]).toEqual(expect.any(Function)));
+    await waitFor(() =>
+      expect(channelHandlers["history_synced"]).toEqual(expect.any(Function)),
+    );
 
     channelHandlers["history_loaded"]({
       messages: [{ id: 1, role: "user", content: "go", tool_calls: [] }],
@@ -2103,7 +3007,12 @@ describe("ProjectAssistantPanel", () => {
     channelHandlers["history_synced"]({
       messages: [
         { id: 1, role: "user", content: "go", tool_calls: [] },
-        { id: 2, role: "assistant", content: "done without refresh", tool_calls: [] },
+        {
+          id: 2,
+          role: "assistant",
+          content: "done without refresh",
+          tool_calls: [],
+        },
       ],
     });
 
@@ -2112,31 +3021,55 @@ describe("ProjectAssistantPanel", () => {
 
   it("does not auto-scroll when the user has scrolled away from the bottom", async () => {
     render(
-      <ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="embedded" />,
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        issueIdentifier="MAC-1"
+        view="board"
+        mode="embedded"
+      />,
     );
 
-    await waitFor(() => expect(channelHandlers["history_loaded"]).toEqual(expect.any(Function)));
+    await waitFor(() =>
+      expect(channelHandlers["history_loaded"]).toEqual(expect.any(Function)),
+    );
 
     await act(async () => {
       channelHandlers["history_loaded"]({
         messages: [
           { id: 1, role: "user", content: "hello", tool_calls: [] },
-          { id: 2, role: "assistant", content: "initial reply", tool_calls: [] },
+          {
+            id: 2,
+            role: "assistant",
+            content: "initial reply",
+            tool_calls: [],
+          },
         ],
       });
       await new Promise((resolve) => requestAnimationFrame(resolve));
     });
 
-    const scroller = screen.getByText("initial reply").closest(".overflow-y-auto") as HTMLDivElement;
-    const scrollTo = vi.spyOn(scroller, "scrollTo").mockImplementation(() => undefined);
+    const scroller = screen
+      .getByText("initial reply")
+      .closest(".overflow-y-auto") as HTMLDivElement;
+    const scrollTo = vi
+      .spyOn(scroller, "scrollTo")
+      .mockImplementation(() => undefined);
 
-    Object.defineProperty(scroller, "scrollHeight", { configurable: true, value: 2000 });
-    Object.defineProperty(scroller, "clientHeight", { configurable: true, value: 400 });
+    Object.defineProperty(scroller, "scrollHeight", {
+      configurable: true,
+      value: 2000,
+    });
+    Object.defineProperty(scroller, "clientHeight", {
+      configurable: true,
+      value: 400,
+    });
     scroller.scrollTop = 0;
 
     await act(async () => {
       fireEvent.scroll(scroller);
-      scroller.dispatchEvent(new WheelEvent("wheel", { deltaY: -1, bubbles: true }));
+      scroller.dispatchEvent(
+        new WheelEvent("wheel", { deltaY: -1, bubbles: true }),
+      );
     });
 
     scrollTo.mockClear();
@@ -2145,7 +3078,12 @@ describe("ProjectAssistantPanel", () => {
       channelHandlers["history_synced"]({
         messages: [
           { id: 1, role: "user", content: "hello", tool_calls: [] },
-          { id: 2, role: "assistant", content: "reconciled reply", tool_calls: [] },
+          {
+            id: 2,
+            role: "assistant",
+            content: "reconciled reply",
+            tool_calls: [],
+          },
         ],
       });
       await new Promise((resolve) => requestAnimationFrame(resolve));
@@ -2172,10 +3110,17 @@ describe("ProjectAssistantPanel", () => {
     ]);
 
     render(
-      <ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-2" view="board" mode="page" />,
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        issueIdentifier="MAC-2"
+        view="board"
+        mode="page"
+      />,
     );
 
-    expect(await screen.findByTestId("execution-mode-menu")).toHaveTextContent(/plan/i);
+    expect(await screen.findByTestId("execution-mode-menu")).toHaveTextContent(
+      /plan/i,
+    );
 
     const textarea = screen.getByPlaceholderText("Write a message...");
     fireEvent.change(textarea, { target: { value: "@mac" } });
@@ -2200,9 +3145,18 @@ describe("ProjectAssistantPanel", () => {
   });
 
   it("opens the Magic command palette as a modal on project session routes", async () => {
-    render(<ProjectAssistantPanel projectSlug="macro-markets" threadId={7990} view="board" mode="page" />);
+    render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        threadId={7990}
+        view="board"
+        mode="page"
+      />,
+    );
 
-    expect(await screen.findByTestId("execution-mode-menu")).toHaveTextContent(/build/i);
+    expect(await screen.findByTestId("execution-mode-menu")).toHaveTextContent(
+      /build/i,
+    );
     await openComposerMoreMenu();
     const magicButton = screen.getByRole("button", { name: /magic/i });
     await waitFor(() => expect(magicButton).not.toBeDisabled());
@@ -2210,13 +3164,17 @@ describe("ProjectAssistantPanel", () => {
     // The Magic button opens a centered modal palette — not the inline `/` list.
     fireEvent.click(magicButton);
 
-    const dialog = await screen.findByRole("dialog", { name: "Magic commands" });
+    const dialog = await screen.findByRole("dialog", {
+      name: "Magic commands",
+    });
     expect(within(dialog).getByText("/plan")).toBeInTheDocument();
     expect(within(dialog).getByText("/push")).toBeInTheDocument();
 
     fireEvent.keyDown(document, { key: "Escape", code: "Escape" });
     await waitFor(() =>
-      expect(screen.queryByRole("dialog", { name: "Magic commands" })).not.toBeInTheDocument(),
+      expect(
+        screen.queryByRole("dialog", { name: "Magic commands" }),
+      ).not.toBeInTheDocument(),
     );
 
     const textarea = screen.getByPlaceholderText("Write a message...");
@@ -2251,10 +3209,18 @@ describe("ProjectAssistantPanel", () => {
       },
     ]);
 
-    render(<ProjectAssistantPanel projectSlug="macro-markets" view="board" mode="page" />);
+    render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        view="board"
+        mode="page"
+      />,
+    );
 
     const textarea = await screen.findByPlaceholderText("Write a message...");
-    expect(await screen.findByTestId("execution-mode-menu")).toHaveTextContent(/yolo/i);
+    expect(await screen.findByTestId("execution-mode-menu")).toHaveTextContent(
+      /yolo/i,
+    );
 
     fireEvent.change(textarea, { target: { value: "@mac" } });
 
@@ -2264,36 +3230,60 @@ describe("ProjectAssistantPanel", () => {
 
   it("renders the scroll-to-bottom control outside the feed scroller when scrolled away from the bottom", async () => {
     render(
-      <ProjectAssistantPanel projectSlug="macro-markets" issueIdentifier="MAC-1" view="board" mode="page" />,
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        issueIdentifier="MAC-1"
+        view="board"
+        mode="page"
+      />,
     );
 
-    await waitFor(() => expect(channelHandlers["history_loaded"]).toEqual(expect.any(Function)));
+    await waitFor(() =>
+      expect(channelHandlers["history_loaded"]).toEqual(expect.any(Function)),
+    );
 
     await act(async () => {
       channelHandlers["history_loaded"]({
         messages: [
           { id: 1, role: "user", content: "hello", tool_calls: [] },
-          { id: 2, role: "assistant", content: "initial reply", tool_calls: [] },
+          {
+            id: 2,
+            role: "assistant",
+            content: "initial reply",
+            tool_calls: [],
+          },
         ],
       });
       await new Promise((resolve) => requestAnimationFrame(resolve));
     });
 
     const feed = screen.getByTestId("assistant-session-feed");
-    Object.defineProperty(feed, "scrollHeight", { configurable: true, value: 2000 });
-    Object.defineProperty(feed, "clientHeight", { configurable: true, value: 400 });
+    Object.defineProperty(feed, "scrollHeight", {
+      configurable: true,
+      value: 2000,
+    });
+    Object.defineProperty(feed, "clientHeight", {
+      configurable: true,
+      value: 400,
+    });
     feed.scrollTop = 0;
 
     await act(async () => {
       fireEvent.scroll(feed);
-      feed.dispatchEvent(new WheelEvent("wheel", { deltaY: -1, bubbles: true }));
+      feed.dispatchEvent(
+        new WheelEvent("wheel", { deltaY: -1, bubbles: true }),
+      );
     });
 
-    const scrollToBottomButton = await screen.findByRole("button", { name: "Scroll to latest messages" });
+    const scrollToBottomButton = await screen.findByRole("button", {
+      name: "Scroll to latest messages",
+    });
     expect(feed).not.toContainElement(scrollToBottomButton);
     // The scroll-to-bottom control sits alongside the feed scroller, not
     // above the composer, so it must live outside the dock/composer as well.
-    expect(screen.getByTestId("assistant-session-composer")).not.toContainElement(scrollToBottomButton);
+    expect(
+      screen.getByTestId("assistant-session-composer"),
+    ).not.toContainElement(scrollToBottomButton);
   });
 
   it("does not show an in-panel environment dock for issue-bound threads", async () => {
@@ -2310,22 +3300,44 @@ describe("ProjectAssistantPanel", () => {
     );
 
     await screen.findByPlaceholderText("Write a message...");
-    expect(screen.queryByRole("button", { name: /toggle environment/i })).not.toBeInTheDocument();
-    expect(screen.queryByTestId("environment-floating-dock")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /toggle environment/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("environment-floating-dock"),
+    ).not.toBeInTheDocument();
     expect(screen.queryByTestId("environment-dock")).not.toBeInTheDocument();
   });
 
   it("does not show the environment dock toggle for freeform threads without an issue", async () => {
-    render(<ProjectAssistantPanel projectSlug="macro-markets" view="board" mode="page" />);
+    render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        view="board"
+        mode="page"
+      />,
+    );
 
     await screen.findByPlaceholderText("Write a message...");
-    expect(screen.queryByRole("button", { name: /environment/i })).not.toBeInTheDocument();
-    expect(screen.queryByTestId("environment-floating-dock")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /environment/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("environment-floating-dock"),
+    ).not.toBeInTheDocument();
   });
 
   it("page mode uses AssistantSessionShell with a single feed scroller", async () => {
-    render(<ProjectAssistantPanel projectSlug="macro-markets" view="board" mode="page" />);
-    expect(await screen.findByTestId("assistant-session-shell")).toBeInTheDocument();
+    render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        view="board"
+        mode="page"
+      />,
+    );
+    expect(
+      await screen.findByTestId("assistant-session-shell"),
+    ).toBeInTheDocument();
     const feed = screen.getByTestId("assistant-session-feed");
     expect(feed.className).toMatch(/overflow-y-auto/);
     // No nested overflow-y-auto descendants inside feed
@@ -2349,7 +3361,9 @@ describe("ProjectAssistantPanel", () => {
       />,
     );
 
-    await waitFor(() => expect(channelHandlers["history_loaded"]).toEqual(expect.any(Function)));
+    await waitFor(() =>
+      expect(channelHandlers["history_loaded"]).toEqual(expect.any(Function)),
+    );
     channelHandlers["history_loaded"]({ messages: [] });
 
     await waitFor(() =>
@@ -2362,7 +3376,9 @@ describe("ProjectAssistantPanel", () => {
       ),
     );
 
-    const sendCalls = push.mock.calls.filter(([event]) => event === "send_message");
+    const sendCalls = push.mock.calls.filter(
+      ([event]) => event === "send_message",
+    );
     expect(sendCalls).toHaveLength(1);
   });
 
@@ -2377,13 +3393,21 @@ describe("ProjectAssistantPanel", () => {
       />,
     );
 
-    await waitFor(() => expect(channelHandlers["history_loaded"]).toEqual(expect.any(Function)));
+    await waitFor(() =>
+      expect(channelHandlers["history_loaded"]).toEqual(expect.any(Function)),
+    );
     channelHandlers["history_loaded"]({
-      messages: [{ id: 1, role: "user", content: "prior turn", tool_calls: [] }],
+      messages: [
+        { id: 1, role: "user", content: "prior turn", tool_calls: [] },
+      ],
     });
 
     await screen.findByText("prior turn");
-    await waitFor(() => expect(screen.getByPlaceholderText("Write a message...")).toHaveValue("should stay in the composer"));
+    await waitFor(() =>
+      expect(screen.getByPlaceholderText("Write a message...")).toHaveValue(
+        "should stay in the composer",
+      ),
+    );
     expect(push).not.toHaveBeenCalledWith("send_message", expect.anything());
   });
 
@@ -2393,16 +3417,29 @@ describe("ProjectAssistantPanel", () => {
         status === "ok" ? callback({ effective_agent: "cursor" }) : undefined,
     }));
 
-    render(<ProjectAssistantPanel projectSlug="macro-markets" threadId={79} view="board" mode="page" />);
+    render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        threadId={79}
+        view="board"
+        mode="page"
+      />,
+    );
 
-    await waitFor(() => expect(channelHandlers["history_loaded"]).toEqual(expect.any(Function)));
+    await waitFor(() =>
+      expect(channelHandlers["history_loaded"]).toEqual(expect.any(Function)),
+    );
     act(() => {
       channelHandlers["history_loaded"]({ messages: [] });
     });
 
     await waitFor(() => {
-      expect(document.body.textContent ?? "").toMatch(/request work from Cursor/i);
+      expect(document.body.textContent ?? "").toMatch(
+        /request work from Cursor/i,
+      );
     });
-    expect(document.body.textContent ?? "").not.toMatch(/request work from Codex/i);
+    expect(document.body.textContent ?? "").not.toMatch(
+      /request work from Codex/i,
+    );
   });
 });

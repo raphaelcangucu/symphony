@@ -1,6 +1,7 @@
 defmodule SymphonyElixir.Assistant.ForkSessionTest do
   use ExUnit.Case, async: false
 
+  alias SymphonyElixir.Agent.ConversationRef
   alias SymphonyElixir.Assistant.{ForkSession, History, Thread}
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.Repo
@@ -33,10 +34,20 @@ defmodule SymphonyElixir.Assistant.ForkSessionTest do
       History.create_issue_session_thread("macro-markets", "MAC-510", %{
         title: "Nova sessao",
         agent_kind: "claude",
-        execution_mode: "build"
+        execution_mode: "build",
+        requested_model: "claude-sonnet-5",
+        requested_effort: "medium"
       })
 
-    {:ok, source} = History.put_agent_thread_id(source, "claude", "claude-native-abc")
+    {:ok, ref} = ConversationRef.new("claude", "claude-native-abc")
+    {:ok, source} = History.put_conversation_ref(source, ref)
+
+    {:ok, source} =
+      History.put_model_provenance(source, %{
+        resolved_model: "claude-sonnet-5",
+        resolved_effort: "medium"
+      })
+
     {:ok, _} = History.append_message(source, %{role: "user", content: "context please"})
     {:ok, _} = History.append_message(source, %{role: "assistant", content: "got it"})
 
@@ -50,10 +61,13 @@ defmodule SymphonyElixir.Assistant.ForkSessionTest do
     assert fork.workspace_path != source.workspace_path
     assert fork.metadata["forked_from_thread_id"] == source.id
     assert fork.metadata["workspace_kind"] == "isolated"
+    assert fork.requested_model == "claude-sonnet-5"
+    assert fork.requested_effort == "medium"
+    assert fork.resolved_model == nil
+    assert fork.resolved_effort == nil
 
     # Clean fork: no native agent brain carried over.
-    assert fork.agent_thread_ids == %{}
-    assert fork.codex_thread_id == nil
+    assert fork.provider_bindings == %{}
 
     copied = History.list_messages_for_thread(fork.id)
     assert Enum.map(copied, & &1.role) == ["user", "assistant"]
@@ -62,7 +76,14 @@ defmodule SymphonyElixir.Assistant.ForkSessionTest do
 
   test "forking a project_session creates a standalone workspace thread" do
     {:ok, _project} = Context.ensure_project(%{name: "Macro Markets", slug: "macro-markets"})
-    {:ok, source} = History.create_project_session_thread("macro-markets", %{title: "Explore"})
+
+    {:ok, source} =
+      History.create_project_session_thread("macro-markets", %{
+        title: "Explore",
+        requested_model: "gpt-5.6-terra",
+        requested_effort: "low"
+      })
+
     {:ok, _} = History.append_message(source, %{role: "user", content: "hello"})
 
     assert {:ok, %Thread{} = fork} = ForkSession.fork(source)
@@ -72,6 +93,11 @@ defmodule SymphonyElixir.Assistant.ForkSessionTest do
     assert fork.title == "Explore (fork)"
     assert fork.workspace_path != source.workspace_path
     assert fork.metadata["forked_from_thread_id"] == source.id
+    assert fork.requested_model == "gpt-5.6-terra"
+    assert fork.requested_effort == "low"
+    assert fork.resolved_model == nil
+    assert fork.resolved_effort == nil
+    assert fork.provider_bindings == %{}
     assert Enum.map(History.list_messages_for_thread(fork.id), & &1.content) == ["hello"]
   end
 

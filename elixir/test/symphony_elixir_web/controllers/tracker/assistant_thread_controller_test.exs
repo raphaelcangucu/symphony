@@ -13,6 +13,7 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadControllerTest do
   import Phoenix.ConnTest
   import Plug.Conn
 
+  alias SymphonyElixir.Agent.ConversationRef
   alias SymphonyElixir.Assistant.{AgentSession, History, ProjectExploreWorkspace, Thread}
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.Repo
@@ -83,14 +84,14 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadControllerTest do
     assert Repo.aggregate(Thread, :count) == 1
   end
 
-  test "POST freeform thread persists agent_kind and model/effort metadata" do
+  test "POST freeform thread keeps Cursor effort only in the canonical model slug" do
     conn =
       authorize()
       |> post("/api/tracker/v1/assistant/threads", %{
         scope: "freeform",
         title: "Ops",
         agent_kind: "cursor",
-        model: "gpt-5",
+        model: "cursor-grok-4.5-high",
         effort: "high"
       })
 
@@ -98,14 +99,37 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadControllerTest do
              "data" => %{
                "id" => id,
                "scope" => "freeform",
-               "agent_kind" => "cursor"
+               "agent_kind" => "cursor",
+               "requested_model" => "cursor-grok-4.5-high",
+               "requested_effort" => nil,
+               "resolved_model" => nil,
+               "resolved_effort" => nil
              }
            } = json_response(conn, 201)
 
     assert {:ok, thread} = History.get_thread(id)
     assert thread.agent_kind == "cursor"
-    assert thread.metadata["model"] == "gpt-5"
-    assert thread.metadata["effort"] == "high"
+    assert thread.requested_model == "cursor-grok-4.5-high"
+    assert thread.requested_effort == nil
+    refute Map.has_key?(thread.metadata, "model")
+    refute Map.has_key?(thread.metadata, "effort")
+
+    assert {:ok, _thread} =
+             History.put_model_provenance(thread, %{
+               resolved_model: "cursor-grok-4.5-high",
+               resolved_effort: nil
+             })
+
+    conn = get(authorize(), "/api/tracker/v1/assistant/threads/#{id}")
+
+    assert %{
+             "data" => %{
+               "requested_model" => "cursor-grok-4.5-high",
+               "requested_effort" => nil,
+               "resolved_model" => "cursor-grok-4.5-high",
+               "resolved_effort" => nil
+             }
+           } = json_response(conn, 200)
   end
 
   test "POST freeform thread stores a per-thread workspace path, not the shared root" do
@@ -233,7 +257,8 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadControllerTest do
   test "PATCH updates title labels and review state" do
     workspace_path = Path.join(System.tmp_dir!(), "assistant-thread-update")
     {:ok, thread} = History.create_freeform_thread(%{title: "Old", workspace_path: workspace_path})
-    {:ok, thread} = History.put_agent_thread_id(thread, "codex", "native-thread-update")
+    {:ok, conversation_ref} = ConversationRef.new("codex", "native-thread-update")
+    {:ok, thread} = History.put_conversation_ref(thread, conversation_ref)
     test_pid = self()
 
     Application.put_env(:symphony_elixir, :native_thread_name_setter, fn workspace, thread_id, name, _opts ->
@@ -359,7 +384,8 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadControllerTest do
     {:ok, thread} =
       History.create_freeform_thread(%{title: "Project session", workspace_path: System.tmp_dir!()})
 
-    {:ok, thread} = History.put_agent_thread_id(thread, "codex", "native-thread-generated")
+    {:ok, conversation_ref} = ConversationRef.new("codex", "native-thread-generated")
+    {:ok, thread} = History.put_conversation_ref(thread, conversation_ref)
     test_pid = self()
 
     Application.put_env(:symphony_elixir, :native_thread_name_setter, fn workspace, thread_id, name, _opts ->

@@ -11,7 +11,6 @@ import {
   catalogFor,
   defaultComposerSettings,
   effortsForModel,
-  fallbackCatalogBundle,
   type AssistantCatalogBundle,
 } from "@/lib/assistantSettings";
 import { fetchAssistantCatalogBundle } from "@/services/assistant";
@@ -44,16 +43,22 @@ export function InlineExecutionSettingsFields({
   renderField,
 }: InlineExecutionSettingsFieldsProps) {
   const { t } = useTranslation();
-  const [bundle, setBundle] = useState<AssistantCatalogBundle>(() => fallbackCatalogBundle());
+  const [bundle, setBundle] = useState<AssistantCatalogBundle | null>(null);
   const [catalogLoading, setCatalogLoading] = useState(true);
 
   const inheritLabel = t("issue.create.inherit", { agent: agentKindLabel(effectiveAgent, t) });
-  const resolvedAgent = value.agent ?? bundle.defaultAgent;
-  const catalog = useMemo(() => catalogFor(bundle, resolvedAgent), [bundle, resolvedAgent]);
-  const defaults = useMemo(() => defaultComposerSettings(catalog), [catalog]);
-  const effectiveModel = value.model ?? defaults.model;
+  const resolvedAgent = value.agent ?? bundle?.defaultAgent ?? effectiveAgent;
+  const catalog = useMemo(
+    () => (bundle ? catalogFor(bundle, resolvedAgent) : null),
+    [bundle, resolvedAgent],
+  );
+  const defaults = useMemo(
+    () => (catalog ? defaultComposerSettings(catalog) : null),
+    [catalog],
+  );
+  const effectiveModel = value.model ?? defaults?.model ?? "";
   const effortOptions = useMemo(
-    () => effortsForModel(catalog, effectiveModel),
+    () => (catalog ? effortsForModel(catalog, effectiveModel) : []),
     [catalog, effectiveModel],
   );
 
@@ -84,11 +89,31 @@ export function InlineExecutionSettingsFields({
       void commit({ agent: null, model: value.model, effort: value.effort });
       return;
     }
+    if (!bundle) return;
     const nextDefaults = defaultComposerSettings(catalogFor(bundle, agent));
     void commit({ agent, model: nextDefaults.model, effort: nextDefaults.effort });
   }
 
-  const controlsDisabled = disabled || saving || catalogLoading;
+  const controlsDisabled = disabled || saving || catalogLoading || !bundle;
+
+  if (!bundle || !catalog) {
+    return (
+      <>
+        {renderField(
+          t("issue.summary.agent"),
+          <span className="text-xs text-muted-foreground">{t("common.loading")}</span>,
+        )}
+        {renderField(
+          t("issue.summary.model"),
+          <span className="text-xs text-muted-foreground">{t("common.loading")}</span>,
+        )}
+        {renderField(
+          t("issue.summary.effort"),
+          <span className="text-xs text-muted-foreground">{t("common.loading")}</span>,
+        )}
+      </>
+    );
+  }
 
   return (
     <>

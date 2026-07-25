@@ -16,31 +16,65 @@ import { http } from "@/services/http";
 vi.mock("@/services/http", () => ({
   http: { delete: vi.fn(), get: vi.fn(), patch: vi.fn(), post: vi.fn() },
   trackerPath: (path: string) => `/api/tracker/v1${path}`,
-  unwrapData: <T,>(response: { data: { data: T } }) => response.data.data,
+  unwrapData: <T>(response: { data: { data: T } }) => response.data.data,
 }));
 
 describe("normalizeAssistantThread", () => {
   it("maps snake_case thread to camelCase", () => {
     const t = normalizeAssistantThread({
-      id: 3, scope: "freeform", project_slug: null, project_name: null,
-      agent_kind: "cursor", issue_identifier: null, title: "Brainstorm", status: "active",
-      preview: "hi", updated_at: "2026-05-30T00:00:00Z",
-      workspace_path: "/workspaces/brainstorm", labels: ["planning"], needs_review: true,
+      id: 3,
+      scope: "freeform",
+      project_slug: null,
+      project_name: null,
+      agent_kind: "cursor",
+      issue_identifier: null,
+      title: "Brainstorm",
+      status: "active",
+      preview: "hi",
+      updated_at: "2026-05-30T00:00:00Z",
+      workspace_path: "/workspaces/brainstorm",
+      labels: ["planning"],
+      needs_review: true,
+      requested_model: "composer-2.5",
+      requested_effort: null,
+      resolved_model: "composer-2.5",
+      resolved_effort: null,
     });
     expect(t).toMatchObject({
-      id: 3, scope: "freeform", agentKind: "cursor", projectSlug: null, issueIdentifier: null,
-      title: "Brainstorm", status: "active", preview: "hi", updatedAt: "2026-05-30T00:00:00Z",
-      workspacePath: "/workspaces/brainstorm", labels: ["planning"], needsReview: true,
+      id: 3,
+      scope: "freeform",
+      agentKind: "cursor",
+      projectSlug: null,
+      issueIdentifier: null,
+      title: "Brainstorm",
+      status: "active",
+      preview: "hi",
+      updatedAt: "2026-05-30T00:00:00Z",
+      workspacePath: "/workspaces/brainstorm",
+      labels: ["planning"],
+      needsReview: true,
+      requestedModel: "composer-2.5",
+      requestedEffort: null,
+      resolvedModel: "composer-2.5",
+      resolvedEffort: null,
     });
   });
 
   it("defaults missing or malformed sidebar metadata values", () => {
     const malformed = normalizeAssistantThread({
-      id: 5, scope: "freeform", status: "active",
-      workspace_path: 42, labels: "one", needs_review: "yes",
+      id: 5,
+      scope: "freeform",
+      status: "active",
+      workspace_path: 42,
+      labels: "one",
+      needs_review: "yes",
     } as never);
 
-    expect(malformed).toMatchObject({ workspacePath: null, labels: [], needsReview: false });
+    expect(malformed).toMatchObject({
+      workspacePath: null,
+      labels: [],
+      needsReview: false,
+    });
   });
 
   it("reads workspace_path from snake_case wire format", () => {
@@ -65,14 +99,19 @@ describe("listAssistantThreads", () => {
     [{ includeArchived: true }, "include_archived=true"],
     [{ includeArchived: false }, ""],
     [{}, ""],
-  ])("controls the include_archived query parameter", async (options, expected) => {
-    vi.mocked(http.get).mockResolvedValue({ data: { data: [] } });
+  ])(
+    "controls the include_archived query parameter",
+    async (options, expected) => {
+      vi.mocked(http.get).mockResolvedValue({ data: { data: [] } });
 
-    await listAssistantThreads(options);
+      await listAssistantThreads(options);
 
-    const requestedUrl = vi.mocked(http.get).mock.calls[0][0] as string;
-    expect(new URL(requestedUrl, "http://tracker").searchParams.toString()).toBe(expected);
-  });
+      const requestedUrl = vi.mocked(http.get).mock.calls[0][0] as string;
+      expect(
+        new URL(requestedUrl, "http://tracker").searchParams.toString(),
+      ).toBe(expected);
+    },
+  );
 
   it("coalesces identical in-flight list requests and serves a short TTL cache", async () => {
     let resolveGet!: (value: unknown) => void;
@@ -84,10 +123,15 @@ describe("listAssistantThreads", () => {
     );
 
     const first = listAssistantThreads({ projectSlug: "advising", limit: 100 });
-    const second = listAssistantThreads({ projectSlug: "advising", limit: 100 });
+    const second = listAssistantThreads({
+      projectSlug: "advising",
+      limit: 100,
+    });
     expect(http.get).toHaveBeenCalledTimes(1);
 
-    resolveGet({ data: { data: [{ id: 1, scope: "project_session", status: "active" }] } });
+    resolveGet({
+      data: { data: [{ id: 1, scope: "project_session", status: "active" }] },
+    });
     await expect(Promise.all([first, second])).resolves.toHaveLength(2);
     expect(http.get).toHaveBeenCalledTimes(1);
 
@@ -116,15 +160,25 @@ describe("createProjectSessionThread", () => {
       },
     });
 
-    const thread = await createProjectSessionThread("macro-markets", { title: "Project session", agentKind: "cursor" });
-
-    expect(http.post).toHaveBeenCalledWith("/api/tracker/v1/assistant/threads", {
-      scope: "project_session",
-      project_slug: "macro-markets",
+    const thread = await createProjectSessionThread("macro-markets", {
       title: "Project session",
-      agent_kind: "cursor",
+      agentKind: "cursor",
     });
-    expect(thread).toMatchObject({ id: 12, scope: "project_session", agentKind: "cursor" });
+
+    expect(http.post).toHaveBeenCalledWith(
+      "/api/tracker/v1/assistant/threads",
+      {
+        scope: "project_session",
+        project_slug: "macro-markets",
+        title: "Project session",
+        agent_kind: "cursor",
+      },
+    );
+    expect(thread).toMatchObject({
+      id: 12,
+      scope: "project_session",
+      agentKind: "cursor",
+    });
   });
 
   it("serializes a validated explicit workspace path", async () => {
@@ -144,13 +198,16 @@ describe("createProjectSessionThread", () => {
       workspacePath: "  /workspaces/macro-markets/__ws_spike  ",
     });
 
-    expect(http.post).toHaveBeenCalledWith("/api/tracker/v1/assistant/threads", {
-      scope: "project_session",
-      project_slug: "macro-markets",
-      title: undefined,
-      agent_kind: undefined,
-      workspace_path: "/workspaces/macro-markets/__ws_spike",
-    });
+    expect(http.post).toHaveBeenCalledWith(
+      "/api/tracker/v1/assistant/threads",
+      {
+        scope: "project_session",
+        project_slug: "macro-markets",
+        title: undefined,
+        agent_kind: undefined,
+        workspace_path: "/workspaces/macro-markets/__ws_spike",
+      },
+    );
   });
 
   it.each(["", "   ", "relative/path", "/valid/path\0suffix"])(
@@ -200,17 +257,20 @@ describe("createIssueSessionThread", () => {
       useParentWorkspace: false,
     });
 
-    expect(http.post).toHaveBeenCalledWith("/api/tracker/v1/assistant/threads", {
-      scope: "issue_session",
-      project_slug: "macro-markets",
-      issue_identifier: "MAC-20",
-      title: "Parallel pass",
-      agent_kind: "claude",
-      execution_mode: "plan",
-      isolated_workspace: undefined,
-      use_parent_workspace: undefined,
-      workspace_path: "/workspaces/macro-markets/MAC-20__p1",
-    });
+    expect(http.post).toHaveBeenCalledWith(
+      "/api/tracker/v1/assistant/threads",
+      {
+        scope: "issue_session",
+        project_slug: "macro-markets",
+        issue_identifier: "MAC-20",
+        title: "Parallel pass",
+        agent_kind: "claude",
+        execution_mode: "plan",
+        isolated_workspace: undefined,
+        use_parent_workspace: undefined,
+        workspace_path: "/workspaces/macro-markets/MAC-20__p1",
+      },
+    );
     expect(thread.workspacePath).toBe("/workspaces/macro-markets/MAC-20__p1");
   });
 
@@ -240,7 +300,9 @@ describe("createIssueSessionThread", () => {
     "rejects runtime non-string workspace path %j",
     async (workspacePath) => {
       await expect(
-        createIssueSessionThread("macro-markets", "MAC-20", { workspacePath } as never),
+        createIssueSessionThread("macro-markets", "MAC-20", {
+          workspacePath,
+        } as never),
       ).rejects.toThrow(/workspacePath/);
       expect(http.post).not.toHaveBeenCalled();
     },
@@ -253,15 +315,18 @@ describe("createIssueSessionThread", () => {
     { useParentWorkspace: null },
     { isolatedWorkspace: { enabled: false } },
     { useParentWorkspace: 0 },
-  ])("rejects explicit workspace conflicts before HTTP: %j", async (conflictingOptions) => {
-    await expect(
-      createIssueSessionThread("macro-markets", "MAC-20", {
-        workspacePath: "/workspaces/macro-markets/MAC-20",
-        ...conflictingOptions,
-      } as never),
-    ).rejects.toThrow(/workspacePath|isolatedWorkspace|useParentWorkspace/);
-    expect(http.post).not.toHaveBeenCalled();
-  });
+  ])(
+    "rejects explicit workspace conflicts before HTTP: %j",
+    async (conflictingOptions) => {
+      await expect(
+        createIssueSessionThread("macro-markets", "MAC-20", {
+          workspacePath: "/workspaces/macro-markets/MAC-20",
+          ...conflictingOptions,
+        } as never),
+      ).rejects.toThrow(/workspacePath|isolatedWorkspace|useParentWorkspace/);
+      expect(http.post).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe("archiveAssistantThread", () => {
@@ -283,7 +348,9 @@ describe("archiveAssistantThread", () => {
 
     const thread = await archiveAssistantThread(9);
 
-    expect(http.post).toHaveBeenCalledWith("/api/tracker/v1/assistant/threads/9/archive");
+    expect(http.post).toHaveBeenCalledWith(
+      "/api/tracker/v1/assistant/threads/9/archive",
+    );
     expect(thread).toMatchObject({ id: 9, status: "archived" });
   });
 
@@ -297,7 +364,14 @@ describe("updateAssistantThread", () => {
 
   it("trims and normalizes supported fields while preserving false and empty labels", async () => {
     vi.mocked(http.patch).mockResolvedValue({
-      data: { data: { id: 7, scope: "freeform", status: "active", needs_review: false } },
+      data: {
+        data: {
+          id: 7,
+          scope: "freeform",
+          status: "active",
+          needs_review: false,
+        },
+      },
     });
 
     await updateAssistantThread(7, {
@@ -306,21 +380,29 @@ describe("updateAssistantThread", () => {
       needsReview: false,
     });
 
-    expect(http.patch).toHaveBeenCalledWith("/api/tracker/v1/assistant/threads/7", {
-      title: "Sidebar title",
-      labels: ["one", "two"],
-      needs_review: false,
-    });
+    expect(http.patch).toHaveBeenCalledWith(
+      "/api/tracker/v1/assistant/threads/7",
+      {
+        title: "Sidebar title",
+        labels: ["one", "two"],
+        needs_review: false,
+      },
+    );
   });
 
   it("omits absent fields", async () => {
     vi.mocked(http.patch).mockResolvedValue({
-      data: { data: { id: 8, scope: "freeform", status: "active", labels: [] } },
+      data: {
+        data: { id: 8, scope: "freeform", status: "active", labels: [] },
+      },
     });
 
     await updateAssistantThread(8, { labels: [] });
 
-    expect(http.patch).toHaveBeenCalledWith("/api/tracker/v1/assistant/threads/8", { labels: [] });
+    expect(http.patch).toHaveBeenCalledWith(
+      "/api/tracker/v1/assistant/threads/8",
+      { labels: [] },
+    );
   });
 
   it("patches agent_kind when agentKind is provided", async () => {
@@ -337,14 +419,19 @@ describe("updateAssistantThread", () => {
 
     const thread = await updateAssistantThread(9, { agentKind: "cursor" });
 
-    expect(http.patch).toHaveBeenCalledWith("/api/tracker/v1/assistant/threads/9", {
-      agent_kind: "cursor",
-    });
+    expect(http.patch).toHaveBeenCalledWith(
+      "/api/tracker/v1/assistant/threads/9",
+      {
+        agent_kind: "cursor",
+      },
+    );
     expect(thread).toMatchObject({ id: 9, agentKind: "cursor" });
   });
 
   it("rejects invalid agentKind values", async () => {
-    await expect(updateAssistantThread(1, { agentKind: "bogus" as never })).rejects.toThrow(/agentKind/);
+    await expect(
+      updateAssistantThread(1, { agentKind: "bogus" as never }),
+    ).rejects.toThrow(/agentKind/);
     expect(http.patch).not.toHaveBeenCalled();
   });
 
@@ -363,7 +450,9 @@ describe("updateAssistantThread", () => {
 
     const thread = await generateAssistantThreadTitle(9);
 
-    expect(http.post).toHaveBeenCalledWith("/api/tracker/v1/assistant/threads/9/generate_title");
+    expect(http.post).toHaveBeenCalledWith(
+      "/api/tracker/v1/assistant/threads/9/generate_title",
+    );
     expect(thread.title).toBe("Cleanup goapi GAM-19");
   });
 
@@ -380,7 +469,9 @@ describe("updateAssistantThread", () => {
       const input = { title: "Valid" };
       Object.defineProperty(input, key, { value: true, enumerable: true });
 
-      await expect(updateAssistantThread(1, input)).rejects.toThrow(/supported/i);
+      await expect(updateAssistantThread(1, input)).rejects.toThrow(
+        /supported/i,
+      );
       expect(http.patch).not.toHaveBeenCalled();
     },
   );
@@ -389,31 +480,46 @@ describe("updateAssistantThread", () => {
     const input = Object.create({ inherited: true }) as { title: string };
     input.title = "Valid";
 
-    await expect(updateAssistantThread(1, input)).rejects.toThrow(/plain object/i);
+    await expect(updateAssistantThread(1, input)).rejects.toThrow(
+      /plain object/i,
+    );
     expect(http.patch).not.toHaveBeenCalled();
   });
 
   it("rejects enumerable symbols but ignores non-enumerable unknown keys", async () => {
     const symbolInput = { title: "Valid", [Symbol("unexpected")]: true };
-    await expect(updateAssistantThread(1, symbolInput)).rejects.toThrow(/supported/i);
+    await expect(updateAssistantThread(1, symbolInput)).rejects.toThrow(
+      /supported/i,
+    );
 
     const hiddenInput = { title: "Valid" };
-    Object.defineProperty(hiddenInput, "hidden", { value: true, enumerable: false });
+    Object.defineProperty(hiddenInput, "hidden", {
+      value: true,
+      enumerable: false,
+    });
     vi.mocked(http.patch).mockResolvedValue({
       data: { data: { id: 1, scope: "freeform", status: "active" } },
     });
     await updateAssistantThread(1, hiddenInput);
 
     expect(http.patch).toHaveBeenCalledTimes(1);
-    expect(http.patch).toHaveBeenCalledWith("/api/tracker/v1/assistant/threads/1", {
-      title: "Valid",
-    });
+    expect(http.patch).toHaveBeenCalledWith(
+      "/api/tracker/v1/assistant/threads/1",
+      {
+        title: "Valid",
+      },
+    );
   });
 
-  it.each([0, -1, 1.5, Number.NaN])("rejects invalid thread id %s before HTTP", async (threadId) => {
-    await expect(updateAssistantThread(threadId, { title: "Valid" })).rejects.toThrow(/threadId/);
-    expect(http.patch).not.toHaveBeenCalled();
-  });
+  it.each([0, -1, 1.5, Number.NaN])(
+    "rejects invalid thread id %s before HTTP",
+    async (threadId) => {
+      await expect(
+        updateAssistantThread(threadId, { title: "Valid" }),
+      ).rejects.toThrow(/threadId/);
+      expect(http.patch).not.toHaveBeenCalled();
+    },
+  );
 
   it.each([
     [null, /input/i],
@@ -424,11 +530,16 @@ describe("updateAssistantThread", () => {
     [{ title: "a".repeat(161) }, /160/],
     [{ labels: "label" }, /labels/i],
     [{ labels: [1] }, /labels/i],
-    [{ labels: Array.from({ length: 13 }, (_, index) => `label-${index}`) }, /12/],
+    [
+      { labels: Array.from({ length: 13 }, (_, index) => `label-${index}`) },
+      /12/,
+    ],
     [{ labels: ["a".repeat(41)] }, /40/],
     [{ needsReview: "yes" }, /needsReview/i],
   ])("rejects malformed update input %#", async (input, message) => {
-    await expect(updateAssistantThread(1, input as never)).rejects.toThrow(message as RegExp);
+    await expect(updateAssistantThread(1, input as never)).rejects.toThrow(
+      message as RegExp,
+    );
     expect(http.patch).not.toHaveBeenCalled();
   });
 
@@ -438,10 +549,12 @@ describe("updateAssistantThread", () => {
     });
     const familyEmoji = "👨‍👩‍👧‍👦";
 
-    await expect(updateAssistantThread(1, {
-      title: familyEmoji.repeat(160),
-      labels: [familyEmoji.repeat(40)],
-    })).resolves.toMatchObject({ id: 1 });
+    await expect(
+      updateAssistantThread(1, {
+        title: familyEmoji.repeat(160),
+        labels: [familyEmoji.repeat(40)],
+      }),
+    ).resolves.toMatchObject({ id: 1 });
   });
 });
 
@@ -453,7 +566,9 @@ describe("deleteAssistantThread", () => {
 
     await deleteAssistantThread(11);
 
-    expect(http.delete).toHaveBeenCalledWith("/api/tracker/v1/assistant/threads/11");
+    expect(http.delete).toHaveBeenCalledWith(
+      "/api/tracker/v1/assistant/threads/11",
+    );
   });
 
   it("rejects invalid thread ids before HTTP", async () => {

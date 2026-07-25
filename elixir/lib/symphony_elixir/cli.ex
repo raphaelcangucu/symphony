@@ -6,6 +6,8 @@ defmodule SymphonyElixir.CLI do
   come from `SYMPHONY_*` env, so no global WORKFLOW.md path is required.
   """
 
+  alias SymphonyElixir.Agent.CLI, as: AgentCLI
+  alias SymphonyElixir.Claude.AppServer.StdioMain
   alias SymphonyElixir.LogFile
 
   @acknowledgement_switch :i_understand_that_this_will_be_running_without_the_usual_guardrails
@@ -31,7 +33,11 @@ defmodule SymphonyElixir.CLI do
 
   @spec main([String.t()]) :: no_return()
   def main(["claude-app-server" | rest]) do
-    SymphonyElixir.Claude.AppServer.StdioMain.run(rest)
+    StdioMain.run(rest)
+  end
+
+  def main(["agent" | rest]) do
+    AgentCLI.main(rest)
   end
 
   def main(args) do
@@ -79,7 +85,7 @@ defmodule SymphonyElixir.CLI do
 
   @spec usage_message() :: String.t()
   defp usage_message do
-    "Usage: symphony [--logs-root <path>] [--port <port>]"
+    "Usage: symphony [--logs-root <path>] [--port <port>]\n       symphony agent <providers|capabilities|run|steer|goal> [options]"
   end
 
   @spec runtime_deps() :: deps()

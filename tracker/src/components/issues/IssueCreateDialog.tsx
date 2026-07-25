@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ExecutionSettingsPicker } from "@/components/assistant/ExecutionSettingsPicker";
 import { agentKindLabel } from "@/components/shared/AgentChip";
 import { useIssueFormOptions } from "@/hooks/useIssueFormOptions";
-import { fallbackCatalogBundle, type AssistantCatalogBundle } from "@/lib/assistantSettings";
+import type { AssistantCatalogBundle } from "@/lib/assistantSettings";
 import { cn } from "@/lib/utils";
 import { fetchAssistantCatalogBundle } from "@/services/assistant";
 import { createIssue } from "@/services/issues";
@@ -123,7 +123,7 @@ export function IssueCreateDialog({
   const [agent, setAgent] = useState<AgentKind | null>(null);
   const [model, setModel] = useState<string | null>(null);
   const [effort, setEffort] = useState<string | null>(null);
-  const [catalogBundle, setCatalogBundle] = useState<AssistantCatalogBundle>(() => fallbackCatalogBundle());
+  const [catalogBundle, setCatalogBundle] = useState<AssistantCatalogBundle | null>(null);
   const [codexGoalMode, setCodexGoalMode] = useState(false);
   const [codexGoal, setCodexGoal] = useState("");
   const [codexGoalEdited, setCodexGoalEdited] = useState(false);
@@ -143,9 +143,14 @@ export function IssueCreateDialog({
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
-    void fetchAssistantCatalogBundle(projectSlug).then((bundle) => {
-      if (!cancelled) setCatalogBundle(bundle);
-    });
+    setCatalogBundle(null);
+    void fetchAssistantCatalogBundle(projectSlug)
+      .then((bundle) => {
+        if (!cancelled) setCatalogBundle(bundle);
+      })
+      .catch(() => {
+        if (!cancelled) setCatalogBundle(null);
+      });
     return () => {
       cancelled = true;
     };
@@ -285,20 +290,24 @@ export function IssueCreateDialog({
 
           <div className="space-y-1 text-sm">
             <span className="text-xs font-medium text-muted-foreground">{t("issue.create.execution")}</span>
-            <ExecutionSettingsPicker
-              bundle={catalogBundle}
-              agent={agent}
-              model={model}
-              effort={effort}
-              allowInherit
-              inheritAgentLabel={t("issue.create.inherit", {
-                agent: agentKindLabel(options.effectiveAgent, t),
-              })}
-              disabled={submitting || optionsLoading}
-              onAgentChange={setAgent}
-              onModelChange={setModel}
-              onEffortChange={setEffort}
-            />
+            {catalogBundle ? (
+              <ExecutionSettingsPicker
+                bundle={catalogBundle}
+                agent={agent}
+                model={model}
+                effort={effort}
+                allowInherit
+                inheritAgentLabel={t("issue.create.inherit", {
+                  agent: agentKindLabel(options.effectiveAgent, t),
+                })}
+                disabled={submitting || optionsLoading}
+                onAgentChange={setAgent}
+                onModelChange={setModel}
+                onEffortChange={setEffort}
+              />
+            ) : (
+              <p className="text-xs text-muted-foreground">{t("common.loading")}</p>
+            )}
           </div>
 
           {concreteAgent(agent ?? "") !== null ? (
@@ -435,4 +444,3 @@ function ChipPicker({ title, emptyText, items, selected, onToggle }: ChipPickerP
     </div>
   );
 }
-

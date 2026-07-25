@@ -98,14 +98,23 @@ defmodule SymphonyElixir.Evidence.Manifest do
           {:ok, t()}
           | {:error, :manifest_missing | {:manifest_invalid, term()} | {:artifacts_missing, [String.t()]}}
   def read(workspace) do
+    with {:ok, snapshot} <- read_snapshot(workspace) do
+      {:ok, snapshot.manifest}
+    end
+  end
+
+  @spec read_snapshot(Path.t()) ::
+          {:ok, %{manifest: t(), map: map(), evidence_dir: Path.t()}}
+          | {:error, :manifest_missing | {:manifest_invalid, term()} | {:artifacts_missing, [String.t()]}}
+  def read_snapshot(workspace) do
     evidence_dir = resolve_dir(workspace)
     path = Path.join(evidence_dir, @manifest_file)
 
     with {:ok, raw} <- read_file(path),
          {:ok, decoded} <- decode(raw),
          {:ok, manifest} <- build(decoded),
-         :ok <- verify_artifacts(evidence_dir, manifest) do
-      {:ok, manifest}
+         :ok <- verify_artifacts(workspace, evidence_dir, manifest) do
+      {:ok, %{manifest: manifest, map: decoded, evidence_dir: evidence_dir}}
     end
   end
 
@@ -277,18 +286,64 @@ defmodule SymphonyElixir.Evidence.Manifest do
 
   defp normalize_artifact_ref(_other), do: []
 
-  defp verify_artifacts(evidence_dir, manifest) do
-    missing =
+  defp verify_artifacts(workspace, evidence_dir, manifest) do
+    {unsafe, missing} =
       manifest
       |> artifact_paths()
-      |> Enum.reject(fn rel ->
-        full = Path.join(evidence_dir, rel)
-        File.exists?(full) or File.dir?(String.trim_trailing(full, "/"))
+      |> Enum.reduce({[], []}, fn relative, {unsafe, missing} ->
+        case artifact_status(workspace, evidence_dir, relative) do
+          :ok -> {unsafe, missing}
+          :missing -> {unsafe, [relative | missing]}
+          :unsafe -> {[relative | unsafe], missing}
+        end
       end)
 
-    case missing do
-      [] -> :ok
-      missing -> {:error, {:artifacts_missing, missing}}
+    cond do
+      unsafe != [] -> {:error, {:manifest_invalid, {:unsafe_artifacts, Enum.reverse(unsafe)}}}
+      missing != [] -> {:error, {:artifacts_missing, Enum.reverse(missing)}}
+      true -> :ok
+    end
+  end
+
+  defp artifact_status(workspace, evidence_dir, relative) when is_binary(relative) do
+    base = Path.expand(evidence_dir)
+    full = Path.expand(Path.join(evidence_dir, relative))
+
+    cond do
+      Path.type(relative) == :absolute ->
+        :unsafe
+
+      not descendant_or_same?(base, full) ->
+        :unsafe
+
+      symlink_below?(Path.expand(workspace), full) ->
+        :unsafe
+
+      true ->
+        case File.lstat(full) do
+          {:ok, %File.Stat{type: type}} when type in [:regular, :directory] -> :ok
+          {:ok, _stat} -> :unsafe
+          {:error, :enoent} -> :missing
+          {:error, _reason} -> :unsafe
+        end
+    end
+  end
+
+  defp artifact_status(_workspace, _evidence_dir, _relative), do: :unsafe
+
+  defp descendant_or_same?(base, path), do: path == base or String.starts_with?(path, base <> "/")
+
+  defp symlink_below?(root, path) do
+    if descendant_or_same?(root, path) do
+      path
+      |> Path.relative_to(root)
+      |> Path.split()
+      |> Enum.scan(root, &Path.join(&2, &1))
+      |> Enum.any?(fn candidate ->
+        match?({:ok, %File.Stat{type: :symlink}}, File.lstat(candidate))
+      end)
+    else
+      true
     end
   end
 end

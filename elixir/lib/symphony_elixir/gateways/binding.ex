@@ -73,7 +73,16 @@ defmodule SymphonyElixir.Gateways.Binding do
     |> normalize_string(:active_issue_identifier)
     |> normalize_string(:active_kb_repo_slug)
     |> normalize_string(:active_kb_page_path)
-    |> validate_required([:provider, :account_id, :binding_kind, :conversation_id, :status, :default_mode, :active_mode])
+    |> validate_required([
+      :provider,
+      :account_id,
+      :binding_kind,
+      :conversation_id,
+      :status,
+      :default_agent_kind,
+      :default_mode,
+      :active_mode
+    ])
     |> validate_inclusion(:binding_kind, @binding_kinds)
     |> validate_inclusion(:status, @statuses)
     |> validate_inclusion(:default_agent_kind, @agent_kinds)

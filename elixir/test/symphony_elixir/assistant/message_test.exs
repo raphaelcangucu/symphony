@@ -13,7 +13,7 @@ defmodule SymphonyElixir.Assistant.MessageTest do
         sequence: 1,
         role: "assistant",
         content: @whitespace,
-        turn_id: @whitespace
+        run_id: @whitespace
       })
 
     assert assistant_changeset.valid?

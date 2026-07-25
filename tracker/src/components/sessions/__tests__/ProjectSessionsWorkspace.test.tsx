@@ -17,12 +17,21 @@ import {
   createAssistantSessionTab,
   createSessionsListTab,
 } from "@/lib/workspaceTabs/types";
-import { workspaceTabsStorageKey, writePersistedWorkspaceTabs } from "@/lib/workspaceTabs/persistence";
-import { archiveAssistantThread, getAssistantThread } from "@/services/assistantThreads";
+import {
+  workspaceTabsStorageKey,
+  writePersistedWorkspaceTabs,
+} from "@/lib/workspaceTabs/persistence";
+import {
+  archiveAssistantThread,
+  getAssistantThread,
+} from "@/services/assistantThreads";
 import { removeWorkspaces } from "@/services/worktrees";
 
 const projectAssistantPanel = vi.fn((props: { contentMaxWidth?: string }) => (
-  <div aria-label="mock assistant panel" data-content-max-width={props.contentMaxWidth} />
+  <div
+    aria-label="mock assistant panel"
+    data-content-max-width={props.contentMaxWidth}
+  />
 ));
 
 const navigateMock = vi.hoisted(() => vi.fn());
@@ -43,7 +52,8 @@ vi.mock("@/services/worktrees", () => ({
   removeWorkspaces: vi.fn(),
 }));
 vi.mock("@/components/assistant/ProjectAssistantPanel", () => ({
-  ProjectAssistantPanel: (props: { contentMaxWidth?: string }) => projectAssistantPanel(props),
+  ProjectAssistantPanel: (props: { contentMaxWidth?: string }) =>
+    projectAssistantPanel(props),
 }));
 vi.mock("@/components/sessions/IssueEnvironmentDock", () => ({
   IssueEnvironmentDock: (props: unknown) => {
@@ -67,7 +77,10 @@ vi.mock("@/components/layout/WorkspaceContext", () => ({
   useWorkspace: () => ({ projectSlug: "demo", view: "board" }),
 }));
 vi.mock("react-router-dom", async () => {
-  const actual = await vi.importActual<typeof import("react-router-dom")>("react-router-dom");
+  const actual =
+    await vi.importActual<typeof import("react-router-dom")>(
+      "react-router-dom",
+    );
   return {
     ...actual,
     useNavigate: () => navigateMock,
@@ -75,11 +88,14 @@ vi.mock("react-router-dom", async () => {
 });
 
 function SessionsChromeHarness({ children }: { children: ReactNode }) {
-  const [chromeState, setChromeState] = useState<ProjectSessionsChromeState | null>(null);
+  const [chromeState, setChromeState] =
+    useState<ProjectSessionsChromeState | null>(null);
 
   return (
     <ProjectSessionsChromeSetterContext.Provider value={setChromeState}>
-      {chromeState ? <span data-testid="sessions-chrome-count">{chromeState.count}</span> : null}
+      {chromeState ? (
+        <span data-testid="sessions-chrome-count">{chromeState.count}</span>
+      ) : null}
       {children}
     </ProjectSessionsChromeSetterContext.Provider>
   );
@@ -97,6 +113,10 @@ describe("ProjectSessionsWorkspace", () => {
       id: 42,
       scope: "project_session",
       agentKind: null,
+      requestedModel: null,
+      requestedEffort: null,
+      resolvedModel: null,
+      resolvedEffort: null,
       projectSlug: "demo",
       projectName: "Demo",
       issueIdentifier: null,
@@ -129,10 +149,18 @@ describe("ProjectSessionsWorkspace", () => {
       </MemoryRouter>,
     );
 
-    expect(screen.queryByTestId("project-sessions-compact-header")).not.toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Sessions" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("project-sessions-compact-header"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Sessions" }),
+    ).not.toBeInTheDocument();
     expect(screen.queryByText("Project sessions")).not.toBeInTheDocument();
-    expect(screen.queryByText("All assistant chats and agent runs related to this project.")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        "All assistant chats and agent runs related to this project.",
+      ),
+    ).not.toBeInTheDocument();
   });
 
   it("publishes the sessions count to the project header chrome", async () => {
@@ -144,7 +172,9 @@ describe("ProjectSessionsWorkspace", () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByTestId("sessions-chrome-count")).toHaveTextContent("0");
+    expect(
+      await screen.findByTestId("sessions-chrome-count"),
+    ).toHaveTextContent("0");
   });
 
   it("mounts the environment dock for a freeform thread scope", async () => {
@@ -153,6 +183,10 @@ describe("ProjectSessionsWorkspace", () => {
       id: 42,
       scope: "freeform",
       agentKind: null,
+      requestedModel: null,
+      requestedEffort: null,
+      resolvedModel: null,
+      resolvedEffort: null,
       projectSlug: "demo",
       projectName: "Demo",
       issueIdentifier: null,
@@ -171,7 +205,11 @@ describe("ProjectSessionsWorkspace", () => {
       </MemoryRouter>,
     );
 
-    await user.click(await screen.findByRole("button", { name: "Environment for freeform-42" }));
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Environment for freeform-42",
+      }),
+    );
 
     expect(screen.getByTestId("environment-dock")).toBeInTheDocument();
     expect(environmentDockMock).toHaveBeenCalledWith(
@@ -192,6 +230,10 @@ describe("ProjectSessionsWorkspace", () => {
       id: 42,
       scope: "freeform",
       agentKind: null,
+      requestedModel: null,
+      requestedEffort: null,
+      resolvedModel: null,
+      resolvedEffort: null,
       projectSlug: "demo",
       projectName: "Demo",
       issueIdentifier: null,
@@ -210,7 +252,9 @@ describe("ProjectSessionsWorkspace", () => {
       </MemoryRouter>,
     );
 
-    await user.click(await screen.findByRole("button", { name: "Terminal for freeform-42" }));
+    await user.click(
+      await screen.findByRole("button", { name: "Terminal for freeform-42" }),
+    );
 
     expect(screen.getByTestId("terminal-dock")).toBeInTheDocument();
     expect(terminalDockMock).toHaveBeenCalledWith(
@@ -314,17 +358,29 @@ describe("ProjectSessionsWorkspace", () => {
     const list = screen.getByRole("list", { name: "Workspaces" });
     expect(list).toBeVisible();
     expect(list.parentElement).toHaveClass("mx-auto", "max-w-3xl");
-    expect(screen.queryByRole("button", { name: "Session" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Session" }),
+    ).not.toBeInTheDocument();
 
-    await user.click(within(list).getByRole("button", { name: /Fix login race/ }));
+    await user.click(
+      within(list).getByRole("button", { name: /Fix login race/ }),
+    );
     expect(screen.getByRole("button", { name: "Session" })).toBeVisible();
 
-    await user.click(within(list).getByRole("button", { name: "More actions" }));
-    expect(await screen.findByRole("menuitem", { name: "Session" })).toBeVisible();
+    await user.click(
+      within(list).getByRole("button", { name: "More actions" }),
+    );
+    expect(
+      await screen.findByRole("menuitem", { name: "Session" }),
+    ).toBeVisible();
 
     await user.keyboard("{Escape}");
-    await user.click(within(list).getByRole("button", { name: /Fix login race/ }));
-    expect(screen.queryByRole("button", { name: "Session" })).not.toBeInTheDocument();
+    await user.click(
+      within(list).getByRole("button", { name: /Fix login race/ }),
+    );
+    expect(
+      screen.queryByRole("button", { name: "Session" }),
+    ).not.toBeInTheDocument();
   });
 
   it("confirms issue workspace removal, removes the tree, and archives linked sessions", async () => {
@@ -407,18 +463,28 @@ describe("ProjectSessionsWorkspace", () => {
     );
 
     const list = screen.getByRole("list", { name: "Workspaces" });
-    expect(within(list).getByRole("button", { name: /Remove workspace/i })).toBeInTheDocument();
+    expect(
+      within(list).getByRole("button", { name: /Remove workspace/i }),
+    ).toBeInTheDocument();
 
-    await user.click(within(list).getByRole("button", { name: "More actions" }));
+    await user.click(
+      within(list).getByRole("button", { name: "More actions" }),
+    );
     await user.click(await screen.findByRole("menuitem", { name: "Remove" }));
 
-    expect(await screen.findByRole("heading", { name: /Remove workspace/i })).toBeVisible();
+    expect(
+      await screen.findByRole("heading", { name: /Remove workspace/i }),
+    ).toBeVisible();
     await user.click(screen.getByRole("button", { name: /^Remove$/ }));
 
     await waitFor(() =>
-      expect(removeWorkspaces).toHaveBeenCalledWith("demo", ["/ws/demo/DEMO-1"]),
+      expect(removeWorkspaces).toHaveBeenCalledWith("demo", [
+        "/ws/demo/DEMO-1",
+      ]),
     );
-    await waitFor(() => expect(archiveAssistantThread).toHaveBeenCalledWith(99));
+    await waitFor(() =>
+      expect(archiveAssistantThread).toHaveBeenCalledWith(99),
+    );
     expect(refetch).toHaveBeenCalled();
   });
 
@@ -499,11 +565,19 @@ describe("ProjectSessionsWorkspace", () => {
     );
 
     const list = screen.getByRole("list", { name: "Workspaces" });
-    await user.click(within(list).getByRole("button", { name: /Fix login race/ }));
+    await user.click(
+      within(list).getByRole("button", { name: /Fix login race/ }),
+    );
 
-    await user.click(within(list).getByRole("button", { name: /Remove session/i }));
-    await waitFor(() => expect(archiveAssistantThread).toHaveBeenCalledWith(99));
-    expect(screen.queryByRole("heading", { name: /Remove workspace/i })).not.toBeInTheDocument();
+    await user.click(
+      within(list).getByRole("button", { name: /Remove session/i }),
+    );
+    await waitFor(() =>
+      expect(archiveAssistantThread).toHaveBeenCalledWith(99),
+    );
+    expect(
+      screen.queryByRole("heading", { name: /Remove workspace/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("selects an active thread tab from the route", async () => {
@@ -514,12 +588,19 @@ describe("ProjectSessionsWorkspace", () => {
     );
 
     await waitFor(() =>
-      expect(screen.getByRole("tab", { name: /Project session/i })).toHaveAttribute("aria-selected", "true"),
+      expect(
+        screen.getByRole("tab", { name: /Project session/i }),
+      ).toHaveAttribute("aria-selected", "true"),
     );
     expect(screen.getByLabelText("mock assistant panel")).toBeInTheDocument();
     expect(container.querySelector("main > div")).toHaveClass("w-full");
-    expect(container.querySelector("main > div")).not.toHaveClass("max-w-[min(100%,96rem)]");
-    expect(screen.getByLabelText("mock assistant panel")).toHaveAttribute("data-content-max-width", "default");
+    expect(container.querySelector("main > div")).not.toHaveClass(
+      "max-w-[min(100%,96rem)]",
+    );
+    expect(screen.getByLabelText("mock assistant panel")).toHaveAttribute(
+      "data-content-max-width",
+      "default",
+    );
   });
 
   it("mounts the preview dock for a thread workspace scope", async () => {
@@ -528,6 +609,10 @@ describe("ProjectSessionsWorkspace", () => {
       id: 42,
       scope: "project_session",
       agentKind: "cursor",
+      requestedModel: null,
+      requestedEffort: null,
+      resolvedModel: null,
+      resolvedEffort: null,
       projectSlug: "demo",
       projectName: "Demo",
       issueIdentifier: null,
@@ -547,7 +632,9 @@ describe("ProjectSessionsWorkspace", () => {
     );
 
     await user.click(
-      await screen.findByRole("button", { name: "Preview for thread-workspace" }),
+      await screen.findByRole("button", {
+        name: "Preview for thread-workspace",
+      }),
     );
 
     expect(screen.getByTestId("preview-dock")).toBeInTheDocument();
@@ -600,20 +687,24 @@ describe("ProjectSessionsWorkspace", () => {
     );
 
     await waitFor(() =>
-      expect(screen.getByRole("tab", { name: /Cleanup goapi GAM-19/i })).toHaveAttribute(
-        "aria-selected",
-        "true",
-      ),
+      expect(
+        screen.getByRole("tab", { name: /Cleanup goapi GAM-19/i }),
+      ).toHaveAttribute("aria-selected", "true"),
     );
-    expect(screen.queryByRole("tab", { name: /^Project session/i })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("tab", { name: /^Project session/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("focuses an already-open issue tab when the route changes even if the title is unchanged", async () => {
     const listTab = createSessionsListTab("Workspaces");
-    writePersistedWorkspaceTabs(workspaceTabsStorageKey("project-sessions", "demo"), {
-      tabs: [listTab, createAssistantSessionTab(99, "GAM-20")],
-      activeTabId: listTab.id,
-    });
+    writePersistedWorkspaceTabs(
+      workspaceTabsStorageKey("project-sessions", "demo"),
+      {
+        tabs: [listTab, createAssistantSessionTab(99, "GAM-20")],
+        activeTabId: listTab.id,
+      },
+    );
 
     vi.mocked(useProjectSessions).mockReturnValue({
       groups: emptyProjectSessionGroups(),
@@ -651,9 +742,15 @@ describe("ProjectSessionsWorkspace", () => {
     );
 
     await waitFor(() =>
-      expect(screen.getByRole("tab", { name: /GAM-20/i })).toHaveAttribute("aria-selected", "true"),
+      expect(screen.getByRole("tab", { name: /GAM-20/i })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      ),
     );
-    expect(screen.getByRole("tab", { name: /Workspaces/i })).toHaveAttribute("aria-selected", "false");
+    expect(screen.getByRole("tab", { name: /Workspaces/i })).toHaveAttribute(
+      "aria-selected",
+      "false",
+    );
   });
 
   it("omits the sibling session button on the workspaces list tab", () => {
@@ -663,19 +760,24 @@ describe("ProjectSessionsWorkspace", () => {
       </MemoryRouter>,
     );
 
-    expect(screen.queryByRole("button", { name: /^New session$/i })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /^New session$/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("drops assistant tabs that belong to another project", async () => {
     const listTab = createSessionsListTab("Workspaces");
-    writePersistedWorkspaceTabs(workspaceTabsStorageKey("project-sessions", "macro-markets"), {
-      tabs: [
-        listTab,
-        createAssistantSessionTab(100, "Advising chat"),
-        createAssistantSessionTab(8051, "Macro chat"),
-      ],
-      activeTabId: "assistant-session:8051",
-    });
+    writePersistedWorkspaceTabs(
+      workspaceTabsStorageKey("project-sessions", "macro-markets"),
+      {
+        tabs: [
+          listTab,
+          createAssistantSessionTab(100, "Advising chat"),
+          createAssistantSessionTab(8051, "Macro chat"),
+        ],
+        activeTabId: "assistant-session:8051",
+      },
+    );
 
     vi.mocked(useProjectSessions).mockReturnValue({
       groups: emptyProjectSessionGroups(),
@@ -707,15 +809,25 @@ describe("ProjectSessionsWorkspace", () => {
     });
 
     renderWithI18n(
-      <MemoryRouter initialEntries={["/projects/macro-markets/workspaces/8051"]}>
-        <ProjectSessionsWorkspace projectSlug="macro-markets" activeThreadId={8051} />
+      <MemoryRouter
+        initialEntries={["/projects/macro-markets/workspaces/8051"]}
+      >
+        <ProjectSessionsWorkspace
+          projectSlug="macro-markets"
+          activeThreadId={8051}
+        />
       </MemoryRouter>,
     );
 
     await waitFor(() =>
-      expect(screen.getByRole("tab", { name: /Macro chat/i })).toHaveAttribute("aria-selected", "true"),
+      expect(screen.getByRole("tab", { name: /Macro chat/i })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      ),
     );
-    expect(screen.queryByRole("tab", { name: /Advising chat/i })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("tab", { name: /Advising chat/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("closes the active assistant tab on the first close click", async () => {
@@ -756,13 +868,21 @@ describe("ProjectSessionsWorkspace", () => {
     );
 
     await waitFor(() =>
-      expect(screen.getByRole("tab", { name: /Project session/i })).toHaveAttribute("aria-selected", "true"),
+      expect(
+        screen.getByRole("tab", { name: /Project session/i }),
+      ).toHaveAttribute("aria-selected", "true"),
     );
 
-    await user.click(screen.getByRole("button", { name: /Close Project session/i }));
+    await user.click(
+      screen.getByRole("button", { name: /Close Project session/i }),
+    );
 
-    expect(screen.queryByRole("tab", { name: /Project session/i })).not.toBeInTheDocument();
-    expect(navigateMock).toHaveBeenCalledWith("/projects/demo/workspaces", { replace: true });
+    expect(
+      screen.queryByRole("tab", { name: /Project session/i }),
+    ).not.toBeInTheDocument();
+    expect(navigateMock).toHaveBeenCalledWith("/projects/demo/workspaces", {
+      replace: true,
+    });
   });
 
   it("creates a sibling session from the tab bar and opens it", async () => {
@@ -771,6 +891,10 @@ describe("ProjectSessionsWorkspace", () => {
       id: 42,
       scope: "project_session",
       agentKind: "cursor" as const,
+      requestedModel: null,
+      requestedEffort: null,
+      resolvedModel: null,
+      resolvedEffort: null,
       projectSlug: "demo",
       projectName: "Demo",
       issueIdentifier: null,
@@ -783,7 +907,11 @@ describe("ProjectSessionsWorkspace", () => {
       updatedAt: "2026-07-15T12:00:00Z",
     };
     vi.mocked(getAssistantThread).mockResolvedValue(sourceThread);
-    vi.mocked(createSiblingSession).mockResolvedValue({ ...sourceThread, id: 99, title: null });
+    vi.mocked(createSiblingSession).mockResolvedValue({
+      ...sourceThread,
+      id: 99,
+      title: null,
+    });
 
     renderWithI18n(
       <MemoryRouter initialEntries={["/projects/demo/workspaces/42"]}>
@@ -792,7 +920,9 @@ describe("ProjectSessionsWorkspace", () => {
     );
 
     await waitFor(() =>
-      expect(screen.getByRole("tab", { name: /Project session/i })).toHaveAttribute("aria-selected", "true"),
+      expect(
+        screen.getByRole("tab", { name: /Project session/i }),
+      ).toHaveAttribute("aria-selected", "true"),
     );
 
     await user.click(screen.getByRole("button", { name: /^New session$/i }));
@@ -800,7 +930,10 @@ describe("ProjectSessionsWorkspace", () => {
     await waitFor(() => {
       expect(getAssistantThread).toHaveBeenCalledWith(42);
       expect(createSiblingSession).toHaveBeenCalledWith(sourceThread);
-      expect(navigateMock).toHaveBeenCalledWith("/projects/demo/workspaces/99", { replace: true });
+      expect(navigateMock).toHaveBeenCalledWith(
+        "/projects/demo/workspaces/99",
+        { replace: true },
+      );
     });
   });
 });
