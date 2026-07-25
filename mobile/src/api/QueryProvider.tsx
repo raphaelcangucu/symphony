@@ -1,11 +1,19 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { useConnection } from "@/auth/ConnectionProvider";
 
+import {
+  profileQueryCacheKey,
+  removeProfileQueries,
+  restoreProfileQueries,
+  saveProfileQueries,
+} from "./query-cache";
+
 export function QueryProvider({ children }: { children: ReactNode }) {
-  const { activeProfile } = useConnection();
-  const previousProfileId = useRef<string | null>(null);
+  const { activeProfile, profiles } = useConnection();
+  const previousProfileIds = useRef(new Set<string>());
   const [client] = useState(
     () =>
       new QueryClient({
@@ -19,14 +27,32 @@ export function QueryProvider({ children }: { children: ReactNode }) {
   );
 
   useEffect(() => {
-    const nextProfileId = activeProfile?.id ?? null;
-    const previous = previousProfileId.current;
-    if (previous && previous !== nextProfileId) {
-      client.removeQueries({
-        queryKey: ["session-library", previous],
-      });
+    const nextIds = new Set(profiles.map((profile) => profile.id));
+    for (const previousId of previousProfileIds.current) {
+      if (!nextIds.has(previousId)) {
+        removeProfileQueries(client, previousId);
+        void AsyncStorage.removeItem(profileQueryCacheKey(previousId));
+      }
     }
-    previousProfileId.current = nextProfileId;
+    previousProfileIds.current = nextIds;
+  }, [client, profiles]);
+
+  useEffect(() => {
+    const profileId = activeProfile?.id;
+    if (!profileId) return;
+    let active = true;
+    let unsubscribe: () => void = () => undefined;
+    void restoreProfileQueries(client, profileId, AsyncStorage).then(() => {
+      if (!active) return;
+      unsubscribe = client.getQueryCache().subscribe(() => {
+        void saveProfileQueries(client, profileId, AsyncStorage);
+      });
+    });
+    return () => {
+      active = false;
+      unsubscribe();
+      void saveProfileQueries(client, profileId, AsyncStorage);
+    };
   }, [activeProfile?.id, client]);
 
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;

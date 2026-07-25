@@ -1,5 +1,7 @@
 import { Socket } from "phoenix";
 
+import { diagnosticLog, type DiagnosticLog } from "@/diagnostics/diagnostic-log";
+
 export type TerminalConnectionState = "connecting" | "live" | "offline";
 
 export type TerminalPushLike = {
@@ -30,6 +32,7 @@ type CreateTerminalSessionOptions = {
   cols?: number;
   rows?: number;
   socketFactory?: (endpoint: string, params: Record<string, string>) => TerminalSocketLike;
+  diagnostics?: DiagnosticLog;
   onOutput(output: string): void;
   onState(state: TerminalConnectionState): void;
   onError(message: string): void;
@@ -58,6 +61,7 @@ export function createTerminalSession({
   cols = 80,
   rows = 24,
   socketFactory = createSocket,
+  diagnostics = diagnosticLog,
   onOutput,
   onState,
   onError,
@@ -71,6 +75,15 @@ export function createTerminalSession({
   let joined = false;
   let lastOutput = "";
   let dimensions = validDimensions(cols, rows);
+  const recordSocket = (event: string, details: Record<string, unknown> = {}) =>
+    diagnostics.record(
+      {
+        scope: "socket",
+        event: `terminal socket ${event}`,
+        details: { topic, projectSlug: project, ...details },
+      },
+      [token],
+    );
 
   function renderSnapshot(output: string) {
     if (output === lastOutput) return;
@@ -81,16 +94,19 @@ export function createTerminalSession({
   function connect() {
     if (started) return;
     started = true;
+    recordSocket("connecting");
     onState("connecting");
     const nextSocket = socketFactory(socketEndpoint(origin), { token, locale });
     const nextChannel = nextSocket.channel(topic, { project_slug: project });
     socket = nextSocket;
     channel = nextChannel;
     nextSocket.onClose?.(() => {
+      recordSocket("closed");
       joined = false;
       if (started) onState("offline");
     });
     nextSocket.onError?.(() => {
+      recordSocket("error");
       joined = false;
       if (started) onState("offline");
     });
@@ -99,6 +115,7 @@ export function createTerminalSession({
       if (typeof output === "string") renderSnapshot(output);
     });
     nextChannel.on("error", (payload) => {
+      recordSocket("channel error", { payload });
       joined = false;
       onState("offline");
       onError(textField(payload, "message") ?? "Terminal session failed");
@@ -107,6 +124,7 @@ export function createTerminalSession({
       .join()
       .receive("ok", (payload) => {
         joined = true;
+        recordSocket("live");
         onState("live");
         const session = field(payload, "session");
         const output = field(session, "output");
@@ -114,11 +132,13 @@ export function createTerminalSession({
         nextChannel.push("resize", { cols: dimensions.cols, rows: dimensions.rows });
       })
       .receive("error", (payload) => {
+        recordSocket("join failed", { payload });
         joined = false;
         onState("offline");
         onError(textField(payload, "reason") ?? "Could not join terminal");
       })
       .receive("timeout", () => {
+        recordSocket("join timeout");
         joined = false;
         onState("offline");
         onError("Terminal connection timed out");
@@ -132,6 +152,7 @@ export function createTerminalSession({
     joined = false;
     channel?.leave();
     socket?.disconnect();
+    recordSocket("disconnected");
     channel = null;
     socket = null;
   }

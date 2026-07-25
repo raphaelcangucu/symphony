@@ -62,4 +62,18 @@ describe("fixture runtime boundary", () => {
       ]),
     });
   });
+
+  it("supports deterministic connection switching and removal", async () => {
+    const storage = createFixtureRuntime().connectionStorage!;
+    const initial = await storage.loadSnapshot();
+    expect(initial.profiles.map((profile) => profile.id)).toEqual(["e2e-remote", "e2e-local"]);
+
+    await expect(storage.selectProfile("e2e-local")).resolves.toEqual(
+      expect.objectContaining({ activeProfileId: "e2e-local" }),
+    );
+    await expect(storage.removeProfile("e2e-local")).resolves.toEqual({
+      profiles: [expect.objectContaining({ id: "e2e-remote" })],
+      activeProfileId: "e2e-remote",
+    });
+  });
 });

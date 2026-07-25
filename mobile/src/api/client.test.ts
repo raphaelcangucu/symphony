@@ -7,6 +7,7 @@ import {
   TrackerTimeoutError,
 } from "./errors";
 import { createTrackerClient } from "./client";
+import { createDiagnosticLog } from "@/diagnostics/diagnostic-log";
 
 function jsonResponse(body: unknown, init: ResponseInit = {}): Response {
   return new Response(JSON.stringify(body), {
@@ -859,6 +860,111 @@ describe("createTrackerClient", () => {
       token: "ExponentPushToken[private]",
     });
     expect(fetchImpl.mock.calls[1]?.[1]?.method).toBe("DELETE");
+  });
+
+  it("maps agent availability and usage windows", async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          data: {
+            codex: {
+              available: true,
+              version: "1.2.3",
+              command: "codex",
+              path: "/usr/bin/codex",
+              authenticated: true,
+              detail: null,
+            },
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          data: {
+            codex: {
+              agent_kind: "codex",
+              plan: "pro",
+              credits_remaining: null,
+              credits_unlimited: true,
+              fetched_at: "2026-07-24T01:00:00Z",
+              stale: false,
+              windows: [
+                {
+                  kind: "five_hour",
+                  used_percent: 42.5,
+                  resets_at: "2026-07-24T05:00:00Z",
+                  window_minutes: 300,
+                },
+              ],
+              model_limits: [],
+            },
+            claude: null,
+          },
+        }),
+      );
+    const client = createTrackerClient({
+      origin: "https://demo.test",
+      token: "secret",
+      locale: "en",
+      fetchImpl,
+    });
+
+    await expect(client.agentAvailability()).resolves.toEqual({
+      codex: {
+        available: true,
+        version: "1.2.3",
+        command: "codex",
+        path: "/usr/bin/codex",
+        authenticated: true,
+        detail: null,
+      },
+    });
+    await expect(client.agentUsage()).resolves.toEqual({
+      codex: expect.objectContaining({
+        agentKind: "codex",
+        plan: "pro",
+        stale: false,
+        creditsUnlimited: true,
+        windows: [
+          {
+            kind: "five_hour",
+            usedPercent: 42.5,
+            resetsAt: "2026-07-24T05:00:00Z",
+            windowMinutes: 300,
+          },
+        ],
+      }),
+      claude: null,
+    });
+  });
+
+  it("records redacted request diagnostics", async () => {
+    const diagnostics = createDiagnosticLog({ limit: 10 });
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        jsonResponse({ data: { registered: true, device_id: "device-1" } }, { status: 201 }),
+      );
+    const client = createTrackerClient({
+      origin: "https://demo.test",
+      token: "tracker-secret",
+      locale: "en",
+      fetchImpl,
+      diagnostics,
+    });
+
+    await client.registerMobilePush({
+      profileId: "profile-1",
+      deviceId: "device-1",
+      platform: "ios",
+      token: "ExponentPushToken[private-token]",
+    });
+
+    const serialized = JSON.stringify(diagnostics.list());
+    expect(serialized).not.toContain("tracker-secret");
+    expect(serialized).not.toContain("private-token");
+    expect(serialized).toContain("/mobile_push/subscriptions");
   });
 
   it("throws a redacted auth error for unauthorized responses", async () => {

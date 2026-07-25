@@ -59,4 +59,41 @@ describe("TrackerClientProvider", () => {
     expect(screen.getByText("missing")).toBeTruthy();
     expect(createClient).not.toHaveBeenCalled();
   });
+
+  it("rebuilds the bound client when the active profile changes", () => {
+    const createClient = jest.fn(() => ({}) as TrackerClient);
+    mockUseConnection.mockReturnValue({
+      activeProfile: {
+        id: "profile-1",
+        name: "Remote",
+        origin: "https://one.test",
+      },
+      activeToken: "token-one",
+    });
+    const view = render(
+      <TrackerClientProvider createClient={createClient} locale="en">
+        <ClientState />
+      </TrackerClientProvider>,
+    );
+
+    mockUseConnection.mockReturnValue({
+      activeProfile: {
+        id: "profile-2",
+        name: "Local",
+        origin: "https://two.test",
+      },
+      activeToken: "token-two",
+    });
+    view.rerender(
+      <TrackerClientProvider createClient={createClient} locale="en">
+        <ClientState />
+      </TrackerClientProvider>,
+    );
+
+    expect(createClient).toHaveBeenLastCalledWith({
+      origin: "https://two.test",
+      token: "token-two",
+      locale: "en",
+    });
+  });
 });

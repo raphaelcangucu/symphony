@@ -1,7 +1,11 @@
 import { redactSecret } from "@/auth/connection-profile";
+import { diagnosticLog, type DiagnosticLog } from "@/diagnostics/diagnostic-log";
 
 import type {
+  AgentAvailabilityMap,
   AgentKind,
+  AgentUsageMap,
+  AgentUsageWindow,
   AssistantAgentCatalog,
   AssistantCatalog,
   AssistantEffortOption,
@@ -63,6 +67,7 @@ type CreateTrackerClientOptions = {
   locale: string;
   timeoutMs?: number;
   fetchImpl?: typeof fetch;
+  diagnostics?: DiagnosticLog;
 };
 
 type RequestOptions = {
@@ -80,6 +85,7 @@ export function createTrackerClient(options: CreateTrackerClientOptions): Tracke
   const origin = options.origin.replace(/\/+$/, "");
   const fetchImpl = options.fetchImpl ?? fetch;
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const diagnostics = options.diagnostics ?? diagnosticLog;
 
   async function request(path: string, requestOptions: RequestOptions = {}): Promise<unknown> {
     const controller = new AbortController();
@@ -103,10 +109,26 @@ export function createTrackerClient(options: CreateTrackerClientOptions): Tracke
     if (requestOptions.idempotencyKey) {
       headers["Idempotency-Key"] = requestOptions.idempotencyKey;
     }
+    const url = `${origin}${basePath}${path}`;
+    const method = requestOptions.method ?? "GET";
+    diagnostics.record(
+      {
+        scope: "request",
+        event: `${method} ${basePath}${path}`,
+        details: {
+          url,
+          method,
+          headers,
+          body: requestOptions.body,
+          state: "started",
+        },
+      },
+      [options.token],
+    );
 
     try {
-      const response = await fetchImpl(`${origin}${basePath}${path}`, {
-        method: requestOptions.method ?? "GET",
+      const response = await fetchImpl(url, {
+        method,
         headers,
         signal: controller.signal,
         ...(requestOptions.body === undefined ? {} : { body: JSON.stringify(requestOptions.body) }),
@@ -137,8 +159,29 @@ export function createTrackerClient(options: CreateTrackerClientOptions): Tracke
         throw new TrackerRequestError(message, response.status);
       }
 
+      diagnostics.record(
+        {
+          scope: "request",
+          event: `${method} ${basePath}${path}`,
+          details: { url, method, status: response.status, state: "completed" },
+        },
+        [options.token],
+      );
       return payload;
     } catch (cause) {
+      diagnostics.record(
+        {
+          scope: "request",
+          event: `${method} ${basePath}${path}`,
+          details: {
+            url,
+            method,
+            state: timedOut ? "timeout" : "failed",
+            error: cause instanceof Error ? cause.message : "Tracker request failed",
+          },
+        },
+        [options.token],
+      );
       if (cause instanceof TrackerRequestError) throw cause;
       if (timedOut) throw new TrackerTimeoutError();
       if (controller.signal.aborted && requestOptions.signal?.aborted) {
@@ -158,6 +201,14 @@ export function createTrackerClient(options: CreateTrackerClientOptions): Tracke
     },
     async viewer(signal) {
       return mapViewer(unwrapData(await request("/viewer", { signal })));
+    },
+    async agentAvailability(signal) {
+      return mapAgentAvailability(
+        unwrapData(await request("/settings/agents/availability", { signal })),
+      );
+    },
+    async agentUsage(signal) {
+      return mapAgentUsage(unwrapData(await request("/settings/agents/usage", { signal })));
     },
     async projects(signal) {
       return readArray(unwrapData(await request("/projects", { signal })), "projects").map(
@@ -712,6 +763,71 @@ function mapViewer(payload: unknown): Viewer {
   };
 }
 
+function mapAgentAvailability(payload: unknown): AgentAvailabilityMap {
+  const record = asRecord(payload, "agent availability");
+  return Object.fromEntries(
+    Object.entries(record).flatMap(([agent, value]) => {
+      if (!isRecord(value)) return [];
+      return [
+        [
+          agent,
+          {
+            available: value.available === true,
+            version: optionalText(value.version),
+            command: typeof value.command === "string" ? value.command : agent,
+            path: optionalText(value.path),
+            authenticated: typeof value.authenticated === "boolean" ? value.authenticated : null,
+            detail: optionalText(value.detail),
+          },
+        ],
+      ];
+    }),
+  );
+}
+
+function mapAgentUsage(payload: unknown): AgentUsageMap {
+  const record = asRecord(payload, "agent usage");
+  return Object.fromEntries(
+    Object.entries(record).map(([agent, value]) => {
+      if (value === null) return [agent, null];
+      const entry = asRecord(value, `${agent} usage`);
+      return [
+        agent,
+        {
+          agentKind:
+            typeof entry.agent_kind === "string" && entry.agent_kind.trim()
+              ? entry.agent_kind
+              : agent,
+          plan: optionalText(entry.plan),
+          creditsRemaining: optionalNumber(entry.credits_remaining),
+          creditsUnlimited: entry.credits_unlimited === true,
+          fetchedAt: optionalText(entry.fetched_at),
+          stale: entry.stale === true,
+          windows: mapUsageWindows(entry.windows),
+          modelLimits: mapUsageWindows(entry.model_limits),
+        },
+      ];
+    }),
+  );
+}
+
+function mapUsageWindows(value: unknown): AgentUsageWindow[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!isRecord(item)) return [];
+    const usedPercent = optionalNumber(item.used_percent);
+    if (usedPercent === null) return [];
+    return [
+      {
+        kind: typeof item.kind === "string" ? item.kind : "unknown",
+        usedPercent,
+        resetsAt: optionalText(item.resets_at),
+        windowMinutes: optionalNumber(item.window_minutes),
+      },
+    ];
+  });
+}
+
 function mapProject(payload: unknown): ProjectSummary {
   const record = asRecord(payload, "project");
   return {
@@ -1142,6 +1258,12 @@ function issueLabels(value: unknown): string[] {
 function finiteNumber(value: unknown, fallback: number): number {
   const number = Number(value);
   return Number.isFinite(number) ? number : fallback;
+}
+
+function optionalNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
 }
 
 function mapThread(payload: unknown): AssistantThread {

@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { createDiagnosticLog } from "@/diagnostics/diagnostic-log";
+
 import {
   assistantThreadTopic,
   createAssistantSession,
@@ -93,10 +95,12 @@ describe("assistant session adapter", () => {
   it("connects, binds the snake_case contract, syncs after reconnect, and cleans up once", () => {
     const socket = new FakeSocket();
     const onAction = vi.fn();
+    const diagnostics = createDiagnosticLog();
     const session = createAssistantSession({
       threadId: 42,
       origin: "https://demo.test",
       token: "secret",
+      diagnostics,
       socketFactory: () => socket,
       onAction,
     });
@@ -128,6 +132,10 @@ describe("assistant session adapter", () => {
     session.disconnect();
     expect(socket.channelInstance.leave).toHaveBeenCalledTimes(1);
     expect(socket.disconnect).toHaveBeenCalledTimes(1);
+    expect(diagnostics.list().map((entry) => entry.event)).toEqual(
+      expect.arrayContaining(["assistant socket live", "assistant socket disconnected"]),
+    );
+    expect(JSON.stringify(diagnostics.list())).not.toContain("secret");
   });
 
   it("sends a seed at most once after a successful join", async () => {

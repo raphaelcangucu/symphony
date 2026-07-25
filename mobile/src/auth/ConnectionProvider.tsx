@@ -16,10 +16,15 @@ import {
   type CreateConnectionProfileInput,
 } from "@/auth/connection-profile";
 import {
+  removeConnectionProfileWithCleanup,
+  validateAndReplaceConnectionToken,
+} from "@/auth/connection-operations";
+import {
   createConnectionStorage,
   type ConnectionStorage,
   type ConnectionStorageSnapshot,
 } from "@/auth/connection-storage";
+import { useAppRuntime } from "@/runtime/AppRuntime";
 
 export type SaveConnectionInput = CreateConnectionProfileInput & {
   token: string;
@@ -30,6 +35,7 @@ export type ConnectionContextValue = {
   activeProfile: ConnectionProfile | null;
   activeToken: string | null;
   hydrated: boolean;
+  loadToken(id: string): Promise<string | null>;
   selectProfile(id: string): Promise<void>;
   saveProfile(input: SaveConnectionInput): Promise<ConnectionProfile>;
   removeProfile(id: string): Promise<void>;
@@ -61,6 +67,7 @@ export function ConnectionProvider({
   children,
   storage = defaultStorage,
 }: ConnectionProviderProps) {
+  const runtime = useAppRuntime();
   const [snapshot, setSnapshot] = useState(emptySnapshot);
   const [activeToken, setActiveToken] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState(false);
@@ -129,22 +136,37 @@ export function ConnectionProvider({
 
   const removeProfile = useCallback(
     async (id: string) => {
-      const nextSnapshot = await storage.removeProfile(id);
+      const nextSnapshot = await removeConnectionProfileWithCleanup({
+        createClient: runtime.createTrackerClient,
+        deviceId: runtime.notifications.deviceId,
+        locale: resolvedLocale(),
+        profileId: id,
+        storage,
+      });
       setSnapshot(nextSnapshot);
       await loadActiveToken(nextSnapshot);
     },
-    [loadActiveToken, storage],
+    [loadActiveToken, runtime.createTrackerClient, runtime.notifications.deviceId, storage],
   );
 
   const replaceToken = useCallback(
     async (id: string, token: string) => {
-      await storage.replaceToken(id, token);
+      const profile = snapshot.profiles.find((candidate) => candidate.id === id);
+      if (!profile) throw new Error("Connection profile not found");
+      await validateAndReplaceConnectionToken({
+        createClient: runtime.createTrackerClient,
+        locale: resolvedLocale(),
+        profile,
+        storage,
+        token,
+      });
       if (snapshot.activeProfileId === id) {
         setActiveToken(await storage.loadToken(id));
       }
     },
-    [snapshot.activeProfileId, storage],
+    [runtime.createTrackerClient, snapshot.activeProfileId, snapshot.profiles, storage],
   );
+  const loadToken = useCallback((id: string) => storage.loadToken(id), [storage]);
 
   const activeProfile =
     snapshot.profiles.find((profile) => profile.id === snapshot.activeProfileId) ?? null;
@@ -154,6 +176,7 @@ export function ConnectionProvider({
       activeProfile,
       activeToken,
       hydrated,
+      loadToken,
       selectProfile,
       saveProfile,
       removeProfile,
@@ -163,6 +186,7 @@ export function ConnectionProvider({
       activeProfile,
       activeToken,
       hydrated,
+      loadToken,
       removeProfile,
       replaceToken,
       saveProfile,
@@ -192,4 +216,12 @@ function createProfileId(): string {
     const value = character === "x" ? random : (random & 0x3) | 0x8;
     return value.toString(16);
   });
+}
+
+function resolvedLocale(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().locale || "en";
+  } catch {
+    return "en";
+  }
 }

@@ -11,6 +11,7 @@ import type {
   AssistantToolStatus,
   SessionTimelineAction,
 } from "@/features/sessions/session-reducer";
+import { diagnosticLog, type DiagnosticLog } from "@/diagnostics/diagnostic-log";
 
 export type AssistantPushLike = {
   receive(status: string, callback: (payload: unknown) => void): AssistantPushLike;
@@ -39,6 +40,7 @@ export type CreateAssistantSessionOptions = {
   locale?: string;
   seed?: string | null;
   socketFactory?: (endpoint: string, params: Record<string, string>) => AssistantSocketLike;
+  diagnostics?: DiagnosticLog;
   onAction(action: SessionTimelineAction): void;
   onSeedAccepted?(): void;
 };
@@ -68,6 +70,7 @@ export function createAssistantSession({
   locale = "en",
   seed,
   socketFactory = createSocket,
+  diagnostics = diagnosticLog,
   onAction,
   onSeedAccepted,
 }: CreateAssistantSessionOptions): AssistantSession {
@@ -80,6 +83,15 @@ export function createAssistantSession({
   let seedReconcile: ((messages: AssistantMessage[]) => void) | null = null;
   let seedRetryPromise: Promise<void> | null = null;
   const seedMessageId = `mobile-seed-${threadId}`;
+  const recordSocket = (event: string, details: Record<string, unknown> = {}) =>
+    diagnostics.record(
+      {
+        scope: "socket",
+        event: `assistant socket ${event}`,
+        details: { topic, ...details },
+      },
+      [token],
+    );
 
   function acceptSeed() {
     if (seedState === "accepted") return;
@@ -107,6 +119,7 @@ export function createAssistantSession({
   function connect() {
     if (started) return;
     started = true;
+    recordSocket("connecting");
     socket = socketFactory(socketEndpoint(origin), { token, locale });
     const nextChannel = socket.channel(topic, {});
     channel = nextChannel;
@@ -115,14 +128,17 @@ export function createAssistantSession({
       seedReconcile?.(messages);
     });
     socket.onOpen(() => {
+      recordSocket("open");
       onAction({ type: "connection_changed", state: "reconnecting" });
       if (joined && channel) channel.push("sync_history", {});
     });
     socket.onError(() => {
+      recordSocket("error");
       joined = false;
       if (started) onAction({ type: "connection_changed", state: "reconnecting" });
     });
     socket.onClose(() => {
+      recordSocket("closed");
       joined = false;
       if (started) onAction({ type: "connection_changed", state: "offline" });
     });
@@ -131,6 +147,7 @@ export function createAssistantSession({
       .join()
       .receive("ok", () => {
         joined = true;
+        recordSocket("live");
         onAction({ type: "connection_changed", state: "live" });
         if (seed?.trim() && seedState === "idle") {
           sendSeed().catch((error: unknown) =>
@@ -139,10 +156,12 @@ export function createAssistantSession({
         }
       })
       .receive("error", (reason) => {
+        recordSocket("join failed", { reason });
         onAction({ type: "connection_changed", state: "offline" });
         onAction({ type: "error", message: receiveError(reason, "Could not join session") });
       })
       .receive("timeout", () => {
+        recordSocket("join timeout");
         onAction({ type: "connection_changed", state: "offline" });
         onAction({ type: "error", message: "Session connection timed out" });
       });
@@ -155,6 +174,7 @@ export function createAssistantSession({
     joined = false;
     channel?.leave();
     socket?.disconnect();
+    recordSocket("disconnected");
     channel = null;
     socket = null;
   }

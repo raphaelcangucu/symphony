@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { createDiagnosticLog } from "@/diagnostics/diagnostic-log";
+
 import type { TerminalChannelLike, TerminalPushLike, TerminalSocketLike } from "./terminal-session";
 import { createTerminalSession, terminalThreadTopic } from "./terminal-session";
 
@@ -53,11 +55,13 @@ describe("terminal session adapter", () => {
     const socket = new FakeSocket();
     const onOutput = vi.fn();
     const onState = vi.fn();
+    const diagnostics = createDiagnosticLog();
     const session = createTerminalSession({
       threadId: 42,
       projectSlug: "symphony",
       origin: "https://demo.test",
       token: "secret",
+      diagnostics,
       socketFactory: () => socket,
       onOutput,
       onState,
@@ -78,6 +82,8 @@ describe("terminal session adapter", () => {
     socket.channelInstance.trigger("output", { data: "$ npm test\n12 passed\n" });
     expect(onOutput).toHaveBeenCalledTimes(2);
     expect(onOutput).toHaveBeenLastCalledWith("$ npm test\n12 passed\n");
+    expect(diagnostics.list().map((entry) => entry.event)).toContain("terminal socket live");
+    expect(JSON.stringify(diagnostics.list())).not.toContain("secret");
   });
 
   it("sends input and resize and cleans up once", () => {

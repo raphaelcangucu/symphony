@@ -152,4 +152,14 @@ describe("SessionLibraryScreen", () => {
     expect(onRefresh).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("button", { name: "Start a new chat" })).toBeTruthy();
   });
+
+  it("shows cached update timestamps when the connection is offline", () => {
+    renderScreen({
+      connectionState: "offline",
+      error: "Tracker offline",
+    });
+
+    expect(screen.getByText("Updated 2026-07-24 02:00 UTC")).toBeTruthy();
+    expect(screen.getByText("Updated 2026-07-24 01:00 UTC")).toBeTruthy();
+  });
 });

@@ -9,6 +9,37 @@ export type Viewer = {
   name: string;
 };
 
+export type AgentAvailability = {
+  available: boolean;
+  version: string | null;
+  command: string;
+  path: string | null;
+  authenticated: boolean | null;
+  detail: string | null;
+};
+
+export type AgentAvailabilityMap = Record<string, AgentAvailability>;
+
+export type AgentUsageWindow = {
+  kind: string;
+  usedPercent: number;
+  resetsAt: string | null;
+  windowMinutes: number | null;
+};
+
+export type AgentUsageEntry = {
+  agentKind: string;
+  plan: string | null;
+  creditsRemaining: number | null;
+  creditsUnlimited: boolean;
+  fetchedAt: string | null;
+  stale: boolean;
+  windows: AgentUsageWindow[];
+  modelLimits: AgentUsageWindow[];
+};
+
+export type AgentUsageMap = Record<string, AgentUsageEntry | null>;
+
 export type ProjectSummary = {
   id: string;
   slug: string;
@@ -439,6 +470,8 @@ export type CreateThreadInput =
 export type TrackerClient = {
   health(signal?: AbortSignal): Promise<Health>;
   viewer(signal?: AbortSignal): Promise<Viewer>;
+  agentAvailability(signal?: AbortSignal): Promise<AgentAvailabilityMap>;
+  agentUsage(signal?: AbortSignal): Promise<AgentUsageMap>;
   projects(signal?: AbortSignal): Promise<ProjectSummary[]>;
   threads(options?: ThreadListOptions, signal?: AbortSignal): Promise<AssistantThread[]>;
   projectSessions(

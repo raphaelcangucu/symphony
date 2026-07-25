@@ -136,7 +136,13 @@ export function SessionLibraryScreen({
             keyExtractor={(item) => item.id}
             onRefresh={onRefresh}
             refreshing={loading}
-            renderItem={({ item }) => <SessionRow item={item} onOpenSession={onOpenSession} />}
+            renderItem={({ item }) => (
+              <SessionRow
+                item={item}
+                onOpenSession={onOpenSession}
+                showUpdatedAt={connectionState === "offline"}
+              />
+            )}
             renderSectionHeader={({ section }) => (
               <ProjectHeader group={section} onToggleGroup={onToggleGroup} />
             )}
@@ -226,9 +232,11 @@ function ProjectHeader({
 function SessionRow({
   item,
   onOpenSession,
+  showUpdatedAt,
 }: {
   item: SessionTreeRow;
   onOpenSession(threadId: number): void;
+  showUpdatedAt: boolean;
 }) {
   const { colors } = useAppTheme();
   const presentation = statePresentation[item.state];
@@ -259,6 +267,11 @@ function SessionRow({
             {item.issueIdentifier}
           </Text>
         ) : null}
+        {showUpdatedAt && item.updatedAt ? (
+          <Text style={[styles.sessionUpdated, { color: colors.textMuted }]}>
+            Updated {formatOfflineTimestamp(item.updatedAt)}
+          </Text>
+        ) : null}
       </View>
       {presentation ? (
         <View style={styles.sessionState}>
@@ -270,6 +283,11 @@ function SessionRow({
       ) : null}
     </Pressable>
   );
+}
+
+function formatOfflineTimestamp(value: string): string {
+  const match = value.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})(?::\d{2}(?:\.\d+)?)?Z$/);
+  return match ? `${match[1]} ${match[2]} UTC` : value;
 }
 
 const styles = StyleSheet.create({
@@ -405,5 +423,8 @@ const styles = StyleSheet.create({
   sessionTitle: {
     fontSize: 16,
     fontWeight: "500",
+  },
+  sessionUpdated: {
+    fontSize: 11,
   },
 });

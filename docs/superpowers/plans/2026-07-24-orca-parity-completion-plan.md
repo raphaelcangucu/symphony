@@ -334,7 +334,7 @@ WSL safety note: focused mobile unit/UI tests, typecheck, lint and formatting
 passed. The focused Elixir controller test and Expo Doctor remain deferred to
 CI or a dedicated native runner so this workstation is not overloaded.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 Commit message: `feat(mobile): add notifications and dictation`
 
@@ -356,32 +356,32 @@ Commit message: `feat(mobile): add notifications and dictation`
 - Modify: `mobile/src/api/contracts.ts`
 - Modify: `mobile/src/auth/ConnectionProvider.tsx`
 
-- [ ] **Step 1: Write failing diagnostics and connection tests**
+- [x] **Step 1: Write failing diagnostics and connection tests**
 
 Prove every URL/header/body diagnostic is redacted, log storage is bounded,
 profile switching rebuilds the active client, token replacement validates
 before persisting, and profile removal deletes its token and cached queries.
 
-- [ ] **Step 2: Run tests and verify RED**
+- [x] **Step 2: Run tests and verify RED**
 
 Run:
 `cd mobile && npm run test:unit -- src/diagnostics src/auth && npm run test:ui -- src/features/connections`
 
 Expected: FAIL because diagnostics and profile management are absent.
 
-- [ ] **Step 3: Implement bounded diagnostics and profile management**
+- [x] **Step 3: Implement bounded diagnostics and profile management**
 
 Record request/socket state without secrets. Add explicit reconnect, replace
 token, switch profile and remove profile actions. Persist React Query read
 models per safe profile id and show stale/offline timestamps.
 
-- [ ] **Step 4: Implement usage and settings**
+- [x] **Step 4: Implement usage and settings**
 
 Load `/settings/agents/usage`, show agent windows and availability, theme,
 notification and diagnostics entries. Unsupported capabilities show an
 explanation rather than a dead control.
 
-- [ ] **Step 5: Verify**
+- [x] **Step 5: Verify**
 
 Run:
 `cd mobile && npm run test:unit -- src/diagnostics src/auth src/api && npm run test:ui -- src/features/connections src/features/diagnostics src/features/settings && npm run typecheck`

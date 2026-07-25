@@ -21,8 +21,15 @@ const profile: ConnectionProfile = {
   createdAt: "2026-07-24T00:00:00Z",
   lastConnectedAt: "2026-07-24T02:00:00Z",
 };
+const localProfile: ConnectionProfile = {
+  id: "e2e-local",
+  name: "Local",
+  origin: "http://127.0.0.1:4000",
+  createdAt: "2026-07-24T00:30:00Z",
+  lastConnectedAt: "2026-07-24T01:30:00Z",
+};
 const snapshot: ConnectionStorageSnapshot = {
-  profiles: [profile],
+  profiles: [profile, localProfile],
   activeProfileId: profile.id,
 };
 const projects: ProjectSummary[] = [{ id: "project-symphony", slug: "symphony", name: "Symphony" }];
@@ -164,13 +171,56 @@ export function createFixtureRuntime(): AppRuntime {
 }
 
 export function createFixtureConnectionStorage(): ConnectionStorage {
+  let current: ConnectionStorageSnapshot = {
+    profiles: [...snapshot.profiles],
+    activeProfileId: snapshot.activeProfileId,
+  };
+  const tokens = new Map([
+    [profile.id, "fixture-token"],
+    [localProfile.id, "fixture-local-token"],
+  ]);
   return {
-    loadSnapshot: async () => snapshot,
-    loadToken: async (profileId) => (profileId === profile.id ? "fixture-token" : null),
-    saveProfile: async () => snapshot,
-    selectProfile: async () => snapshot,
-    removeProfile: async () => snapshot,
-    replaceToken: async () => undefined,
+    loadSnapshot: async () => ({
+      profiles: [...current.profiles],
+      activeProfileId: current.activeProfileId,
+    }),
+    loadToken: async (profileId) => tokens.get(profileId) ?? null,
+    saveProfile: async (nextProfile, token) => {
+      const profiles = current.profiles.some((item) => item.id === nextProfile.id)
+        ? current.profiles.map((item) => (item.id === nextProfile.id ? nextProfile : item))
+        : [...current.profiles, nextProfile];
+      tokens.set(nextProfile.id, token);
+      current = {
+        profiles,
+        activeProfileId: current.activeProfileId ?? nextProfile.id,
+      };
+      return current;
+    },
+    selectProfile: async (profileId) => {
+      if (!current.profiles.some((item) => item.id === profileId)) {
+        throw new Error("Connection profile not found");
+      }
+      current = { ...current, activeProfileId: profileId };
+      return current;
+    },
+    removeProfile: async (profileId) => {
+      const profiles = current.profiles.filter((item) => item.id !== profileId);
+      tokens.delete(profileId);
+      current = {
+        profiles,
+        activeProfileId:
+          current.activeProfileId === profileId
+            ? (profiles[0]?.id ?? null)
+            : current.activeProfileId,
+      };
+      return current;
+    },
+    replaceToken: async (profileId, token) => {
+      if (!current.profiles.some((item) => item.id === profileId)) {
+        throw new Error("Connection profile not found");
+      }
+      tokens.set(profileId, token);
+    },
   };
 }
 
@@ -180,6 +230,35 @@ export function createFixtureTrackerClient(): TrackerClient {
   return {
     health: async () => ({ status: "ok" }),
     viewer: async () => ({ id: "fixture-user", name: "raphael" }),
+    agentAvailability: async () => ({
+      codex: {
+        available: true,
+        version: "fixture",
+        command: "codex",
+        path: "/usr/bin/codex",
+        authenticated: true,
+        detail: null,
+      },
+    }),
+    agentUsage: async () => ({
+      codex: {
+        agentKind: "codex",
+        plan: "fixture",
+        creditsRemaining: null,
+        creditsUnlimited: true,
+        fetchedAt: "2026-07-24T02:00:00Z",
+        stale: false,
+        windows: [
+          {
+            kind: "five_hour",
+            usedPercent: 42,
+            resetsAt: "2026-07-24T05:00:00Z",
+            windowMinutes: 300,
+          },
+        ],
+        modelLimits: [],
+      },
+    }),
     projects: async () => projects,
     threads: async () => [fixtureThread],
     projectSessions: async () => ({ sessions: [projectSession], nextCursor: null }),
