@@ -26,6 +26,10 @@ const session = {
   disconnect: jest.fn(),
   sendMessage: jest.fn().mockResolvedValue(undefined),
   retrySeed: jest.fn().mockResolvedValue(undefined),
+  resumeTurn: jest.fn().mockResolvedValue(undefined),
+  stopTurn: jest.fn().mockResolvedValue(undefined),
+  submitApproval: jest.fn().mockResolvedValue(undefined),
+  submitUserInput: jest.fn().mockResolvedValue(undefined),
 };
 
 describe("SessionRoute", () => {

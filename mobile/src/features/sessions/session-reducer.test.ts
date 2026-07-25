@@ -108,4 +108,50 @@ describe("session timeline reducer", () => {
       error: null,
     });
   });
+
+  it("tracks approvals, user questions, and resumable turn state explicitly", () => {
+    let state = sessionTimelineReducer(createSessionTimelineState(), {
+      type: "approval_required",
+      request: {
+        requestId: "approval-1",
+        command: "git push",
+        cwd: "/work/symphony",
+        reason: "Push the branch",
+        toolName: "exec",
+        agent: "codex",
+      },
+    });
+    state = sessionTimelineReducer(state, {
+      type: "user_input_required",
+      request: {
+        requestId: "question-1",
+        questions: [
+          {
+            id: "target",
+            header: "Target",
+            question: "Where should this deploy?",
+            isOther: false,
+            isSecret: false,
+            options: [{ label: "Production", description: "Public app" }],
+          },
+        ],
+      },
+    });
+    state = sessionTimelineReducer(state, {
+      type: "turn_status",
+      status: { status: "interrupted", canResume: true },
+    });
+
+    expect(state.pendingApproval?.requestId).toBe("approval-1");
+    expect(state.pendingUserInput?.questions[0]?.id).toBe("target");
+    expect(state.turnStatus).toEqual({ status: "interrupted", canResume: true });
+
+    state = sessionTimelineReducer(state, { type: "approval_resolved", requestId: "approval-1" });
+    state = sessionTimelineReducer(state, {
+      type: "user_input_resolved",
+      requestId: "question-1",
+    });
+    expect(state.pendingApproval).toBeNull();
+    expect(state.pendingUserInput).toBeNull();
+  });
 });

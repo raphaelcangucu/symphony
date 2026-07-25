@@ -3,6 +3,10 @@ import { Socket } from "phoenix";
 import type {
   AssistantMessage,
   AssistantMessageRole,
+  AssistantApprovalRequest,
+  AssistantQuestion,
+  AssistantTurnStatus,
+  AssistantUserInputRequest,
   AssistantToolCall,
   AssistantToolStatus,
   SessionTimelineAction,
@@ -44,6 +48,10 @@ export type AssistantSession = {
   disconnect(): void;
   sendMessage(message: string): Promise<void>;
   retrySeed(): Promise<void>;
+  submitApproval(requestId: string | number, action: "approve" | "cancel"): Promise<void>;
+  submitUserInput(requestId: string | number, answers: Record<string, string>): Promise<void>;
+  stopTurn(): Promise<void>;
+  resumeTurn(): Promise<void>;
 };
 
 export function assistantThreadTopic(threadId: number): string {
@@ -179,6 +187,34 @@ export function createAssistantSession({
     return seedRetryPromise;
   }
 
+  function pushCommand(event: string, payload: Record<string, unknown>): Promise<void> {
+    if (!channel || !joined) return Promise.reject(new Error("Session is not connected"));
+    return pushWithAck(channel, event, payload);
+  }
+
+  function submitApproval(requestId: string | number, action: "approve" | "cancel"): Promise<void> {
+    return pushCommand("submit_approval", { request_id: requestId, action }).then(() => {
+      onAction({ type: "approval_resolved", requestId });
+    });
+  }
+
+  function submitUserInput(
+    requestId: string | number,
+    answers: Record<string, string>,
+  ): Promise<void> {
+    return pushCommand("submit_user_input", { request_id: requestId, answers }).then(() => {
+      onAction({ type: "user_input_resolved", requestId });
+    });
+  }
+
+  function stopTurn(): Promise<void> {
+    return pushCommand("stop_turn", {});
+  }
+
+  function resumeTurn(): Promise<void> {
+    return pushCommand("resume_turn", {});
+  }
+
   function reconcileSeed(): Promise<void> {
     if (!channel || !joined) return Promise.reject(new Error("Session is not connected"));
     return new Promise((resolve, reject) => {
@@ -210,7 +246,16 @@ export function createAssistantSession({
     });
   }
 
-  return { connect, disconnect, retrySeed, sendMessage };
+  return {
+    connect,
+    disconnect,
+    retrySeed,
+    resumeTurn,
+    sendMessage,
+    stopTurn,
+    submitApproval,
+    submitUserInput,
+  };
 }
 
 function bindEvents(
@@ -254,6 +299,18 @@ function bindEvents(
       message: readStringField(payload, "message") ?? "Assistant request failed",
     });
   });
+  channel.on("approval_required", (payload) => {
+    const request = readApproval(payload);
+    if (request) onAction({ type: "approval_required", request });
+  });
+  channel.on("user_input_required", (payload) => {
+    const request = readUserInput(payload);
+    if (request) onAction({ type: "user_input_required", request });
+  });
+  channel.on("turn_status", (payload) => {
+    const status = readTurnStatus(payload);
+    if (status) onAction({ type: "turn_status", status });
+  });
 }
 
 function historyContainsSeed(messages: AssistantMessage[], seed: string | null | undefined) {
@@ -281,6 +338,84 @@ function pushMessage(
       )
       .receive("timeout", () => reject(new Error("Message send timed out")));
   });
+}
+
+function pushWithAck(
+  channel: AssistantChannelLike,
+  event: string,
+  payload: Record<string, unknown>,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    channel
+      .push(event, payload)
+      .receive("ok", () => resolve())
+      .receive("error", (reason) =>
+        reject(new Error(receiveError(reason, `Could not ${event.replaceAll("_", " ")}`))),
+      )
+      .receive("timeout", () => reject(new Error(`${event.replaceAll("_", " ")} timed out`)));
+  });
+}
+
+function readApproval(payload: unknown): AssistantApprovalRequest | null {
+  if (!isRecord(payload)) return null;
+  const requestId = payload.request_id;
+  if (typeof requestId !== "string" && typeof requestId !== "number") return null;
+  return {
+    requestId,
+    command: nullableString(payload.command),
+    cwd: nullableString(payload.cwd),
+    reason: nullableString(payload.reason),
+    toolName: nullableString(payload.tool_name),
+    agent: nullableString(payload.agent),
+  };
+}
+
+function readUserInput(payload: unknown): AssistantUserInputRequest | null {
+  if (!isRecord(payload)) return null;
+  const requestId = payload.request_id;
+  if (typeof requestId !== "string" && typeof requestId !== "number") return null;
+  const questions = Array.isArray(payload.questions)
+    ? payload.questions.flatMap((question) => {
+        const normalized = readQuestion(question);
+        return normalized ? [normalized] : [];
+      })
+    : [];
+  return { requestId, questions };
+}
+
+function readQuestion(value: unknown): AssistantQuestion | null {
+  if (!isRecord(value) || typeof value.id !== "string" || !value.id.trim()) return null;
+  return {
+    id: value.id,
+    header: nullableString(value.header) ?? "",
+    question: nullableString(value.question) ?? "",
+    isOther: value.isOther === true || value.is_other === true,
+    isSecret: value.isSecret === true || value.is_secret === true,
+    options: Array.isArray(value.options)
+      ? value.options.flatMap((option) => {
+          if (!isRecord(option) || typeof option.label !== "string") return [];
+          const normalized: { label: string; description?: string } = {
+            label: option.label,
+          };
+          if (typeof option.description === "string") {
+            normalized.description = option.description;
+          }
+          return [normalized];
+        })
+      : null,
+  };
+}
+
+function readTurnStatus(payload: unknown): AssistantTurnStatus | null {
+  if (!isRecord(payload)) return null;
+  return {
+    status: nullableString(payload.status) ?? "unknown",
+    canResume: payload.can_resume === true,
+  };
+}
+
+function nullableString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value : null;
 }
 
 function readMessages(payload: unknown): AssistantMessage[] {

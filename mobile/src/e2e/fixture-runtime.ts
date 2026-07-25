@@ -229,6 +229,24 @@ function createFixtureAssistantSession(
       connected = false;
     },
     retrySeed: async () => options.onSeedAccepted?.(),
+    resumeTurn: async () => {
+      options.onAction({
+        type: "turn_status",
+        status: { status: "running", canResume: false },
+      });
+    },
+    stopTurn: async () => {
+      options.onAction({
+        type: "turn_status",
+        status: { status: "interrupted", canResume: true },
+      });
+    },
+    submitApproval: async (requestId: string | number) => {
+      options.onAction({ type: "approval_resolved", requestId });
+    },
+    submitUserInput: async (requestId: string | number) => {
+      options.onAction({ type: "user_input_resolved", requestId });
+    },
     async sendMessage(message: string) {
       options.onAction({
         type: "message_created",

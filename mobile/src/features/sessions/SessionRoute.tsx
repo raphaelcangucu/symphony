@@ -57,9 +57,13 @@ export function SessionRoute() {
 
   return (
     <SessionScreen
+      onApproval={(requestId, action) => session.submitApproval(requestId, action)}
       onBack={() => router.back()}
+      onResumeTurn={() => session.resumeTurn()}
       onRetrySeed={seed ? () => session.retrySeed() : undefined}
       onSend={(message) => session.sendMessage(message)}
+      onStopTurn={() => session.stopTurn()}
+      onSubmitUserInput={(requestId, answers) => session.submitUserInput(requestId, answers)}
       threadId={threadId}
       timeline={timeline}
     />

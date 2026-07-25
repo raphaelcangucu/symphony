@@ -19,12 +19,17 @@ import { radii, spacing } from "@/theme/tokens";
 import { useAppTheme } from "@/theme/ThemeProvider";
 
 import type { AssistantMessage, AssistantToolCall, SessionTimelineState } from "./session-reducer";
+import type { AssistantApprovalRequest, AssistantUserInputRequest } from "./session-reducer";
 
 type SessionScreenProps = {
   threadId: number;
   timeline: SessionTimelineState;
   onBack(): void;
+  onApproval(requestId: string | number, action: "approve" | "cancel"): Promise<void>;
+  onResumeTurn(): Promise<void>;
   onSend(message: string): Promise<void>;
+  onStopTurn(): Promise<void>;
+  onSubmitUserInput(requestId: string | number, answers: Record<string, string>): Promise<void>;
   onRetrySeed?: (() => Promise<void>) | undefined;
 };
 
@@ -32,7 +37,11 @@ export function SessionScreen({
   threadId,
   timeline,
   onBack,
+  onApproval,
+  onResumeTurn,
   onSend,
+  onStopTurn,
+  onSubmitUserInput,
   onRetrySeed,
 }: SessionScreenProps) {
   const { colors } = useAppTheme();
@@ -83,7 +92,11 @@ export function SessionScreen({
             <Text style={[styles.title, { color: colors.textPrimary }]}>Session {threadId}</Text>
             <ConnectionBadge state={connectionState(timeline.connectionState)} />
           </View>
-          <View style={styles.backButton} />
+          <TurnControl
+            onResumeTurn={onResumeTurn}
+            onStopTurn={onStopTurn}
+            turnStatus={timeline.turnStatus}
+          />
         </View>
 
         <FlatList
@@ -101,6 +114,13 @@ export function SessionScreen({
           style={styles.messageList}
           testID="session-message-list"
         />
+
+        {timeline.pendingApproval ? (
+          <ApprovalCard onApproval={onApproval} request={timeline.pendingApproval} />
+        ) : null}
+        {timeline.pendingUserInput ? (
+          <UserInputCard onSubmit={onSubmitUserInput} request={timeline.pendingUserInput} />
+        ) : null}
 
         {timeline.error || sendError ? (
           <View style={styles.errorRow}>
@@ -154,6 +174,222 @@ export function SessionScreen({
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
+  );
+}
+
+function TurnControl({
+  onResumeTurn,
+  onStopTurn,
+  turnStatus,
+}: {
+  onResumeTurn(): Promise<void>;
+  onStopTurn(): Promise<void>;
+  turnStatus: SessionTimelineState["turnStatus"];
+}) {
+  const { colors } = useAppTheme();
+  const [busy, setBusy] = useState(false);
+  const canResume = turnStatus?.canResume === true;
+  const canStop = turnStatus?.status === "running";
+  if (!canResume && !canStop) return <View style={styles.backButton} />;
+  const label = canResume ? "Resume turn" : "Stop turn";
+  return (
+    <Pressable
+      accessibilityLabel={label}
+      accessibilityRole="button"
+      disabled={busy}
+      onPress={() => {
+        setBusy(true);
+        void (canResume ? onResumeTurn() : onStopTurn()).finally(() => setBusy(false));
+      }}
+      style={styles.turnControl}
+    >
+      <Text style={{ color: canResume ? colors.statusGreen : colors.statusRed }}>
+        {busy ? "…" : canResume ? "Resume" : "Stop"}
+      </Text>
+    </Pressable>
+  );
+}
+
+function ApprovalCard({
+  onApproval,
+  request,
+}: {
+  onApproval(requestId: string | number, action: "approve" | "cancel"): Promise<void>;
+  request: AssistantApprovalRequest;
+}) {
+  const { colors } = useAppTheme();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const decide = async (action: "approve" | "cancel") => {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await onApproval(request.requestId, action);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not submit approval");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <View
+      style={[
+        styles.requestCard,
+        { backgroundColor: colors.bgRaised, borderColor: colors.statusAmber },
+      ]}
+    >
+      <Text style={[styles.requestTitle, { color: colors.statusAmber }]}>Approval required</Text>
+      {request.reason ? (
+        <Text style={{ color: colors.textSecondary }}>{request.reason}</Text>
+      ) : null}
+      {request.command ? (
+        <Text style={[styles.command, { color: colors.textPrimary }]}>{request.command}</Text>
+      ) : null}
+      {request.cwd ? <Text style={{ color: colors.textMuted }}>{request.cwd}</Text> : null}
+      {error ? (
+        <Text accessibilityRole="alert" style={{ color: colors.statusRed }}>
+          {error}
+        </Text>
+      ) : null}
+      <View style={styles.requestActions}>
+        <RequestButton
+          disabled={busy}
+          label="Cancel command"
+          onPress={() => void decide("cancel")}
+          tone="secondary"
+        />
+        <RequestButton
+          disabled={busy}
+          label="Approve command"
+          onPress={() => void decide("approve")}
+          tone="primary"
+        />
+      </View>
+    </View>
+  );
+}
+
+function UserInputCard({
+  onSubmit,
+  request,
+}: {
+  onSubmit(requestId: string | number, answers: Record<string, string>): Promise<void>;
+  request: AssistantUserInputRequest;
+}) {
+  const { colors } = useAppTheme();
+  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const complete = request.questions.every((question) => Boolean(answers[question.id]?.trim()));
+  const submit = async () => {
+    if (!complete || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await onSubmit(request.requestId, answers);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not submit answers");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <View
+      style={[styles.requestCard, { backgroundColor: colors.bgRaised, borderColor: colors.accent }]}
+    >
+      <Text style={[styles.requestTitle, { color: colors.accent }]}>Assistant question</Text>
+      {request.questions.map((question) => (
+        <View key={question.id} style={styles.question}>
+          {question.header ? (
+            <Text style={[styles.questionHeader, { color: colors.textMuted }]}>
+              {question.header}
+            </Text>
+          ) : null}
+          <Text style={{ color: colors.textPrimary }}>{question.question}</Text>
+          {question.options?.length ? (
+            <View style={styles.requestActions}>
+              {question.options.map((option) => (
+                <RequestButton
+                  key={option.label}
+                  label={`Select ${option.label}`}
+                  onPress={() =>
+                    setAnswers((current) => ({ ...current, [question.id]: option.label }))
+                  }
+                  selected={answers[question.id] === option.label}
+                  tone="secondary"
+                />
+              ))}
+            </View>
+          ) : (
+            <TextInput
+              accessibilityLabel={`Answer ${question.header || question.question}`}
+              onChangeText={(answer) =>
+                setAnswers((current) => ({ ...current, [question.id]: answer }))
+              }
+              secureTextEntry={question.isSecret}
+              style={[
+                styles.answerInput,
+                { borderColor: colors.borderStrong, color: colors.textPrimary },
+              ]}
+              value={answers[question.id] ?? ""}
+            />
+          )}
+        </View>
+      ))}
+      {error ? (
+        <Text accessibilityRole="alert" style={{ color: colors.statusRed }}>
+          {error}
+        </Text>
+      ) : null}
+      <RequestButton
+        disabled={!complete || busy}
+        label="Submit answers"
+        onPress={() => void submit()}
+        tone="primary"
+      />
+    </View>
+  );
+}
+
+function RequestButton({
+  disabled = false,
+  label,
+  onPress,
+  selected = false,
+  tone,
+}: {
+  disabled?: boolean;
+  label: string;
+  onPress(): void;
+  selected?: boolean;
+  tone: "primary" | "secondary";
+}) {
+  const { colors } = useAppTheme();
+  return (
+    <Pressable
+      accessibilityLabel={label}
+      accessibilityRole="button"
+      disabled={disabled}
+      onPress={onPress}
+      style={[
+        styles.requestButton,
+        {
+          backgroundColor: tone === "primary" || selected ? colors.textPrimary : colors.bgPanel,
+          borderColor: selected ? colors.accent : colors.borderStrong,
+          opacity: disabled ? 0.45 : 1,
+        },
+      ]}
+    >
+      <Text
+        style={{
+          color: tone === "primary" || selected ? colors.bgBase : colors.textPrimary,
+          fontWeight: "700",
+        }}
+      >
+        {label}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -259,6 +495,36 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "700",
   },
+  answerInput: {
+    borderRadius: radii.sm,
+    borderWidth: 1,
+    minHeight: 44,
+    paddingHorizontal: spacing.sm,
+  },
+  command: {
+    fontFamily: Platform.select({ ios: "Menlo", default: "monospace" }),
+    fontSize: 13,
+  },
+  question: { gap: spacing.xs },
+  questionHeader: { fontSize: 11, fontWeight: "700", textTransform: "uppercase" },
+  requestActions: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs },
+  requestButton: {
+    alignItems: "center",
+    borderRadius: radii.sm,
+    borderWidth: 1,
+    justifyContent: "center",
+    minHeight: 44,
+    paddingHorizontal: spacing.sm,
+  },
+  requestCard: {
+    borderRadius: radii.md,
+    borderWidth: 1,
+    gap: spacing.xs,
+    marginHorizontal: spacing.md,
+    marginTop: spacing.xs,
+    padding: spacing.md,
+  },
+  requestTitle: { fontSize: 14, fontWeight: "700" },
   header: {
     alignItems: "center",
     borderBottomWidth: StyleSheet.hairlineWidth,
@@ -330,5 +596,11 @@ const styles = StyleSheet.create({
   toolName: {
     fontSize: 13,
     fontWeight: "600",
+  },
+  turnControl: {
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 44,
+    minWidth: 64,
   },
 });

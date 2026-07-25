@@ -16,11 +16,42 @@ export type AssistantMessage = {
   insertedAt: string | null;
 };
 
+export type AssistantApprovalRequest = {
+  requestId: string | number;
+  command: string | null;
+  cwd: string | null;
+  reason: string | null;
+  toolName: string | null;
+  agent: string | null;
+};
+
+export type AssistantQuestion = {
+  id: string;
+  header: string;
+  question: string;
+  isOther: boolean;
+  isSecret: boolean;
+  options: Array<{ label: string; description?: string }> | null;
+};
+
+export type AssistantUserInputRequest = {
+  requestId: string | number;
+  questions: AssistantQuestion[];
+};
+
+export type AssistantTurnStatus = {
+  status: string;
+  canResume: boolean;
+};
+
 export type SessionTimelineState = {
   messages: AssistantMessage[];
   streamingText: string;
   activeTools: AssistantToolCall[];
   connectionState: "connecting" | "live" | "reconnecting" | "offline";
+  pendingApproval: AssistantApprovalRequest | null;
+  pendingUserInput: AssistantUserInputRequest | null;
+  turnStatus: AssistantTurnStatus | null;
   error: string | null;
 };
 
@@ -32,6 +63,11 @@ export type SessionTimelineAction =
   | { type: "tool_call_started"; toolCall: AssistantToolCall }
   | { type: "tool_call_completed"; toolCall: AssistantToolCall }
   | { type: "assistant_completed"; message: AssistantMessage }
+  | { type: "approval_required"; request: AssistantApprovalRequest }
+  | { type: "approval_resolved"; requestId: string | number }
+  | { type: "user_input_required"; request: AssistantUserInputRequest }
+  | { type: "user_input_resolved"; requestId: string | number }
+  | { type: "turn_status"; status: AssistantTurnStatus }
   | { type: "connection_changed"; state: SessionTimelineState["connectionState"] }
   | { type: "error"; message: string };
 
@@ -41,6 +77,9 @@ export function createSessionTimelineState(): SessionTimelineState {
     streamingText: "",
     activeTools: [],
     connectionState: "connecting",
+    pendingApproval: null,
+    pendingUserInput: null,
+    turnStatus: null,
     error: null,
   };
 }
@@ -86,6 +125,26 @@ export function sessionTimelineReducer(
         activeTools: [],
         error: null,
       };
+    case "approval_required":
+      return { ...state, pendingApproval: action.request, error: null };
+    case "approval_resolved":
+      return {
+        ...state,
+        pendingApproval:
+          state.pendingApproval?.requestId === action.requestId ? null : state.pendingApproval,
+        error: null,
+      };
+    case "user_input_required":
+      return { ...state, pendingUserInput: action.request, error: null };
+    case "user_input_resolved":
+      return {
+        ...state,
+        pendingUserInput:
+          state.pendingUserInput?.requestId === action.requestId ? null : state.pendingUserInput,
+        error: null,
+      };
+    case "turn_status":
+      return { ...state, turnStatus: action.status };
     case "connection_changed":
       return { ...state, connectionState: action.state };
     case "error":

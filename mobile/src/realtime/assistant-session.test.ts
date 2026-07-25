@@ -300,4 +300,89 @@ describe("assistant session adapter", () => {
     push?.push.trigger("ok");
     await expect(sent).resolves.toBeUndefined();
   });
+
+  it("normalizes approvals, questions, and turn status and submits responses", async () => {
+    const socket = new FakeSocket();
+    const onAction = vi.fn();
+    const session = createAssistantSession({
+      threadId: 42,
+      origin: "https://demo.test",
+      token: "secret",
+      socketFactory: () => socket,
+      onAction,
+    });
+    session.connect();
+    socket.channelInstance.joinPush.trigger("ok");
+
+    socket.channelInstance.trigger("approval_required", {
+      request_id: "approval-1",
+      command: "git push",
+      cwd: "/work/symphony",
+      reason: "Push the branch",
+      tool_name: "exec",
+      agent: "codex",
+    });
+    socket.channelInstance.trigger("user_input_required", {
+      request_id: "question-1",
+      questions: [
+        {
+          id: "target",
+          header: "Target",
+          question: "Where?",
+          isOther: false,
+          isSecret: false,
+          options: [{ label: "Production", description: "Public app" }],
+        },
+      ],
+    });
+    socket.channelInstance.trigger("turn_status", {
+      status: "interrupted",
+      can_resume: true,
+    });
+
+    expect(onAction).toHaveBeenCalledWith({
+      type: "approval_required",
+      request: expect.objectContaining({ requestId: "approval-1", command: "git push" }),
+    });
+    expect(onAction).toHaveBeenCalledWith({
+      type: "user_input_required",
+      request: expect.objectContaining({
+        requestId: "question-1",
+        questions: [expect.objectContaining({ id: "target" })],
+      }),
+    });
+    expect(onAction).toHaveBeenCalledWith({
+      type: "turn_status",
+      status: { status: "interrupted", canResume: true },
+    });
+
+    const approval = session.submitApproval("approval-1", "approve");
+    const approvalPush = socket.channelInstance.pushes.at(-1);
+    expect(approvalPush).toMatchObject({
+      event: "submit_approval",
+      payload: { request_id: "approval-1", action: "approve" },
+    });
+    approvalPush?.push.trigger("ok");
+    await expect(approval).resolves.toBeUndefined();
+
+    const answers = session.submitUserInput("question-1", { target: "Production" });
+    const answersPush = socket.channelInstance.pushes.at(-1);
+    expect(answersPush).toMatchObject({
+      event: "submit_user_input",
+      payload: { request_id: "question-1", answers: { target: "Production" } },
+    });
+    answersPush?.push.trigger("ok");
+    await expect(answers).resolves.toBeUndefined();
+
+    const stop = session.stopTurn();
+    socket.channelInstance.pushes.at(-1)?.push.trigger("ok");
+    await expect(stop).resolves.toBeUndefined();
+    const resume = session.resumeTurn();
+    socket.channelInstance.pushes.at(-1)?.push.trigger("ok");
+    await expect(resume).resolves.toBeUndefined();
+    expect(socket.channelInstance.pushes.slice(-2).map(({ event }) => event)).toEqual([
+      "stop_turn",
+      "resume_turn",
+    ]);
+  });
 });

@@ -32,6 +32,9 @@ const timeline: SessionTimelineState = {
     },
   ],
   connectionState: "live",
+  pendingApproval: null,
+  pendingUserInput: null,
+  turnStatus: { status: "running", canResume: false },
   error: null,
 };
 
@@ -41,6 +44,10 @@ function renderScreen(overrides: Partial<React.ComponentProps<typeof SessionScre
     timeline,
     onBack: jest.fn(),
     onSend: jest.fn().mockResolvedValue(undefined),
+    onApproval: jest.fn().mockResolvedValue(undefined),
+    onResumeTurn: jest.fn().mockResolvedValue(undefined),
+    onStopTurn: jest.fn().mockResolvedValue(undefined),
+    onSubmitUserInput: jest.fn().mockResolvedValue(undefined),
     ...overrides,
   };
   return render(
@@ -87,5 +94,82 @@ describe("SessionScreen", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/Socket offline/);
     expect(screen.getByLabelText("Message")).toHaveProp("value", "Do not lose this");
+  });
+
+  it("renders and resolves approval and question cards", async () => {
+    const onApproval = jest.fn().mockResolvedValue(undefined);
+    const onSubmitUserInput = jest.fn().mockResolvedValue(undefined);
+    renderScreen({
+      timeline: {
+        ...timeline,
+        pendingApproval: {
+          requestId: "approval-1",
+          command: "git push",
+          cwd: "/work/symphony",
+          reason: "Publish the branch",
+          toolName: "exec",
+          agent: "codex",
+        },
+        pendingUserInput: {
+          requestId: "question-1",
+          questions: [
+            {
+              id: "target",
+              header: "Target",
+              question: "Where should this deploy?",
+              isOther: false,
+              isSecret: false,
+              options: [{ label: "Production", description: "Public app" }],
+            },
+          ],
+        },
+      },
+      onApproval,
+      onSubmitUserInput,
+    });
+
+    expect(screen.getByText("Approval required")).toBeTruthy();
+    expect(screen.getByText("git push")).toBeTruthy();
+    fireEvent.press(screen.getByRole("button", { name: "Approve command" }));
+    await waitFor(() => expect(onApproval).toHaveBeenCalledWith("approval-1", "approve"));
+
+    expect(screen.getByText("Where should this deploy?")).toBeTruthy();
+    fireEvent.press(screen.getByRole("button", { name: "Select Production" }));
+    fireEvent.press(screen.getByRole("button", { name: "Submit answers" }));
+    await waitFor(() =>
+      expect(onSubmitUserInput).toHaveBeenCalledWith("question-1", {
+        target: "Production",
+      }),
+    );
+  });
+
+  it("stops running turns and resumes interrupted turns", async () => {
+    const onStopTurn = jest.fn().mockResolvedValue(undefined);
+    const onResumeTurn = jest.fn().mockResolvedValue(undefined);
+    const view = renderScreen({ onStopTurn, onResumeTurn });
+
+    fireEvent.press(screen.getByRole("button", { name: "Stop turn" }));
+    expect(onStopTurn).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Stop turn" })).toBeEnabled());
+
+    view.rerender(
+      <ThemeProvider colorScheme="dark">
+        <SessionScreen
+          onApproval={jest.fn()}
+          onBack={jest.fn()}
+          onResumeTurn={onResumeTurn}
+          onSend={jest.fn()}
+          onStopTurn={onStopTurn}
+          onSubmitUserInput={jest.fn()}
+          threadId={42}
+          timeline={{
+            ...timeline,
+            turnStatus: { status: "interrupted", canResume: true },
+          }}
+        />
+      </ThemeProvider>,
+    );
+    fireEvent.press(screen.getByRole("button", { name: "Resume turn" }));
+    await waitFor(() => expect(onResumeTurn).toHaveBeenCalledTimes(1));
   });
 });

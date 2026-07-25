@@ -106,34 +106,34 @@ Commit message: `feat(mobile): add Orca-style task operations`
 - Modify: `mobile/src/features/sessions/SessionScreen.tsx`
 - Modify: `mobile/src/features/sessions/SessionScreen.test.tsx`
 
-- [ ] **Step 1: Write failing adapter and reducer tests**
+- [x] **Step 1: Write failing adapter and reducer tests**
 
 Prove `approval_required`, `user_input_required`, tool activity, queued
 messages, goal state, interrupt and resume events become explicit timeline
 state. Prove approval and question submissions push `submit_approval` and
 `submit_user_input` with the server request id.
 
-- [ ] **Step 2: Run tests and verify RED**
+- [x] **Step 2: Run tests and verify RED**
 
 Run:
 `cd mobile && npm run test:unit -- src/realtime/assistant-session.test.ts src/features/sessions/session-reducer.test.ts`
 
 Expected: FAIL on the new event/state assertions.
 
-- [ ] **Step 3: Implement adapter, state and accessible cards**
+- [x] **Step 3: Implement adapter, state and accessible cards**
 
 Approval cards expose Approve and Cancel. Question cards support every server
 question and preserve entered answers until acknowledged. Session controls
 expose resume/interrupt only when allowed by the current state.
 
-- [ ] **Step 4: Run tests and verify GREEN**
+- [x] **Step 4: Run tests and verify GREEN**
 
 Run:
 `cd mobile && npm run test:unit -- src/realtime/assistant-session.test.ts src/features/sessions/session-reducer.test.ts && npm run test:ui -- src/features/sessions/SessionScreen.test.tsx`
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Commit message: `feat(mobile): add live assistant controls`
 
