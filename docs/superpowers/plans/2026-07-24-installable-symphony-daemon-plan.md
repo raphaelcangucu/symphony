@@ -23,6 +23,10 @@ services, ExUnit, POSIX shell launchers, Make.
 - Run Elixir commands from `elixir/`.
 - Follow TDD for each behavior: failing test, observed failure, minimal
   implementation, passing test.
+- Under WSL, run exactly one test file or one narrowly targeted test filter per
+  process, sequentially. Split every multi-file command below. Never run a
+  directory-wide suite or repository-wide gate unless the user explicitly
+  approves that specific run.
 - Every public `def` under `lib/` needs an adjacent `@spec`.
 - Do not stop or modify the canonical development daemon during unit work.
 - Real systemd acceptance uses a unique unit name and isolated port/database.
@@ -90,7 +94,7 @@ services, ExUnit, POSIX shell launchers, Make.
 - Create: `elixir/lib/symphony_elixir/daemon/paths.ex`
 - Test: `elixir/test/symphony_elixir/daemon/paths_test.exs`
 
-- [ ] **Step 1: Write failing XDG path tests**
+- [x] **Step 1: Write failing XDG path tests**
 
 ```elixir
 defmodule SymphonyElixir.Daemon.PathsTest do
@@ -150,7 +154,7 @@ defmodule SymphonyElixir.Daemon.PathsTest do
 end
 ```
 
-- [ ] **Step 2: Run the test and observe the missing module**
+- [x] **Step 2: Run the test and observe the missing module**
 
 Run:
 
@@ -161,7 +165,7 @@ mix test test/symphony_elixir/daemon/paths_test.exs
 
 Expected: FAIL because `SymphonyElixir.Daemon.Paths` is undefined.
 
-- [ ] **Step 3: Implement the path struct and resolver**
+- [x] **Step 3: Implement the path struct and resolver**
 
 ```elixir
 defmodule SymphonyElixir.Daemon.Paths do
@@ -281,7 +285,7 @@ defmodule SymphonyElixir.Daemon.Paths do
 end
 ```
 
-- [ ] **Step 4: Run the focused test**
+- [x] **Step 4: Run the focused test**
 
 Run:
 
@@ -293,7 +297,7 @@ mix specs.check
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add elixir/lib/symphony_elixir/daemon/paths.ex \
@@ -313,7 +317,7 @@ git commit -m "feat(daemon): define installed XDG paths"
 - Test: `elixir/test/symphony_elixir/daemon/build_info_test.exs`
 - Test: `elixir/test/symphony_elixir_web/health_controller_test.exs`
 
-- [ ] **Step 1: Write failing identity and health tests**
+- [x] **Step 1: Write failing identity and health tests**
 
 ```elixir
 defmodule SymphonyElixir.Daemon.BuildInfoTest do
@@ -368,7 +372,7 @@ test "GET /api/health returns build identity without authentication" do
 end
 ```
 
-- [ ] **Step 2: Run the tests and observe failure**
+- [x] **Step 2: Run the tests and observe failure**
 
 Run:
 
@@ -381,7 +385,7 @@ mix test test/symphony_elixir/daemon/build_info_test.exs \
 Expected: FAIL because `BuildInfo` is undefined and health only returns
 `status`.
 
-- [ ] **Step 3: Implement build identity and health serialization**
+- [x] **Step 3: Implement build identity and health serialization**
 
 ```elixir
 defmodule SymphonyElixir.Daemon.BuildInfo do
@@ -445,7 +449,7 @@ def show(conn, _params) do
 end
 ```
 
-- [ ] **Step 4: Configure installed paths only at runtime**
+- [x] **Step 4: Configure installed paths only at runtime**
 
 Append inside the existing non-test block of `config/runtime.exs`:
 
@@ -488,7 +492,7 @@ config :symphony_elixir,
   git_commit: System.get_env("SYMPHONY_BUILD_COMMIT") || "development"
 ```
 
-- [ ] **Step 5: Run focused and config tests**
+- [x] **Step 5: Run focused and config tests**
 
 Run:
 
@@ -501,7 +505,7 @@ mix specs.check
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add elixir/config/config.exs elixir/config/runtime.exs elixir/mix.exs \
@@ -525,7 +529,7 @@ git commit -m "feat(daemon): expose installed build identity"
 - Create: `elixir/lib/symphony_elixir/release.ex`
 - Test: `elixir/test/symphony_elixir/release_test.exs`
 
-- [ ] **Step 1: Write a failing release contract test**
+- [x] **Step 1: Write a failing release contract test**
 
 ```elixir
 defmodule SymphonyElixir.ReleaseTest do
@@ -551,7 +555,7 @@ defmodule SymphonyElixir.ReleaseTest do
 end
 ```
 
-- [ ] **Step 2: Run the test and observe missing release configuration**
+- [x] **Step 2: Run the test and observe missing release configuration**
 
 Run:
 
@@ -562,7 +566,7 @@ mix test test/symphony_elixir/release_test.exs
 
 Expected: FAIL because `:releases` and overlay files do not exist.
 
-- [ ] **Step 3: Add the named release and asset-copy step**
+- [x] **Step 3: Add the named release and asset-copy step**
 
 Add `releases: releases()` to `project/0`, then:
 
@@ -622,7 +626,7 @@ defp copy_release_assets(%Mix.Release{} = release) do
 end
 ```
 
-- [ ] **Step 4: Add release entrypoints and templates**
+- [x] **Step 4: Add release entrypoints and templates**
 
 Create `lib/symphony_elixir/release.ex`:
 
@@ -681,7 +685,7 @@ exec "$release_root/bin/symphony" eval \
 
 Make both overlays executable in git.
 
-- [ ] **Step 5: Run unit and real release smoke checks**
+- [x] **Step 5: Run unit and real release smoke checks**
 
 Run:
 
@@ -700,7 +704,7 @@ _build/prod/rel/symphony/bin/symphony eval \
 
 Expected: tests PASS and the last command prints `sqlite-ok`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add elixir/mix.exs elixir/rel \
@@ -721,7 +725,7 @@ git commit -m "feat(daemon): package a self-contained OTP release"
 - Test: `elixir/test/symphony_elixir/daemon/environment_test.exs`
 - Test: `elixir/test/symphony_elixir/daemon/manifest_test.exs`
 
-- [ ] **Step 1: Write failing atomic-write and rendering tests**
+- [x] **Step 1: Write failing atomic-write and rendering tests**
 
 ```elixir
 defmodule SymphonyElixir.Daemon.FilesTest do
@@ -817,7 +821,7 @@ defmodule SymphonyElixir.Daemon.ManifestTest do
 end
 ```
 
-- [ ] **Step 2: Run tests and observe missing modules**
+- [x] **Step 2: Run tests and observe missing modules**
 
 Run:
 
@@ -830,7 +834,7 @@ mix test test/symphony_elixir/daemon/files_test.exs \
 
 Expected: FAIL with undefined modules.
 
-- [ ] **Step 3: Implement atomic files**
+- [x] **Step 3: Implement atomic files**
 
 ```elixir
 defmodule SymphonyElixir.Daemon.Files do
@@ -886,7 +890,7 @@ end
 During implementation, use `:file.sync(file)` with the actual IO device shape
 accepted by OTP 28; the test must prove the final helper works on this runtime.
 
-- [ ] **Step 4: Implement safe environment and manifest modules**
+- [x] **Step 4: Implement safe environment and manifest modules**
 
 ```elixir
 defmodule SymphonyElixir.Daemon.Environment do
@@ -948,7 +952,7 @@ defmodule SymphonyElixir.Daemon.Manifest do
 end
 ```
 
-- [ ] **Step 5: Run tests and specs**
+- [x] **Step 5: Run tests and specs**
 
 Run:
 
@@ -962,7 +966,7 @@ mix specs.check
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add elixir/lib/symphony_elixir/daemon/{files,environment,manifest}.ex \
@@ -982,7 +986,7 @@ git commit -m "feat(daemon): add atomic installation primitives"
 - Test: `elixir/test/symphony_elixir/daemon/systemd_test.exs`
 - Test: `elixir/test/symphony_elixir/daemon/listener_test.exs`
 
-- [ ] **Step 1: Write failing unit and adapter tests**
+- [x] **Step 1: Write failing unit and adapter tests**
 
 ```elixir
 defmodule SymphonyElixir.Daemon.Systemd.UnitTest do
@@ -1056,7 +1060,7 @@ defmodule SymphonyElixir.Daemon.ListenerTest do
 end
 ```
 
-- [ ] **Step 2: Run tests and observe missing modules**
+- [x] **Step 2: Run tests and observe missing modules**
 
 Run:
 
@@ -1069,7 +1073,7 @@ mix test test/symphony_elixir/daemon/systemd/unit_test.exs \
 
 Expected: FAIL.
 
-- [ ] **Step 3: Implement deterministic unit rendering**
+- [x] **Step 3: Implement deterministic unit rendering**
 
 ```elixir
 defmodule SymphonyElixir.Daemon.Systemd.Unit do
@@ -1115,7 +1119,7 @@ defmodule SymphonyElixir.Daemon.Systemd.Unit do
 end
 ```
 
-- [ ] **Step 4: Implement systemd argv calls and parsing**
+- [x] **Step 4: Implement systemd argv calls and parsing**
 
 ```elixir
 defmodule SymphonyElixir.Daemon.Systemd do
@@ -1215,7 +1219,7 @@ defmodule SymphonyElixir.Daemon.Systemd do
 end
 ```
 
-- [ ] **Step 5: Implement the Linux listener probe**
+- [x] **Step 5: Implement the Linux listener probe**
 
 ```elixir
 defmodule SymphonyElixir.Daemon.Listener do
@@ -1253,7 +1257,7 @@ defmodule SymphonyElixir.Daemon.Listener do
 end
 ```
 
-- [ ] **Step 6: Run tests and commit**
+- [x] **Step 6: Run tests and commit**
 
 Run:
 
@@ -1287,7 +1291,7 @@ git commit -m "feat(daemon): add systemd service adapter"
 - Test: `elixir/test/symphony_elixir/daemon/preflight_test.exs`
 - Test: `elixir/test/symphony_elixir/daemon/status_test.exs`
 
-- [ ] **Step 1: Write failing health and status classification tests**
+- [x] **Step 1: Write failing health and status classification tests**
 
 ```elixir
 defmodule SymphonyElixir.Daemon.HealthProbeTest do
@@ -1436,7 +1440,7 @@ defp permissive_deps do
 end
 ```
 
-- [ ] **Step 2: Run tests and observe missing modules**
+- [x] **Step 2: Run tests and observe missing modules**
 
 Run:
 
@@ -1449,7 +1453,7 @@ mix test test/symphony_elixir/daemon/health_probe_test.exs \
 
 Expected: FAIL.
 
-- [ ] **Step 3: Implement the local HTTP probe**
+- [x] **Step 3: Implement the local HTTP probe**
 
 ```elixir
 defmodule SymphonyElixir.Daemon.HealthProbe do
@@ -1510,7 +1514,7 @@ defmodule SymphonyElixir.Daemon.HealthProbe do
 end
 ```
 
-- [ ] **Step 4: Implement status composition**
+- [x] **Step 4: Implement status composition**
 
 `Status.inspect/2` returns:
 
@@ -1549,7 +1553,7 @@ commit_drift =
 Set `healthy?` only when active, listener PID matches, health status is `ok`,
 and version/commit/unit drift are absent.
 
-- [ ] **Step 5: Implement preflight with explicit failures**
+- [x] **Step 5: Implement preflight with explicit failures**
 
 `Preflight.run/1` merges the supplied dependency map over the runtime
 dependencies, then validates in this order:
@@ -1602,7 +1606,7 @@ messages:
 
 Never invoke a kill or stop command.
 
-- [ ] **Step 6: Run tests and commit**
+- [x] **Step 6: Run tests and commit**
 
 Run:
 
@@ -1635,7 +1639,7 @@ git commit -m "feat(daemon): report health and configuration drift"
 - Test: `elixir/test/symphony_elixir/daemon/cli_test.exs`
 - Test: `elixir/test/mix/tasks/symphony_daemon_test.exs`
 
-- [ ] **Step 1: Write failing parser and lifecycle tests**
+- [x] **Step 1: Write failing parser and lifecycle tests**
 
 ```elixir
 test "parses every supported command and option" do
@@ -1696,7 +1700,7 @@ test "forced restart kills the cgroup and waits for health" do
 end
 ```
 
-- [ ] **Step 2: Run tests and observe missing modules**
+- [x] **Step 2: Run tests and observe missing modules**
 
 Run:
 
@@ -1709,7 +1713,7 @@ mix test test/symphony_elixir/daemon/lifecycle_test.exs \
 
 Expected: FAIL.
 
-- [ ] **Step 3: Implement lifecycle operations**
+- [x] **Step 3: Implement lifecycle operations**
 
 Implement:
 
@@ -1759,7 +1763,7 @@ The default `wait_healthy` polls `Status.inspect/2` every 250 ms for 30 seconds,
 returns immediately on `:healthy`, and returns
 `{:error, {:health_timeout, last_status}}` at the deadline.
 
-- [ ] **Step 4: Implement CLI parsing and output**
+- [x] **Step 4: Implement CLI parsing and output**
 
 `CLI.parse/1` uses strict `OptionParser` switches per command. `CLI.run/2`
 returns:
@@ -1789,7 +1793,7 @@ def main(["daemon" | rest]) do
 end
 ```
 
-- [ ] **Step 5: Run focused tests and commit**
+- [x] **Step 5: Run focused tests and commit**
 
 Run:
 
@@ -1820,7 +1824,7 @@ git commit -m "feat(daemon): add lifecycle management CLI"
 - Create: `elixir/lib/symphony_elixir/daemon/migration.ex`
 - Test: `elixir/test/symphony_elixir/daemon/migration_test.exs`
 
-- [ ] **Step 1: Write failing migration tests using a WAL fixture**
+- [x] **Step 1: Write failing migration tests using a WAL fixture**
 
 ```elixir
 test "migrates a consistent database while preserving the source" do
@@ -1930,7 +1934,7 @@ end
 The fixture helper opens Exqlite, enables WAL, creates one table, inserts the
 value, and closes the connection.
 
-- [ ] **Step 2: Run the test and observe missing module**
+- [x] **Step 2: Run the test and observe missing module**
 
 Run:
 
@@ -1941,7 +1945,7 @@ mix test test/symphony_elixir/daemon/migration_test.exs
 
 Expected: FAIL.
 
-- [ ] **Step 3: Implement consistent snapshot and integrity check**
+- [x] **Step 3: Implement consistent snapshot and integrity check**
 
 Use Exqlite serialization so WAL content is included without relying on an
 external `sqlite3` executable:
@@ -1983,7 +1987,7 @@ end
 `write_synced/2` opens `[:write, :binary, :exclusive]`, writes the bytes,
 calls `:file.sync/1`, and closes the file.
 
-- [ ] **Step 4: Implement migration orchestration and Ecto release migration**
+- [x] **Step 4: Implement migration orchestration and Ecto release migration**
 
 `Migration.migrate/3` must:
 
@@ -2024,7 +2028,7 @@ def migrate_release(database) do
 end
 ```
 
-- [ ] **Step 5: Run migration tests and commit**
+- [x] **Step 5: Run migration tests and commit**
 
 Run:
 
@@ -2055,7 +2059,7 @@ git commit -m "feat(daemon): migrate SQLite state safely"
 - Test: `elixir/test/symphony_elixir/daemon/install_test.exs`
 - Test: `elixir/test/symphony_elixir/daemon/lifecycle_test.exs`
 
-- [ ] **Step 1: Write failing archive safety and rollback tests**
+- [x] **Step 1: Write failing archive safety and rollback tests**
 
 ```elixir
 test "rejects absolute and parent-traversal tar entries" do
@@ -2186,7 +2190,7 @@ defp successful_deps(root, test_pid) do
 end
 ```
 
-- [ ] **Step 2: Run tests and observe missing modules**
+- [x] **Step 2: Run tests and observe missing modules**
 
 Run:
 
@@ -2198,7 +2202,7 @@ mix test test/symphony_elixir/daemon/artifact_test.exs \
 
 Expected: FAIL.
 
-- [ ] **Step 3: Implement safe tar staging**
+- [x] **Step 3: Implement safe tar staging**
 
 `Artifact.stage/2` must:
 
@@ -2231,7 +2235,7 @@ def validate_entries(entries) do
 end
 ```
 
-- [ ] **Step 4: Implement installation transaction**
+- [x] **Step 4: Implement installation transaction**
 
 `Install.run/2` must capture before mutation:
 
@@ -2294,7 +2298,7 @@ exec "$install_root/current/bin/symphony-daemon" "$@"
 
 Use mode `0755`.
 
-- [ ] **Step 5: Add uninstall without persistent-data deletion**
+- [x] **Step 5: Add uninstall without persistent-data deletion**
 
 Add `Lifecycle.uninstall/1`:
 
@@ -2316,7 +2320,7 @@ end
 Tests must assert that environment, install manifest, database, backups, logs,
 and versioned releases still exist.
 
-- [ ] **Step 6: Run tests and commit**
+- [x] **Step 6: Run tests and commit**
 
 Run:
 
@@ -2353,7 +2357,7 @@ git commit -m "feat(daemon): install releases with health rollback"
 - Test: `elixir/test/symphony_elixir/assistant/turn_manager_test.exs`
 - Test: `elixir/test/symphony_elixir/orchestrator_status_test.exs`
 
-- [ ] **Step 1: Write failing gate and drain tests**
+- [x] **Step 1: Write failing gate and drain tests**
 
 ```elixir
 test "begin_drain closes admission immediately" do
@@ -2444,7 +2448,7 @@ end
 
 Reset `Shutdown` to admitting in test setup/on-exit.
 
-- [ ] **Step 2: Run focused tests and observe failures**
+- [x] **Step 2: Run focused tests and observe failures**
 
 Run:
 
@@ -2456,7 +2460,7 @@ mix test test/symphony_elixir/daemon/shutdown_test.exs \
 
 Expected: FAIL.
 
-- [ ] **Step 3: Implement the gate and drain coordinator**
+- [x] **Step 3: Implement the gate and drain coordinator**
 
 ```elixir
 defmodule SymphonyElixir.Daemon.Shutdown do
@@ -2546,7 +2550,7 @@ defmodule SymphonyElixir.Daemon.Shutdown do
 end
 ```
 
-- [ ] **Step 4: Wire admission into assistant and issue dispatch**
+- [x] **Step 4: Wire admission into assistant and issue dispatch**
 
 Add `Shutdown` before `TurnManager` in `SharedSupervisor.child_specs/0`.
 
@@ -2580,7 +2584,7 @@ In the manual `request_dispatch` handler, return
 sites to return a visible retryable error when `TurnManager.enqueue/3` returns
 that value.
 
-- [ ] **Step 5: Drain only installed-mode OTP shutdown**
+- [x] **Step 5: Drain only installed-mode OTP shutdown**
 
 Add:
 
@@ -2597,7 +2601,7 @@ end
 
 to `SymphonyElixir.Application`. Development `make stop` remains immediate.
 
-- [ ] **Step 6: Run focused suites and commit**
+- [x] **Step 6: Run focused suites and commit**
 
 Run:
 
@@ -2637,7 +2641,7 @@ git commit -m "feat(daemon): drain active work on shutdown"
 - Create: `elixir/test/release/installed_release_test.sh`
 - Test: `elixir/test/symphony_elixir/daemon/release_smoke_test.exs`
 
-- [ ] **Step 1: Write the failing smoke harness**
+- [x] **Step 1: Write the failing smoke harness**
 
 Create `test/release/installed_release_test.sh`:
 
@@ -2731,7 +2735,7 @@ defmodule SymphonyElixir.Daemon.ReleaseSmokeTest do
 end
 ```
 
-- [ ] **Step 2: Run the smoke test and observe missing bootstrap behavior**
+- [x] **Step 2: Run the smoke test and observe missing bootstrap behavior**
 
 Run:
 
@@ -2744,7 +2748,7 @@ mix test test/symphony_elixir/daemon/release_smoke_test.exs
 Expected: FAIL until release entrypoints, migrations, runtime paths, and assets
 all work together.
 
-- [ ] **Step 3: Add Make targets and automatic artifact selection**
+- [x] **Step 3: Add Make targets and automatic artifact selection**
 
 Add:
 
@@ -2771,7 +2775,7 @@ When `mix symphony.daemon install` has no `--artifact`, its bootstrap path runs
 `MIX_ENV=prod mix release symphony --overwrite` with argv, resolves the tar
 using `Mix.Project.config()[:version]`, then calls `Install.run/2`.
 
-- [ ] **Step 4: Run release smoke outside the checkout**
+- [x] **Step 4: Run release smoke outside the checkout**
 
 Run:
 
@@ -2788,7 +2792,7 @@ test ! -e _build
 
 The ExUnit smoke must already have booted this extracted release successfully.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add elixir/Makefile elixir/lib/mix/tasks/symphony.daemon.ex \
@@ -2799,7 +2803,7 @@ git commit -m "test(daemon): prove checkout-independent release boot"
 
 ---
 
-### Task 12: Operator docs, fake-systemd integration, real WSL acceptance, and full gates
+### Task 12: Operator docs, fake-systemd integration, real WSL acceptance, and approved gates
 
 **Files:**
 - Modify: `INSTALL.md`
@@ -2807,7 +2811,7 @@ git commit -m "test(daemon): prove checkout-independent release boot"
 - Create: `elixir/test/symphony_elixir/daemon/systemd_integration_test.exs`
 - Create: `elixir/scripts/daemon-acceptance.sh`
 
-- [ ] **Step 1: Add a fake-systemd end-to-end test**
+- [x] **Step 1: Add a fake-systemd end-to-end test**
 
 The test creates a temporary HOME/XDG tree and a fake command runner that stores
 unit state in an Agent. Exercise:
@@ -2837,7 +2841,7 @@ mix test test/symphony_elixir/daemon/systemd_integration_test.exs
 
 Expected: PASS.
 
-- [ ] **Step 2: Document the exact operator workflow**
+- [x] **Step 2: Document the exact operator workflow**
 
 `INSTALL.md` must contain:
 
@@ -2858,7 +2862,7 @@ the fact that `make serve` remains the development daemon.
 `elixir/README.md` must document release build/smoke commands and the separation
 between source hot reload and installed service mode.
 
-- [ ] **Step 3: Add an isolated real-systemd acceptance script**
+- [x] **Step 3: Add an isolated real-systemd acceptance script**
 
 `scripts/daemon-acceptance.sh` must:
 
@@ -2886,7 +2890,7 @@ set -eu
 
 repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 elixir_root="$repo_root/elixir"
-artifact="$elixir_root/_build/prod/symphony-0.3.0.tar.gz"
+artifact="$elixir_root/_build/prod/symphony-0.3.0-linux-$(uname -m).tar.gz"
 unit="symphony-acceptance-$$.service"
 scratch=$(mktemp -d)
 real_home=${HOME:?HOME is required}
@@ -2972,7 +2976,12 @@ bash scripts/daemon-acceptance.sh
 Expected: PASS on the current WSL user systemd manager without touching the
 canonical service or development process.
 
-- [ ] **Step 4: Run all targeted daemon tests**
+Blocked evidence on 2026-07-24: the current shell has no active or lingering
+`systemd --user` manager (`/run/user/1000/bus` is absent). The script exited 77
+before creating or changing any unit. Run it again from a normal login session,
+or after the operator explicitly enables lingering.
+
+- [x] **Step 4: Run all targeted daemon tests**
 
 Run:
 
@@ -2987,6 +2996,10 @@ mix test test/symphony_elixir/daemon \
 
 Expected: PASS.
 
+Executed under the WSL rule as separate test files and narrow filters rather
+than the prohibited directory/multi-file command. All selected daemon tests
+passed; evidence is stored outside the repository worktree.
+
 - [ ] **Step 5: Run repository quality gates**
 
 Run:
@@ -3000,6 +3013,10 @@ make release-smoke
 
 Expected: format, Credo, tests with coverage, Dialyzer, public-spec validation,
 and release smoke all PASS.
+
+The broad `make all` gate is intentionally not run locally because the operator
+forbids large WSL test runs. Targeted format, public-spec, shell syntax, daemon
+unit/integration tests, and release smoke passed; the broad gate remains for CI.
 
 - [ ] **Step 6: Verify the diff and commit**
 
@@ -3024,17 +3041,18 @@ git commit -m "docs(daemon): document and validate service operations"
 
 ## Final Acceptance Checklist
 
-- [ ] Artifact boots outside the checkout with bundled ERTS, Exqlite, assets,
+- [x] Artifact boots outside the checkout with bundled ERTS, Exqlite, assets,
   migrations, and skills.
 - [ ] `systemd --user` owns foreground process restart and start-limit policy.
-- [ ] Invalid preflight exits `78` and does not restart-loop.
-- [ ] CLI install/start/stop/restart/status/uninstall are idempotent.
-- [ ] Human and JSON status separate service, listener, health, and drift.
-- [ ] SQLite migration preserves and verifies the source plus forced backup.
-- [ ] Candidate health failure restores the prior release and unit.
-- [ ] Ordinary shutdown closes admission and drains for up to five minutes.
-- [ ] Forced restart produces honest interrupted/resumable assistant state.
-- [ ] Uninstall preserves configuration, database, backups, logs, and releases.
-- [ ] Development `make serve/update/stop` behavior remains unchanged.
+- [x] Invalid preflight exits `78` and does not restart-loop.
+- [x] CLI install/start/stop/restart/status/uninstall are idempotent.
+- [x] Human and JSON status separate service, listener, health, and drift.
+- [x] SQLite migration preserves and verifies the source plus forced backup.
+- [x] Candidate health failure restores the prior release and unit.
+- [x] Ordinary shutdown closes admission and drains for up to five minutes.
+- [x] Forced restart produces honest interrupted/resumable assistant state.
+- [x] Uninstall preserves configuration, database, backups, logs, and releases.
+- [x] Development `make serve/update/stop` behavior remains unchanged.
 - [ ] Real unique-unit SIGKILL acceptance proves systemd restart.
-- [ ] Full repository gates and release smoke pass.
+- [x] Checkout-independent release smoke passes from the extracted tar.
+- [ ] Full repository gates pass outside WSL or in CI.

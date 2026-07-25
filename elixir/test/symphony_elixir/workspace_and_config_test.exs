@@ -133,7 +133,7 @@ defmodule SymphonyElixir.WorkspaceAndConfigTest do
       assert File.read!(Path.join(second_workspace, "local-progress.txt")) == "in progress\n"
       assert File.read!(Path.join([second_workspace, "deps", "cache.txt"])) == "cached deps\n"
       assert File.read!(Path.join([second_workspace, "_build", "artifact.txt"])) == "compiled artifact\n"
-      refute File.exists?(Path.join([second_workspace, "tmp", "scratch.txt"]))
+      assert File.read!(Path.join([second_workspace, "tmp", "scratch.txt"])) == "remove me\n"
     after
       File.rm_rf(workspace_root)
     end
@@ -153,9 +153,15 @@ defmodule SymphonyElixir.WorkspaceAndConfigTest do
 
       write_workflow_file!(Workflow.workflow_file_path(), workspace_root: workspace_root)
 
-      assert {:ok, workspace} = Workspace.create_for_issue("MT-STALE")
-      assert workspace == stale_workspace
-      assert File.dir?(workspace)
+      assert {:error,
+              %SymphonyElixir.Workspace.Provision.Error{
+                stage: :inspect_final,
+                reason: {:workspace_path_blocked, ^stale_workspace, :regular},
+                retryable: false
+              }} = Workspace.create_for_issue("MT-STALE")
+
+      assert File.regular?(stale_workspace)
+      assert File.read!(stale_workspace) == "old state\n"
     after
       File.rm_rf(workspace_root)
     end
@@ -217,14 +223,21 @@ defmodule SymphonyElixir.WorkspaceAndConfigTest do
         hook_after_create: "echo nope && exit 17"
       )
 
-      assert {:error, {:workspace_hook_failed, "after_create", 17, _output}} =
+      assert {:error,
+              %SymphonyElixir.Workspace.Provision.Error{
+                stage: :after_create,
+                reason: {:workspace_hook_failed, "after_create", 17, output},
+                retryable: true
+              }} =
                Workspace.create_for_issue("MT-FAIL")
+
+      assert output =~ "nope"
     after
       File.rm_rf(workspace_root)
     end
   end
 
-  test "workspace surfaces after_create hook timeouts" do
+  test "workspace waits for after_create even beyond the lifecycle hook timeout" do
     workspace_root =
       Path.join(
         System.tmp_dir!(),
@@ -235,11 +248,11 @@ defmodule SymphonyElixir.WorkspaceAndConfigTest do
       write_workflow_file!(Workflow.workflow_file_path(),
         workspace_root: workspace_root,
         hook_timeout_ms: 10,
-        hook_after_create: "sleep 1"
+        hook_after_create: "sleep 0.05 && echo ready > ready.txt"
       )
 
-      assert {:error, {:workspace_hook_timeout, "after_create", 10}} =
-               Workspace.create_for_issue("MT-TIMEOUT")
+      assert {:ok, workspace} = Workspace.create_for_issue("MT-TIMEOUT")
+      assert File.read!(Path.join(workspace, "ready.txt")) == "ready\n"
     after
       File.rm_rf(workspace_root)
     end

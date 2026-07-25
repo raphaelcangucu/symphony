@@ -44,7 +44,7 @@ defmodule SymphonyElixir.DevServerTest do
     {:ok, project: project}
   end
 
-  test "issue_targets returns disabled with persisted server views when dev server config is off", %{project: project} do
+  test "issue_targets returns disabled and reconciles stale persisted server views", %{project: project} do
     {:ok, row} =
       DevServerRecord.upsert(project.id, "1", "front", %{
         working_dir: "front",
@@ -66,7 +66,7 @@ defmodule SymphonyElixir.DevServerTest do
                   working_dir: "front",
                   port: 4101,
                   url: "http://127.0.0.1:4101/",
-                  status: "ready",
+                  status: "crashed",
                   primary: true,
                   session_name: "sym-dev-front"
                 }
@@ -74,6 +74,7 @@ defmodule SymphonyElixir.DevServerTest do
             }} = DevServer.issue_targets(project.slug, "#1")
 
     assert row_id == row.id
+    assert [%DevServerRecord{status: "crashed"}] = DevServerRecord.list_for_issue(project.id, "1")
   end
 
   test "issue_targets returns project_not_found for an unknown project" do

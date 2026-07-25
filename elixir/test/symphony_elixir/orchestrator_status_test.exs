@@ -3,9 +3,58 @@ defmodule SymphonyElixir.OrchestratorStatusTest do
 
   alias SymphonyElixir.Codex.CodingAgent, as: CodexCodingAgent
   alias SymphonyElixir.Cursor.CodingAgent, as: CursorCodingAgent
+  alias SymphonyElixir.Daemon.Shutdown
 
   defp normalize(event), do: CodexCodingAgent.normalize_event(event)
   defp normalize_cursor(event), do: CursorCodingAgent.normalize_event(event)
+
+  test "manual dispatch rejects new work while daemon is draining" do
+    orchestrator_name = Module.concat(__MODULE__, :DrainingOrchestrator)
+    :ok = Shutdown.begin_drain()
+    on_exit(fn -> Shutdown.reset() end)
+
+    start_supervised!({Orchestrator, name: orchestrator_name, schedule_initial_tick?: false})
+
+    assert {:error, :daemon_draining} =
+             Orchestrator.request_dispatch(orchestrator_name, "SYM-1")
+  end
+
+  test "scheduled retry releases its claim without dispatching while daemon is draining" do
+    orchestrator_name = Module.concat(__MODULE__, :DrainingRetryOrchestrator)
+    issue_id = "issue-draining-retry"
+    :ok = Shutdown.begin_drain()
+    on_exit(fn -> Shutdown.reset() end)
+
+    start_supervised!({Orchestrator, name: orchestrator_name, schedule_initial_tick?: false})
+    pid = Process.whereis(orchestrator_name)
+
+    :sys.replace_state(pid, fn state ->
+      retry = %{
+        attempt: 1,
+        timer_ref: nil,
+        due_at_ms: System.monotonic_time(:millisecond),
+        identifier: "SYM-DRAIN",
+        project_slug: nil,
+        error: "retry"
+      }
+
+      %{
+        state
+        | retry_attempts: %{issue_id => retry},
+          claimed: MapSet.put(state.claimed, issue_id)
+      }
+    end)
+
+    send(pid, {:retry_issue, issue_id})
+
+    state =
+      wait_for_state(pid, fn state ->
+        not Map.has_key?(state.retry_attempts, issue_id) and
+          not MapSet.member?(state.claimed, issue_id)
+      end)
+
+    assert state.running == %{}
+  end
 
   test "snapshot returns :timeout when snapshot server is unresponsive" do
     server_name = Module.concat(__MODULE__, :UnresponsiveSnapshotServer)
@@ -306,7 +355,7 @@ defmodule SymphonyElixir.OrchestratorStatusTest do
     Application.put_env(:symphony_elixir, :memory_tracker_recipient, self())
 
     orchestrator_name = Module.concat(__MODULE__, :TransitionOrchestrator)
-    {:ok, pid} = Orchestrator.start_link(name: orchestrator_name)
+    {:ok, pid} = Orchestrator.start_link(name: orchestrator_name, schedule_initial_tick?: false)
 
     on_exit(fn -> if Process.alive?(pid), do: Process.exit(pid, :normal) end)
 
@@ -334,7 +383,12 @@ defmodule SymphonyElixir.OrchestratorStatusTest do
 
     assert_receive {:memory_tracker_state_update, ^issue_id, "Human Review"}, 1_000
 
-    state = :sys.get_state(pid)
+    state =
+      wait_for_state(pid, fn state ->
+        not MapSet.member?(state.claimed, issue_id) and
+          not Map.has_key?(state.running, issue_id)
+      end)
+
     refute MapSet.member?(state.claimed, issue_id)
     refute Map.has_key?(state.retry_attempts, issue_id)
     refute Map.has_key?(state.running, issue_id)
@@ -1399,7 +1453,10 @@ defmodule SymphonyElixir.OrchestratorStatusTest do
 
     on_exit(fn ->
       if is_nil(Process.whereis(SymphonyElixir.Orchestrator)) do
-        case Supervisor.restart_child(SymphonyElixir.OrchestratorSupervisor, SymphonyElixir.Orchestrator) do
+        case Supervisor.restart_child(
+               SymphonyElixir.OrchestratorSupervisor,
+               SymphonyElixir.Orchestrator.RunnerSupervisor
+             ) do
           {:ok, _pid} -> :ok
           {:error, {:already_started, _pid}} -> :ok
         end
@@ -1407,7 +1464,11 @@ defmodule SymphonyElixir.OrchestratorStatusTest do
     end)
 
     if is_pid(orchestrator_pid) do
-      assert :ok = Supervisor.terminate_child(SymphonyElixir.OrchestratorSupervisor, SymphonyElixir.Orchestrator)
+      assert :ok =
+               Supervisor.terminate_child(
+                 SymphonyElixir.OrchestratorSupervisor,
+                 SymphonyElixir.Orchestrator.RunnerSupervisor
+               )
     end
 
     {:ok, pid} =
@@ -1823,6 +1884,27 @@ defmodule SymphonyElixir.OrchestratorStatusTest do
   defp wait_for_snapshot(pid, predicate, timeout_ms \\ 200) when is_function(predicate, 1) do
     deadline_ms = System.monotonic_time(:millisecond) + timeout_ms
     do_wait_for_snapshot(pid, predicate, deadline_ms)
+  end
+
+  defp wait_for_state(pid, predicate, timeout_ms \\ 2_000) when is_function(predicate, 1) do
+    deadline_ms = System.monotonic_time(:millisecond) + timeout_ms
+    do_wait_for_state(pid, predicate, deadline_ms)
+  end
+
+  defp do_wait_for_state(pid, predicate, deadline_ms) do
+    state = :sys.get_state(pid)
+
+    cond do
+      predicate.(state) ->
+        state
+
+      System.monotonic_time(:millisecond) >= deadline_ms ->
+        flunk("timed out waiting for orchestrator state: #{inspect(state)}")
+
+      true ->
+        Process.sleep(5)
+        do_wait_for_state(pid, predicate, deadline_ms)
+    end
   end
 
   defp do_wait_for_snapshot(pid, predicate, deadline_ms) do

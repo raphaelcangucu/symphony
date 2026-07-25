@@ -21,6 +21,7 @@ defmodule SymphonyElixir.Application do
 
   @impl true
   def start(_type, _args) do
+    :ok = SymphonyElixir.Daemon.BuildInfo.mark_started()
     :ok = SymphonyElixir.LogFile.configure()
     :ok = SymphonyElixir.Observability.SlowQueryLogger.attach()
     :ok = SymphonyElixir.Observability.SqlLog.attach()
@@ -30,6 +31,15 @@ defmodule SymphonyElixir.Application do
       strategy: :one_for_one,
       name: SymphonyElixir.Supervisor
     )
+  end
+
+  @impl true
+  def prep_stop(state) do
+    if SymphonyElixir.Daemon.BuildInfo.snapshot().mode == "installed" do
+      _ = SymphonyElixir.Daemon.Shutdown.drain(300_000)
+    end
+
+    state
   end
 
   @impl true

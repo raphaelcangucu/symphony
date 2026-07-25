@@ -2,9 +2,11 @@ defmodule SymphonyElixir.MixProject do
   use Mix.Project
 
   def project do
+    app_version = "0.3.0"
+
     [
       app: :symphony_elixir,
-      version: "0.3.0",
+      version: app_version,
       elixir: "~> 1.19",
       compilers: [:phoenix_live_view] ++ Mix.compilers(),
       start_permanent: Mix.env() == :prod,
@@ -120,6 +122,7 @@ defmodule SymphonyElixir.MixProject do
         plt_add_apps: [:mix]
       ],
       escript: escript(),
+      releases: releases(),
       aliases: aliases(),
       deps: deps()
     ]
@@ -175,5 +178,72 @@ defmodule SymphonyElixir.MixProject do
       name: "symphony",
       path: "bin/symphony"
     ]
+  end
+
+  defp releases do
+    [
+      symphony: [
+        include_erts: true,
+        include_executables_for: [:unix],
+        applications: [runtime_tools: :permanent],
+        steps: [:assemble, &copy_release_assets/1, :tar]
+      ]
+    ]
+  end
+
+  defp copy_release_assets(%Mix.Release{} = release) do
+    app_version = to_string(release.version)
+    File.rm(Path.join(release.path, "manifest.json"))
+
+    app_priv =
+      Path.join([
+        release.path,
+        "lib",
+        "symphony_elixir-#{app_version}",
+        "priv"
+      ])
+
+    source_skills = Path.expand("../skills", __DIR__)
+    target_skills = Path.join(app_priv, "skills")
+    File.rm_rf!(target_skills)
+    File.cp_r!(source_skills, target_skills)
+
+    build_commit =
+      System.get_env("SYMPHONY_BUILD_COMMIT") ||
+        case System.cmd("git", ["rev-parse", "HEAD"],
+               cd: Path.expand("..", __DIR__),
+               stderr_to_stdout: true
+             ) do
+          {commit, 0} -> String.trim(commit)
+          _ -> "unknown"
+        end
+
+    checksums =
+      release.path
+      |> Path.join("**/*")
+      |> Path.wildcard(match_dot: true)
+      |> Enum.filter(&File.regular?/1)
+      |> Enum.reject(&(&1 == Path.join([release.path, "releases", app_version, "manifest.json"])))
+      |> Map.new(fn path ->
+        relative = Path.relative_to(path, release.path)
+        digest = path |> File.read!() |> then(&:crypto.hash(:sha256, &1)) |> Base.encode16(case: :lower)
+        {relative, digest}
+      end)
+
+    manifest = %{
+      "version" => to_string(release.version),
+      "git_commit" => build_commit,
+      "target_os" => "linux",
+      "system_architecture" => :erlang.system_info(:system_architecture) |> to_string(),
+      "checksums" => checksums,
+      "built_at" => DateTime.utc_now() |> DateTime.truncate(:second) |> DateTime.to_iso8601()
+    }
+
+    File.write!(
+      Path.join([release.path, "releases", app_version, "manifest.json"]),
+      Jason.encode_to_iodata!(manifest, pretty: true)
+    )
+
+    release
   end
 end

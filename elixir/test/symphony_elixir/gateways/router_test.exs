@@ -2,6 +2,7 @@ defmodule SymphonyElixir.Gateways.RouterTest do
   use ExUnit.Case, async: false
 
   alias SymphonyElixir.Gateways
+  alias SymphonyElixir.Daemon.Shutdown
   alias SymphonyElixir.Gateways.{Binding, InboundMessage, PairingCode, Router}
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.Repo
@@ -9,9 +10,34 @@ defmodule SymphonyElixir.Gateways.RouterTest do
   alias SymphonyElixir.Settings.Setting
 
   setup do
+    :ok = Shutdown.reset()
     cleanup()
-    on_exit(&cleanup/0)
+
+    on_exit(fn ->
+      Shutdown.reset()
+      cleanup()
+    end)
+
     :ok
+  end
+
+  test "plain messages receive a retryable notice while daemon is draining" do
+    Settings.put("gateways", "telegram_enabled", true)
+    Settings.put("gateways", "telegram_dm_allowed_user_ids", ["777"])
+    message = direct_message("777", "/status")
+
+    assert {:ok, :command} = Router.handle_message(message, adapter: __MODULE__.FakeAdapter)
+    assert_received {:sent_text, _status}
+
+    :ok = Shutdown.begin_drain()
+
+    assert {:error, {:retryable, :daemon_draining}} =
+             Router.handle_message(
+               direct_message("777", "hello"),
+               adapter: __MODULE__.FakeAdapter
+             )
+
+    assert_received {:sent_text, "Symphony is restarting. Please retry this message shortly."}
   end
 
   test "blocks unauthorized direct messages" do

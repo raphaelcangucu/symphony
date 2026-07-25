@@ -1,5 +1,9 @@
 import Config
 
+config :symphony_elixir,
+  app_version: Mix.Project.config()[:version],
+  git_commit: System.get_env("SYMPHONY_BUILD_COMMIT") || "development"
+
 config :phoenix, :json_library, Jason
 
 config :symphony_elixir, SymphonyElixirWeb.Gettext,

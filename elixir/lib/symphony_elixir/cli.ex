@@ -30,6 +30,10 @@ defmodule SymphonyElixir.CLI do
         }
 
   @spec main([String.t()]) :: no_return()
+  def main(["daemon" | rest]) do
+    SymphonyElixir.Daemon.CLI.main(["daemon" | rest])
+  end
+
   def main(["claude-app-server" | rest]) do
     SymphonyElixir.Claude.AppServer.StdioMain.run(rest)
   end

@@ -72,6 +72,38 @@ Symphony does **not** use a global `WORKFLOW.md`. Process settings live in `elix
 (`SYMPHONY_*` variables); each project's workflow (YAML front matter + agent prompt) is stored as
 `workflow_markdown` in the SQLite database and edited from the tracker UI.
 
+### Development checkout versus installed service
+
+`make serve` is the development daemon. It runs from the source checkout and
+supports the existing `make update` hot-reload workflow. It is not replaced or
+managed by the installed-service commands.
+
+For a self-contained production release:
+
+```bash
+make release
+make release-smoke
+```
+
+`make release-smoke` boots the packaged OTP release with bundled ERTS, SQLite
+NIF, migrations, static assets, and skills from a temporary directory. It does
+not use source, `deps`, or `_build` at runtime. The generated
+`symphony-<version>-linux-<architecture>.tar.gz` carries a target-identity
+manifest and per-file SHA-256 checksums validated before installation.
+
+Install the release as a resilient `systemd --user` service:
+
+```bash
+make daemon-install ARGS="--i-understand-that-this-will-be-running-without-the-usual-guardrails"
+symphony daemon status
+```
+
+The installed service runs immutable versioned releases under
+`~/.local/lib/symphony`; source edits and `make update` do not change it. Build
+and install a new release to upgrade it. See [`INSTALL.md`](../INSTALL.md) for
+XDG paths, migration, lingering, rollback, port-conflict, journal, and uninstall
+details.
+
 ## Telegram gateway
 
 Symphony can expose the maestro through a Telegram bot. The first gateway implementation is

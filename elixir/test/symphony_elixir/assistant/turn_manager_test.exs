@@ -3,6 +3,7 @@ defmodule SymphonyElixir.Assistant.TurnManagerTest do
   use ExUnit.Case, async: false
 
   alias SymphonyElixir.Assistant.{History, TurnManager}
+  alias SymphonyElixir.Daemon.Shutdown
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.Repo
 
@@ -535,6 +536,55 @@ defmodule SymphonyElixir.Assistant.TurnManagerTest do
     {:ok, reloaded} = History.get_thread(thread.id)
     refute History.turn_running?(reloaded)
     refute TurnManager.running?(thread.id)
+  end
+
+  test "start and enqueue reject work while daemon is draining", %{thread: thread} do
+    :ok = Shutdown.begin_drain()
+    on_exit(fn -> Shutdown.reset() end)
+
+    assert {:error, :daemon_draining} =
+             TurnManager.start_turn(thread.id, "new", run: fn -> {:ok, %{}} end)
+
+    assert {:error, :daemon_draining} =
+             TurnManager.enqueue(thread.id, "queued", run: fn -> {:ok, %{}} end)
+  end
+
+  test "queued work does not start after drain begins", %{thread: thread} do
+    test_pid = self()
+
+    first = fn ->
+      send(test_pid, {:first_worker, self()})
+      receive do: (:finish -> {:ok, %{}})
+    end
+
+    second = fn ->
+      send(test_pid, :second_worker_started)
+      {:ok, %{}}
+    end
+
+    assert {:ok, %{pid: worker}} = TurnManager.start_turn(thread.id, "first", run: first)
+    assert_receive {:first_worker, ^worker}
+    assert :ok = TurnManager.enqueue(thread.id, "second", run: second)
+
+    :ok = Shutdown.begin_drain()
+    on_exit(fn -> Shutdown.reset() end)
+    send(worker, :finish)
+
+    refute_receive :second_worker_started, 100
+  end
+
+  test "active_thread_ids and interrupt_all expose running workers", %{thread: thread} do
+    test_pid = self()
+
+    run = fn ->
+      send(test_pid, {:worker, self()})
+      receive do: ({:agent_interrupt} -> {:error, :interrupted})
+    end
+
+    assert {:ok, %{pid: worker}} = TurnManager.start_turn(thread.id, "live", run: run)
+    assert_receive {:worker, ^worker}
+    assert thread.id in TurnManager.active_thread_ids()
+    assert :ok = TurnManager.interrupt_all("daemon_shutdown_timeout")
   end
 
   defp wait_until(fun, attempts \\ 100) do

@@ -28,16 +28,16 @@ defmodule SymphonyElixir.KnowledgeBase.GitFlowTest do
     {:ok, ws: ws}
   end
 
-  test "sync_branch merges origin/main and pushes the docs branch", %{ws: ws} do
+  test "sync_branch merges origin/main and pushes the checkout branch", %{ws: ws} do
     assert {:ok, _} = GitFlow.sync_branch(ws, "main")
 
     assert {output, 0} =
-             System.cmd("git", ["branch", "--list", "symphony-docs"],
+             System.cmd("git", ["branch", "--show-current"],
                cd: ws.worktree,
                stderr_to_stdout: true
              )
 
-    assert output =~ "symphony-docs"
+    assert String.trim(output) == ws.branch
   end
 
   test "pending_changes? is false when the docs branch mirrors the default branch", %{ws: ws} do

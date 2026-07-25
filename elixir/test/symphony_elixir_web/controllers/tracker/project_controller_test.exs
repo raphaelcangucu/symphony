@@ -6,6 +6,7 @@ defmodule SymphonyElixirWeb.Tracker.ProjectControllerTest do
   import Plug.Conn
 
   alias SymphonyElixir.Assistant.Thread
+  alias SymphonyElixir.HotpathCache
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.Repo
 
@@ -16,13 +17,17 @@ defmodule SymphonyElixirWeb.Tracker.ProjectControllerTest do
     start_supervised!(SymphonyElixirWeb.Endpoint)
     migrate_repo()
     SymphonyElixir.TestSupport.truncate_tracker!(Repo)
+    clear_projects_cache()
 
     previous_token = System.get_env(@token_env)
     System.put_env(@token_env, "secret")
 
     {:ok, _project} = Context.ensure_project(%{name: "Activity", slug: "activity"})
 
-    on_exit(fn -> restore_env(@token_env, previous_token) end)
+    on_exit(fn ->
+      clear_projects_cache()
+      restore_env(@token_env, previous_token)
+    end)
 
     {:ok, conn: authorize()}
   end
@@ -82,4 +87,9 @@ defmodule SymphonyElixirWeb.Tracker.ProjectControllerTest do
 
   defp restore_env(key, nil), do: System.delete_env(key)
   defp restore_env(key, value), do: System.put_env(key, value)
+
+  defp clear_projects_cache do
+    HotpathCache.invalidate({:tracker_projects_index, false})
+    HotpathCache.invalidate({:tracker_projects_index, true})
+  end
 end

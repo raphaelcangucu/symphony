@@ -1,5 +1,5 @@
 defmodule SymphonyElixir.BackupTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   alias SymphonyElixir.Backup
 
@@ -8,11 +8,15 @@ defmodule SymphonyElixir.BackupTest do
     db = Path.join(tmp, "tracker.sqlite3")
     backup_root = Path.join(tmp, "backups")
 
-    File.mkdir_p!(Path.dirname(db))
-    File.write!(db, "sqlite-test-db")
+    SymphonyElixir.SqliteFixtures.create_database!(db)
 
-    prev_db = Application.get_env(:symphony_elixir, SymphonyElixir.Repo)[:database]
-    prev_backup = Application.get_env(:symphony_elixir, :backup_local_dir)
+    previous_app_env =
+      Map.new(
+        [:root_dir, SymphonyElixir.Repo, :backup_local_dir, :backup_retention_days],
+        &{&1, Application.fetch_env(:symphony_elixir, &1)}
+      )
+
+    prev_database_env = System.get_env("SYMPHONY_LOCAL_TRACKER_DATABASE")
 
     Application.put_env(:symphony_elixir, :root_dir, tmp)
     System.put_env("SYMPHONY_LOCAL_TRACKER_DATABASE", db)
@@ -21,9 +25,13 @@ defmodule SymphonyElixir.BackupTest do
     Application.put_env(:symphony_elixir, :backup_retention_days, 7)
 
     on_exit(fn ->
-      System.delete_env("SYMPHONY_LOCAL_TRACKER_DATABASE")
-      Application.put_env(:symphony_elixir, SymphonyElixir.Repo, database: prev_db)
-      Application.put_env(:symphony_elixir, :backup_local_dir, prev_backup)
+      if prev_database_env do
+        System.put_env("SYMPHONY_LOCAL_TRACKER_DATABASE", prev_database_env)
+      else
+        System.delete_env("SYMPHONY_LOCAL_TRACKER_DATABASE")
+      end
+
+      Enum.each(previous_app_env, fn {key, previous} -> restore_app_env(key, previous) end)
       File.rm_rf(tmp)
     end)
 
@@ -38,10 +46,10 @@ defmodule SymphonyElixir.BackupTest do
     [listed] = Backup.list()
     assert listed.id == backup.id
 
-    File.write!(db, "restored-content")
+    SymphonyElixir.SqliteFixtures.execute!(db, "UPDATE fixture SET value = 'changed' WHERE id = 1")
 
     assert {:ok, _} = Backup.restore(backup.id)
-    assert File.read!(db) == "sqlite-test-db"
+    assert SymphonyElixir.SqliteFixtures.scalar!(db, "SELECT value FROM fixture WHERE id = 1") == "original"
   end
 
   test "cleanup removes expired backups" do
@@ -66,4 +74,10 @@ defmodule SymphonyElixir.BackupTest do
     refute File.exists?(path)
     assert Backup.list() == []
   end
+
+  defp restore_app_env(key, {:ok, value}),
+    do: Application.put_env(:symphony_elixir, key, value)
+
+  defp restore_app_env(key, :error),
+    do: Application.delete_env(:symphony_elixir, key)
 end

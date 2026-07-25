@@ -27,11 +27,21 @@ This directory contains the Elixir agent orchestration service that polls Linear
 
 ## Tests and Validation
 
-Run targeted tests while iterating, then run full gates before handoff.
+Run targeted tests while iterating. Run full gates before handoff only outside WSL.
+
+### WSL safety
+
+- Never run the full test suite, a test directory, or a large multi-file test batch under WSL.
+  Large test runs can exhaust the environment and crash WSL.
+- Run one test file or one narrowly targeted test filter at a time, sequentially.
+- Do not expand test scope under WSL unless the user explicitly approves that specific run.
 
 ```bash
 make all
 ```
+
+Under WSL, `make all` also requires the user's explicit approval because it includes broad test
+coverage.
 
 ## Required Rules
 

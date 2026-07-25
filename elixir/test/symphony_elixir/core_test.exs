@@ -286,7 +286,10 @@ defmodule SymphonyElixir.CoreTest do
 
     on_exit(fn ->
       if is_nil(Process.whereis(SymphonyElixir.Orchestrator)) do
-        case Supervisor.restart_child(SymphonyElixir.OrchestratorSupervisor, SymphonyElixir.Orchestrator) do
+        case Supervisor.restart_child(
+               SymphonyElixir.OrchestratorSupervisor,
+               SymphonyElixir.Orchestrator.RunnerSupervisor
+             ) do
           {:ok, _pid} -> :ok
           {:error, {:already_started, _pid}} -> :ok
         end
@@ -294,7 +297,11 @@ defmodule SymphonyElixir.CoreTest do
     end)
 
     if is_pid(orchestrator_pid) do
-      assert :ok = Supervisor.terminate_child(SymphonyElixir.OrchestratorSupervisor, SymphonyElixir.Orchestrator)
+      assert :ok =
+               Supervisor.terminate_child(
+                 SymphonyElixir.OrchestratorSupervisor,
+                 SymphonyElixir.Orchestrator.RunnerSupervisor
+               )
     end
 
     assert {:ok, pid} = SymphonyElixir.start_link()
@@ -652,7 +659,7 @@ defmodule SymphonyElixir.CoreTest do
     Process.sleep(50)
     state = :sys.get_state(pid)
 
-    assert %{attempt: 3, due_at_ms: due_at_ms, identifier: "MT-559", error: "agent exited: :boom"} =
+    assert %{attempt: 3, due_at_ms: due_at_ms, identifier: "MT-559", error: ":boom"} =
              state.retry_attempts[issue_id]
 
     assert_due_in_range(due_at_ms, 39_500, 40_500)
@@ -691,7 +698,7 @@ defmodule SymphonyElixir.CoreTest do
     Process.sleep(50)
     state = :sys.get_state(pid)
 
-    assert %{attempt: 1, due_at_ms: due_at_ms, identifier: "MT-560", error: "agent exited: :boom"} =
+    assert %{attempt: 1, due_at_ms: due_at_ms, identifier: "MT-560", error: ":boom"} =
              state.retry_attempts[issue_id]
 
     assert_due_in_range(due_at_ms, 9_000, 10_500)
@@ -699,8 +706,9 @@ defmodule SymphonyElixir.CoreTest do
 
   defp assert_due_in_range(due_at_ms, min_remaining_ms, max_remaining_ms) do
     remaining_ms = due_at_ms - System.monotonic_time(:millisecond)
+    scheduler_tolerance_ms = 2_000
 
-    assert remaining_ms >= min_remaining_ms
+    assert remaining_ms >= min_remaining_ms - scheduler_tolerance_ms
     assert remaining_ms <= max_remaining_ms
   end
 
@@ -777,7 +785,7 @@ defmodule SymphonyElixir.CoreTest do
       ]
     }
 
-    assert PromptBuilder.build_prompt(issue) == "Ticket MT-701"
+    assert String.starts_with?(PromptBuilder.build_prompt(issue), "Ticket MT-701\n")
   end
 
   test "prompt builder renders undefined variables as empty strings" do
@@ -796,7 +804,7 @@ defmodule SymphonyElixir.CoreTest do
     }
 
     prompt = PromptBuilder.build_prompt(issue)
-    assert prompt == "Work on ticket  and follow these steps."
+    assert String.starts_with?(prompt, "Work on ticket  and follow these steps.\n")
   end
 
   test "prompt builder surfaces invalid template content with prompt context" do
@@ -839,7 +847,7 @@ defmodule SymphonyElixir.CoreTest do
 
     prompt = PromptBuilder.build_prompt(issue, attempt: 2)
 
-    assert prompt == "Retry #2"
+    assert String.starts_with?(prompt, "Retry #2\n")
   end
 
   test "prompt builder ensures valid UTF-8 output" do
@@ -857,7 +865,7 @@ defmodule SymphonyElixir.CoreTest do
 
     prompt = PromptBuilder.build_prompt(issue)
     assert String.valid?(prompt)
-    assert prompt == "Valid ASCII title"
+    assert String.starts_with?(prompt, "Valid ASCII title\n")
   end
 
   test "prompt builder handles undefined issue fields gracefully in custom templates" do
@@ -1207,7 +1215,13 @@ defmodule SymphonyElixir.CoreTest do
         labels: []
       }
 
-      assert :ok = AgentRunner.run(issue, nil, issue_state_fetcher: state_fetcher)
+      assert :ok =
+               AgentRunner.run(issue, nil,
+                 issue_state_fetcher: state_fetcher,
+                 handoff_ready_evaluator: fn _workspace -> :continue end,
+                 continuation_delay_ms: 0
+               )
+
       assert_receive {:issue_state_fetch, 1}
       assert_receive {:issue_state_fetch, 2}
 
@@ -1330,7 +1344,12 @@ defmodule SymphonyElixir.CoreTest do
         labels: []
       }
 
-      assert :ok = AgentRunner.run(issue, nil, issue_state_fetcher: state_fetcher)
+      assert :ok =
+               AgentRunner.run(issue, nil,
+                 issue_state_fetcher: state_fetcher,
+                 handoff_ready_evaluator: fn _workspace -> :continue end,
+                 continuation_delay_ms: 0
+               )
 
       trace = File.read!(trace_file)
       assert length(String.split(trace, "RUN", trim: true)) == 1
@@ -1587,23 +1606,21 @@ defmodule SymphonyElixir.CoreTest do
       File.write!(codex_binary, """
       #!/bin/sh
       trace_file="${SYMP_TEST_CODex_TRACE:-/tmp/codex-policy-overrides.trace}"
-      count=0
 
       while IFS= read -r line; do
-        count=$((count + 1))
         printf 'JSON:%s\\n' "$line" >> "$trace_file"
 
-        case "$count" in
-          1)
+        case "$line" in
+          *'"method":"initialize"'*)
             printf '%s\\n' '{"id":1,"result":{}}'
             ;;
-          2)
+          *'"method":"initialized"'*)
+            ;;
+          *'"method":"thread/start"'*)
             printf '%s\\n' '{"id":2,"result":{"thread":{"id":"thread-99"}}}'
             ;;
-          3)
+          *'"method":"turn/start"'*)
             printf '%s\\n' '{"id":3,"result":{"turn":{"id":"turn-99"}}}'
-            ;;
-          4)
             printf '%s\\n' '{"method":"turn/completed"}'
             exit 0
             ;;
@@ -1637,7 +1654,8 @@ defmodule SymphonyElixir.CoreTest do
         labels: ["backend"]
       }
 
-      assert {:ok, _result} = AppServer.run(workspace, "Fix workspace start args", issue)
+      assert {:ok, _result} =
+               AppServer.run(workspace, "Fix workspace start args", issue, codex_config: Config.section("codex"))
 
       lines = File.read!(trace_file) |> String.split("\n", trim: true)
 

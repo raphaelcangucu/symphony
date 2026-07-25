@@ -820,8 +820,16 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   end
 
   def handle_info({:authoring_goal_updated, native_goal}, socket) do
-    _ = native_goal
-    {:noreply, schedule_authoritative_goal_status(socket, broadcast: true)}
+    case socket.assigns[:thread] do
+      %{id: id} = thread when is_integer(id) and is_map(native_goal) ->
+        status = live_native_goal_status(thread, native_goal)
+        {_accepted?, socket} = accept_goal_status(socket, status, false)
+        GoalRun.broadcast_from(self(), id, {:goal_status_updated, status})
+        {:noreply, socket}
+
+      _thread ->
+        {:noreply, socket}
+    end
   end
 
   def handle_info({:authoring_goal_changed, status_payload}, socket) do
@@ -1352,7 +1360,9 @@ defmodule SymphonyElixirWeb.AssistantChannel do
   defp kill_tool_error_payload(reason), do: %{reason: error_reason(reason)}
 
   defp should_push_turn_stream?(socket, event, payload) when is_binary(event) and is_map(payload) do
-    socket.assigns[:turn_status] != :running or canceled_tool_completion?(event, payload)
+    not is_pid(socket.assigns[:turn_pid]) or
+      socket.assigns[:turn_status] != :running or
+      canceled_tool_completion?(event, payload)
   end
 
   defp should_push_turn_stream?(_socket, _event, _payload), do: false
@@ -1550,6 +1560,9 @@ defmodule SymphonyElixirWeb.AssistantChannel do
       {:error, :turn_in_progress} ->
         steer_or_queue(thread, trimmed, start_opts, socket)
 
+      {:error, :daemon_draining} ->
+        {:reply, {:error, %{reason: "daemon is shutting down; retry after it restarts", retryable: true}}, socket}
+
       {:error, _reason} ->
         {:reply, {:error, %{reason: "assistant could not start the turn"}}, socket}
     end
@@ -1634,8 +1647,17 @@ defmodule SymphonyElixirWeb.AssistantChannel do
 
       :error ->
         maybe_persist_steer(socket, trimmed)
-        TurnManager.enqueue(thread.id, trimmed, start_opts)
-        {:reply, {:ok, %{queued: true}}, socket}
+
+        case TurnManager.enqueue(thread.id, trimmed, start_opts) do
+          :ok ->
+            {:reply, {:ok, %{queued: true}}, socket}
+
+          {:error, :daemon_draining} ->
+            {:reply, {:error, %{reason: "daemon is shutting down; retry after it restarts", retryable: true}}, socket}
+
+          {:error, _reason} ->
+            {:reply, {:error, %{reason: "assistant could not queue the turn"}}, socket}
+        end
     end
   end
 
@@ -2244,6 +2266,36 @@ defmodule SymphonyElixirWeb.AssistantChannel do
       running: process_running,
       error: Map.get(payload, :error)
     }
+  end
+
+  defp live_native_goal_status(thread, native_goal) do
+    request_order = System.unique_integer([:positive, :monotonic])
+    running = GoalRun.running?(thread.id) or TurnManager.running?(thread.id)
+    elapsed = if running, do: GoalRun.elapsed_seconds(thread.id), else: nil
+    payload = AuthoringGoalControl.payload_from_native_update(thread, native_goal)
+
+    goal =
+      payload.goal
+      |> patch_goal_runtime(elapsed)
+      |> normalize_snapshot_goal(payload)
+
+    thread
+    |> authoritative_goal_status(request_order: request_order, process_running: running)
+    |> Map.merge(%{
+      enabled: payload.enabled,
+      objective: payload.objective,
+      native: payload.native,
+      status: payload.status,
+      provider: payload.provider,
+      source: payload.source,
+      capabilities: payload.capabilities,
+      goal: goal,
+      token_budget: goal_field(goal, :tokenBudget),
+      tokens_used: goal_field(goal, :tokensUsed),
+      time_used_seconds: goal_field(goal, :timeUsedSeconds),
+      running: running,
+      process_running: running
+    })
   end
 
   defp unavailable_goal_status(%{id: thread_id} = thread, reason, request_order)

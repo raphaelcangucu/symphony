@@ -36,6 +36,7 @@ defmodule SymphonyElixir.SharedSupervisor do
       SymphonyElixir.Observability.Registry,
       SymphonyElixir.Repo,
       SymphonyElixir.Assistant.TurnManager.registry_child_spec(),
+      SymphonyElixir.Daemon.Shutdown,
       SymphonyElixir.Assistant.TurnManager,
       SymphonyElixir.LocalTracker.CloneSupervisor,
       %{

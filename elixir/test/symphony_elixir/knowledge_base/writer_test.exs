@@ -80,6 +80,9 @@ defmodule SymphonyElixir.KnowledgeBase.WriterTest do
     # Re-storing identical bytes under the same name is an idempotent no-op.
     assert {:ok, %{asset_path: "assets/queue-config.png", commit: :unchanged}} =
              Writer.store_asset(ws, "whatever.png", <<137, 80, 78, 71>>, name: "queue config")
+
+    assert {"Symphony\n", 0} =
+             System.cmd("git", ["log", "-1", "--format=%an"], cd: ws.worktree, stderr_to_stdout: true)
   end
 
   test "store_asset appends a suffix when the friendly name collides with other bytes", %{ws: ws} do

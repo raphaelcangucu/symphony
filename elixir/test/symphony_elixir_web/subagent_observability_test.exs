@@ -10,6 +10,7 @@ defmodule SymphonyElixirWeb.SubagentObservabilityTest do
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.Orchestrator
   alias SymphonyElixir.Repo
+  alias SymphonyElixir.Settings
   alias SymphonyElixirWeb.Presenter
 
   setup do
@@ -17,6 +18,8 @@ defmodule SymphonyElixirWeb.SubagentObservabilityTest do
       Ecto.Migrator.with_repo(Repo, fn repo -> Ecto.Migrator.run(repo, :up, all: true) end)
 
     SymphonyElixir.TestSupport.truncate_tracker!(Repo)
+    {:ok, true} = Settings.put("lab", "bundle_child_orchestration", true)
+    on_exit(fn -> Settings.put("lab", "bundle_child_orchestration", false) end)
     :ok
   end
 

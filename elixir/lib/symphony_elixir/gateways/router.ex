@@ -255,8 +255,14 @@ defmodule SymphonyElixir.Gateways.Router do
         await_assistant_turn()
 
       {:error, :turn_in_progress} ->
-        TurnManager.enqueue(thread.id, message.raw_text, start_opts)
-        await_assistant_turn()
+        case TurnManager.enqueue(thread.id, message.raw_text, start_opts) do
+          :ok -> await_assistant_turn()
+          {:error, :daemon_draining} -> {:error, {:retryable, :daemon_draining}}
+          {:error, reason} -> {:error, reason}
+        end
+
+      {:error, :daemon_draining} ->
+        {:error, {:retryable, :daemon_draining}}
 
       {:error, reason} ->
         {:error, reason}
@@ -336,6 +342,15 @@ defmodule SymphonyElixir.Gateways.Router do
       "This topic is not paired with a Symphony project. Use /symphony_pair <code> in a project topic, message in General/DM freeform, or pair this topic."
     )
 
+    error
+  end
+
+  defp maybe_notify_failure(
+         {:error, {:retryable, :daemon_draining}} = error,
+         message,
+         adapter
+       ) do
+    send_text(adapter, message, "Symphony is restarting. Please retry this message shortly.")
     error
   end
 

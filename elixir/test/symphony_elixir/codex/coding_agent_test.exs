@@ -1153,6 +1153,7 @@ defmodule SymphonyElixir.Codex.CodingAgentTest do
   end
 
   defp turn_completion_statuses(statuses) when is_list(statuses), do: statuses
+  defp turn_completion_statuses(:goal_ok), do: [:completed]
   defp turn_completion_statuses(:missing_update_active), do: [:missing, :completed]
   defp turn_completion_statuses(_response_mode), do: [:unknown]
 

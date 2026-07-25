@@ -47,9 +47,9 @@ defmodule SymphonyElixir.Workspace.InventoryTest do
     _clean_repo = GitFixtures.make_repo!(ctx.tmp, active_ws, "frontend")
     File.write!(Path.join(dirty_repo, "extra.txt"), "dirty")
 
-    _done_repo = GitFixtures.make_repo!(ctx.tmp, done_ws, "backend")
-    _parallel_repo = GitFixtures.make_repo!(ctx.tmp, parallel_ws, "backend")
-    _standalone_repo = GitFixtures.make_repo!(ctx.tmp, standalone_ws, "backend")
+    _done_repo = GitFixtures.make_repo!(Path.join(ctx.tmp, "done"), done_ws, "backend")
+    _parallel_repo = GitFixtures.make_repo!(Path.join(ctx.tmp, "parallel"), parallel_ws, "backend")
+    _standalone_repo = GitFixtures.make_repo!(Path.join(ctx.tmp, "standalone"), standalone_ws, "backend")
 
     # Shared project workspace repo directly under the segment root.
     _project_repo = GitFixtures.make_repo!(ctx.tmp, ctx.segment_root, "shared")
@@ -144,9 +144,12 @@ defmodule SymphonyElixir.Workspace.InventoryTest do
     assert {:ok, scan} = Inventory.scan_stream("invproj", emit, executions: [], size_fun: size_fun())
     emitted = Agent.get(events, &Enum.reverse/1)
 
-    assert length(scan.workspaces) == 1
-    assert {:entry, %{path: ^active_ws}} = Enum.at(emitted, 0)
-    assert {:totals, %{count: 1}} = List.last(emitted)
+    emitted_paths =
+      for {:entry, %{path: path}} <- emitted, into: MapSet.new(), do: path
+
+    assert length(scan.workspaces) == 2
+    assert emitted_paths == MapSet.new([Path.expand(ctx.segment_root), active_ws])
+    assert {:totals, %{count: 2}} = List.last(emitted)
   end
 
   test "scan omits a workspace whose probe exceeds the per-scan deadline", ctx do
@@ -154,8 +157,8 @@ defmodule SymphonyElixir.Workspace.InventoryTest do
     fast = create_issue!("Fast probe")
     slow_ws = workspace_dir!(ctx.segment_root, slow.identifier)
     fast_ws = workspace_dir!(ctx.segment_root, fast.identifier)
-    _slow_repo = GitFixtures.make_repo!(ctx.tmp, slow_ws, "backend")
-    _fast_repo = GitFixtures.make_repo!(ctx.tmp, fast_ws, "backend")
+    _slow_repo = GitFixtures.make_repo!(Path.join(ctx.tmp, "slow"), slow_ws, "backend")
+    _fast_repo = GitFixtures.make_repo!(Path.join(ctx.tmp, "fast"), fast_ws, "backend")
 
     slow_size_fun = fn path ->
       if String.starts_with?(path, slow_ws) do

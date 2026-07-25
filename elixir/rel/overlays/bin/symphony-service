@@ -1,0 +1,6 @@
+#!/bin/sh
+set -eu
+release_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+"$release_root/bin/symphony" eval \
+  'SymphonyElixir.Release.preflight()'
+exec "$release_root/bin/symphony" start
