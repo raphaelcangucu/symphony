@@ -110,6 +110,7 @@ defmodule SymphonyElixir.IssueDispatch do
          :ok <- maybe_hard_reset(project, identifier, issue, action),
          {:ok, _} <- maybe_move_for_action(project, issue, action, opts),
          :ok <- cancel_retry(identifier),
+         :ok <- maybe_append_resume_boundary(project, identifier, issue, action),
          :ok <- nudge_manual_dispatch(identifier),
          :ok <- maybe_record_dispatch_activity(project, identifier, action, opts) do
       {:ok, reloaded} = IssueAdapter.dispatch(project, :get_issue, [identifier])
@@ -355,6 +356,19 @@ defmodule SymphonyElixir.IssueDispatch do
     end
   end
 
+  defp maybe_append_resume_boundary(project, identifier, issue, action)
+       when action in [:resume, :continue_work] do
+    workspace = run_workspace(project, identifier, issue)
+
+    if File.dir?(workspace) do
+      SessionEvents.append_resume(workspace)
+    else
+      :ok
+    end
+  end
+
+  defp maybe_append_resume_boundary(_project, _identifier, _issue, _action), do: :ok
+
   # Hard reset starts a brand-new orchestrator execution session. Archive the
   # latest reusable issue_execution so ensure/3 does not reopen it on resume.
   defp archive_execution_session(%Project{slug: slug}, identifier)
@@ -364,9 +378,7 @@ defmodule SymphonyElixir.IssueDispatch do
         :ok
 
       {:error, reason} ->
-        Logger.warning(
-          "Hard reset could not archive execution session identifier=#{identifier} reason=#{inspect(reason)}"
-        )
+        Logger.warning("Hard reset could not archive execution session identifier=#{identifier} reason=#{inspect(reason)}")
 
         :ok
     end

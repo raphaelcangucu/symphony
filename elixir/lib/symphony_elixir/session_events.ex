@@ -96,6 +96,24 @@ defmodule SymphonyElixir.SessionEvents do
     })
   end
 
+  @doc """
+  Appends a lifecycle boundary when an existing execution is resumed.
+
+  Earlier failure annotations remain available for audit, while consumers can
+  distinguish them from the state of the newly resumed run.
+  """
+  @spec append_resume(Path.t()) :: :ok
+  def append_resume(workspace) when is_binary(workspace) do
+    append_entry(workspace, %{
+      "kind" => "event",
+      "title" => "Run resumed",
+      "body" => "Execution resumed",
+      "status" => "running",
+      "collapsed" => true,
+      "source" => "symphony"
+    })
+  end
+
   @spec tail(Path.t(), keyword()) :: {:ok, [map()], non_neg_integer()}
   def tail(workspace, opts \\ []) when is_binary(workspace) do
     path = events_path(workspace)

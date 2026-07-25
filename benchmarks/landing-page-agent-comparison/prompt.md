@@ -1,6 +1,8 @@
 # Tarefa: landing page do Symphony
 
-Trabalhe exclusivamente no repositório `site/` deste workspace. Não faça perguntas e não altere arquivos fora desse repositório.
+Implemente diretamente, sem delegar a outros agentes e sem fazer perguntas.
+Trabalhe no repositório `site/` deste workspace. Fora dele, escreva somente a
+evidência canônica em `.symphony/evidence/` na raiz do workspace.
 
 Crie uma landing page completa, responsiva e visualmente marcante, em português, apresentando o Symphony como uma plataforma de orquestração de agentes de engenharia. A página deve explicar de forma concreta como o Symphony organiza sessões, tarefas, previews e evidências usando Codex, Cursor e Claude.
 
@@ -50,7 +52,40 @@ Os testes devem abrir a aplicação real por HTTP e validar:
 4. a navegação por âncora ao clicar em pelo menos um link;
 5. ausência de overflow horizontal em viewport mobile.
 
-Configure Playwright para produzir screenshot, vídeo e trace. O `baseURL` deve aceitar `PLAYWRIGHT_BASE_URL` e usar `http://127.0.0.1:4173` apenas como padrão local.
+Configure Playwright para produzir screenshot, vídeo e trace. O `baseURL` deve
+aceitar `PLAYWRIGHT_BASE_URL`. Não configure `webServer` no
+`playwright.config.ts`: neste ambiente a sondagem de porta fechada do Playwright
+pode bloquear antes de iniciar o servidor. Preserve
+`scripts/run-e2e.mjs` e `scripts/child-env.mjs`, já fornecidos pelo repositório,
+e configure
+`test:e2e` como `node scripts/run-e2e.mjs`. Esse runner inicia um Vite próprio
+na porta `PLAYWRIGHT_PORT`, usa `4173` apenas como padrão local, aguarda HTTP
+com timeout explícito, usa uma allowlist de ambiente sem tokens/credenciais e
+encerra todo o grupo de processos. Assim nenhum teste reutiliza outra aplicação
+nem expõe segredos do agente ao Vite ou ao Playwright.
+Use seletores acessíveis exatos (`exact: true`) quando um nome puder aparecer
+em mais de um heading.
+
+## Evidência obrigatória
+
+Depois de executar o build e o E2E, grave um manifesto real em
+`.symphony/evidence/manifest.json` na raiz do workspace. Copie para
+`.symphony/evidence/artifacts/`:
+
+- o relatório do build;
+- screenshot full-page desktop;
+- screenshot full-page mobile;
+- vídeo WebM do Playwright;
+- uma cópia MP4/H.264 do vídeo, gerada com `ffmpeg`;
+- trace do Playwright.
+
+Todos os artefatos devem ser arquivos ou diretórios reais dentro dessa árvore;
+não use symlinks nem caminhos que escapem de `.symphony/evidence/`.
+
+O manifesto deve possuir um run `unit` para `npm run build` e um run `e2e`
+para o teste focado, ambos com os status realmente observados. No run E2E,
+registre `navigations` com a URL HTTP real, `proof`, screenshots e vídeos como
+objetos rotulados. Não invente arquivos, comandos ou resultados.
 
 ## Finalização
 
@@ -58,4 +93,8 @@ Configure Playwright para produzir screenshot, vídeo e trace. O `baseURL` deve 
 - Execute `npm run build`.
 - Execute o teste E2E focado que você criou.
 - Corrija falhas que estejam dentro do projeto.
+- Se esta tarefa estiver sendo executada pelo orquestrador Symphony, mantenha o
+  Codex Workpad atualizado, marque o escopo completo somente após a validação,
+  faça commit e envie a branch para o `origin` local configurado. Não tente
+  abrir um PR externo para o repositório local do benchmark.
 - No resumo final, informe os arquivos principais e os comandos realmente executados; não afirme que um teste passou se ele não foi executado com sucesso.

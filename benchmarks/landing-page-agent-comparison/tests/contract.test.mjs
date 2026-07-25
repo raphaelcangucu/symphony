@@ -22,6 +22,8 @@ test("the canonical prompt requires preview-compatible Playwright E2E", async ()
   assert.match(prompt, /Playwright/);
   assert.match(prompt, /npm run dev -- --host 0\.0\.0\.0/);
   assert.match(prompt, /test:e2e/);
+  assert.match(prompt, /node scripts\/run-e2e\.mjs/);
+  assert.match(prompt, /Não configure `webServer`/);
   assert.match(prompt, /Codex, Cursor e Claude/);
   assert.equal(promptSha256(prompt).length, 64);
 });

@@ -15,10 +15,56 @@ import {
   observedExecutionDuration,
   resolveRunIdentity,
   summarizeAttempts,
+  validationPort,
 } from "../src/collect.mjs";
+
+test("independent validation reserves one deterministic port per cell", () => {
+  assert.equal(validationPort(0), 24_000);
+  assert.equal(validationPort(5), 24_005);
+  assert.throws(() => validationPort(-1), /invalid validation index/);
+});
 
 test("inspectWorkspace reports generated landing and E2E contracts", async () => {
   const workspace = await mkdtemp(join(tmpdir(), "symphony-collect-"));
+  await mkdir(join(workspace, "src"));
+  await mkdir(join(workspace, "tests", "e2e"), { recursive: true });
+  await mkdir(join(workspace, "scripts"));
+  await writeFile(
+    join(workspace, "package.json"),
+    JSON.stringify({
+      scripts: {
+        dev: "vite",
+        build: "vite build",
+        "test:e2e": "node scripts/run-e2e.mjs",
+      },
+    }),
+  );
+  await writeFile(
+    join(workspace, "scripts", "run-e2e.mjs"),
+    "const controller = new AbortController();\nconst args = ['--strictPort'];\n",
+  );
+  await writeFile(join(workspace, "src", "App.tsx"), "export function App() {}\n");
+  await writeFile(join(workspace, "playwright.config.ts"), "export default {};\n");
+  await writeFile(join(workspace, "tests", "e2e", "landing.spec.ts"), "test('landing', () => {});\n");
+
+  const facts = await inspectWorkspace(workspace);
+
+  assert.equal(facts.exists, true);
+  assert.equal(facts.contract.package_json, true);
+  assert.equal(facts.contract.source, true);
+  assert.equal(facts.contract.playwright_config, true);
+  assert.equal(facts.contract.e2e_tests, true);
+  assert.deepEqual(facts.contract.scripts, {
+    dev: true,
+    build: true,
+    test_e2e: true,
+    e2e_runner: true,
+  });
+  assert.equal(facts.file_count, 5);
+});
+
+test("inspectWorkspace rejects a direct Playwright script without the safe runner", async () => {
+  const workspace = await mkdtemp(join(tmpdir(), "symphony-unsafe-e2e-"));
   await mkdir(join(workspace, "src"));
   await mkdir(join(workspace, "tests", "e2e"), { recursive: true });
   await writeFile(
@@ -37,17 +83,8 @@ test("inspectWorkspace reports generated landing and E2E contracts", async () =>
 
   const facts = await inspectWorkspace(workspace);
 
-  assert.equal(facts.exists, true);
-  assert.equal(facts.contract.package_json, true);
-  assert.equal(facts.contract.source, true);
-  assert.equal(facts.contract.playwright_config, true);
-  assert.equal(facts.contract.e2e_tests, true);
-  assert.deepEqual(facts.contract.scripts, {
-    dev: true,
-    build: true,
-    test_e2e: true,
-  });
-  assert.equal(facts.file_count, 4);
+  assert.equal(facts.contract.scripts.test_e2e, false);
+  assert.equal(facts.contract.scripts.e2e_runner, false);
 });
 
 test("renderComparison preserves blocked cells and the shared prompt hash", () => {
@@ -168,6 +205,7 @@ test("inventoryArtifacts records concrete generated evidence paths", async () =>
   await mkdir(join(root, "nested"));
   await writeFile(join(root, "nested", "landing.png"), "png");
   await writeFile(join(root, "nested", "landing.webm"), "video");
+  await writeFile(join(root, "nested", "landing.mp4"), "mp4");
   await writeFile(join(root, "nested", "landing.zip"), "trace");
 
   const inventory = await inventoryArtifacts([
@@ -180,7 +218,13 @@ test("inventoryArtifacts records concrete generated evidence paths", async () =>
       path: join(root, "nested", "landing.png"),
     },
   ]);
-  assert.equal(inventory.videos[0].path, join(root, "nested", "landing.webm"));
+  assert.deepEqual(
+    inventory.videos.map((item) => item.path),
+    [
+      join(root, "nested", "landing.mp4"),
+      join(root, "nested", "landing.webm"),
+    ],
+  );
   assert.equal(inventory.traces[0].path, join(root, "nested", "landing.zip"));
 });
 

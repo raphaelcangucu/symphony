@@ -18,6 +18,10 @@ Cada agente deve criar em `site/`:
 - scripts `dev`, `build` e `test:e2e`;
 - preview compatível com `npm run dev -- --host 0.0.0.0`;
 - Playwright abrindo a aplicação real por HTTP;
+- runner E2E isolado que inicia e encerra seu próprio preview sem depender da
+  sondagem de `webServer` do Playwright;
+- execução de build/E2E com allowlist de ambiente, sem repassar tokens aos
+  scripts gerados;
 - validações de hero, agentes, fluxo, evidências, âncora e mobile;
 - screenshot, vídeo e trace.
 
@@ -54,6 +58,11 @@ Colete build/E2E e gere as capturas visuais padronizadas:
 npm run collect
 npm run capture:visuals
 ```
+
+O coletor instala dependências com lifecycle scripts desativados e executa
+build/E2E com um ambiente sanitizado. O capturador usa `--strictPort`, timeout
+por requisição HTTP e continua registrando as demais células caso uma captura
+falhe.
 
 ## Saídas
 

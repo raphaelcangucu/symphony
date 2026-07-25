@@ -5,7 +5,9 @@ import { RUN_MATRIX, workflowPromptTemplate } from "../src/contract.mjs";
 import {
   buildRunRecords,
   devEnvironmentSteps,
+  issueTitle,
   projectPayload,
+  provisionSessions,
   workflowMarkdown,
 } from "../src/provision.mjs";
 
@@ -23,6 +25,8 @@ test("workspace project payload configures preview, evidence and local clone", (
   assert.match(payload.setup.workflow_markdown, /dev_server:\n  enabled: true/);
   assert.match(payload.setup.workflow_markdown, /dispatch_states:\n    - In Progress/);
   assert.match(payload.setup.workflow_markdown, /test:e2e/);
+  assert.match(payload.setup.workflow_markdown, /max_turns: 30/);
+  assert.match(payload.setup.workflow_markdown, /required: true/);
 });
 
 test("workflow prompt injects the issue description without provider branches", () => {
@@ -56,4 +60,64 @@ test("preview uses one explicit canonical serve step", () => {
     `sh -c 'npm run dev -- --host 0.0.0.0 --port "$PORT"'`,
   );
   assert.equal(steps[0].run_spec, undefined);
+});
+
+test("direct sessions use the canonical atomic workspace provisioner", async () => {
+  const apiCalls = [];
+  const records = [
+    {
+      id: "session-claude",
+      path: "session",
+      provider: "claude",
+      issue_identifier: "SYM-3",
+      execution_mode: "yolo",
+    },
+    {
+      id: "orchestrator-claude",
+      path: "orchestrator",
+      provider: "claude",
+      issue_identifier: "SYM-6",
+      execution_mode: "yolo",
+    },
+  ];
+  const api = {
+    async request(path, options) {
+      apiCalls.push([path, options]);
+
+      if (path === "/assistant/threads") {
+        assert.equal(options.body.issue_identifier, "SYM-3");
+        return {
+          id: 33,
+          workspace_path: "/tmp/landing-workspaces/SYM-3__p1",
+        };
+      }
+
+      assert.equal(path, "/assistant/threads/33/workspace/provision");
+      return {
+        status: "ready",
+        workspace_path: "/tmp/landing-workspaces/SYM-3__p1",
+      };
+    },
+  };
+
+  await provisionSessions(api, records);
+
+  assert.equal(apiCalls.length, 2);
+  assert.equal(apiCalls[1][1].method, "POST");
+  assert.equal(records[0].thread_id, 33);
+  assert.equal(
+    records[0].workspace_path,
+    "/tmp/landing-workspaces/SYM-3__p1",
+  );
+});
+
+test("issue titles identify the execution path and provider", () => {
+  assert.equal(
+    issueTitle({ path: "session", provider: "cursor" }),
+    "Landing benchmark · session · cursor",
+  );
+  assert.equal(
+    issueTitle({ path: "orchestrator", provider: "claude" }),
+    "Landing benchmark · orchestrator · claude",
+  );
 });

@@ -123,12 +123,22 @@ export function isTerminalExecutionThread(thread) {
   return thread?.status === "closed" || thread?.status === "error";
 }
 
+export function isSettledOrchestratorExecution(thread, execution) {
+  if (!isTerminalExecutionThread(thread) || !isTerminalAgentExecution(execution)) {
+    return false;
+  }
+  const executionThreadId = Number(execution?.execution_session_id);
+  return (
+    Number.isInteger(executionThreadId) &&
+    executionThreadId === Number(thread?.id)
+  );
+}
+
 export function classifyOrchestratorOutcome(thread, execution = null) {
-  if (
-    thread?.status === "closed" &&
-    isTerminalAgentExecution(execution)
-  ) {
-    return "completed";
+  if (thread?.status === "closed" && isSettledOrchestratorExecution(thread, execution)) {
+    return new Set(["completed", "saved"]).has(execution?.status)
+      ? "completed"
+      : "failed";
   }
   if (thread?.status === "error") return "failed";
   return "incomplete";

@@ -194,9 +194,9 @@ defmodule SymphonyElixir.AgentExecutionTest do
       assert execution.goal.kind == "goal"
       assert execution.goal.source == "native"
       assert execution.goal.objective == "Pursue the native goal"
-      # Projected (non-live-thread) capabilities only — native pause/resume require
-      # a live resolvable thread the UI dispatches into instead.
-      assert execution.goal.capabilities == ["get", "edit", "clear"]
+      # A projected native goal can always be stopped through the persisted
+      # execution, while pause/resume still require a live resolvable thread.
+      assert execution.goal.capabilities == ["get", "edit", "clear", "stop"]
       assert execution.long_running
       assert execution.long_running_label == "Pursuing goal"
     end
@@ -207,6 +207,44 @@ defmodule SymphonyElixir.AgentExecutionTest do
 
       assert [execution] = AgentExecution.from_snapshot(snapshot)
       assert execution.status == :idle
+    end
+
+    test "keeps stale running issues idle when the transcript has activity without completion" do
+      identifier = "SYM-ACTIVE-#{System.unique_integer([:positive])}"
+      issue = %{identifier: identifier, project_slug: nil, labels: ["backend"], agent_kind: "codex"}
+      workspace = Workspace.path_for_issue(issue)
+      sessions_dir = Path.join(System.tmp_dir!(), "codex-sessions-#{System.unique_integer([:positive])}")
+      thread_id = "thread-active"
+
+      File.mkdir_p!(workspace)
+      File.mkdir_p!(sessions_dir)
+      Application.put_env(:symphony_elixir, :codex_sessions_dir, sessions_dir)
+
+      on_exit(fn ->
+        File.rm_rf(workspace)
+        File.rm_rf(sessions_dir)
+      end)
+
+      :ok = CodexStore.write(workspace, thread_id)
+      write_rollout!(sessions_dir, thread_id)
+
+      stale = DateTime.add(DateTime.utc_now(), -10 * 60, :second)
+
+      snapshot = %{
+        running: [
+          running_entry(%{
+            identifier: identifier,
+            issue: issue,
+            agent_kind: "codex",
+            last_codex_timestamp: stale
+          })
+        ],
+        retrying: []
+      }
+
+      assert [execution] = AgentExecution.from_snapshot(snapshot)
+      assert execution.status == :idle
+      assert execution.error == nil
     end
 
     test "surfaces the real run failure for interrupted stale Codex runs" do
@@ -253,6 +291,46 @@ defmodule SymphonyElixir.AgentExecutionTest do
       assert execution.error == message <> ". Use Resume in the execution panel."
       refute execution.error =~ "{:turn_failed"
       refute execution.error =~ "Turn aborted"
+    end
+
+    test "a resumed run is not aborted again by its earlier failure annotation" do
+      identifier = "SYM-RESUMED-#{System.unique_integer([:positive])}"
+      issue = %{identifier: identifier, project_slug: nil, labels: ["backend"], agent_kind: "codex"}
+      workspace = Workspace.path_for_issue(issue)
+      sessions_dir = Path.join(System.tmp_dir!(), "codex-sessions-#{System.unique_integer([:positive])}")
+      thread_id = "thread-resumed"
+
+      File.mkdir_p!(workspace)
+      File.mkdir_p!(sessions_dir)
+      Application.put_env(:symphony_elixir, :codex_sessions_dir, sessions_dir)
+
+      on_exit(fn ->
+        File.rm_rf(workspace)
+        File.rm_rf(sessions_dir)
+      end)
+
+      :ok = CodexStore.write(workspace, thread_id)
+      write_rollout!(sessions_dir, thread_id)
+      :ok = SessionEvents.append_run_failure(workspace, {:turn_failed, "old context full"})
+      :ok = SessionEvents.append_resume(workspace)
+
+      stale = DateTime.add(DateTime.utc_now(), -10 * 60, :second)
+
+      snapshot = %{
+        running: [
+          running_entry(%{
+            identifier: identifier,
+            issue: issue,
+            agent_kind: "codex",
+            last_codex_timestamp: stale
+          })
+        ],
+        retrying: []
+      }
+
+      assert [execution] = AgentExecution.from_snapshot(snapshot)
+      assert execution.status == :idle
+      assert execution.error == nil
     end
 
     test "classifies operator-paused stale Codex runs as paused, not aborted" do

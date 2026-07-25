@@ -1,24 +1,65 @@
 # Comparação visual padronizada
 
-Capturas em viewport 1280 × 720, com movimento reduzido. A sessão Cursor não
-possui captura de landing porque o provedor falhou antes da geração.
+Viewports: desktop 1280 × 720 e mobile 390 × 844. Todas as imagens abaixo são
+capturas de página completa, com movimento reduzido e servidor isolado por
+célula.
 
 ## Sessão · Codex
 
-![Hero da landing criada pelo Codex em sessão](screens/session-codex-hero.webp)
+![Hero da sessão Codex](screens/session-codex-hero.png)
+
+![Página desktop completa da sessão Codex](screens/session-codex-full.png)
+
+![Página mobile completa da sessão Codex](screens/session-codex-mobile-full.png)
+
+[Vídeo E2E MP4](videos/session-codex-e2e.mp4)
+
+## Sessão · Cursor
+
+![Hero da sessão Cursor](screens/session-cursor-hero.png)
+
+![Página desktop completa da sessão Cursor](screens/session-cursor-full.png)
+
+![Página mobile completa da sessão Cursor](screens/session-cursor-mobile-full.png)
+
+[Vídeo E2E MP4](videos/session-cursor-e2e.mp4)
 
 ## Sessão · Claude
 
-![Hero da landing criada pelo Claude em sessão](screens/session-claude-hero.webp)
+![Hero da sessão Claude](screens/session-claude-hero.png)
+
+![Página desktop completa da sessão Claude](screens/session-claude-full.png)
+
+![Página mobile completa da sessão Claude](screens/session-claude-mobile-full.png)
+
+[Vídeo E2E MP4](videos/session-claude-e2e.mp4)
 
 ## Orquestrador · Codex
 
-![Hero da landing criada pelo Codex via orquestrador](screens/orchestrator-codex-hero.webp)
+![Hero do orquestrador Codex](screens/orchestrator-codex-hero.png)
+
+![Página desktop completa do orquestrador Codex](screens/orchestrator-codex-full.png)
+
+![Página mobile completa do orquestrador Codex](screens/orchestrator-codex-mobile-full.png)
+
+[Vídeo E2E MP4](videos/orchestrator-codex-e2e.mp4)
 
 ## Orquestrador · Cursor
 
-![Hero da landing criada pelo Cursor via orquestrador](screens/orchestrator-cursor-hero.webp)
+![Hero do orquestrador Cursor](screens/orchestrator-cursor-hero.png)
+
+![Página desktop completa do orquestrador Cursor](screens/orchestrator-cursor-full.png)
+
+![Página mobile completa do orquestrador Cursor](screens/orchestrator-cursor-mobile-full.png)
+
+[Vídeo E2E MP4](videos/orchestrator-cursor-e2e.mp4)
 
 ## Orquestrador · Claude
 
-![Hero da landing criada pelo Claude via orquestrador](screens/orchestrator-claude-hero.webp)
+![Hero do orquestrador Claude](screens/orchestrator-claude-hero.png)
+
+![Página desktop completa do orquestrador Claude](screens/orchestrator-claude-full.png)
+
+![Página mobile completa do orquestrador Claude](screens/orchestrator-claude-mobile-full.png)
+
+[Vídeo E2E MP4](videos/orchestrator-claude-e2e.mp4)

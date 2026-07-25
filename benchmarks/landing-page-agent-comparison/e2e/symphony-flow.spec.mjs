@@ -13,8 +13,7 @@ import {
   classifyOrchestratorOutcome,
   issueRoute,
   issueStatusName,
-  isTerminalAgentExecution,
-  isTerminalExecutionThread,
+  isSettledOrchestratorExecution,
   selectRun,
   selectIssueAgentExecution,
   selectIssueExecutionThread,
@@ -38,11 +37,9 @@ async function loadRun() {
 
 async function waitForIssueCompletion(api, projectSlug, identifier, timeoutMs) {
   const startedAt = Date.now();
-  const inconsistentStateGraceMs = 10_000;
   let issue;
   let execution;
   let executionThread;
-  let terminalSignalAt = null;
   while (Date.now() - startedAt < timeoutMs) {
     issue = await api.request(
       `/projects/${encodeURIComponent(projectSlug)}/issues/${encodeURIComponent(identifier)}`,
@@ -53,18 +50,8 @@ async function waitForIssueCompletion(api, projectSlug, identifier, timeoutMs) {
       `/assistant/threads?project_slug=${encodeURIComponent(projectSlug)}`,
     );
     executionThread = selectIssueExecutionThread(threads, identifier);
-    const executionTerminal = isTerminalAgentExecution(execution);
-    const threadTerminal = isTerminalExecutionThread(executionThread);
-    if (executionTerminal && threadTerminal) {
+    if (isSettledOrchestratorExecution(executionThread, execution)) {
       return { issue, execution, executionThread };
-    }
-    if (executionTerminal || threadTerminal) {
-      terminalSignalAt ??= Date.now();
-      if (Date.now() - terminalSignalAt >= inconsistentStateGraceMs) {
-        return { issue, execution, executionThread };
-      }
-    } else {
-      terminalSignalAt = null;
     }
     await new Promise((resolvePromise) => setTimeout(resolvePromise, 2_000));
   }

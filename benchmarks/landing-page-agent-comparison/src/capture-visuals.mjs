@@ -1,9 +1,19 @@
 import { spawn } from "node:child_process";
-import { access, mkdir, readFile, writeFile } from "node:fs/promises";
+import {
+  access,
+  copyFile,
+  mkdir,
+  readFile,
+  rename,
+  writeFile,
+} from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { chromium } from "@playwright/test";
+import { createApi } from "./api.mjs";
+import { executeProcess } from "./process.mjs";
+import { sanitizedChildEnv } from "../seed/scripts/child-env.mjs";
 
 const RUN_ID_PATTERN = /^(session|orchestrator)-(codex|cursor|claude)$/;
 
@@ -14,6 +24,19 @@ export function visualPort(index) {
   return 23_000 + index;
 }
 
+export function previewArgs(port) {
+  return [
+    "run",
+    "dev",
+    "--",
+    "--host",
+    "127.0.0.1",
+    "--port",
+    String(port),
+    "--strictPort",
+  ];
+}
+
 export function visualScreenshotNames(runId) {
   if (!RUN_ID_PATTERN.test(runId)) {
     throw new Error(`invalid benchmark run id: ${runId}`);
@@ -21,6 +44,9 @@ export function visualScreenshotNames(runId) {
   return {
     hero: `${runId}-hero.png`,
     full: `${runId}-full.png`,
+    mobileFull: `${runId}-mobile-full.png`,
+    video: `${runId}-e2e.webm`,
+    mp4: `${runId}-e2e.mp4`,
   };
 }
 
@@ -28,7 +54,7 @@ export function renderVisualComparison(captures) {
   const lines = [
     "# Comparação visual padronizada",
     "",
-    "Viewport: 1280 × 720, movimento reduzido, servidor isolado por célula.",
+    "Viewports: desktop 1280 × 720 e mobile 390 × 844; páginas completas, movimento reduzido e servidor isolado por célula.",
     "",
   ];
   for (const capture of captures) {
@@ -38,9 +64,15 @@ export function renderVisualComparison(captures) {
         `![Hero de ${capture.id}](screens/${capture.id}-hero.png)`,
         "",
         `![Página completa de ${capture.id}](screens/${capture.id}-full.png)`,
+        "",
+        `![Página mobile completa de ${capture.id}](screens/${capture.id}-mobile-full.png)`,
+        "",
+        `[Vídeo E2E MP4 de ${capture.id}](videos/${capture.id}-e2e.mp4)`,
       );
     } else {
-      lines.push(`Captura indisponível: ${capture.status}.`);
+      lines.push(
+        `Captura indisponível: ${capture.status}${capture.error ? ` — ${capture.error}` : ""}.`,
+      );
     }
     lines.push("");
   }
@@ -116,35 +148,226 @@ function forwardParentSignals(child) {
   };
 }
 
-async function waitForHttp(url, timeoutMs = 30_000) {
+export async function waitForHttp(
+  url,
+  timeoutMs = 30_000,
+  {
+    fetchImpl = globalThis.fetch,
+    requestTimeoutMs = 1_000,
+  } = {},
+) {
   const startedAt = Date.now();
   let lastError;
   while (Date.now() - startedAt < timeoutMs) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), requestTimeoutMs);
     try {
-      const response = await fetch(url);
+      const response = await fetchImpl(url, { signal: controller.signal });
       if (response.ok) return;
       lastError = new Error(`HTTP ${response.status}`);
     } catch (error) {
       lastError = error;
+    } finally {
+      clearTimeout(timer);
     }
     await new Promise((resolvePromise) => setTimeout(resolvePromise, 250));
   }
   throw new Error(`preview did not become ready at ${url}: ${lastError}`);
 }
 
+export async function captureRunMatrix(runs, capture) {
+  const captures = [];
+
+  for (const [index, run] of runs.entries()) {
+    try {
+      captures.push(await capture(run, index));
+    } catch (error) {
+      captures.push({
+        id: run.id,
+        status: "capture-failed",
+        error: error?.message ?? String(error),
+      });
+    }
+  }
+
+  return captures;
+}
+
 function workspaceForRun(manifest, run) {
-  if (run.path === "session") return join(run.workspace_path, "site");
+  return join(workspaceRootForRun(manifest, run), "site");
+}
+
+function workspaceRootForRun(manifest, run) {
+  if (run.path === "session") return run.workspace_path;
   return join(
     manifest.runtime_root,
     "workspaces",
     manifest.project_slug,
     run.issue_identifier.replace(/[^a-zA-Z0-9._-]/g, "_"),
-    "site",
   );
 }
 
-async function captureRun({ manifest, run, index, reportRoot }) {
+function validationStep(collected, suffix) {
+  return (
+    collected.validation?.find((step) => step.command.endsWith(suffix)) ?? null
+  );
+}
+
+function artifactRef(path, label, url) {
+  return { path, label, navigations: [url] };
+}
+
+export function evidenceManifestForRun({ run, collected, url, names }) {
+  const build = validationStep(collected, "npm run build");
+  const generatedE2e = validationStep(collected, "npm run test:e2e");
+  const buildReport = "artifacts/reports/build.txt";
+  const e2eReport = "artifacts/reports/e2e.txt";
+  const desktopRelative = `artifacts/screens/${names.full}`;
+  const mobileRelative = `artifacts/screens/${names.mobileFull}`;
+  const webmRelative = `artifacts/videos/${names.video}`;
+  const mp4Relative = `artifacts/videos/${names.mp4}`;
+  const traceRelative = `artifacts/traces/${run.id}-e2e.zip`;
+  const label = `${run.id} landing page walkthrough`;
+
+  return {
+    issue: run.issue_identifier,
+    generated_at: new Date().toISOString(),
+    ui_change: true,
+    runs: [
+      {
+        kind: "unit",
+        repo: "site",
+        command: "npm run build",
+        status: build?.status ?? "failed",
+        report: buildReport,
+        duration_ms: build?.duration_ms ?? null,
+      },
+      {
+        kind: "e2e",
+        repo: "site",
+        command: "npm run test:e2e",
+        status: generatedE2e?.status ?? "failed",
+        report: e2eReport,
+        screenshots: [
+          artifactRef(desktopRelative, `${label} desktop full page`, url),
+          artifactRef(mobileRelative, `${label} mobile full page`, url),
+        ],
+        videos: [
+          artifactRef(webmRelative, `${label} WebM source`, url),
+          artifactRef(mp4Relative, `${label} MP4 H.264`, url),
+        ],
+        trace: traceRelative,
+        navigations: [url],
+        proof: {
+          title: label,
+          desktop_viewport: "1280x720",
+          mobile_viewport: "390x844",
+          full_page: true,
+        },
+      },
+    ],
+  };
+}
+
+export function assertEvidenceTabRecord(records, { runId, threadId }) {
+  const record = (Array.isArray(records) ? records : []).find(
+    (entry) =>
+      entry?.run_id === runId &&
+      String(entry?.session_id ?? "") === String(threadId),
+  );
+  if (!record) {
+    throw new Error(`Evidence tab did not return persisted run ${runId}`);
+  }
+  if (record.status !== "passed") {
+    throw new Error(`Evidence run ${runId} is not passed`);
+  }
+
+  const e2e = record.manifest?.runs?.find((run) => run?.kind === "e2e");
+  if (!e2e) {
+    throw new Error(`Evidence run ${runId} is missing its E2E run`);
+  }
+  const screenshots = Array.isArray(e2e.screenshots) ? e2e.screenshots : [];
+  const videos = Array.isArray(e2e.videos) ? e2e.videos : [];
+  const videoPaths = videos.map((entry) =>
+    typeof entry === "string" ? entry : entry?.path,
+  );
+  if (
+    e2e.status !== "passed" ||
+    screenshots.length < 2 ||
+    !videoPaths.some((path) => /\.webm$/i.test(path ?? "")) ||
+    !videoPaths.some((path) => /\.mp4$/i.test(path ?? "")) ||
+    typeof e2e.trace !== "string" ||
+    e2e.trace.trim() === ""
+  ) {
+    throw new Error(`Evidence run ${runId} has an incomplete visual contract`);
+  }
+
+  return record;
+}
+
+async function transcodeMp4(webmPath, mp4Path) {
+  const result = await executeProcess(
+    "ffmpeg",
+    [
+      "-y",
+      "-i",
+      webmPath,
+      "-c:v",
+      "libx264",
+      "-preset",
+      "medium",
+      "-pix_fmt",
+      "yuv420p",
+      "-movflags",
+      "+faststart",
+      "-an",
+      mp4Path,
+    ],
+    { cwd: resolve(webmPath, ".."), timeout: 2 * 60 * 1000 },
+  );
+  if (result.status !== "passed") {
+    throw new Error(`ffmpeg MP4 conversion failed: ${result.output}`);
+  }
+}
+
+async function writeEvidenceManifest({
+  run,
+  collected,
+  evidenceRoot,
+  url,
+  names,
+  paths,
+}) {
+  const reportsRoot = join(evidenceRoot, "artifacts", "reports");
+  await mkdir(reportsRoot, { recursive: true });
+  const build = validationStep(collected, "npm run build");
+  const generatedE2e = validationStep(collected, "npm run test:e2e");
+  const buildReport = "artifacts/reports/build.txt";
+  const e2eReport = "artifacts/reports/e2e.txt";
+  await writeFile(join(evidenceRoot, buildReport), build?.output ?? "not run\n");
+  await writeFile(
+    join(evidenceRoot, e2eReport),
+    generatedE2e?.output ?? "not run\n",
+  );
+
+  const manifest = evidenceManifestForRun({ run, collected, url, names });
+  await writeFile(
+    join(evidenceRoot, "manifest.json"),
+    `${JSON.stringify(manifest, null, 2)}\n`,
+  );
+  return { manifest, ...paths };
+}
+
+async function captureRun({
+  manifest,
+  run,
+  index,
+  reportRoot,
+  reportVideoRoot,
+  api,
+}) {
   const workspacePath = workspaceForRun(manifest, run);
+  const workspaceRoot = workspaceRootForRun(manifest, run);
   const collectedPath = join(
     manifest.runtime_root,
     "results",
@@ -160,13 +383,26 @@ async function captureRun({ manifest, run, index, reportRoot }) {
   const port = visualPort(index);
   const url = `http://127.0.0.1:${port}/`;
   const names = visualScreenshotNames(run.id);
+  const evidenceRoot = join(workspaceRoot, ".symphony", "evidence");
+  const screensRoot = join(evidenceRoot, "artifacts", "screens");
+  const videosRoot = join(evidenceRoot, "artifacts", "videos");
+  const tracesRoot = join(evidenceRoot, "artifacts", "traces");
+  await mkdir(screensRoot, { recursive: true });
+  await mkdir(videosRoot, { recursive: true });
+  await mkdir(tracesRoot, { recursive: true });
+  const heroPath = join(screensRoot, names.hero);
+  const desktopPath = join(screensRoot, names.full);
+  const mobilePath = join(screensRoot, names.mobileFull);
+  const webmPath = join(videosRoot, names.video);
+  const mp4Path = join(videosRoot, names.mp4);
+  const tracePath = join(tracesRoot, `${run.id}-e2e.zip`);
   const child = spawn(
     "npm",
-    ["run", "dev", "--", "--host", "127.0.0.1", "--port", String(port)],
+    previewArgs(port),
     {
       cwd: workspacePath,
       detached: true,
-      env: process.env,
+      env: sanitizedChildEnv(process.env),
       stdio: "ignore",
     },
   );
@@ -186,22 +422,102 @@ async function captureRun({ manifest, run, index, reportRoot }) {
   try {
     await Promise.race([waitForHttp(url), previewFailed]);
     browser = await chromium.launch({ headless: true });
-    const page = await browser.newPage({
+    const desktopContext = await browser.newContext({
       viewport: { width: 1280, height: 720 },
       reducedMotion: "reduce",
+      recordVideo: {
+        dir: videosRoot,
+        size: { width: 1280, height: 720 },
+      },
     });
+    await desktopContext.tracing.start({
+      screenshots: true,
+      snapshots: true,
+      sources: true,
+    });
+    const page = await desktopContext.newPage();
+    const video = page.video();
     await page.goto(url, { waitUntil: "networkidle" });
-    await page.screenshot({ path: join(reportRoot, names.hero) });
+    await page.screenshot({ path: heroPath });
     await page.screenshot({
-      path: join(reportRoot, names.full),
+      path: desktopPath,
       fullPage: true,
+    });
+    const pageHeight = await page.evaluate(
+      () => document.documentElement.scrollHeight,
+    );
+    for (const ratio of [0.25, 0.5, 0.75, 1, 0]) {
+      await page.evaluate(
+        ({ height, position }) =>
+          window.scrollTo({ top: height * position, behavior: "instant" }),
+        { height: pageHeight, position: ratio },
+      );
+      await page.waitForTimeout(350);
+    }
+    await desktopContext.tracing.stop({ path: tracePath });
+    await desktopContext.close();
+    const recordedPath = await video.path();
+    if (resolve(recordedPath) !== resolve(webmPath)) {
+      await rename(recordedPath, webmPath);
+    }
+
+    const mobileContext = await browser.newContext({
+      viewport: { width: 390, height: 844 },
+      reducedMotion: "reduce",
+      isMobile: true,
+    });
+    const mobilePage = await mobileContext.newPage();
+    await mobilePage.goto(url, { waitUntil: "networkidle" });
+    await mobilePage.screenshot({ path: mobilePath, fullPage: true });
+    await mobileContext.close();
+
+    await transcodeMp4(webmPath, mp4Path);
+    await Promise.all([
+      copyFile(heroPath, join(reportRoot, names.hero)),
+      copyFile(desktopPath, join(reportRoot, names.full)),
+      copyFile(mobilePath, join(reportRoot, names.mobileFull)),
+      copyFile(webmPath, join(reportVideoRoot, names.video)),
+      copyFile(mp4Path, join(reportVideoRoot, names.mp4)),
+    ]);
+    const evidence = await writeEvidenceManifest({
+      run,
+      collected,
+      evidenceRoot,
+      url,
+      names,
+      paths: {
+        hero: heroPath,
+        full: desktopPath,
+        mobile_full: mobilePath,
+        video: webmPath,
+        mp4: mp4Path,
+        trace: tracePath,
+      },
+    });
+    const threadId =
+      run.thread_id ?? collected.identity?.assistant_thread_id ?? null;
+    if (!threadId) {
+      throw new Error(`missing assistant thread id for evidence import: ${run.id}`);
+    }
+    const persisted = await api.request(
+      `/assistant/threads/${encodeURIComponent(threadId)}/evidence`,
+      { method: "POST", body: {} },
+    );
+    const evidenceRecords = await api.request(
+      `/projects/${encodeURIComponent(manifest.project_slug)}/issues/${encodeURIComponent(run.issue_identifier)}/evidence`,
+    );
+    assertEvidenceTabRecord(evidenceRecords, {
+      runId: persisted.run_id,
+      threadId,
     });
     return {
       id: run.id,
       status: "captured",
       url,
-      hero: join(reportRoot, names.hero),
-      full: join(reportRoot, names.full),
+      ...evidence,
+      evidence_run_id: persisted.run_id,
+      evidence_issue_identifier: run.issue_identifier,
+      evidence_tab_verified: true,
     };
   } finally {
     try {
@@ -222,12 +538,26 @@ export async function captureVisuals(env = process.env) {
     await readFile(join(runtimeRoot, "runs.json"), "utf8"),
   );
   const reportRoot = join(runtimeRoot, "report", "screens");
+  const reportVideoRoot = join(runtimeRoot, "report", "videos");
   await mkdir(reportRoot, { recursive: true });
+  await mkdir(reportVideoRoot, { recursive: true });
+  const api = createApi({
+    baseUrl: env.SYMPHONY_BENCH_URL,
+    token: env.SYMPHONY_BENCH_TOKEN,
+  });
 
-  const captures = [];
-  for (const [index, run] of manifest.runs.entries()) {
-    captures.push(await captureRun({ manifest, run, index, reportRoot }));
-  }
+  const captures = await captureRunMatrix(
+    manifest.runs,
+    (run, index) =>
+      captureRun({
+        manifest,
+        run,
+        index,
+        reportRoot,
+        reportVideoRoot,
+        api,
+      }),
+  );
   await writeFile(
     join(runtimeRoot, "report", "visuals.json"),
     `${JSON.stringify(captures, null, 2)}\n`,
@@ -247,6 +577,9 @@ if (invokedPath === import.meta.url) {
   captureVisuals()
     .then((captures) => {
       process.stdout.write(`${JSON.stringify(captures, null, 2)}\n`);
+      if (captures.some((capture) => capture.status !== "captured")) {
+        process.exitCode = 1;
+      }
     })
     .catch((error) => {
       process.stderr.write(`${error.stack ?? error.message}\n`);

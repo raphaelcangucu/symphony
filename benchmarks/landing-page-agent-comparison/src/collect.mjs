@@ -9,6 +9,7 @@ import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { executeProcess } from "./process.mjs";
+import { sanitizedChildEnv } from "../seed/scripts/child-env.mjs";
 
 const IGNORED_DIRECTORIES = new Set([".git", "node_modules", "dist", "test-results"]);
 
@@ -137,7 +138,7 @@ export async function inventoryArtifacts(locations) {
         path: join(location.root, relativePath),
       };
       if (/\.png$/i.test(relativePath)) inventory.screenshots.push(item);
-      else if (/\.webm$/i.test(relativePath)) inventory.videos.push(item);
+      else if (/\.(webm|mp4)$/i.test(relativePath)) inventory.videos.push(item);
       else if (/\.zip$/i.test(relativePath)) inventory.traces.push(item);
     }
   }
@@ -239,6 +240,14 @@ export async function inspectWorkspace(workspacePath) {
   const playwrightConfig = files.some((path) =>
     /^playwright\.config\.[cm]?[jt]s$/.test(path),
   );
+  const e2eScript = scripts["test:e2e"];
+  const runnerPath = "scripts/run-e2e.mjs";
+  let safeE2eRunner = false;
+  if (e2eScript === `node ${runnerPath}` && files.includes(runnerPath)) {
+    const runner = await readFile(join(workspacePath, runnerPath), "utf8");
+    safeE2eRunner =
+      runner.includes("--strictPort") && runner.includes("AbortController");
+  }
 
   return {
     exists: true,
@@ -251,7 +260,8 @@ export async function inspectWorkspace(workspacePath) {
       scripts: {
         dev: typeof scripts.dev === "string",
         build: typeof scripts.build === "string",
-        test_e2e: typeof scripts["test:e2e"] === "string",
+        test_e2e: e2eScript === `node ${runnerPath}`,
+        e2e_runner: safeE2eRunner,
       },
     },
   };
@@ -271,16 +281,33 @@ export async function executeValidation(command, args, cwd, timeout) {
   return executeProcess(command, args, { cwd, timeout });
 }
 
-async function validateWorkspace(workspacePath) {
+export function validationPort(index) {
+  if (!Number.isInteger(index) || index < 0 || index > 99) {
+    throw new Error(`invalid validation index: ${index}`);
+  }
+  return 24_000 + index;
+}
+
+async function validateWorkspace(workspacePath, index) {
   const steps = [];
   const commands = [
-    ["npm", ["install"], 8 * 60 * 1000],
+    ["npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund"], 8 * 60 * 1000],
     ["npm", ["run", "build"], 5 * 60 * 1000],
     ["npm", ["run", "test:e2e"], 10 * 60 * 1000],
   ];
 
+  const port = validationPort(index);
+  const env = sanitizedChildEnv(process.env, {
+    PLAYWRIGHT_PORT: String(port),
+    PLAYWRIGHT_BASE_URL: `http://127.0.0.1:${port}`,
+  });
+
   for (const [command, args, timeout] of commands) {
-    const result = await executeValidation(command, args, workspacePath, timeout);
+    const result = await executeProcess(command, args, {
+      cwd: workspacePath,
+      env,
+      timeout,
+    });
     steps.push(result);
     if (result.status !== "passed") break;
   }
@@ -379,7 +406,7 @@ export async function collect(env = process.env) {
   const manifest = JSON.parse(await readFile(join(runtimeRoot, "runs.json"), "utf8"));
   const rows = [];
 
-  for (const run of manifest.runs) {
+  for (const [index, run] of manifest.runs.entries()) {
     const workspacePath = workspaceForRun(manifest, run);
     const facts = await inspectWorkspace(workspacePath);
     let runResult = {};
@@ -395,7 +422,7 @@ export async function collect(env = process.env) {
 
     const validation =
       facts.exists && contractPassed(facts.contract)
-        ? await validateWorkspace(workspacePath)
+        ? await validateWorkspace(workspacePath, index)
         : [];
     const git = facts.exists ? await gitFacts(workspacePath) : {
       available: false,

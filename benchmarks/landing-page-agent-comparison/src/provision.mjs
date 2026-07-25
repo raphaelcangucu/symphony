@@ -48,7 +48,7 @@ dev_server:
   idle_timeout_ms: 1800000
   auto_start_on: []
 evidence:
-  required: false
+  required: true
   repos:
     site:
       unit_command: npm run build
@@ -59,7 +59,7 @@ evidence:
 agent:
   kind: codex
   max_concurrent_agents: 1
-  max_turns: 5
+  max_turns: 30
   completion_transitions:
     In Progress: Human Review
 codex:
@@ -198,31 +198,44 @@ async function saveDevEnvironment(api) {
   });
 }
 
-async function provisionSessions(api, records) {
+export async function provisionSessions(api, records) {
   for (const record of records.filter((run) => run.path === "session")) {
-    const created = await api.request(`/projects/${PROJECT_SLUG}/workspaces`, {
+    const created = await api.request("/assistant/threads", {
       method: "POST",
       body: {
-        name: record.id,
+        scope: "issue_session",
+        project_slug: PROJECT_SLUG,
+        issue_identifier: record.issue_identifier,
         title: `Landing benchmark · session · ${record.provider}`,
         agent_kind: record.provider,
         execution_mode: record.execution_mode,
+        isolated_workspace: true,
       },
     });
 
-    record.thread_id = created.thread.id;
-    record.workspace_path = created.workspace_path;
+    record.thread_id = created.id;
+    const provisioned = await api.request(
+      `/assistant/threads/${created.id}/workspace/provision`,
+      {
+        method: "POST",
+      },
+    );
+    record.workspace_path = provisioned.workspace_path;
   }
+}
+
+export function issueTitle(record) {
+  return `Landing benchmark · ${record.path} · ${record.provider}`;
 }
 
 async function provisionIssues(api, records) {
   const prompt = await readCanonicalPrompt();
 
-  for (const record of records.filter((run) => run.path === "orchestrator")) {
+  for (const record of records) {
     const issue = await api.request(`/projects/${PROJECT_SLUG}/issues`, {
       method: "POST",
       body: {
-        title: `Landing benchmark · orchestrator · ${record.provider}`,
+        title: issueTitle(record),
         description: prompt,
         status: "Backlog",
         agent: record.provider,
@@ -265,8 +278,8 @@ export async function provision(env = process.env) {
 
   const prompt = await readCanonicalPrompt();
   const records = buildRunRecords(prompt);
-  await provisionSessions(api, records);
   await provisionIssues(api, records);
+  await provisionSessions(api, records);
 
   const manifest = {
     project_slug: PROJECT_SLUG,

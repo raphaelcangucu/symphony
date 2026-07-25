@@ -204,7 +204,7 @@ defmodule SymphonyElixir.Cursor.AcpRunner do
   end
 
   defp open_session(client, args, workspace) do
-    mcp_servers = mcp_servers_from_config(Map.get(args, :mcp_config_path))
+    mcp_servers = []
 
     case Map.get(args, :cli_session_id) do
       id when is_binary(id) and id != "" ->
@@ -303,26 +303,6 @@ defmodule SymphonyElixir.Cursor.AcpRunner do
       0 -> :ok
     end
   end
-
-  defp mcp_servers_from_config(path) when is_binary(path) do
-    case File.read(path) do
-      {:ok, raw} ->
-        case Jason.decode(raw) do
-          {:ok, %{"mcpServers" => servers}} when is_map(servers) ->
-            Enum.map(servers, fn {name, cfg} ->
-              Map.put(cfg || %{}, "name", name)
-            end)
-
-          _ ->
-            []
-        end
-
-      _ ->
-        []
-    end
-  end
-
-  defp mcp_servers_from_config(_), do: []
 
   defp flatten_answers(normalized) when is_map(normalized) do
     Map.new(normalized, fn {qid, value} ->

@@ -11,6 +11,7 @@ import {
   classifyOrchestratorOutcome,
   isTerminalAgentExecution,
   isTerminalExecutionThread,
+  isSettledOrchestratorExecution,
   selectRun,
   selectIssueAgentExecution,
   selectIssueExecutionThread,
@@ -156,13 +157,29 @@ test("orchestrator outcome requires a closed provider execution thread", () => {
 
   assert.equal(selectIssueExecutionThread(threads, "SYM-2").id, 11);
   assert.equal(
-    classifyOrchestratorOutcome(threads[0], { status: "aborted" }),
+    classifyOrchestratorOutcome(threads[0], {
+      status: "aborted",
+      execution_session_id: 10,
+    }),
     "failed",
   );
   assert.equal(
-    classifyOrchestratorOutcome(threads[1], { status: "saved" }),
+    classifyOrchestratorOutcome(threads[1], {
+      status: "saved",
+      execution_session_id: 11,
+    }),
     "completed",
   );
+  for (const status of ["aborted", "failed", "error", "canceled"]) {
+    assert.equal(
+      classifyOrchestratorOutcome(threads[1], {
+        status,
+        execution_session_id: 11,
+      }),
+      "failed",
+      `closed thread with ${status} execution must remain failed`,
+    );
+  }
   assert.equal(
     classifyOrchestratorOutcome(threads[1], { status: "live" }),
     "incomplete",
@@ -204,4 +221,28 @@ test("orchestrator settlement recognizes the latest terminal agent execution", (
   assert.equal(isTerminalExecutionThread({ status: "closed" }), true);
   assert.equal(isTerminalExecutionThread({ status: "error" }), true);
   assert.equal(isTerminalExecutionThread({ status: "active" }), false);
+});
+
+test("orchestrator settlement rejects contradictory or mismatched terminal signals", () => {
+  assert.equal(
+    isSettledOrchestratorExecution(
+      { id: 8, status: "active" },
+      { status: "aborted", execution_session_id: 8 },
+    ),
+    false,
+  );
+  assert.equal(
+    isSettledOrchestratorExecution(
+      { id: 8, status: "closed" },
+      { status: "saved", execution_session_id: 8 },
+    ),
+    true,
+  );
+  assert.equal(
+    isSettledOrchestratorExecution(
+      { id: 8, status: "closed" },
+      { status: "saved", execution_session_id: 9 },
+    ),
+    false,
+  );
 });
