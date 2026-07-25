@@ -9,6 +9,7 @@ on:
 jobs:
   make-all:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: elixir
@@ -34,5 +35,27 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-mix-
 
-      - name: Verify make all
-        run: make all
+      - name: Install Elixir dependencies
+        run: make setup
+
+      - name: Build Elixir application
+        run: make build
+
+      - name: Check formatting
+        run: make fmt-check
+
+      - name: Check public specs and warning-level lint
+        run: make lint
+
+      - name: Run bounded mobile host validation
+        run: |
+          set -a
+          [ -f .env.testing ] && . ./.env.testing
+          set +a
+          mix test \
+            test/symphony_elixir/mobile_rpc \
+            test/symphony_elixir/settings/vault_test.exs \
+            test/symphony_elixir/extensions_test.exs \
+            test/symphony_elixir_web/mobile_rpc_socket_test.exs \
+            test/symphony_elixir_web/controllers/tracker/mobile_rpc_controller_test.exs \
+            test/symphony_elixir_web/controllers/tracker/mobile_push_controller_test.exs
