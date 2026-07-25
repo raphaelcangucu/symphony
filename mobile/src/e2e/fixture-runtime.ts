@@ -308,6 +308,62 @@ export function createFixtureTrackerClient(): TrackerClient {
       results: [{ repo: "symphony", ok: true }],
       workspace: { path: "/work/symphony", available: true },
     }),
+    issuePullRequests: async () => ({
+      supported: true,
+      available: true,
+      children: [],
+      pullRequests: [
+        {
+          number: 7,
+          title: "Complete Orca mobile parity",
+          url: "https://github.com/raphaelcangucu/symphony/pull/7",
+          state: "open",
+          repo: "raphaelcangucu/symphony",
+          origin: "auto",
+          isDraft: false,
+          merged: false,
+          headRef: "agent/mobile-companion-e2e",
+          baseRef: "main",
+          author: "raphaelcangucu",
+          mergeable: "MERGEABLE",
+          checksState: "success",
+          pipelines: [
+            {
+              name: "CI",
+              url: null,
+              jobs: [
+                {
+                  name: "mobile",
+                  status: "COMPLETED",
+                  conclusion: "SUCCESS",
+                  url: null,
+                },
+              ],
+            },
+          ],
+          statuses: [],
+          conversation: [],
+          baseBehindBy: 0,
+        },
+      ],
+    }),
+    linkIssuePullRequest: async () => undefined,
+    unlinkIssuePullRequest: async () => undefined,
+    requestPullRequestFix: async () => ({
+      movedTo: "Rework",
+      commentPosted: true,
+      jobs: [],
+    }),
+    updatePullRequestBranch: async () => ({ updated: true }),
+    rerunPullRequestJobs: async () => [{ runId: 99, ok: true }],
+    mergeIssuePullRequest: async (_projectSlug, _identifier, _number, input) => ({
+      merged: true,
+      method: input.method,
+      bypass: input.bypass === true,
+      sha: "abc123456789",
+      message: "Fixture pull request merged",
+      issue,
+    }),
   };
 }
 

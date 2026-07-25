@@ -234,6 +234,97 @@ export type GitDiffPushResponse = {
   workspace: GitDiffWorkspace;
 };
 
+export type PullRequestState = "open" | "closed" | "merged" | "draft" | "unknown";
+export type PullRequestMergeMethod = "merge" | "squash" | "rebase";
+
+export type PullRequestJob = {
+  name: string | null;
+  status: string | null;
+  conclusion: string | null;
+  url: string | null;
+};
+
+export type PullRequestPipeline = {
+  name: string;
+  url: string | null;
+  jobs: PullRequestJob[];
+};
+
+export type PullRequestStatus = {
+  context: string | null;
+  state: string | null;
+  url: string | null;
+  description: string | null;
+};
+
+export type PullRequestConversationEntry = {
+  author: string | null;
+  body: string;
+  kind: "comment" | "review";
+  reviewState: string | null;
+  createdAt: string | null;
+};
+
+export type PullRequest = {
+  number: number;
+  title: string | null;
+  url: string | null;
+  state: PullRequestState;
+  repo: string | null;
+  origin: "auto" | "manual";
+  isDraft: boolean;
+  merged: boolean;
+  headRef: string | null;
+  baseRef: string | null;
+  author: string | null;
+  mergeable: string | null;
+  checksState: string | null;
+  pipelines: PullRequestPipeline[];
+  statuses: PullRequestStatus[];
+  conversation: PullRequestConversationEntry[];
+  baseBehindBy: number | null;
+};
+
+export type PullRequestGroup = {
+  identifier: string;
+  title: string | null;
+  pullRequests: PullRequest[];
+};
+
+export type PullRequestResult = {
+  pullRequests: PullRequest[];
+  supported: boolean;
+  available: boolean;
+  children: PullRequestGroup[];
+};
+
+export type PullRequestFixResult = {
+  movedTo: string;
+  commentPosted: boolean;
+  jobs: Array<{ name: string | null; conclusion: string | null; url: string | null }>;
+};
+
+export type PullRequestRerunResult = {
+  runId: number;
+  ok: boolean;
+  error?: string;
+  status?: number;
+};
+
+export type MergePullRequestInput = {
+  method: PullRequestMergeMethod;
+  bypass?: boolean;
+};
+
+export type MergePullRequestResult = {
+  merged: boolean;
+  method: PullRequestMergeMethod;
+  bypass: boolean;
+  sha?: string;
+  message?: string;
+  issue: IssueSummary | null;
+};
+
 export type AssistantThread = {
   id: number;
   scope: string;
@@ -415,4 +506,46 @@ export type TrackerClient = {
     signal?: AbortSignal,
   ): Promise<GitDiffCommitResponse>;
   pushThreadDiff(threadId: number, signal?: AbortSignal): Promise<GitDiffPushResponse>;
+  issuePullRequests(
+    projectSlug: string,
+    identifier: string,
+    refresh?: boolean,
+    signal?: AbortSignal,
+  ): Promise<PullRequestResult>;
+  linkIssuePullRequest(
+    projectSlug: string,
+    identifier: string,
+    url: string,
+    signal?: AbortSignal,
+  ): Promise<void>;
+  unlinkIssuePullRequest(
+    projectSlug: string,
+    identifier: string,
+    url: string,
+    signal?: AbortSignal,
+  ): Promise<void>;
+  requestPullRequestFix(
+    projectSlug: string,
+    identifier: string,
+    signal?: AbortSignal,
+  ): Promise<PullRequestFixResult>;
+  updatePullRequestBranch(
+    projectSlug: string,
+    identifier: string,
+    number: number,
+    signal?: AbortSignal,
+  ): Promise<{ updated: boolean }>;
+  rerunPullRequestJobs(
+    projectSlug: string,
+    identifier: string,
+    number: number,
+    signal?: AbortSignal,
+  ): Promise<PullRequestRerunResult[]>;
+  mergeIssuePullRequest(
+    projectSlug: string,
+    identifier: string,
+    number: number,
+    input: MergePullRequestInput,
+    signal?: AbortSignal,
+  ): Promise<MergePullRequestResult>;
 };

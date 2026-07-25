@@ -238,7 +238,7 @@ Run:
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 Commit message: `feat(mobile): add diff commit and push`
 
@@ -253,25 +253,25 @@ Commit message: `feat(mobile): add diff commit and push`
 - Modify: `mobile/src/api/client.ts`
 - Modify: `mobile/src/api/client.test.ts`
 
-- [ ] **Step 1: Write failing API and screen tests**
+- [x] **Step 1: Write failing API and screen tests**
 
 Cover list/link/unlink, checks, update branch, rerun failed, fix and merge.
 Destructive actions require confirmation; merge displays conflicts and blocked
 checks without discarding loaded PR state.
 
-- [ ] **Step 2: Run tests and verify RED**
+- [x] **Step 2: Run tests and verify RED**
 
 Run:
 `cd mobile && npm run test:unit -- src/api/client.test.ts && npm run test:ui -- src/features/pull-requests`
 
 Expected: FAIL because PR methods and screen are absent.
 
-- [ ] **Step 3: Implement API and screen**
+- [x] **Step 3: Implement API and screen**
 
 Map the existing tracker PR presentation into a mobile contract and invalidate
 the issue PR query after each successful action.
 
-- [ ] **Step 4: Verify**
+- [x] **Step 4: Verify**
 
 Run:
 `cd mobile && npm run test:unit -- src/api/client.test.ts && npm run test:ui -- src/features/pull-requests && npm run typecheck`

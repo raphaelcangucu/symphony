@@ -647,6 +647,172 @@ describe("createTrackerClient", () => {
     expect(fetchImpl.mock.calls[1]?.[1]?.method).toBe("POST");
   });
 
+  it("maps issue pull requests and binds every operational endpoint", async () => {
+    const pullRequest = {
+      number: 7,
+      title: "Complete mobile parity",
+      url: "https://github.com/acme/mobile/pull/7",
+      state: "open",
+      repo: "acme/mobile",
+      origin: "manual",
+      is_draft: false,
+      merged: false,
+      head_ref: "agent/mobile",
+      base_ref: "main",
+      author: "raphael",
+      mergeable: "CONFLICTING",
+      checks_state: "failure",
+      base_behind_by: 2,
+      pipelines: [
+        {
+          name: "CI",
+          url: "https://github.com/acme/mobile/actions/runs/99",
+          jobs: [
+            {
+              name: "e2e",
+              status: "COMPLETED",
+              conclusion: "FAILURE",
+              url: "https://github.com/acme/mobile/actions/jobs/100",
+            },
+          ],
+        },
+      ],
+      statuses: [],
+      conversation: [],
+    };
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          data: [pullRequest],
+          supported: true,
+          available: true,
+          children: [],
+        }),
+      )
+      .mockResolvedValueOnce(jsonResponse({ data: { ...pullRequest, origin: "manual" } }))
+      .mockResolvedValueOnce(jsonResponse({ data: { unlinked: true } }))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          data: {
+            moved_to: "Rework",
+            comment_posted: true,
+            jobs: [{ name: "e2e", conclusion: "FAILURE", url: "job" }],
+          },
+        }),
+      )
+      .mockResolvedValueOnce(jsonResponse({ data: { updated: true } }))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          data: {
+            reruns: [
+              { run_id: 99, ok: true },
+              { run_id: 100, ok: false, error: "rate_limited", status: 429 },
+            ],
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          data: {
+            merged: true,
+            method: "squash",
+            bypass: false,
+            sha: "abc123",
+            message: "merged",
+            issue: null,
+          },
+        }),
+      );
+    const client = createTrackerClient({
+      origin: "https://demo.test",
+      token: "secret",
+      locale: "en",
+      fetchImpl,
+    });
+
+    await expect(client.issuePullRequests("mobile app", "MOB/7", true)).resolves.toEqual({
+      pullRequests: [
+        expect.objectContaining({
+          number: 7,
+          repo: "acme/mobile",
+          origin: "manual",
+          mergeable: "CONFLICTING",
+          checksState: "failure",
+          baseBehindBy: 2,
+          pipelines: [
+            expect.objectContaining({
+              name: "CI",
+              jobs: [
+                expect.objectContaining({
+                  name: "e2e",
+                  conclusion: "FAILURE",
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
+      supported: true,
+      available: true,
+      children: [],
+    });
+    await client.linkIssuePullRequest(
+      "mobile app",
+      "MOB/7",
+      "https://github.com/acme/mobile/pull/7",
+    );
+    await client.unlinkIssuePullRequest(
+      "mobile app",
+      "MOB/7",
+      "https://github.com/acme/mobile/pull/7",
+    );
+    await expect(client.requestPullRequestFix("mobile app", "MOB/7")).resolves.toEqual({
+      movedTo: "Rework",
+      commentPosted: true,
+      jobs: [{ name: "e2e", conclusion: "FAILURE", url: "job" }],
+    });
+    await expect(client.updatePullRequestBranch("mobile app", "MOB/7", 7)).resolves.toEqual({
+      updated: true,
+    });
+    await expect(client.rerunPullRequestJobs("mobile app", "MOB/7", 7)).resolves.toEqual([
+      { runId: 99, ok: true },
+      { runId: 100, ok: false, error: "rate_limited", status: 429 },
+    ]);
+    await expect(
+      client.mergeIssuePullRequest("mobile app", "MOB/7", 7, {
+        method: "squash",
+        bypass: false,
+      }),
+    ).resolves.toEqual({
+      merged: true,
+      method: "squash",
+      bypass: false,
+      sha: "abc123",
+      message: "merged",
+      issue: null,
+    });
+
+    expect(fetchImpl.mock.calls.map(([url]) => url)).toEqual([
+      "https://demo.test/api/tracker/v1/projects/mobile%20app/issues/MOB%2F7/pull_requests?refresh=1",
+      "https://demo.test/api/tracker/v1/projects/mobile%20app/issues/MOB%2F7/pull_requests/link",
+      "https://demo.test/api/tracker/v1/projects/mobile%20app/issues/MOB%2F7/pull_requests/link",
+      "https://demo.test/api/tracker/v1/projects/mobile%20app/issues/MOB%2F7/pull_requests/fix",
+      "https://demo.test/api/tracker/v1/projects/mobile%20app/issues/MOB%2F7/pull_requests/7/update_branch",
+      "https://demo.test/api/tracker/v1/projects/mobile%20app/issues/MOB%2F7/pull_requests/7/rerun_failed",
+      "https://demo.test/api/tracker/v1/projects/mobile%20app/issues/MOB%2F7/pull_requests/7/merge",
+    ]);
+    expect(fetchImpl.mock.calls[1]?.[1]?.method).toBe("POST");
+    expect(fetchImpl.mock.calls[2]?.[1]?.method).toBe("DELETE");
+    expect(JSON.parse(String(fetchImpl.mock.calls[2]?.[1]?.body))).toEqual({
+      url: "https://github.com/acme/mobile/pull/7",
+    });
+    expect(JSON.parse(String(fetchImpl.mock.calls[6]?.[1]?.body))).toEqual({
+      method: "squash",
+      bypass: false,
+    });
+  });
+
   it("throws a redacted auth error for unauthorized responses", async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
       jsonResponse(

@@ -32,8 +32,17 @@ import type {
   IssueMutationInput,
   IssuePriority,
   IssueSummary,
+  MergePullRequestResult,
   ProjectSessionRow,
   ProjectSummary,
+  PullRequest,
+  PullRequestFixResult,
+  PullRequestGroup,
+  PullRequestMergeMethod,
+  PullRequestPipeline,
+  PullRequestResult,
+  PullRequestRerunResult,
+  PullRequestState,
   ThreadDocumentList,
   ThreadListOptions,
   TrackerClient,
@@ -395,6 +404,76 @@ export function createTrackerClient(options: CreateTrackerClientOptions): Tracke
         workspace: mapGitDiffWorkspace(payload.workspace),
       };
     },
+    async issuePullRequests(projectSlug, identifier, refresh = false, signal) {
+      const suffix = refresh ? "?refresh=1" : "";
+      return mapPullRequestResult(
+        await request(`${issuePullRequestPath(projectSlug, identifier)}${suffix}`, { signal }),
+      );
+    },
+    async linkIssuePullRequest(projectSlug, identifier, url, signal) {
+      await request(`${issuePullRequestPath(projectSlug, identifier)}/link`, {
+        method: "POST",
+        body: { url: requireText(url, "pull request URL") },
+        signal,
+      });
+    },
+    async unlinkIssuePullRequest(projectSlug, identifier, url, signal) {
+      await request(`${issuePullRequestPath(projectSlug, identifier)}/link`, {
+        method: "DELETE",
+        body: { url: requireText(url, "pull request URL") },
+        signal,
+      });
+    },
+    async requestPullRequestFix(projectSlug, identifier, signal) {
+      return mapPullRequestFix(
+        unwrapData(
+          await request(`${issuePullRequestPath(projectSlug, identifier)}/fix`, {
+            method: "POST",
+            signal,
+          }),
+        ),
+      );
+    },
+    async updatePullRequestBranch(projectSlug, identifier, number, signal) {
+      const payload = asRecord(
+        unwrapData(
+          await request(
+            `${issuePullRequestPath(projectSlug, identifier)}/${positiveInteger(number, "pull request number")}/update_branch`,
+            { method: "POST", signal },
+          ),
+        ),
+        "pull request branch update",
+      );
+      return { updated: payload.updated === true };
+    },
+    async rerunPullRequestJobs(projectSlug, identifier, number, signal) {
+      const payload = asRecord(
+        unwrapData(
+          await request(
+            `${issuePullRequestPath(projectSlug, identifier)}/${positiveInteger(number, "pull request number")}/rerun_failed`,
+            { method: "POST", signal },
+          ),
+        ),
+        "pull request reruns",
+      );
+      return readArray(payload.reruns ?? [], "pull request reruns").map(mapPullRequestRerun);
+    },
+    async mergeIssuePullRequest(projectSlug, identifier, number, input, signal) {
+      const method = pullRequestMergeMethod(input.method);
+      return mapPullRequestMerge(
+        unwrapData(
+          await request(
+            `${issuePullRequestPath(projectSlug, identifier)}/${positiveInteger(number, "pull request number")}/merge`,
+            {
+              method: "POST",
+              body: { method, bypass: input.bypass === true },
+              signal,
+            },
+          ),
+        ),
+        method,
+      );
+    },
   };
 }
 
@@ -456,8 +535,19 @@ function issuePath(projectSlug: string): string {
   return `/projects/${segment(requireText(projectSlug, "project slug"))}/issues`;
 }
 
+function issuePullRequestPath(projectSlug: string, identifier: string): string {
+  return `${issuePath(projectSlug)}/${segment(identifier)}/pull_requests`;
+}
+
 function segment(value: string): string {
   return encodeURIComponent(requireText(value, "path segment"));
+}
+
+function positiveInteger(value: number, label: string): number {
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new TrackerProtocolError(`Tracker ${label} must be a positive integer`);
+  }
+  return value;
 }
 
 function issueListQuery(options: IssueListOptions): URLSearchParams {
@@ -777,6 +867,154 @@ function mapGitDiffPushResult(payload: unknown): GitDiffPushResponse["results"][
     ok: record.ok === true,
     ...(error ? { error } : {}),
   };
+}
+
+function mapPullRequestResult(payload: unknown): PullRequestResult {
+  const record = asRecord(payload, "pull requests");
+  return {
+    pullRequests: readArray(record.data ?? [], "pull requests").map(mapPullRequest),
+    supported: record.supported === true,
+    available: record.available === true,
+    children: readArray(record.children ?? [], "pull request groups")
+      .map(mapPullRequestGroup)
+      .filter((group) => group.identifier && group.pullRequests.length > 0),
+  };
+}
+
+function mapPullRequest(payload: unknown): PullRequest {
+  const record = asRecord(payload, "pull request");
+  const number = positiveInteger(Number(record.number), "pull request number");
+  return {
+    number,
+    title: optionalText(record.title),
+    url: optionalText(record.url),
+    state: pullRequestState(record.state),
+    repo: optionalText(record.repo),
+    origin: record.origin === "manual" ? "manual" : "auto",
+    isDraft: record.is_draft === true,
+    merged: record.merged === true,
+    headRef: optionalText(record.head_ref),
+    baseRef: optionalText(record.base_ref),
+    author: optionalText(record.author),
+    mergeable: optionalText(record.mergeable),
+    checksState: optionalText(record.checks_state),
+    pipelines: readArray(record.pipelines ?? [], "pull request pipelines").map(
+      mapPullRequestPipeline,
+    ),
+    statuses: readArray(record.statuses ?? [], "pull request statuses").map((value) => {
+      const status = asRecord(value, "pull request status");
+      return {
+        context: optionalText(status.context),
+        state: optionalText(status.state),
+        url: optionalText(status.url),
+        description: optionalText(status.description),
+      };
+    }),
+    conversation: readArray(record.conversation ?? [], "pull request conversation").map((value) => {
+      const entry = asRecord(value, "pull request conversation entry");
+      return {
+        author: optionalText(entry.author),
+        body: typeof entry.body === "string" ? entry.body : "",
+        kind: entry.kind === "review" ? "review" : "comment",
+        reviewState: optionalText(entry.review_state),
+        createdAt: optionalText(entry.created_at),
+      };
+    }),
+    baseBehindBy:
+      record.base_behind_by === null || record.base_behind_by === undefined
+        ? null
+        : finiteNumber(record.base_behind_by, 0),
+  };
+}
+
+function mapPullRequestPipeline(payload: unknown): PullRequestPipeline {
+  const record = asRecord(payload, "pull request pipeline");
+  return {
+    name: optionalText(record.name) ?? "Checks",
+    url: optionalText(record.url),
+    jobs: readArray(record.jobs ?? [], "pull request jobs").map((value) => {
+      const job = asRecord(value, "pull request job");
+      return {
+        name: optionalText(job.name),
+        status: optionalText(job.status),
+        conclusion: optionalText(job.conclusion),
+        url: optionalText(job.url),
+      };
+    }),
+  };
+}
+
+function mapPullRequestGroup(payload: unknown): PullRequestGroup {
+  const record = asRecord(payload, "pull request group");
+  return {
+    identifier: optionalText(record.identifier) ?? "",
+    title: optionalText(record.title),
+    pullRequests: readArray(record.pull_requests ?? [], "grouped pull requests").map(
+      mapPullRequest,
+    ),
+  };
+}
+
+function mapPullRequestFix(payload: unknown): PullRequestFixResult {
+  const record = asRecord(payload, "pull request fix");
+  return {
+    movedTo: optionalText(record.moved_to) ?? "Rework",
+    commentPosted: record.comment_posted === true,
+    jobs: readArray(record.jobs ?? [], "pull request fix jobs").map((value) => {
+      const job = asRecord(value, "pull request fix job");
+      return {
+        name: optionalText(job.name),
+        conclusion: optionalText(job.conclusion),
+        url: optionalText(job.url),
+      };
+    }),
+  };
+}
+
+function mapPullRequestRerun(payload: unknown): PullRequestRerunResult {
+  const record = asRecord(payload, "pull request rerun");
+  const error = optionalText(record.error);
+  const status =
+    typeof record.status === "number" && Number.isFinite(record.status) ? record.status : undefined;
+  return {
+    runId: finiteNumber(record.run_id, 0),
+    ok: record.ok === true,
+    ...(error ? { error } : {}),
+    ...(status !== undefined ? { status } : {}),
+  };
+}
+
+function mapPullRequestMerge(
+  payload: unknown,
+  fallbackMethod: PullRequestMergeMethod,
+): MergePullRequestResult {
+  const record = asRecord(payload, "pull request merge");
+  const sha = optionalText(record.sha);
+  const message = optionalText(record.message);
+  return {
+    merged: record.merged === true,
+    method: readPullRequestMergeMethod(record.method) ?? fallbackMethod,
+    bypass: record.bypass === true,
+    ...(sha ? { sha } : {}),
+    ...(message ? { message } : {}),
+    issue: record.issue === null || record.issue === undefined ? null : mapIssue(record.issue),
+  };
+}
+
+function pullRequestState(payload: unknown): PullRequestState {
+  return payload === "open" || payload === "closed" || payload === "merged" || payload === "draft"
+    ? payload
+    : "unknown";
+}
+
+function readPullRequestMergeMethod(payload: unknown): PullRequestMergeMethod | null {
+  return payload === "merge" || payload === "squash" || payload === "rebase" ? payload : null;
+}
+
+function pullRequestMergeMethod(payload: unknown): PullRequestMergeMethod {
+  const method = readPullRequestMergeMethod(payload);
+  if (!method) throw new TrackerProtocolError("Tracker pull request merge method is invalid");
+  return method;
 }
 
 function mapBlocker(payload: unknown): IssueBlocker {
