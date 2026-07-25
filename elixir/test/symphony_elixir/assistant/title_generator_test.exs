@@ -52,7 +52,10 @@ defmodule SymphonyElixir.Assistant.TitleGeneratorTest do
   end
 
   test "generate returns normalized title from runner" do
-    runner = fn _workspace, _prompt, _issue, _opts ->
+    test_pid = self()
+
+    runner = fn _workspace, _prompt, _issue, opts ->
+      send(test_pid, {:runner_opts, opts})
       {:ok, %{assistant_message: "Title: Cleanup goapi GAM-19\n"}}
     end
 
@@ -65,6 +68,9 @@ defmodule SymphonyElixir.Assistant.TitleGeneratorTest do
                runner: runner,
                workspace: "/tmp"
              )
+
+    assert_receive {:runner_opts, opts}
+    assert Keyword.fetch!(opts, :archive_on_stop)
   end
 
   test "generate errors when context is insufficient" do

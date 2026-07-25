@@ -23,6 +23,8 @@ defmodule SymphonyElixir.Codex.CodingAgent do
   @goal_get_id 6
   @goal_clear_id 7
   @thread_compact_start_id 8
+  @thread_name_set_id 9
+  @thread_archive_id 10
   @steer_base_id 100
   @default_max_goal_turns 50
   @max_goal_turns_cap 500
@@ -49,7 +51,9 @@ defmodule SymphonyElixir.Codex.CodingAgent do
   def run(workspace, prompt, issue, opts \\ []) do
     with {:ok, session} <- start_session(workspace, opts) do
       try do
-        run_turn(session, prompt, issue, opts)
+        result = run_turn(session, prompt, issue, opts)
+        maybe_archive_on_stop(session, opts)
+        result
       after
         stop_session(session)
       end
@@ -71,6 +75,7 @@ defmodule SymphonyElixir.Codex.CodingAgent do
       with {:ok, session_policies} <- session_policies(expanded_workspace, codex_section, opts),
            {:ok, %{thread_id: thread_id} = thread_context, origin} <-
              do_start_session(port, expanded_workspace, session_policies, opts, goals_section),
+           :ok <- maybe_set_thread_name(port, thread_id, Keyword.get(opts, :thread_name)),
            {:ok, goal_state, goal_map} <-
              establish_goal(port, thread_id, origin, opts, goals_section) do
         # Only durable goal-mode runs own the workspace session sidecar.
@@ -147,6 +152,36 @@ defmodule SymphonyElixir.Codex.CodingAgent do
       after
         stop_port(port)
       end
+    end
+  end
+
+  @doc "Sets the display name of an existing native Codex thread."
+  @spec set_thread_name(Path.t(), String.t(), String.t(), keyword()) :: :ok | {:error, term()}
+  def set_thread_name(workspace, thread_id, name, opts \\ [])
+      when is_binary(workspace) and is_binary(thread_id) and is_binary(name) and is_list(opts) do
+    trimmed_thread_id = String.trim(thread_id)
+    trimmed_name = String.trim(name)
+    codex_section = codex_section(opts)
+
+    cond do
+      trimmed_thread_id == "" ->
+        {:error, :invalid_thread_id}
+
+      trimmed_name == "" ->
+        {:error, :invalid_thread_name}
+
+      true ->
+        with :ok <- validate_workspace_cwd(workspace, opts),
+             {:ok, port} <- start_port(workspace, codex_section) do
+          try do
+            with :ok <- send_initialize(port),
+                 :ok <- request_thread_name_set(port, trimmed_thread_id, trimmed_name) do
+              :ok
+            end
+          after
+            stop_port(port)
+          end
+        end
     end
   end
 
@@ -739,6 +774,74 @@ defmodule SymphonyElixir.Codex.CodingAgent do
     case start_thread_with_provenance(port, workspace, session_policies, opts) do
       {:ok, thread_context} -> {:ok, thread_context, :started}
       other -> other
+    end
+  end
+
+  defp maybe_set_thread_name(_port, _thread_id, nil), do: :ok
+
+  defp maybe_set_thread_name(port, thread_id, name) when is_binary(name) do
+    case String.trim(name) do
+      "" ->
+        :ok
+
+      trimmed ->
+        case request_thread_name_set(port, thread_id, trimmed) do
+          :ok ->
+            :ok
+
+          {:error, reason} ->
+            Logger.warning("Codex native thread name sync failed thread_id=#{thread_id}: #{inspect(reason)}")
+
+            :ok
+        end
+    end
+  end
+
+  defp maybe_set_thread_name(_port, _thread_id, _name), do: :ok
+
+  defp request_thread_name_set(port, thread_id, name) do
+    send_message(port, %{
+      "method" => "thread/name/set",
+      "id" => @thread_name_set_id,
+      "params" => %{"threadId" => thread_id, "name" => name}
+    })
+
+    case await_response(port, @thread_name_set_id) do
+      {:ok, _result} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp maybe_archive_on_stop(%{port: port, thread_id: thread_id}, opts) do
+    if Keyword.get(opts, :archive_on_stop, false) == true do
+      try do
+        # The completed turn is authoritative. A server that disconnects while
+        # handling this optional request must not take down the linked caller.
+        :erlang.unlink(port)
+
+        send_message(port, %{
+          "method" => "thread/archive",
+          "id" => @thread_archive_id,
+          "params" => %{"threadId" => thread_id}
+        })
+
+        case await_response(port, @thread_archive_id) do
+          {:ok, _result} ->
+            :ok
+
+          {:error, reason} ->
+            Logger.warning("Codex auxiliary thread archive failed thread_id=#{thread_id}: #{inspect(reason)}")
+
+            :ok
+        end
+      catch
+        kind, reason ->
+          Logger.warning("Codex auxiliary thread archive failed thread_id=#{thread_id}: #{inspect({kind, reason})}")
+
+          :ok
+      end
+    else
+      :ok
     end
   end
 
@@ -2143,6 +2246,9 @@ defmodule SymphonyElixir.Codex.CodingAgent do
           :ok
         rescue
           ArgumentError ->
+            :ok
+        catch
+          :exit, _reason ->
             :ok
         end
     end
