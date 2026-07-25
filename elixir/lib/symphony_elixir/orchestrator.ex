@@ -27,6 +27,7 @@ defmodule SymphonyElixir.Orchestrator do
   alias SymphonyElixir.Evidence
   alias SymphonyElixir.GitHub.IssueMarker
   alias SymphonyElixir.LocalTracker.{Context, IssueMapper, Repository}
+
   alias SymphonyElixir.Orchestrator.{
     AgentTotals,
     BundleCoordinator,
@@ -35,6 +36,7 @@ defmodule SymphonyElixir.Orchestrator do
     IncompleteReason,
     RunUpdate
   }
+
   alias SymphonyElixir.PublicRouting
   alias SymphonyElixir.PushNotifications.Dispatcher, as: PushDispatcher
   alias SymphonyElixir.RunContract.Finalizer
@@ -195,6 +197,7 @@ defmodule SymphonyElixir.Orchestrator do
 
       running_entry ->
         {updated_running_entry, token_delta} = RunUpdate.integrate(running_entry, update)
+        persist_execution_model_provenance(updated_running_entry, update)
 
         state =
           state
@@ -590,6 +593,8 @@ defmodule SymphonyElixir.Orchestrator do
         case ExecutionSession.ensure(issue.project_slug, issue.identifier,
                workspace_path: workspace,
                agent_kind: Map.get(running_entry, :agent_kind),
+               requested_model: Map.get(running_entry, :model),
+               requested_effort: Map.get(running_entry, :effort),
                unit_id: bundle_ctx.unit_id,
                bundle_role: to_string(bundle_ctx.role)
              ) do
@@ -626,6 +631,38 @@ defmodule SymphonyElixir.Orchestrator do
   end
 
   defp finish_execution_session(_running_entry, _status), do: :ok
+
+  defp persist_execution_model_provenance(running_entry, update)
+       when is_map(running_entry) and is_map(update) do
+    session_id = Map.get(running_entry, :execution_session_id)
+
+    attrs =
+      []
+      |> maybe_put_provenance(:resolved_model, Map.get(update, :resolved_model))
+      |> maybe_put_provenance(:resolved_effort, Map.get(update, :resolved_effort))
+
+    if is_integer(session_id) and attrs != [] do
+      case ExecutionSession.put_model_provenance(session_id, attrs) do
+        {:ok, _thread} -> :ok
+        {:error, reason} -> Logger.warning("ExecutionSession provenance update failed: #{inspect(reason)}")
+      end
+    end
+
+    :ok
+  rescue
+    error ->
+      Logger.warning("ExecutionSession provenance update failed: #{Exception.message(error)}")
+      :ok
+  end
+
+  defp maybe_put_provenance(attrs, _key, value) when not is_binary(value), do: attrs
+
+  defp maybe_put_provenance(attrs, key, value) do
+    case String.trim(value) do
+      "" -> attrs
+      normalized -> Keyword.put(attrs, key, normalized)
+    end
+  end
 
   defp execution_completion_status(running_entry) when is_map(running_entry) do
     case Map.get(running_entry, :agent_outcome) do
@@ -1099,13 +1136,16 @@ defmodule SymphonyElixir.Orchestrator do
   end
 
   defp dispatch_running_entry(pid, ref, %Issue{} = issue, agent_kind, attempt, bundle_ctx) do
+    agent_settings = AgentRunner.agent_settings_opts(issue)
+
     %{
       pid: pid,
       ref: ref,
       identifier: issue.identifier,
       issue: issue,
       agent_kind: agent_kind,
-      model: Keyword.get(AgentRunner.agent_settings_opts(issue), :model),
+      model: Keyword.get(agent_settings, :model),
+      effort: Keyword.get(agent_settings, :effort),
       agent_goal: Map.get(issue, :agent_goal),
       goal: nil,
       session_id: nil,
@@ -3083,8 +3123,7 @@ defmodule SymphonyElixir.Orchestrator do
     %{
       state
       | agent_totals: AgentTotals.apply_delta(agent_totals, token_delta),
-        agent_totals_by_project:
-          AgentTotals.apply_project_delta(by_project, project_slug, token_delta)
+        agent_totals_by_project: AgentTotals.apply_project_delta(by_project, project_slug, token_delta)
     }
   end
 

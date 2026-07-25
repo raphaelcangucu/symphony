@@ -9,8 +9,11 @@ import {
   workflowPromptTemplate,
 } from "../src/contract.mjs";
 import {
+  benchmarkResultStatus,
   classifySessionOutcome,
+  sessionFailureSummary,
   classifyOrchestratorOutcome,
+  modelProvenanceMatches,
   issueRoute,
   issueStatusName,
   isSettledOrchestratorExecution,
@@ -31,7 +34,9 @@ const artifactRoot = resolve(process.env.SYMPHONY_BENCH_ARTIFACT_ROOT ?? "");
 const resultPath = join(runtimeRoot, "results", `${runId}.json`);
 
 async function loadRun() {
-  const manifest = JSON.parse(await readFile(join(runtimeRoot, "runs.json"), "utf8"));
+  const manifest = JSON.parse(
+    await readFile(join(runtimeRoot, "runs.json"), "utf8"),
+  );
   return { manifest, run: selectRun(manifest, runId) };
 }
 
@@ -119,14 +124,29 @@ test("executes one provider cell through the real Symphony tracker", async ({
       await expect(composer).toBeVisible({ timeout: 60_000 });
       const executionMode = page.getByTestId("execution-mode-menu");
       await expect(executionMode).toBeVisible();
-      if (!((await executionMode.textContent()) ?? "").toLowerCase().includes(run.execution_mode)) {
+      if (
+        !((await executionMode.textContent()) ?? "")
+          .toLowerCase()
+          .includes(run.execution_mode)
+      ) {
         await executionMode.click();
         await page
-          .getByRole("menuitemradio", { name: new RegExp(run.execution_mode, "i") })
+          .getByRole("menuitemradio", {
+            name: new RegExp(run.execution_mode, "i"),
+          })
           .click();
       }
-      const assistantMessages = page.locator('[data-testid="assistant-chat-message"]');
+      const assistantMessages = page.locator(
+        '[data-testid="assistant-chat-message"]',
+      );
       const initialMessageCount = await assistantMessages.count();
+      const initialThread = await api
+        .request(`/assistant/threads/${run.thread_id}`)
+        .catch(() => null);
+      const validationRun = {
+        ...run,
+        initial_thread_updated_at: initialThread?.updated_at ?? null,
+      };
 
       await composer.fill(prompt);
       await page.getByRole("button", { name: "Send message" }).click();
@@ -144,19 +164,26 @@ test("executes one provider cell through the real Symphony tracker", async ({
         initialMessageCount,
         await assistantMessages.count(),
         thread,
-        run.provider,
+        validationRun,
       );
       result.identity = {
         assistant_thread_id: thread?.id ?? run.thread_id,
         agent_kind: thread?.agent_kind ?? null,
         status: thread?.status ?? null,
         provider_matches: thread?.agent_kind === run.provider,
+        requested_model: thread?.requested_model ?? null,
+        requested_effort: thread?.requested_effort ?? null,
+        resolved_model: thread?.resolved_model ?? null,
+        resolved_effort: thread?.resolved_effort ?? null,
       };
       if (result.agent_outcome === "failed") {
         result.provider_error = sessionProviderError(thread);
-        result.error =
-          result.provider_error?.summary ??
-          "session ended without an assistant response";
+        result.error = sessionFailureSummary(
+          initialMessageCount,
+          await assistantMessages.count(),
+          thread,
+          validationRun,
+        );
       }
     } else {
       const route = issueRoute(manifest.project_slug, run.issue_identifier);
@@ -182,12 +209,13 @@ test("executes one provider cell through the real Symphony tracker", async ({
         await api.request(`${issuePath}/dispatch`, {
           method: "POST",
           body: {
-              action: "hard_reset",
-              agent: run.provider,
-              mode: run.execution_mode,
-            },
+            action: "hard_reset",
+            agent: run.provider,
+            mode: run.execution_mode,
+            model: run.requested_model,
+            effort: run.requested_effort,
           },
-        );
+        });
       }
       await page.goto(route, { waitUntil: "domcontentloaded" });
       const settlement = await waitForIssueCompletion(
@@ -208,6 +236,10 @@ test("executes one provider cell through the real Symphony tracker", async ({
         agent_kind: executionThread?.agent_kind ?? null,
         status: executionThread?.status ?? null,
         provider_matches: executionThread?.agent_kind === run.provider,
+        requested_model: executionThread?.requested_model ?? null,
+        requested_effort: executionThread?.requested_effort ?? null,
+        resolved_model: executionThread?.resolved_model ?? null,
+        resolved_effort: executionThread?.resolved_effort ?? null,
         agent_execution_status: settlement.execution?.status ?? null,
         agent_execution_runtime_seconds:
           settlement.execution?.runtime_seconds ?? null,
@@ -217,7 +249,8 @@ test("executes one provider cell through the real Symphony tracker", async ({
       };
       if (
         result.agent_outcome !== "completed" ||
-        !result.identity.provider_matches
+        !result.identity.provider_matches ||
+        !modelProvenanceMatches(executionThread, run)
       ) {
         result.error =
           `orchestrator execution ${result.identity.status ?? "missing"} ` +
@@ -230,14 +263,13 @@ test("executes one provider cell through the real Symphony tracker", async ({
       path: join(artifactRoot, "symphony-final.png"),
       fullPage: true,
     });
-    result.status =
-      result.agent_outcome === "completed" &&
-      result.identity?.provider_matches !== false
-        ? "completed"
-        : "blocked";
+    result.status = benchmarkResultStatus(result);
+    if (result.status !== "completed") {
+      throw new Error(result.error ?? "benchmark cell did not complete");
+    }
   } catch (error) {
     result.status = "blocked";
-    result.error = error?.stack ?? String(error);
+    result.error ??= error?.stack ?? String(error);
     await page
       .screenshot({
         path: join(artifactRoot, "symphony-blocked.png"),
@@ -249,12 +281,7 @@ test("executes one provider cell through the real Symphony tracker", async ({
     result.finished_at = new Date().toISOString();
     result.duration_ms = Date.now() - startedAt.getTime();
     const serializedResult = `${JSON.stringify(result, null, 2)}\n`;
-    const attemptResultRoot = join(
-      runtimeRoot,
-      "results",
-      "attempts",
-      run.id,
-    );
+    const attemptResultRoot = join(runtimeRoot, "results", "attempts", run.id);
     await mkdir(attemptResultRoot, { recursive: true });
     await writeFile(resultPath, serializedResult);
     await writeFile(

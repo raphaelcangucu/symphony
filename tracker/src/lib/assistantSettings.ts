@@ -56,28 +56,14 @@ export interface AssistantComposerState {
 // Composer choice is session-scoped so each browser/session can keep its own
 // last agent/model without leaking into other work.
 const COMPOSER_STATE_KEY = "symphony.assistant.composer.v2";
-const CATALOGS_STORAGE_KEY = "symphony.assistant.catalogs";
 
 type Translate = TFunction;
-
-function catalogModelKey(modelId: string): string {
-  return modelId.replace(/\./g, "_");
-}
 
 export function catalogAgentLabel(
   agent: AgentKind,
   t: Translate = i18n.t.bind(i18n) as Translate,
 ): string {
   return t(`assistant.catalog.agents.${agent}`);
-}
-
-function catalogModelLabel(
-  modelId: string,
-  t: Translate = i18n.t.bind(i18n) as Translate,
-): string {
-  const key = `assistant.catalog.models.${catalogModelKey(modelId)}`;
-  const translated = t(key);
-  return translated === key ? modelId : translated;
 }
 
 function effortLabelForId(id: string, t: Translate = i18n.t.bind(i18n) as Translate): string {
@@ -87,154 +73,10 @@ function effortLabelForId(id: string, t: Translate = i18n.t.bind(i18n) as Transl
   return translated === key ? id : translated;
 }
 
-function efforts(t: Translate, ...ids: string[]): AssistantEffortOption[] {
-  return ids.map((id) => ({ id, label: effortLabelForId(id, t) }));
-}
-
-function fallbackEfforts(t: Translate = i18n.t.bind(i18n) as Translate): AssistantEffortOption[] {
-  return efforts(t, "low", "medium", "high", "xhigh");
-}
-
-export function fallbackCodexCatalog(
-  command = "codex app-server",
-  t: Translate = i18n.t.bind(i18n) as Translate,
-): AssistantAgentCatalog {
-  const defaultModel = "gpt-5.5";
-
-  return {
-    agent: "codex",
-    agentLabel: catalogAgentLabel("codex", t),
-    command,
-    defaultModel,
-    models: [
-      fallbackModel("gpt-5.5", true, "medium", fallbackEfforts(t), t),
-      fallbackModel("gpt-5.4", false, "medium", fallbackEfforts(t), t),
-      fallbackModel("gpt-5.3-codex", false, "medium", fallbackEfforts(t), t),
-    ],
-  };
-}
-
-export function fallbackClaudeCatalog(
-  command = "claude",
-  t: Translate = i18n.t.bind(i18n) as Translate,
-): AssistantAgentCatalog {
-  // Mirrors SymphonyElixir.Claude.ModelCatalog: max is flagship-tier (Opus /
-  // Fable), xhigh reaches Opus 4.7+ and Sonnet 5, Haiku has no effort control,
-  // and each model pins an explicit default rung (Sonnet 5 has xhigh yet
-  // defaults to high).
-  const opusEfforts = efforts(t, "low", "medium", "high", "xhigh", "max");
-  const opusLegacyEfforts = efforts(t, "low", "medium", "high", "max");
-  const sonnetEfforts = efforts(t, "low", "medium", "high");
-  const sonnetNextEfforts = efforts(t, "low", "medium", "high", "xhigh");
-
-  return {
-    agent: "claude",
-    agentLabel: catalogAgentLabel("claude", t),
-    command,
-    defaultModel: "claude-opus-4-8",
-    models: [
-      fallbackModel("claude-opus-4-8", true, "xhigh", opusEfforts, t),
-      fallbackModel("claude-fable-5", false, "xhigh", opusEfforts, t),
-      fallbackModel("claude-opus-4-7", false, "xhigh", opusEfforts, t),
-      fallbackModel("claude-opus-4-6", false, "high", opusLegacyEfforts, t),
-      fallbackModel("claude-sonnet-5", false, "high", sonnetNextEfforts, t),
-      fallbackModel("claude-sonnet-4-6", false, "high", sonnetEfforts, t),
-      fallbackModel("claude-haiku-4-5", false, "", [], t),
-    ],
-  };
-}
-
-export function fallbackCursorCatalog(
-  command = "cursor-agent",
-  t: Translate = i18n.t.bind(i18n) as Translate,
-): AssistantAgentCatalog {
-  // Mirrors SymphonyElixir.Cursor.ModelCatalog: the cursor-agent CLI has no
-  // reasoning-effort flag, so every model hides the effort menu; "auto" lets
-  // the CLI pick its own default model.
-  return {
-    agent: "cursor",
-    agentLabel: catalogAgentLabel("cursor", t),
-    command,
-    defaultModel: "auto",
-    models: [
-      fallbackModel("auto", true, "", [], t),
-      fallbackModel("composer-1", false, "", [], t),
-      fallbackModel("gpt-5", false, "", [], t),
-      fallbackModel("sonnet-4", false, "", [], t),
-      fallbackModel("sonnet-4-thinking", false, "", [], t),
-    ],
-  };
-}
-
-export function fallbackOpenCodeCatalog(
-  command = "opencode",
-  t: Translate = i18n.t.bind(i18n) as Translate,
-): AssistantAgentCatalog {
-  return {
-    agent: "opencode",
-    agentLabel: catalogAgentLabel("opencode", t),
-    command,
-    defaultModel: "opencode/gpt-5.5",
-    models: [
-      fallbackModel("opencode/gpt-5.5", true, "", [], t),
-      fallbackModel("anthropic/claude-sonnet-4-6", false, "", [], t),
-    ],
-  };
-}
-
-export function fallbackCatalogBundle(t: Translate = i18n.t.bind(i18n) as Translate): AssistantCatalogBundle {
-  return {
-    agents: [
-      fallbackCodexCatalog(undefined, t),
-      fallbackClaudeCatalog(undefined, t),
-      fallbackCursorCatalog(undefined, t),
-      fallbackOpenCodeCatalog(undefined, t),
-    ],
-    defaultAgent: "codex",
-  };
-}
-
 export function catalogFor(bundle: AssistantCatalogBundle, agent: AgentKind): AssistantAgentCatalog {
-  return bundle.agents.find((c) => c.agent === agent) ?? bundle.agents[0];
-}
-
-export function loadCachedCatalogBundle(): AssistantCatalogBundle | null {
-  if (typeof window === "undefined") return null;
-
-  try {
-    const raw = window.localStorage.getItem(CATALOGS_STORAGE_KEY);
-    if (!raw) return null;
-
-    const parsed = JSON.parse(raw) as AssistantCatalogBundle;
-    if (!Array.isArray(parsed.agents) || parsed.agents.length === 0) return null;
-
-    return parsed;
-  } catch {
-    return null;
-  }
-}
-
-export function saveCachedCatalogBundle(bundle: AssistantCatalogBundle): void {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(CATALOGS_STORAGE_KEY, JSON.stringify(bundle));
-}
-
-/**
- * @deprecated Use loadCachedCatalogBundle
- */
-export function loadCachedCodexCatalog(): AssistantAgentCatalog | null {
-  const bundle = loadCachedCatalogBundle();
-  if (!bundle) return null;
-  return bundle.agents.find((c) => c.agent === "codex") ?? null;
-}
-
-/**
- * @deprecated Use saveCachedCatalogBundle
- */
-export function saveCachedCodexCatalog(catalog: AssistantAgentCatalog): void {
-  const bundle = loadCachedCatalogBundle() ?? fallbackCatalogBundle();
-  const agents = bundle.agents.filter((c) => c.agent !== catalog.agent);
-  saveCachedCatalogBundle({ ...bundle, agents: [...agents, catalog] });
+  const catalog = bundle.agents.find((candidate) => candidate.agent === agent);
+  if (!catalog) throw new Error(`assistant catalog is unavailable for ${agent}`);
+  return catalog;
 }
 
 export function loadComposerState(bundle: AssistantCatalogBundle): AssistantComposerState {
@@ -351,45 +193,26 @@ export function effortsForModel(catalog: AssistantAgentCatalog, modelId: string)
 
 export function normalizeEffort(model: AssistantModelOption, effort?: string | null): AssistantEffort {
   if (effort && model.efforts.some((option) => option.id === effort)) return effort;
-  if (model.defaultEffort) return model.defaultEffort;
-  return inferEffortFromModel(model);
-}
-
-function inferEffortFromModel(model: AssistantModelOption): AssistantEffort {
-  const text = `${model.model} ${model.label}`.toLowerCase();
-  if (/\b(max|ultra)\b/.test(text)) return "max";
-  if (/\b(extra[-_\s]?high|xhigh)\b/.test(text)) return "xhigh";
-  if (/\bhigh\b/.test(text)) return "high";
-  if (/\blow\b/.test(text)) return "low";
-  if (/\bminimal\b/.test(text)) return "minimal";
+  if (
+    model.defaultEffort &&
+    model.efforts.some((option) => option.id === model.defaultEffort)
+  ) {
+    return model.defaultEffort;
+  }
   return "";
 }
 
-function fallbackModel(
-  model: string,
-  isDefault: boolean,
-  defaultEffort: string,
-  efforts: AssistantEffortOption[],
-  t: Translate = i18n.t.bind(i18n) as Translate,
-): AssistantModelOption {
-  return {
-    id: model,
-    model,
-    label: catalogModelLabel(model, t),
-    isDefault,
-    defaultEffort,
-    efforts,
-    inputModalities: ["text", "image"],
-  };
-}
-
 function pickDefaultModel(catalog: AssistantAgentCatalog): AssistantModelOption {
-  if (catalog.defaultModel) {
-    const match = findModelOption(catalog, catalog.defaultModel);
-    if (match) return match;
+  if (!catalog.defaultModel) {
+    throw new Error(`assistant catalog has no default model for ${catalog.agent}`);
   }
-
-  return catalog.models.find((model) => model.isDefault) ?? catalog.models[0];
+  const model = findModelOption(catalog, catalog.defaultModel);
+  if (!model) {
+    throw new Error(
+      `assistant catalog default model ${catalog.defaultModel} is unavailable for ${catalog.agent}`,
+    );
+  }
+  return model;
 }
 
 function findModelOption(catalog: AssistantAgentCatalog, modelId?: string | null): AssistantModelOption | undefined {

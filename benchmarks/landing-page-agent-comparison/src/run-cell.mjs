@@ -17,7 +17,11 @@ export function selectRun(manifest, runId) {
 }
 
 export function artifactSlug(runId) {
-  if (!/^(session|orchestrator)-(codex|cursor|claude)$/.test(runId)) {
+  if (
+    !/^(providers-(default|advanced)-(session|orchestrator)-(codex|cursor|claude)|codex-5\.6-defaults-session-(sol|terra|luna))$/.test(
+      runId,
+    )
+  ) {
     throw new Error(`invalid benchmark run id: ${runId}`);
   }
   return runId;
@@ -52,16 +56,104 @@ export function classifySessionOutcome(
   initialMessageCount,
   finalMessageCount,
   thread,
-  provider,
+  run,
 ) {
-  if (finalMessageCount <= initialMessageCount) return "failed";
-  if (!thread || thread.agent_kind !== provider) return "failed";
-  if (thread.status === "error" || sessionProviderError(thread)) return "failed";
+  if (
+    !sessionTurnObserved(initialMessageCount, finalMessageCount, thread, run)
+  )
+    return "failed";
+  if (!thread || thread.agent_kind !== run?.provider) return "failed";
+  if (thread.status === "error" || sessionProviderError(thread))
+    return "failed";
+  if (!modelProvenanceMatches(thread, run)) return "failed";
   return "completed";
 }
 
+export function benchmarkResultStatus(result) {
+  return result?.agent_outcome === "completed" &&
+    result?.identity?.provider_matches !== false &&
+    !result?.error
+    ? "completed"
+    : "blocked";
+}
+
+export function sessionFailureSummary(
+  initialMessageCount,
+  finalMessageCount,
+  thread,
+  run,
+) {
+  const providerError = sessionProviderError(thread);
+  if (providerError) return providerError.summary;
+  if (!sessionTurnObserved(initialMessageCount, finalMessageCount, thread, run))
+    return "session ended without an assistant response";
+  if (!thread) return "assistant thread could not be read after completion";
+  if (thread.agent_kind !== run?.provider) {
+    return `provider mismatch: requested ${run?.provider ?? "unknown"}, resolved ${thread.agent_kind ?? "unknown"}`;
+  }
+  if (!modelProvenanceMatches(thread, run)) {
+    return `model provenance mismatch: requested ${formatModelEffort(run?.requested_model, run?.requested_effort)}, resolved ${formatModelEffort(thread.resolved_model, thread.resolved_effort)}`;
+  }
+  return `session ended with status ${thread.status ?? "unknown"}`;
+}
+
+export function sessionTurnObserved(
+  initialMessageCount,
+  finalMessageCount,
+  thread,
+  run,
+) {
+  if (finalMessageCount > initialMessageCount) return true;
+  const initialUpdatedAt = run?.initial_thread_updated_at;
+  return (
+    typeof initialUpdatedAt === "string" &&
+    initialUpdatedAt !== "" &&
+    typeof thread?.updated_at === "string" &&
+    thread.updated_at !== initialUpdatedAt
+  );
+}
+
+function formatModelEffort(model, effort) {
+  return `${model ?? "unknown"}/${effort ?? "none"}`;
+}
+
+export function modelProvenanceMatches(thread, run) {
+  if (!thread || !run?.requested_model) return false;
+  const expectedEffort = run.requested_effort ?? null;
+
+  if (run.provider === "cursor") {
+    return (
+      thread.requested_model === run.requested_model &&
+      (thread.requested_effort ?? null) === null &&
+      resolvedModelMatches(
+        run.provider,
+        thread.resolved_model,
+        run.requested_model,
+      ) &&
+      (thread.resolved_effort ?? null) === expectedEffort
+    );
+  }
+
+  return (
+    thread.requested_model === run.requested_model &&
+    (thread.requested_effort ?? null) === expectedEffort &&
+    resolvedModelMatches(
+      run.provider,
+      thread.resolved_model,
+      run.requested_model,
+    ) &&
+    (thread.resolved_effort ?? null) === expectedEffort
+  );
+}
+
+export function resolvedModelMatches(provider, resolvedModel, requestedModel) {
+  return Boolean(provider) && resolvedModel === requestedModel;
+}
+
 export function issueStatusName(issue) {
-  return typeof issue?.status === "string" ? issue.status : issue?.status?.name ?? null;
+  return typeof issue?.status === "string"
+    ? issue.status
+    : (issue?.status?.name ?? null);
 }
 
 export function shouldDispatchIssue(issue) {
@@ -75,7 +167,7 @@ export function sessionProviderError(thread) {
   const summary =
     raw?.includes("invalid_union") && raw.includes("mcpServers")
       ? "Cursor ACP rejected mcpServers payload (invalid_union)"
-      : turn.error_detail?.message ?? raw ?? "Agent operation failed";
+      : (turn.error_detail?.message ?? raw ?? "Agent operation failed");
   return {
     code: turn.error_code ?? turn.error_detail?.code ?? null,
     category: turn.error_detail?.category ?? null,
@@ -102,7 +194,9 @@ export function selectIssueAgentExecution(executions, issueIdentifier) {
     (Array.isArray(executions) ? executions : [])
       .filter((execution) => execution?.issue_identifier === issueIdentifier)
       .sort((left, right) =>
-        String(right.started_at ?? "").localeCompare(String(left.started_at ?? "")),
+        String(right.started_at ?? "").localeCompare(
+          String(left.started_at ?? ""),
+        ),
       )[0] ?? null
   );
 }
@@ -124,7 +218,10 @@ export function isTerminalExecutionThread(thread) {
 }
 
 export function isSettledOrchestratorExecution(thread, execution) {
-  if (!isTerminalExecutionThread(thread) || !isTerminalAgentExecution(execution)) {
+  if (
+    !isTerminalExecutionThread(thread) ||
+    !isTerminalAgentExecution(execution)
+  ) {
     return false;
   }
   const executionThreadId = Number(execution?.execution_session_id);
@@ -135,7 +232,10 @@ export function isSettledOrchestratorExecution(thread, execution) {
 }
 
 export function classifyOrchestratorOutcome(thread, execution = null) {
-  if (thread?.status === "closed" && isSettledOrchestratorExecution(thread, execution)) {
+  if (
+    thread?.status === "closed" &&
+    isSettledOrchestratorExecution(thread, execution)
+  ) {
     return new Set(["completed", "saved"]).has(execution?.status)
       ? "completed"
       : "failed";
@@ -148,7 +248,9 @@ function requiredEnvironment(env) {
   const runtimeRoot = env.SYMPHONY_BENCH_RUNTIME?.trim();
   const runId = env.SYMPHONY_BENCH_RUN_ID?.trim();
   if (!runtimeRoot || !runId) {
-    throw new Error("SYMPHONY_BENCH_RUNTIME and SYMPHONY_BENCH_RUN_ID are required");
+    throw new Error(
+      "SYMPHONY_BENCH_RUNTIME and SYMPHONY_BENCH_RUN_ID are required",
+    );
   }
   return { runtimeRoot: resolve(runtimeRoot), runId: artifactSlug(runId) };
 }
@@ -170,7 +272,9 @@ function executePlaywright(env) {
 
 export async function runCell(env = process.env) {
   const { runtimeRoot, runId } = requiredEnvironment(env);
-  const manifest = JSON.parse(await readFile(join(runtimeRoot, "runs.json"), "utf8"));
+  const manifest = JSON.parse(
+    await readFile(join(runtimeRoot, "runs.json"), "utf8"),
+  );
   selectRun(manifest, runId);
 
   const attemptId = attemptSlug(
@@ -191,7 +295,8 @@ export async function runCell(env = process.env) {
   try {
     recordedResult = JSON.parse(await readFile(resultPath, "utf8"));
   } catch (error) {
-    if (error?.code !== "ENOENT" && !(error instanceof SyntaxError)) throw error;
+    if (error?.code !== "ENOENT" && !(error instanceof SyntaxError))
+      throw error;
   }
   if (recordedResult?.attempt_id !== attemptId) {
     const fallbackResult = `${JSON.stringify(
@@ -209,13 +314,13 @@ export async function runCell(env = process.env) {
       null,
       2,
     )}\n`;
-    await writeFile(
-      resultPath,
-      fallbackResult,
-    );
+    await writeFile(resultPath, fallbackResult);
     const attemptResultRoot = join(runtimeRoot, "results", "attempts", runId);
     await mkdir(attemptResultRoot, { recursive: true });
-    await writeFile(join(attemptResultRoot, `${attemptId}.json`), fallbackResult);
+    await writeFile(
+      join(attemptResultRoot, `${attemptId}.json`),
+      fallbackResult,
+    );
   }
 
   return execution.exit_code ?? (execution.status === "timed_out" ? 124 : 1);

@@ -24,7 +24,11 @@ defmodule SymphonyElixir.Assistant.Thread do
     :status,
     :metadata,
     :agent_kind,
-    :provider_bindings
+    :provider_bindings,
+    :requested_model,
+    :requested_effort,
+    :resolved_model,
+    :resolved_effort
   ]
 
   schema "assistant_threads" do
@@ -37,6 +41,10 @@ defmodule SymphonyElixir.Assistant.Thread do
     field(:metadata, :map, default: %{})
     field(:agent_kind, :string)
     field(:provider_bindings, :map, default: %{})
+    field(:requested_model, :string)
+    field(:requested_effort, :string)
+    field(:resolved_model, :string)
+    field(:resolved_effort, :string)
 
     has_many(:messages, Message, foreign_key: :thread_id)
 
@@ -53,6 +61,9 @@ defmodule SymphonyElixir.Assistant.Thread do
     |> validate_inclusion(:status, ["active", "closed", "error", "archived"])
     |> validate_agent_kind()
     |> validate_provider_bindings()
+    |> normalize_model_provenance()
+    |> enforce_provider_model_contract()
+    |> remove_legacy_model_metadata()
     |> normalize_project_slug()
     |> validate_scope_fields()
     |> unique_constraint(:project_slug, name: :assistant_threads_active_project_index)
@@ -87,6 +98,56 @@ defmodule SymphonyElixir.Assistant.Thread do
       slug when is_binary(slug) -> put_change(changeset, :project_slug, String.trim(slug))
       _ -> changeset
     end
+  end
+
+  defp normalize_model_provenance(changeset) do
+    Enum.reduce(
+      [:requested_model, :requested_effort, :resolved_model, :resolved_effort],
+      changeset,
+      fn field, current ->
+        update_change(current, field, fn
+          value when is_binary(value) ->
+            case String.trim(value) do
+              "" -> nil
+              trimmed -> trimmed
+            end
+
+          value ->
+            value
+        end)
+      end
+    )
+  end
+
+  defp enforce_provider_model_contract(changeset) do
+    case get_field(changeset, :agent_kind) do
+      "cursor" ->
+        changeset
+        |> put_change(:requested_effort, nil)
+        |> put_change(:resolved_effort, nil)
+
+      _agent_kind ->
+        changeset
+    end
+  end
+
+  defp remove_legacy_model_metadata(changeset) do
+    update_change(changeset, :metadata, fn
+      metadata when is_map(metadata) ->
+        metadata
+        |> Map.drop(["model", "effort"])
+        |> Map.update("current_turn", nil, fn
+          turn when is_map(turn) -> Map.drop(turn, ["model", "effort"])
+          turn -> turn
+        end)
+        |> then(fn
+          %{"current_turn" => nil} = cleaned -> Map.delete(cleaned, "current_turn")
+          cleaned -> cleaned
+        end)
+
+      metadata ->
+        metadata
+    end)
   end
 
   defp validate_provider_bindings(changeset) do

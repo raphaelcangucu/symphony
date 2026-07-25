@@ -3,11 +3,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AssistantComposer } from "@/components/assistant/AssistantComposer";
 import { i18n } from "@/i18n";
-import { fallbackCatalogBundle } from "@/lib/assistantSettings";
+import { createMockAssistantCatalogBundle } from "@/test-fixtures/assistantCatalog";
 import { mockAssistantCodexCatalog } from "@/test-fixtures/assistantCatalog";
 import type { NotionImportResult } from "@/services/notion";
 
-const mockBundle = fallbackCatalogBundle();
+const mockBundle = createMockAssistantCatalogBundle();
 mockBundle.agents = [
   { ...mockAssistantCodexCatalog },
   ...mockBundle.agents.filter((a) => a.agent !== "codex"),

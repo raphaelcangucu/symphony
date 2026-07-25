@@ -146,7 +146,9 @@ defmodule SymphonyElixir.Claude.CodingAgent do
                conversation_id: result.cli_session_id,
                run_id: turn_id,
                usage: result.usage,
-               cost_usd: result.cost_usd
+               cost_usd: result.cost_usd,
+               resolved_model: Map.get(result, :resolved_model),
+               resolved_effort: Map.get(result, :resolved_effort)
              }}
 
           {:error, reason} ->

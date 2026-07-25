@@ -33,7 +33,7 @@ import {
 import { resolveExecutionComposerRoute } from "@/components/assistant/executionComposerRouting";
 import { agentEnterHintLabel, canResumeExecution, deriveAgentControl } from "@/lib/agentExecutionDisplay";
 import { enrichGuidanceWithAttachments } from "@/lib/enrichComposerGuidance";
-import { catalogFor, defaultComposerSettings, fallbackCatalogBundle } from "@/lib/assistantSettings";
+import { catalogFor, defaultComposerSettings, type AssistantCatalogBundle } from "@/lib/assistantSettings";
 import { resolveExecutionComposerSeed } from "@/lib/executionComposerSeed";
 import { fetchAssistantCatalogBundle } from "@/services/assistant";
 import { updateAssistantThread } from "@/services/assistantThreads";
@@ -79,8 +79,8 @@ export function ExecutionControlComposer({
 }: ExecutionControlComposerProps) {
   const { t } = useTranslation();
   const [queued, setQueued] = useState<QueuedGuidanceItem[]>([]);
-  const [bundle, setBundle] = useState(fallbackCatalogBundle());
-  const [agent, setAgent] = useState<AgentKind>(issue.agentKind ?? bundle.defaultAgent);
+  const [bundle, setBundle] = useState<AssistantCatalogBundle | null>(null);
+  const [agent, setAgent] = useState<AgentKind>(issue.agentKind ?? "codex");
   const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [mode, setMode] = useState<ExecutionMode>(DEFAULT_EXECUTION_MODE);
   // Memoized submit handlers may close over a stale render; read mode from a ref
@@ -144,16 +144,17 @@ export function ExecutionControlComposer({
     [queued],
   );
 
-  const controlsDisabled = dispatchPending !== null;
+  const controlsDisabled = dispatchPending !== null || !bundle;
 
   useEffect(() => {
     let cancelled = false;
+    setBundle(null);
     void fetchAssistantCatalogBundle(projectSlug)
       .then((next) => {
         if (!cancelled) setBundle(next);
       })
       .catch(() => {
-        if (!cancelled) setBundle(fallbackCatalogBundle());
+        if (!cancelled) setBundle(null);
       });
     return () => {
       cancelled = true;
@@ -164,8 +165,8 @@ export function ExecutionControlComposer({
   // durable issue pins. Catalog defaults apply only when neither source pins a
   // model/effort — never seed fallback gpt-5.5/medium ahead of the remote catalog.
   const composerSeed = useMemo(
-    () => resolveExecutionComposerSeed(execution, issue, bundle.defaultAgent),
-    [bundle.defaultAgent, execution, issue.agentKind, issue.effort, issue.model],
+    () => resolveExecutionComposerSeed(execution, issue, bundle?.defaultAgent ?? issue.agentKind ?? "codex"),
+    [bundle?.defaultAgent, execution, issue.agentKind, issue.effort, issue.model],
   );
 
   useEffect(() => {
@@ -173,7 +174,7 @@ export function ExecutionControlComposer({
   }, [composerSeed.agent]);
 
   const settingsSeed = useMemo(() => {
-    if (composerSeed.model == null && composerSeed.effort == null) return null;
+    if (!bundle || (composerSeed.model == null && composerSeed.effort == null)) return null;
     const defaults = defaultComposerSettings(catalogFor(bundle, composerSeed.agent));
     return {
       agent: composerSeed.agent,
@@ -668,7 +669,8 @@ export function ExecutionControlComposer({
       ) : null}
 
       <div>
-        <AssistantComposer
+        {bundle ? (
+          <AssistantComposer
           key={composerSeed.remountKey}
           projectSlug={projectSlug}
           bundle={bundle}
@@ -795,7 +797,15 @@ export function ExecutionControlComposer({
               </p>
             </div>
           }
-        />
+          />
+        ) : (
+          <div
+            className="rounded-md border border-dashed px-3 py-4 text-center text-sm text-muted-foreground"
+            role="status"
+          >
+            {t("assistant.panel.loadingModels")}
+          </div>
+        )}
       </div>
 
       <Dialog

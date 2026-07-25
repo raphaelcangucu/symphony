@@ -33,6 +33,8 @@ defmodule SymphonyElixir.Assistant.ForkSession do
     History.create_issue_session_thread(source.project_slug, source.issue_identifier, %{
       title: fork_title(source),
       agent_kind: source.agent_kind,
+      requested_model: source.requested_model,
+      requested_effort: source.requested_effort,
       execution_mode: execution_mode(source),
       isolated_workspace: true,
       metadata: %{"forked_from_thread_id" => source.id}
@@ -46,6 +48,8 @@ defmodule SymphonyElixir.Assistant.ForkSession do
       History.create_workspace_session_thread(source.project_slug, path, %{
         title: fork_title(source),
         agent_kind: source.agent_kind,
+        requested_model: source.requested_model,
+        requested_effort: source.requested_effort,
         metadata: %{"forked_from_thread_id" => source.id}
       })
     end

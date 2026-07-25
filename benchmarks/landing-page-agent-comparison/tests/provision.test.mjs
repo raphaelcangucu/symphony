@@ -23,7 +23,10 @@ test("workspace project payload configures preview, evidence and local clone", (
   assert.equal(payload.repositories[0].local_path, "/tmp/landing-seed");
   assert.equal(payload.repositories[0].workspace_path, "site");
   assert.match(payload.setup.workflow_markdown, /dev_server:\n  enabled: true/);
-  assert.match(payload.setup.workflow_markdown, /dispatch_states:\n    - In Progress/);
+  assert.match(
+    payload.setup.workflow_markdown,
+    /dispatch_states:\n    - In Progress/,
+  );
   assert.match(payload.setup.workflow_markdown, /test:e2e/);
   assert.match(payload.setup.workflow_markdown, /max_turns: 30/);
   assert.match(payload.setup.workflow_markdown, /required: true/);
@@ -39,14 +42,24 @@ test("workflow prompt injects the issue description without provider branches", 
   assert.equal(markdown.endsWith("{{ issue.description }}\n"), false);
 });
 
-test("all six run records carry the same prompt hash", () => {
+test("all 15 run records carry the same prompt hash and explicit model contract", () => {
   const prompt = "identical prompt\n";
   const records = buildRunRecords(prompt);
 
   assert.equal(records.length, RUN_MATRIX.length);
   assert.equal(new Set(records.map((run) => run.prompt_sha256)).size, 1);
-  assert.deepEqual(new Set(records.map((run) => run.execution_mode)), new Set(["yolo"]));
-  assert.deepEqual(records.map((run) => run.id), RUN_MATRIX.map((run) => run.id));
+  assert.deepEqual(
+    new Set(records.map((run) => run.execution_mode)),
+    new Set(["yolo"]),
+  );
+  assert.deepEqual(
+    records.map((run) => run.id),
+    RUN_MATRIX.map((run) => run.id),
+  );
+  assert.equal(
+    records.every((run) => run.requested_model),
+    true,
+  );
 });
 
 test("preview uses one explicit canonical serve step", () => {
@@ -71,6 +84,8 @@ test("direct sessions use the canonical atomic workspace provisioner", async () 
       provider: "claude",
       issue_identifier: "SYM-3",
       execution_mode: "yolo",
+      requested_model: "claude-sonnet-5",
+      requested_effort: "medium",
     },
     {
       id: "orchestrator-claude",
@@ -86,6 +101,8 @@ test("direct sessions use the canonical atomic workspace provisioner", async () 
 
       if (path === "/assistant/threads") {
         assert.equal(options.body.issue_identifier, "SYM-3");
+        assert.equal(options.body.model, "claude-sonnet-5");
+        assert.equal(options.body.effort, "medium");
         return {
           id: 33,
           workspace_path: "/tmp/landing-workspaces/SYM-3__p1",
@@ -105,10 +122,7 @@ test("direct sessions use the canonical atomic workspace provisioner", async () 
   assert.equal(apiCalls.length, 2);
   assert.equal(apiCalls[1][1].method, "POST");
   assert.equal(records[0].thread_id, 33);
-  assert.equal(
-    records[0].workspace_path,
-    "/tmp/landing-workspaces/SYM-3__p1",
-  );
+  assert.equal(records[0].workspace_path, "/tmp/landing-workspaces/SYM-3__p1");
 });
 
 test("issue titles identify the execution path and provider", () => {

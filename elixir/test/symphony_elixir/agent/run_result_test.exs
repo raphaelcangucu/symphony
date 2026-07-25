@@ -3,6 +3,23 @@ defmodule SymphonyElixir.Agent.RunResultTest do
 
   alias SymphonyElixir.Agent.RunResult
 
+  test "keeps canonical provider-resolved model provenance" do
+    assert {:ok, normalized} =
+             RunResult.normalize("codex", %{
+               provider: "codex",
+               conversation_id: "thread-1",
+               run_id: "turn-1",
+               assistant_message: "done",
+               resolved_model: "gpt-5.6-sol",
+               resolved_effort: "low"
+             })
+
+    assert normalized.resolved_model == "gpt-5.6-sol"
+    assert normalized.resolved_effort == "low"
+    assert RunResult.to_map(normalized).resolved_model == "gpt-5.6-sol"
+    assert RunResult.to_map(normalized).resolved_effort == "low"
+  end
+
   test "normalizes only the provider-neutral identity contract" do
     assert {:ok, result} =
              RunResult.normalize("codex", %{

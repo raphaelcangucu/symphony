@@ -199,6 +199,29 @@ defmodule SymphonyElixir.Codex.CodingAgentTest do
   end
 
   describe "explicit interactive thread resume" do
+    test "sends the requested model on resume and the current effort field on turn start" do
+      with_fake_resume_server(:present, fn workspace, issue, trace_file ->
+        assert {:ok, _result} =
+                 AppServer.run(workspace, "Continue the chat", issue,
+                   conversation_ref: %ConversationRef{
+                     provider: "codex",
+                     conversation_id: "thread-resume"
+                   },
+                   model: "gpt-5.5",
+                   effort: "medium"
+                 )
+
+        messages = outbound_messages(trace_file)
+        thread_resume = message_with_method(messages, "thread/resume")
+        turn_start = message_with_method(messages, "turn/start")
+
+        assert thread_resume["params"]["model"] == "gpt-5.5"
+        assert turn_start["params"]["model"] == "gpt-5.5"
+        assert turn_start["params"]["effort"] == "medium"
+        refute Map.has_key?(turn_start["params"], "reasoningEffort")
+      end)
+    end
+
     test "resumes the provided thread outside goal mode without reading goal state" do
       with_fake_resume_server(:present, fn workspace, issue, trace_file ->
         assert {:ok, result} =
@@ -478,6 +501,27 @@ defmodule SymphonyElixir.Codex.CodingAgentTest do
   end
 
   describe "execution mode sandbox" do
+    test "sends requested model and current effort fields and returns the native settings" do
+      with_fake_goal_server(fn workspace, issue, trace_file ->
+        assert {:ok, result} =
+                 AppServer.run(workspace, "Build the feature", issue,
+                   model: "gpt-5.5",
+                   effort: "medium"
+                 )
+
+        messages = outbound_messages(trace_file)
+        thread_start = message_with_method(messages, "thread/start")
+        turn_start = message_with_method(messages, "turn/start")
+
+        assert thread_start["params"]["model"] == "gpt-5.5"
+        assert turn_start["params"]["model"] == "gpt-5.5"
+        assert turn_start["params"]["effort"] == "medium"
+        refute Map.has_key?(turn_start["params"], "reasoningEffort")
+        assert result.resolved_model == "gpt-5.5"
+        assert result.resolved_effort == "medium"
+      end)
+    end
+
     test "plan mode starts the thread in a read-only sandbox" do
       with_fake_goal_server(fn workspace, issue, trace_file ->
         assert {:ok, _result} =
@@ -651,6 +695,7 @@ defmodule SymphonyElixir.Codex.CodingAgentTest do
           ;;
         *'"method":"turn/start"'*)
           printf '%s\\n' '{"id":3,"result":{"turn":{"id":"turn-resume"}}}'
+          printf '%s\\n' '{"method":"thread/settings/updated","params":{"threadId":"thread-resume","threadSettings":{"model":"gpt-5.5","modelProvider":"openai","effort":"medium","approvalPolicy":"never","approvalsReviewer":"user","collaborationMode":{"mode":"default","settings":{}},"cwd":".","sandboxPolicy":{"type":"dangerFullAccess"}}}}'
           printf '%s\\n' '{"method":"thread/goal/updated","params":{"threadId":"thread-resume","goal":{"status":"completed"}}}'
           printf '%s\\n' '{"method":"turn/completed"}'
           exit 0
@@ -949,7 +994,7 @@ defmodule SymphonyElixir.Codex.CodingAgentTest do
         *'"method":"initialized"'*)
           ;;
         *'"method":"thread/start"'*)
-          printf '%s\\n' '{"id":2,"result":{"thread":{"id":"thread-goal"}}}'
+          printf '%s\\n' '{"id":2,"result":{"thread":{"id":"thread-goal"},"model":"gpt-5.5","reasoningEffort":"low"}}'
           ;;
         *'"method":"thread/goal/set"'*)
           printf '%s\\n' '#{goal_response}'
@@ -961,6 +1006,7 @@ defmodule SymphonyElixir.Codex.CodingAgentTest do
         *'"method":"turn/start"'*)
           turn_count=$((turn_count + 1))
           printf '%s\\n' '{"id":3,"result":{"turn":{"id":"turn-goal"}}}'
+          printf '%s\\n' '{"method":"thread/settings/updated","params":{"threadId":"thread-goal","threadSettings":{"model":"gpt-5.5","modelProvider":"openai","effort":"medium","approvalPolicy":"never","approvalsReviewer":"user","collaborationMode":{"mode":"default","settings":{}},"cwd":".","sandboxPolicy":{"type":"dangerFullAccess"}}}}'
           case "$turn_count" in
     #{turn_completion_cases}
             *)

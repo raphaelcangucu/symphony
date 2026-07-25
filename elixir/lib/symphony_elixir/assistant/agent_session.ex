@@ -92,6 +92,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
          {:ok, trimmed_message} <- normalize_message(message),
          {:ok, workspace} <- persisted_thread_workspace(thread),
          {:ok, agent_kind} <- resolve_thread_agent(thread, context),
+         {:ok, thread} <- persist_requested_model_provenance(thread, context, agent_kind),
          {:ok, opts} <-
            opts
            |> Keyword.put(:agent_kind, agent_kind)
@@ -129,6 +130,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
       when is_binary(message) and is_map(context) and is_list(opts) do
     with {:ok, thread} <- active_thread(thread_id),
          {:ok, agent_kind} <- resolve_thread_agent(thread, context),
+         {:ok, thread} <- persist_requested_model_provenance(thread, context, agent_kind),
          {:ok, opts} <-
            opts
            |> Keyword.put(:agent_kind, agent_kind)
@@ -170,6 +172,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
              is_list(opts) do
     with {:ok, thread} <- active_thread(thread_id),
          {:ok, agent_kind} <- resolve_thread_agent(thread, context),
+         {:ok, thread} <- persist_requested_model_provenance(thread, context, agent_kind),
          {:ok, opts} <-
            opts
            |> Keyword.put(:agent_kind, agent_kind)
@@ -211,6 +214,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
       when is_binary(message) and is_map(context) and is_list(opts) do
     with {:ok, thread} <- active_thread(thread_id),
          {:ok, agent_kind} <- resolve_thread_agent(thread, context),
+         {:ok, thread} <- persist_requested_model_provenance(thread, context, agent_kind),
          {:ok, opts} <-
            opts
            |> Keyword.put(:agent_kind, agent_kind)
@@ -272,6 +276,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
              is_list(opts) do
     with {:ok, thread} <- active_thread(thread_id),
          {:ok, agent_kind} <- resolve_thread_agent(thread, context),
+         {:ok, thread} <- persist_requested_model_provenance(thread, context, agent_kind),
          {:ok, opts} <-
            opts
            |> Keyword.put(:agent_kind, agent_kind)
@@ -1870,21 +1875,35 @@ defmodule SymphonyElixir.Assistant.AgentSession do
 
     stored_kind = Map.get(thread, :agent_kind)
 
-    cond do
-      match?(%ConversationRef{}, conversation_ref) ->
-        with {:ok, thread} <- History.set_thread_agent(thread, agent_kind) do
-          History.put_conversation_ref(thread, conversation_ref)
-        end
+    identity_result =
+      cond do
+        match?(%ConversationRef{}, conversation_ref) ->
+          with {:ok, thread} <- History.set_thread_agent(thread, agent_kind) do
+            History.put_conversation_ref(thread, conversation_ref)
+          end
 
-      stored_kind != agent_kind and is_binary(stored_kind) ->
-        # Agent kind was previously stored as something different: update it.
-        # (stored_kind == nil means the thread has never had an agent set — we skip
-        # writing the default to avoid unnecessary writes on every new thread's first turn.)
-        History.set_thread_agent(thread, agent_kind)
+        stored_kind != agent_kind and is_binary(stored_kind) ->
+          # Agent kind was previously stored as something different: update it.
+          # (stored_kind == nil means the thread has never had an agent set — we skip
+          # writing the default to avoid unnecessary writes on every new thread's first turn.)
+          History.set_thread_agent(thread, agent_kind)
 
-      true ->
-        # Nothing to persist — no backend id and kind is unchanged or unset default.
-        {:ok, thread}
+        true ->
+          # Nothing to persist — no backend id and kind is unchanged or unset default.
+          {:ok, thread}
+      end
+
+    with {:ok, thread} <- identity_result do
+      provenance =
+        [:resolved_model, :resolved_effort]
+        |> Enum.reduce(%{}, fn key, values ->
+          case Map.get(runner_result, key) do
+            value when is_binary(value) and value != "" -> Map.put(values, key, value)
+            _value -> values
+          end
+        end)
+
+      History.put_model_provenance(thread, provenance)
     end
   end
 
@@ -1898,12 +1917,35 @@ defmodule SymphonyElixir.Assistant.AgentSession do
     end
   end
 
+  defp persist_requested_model_provenance(thread, context, agent_kind)
+       when is_map(thread) and is_map(context) and is_binary(agent_kind) do
+    model_present? = Map.has_key?(context, "model") or Map.has_key?(context, :model)
+    effort_present? = Map.has_key?(context, "effort") or Map.has_key?(context, :effort)
+
+    if model_present? or effort_present? do
+      History.put_model_provenance(thread, %{
+        requested_model: Map.get(context, "model") || Map.get(context, :model),
+        requested_effort:
+          if(agent_kind == "cursor",
+            do: nil,
+            else: Map.get(context, "effort") || Map.get(context, :effort)
+          ),
+        resolved_model: nil,
+        resolved_effort: nil
+      })
+    else
+      {:ok, thread}
+    end
+  end
+
   defp turn_identity_fields(runner_result) do
     %{
       provider: Map.get(runner_result, :provider),
       conversation_id: Map.get(runner_result, :conversation_id),
       run_id: Map.get(runner_result, :run_id),
-      execution_id: Map.get(runner_result, :execution_id)
+      execution_id: Map.get(runner_result, :execution_id),
+      resolved_model: Map.get(runner_result, :resolved_model),
+      resolved_effort: Map.get(runner_result, :resolved_effort)
     }
   end
 

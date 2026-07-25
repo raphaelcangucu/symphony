@@ -3,6 +3,7 @@ import { spawn } from "node:child_process";
 import { createServer } from "node:http";
 import test from "node:test";
 
+import * as captureVisuals from "../src/capture-visuals.mjs";
 import {
   assertEvidenceTabRecord,
   captureRunMatrix,
@@ -58,31 +59,92 @@ test("visual preview probe aborts an HTTP request that never answers", async () 
 
 test("visual capture records one failure and continues the remaining matrix", async () => {
   const captures = await captureRunMatrix(
-    [{ id: "session-codex" }, { id: "session-cursor" }],
+    [
+      { id: "providers-default-session-codex" },
+      { id: "providers-default-session-cursor" },
+    ],
     async (run) => {
-      if (run.id === "session-codex") throw new Error("ffmpeg failed");
+      if (run.id === "providers-default-session-codex")
+        throw new Error("ffmpeg failed");
       return { id: run.id, status: "captured" };
     },
   );
 
   assert.deepEqual(captures, [
     {
-      id: "session-codex",
+      id: "providers-default-session-codex",
       status: "capture-failed",
       error: "ffmpeg failed",
     },
-    { id: "session-cursor", status: "captured" },
+    { id: "providers-default-session-cursor", status: "captured" },
   ]);
 });
 
+test("visual capture rejects a blocked or incompletely validated benchmark cell", () => {
+  assert.equal(typeof captureVisuals.assertCaptureEligible, "function");
+
+  const run = {
+    id: "providers-default-session-cursor",
+    provider: "cursor",
+    requested_model: "composer-2.5",
+    requested_effort: null,
+  };
+  const eligible = {
+    status: "completed",
+    contract_passed: true,
+    agent_outcome: "completed",
+    error: null,
+    identity: {
+      provider_matches: true,
+      requested_model: "composer-2.5",
+      requested_effort: null,
+      resolved_model: "composer-2.5",
+      resolved_effort: null,
+    },
+    validation: [
+      { command: "npm install", status: "passed" },
+      { command: "npm run build", status: "passed" },
+      { command: "npm run test:e2e", status: "passed" },
+    ],
+  };
+
+  assert.doesNotThrow(() => captureVisuals.assertCaptureEligible(eligible, run));
+  assert.throws(
+    () =>
+      captureVisuals.assertCaptureEligible(
+        { ...eligible, status: "blocked", error: "provider failed" },
+        run,
+      ),
+    /not eligible for evidence capture/,
+  );
+  assert.throws(
+    () =>
+      captureVisuals.assertCaptureEligible(
+        {
+          ...eligible,
+          validation: eligible.validation.map((step, index) =>
+            index === 2 ? { ...step, status: "failed" } : step,
+          ),
+        },
+        run,
+      ),
+    /not eligible for evidence capture/,
+  );
+});
+
 test("visual captures use safe stable report names", () => {
-  assert.deepEqual(visualScreenshotNames("orchestrator-claude"), {
-    hero: "orchestrator-claude-hero.png",
-    full: "orchestrator-claude-full.png",
-    mobileFull: "orchestrator-claude-mobile-full.png",
-    video: "orchestrator-claude-e2e.webm",
-    mp4: "orchestrator-claude-e2e.mp4",
-  });
+  assert.deepEqual(
+    visualScreenshotNames("providers-advanced-orchestrator-claude"),
+    {
+      hero: "providers-advanced-orchestrator-claude-hero.png",
+      full: "providers-advanced-orchestrator-claude-full.png",
+      mobileFull: "providers-advanced-orchestrator-claude-mobile-full.png",
+      evidenceTab:
+        "providers-advanced-orchestrator-claude-evidence-tab.png",
+      video: "providers-advanced-orchestrator-claude-e2e.webm",
+      mp4: "providers-advanced-orchestrator-claude-e2e.mp4",
+    },
+  );
   assert.throws(
     () => visualScreenshotNames("../../escape"),
     /invalid benchmark run id/,
@@ -91,26 +153,29 @@ test("visual captures use safe stable report names", () => {
 
 test("visual report preserves captured and blocked cells", () => {
   const report = renderVisualComparison([
-    { id: "session-codex", status: "captured" },
-    { id: "session-cursor", status: "skipped-contract" },
+    { id: "codex-5.6-defaults-session-sol", status: "captured" },
+    { id: "providers-default-session-cursor", status: "skipped-contract" },
   ]);
-  assert.match(report, /screens\/session-codex-hero\.png/);
-  assert.match(report, /screens\/session-codex-mobile-full\.png/);
-  assert.match(report, /videos\/session-codex-e2e\.mp4/);
-  assert.match(report, /session-cursor/);
+  assert.match(report, /screens\/codex-5\.6-defaults-session-sol-hero\.png/);
+  assert.match(
+    report,
+    /screens\/codex-5\.6-defaults-session-sol-mobile-full\.png/,
+  );
+  assert.match(report, /videos\/codex-5\.6-defaults-session-sol-e2e\.mp4/);
+  assert.match(report, /providers-default-session-cursor/);
   assert.match(report, /skipped-contract/);
 });
 
 test("canonical manifest exposes desktop, mobile, WebM, MP4, trace, and real navigation", () => {
   const run = {
-    id: "session-cursor",
+    id: "providers-default-session-cursor",
     issue_identifier: "SYM-2",
   };
   const names = visualScreenshotNames(run.id);
   const manifest = evidenceManifestForRun({
     run,
     names,
-    url: "http://127.0.0.1:23001/",
+    navigations: ["http://127.0.0.1:23001/observed-by-playwright"],
     collected: {
       validation: [
         {
@@ -133,20 +198,66 @@ test("canonical manifest exposes desktop, mobile, WebM, MP4, trace, and real nav
   assert.deepEqual(
     e2e.screenshots.map((entry) => entry.path),
     [
-      "artifacts/screens/session-cursor-full.png",
-      "artifacts/screens/session-cursor-mobile-full.png",
+      "artifacts/screens/providers-default-session-cursor-full.png",
+      "artifacts/screens/providers-default-session-cursor-mobile-full.png",
     ],
   );
   assert.deepEqual(
     e2e.videos.map((entry) => entry.path),
     [
-      "artifacts/videos/session-cursor-e2e.webm",
-      "artifacts/videos/session-cursor-e2e.mp4",
+      "artifacts/videos/providers-default-session-cursor-e2e.webm",
+      "artifacts/videos/providers-default-session-cursor-e2e.mp4",
     ],
   );
-  assert.equal(e2e.trace, "artifacts/traces/session-cursor-e2e.zip");
-  assert.deepEqual(e2e.navigations, ["http://127.0.0.1:23001/"]);
+  assert.equal(
+    e2e.trace,
+    "artifacts/traces/providers-default-session-cursor-e2e.zip",
+  );
+  assert.deepEqual(e2e.navigations, [
+    "http://127.0.0.1:23001/observed-by-playwright",
+  ]);
   assert.equal(e2e.proof.full_page, true);
+});
+
+test("Evidence-tab verification navigates the real UI and requires rendered media", async () => {
+  assert.equal(typeof captureVisuals.verifyEvidenceTabUi, "function");
+
+  const calls = [];
+  const card = {
+    waitFor: async (options) => calls.push(["waitFor", options]),
+    locator: (selector) => ({
+      count: async () => (selector === "img" || selector === "video" ? 2 : 0),
+    }),
+  };
+  const page = {
+    goto: async (url, options) => calls.push(["goto", url, options]),
+    getByTestId: (testId) => {
+      calls.push(["getByTestId", testId]);
+      return card;
+    },
+    waitForFunction: async (_predicate, argument, options) =>
+      calls.push(["waitForFunction", argument, options]),
+  };
+
+  const result = await captureVisuals.verifyEvidenceTabUi(page, {
+    baseUrl: "http://127.0.0.1:4010",
+    projectSlug: "symphony benchmark",
+    issueIdentifier: "SYM-2",
+    runId: "20260725-1",
+  });
+
+  assert.equal(
+    result.route,
+    "http://127.0.0.1:4010/tracker/projects/symphony%20benchmark/board/issues/SYM-2/evidence",
+  );
+  assert.equal(result.screenshot_count, 2);
+  assert.equal(result.video_count, 2);
+  assert.deepEqual(calls[0], [
+    "goto",
+    result.route,
+    { waitUntil: "domcontentloaded" },
+  ]);
+  assert.deepEqual(calls[1], ["getByTestId", "evidence-20260725-1"]);
 });
 
 test("Evidence-tab verification requires the persisted visual contract", () => {

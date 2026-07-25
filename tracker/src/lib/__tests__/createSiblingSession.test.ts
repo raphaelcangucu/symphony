@@ -16,6 +16,10 @@ function thread(overrides: Partial<AssistantThread> = {}): AssistantThread {
     id: 8006,
     scope: "project_session",
     agentKind: "cursor",
+    requestedModel: null,
+    requestedEffort: null,
+    resolvedModel: null,
+    resolvedEffort: null,
     projectSlug: "advising",
     projectName: "Advising",
     issueIdentifier: null,
@@ -34,9 +38,16 @@ describe("createSiblingSession", () => {
   beforeEach(() => {
     createProjectSessionThread.mockReset();
     createIssueSessionThread.mockReset();
-    createProjectSessionThread.mockResolvedValue(thread({ id: 9001, title: null }));
+    createProjectSessionThread.mockResolvedValue(
+      thread({ id: 9001, title: null }),
+    );
     createIssueSessionThread.mockResolvedValue(
-      thread({ id: 9002, scope: "issue_session", issueIdentifier: "ADV-1", title: null }),
+      thread({
+        id: 9002,
+        scope: "issue_session",
+        issueIdentifier: "ADV-1",
+        title: null,
+      }),
     );
   });
 
@@ -61,10 +72,14 @@ describe("createSiblingSession", () => {
       }),
     );
 
-    expect(createIssueSessionThread).toHaveBeenCalledWith("advising", "ADV-42", {
-      workspacePath: "/workspaces/advising/ADV-42",
-      agentKind: "codex",
-    });
+    expect(createIssueSessionThread).toHaveBeenCalledWith(
+      "advising",
+      "ADV-42",
+      {
+        workspacePath: "/workspaces/advising/ADV-42",
+        agentKind: "codex",
+      },
+    );
     expect(createProjectSessionThread).not.toHaveBeenCalled();
   });
 
@@ -95,7 +110,9 @@ describe("createSiblingSession", () => {
   });
 
   it("fails fast when projectSlug is blank", async () => {
-    await expect(createSiblingSession(thread({ projectSlug: "  " }))).rejects.toThrow(/projectSlug/i);
+    await expect(
+      createSiblingSession(thread({ projectSlug: "  " })),
+    ).rejects.toThrow(/projectSlug/i);
     expect(createProjectSessionThread).not.toHaveBeenCalled();
   });
 

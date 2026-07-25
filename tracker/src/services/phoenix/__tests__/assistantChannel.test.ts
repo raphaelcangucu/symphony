@@ -59,24 +59,36 @@ describe("assistantTopic", () => {
 
 describe("assistantIssueTopic", () => {
   it("builds an encoded issue assistant topic", () => {
-    expect(assistantIssueTopic("macro-markets", "MAC-1")).toBe("assistant:issue:macro-markets:MAC-1");
-    expect(assistantIssueTopic("a/b c", "#508")).toBe("assistant:issue:a%2Fb%20c:%23508");
+    expect(assistantIssueTopic("macro-markets", "MAC-1")).toBe(
+      "assistant:issue:macro-markets:MAC-1",
+    );
+    expect(assistantIssueTopic("a/b c", "#508")).toBe(
+      "assistant:issue:a%2Fb%20c:%23508",
+    );
   });
 
   it("rejects empty issue topic parts", () => {
-    expect(() => assistantIssueTopic(" ", "MAC-1")).toThrow("projectSlug is required");
-    expect(() => assistantIssueTopic("macro", " ")).toThrow("identifier is required");
+    expect(() => assistantIssueTopic(" ", "MAC-1")).toThrow(
+      "projectSlug is required",
+    );
+    expect(() => assistantIssueTopic("macro", " ")).toThrow(
+      "identifier is required",
+    );
   });
 });
 
 describe("assistant channel binding", () => {
   it("forwards last_turn from history_loaded to onTurnStatus", () => {
     const handlers: Record<string, (payload: unknown) => void> = {};
-    const channel = { on: (event: string, cb: (payload: unknown) => void) => (handlers[event] = cb) } as never;
+    const channel = {
+      on: (event: string, cb: (payload: unknown) => void) =>
+        (handlers[event] = cb),
+    } as never;
     const onTurnStatus = vi.fn();
+    const onHistoryLoaded = vi.fn();
 
     bindAssistantEvents(channel, {
-      onHistoryLoaded: vi.fn(),
+      onHistoryLoaded,
       onMessageCreated: vi.fn(),
       onAssistantDelta: vi.fn(),
       onToolCallStarted: vi.fn(),
@@ -88,17 +100,69 @@ describe("assistant channel binding", () => {
 
     handlers["history_loaded"]({
       messages: [],
+      effective_agent: "codex",
       last_turn: { status: "interrupted", can_resume: true },
+      requested_model: "gpt-5.6",
+      requested_effort: "medium",
+      resolved_model: "gpt-5.6-sol",
+      resolved_effort: "low",
     });
 
     expect(onTurnStatus).toHaveBeenCalledWith(
       expect.objectContaining({ status: "interrupted", canResume: true }),
     );
+    expect(onHistoryLoaded).toHaveBeenCalledWith(
+      [],
+      expect.objectContaining({
+        effectiveAgent: "codex",
+        requestedModel: "gpt-5.6",
+        requestedEffort: "medium",
+        resolvedModel: "gpt-5.6-sol",
+        resolvedEffort: "low",
+      }),
+    );
+  });
+
+  it("forwards live model provenance after a completed turn", () => {
+    const handlers: Record<string, (payload: unknown) => void> = {};
+    const channel = {
+      on: (event: string, cb: (payload: unknown) => void) =>
+        (handlers[event] = cb),
+    } as never;
+    const onModelProvenance = vi.fn();
+
+    bindAssistantEvents(channel, {
+      onHistoryLoaded: vi.fn(),
+      onMessageCreated: vi.fn(),
+      onAssistantDelta: vi.fn(),
+      onToolCallStarted: vi.fn(),
+      onToolCallCompleted: vi.fn(),
+      onAssistantCompleted: vi.fn(),
+      onAssistantError: vi.fn(),
+      onModelProvenance,
+    });
+
+    handlers["model_provenance"]({
+      requested_model: "gpt-5.6",
+      requested_effort: "medium",
+      resolved_model: "gpt-5.6-sol",
+      resolved_effort: "low",
+    });
+
+    expect(onModelProvenance).toHaveBeenCalledWith({
+      requestedModel: "gpt-5.6",
+      requestedEffort: "medium",
+      resolvedModel: "gpt-5.6-sol",
+      resolvedEffort: "low",
+    });
   });
 
   it("normalizes history, streaming deltas, tool calls, completion, and errors", () => {
     const handlers: Record<string, (payload: unknown) => void> = {};
-    const channel = { on: (event: string, cb: (payload: unknown) => void) => (handlers[event] = cb) } as never;
+    const channel = {
+      on: (event: string, cb: (payload: unknown) => void) =>
+        (handlers[event] = cb),
+    } as never;
 
     const onHistoryLoaded = vi.fn();
     const onMessageCreated = vi.fn();
@@ -123,13 +187,31 @@ describe("assistant channel binding", () => {
     });
 
     handlers["history_loaded"]({
-      messages: [{ id: 1, role: "user", content: "Oi", tool_calls: [], inserted_at: "2026-05-30T20:00:00Z" }],
+      messages: [
+        {
+          id: 1,
+          role: "user",
+          content: "Oi",
+          tool_calls: [],
+          inserted_at: "2026-05-30T20:00:00Z",
+        },
+      ],
     });
     handlers["message_created"]({ message: { role: "user", content: "Oi" } });
     handlers["assistant_delta"]({ delta: "Olá" });
-    handlers["tool_call_started"]({ tool_call: { name: "list_issues", status: "running", result: {} } });
-    handlers["tool_call_completed"]({ tool_call: { name: "list_issues", status: "complete", result: { issues: [] } } });
-    handlers["assistant_completed"]({ message: { role: "assistant", content: "Olá!", tool_calls: [] } });
+    handlers["tool_call_started"]({
+      tool_call: { name: "list_issues", status: "running", result: {} },
+    });
+    handlers["tool_call_completed"]({
+      tool_call: {
+        name: "list_issues",
+        status: "complete",
+        result: { issues: [] },
+      },
+    });
+    handlers["assistant_completed"]({
+      message: { role: "assistant", content: "Olá!", tool_calls: [] },
+    });
     handlers["assistant_error"]({ message: "Codex unavailable" });
     handlers["assistant_document_changed"]({ identifier: "MAC-1" });
     handlers["assistant_document_changed"]({ thread_id: 7006 });
@@ -145,26 +227,45 @@ describe("assistant channel binding", () => {
         threadId: null,
       }),
     );
-    expect(onMessageCreated).toHaveBeenCalledWith(expect.objectContaining({ role: "user", content: "Oi" }));
+    expect(onMessageCreated).toHaveBeenCalledWith(
+      expect.objectContaining({ role: "user", content: "Oi" }),
+    );
     expect(onAssistantDelta).toHaveBeenCalledWith("Olá");
-    expect(onToolCallStarted).toHaveBeenCalledWith(expect.objectContaining({ name: "list_issues", status: "running" }));
-    expect(onToolCallCompleted).toHaveBeenCalledWith(expect.objectContaining({ name: "list_issues", status: "complete" }));
-    expect(onAssistantCompleted).toHaveBeenCalledWith(expect.objectContaining({ role: "assistant", content: "Olá!" }));
-    expect(onAssistantError).toHaveBeenCalledWith("Invalid assistant error payload.", {
-      code: "invalid_error_payload",
-      category: "protocol",
-      retryable: false,
-      message: "Invalid assistant error payload.",
-      details: {},
+    expect(onToolCallStarted).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "list_issues", status: "running" }),
+    );
+    expect(onToolCallCompleted).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "list_issues", status: "complete" }),
+    );
+    expect(onAssistantCompleted).toHaveBeenCalledWith(
+      expect.objectContaining({ role: "assistant", content: "Olá!" }),
+    );
+    expect(onAssistantError).toHaveBeenCalledWith(
+      "Invalid assistant error payload.",
+      {
+        code: "invalid_error_payload",
+        category: "protocol",
+        retryable: false,
+        message: "Invalid assistant error payload.",
+        details: {},
+      },
+    );
+    expect(onAssistantDocumentChanged).toHaveBeenCalledWith({
+      identifier: "MAC-1",
     });
-    expect(onAssistantDocumentChanged).toHaveBeenCalledWith({ identifier: "MAC-1" });
     expect(onAssistantDocumentChanged).toHaveBeenCalledWith({ threadId: 7006 });
-    expect(onAssistantIssueCreated).toHaveBeenCalledWith({ identifier: "MAC-7", threadId: 42 });
+    expect(onAssistantIssueCreated).toHaveBeenCalledWith({
+      identifier: "MAC-7",
+      threadId: 42,
+    });
   });
 
   it("forwards stable structured assistant errors without breaking the message callback", () => {
     const handlers: Record<string, (payload: unknown) => void> = {};
-    const channel = { on: (event: string, cb: (payload: unknown) => void) => (handlers[event] = cb) } as never;
+    const channel = {
+      on: (event: string, cb: (payload: unknown) => void) =>
+        (handlers[event] = cb),
+    } as never;
     const onAssistantError = vi.fn();
 
     bindAssistantEvents(channel, {
@@ -196,7 +297,10 @@ describe("assistant channel binding", () => {
 
   it("forwards steer failures with canonical code and prompt fields", () => {
     const handlers: Record<string, (payload: unknown) => void> = {};
-    const channel = { on: (event: string, cb: (payload: unknown) => void) => (handlers[event] = cb) } as never;
+    const channel = {
+      on: (event: string, cb: (payload: unknown) => void) =>
+        (handlers[event] = cb),
+    } as never;
     const onSteerFailed = vi.fn();
 
     bindAssistantEvents(channel, {
@@ -223,7 +327,10 @@ describe("assistant channel binding", () => {
 
   it("normalizes user_input_required questions", () => {
     const handlers: Record<string, (payload: unknown) => void> = {};
-    const channel = { on: (event: string, cb: (payload: unknown) => void) => (handlers[event] = cb) } as never;
+    const channel = {
+      on: (event: string, cb: (payload: unknown) => void) =>
+        (handlers[event] = cb),
+    } as never;
     const onUserInputRequired = vi.fn();
 
     bindAssistantEvents(channel, {
@@ -268,7 +375,10 @@ describe("assistant channel binding", () => {
 
   it("does not emit document-change callbacks for malformed payloads", () => {
     const handlers: Record<string, (payload: unknown) => void> = {};
-    const channel = { on: (event: string, cb: (payload: unknown) => void) => (handlers[event] = cb) } as never;
+    const channel = {
+      on: (event: string, cb: (payload: unknown) => void) =>
+        (handlers[event] = cb),
+    } as never;
     const onAssistantDocumentChanged = vi.fn();
 
     bindAssistantEvents(channel, {
@@ -323,14 +433,19 @@ describe("provider capabilities", () => {
   });
 
   it("rejects malformed structured errors", () => {
-    expect(normalizeAssistantError({ message: "missing machine fields" })).toBeNull();
+    expect(
+      normalizeAssistantError({ message: "missing machine fields" }),
+    ).toBeNull();
   });
 });
 
 describe("authoring goal channel", () => {
   it("normalizes goal_status payloads and the native goal", () => {
     const handlers: Record<string, (payload: unknown) => void> = {};
-    const channel = { on: (event: string, cb: (payload: unknown) => void) => (handlers[event] = cb) } as never;
+    const channel = {
+      on: (event: string, cb: (payload: unknown) => void) =>
+        (handlers[event] = cb),
+    } as never;
     const onGoalStatus = vi.fn();
 
     bindAssistantEvents(channel, {
@@ -372,33 +487,40 @@ describe("authoring goal channel", () => {
       updated_at: "2026-07-13T12:01:13Z",
     });
 
-    expect(onGoalStatus).toHaveBeenCalledWith(expect.objectContaining({
-      threadId: 17,
-      enabled: true,
-      objective: "Audit the admin UI",
-      native: true,
-      status: "paused",
-      provider: "codex",
-      source: "native",
-      capabilities: ["resume", "edit"],
-      goal: expect.objectContaining({
+    expect(onGoalStatus).toHaveBeenCalledWith(
+      expect.objectContaining({
+        threadId: 17,
+        enabled: true,
+        objective: "Audit the admin UI",
+        native: true,
         status: "paused",
-        timeUsedSeconds: 73,
-        tokenBudget: 200000,
+        provider: "codex",
+        source: "native",
+        capabilities: ["resume", "edit"],
+        goal: expect.objectContaining({
+          status: "paused",
+          timeUsedSeconds: 73,
+          tokenBudget: 200000,
+          revision: "11",
+        }),
+        processRunning: false,
+        processElapsedSeconds: 73,
+        resumable: true,
         revision: "11",
+        requestOrder: 8,
+        eventOrder: 7,
+        running: false,
       }),
-      processRunning: false,
-      processElapsedSeconds: 73,
-      resumable: true,
-      revision: "11",
-      requestOrder: 8,
-      eventOrder: 7,
-      running: false,
-    }));
+    );
   });
 
   it("treats a blank objective and missing goal as empty", () => {
-    const status = normalizeGoalStatus({ enabled: true, objective: "  ", native: false, goal: null });
+    const status = normalizeGoalStatus({
+      enabled: true,
+      objective: "  ",
+      native: false,
+      goal: null,
+    });
     expect(status).toMatchObject({
       enabled: true,
       objective: null,
@@ -454,7 +576,9 @@ describe("authoring goal channel", () => {
     expect(push).toHaveBeenCalledWith("goal_pause", {});
     expect(push).toHaveBeenCalledWith("goal_resume", {});
     expect(push).toHaveBeenCalledWith("goal_clear", {});
-    expect(push).toHaveBeenCalledWith("goal_set_objective", { objective: "Finish the spec" });
+    expect(push).toHaveBeenCalledWith("goal_set_objective", {
+      objective: "Finish the spec",
+    });
   });
 });
 
@@ -469,19 +593,34 @@ describe("goal status ordering", () => {
 
     expect(
       shouldAcceptGoalStatus(
-        normalizeGoalStatus({ thread_id: 7, enabled: true, revision: "11", request_order: 1 }),
+        normalizeGoalStatus({
+          thread_id: 7,
+          enabled: true,
+          revision: "11",
+          request_order: 1,
+        }),
         current,
       ),
     ).toBe(true);
     expect(
       shouldAcceptGoalStatus(
-        normalizeGoalStatus({ thread_id: 7, enabled: true, revision: "9", request_order: 99 }),
+        normalizeGoalStatus({
+          thread_id: 7,
+          enabled: true,
+          revision: "9",
+          request_order: 99,
+        }),
         current,
       ),
     ).toBe(false);
     expect(
       shouldAcceptGoalStatus(
-        normalizeGoalStatus({ thread_id: 8, enabled: true, revision: "12", request_order: 99 }),
+        normalizeGoalStatus({
+          thread_id: 8,
+          enabled: true,
+          revision: "12",
+          request_order: 99,
+        }),
         current,
       ),
     ).toBe(false);
@@ -497,13 +636,23 @@ describe("goal status ordering", () => {
 
     expect(
       shouldAcceptGoalStatus(
-        normalizeGoalStatus({ thread_id: 7, enabled: true, revision: "10", request_order: 6 }),
+        normalizeGoalStatus({
+          thread_id: 7,
+          enabled: true,
+          revision: "10",
+          request_order: 6,
+        }),
         current,
       ),
     ).toBe(true);
     expect(
       shouldAcceptGoalStatus(
-        normalizeGoalStatus({ thread_id: 7, enabled: true, revision: "10", request_order: 4 }),
+        normalizeGoalStatus({
+          thread_id: 7,
+          enabled: true,
+          revision: "10",
+          request_order: 4,
+        }),
         current,
       ),
     ).toBe(false);
@@ -528,23 +677,43 @@ describe("goal status ordering", () => {
       onGoalStatus,
     });
 
-    handlers["goal_status"]({ thread_id: 7, enabled: true, revision: "20", request_order: 3 });
+    handlers["goal_status"]({
+      thread_id: 7,
+      enabled: true,
+      revision: "20",
+      request_order: 3,
+    });
 
     expect(
-      acceptControlReply({ thread_id: 7, enabled: false, revision: "19", request_order: 99 }),
+      acceptControlReply({
+        thread_id: 7,
+        enabled: false,
+        revision: "19",
+        request_order: 99,
+      }),
     ).toBe(false);
     expect(
-      acceptControlReply({ thread_id: 7, enabled: false, revision: "20", request_order: 4 }),
+      acceptControlReply({
+        thread_id: 7,
+        enabled: false,
+        revision: "20",
+        request_order: 4,
+      }),
     ).toBe(true);
     expect(onGoalStatus).toHaveBeenCalledTimes(2);
-    expect(onGoalStatus).toHaveBeenLastCalledWith(expect.objectContaining({ enabled: false }));
+    expect(onGoalStatus).toHaveBeenLastCalledWith(
+      expect.objectContaining({ enabled: false }),
+    );
   });
 });
 
 describe("turn status channel", () => {
   it("invokes onTurnStatus when the channel pushes turn_status", () => {
     const handlers: Record<string, (payload: unknown) => void> = {};
-    const channel = { on: (event: string, cb: (payload: unknown) => void) => (handlers[event] = cb) } as never;
+    const channel = {
+      on: (event: string, cb: (payload: unknown) => void) =>
+        (handlers[event] = cb),
+    } as never;
     const onTurnStatus = vi.fn();
 
     bindAssistantEvents(channel, {
@@ -674,8 +843,14 @@ describe("turn status channel", () => {
   });
 
   it("reads last_turn from a join payload, or null when absent", () => {
-    expect(readLastTurn({ last_turn: { status: "interrupted", can_resume: true } })).toEqual(
-      expect.objectContaining({ status: "interrupted", canResume: true, activeTools: [] }),
+    expect(
+      readLastTurn({ last_turn: { status: "interrupted", can_resume: true } }),
+    ).toEqual(
+      expect.objectContaining({
+        status: "interrupted",
+        canResume: true,
+        activeTools: [],
+      }),
     );
     expect(readLastTurn({})).toBeNull();
     expect(readLastTurn(null)).toBeNull();
@@ -712,7 +887,10 @@ describe("turn status channel", () => {
 
   it("forwards history_synced to onHistorySynced", () => {
     const handlers: Record<string, (payload: unknown) => void> = {};
-    const channel = { on: (event: string, cb: (payload: unknown) => void) => (handlers[event] = cb) } as never;
+    const channel = {
+      on: (event: string, cb: (payload: unknown) => void) =>
+        (handlers[event] = cb),
+    } as never;
     const onHistorySynced = vi.fn();
 
     bindAssistantEvents(channel, {
@@ -727,7 +905,9 @@ describe("turn status channel", () => {
     });
 
     handlers["history_synced"]({
-      messages: [{ id: 1, role: "assistant", content: "synced", tool_calls: [] }],
+      messages: [
+        { id: 1, role: "assistant", content: "synced", tool_calls: [] },
+      ],
       has_more_before: true,
       oldest_sequence: 5,
     });
@@ -763,7 +943,10 @@ describe("fetchToolOutput", () => {
     responders.ok({ output: "full output", output_byte_size: 11 });
 
     await expect(promise).resolves.toBe("full output");
-    expect(push).toHaveBeenCalledWith("fetch_tool_output", { message_id: 12, tool_call_id: "call-1" });
+    expect(push).toHaveBeenCalledWith("fetch_tool_output", {
+      message_id: 12,
+      tool_call_id: "call-1",
+    });
   });
 
   it("resolves with an empty string when the payload output is missing", async () => {
@@ -813,11 +996,15 @@ describe("loadOlderMessages", () => {
     });
 
     await expect(promise).resolves.toEqual({
-      messages: [expect.objectContaining({ id: "1", role: "user", content: "old" })],
+      messages: [
+        expect.objectContaining({ id: "1", role: "user", content: "old" }),
+      ],
       hasMoreBefore: true,
       oldestSequence: 3,
     });
-    expect(push).toHaveBeenCalledWith("load_older_messages", { before_sequence: 42 });
+    expect(push).toHaveBeenCalledWith("load_older_messages", {
+      before_sequence: 42,
+    });
   });
 
   it("rejects with the canonical server message on error", async () => {

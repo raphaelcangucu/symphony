@@ -27,6 +27,7 @@ defmodule SymphonyElixir.Cursor.CodingAgent do
   alias SymphonyElixir.Config
   alias SymphonyElixir.Cursor.AcpRunner
   alias SymphonyElixir.Cursor.CliRunner
+  alias SymphonyElixir.Cursor.ModelCatalog
   alias SymphonyElixir.ExecutionMode
 
   @mcp_server_name "symphony"
@@ -106,26 +107,42 @@ defmodule SymphonyElixir.Cursor.CodingAgent do
 
     case run_result do
       {:ok, result} ->
-        turn_usage = canonicalize_usage(result.usage)
-        usage_totals = add_usage(prior_totals, turn_usage)
+        case resolved_model(Map.get(result, :provider_model), Map.get(runner_args, :model)) do
+          {:ok, resolved_model} ->
+            turn_usage = canonicalize_usage(result.usage)
+            usage_totals = add_usage(prior_totals, turn_usage)
+            resolved_effort = resolved_effort(resolved_model, Map.get(runner_args, :model))
 
-        emit_message(
-          on_message,
-          :turn_completed,
-          %{payload: %{"usage" => usage_totals}, result: result},
-          %{usage: usage_totals}
-        )
+            result =
+              result
+              |> Map.put(:resolved_model, resolved_model)
+              |> Map.put(:resolved_effort, resolved_effort)
 
-        {:ok,
-         %{
-           result: :turn_completed,
-           provider: "cursor",
-           conversation_id: result.cli_session_id,
-           run_id: turn_id,
-           usage: usage_totals,
-           usage_totals: usage_totals,
-           cost_usd: result.cost_usd
-         }}
+            emit_message(
+              on_message,
+              :turn_completed,
+              %{payload: %{"usage" => usage_totals}, result: result},
+              %{usage: usage_totals}
+            )
+
+            {:ok,
+             %{
+               result: :turn_completed,
+               provider: "cursor",
+               conversation_id: result.cli_session_id,
+               run_id: turn_id,
+               usage: usage_totals,
+               usage_totals: usage_totals,
+               cost_usd: result.cost_usd,
+               resolved_model: resolved_model,
+               resolved_effort: resolved_effort
+             }}
+
+          {:error, reason} ->
+            Logger.warning("Cursor model confirmation failed for #{issue_context(issue)}: #{inspect(reason)}")
+            emit_message(on_message, :turn_ended_with_error, %{reason: reason}, %{})
+            {:error, reason}
+        end
 
       {:error, {:resume_session_not_found, stale_id}} when session.cli_session_id != nil ->
         reason = {:resume_conversation_failed, stale_id, :not_found}
@@ -163,7 +180,114 @@ defmodule SymphonyElixir.Cursor.CodingAgent do
     |> Map.put(:rate_limits, event[:rate_limits] || Map.get(event, "rate_limits"))
   end
 
+  @doc false
+  @spec resolved_model(String.t() | nil, String.t() | nil) ::
+          {:ok, String.t() | nil} | {:error, term()}
+  def resolved_model(provider_model, requested_model) do
+    provider_model = normalize_model_value(provider_model)
+    requested_model = normalize_model_value(requested_model)
+
+    cond do
+      is_nil(provider_model) ->
+        if is_nil(requested_model) do
+          {:ok, nil}
+        else
+          {:error, {:model_confirmation_missing, requested_model}}
+        end
+
+      true ->
+        with {:ok, catalog} <- ModelCatalog.list_models() do
+          resolve_catalog_model(catalog.models, provider_model, requested_model)
+        end
+    end
+  end
+
+  defp resolve_catalog_model(models, provider_model, requested_model)
+       when requested_model in [nil, "auto"] do
+    case Enum.filter(models, &provider_model_matches?(&1, provider_model)) do
+      [model] ->
+        {:ok, model.model}
+
+      [] ->
+        {:error, {:model_confirmation_unmatched, provider_model}}
+
+      matches ->
+        {:error, {:model_confirmation_ambiguous, provider_model, Enum.map(matches, & &1.model)}}
+    end
+  end
+
+  defp resolve_catalog_model(models, provider_model, requested_model) do
+    case Enum.filter(models, &(&1.model == requested_model)) do
+      [model] ->
+        if provider_model_matches?(model, provider_model) do
+          {:ok, model.model}
+        else
+          {:error, {:model_confirmation_mismatch, requested_model, provider_model}}
+        end
+
+      [] ->
+        {:error, {:requested_model_unavailable, requested_model}}
+
+      matches ->
+        {:error, {:requested_model_ambiguous, requested_model, Enum.map(matches, & &1.model)}}
+    end
+  end
+
+  @doc false
+  @spec resolved_effort(String.t() | nil, String.t() | nil) :: String.t() | nil
+  def resolved_effort(_provider_model, _requested_model), do: nil
+
   # ── Private helpers ────────────────────────────────────────────────────────
+
+  defp normalize_model_value(value) when is_binary(value) do
+    case String.trim(value) do
+      "" -> nil
+      normalized -> normalized
+    end
+  end
+
+  defp normalize_model_value(nil), do: nil
+  defp normalize_model_value(value), do: value |> to_string() |> normalize_model_value()
+
+  defp comparable_model(value) do
+    value
+    |> String.replace(~r/\[.*\]\z/u, "")
+    |> String.downcase()
+    |> String.replace(~r/[^a-z0-9]/u, "")
+    |> String.replace_prefix("cursor", "")
+    |> String.replace(~r/(high|medium|low)\z/u, "")
+  end
+
+  defp provider_model_matches?(model, provider_model) do
+    comparable =
+      [model.model, model.id, model.label]
+      |> Enum.filter(&is_binary/1)
+      |> Enum.any?(&(comparable_model(&1) == comparable_model(provider_model)))
+
+    provider_effort = parameter_effort(provider_model) || variant_effort(provider_model)
+    catalog_effort = variant_effort(model.model) || variant_effort(model.id)
+
+    comparable and
+      (is_nil(catalog_effort) or provider_effort == catalog_effort)
+  end
+
+  defp parameter_effort(value) when is_binary(value) do
+    case Regex.run(~r/(?:^|[,\[])effort=(low|medium|high|xhigh|max)(?:[,\]]|$)/u, String.downcase(value)) do
+      [_, effort] -> effort
+      _ -> nil
+    end
+  end
+
+  defp parameter_effort(_value), do: nil
+
+  defp variant_effort(value) when is_binary(value) do
+    case Regex.run(~r/(?:^|[\s_-])(low|medium|high|xhigh|max)(?:\s|\z)/u, String.downcase(value)) do
+      [_, effort] -> effort
+      _ -> nil
+    end
+  end
+
+  defp variant_effort(_value), do: nil
 
   defp turn_args(session, prompt, opts) do
     %{

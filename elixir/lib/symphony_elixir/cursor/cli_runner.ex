@@ -82,6 +82,7 @@ defmodule SymphonyElixir.Cursor.CliRunner do
       cli_session_id: args.cli_session_id,
       usage: nil,
       cost_usd: nil,
+      provider_model: nil,
       error: nil,
       resume_invalid: false,
       committed_text: "",
@@ -232,8 +233,8 @@ defmodule SymphonyElixir.Cursor.CliRunner do
   # Event processing: translate NDJSON -> bridge events
   # ────────────────────────────────────────────────────────────
 
-  defp process_event(%{"type" => "system", "subtype" => "init", "session_id" => sid}, _on_event, state) do
-    %{state | cli_session_id: sid}
+  defp process_event(%{"type" => "system", "subtype" => "init", "session_id" => sid} = payload, _on_event, state) do
+    %{state | cli_session_id: sid, provider_model: normalize_provider_model(Map.get(payload, "model"))}
   end
 
   defp process_event(%{"type" => "assistant"} = payload, on_event, state) do
@@ -329,6 +330,15 @@ defmodule SymphonyElixir.Cursor.CliRunner do
   defp process_event(_unknown, _on_event, state) do
     state
   end
+
+  defp normalize_provider_model(model) when is_binary(model) do
+    case String.trim(model) do
+      "" -> nil
+      value -> value
+    end
+  end
+
+  defp normalize_provider_model(_model), do: nil
 
   defp assistant_text(payload) do
     (get_in(payload, ["message", "content"]) || [])
@@ -550,5 +560,4 @@ defmodule SymphonyElixir.Cursor.CliRunner do
   defp encode_content(nil), do: ""
   defp encode_content(content) when is_binary(content), do: content
   defp encode_content(content), do: Jason.encode!(content)
-
 end

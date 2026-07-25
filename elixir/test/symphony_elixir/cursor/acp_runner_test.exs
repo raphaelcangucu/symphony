@@ -21,7 +21,7 @@ defmodule SymphonyElixir.Cursor.AcpRunnerTest do
             prompt: "hello",
             session_uuid: "sess",
             cli_session_id: nil,
-            model: nil,
+            model: "composer-2.5",
             mcp_config_path: nil,
             timeout_ms: 5_000,
             writer: writer,
@@ -51,7 +51,10 @@ defmodule SymphonyElixir.Cursor.AcpRunnerTest do
       Jason.encode!(%{
         "jsonrpc" => "2.0",
         "id" => new_id,
-        "result" => %{"sessionId" => "acp-session-1"}
+        "result" => %{
+          "sessionId" => "acp-session-1",
+          "models" => %{"currentModelId" => "composer-2.5[fast=true]"}
+        }
       })
     )
 
@@ -88,6 +91,7 @@ defmodule SymphonyElixir.Cursor.AcpRunnerTest do
     assert {:ok, result} = Task.await(task, 5_000)
     assert result.status == :completed
     assert result.cli_session_id == "acp-session-1"
+    assert result.provider_model == "composer-2.5[fast=true]"
   end
 
   @tag :tmp_dir

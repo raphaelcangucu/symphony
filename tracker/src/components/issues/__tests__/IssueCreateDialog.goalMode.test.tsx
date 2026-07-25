@@ -7,7 +7,7 @@ import { IssueCreateDialog } from "@/components/issues/IssueCreateDialog";
 import { i18n } from "@/i18n";
 import { createIssue, getIssueFormOptions } from "@/services/issues";
 import type { Issue, IssueFormOptions } from "@/types/issue";
-import { fallbackCatalogBundle } from "@/lib/assistantSettings";
+import { createMockAssistantCatalogBundle } from "@/test-fixtures/assistantCatalog";
 import { mockAssistantCodexCatalog } from "@/test-fixtures/assistantCatalog";
 
 vi.mock("sonner", () => ({
@@ -32,7 +32,7 @@ const mockCreateIssue = vi.mocked(createIssue);
 const mockGetIssueFormOptions = vi.mocked(getIssueFormOptions);
 
 function catalogBundle() {
-  const bundle = fallbackCatalogBundle();
+  const bundle = createMockAssistantCatalogBundle();
   bundle.agents = [
     { ...mockAssistantCodexCatalog },
     ...bundle.agents.filter((agent) => agent.agent !== "codex"),

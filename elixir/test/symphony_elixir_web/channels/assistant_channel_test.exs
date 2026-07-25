@@ -115,6 +115,8 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
          assistant_message: "Oi! Sou o assistant do projeto.",
          conversation_id: "thread-1",
          run_id: "turn-1",
+         resolved_model: "gpt-5.6-sol",
+         resolved_effort: "low",
          tool_calls: []
        }}
     end
@@ -127,12 +129,28 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
 
     assert_push("history_loaded", %{messages: []})
 
-    ref = push(socket, "send_message", %{"message" => "Oi", "context" => %{"view" => "board"}})
+    ref =
+      push(socket, "send_message", %{
+        "message" => "Oi",
+        "context" => %{
+          "view" => "board",
+          "model" => "gpt-5.6-sol",
+          "effort" => "low"
+        }
+      })
+
     assert_reply(ref, :ok, %{})
 
     assert_push("message_created", %{message: %{role: "user", content: "Oi"}})
     assert_push("assistant_delta", %{delta: "Oi"})
     assert_push("assistant_completed", %{message: %{role: "assistant", content: "Oi! Sou o assistant do projeto."}})
+
+    assert_push("model_provenance", %{
+      requested_model: "gpt-5.6-sol",
+      requested_effort: "low",
+      resolved_model: "gpt-5.6-sol",
+      resolved_effort: "low"
+    })
 
     {:ok, join_reply, _socket} =
       socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
@@ -142,6 +160,32 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
 
     assert_push("history_loaded", %{messages: messages})
     assert Enum.map(messages, & &1.role) == ["user", "assistant"]
+  end
+
+  test "join exposes requested and provider-resolved model provenance" do
+    {:ok, thread} =
+      History.ensure_thread("macro-markets", %{
+        workspace_path: Path.join(System.tmp_dir!(), "assistant-model-provenance"),
+        requested_model: "gpt-5.6",
+        requested_effort: "medium"
+      })
+
+    {:ok, _thread} =
+      History.put_model_provenance(thread, %{
+        resolved_model: "gpt-5.6-sol",
+        resolved_effort: "low"
+      })
+
+    {:ok, payload, _socket} =
+      socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
+      |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, "assistant:macro-markets")
+
+    assert payload.requested_model == "gpt-5.6"
+    assert payload.requested_effort == "medium"
+    assert payload.resolved_model == "gpt-5.6-sol"
+    assert payload.resolved_effort == "low"
+    refute Map.has_key?(payload, :model)
+    refute Map.has_key?(payload, :effort)
   end
 
   test "joining a thread recovers durable pending turns", %{socket: socket} do
@@ -310,8 +354,8 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
     ref = push(socket, "send_message", %{"message" => "go", "context" => %{"view" => "board"}})
     assert_reply(ref, :ok, %{})
 
-    assert_push("assistant_completed", %{message: %{role: "assistant", content: "synced reply"}})
-    assert_push("history_synced", %{messages: messages})
+    assert_push("assistant_completed", %{message: %{role: "assistant", content: "synced reply"}}, 2_000)
+    assert_push("history_synced", %{messages: messages}, 2_000)
     assert Enum.map(messages, & &1.content) == ["go", "synced reply"]
   end
 

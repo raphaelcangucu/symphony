@@ -6,9 +6,21 @@ Symphony:
 - sessão interativa;
 - issue despachado pelo orquestrador.
 
-A matriz usa Codex, Cursor e Claude, totalizando seis células. O prompt
-canônico fica em [`prompt.md`](prompt.md); seu SHA-256 é gravado em todas as
-execuções para impedir comparações com instruções diferentes.
+A matriz fixa modelo e esforço e contém 15 células:
+
+- `providers-default`: sessão e orquestrador com Codex `gpt-5.5` medium,
+  Claude `claude-sonnet-5` medium e Cursor `composer-2.5`;
+- `providers-advanced`: sessão e orquestrador com Codex `gpt-5.5` high,
+  Claude `claude-opus-5` high e Cursor `cursor-grok-4.5-high`;
+- `codex-5.6-defaults`: sessão direta com `gpt-5.6-sol` low,
+  `gpt-5.6-terra` medium e `gpt-5.6-luna` medium.
+
+O prompt canônico fica em [`prompt.md`](prompt.md); seu SHA-256 é gravado em
+todas as execuções para impedir comparações com instruções diferentes. Cada
+célula também valida o agente, o modelo solicitado, o modelo confirmado pelo
+provedor e o esforço. O adapter Cursor resolve nomes e identificadores nativos
+contra o catálogo vivo e persiste um único slug canônico. Como o esforço está
+codificado no slug do Cursor, os dois campos de esforço permanecem nulos.
 
 ## Contrato
 
@@ -41,16 +53,17 @@ npm install
 npm run provision
 ```
 
-Execute uma célula por vez para limitar CPU e memória:
+Execute uma matriz por vez, ou células independentes em paralelo quando houver
+capacidade. Os testes unitários do Symphony continuam focados e sequenciais:
 
 ```bash
-for run_id in \
-  session-codex session-cursor session-claude \
-  orchestrator-codex orchestrator-cursor orchestrator-claude
-do
-  SYMPHONY_BENCH_RUN_ID="$run_id" npm run run:cell
-done
+npm run run:default
+npm run run:advanced
+npm run run:codex-5.6
 ```
+
+Para repetir apenas uma célula, use
+`SYMPHONY_BENCH_RUN_ID=<id> npm run run:cell`.
 
 Colete build/E2E e gere as capturas visuais padronizadas:
 

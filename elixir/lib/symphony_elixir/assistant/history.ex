@@ -283,24 +283,24 @@ defmodule SymphonyElixir.Assistant.History do
   def thread_execution_mode(_thread), do: nil
 
   @spec thread_model(Thread.t()) :: String.t() | nil
-  def thread_model(%Thread{metadata: %{"model" => model}}) when is_binary(model) do
-    case String.trim(model) do
-      "" -> nil
-      trimmed -> trimmed
-    end
-  end
-
-  def thread_model(_thread), do: nil
+  def thread_model(%Thread{resolved_model: model}) when is_binary(model), do: model
+  def thread_model(%Thread{}), do: nil
 
   @spec thread_effort(Thread.t()) :: String.t() | nil
-  def thread_effort(%Thread{metadata: %{"effort" => effort}}) when is_binary(effort) do
-    case String.trim(effort) do
-      "" -> nil
-      trimmed -> trimmed
-    end
-  end
+  def thread_effort(%Thread{resolved_effort: effort}) when is_binary(effort), do: effort
+  def thread_effort(%Thread{}), do: nil
 
-  def thread_effort(_thread), do: nil
+  @spec requested_model(Thread.t()) :: String.t() | nil
+  def requested_model(%Thread{requested_model: model}), do: model
+
+  @spec requested_effort(Thread.t()) :: String.t() | nil
+  def requested_effort(%Thread{requested_effort: effort}), do: effort
+
+  @spec resolved_model(Thread.t()) :: String.t() | nil
+  def resolved_model(%Thread{resolved_model: model}), do: model
+
+  @spec resolved_effort(Thread.t()) :: String.t() | nil
+  def resolved_effort(%Thread{resolved_effort: effort}), do: effort
 
   @spec thread_skill_profile(Thread.t()) :: String.t() | nil
   def thread_skill_profile(%Thread{metadata: %{"skill_profile" => profile}}) when is_binary(profile) do
@@ -312,12 +312,6 @@ defmodule SymphonyElixir.Assistant.History do
 
   def thread_skill_profile(_thread), do: nil
 
-  defp put_session_model_effort(metadata, attrs) when is_map(metadata) and is_map(attrs) do
-    metadata
-    |> maybe_put_meta_string("model", Map.get(attrs, :model) || Map.get(attrs, "model"))
-    |> maybe_put_meta_string("effort", Map.get(attrs, :effort) || Map.get(attrs, "effort"))
-  end
-
   defp maybe_put_meta_string(metadata, _key, nil), do: metadata
 
   defp maybe_put_meta_string(metadata, key, value) when is_binary(value) do
@@ -328,6 +322,64 @@ defmodule SymphonyElixir.Assistant.History do
   end
 
   defp maybe_put_meta_string(metadata, _key, _value), do: metadata
+
+  defp put_requested_model_provenance(attrs) when is_map(attrs) do
+    attrs
+    |> maybe_copy_attr(:model, "model", :requested_model)
+    |> maybe_copy_attr(:effort, "effort", :requested_effort)
+  end
+
+  defp maybe_copy_attr(attrs, atom_key, string_key, target_key) do
+    cond do
+      Map.has_key?(attrs, target_key) ->
+        attrs
+
+      Map.has_key?(attrs, Atom.to_string(target_key)) ->
+        Map.put(attrs, target_key, Map.get(attrs, Atom.to_string(target_key)))
+
+      Map.has_key?(attrs, atom_key) ->
+        Map.put(attrs, target_key, Map.get(attrs, atom_key))
+
+      Map.has_key?(attrs, string_key) ->
+        Map.put(attrs, target_key, Map.get(attrs, string_key))
+
+      true ->
+        attrs
+    end
+  end
+
+  defp drop_legacy_model_attrs(attrs) when is_map(attrs) do
+    Map.drop(attrs, [:model, "model", :effort, "effort"])
+  end
+
+  defp drop_legacy_model_metadata(metadata) when is_map(metadata) do
+    metadata
+    |> Map.drop(["model", "effort"])
+    |> Map.update("current_turn", nil, fn
+      turn when is_map(turn) -> Map.drop(turn, ["model", "effort"])
+      turn -> turn
+    end)
+    |> then(fn
+      %{"current_turn" => nil} = cleaned -> Map.delete(cleaned, "current_turn")
+      cleaned -> cleaned
+    end)
+  end
+
+  defp take_model_provenance(attrs) when is_map(attrs) do
+    Enum.reduce(
+      [:requested_model, :requested_effort, :resolved_model, :resolved_effort],
+      %{},
+      fn key, provenance ->
+        string_key = Atom.to_string(key)
+
+        cond do
+          Map.has_key?(attrs, key) -> Map.put(provenance, key, Map.get(attrs, key))
+          Map.has_key?(attrs, string_key) -> Map.put(provenance, key, Map.get(attrs, string_key))
+          true -> provenance
+        end
+      end
+    )
+  end
 
   @doc """
   Persists whether the chat goal is enabled for an assistant thread.
@@ -452,8 +504,6 @@ defmodule SymphonyElixir.Assistant.History do
       "status" => "running",
       "trigger" => Map.get(attrs, :trigger, "user"),
       "prompt" => to_string(Map.get(attrs, :prompt, "")),
-      "model" => stringify(Map.get(attrs, :model)),
-      "effort" => stringify(Map.get(attrs, :effort)),
       "provider" => stringify(Map.get(attrs, :provider)),
       "conversation_id" => stringify(Map.get(attrs, :conversation_id)),
       "run_id" => stringify(Map.get(attrs, :run_id)),
@@ -776,6 +826,17 @@ defmodule SymphonyElixir.Assistant.History do
     |> notify_recents()
   end
 
+  @doc "Persists explicit requested or provider-resolved session model provenance."
+  @spec put_model_provenance(Thread.t(), attrs()) ::
+          {:ok, Thread.t()} | {:error, Ecto.Changeset.t()}
+  def put_model_provenance(%Thread{} = thread, attrs) when is_map(attrs) do
+    provenance =
+      attrs
+      |> take_model_provenance()
+
+    update_thread(thread, provenance)
+  end
+
   @doc "Returns the canonical provider conversation reference stored for `provider`."
   @spec conversation_ref(Thread.t(), String.t()) :: {:ok, ConversationRef.t()} | :error
   def conversation_ref(%Thread{} = thread, provider) when is_binary(provider) do
@@ -915,9 +976,12 @@ defmodule SymphonyElixir.Assistant.History do
       attrs
       |> Map.get(:metadata, Map.get(attrs, "metadata", %{}))
       |> Map.new()
+      |> drop_legacy_model_metadata()
       |> TitleGenerator.put_auto_eligible()
 
     attrs
+    |> put_requested_model_provenance()
+    |> drop_legacy_model_attrs()
     |> Map.put(:scope, "freeform")
     |> Map.delete(:project_slug)
     |> Map.put_new(:status, "active")
@@ -970,12 +1034,13 @@ defmodule SymphonyElixir.Assistant.History do
         |> Map.get(:metadata, Map.get(attrs, "metadata", %{}))
         |> Map.new()
         |> Map.put("execution_mode", execution_mode)
-        |> put_session_model_effort(attrs)
+        |> drop_legacy_model_metadata()
         |> TitleGenerator.put_auto_eligible()
 
       workspace_basename = workspace |> Path.basename() |> String.trim()
 
       attrs
+      |> put_requested_model_provenance()
       |> Map.drop([:model, "model", :effort, "effort", :execution_mode, "execution_mode"])
       |> Map.put(:scope, "project_session")
       |> Map.put(:project_slug, normalized_slug)
@@ -1012,7 +1077,7 @@ defmodule SymphonyElixir.Assistant.History do
         |> Map.get(:metadata, Map.get(attrs, "metadata", %{}))
         |> Map.new()
         |> Map.put("execution_mode", execution_mode)
-        |> put_session_model_effort(attrs)
+        |> drop_legacy_model_metadata()
         |> Map.merge(workspace_meta)
         |> maybe_put_clone_branches(attrs)
         |> TitleGenerator.put_auto_eligible()
@@ -1020,6 +1085,7 @@ defmodule SymphonyElixir.Assistant.History do
       default_title = issue_session_default_title(slug, identifier)
 
       attrs
+      |> put_requested_model_provenance()
       |> Map.drop([
         :isolated_workspace,
         "isolated_workspace",
@@ -1073,7 +1139,7 @@ defmodule SymphonyElixir.Assistant.History do
         |> Map.get(:metadata, Map.get(attrs, "metadata", %{}))
         |> Map.new()
         |> Map.put("execution_mode", execution_mode)
-        |> put_session_model_effort(attrs)
+        |> drop_legacy_model_metadata()
         |> Map.put("workspace_kind", workspace_kind)
         |> TitleGenerator.put_auto_eligible()
 
@@ -1084,6 +1150,7 @@ defmodule SymphonyElixir.Assistant.History do
         )
 
       attrs
+      |> put_requested_model_provenance()
       |> Map.drop([
         :isolated_workspace,
         "isolated_workspace",
@@ -1131,12 +1198,13 @@ defmodule SymphonyElixir.Assistant.History do
         |> Map.get(:metadata, Map.get(attrs, "metadata", %{}))
         |> Map.new()
         |> Map.put("execution_mode", execution_mode)
-        |> put_session_model_effort(attrs)
+        |> drop_legacy_model_metadata()
         |> TitleGenerator.put_auto_eligible()
 
       workspace_basename = path |> Path.basename() |> String.trim()
 
       attrs
+      |> put_requested_model_provenance()
       |> Map.drop([
         :model,
         "model",

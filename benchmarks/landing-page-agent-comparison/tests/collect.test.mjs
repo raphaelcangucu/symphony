@@ -43,9 +43,18 @@ test("inspectWorkspace reports generated landing and E2E contracts", async () =>
     join(workspace, "scripts", "run-e2e.mjs"),
     "const controller = new AbortController();\nconst args = ['--strictPort'];\n",
   );
-  await writeFile(join(workspace, "src", "App.tsx"), "export function App() {}\n");
-  await writeFile(join(workspace, "playwright.config.ts"), "export default {};\n");
-  await writeFile(join(workspace, "tests", "e2e", "landing.spec.ts"), "test('landing', () => {});\n");
+  await writeFile(
+    join(workspace, "src", "App.tsx"),
+    "export function App() {}\n",
+  );
+  await writeFile(
+    join(workspace, "playwright.config.ts"),
+    "export default {};\n",
+  );
+  await writeFile(
+    join(workspace, "tests", "e2e", "landing.spec.ts"),
+    "test('landing', () => {});\n",
+  );
 
   const facts = await inspectWorkspace(workspace);
 
@@ -77,9 +86,18 @@ test("inspectWorkspace rejects a direct Playwright script without the safe runne
       },
     }),
   );
-  await writeFile(join(workspace, "src", "App.tsx"), "export function App() {}\n");
-  await writeFile(join(workspace, "playwright.config.ts"), "export default {};\n");
-  await writeFile(join(workspace, "tests", "e2e", "landing.spec.ts"), "test('landing', () => {});\n");
+  await writeFile(
+    join(workspace, "src", "App.tsx"),
+    "export function App() {}\n",
+  );
+  await writeFile(
+    join(workspace, "playwright.config.ts"),
+    "export default {};\n",
+  );
+  await writeFile(
+    join(workspace, "tests", "e2e", "landing.spec.ts"),
+    "test('landing', () => {});\n",
+  );
 
   const facts = await inspectWorkspace(workspace);
 
@@ -220,28 +238,28 @@ test("inventoryArtifacts records concrete generated evidence paths", async () =>
   ]);
   assert.deepEqual(
     inventory.videos.map((item) => item.path),
-    [
-      join(root, "nested", "landing.mp4"),
-      join(root, "nested", "landing.webm"),
-    ],
+    [join(root, "nested", "landing.mp4"), join(root, "nested", "landing.webm")],
   );
   assert.equal(inventory.traces[0].path, join(root, "nested", "landing.zip"));
 });
 
 test("summarizeAttempts lists immutable attempts without mixing their metrics", () => {
   assert.deepEqual(
-    summarizeAttempts([
-      {
-        attempt_id: "generation",
-        duration_ms: 680_517,
-        artifact_root: "/tmp/generation",
-      },
-      {
-        attempt_id: "terminal-snapshot",
-        duration_ms: 3_535,
-        artifact_root: "/tmp/terminal",
-      },
-    ], "terminal-snapshot"),
+    summarizeAttempts(
+      [
+        {
+          attempt_id: "generation",
+          duration_ms: 680_517,
+          artifact_root: "/tmp/generation",
+        },
+        {
+          attempt_id: "terminal-snapshot",
+          duration_ms: 3_535,
+          artifact_root: "/tmp/terminal",
+        },
+      ],
+      "terminal-snapshot",
+    ),
     {
       count: 2,
       canonical_attempt_id: "terminal-snapshot",
@@ -266,6 +284,10 @@ test("resolveRunIdentity labels manifest-only session identity without inventing
       agent_kind: "codex",
       status: null,
       provider_matches: null,
+      requested_model: null,
+      requested_effort: null,
+      resolved_model: null,
+      resolved_effort: null,
       source: "manifest",
     },
   );

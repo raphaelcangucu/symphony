@@ -35,13 +35,20 @@ import {
   type AssistantOutgoingAttachment,
 } from "@/components/assistant/assistantAttachments";
 import { ASSISTANT_CHAT_MESSAGE_TEXT_CLASS } from "@/components/assistant/chatTypography";
-import { ComposerMoreMenu, ComposerToolbar } from "@/components/assistant/ComposerToolbar";
+import {
+  ComposerMoreMenu,
+  ComposerToolbar,
+} from "@/components/assistant/ComposerToolbar";
 import { useIsLgUp } from "@/hooks/useMediaQuery";
 import {
   ContextMentionPopover,
   orderMentionOptions,
 } from "@/components/assistant/ContextMentionPopover";
-import type { ComposerContextChipRef, MentionRef, ResolvedMention } from "@/components/assistant/contextMentions";
+import type {
+  ComposerContextChipRef,
+  MentionRef,
+  ResolvedMention,
+} from "@/components/assistant/contextMentions";
 import { useComposerAttachments } from "@/components/assistant/useComposerAttachments";
 import { useContextMentions } from "@/components/assistant/useContextMentions";
 import { MagicCommandPalette } from "@/components/commands/MagicCommandPalette";
@@ -74,9 +81,17 @@ import { cn, SCROLLBAR_THIN } from "@/lib/utils";
 import { importNotionPage, type NotionImportResult } from "@/services/notion";
 import type { AgentKind } from "@/types/issue";
 
-function addContextRef(current: ComposerContextChipRef[], ref: ComposerContextChipRef): ComposerContextChipRef[] {
+function addContextRef(
+  current: ComposerContextChipRef[],
+  ref: ComposerContextChipRef,
+): ComposerContextChipRef[] {
   if (!ref.id.trim()) return current;
-  if (current.some((currentRef) => currentRef.type === ref.type && currentRef.id === ref.id)) return current;
+  if (
+    current.some(
+      (currentRef) => currentRef.type === ref.type && currentRef.id === ref.id,
+    )
+  )
+    return current;
   return [...current, { ...ref, state: ref.state ?? "draft" }];
 }
 
@@ -106,7 +121,8 @@ function syncComposerTextareaHeight(textarea: HTMLTextAreaElement): void {
   textarea.scrollTop = textarea.scrollHeight;
 }
 
-export type AssistantComposerSubmitKind = "message" | "infer" | "btw" | "goal" | "new_thread";
+export type AssistantComposerSubmitKind =
+  "message" | "infer" | "btw" | "goal" | "new_thread";
 
 export interface AssistantComposerSubmit {
   kind: AssistantComposerSubmitKind;
@@ -171,7 +187,10 @@ export interface ComposerAgentSelectionProps {
   /** Reports the currently selected agent (on mount and on every change). */
   onAgentChange?: (agent: AgentKind) => void;
   /** Reports the selected agent's model/effort settings (on mount and change). */
-  onSettingsChange?: (agent: AgentKind, settings: AssistantComposerSettings) => void;
+  onSettingsChange?: (
+    agent: AgentKind,
+    settings: AssistantComposerSettings,
+  ) => void;
   /** Initial/server-resolved agent for reopening a persisted session. */
   agentSeed?: AgentKind | null;
   /** When set, seeds agent/model/effort from task settings instead of sessionStorage. */
@@ -205,7 +224,8 @@ export interface ComposerSlotProps {
 }
 
 interface AssistantComposerProps
-  extends ComposerMentionProps,
+  extends
+    ComposerMentionProps,
     ComposerMagicProps,
     ComposerSlashCommandProps,
     ComposerAgentSelectionProps,
@@ -312,22 +332,32 @@ export function AssistantComposer({
   } = useComposerAttachments({ projectSlug, dropTargetRef });
   const [contextRefs, setContextRefs] = useState<ComposerContextChipRef[]>([]);
   const lastDraftSeedIdRef = useRef(0);
-  const [composerState, setComposerState] = useState<AssistantComposerState>(() => {
-    if (settingsSeed) {
-      return {
-        agent: settingsSeed.agent,
-        byAgent: {
-          [settingsSeed.agent]: { model: settingsSeed.model, effort: settingsSeed.effort },
-        },
-      };
-    }
-    // Task-scoped composers must not hydrate from browser storage — the issue
-    // (or catalog defaults after fetch) is the source of truth.
-    if (!persistLocalComposerState) {
-      return { agent: bundle.defaultAgent, byAgent: {} };
-    }
-    return loadComposerState(bundle);
-  });
+  const [composerState, setComposerState] = useState<AssistantComposerState>(
+    () => {
+      if (settingsSeed) {
+        return {
+          agent: settingsSeed.agent,
+          byAgent: {
+            [settingsSeed.agent]: {
+              model: settingsSeed.model,
+              effort: settingsSeed.effort,
+            },
+          },
+        };
+      }
+      // Task-scoped composers must not hydrate from browser storage — the issue
+      // (or catalog defaults after fetch) is the source of truth.
+      if (!persistLocalComposerState) {
+        return { agent: bundle.defaultAgent, byAgent: {} };
+      }
+      return loadComposerState(bundle);
+    },
+  );
+  const appliedSettingsSeedRef = useRef(
+    settingsSeed
+      ? `${settingsSeed.agent}\0${settingsSeed.model}\0${settingsSeed.effort}`
+      : null,
+  );
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const recordingRef = useRef(false);
@@ -344,16 +374,35 @@ export function AssistantComposer({
   // Derive per-agent catalog and settings
   const catalog = catalogFor(bundle, composerState.agent);
   const settings: AssistantComposerSettings =
-    composerState.byAgent[composerState.agent] ?? defaultComposerSettings(catalog);
+    composerState.byAgent[composerState.agent] ??
+    defaultComposerSettings(catalog);
 
   useEffect(() => {
-    // Seed only via initial state (or remount). Avoid resetting mid-interaction when
-    // the parent recomputes settingsSeed after catalog load.
+    if (!settingsSeed) return;
+    const key = `${settingsSeed.agent}\0${settingsSeed.model}\0${settingsSeed.effort}`;
+    if (appliedSettingsSeedRef.current === key) return;
+    appliedSettingsSeedRef.current = key;
+
+    setComposerState((current) => ({
+      ...current,
+      agent: settingsSeed.agent,
+      byAgent: {
+        ...current.byAgent,
+        [settingsSeed.agent]: {
+          model: settingsSeed.model,
+          effort: settingsSeed.effort,
+        },
+      },
+    }));
+  }, [settingsSeed]);
+
+  useEffect(() => {
     if (!agentSeed || settingsSeed) return;
     setComposerState((current) => {
       if (current.agent === agentSeed) return current;
       const nextCatalog = catalogFor(bundle, agentSeed);
-      const nextSettings = current.byAgent[agentSeed] ?? defaultComposerSettings(nextCatalog);
+      const nextSettings =
+        current.byAgent[agentSeed] ?? defaultComposerSettings(nextCatalog);
       return {
         ...current,
         agent: agentSeed,
@@ -382,16 +431,27 @@ export function AssistantComposer({
   const settingsModel = settings.model;
   const settingsEffort = settings.effort;
   useEffect(() => {
-    onSettingsChange?.(composerState.agent, { model: settingsModel, effort: settingsEffort });
+    onSettingsChange?.(composerState.agent, {
+      model: settingsModel,
+      effort: settingsEffort,
+    });
   }, [composerState.agent, settingsModel, settingsEffort, onSettingsChange]);
 
   // When bundle changes, re-validate current model against the catalog for active agent
   useEffect(() => {
     setComposerState((current) => {
       const activeCatalog = catalogFor(bundle, current.agent);
-      const currentSettings = current.byAgent[current.agent] ?? defaultComposerSettings(activeCatalog);
+      const currentSettings =
+        settingsSeed?.agent === current.agent
+          ? {
+              model: settingsSeed.model,
+              effort: settingsSeed.effort,
+            }
+          : (current.byAgent[current.agent] ??
+            defaultComposerSettings(activeCatalog));
       const modelOption =
-        activeCatalog.models.find((m) => m.model === currentSettings.model) ?? activeCatalog.models[0];
+        activeCatalog.models.find((m) => m.model === currentSettings.model) ??
+        activeCatalog.models[0];
       return {
         ...current,
         byAgent: {
@@ -403,7 +463,7 @@ export function AssistantComposer({
         },
       };
     });
-  }, [bundle]);
+  }, [bundle, settingsSeed]);
 
   useEffect(() => {
     if (!seedMessage?.trim()) return;
@@ -411,13 +471,17 @@ export function AssistantComposer({
   }, [seedMessage]);
 
   useEffect(() => {
-    if (!draftSeed || draftSeed.requestId === lastDraftSeedIdRef.current) return;
-    if (!Number.isFinite(draftSeed.requestId) || draftSeed.requestId <= 0) return;
+    if (!draftSeed || draftSeed.requestId === lastDraftSeedIdRef.current)
+      return;
+    if (!Number.isFinite(draftSeed.requestId) || draftSeed.requestId <= 0)
+      return;
 
     lastDraftSeedIdRef.current = draftSeed.requestId;
     setInput(draftSeed.message ?? "");
     replaceAttachments(hydrateAttachments(draftSeed.attachments ?? []));
-    setContextRefs(Array.isArray(draftSeed.contextRefs) ? draftSeed.contextRefs : []);
+    setContextRefs(
+      Array.isArray(draftSeed.contextRefs) ? draftSeed.contextRefs : [],
+    );
     requestAnimationFrame(() => textareaRef.current?.focus());
   }, [draftSeed, replaceAttachments]);
 
@@ -455,7 +519,10 @@ export function AssistantComposer({
 
   const parsedInput = parseSlashCommand(input, t, slashContext);
   const hasComposerContent =
-    parsedInput.kind === "goal" || input.trim().length > 0 || attachments.length > 0 || contextRefs.length > 0;
+    parsedInput.kind === "goal" ||
+    input.trim().length > 0 ||
+    attachments.length > 0 ||
+    contextRefs.length > 0;
   const canSend =
     !recording &&
     !uploadingImage &&
@@ -470,14 +537,18 @@ export function AssistantComposer({
     slashContext,
     slashCommandExtras ?? defaultSkillCommands(t, slashContext),
   );
-  const showPalette = paletteCommands.length > 0 && input.trim().split(" ").length === 1;
+  const showPalette =
+    paletteCommands.length > 0 && input.trim().split(" ").length === 1;
 
   const mentions = useContextMentions(input);
   const [mentionActiveIndex, setMentionActiveIndex] = useState(0);
   const [paletteActiveIndex, setPaletteActiveIndex] = useState(0);
   const paletteListRef = useRef<HTMLDivElement>(null);
-  const orderedMentions = mentionsEnabled ? orderMentionOptions(mentionOptions ?? []) : [];
-  const showMentions = mentionsEnabled && mentions.open && orderedMentions.length > 0;
+  const orderedMentions = mentionsEnabled
+    ? orderMentionOptions(mentionOptions ?? [])
+    : [];
+  const showMentions =
+    mentionsEnabled && mentions.open && orderedMentions.length > 0;
 
   useEffect(() => {
     if (magicPaletteRequestId <= 0) return;
@@ -492,7 +563,9 @@ export function AssistantComposer({
 
   useEffect(() => {
     if (!contextInsertRequest) return;
-    setContextRefs((current) => addContextRef(current, contextInsertRequest.ref));
+    setContextRefs((current) =>
+      addContextRef(current, contextInsertRequest.ref),
+    );
     requestAnimationFrame(() => textareaRef.current?.focus());
   }, [contextInsertRequest]);
 
@@ -513,7 +586,9 @@ export function AssistantComposer({
 
   useEffect(() => {
     if (!showPalette || !paletteListRef.current) return;
-    const active = paletteListRef.current.querySelector<HTMLElement>("[data-active='true']");
+    const active = paletteListRef.current.querySelector<HTMLElement>(
+      "[data-active='true']",
+    );
     active?.scrollIntoView({ block: "nearest" });
   }, [paletteActiveIndex, showPalette]);
 
@@ -529,7 +604,9 @@ export function AssistantComposer({
     if (resolved) {
       const next = mentions.removeMentionText();
       if (next !== null) setInput(next);
-      setContextRefs((current) => addContextRef(current, { ...resolved, state: "draft" }));
+      setContextRefs((current) =>
+        addContextRef(current, { ...resolved, state: "draft" }),
+      );
       onMentionSelect?.(resolved);
     } else {
       const next = mentions.selectMention(ref);
@@ -543,7 +620,8 @@ export function AssistantComposer({
     setComposerState((current) => {
       const nextCatalog = catalogFor(bundle, agent);
       // If no saved settings for this agent, seed with defaults
-      const nextSettings = current.byAgent[agent] ?? defaultComposerSettings(nextCatalog);
+      const nextSettings =
+        current.byAgent[agent] ?? defaultComposerSettings(nextCatalog);
       return {
         ...current,
         agent,
@@ -558,8 +636,12 @@ export function AssistantComposer({
   function updateModel(model: string) {
     setComposerState((current) => {
       const activeCatalog = catalogFor(bundle, current.agent);
-      const modelOption = activeCatalog.models.find((entry) => entry.model === model) ?? activeCatalog.models[0];
-      const currentSettings = current.byAgent[current.agent] ?? defaultComposerSettings(activeCatalog);
+      const modelOption =
+        activeCatalog.models.find((entry) => entry.model === model) ??
+        activeCatalog.models[0];
+      const currentSettings =
+        current.byAgent[current.agent] ??
+        defaultComposerSettings(activeCatalog);
       return {
         ...current,
         byAgent: {
@@ -576,9 +658,12 @@ export function AssistantComposer({
   function updateEffort(effort: AssistantEffort) {
     setComposerState((current) => {
       const activeCatalog = catalogFor(bundle, current.agent);
-      const currentSettings = current.byAgent[current.agent] ?? defaultComposerSettings(activeCatalog);
+      const currentSettings =
+        current.byAgent[current.agent] ??
+        defaultComposerSettings(activeCatalog);
       const modelOption =
-        activeCatalog.models.find((m) => m.model === currentSettings.model) ?? activeCatalog.models[0];
+        activeCatalog.models.find((m) => m.model === currentSettings.model) ??
+        activeCatalog.models[0];
       return {
         ...current,
         byAgent: {
@@ -593,7 +678,9 @@ export function AssistantComposer({
   }
 
   function removeContextRef(type: ComposerContextChipRef["type"], id: string) {
-    setContextRefs((current) => current.filter((ref) => ref.type !== type || ref.id !== id));
+    setContextRefs((current) =>
+      current.filter((ref) => ref.type !== type || ref.id !== id),
+    );
   }
 
   function submitCurrent() {
@@ -602,7 +689,12 @@ export function AssistantComposer({
     const parsed = parseSlashCommand(input, t, slashContext);
     // `/goal` may be issued with no objective (the assistant derives it from the
     // issue artifacts); every other command requires an argument.
-    if (parsed.kind !== "message" && parsed.kind !== "goal" && parsed.argument.length === 0) return;
+    if (
+      parsed.kind !== "message" &&
+      parsed.kind !== "goal" &&
+      parsed.argument.length === 0
+    )
+      return;
 
     onSubmit({
       kind: parsed.kind,
@@ -638,7 +730,10 @@ export function AssistantComposer({
       }
       if (event.key === "ArrowUp") {
         event.preventDefault();
-        setMentionActiveIndex((index) => (index - 1 + orderedMentions.length) % orderedMentions.length);
+        setMentionActiveIndex(
+          (index) =>
+            (index - 1 + orderedMentions.length) % orderedMentions.length,
+        );
         return;
       }
       if (event.key === "Enter" || event.key === "Tab") {
@@ -662,12 +757,16 @@ export function AssistantComposer({
       }
       if (event.key === "ArrowUp") {
         event.preventDefault();
-        setPaletteActiveIndex((index) => (index - 1 + paletteCommands.length) % paletteCommands.length);
+        setPaletteActiveIndex(
+          (index) =>
+            (index - 1 + paletteCommands.length) % paletteCommands.length,
+        );
         return;
       }
       if (event.key === "Tab" && !event.shiftKey) {
         event.preventDefault();
-        const command = paletteCommands[paletteActiveIndex] ?? paletteCommands[0];
+        const command =
+          paletteCommands[paletteActiveIndex] ?? paletteCommands[0];
         if (command) applySlashCommand(command);
         return;
       }
@@ -710,7 +809,9 @@ export function AssistantComposer({
 
     startSpeechRecognition((text, isFinal) => {
       if (!isFinal) return;
-      setInput((current) => (current.trim() ? `${current.trim()} ${text}` : text));
+      setInput((current) =>
+        current.trim() ? `${current.trim()} ${text}` : text,
+      );
     });
   }
 
@@ -718,14 +819,20 @@ export function AssistantComposer({
   const firstNotionUrl = notionUrls[0] ?? null;
 
   async function handleNotionImport() {
-    if (!firstNotionUrl || notionImporting || disabled || composerDisabled) return;
+    if (!firstNotionUrl || notionImporting || disabled || composerDisabled)
+      return;
 
     setNotionImporting(true);
     try {
       const result = await importNotionPage(firstNotionUrl);
       onNotionImported?.(result);
     } catch (error) {
-      toast.error(notionImportErrorMessage(error, t("assistant.notionImport.importFailed")));
+      toast.error(
+        notionImportErrorMessage(
+          error,
+          t("assistant.notionImport.importFailed"),
+        ),
+      );
     } finally {
       setNotionImporting(false);
     }
@@ -739,7 +846,10 @@ export function AssistantComposer({
 
   return (
     <form
-      className={cn("relative bg-background", floating ? "px-0 pb-0 pt-0" : "border-t p-4")}
+      className={cn(
+        "relative bg-background",
+        floating ? "px-0 pb-0 pt-0" : "border-t p-4",
+      )}
       onSubmit={handleSubmit}
       onDragEnter={nativeDropZoneActive ? undefined : handleDragEnter}
       onDragOver={nativeDropZoneActive ? undefined : handleDragOver}
@@ -779,8 +889,14 @@ export function AssistantComposer({
                   className="flex items-center gap-2 rounded-lg border bg-muted/40 px-2 py-1.5 text-xs"
                 >
                   <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                  <span className="max-w-[8rem] truncate font-medium">{ref.id}</span>
-                  {ref.label ? <span className="max-w-[12rem] truncate text-muted-foreground">{ref.label}</span> : null}
+                  <span className="max-w-[8rem] truncate font-medium">
+                    {ref.id}
+                  </span>
+                  {ref.label ? (
+                    <span className="max-w-[12rem] truncate text-muted-foreground">
+                      {ref.label}
+                    </span>
+                  ) : null}
                   <button
                     type="button"
                     aria-label={`Remove context ${ref.id}`}
@@ -808,7 +924,9 @@ export function AssistantComposer({
                     />
                     <button
                       type="button"
-                      aria-label={t("assistant.composer.removeAttachment", { name: attachment.name })}
+                      aria-label={t("assistant.composer.removeAttachment", {
+                        name: attachment.name,
+                      })}
                       onClick={() => removeAttachment(attachment.id)}
                       className="absolute -right-1 -top-1 rounded-full border bg-background p-0.5 opacity-0 shadow-sm transition-opacity group-hover:opacity-100"
                     >
@@ -818,7 +936,11 @@ export function AssistantComposer({
                 );
               }
 
-              if (attachment.type === "file" && attachment.previewUrl && isVideoMediaType(attachment.mediaType)) {
+              if (
+                attachment.type === "file" &&
+                attachment.previewUrl &&
+                isVideoMediaType(attachment.mediaType)
+              ) {
                 return (
                   <div key={attachment.id} className="group relative">
                     <video
@@ -831,7 +953,9 @@ export function AssistantComposer({
                     />
                     <button
                       type="button"
-                      aria-label={t("assistant.composer.removeAttachment", { name: attachment.name })}
+                      aria-label={t("assistant.composer.removeAttachment", {
+                        name: attachment.name,
+                      })}
                       onClick={() => removeAttachment(attachment.id)}
                       className="absolute -right-1 -top-1 rounded-full border bg-background p-0.5 opacity-0 shadow-sm transition-opacity group-hover:opacity-100"
                     >
@@ -848,10 +972,14 @@ export function AssistantComposer({
                   className="flex items-center gap-2 rounded-lg border bg-muted/40 px-2 py-1.5 text-xs"
                 >
                   <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                  <span className="max-w-[12rem] truncate">{attachment.name}</span>
+                  <span className="max-w-[12rem] truncate">
+                    {attachment.name}
+                  </span>
                   <button
                     type="button"
-                    aria-label={t("assistant.composer.removeAttachment", { name: attachment.name })}
+                    aria-label={t("assistant.composer.removeAttachment", {
+                      name: attachment.name,
+                    })}
                     onClick={() => removeAttachment(attachment.id)}
                     className="rounded p-0.5 text-muted-foreground hover:text-foreground"
                   >
@@ -890,13 +1018,19 @@ export function AssistantComposer({
                     }}
                     onMouseEnter={() => setPaletteActiveIndex(index)}
                   >
-                    <span className="shrink-0 font-mono text-xs font-semibold">{command.name}</span>
-                    <span className="truncate text-xs text-muted-foreground">{command.description}</span>
+                    <span className="shrink-0 font-mono text-xs font-semibold">
+                      {command.name}
+                    </span>
+                    <span className="truncate text-xs text-muted-foreground">
+                      {command.description}
+                    </span>
                   </button>
                 );
               })}
             </div>
-            <p className="px-2 pt-1 text-[10px] text-muted-foreground">{t("assistant.composer.tabToComplete")}</p>
+            <p className="px-2 pt-1 text-[10px] text-muted-foreground">
+              {t("assistant.composer.tabToComplete")}
+            </p>
           </div>
         ) : null}
 
@@ -934,7 +1068,10 @@ export function AssistantComposer({
             const value = event.target.value;
             setInput(value);
             if (mentionsEnabled) {
-              mentions.handleChange(value, event.target.selectionStart ?? value.length);
+              mentions.handleChange(
+                value,
+                event.target.selectionStart ?? value.length,
+              );
             }
           }}
           onKeyDown={handleKeyDown}
@@ -969,7 +1106,9 @@ export function AssistantComposer({
             </Button>
             {toolbarAfterAttach}
             {toolbarMore ? (
-              <ComposerMoreMenu disabled={disabled || composerDisabled}>{toolbarMore}</ComposerMoreMenu>
+              <ComposerMoreMenu disabled={disabled || composerDisabled}>
+                {toolbarMore}
+              </ComposerMoreMenu>
             ) : null}
           </div>
 
@@ -998,7 +1137,11 @@ export function AssistantComposer({
                   "bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-700 dark:bg-red-950/30 dark:text-red-400 dark:hover:bg-red-950/50",
               )}
               disabled={disabled || composerDisabled}
-              aria-label={recording ? t("assistant.composer.stopRecording") : t("assistant.composer.recordAudio")}
+              aria-label={
+                recording
+                  ? t("assistant.composer.stopRecording")
+                  : t("assistant.composer.recordAudio")
+              }
               onClick={() => void toggleRecording()}
             >
               {recording ? (
@@ -1014,11 +1157,16 @@ export function AssistantComposer({
                   <Square className="relative h-3.5 w-3.5 fill-current" />
                 </>
               ) : (
-                <Mic className={cn("h-4 w-4", speechListening && "animate-pulse")} />
+                <Mic
+                  className={cn("h-4 w-4", speechListening && "animate-pulse")}
+                />
               )}
             </Button>
             {recording ? (
-              <span className="inline-flex items-center gap-1 px-1 text-xs text-muted-foreground" aria-live="polite">
+              <span
+                className="inline-flex items-center gap-1 px-1 text-xs text-muted-foreground"
+                aria-live="polite"
+              >
                 <AudioLines className="h-3.5 w-3.5 animate-pulse text-primary" />
                 {t("assistant.composer.recording")}
               </span>
@@ -1041,10 +1189,17 @@ export function AssistantComposer({
       </div>
 
       {hint === null ? null : (
-        <p className={cn("text-xs text-muted-foreground", floating ? "mt-1.5" : "mt-2")}>
+        <p
+          className={cn(
+            "text-xs text-muted-foreground",
+            floating ? "mt-1.5" : "mt-2",
+          )}
+        >
           {hint ?? t("assistant.composer.hint", { command: catalog.command })}
           {speechError ? (
-            <span className="text-destructive">{t("assistant.composer.voiceUnavailable", { error: speechError })}</span>
+            <span className="text-destructive">
+              {t("assistant.composer.voiceUnavailable", { error: speechError })}
+            </span>
           ) : null}
         </p>
       )}
@@ -1060,7 +1215,8 @@ function notionImportErrorMessage(error: unknown, fallback: string): string {
       const message = (body as { error?: { message?: string } }).error?.message;
       if (typeof message === "string" && message.trim()) return message;
     }
-    if (typeof error.message === "string" && error.message.trim()) return error.message;
+    if (typeof error.message === "string" && error.message.trim())
+      return error.message;
   }
 
   if (error instanceof Error && error.message.trim()) return error.message;

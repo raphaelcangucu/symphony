@@ -5,11 +5,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 
 import { createApi } from "./api.mjs";
-import {
-  RUN_MATRIX,
-  promptSha256,
-  readCanonicalPrompt,
-} from "./contract.mjs";
+import { RUN_MATRIX, promptSha256, readCanonicalPrompt } from "./contract.mjs";
 
 const execFileAsync = promisify(execFile);
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -97,7 +93,10 @@ export function projectPayload({
     ],
     setup: {
       workflow_markdown: workflowMarkdown(workspaceRoot),
-      validation_commands: ["cd site && npm run build", "cd site && npm run test:e2e"],
+      validation_commands: [
+        "cd site && npm run build",
+        "cd site && npm run test:e2e",
+      ],
       scan_summary: {
         benchmark: "landing-page-agent-comparison",
       },
@@ -208,6 +207,8 @@ export async function provisionSessions(api, records) {
         issue_identifier: record.issue_identifier,
         title: `Landing benchmark · session · ${record.provider}`,
         agent_kind: record.provider,
+        model: record.requested_model,
+        effort: record.requested_effort,
         execution_mode: record.execution_mode,
         isolated_workspace: true,
       },
@@ -225,7 +226,8 @@ export async function provisionSessions(api, records) {
 }
 
 export function issueTitle(record) {
-  return `Landing benchmark · ${record.path} · ${record.provider}`;
+  const matrix = record.matrix ? ` · ${record.matrix}` : "";
+  return `Landing benchmark${matrix} · ${record.path} · ${record.provider}`;
 }
 
 async function provisionIssues(api, records) {
@@ -239,6 +241,8 @@ async function provisionIssues(api, records) {
         description: prompt,
         status: "Backlog",
         agent: record.provider,
+        model: record.requested_model,
+        effort: record.requested_effort,
       },
     });
 
@@ -305,16 +309,20 @@ if (invokedPath === import.meta.url) {
   provision()
     .then((manifest) => {
       process.stdout.write(
-        `${JSON.stringify({
-          project_slug: manifest.project_slug,
-          prompt_sha256: manifest.prompt_sha256,
-          runs: manifest.runs.map((run) => ({
-            id: run.id,
-            thread_id: run.thread_id,
-            issue_identifier: run.issue_identifier,
-            workspace_path: run.workspace_path,
-          })),
-        }, null, 2)}\n`,
+        `${JSON.stringify(
+          {
+            project_slug: manifest.project_slug,
+            prompt_sha256: manifest.prompt_sha256,
+            runs: manifest.runs.map((run) => ({
+              id: run.id,
+              thread_id: run.thread_id,
+              issue_identifier: run.issue_identifier,
+              workspace_path: run.workspace_path,
+            })),
+          },
+          null,
+          2,
+        )}\n`,
       );
     })
     .catch((error) => {

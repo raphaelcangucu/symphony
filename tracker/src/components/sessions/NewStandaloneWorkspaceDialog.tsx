@@ -22,7 +22,6 @@ import { Input } from "@/components/ui/input";
 import {
   catalogFor,
   defaultComposerSettings,
-  fallbackCatalogBundle,
   type AssistantCatalogBundle,
 } from "@/lib/assistantSettings";
 import { resolveCloneBranchApiPayload, type WorkspaceCloneRepoOption } from "@/lib/workspaceCloneRepos";
@@ -56,7 +55,7 @@ export function NewStandaloneWorkspaceDialog({
   const [mode, setMode] = useState<ExecutionMode>(DEFAULT_MODE);
   const [model, setModel] = useState<string | null>(null);
   const [effort, setEffort] = useState<string | null>(null);
-  const [bundle, setBundle] = useState<AssistantCatalogBundle>(() => fallbackCatalogBundle());
+  const [bundle, setBundle] = useState<AssistantCatalogBundle | null>(null);
   const [creating, setCreating] = useState(false);
 
   useEffect(() => {
@@ -73,16 +72,21 @@ export function NewStandaloneWorkspaceDialog({
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
-    void fetchAssistantCatalogBundle(projectSlug).then((next) => {
-      if (!cancelled) setBundle(next);
-    });
+    setBundle(null);
+    void fetchAssistantCatalogBundle(projectSlug)
+      .then((next) => {
+        if (!cancelled) setBundle(next);
+      })
+      .catch(() => {
+        if (!cancelled) setBundle(null);
+      });
     return () => {
       cancelled = true;
     };
   }, [open, projectSlug]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || !bundle) return;
     const defaults = defaultComposerSettings(catalogFor(bundle, agent));
     setModel((current) => current ?? defaults.model);
     setEffort((current) => current ?? defaults.effort);
@@ -139,16 +143,20 @@ export function NewStandaloneWorkspaceDialog({
           </div>
 
           <div className="flex flex-wrap items-center gap-1.5">
-            <ExecutionSettingsFields
-              bundle={bundle}
-              agent={agent}
-              model={model}
-              effort={effort}
-              disabled={creating}
-              onAgentChange={(next) => setAgent(next ?? DEFAULT_AGENT)}
-              onModelChange={setModel}
-              onEffortChange={setEffort}
-            />
+            {bundle ? (
+              <ExecutionSettingsFields
+                bundle={bundle}
+                agent={agent}
+                model={model}
+                effort={effort}
+                disabled={creating}
+                onAgentChange={(next) => setAgent(next ?? DEFAULT_AGENT)}
+                onModelChange={setModel}
+                onEffortChange={setEffort}
+              />
+            ) : (
+              <span className="text-xs text-muted-foreground">{t("common.loading")}</span>
+            )}
             <ExecutionModeField agent={agent} mode={mode} disabled={creating} onChange={setMode} />
           </div>
 
@@ -169,7 +177,7 @@ export function NewStandaloneWorkspaceDialog({
               {t("workspacesPage.cleanup.cancel")}
             </Button>
           </DialogClose>
-          <Button type="button" disabled={creating || name.trim() === ""} onClick={() => void handleCreate()}>
+          <Button type="button" disabled={creating || name.trim() === "" || !bundle} onClick={() => void handleCreate()}>
             <FolderPlus className="h-4 w-4" />
             {creating ? t("workspacesPage.newWorkspace.creating") : t("workspacesPage.newWorkspace.create")}
           </Button>

@@ -4,11 +4,57 @@ defmodule SymphonyElixir.Cursor.CodingAgentTest do
   alias SymphonyElixir.Claude.ApprovalBroker
   alias SymphonyElixir.Claude.AppServer.ToolGateway
   alias SymphonyElixir.Cursor.CodingAgent
+  alias SymphonyElixir.HotpathCache
 
   @fake Path.expand("../../support/fixtures/fake_cursor.sh", __DIR__)
   @issue %{id: "1", identifier: "PREF-1", title: "Test issue"}
   @create_issue_spec %{"name" => "create_issue", "description" => "d", "inputSchema" => %{"type" => "object"}}
   @list_issues_spec %{"name" => "list_issues", "description" => "d", "inputSchema" => %{"type" => "object"}}
+
+  setup do
+    HotpathCache.put(
+      :cursor_model_catalog,
+      %{
+        agent: "cursor",
+        agent_label: "Cursor Agent",
+        command: "cursor-agent",
+        default_model: "auto",
+        models: [
+          %{
+            id: "auto",
+            model: "auto",
+            label: "Auto",
+            is_default: true,
+            default_effort: "",
+            efforts: [],
+            input_modalities: ["text", "image"]
+          },
+          %{
+            id: "composer-2.5",
+            model: "composer-2.5",
+            label: "Composer 2.5 (current)",
+            is_default: false,
+            default_effort: "",
+            efforts: [],
+            input_modalities: ["text", "image"]
+          },
+          %{
+            id: "cursor-grok-4.5-high",
+            model: "cursor-grok-4.5-high",
+            label: "Cursor Grok 4.5 High",
+            is_default: false,
+            default_effort: "",
+            efforts: [],
+            input_modalities: ["text", "image"]
+          }
+        ]
+      },
+      60_000
+    )
+
+    on_exit(fn -> HotpathCache.invalidate(:cursor_model_catalog) end)
+    :ok
+  end
 
   defp workspace do
     root = Path.join(System.tmp_dir!(), "cursor-adapter-#{System.unique_integer([:positive])}")
@@ -41,6 +87,39 @@ defmodule SymphonyElixir.Cursor.CodingAgentTest do
     assert :session_started in events
     assert :turn_completed in events
     Agent.stop(collector)
+  end
+
+  test "resolved_model/2 canonicalizes native Cursor confirmation to the unique catalog slug" do
+    assert {:ok, "composer-2.5"} =
+             CodingAgent.resolved_model("composer-2.5[fast=true]", "composer-2.5")
+
+    assert {:ok, "cursor-grok-4.5-high"} =
+             CodingAgent.resolved_model(
+               "grok-4.5[effort=high,fast=true]",
+               "cursor-grok-4.5-high"
+             )
+  end
+
+  test "resolved_model/2 resolves automatic selection through the live catalog" do
+    assert {:ok, "composer-2.5"} = CodingAgent.resolved_model("Composer 2.5", nil)
+  end
+
+  test "resolved_model/2 rejects missing or contradictory native confirmation" do
+    assert {:error, {:model_confirmation_missing, "composer-2.5"}} =
+             CodingAgent.resolved_model(nil, "composer-2.5")
+
+    assert {:error, {:model_confirmation_mismatch, "composer-2.5", "Grok 4.5"}} =
+             CodingAgent.resolved_model("Grok 4.5", "composer-2.5")
+  end
+
+  test "resolved_effort/2 stays nil because Cursor effort is canonical in the model slug" do
+    assert CodingAgent.resolved_effort(
+             "grok-4.5[effort=high,fast=true]",
+             "cursor-grok-4.5-high"
+           ) == nil
+
+    assert CodingAgent.resolved_effort("Grok 4.5", "cursor-grok-4.5-high") == nil
+    assert CodingAgent.resolved_effort("composer-2.5[fast=true]", "composer-2.5") == nil
   end
 
   test "second turn resumes with the captured chat id" do

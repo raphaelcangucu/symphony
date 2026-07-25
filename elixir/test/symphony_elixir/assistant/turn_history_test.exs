@@ -28,6 +28,8 @@ defmodule SymphonyElixir.Assistant.TurnHistoryTest do
     assert turn["prompt"] == "do the thing"
     assert turn["provider"] == "codex"
     refute Map.has_key?(turn, "agent_kind")
+    refute Map.has_key?(turn, "model")
+    refute Map.has_key?(turn, "effort")
     assert is_binary(turn["started_at"])
     assert turn["finished_at"] == nil
     assert History.turn_running?(updated)

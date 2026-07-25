@@ -10,7 +10,10 @@ defmodule SymphonyElixirWeb.Tracker.AssistantController do
 
   @spec config(Conn.t(), map()) :: Conn.t()
   def config(conn, _params) do
-    json(conn, %{data: CatalogBundle.fetch()})
+    case CatalogBundle.fetch() do
+      {:ok, bundle} -> json(conn, %{data: bundle})
+      {:error, reason} -> TrackerErrors.render(conn, reason)
+    end
   end
 
   @spec upload_attachment(Conn.t(), map()) :: Conn.t()

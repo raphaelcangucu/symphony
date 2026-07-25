@@ -123,6 +123,7 @@ defmodule SymphonyElixir.Evidence.Commits do
       wait_ms: @cache_wait_ms
     )
   end
+
   defp workspace_fingerprint(repos) when is_list(repos) do
     Enum.map(repos, fn %RepoState{} = repo ->
       head =

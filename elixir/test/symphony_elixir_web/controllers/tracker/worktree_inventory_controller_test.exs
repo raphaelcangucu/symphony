@@ -343,8 +343,10 @@ defmodule SymphonyElixirWeb.Tracker.WorktreeInventoryControllerTest do
     {:ok, persisted} = History.get_thread(thread["id"])
     assert persisted.agent_kind == "claude"
     assert History.thread_execution_mode(persisted) == "yolo"
-    assert History.thread_model(persisted) == "claude-sonnet"
-    assert History.thread_effort(persisted) == "high"
+    assert History.requested_model(persisted) == "claude-sonnet"
+    assert History.requested_effort(persisted) == "high"
+    assert History.resolved_model(persisted) == nil
+    assert History.resolved_effort(persisted) == nil
   end
 
   test "POST /workspaces rejects a duplicate name", ctx do

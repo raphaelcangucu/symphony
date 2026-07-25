@@ -10,7 +10,10 @@ import type { AgentExecution } from "@/types/agent-execution";
 import type { AssistantThread } from "@/types/assistant-thread";
 import type { Issue } from "@/types/issue";
 import type { RecentSession } from "@/types/recents";
-import type { SidebarProjectBranchInput, SidebarWorkspaceNode } from "@/types/sidebar";
+import type {
+  SidebarProjectBranchInput,
+  SidebarWorkspaceNode,
+} from "@/types/sidebar";
 import type { WorkspaceInventoryEntry } from "@/types/worktrees";
 
 const PROJECT_PATH = "/repos/demo";
@@ -117,6 +120,10 @@ function thread(
     id,
     scope: "project_session",
     agentKind: "claude",
+    requestedModel: null,
+    requestedEffort: null,
+    resolvedModel: null,
+    resolvedEffort: null,
     projectSlug: "demo",
     projectName: "Demo",
     issueIdentifier: null,
@@ -139,7 +146,12 @@ function fixtureInput(
     projectTitle: "Demo",
     archived: false,
     issues: [issue("DEMO-1", "First issue")],
-    executions: new Map([["DEMO-1", execution("DEMO-1", { executionSessionId: 42, sessionId: "42" })]]),
+    executions: new Map([
+      [
+        "DEMO-1",
+        execution("DEMO-1", { executionSessionId: 42, sessionId: "42" }),
+      ],
+    ]),
     relatedSessions: [
       recent("authoring", {
         scope: "issue",
@@ -163,13 +175,20 @@ function fixtureInput(
       thread(11, { issueIdentifier: "DEMO-1", workspacePath: ISSUE_PATH }),
     ],
     inventory: [
-      inventory(PROJECT_PATH, { kind: "project", name: "demo", removable: false }),
+      inventory(PROJECT_PATH, {
+        kind: "project",
+        name: "demo",
+        removable: false,
+      }),
       inventory(ISSUE_PATH, {
         kind: "issue",
         issueIdentifier: "DEMO-1",
         name: "DEMO-1",
       }),
-      inventory("/repos/demo/experiments", { kind: "standalone", name: "experiments" }),
+      inventory("/repos/demo/experiments", {
+        kind: "standalone",
+        name: "experiments",
+      }),
     ],
     loadState: "ready",
     error: null,
@@ -191,14 +210,20 @@ describe("buildSidebarProjectTree", () => {
     const project = buildSidebarProjectTree(fixtureInput());
 
     expect(project.id).toBe("demo");
-    expect(project.workspaces.map((workspace) => workspace.workspaceKind)).toEqual([
-      "issue",
-      "project",
-      "standalone",
-    ]);
+    expect(
+      project.workspaces.map((workspace) => workspace.workspaceKind),
+    ).toEqual(["issue", "project", "standalone"]);
 
-    const issueWorkspace = project.workspaces.find((workspace) => workspace.workspaceKind === "issue");
-    expect(issueWorkspace?.sessions.map(({ id, sessionKind, href }) => ({ id, sessionKind, href }))).toEqual([
+    const issueWorkspace = project.workspaces.find(
+      (workspace) => workspace.workspaceKind === "issue",
+    );
+    expect(
+      issueWorkspace?.sessions.map(({ id, sessionKind, href }) => ({
+        id,
+        sessionKind,
+        href,
+      })),
+    ).toEqual([
       {
         id: "authoring:DEMO-1",
         sessionKind: "authoring",
@@ -215,7 +240,9 @@ describe("buildSidebarProjectTree", () => {
         href: "/projects/demo/workspaces/42",
       },
     ]);
-    expect(project.unassignedSessions.map((session) => session.title)).toEqual(["Free chat"]);
+    expect(project.unassignedSessions.map((session) => session.title)).toEqual([
+      "Free chat",
+    ]);
   });
 
   it("preserves authoritative thread labels and issue label names on session nodes", () => {
@@ -235,12 +262,15 @@ describe("buildSidebarProjectTree", () => {
     const issueWorkspace = project.workspaces.find(
       (workspace) => workspace.workspaceKind === "issue",
     );
-    const chat = issueWorkspace?.sessions.find((session) => session.id === "thread:11");
+    const chat = issueWorkspace?.sessions.find(
+      (session) => session.id === "thread:11",
+    );
     expect(chat?.labels).toEqual(["backend"]);
     expect(chat?.issueLabelNames).toEqual(["Bug", "UI"]);
     expect(
-      issueWorkspace?.sessions.find((session) => session.sessionKind === "execution")
-        ?.labels,
+      issueWorkspace?.sessions.find(
+        (session) => session.sessionKind === "execution",
+      )?.labels,
     ).toBeNull();
   });
 
@@ -258,10 +288,16 @@ describe("buildSidebarProjectTree", () => {
     });
 
     const project = buildSidebarProjectTree(input);
-    const standalone = project.workspaces.find((workspace) => workspace.workspaceKind === "standalone");
+    const standalone = project.workspaces.find(
+      (workspace) => workspace.workspaceKind === "standalone",
+    );
 
-    expect(standalone?.sessions.map((session) => session.id)).toEqual(["thread:21"]);
-    expect(project.unassignedSessions.map((session) => session.id)).toEqual(["thread:22"]);
+    expect(standalone?.sessions.map((session) => session.id)).toEqual([
+      "thread:21",
+    ]);
+    expect(project.unassignedSessions.map((session) => session.id)).toEqual([
+      "thread:22",
+    ]);
   });
 
   it("reconciles authoring recents with thread metadata without duplicate chat nodes", () => {
@@ -292,7 +328,9 @@ describe("buildSidebarProjectTree", () => {
       ]),
       ...project.unassignedSessions,
     ];
-    const authoring = allSessions.filter((session) => session.id === "authoring:DEMO-1");
+    const authoring = allSessions.filter(
+      (session) => session.id === "authoring:DEMO-1",
+    );
 
     expect(authoring).toHaveLength(1);
     expect(authoring[0]).toMatchObject({
@@ -344,7 +382,9 @@ describe("buildSidebarProjectTree", () => {
       }),
     );
 
-    expect(project.unassignedSessions.map(({ id, title }) => ({ id, title }))).toEqual([
+    expect(
+      project.unassignedSessions.map(({ id, title }) => ({ id, title })),
+    ).toEqual([
       { id: "thread:61", title: "Newest thread" },
       { id: "thread:62", title: "Distinct thread" },
     ]);
@@ -373,7 +413,9 @@ describe("buildSidebarProjectTree", () => {
     );
 
     expect(
-      project.unassignedSessions.filter((session) => session.id === "thread:63"),
+      project.unassignedSessions.filter(
+        (session) => session.id === "thread:63",
+      ),
     ).toEqual([
       expect.objectContaining({
         id: "thread:63",
@@ -389,10 +431,7 @@ describe("buildSidebarProjectTree", () => {
           issue("DEMO-1", "First issue"),
           { ...issue("OTHER-1", "Other issue"), projectSlug: "other" },
         ],
-        executions: [
-          execution("DEMO-1"),
-          execution("OTHER-1"),
-        ],
+        executions: [execution("DEMO-1"), execution("OTHER-1")],
         relatedSessions: [
           recent("other-31", { projectSlug: "other", threadId: 31 }),
           recent("global-32", {
@@ -401,15 +440,23 @@ describe("buildSidebarProjectTree", () => {
             scope: "freeform",
             threadId: 32,
           }),
-          recent("local-33", { scope: "project", threadId: 33, title: "Local unassigned" }),
+          recent("local-33", {
+            scope: "project",
+            threadId: 33,
+            title: "Local unassigned",
+          }),
         ],
         assistantThreads: [],
       }),
     );
 
-    expect(project.unassignedSessions.map((session) => session.id)).toEqual(["thread:33"]);
+    expect(project.unassignedSessions.map((session) => session.id)).toEqual([
+      "thread:33",
+    ]);
     expect(
-      project.workspaces.flatMap((workspace) => workspace.sessions).map((session) => session.id),
+      project.workspaces
+        .flatMap((workspace) => workspace.sessions)
+        .map((session) => session.id),
     ).not.toContain("exec:OTHER-1");
   });
 
@@ -502,9 +549,7 @@ describe("buildSidebarProjectTree", () => {
       }),
     );
     const pinnedWorkspaceIds = new Set(
-      inventories
-        .slice(0, 9)
-        .map((entry) => `workspace:demo:${entry.path}`),
+      inventories.slice(0, 9).map((entry) => `workspace:demo:${entry.path}`),
     );
     const pinned = buildSidebarProjectTree(
       fixtureInput({
@@ -564,7 +609,9 @@ describe("buildSidebarProjectTree", () => {
         options: {
           ...defaultOptions,
           pinnedSessionIds: new Set(
-            projectSessions.slice(0, 7).map((session) => `thread:${session.threadId}`),
+            projectSessions
+              .slice(0, 7)
+              .map((session) => `thread:${session.threadId}`),
           ),
         },
       }),
@@ -611,14 +658,21 @@ describe("buildSidebarProjectTree", () => {
 
     expect(
       Object.fromEntries(
-        project.workspaces.map((workspace) => [workspace.workspaceKind, workspace.title]),
+        project.workspaces.map((workspace) => [
+          workspace.workspaceKind,
+          workspace.title,
+        ]),
       ),
     ).toEqual({
       issue: "Issue alias",
       project: "Main alias",
       standalone: "/repos/demo/unnamed",
     });
-    expect(project.workspaces.every((workspace) => workspace.title.trim().length > 0)).toBe(true);
+    expect(
+      project.workspaces.every(
+        (workspace) => workspace.title.trim().length > 0,
+      ),
+    ).toBe(true);
   });
 
   it("preserves project, parallel, and orphan workspace cards", () => {
@@ -639,12 +693,9 @@ describe("buildSidebarProjectTree", () => {
       }),
     );
 
-    expect(project.workspaces.map((workspace) => workspace.workspaceKind)).toEqual([
-      "issue",
-      "parallel",
-      "project",
-      "orphan",
-    ]);
+    expect(
+      project.workspaces.map((workspace) => workspace.workspaceKind),
+    ).toEqual(["issue", "parallel", "project", "orphan"]);
   });
 
   it("sorts by pinned, in-progress activity, then recency, title, and stable id", () => {
@@ -655,37 +706,54 @@ describe("buildSidebarProjectTree", () => {
       workspaceNode("recent", "Zulu", "idle", "2026-02-01T00:00:00Z"),
       workspaceNode("error", "Zulu", "error", "2026-01-01T00:00:00Z"),
       workspaceNode("alpha-a", "Alpha", "idle", "2026-01-01T00:00:00Z"),
-      { ...workspaceNode("pinned", "Pinned", "idle", "bad-date"), pinned: true },
+      {
+        ...workspaceNode("pinned", "Pinned", "idle", "bad-date"),
+        pinned: true,
+      },
     ];
 
-    expect([...nodes].sort(compareSidebarNodes).map((node) => node.id)).toEqual([
-      "pinned",
-      "active",
-      "attention",
-      "error",
-      "recent",
-      "alpha-a",
-      "alpha-b",
-    ]);
+    expect([...nodes].sort(compareSidebarNodes).map((node) => node.id)).toEqual(
+      [
+        "pinned",
+        "active",
+        "attention",
+        "error",
+        "recent",
+        "alpha-a",
+        "alpha-b",
+      ],
+    );
     // active and attention share the in-progress rank; title/id break ties.
     expect(
       [
-        workspaceNode("waiting", "Waiting", "attention", "2026-01-01T00:00:00Z"),
+        workspaceNode(
+          "waiting",
+          "Waiting",
+          "attention",
+          "2026-01-01T00:00:00Z",
+        ),
         workspaceNode("live", "Live", "active", "2026-01-01T00:00:00Z"),
-      ].sort(compareSidebarNodes).map((node) => node.id),
+      ]
+        .sort(compareSidebarNodes)
+        .map((node) => node.id),
     ).toEqual(["live", "waiting"]);
   });
 
   it("sorts malformed timestamps as oldest without unstable NaN comparisons", () => {
     const malformed = workspaceNode("malformed", "Same", "idle", "not-a-date");
     const missing = workspaceNode("missing", "Same", "idle", "");
-    const valid = workspaceNode("valid", "Same", "idle", "2026-01-01T00:00:00Z");
-
-    expect([malformed, valid, missing].sort(compareSidebarNodes).map((node) => node.id)).toEqual([
+    const valid = workspaceNode(
       "valid",
-      "malformed",
-      "missing",
-    ]);
+      "Same",
+      "idle",
+      "2026-01-01T00:00:00Z",
+    );
+
+    expect(
+      [malformed, valid, missing]
+        .sort(compareSidebarNodes)
+        .map((node) => node.id),
+    ).toEqual(["valid", "malformed", "missing"]);
     expect(compareSidebarNodes(malformed, missing)).not.toBeNaN();
   });
 
@@ -723,7 +791,9 @@ describe("buildSidebarProjectTree", () => {
         workspaceNode("é", "Same"),
         workspaceNode("Z", "Same"),
         workspaceNode("a", "Same"),
-      ].sort(compareSidebarNodes).map((node) => node.id),
+      ]
+        .sort(compareSidebarNodes)
+        .map((node) => node.id),
     ).toEqual(["Z", "a", "é"]);
   });
 
@@ -739,11 +809,19 @@ describe("buildSidebarProjectTree", () => {
         },
       }),
     );
-    const sessions = project.workspaces.flatMap((workspace) => workspace.sessions);
+    const sessions = project.workspaces.flatMap(
+      (workspace) => workspace.sessions,
+    );
 
-    expect(sessions.find((session) => session.id === "thread:11")?.unread).toBe(false);
-    expect(sessions.find((session) => session.id === "authoring:DEMO-1")?.unread).toBe(true);
-    expect(sessions.find((session) => session.id === "thread:42")?.unread).toBe(false);
+    expect(sessions.find((session) => session.id === "thread:11")?.unread).toBe(
+      false,
+    );
+    expect(
+      sessions.find((session) => session.id === "authoring:DEMO-1")?.unread,
+    ).toBe(true);
+    expect(sessions.find((session) => session.id === "thread:42")?.unread).toBe(
+      false,
+    );
     expect(project.unassignedSessions[0]?.unread).toBe(true);
   });
 
@@ -760,11 +838,19 @@ describe("buildSidebarProjectTree", () => {
         },
       }),
     );
-    const sessions = project.workspaces.flatMap((workspace) => workspace.sessions);
+    const sessions = project.workspaces.flatMap(
+      (workspace) => workspace.sessions,
+    );
 
-    expect(sessions.find((session) => session.id === "thread:11")?.unread).toBe(true);
-    expect(sessions.find((session) => session.id === "authoring:DEMO-1")?.unread).toBe(false);
-    expect(sessions.find((session) => session.id === "thread:42")?.unread).toBe(false);
+    expect(sessions.find((session) => session.id === "thread:11")?.unread).toBe(
+      true,
+    );
+    expect(
+      sessions.find((session) => session.id === "authoring:DEMO-1")?.unread,
+    ).toBe(false);
+    expect(sessions.find((session) => session.id === "thread:42")?.unread).toBe(
+      false,
+    );
   });
 
   it("preserves Unix epoch zero while rejecting negative and invalid timestamps", () => {
@@ -821,7 +907,9 @@ describe("buildSidebarProjectTree", () => {
       "paused",
       "saved",
     ] as const;
-    const issues = statuses.map((status, index) => issue(`DEMO-${index + 1}`, status));
+    const issues = statuses.map((status, index) =>
+      issue(`DEMO-${index + 1}`, status),
+    );
     const project = buildSidebarProjectTree(
       fixtureInput({
         issues,
@@ -862,8 +950,12 @@ describe("buildSidebarProjectTree", () => {
   });
 
   it("propagates load, error, and stale state without discarding data", () => {
-    const errored = buildSidebarProjectTree(fixtureInput({ loadState: "error", error: "Inventory failed" }));
-    const stale = buildSidebarProjectTree(fixtureInput({ loadState: "stale", error: "Refresh failed" }));
+    const errored = buildSidebarProjectTree(
+      fixtureInput({ loadState: "error", error: "Inventory failed" }),
+    );
+    const stale = buildSidebarProjectTree(
+      fixtureInput({ loadState: "stale", error: "Refresh failed" }),
+    );
 
     expect(errored).toMatchObject({
       loadState: "error",
@@ -882,7 +974,7 @@ describe("buildSidebarProjectTree", () => {
     const mutableInput = fixtureInput({ executions: [execution("DEMO-1")] });
     const snapshot = structuredClone({
       ...mutableInput,
-      executions: [...mutableInput.executions as AgentExecution[]],
+      executions: [...(mutableInput.executions as AgentExecution[])],
       options: {
         ...mutableInput.options,
         pinnedProjectIds: [...mutableInput.options.pinnedProjectIds],
@@ -895,7 +987,7 @@ describe("buildSidebarProjectTree", () => {
     expect(() => buildSidebarProjectTree(frozenInput)).not.toThrow();
     expect({
       ...mutableInput,
-      executions: [...mutableInput.executions as AgentExecution[]],
+      executions: [...(mutableInput.executions as AgentExecution[])],
       options: {
         ...mutableInput.options,
         pinnedProjectIds: [...mutableInput.options.pinnedProjectIds],
@@ -964,12 +1056,36 @@ describe("sidebar project branch input validation", () => {
     ["relatedSessions", { relatedSessions: {} }, /relatedSessions.*array/i],
     ["assistantThreads", { assistantThreads: {} }, /assistantThreads.*array/i],
     ["inventory", { inventory: {} }, /inventory.*array/i],
-    ["loadState", { loadState: "unknown" }, /loadState.*idle.*loading.*ready.*error.*stale/i],
-    ["sortMode", { options: { ...fixtureInput().options, sortMode: "recent" } }, /sortMode.*activity.*name/i],
-    ["workspaceLimit", { options: { ...fixtureInput().options, workspaceLimit: Number.NaN } }, /workspaceLimit.*finite/i],
-    ["sessionLimit", { options: { ...fixtureInput().options, sessionLimit: -1 } }, /sessionLimit.*non-negative/i],
-    ["pinnedProjectIds", { options: { ...fixtureInput().options, pinnedProjectIds: [] } }, /pinnedProjectIds.*Set/i],
-    ["lastReadAtBySession", { options: { ...fixtureInput().options, lastReadAtBySession: null } }, /lastReadAtBySession.*object.*Map/i],
+    [
+      "loadState",
+      { loadState: "unknown" },
+      /loadState.*idle.*loading.*ready.*error.*stale/i,
+    ],
+    [
+      "sortMode",
+      { options: { ...fixtureInput().options, sortMode: "recent" } },
+      /sortMode.*activity.*name/i,
+    ],
+    [
+      "workspaceLimit",
+      { options: { ...fixtureInput().options, workspaceLimit: Number.NaN } },
+      /workspaceLimit.*finite/i,
+    ],
+    [
+      "sessionLimit",
+      { options: { ...fixtureInput().options, sessionLimit: -1 } },
+      /sessionLimit.*non-negative/i,
+    ],
+    [
+      "pinnedProjectIds",
+      { options: { ...fixtureInput().options, pinnedProjectIds: [] } },
+      /pinnedProjectIds.*Set/i,
+    ],
+    [
+      "lastReadAtBySession",
+      { options: { ...fixtureInput().options, lastReadAtBySession: null } },
+      /lastReadAtBySession.*object.*Map/i,
+    ],
   ])("rejects malformed %s", (_field, overrides, expectedMessage) => {
     expect(() =>
       buildSidebarProjectTree(
@@ -995,21 +1111,28 @@ describe("sidebar project branch input validation", () => {
     ["assistantThreads", [{}], /assistantThreads\[0\].*id/i],
     ["inventory", [null], /inventory\[0\].*object/i],
     ["inventory", [{}], /inventory\[0\].*path/i],
-  ])("rejects malformed %s elements with their index", (field, value, expectedMessage) => {
-    expect(() =>
-      buildSidebarProjectTree(
-        fixtureInput({
-          [field]: value,
-        } as Partial<SidebarProjectBranchInput>),
-      ),
-    ).toThrow(expectedMessage);
-  });
+  ])(
+    "rejects malformed %s elements with their index",
+    (field, value, expectedMessage) => {
+      expect(() =>
+        buildSidebarProjectTree(
+          fixtureInput({
+            [field]: value,
+          } as Partial<SidebarProjectBranchInput>),
+        ),
+      ).toThrow(expectedMessage);
+    },
+  );
 });
 
 describe("sidebar tree helpers", () => {
   it("aggregates status with documented precedence", () => {
-    expect(aggregateStatus(["idle", "stale", "active", "attention", "error"])).toBe("error");
-    expect(aggregateStatus(["idle", "stale", "active", "attention"])).toBe("attention");
+    expect(
+      aggregateStatus(["idle", "stale", "active", "attention", "error"]),
+    ).toBe("error");
+    expect(aggregateStatus(["idle", "stale", "active", "attention"])).toBe(
+      "attention",
+    );
     expect(aggregateStatus(["idle", "stale", "active"])).toBe("active");
     expect(aggregateStatus(["idle", "stale"])).toBe("stale");
     expect(aggregateStatus([])).toBe("idle");
@@ -1034,7 +1157,9 @@ describe("sidebar tree helpers", () => {
   });
 
   it("applies archive, status, agent, activity, and group preferences to tree output", () => {
-    const collectSessionIds = (project: ReturnType<typeof buildSidebarProjectTree>) =>
+    const collectSessionIds = (
+      project: ReturnType<typeof buildSidebarProjectTree>,
+    ) =>
       [
         ...project.workspaces.flatMap((workspace) => [
           ...workspace.sessions,
@@ -1094,8 +1219,15 @@ describe("sidebar tree helpers", () => {
       executions: new Map(),
       issues: [],
       inventory: [
-        inventory(PROJECT_PATH, { kind: "project", name: "demo", removable: false }),
-        inventory("/repos/demo/experiments", { kind: "standalone", name: "experiments" }),
+        inventory(PROJECT_PATH, {
+          kind: "project",
+          name: "demo",
+          removable: false,
+        }),
+        inventory("/repos/demo/experiments", {
+          kind: "standalone",
+          name: "experiments",
+        }),
       ],
     });
 
@@ -1158,10 +1290,9 @@ describe("sidebar tree helpers", () => {
         filters: { showArchived: false },
       },
     });
-    expect(grouped.workspaces.map((workspace) => workspace.workspaceKind)).toEqual([
-      "project",
-      "standalone",
-    ]);
+    expect(
+      grouped.workspaces.map((workspace) => workspace.workspaceKind),
+    ).toEqual(["project", "standalone"]);
   });
 });
 

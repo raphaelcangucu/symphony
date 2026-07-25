@@ -129,6 +129,7 @@ defmodule SymphonyElixirWeb.Router do
     delete("/projects/:project_slug/gateways/telegram", ProjectGatewayController, :delete_telegram)
     get("/projects/:project_slug/issues/form_options", IssueController, :form_options)
     get("/assistant/threads", AssistantThreadController, :index)
+    get("/assistant/config", AssistantController, :config)
     post("/assistant/threads", AssistantThreadController, :create)
     post("/assistant/threads/freeform/active", AssistantThreadController, :ensure_active_freeform)
     get("/assistant/threads/:thread_id", AssistantThreadController, :show)

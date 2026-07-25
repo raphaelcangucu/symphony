@@ -3,15 +3,15 @@ import { describe, expect, it } from "vitest";
 import {
   catalogAgentLabel,
   catalogFor,
-  fallbackCatalogBundle,
   loadComposerState,
   saveComposerState,
 } from "@/lib/assistantSettings";
+import { createMockAssistantCatalogBundle } from "@/test-fixtures/assistantCatalog";
 
 describe("composer state v2", () => {
   it("defaults to the bundle's default agent with that catalog's default model", () => {
     window.localStorage.clear();
-    const bundle = fallbackCatalogBundle();
+    const bundle = createMockAssistantCatalogBundle();
     const state = loadComposerState(bundle);
 
     expect(state.agent).toBe("codex");
@@ -20,7 +20,7 @@ describe("composer state v2", () => {
 
   it("persists per-agent model choices independently", () => {
     window.localStorage.clear();
-    const bundle = fallbackCatalogBundle();
+    const bundle = createMockAssistantCatalogBundle();
     const state = loadComposerState(bundle);
 
     state.agent = "claude";

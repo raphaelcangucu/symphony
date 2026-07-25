@@ -31,7 +31,9 @@ defmodule SymphonyElixir.Agent.RunResult do
             tool_calls: [],
             content_blocks: nil,
             usage: nil,
-            cost_usd: nil
+            cost_usd: nil,
+            resolved_model: nil,
+            resolved_effort: nil
 
   @type t :: %__MODULE__{
           provider: String.t(),
@@ -43,7 +45,9 @@ defmodule SymphonyElixir.Agent.RunResult do
           tool_calls: list(),
           content_blocks: list() | nil,
           usage: map() | nil,
-          cost_usd: number() | nil
+          cost_usd: number() | nil,
+          resolved_model: String.t() | nil,
+          resolved_effort: String.t() | nil
         }
 
   @spec normalize(String.t() | atom(), map()) :: {:ok, t()} | {:error, term()}
@@ -69,7 +73,9 @@ defmodule SymphonyElixir.Agent.RunResult do
          tool_calls: get(result, :tool_calls) || [],
          content_blocks: get(result, :content_blocks),
          usage: get(result, :usage),
-         cost_usd: get(result, :cost_usd)
+         cost_usd: get(result, :cost_usd),
+         resolved_model: string_value(get(result, :resolved_model)),
+         resolved_effort: string_value(get(result, :resolved_effort))
        }}
     end
   end
@@ -88,7 +94,9 @@ defmodule SymphonyElixir.Agent.RunResult do
       tool_calls: result.tool_calls,
       content_blocks: result.content_blocks,
       usage: result.usage,
-      cost_usd: result.cost_usd
+      cost_usd: result.cost_usd,
+      resolved_model: result.resolved_model,
+      resolved_effort: result.resolved_effort
     }
   end
 

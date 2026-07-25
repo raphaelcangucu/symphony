@@ -1,17 +1,16 @@
-import {
-  access,
-  mkdir,
-  readFile,
-  readdir,
-  writeFile,
-} from "node:fs/promises";
+import { access, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { executeProcess } from "./process.mjs";
 import { sanitizedChildEnv } from "../seed/scripts/child-env.mjs";
 
-const IGNORED_DIRECTORIES = new Set([".git", "node_modules", "dist", "test-results"]);
+const IGNORED_DIRECTORIES = new Set([
+  ".git",
+  "node_modules",
+  "dist",
+  "test-results",
+]);
 
 async function exists(path) {
   try {
@@ -38,7 +37,9 @@ async function filesBelow(root, current = root) {
 
 async function hasE2eTests(workspacePath) {
   const root = join(workspacePath, "tests", "e2e");
-  return (await filesBelow(root)).some((path) => /\.(spec|test)\.[cm]?[jt]sx?$/.test(path));
+  return (await filesBelow(root)).some((path) =>
+    /\.(spec|test)\.[cm]?[jt]sx?$/.test(path),
+  );
 }
 
 export async function gitFacts(workspacePath) {
@@ -169,6 +170,10 @@ export function resolveRunIdentity(run, runResult) {
       agent_kind: run.provider,
       status: null,
       provider_matches: null,
+      requested_model: run.requested_model ?? null,
+      requested_effort: run.requested_effort ?? null,
+      resolved_model: null,
+      resolved_effort: null,
       source: "manifest",
     };
   }
@@ -291,7 +296,11 @@ export function validationPort(index) {
 async function validateWorkspace(workspacePath, index) {
   const steps = [];
   const commands = [
-    ["npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund"], 8 * 60 * 1000],
+    [
+      "npm",
+      ["install", "--ignore-scripts", "--no-audit", "--no-fund"],
+      8 * 60 * 1000,
+    ],
     ["npm", ["run", "build"], 5 * 60 * 1000],
     ["npm", ["run", "test:e2e"], 10 * 60 * 1000],
   ];
@@ -320,8 +329,8 @@ export function renderComparison({ prompt_sha256: promptHash, rows }) {
     "",
     `Prompt SHA-256: \`${promptHash}\``,
     "",
-    "| Célula | Caminho | Provedor | Symphony | Contrato | Validação | Duração observada | Observação |",
-    "| --- | --- | --- | --- | --- | --- | ---: | --- |",
+    "| Célula | Matriz | Caminho | Provedor | Solicitado | Resolvido | Symphony | Contrato | Validação | Duração observada | Observação |",
+    "| --- | --- | --- | --- | --- | --- | --- | --- | --- | ---: | --- |",
   ];
 
   for (const row of rows) {
@@ -329,10 +338,10 @@ export function renderComparison({ prompt_sha256: promptHash, rows }) {
       row.validation?.length > 0 &&
       row.validation.every((step) => step.status === "passed")
         ? "passed"
-        : row.validation?.at(-1)?.status ?? "not-run";
+        : (row.validation?.at(-1)?.status ?? "not-run");
     const e2eOutput =
-      row.validation?.find((step) => step.command.includes("test:e2e"))?.output ??
-      "";
+      row.validation?.find((step) => step.command.includes("test:e2e"))
+        ?.output ?? "";
     const e2eCount = [...e2eOutput.matchAll(/(\d+) passed\b/g)].at(-1)?.[1];
     const validation = e2eCount
       ? `${validationStatus} (${e2eCount} E2E)`
@@ -343,7 +352,7 @@ export function renderComparison({ prompt_sha256: promptHash, rows }) {
         ? String(row.error).split("\n")[0]
         : "—";
     lines.push(
-      `| ${row.id} | ${row.path} | ${row.provider} | ${row.status} | ${row.contract_passed ? "passed" : "failed"} | ${validation} | ${formatDuration(row.execution_observed_duration_ms ?? row.duration_ms)} | ${observation} |`,
+      `| ${row.id} | ${row.matrix ?? "n/a"} | ${row.path} | ${row.provider} | ${modelEffort(row.requested_model, row.requested_effort)} | ${modelEffort(row.identity?.resolved_model, row.identity?.resolved_effort)} | ${row.status} | ${row.contract_passed ? "passed" : "failed"} | ${validation} | ${formatDuration(row.execution_observed_duration_ms ?? row.duration_ms)} | ${observation} |`,
     );
   }
 
@@ -360,7 +369,9 @@ export function renderComparison({ prompt_sha256: promptHash, rows }) {
       `- Tentativas: ${row.attempts?.count ?? 0} (canônica: ${row.attempts?.canonical_attempt_id ?? "n/a"})`,
       `- Preview: ${row.preview?.servers?.[0]?.url ?? "indisponível"}`,
       `- Identidade: ${row.identity ? `thread=${row.identity.assistant_thread_id ?? "n/a"}, agent=${row.identity.agent_kind ?? "n/a"}, status=${row.identity.status ?? "n/a"}, source=${row.identity.source ?? "n/a"}` : "indisponível"}`,
-      `- Git: ${row.git?.available ? `${row.git.changed_files} arquivos / ${row.git.changed_lines} linhas alteradas` : row.git?.reason ?? "indisponível"}`,
+      `- Modelo solicitado: ${modelEffort(row.requested_model, row.requested_effort)}`,
+      `- Modelo resolvido: ${modelEffort(row.identity?.resolved_model, row.identity?.resolved_effort)}`,
+      `- Git: ${row.git?.available ? `${row.git.changed_files} arquivos / ${row.git.changed_lines} linhas alteradas` : (row.git?.reason ?? "indisponível")}`,
       `- Evidências: ${row.artifacts ? `${row.artifacts.screenshots.length} screenshots, ${row.artifacts.videos.length} vídeos, ${row.artifacts.traces.length} traces` : "indisponível"}`,
       `- Erro: ${row.error ? `\`${String(row.error).split("\n")[0]}\`` : "nenhum registrado"}`,
       "",
@@ -371,6 +382,11 @@ export function renderComparison({ prompt_sha256: promptHash, rows }) {
     "",
   );
   return lines.join("\n");
+}
+
+function modelEffort(model, effort) {
+  if (!model) return "n/a";
+  return effort ? `${model} (${effort})` : model;
 }
 
 export function formatDuration(durationMs) {
@@ -403,7 +419,9 @@ export async function collect(env = process.env) {
   if (!env.SYMPHONY_BENCH_RUNTIME?.trim()) {
     throw new Error("SYMPHONY_BENCH_RUNTIME is required");
   }
-  const manifest = JSON.parse(await readFile(join(runtimeRoot, "runs.json"), "utf8"));
+  const manifest = JSON.parse(
+    await readFile(join(runtimeRoot, "runs.json"), "utf8"),
+  );
   const rows = [];
 
   for (const [index, run] of manifest.runs.entries()) {
@@ -418,17 +436,22 @@ export async function collect(env = process.env) {
       runResult = { status: "not-run", error: "run result is missing" };
     }
     const attemptResults = await readAttemptResults(runtimeRoot, run.id);
-    const attempts = summarizeAttempts(attemptResults, runResult.attempt_id ?? null);
+    const attempts = summarizeAttempts(
+      attemptResults,
+      runResult.attempt_id ?? null,
+    );
 
     const validation =
       facts.exists && contractPassed(facts.contract)
         ? await validateWorkspace(workspacePath, index)
         : [];
-    const git = facts.exists ? await gitFacts(workspacePath) : {
-      available: false,
-      reason: "workspace is missing",
-      changed_lines: null,
-    };
+    const git = facts.exists
+      ? await gitFacts(workspacePath)
+      : {
+          available: false,
+          reason: "workspace is missing",
+          changed_lines: null,
+        };
     const artifacts = await inventoryArtifacts([
       {
         source: "tracker",
@@ -487,15 +510,19 @@ if (invokedPath === import.meta.url) {
   collect()
     .then((comparison) => {
       process.stdout.write(
-        `${JSON.stringify({
-          prompt_sha256: comparison.prompt_sha256,
-          rows: comparison.rows.map((row) => ({
-            id: row.id,
-            status: row.status,
-            contract_passed: row.contract_passed,
-            validation: row.validation.map((step) => step.status),
-          })),
-        }, null, 2)}\n`,
+        `${JSON.stringify(
+          {
+            prompt_sha256: comparison.prompt_sha256,
+            rows: comparison.rows.map((row) => ({
+              id: row.id,
+              status: row.status,
+              contract_passed: row.contract_passed,
+              validation: row.validation.map((step) => step.status),
+            })),
+          },
+          null,
+          2,
+        )}\n`,
       );
     })
     .catch((error) => {

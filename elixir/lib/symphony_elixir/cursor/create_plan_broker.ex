@@ -19,8 +19,12 @@ defmodule SymphonyElixir.Cursor.CreatePlanBroker do
     case Process.whereis(@registry) do
       nil ->
         case Registry.start_link(keys: :unique, name: @registry) do
-          {:ok, _} -> :ok
-          {:error, {:already_started, _}} -> :ok
+          {:ok, _} ->
+            :ok
+
+          {:error, {:already_started, _}} ->
+            :ok
+
           {:error, reason} ->
             Logger.warning("[Cursor.CreatePlanBroker] registry start failed: #{inspect(reason)}")
             :ok

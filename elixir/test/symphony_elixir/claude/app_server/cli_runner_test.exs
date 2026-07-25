@@ -20,6 +20,7 @@ defmodule SymphonyElixir.Claude.AppServer.CliRunnerTest do
           session_uuid: "11111111-1111-1111-1111-111111111111",
           cli_session_id: Keyword.get(opts, :cli_session_id),
           model: Keyword.get(opts, :model),
+          effort: Keyword.get(opts, :effort),
           mcp_config_path: Keyword.get(opts, :mcp_config_path),
           permission_mode: "bypassPermissions",
           timeout_ms: Keyword.get(opts, :timeout_ms, 5_000)
@@ -33,9 +34,16 @@ defmodule SymphonyElixir.Claude.AppServer.CliRunnerTest do
   end
 
   test "happy turn captures session id, usage, cost, and emits translated events" do
-    {result, events, workspace} = run("happy")
+    {result, events, workspace} = run("happy", model: "sonnet", effort: "medium")
 
-    assert {:ok, %{cli_session_id: "sess-123", status: :completed} = turn} = result
+    assert {:ok,
+            %{
+              cli_session_id: "sess-123",
+              status: :completed,
+              resolved_model: "claude-sonnet-5",
+              resolved_effort: "medium"
+            } = turn} = result
+
     assert turn.usage == %{input_tokens: 10, output_tokens: 5, total_tokens: 15}
     assert turn.cost_usd == 0.01
 

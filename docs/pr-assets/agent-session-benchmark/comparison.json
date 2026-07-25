@@ -1,21 +1,24 @@
 {
-  "generated_at": "2026-07-25T05:19:20.082Z",
-  "prompt_sha256": "51119498623b6c5095be4e4ee59517273db6fd345d4e9b8574ae4721c450fc50",
+  "generated_at": "2026-07-25T19:27:06.332Z",
+  "prompt_sha256": "f9ea44a4d5952da71a896d5d7623f694bb445f52064f563ecf9a3d81744ca297",
   "rows": [
     {
-      "id": "session-codex",
+      "id": "providers-default-session-codex",
+      "matrix": "providers-default",
       "path": "session",
       "provider": "codex",
-      "prompt_sha256": "51119498623b6c5095be4e4ee59517273db6fd345d4e9b8574ae4721c450fc50",
+      "requested_model": "gpt-5.5",
+      "requested_effort": "medium",
+      "prompt_sha256": "f9ea44a4d5952da71a896d5d7623f694bb445f52064f563ecf9a3d81744ca297",
       "execution_mode": "yolo",
       "status": "completed",
       "thread_id": 1,
       "issue_identifier": "SYM-1",
-      "workspace_path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-1__p1/site",
-      "attempt_id": "20260725T031348108Z-32304cc9-91d1-47ce-a57c-5f61a2a35888",
-      "effective_prompt_sha256": "51119498623b6c5095be4e4ee59517273db6fd345d4e9b8574ae4721c450fc50",
-      "started_at": "2026-07-25T03:13:49.239Z",
-      "tracker_url": "http://127.0.0.1:4029/tracker/projects/symphony-landing-benchmark/workspaces/1",
+      "workspace_path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-1__p1/site",
+      "attempt_id": "20260725T161157791Z-5730f273-bf14-4d61-b076-23d185652029",
+      "effective_prompt_sha256": "f9ea44a4d5952da71a896d5d7623f694bb445f52064f563ecf9a3d81744ca297",
+      "started_at": "2026-07-25T16:11:59.106Z",
+      "tracker_url": "http://127.0.0.1:4010/tracker/projects/symphony-landing-benchmark/workspaces/1",
       "preview": {
         "reason": null,
         "tunnel": {
@@ -33,11 +36,11 @@
             "revision": null,
             "url": "http://127.0.0.1:10000/",
             "slug": "site",
-            "working_dir": "site",
-            "session_name": "sym-workspace-symphony-landing-benchmark-20b1507c71fa-dev-site",
-            "contract_id": null,
-            "preferred_port": null,
             "allowed_ports": null,
+            "preferred_port": null,
+            "session_name": "sym-workspace-symphony-landing-benchmark-e6b2d9e156d2-dev-site",
+            "working_dir": "site",
+            "contract_id": null,
             "sync_state": null,
             "public_url": "http://127.0.0.1:10000/",
             "local_url": "http://127.0.0.1:10000/",
@@ -45,769 +48,34 @@
             "sync_reason": null
           }
         ],
-        "as_of": "2026-07-25T03:41:24.301807Z",
-        "snapshot_id": "snap_0c1009096e2641babae6bf67f1221a9b"
+        "as_of": "2026-07-25T16:22:39.157545Z",
+        "snapshot_id": "snap_145fa8ef0d814bafb7cd8aec7b8ab5e6"
       },
       "agent_outcome": "completed",
       "error": null,
-      "artifact_root": "/tmp/symphony-agent-e2e-v5.881uZd/artifacts/session-codex/attempts/20260725T031348108Z-32304cc9-91d1-47ce-a57c-5f61a2a35888",
+      "artifact_root": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-default-session-codex/attempts/20260725T161157791Z-5730f273-bf14-4d61-b076-23d185652029",
       "identity": {
         "assistant_thread_id": 1,
         "agent_kind": "codex",
         "status": "active",
         "provider_matches": true,
+        "requested_model": "gpt-5.5",
+        "requested_effort": "medium",
+        "resolved_model": "gpt-5.5",
+        "resolved_effort": "medium",
         "source": "tracker_snapshot"
       },
-      "finished_at": "2026-07-25T03:41:24.383Z",
-      "duration_ms": 1655144,
-      "artifacts_root": "/tmp/symphony-agent-e2e-v5.881uZd/artifacts/session-codex/attempts/20260725T031348108Z-32304cc9-91d1-47ce-a57c-5f61a2a35888",
+      "finished_at": "2026-07-25T16:22:39.244Z",
+      "duration_ms": 640138,
+      "artifacts_root": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-default-session-codex/attempts/20260725T161157791Z-5730f273-bf14-4d61-b076-23d185652029",
       "attempts": {
         "count": 1,
-        "canonical_attempt_id": "20260725T031348108Z-32304cc9-91d1-47ce-a57c-5f61a2a35888",
+        "canonical_attempt_id": "20260725T161157791Z-5730f273-bf14-4d61-b076-23d185652029",
         "attempt_ids": [
-          "20260725T031348108Z-32304cc9-91d1-47ce-a57c-5f61a2a35888"
+          "20260725T161157791Z-5730f273-bf14-4d61-b076-23d185652029"
         ]
       },
       "execution_observed_duration_ms": null,
-      "file_count": 41,
-      "contract": {
-        "package_json": true,
-        "source": true,
-        "playwright_config": true,
-        "e2e_tests": true,
-        "scripts": {
-          "dev": true,
-          "build": true,
-          "test_e2e": true,
-          "e2e_runner": true
-        }
-      },
-      "contract_passed": true,
-      "validation": [
-        {
-          "command": "npm install --ignore-scripts --no-audit --no-fund",
-          "status": "passed",
-          "exit_code": 0,
-          "duration_ms": 399,
-          "output": "\nup to date in 296ms\n"
-        },
-        {
-          "command": "npm run build",
-          "status": "passed",
-          "exit_code": 0,
-          "duration_ms": 515,
-          "output": "\n> symphony-landing-benchmark@0.1.0 build\n> tsc --noEmit && vite build\n\nvite v8.1.5 building client environment for production...\n\u001b[2K\rtransforming...✓ 15 modules transformed.\nrendering chunks...\ncomputing gzip size...\ndist/index.html                   0.39 kB │ gzip:  0.26 kB\ndist/assets/index-C3WrcUFO.css    7.22 kB │ gzip:  2.38 kB\ndist/assets/index-CIjrvR_4.js   197.84 kB │ gzip: 62.36 kB\n\n✓ built in 109ms\n"
-        },
-        {
-          "command": "npm run test:e2e",
-          "status": "passed",
-          "exit_code": 0,
-          "duration_ms": 5858,
-          "output": "\n> symphony-landing-benchmark@0.1.0 test:e2e\n> node scripts/run-e2e.mjs\n\n\n> symphony-landing-benchmark@0.1.0 dev\n> vite --host 127.0.0.1 --port 24000 --strictPort\n\n2:18:29 AM [vite] (client) Re-optimizing dependencies because vite config has changed\n\n  VITE v8.1.5  ready in 170 ms\n\n  ➜  Local:   http://127.0.0.1:24000/\n\nRunning 2 tests using 1 worker\n\n  ✓  1 [chromium] › tests/e2e/landing.spec.ts:16:1 › apresenta a landing page do Symphony sem regressões críticas (1.8s)\n  ✓  2 [chromium] › tests/e2e/landing.spec.ts:56:1 › não cria overflow horizontal em viewport mobile (529ms)\n2:18:34 AM [vite] (client) page reload playwright-report/index.html\n2:18:34 AM [vite] (client) page reload playwright-report/trace/index.html\n2:18:34 AM [vite] (client) page reload playwright-report/trace/snapshot.html\n2:18:34 AM [vite] (client) page reload playwright-report/trace/uiMode.html\n\n  2 passed (3.1s)\n"
-        }
-      ],
-      "git": {
-        "available": true,
-        "reason": null,
-        "root": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-1__p1/site",
-        "head_sha": "627d234a8a406f4f37c3723d9a5566772dc204a2",
-        "clean": true,
-        "changed_files": 0,
-        "changed_lines": 0
-      },
-      "artifacts": {
-        "screenshots": [
-          {
-            "source": "tracker",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/artifacts/session-codex/attempts/20260725T031348108Z-32304cc9-91d1-47ce-a57c-5f61a2a35888/raw/symphony-flow-executes-one-bcb66-h-the-real-Symphony-tracker/test-finished-1.png"
-          },
-          {
-            "source": "tracker",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/artifacts/session-codex/attempts/20260725T031348108Z-32304cc9-91d1-47ce-a57c-5f61a2a35888/symphony-final.png"
-          },
-          {
-            "source": "generated_e2e",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-1__p1/site/test-results/landing-apresenta-a-landin-58b1e-ony-sem-regressões-críticas-chromium/attachments/desktop-full-page-screenshot-fbc593de9e612b948fda9628d5a22622942eac6d.png"
-          },
-          {
-            "source": "generated_e2e",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-1__p1/site/test-results/landing-apresenta-a-landin-58b1e-ony-sem-regressões-críticas-chromium/desktop-full-page.png"
-          },
-          {
-            "source": "generated_e2e",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-1__p1/site/test-results/landing-apresenta-a-landin-58b1e-ony-sem-regressões-críticas-chromium/test-finished-1.png"
-          },
-          {
-            "source": "generated_e2e",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-1__p1/site/test-results/landing-não-cria-overflow-horizontal-em-viewport-mobile-chromium/attachments/mobile-full-page-screenshot-c86005cd6957ab61e8d1b4fbc0b4d24364a46231.png"
-          },
-          {
-            "source": "generated_e2e",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-1__p1/site/test-results/landing-não-cria-overflow-horizontal-em-viewport-mobile-chromium/mobile-full-page.png"
-          },
-          {
-            "source": "generated_e2e",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-1__p1/site/test-results/landing-não-cria-overflow-horizontal-em-viewport-mobile-chromium/test-finished-1.png"
-          }
-        ],
-        "videos": [
-          {
-            "source": "tracker",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/artifacts/session-codex/attempts/20260725T031348108Z-32304cc9-91d1-47ce-a57c-5f61a2a35888/raw/symphony-flow-executes-one-bcb66-h-the-real-Symphony-tracker/video.webm"
-          },
-          {
-            "source": "generated_e2e",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-1__p1/site/test-results/landing-apresenta-a-landin-58b1e-ony-sem-regressões-críticas-chromium/video.webm"
-          },
-          {
-            "source": "generated_e2e",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-1__p1/site/test-results/landing-não-cria-overflow-horizontal-em-viewport-mobile-chromium/video.webm"
-          }
-        ],
-        "traces": [
-          {
-            "source": "generated_e2e",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-1__p1/site/test-results/landing-apresenta-a-landin-58b1e-ony-sem-regressões-críticas-chromium/trace.zip"
-          },
-          {
-            "source": "generated_e2e",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-1__p1/site/test-results/landing-não-cria-overflow-horizontal-em-viewport-mobile-chromium/trace.zip"
-          }
-        ]
-      }
-    },
-    {
-      "id": "session-cursor",
-      "path": "session",
-      "provider": "cursor",
-      "prompt_sha256": "51119498623b6c5095be4e4ee59517273db6fd345d4e9b8574ae4721c450fc50",
-      "execution_mode": "yolo",
-      "status": "completed",
-      "thread_id": 2,
-      "issue_identifier": "SYM-2",
-      "workspace_path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-2__p1/site",
-      "attempt_id": "20260725T034141621Z-27e91016-acc4-4c37-9b91-4a040688e3ed",
-      "effective_prompt_sha256": "51119498623b6c5095be4e4ee59517273db6fd345d4e9b8574ae4721c450fc50",
-      "started_at": "2026-07-25T03:41:42.752Z",
-      "tracker_url": "http://127.0.0.1:4029/tracker/projects/symphony-landing-benchmark/workspaces/2",
-      "preview": {
-        "reason": null,
-        "tunnel": {
-          "enabled": false,
-          "running": false
-        },
-        "available": true,
-        "servers": [
-          {
-            "id": 4,
-            "port": 10008,
-            "status": "ready",
-            "primary": true,
-            "source": null,
-            "revision": null,
-            "url": "http://127.0.0.1:10008/",
-            "slug": "site",
-            "working_dir": "site",
-            "session_name": "sym-workspace-symphony-landing-benchmark-8d94237da6ce-dev-site",
-            "contract_id": null,
-            "preferred_port": null,
-            "allowed_ports": null,
-            "sync_state": null,
-            "public_url": "http://127.0.0.1:10008/",
-            "local_url": "http://127.0.0.1:10008/",
-            "actual_port": null,
-            "sync_reason": null
-          }
-        ],
-        "as_of": "2026-07-25T03:46:42.339385Z",
-        "snapshot_id": "snap_e8e3d4d74d804a89994abc3046191abb"
-      },
-      "agent_outcome": "completed",
-      "error": null,
-      "artifact_root": "/tmp/symphony-agent-e2e-v5.881uZd/artifacts/session-cursor/attempts/20260725T034141621Z-27e91016-acc4-4c37-9b91-4a040688e3ed",
-      "identity": {
-        "assistant_thread_id": 2,
-        "agent_kind": "cursor",
-        "status": "active",
-        "provider_matches": true,
-        "source": "tracker_snapshot"
-      },
-      "finished_at": "2026-07-25T03:46:42.456Z",
-      "duration_ms": 299704,
-      "artifacts_root": "/tmp/symphony-agent-e2e-v5.881uZd/artifacts/session-cursor/attempts/20260725T034141621Z-27e91016-acc4-4c37-9b91-4a040688e3ed",
-      "attempts": {
-        "count": 1,
-        "canonical_attempt_id": "20260725T034141621Z-27e91016-acc4-4c37-9b91-4a040688e3ed",
-        "attempt_ids": [
-          "20260725T034141621Z-27e91016-acc4-4c37-9b91-4a040688e3ed"
-        ]
-      },
-      "execution_observed_duration_ms": null,
-      "file_count": 34,
-      "contract": {
-        "package_json": true,
-        "source": true,
-        "playwright_config": true,
-        "e2e_tests": true,
-        "scripts": {
-          "dev": true,
-          "build": true,
-          "test_e2e": true,
-          "e2e_runner": true
-        }
-      },
-      "contract_passed": true,
-      "validation": [
-        {
-          "command": "npm install --ignore-scripts --no-audit --no-fund",
-          "status": "passed",
-          "exit_code": 0,
-          "duration_ms": 336,
-          "output": "\nup to date in 237ms\n"
-        },
-        {
-          "command": "npm run build",
-          "status": "passed",
-          "exit_code": 0,
-          "duration_ms": 1826,
-          "output": "\n> symphony-landing-benchmark@0.1.0 build\n> tsc --noEmit && vite build\n\nvite v6.4.3 building for production...\ntransforming...\n✓ 28 modules transformed.\nrendering chunks...\ncomputing gzip size...\ndist/index.html                   0.40 kB │ gzip:  0.27 kB\ndist/assets/index-DLD-tH9O.css    8.08 kB │ gzip:  2.58 kB\ndist/assets/index-myqzHRUV.js   202.16 kB │ gzip: 63.31 kB\n✓ built in 584ms\n"
-        },
-        {
-          "command": "npm run test:e2e",
-          "status": "passed",
-          "exit_code": 0,
-          "duration_ms": 5810,
-          "output": "\n> symphony-landing-benchmark@0.1.0 test:e2e\n> node scripts/run-e2e.mjs\n\n\n> symphony-landing-benchmark@0.1.0 dev\n> vite --host 127.0.0.1 --port 24001 --strictPort\n\n\n  VITE v6.4.3  ready in 88 ms\n\n  ➜  Local:   http://127.0.0.1:24001/\n\nRunning 1 test using 1 worker\n\n  ✓  1 [chromium] › tests/e2e/symphony-landing.spec.ts:3:1 › apresenta a landing page Symphony completa e responsiva (2.3s)\n\n  1 passed (3.0s)\n"
-        }
-      ],
-      "git": {
-        "available": true,
-        "reason": null,
-        "root": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-2__p1/site",
-        "head_sha": "351cc230319a5f85456794503339ef27bf5bac54",
-        "clean": false,
-        "changed_files": 8,
-        "changed_lines": 2753
-      },
-      "artifacts": {
-        "screenshots": [
-          {
-            "source": "tracker",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/artifacts/session-cursor/attempts/20260725T034141621Z-27e91016-acc4-4c37-9b91-4a040688e3ed/raw/symphony-flow-executes-one-bcb66-h-the-real-Symphony-tracker/test-finished-1.png"
-          },
-          {
-            "source": "tracker",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/artifacts/session-cursor/attempts/20260725T034141621Z-27e91016-acc4-4c37-9b91-4a040688e3ed/symphony-final.png"
-          },
-          {
-            "source": "generated_e2e",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-2__p1/site/test-results/symphony-landing-apresenta-029af-phony-completa-e-responsiva-chromium/symphony-desktop-full-page.png"
-          },
-          {
-            "source": "generated_e2e",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-2__p1/site/test-results/symphony-landing-apresenta-029af-phony-completa-e-responsiva-chromium/symphony-mobile-full-page.png"
-          },
-          {
-            "source": "generated_e2e",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-2__p1/site/test-results/symphony-landing-apresenta-029af-phony-completa-e-responsiva-chromium/test-finished-1.png"
-          }
-        ],
-        "videos": [
-          {
-            "source": "tracker",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/artifacts/session-cursor/attempts/20260725T034141621Z-27e91016-acc4-4c37-9b91-4a040688e3ed/raw/symphony-flow-executes-one-bcb66-h-the-real-Symphony-tracker/video.webm"
-          },
-          {
-            "source": "generated_e2e",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-2__p1/site/test-results/symphony-landing-apresenta-029af-phony-completa-e-responsiva-chromium/video.webm"
-          }
-        ],
-        "traces": [
-          {
-            "source": "generated_e2e",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-2__p1/site/test-results/symphony-landing-apresenta-029af-phony-completa-e-responsiva-chromium/trace.zip"
-          }
-        ]
-      }
-    },
-    {
-      "id": "session-claude",
-      "path": "session",
-      "provider": "claude",
-      "prompt_sha256": "51119498623b6c5095be4e4ee59517273db6fd345d4e9b8574ae4721c450fc50",
-      "execution_mode": "yolo",
-      "status": "completed",
-      "thread_id": 3,
-      "issue_identifier": "SYM-3",
-      "workspace_path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-3__p1/site",
-      "attempt_id": "20260725T034705952Z-2b799f9b-053c-43c8-adf9-412b0c7d3b62",
-      "effective_prompt_sha256": "51119498623b6c5095be4e4ee59517273db6fd345d4e9b8574ae4721c450fc50",
-      "started_at": "2026-07-25T03:47:07.184Z",
-      "tracker_url": "http://127.0.0.1:4029/tracker/projects/symphony-landing-benchmark/workspaces/3",
-      "preview": {
-        "reason": null,
-        "tunnel": {
-          "enabled": false,
-          "running": false
-        },
-        "available": true,
-        "servers": [
-          {
-            "id": 7,
-            "port": 10016,
-            "status": "ready",
-            "primary": true,
-            "source": null,
-            "revision": null,
-            "url": "http://127.0.0.1:10016/",
-            "slug": "site",
-            "working_dir": "site",
-            "session_name": "sym-workspace-symphony-landing-benchmark-175e1271be09-dev-site",
-            "contract_id": null,
-            "preferred_port": null,
-            "allowed_ports": null,
-            "sync_state": null,
-            "public_url": "http://127.0.0.1:10016/",
-            "local_url": "http://127.0.0.1:10016/",
-            "actual_port": null,
-            "sync_reason": null
-          }
-        ],
-        "as_of": "2026-07-25T04:06:13.623123Z",
-        "snapshot_id": "snap_3a7ac8388e724cf1afcd92e634aaf12c"
-      },
-      "agent_outcome": "completed",
-      "error": null,
-      "artifact_root": "/tmp/symphony-agent-e2e-v5.881uZd/artifacts/session-claude/attempts/20260725T034705952Z-2b799f9b-053c-43c8-adf9-412b0c7d3b62",
-      "identity": {
-        "assistant_thread_id": 3,
-        "agent_kind": "claude",
-        "status": "active",
-        "provider_matches": true,
-        "source": "tracker_snapshot"
-      },
-      "finished_at": "2026-07-25T04:06:13.726Z",
-      "duration_ms": 1146542,
-      "artifacts_root": "/tmp/symphony-agent-e2e-v5.881uZd/artifacts/session-claude/attempts/20260725T034705952Z-2b799f9b-053c-43c8-adf9-412b0c7d3b62",
-      "attempts": {
-        "count": 1,
-        "canonical_attempt_id": "20260725T034705952Z-2b799f9b-053c-43c8-adf9-412b0c7d3b62",
-        "attempt_ids": [
-          "20260725T034705952Z-2b799f9b-053c-43c8-adf9-412b0c7d3b62"
-        ]
-      },
-      "execution_observed_duration_ms": null,
-      "file_count": 68,
-      "contract": {
-        "package_json": true,
-        "source": true,
-        "playwright_config": true,
-        "e2e_tests": true,
-        "scripts": {
-          "dev": true,
-          "build": true,
-          "test_e2e": true,
-          "e2e_runner": true
-        }
-      },
-      "contract_passed": true,
-      "validation": [
-        {
-          "command": "npm install --ignore-scripts --no-audit --no-fund",
-          "status": "passed",
-          "exit_code": 0,
-          "duration_ms": 334,
-          "output": "\nup to date in 232ms\n"
-        },
-        {
-          "command": "npm run build",
-          "status": "passed",
-          "exit_code": 0,
-          "duration_ms": 1866,
-          "output": "\n> symphony-landing@0.1.0 build\n> tsc --noEmit && vite build\n\nvite v5.4.21 building for production...\ntransforming...\n✓ 42 modules transformed.\nrendering chunks...\ncomputing gzip size...\ndist/index.html                   0.75 kB │ gzip:  0.46 kB\ndist/assets/index-DVEIRnml.css   14.12 kB │ gzip:  3.75 kB\ndist/assets/index-W0BJNRAE.js   156.92 kB │ gzip: 49.96 kB\n✓ built in 470ms\n"
-        },
-        {
-          "command": "npm run test:e2e",
-          "status": "passed",
-          "exit_code": 0,
-          "duration_ms": 10850,
-          "output": "\n> symphony-landing@0.1.0 test:e2e\n> node scripts/run-e2e.mjs\n\n\n> symphony-landing@0.1.0 dev\n> vite --host 127.0.0.1 --port 24002 --strictPort\n\n\n  VITE v5.4.21  ready in 108 ms\n\n  ➜  Local:   http://127.0.0.1:24002/\n\nRunning 7 tests using 1 worker\n\n  ✓  1 [chromium] › tests/e2e/landing.spec.ts:14:3 › Landing page do Symphony › hero traz o heading principal e as duas chamadas (491ms)\n  ✓  2 [chromium] › tests/e2e/landing.spec.ts:30:3 › Landing page do Symphony › apresenta cards distintos de Codex, Cursor e Claude (409ms)\n  ✓  3 [chromium] › tests/e2e/landing.spec.ts:47:3 › Landing page do Symphony › mostra a seção do fluxo e a seção de evidências (420ms)\n  ✓  4 [chromium] › tests/e2e/landing.spec.ts:66:3 › Landing page do Symphony › navega por âncora ao clicar em um link do menu (776ms)\n  ✓  5 [chromium] › tests/e2e/landing.spec.ts:78:3 › Landing page do Symphony › não registra erros no console da página (777ms)\n  ✓  6 [chromium] › tests/e2e/landing.spec.ts:91:3 › Landing page do Symphony › não gera overflow horizontal no viewport mobile (757ms)\n  ✓  7 [chromium] › tests/e2e/landing.spec.ts:99:3 › Landing page do Symphony › @evidence jornada completa com captura desktop e mobile (2.1s)\n\n  7 passed (6.7s)\n"
-        }
-      ],
-      "git": {
-        "available": true,
-        "reason": null,
-        "root": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-3__p1/site",
-        "head_sha": "0a9541ab0b4092030727ab0a2eff6698f1d37417",
-        "clean": true,
-        "changed_files": 0,
-        "changed_lines": 0
-      },
-      "artifacts": {
-        "screenshots": [
-          {
-            "source": "tracker",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/artifacts/session-claude/attempts/20260725T034705952Z-2b799f9b-053c-43c8-adf9-412b0c7d3b62/raw/symphony-flow-executes-one-bcb66-h-the-real-Symphony-tracker/test-finished-1.png"
-          },
-          {
-            "source": "tracker",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/artifacts/session-claude/attempts/20260725T034705952Z-2b799f9b-053c-43c8-adf9-412b0c7d3b62/symphony-final.png"
-          },
-          {
-            "source": "generated_e2e",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-3__p1/site/test-results/evidence/desktop-full.png"
-          },
-          {
-            "source": "generated_e2e",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-3__p1/site/test-results/evidence/mobile-full.png"
-          },
-          {
-            "source": "generated_e2e",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-3__p1/site/test-results/landing-Landing-page-do-Sy-38efc-rincipal-e-as-duas-chamadas-chromium/test-finished-1.png"
-          },
-          {
-            "source": "generated_e2e",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-3__p1/site/test-results/landing-Landing-page-do-Sy-6dadb--erros-no-console-da-página-chromium/test-finished-1.png"
-          },
-          {
-            "source": "generated_e2e",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-3__p1/site/test-results/landing-Landing-page-do-Sy-7d1b6-om-captura-desktop-e-mobile-chromium/test-finished-1.png"
-          },
-          {
-            "source": "generated_e2e",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-3__p1/site/test-results/landing-Landing-page-do-Sy-8804b-os-de-Codex-Cursor-e-Claude-chromium/test-finished-1.png"
-          },
-          {
-            "source": "generated_e2e",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-3__p1/site/test-results/landing-Landing-page-do-Sy-a90c3-o-clicar-em-um-link-do-menu-chromium/test-finished-1.png"
-          },
-          {
-            "source": "generated_e2e",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-3__p1/site/test-results/landing-Landing-page-do-Sy-af958-uxo-e-a-seção-de-evidências-chromium/test-finished-1.png"
-          },
-          {
-            "source": "generated_e2e",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-3__p1/site/test-results/landing-Landing-page-do-Sy-d022b-rizontal-no-viewport-mobile-chromium/test-finished-1.png"
-          }
-        ],
-        "videos": [
-          {
-            "source": "tracker",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/artifacts/session-claude/attempts/20260725T034705952Z-2b799f9b-053c-43c8-adf9-412b0c7d3b62/raw/symphony-flow-executes-one-bcb66-h-the-real-Symphony-tracker/video.webm"
-          },
-          {
-            "source": "generated_e2e",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-3__p1/site/test-results/landing-Landing-page-do-Sy-38efc-rincipal-e-as-duas-chamadas-chromium/video.webm"
-          },
-          {
-            "source": "generated_e2e",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-3__p1/site/test-results/landing-Landing-page-do-Sy-6dadb--erros-no-console-da-página-chromium/video.webm"
-          },
-          {
-            "source": "generated_e2e",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-3__p1/site/test-results/landing-Landing-page-do-Sy-7d1b6-om-captura-desktop-e-mobile-chromium/video.webm"
-          },
-          {
-            "source": "generated_e2e",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-3__p1/site/test-results/landing-Landing-page-do-Sy-8804b-os-de-Codex-Cursor-e-Claude-chromium/video.webm"
-          },
-          {
-            "source": "generated_e2e",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-3__p1/site/test-results/landing-Landing-page-do-Sy-a90c3-o-clicar-em-um-link-do-menu-chromium/video.webm"
-          },
-          {
-            "source": "generated_e2e",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-3__p1/site/test-results/landing-Landing-page-do-Sy-af958-uxo-e-a-seção-de-evidências-chromium/video.webm"
-          },
-          {
-            "source": "generated_e2e",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-3__p1/site/test-results/landing-Landing-page-do-Sy-d022b-rizontal-no-viewport-mobile-chromium/video.webm"
-          }
-        ],
-        "traces": [
-          {
-            "source": "generated_e2e",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-3__p1/site/test-results/landing-Landing-page-do-Sy-38efc-rincipal-e-as-duas-chamadas-chromium/trace.zip"
-          },
-          {
-            "source": "generated_e2e",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-3__p1/site/test-results/landing-Landing-page-do-Sy-6dadb--erros-no-console-da-página-chromium/trace.zip"
-          },
-          {
-            "source": "generated_e2e",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-3__p1/site/test-results/landing-Landing-page-do-Sy-7d1b6-om-captura-desktop-e-mobile-chromium/trace.zip"
-          },
-          {
-            "source": "generated_e2e",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-3__p1/site/test-results/landing-Landing-page-do-Sy-8804b-os-de-Codex-Cursor-e-Claude-chromium/trace.zip"
-          },
-          {
-            "source": "generated_e2e",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-3__p1/site/test-results/landing-Landing-page-do-Sy-a90c3-o-clicar-em-um-link-do-menu-chromium/trace.zip"
-          },
-          {
-            "source": "generated_e2e",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-3__p1/site/test-results/landing-Landing-page-do-Sy-af958-uxo-e-a-seção-de-evidências-chromium/trace.zip"
-          },
-          {
-            "source": "generated_e2e",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-3__p1/site/test-results/landing-Landing-page-do-Sy-d022b-rizontal-no-viewport-mobile-chromium/trace.zip"
-          }
-        ]
-      }
-    },
-    {
-      "id": "orchestrator-codex",
-      "path": "orchestrator",
-      "provider": "codex",
-      "prompt_sha256": "51119498623b6c5095be4e4ee59517273db6fd345d4e9b8574ae4721c450fc50",
-      "execution_mode": "yolo",
-      "status": "completed",
-      "thread_id": null,
-      "issue_identifier": "SYM-4",
-      "workspace_path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-4/site",
-      "attempt_id": "20260725T041318993Z-ab7807eb-592e-4843-88d7-35edcd51711e",
-      "effective_prompt_sha256": "51119498623b6c5095be4e4ee59517273db6fd345d4e9b8574ae4721c450fc50",
-      "started_at": "2026-07-25T04:13:20.103Z",
-      "tracker_url": "http://127.0.0.1:4029/tracker/projects/symphony-landing-benchmark/board/issues/SYM-4/sessions?surface=autonomous",
-      "preview": {
-        "reason": null,
-        "tunnel": {
-          "enabled": false,
-          "running": false
-        },
-        "available": true,
-        "servers": [
-          {
-            "id": 10,
-            "port": 10008,
-            "status": "ready",
-            "primary": true,
-            "source": "managed",
-            "revision": 2,
-            "url": "http://127.0.0.1:10008/",
-            "slug": "site",
-            "session_name": "sym-dev-symphony-landing-benchmark-SYM-4-site",
-            "sync_state": "in_sync",
-            "working_dir": "site",
-            "local_url": "http://127.0.0.1:10008/",
-            "public_url": "http://127.0.0.1:10008/",
-            "actual_port": 10008,
-            "contract_id": "ctr_55dbc7a13e7849a9889e23308fe036ee",
-            "preferred_port": 10008,
-            "allowed_ports": [
-              10008,
-              10000,
-              10001,
-              10002,
-              10003,
-              10004,
-              10005,
-              10006,
-              10007
-            ],
-            "sync_reason": null
-          }
-        ],
-        "as_of": "2026-07-25T04:26:24.053134Z",
-        "snapshot_id": "snap_b2b6663331aa4c80ab00d515cf7bd37c"
-      },
-      "agent_outcome": "completed",
-      "error": null,
-      "artifact_root": "/tmp/symphony-agent-e2e-v5.881uZd/artifacts/orchestrator-codex/attempts/20260725T041318993Z-ab7807eb-592e-4843-88d7-35edcd51711e",
-      "identity": {
-        "assistant_thread_id": 5,
-        "issue_identifier": "SYM-4",
-        "agent_kind": "codex",
-        "status": "closed",
-        "provider_matches": true,
-        "agent_execution_status": "saved",
-        "agent_execution_runtime_seconds": null,
-        "agent_execution_started_at": "2026-07-25T04:13:20Z",
-        "agent_execution_last_event_at": "2026-07-25T04:26:19Z",
-        "source": "tracker_snapshot"
-      },
-      "finished_at": "2026-07-25T04:26:24.143Z",
-      "duration_ms": 784040,
-      "artifacts_root": "/tmp/symphony-agent-e2e-v5.881uZd/artifacts/orchestrator-codex/attempts/20260725T041318993Z-ab7807eb-592e-4843-88d7-35edcd51711e",
-      "attempts": {
-        "count": 2,
-        "canonical_attempt_id": "20260725T041318993Z-ab7807eb-592e-4843-88d7-35edcd51711e",
-        "attempt_ids": [
-          "20260725T040630701Z-3a3ba372-75eb-4104-9071-0bb88650a8e3",
-          "20260725T041318993Z-ab7807eb-592e-4843-88d7-35edcd51711e"
-        ]
-      },
-      "execution_observed_duration_ms": 779000,
-      "file_count": 41,
-      "contract": {
-        "package_json": true,
-        "source": true,
-        "playwright_config": true,
-        "e2e_tests": true,
-        "scripts": {
-          "dev": true,
-          "build": true,
-          "test_e2e": true,
-          "e2e_runner": true
-        }
-      },
-      "contract_passed": true,
-      "validation": [
-        {
-          "command": "npm install --ignore-scripts --no-audit --no-fund",
-          "status": "passed",
-          "exit_code": 0,
-          "duration_ms": 340,
-          "output": "\nup to date in 242ms\n"
-        },
-        {
-          "command": "npm run build",
-          "status": "passed",
-          "exit_code": 0,
-          "duration_ms": 1869,
-          "output": "\n> symphony-landing-page@1.0.0 build\n> tsc -b && vite build\n\nvite v7.3.6 building client environment for production...\ntransforming...\n✓ 29 modules transformed.\nrendering chunks...\ncomputing gzip size...\ndist/index.html                   0.65 kB │ gzip:  0.40 kB\ndist/assets/index-CWHkPErC.css   16.57 kB │ gzip:  4.56 kB\ndist/assets/index-B7HoDimY.js   205.26 kB │ gzip: 64.14 kB\n✓ built in 591ms\n"
-        },
-        {
-          "command": "npm run test:e2e",
-          "status": "passed",
-          "exit_code": 0,
-          "duration_ms": 4654,
-          "output": "\n> symphony-landing-page@1.0.0 test:e2e\n> node scripts/run-e2e.mjs\n\n\n> symphony-landing-page@1.0.0 dev\n> vite --host 127.0.0.1 --port 24003 --strictPort\n\n\n  VITE v7.3.6  ready in 120 ms\n\n  ➜  Local:   http://127.0.0.1:24003/\n\nRunning 1 test using 1 worker\n\n  ✓  1 tests/e2e/landing.spec.ts:8:1 › orquestração de agentes do pedido à evidência (1.3s)\n\n  1 passed (1.8s)\n"
-        }
-      ],
-      "git": {
-        "available": true,
-        "reason": null,
-        "root": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-4/site",
-        "head_sha": "67659be6651eb8e0eeba51c0ec1c4379530294b1",
-        "clean": true,
-        "changed_files": 0,
-        "changed_lines": 0
-      },
-      "artifacts": {
-        "screenshots": [
-          {
-            "source": "tracker",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/artifacts/orchestrator-codex/attempts/20260725T041318993Z-ab7807eb-592e-4843-88d7-35edcd51711e/raw/symphony-flow-executes-one-bcb66-h-the-real-Symphony-tracker/test-finished-1.png"
-          },
-          {
-            "source": "tracker",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/artifacts/orchestrator-codex/attempts/20260725T041318993Z-ab7807eb-592e-4843-88d7-35edcd51711e/symphony-final.png"
-          },
-          {
-            "source": "generated_e2e",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-4/site/test-results/evidence/sym-4-orquestracao-de-agentes-desktop-full.png"
-          },
-          {
-            "source": "generated_e2e",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-4/site/test-results/evidence/sym-4-orquestracao-de-agentes-mobile-full.png"
-          },
-          {
-            "source": "generated_e2e",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-4/site/test-results/landing-orquestração-de-agentes-do-pedido-à-evidência/test-finished-1.png"
-          }
-        ],
-        "videos": [
-          {
-            "source": "tracker",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/artifacts/orchestrator-codex/attempts/20260725T041318993Z-ab7807eb-592e-4843-88d7-35edcd51711e/raw/symphony-flow-executes-one-bcb66-h-the-real-Symphony-tracker/video.webm"
-          },
-          {
-            "source": "generated_e2e",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-4/site/test-results/landing-orquestração-de-agentes-do-pedido-à-evidência/video.webm"
-          }
-        ],
-        "traces": [
-          {
-            "source": "generated_e2e",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-4/site/test-results/landing-orquestração-de-agentes-do-pedido-à-evidência/trace.zip"
-          }
-        ]
-      }
-    },
-    {
-      "id": "orchestrator-cursor",
-      "path": "orchestrator",
-      "provider": "cursor",
-      "prompt_sha256": "51119498623b6c5095be4e4ee59517273db6fd345d4e9b8574ae4721c450fc50",
-      "execution_mode": "yolo",
-      "status": "completed",
-      "thread_id": null,
-      "issue_identifier": "SYM-5",
-      "workspace_path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-5/site",
-      "attempt_id": "20260725T042640046Z-1c7d4b93-b034-4fee-88fe-df8b815f8ba4",
-      "effective_prompt_sha256": "51119498623b6c5095be4e4ee59517273db6fd345d4e9b8574ae4721c450fc50",
-      "started_at": "2026-07-25T04:26:41.151Z",
-      "tracker_url": "http://127.0.0.1:4029/tracker/projects/symphony-landing-benchmark/board/issues/SYM-5/sessions?surface=autonomous",
-      "preview": {
-        "reason": null,
-        "tunnel": {
-          "enabled": false,
-          "running": false
-        },
-        "available": true,
-        "servers": [
-          {
-            "id": 23,
-            "port": 10009,
-            "status": "ready",
-            "primary": true,
-            "source": "managed",
-            "revision": 1,
-            "url": "http://127.0.0.1:10009/",
-            "slug": "site",
-            "session_name": "sym-dev-symphony-landing-benchmark-SYM-5-site",
-            "sync_state": "in_sync",
-            "working_dir": "site",
-            "local_url": "http://127.0.0.1:10009/",
-            "public_url": "http://127.0.0.1:10009/",
-            "actual_port": 10009,
-            "contract_id": "ctr_4589209d9b7f4b70a2f94a298efa3e39",
-            "preferred_port": 10009,
-            "allowed_ports": [
-              10009,
-              10000,
-              10001,
-              10002,
-              10003,
-              10004,
-              10005,
-              10006,
-              10007
-            ],
-            "sync_reason": null
-          }
-        ],
-        "as_of": "2026-07-25T04:32:59.731331Z",
-        "snapshot_id": "snap_05e3f4ca67214712a3f410b37a4d0e32"
-      },
-      "agent_outcome": "completed",
-      "error": null,
-      "artifact_root": "/tmp/symphony-agent-e2e-v5.881uZd/artifacts/orchestrator-cursor/attempts/20260725T042640046Z-1c7d4b93-b034-4fee-88fe-df8b815f8ba4",
-      "identity": {
-        "assistant_thread_id": 6,
-        "issue_identifier": "SYM-5",
-        "agent_kind": "cursor",
-        "status": "closed",
-        "provider_matches": true,
-        "agent_execution_status": "saved",
-        "agent_execution_runtime_seconds": null,
-        "agent_execution_started_at": "2026-07-25T04:26:41Z",
-        "agent_execution_last_event_at": "2026-07-25T04:32:57Z",
-        "source": "tracker_snapshot"
-      },
-      "finished_at": "2026-07-25T04:32:59.839Z",
-      "duration_ms": 378688,
-      "artifacts_root": "/tmp/symphony-agent-e2e-v5.881uZd/artifacts/orchestrator-cursor/attempts/20260725T042640046Z-1c7d4b93-b034-4fee-88fe-df8b815f8ba4",
-      "attempts": {
-        "count": 1,
-        "canonical_attempt_id": "20260725T042640046Z-1c7d4b93-b034-4fee-88fe-df8b815f8ba4",
-        "attempt_ids": [
-          "20260725T042640046Z-1c7d4b93-b034-4fee-88fe-df8b815f8ba4"
-        ]
-      },
-      "execution_observed_duration_ms": 376000,
       "file_count": 38,
       "contract": {
         "package_json": true,
@@ -827,29 +95,29 @@
           "command": "npm install --ignore-scripts --no-audit --no-fund",
           "status": "passed",
           "exit_code": 0,
-          "duration_ms": 332,
-          "output": "\nup to date in 233ms\n"
+          "duration_ms": 386,
+          "output": "\nup to date in 279ms\n"
         },
         {
           "command": "npm run build",
           "status": "passed",
           "exit_code": 0,
-          "duration_ms": 2212,
-          "output": "\n> symphony-landing-page@0.1.0 build\n> tsc -b && vite build\n\nvite v6.4.3 building for production...\ntransforming...\n✓ 29 modules transformed.\nrendering chunks...\ncomputing gzip size...\ndist/index.html                   0.62 kB │ gzip:  0.38 kB\ndist/assets/index-HNYfq4RV.css    8.56 kB │ gzip:  2.68 kB\ndist/assets/index-CNtvVeLD.js   201.88 kB │ gzip: 63.35 kB\n✓ built in 633ms\n"
+          "duration_ms": 2341,
+          "output": "\n> symphony-landing-page@0.0.0 build\n> tsc -b && vite build\n\nvite v6.4.3 building for production...\ntransforming...\n✓ 29 modules transformed.\nrendering chunks...\ncomputing gzip size...\ndist/index.html                   0.61 kB │ gzip:  0.38 kB\ndist/assets/index-GteVsqWv.css    8.02 kB │ gzip:  2.50 kB\ndist/assets/index-BbGxgJMy.js   202.02 kB │ gzip: 63.33 kB\n✓ built in 763ms\n"
         },
         {
           "command": "npm run test:e2e",
           "status": "passed",
           "exit_code": 0,
-          "duration_ms": 5013,
-          "output": "\n> symphony-landing-page@0.1.0 test:e2e\n> node scripts/run-e2e.mjs\n\n\n> symphony-landing-page@0.1.0 dev\n> vite --host 127.0.0.1 --port 24004 --strictPort\n\n\n  VITE v6.4.3  ready in 116 ms\n\n  ➜  Local:   http://127.0.0.1:24004/\n\nRunning 1 test using 1 worker\n\n  ✓  1 [chromium] › tests/e2e/symphony-landing.spec.ts:16:1 › landing page apresenta Symphony como orquestrador de agentes (1.6s)\n\n  1 passed (2.2s)\n"
+          "duration_ms": 6723,
+          "output": "\n> symphony-landing-page@0.0.0 test:e2e\n> node scripts/run-e2e.mjs\n\n\n> symphony-landing-page@0.0.0 dev\n> vite --host 127.0.0.1 --port 24000 --strictPort\n\n\n  VITE v6.4.3  ready in 134 ms\n\n  ➜  Local:   http://127.0.0.1:24000/\n\nRunning 1 test using 1 worker\n\n  ✓  1 [chromium] › tests/e2e/symphony-landing.spec.ts:3:1 › apresenta a landing page do Symphony com fluxo, agentes e evidencias (2.7s)\n\n  1 passed (3.7s)\n"
         }
       ],
       "git": {
         "available": true,
         "reason": null,
-        "root": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-5/site",
-        "head_sha": "9fa7e1e31dc832dc829d9848082224d6854324d7",
+        "root": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-1__p1/site",
+        "head_sha": "95116187fbc48bce1c6a530bfcd15cf3f3897524",
         "clean": true,
         "changed_files": 0,
         "changed_lines": 0
@@ -858,49 +126,60 @@
         "screenshots": [
           {
             "source": "tracker",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/artifacts/orchestrator-cursor/attempts/20260725T042640046Z-1c7d4b93-b034-4fee-88fe-df8b815f8ba4/raw/symphony-flow-executes-one-bcb66-h-the-real-Symphony-tracker/test-finished-1.png"
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-default-session-codex/attempts/20260725T161157791Z-5730f273-bf14-4d61-b076-23d185652029/raw/symphony-flow-executes-one-bcb66-h-the-real-Symphony-tracker/test-finished-1.png"
           },
           {
             "source": "tracker",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/artifacts/orchestrator-cursor/attempts/20260725T042640046Z-1c7d4b93-b034-4fee-88fe-df8b815f8ba4/symphony-final.png"
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-default-session-codex/attempts/20260725T161157791Z-5730f273-bf14-4d61-b076-23d185652029/symphony-final.png"
           },
           {
             "source": "generated_e2e",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-5/site/test-results/symphony-landing-landing-p-3f6cb-omo-orquestrador-de-agentes-chromium/test-finished-1.png"
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-1__p1/site/test-results/artifacts/symphony-landing-apresenta-c06b9--fluxo-agentes-e-evidencias-chromium/desktop-full-page.png"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-1__p1/site/test-results/artifacts/symphony-landing-apresenta-c06b9--fluxo-agentes-e-evidencias-chromium/mobile-full-page.png"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-1__p1/site/test-results/artifacts/symphony-landing-apresenta-c06b9--fluxo-agentes-e-evidencias-chromium/test-finished-1.png"
           }
         ],
         "videos": [
           {
             "source": "tracker",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/artifacts/orchestrator-cursor/attempts/20260725T042640046Z-1c7d4b93-b034-4fee-88fe-df8b815f8ba4/raw/symphony-flow-executes-one-bcb66-h-the-real-Symphony-tracker/video.webm"
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-default-session-codex/attempts/20260725T161157791Z-5730f273-bf14-4d61-b076-23d185652029/raw/symphony-flow-executes-one-bcb66-h-the-real-Symphony-tracker/video.webm"
           },
           {
             "source": "generated_e2e",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-5/site/test-results/symphony-landing-landing-p-3f6cb-omo-orquestrador-de-agentes-chromium/video.webm"
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-1__p1/site/test-results/artifacts/symphony-landing-apresenta-c06b9--fluxo-agentes-e-evidencias-chromium/video.webm"
           }
         ],
         "traces": [
           {
             "source": "generated_e2e",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-5/site/test-results/symphony-landing-landing-p-3f6cb-omo-orquestrador-de-agentes-chromium/trace.zip"
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-1__p1/site/test-results/artifacts/symphony-landing-apresenta-c06b9--fluxo-agentes-e-evidencias-chromium/trace.zip"
           }
         ]
       }
     },
     {
-      "id": "orchestrator-claude",
-      "path": "orchestrator",
-      "provider": "claude",
-      "prompt_sha256": "51119498623b6c5095be4e4ee59517273db6fd345d4e9b8574ae4721c450fc50",
+      "id": "providers-default-session-cursor",
+      "matrix": "providers-default",
+      "path": "session",
+      "provider": "cursor",
+      "requested_model": "composer-2.5",
+      "requested_effort": null,
+      "prompt_sha256": "f9ea44a4d5952da71a896d5d7623f694bb445f52064f563ecf9a3d81744ca297",
       "execution_mode": "yolo",
       "status": "completed",
-      "thread_id": null,
-      "issue_identifier": "SYM-6",
-      "workspace_path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-6/site",
-      "attempt_id": "20260725T043314316Z-b1ea167a-4a9b-4f17-969b-ca4adb085fbd",
-      "effective_prompt_sha256": "51119498623b6c5095be4e4ee59517273db6fd345d4e9b8574ae4721c450fc50",
-      "started_at": "2026-07-25T04:33:15.420Z",
-      "tracker_url": "http://127.0.0.1:4029/tracker/projects/symphony-landing-benchmark/board/issues/SYM-6/sessions?surface=autonomous",
+      "thread_id": 2,
+      "issue_identifier": "SYM-2",
+      "workspace_path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-2__p1/site",
+      "attempt_id": "20260725T192211953Z-aeae40d2-5b05-48db-8fa2-c7045e6f6bd3",
+      "effective_prompt_sha256": "f9ea44a4d5952da71a896d5d7623f694bb445f52064f563ecf9a3d81744ca297",
+      "started_at": "2026-07-25T19:22:14.296Z",
+      "tracker_url": "http://127.0.0.1:4010/tracker/projects/symphony-landing-benchmark/workspaces/2",
       "preview": {
         "reason": null,
         "tunnel": {
@@ -910,65 +189,55 @@
         "available": true,
         "servers": [
           {
-            "id": 28,
+            "id": 4,
             "port": 10016,
             "status": "ready",
             "primary": true,
-            "source": "managed",
-            "revision": 2,
+            "source": null,
+            "revision": null,
             "url": "http://127.0.0.1:10016/",
             "slug": "site",
-            "session_name": "sym-dev-symphony-landing-benchmark-SYM-6-site",
-            "sync_state": "in_sync",
+            "session_name": "sym-workspace-symphony-landing-benchmark-94b4aeb1888e-dev-site",
+            "sync_state": null,
             "working_dir": "site",
             "local_url": "http://127.0.0.1:10016/",
             "public_url": "http://127.0.0.1:10016/",
-            "actual_port": 10016,
-            "contract_id": "ctr_45d1525f896747a099f936e09b61b59a",
-            "preferred_port": 10016,
-            "allowed_ports": [
-              10016,
-              10008,
-              10009,
-              10010,
-              10011,
-              10012,
-              10013,
-              10014,
-              10015
-            ],
+            "actual_port": null,
+            "contract_id": null,
+            "preferred_port": null,
+            "allowed_ports": null,
             "sync_reason": null
           }
         ],
-        "as_of": "2026-07-25T04:49:24.305163Z",
-        "snapshot_id": "snap_fbc05932b77d436dbaac2243031c01dc"
+        "as_of": "2026-07-25T19:23:55.460324Z",
+        "snapshot_id": "snap_56bc2f1256ac4006ac5db04b10707751"
       },
       "agent_outcome": "completed",
       "error": null,
-      "artifact_root": "/tmp/symphony-agent-e2e-v5.881uZd/artifacts/orchestrator-claude/attempts/20260725T043314316Z-b1ea167a-4a9b-4f17-969b-ca4adb085fbd",
+      "artifact_root": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-default-session-cursor/attempts/20260725T192211953Z-aeae40d2-5b05-48db-8fa2-c7045e6f6bd3",
       "identity": {
-        "assistant_thread_id": 7,
-        "issue_identifier": "SYM-6",
-        "agent_kind": "claude",
-        "status": "closed",
+        "assistant_thread_id": 2,
+        "agent_kind": "cursor",
+        "status": "active",
         "provider_matches": true,
-        "agent_execution_status": "saved",
-        "agent_execution_runtime_seconds": null,
-        "agent_execution_started_at": "2026-07-25T04:33:15Z",
-        "agent_execution_last_event_at": "2026-07-25T04:49:20Z",
+        "requested_model": "composer-2.5",
+        "requested_effort": null,
+        "resolved_model": "composer-2.5",
+        "resolved_effort": null,
         "source": "tracker_snapshot"
       },
-      "finished_at": "2026-07-25T04:49:24.411Z",
-      "duration_ms": 968991,
-      "artifacts_root": "/tmp/symphony-agent-e2e-v5.881uZd/artifacts/orchestrator-claude/attempts/20260725T043314316Z-b1ea167a-4a9b-4f17-969b-ca4adb085fbd",
+      "finished_at": "2026-07-25T19:23:55.585Z",
+      "duration_ms": 101289,
+      "artifacts_root": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-default-session-cursor/attempts/20260725T192211953Z-aeae40d2-5b05-48db-8fa2-c7045e6f6bd3",
       "attempts": {
-        "count": 1,
-        "canonical_attempt_id": "20260725T043314316Z-b1ea167a-4a9b-4f17-969b-ca4adb085fbd",
+        "count": 2,
+        "canonical_attempt_id": "20260725T192211953Z-aeae40d2-5b05-48db-8fa2-c7045e6f6bd3",
         "attempt_ids": [
-          "20260725T043314316Z-b1ea167a-4a9b-4f17-969b-ca4adb085fbd"
+          "20260725T163121862Z-991bbb78-b21b-4937-b32c-744b1fff9893",
+          "20260725T192211953Z-aeae40d2-5b05-48db-8fa2-c7045e6f6bd3"
         ]
       },
-      "execution_observed_duration_ms": 965000,
+      "execution_observed_duration_ms": null,
       "file_count": 58,
       "contract": {
         "package_json": true,
@@ -988,29 +257,29 @@
           "command": "npm install --ignore-scripts --no-audit --no-fund",
           "status": "passed",
           "exit_code": 0,
-          "duration_ms": 353,
-          "output": "\nup to date in 240ms\n"
+          "duration_ms": 375,
+          "output": "\nup to date in 266ms\n"
         },
         {
           "command": "npm run build",
           "status": "passed",
           "exit_code": 0,
-          "duration_ms": 2041,
-          "output": "\n> symphony-landing@0.1.0 build\n> tsc --noEmit && vite build\n\nvite v5.4.21 building for production...\ntransforming...\n✓ 42 modules transformed.\nrendering chunks...\ncomputing gzip size...\ndist/index.html                   1.13 kB │ gzip:  0.66 kB\ndist/assets/index-Bd-IFc3G.css   12.20 kB │ gzip:  3.31 kB\ndist/assets/index-DhgD40kd.js   157.38 kB │ gzip: 50.37 kB\n✓ built in 483ms\n"
+          "duration_ms": 2057,
+          "output": "\n> symphony-landing@1.0.0 build\n> tsc --noEmit && vite build\n\nvite v7.3.6 building client environment for production...\ntransforming...\n✓ 38 modules transformed.\nrendering chunks...\ncomputing gzip size...\ndist/index.html                   0.59 kB │ gzip:  0.36 kB\ndist/assets/index-NCfb_beT.css   10.30 kB │ gzip:  2.85 kB\ndist/assets/index-DELo3EyG.js   207.43 kB │ gzip: 64.93 kB\n✓ built in 719ms\n"
         },
         {
           "command": "npm run test:e2e",
           "status": "passed",
           "exit_code": 0,
-          "duration_ms": 6306,
-          "output": "\n> symphony-landing@0.1.0 test:e2e\n> node scripts/run-e2e.mjs\n\n\n> symphony-landing@0.1.0 dev\n> vite --host 127.0.0.1 --port 24005 --strictPort\n\n\n  VITE v5.4.21  ready in 110 ms\n\n  ➜  Local:   http://127.0.0.1:24005/\n\nRunning 5 tests using 1 worker\n\n  ✓  1 [chromium] › tests/e2e/landing.spec.ts:24:3 › Landing do Symphony › hero: heading principal e as duas chamadas (889ms)\n  ✓  2 [chromium] › tests/e2e/landing.spec.ts:52:3 › Landing do Symphony › agentes: cards de Codex, Cursor e Claude (357ms)\n  ✓  3 [chromium] › tests/e2e/landing.spec.ts:70:3 › Landing do Symphony › seções de fluxo e de evidências estão presentes (392ms)\n  ✓  4 [chromium] › tests/e2e/landing.spec.ts:90:3 › Landing do Symphony › navegação por âncora ao clicar em um link do menu (629ms)\n  ✓  5 [chromium] › tests/e2e/landing.spec.ts:102:3 › Landing do Symphony › sem overflow horizontal em viewport mobile (561ms)\n\n  5 passed (3.5s)\n"
+          "duration_ms": 7873,
+          "output": "\n> symphony-landing@1.0.0 test:e2e\n> node scripts/run-e2e.mjs\n\n\n> symphony-landing@1.0.0 dev\n> vite --host 127.0.0.1 --port 24001 --strictPort\n\n\n  VITE v7.3.6  ready in 148 ms\n\n  ➜  Local:   http://127.0.0.1:24001/\n\nRunning 5 tests using 1 worker\n\n[1/5] [chromium] › tests/e2e/landing.spec.ts:14:3 › Symphony landing page › exibe hero com heading principal e duas chamadas\n[2/5] [chromium] › tests/e2e/landing.spec.ts:38:3 › Symphony landing page › exibe cards de Codex, Cursor e Claude\n[3/5] [chromium] › tests/e2e/landing.spec.ts:50:3 › Symphony landing page › exibe seção de fluxo e seção de evidências\n[4/5] [chromium] › tests/e2e/landing.spec.ts:85:3 › Symphony landing page › navega por âncora ao clicar em link do menu\n[5/5] [chromium] › tests/e2e/landing.spec.ts:97:3 › Symphony landing page › não apresenta overflow horizontal em viewport mobile\n  5 passed (4.7s)\n"
         }
       ],
       "git": {
         "available": true,
         "reason": null,
-        "root": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-6/site",
-        "head_sha": "df4f7e2eacbe67a0eaf4f7b54cf9fdc19a3c6ab5",
+        "root": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-2__p1/site",
+        "head_sha": "086d299b79a41fdbc228be3df39eaa6a3f1e0793",
         "clean": true,
         "changed_files": 0,
         "changed_lines": 0
@@ -1019,87 +288,2442 @@
         "screenshots": [
           {
             "source": "tracker",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/artifacts/orchestrator-claude/attempts/20260725T043314316Z-b1ea167a-4a9b-4f17-969b-ca4adb085fbd/raw/symphony-flow-executes-one-bcb66-h-the-real-Symphony-tracker/test-finished-1.png"
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-default-session-cursor/attempts/20260725T192211953Z-aeae40d2-5b05-48db-8fa2-c7045e6f6bd3/raw/symphony-flow-executes-one-bcb66-h-the-real-Symphony-tracker/test-finished-1.png"
           },
           {
             "source": "tracker",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/artifacts/orchestrator-claude/attempts/20260725T043314316Z-b1ea167a-4a9b-4f17-969b-ca4adb085fbd/symphony-final.png"
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-default-session-cursor/attempts/20260725T192211953Z-aeae40d2-5b05-48db-8fa2-c7045e6f6bd3/symphony-final.png"
           },
           {
             "source": "generated_e2e",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-6/site/test-results/landing-Landing-do-Symphon-18976-o-clicar-em-um-link-do-menu-chromium/test-finished-1.png"
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-2__p1/site/test-results/landing-Symphony-landing-p-1e18f-ds-de-Codex-Cursor-e-Claude-chromium/test-finished-1.png"
           },
           {
             "source": "generated_e2e",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-6/site/test-results/landing-Landing-do-Symphon-363aa-rizontal-em-viewport-mobile-chromium/test-finished-1.png"
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-2__p1/site/test-results/landing-Symphony-landing-p-26ef6-a-ao-clicar-em-link-do-menu-chromium/test-finished-1.png"
           },
           {
             "source": "generated_e2e",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-6/site/test-results/landing-Landing-do-Symphon-6bd7f--evidências-estão-presentes-chromium/test-finished-1.png"
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-2__p1/site/test-results/landing-Symphony-landing-p-52741-fluxo-e-seção-de-evidências-chromium/test-finished-1.png"
           },
           {
             "source": "generated_e2e",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-6/site/test-results/landing-Landing-do-Symphon-7bf97-rincipal-e-as-duas-chamadas-chromium/test-finished-1.png"
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-2__p1/site/test-results/landing-Symphony-landing-p-a78a9-rizontal-em-viewport-mobile-chromium/test-finished-1.png"
           },
           {
             "source": "generated_e2e",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-6/site/test-results/landing-Landing-do-Symphon-8d444-ds-de-Codex-Cursor-e-Claude-chromium/test-finished-1.png"
-          },
-          {
-            "source": "generated_e2e",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-6/site/test-results/screenshots/desktop-full.png"
-          },
-          {
-            "source": "generated_e2e",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-6/site/test-results/screenshots/mobile-full.png"
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-2__p1/site/test-results/landing-Symphony-landing-p-fdeec-g-principal-e-duas-chamadas-chromium/test-finished-1.png"
           }
         ],
         "videos": [
           {
             "source": "tracker",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/artifacts/orchestrator-claude/attempts/20260725T043314316Z-b1ea167a-4a9b-4f17-969b-ca4adb085fbd/raw/symphony-flow-executes-one-bcb66-h-the-real-Symphony-tracker/video.webm"
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-default-session-cursor/attempts/20260725T192211953Z-aeae40d2-5b05-48db-8fa2-c7045e6f6bd3/raw/symphony-flow-executes-one-bcb66-h-the-real-Symphony-tracker/video.webm"
           },
           {
             "source": "generated_e2e",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-6/site/test-results/landing-Landing-do-Symphon-18976-o-clicar-em-um-link-do-menu-chromium/video.webm"
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-2__p1/site/test-results/landing-Symphony-landing-p-1e18f-ds-de-Codex-Cursor-e-Claude-chromium/video.webm"
           },
           {
             "source": "generated_e2e",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-6/site/test-results/landing-Landing-do-Symphon-363aa-rizontal-em-viewport-mobile-chromium/video.webm"
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-2__p1/site/test-results/landing-Symphony-landing-p-26ef6-a-ao-clicar-em-link-do-menu-chromium/video.webm"
           },
           {
             "source": "generated_e2e",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-6/site/test-results/landing-Landing-do-Symphon-6bd7f--evidências-estão-presentes-chromium/video.webm"
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-2__p1/site/test-results/landing-Symphony-landing-p-52741-fluxo-e-seção-de-evidências-chromium/video.webm"
           },
           {
             "source": "generated_e2e",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-6/site/test-results/landing-Landing-do-Symphon-7bf97-rincipal-e-as-duas-chamadas-chromium/video.webm"
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-2__p1/site/test-results/landing-Symphony-landing-p-a78a9-rizontal-em-viewport-mobile-chromium/video.webm"
           },
           {
             "source": "generated_e2e",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-6/site/test-results/landing-Landing-do-Symphon-8d444-ds-de-Codex-Cursor-e-Claude-chromium/video.webm"
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-2__p1/site/test-results/landing-Symphony-landing-p-fdeec-g-principal-e-duas-chamadas-chromium/video.webm"
           }
         ],
         "traces": [
           {
             "source": "generated_e2e",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-6/site/test-results/landing-Landing-do-Symphon-18976-o-clicar-em-um-link-do-menu-chromium/trace.zip"
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-2__p1/site/test-results/landing-Symphony-landing-p-1e18f-ds-de-Codex-Cursor-e-Claude-chromium/trace.zip"
           },
           {
             "source": "generated_e2e",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-6/site/test-results/landing-Landing-do-Symphon-363aa-rizontal-em-viewport-mobile-chromium/trace.zip"
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-2__p1/site/test-results/landing-Symphony-landing-p-26ef6-a-ao-clicar-em-link-do-menu-chromium/trace.zip"
           },
           {
             "source": "generated_e2e",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-6/site/test-results/landing-Landing-do-Symphon-6bd7f--evidências-estão-presentes-chromium/trace.zip"
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-2__p1/site/test-results/landing-Symphony-landing-p-52741-fluxo-e-seção-de-evidências-chromium/trace.zip"
           },
           {
             "source": "generated_e2e",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-6/site/test-results/landing-Landing-do-Symphon-7bf97-rincipal-e-as-duas-chamadas-chromium/trace.zip"
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-2__p1/site/test-results/landing-Symphony-landing-p-a78a9-rizontal-em-viewport-mobile-chromium/trace.zip"
           },
           {
             "source": "generated_e2e",
-            "path": "/tmp/symphony-agent-e2e-v5.881uZd/workspaces/symphony-landing-benchmark/SYM-6/site/test-results/landing-Landing-do-Symphon-8d444-ds-de-Codex-Cursor-e-Claude-chromium/trace.zip"
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-2__p1/site/test-results/landing-Symphony-landing-p-fdeec-g-principal-e-duas-chamadas-chromium/trace.zip"
+          }
+        ]
+      }
+    },
+    {
+      "id": "providers-default-session-claude",
+      "matrix": "providers-default",
+      "path": "session",
+      "provider": "claude",
+      "requested_model": "claude-sonnet-5",
+      "requested_effort": "medium",
+      "prompt_sha256": "f9ea44a4d5952da71a896d5d7623f694bb445f52064f563ecf9a3d81744ca297",
+      "execution_mode": "yolo",
+      "status": "completed",
+      "thread_id": 3,
+      "issue_identifier": "SYM-3",
+      "workspace_path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-3__p1/site",
+      "attempt_id": "20260725T163541009Z-a03a8f15-d512-450a-af16-9607f9dd1da0",
+      "effective_prompt_sha256": "f9ea44a4d5952da71a896d5d7623f694bb445f52064f563ecf9a3d81744ca297",
+      "started_at": "2026-07-25T16:35:42.158Z",
+      "tracker_url": "http://127.0.0.1:4010/tracker/projects/symphony-landing-benchmark/workspaces/3",
+      "preview": {
+        "reason": null,
+        "tunnel": {
+          "enabled": false,
+          "running": false
+        },
+        "available": true,
+        "servers": [
+          {
+            "id": 9,
+            "port": 10016,
+            "status": "ready",
+            "primary": true,
+            "source": null,
+            "revision": null,
+            "url": "http://127.0.0.1:10016/",
+            "slug": "site",
+            "allowed_ports": null,
+            "preferred_port": null,
+            "session_name": "sym-workspace-symphony-landing-benchmark-fc42c3af9144-dev-site",
+            "working_dir": "site",
+            "contract_id": null,
+            "sync_state": null,
+            "public_url": "http://127.0.0.1:10016/",
+            "local_url": "http://127.0.0.1:10016/",
+            "actual_port": null,
+            "sync_reason": null
+          }
+        ],
+        "as_of": "2026-07-25T16:45:29.667101Z",
+        "snapshot_id": "snap_a36dd92ae66f4980a233e024ea37e763"
+      },
+      "agent_outcome": "completed",
+      "error": null,
+      "artifact_root": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-default-session-claude/attempts/20260725T163541009Z-a03a8f15-d512-450a-af16-9607f9dd1da0",
+      "identity": {
+        "assistant_thread_id": 3,
+        "agent_kind": "claude",
+        "status": "active",
+        "provider_matches": true,
+        "requested_model": "claude-sonnet-5",
+        "requested_effort": "medium",
+        "resolved_model": "claude-sonnet-5",
+        "resolved_effort": "medium",
+        "source": "tracker_snapshot"
+      },
+      "finished_at": "2026-07-25T16:45:29.755Z",
+      "duration_ms": 587597,
+      "artifacts_root": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-default-session-claude/attempts/20260725T163541009Z-a03a8f15-d512-450a-af16-9607f9dd1da0",
+      "attempts": {
+        "count": 1,
+        "canonical_attempt_id": "20260725T163541009Z-a03a8f15-d512-450a-af16-9607f9dd1da0",
+        "attempt_ids": [
+          "20260725T163541009Z-a03a8f15-d512-450a-af16-9607f9dd1da0"
+        ]
+      },
+      "execution_observed_duration_ms": null,
+      "file_count": 78,
+      "contract": {
+        "package_json": true,
+        "source": true,
+        "playwright_config": true,
+        "e2e_tests": true,
+        "scripts": {
+          "dev": true,
+          "build": true,
+          "test_e2e": true,
+          "e2e_runner": true
+        }
+      },
+      "contract_passed": true,
+      "validation": [
+        {
+          "command": "npm install --ignore-scripts --no-audit --no-fund",
+          "status": "passed",
+          "exit_code": 0,
+          "duration_ms": 482,
+          "output": "\nup to date in 372ms\n"
+        },
+        {
+          "command": "npm run build",
+          "status": "passed",
+          "exit_code": 0,
+          "duration_ms": 2466,
+          "output": "\n> symphony-landing@0.0.0 build\n> tsc -b && vite build\n\nvite v5.4.21 building for production...\ntransforming...\n✓ 40 modules transformed.\nrendering chunks...\ncomputing gzip size...\ndist/index.html                   0.61 kB │ gzip:  0.39 kB\ndist/assets/index-C6qfNAv6.css    8.93 kB │ gzip:  2.59 kB\ndist/assets/index-B7nTGuLd.js   152.37 kB │ gzip: 48.92 kB\n✓ built in 594ms\n"
+        },
+        {
+          "command": "npm run test:e2e",
+          "status": "passed",
+          "exit_code": 0,
+          "duration_ms": 7355,
+          "output": "\n> symphony-landing@0.0.0 test:e2e\n> node scripts/run-e2e.mjs\n\n\n> symphony-landing@0.0.0 dev\n> vite --host 127.0.0.1 --port 24002 --strictPort\n\n\n  VITE v5.4.21  ready in 129 ms\n\n  ➜  Local:   http://127.0.0.1:24002/\n\nRunning 10 tests using 8 workers\n\n  ✓   1 [chromium] › tests/e2e/landing.spec.ts:90:3 › Symphony landing page › mobile: não há overflow horizontal em viewport estreito (1.3s)\n  ✓   4 [chromium] › tests/e2e/landing.spec.ts:23:3 › Symphony landing page › agentes: exibe os cards de Codex, Cursor e Claude (1.4s)\n  ✓   2 [chromium] › tests/e2e/landing.spec.ts:4:3 › Symphony landing page › hero: exibe o heading principal e as duas chamadas (1.4s)\n  ✓   6 [chromium] › tests/e2e/landing.spec.ts:76:3 › Symphony landing page › navegação: clicar em um link do menu leva à âncora correspondente (1.6s)\n  ✓   3 [mobile-chrome] › tests/e2e/landing.spec.ts:4:3 › Symphony landing page › hero: exibe o heading principal e as duas chamadas (1.6s)\n  ✓   7 [chromium] › tests/e2e/landing.spec.ts:38:3 › Symphony landing page › fluxo e evidências: seções presentes com o conteúdo esperado (1.8s)\n  ✓   5 [mobile-chrome] › tests/e2e/landing.spec.ts:23:3 › Symphony landing page › agentes: exibe os cards de Codex, Cursor e Claude (1.9s)\n  ✓   8 [mobile-chrome] › tests/e2e/landing.spec.ts:38:3 › Symphony landing page › fluxo e evidências: seções presentes com o conteúdo esperado (2.1s)\n  ✓   9 [mobile-chrome] › tests/e2e/landing.spec.ts:76:3 › Symphony landing page › navegação: clicar em um link do menu leva à âncora correspondente (751ms)\n  ✓  10 [mobile-chrome] › tests/e2e/landing.spec.ts:90:3 › Symphony landing page › mobile: não há overflow horizontal em viewport estreito (786ms)\n\n  10 passed (4.3s)\n4:25:19 PM [vite] page reload playwright-report/index.html\n4:25:19 PM [vite] page reload playwright-report/trace/index.html\n4:25:19 PM [vite] page reload playwright-report/trace/snapshot.html\n4:25:19 PM [vite] page reload playwright-report/trace/uiMode.html\n"
+        }
+      ],
+      "git": {
+        "available": true,
+        "reason": null,
+        "root": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-3__p1/site",
+        "head_sha": "90b81d1f9203ca714c7f175a000e6c84f96060f8",
+        "clean": true,
+        "changed_files": 0,
+        "changed_lines": 0
+      },
+      "artifacts": {
+        "screenshots": [
+          {
+            "source": "tracker",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-default-session-claude/attempts/20260725T163541009Z-a03a8f15-d512-450a-af16-9607f9dd1da0/raw/symphony-flow-executes-one-bcb66-h-the-real-Symphony-tracker/test-finished-1.png"
+          },
+          {
+            "source": "tracker",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-default-session-claude/attempts/20260725T163541009Z-a03a8f15-d512-450a-af16-9607f9dd1da0/symphony-final.png"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-3__p1/site/test-results/landing-Symphony-landing-p-13e00-tes-com-o-conteúdo-esperado-chromium/test-finished-1.png"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-3__p1/site/test-results/landing-Symphony-landing-p-13e00-tes-com-o-conteúdo-esperado-mobile-chrome/test-finished-1.png"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-3__p1/site/test-results/landing-Symphony-landing-p-4fd98-ds-de-Codex-Cursor-e-Claude-chromium/test-finished-1.png"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-3__p1/site/test-results/landing-Symphony-landing-p-4fd98-ds-de-Codex-Cursor-e-Claude-mobile-chrome/test-finished-1.png"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-3__p1/site/test-results/landing-Symphony-landing-p-5830b-zontal-em-viewport-estreito-chromium/test-finished-1.png"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-3__p1/site/test-results/landing-Symphony-landing-p-5830b-zontal-em-viewport-estreito-mobile-chrome/test-finished-1.png"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-3__p1/site/test-results/landing-Symphony-landing-p-ae644-eva-à-âncora-correspondente-chromium/test-finished-1.png"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-3__p1/site/test-results/landing-Symphony-landing-p-ae644-eva-à-âncora-correspondente-mobile-chrome/test-finished-1.png"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-3__p1/site/test-results/landing-Symphony-landing-p-b1d51-rincipal-e-as-duas-chamadas-chromium/test-finished-1.png"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-3__p1/site/test-results/landing-Symphony-landing-p-b1d51-rincipal-e-as-duas-chamadas-mobile-chrome/test-finished-1.png"
+          }
+        ],
+        "videos": [
+          {
+            "source": "tracker",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-default-session-claude/attempts/20260725T163541009Z-a03a8f15-d512-450a-af16-9607f9dd1da0/raw/symphony-flow-executes-one-bcb66-h-the-real-Symphony-tracker/video.webm"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-3__p1/site/test-results/landing-Symphony-landing-p-13e00-tes-com-o-conteúdo-esperado-chromium/video.webm"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-3__p1/site/test-results/landing-Symphony-landing-p-13e00-tes-com-o-conteúdo-esperado-mobile-chrome/video.webm"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-3__p1/site/test-results/landing-Symphony-landing-p-4fd98-ds-de-Codex-Cursor-e-Claude-chromium/video.webm"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-3__p1/site/test-results/landing-Symphony-landing-p-4fd98-ds-de-Codex-Cursor-e-Claude-mobile-chrome/video.webm"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-3__p1/site/test-results/landing-Symphony-landing-p-5830b-zontal-em-viewport-estreito-chromium/video.webm"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-3__p1/site/test-results/landing-Symphony-landing-p-5830b-zontal-em-viewport-estreito-mobile-chrome/video.webm"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-3__p1/site/test-results/landing-Symphony-landing-p-ae644-eva-à-âncora-correspondente-chromium/video.webm"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-3__p1/site/test-results/landing-Symphony-landing-p-ae644-eva-à-âncora-correspondente-mobile-chrome/video.webm"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-3__p1/site/test-results/landing-Symphony-landing-p-b1d51-rincipal-e-as-duas-chamadas-chromium/video.webm"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-3__p1/site/test-results/landing-Symphony-landing-p-b1d51-rincipal-e-as-duas-chamadas-mobile-chrome/video.webm"
+          }
+        ],
+        "traces": [
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-3__p1/site/test-results/landing-Symphony-landing-p-13e00-tes-com-o-conteúdo-esperado-chromium/trace.zip"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-3__p1/site/test-results/landing-Symphony-landing-p-13e00-tes-com-o-conteúdo-esperado-mobile-chrome/trace.zip"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-3__p1/site/test-results/landing-Symphony-landing-p-4fd98-ds-de-Codex-Cursor-e-Claude-chromium/trace.zip"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-3__p1/site/test-results/landing-Symphony-landing-p-4fd98-ds-de-Codex-Cursor-e-Claude-mobile-chrome/trace.zip"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-3__p1/site/test-results/landing-Symphony-landing-p-5830b-zontal-em-viewport-estreito-chromium/trace.zip"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-3__p1/site/test-results/landing-Symphony-landing-p-5830b-zontal-em-viewport-estreito-mobile-chrome/trace.zip"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-3__p1/site/test-results/landing-Symphony-landing-p-ae644-eva-à-âncora-correspondente-chromium/trace.zip"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-3__p1/site/test-results/landing-Symphony-landing-p-ae644-eva-à-âncora-correspondente-mobile-chrome/trace.zip"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-3__p1/site/test-results/landing-Symphony-landing-p-b1d51-rincipal-e-as-duas-chamadas-chromium/trace.zip"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-3__p1/site/test-results/landing-Symphony-landing-p-b1d51-rincipal-e-as-duas-chamadas-mobile-chrome/trace.zip"
+          }
+        ]
+      }
+    },
+    {
+      "id": "providers-default-orchestrator-codex",
+      "matrix": "providers-default",
+      "path": "orchestrator",
+      "provider": "codex",
+      "requested_model": "gpt-5.5",
+      "requested_effort": "medium",
+      "prompt_sha256": "f9ea44a4d5952da71a896d5d7623f694bb445f52064f563ecf9a3d81744ca297",
+      "execution_mode": "yolo",
+      "status": "completed",
+      "thread_id": null,
+      "issue_identifier": "SYM-4",
+      "workspace_path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-4/site",
+      "attempt_id": "20260725T164530112Z-fbf5a6da-7c6a-4275-b851-d10894b74eb9",
+      "effective_prompt_sha256": "f9ea44a4d5952da71a896d5d7623f694bb445f52064f563ecf9a3d81744ca297",
+      "started_at": "2026-07-25T16:45:31.286Z",
+      "tracker_url": "http://127.0.0.1:4010/tracker/projects/symphony-landing-benchmark/board/issues/SYM-4/sessions?surface=autonomous",
+      "preview": {
+        "reason": null,
+        "tunnel": {
+          "enabled": false,
+          "running": false
+        },
+        "available": true,
+        "servers": [
+          {
+            "id": 12,
+            "port": 10001,
+            "status": "ready",
+            "primary": true,
+            "source": "managed",
+            "revision": 2,
+            "url": "http://127.0.0.1:10001/",
+            "slug": "site",
+            "allowed_ports": [
+              10001,
+              10024,
+              10025,
+              10026,
+              10027,
+              10028,
+              10029,
+              10030,
+              10031
+            ],
+            "preferred_port": 10001,
+            "session_name": "sym-dev-symphony-landing-benchmark-SYM-4-site",
+            "working_dir": "site",
+            "contract_id": "ctr_d0e00539ce30478581c342cfbc793ea8",
+            "sync_state": "in_sync",
+            "public_url": "http://127.0.0.1:10001/",
+            "local_url": "http://127.0.0.1:10001/",
+            "actual_port": 10001,
+            "sync_reason": null
+          }
+        ],
+        "as_of": "2026-07-25T16:53:12.327222Z",
+        "snapshot_id": "snap_ea1bd9fef7214991a7323ae93fa5d376"
+      },
+      "agent_outcome": "completed",
+      "error": null,
+      "artifact_root": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-default-orchestrator-codex/attempts/20260725T164530112Z-fbf5a6da-7c6a-4275-b851-d10894b74eb9",
+      "identity": {
+        "assistant_thread_id": 10,
+        "issue_identifier": "SYM-4",
+        "agent_kind": "codex",
+        "status": "closed",
+        "provider_matches": true,
+        "requested_model": "gpt-5.5",
+        "requested_effort": "medium",
+        "resolved_model": "gpt-5.5",
+        "resolved_effort": "medium",
+        "agent_execution_status": "saved",
+        "agent_execution_runtime_seconds": null,
+        "agent_execution_started_at": "2026-07-25T16:45:31Z",
+        "agent_execution_last_event_at": "2026-07-25T16:53:08Z",
+        "source": "tracker_snapshot"
+      },
+      "finished_at": "2026-07-25T16:53:12.445Z",
+      "duration_ms": 461159,
+      "artifacts_root": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-default-orchestrator-codex/attempts/20260725T164530112Z-fbf5a6da-7c6a-4275-b851-d10894b74eb9",
+      "attempts": {
+        "count": 1,
+        "canonical_attempt_id": "20260725T164530112Z-fbf5a6da-7c6a-4275-b851-d10894b74eb9",
+        "attempt_ids": [
+          "20260725T164530112Z-fbf5a6da-7c6a-4275-b851-d10894b74eb9"
+        ]
+      },
+      "execution_observed_duration_ms": 457000,
+      "file_count": 39,
+      "contract": {
+        "package_json": true,
+        "source": true,
+        "playwright_config": true,
+        "e2e_tests": true,
+        "scripts": {
+          "dev": true,
+          "build": true,
+          "test_e2e": true,
+          "e2e_runner": true
+        }
+      },
+      "contract_passed": true,
+      "validation": [
+        {
+          "command": "npm install --ignore-scripts --no-audit --no-fund",
+          "status": "passed",
+          "exit_code": 0,
+          "duration_ms": 476,
+          "output": "\nup to date in 369ms\n"
+        },
+        {
+          "command": "npm run build",
+          "status": "passed",
+          "exit_code": 0,
+          "duration_ms": 2355,
+          "output": "\n> symphony-landing-benchmark@0.1.0 build\n> tsc -b && vite build\n\nvite v6.4.3 building for production...\ntransforming...\n✓ 29 modules transformed.\nrendering chunks...\ncomputing gzip size...\ndist/index.html                   0.62 kB │ gzip:  0.38 kB\ndist/assets/index-AkR3SxFp.css    6.88 kB │ gzip:  2.34 kB\ndist/assets/index-DZch0B8z.js   200.87 kB │ gzip: 62.88 kB\n✓ built in 712ms\n"
+        },
+        {
+          "command": "npm run test:e2e",
+          "status": "passed",
+          "exit_code": 0,
+          "duration_ms": 6555,
+          "output": "\n> symphony-landing-benchmark@0.1.0 test:e2e\n> node scripts/run-e2e.mjs\n\n\n> symphony-landing-benchmark@0.1.0 dev\n> vite --host 127.0.0.1 --port 24003 --strictPort\n\n\n  VITE v6.4.3  ready in 132 ms\n\n  ➜  Local:   http://127.0.0.1:24003/\n\nRunning 1 test using 1 worker\n\n  ✓  1 [chromium] › tests/e2e/symphony-landing.spec.ts:10:1 › landing page Symphony real app (2.5s)\n\n  1 passed (3.4s)\n4:25:29 PM [vite] (client) page reload playwright-report/index.html\n4:25:29 PM [vite] (client) page reload playwright-report/trace/index.html\n4:25:29 PM [vite] (client) page reload playwright-report/trace/snapshot.html\n4:25:29 PM [vite] (client) page reload playwright-report/trace/uiMode.html\n"
+        }
+      ],
+      "git": {
+        "available": true,
+        "reason": null,
+        "root": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-4/site",
+        "head_sha": "a44b1336f7094da5edf9a473577e116b26c31172",
+        "clean": true,
+        "changed_files": 0,
+        "changed_lines": 0
+      },
+      "artifacts": {
+        "screenshots": [
+          {
+            "source": "tracker",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-default-orchestrator-codex/attempts/20260725T164530112Z-fbf5a6da-7c6a-4275-b851-d10894b74eb9/raw/symphony-flow-executes-one-bcb66-h-the-real-Symphony-tracker/test-finished-1.png"
+          },
+          {
+            "source": "tracker",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-default-orchestrator-codex/attempts/20260725T164530112Z-fbf5a6da-7c6a-4275-b851-d10894b74eb9/symphony-final.png"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-4/site/test-results/symphony-landing-landing-page-Symphony-real-app-chromium/test-finished-1.png"
+          }
+        ],
+        "videos": [
+          {
+            "source": "tracker",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-default-orchestrator-codex/attempts/20260725T164530112Z-fbf5a6da-7c6a-4275-b851-d10894b74eb9/raw/symphony-flow-executes-one-bcb66-h-the-real-Symphony-tracker/video.webm"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-4/site/test-results/symphony-landing-landing-page-Symphony-real-app-chromium/video.webm"
+          }
+        ],
+        "traces": [
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-4/site/test-results/symphony-landing-landing-page-Symphony-real-app-chromium/trace.zip"
+          }
+        ]
+      }
+    },
+    {
+      "id": "providers-default-orchestrator-cursor",
+      "matrix": "providers-default",
+      "path": "orchestrator",
+      "provider": "cursor",
+      "requested_model": "composer-2.5",
+      "requested_effort": null,
+      "prompt_sha256": "f9ea44a4d5952da71a896d5d7623f694bb445f52064f563ecf9a3d81744ca297",
+      "execution_mode": "yolo",
+      "status": "completed",
+      "thread_id": null,
+      "issue_identifier": "SYM-5",
+      "workspace_path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-5/site",
+      "attempt_id": "20260725T192212005Z-3637f179-0bb7-4441-b3a6-915348e43c8b",
+      "effective_prompt_sha256": "f9ea44a4d5952da71a896d5d7623f694bb445f52064f563ecf9a3d81744ca297",
+      "started_at": "2026-07-25T19:22:14.343Z",
+      "tracker_url": "http://127.0.0.1:4010/tracker/projects/symphony-landing-benchmark/board/issues/SYM-5/sessions?surface=autonomous",
+      "preview": {
+        "reason": null,
+        "tunnel": {
+          "enabled": false,
+          "running": false
+        },
+        "available": true,
+        "servers": [
+          {
+            "id": 20,
+            "port": 10024,
+            "status": "ready",
+            "primary": true,
+            "source": "managed",
+            "revision": 2,
+            "url": "http://127.0.0.1:10024/",
+            "slug": "site",
+            "session_name": "sym-dev-symphony-landing-benchmark-SYM-5-site",
+            "sync_state": "in_sync",
+            "working_dir": "site",
+            "local_url": "http://127.0.0.1:10024/",
+            "public_url": "http://127.0.0.1:10024/",
+            "actual_port": 10024,
+            "contract_id": "ctr_ef20e6e38b0c4919b23e68bb2ce9ed13",
+            "preferred_port": 10024,
+            "allowed_ports": [
+              10024,
+              10025,
+              10026,
+              10027,
+              10028,
+              10029,
+              10030,
+              10031
+            ],
+            "sync_reason": null
+          }
+        ],
+        "as_of": "2026-07-25T19:24:42.470804Z",
+        "snapshot_id": "snap_806158a2c0304e259be190d259752c73"
+      },
+      "agent_outcome": "completed",
+      "error": null,
+      "artifact_root": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-default-orchestrator-cursor/attempts/20260725T192212005Z-3637f179-0bb7-4441-b3a6-915348e43c8b",
+      "identity": {
+        "assistant_thread_id": 18,
+        "issue_identifier": "SYM-5",
+        "agent_kind": "cursor",
+        "status": "closed",
+        "provider_matches": true,
+        "requested_model": "composer-2.5",
+        "requested_effort": null,
+        "resolved_model": "composer-2.5",
+        "resolved_effort": null,
+        "agent_execution_status": "saved",
+        "agent_execution_runtime_seconds": null,
+        "agent_execution_started_at": "2026-07-25T19:22:14Z",
+        "agent_execution_last_event_at": "2026-07-25T19:24:38Z",
+        "source": "tracker_snapshot"
+      },
+      "finished_at": "2026-07-25T19:24:42.604Z",
+      "duration_ms": 148261,
+      "artifacts_root": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-default-orchestrator-cursor/attempts/20260725T192212005Z-3637f179-0bb7-4441-b3a6-915348e43c8b",
+      "attempts": {
+        "count": 2,
+        "canonical_attempt_id": "20260725T192212005Z-3637f179-0bb7-4441-b3a6-915348e43c8b",
+        "attempt_ids": [
+          "20260725T165312794Z-8cb9dd7b-82bc-41ca-ba85-1078fe850b24",
+          "20260725T192212005Z-3637f179-0bb7-4441-b3a6-915348e43c8b"
+        ]
+      },
+      "execution_observed_duration_ms": 144000,
+      "file_count": 39,
+      "contract": {
+        "package_json": true,
+        "source": true,
+        "playwright_config": true,
+        "e2e_tests": true,
+        "scripts": {
+          "dev": true,
+          "build": true,
+          "test_e2e": true,
+          "e2e_runner": true
+        }
+      },
+      "contract_passed": true,
+      "validation": [
+        {
+          "command": "npm install --ignore-scripts --no-audit --no-fund",
+          "status": "passed",
+          "exit_code": 0,
+          "duration_ms": 822,
+          "output": "\nup to date in 660ms\n"
+        },
+        {
+          "command": "npm run build",
+          "status": "passed",
+          "exit_code": 0,
+          "duration_ms": 4118,
+          "output": "\n> symphony-landing-benchmark@0.1.0 build\n> tsc -b && vite build\n\nvite v6.4.3 building for production...\ntransforming...\n✓ 29 modules transformed.\nrendering chunks...\ncomputing gzip size...\ndist/index.html                   0.62 kB │ gzip:  0.38 kB\ndist/assets/index-AkR3SxFp.css    6.88 kB │ gzip:  2.34 kB\ndist/assets/index-DZch0B8z.js   200.87 kB │ gzip: 62.88 kB\n✓ built in 1.09s\n"
+        },
+        {
+          "command": "npm run test:e2e",
+          "status": "passed",
+          "exit_code": 0,
+          "duration_ms": 7136,
+          "output": "\n> symphony-landing-benchmark@0.1.0 test:e2e\n> node scripts/run-e2e.mjs\n\n\n> symphony-landing-benchmark@0.1.0 dev\n> vite --host 127.0.0.1 --port 24004 --strictPort\n\n\n  VITE v6.4.3  ready in 218 ms\n\n  ➜  Local:   http://127.0.0.1:24004/\n\nRunning 1 test using 1 worker\n\n  ✓  1 [chromium] › tests/e2e/symphony-landing.spec.ts:10:1 › landing page Symphony real app (2.7s)\n\n  1 passed (3.6s)\n"
+        }
+      ],
+      "git": {
+        "available": true,
+        "reason": null,
+        "root": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-5/site",
+        "head_sha": "6a1f2cc1d40571b645eed412770fd22b2eaf7a97",
+        "clean": true,
+        "changed_files": 0,
+        "changed_lines": 0
+      },
+      "artifacts": {
+        "screenshots": [
+          {
+            "source": "tracker",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-default-orchestrator-cursor/attempts/20260725T192212005Z-3637f179-0bb7-4441-b3a6-915348e43c8b/raw/symphony-flow-executes-one-bcb66-h-the-real-Symphony-tracker/test-finished-1.png"
+          },
+          {
+            "source": "tracker",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-default-orchestrator-cursor/attempts/20260725T192212005Z-3637f179-0bb7-4441-b3a6-915348e43c8b/symphony-final.png"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-5/site/test-results/symphony-landing-landing-page-Symphony-real-app-chromium/test-finished-1.png"
+          }
+        ],
+        "videos": [
+          {
+            "source": "tracker",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-default-orchestrator-cursor/attempts/20260725T192212005Z-3637f179-0bb7-4441-b3a6-915348e43c8b/raw/symphony-flow-executes-one-bcb66-h-the-real-Symphony-tracker/video.webm"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-5/site/test-results/symphony-landing-landing-page-Symphony-real-app-chromium/video.webm"
+          }
+        ],
+        "traces": [
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-5/site/test-results/symphony-landing-landing-page-Symphony-real-app-chromium/trace.zip"
+          }
+        ]
+      }
+    },
+    {
+      "id": "providers-default-orchestrator-claude",
+      "matrix": "providers-default",
+      "path": "orchestrator",
+      "provider": "claude",
+      "requested_model": "claude-sonnet-5",
+      "requested_effort": "medium",
+      "prompt_sha256": "f9ea44a4d5952da71a896d5d7623f694bb445f52064f563ecf9a3d81744ca297",
+      "execution_mode": "yolo",
+      "status": "completed",
+      "thread_id": null,
+      "issue_identifier": "SYM-6",
+      "workspace_path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-6/site",
+      "attempt_id": "20260725T165436000Z-cf7de322-40cf-4acb-aa15-f6950ef0b0a5",
+      "effective_prompt_sha256": "f9ea44a4d5952da71a896d5d7623f694bb445f52064f563ecf9a3d81744ca297",
+      "started_at": "2026-07-25T16:54:37.885Z",
+      "tracker_url": "http://127.0.0.1:4010/tracker/projects/symphony-landing-benchmark/board/issues/SYM-6/sessions?surface=autonomous",
+      "preview": {
+        "reason": null,
+        "tunnel": {
+          "enabled": false,
+          "running": false
+        },
+        "available": true,
+        "servers": [
+          {
+            "id": 24,
+            "port": 10040,
+            "status": "ready",
+            "primary": true,
+            "source": "managed",
+            "revision": 1,
+            "url": "http://127.0.0.1:10040/",
+            "slug": "site",
+            "allowed_ports": [
+              10040,
+              10041,
+              10042,
+              10043,
+              10044,
+              10045,
+              10046,
+              10047
+            ],
+            "preferred_port": 10040,
+            "session_name": "sym-dev-symphony-landing-benchmark-SYM-6-site",
+            "working_dir": "site",
+            "contract_id": "ctr_90888b8e7bd941b2994917692a69c413",
+            "sync_state": "in_sync",
+            "public_url": "http://127.0.0.1:10040/",
+            "local_url": "http://127.0.0.1:10040/",
+            "actual_port": 10040,
+            "sync_reason": null
+          }
+        ],
+        "as_of": "2026-07-25T16:57:29.472219Z",
+        "snapshot_id": "snap_94c1b3f7f5d04e39886abdbaa1ad0ed0"
+      },
+      "agent_outcome": "completed",
+      "error": null,
+      "artifact_root": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-default-orchestrator-claude/attempts/20260725T165436000Z-cf7de322-40cf-4acb-aa15-f6950ef0b0a5",
+      "identity": {
+        "assistant_thread_id": 12,
+        "issue_identifier": "SYM-6",
+        "agent_kind": "claude",
+        "status": "closed",
+        "provider_matches": true,
+        "requested_model": "claude-sonnet-5",
+        "requested_effort": "medium",
+        "resolved_model": "claude-sonnet-5",
+        "resolved_effort": "medium",
+        "agent_execution_status": "saved",
+        "agent_execution_runtime_seconds": null,
+        "agent_execution_started_at": "2026-07-25T16:54:38Z",
+        "agent_execution_last_event_at": "2026-07-25T16:57:25Z",
+        "source": "tracker_snapshot"
+      },
+      "finished_at": "2026-07-25T16:57:29.579Z",
+      "duration_ms": 171694,
+      "artifacts_root": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-default-orchestrator-claude/attempts/20260725T165436000Z-cf7de322-40cf-4acb-aa15-f6950ef0b0a5",
+      "attempts": {
+        "count": 1,
+        "canonical_attempt_id": "20260725T165436000Z-cf7de322-40cf-4acb-aa15-f6950ef0b0a5",
+        "attempt_ids": [
+          "20260725T165436000Z-cf7de322-40cf-4acb-aa15-f6950ef0b0a5"
+        ]
+      },
+      "execution_observed_duration_ms": 167000,
+      "file_count": 39,
+      "contract": {
+        "package_json": true,
+        "source": true,
+        "playwright_config": true,
+        "e2e_tests": true,
+        "scripts": {
+          "dev": true,
+          "build": true,
+          "test_e2e": true,
+          "e2e_runner": true
+        }
+      },
+      "contract_passed": true,
+      "validation": [
+        {
+          "command": "npm install --ignore-scripts --no-audit --no-fund",
+          "status": "passed",
+          "exit_code": 0,
+          "duration_ms": 368,
+          "output": "\nup to date in 265ms\n"
+        },
+        {
+          "command": "npm run build",
+          "status": "passed",
+          "exit_code": 0,
+          "duration_ms": 2174,
+          "output": "\n> symphony-landing-benchmark@0.1.0 build\n> tsc -b && vite build\n\nvite v6.4.3 building for production...\ntransforming...\n✓ 29 modules transformed.\nrendering chunks...\ncomputing gzip size...\ndist/index.html                   0.62 kB │ gzip:  0.38 kB\ndist/assets/index-AkR3SxFp.css    6.88 kB │ gzip:  2.34 kB\ndist/assets/index-DZch0B8z.js   200.87 kB │ gzip: 62.88 kB\n✓ built in 663ms\n"
+        },
+        {
+          "command": "npm run test:e2e",
+          "status": "passed",
+          "exit_code": 0,
+          "duration_ms": 6278,
+          "output": "\n> symphony-landing-benchmark@0.1.0 test:e2e\n> node scripts/run-e2e.mjs\n\n\n> symphony-landing-benchmark@0.1.0 dev\n> vite --host 127.0.0.1 --port 24005 --strictPort\n\n\n  VITE v6.4.3  ready in 141 ms\n\n  ➜  Local:   http://127.0.0.1:24005/\n\nRunning 1 test using 1 worker\n\n  ✓  1 [chromium] › tests/e2e/symphony-landing.spec.ts:10:1 › landing page Symphony real app (2.1s)\n\n  1 passed (2.8s)\n"
+        }
+      ],
+      "git": {
+        "available": true,
+        "reason": null,
+        "root": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-6/site",
+        "head_sha": "23d2b0a6c3829a538e00fc1a274088c2af68fd32",
+        "clean": true,
+        "changed_files": 0,
+        "changed_lines": 0
+      },
+      "artifacts": {
+        "screenshots": [
+          {
+            "source": "tracker",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-default-orchestrator-claude/attempts/20260725T165436000Z-cf7de322-40cf-4acb-aa15-f6950ef0b0a5/raw/symphony-flow-executes-one-bcb66-h-the-real-Symphony-tracker/test-finished-1.png"
+          },
+          {
+            "source": "tracker",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-default-orchestrator-claude/attempts/20260725T165436000Z-cf7de322-40cf-4acb-aa15-f6950ef0b0a5/symphony-final.png"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-6/site/test-results/symphony-landing-landing-page-Symphony-real-app-chromium/test-finished-1.png"
+          }
+        ],
+        "videos": [
+          {
+            "source": "tracker",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-default-orchestrator-claude/attempts/20260725T165436000Z-cf7de322-40cf-4acb-aa15-f6950ef0b0a5/raw/symphony-flow-executes-one-bcb66-h-the-real-Symphony-tracker/video.webm"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-6/site/test-results/symphony-landing-landing-page-Symphony-real-app-chromium/video.webm"
+          }
+        ],
+        "traces": [
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-6/site/test-results/symphony-landing-landing-page-Symphony-real-app-chromium/trace.zip"
+          }
+        ]
+      }
+    },
+    {
+      "id": "providers-advanced-session-codex",
+      "matrix": "providers-advanced",
+      "path": "session",
+      "provider": "codex",
+      "requested_model": "gpt-5.5",
+      "requested_effort": "high",
+      "prompt_sha256": "f9ea44a4d5952da71a896d5d7623f694bb445f52064f563ecf9a3d81744ca297",
+      "execution_mode": "yolo",
+      "status": "completed",
+      "thread_id": 4,
+      "issue_identifier": "SYM-7",
+      "workspace_path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-7__p1/site",
+      "attempt_id": "20260725T165912884Z-f9ca83f9-e57c-4319-8302-78345a33bffe",
+      "effective_prompt_sha256": "f9ea44a4d5952da71a896d5d7623f694bb445f52064f563ecf9a3d81744ca297",
+      "started_at": "2026-07-25T16:59:14.048Z",
+      "tracker_url": "http://127.0.0.1:4010/tracker/projects/symphony-landing-benchmark/workspaces/4",
+      "preview": {
+        "reason": null,
+        "tunnel": {
+          "enabled": false,
+          "running": false
+        },
+        "available": true,
+        "servers": [
+          {
+            "id": 33,
+            "port": 10000,
+            "status": "ready",
+            "primary": true,
+            "source": null,
+            "revision": null,
+            "url": "http://127.0.0.1:10000/",
+            "slug": "site",
+            "allowed_ports": null,
+            "preferred_port": null,
+            "session_name": "sym-workspace-symphony-landing-benchmark-a773583eaeb9-dev-site",
+            "working_dir": "site",
+            "contract_id": null,
+            "sync_state": null,
+            "public_url": "http://127.0.0.1:10000/",
+            "local_url": "http://127.0.0.1:10000/",
+            "actual_port": null,
+            "sync_reason": null
+          }
+        ],
+        "as_of": "2026-07-25T17:13:18.882948Z",
+        "snapshot_id": "snap_63556aa092484327b767312d3ac27ba8"
+      },
+      "agent_outcome": "completed",
+      "error": null,
+      "artifact_root": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-advanced-session-codex/attempts/20260725T165912884Z-f9ca83f9-e57c-4319-8302-78345a33bffe",
+      "identity": {
+        "assistant_thread_id": 4,
+        "agent_kind": "codex",
+        "status": "active",
+        "provider_matches": true,
+        "requested_model": "gpt-5.5",
+        "requested_effort": "high",
+        "resolved_model": "gpt-5.5",
+        "resolved_effort": "high",
+        "source": "tracker_snapshot"
+      },
+      "finished_at": "2026-07-25T17:13:18.993Z",
+      "duration_ms": 844945,
+      "artifacts_root": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-advanced-session-codex/attempts/20260725T165912884Z-f9ca83f9-e57c-4319-8302-78345a33bffe",
+      "attempts": {
+        "count": 1,
+        "canonical_attempt_id": "20260725T165912884Z-f9ca83f9-e57c-4319-8302-78345a33bffe",
+        "attempt_ids": [
+          "20260725T165912884Z-f9ca83f9-e57c-4319-8302-78345a33bffe"
+        ]
+      },
+      "execution_observed_duration_ms": null,
+      "file_count": 40,
+      "contract": {
+        "package_json": true,
+        "source": true,
+        "playwright_config": true,
+        "e2e_tests": true,
+        "scripts": {
+          "dev": true,
+          "build": true,
+          "test_e2e": true,
+          "e2e_runner": true
+        }
+      },
+      "contract_passed": true,
+      "validation": [
+        {
+          "command": "npm install --ignore-scripts --no-audit --no-fund",
+          "status": "passed",
+          "exit_code": 0,
+          "duration_ms": 361,
+          "output": "\nup to date in 256ms\n"
+        },
+        {
+          "command": "npm run build",
+          "status": "passed",
+          "exit_code": 0,
+          "duration_ms": 2854,
+          "output": "\n> symphony-landing-benchmark@0.1.0 build\n> tsc -b && vite build\n\nvite v6.4.3 building for production...\ntransforming...\n✓ 28 modules transformed.\nrendering chunks...\ncomputing gzip size...\ndist/index.html                   0.61 kB │ gzip:  0.39 kB\ndist/assets/index-C2DEp3IU.css    9.28 kB │ gzip:  2.70 kB\ndist/assets/index-CuA_0HeQ.js   201.95 kB │ gzip: 63.17 kB\n✓ built in 668ms\n"
+        },
+        {
+          "command": "npm run test:e2e",
+          "status": "passed",
+          "exit_code": 0,
+          "duration_ms": 6098,
+          "output": "\n> symphony-landing-benchmark@0.1.0 test:e2e\n> node scripts/run-e2e.mjs\n\n\n> symphony-landing-benchmark@0.1.0 dev\n> vite --host 127.0.0.1 --port 24006 --strictPort\n\n\n  VITE v6.4.3  ready in 121 ms\n\n  ➜  Local:   http://127.0.0.1:24006/\n\nRunning 2 tests using 1 worker\n\n  ✓  1 [chromium] › tests/e2e/landing.spec.ts:9:3 › landing page do Symphony › apresenta a plataforma e evidencia o fluxo real (1.8s)\n  ✓  2 [chromium] › tests/e2e/landing.spec.ts:76:3 › landing page do Symphony › mantém o layout mobile sem overflow horizontal (709ms)\n\n  2 passed (3.2s)\n"
+        }
+      ],
+      "git": {
+        "available": true,
+        "reason": null,
+        "root": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-7__p1/site",
+        "head_sha": "f1dbb41966e6c284080dcd4c6e6ef961a2bfbaed",
+        "clean": false,
+        "changed_files": 10,
+        "changed_lines": 2982
+      },
+      "artifacts": {
+        "screenshots": [
+          {
+            "source": "tracker",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-advanced-session-codex/attempts/20260725T165912884Z-f9ca83f9-e57c-4319-8302-78345a33bffe/raw/symphony-flow-executes-one-bcb66-h-the-real-Symphony-tracker/test-finished-1.png"
+          },
+          {
+            "source": "tracker",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-advanced-session-codex/attempts/20260725T165912884Z-f9ca83f9-e57c-4319-8302-78345a33bffe/symphony-final.png"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-7__p1/site/test-results/landing-landing-page-do-Sy-a24b4-ma-e-evidencia-o-fluxo-real-chromium/test-finished-1.png"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-7__p1/site/test-results/landing-landing-page-do-Sy-af960-ile-sem-overflow-horizontal-chromium/test-finished-1.png"
+          }
+        ],
+        "videos": [
+          {
+            "source": "tracker",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-advanced-session-codex/attempts/20260725T165912884Z-f9ca83f9-e57c-4319-8302-78345a33bffe/raw/symphony-flow-executes-one-bcb66-h-the-real-Symphony-tracker/video.webm"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-7__p1/site/test-results/landing-landing-page-do-Sy-a24b4-ma-e-evidencia-o-fluxo-real-chromium/video.webm"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-7__p1/site/test-results/landing-landing-page-do-Sy-af960-ile-sem-overflow-horizontal-chromium/video.webm"
+          }
+        ],
+        "traces": [
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-7__p1/site/test-results/landing-landing-page-do-Sy-a24b4-ma-e-evidencia-o-fluxo-real-chromium/trace.zip"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-7__p1/site/test-results/landing-landing-page-do-Sy-af960-ile-sem-overflow-horizontal-chromium/trace.zip"
+          }
+        ]
+      }
+    },
+    {
+      "id": "providers-advanced-session-cursor",
+      "matrix": "providers-advanced",
+      "path": "session",
+      "provider": "cursor",
+      "requested_model": "cursor-grok-4.5-high",
+      "requested_effort": null,
+      "prompt_sha256": "f9ea44a4d5952da71a896d5d7623f694bb445f52064f563ecf9a3d81744ca297",
+      "execution_mode": "yolo",
+      "status": "completed",
+      "thread_id": 5,
+      "issue_identifier": "SYM-8",
+      "workspace_path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-8__p1/site",
+      "attempt_id": "20260725T192211975Z-1055e439-6bc2-4b7b-a825-1ee908be7162",
+      "effective_prompt_sha256": "f9ea44a4d5952da71a896d5d7623f694bb445f52064f563ecf9a3d81744ca297",
+      "started_at": "2026-07-25T19:22:14.345Z",
+      "tracker_url": "http://127.0.0.1:4010/tracker/projects/symphony-landing-benchmark/workspaces/5",
+      "preview": {
+        "reason": null,
+        "tunnel": {
+          "enabled": false,
+          "running": false
+        },
+        "available": true,
+        "servers": [
+          {
+            "id": 36,
+            "port": 10008,
+            "status": "ready",
+            "primary": true,
+            "source": null,
+            "revision": null,
+            "url": "http://127.0.0.1:10008/",
+            "slug": "site",
+            "session_name": "sym-workspace-symphony-landing-benchmark-dd8aad3f6105-dev-site",
+            "sync_state": null,
+            "working_dir": "site",
+            "local_url": "http://127.0.0.1:10008/",
+            "public_url": "http://127.0.0.1:10008/",
+            "actual_port": null,
+            "contract_id": null,
+            "preferred_port": null,
+            "allowed_ports": null,
+            "sync_reason": null
+          }
+        ],
+        "as_of": "2026-07-25T19:23:50.721209Z",
+        "snapshot_id": "snap_b5350a37704b4f29b663cc898c2e7062"
+      },
+      "agent_outcome": "completed",
+      "error": null,
+      "artifact_root": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-advanced-session-cursor/attempts/20260725T192211975Z-1055e439-6bc2-4b7b-a825-1ee908be7162",
+      "identity": {
+        "assistant_thread_id": 5,
+        "agent_kind": "cursor",
+        "status": "active",
+        "provider_matches": true,
+        "requested_model": "cursor-grok-4.5-high",
+        "requested_effort": null,
+        "resolved_model": "cursor-grok-4.5-high",
+        "resolved_effort": null,
+        "source": "tracker_snapshot"
+      },
+      "finished_at": "2026-07-25T19:23:50.876Z",
+      "duration_ms": 96531,
+      "artifacts_root": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-advanced-session-cursor/attempts/20260725T192211975Z-1055e439-6bc2-4b7b-a825-1ee908be7162",
+      "attempts": {
+        "count": 4,
+        "canonical_attempt_id": "20260725T192211975Z-1055e439-6bc2-4b7b-a825-1ee908be7162",
+        "attempt_ids": [
+          "20260725T171319358Z-f213feb9-f9ed-4490-bda9-788632bc6d39",
+          "20260725T174913584Z-cbe1262f-60cf-4f03-be2b-c8a67c85fb1f",
+          "20260725T175201011Z-c1680517-d9eb-423b-a8f9-84d98b86250c",
+          "20260725T192211975Z-1055e439-6bc2-4b7b-a825-1ee908be7162"
+        ]
+      },
+      "execution_observed_duration_ms": null,
+      "file_count": 41,
+      "contract": {
+        "package_json": true,
+        "source": true,
+        "playwright_config": true,
+        "e2e_tests": true,
+        "scripts": {
+          "dev": true,
+          "build": true,
+          "test_e2e": true,
+          "e2e_runner": true
+        }
+      },
+      "contract_passed": true,
+      "validation": [
+        {
+          "command": "npm install --ignore-scripts --no-audit --no-fund",
+          "status": "passed",
+          "exit_code": 0,
+          "duration_ms": 364,
+          "output": "\nup to date in 259ms\n"
+        },
+        {
+          "command": "npm run build",
+          "status": "passed",
+          "exit_code": 0,
+          "duration_ms": 1740,
+          "output": "\n> symphony-landing@1.0.0 build\n> tsc --noEmit && vite build\n\nvite v7.3.6 building client environment for production...\ntransforming...\n✓ 29 modules transformed.\nrendering chunks...\ncomputing gzip size...\ndist/index.html                   0.60 kB │ gzip:  0.37 kB\ndist/assets/index-DyG6sAFN.css    8.50 kB │ gzip:  2.68 kB\ndist/assets/index-B6P7Pksy.js   201.19 kB │ gzip: 63.23 kB\n✓ built in 639ms\n"
+        },
+        {
+          "command": "npm run test:e2e",
+          "status": "passed",
+          "exit_code": 0,
+          "duration_ms": 5051,
+          "output": "\n> symphony-landing@1.0.0 test:e2e\n> node scripts/run-e2e.mjs\n\n\n> symphony-landing@1.0.0 dev\n> vite --host 127.0.0.1 --port 24007 --strictPort\n\n\n  VITE v7.3.6  ready in 131 ms\n\n  ➜  Local:   http://127.0.0.1:24007/\n\nRunning 1 test using 1 worker\n\n  ✓  1 tests/e2e/landing.spec.ts:9:3 › Symphony landing page › landing page renders hero, agents, flow, evidence, and anchors (1.5s)\n\n  1 passed (2.1s)\n"
+        }
+      ],
+      "git": {
+        "available": true,
+        "reason": null,
+        "root": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-8__p1/site",
+        "head_sha": "bed4614c7a56585d784c1a23a257c0f035263b89",
+        "clean": true,
+        "changed_files": 0,
+        "changed_lines": 0
+      },
+      "artifacts": {
+        "screenshots": [
+          {
+            "source": "tracker",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-advanced-session-cursor/attempts/20260725T192211975Z-1055e439-6bc2-4b7b-a825-1ee908be7162/raw/symphony-flow-executes-one-bcb66-h-the-real-Symphony-tracker/test-finished-1.png"
+          },
+          {
+            "source": "tracker",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-advanced-session-cursor/attempts/20260725T192211975Z-1055e439-6bc2-4b7b-a825-1ee908be7162/symphony-final.png"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-8__p1/site/test-results/landing-Symphony-landing-p-fd715-s-flow-evidence-and-anchors/sym-8-landing-desktop-full.png"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-8__p1/site/test-results/landing-Symphony-landing-p-fd715-s-flow-evidence-and-anchors/sym-8-landing-mobile-full.png"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-8__p1/site/test-results/landing-Symphony-landing-p-fd715-s-flow-evidence-and-anchors/test-finished-1.png"
+          }
+        ],
+        "videos": [
+          {
+            "source": "tracker",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-advanced-session-cursor/attempts/20260725T192211975Z-1055e439-6bc2-4b7b-a825-1ee908be7162/raw/symphony-flow-executes-one-bcb66-h-the-real-Symphony-tracker/video.webm"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-8__p1/site/test-results/landing-Symphony-landing-p-fd715-s-flow-evidence-and-anchors/video.webm"
+          }
+        ],
+        "traces": [
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-8__p1/site/test-results/landing-Symphony-landing-p-fd715-s-flow-evidence-and-anchors/trace.zip"
+          }
+        ]
+      }
+    },
+    {
+      "id": "providers-advanced-session-claude",
+      "matrix": "providers-advanced",
+      "path": "session",
+      "provider": "claude",
+      "requested_model": "claude-opus-5",
+      "requested_effort": "high",
+      "prompt_sha256": "f9ea44a4d5952da71a896d5d7623f694bb445f52064f563ecf9a3d81744ca297",
+      "execution_mode": "yolo",
+      "status": "completed",
+      "thread_id": 6,
+      "issue_identifier": "SYM-9",
+      "workspace_path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-9__p1/site",
+      "attempt_id": "20260725T171646061Z-659188a0-843a-45b4-a8d4-05e156d5abe7",
+      "effective_prompt_sha256": "f9ea44a4d5952da71a896d5d7623f694bb445f52064f563ecf9a3d81744ca297",
+      "started_at": "2026-07-25T17:16:47.283Z",
+      "tracker_url": "http://127.0.0.1:4010/tracker/projects/symphony-landing-benchmark/workspaces/6",
+      "preview": {
+        "reason": null,
+        "tunnel": {
+          "enabled": false,
+          "running": false
+        },
+        "available": true,
+        "servers": [
+          {
+            "id": 39,
+            "port": 10016,
+            "status": "ready",
+            "primary": true,
+            "source": null,
+            "revision": null,
+            "url": "http://127.0.0.1:10016/",
+            "slug": "site",
+            "allowed_ports": null,
+            "preferred_port": null,
+            "session_name": "sym-workspace-symphony-landing-benchmark-dd2367b01dde-dev-site",
+            "working_dir": "site",
+            "contract_id": null,
+            "sync_state": null,
+            "public_url": "http://127.0.0.1:10016/",
+            "local_url": "http://127.0.0.1:10016/",
+            "actual_port": null,
+            "sync_reason": null
+          }
+        ],
+        "as_of": "2026-07-25T17:38:23.917709Z",
+        "snapshot_id": "snap_7c1cb995a5434afaa2f60f5e337f0c18"
+      },
+      "agent_outcome": "completed",
+      "error": null,
+      "artifact_root": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-advanced-session-claude/attempts/20260725T171646061Z-659188a0-843a-45b4-a8d4-05e156d5abe7",
+      "identity": {
+        "assistant_thread_id": 6,
+        "agent_kind": "claude",
+        "status": "active",
+        "provider_matches": true,
+        "requested_model": "claude-opus-5",
+        "requested_effort": "high",
+        "resolved_model": "claude-opus-5",
+        "resolved_effort": "high",
+        "source": "tracker_snapshot"
+      },
+      "finished_at": "2026-07-25T17:38:24.017Z",
+      "duration_ms": 1296734,
+      "artifacts_root": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-advanced-session-claude/attempts/20260725T171646061Z-659188a0-843a-45b4-a8d4-05e156d5abe7",
+      "attempts": {
+        "count": 1,
+        "canonical_attempt_id": "20260725T171646061Z-659188a0-843a-45b4-a8d4-05e156d5abe7",
+        "attempt_ids": [
+          "20260725T171646061Z-659188a0-843a-45b4-a8d4-05e156d5abe7"
+        ]
+      },
+      "execution_observed_duration_ms": null,
+      "file_count": 71,
+      "contract": {
+        "package_json": true,
+        "source": true,
+        "playwright_config": true,
+        "e2e_tests": true,
+        "scripts": {
+          "dev": true,
+          "build": true,
+          "test_e2e": true,
+          "e2e_runner": true
+        }
+      },
+      "contract_passed": true,
+      "validation": [
+        {
+          "command": "npm install --ignore-scripts --no-audit --no-fund",
+          "status": "passed",
+          "exit_code": 0,
+          "duration_ms": 362,
+          "output": "\nup to date in 259ms\n"
+        },
+        {
+          "command": "npm run build",
+          "status": "passed",
+          "exit_code": 0,
+          "duration_ms": 2450,
+          "output": "\n> symphony-landing@0.1.0 build\n> tsc -b && vite build\n\nvite v7.3.6 building client environment for production...\ntransforming...\n✓ 39 modules transformed.\nrendering chunks...\ncomputing gzip size...\ndist/index.html                   0.68 kB │ gzip:  0.42 kB\ndist/assets/index-DutK6MA1.css   16.99 kB │ gzip:  4.35 kB\ndist/assets/index-D3JXx4YT.js   208.52 kB │ gzip: 65.27 kB\n✓ built in 665ms\n"
+        },
+        {
+          "command": "npm run test:e2e",
+          "status": "passed",
+          "exit_code": 0,
+          "duration_ms": 9167,
+          "output": "\n> symphony-landing@0.1.0 test:e2e\n> node scripts/run-e2e.mjs\n\n\n> symphony-landing@0.1.0 dev\n> vite --host 127.0.0.1 --port 24008 --strictPort\n\n\n  VITE v7.3.6  ready in 126 ms\n\n  ➜  Local:   http://127.0.0.1:24008/\n\nRunning 8 tests using 1 worker\n\n  ✓  1 [desktop-chromium] › tests/e2e/landing.spec.ts:37:3 › landing do Symphony em desktop › hero anuncia a proposta de valor com chamada principal e secundária (551ms)\n  ✓  2 [desktop-chromium] › tests/e2e/landing.spec.ts:61:3 › landing do Symphony em desktop › cards de Codex, Cursor e Claude descrevem cada agente (479ms)\n  ✓  3 [desktop-chromium] › tests/e2e/landing.spec.ts:83:3 › landing do Symphony em desktop › seção de fluxo encadeia tarefa até revisão (482ms)\n  ✓  4 [desktop-chromium] › tests/e2e/landing.spec.ts:98:3 › landing do Symphony em desktop › seção de evidências cita testes, screenshots, vídeo e trace (455ms)\n  ✓  5 [desktop-chromium] › tests/e2e/landing.spec.ts:119:3 › landing do Symphony em desktop › navegação por âncora leva o leitor até a seção de evidências (1.4s)\n  ✓  6 [desktop-chromium] › tests/e2e/landing.spec.ts:133:3 › landing do Symphony em desktop › landing completa em desktop (991ms)\n  ✓  7 [desktop-chromium] › tests/e2e/landing.spec.ts:148:3 › landing do Symphony em mobile › layout mobile não gera overflow horizontal (344ms)\n  ✓  8 [desktop-chromium] › tests/e2e/landing.spec.ts:160:3 › landing do Symphony em mobile › landing completa em mobile (674ms)\n\n  8 passed (6.3s)\n"
+        }
+      ],
+      "git": {
+        "available": true,
+        "reason": null,
+        "root": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-9__p1/site",
+        "head_sha": "32cedfdc147168ae0e15d694ad4547e7d89be9c6",
+        "clean": true,
+        "changed_files": 0,
+        "changed_lines": 0
+      },
+      "artifacts": {
+        "screenshots": [
+          {
+            "source": "tracker",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-advanced-session-claude/attempts/20260725T171646061Z-659188a0-843a-45b4-a8d4-05e156d5abe7/raw/symphony-flow-executes-one-bcb66-h-the-real-Symphony-tracker/test-finished-1.png"
+          },
+          {
+            "source": "tracker",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-advanced-session-claude/attempts/20260725T171646061Z-659188a0-843a-45b4-a8d4-05e156d5abe7/symphony-final.png"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-9__p1/site/test-results/landing-landing-do-Symphon-0eb9c-ão-gera-overflow-horizontal-desktop-chromium/test-finished-1.png"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-9__p1/site/test-results/landing-landing-do-Symphon-51d19-s-screenshots-vídeo-e-trace-desktop-chromium/test-finished-1.png"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-9__p1/site/test-results/landing-landing-do-Symphon-5d9e5-r-até-a-seção-de-evidências-desktop-chromium/test-finished-1.png"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-9__p1/site/test-results/landing-landing-do-Symphon-5da0a--landing-completa-em-mobile-desktop-chromium/test-finished-1.png"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-9__p1/site/test-results/landing-landing-do-Symphon-71742-landing-completa-em-desktop-desktop-chromium/test-finished-1.png"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-9__p1/site/test-results/landing-landing-do-Symphon-7acba-laude-descrevem-cada-agente-desktop-chromium/test-finished-1.png"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-9__p1/site/test-results/landing-landing-do-Symphon-a453c-encadeia-tarefa-até-revisão-desktop-chromium/test-finished-1.png"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-9__p1/site/test-results/landing-landing-do-Symphon-ed900-mada-principal-e-secundária-desktop-chromium/test-finished-1.png"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-9__p1/site/test-results/screens/sym-9-landing-desktop-full.png"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-9__p1/site/test-results/screens/sym-9-landing-mobile-full.png"
+          }
+        ],
+        "videos": [
+          {
+            "source": "tracker",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-advanced-session-claude/attempts/20260725T171646061Z-659188a0-843a-45b4-a8d4-05e156d5abe7/raw/symphony-flow-executes-one-bcb66-h-the-real-Symphony-tracker/video.webm"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-9__p1/site/test-results/landing-landing-do-Symphon-0eb9c-ão-gera-overflow-horizontal-desktop-chromium/video.webm"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-9__p1/site/test-results/landing-landing-do-Symphon-51d19-s-screenshots-vídeo-e-trace-desktop-chromium/video.webm"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-9__p1/site/test-results/landing-landing-do-Symphon-5d9e5-r-até-a-seção-de-evidências-desktop-chromium/video.webm"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-9__p1/site/test-results/landing-landing-do-Symphon-5da0a--landing-completa-em-mobile-desktop-chromium/video.webm"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-9__p1/site/test-results/landing-landing-do-Symphon-71742-landing-completa-em-desktop-desktop-chromium/video.webm"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-9__p1/site/test-results/landing-landing-do-Symphon-7acba-laude-descrevem-cada-agente-desktop-chromium/video.webm"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-9__p1/site/test-results/landing-landing-do-Symphon-a453c-encadeia-tarefa-até-revisão-desktop-chromium/video.webm"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-9__p1/site/test-results/landing-landing-do-Symphon-ed900-mada-principal-e-secundária-desktop-chromium/video.webm"
+          }
+        ],
+        "traces": [
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-9__p1/site/test-results/landing-landing-do-Symphon-0eb9c-ão-gera-overflow-horizontal-desktop-chromium/trace.zip"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-9__p1/site/test-results/landing-landing-do-Symphon-51d19-s-screenshots-vídeo-e-trace-desktop-chromium/trace.zip"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-9__p1/site/test-results/landing-landing-do-Symphon-5d9e5-r-até-a-seção-de-evidências-desktop-chromium/trace.zip"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-9__p1/site/test-results/landing-landing-do-Symphon-5da0a--landing-completa-em-mobile-desktop-chromium/trace.zip"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-9__p1/site/test-results/landing-landing-do-Symphon-71742-landing-completa-em-desktop-desktop-chromium/trace.zip"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-9__p1/site/test-results/landing-landing-do-Symphon-7acba-laude-descrevem-cada-agente-desktop-chromium/trace.zip"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-9__p1/site/test-results/landing-landing-do-Symphon-a453c-encadeia-tarefa-até-revisão-desktop-chromium/trace.zip"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-9__p1/site/test-results/landing-landing-do-Symphon-ed900-mada-principal-e-secundária-desktop-chromium/trace.zip"
+          }
+        ]
+      }
+    },
+    {
+      "id": "providers-advanced-orchestrator-codex",
+      "matrix": "providers-advanced",
+      "path": "orchestrator",
+      "provider": "codex",
+      "requested_model": "gpt-5.5",
+      "requested_effort": "high",
+      "prompt_sha256": "f9ea44a4d5952da71a896d5d7623f694bb445f52064f563ecf9a3d81744ca297",
+      "execution_mode": "yolo",
+      "status": "completed",
+      "thread_id": null,
+      "issue_identifier": "SYM-10",
+      "workspace_path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-10/site",
+      "attempt_id": "20260725T173824362Z-cd39b870-992c-4966-bb6d-ab2a8a5c6d56",
+      "effective_prompt_sha256": "f9ea44a4d5952da71a896d5d7623f694bb445f52064f563ecf9a3d81744ca297",
+      "started_at": "2026-07-25T17:38:25.724Z",
+      "tracker_url": "http://127.0.0.1:4010/tracker/projects/symphony-landing-benchmark/board/issues/SYM-10/sessions?surface=autonomous",
+      "preview": {
+        "reason": null,
+        "tunnel": {
+          "enabled": false,
+          "running": false
+        },
+        "available": true,
+        "servers": [
+          {
+            "id": 42,
+            "port": 10002,
+            "status": "ready",
+            "primary": true,
+            "source": "managed",
+            "revision": 3,
+            "url": "http://127.0.0.1:10002/",
+            "slug": "site",
+            "allowed_ports": [
+              10002,
+              10024,
+              10025,
+              10026,
+              10027,
+              10028,
+              10029,
+              10030,
+              10031
+            ],
+            "preferred_port": 10002,
+            "session_name": "sym-dev-symphony-landing-benchmark-SYM-10-site",
+            "working_dir": "site",
+            "contract_id": "ctr_1eb2a71f852047d9a035298bb6836b22",
+            "sync_state": "in_sync",
+            "public_url": "http://127.0.0.1:10002/",
+            "local_url": "http://127.0.0.1:10002/",
+            "actual_port": 10002,
+            "sync_reason": null
+          }
+        ],
+        "as_of": "2026-07-25T17:45:00.962218Z",
+        "snapshot_id": "snap_8954a8afb76c45c4b5d5c46f47be74b9"
+      },
+      "agent_outcome": "completed",
+      "error": null,
+      "artifact_root": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-advanced-orchestrator-codex/attempts/20260725T173824362Z-cd39b870-992c-4966-bb6d-ab2a8a5c6d56",
+      "identity": {
+        "assistant_thread_id": 13,
+        "issue_identifier": "SYM-10",
+        "agent_kind": "codex",
+        "status": "closed",
+        "provider_matches": true,
+        "requested_model": "gpt-5.5",
+        "requested_effort": "high",
+        "resolved_model": "gpt-5.5",
+        "resolved_effort": "high",
+        "agent_execution_status": "saved",
+        "agent_execution_runtime_seconds": null,
+        "agent_execution_started_at": "2026-07-25T17:38:25Z",
+        "agent_execution_last_event_at": "2026-07-25T17:44:57Z",
+        "source": "tracker_snapshot"
+      },
+      "finished_at": "2026-07-25T17:45:01.059Z",
+      "duration_ms": 395335,
+      "artifacts_root": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-advanced-orchestrator-codex/attempts/20260725T173824362Z-cd39b870-992c-4966-bb6d-ab2a8a5c6d56",
+      "attempts": {
+        "count": 1,
+        "canonical_attempt_id": "20260725T173824362Z-cd39b870-992c-4966-bb6d-ab2a8a5c6d56",
+        "attempt_ids": [
+          "20260725T173824362Z-cd39b870-992c-4966-bb6d-ab2a8a5c6d56"
+        ]
+      },
+      "execution_observed_duration_ms": 392000,
+      "file_count": 39,
+      "contract": {
+        "package_json": true,
+        "source": true,
+        "playwright_config": true,
+        "e2e_tests": true,
+        "scripts": {
+          "dev": true,
+          "build": true,
+          "test_e2e": true,
+          "e2e_runner": true
+        }
+      },
+      "contract_passed": true,
+      "validation": [
+        {
+          "command": "npm install --ignore-scripts --no-audit --no-fund",
+          "status": "passed",
+          "exit_code": 0,
+          "duration_ms": 390,
+          "output": "\nup to date in 284ms\n"
+        },
+        {
+          "command": "npm run build",
+          "status": "passed",
+          "exit_code": 0,
+          "duration_ms": 2062,
+          "output": "\n> symphony-landing-benchmark@0.1.0 build\n> tsc -b && vite build\n\nvite v6.4.3 building for production...\ntransforming...\n✓ 29 modules transformed.\nrendering chunks...\ncomputing gzip size...\ndist/index.html                   0.62 kB │ gzip:  0.38 kB\ndist/assets/index-AkR3SxFp.css    6.88 kB │ gzip:  2.34 kB\ndist/assets/index-C87SRD7G.js   201.00 kB │ gzip: 62.93 kB\n✓ built in 677ms\n"
+        },
+        {
+          "command": "npm run test:e2e",
+          "status": "passed",
+          "exit_code": 0,
+          "duration_ms": 5326,
+          "output": "\n> symphony-landing-benchmark@0.1.0 test:e2e\n> node scripts/run-e2e.mjs\n\n\n> symphony-landing-benchmark@0.1.0 dev\n> vite --host 127.0.0.1 --port 24009 --strictPort\n\n\n  VITE v6.4.3  ready in 118 ms\n\n  ➜  Local:   http://127.0.0.1:24009/\n\nRunning 1 test using 1 worker\n\n  ✓  1 [chromium] › tests/e2e/symphony-landing.spec.ts:10:1 › landing page Symphony real app (1.9s)\n\n  1 passed (2.5s)\n"
+        }
+      ],
+      "git": {
+        "available": true,
+        "reason": null,
+        "root": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-10/site",
+        "head_sha": "905dbdcd611629d0ec5f55f140a1bbd9763a63fe",
+        "clean": true,
+        "changed_files": 0,
+        "changed_lines": 0
+      },
+      "artifacts": {
+        "screenshots": [
+          {
+            "source": "tracker",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-advanced-orchestrator-codex/attempts/20260725T173824362Z-cd39b870-992c-4966-bb6d-ab2a8a5c6d56/raw/symphony-flow-executes-one-bcb66-h-the-real-Symphony-tracker/test-finished-1.png"
+          },
+          {
+            "source": "tracker",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-advanced-orchestrator-codex/attempts/20260725T173824362Z-cd39b870-992c-4966-bb6d-ab2a8a5c6d56/symphony-final.png"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-10/site/test-results/symphony-landing-landing-page-Symphony-real-app-chromium/test-finished-1.png"
+          }
+        ],
+        "videos": [
+          {
+            "source": "tracker",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-advanced-orchestrator-codex/attempts/20260725T173824362Z-cd39b870-992c-4966-bb6d-ab2a8a5c6d56/raw/symphony-flow-executes-one-bcb66-h-the-real-Symphony-tracker/video.webm"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-10/site/test-results/symphony-landing-landing-page-Symphony-real-app-chromium/video.webm"
+          }
+        ],
+        "traces": [
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-10/site/test-results/symphony-landing-landing-page-Symphony-real-app-chromium/trace.zip"
+          }
+        ]
+      }
+    },
+    {
+      "id": "providers-advanced-orchestrator-cursor",
+      "matrix": "providers-advanced",
+      "path": "orchestrator",
+      "provider": "cursor",
+      "requested_model": "cursor-grok-4.5-high",
+      "requested_effort": null,
+      "prompt_sha256": "f9ea44a4d5952da71a896d5d7623f694bb445f52064f563ecf9a3d81744ca297",
+      "execution_mode": "yolo",
+      "status": "completed",
+      "thread_id": null,
+      "issue_identifier": "SYM-11",
+      "workspace_path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-11/site",
+      "attempt_id": "20260725T192212010Z-88e7b9e9-f09c-4d19-af96-c13a8002bab4",
+      "effective_prompt_sha256": "f9ea44a4d5952da71a896d5d7623f694bb445f52064f563ecf9a3d81744ca297",
+      "started_at": "2026-07-25T19:22:14.440Z",
+      "tracker_url": "http://127.0.0.1:4010/tracker/projects/symphony-landing-benchmark/board/issues/SYM-11/sessions?surface=autonomous",
+      "preview": {
+        "reason": null,
+        "tunnel": {
+          "enabled": false,
+          "running": false
+        },
+        "available": true,
+        "servers": [
+          {
+            "id": 54,
+            "port": 10000,
+            "status": "ready",
+            "primary": true,
+            "source": "managed",
+            "revision": 4,
+            "url": "http://127.0.0.1:10000/",
+            "slug": "site",
+            "session_name": "sym-dev-symphony-landing-benchmark-SYM-11-site",
+            "sync_state": "in_sync",
+            "working_dir": "site",
+            "local_url": "http://127.0.0.1:10000/",
+            "public_url": "http://127.0.0.1:10000/",
+            "actual_port": 10000,
+            "contract_id": "ctr_eecbdd2aa6aa4de392423762971c518e",
+            "preferred_port": 10000,
+            "allowed_ports": [
+              10000,
+              10001,
+              10002,
+              10003,
+              10004,
+              10005,
+              10006,
+              10007
+            ],
+            "sync_reason": null
+          }
+        ],
+        "as_of": "2026-07-25T19:23:15.399141Z",
+        "snapshot_id": "snap_c37aaac8137548b3b00b4a202b13f256"
+      },
+      "agent_outcome": "completed",
+      "error": null,
+      "artifact_root": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-advanced-orchestrator-cursor/attempts/20260725T192212010Z-88e7b9e9-f09c-4d19-af96-c13a8002bab4",
+      "identity": {
+        "assistant_thread_id": 17,
+        "issue_identifier": "SYM-11",
+        "agent_kind": "cursor",
+        "status": "closed",
+        "provider_matches": true,
+        "requested_model": "cursor-grok-4.5-high",
+        "requested_effort": null,
+        "resolved_model": "cursor-grok-4.5-high",
+        "resolved_effort": null,
+        "agent_execution_status": "saved",
+        "agent_execution_runtime_seconds": null,
+        "agent_execution_started_at": "2026-07-25T19:22:14Z",
+        "agent_execution_last_event_at": "2026-07-25T19:23:11Z",
+        "source": "tracker_snapshot"
+      },
+      "finished_at": "2026-07-25T19:23:15.724Z",
+      "duration_ms": 61284,
+      "artifacts_root": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-advanced-orchestrator-cursor/attempts/20260725T192212010Z-88e7b9e9-f09c-4d19-af96-c13a8002bab4",
+      "attempts": {
+        "count": 3,
+        "canonical_attempt_id": "20260725T192212010Z-88e7b9e9-f09c-4d19-af96-c13a8002bab4",
+        "attempt_ids": [
+          "20260725T174510238Z-ffb5a07b-ecb6-42b3-81a4-98ffde84541e",
+          "20260725T175311101Z-bd47d305-5b34-4cb9-b8ac-833d7f7157b5",
+          "20260725T192212010Z-88e7b9e9-f09c-4d19-af96-c13a8002bab4"
+        ]
+      },
+      "execution_observed_duration_ms": 57000,
+      "file_count": 39,
+      "contract": {
+        "package_json": true,
+        "source": true,
+        "playwright_config": true,
+        "e2e_tests": true,
+        "scripts": {
+          "dev": true,
+          "build": true,
+          "test_e2e": true,
+          "e2e_runner": true
+        }
+      },
+      "contract_passed": true,
+      "validation": [
+        {
+          "command": "npm install --ignore-scripts --no-audit --no-fund",
+          "status": "passed",
+          "exit_code": 0,
+          "duration_ms": 342,
+          "output": "\nup to date in 241ms\n"
+        },
+        {
+          "command": "npm run build",
+          "status": "passed",
+          "exit_code": 0,
+          "duration_ms": 2119,
+          "output": "\n> symphony-landing-benchmark@0.1.0 build\n> tsc -b && vite build\n\nvite v6.4.3 building for production...\ntransforming...\n✓ 29 modules transformed.\nrendering chunks...\ncomputing gzip size...\ndist/index.html                   0.62 kB │ gzip:  0.38 kB\ndist/assets/index-DsQr4L20.css    8.49 kB │ gzip:  2.66 kB\ndist/assets/index-CvRtRfpv.js   201.94 kB │ gzip: 63.23 kB\n✓ built in 626ms\n"
+        },
+        {
+          "command": "npm run test:e2e",
+          "status": "passed",
+          "exit_code": 0,
+          "duration_ms": 5245,
+          "output": "\n> symphony-landing-benchmark@0.1.0 test:e2e\n> node scripts/run-e2e.mjs\n\n\n> symphony-landing-benchmark@0.1.0 dev\n> vite --host 127.0.0.1 --port 24010 --strictPort\n\n\n  VITE v6.4.3  ready in 120 ms\n\n  ➜  Local:   http://127.0.0.1:24010/\n\nRunning 1 test using 1 worker\n\n  ✓  1 [chromium] › tests/e2e/symphony-landing.spec.ts:10:1 › landing page Symphony real app (1.7s)\n\n  1 passed (2.4s)\n"
+        }
+      ],
+      "git": {
+        "available": true,
+        "reason": null,
+        "root": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-11/site",
+        "head_sha": "feeb03d01600b376edf95659acabbcc95bbd9469",
+        "clean": true,
+        "changed_files": 0,
+        "changed_lines": 0
+      },
+      "artifacts": {
+        "screenshots": [
+          {
+            "source": "tracker",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-advanced-orchestrator-cursor/attempts/20260725T192212010Z-88e7b9e9-f09c-4d19-af96-c13a8002bab4/raw/symphony-flow-executes-one-bcb66-h-the-real-Symphony-tracker/test-finished-1.png"
+          },
+          {
+            "source": "tracker",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-advanced-orchestrator-cursor/attempts/20260725T192212010Z-88e7b9e9-f09c-4d19-af96-c13a8002bab4/symphony-final.png"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-11/site/test-results/symphony-landing-landing-page-Symphony-real-app-chromium/test-finished-1.png"
+          }
+        ],
+        "videos": [
+          {
+            "source": "tracker",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-advanced-orchestrator-cursor/attempts/20260725T192212010Z-88e7b9e9-f09c-4d19-af96-c13a8002bab4/raw/symphony-flow-executes-one-bcb66-h-the-real-Symphony-tracker/video.webm"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-11/site/test-results/symphony-landing-landing-page-Symphony-real-app-chromium/video.webm"
+          }
+        ],
+        "traces": [
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-11/site/test-results/symphony-landing-landing-page-Symphony-real-app-chromium/trace.zip"
+          }
+        ]
+      }
+    },
+    {
+      "id": "providers-advanced-orchestrator-claude",
+      "matrix": "providers-advanced",
+      "path": "orchestrator",
+      "provider": "claude",
+      "requested_model": "claude-opus-5",
+      "requested_effort": "high",
+      "prompt_sha256": "f9ea44a4d5952da71a896d5d7623f694bb445f52064f563ecf9a3d81744ca297",
+      "execution_mode": "yolo",
+      "status": "completed",
+      "thread_id": null,
+      "issue_identifier": "SYM-12",
+      "workspace_path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-12/site",
+      "attempt_id": "20260725T183754214Z-58c7ba31-6a82-463e-8258-39dd29c71cf7",
+      "effective_prompt_sha256": "f9ea44a4d5952da71a896d5d7623f694bb445f52064f563ecf9a3d81744ca297",
+      "started_at": "2026-07-25T18:37:55.666Z",
+      "tracker_url": "http://127.0.0.1:4010/tracker/projects/symphony-landing-benchmark/board/issues/SYM-12/sessions?surface=autonomous",
+      "preview": {
+        "reason": null,
+        "tunnel": {
+          "enabled": false,
+          "running": false
+        },
+        "available": true,
+        "servers": [
+          {
+            "id": 80,
+            "port": 10017,
+            "status": "ready",
+            "primary": true,
+            "source": "managed",
+            "revision": 2,
+            "url": "http://127.0.0.1:10017/",
+            "slug": "site",
+            "allowed_ports": [
+              10017,
+              10008,
+              10009,
+              10010,
+              10011,
+              10012,
+              10013,
+              10014,
+              10015
+            ],
+            "preferred_port": 10017,
+            "session_name": "sym-dev-symphony-landing-benchmark-SYM-12-site",
+            "working_dir": "site",
+            "contract_id": "ctr_f9ab91f8da58439ebdee4a09dffb7a77",
+            "sync_state": "in_sync",
+            "public_url": "http://127.0.0.1:10017/",
+            "local_url": "http://127.0.0.1:10017/",
+            "actual_port": 10017,
+            "sync_reason": null
+          }
+        ],
+        "as_of": "2026-07-25T18:37:58.464562Z",
+        "snapshot_id": "snap_51a0ba5d14c348ae935b2cc3b1c41a47"
+      },
+      "agent_outcome": "completed",
+      "error": null,
+      "artifact_root": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-advanced-orchestrator-claude/attempts/20260725T183754214Z-58c7ba31-6a82-463e-8258-39dd29c71cf7",
+      "identity": {
+        "assistant_thread_id": 16,
+        "issue_identifier": "SYM-12",
+        "agent_kind": "claude",
+        "status": "closed",
+        "provider_matches": true,
+        "requested_model": "claude-opus-5",
+        "requested_effort": "high",
+        "resolved_model": "claude-opus-5",
+        "resolved_effort": "high",
+        "agent_execution_status": "saved",
+        "agent_execution_runtime_seconds": null,
+        "agent_execution_started_at": "2026-07-25T17:54:34Z",
+        "agent_execution_last_event_at": "2026-07-25T18:37:10Z",
+        "source": "tracker_snapshot"
+      },
+      "finished_at": "2026-07-25T18:37:58.569Z",
+      "duration_ms": 2903,
+      "artifacts_root": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-advanced-orchestrator-claude/attempts/20260725T183754214Z-58c7ba31-6a82-463e-8258-39dd29c71cf7",
+      "attempts": {
+        "count": 2,
+        "canonical_attempt_id": "20260725T183754214Z-58c7ba31-6a82-463e-8258-39dd29c71cf7",
+        "attempt_ids": [
+          "20260725T175432861Z-6ab7e305-9e39-4ae7-9681-1430b63d7cd0",
+          "20260725T183754214Z-58c7ba31-6a82-463e-8258-39dd29c71cf7"
+        ]
+      },
+      "execution_observed_duration_ms": 2556000,
+      "file_count": 39,
+      "contract": {
+        "package_json": true,
+        "source": true,
+        "playwright_config": true,
+        "e2e_tests": true,
+        "scripts": {
+          "dev": true,
+          "build": true,
+          "test_e2e": true,
+          "e2e_runner": true
+        }
+      },
+      "contract_passed": true,
+      "validation": [
+        {
+          "command": "npm install --ignore-scripts --no-audit --no-fund",
+          "status": "passed",
+          "exit_code": 0,
+          "duration_ms": 361,
+          "output": "\nup to date in 260ms\n"
+        },
+        {
+          "command": "npm run build",
+          "status": "passed",
+          "exit_code": 0,
+          "duration_ms": 2319,
+          "output": "\n> symphony-landing-benchmark@0.1.0 build\n> tsc -b && vite build\n\nvite v6.4.3 building for production...\ntransforming...\n✓ 29 modules transformed.\nrendering chunks...\ncomputing gzip size...\ndist/index.html                   0.62 kB │ gzip:  0.38 kB\ndist/assets/index-B7UN44S8.css    7.65 kB │ gzip:  2.50 kB\ndist/assets/index--Vg3Ts6K.js   202.19 kB │ gzip: 63.41 kB\n✓ built in 797ms\n"
+        },
+        {
+          "command": "npm run test:e2e",
+          "status": "passed",
+          "exit_code": 0,
+          "duration_ms": 5137,
+          "output": "\n> symphony-landing-benchmark@0.1.0 test:e2e\n> node scripts/run-e2e.mjs\n\n\n> symphony-landing-benchmark@0.1.0 dev\n> vite --host 127.0.0.1 --port 24011 --strictPort\n\n\n  VITE v6.4.3  ready in 125 ms\n\n  ➜  Local:   http://127.0.0.1:24011/\n\nRunning 1 test using 1 worker\n\n  ✓  1 [chromium] › tests/e2e/symphony-landing.spec.ts:10:1 › landing page Symphony real app (1.7s)\n\n  1 passed (2.3s)\n"
+        }
+      ],
+      "git": {
+        "available": true,
+        "reason": null,
+        "root": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-12/site",
+        "head_sha": "d84a527a311ab6505455633812c4be9e5342ba60",
+        "clean": true,
+        "changed_files": 0,
+        "changed_lines": 0
+      },
+      "artifacts": {
+        "screenshots": [
+          {
+            "source": "tracker",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-advanced-orchestrator-claude/attempts/20260725T183754214Z-58c7ba31-6a82-463e-8258-39dd29c71cf7/raw/symphony-flow-executes-one-bcb66-h-the-real-Symphony-tracker/test-finished-1.png"
+          },
+          {
+            "source": "tracker",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-advanced-orchestrator-claude/attempts/20260725T183754214Z-58c7ba31-6a82-463e-8258-39dd29c71cf7/symphony-final.png"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-12/site/test-results/symphony-landing-landing-page-Symphony-real-app-chromium/test-finished-1.png"
+          }
+        ],
+        "videos": [
+          {
+            "source": "tracker",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/providers-advanced-orchestrator-claude/attempts/20260725T183754214Z-58c7ba31-6a82-463e-8258-39dd29c71cf7/raw/symphony-flow-executes-one-bcb66-h-the-real-Symphony-tracker/video.webm"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-12/site/test-results/symphony-landing-landing-page-Symphony-real-app-chromium/video.webm"
+          }
+        ],
+        "traces": [
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-12/site/test-results/symphony-landing-landing-page-Symphony-real-app-chromium/trace.zip"
+          }
+        ]
+      }
+    },
+    {
+      "id": "codex-5.6-defaults-session-sol",
+      "matrix": "codex-5.6-defaults",
+      "path": "session",
+      "provider": "codex",
+      "variant": "sol",
+      "requested_model": "gpt-5.6-sol",
+      "requested_effort": "low",
+      "prompt_sha256": "f9ea44a4d5952da71a896d5d7623f694bb445f52064f563ecf9a3d81744ca297",
+      "execution_mode": "yolo",
+      "status": "completed",
+      "thread_id": 7,
+      "issue_identifier": "SYM-13",
+      "workspace_path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-13__p1/site",
+      "attempt_id": "20260725T183048865Z-0c5de4cc-b836-4fc4-8cbf-80cdc1ba6119",
+      "effective_prompt_sha256": "f9ea44a4d5952da71a896d5d7623f694bb445f52064f563ecf9a3d81744ca297",
+      "started_at": "2026-07-25T18:30:50.098Z",
+      "tracker_url": "http://127.0.0.1:4010/tracker/projects/symphony-landing-benchmark/workspaces/7",
+      "preview": {
+        "reason": null,
+        "tunnel": {
+          "enabled": false,
+          "running": false
+        },
+        "available": true,
+        "servers": [
+          {
+            "id": 87,
+            "port": 10018,
+            "status": "ready",
+            "primary": true,
+            "source": null,
+            "revision": null,
+            "url": "http://127.0.0.1:10018/",
+            "slug": "site",
+            "allowed_ports": null,
+            "preferred_port": null,
+            "session_name": "sym-workspace-symphony-landing-benchmark-5f0f89e53d1c-dev-site",
+            "working_dir": "site",
+            "contract_id": null,
+            "sync_state": null,
+            "public_url": "http://127.0.0.1:10018/",
+            "local_url": "http://127.0.0.1:10018/",
+            "actual_port": null,
+            "sync_reason": null
+          }
+        ],
+        "as_of": "2026-07-25T18:40:21.305080Z",
+        "snapshot_id": "snap_ae0862cc280c46ca8d7931e4d12a0b81"
+      },
+      "agent_outcome": "completed",
+      "error": null,
+      "artifact_root": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/codex-5.6-defaults-session-sol/attempts/20260725T183048865Z-0c5de4cc-b836-4fc4-8cbf-80cdc1ba6119",
+      "identity": {
+        "assistant_thread_id": 7,
+        "agent_kind": "codex",
+        "status": "active",
+        "provider_matches": true,
+        "requested_model": "gpt-5.6-sol",
+        "requested_effort": "low",
+        "resolved_model": "gpt-5.6-sol",
+        "resolved_effort": "low",
+        "source": "tracker_snapshot"
+      },
+      "finished_at": "2026-07-25T18:40:21.741Z",
+      "duration_ms": 571643,
+      "artifacts_root": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/codex-5.6-defaults-session-sol/attempts/20260725T183048865Z-0c5de4cc-b836-4fc4-8cbf-80cdc1ba6119",
+      "attempts": {
+        "count": 2,
+        "canonical_attempt_id": "20260725T183048865Z-0c5de4cc-b836-4fc4-8cbf-80cdc1ba6119",
+        "attempt_ids": [
+          "20260725T175432854Z-0a401a87-4c47-4357-825d-62081cc1d079",
+          "20260725T183048865Z-0c5de4cc-b836-4fc4-8cbf-80cdc1ba6119"
+        ]
+      },
+      "execution_observed_duration_ms": null,
+      "file_count": 39,
+      "contract": {
+        "package_json": true,
+        "source": true,
+        "playwright_config": true,
+        "e2e_tests": true,
+        "scripts": {
+          "dev": true,
+          "build": true,
+          "test_e2e": true,
+          "e2e_runner": true
+        }
+      },
+      "contract_passed": true,
+      "validation": [
+        {
+          "command": "npm install --ignore-scripts --no-audit --no-fund",
+          "status": "passed",
+          "exit_code": 0,
+          "duration_ms": 349,
+          "output": "\nup to date in 245ms\n"
+        },
+        {
+          "command": "npm run build",
+          "status": "passed",
+          "exit_code": 0,
+          "duration_ms": 2939,
+          "output": "\n> symphony-landing-page@1.0.0 build\n> tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.node.json && vite build\n\nvite v6.4.3 building for production...\ntransforming...\n✓ 29 modules transformed.\nrendering chunks...\ncomputing gzip size...\ndist/index.html                   0.65 kB │ gzip:  0.40 kB\ndist/assets/index-Bip6Oh6i.css   15.41 kB │ gzip:  4.32 kB\ndist/assets/index-Dkkj6qM8.js   206.65 kB │ gzip: 64.14 kB\n✓ built in 697ms\n"
+        },
+        {
+          "command": "npm run test:e2e",
+          "status": "passed",
+          "exit_code": 0,
+          "duration_ms": 4957,
+          "output": "\n> symphony-landing-page@1.0.0 test:e2e\n> node scripts/run-e2e.mjs\n\n\n> symphony-landing-page@1.0.0 dev\n> vite --host 127.0.0.1 --port 24012 --strictPort\n\n\n  VITE v6.4.3  ready in 148 ms\n\n  ➜  Local:   http://127.0.0.1:24012/\n\nRunning 1 test using 1 worker\n\n  ✓  1 tests/e2e/landing.spec.ts:3:1 › landing Symphony apresenta a orquestração completa (1.4s)\n\n  1 passed (2.1s)\n"
+        }
+      ],
+      "git": {
+        "available": true,
+        "reason": null,
+        "root": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-13__p1/site",
+        "head_sha": "b1c95abd1ff570c847fd73eff1707f880ac2cfff",
+        "clean": true,
+        "changed_files": 0,
+        "changed_lines": 0
+      },
+      "artifacts": {
+        "screenshots": [
+          {
+            "source": "tracker",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/codex-5.6-defaults-session-sol/attempts/20260725T183048865Z-0c5de4cc-b836-4fc4-8cbf-80cdc1ba6119/raw/symphony-flow-executes-one-bcb66-h-the-real-Symphony-tracker/test-finished-1.png"
+          },
+          {
+            "source": "tracker",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/codex-5.6-defaults-session-sol/attempts/20260725T183048865Z-0c5de4cc-b836-4fc4-8cbf-80cdc1ba6119/symphony-final.png"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-13__p1/site/test-results/landing-landing-Symphony-apresenta-a-orquestração-completa/test-finished-1.png"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-13__p1/site/test-results/screens/sym-13-orquestracao-completa-desktop-full.png"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-13__p1/site/test-results/screens/sym-13-orquestracao-completa-mobile-full.png"
+          }
+        ],
+        "videos": [
+          {
+            "source": "tracker",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/codex-5.6-defaults-session-sol/attempts/20260725T183048865Z-0c5de4cc-b836-4fc4-8cbf-80cdc1ba6119/raw/symphony-flow-executes-one-bcb66-h-the-real-Symphony-tracker/video.webm"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-13__p1/site/test-results/landing-landing-Symphony-apresenta-a-orquestração-completa/video.webm"
+          }
+        ],
+        "traces": [
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-13__p1/site/test-results/landing-landing-Symphony-apresenta-a-orquestração-completa/trace.zip"
+          }
+        ]
+      }
+    },
+    {
+      "id": "codex-5.6-defaults-session-terra",
+      "matrix": "codex-5.6-defaults",
+      "path": "session",
+      "provider": "codex",
+      "variant": "terra",
+      "requested_model": "gpt-5.6-terra",
+      "requested_effort": "medium",
+      "prompt_sha256": "f9ea44a4d5952da71a896d5d7623f694bb445f52064f563ecf9a3d81744ca297",
+      "execution_mode": "yolo",
+      "status": "completed",
+      "thread_id": 8,
+      "issue_identifier": "SYM-14",
+      "workspace_path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-14__p1/site",
+      "attempt_id": "20260725T175432843Z-d0577e50-6917-4eb9-adb9-4b966ef43413",
+      "effective_prompt_sha256": "f9ea44a4d5952da71a896d5d7623f694bb445f52064f563ecf9a3d81744ca297",
+      "started_at": "2026-07-25T17:54:34.200Z",
+      "tracker_url": "http://127.0.0.1:4010/tracker/projects/symphony-landing-benchmark/workspaces/8",
+      "preview": {
+        "reason": null,
+        "tunnel": {
+          "enabled": false,
+          "running": false
+        },
+        "available": true,
+        "servers": [
+          {
+            "id": 90,
+            "port": 10032,
+            "status": "ready",
+            "primary": true,
+            "source": null,
+            "revision": null,
+            "url": "http://127.0.0.1:10032/",
+            "slug": "site",
+            "allowed_ports": null,
+            "preferred_port": null,
+            "session_name": "sym-workspace-symphony-landing-benchmark-1b61715653c7-dev-site",
+            "working_dir": "site",
+            "contract_id": null,
+            "sync_state": null,
+            "public_url": "http://127.0.0.1:10032/",
+            "local_url": "http://127.0.0.1:10032/",
+            "actual_port": null,
+            "sync_reason": null
+          }
+        ],
+        "as_of": "2026-07-25T18:29:11.009434Z",
+        "snapshot_id": "snap_2d5d56474e17426bb545e18c9dec88a6"
+      },
+      "agent_outcome": "completed",
+      "error": null,
+      "artifact_root": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/codex-5.6-defaults-session-terra/attempts/20260725T175432843Z-d0577e50-6917-4eb9-adb9-4b966ef43413",
+      "identity": {
+        "assistant_thread_id": 8,
+        "agent_kind": "codex",
+        "status": "active",
+        "provider_matches": true,
+        "requested_model": "gpt-5.6-terra",
+        "requested_effort": "medium",
+        "resolved_model": "gpt-5.6-terra",
+        "resolved_effort": "medium",
+        "source": "tracker_snapshot"
+      },
+      "finished_at": "2026-07-25T18:29:11.117Z",
+      "duration_ms": 2076917,
+      "artifacts_root": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/codex-5.6-defaults-session-terra/attempts/20260725T175432843Z-d0577e50-6917-4eb9-adb9-4b966ef43413",
+      "attempts": {
+        "count": 1,
+        "canonical_attempt_id": "20260725T175432843Z-d0577e50-6917-4eb9-adb9-4b966ef43413",
+        "attempt_ids": [
+          "20260725T175432843Z-d0577e50-6917-4eb9-adb9-4b966ef43413"
+        ]
+      },
+      "execution_observed_duration_ms": null,
+      "file_count": 41,
+      "contract": {
+        "package_json": true,
+        "source": true,
+        "playwright_config": true,
+        "e2e_tests": true,
+        "scripts": {
+          "dev": true,
+          "build": true,
+          "test_e2e": true,
+          "e2e_runner": true
+        }
+      },
+      "contract_passed": true,
+      "validation": [
+        {
+          "command": "npm install --ignore-scripts --no-audit --no-fund",
+          "status": "passed",
+          "exit_code": 0,
+          "duration_ms": 414,
+          "output": "\nup to date in 311ms\n"
+        },
+        {
+          "command": "npm run build",
+          "status": "passed",
+          "exit_code": 0,
+          "duration_ms": 554,
+          "output": "\n> symphony-landing@1.0.0 build\n> tsc -b && vite build\n\nvite v8.1.5 building client environment for production...\n\u001b[2K\rtransforming...✓ 15 modules transformed.\nrendering chunks...\ncomputing gzip size...\ndist/index.html                   0.47 kB │ gzip:  0.32 kB\ndist/assets/index-AztIE9Am.css    7.93 kB │ gzip:  2.53 kB\ndist/assets/index-D6d0uloG.js   199.19 kB │ gzip: 62.39 kB\n\n✓ built in 118ms\n"
+        },
+        {
+          "command": "npm run test:e2e",
+          "status": "passed",
+          "exit_code": 0,
+          "duration_ms": 5570,
+          "output": "\n> symphony-landing@1.0.0 test:e2e\n> node scripts/run-e2e.mjs\n\n\n> symphony-landing@1.0.0 dev\n> vite --host 127.0.0.1 --port 24013 --strictPort\n\n\n  VITE v8.1.5  ready in 172 ms\n\n  ➜  Local:   http://127.0.0.1:24013/\n\nRunning 2 tests using 1 worker\n\n  ✓  1 [chromium] › tests/e2e/symphony-landing.spec.ts:6:1 › landing do Symphony apresenta o fluxo de engenharia (1.3s)\n  ✓  2 [chromium] › tests/e2e/symphony-landing.spec.ts:25:1 › landing do Symphony permanece sem overflow no mobile (811ms)\n\n  2 passed (2.7s)\n"
+        }
+      ],
+      "git": {
+        "available": true,
+        "reason": null,
+        "root": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-14__p1/site",
+        "head_sha": "f1dbb41966e6c284080dcd4c6e6ef961a2bfbaed",
+        "clean": false,
+        "changed_files": 11,
+        "changed_lines": 1565
+      },
+      "artifacts": {
+        "screenshots": [
+          {
+            "source": "tracker",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/codex-5.6-defaults-session-terra/attempts/20260725T175432843Z-d0577e50-6917-4eb9-adb9-4b966ef43413/raw/symphony-flow-executes-one-bcb66-h-the-real-Symphony-tracker/test-finished-1.png"
+          },
+          {
+            "source": "tracker",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/codex-5.6-defaults-session-terra/attempts/20260725T175432843Z-d0577e50-6917-4eb9-adb9-4b966ef43413/symphony-final.png"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-14__p1/site/test-results/symphony-landing-landing-d-1acf2-senta-o-fluxo-de-engenharia-chromium/test-finished-1.png"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-14__p1/site/test-results/symphony-landing-landing-d-840ad-nece-sem-overflow-no-mobile-chromium/test-finished-1.png"
+          }
+        ],
+        "videos": [
+          {
+            "source": "tracker",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/codex-5.6-defaults-session-terra/attempts/20260725T175432843Z-d0577e50-6917-4eb9-adb9-4b966ef43413/raw/symphony-flow-executes-one-bcb66-h-the-real-Symphony-tracker/video.webm"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-14__p1/site/test-results/symphony-landing-landing-d-1acf2-senta-o-fluxo-de-engenharia-chromium/video.webm"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-14__p1/site/test-results/symphony-landing-landing-d-840ad-nece-sem-overflow-no-mobile-chromium/video.webm"
+          }
+        ],
+        "traces": [
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-14__p1/site/test-results/symphony-landing-landing-d-1acf2-senta-o-fluxo-de-engenharia-chromium/trace.zip"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-14__p1/site/test-results/symphony-landing-landing-d-840ad-nece-sem-overflow-no-mobile-chromium/trace.zip"
+          }
+        ]
+      }
+    },
+    {
+      "id": "codex-5.6-defaults-session-luna",
+      "matrix": "codex-5.6-defaults",
+      "path": "session",
+      "provider": "codex",
+      "variant": "luna",
+      "requested_model": "gpt-5.6-luna",
+      "requested_effort": "medium",
+      "prompt_sha256": "f9ea44a4d5952da71a896d5d7623f694bb445f52064f563ecf9a3d81744ca297",
+      "execution_mode": "yolo",
+      "status": "completed",
+      "thread_id": 9,
+      "issue_identifier": "SYM-15",
+      "workspace_path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-15__p1/site",
+      "attempt_id": "20260725T175432833Z-c5e29205-5279-4f0f-9d9b-b7089bda93dc",
+      "effective_prompt_sha256": "f9ea44a4d5952da71a896d5d7623f694bb445f52064f563ecf9a3d81744ca297",
+      "started_at": "2026-07-25T17:54:34.175Z",
+      "tracker_url": "http://127.0.0.1:4010/tracker/projects/symphony-landing-benchmark/workspaces/9",
+      "preview": {
+        "reason": null,
+        "tunnel": {
+          "enabled": false,
+          "running": false
+        },
+        "available": true,
+        "servers": [
+          {
+            "id": 84,
+            "port": 10016,
+            "status": "ready",
+            "primary": true,
+            "source": null,
+            "revision": null,
+            "url": "http://127.0.0.1:10016/",
+            "slug": "site",
+            "allowed_ports": null,
+            "preferred_port": null,
+            "session_name": "sym-workspace-symphony-landing-benchmark-3c22e079c460-dev-site",
+            "working_dir": "site",
+            "contract_id": null,
+            "sync_state": null,
+            "public_url": "http://127.0.0.1:10016/",
+            "local_url": "http://127.0.0.1:10016/",
+            "actual_port": null,
+            "sync_reason": null
+          }
+        ],
+        "as_of": "2026-07-25T18:28:45.895667Z",
+        "snapshot_id": "snap_b4b0529e7f1f463887a9dc322f0a10be"
+      },
+      "agent_outcome": "completed",
+      "error": null,
+      "artifact_root": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/codex-5.6-defaults-session-luna/attempts/20260725T175432833Z-c5e29205-5279-4f0f-9d9b-b7089bda93dc",
+      "identity": {
+        "assistant_thread_id": 9,
+        "agent_kind": "codex",
+        "status": "active",
+        "provider_matches": true,
+        "requested_model": "gpt-5.6-luna",
+        "requested_effort": "medium",
+        "resolved_model": "gpt-5.6-luna",
+        "resolved_effort": "medium",
+        "source": "tracker_snapshot"
+      },
+      "finished_at": "2026-07-25T18:28:46.033Z",
+      "duration_ms": 2051858,
+      "artifacts_root": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/codex-5.6-defaults-session-luna/attempts/20260725T175432833Z-c5e29205-5279-4f0f-9d9b-b7089bda93dc",
+      "attempts": {
+        "count": 1,
+        "canonical_attempt_id": "20260725T175432833Z-c5e29205-5279-4f0f-9d9b-b7089bda93dc",
+        "attempt_ids": [
+          "20260725T175432833Z-c5e29205-5279-4f0f-9d9b-b7089bda93dc"
+        ]
+      },
+      "execution_observed_duration_ms": null,
+      "file_count": 46,
+      "contract": {
+        "package_json": true,
+        "source": true,
+        "playwright_config": true,
+        "e2e_tests": true,
+        "scripts": {
+          "dev": true,
+          "build": true,
+          "test_e2e": true,
+          "e2e_runner": true
+        }
+      },
+      "contract_passed": true,
+      "validation": [
+        {
+          "command": "npm install --ignore-scripts --no-audit --no-fund",
+          "status": "passed",
+          "exit_code": 0,
+          "duration_ms": 426,
+          "output": "\nup to date in 320ms\n"
+        },
+        {
+          "command": "npm run build",
+          "status": "passed",
+          "exit_code": 0,
+          "duration_ms": 2124,
+          "output": "\n> symphony-landing@1.0.0 build\n> tsc -b && vite build\n\nvite v6.4.3 building for production...\ntransforming...\n✓ 28 modules transformed.\nrendering chunks...\ncomputing gzip size...\ndist/index.html                   0.47 kB │ gzip:  0.31 kB\ndist/assets/index-BwsjYc-x.css    8.55 kB │ gzip:  2.53 kB\ndist/assets/index-D3aBk-lg.js   202.39 kB │ gzip: 63.33 kB\n✓ built in 636ms\n"
+        },
+        {
+          "command": "npm run test:e2e",
+          "status": "passed",
+          "exit_code": 0,
+          "duration_ms": 4450,
+          "output": "\n> symphony-landing@1.0.0 test:e2e\n> node scripts/run-e2e.mjs\n\n\n> symphony-landing@1.0.0 dev\n> vite --host 127.0.0.1 --port 24014 --strictPort\n\n\n  VITE v6.4.3  ready in 119 ms\n\n  ➜  Local:   http://127.0.0.1:24014/\n\nRunning 4 tests using 4 workers\n\n  ✓  2 [desktop] › tests/e2e/landing.spec.ts:3:1 › apresenta a proposta e o fluxo do Symphony (685ms)\n  ✓  4 [mobile] › tests/e2e/landing.spec.ts:3:1 › apresenta a proposta e o fluxo do Symphony (651ms)\n  ✓  3 [mobile] › tests/e2e/landing.spec.ts:17:1 › navega por âncora e não cria overflow no mobile (680ms)\n  ✓  1 [desktop] › tests/e2e/landing.spec.ts:17:1 › navega por âncora e não cria overflow no mobile (900ms)\n\n  4 passed (1.6s)\n4:27:05 PM [vite] (client) page reload playwright-report/index.html\n4:27:05 PM [vite] (client) page reload playwright-report/trace/index.html\n4:27:05 PM [vite] (client) page reload playwright-report/trace/snapshot.html\n4:27:05 PM [vite] (client) page reload playwright-report/trace/uiMode.html\n"
+        }
+      ],
+      "git": {
+        "available": true,
+        "reason": null,
+        "root": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-15__p1/site",
+        "head_sha": "9ae6502e9eaa3f6f657825b15cbd8de28e5a98a4",
+        "clean": true,
+        "changed_files": 0,
+        "changed_lines": 0
+      },
+      "artifacts": {
+        "screenshots": [
+          {
+            "source": "tracker",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/codex-5.6-defaults-session-luna/attempts/20260725T175432833Z-c5e29205-5279-4f0f-9d9b-b7089bda93dc/raw/symphony-flow-executes-one-bcb66-h-the-real-Symphony-tracker/test-finished-1.png"
+          },
+          {
+            "source": "tracker",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/codex-5.6-defaults-session-luna/attempts/20260725T175432833Z-c5e29205-5279-4f0f-9d9b-b7089bda93dc/symphony-final.png"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-15__p1/site/test-results/landing-apresenta-a-proposta-e-o-fluxo-do-Symphony-desktop/test-finished-1.png"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-15__p1/site/test-results/landing-apresenta-a-proposta-e-o-fluxo-do-Symphony-mobile/test-finished-1.png"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-15__p1/site/test-results/landing-navega-por-âncora-e-não-cria-overflow-no-mobile-desktop/test-finished-1.png"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-15__p1/site/test-results/landing-navega-por-âncora-e-não-cria-overflow-no-mobile-mobile/test-finished-1.png"
+          }
+        ],
+        "videos": [
+          {
+            "source": "tracker",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/artifacts/codex-5.6-defaults-session-luna/attempts/20260725T175432833Z-c5e29205-5279-4f0f-9d9b-b7089bda93dc/raw/symphony-flow-executes-one-bcb66-h-the-real-Symphony-tracker/video.webm"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-15__p1/site/test-results/landing-apresenta-a-proposta-e-o-fluxo-do-Symphony-desktop/video.webm"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-15__p1/site/test-results/landing-apresenta-a-proposta-e-o-fluxo-do-Symphony-mobile/video.webm"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-15__p1/site/test-results/landing-navega-por-âncora-e-não-cria-overflow-no-mobile-desktop/video.webm"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-15__p1/site/test-results/landing-navega-por-âncora-e-não-cria-overflow-no-mobile-mobile/video.webm"
+          }
+        ],
+        "traces": [
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-15__p1/site/test-results/landing-apresenta-a-proposta-e-o-fluxo-do-Symphony-desktop/trace.zip"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-15__p1/site/test-results/landing-apresenta-a-proposta-e-o-fluxo-do-Symphony-mobile/trace.zip"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-15__p1/site/test-results/landing-navega-por-âncora-e-não-cria-overflow-no-mobile-desktop/trace.zip"
+          },
+          {
+            "source": "generated_e2e",
+            "path": "/tmp/symphony-bench-model-provenance-pr6-v2/runtime/workspaces/symphony-landing-benchmark/SYM-15__p1/site/test-results/landing-navega-por-âncora-e-não-cria-overflow-no-mobile-mobile/trace.zip"
           }
         ]
       }

@@ -82,12 +82,29 @@ defmodule SymphonyElixirWeb.Tracker.AssistantControllerTest do
     claude = Enum.find(agents, &(&1["agent"] == "claude"))
     assert claude["agent_label"] == "Claude Code"
     assert is_binary(claude["command"])
-    assert claude["default_model"] == "claude-opus-4-8"
-    assert length(claude["models"]) == 7
+    assert claude["default_model"] == "claude-opus-5"
+    assert length(claude["models"]) == 8
 
     default_claude_model = Enum.find(claude["models"], & &1["is_default"])
-    assert default_claude_model["model"] == "claude-opus-4-8"
+    assert default_claude_model["model"] == "claude-opus-5"
     assert Enum.any?(default_claude_model["efforts"], &(&1["id"] == "xhigh"))
+  end
+
+  test "returns the same live catalog bundle without requiring a project" do
+    conn =
+      build_conn()
+      |> put_req_header("authorization", "Bearer secret")
+      |> get("/api/tracker/v1/assistant/config")
+
+    assert %{
+             "data" => %{
+               "agents" => agents,
+               "default_agent" => default_agent
+             }
+           } = json_response(conn, 200)
+
+    assert Enum.any?(agents, &(&1["agent"] == "codex"))
+    assert is_binary(default_agent)
   end
 
   test "serves a stored attachment image with the right content type" do

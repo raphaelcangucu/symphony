@@ -572,6 +572,37 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
       assert_receive {:workspace, ^expected}
     end
 
+    test "normalizes Cursor requested effort to the model slug invariant", %{thread: thread} do
+      runner = fn _workspace, _prompt, _issue, _opts ->
+        {:ok,
+         %{
+           assistant_message: "done",
+           tool_calls: [],
+           conversation_id: "cursor-session",
+           run_id: "cursor-turn",
+           resolved_model: "cursor-grok-4.5-high"
+         }}
+      end
+
+      assert {:ok, _result} =
+               AgentSession.send_message_to_issue_thread(
+                 thread,
+                 "hi",
+                 %{
+                   "agent" => "cursor",
+                   "model" => "cursor-grok-4.5-high",
+                   "effort" => "high"
+                 },
+                 runner: runner
+               )
+
+      persisted = Repo.get!(Thread, thread.id)
+      assert persisted.requested_model == "cursor-grok-4.5-high"
+      assert persisted.requested_effort == nil
+      assert persisted.resolved_model == "cursor-grok-4.5-high"
+      assert persisted.resolved_effort == nil
+    end
+
     test "runs the turn for an issue_session-scoped thread" do
       thread_workspace = Workspace.path_for_issue("MAC-1")
       File.mkdir_p!(thread_workspace)
@@ -739,7 +770,9 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
            assistant_message: "updated",
            tool_calls: [%{name: "update_issue", status: "complete"}],
            conversation_id: "ct",
-           run_id: "t1"
+           run_id: "t1",
+           resolved_model: "gpt-5.6-sol",
+           resolved_effort: "low"
          }}
       end
 
@@ -781,6 +814,8 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
 
       persisted_thread = Repo.get!(SymphonyElixir.Assistant.Thread, thread.id)
       assert persisted_thread.provider_bindings["codex"] == "ct"
+      assert persisted_thread.resolved_model == "gpt-5.6-sol"
+      assert persisted_thread.resolved_effort == "low"
 
       messages = thread.id |> History.list_messages_for_thread() |> Enum.map(&History.message_payload/1)
       assert Enum.map(messages, & &1.role) == ["user", "assistant"]

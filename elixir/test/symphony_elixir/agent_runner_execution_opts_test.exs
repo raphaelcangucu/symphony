@@ -51,6 +51,45 @@ defmodule SymphonyElixir.AgentRunnerExecutionOptsTest do
     assert AgentRunner.agent_settings_opts(issue) == []
   end
 
+  test "model_provenance_update emits only confirmed native values" do
+    assert %{
+             event: :model_provenance,
+             resolved_model: "gpt-5.6-sol",
+             resolved_effort: "low",
+             timestamp: %DateTime{}
+           } =
+             AgentRunner.model_provenance_update(%{
+               resolved_model: "gpt-5.6-sol",
+               resolved_effort: "low"
+             })
+
+    assert AgentRunner.model_provenance_update(%{resolved_model: nil, resolved_effort: nil}) == nil
+  end
+
+  test "provider-confirmed provenance advances into the next orchestrator turn" do
+    session = %{
+      resolved_model: "gpt-5.5",
+      resolved_effort: "medium",
+      metadata: %{}
+    }
+
+    turn_one = %{
+      resolved_model: "gpt-5.6-sol",
+      resolved_effort: "high"
+    }
+
+    turn_two_session = AgentRunner.advance_session(session, turn_one)
+    assert turn_two_session.resolved_model == "gpt-5.6-sol"
+    assert turn_two_session.resolved_effort == "high"
+
+    turn_two = %{
+      resolved_model: turn_two_session.resolved_model,
+      resolved_effort: turn_two_session.resolved_effort
+    }
+
+    assert AgentRunner.advance_session(turn_two_session, turn_two) == turn_two_session
+  end
+
   test "agent_settings_opts omits keys that were never set" do
     {:ok, _} =
       Context.upsert_project_setup("demo", %{

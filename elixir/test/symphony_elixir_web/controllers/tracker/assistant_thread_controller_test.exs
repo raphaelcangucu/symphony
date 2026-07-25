@@ -60,14 +60,14 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadControllerTest do
              json_response(conn, 201)
   end
 
-  test "POST freeform thread persists agent_kind and model/effort metadata" do
+  test "POST freeform thread keeps Cursor effort only in the canonical model slug" do
     conn =
       authorize()
       |> post("/api/tracker/v1/assistant/threads", %{
         scope: "freeform",
         title: "Ops",
         agent_kind: "cursor",
-        model: "gpt-5",
+        model: "cursor-grok-4.5-high",
         effort: "high"
       })
 
@@ -75,14 +75,37 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadControllerTest do
              "data" => %{
                "id" => id,
                "scope" => "freeform",
-               "agent_kind" => "cursor"
+               "agent_kind" => "cursor",
+               "requested_model" => "cursor-grok-4.5-high",
+               "requested_effort" => nil,
+               "resolved_model" => nil,
+               "resolved_effort" => nil
              }
            } = json_response(conn, 201)
 
     assert {:ok, thread} = History.get_thread(id)
     assert thread.agent_kind == "cursor"
-    assert thread.metadata["model"] == "gpt-5"
-    assert thread.metadata["effort"] == "high"
+    assert thread.requested_model == "cursor-grok-4.5-high"
+    assert thread.requested_effort == nil
+    refute Map.has_key?(thread.metadata, "model")
+    refute Map.has_key?(thread.metadata, "effort")
+
+    assert {:ok, _thread} =
+             History.put_model_provenance(thread, %{
+               resolved_model: "cursor-grok-4.5-high",
+               resolved_effort: nil
+             })
+
+    conn = get(authorize(), "/api/tracker/v1/assistant/threads/#{id}")
+
+    assert %{
+             "data" => %{
+               "requested_model" => "cursor-grok-4.5-high",
+               "requested_effort" => nil,
+               "resolved_model" => "cursor-grok-4.5-high",
+               "resolved_effort" => nil
+             }
+           } = json_response(conn, 200)
   end
 
   test "POST freeform thread stores a per-thread workspace path, not the shared root" do

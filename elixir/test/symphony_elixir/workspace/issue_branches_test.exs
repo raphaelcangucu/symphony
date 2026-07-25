@@ -43,8 +43,7 @@ defmodule SymphonyElixir.Workspace.IssueBranchesTest do
       %ProjectSetup{}
       |> ProjectSetup.changeset(%{
         project_id: project.id,
-        workflow_markdown:
-          Workflow.to_markdown(%{"source_control" => %{"branch_pattern" => branch_pattern}}, ""),
+        workflow_markdown: Workflow.to_markdown(%{"source_control" => %{"branch_pattern" => branch_pattern}}, ""),
         validation_commands: %{"commands" => []},
         scan_summary: %{}
       })

@@ -13,9 +13,8 @@ import { pathToFileURL } from "node:url";
 import { chromium } from "@playwright/test";
 import { createApi } from "./api.mjs";
 import { executeProcess } from "./process.mjs";
+import { artifactSlug, modelProvenanceMatches } from "./run-cell.mjs";
 import { sanitizedChildEnv } from "../seed/scripts/child-env.mjs";
-
-const RUN_ID_PATTERN = /^(session|orchestrator)-(codex|cursor|claude)$/;
 
 export function visualPort(index) {
   if (!Number.isInteger(index) || index < 0 || index > 99) {
@@ -38,15 +37,14 @@ export function previewArgs(port) {
 }
 
 export function visualScreenshotNames(runId) {
-  if (!RUN_ID_PATTERN.test(runId)) {
-    throw new Error(`invalid benchmark run id: ${runId}`);
-  }
+  const safeRunId = artifactSlug(runId);
   return {
-    hero: `${runId}-hero.png`,
-    full: `${runId}-full.png`,
-    mobileFull: `${runId}-mobile-full.png`,
-    video: `${runId}-e2e.webm`,
-    mp4: `${runId}-e2e.mp4`,
+    hero: `${safeRunId}-hero.png`,
+    full: `${safeRunId}-full.png`,
+    mobileFull: `${safeRunId}-mobile-full.png`,
+    evidenceTab: `${safeRunId}-evidence-tab.png`,
+    video: `${safeRunId}-e2e.webm`,
+    mp4: `${safeRunId}-e2e.mp4`,
   };
 }
 
@@ -66,6 +64,8 @@ export function renderVisualComparison(captures) {
         `![Página completa de ${capture.id}](screens/${capture.id}-full.png)`,
         "",
         `![Página mobile completa de ${capture.id}](screens/${capture.id}-mobile-full.png)`,
+        "",
+        `![Run renderizado na aba Evidências de ${capture.id}](screens/${capture.id}-evidence-tab.png)`,
         "",
         `[Vídeo E2E MP4 de ${capture.id}](videos/${capture.id}-e2e.mp4)`,
       );
@@ -193,6 +193,34 @@ export async function captureRunMatrix(runs, capture) {
   return captures;
 }
 
+export function assertCaptureEligible(collected, run) {
+  const validation = Array.isArray(collected?.validation)
+    ? collected.validation
+    : [];
+  const failures = [];
+  if (collected?.status !== "completed") failures.push("status is not completed");
+  if (collected?.contract_passed !== true) failures.push("contract did not pass");
+  if (collected?.agent_outcome !== "completed")
+    failures.push("agent outcome is not completed");
+  if (collected?.error) failures.push(`error is present: ${collected.error}`);
+  if (collected?.identity?.provider_matches !== true)
+    failures.push("provider identity did not match");
+  if (!modelProvenanceMatches(collected?.identity, run))
+    failures.push("model provenance did not match");
+  if (
+    validation.length < 3 ||
+    validation.some((step) => step?.status !== "passed")
+  ) {
+    failures.push("validation is incomplete or failed");
+  }
+
+  if (failures.length > 0) {
+    throw new Error(
+      `${run.id} is not eligible for evidence capture: ${failures.join("; ")}`,
+    );
+  }
+}
+
 function workspaceForRun(manifest, run) {
   return join(workspaceRootForRun(manifest, run), "site");
 }
@@ -213,11 +241,27 @@ function validationStep(collected, suffix) {
   );
 }
 
-function artifactRef(path, label, url) {
-  return { path, label, navigations: [url] };
+function artifactRef(path, label, navigations) {
+  return { path, label, navigations };
 }
 
-export function evidenceManifestForRun({ run, collected, url, names }) {
+export function evidenceManifestForRun({
+  run,
+  collected,
+  navigations,
+  names,
+}) {
+  if (
+    !Array.isArray(navigations) ||
+    navigations.length === 0 ||
+    navigations.some(
+      (navigation) =>
+        typeof navigation !== "string" ||
+        !/^https?:\/\//i.test(navigation.trim()),
+    )
+  ) {
+    throw new Error(`missing observed browser navigation for ${run.id}`);
+  }
   const build = validationStep(collected, "npm run build");
   const generatedE2e = validationStep(collected, "npm run test:e2e");
   const buildReport = "artifacts/reports/build.txt";
@@ -249,15 +293,23 @@ export function evidenceManifestForRun({ run, collected, url, names }) {
         status: generatedE2e?.status ?? "failed",
         report: e2eReport,
         screenshots: [
-          artifactRef(desktopRelative, `${label} desktop full page`, url),
-          artifactRef(mobileRelative, `${label} mobile full page`, url),
+          artifactRef(
+            desktopRelative,
+            `${label} desktop full page`,
+            navigations,
+          ),
+          artifactRef(
+            mobileRelative,
+            `${label} mobile full page`,
+            navigations,
+          ),
         ],
         videos: [
-          artifactRef(webmRelative, `${label} WebM source`, url),
-          artifactRef(mp4Relative, `${label} MP4 H.264`, url),
+          artifactRef(webmRelative, `${label} WebM source`, navigations),
+          artifactRef(mp4Relative, `${label} MP4 H.264`, navigations),
         ],
         trace: traceRelative,
-        navigations: [url],
+        navigations,
         proof: {
           title: label,
           desktop_viewport: "1280x720",
@@ -305,6 +357,53 @@ export function assertEvidenceTabRecord(records, { runId, threadId }) {
   return record;
 }
 
+export async function verifyEvidenceTabUi(
+  page,
+  { baseUrl, projectSlug, issueIdentifier, runId },
+) {
+  const route = new URL(
+    `/tracker/projects/${encodeURIComponent(projectSlug)}/board/issues/${encodeURIComponent(issueIdentifier)}/evidence`,
+    baseUrl,
+  ).href;
+  await page.goto(route, { waitUntil: "domcontentloaded" });
+
+  const testId = `evidence-${runId}`;
+  const card = page.getByTestId(testId);
+  await card.waitFor({ state: "visible", timeout: 60_000 });
+  await page.waitForFunction(
+    ({ evidenceTestId }) => {
+      const record = document.querySelector(
+        `[data-testid="${evidenceTestId}"]`,
+      );
+      if (!record) return false;
+      const images = [...record.querySelectorAll("img")];
+      const videos = [...record.querySelectorAll("video")];
+      return (
+        images.length >= 2 &&
+        images.every((image) => image.complete && image.naturalWidth > 0) &&
+        videos.length >= 2 &&
+        videos.every((video) => video.readyState >= 1)
+      );
+    },
+    { evidenceTestId: testId },
+    { timeout: 60_000 },
+  );
+
+  const screenshotCount = await card.locator("img").count();
+  const videoCount = await card.locator("video").count();
+  if (screenshotCount < 2 || videoCount < 2) {
+    throw new Error(
+      `Evidence UI run ${runId} rendered ${screenshotCount} screenshots and ${videoCount} videos`,
+    );
+  }
+
+  return {
+    route,
+    screenshot_count: screenshotCount,
+    video_count: videoCount,
+  };
+}
+
 async function transcodeMp4(webmPath, mp4Path) {
   const result = await executeProcess(
     "ffmpeg",
@@ -334,7 +433,7 @@ async function writeEvidenceManifest({
   run,
   collected,
   evidenceRoot,
-  url,
+  navigations,
   names,
   paths,
 }) {
@@ -350,7 +449,12 @@ async function writeEvidenceManifest({
     generatedE2e?.output ?? "not run\n",
   );
 
-  const manifest = evidenceManifestForRun({ run, collected, url, names });
+  const manifest = evidenceManifestForRun({
+    run,
+    collected,
+    navigations,
+    names,
+  });
   await writeFile(
     join(evidenceRoot, "manifest.json"),
     `${JSON.stringify(manifest, null, 2)}\n`,
@@ -365,6 +469,8 @@ async function captureRun({
   reportRoot,
   reportVideoRoot,
   api,
+  trackerBaseUrl,
+  trackerToken,
 }) {
   const workspacePath = workspaceForRun(manifest, run);
   const workspaceRoot = workspaceRootForRun(manifest, run);
@@ -376,9 +482,7 @@ async function captureRun({
   if (!(await exists(collectedPath))) return { id: run.id, status: "not-collected" };
 
   const collected = JSON.parse(await readFile(collectedPath, "utf8"));
-  if (!collected.contract_passed) {
-    return { id: run.id, status: "skipped-contract" };
-  }
+  assertCaptureEligible(collected, run);
 
   const port = visualPort(index);
   const url = `http://127.0.0.1:${port}/`;
@@ -393,6 +497,7 @@ async function captureRun({
   const heroPath = join(screensRoot, names.hero);
   const desktopPath = join(screensRoot, names.full);
   const mobilePath = join(screensRoot, names.mobileFull);
+  const evidenceTabPath = join(reportRoot, names.evidenceTab);
   const webmPath = join(videosRoot, names.video);
   const mp4Path = join(videosRoot, names.mp4);
   const tracePath = join(tracesRoot, `${run.id}-e2e.zip`);
@@ -438,6 +543,7 @@ async function captureRun({
     const page = await desktopContext.newPage();
     const video = page.video();
     await page.goto(url, { waitUntil: "networkidle" });
+    const capturedNavigations = [page.url()];
     await page.screenshot({ path: heroPath });
     await page.screenshot({
       path: desktopPath,
@@ -483,7 +589,7 @@ async function captureRun({
       run,
       collected,
       evidenceRoot,
-      url,
+      navigations: capturedNavigations,
       names,
       paths: {
         hero: heroPath,
@@ -510,6 +616,28 @@ async function captureRun({
       runId: persisted.run_id,
       threadId,
     });
+    const evidenceContext = await browser.newContext({
+      viewport: { width: 1280, height: 720 },
+      reducedMotion: "reduce",
+    });
+    await evidenceContext.addInitScript(
+      ({ token }) => {
+        window.localStorage.setItem("symphony.tracker.token", token);
+      },
+      { token: trackerToken },
+    );
+    const evidencePage = await evidenceContext.newPage();
+    const evidenceUi = await verifyEvidenceTabUi(evidencePage, {
+      baseUrl: trackerBaseUrl,
+      projectSlug: manifest.project_slug,
+      issueIdentifier: run.issue_identifier,
+      runId: persisted.run_id,
+    });
+    await evidencePage.screenshot({
+      path: evidenceTabPath,
+      fullPage: true,
+    });
+    await evidenceContext.close();
     return {
       id: run.id,
       status: "captured",
@@ -518,6 +646,10 @@ async function captureRun({
       evidence_run_id: persisted.run_id,
       evidence_issue_identifier: run.issue_identifier,
       evidence_tab_verified: true,
+      evidence_tab_route: evidenceUi.route,
+      evidence_tab_screenshot: evidenceTabPath,
+      evidence_rendered_screenshots: evidenceUi.screenshot_count,
+      evidence_rendered_videos: evidenceUi.video_count,
     };
   } finally {
     try {
@@ -556,6 +688,8 @@ export async function captureVisuals(env = process.env) {
         reportRoot,
         reportVideoRoot,
         api,
+        trackerBaseUrl: env.SYMPHONY_BENCH_URL,
+        trackerToken: env.SYMPHONY_BENCH_TOKEN,
       }),
   );
   await writeFile(

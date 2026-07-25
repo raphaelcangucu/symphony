@@ -209,13 +209,25 @@ defmodule SymphonyElixir.Agent.CliRunner.Base do
           }
         })
 
-        {:ok,
-         %{
-           cli_session_id: state.cli_session_id,
-           status: :completed,
-           usage: usage,
-           cost_usd: state.cost_usd
-         }}
+        result =
+          %{
+            cli_session_id: state.cli_session_id,
+            status: :completed,
+            usage: usage,
+            cost_usd: state.cost_usd
+          }
+          |> put_state_value(state, :resolved_model)
+          |> put_state_value(state, :resolved_effort)
+          |> put_state_value(state, :provider_model)
+
+        {:ok, result}
+    end
+  end
+
+  defp put_state_value(result, state, key) do
+    case Map.get(state, key) do
+      value when is_binary(value) and value != "" -> Map.put(result, key, value)
+      _value -> result
     end
   end
 
@@ -229,21 +241,61 @@ defmodule SymphonyElixir.Agent.CliRunner.Base do
     case :erlang.port_info(port, :os_pid) do
       {:os_pid, os_pid} ->
         pid_str = to_string(os_pid)
+        descendants = descendant_pids(os_pid)
 
         if System.find_executable("setsid") do
           # setsid was used at spawn time → pgid == os_pid → kill whole group
-          System.cmd("kill", ["-9", "-#{pid_str}"], stderr_to_stdout: true)
-        else
-          # Legacy path: kill direct children first, then bash itself
-          System.cmd("pkill", ["-9", "-P", pid_str], stderr_to_stdout: true)
-          System.cmd("kill", ["-9", pid_str], stderr_to_stdout: true)
+          System.cmd("kill", ["-9", "--", "-#{pid_str}"], stderr_to_stdout: true)
         end
+
+        # `setsid --wait` may fork before exec when its own process is already a
+        # group leader. Capture and kill the complete descendant tree as
+        # explicit PIDs as well, so interpreter wrappers and grandchildren
+        # cannot survive by moving into a child-owned process group.
+        pids = Enum.map(descendants ++ [os_pid], &Integer.to_string/1)
+        System.cmd("kill", ["-9", "--" | pids], stderr_to_stdout: true)
 
       _ ->
         :ok
     end
 
     stop_port(port)
+  end
+
+  defp descendant_pids(root_pid) when is_integer(root_pid) do
+    case System.cmd("ps", ["-eo", "pid=,ppid="], stderr_to_stdout: true) do
+      {output, 0} ->
+        children_by_parent =
+          output
+          |> String.split("\n", trim: true)
+          |> Enum.reduce(%{}, fn line, acc ->
+            case line |> String.split() |> Enum.map(&Integer.parse/1) do
+              [{pid, ""}, {parent, ""}] ->
+                Map.update(acc, parent, [pid], &[pid | &1])
+
+              _ ->
+                acc
+            end
+          end)
+
+        collect_descendants(children_by_parent, [root_pid], MapSet.new())
+        |> MapSet.delete(root_pid)
+        |> MapSet.to_list()
+
+      _ ->
+        []
+    end
+  end
+
+  defp collect_descendants(_children_by_parent, [], seen), do: seen
+
+  defp collect_descendants(children_by_parent, [pid | pending], seen) do
+    if MapSet.member?(seen, pid) do
+      collect_descendants(children_by_parent, pending, seen)
+    else
+      children = Map.get(children_by_parent, pid, [])
+      collect_descendants(children_by_parent, children ++ pending, MapSet.put(seen, pid))
+    end
   end
 
   defp kill_port_children(port) when is_port(port) do

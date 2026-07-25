@@ -4,7 +4,7 @@
 prompt="$(cat)"
 case "${FAKE_CLAUDE_MODE:-happy}" in
   happy)
-    echo '{"type":"system","subtype":"init","session_id":"sess-123"}'
+    echo '{"type":"system","subtype":"init","session_id":"sess-123","model":"claude-sonnet-5"}'
     echo '{"type":"assistant","is_partial":true,"message":{"id":"m1","content":[{"type":"text","text":"Hel"}]}}'
     echo '{"type":"assistant","message":{"id":"m1","content":[{"type":"text","text":"Hello from fake claude"}]}}'
     echo '{"type":"assistant","message":{"id":"m2","content":[{"type":"tool_use","id":"tu1","name":"mcp__symphony__list_issues","input":{"limit":1}}]}}'

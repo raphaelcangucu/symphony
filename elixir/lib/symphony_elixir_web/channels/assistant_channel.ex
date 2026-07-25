@@ -1106,11 +1106,32 @@ defmodule SymphonyElixirWeb.AssistantChannel do
 
   defp finish_successful_turn(result, socket) do
     push(socket, "assistant_completed", %{message: result.assistant_chat_message})
+    socket = push_model_provenance(socket)
     socket = push_history_sync(socket)
     _ = maybe_push_created_issue(result, socket)
     socket = schedule_authoritative_goal_status(socket, process_running: false, broadcast: true)
     {:noreply, socket |> clear_goal_paused() |> reset_turn()}
   end
+
+  defp push_model_provenance(%Socket{assigns: %{thread: %{id: id}}} = socket)
+       when is_integer(id) do
+    case History.get_thread(id) do
+      {:ok, thread} ->
+        push(socket, "model_provenance", %{
+          requested_model: History.requested_model(thread),
+          requested_effort: History.requested_effort(thread),
+          resolved_model: History.resolved_model(thread),
+          resolved_effort: History.resolved_effort(thread)
+        })
+
+        assign(socket, :thread, thread)
+
+      _ ->
+        socket
+    end
+  end
+
+  defp push_model_provenance(socket), do: socket
 
   defp finish_failed_turn(reason, socket) do
     # `or`/`and` require a strict boolean on the left; `:goal_paused` may be
@@ -1537,8 +1558,8 @@ defmodule SymphonyElixirWeb.AssistantChannel do
         trigger: "resume",
         provider: provider,
         conversation_id: conversation_id,
-        model: turn["model"],
-        effort: turn["effort"]
+        model: History.requested_model(thread),
+        effort: History.requested_effort(thread)
       ]
 
       case TurnManager.start_turn(thread.id, prompt, start_opts) do
@@ -2224,8 +2245,10 @@ defmodule SymphonyElixirWeb.AssistantChannel do
         |> CodingAgent.capabilities()
         |> Map.from_struct(),
       execution_mode: History.thread_execution_mode(thread),
-      model: History.thread_model(thread),
-      effort: History.thread_effort(thread),
+      requested_model: History.requested_model(thread),
+      requested_effort: History.requested_effort(thread),
+      resolved_model: History.resolved_model(thread),
+      resolved_effort: History.resolved_effort(thread),
       skill_profile: History.thread_skill_profile(thread),
       scope: thread.scope
     }

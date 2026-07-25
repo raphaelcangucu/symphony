@@ -8,7 +8,8 @@ import { OrchestrationRulesCard } from "@/components/settings/OrchestrationRules
 import { PushNotificationsCard } from "@/components/settings/PushNotificationsCard";
 import { AGENT_KINDS, agentKindLabel } from "@/components/shared/AgentChip";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { fallbackCatalogBundle, type AssistantCatalogBundle } from "@/lib/assistantSettings";
+import type { AssistantCatalogBundle } from "@/lib/assistantSettings";
+import { fetchAssistantCatalogBundle } from "@/services/assistant";
 import {
   type AgentAvailability,
   type AgentEffortSettings,
@@ -28,7 +29,7 @@ export function SettingsPage() {
   const [defaultAgent, setDefaultAgent] = useState<AgentKind | null>(null);
   const [agentModels, setAgentModels] = useState<AgentModelSettings>({});
   const [agentEfforts, setAgentEfforts] = useState<AgentEffortSettings>({});
-  const [bundle] = useState<AssistantCatalogBundle>(() => fallbackCatalogBundle());
+  const [bundle, setBundle] = useState<AssistantCatalogBundle | null>(null);
   const [orchestrator, setOrchestrator] = useState<OrchestratorSettings | null>(null);
   const [uiLocale, setUiLocale] = useState<LocalePreference | null>(null);
   const [availability, setAvailability] = useState<AgentAvailability | null>(null);
@@ -57,6 +58,13 @@ export function SettingsPage() {
       })
       .catch(() => {
         if (!cancelled) setAvailabilityError(true);
+      });
+    void fetchAssistantCatalogBundle()
+      .then((result) => {
+        if (!cancelled) setBundle(result);
+      })
+      .catch(() => {
+        if (!cancelled) setLoadError(true);
       });
     return () => {
       cancelled = true;
@@ -91,7 +99,7 @@ export function SettingsPage() {
     }
   }
 
-  const activeAgent = defaultAgent ?? bundle.defaultAgent;
+  const activeAgent = defaultAgent ?? bundle?.defaultAgent ?? null;
 
   return (
     <div className="space-y-6">
@@ -111,7 +119,7 @@ export function SettingsPage() {
           <CardContent className="space-y-4">
             {loadError ? (
               <p className="text-xs text-muted-foreground">{t("settings.loadFailed")}</p>
-            ) : defaultAgent === null ? (
+            ) : defaultAgent === null || bundle === null || activeAgent === null ? (
               <p className="text-xs text-muted-foreground">{t("common.loading")}</p>
             ) : (
               <ExecutionSettingsPicker
