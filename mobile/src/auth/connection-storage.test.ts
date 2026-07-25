@@ -110,6 +110,35 @@ describe("connection storage", () => {
     });
   });
 
+  it("selects a newly paired host after preserving existing connections", async () => {
+    const adapters = createAdapters();
+    const storage = createConnectionStorage(adapters);
+    await storage.saveProfile(firstProfile, "legacy-secret");
+    const rpcProfile: HostProfile = {
+      id: "profile-rpc",
+      hostId: "host_01",
+      name: "Mac Studio",
+      origin: "ws://studio.test/mobile/rpc",
+      endpoint: "ws://studio.test/mobile/rpc",
+      hostPublicKeyFingerprint: "sha256:abcd",
+      transport: "rpc",
+      protocolVersion: 1,
+      createdAt: "2026-07-25T12:00:00.000Z",
+      lastConnectedAt: null,
+    };
+
+    await expect(
+      storage.saveHostProfile(rpcProfile, {
+        deviceId: "device_01",
+        deviceToken: "device-secret",
+        hostPublicKey: "host-public-key",
+      }),
+    ).resolves.toEqual({
+      profiles: [expect.objectContaining({ id: firstProfile.id }), rpcProfile],
+      activeProfileId: rpcProfile.id,
+    });
+  });
+
   it("keeps profile metadata in AsyncStorage and the token only in SecureStore", async () => {
     const adapters = createAdapters();
     const storage = createConnectionStorage(adapters);

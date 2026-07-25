@@ -1,5 +1,5 @@
 import { CameraView, useCameraPermissions } from "expo-camera";
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { parsePairingOffer, redactPairingSecrets, type PairingOfferV1 } from "@/auth/pairing-offer";
@@ -10,38 +10,57 @@ import { useAppTheme } from "@/theme/ThemeProvider";
 
 type PairHostScreenProps = {
   pairHost: (offer: PairingOfferV1) => Promise<void>;
+  initialLink?: string;
+  autoPair?: boolean;
   onPaired?: () => void;
   onUseLegacy?: () => void;
 };
 
-export function PairHostScreen({ onPaired, onUseLegacy, pairHost }: PairHostScreenProps) {
+export function PairHostScreen({
+  autoPair = false,
+  initialLink = "",
+  onPaired,
+  onUseLegacy,
+  pairHost,
+}: PairHostScreenProps) {
   const { colors } = useAppTheme();
   const [permission, requestPermission] = useCameraPermissions();
-  const [link, setLink] = useState("");
+  const [link, setLink] = useState(autoPair ? "" : initialLink);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [scanning, setScanning] = useState(false);
   const submittingRef = useRef(false);
+  const autoSubmittedRef = useRef(false);
 
-  async function pair() {
-    if (!link.trim() || submittingRef.current) return;
-    submittingRef.current = true;
-    setSubmitting(true);
-    setError(null);
+  const submitPairingLink = useCallback(
+    async (candidate: string) => {
+      if (!candidate.trim() || submittingRef.current) return;
+      submittingRef.current = true;
+      setSubmitting(true);
+      setError(null);
 
-    let offer: PairingOfferV1 | null = null;
-    try {
-      offer = parsePairingOffer(link);
-      await pairHost(offer);
-      onPaired?.();
-    } catch (cause) {
-      const message = cause instanceof Error ? cause.message : "Could not pair this Symphony host";
-      setError(offer ? redactPairingSecrets(message, offer) : message);
-    } finally {
-      submittingRef.current = false;
-      setSubmitting(false);
-    }
-  }
+      let offer: PairingOfferV1 | null = null;
+      try {
+        offer = parsePairingOffer(candidate);
+        await pairHost(offer);
+        onPaired?.();
+      } catch (cause) {
+        const message =
+          cause instanceof Error ? cause.message : "Could not pair this Symphony host";
+        setError(offer ? redactPairingSecrets(message, offer) : message);
+      } finally {
+        submittingRef.current = false;
+        setSubmitting(false);
+      }
+    },
+    [onPaired, pairHost],
+  );
+
+  useEffect(() => {
+    if (!autoPair || !initialLink.trim() || autoSubmittedRef.current) return;
+    autoSubmittedRef.current = true;
+    void submitPairingLink(initialLink);
+  }, [autoPair, initialLink, submitPairingLink]);
 
   async function openScanner() {
     const result = permission?.granted ? permission : await requestPermission();
@@ -128,7 +147,7 @@ export function PairHostScreen({ onPaired, onUseLegacy, pairHost }: PairHostScre
         accessibilityLabel="Pair Symphony host"
         accessibilityState={{ disabled: !link.trim() || submitting }}
         disabled={!link.trim() || submitting}
-        onPress={() => void pair()}
+        onPress={() => void submitPairingLink(link)}
         style={({ pressed }) => [
           styles.primaryButton,
           {

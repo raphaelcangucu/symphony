@@ -118,6 +118,19 @@ defmodule SymphonyElixir.MobileRpc.Devices do
 
   def get_paired(_device_id), do: {:error, :not_found}
 
+  @spec public_metadata(Device.t(), String.t() | nil) :: map()
+  def public_metadata(%Device{} = device, current_device_id \\ nil) do
+    %{
+      "device_id" => device.device_id,
+      "name" => device.name,
+      "scope" => device.scope,
+      "paired_at" => iso8601(device.paired_at),
+      "last_seen_at" => iso8601(device.last_seen_at),
+      "protocol_version" => device.protocol_version,
+      "current" => device.device_id == current_device_id
+    }
+  end
+
   @spec revoke(String.t()) :: :ok
   def revoke(device_id) when is_binary(device_id) do
     current_time = now()
@@ -147,6 +160,9 @@ defmodule SymphonyElixir.MobileRpc.Devices do
   defp random_id(prefix, bytes) do
     prefix <> Base.url_encode64(:crypto.strong_rand_bytes(bytes), padding: false)
   end
+
+  defp iso8601(nil), do: nil
+  defp iso8601(%DateTime{} = value), do: DateTime.to_iso8601(value)
 
   defp now, do: DateTime.utc_now() |> DateTime.truncate(:microsecond)
 end

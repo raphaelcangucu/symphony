@@ -108,6 +108,7 @@ Commit: `feat(mobile-rpc): add interoperable encrypted frame contract`
 - Create: `elixir/lib/symphony_elixir/mobile_rpc/device.ex`
 - Create: `elixir/lib/symphony_elixir/mobile_rpc/devices.ex`
 - Create: `elixir/lib/symphony_elixir/mobile_rpc/pairing_offer.ex`
+- Create: `elixir/lib/symphony_elixir_web/controllers/tracker/mobile_rpc_controller.ex`
 - Create: `elixir/test/symphony_elixir/mobile_rpc/devices_test.exs`
 - Create: `elixir/test/symphony_elixir/mobile_rpc/pairing_offer_test.exs`
 - Create: `mobile/src/auth/pairing-offer.ts`
@@ -311,6 +312,7 @@ Commit: `refactor(mobile): introduce host transport compatibility layer`
 - Modify: `mobile/src/features/connect/ConnectScreen.tsx`
 - Modify: `mobile/src/features/connections/ConnectionsScreen.tsx`
 - Modify: `mobile/app/connect.tsx`
+- Create: `mobile/app/pair.tsx`
 
 - [x] **Step 1: Write failing profile migration and pairing UI tests**
 
@@ -487,7 +489,7 @@ Run focused mobile tests in WSL and host tests in CI.
 Never return token digests. Show device name, scope, paired time, last seen,
 protocol and status only.
 
-- [ ] **Step 4: Verify GREEN and commit**
+- [x] **Step 4: Verify GREEN and commit**
 
 Commit: `feat(mobile-rpc): add paired devices and host notifications`
 
@@ -511,13 +513,13 @@ required scope, streaming behavior and evidence.
 Run existing controller/channel suites plus new RPC suites. A new RPC handler
 must not change legacy response or Phoenix event contracts accidentally.
 
-- [ ] **Step 3: Verify migration behavior**
+- [x] **Step 3: Verify migration behavior**
 
 New profiles must always use RPC. Legacy profiles remain functional and display
 a re-pair action. No code path may silently reuse the global tracker token as a
 device token.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 Commit: `test(mobile-rpc): verify legacy compatibility and migration`
 
@@ -531,7 +533,7 @@ Commit: `test(mobile-rpc): verify legacy compatibility and migration`
 - Modify: `mobile/src/e2e/fixture-runtime.ts`
 - Create: `mobile/artifacts/e2e/multi-host-mobile-report.md`
 
-- [ ] **Step 1: Add two deterministic host fixtures**
+- [x] **Step 1: Add two deterministic host fixtures**
 
 Host A and Host B must have overlapping ids but visibly different identities,
 projects, sessions and agent states. The fixture RPC uses the production

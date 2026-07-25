@@ -99,23 +99,10 @@ defmodule SymphonyElixir.MobileRpc.Methods.System do
     def call(_params, context) do
       devices =
         Devices.list_paired()
-        |> Enum.map(fn device ->
-          %{
-            "device_id" => device.device_id,
-            "name" => device.name,
-            "scope" => device.scope,
-            "paired_at" => iso8601(device.paired_at),
-            "last_seen_at" => iso8601(device.last_seen_at),
-            "protocol_version" => device.protocol_version,
-            "current" => device.device_id == context.device_id
-          }
-        end)
+        |> Enum.map(&Devices.public_metadata(&1, context.device_id))
 
       {:ok, %{"devices" => devices}}
     end
-
-    defp iso8601(nil), do: nil
-    defp iso8601(%DateTime{} = value), do: DateTime.to_iso8601(value)
   end
 
   defmodule RevokeDevice do

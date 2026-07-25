@@ -195,7 +195,7 @@ export function createFixtureConnectionStorage(): ConnectionStorage {
       tokens.set(nextProfile.id, token);
       current = {
         profiles,
-        activeProfileId: current.activeProfileId ?? nextProfile.id,
+        activeProfileId: nextProfile.id,
       };
       return current;
     },

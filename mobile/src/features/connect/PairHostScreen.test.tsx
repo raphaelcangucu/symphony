@@ -60,6 +60,19 @@ describe("PairHostScreen", () => {
     expect(await screen.findByText("Unsupported Symphony pairing link")).toBeTruthy();
     expect(screen.getByDisplayValue(input)).toBeTruthy();
   });
+
+  it("authenticates an app deep link immediately without exposing its secret", async () => {
+    const link = encodePairingOffer(offer);
+    const pairHost = jest.fn(async () => undefined);
+    const onPaired = jest.fn();
+
+    renderScreen({ autoPair: true, initialLink: link, onPaired, pairHost });
+
+    await waitFor(() => expect(pairHost).toHaveBeenCalledWith(offer));
+    expect(onPaired).toHaveBeenCalledTimes(1);
+    expect(screen.queryByDisplayValue(link)).toBeNull();
+    expect(JSON.stringify(screen.toJSON())).not.toContain(offer.deviceToken);
+  });
 });
 
 function renderScreen(props: React.ComponentProps<typeof PairHostScreen>) {

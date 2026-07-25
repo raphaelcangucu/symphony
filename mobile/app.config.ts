@@ -1,6 +1,7 @@
 import type { ExpoConfig } from "expo/config";
 
 const easProjectId = process.env.EXPO_PUBLIC_EAS_PROJECT_ID;
+const e2eBuild = process.env.EXPO_PUBLIC_E2E_FIXTURES === "1";
 
 const config: ExpoConfig = {
   name: "Dev10x",
@@ -44,6 +45,7 @@ const config: ExpoConfig = {
         speechRecognitionPermission: "Allow Dev10x to recognize your spoken messages.",
       },
     ],
+    ...(e2eBuild ? ["./plugins/with-e2e-cleartext"] : []),
   ],
   extra: easProjectId ? { eas: { projectId: easProjectId } } : undefined,
   experiments: {

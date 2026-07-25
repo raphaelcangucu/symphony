@@ -119,6 +119,12 @@ Manual paste remains available for accessibility and recovery. The legacy
 `symphony://connect?url=...&token=...` tracker link is accepted only by the
 compatibility path and is clearly labeled legacy.
 
+The selected host exposes tracker-operator-authenticated administration routes
+to create a one-device offer, list safe paired-device metadata and revoke one
+device. The creation response is the only administrative response containing
+the pairing URL. A `symphony://pair` app deep link authenticates immediately,
+never renders the encoded secret, and selects the newly paired host.
+
 ## Encrypted Handshake
 
 The application-layer protocol uses reviewed cryptographic libraries rather

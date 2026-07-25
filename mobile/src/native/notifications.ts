@@ -20,7 +20,9 @@ export type NotificationResponsePort = {
 
 export type NotificationRouter = {
   initialRoute(): Promise<NotificationDestination | null>;
-  subscribe(listener: (destination: NotificationDestination) => void): NotificationRouteSubscription;
+  subscribe(
+    listener: (destination: NotificationDestination) => void,
+  ): NotificationRouteSubscription;
 };
 
 export type NotificationDestination = {
@@ -141,8 +143,7 @@ export async function activateNotificationDestination({
 }): Promise<boolean> {
   if (destination.hostId) {
     const profile = profiles.find(
-      (candidate) =>
-        candidate.hostId === destination.hostId || candidate.id === destination.hostId,
+      (candidate) => candidate.hostId === destination.hostId || candidate.id === destination.hostId,
     );
     if (!profile) return false;
     await selectProfile(profile.id);

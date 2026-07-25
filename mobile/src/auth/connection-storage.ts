@@ -148,7 +148,7 @@ export function createConnectionStorage({
         ];
         const nextSnapshot = {
           profiles,
-          activeProfileId: snapshot.activeProfileId ?? profile.id,
+          activeProfileId: profile.id,
         };
 
         await saveHostCredential(secureStorage, profile.id, credential);

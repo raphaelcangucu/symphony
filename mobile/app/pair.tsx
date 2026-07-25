@@ -1,21 +1,20 @@
-import { router } from "expo-router";
-import { useState } from "react";
+import { router, useLocalSearchParams } from "expo-router";
 
 import { useConnection } from "@/auth/ConnectionProvider";
-import { ConnectScreen } from "@/features/connect/ConnectScreen";
 import { pairHostOffer } from "@/features/connect/pair-host";
 import { PairHostScreen } from "@/features/connect/PairHostScreen";
 
-export default function ConnectRoute() {
-  const [legacy, setLegacy] = useState(false);
+export default function PairRoute() {
+  const params = useLocalSearchParams<{ code?: string | string[] }>();
   const { saveHostProfile } = useConnection();
-
-  if (legacy) return <ConnectScreen />;
+  const code = Array.isArray(params.code) ? params.code[0] : params.code;
+  const link = code ? `symphony://pair?${new URLSearchParams({ code }).toString()}` : "";
 
   return (
     <PairHostScreen
+      autoPair={Boolean(link)}
+      initialLink={link}
       onPaired={() => router.replace("/")}
-      onUseLegacy={() => setLegacy(true)}
       pairHost={(offer) => pairHostOffer(offer, saveHostProfile)}
     />
   );

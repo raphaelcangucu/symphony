@@ -1,0 +1,100 @@
+name: mobile-encrypted-multi-host-e2e
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/mobile-e2e.yml"
+      - "elixir/**"
+      - "mobile/**"
+
+permissions:
+  contents: read
+
+jobs:
+  android-multi-host:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+
+    env:
+      EXPO_PUBLIC_E2E_FIXTURES: "1"
+      MIX_ENV: dev
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Set up Elixir and OTP
+        uses: jdx/mise-action@v3
+        with:
+          install: true
+          cache: true
+          working_directory: elixir
+
+      - name: Install native test tools
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg jq tmux
+
+      - name: Install mobile dependencies
+        working-directory: mobile
+        run: npm ci
+
+      - name: Validate mobile contracts
+        working-directory: mobile
+        run: |
+          npm run typecheck
+          npm run lint
+          npm run format:check
+          npm run test
+
+      - name: Prepare Symphony host runtime
+        working-directory: elixir
+        run: |
+          mix deps.get
+          mix compile
+          mix test \
+            test/symphony_elixir/mobile_rpc \
+            test/symphony_elixir_web/mobile_rpc_socket_test.exs \
+            test/symphony_elixir_web/controllers/tracker/mobile_rpc_controller_test.exs \
+            test/symphony_elixir/push_notifications/native_sender_test.exs
+
+      - name: Build Android E2E APK
+        working-directory: mobile
+        run: npm run build:android:e2e
+
+      - name: Record complete encrypted two-host journey
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_6
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: mobile/e2e/multi-host-smoke.sh mobile/android/app/build/outputs/apk/release/app-release.apk
+
+      - name: Upload MP4 and reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: encrypted-multi-host-mobile-e2e
+          if-no-files-found: error
+          retention-days: 30
+          path: |
+            mobile/artifacts/e2e/*.mp4
+            mobile/artifacts/e2e/*.png
+            mobile/artifacts/e2e/*.md
+            mobile/artifacts/e2e/*.json
+            mobile/artifacts/e2e/*-trace.txt
