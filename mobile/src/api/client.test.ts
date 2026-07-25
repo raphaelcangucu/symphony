@@ -373,6 +373,95 @@ describe("createTrackerClient", () => {
     );
   });
 
+  it("maps thread documents and preview servers through encoded routes", async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          data: {
+            available: true,
+            reason: null,
+            documents: [
+              {
+                id: "docs/plan.md",
+                kind: "draft",
+                path: "docs/plan.md",
+                title: "Mobile plan",
+                updated_at: "2026-07-24T02:00:00Z",
+              },
+            ],
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          data: { path: "docs/plan.md", content: "# Mobile plan\n\nShip it." },
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          data: {
+            available: true,
+            reason: null,
+            servers: [
+              {
+                id: 7,
+                slug: "app",
+                url: "http://127.0.0.1:4000",
+                public_url: "https://preview.example.test",
+                status: "ready",
+                primary: true,
+              },
+            ],
+          },
+        }),
+      );
+    const client = createTrackerClient({
+      origin: "https://demo.test",
+      token: "secret",
+      locale: "en",
+      fetchImpl,
+    });
+
+    await expect(client.threadDocuments(42)).resolves.toEqual({
+      available: true,
+      reason: null,
+      documents: [
+        {
+          id: "docs/plan.md",
+          kind: "draft",
+          path: "docs/plan.md",
+          title: "Mobile plan",
+          updatedAt: "2026-07-24T02:00:00Z",
+        },
+      ],
+    });
+    await expect(client.threadDocument(42, "docs/plan.md")).resolves.toEqual({
+      path: "docs/plan.md",
+      content: "# Mobile plan\n\nShip it.",
+    });
+    await expect(client.threadDevServers(42)).resolves.toEqual({
+      available: true,
+      reason: null,
+      servers: [
+        expect.objectContaining({
+          id: 7,
+          slug: "app",
+          status: "ready",
+          primary: true,
+          publicUrl: "https://preview.example.test",
+        }),
+      ],
+    });
+    expect(fetchImpl.mock.calls.map(([url]) => url)).toEqual([
+      "https://demo.test/api/tracker/v1/assistant/threads/42/documents",
+      "https://demo.test/api/tracker/v1/assistant/threads/42/documents/docs/plan.md",
+      "https://demo.test/api/tracker/v1/assistant/threads/42/dev_servers",
+    ]);
+    await expect(client.threadDocument(42, "../secret.md")).rejects.toThrow("safe relative");
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+  });
+
   it("throws a redacted auth error for unauthorized responses", async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
       jsonResponse(

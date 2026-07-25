@@ -112,6 +112,41 @@ export type GoalControlInput = {
   tokenBudget?: number;
 };
 
+export type ThreadDocument = {
+  id: string;
+  kind: "draft";
+  path: string;
+  title: string;
+  updatedAt: string | null;
+};
+
+export type ThreadDocumentList = {
+  available: boolean;
+  reason: string | null;
+  documents: ThreadDocument[];
+};
+
+export type ThreadDocumentContent = {
+  path: string;
+  content: string;
+};
+
+export type DevServer = {
+  id: number;
+  slug: string;
+  url: string | null;
+  localUrl: string | null;
+  publicUrl: string | null;
+  status: string;
+  primary: boolean;
+};
+
+export type DevServerList = {
+  available: boolean;
+  reason: string | null;
+  servers: DevServer[];
+};
+
 export type AssistantThread = {
   id: number;
   scope: string;
@@ -263,4 +298,13 @@ export type TrackerClient = {
     input: GoalControlInput,
     signal?: AbortSignal,
   ): Promise<Record<string, unknown>>;
+  threadDocuments(threadId: number, signal?: AbortSignal): Promise<ThreadDocumentList>;
+  threadDocument(
+    threadId: number,
+    path: string,
+    signal?: AbortSignal,
+  ): Promise<ThreadDocumentContent>;
+  threadDevServers(threadId: number, signal?: AbortSignal): Promise<DevServerList>;
+  startThreadDevServers(threadId: number, signal?: AbortSignal): Promise<DevServerList>;
+  restartThreadDevServers(threadId: number, signal?: AbortSignal): Promise<DevServerList>;
 };

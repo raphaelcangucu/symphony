@@ -9,6 +9,8 @@ import type {
   AssistantThread,
   CreateThreadInput,
   CreateIssueInput,
+  DevServer,
+  DevServerList,
   GoalControlInput,
   Health,
   IssueBlocker,
@@ -22,6 +24,7 @@ import type {
   IssueSummary,
   ProjectSessionRow,
   ProjectSummary,
+  ThreadDocumentList,
   ThreadListOptions,
   TrackerClient,
   Viewer,
@@ -285,7 +288,68 @@ export function createTrackerClient(options: CreateTrackerClientOptions): Tracke
         "goal",
       );
     },
+    async threadDocuments(threadId, signal) {
+      return mapThreadDocumentList(
+        unwrapData(await request(`${threadPath(threadId)}/documents`, { signal })),
+      );
+    },
+    async threadDocument(threadId, path, signal) {
+      const encodedPath = safeDocumentPath(path).split("/").map(encodeURIComponent).join("/");
+      const payload = asRecord(
+        unwrapData(await request(`${threadPath(threadId)}/documents/${encodedPath}`, { signal })),
+        "thread document",
+      );
+      return {
+        path: requireText(payload.path, "thread document path"),
+        content: typeof payload.content === "string" ? payload.content : "",
+      };
+    },
+    async threadDevServers(threadId, signal) {
+      return mapDevServerList(
+        unwrapData(await request(`${threadPath(threadId)}/dev_servers`, { signal })),
+      );
+    },
+    async startThreadDevServers(threadId, signal) {
+      return mapDevServerList(
+        unwrapData(
+          await request(`${threadPath(threadId)}/dev_servers/start`, {
+            method: "POST",
+            signal,
+          }),
+        ),
+      );
+    },
+    async restartThreadDevServers(threadId, signal) {
+      return mapDevServerList(
+        unwrapData(
+          await request(`${threadPath(threadId)}/dev_servers/restart`, {
+            method: "POST",
+            signal,
+          }),
+        ),
+      );
+    },
   };
+}
+
+function threadPath(threadId: number): string {
+  if (!Number.isInteger(threadId) || threadId <= 0) {
+    throw new TrackerProtocolError("Tracker thread id must be a positive integer");
+  }
+  return `/assistant/threads/${threadId}`;
+}
+
+function safeDocumentPath(path: string): string {
+  const normalized = requireText(path, "document path").replaceAll("\\", "/");
+  const segments = normalized.split("/");
+  if (
+    normalized.startsWith("/") ||
+    !normalized.toLocaleLowerCase().endsWith(".md") ||
+    segments.some((item) => item === "" || item === "." || item === "..")
+  ) {
+    throw new TrackerProtocolError("Tracker document path must be a safe relative markdown path");
+  }
+  return normalized;
 }
 
 function issuePath(projectSlug: string): string {
@@ -480,6 +544,53 @@ function mapIssueFormOptions(payload: unknown): IssueFormOptions {
     }),
     agents,
     effectiveAgent,
+  };
+}
+
+function mapThreadDocumentList(payload: unknown): ThreadDocumentList {
+  const record = asRecord(payload, "thread documents");
+  return {
+    available: record.available === true,
+    reason: optionalText(record.reason),
+    documents: readArray(record.documents ?? [], "thread documents").map((value) => {
+      const document = asRecord(value, "thread document");
+      const path = requireText(document.path, "thread document path");
+      return {
+        id: optionalText(document.id) ?? path,
+        kind: "draft",
+        path,
+        title: optionalText(document.title) ?? path,
+        updatedAt: optionalText(document.updated_at),
+      };
+    }),
+  };
+}
+
+function mapDevServerList(payload: unknown): DevServerList {
+  const record = asRecord(payload, "dev servers");
+  return {
+    available: record.available === true,
+    reason: optionalText(record.reason),
+    servers: readArray(record.servers ?? [], "dev servers").flatMap((value) => {
+      const server = mapDevServer(value);
+      return server ? [server] : [];
+    }),
+  };
+}
+
+function mapDevServer(payload: unknown): DevServer | null {
+  const record = asRecord(payload, "dev server");
+  const id = Number(record.id);
+  const slug = optionalText(record.slug);
+  if (!Number.isInteger(id) || id <= 0 || !slug) return null;
+  return {
+    id,
+    slug,
+    url: optionalText(record.url),
+    localUrl: optionalText(record.local_url),
+    publicUrl: optionalText(record.public_url),
+    status: optionalText(record.status) ?? "unknown",
+    primary: record.primary === true,
   };
 }
 

@@ -155,21 +155,21 @@ Commit message: `feat(mobile): add live assistant controls`
 - Modify: `mobile/src/api/client.ts`
 - Modify: `mobile/src/api/client.test.ts`
 
-- [ ] **Step 1: Write failing transport tests**
+- [x] **Step 1: Write failing transport tests**
 
 Prove the terminal joins `terminal:thread:<id>`, renders snapshots and deltas,
 sends input and resize events, reconnects without duplicating output, and
 disconnects on unmount. Prove document listing and file reads remain scoped to
 the selected thread.
 
-- [ ] **Step 2: Run tests and verify RED**
+- [x] **Step 2: Run tests and verify RED**
 
 Run:
 `cd mobile && npm run test:unit -- src/realtime/terminal-session.test.ts src/api/client.test.ts`
 
 Expected: FAIL because terminal and document transports are absent.
 
-- [ ] **Step 3: Implement terminal and document transports**
+- [x] **Step 3: Implement terminal and document transports**
 
 Keep ANSI output as selectable monospace text in the first native slice.
 Reject parent traversal before requests and rely on the backend sandbox as the

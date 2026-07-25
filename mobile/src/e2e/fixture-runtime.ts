@@ -121,6 +121,27 @@ export function createFixtureRuntime(): AppRuntime {
 
       return createFixtureAssistantSession(options, persistedSeeds.get(options.threadId));
     },
+    createTerminalSession: (options) => {
+      let connected = false;
+      return {
+        connect() {
+          if (connected) return;
+          connected = true;
+          options.onState("connecting");
+          options.onOutput("$ pwd\n/work/symphony\n$ git status\nOn branch agent/mobile\n");
+          options.onState("live");
+        },
+        disconnect() {
+          connected = false;
+        },
+        sendInput(data: string) {
+          options.onOutput(
+            `$ pwd\n/work/symphony\n$ git status\nOn branch agent/mobile\n$ ${data.trim()}\n`,
+          );
+        },
+        resize() {},
+      };
+    },
   };
 }
 
@@ -202,6 +223,44 @@ export function createFixtureTrackerClient(): TrackerClient {
       action: input.action,
       status: input.action === "pause" ? "paused" : "running",
     }),
+    threadDocuments: async () => ({
+      available: true,
+      reason: null,
+      documents: [
+        {
+          id: "docs/mobile-plan.md",
+          kind: "draft",
+          path: "docs/mobile-plan.md",
+          title: "Mobile parity plan",
+          updatedAt: "2026-07-24T02:00:00Z",
+        },
+      ],
+    }),
+    threadDocument: async (_threadId, path) => ({
+      path,
+      content: "# Mobile parity plan\n\nComplete the Orca-inspired experience.",
+    }),
+    threadDevServers: async () => fixtureDevServers(),
+    startThreadDevServers: async () => fixtureDevServers(),
+    restartThreadDevServers: async () => fixtureDevServers(),
+  };
+}
+
+function fixtureDevServers() {
+  return {
+    available: true,
+    reason: null,
+    servers: [
+      {
+        id: 7,
+        slug: "mobile",
+        url: "http://127.0.0.1:8081",
+        localUrl: "http://127.0.0.1:8081",
+        publicUrl: "https://preview.fixture.symphony.test",
+        status: "ready",
+        primary: true,
+      },
+    ],
   };
 }
 
