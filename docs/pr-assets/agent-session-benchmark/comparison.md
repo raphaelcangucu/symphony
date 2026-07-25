@@ -29,6 +29,6 @@ Prompt SHA-256:
 ## Evidências relacionadas
 
 - [Comparação visual](visual-comparison.md)
-- [Sessão Codex em vídeo](videos/session-codex-4x.webm)
-- [Falha Cursor em vídeo](videos/session-cursor-blocked-4x.webm)
-- [Sessão Claude em vídeo](videos/session-claude-4x.webm)
+- [Sessão Codex em vídeo MP4](videos/session-codex-4x.mp4)
+- [Falha Cursor em vídeo MP4](videos/session-cursor-blocked-4x.mp4)
+- [Sessão Claude em vídeo MP4](videos/session-claude-4x.mp4)

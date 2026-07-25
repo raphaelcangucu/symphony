@@ -20,12 +20,12 @@ por sessão direta e pelo orquestrador, usando Codex, Cursor e Claude.
 
 ## Vídeos
 
-As gravações publicadas mantêm toda a linha do tempo e foram aceleradas em 4×
-para reduzir o tamanho no histórico Git.
+As gravações publicadas mantêm toda a linha do tempo, usam MP4/H.264 com
+`faststart` e foram aceleradas em 4× para reduzir o tamanho no histórico Git.
 
-- [Sessão Codex — concluída](videos/session-codex-4x.webm)
-- [Sessão Cursor — bloqueada](videos/session-cursor-blocked-4x.webm)
-- [Sessão Claude — concluída](videos/session-claude-4x.webm)
+- [Sessão Codex — concluída](videos/session-codex-4x.mp4)
+- [Sessão Cursor — bloqueada](videos/session-cursor-blocked-4x.mp4)
+- [Sessão Claude — concluída](videos/session-claude-4x.mp4)
 
 ## Segurança
 
