@@ -33,6 +33,7 @@ export type SaveConnectionInput = CreateConnectionProfileInput & {
 export type ConnectionContextValue = {
   profiles: ConnectionProfile[];
   activeProfile: ConnectionProfile | null;
+  activeHostId: string | null;
   activeToken: string | null;
   hydrated: boolean;
   loadToken(id: string): Promise<string | null>;
@@ -174,6 +175,7 @@ export function ConnectionProvider({
     () => ({
       profiles: snapshot.profiles,
       activeProfile,
+      activeHostId: activeProfile?.id ?? null,
       activeToken,
       hydrated,
       loadToken,

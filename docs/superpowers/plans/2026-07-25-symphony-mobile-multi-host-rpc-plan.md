@@ -261,10 +261,10 @@ Commit: `feat(mobile-rpc): add versioned dispatcher and host health`
 - Create: `mobile/src/transport/LegacyHostTransport.ts`
 - Create: `mobile/src/transport/host-transport.contract.test.ts`
 - Modify: `mobile/src/api/TrackerClientProvider.tsx`
-- Modify: `mobile/src/realtime/socket-manager.ts`
+- Preserve: `mobile/src/realtime/assistant-session.ts` and `mobile/src/realtime/terminal-session.ts`
 - Modify: `mobile/src/auth/ConnectionProvider.tsx`
 
-- [ ] **Step 1: Write the shared transport contract test**
+- [x] **Step 1: Write the shared transport contract test**
 
 Run one fixture suite against both adapters and require the same mobile domain
 models for host health, projects, tasks, threads and capabilities.
@@ -283,17 +283,17 @@ export interface HostTransport {
 }
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run the focused contract test in WSL.
 
-- [ ] **Step 3: Implement adapters**
+- [x] **Step 3: Implement adapters**
 
 `RpcHostTransport` uses one authenticated encrypted socket per selected host.
 `LegacyHostTransport` wraps the existing REST client and Phoenix adapters
 without changing their wire behavior.
 
-- [ ] **Step 4: Verify GREEN and commit**
+- [x] **Step 4: Verify GREEN and commit**
 
 Commit: `refactor(mobile): introduce host transport compatibility layer`
 
