@@ -19,6 +19,7 @@ readonly TRACE_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}-trace.txt"
 readonly REPORT_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}-report.md"
 readonly REPORT_JSON_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}.json"
 readonly REMOTE_VIDEO="/data/local/tmp/${ARTIFACT_SLUG}.mp4"
+readonly REMOTE_UI_DUMP="/data/local/tmp/symphony-mobile-window.xml"
 readonly ADMIN_TOKEN="mobile-e2e-admin-token"
 readonly HOST_A_PORT=4101
 readonly HOST_B_PORT=4102
@@ -53,8 +54,10 @@ trace_step() {
 }
 
 dump_ui() {
-  "${ADB}" shell uiautomator dump /sdcard/symphony-mobile-window.xml >/dev/null 2>&1 || true
-  "${ADB}" exec-out cat /sdcard/symphony-mobile-window.xml >"${UI_DUMP_PATH}" 2>/dev/null || true
+  : >"${UI_DUMP_PATH}"
+  "${ADB}" shell rm -f "${REMOTE_UI_DUMP}" >/dev/null 2>&1 || true
+  timeout 15s "${ADB}" shell uiautomator dump "${REMOTE_UI_DUMP}" >/dev/null 2>&1 || true
+  timeout 15s "${ADB}" exec-out cat "${REMOTE_UI_DUMP}" >"${UI_DUMP_PATH}" 2>/dev/null || true
 }
 
 wait_for_selector() {
@@ -117,7 +120,7 @@ cleanup() {
   stop_recording
   [[ -n "${host_a_pid}" ]] && kill "${host_a_pid}" >/dev/null 2>&1 || true
   [[ -n "${host_b_pid}" ]] && kill "${host_b_pid}" >/dev/null 2>&1 || true
-  "${ADB}" shell rm -f "${REMOTE_VIDEO}" >/dev/null 2>&1 || true
+  "${ADB}" shell rm -f "${REMOTE_VIDEO}" "${REMOTE_UI_DUMP}" >/dev/null 2>&1 || true
   rm -rf "${E2E_ROOT}"
 }
 
