@@ -88,6 +88,138 @@ describe("Symphony mock RPC handlers", () => {
     expect(unsubscribe(socket, subscriptionId)).toBe(true);
   });
 
+  it("serves the copied Dev10x session and terminal DTOs", () => {
+    const sent: RpcResponse[] = [];
+    const send = (message: RpcResponse) => sent.push(message);
+
+    handleRequest(
+      {
+        type: "rpc",
+        id: "tabs",
+        method: "session.tabs.list",
+        params: { worktree: "id:101" },
+      },
+      send,
+      socket,
+    );
+    handleRequest(
+      {
+        type: "rpc",
+        id: "terminals",
+        method: "terminal.list",
+        params: { worktree: "id:101" },
+      },
+      send,
+      socket,
+    );
+    handleRequest(
+      {
+        type: "rpc",
+        id: "markdown",
+        method: "markdown.readTab",
+        params: { worktree: "id:101", tabId: "docs/mock-comparison.md" },
+      },
+      send,
+      socket,
+    );
+
+    expect(sent[0]).toMatchObject({
+      ok: true,
+      result: {
+        worktree: "101",
+        snapshotVersion: 1,
+        activeTabType: "terminal",
+        tabs: [
+          {
+            type: "terminal",
+            id: "thread:101",
+            terminal: "thread:101",
+            launchAgent: "codex",
+            isActive: true,
+          },
+        ],
+      },
+    });
+    expect(sent[1]).toMatchObject({
+      ok: true,
+      result: {
+        terminals: [{ handle: "thread:101", isActive: true }],
+        totalCount: 1,
+        truncated: false,
+      },
+    });
+    expect(sent[2]).toMatchObject({
+      ok: true,
+      result: {
+        tabId: "docs/mock-comparison.md",
+        content: expect.stringContaining("Dev10x"),
+        editable: false,
+      },
+    });
+  });
+
+  it("streams copied session snapshots and terminal scrollback after binding", async () => {
+    vi.useFakeTimers();
+    const sent: RpcResponse[] = [];
+    const send = (message: RpcResponse) => sent.push(message);
+
+    handleRequest(
+      {
+        type: "rpc",
+        id: "tabs-subscribe",
+        method: "session.tabs.subscribe",
+        params: { worktree: "id:101" },
+      },
+      send,
+      socket,
+    );
+    handleRequest(
+      {
+        type: "rpc",
+        id: "terminal-subscribe",
+        method: "terminal.subscribe",
+        params: {
+          terminal: "thread:101",
+          client: { id: "device_mock", type: "mobile" },
+          viewport: { cols: 48, rows: 18 },
+          capabilities: { terminalBinaryStream: 1 },
+        },
+      },
+      send,
+      socket,
+    );
+
+    await vi.runOnlyPendingTimersAsync();
+
+    expect(sent[0]).toMatchObject({
+      id: "tabs-subscribe",
+      ok: true,
+      result: { subscription_id: expect.any(String) },
+    });
+    expect(sent[1]).toMatchObject({
+      id: "terminal-subscribe",
+      ok: true,
+      result: { subscription_id: expect.any(String) },
+    });
+    expect(sent[2]).toMatchObject({
+      type: "event",
+      sequence: 1,
+      event: "session.tabs.snapshot",
+      payload: { type: "snapshot", worktree: "101", snapshotVersion: 1 },
+    });
+    expect(sent[3]).toMatchObject({
+      type: "event",
+      sequence: 1,
+      event: "terminal.scrollback",
+      payload: {
+        type: "scrollback",
+        serialized: expect.stringContaining("Dev10x mock host"),
+        cols: 48,
+        rows: 18,
+      },
+    });
+  });
+
   it("fails closed for unknown methods without reflecting params", () => {
     const sent: RpcResponse[] = [];
     handleRequest(

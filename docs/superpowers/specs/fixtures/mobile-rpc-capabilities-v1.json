@@ -89,6 +89,36 @@
       "migration": "shared_channel_state_machine"
     },
     {
+      "operation": "Dev10x workspace session tabs, Markdown and terminal control",
+      "rpc": [
+        "session.tabs.list",
+        "session.tabs.subscribe",
+        "session.tabs.activate",
+        "session.tabs.createTerminal",
+        "session.tabs.close",
+        "terminal.list",
+        "terminal.subscribe",
+        "terminal.send",
+        "terminal.updateViewport",
+        "terminal.focus",
+        "terminal.rename",
+        "terminal.close",
+        "terminal.clearBuffer",
+        "terminal.setDisplayMode",
+        "terminal.getAutoRestoreFit",
+        "terminal.setAutoRestoreFit",
+        "markdown.readTab",
+        "markdown.saveTab"
+      ],
+      "legacy": [
+        "Phoenix terminal:thread:*",
+        "Phoenix terminal:tab:*",
+        "GET /api/tracker/v1/assistant/threads/:id/documents/*"
+      ],
+      "stream": true,
+      "migration": "orca_compatible_shared_service_adapter"
+    },
+    {
       "operation": "terminal snapshot, output, input and resize",
       "rpc": ["terminal.subscribe", "terminal.command"],
       "legacy": ["Phoenix terminal:thread:*"],

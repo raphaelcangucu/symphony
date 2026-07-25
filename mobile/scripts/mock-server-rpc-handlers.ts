@@ -24,6 +24,23 @@ const METHODS = [
   "notifications.request",
   "terminal.subscribe",
   "terminal.command",
+  "session.tabs.list",
+  "session.tabs.subscribe",
+  "session.tabs.activate",
+  "session.tabs.createTerminal",
+  "session.tabs.close",
+  "terminal.list",
+  "terminal.send",
+  "terminal.updateViewport",
+  "terminal.focus",
+  "terminal.rename",
+  "terminal.close",
+  "terminal.clearBuffer",
+  "terminal.setDisplayMode",
+  "terminal.getAutoRestoreFit",
+  "terminal.setAutoRestoreFit",
+  "markdown.readTab",
+  "markdown.saveTab",
 ] as const;
 
 export type RpcRequest = {
@@ -65,8 +82,9 @@ export type RpcResponse = RpcResult | RpcEvent;
 type Send = (response: RpcResponse) => void;
 type Subscription = {
   id: string;
-  kind: "sessions" | "terminal";
+  kind: "sessions" | "terminal" | "session-tabs" | "orca-terminal";
   threadId: number;
+  terminalHandle?: string;
   sequence: number;
   send: Send;
   timers: Set<ReturnType<typeof setTimeout>>;
@@ -79,6 +97,11 @@ let nextIssue = 102;
 let issue = mockIssue();
 const comments = [mockComment()];
 const subtasks: Record<string, unknown>[] = [];
+let mockSessionSnapshotVersion = 1;
+let mockActiveTabId = "thread:101";
+let mockAutoRestoreFitMs: number | null = null;
+const mockDisplayModes = new Map<string, "auto" | "desktop">();
+let mockSessionTabs = [mockPrimaryTerminalTab()];
 
 export const mockScenarioSummary = {
   projectCount: 1,
@@ -208,13 +231,88 @@ export function handleRequest(request: RpcRequest, send: Send, ws: WebSocket): v
         subscribe("sessions", request, respond, ws);
         break;
       case "terminal.subscribe":
-        subscribe("terminal", request, respond, ws);
+        if (text(request.params.terminal)) {
+          subscribeCopiedTerminal(request, respond, ws);
+        } else {
+          subscribe("terminal", request, respond, ws);
+        }
         break;
       case "sessions.command":
         handleSessionCommand(request, respond, ws);
         break;
       case "terminal.command":
         handleTerminalCommand(request, respond, ws);
+        break;
+      case "session.tabs.list":
+        respond(success(request.id, copiedSessionSnapshot(request.params)));
+        break;
+      case "session.tabs.subscribe":
+        subscribeCopiedSessionTabs(request, respond, ws);
+        break;
+      case "session.tabs.activate":
+        activateCopiedSessionTab(request, respond, ws);
+        break;
+      case "session.tabs.createTerminal":
+        createCopiedTerminalTab(request, respond, ws);
+        break;
+      case "session.tabs.close":
+        closeCopiedSessionTab(request, respond, ws);
+        break;
+      case "terminal.list":
+        respond(success(request.id, copiedTerminalList(request.params)));
+        break;
+      case "terminal.send":
+        sendCopiedTerminalInput(request, respond, ws);
+        break;
+      case "terminal.updateViewport":
+        respond(
+          success(request.id, {
+            terminal: text(request.params.terminal),
+            ...record(request.params.viewport),
+            displayMode: copiedDisplayMode(text(request.params.terminal)),
+          }),
+        );
+        break;
+      case "terminal.focus":
+        focusCopiedTerminal(request, respond, ws);
+        break;
+      case "terminal.rename":
+        renameCopiedTerminal(request, respond, ws);
+        break;
+      case "terminal.close":
+        closeCopiedTerminal(request, respond, ws);
+        break;
+      case "terminal.clearBuffer":
+        respond(
+          success(request.id, {
+            clear: {
+              handle: text(request.params.terminal),
+              cleared: true,
+            },
+          }),
+        );
+        break;
+      case "terminal.setDisplayMode": {
+        const handle = text(request.params.terminal);
+        const mode = request.params.mode === "desktop" ? "desktop" : "auto";
+        mockDisplayModes.set(handle, mode);
+        respond(success(request.id, { mode }));
+        break;
+      }
+      case "terminal.getAutoRestoreFit":
+        respond(success(request.id, { ms: mockAutoRestoreFitMs }));
+        break;
+      case "terminal.setAutoRestoreFit":
+        mockAutoRestoreFitMs = normalizeAutoRestoreFitMs(request.params.ms);
+        respond(success(request.id, { ms: mockAutoRestoreFitMs }));
+        break;
+      case "markdown.readTab":
+        respond(success(request.id, copiedMarkdownTab(request.params)));
+        break;
+      case "markdown.saveTab":
+        respond(
+          error(request.id, "read_only", "Symphony markdown tabs are read-only on mobile", false),
+        );
         break;
       default:
         respond(
@@ -271,18 +369,106 @@ export function cleanupConnection(ws: WebSocket): void {
   pendingResponses.delete(ws);
 }
 
-function subscribe(
+function mockPrimaryTerminalTab(): Record<string, unknown> {
+  return {
+    type: "terminal",
+    id: "thread:101",
+    title: "Dev10x mobile",
+    terminal: "thread:101",
+    launchAgent: "codex",
+    status: "ready",
+    isActive: true,
+  };
+}
+
+function copiedSessionSnapshot(params: Record<string, unknown>): Record<string, unknown> {
+  const threadId = worktreeId(params.worktree);
+  const primaryHandle = `thread:${threadId}`;
+  const tabs =
+    threadId === 101
+      ? mockSessionTabs
+      : [
+          {
+            ...mockPrimaryTerminalTab(),
+            id: primaryHandle,
+            terminal: primaryHandle,
+          },
+        ];
+  const activeTabId = tabs.some((tab) => tab.id === mockActiveTabId)
+    ? mockActiveTabId
+    : primaryHandle;
+  return {
+    worktree: String(threadId),
+    publicationEpoch: `${HOST_ID}:${threadId}`,
+    snapshotVersion: mockSessionSnapshotVersion,
+    tabs: tabs.map((tab) => ({ ...tab, isActive: tab.id === activeTabId })),
+    activeTabId,
+    activeTabType: "terminal",
+  };
+}
+
+function copiedTerminalList(params: Record<string, unknown>): Record<string, unknown> {
+  const snapshot = copiedSessionSnapshot(params);
+  const terminals = (snapshot.tabs as Record<string, unknown>[]).map((tab) => ({
+    handle: tab.terminal,
+    title: tab.title,
+    isActive: tab.isActive,
+    worktreeId: snapshot.worktree,
+    hasRunningProcess: tab.status === "ready",
+  }));
+  return {
+    terminals,
+    totalCount: terminals.length,
+    truncated: false,
+  };
+}
+
+function subscribeCopiedSessionTabs(request: RpcRequest, send: Send, ws: WebSocket): void {
+  const threadId = worktreeId(request.params.worktree);
+  const subscription = registerSubscription("session-tabs", threadId, send, ws);
+  send(success(request.id, { subscription_id: subscription.id }));
+  schedule(subscription, () =>
+    emit(subscription, "session.tabs.snapshot", {
+      type: "snapshot",
+      ...copiedSessionSnapshot({ worktree: `id:${threadId}` }),
+    }),
+  );
+}
+
+function subscribeCopiedTerminal(request: RpcRequest, send: Send, ws: WebSocket): void {
+  const handle = text(request.params.terminal) || "thread:101";
+  const threadId = terminalThreadId(handle);
+  const subscription = registerSubscription("orca-terminal", threadId, send, ws, handle);
+  const viewport = record(request.params.viewport);
+  const cols = positiveInteger(viewport.cols, 80);
+  const rows = positiveInteger(viewport.rows, 24);
+  send(success(request.id, { subscription_id: subscription.id }));
+  schedule(subscription, () =>
+    emit(subscription, "terminal.scrollback", {
+      type: "scrollback",
+      serialized: "$ dev10x mobile --mock\nDev10x mock host online\nSymphony RPC: encrypted\n",
+      lines: ["$ dev10x mobile --mock", "Dev10x mock host online", "Symphony RPC: encrypted"],
+      truncated: false,
+      cols,
+      rows,
+      displayMode: copiedDisplayMode(handle),
+    }),
+  );
+}
+
+function registerSubscription(
   kind: Subscription["kind"],
-  request: RpcRequest,
+  threadId: number,
   send: Send,
   ws: WebSocket,
-): void {
-  const threadId = positiveInteger(request.params.thread_id, 101);
+  terminalHandle?: string,
+): Subscription {
   const id = `sub_mock_${++nextSubscription}`;
   const subscription: Subscription = {
     id,
     kind,
     threadId,
+    ...(terminalHandle ? { terminalHandle } : {}),
     sequence: 0,
     send,
     timers: new Set(),
@@ -290,7 +476,221 @@ function subscribe(
   const entries = subscriptions.get(ws) ?? new Map();
   entries.set(id, subscription);
   subscriptions.set(ws, entries);
-  send(success(request.id, { subscription_id: id }));
+  return subscription;
+}
+
+function activateCopiedSessionTab(request: RpcRequest, send: Send, ws: WebSocket): void {
+  const threadId = worktreeId(request.params.worktree);
+  const tabId = text(request.params.tabId);
+  const exists = mockSessionTabs.some((tab) => tab.id === tabId);
+  if (!exists) {
+    send(error(request.id, "not_found", "Session tab was not found"));
+    return;
+  }
+  mockActiveTabId = tabId;
+  mockSessionSnapshotVersion += 1;
+  const snapshot = copiedSessionSnapshot({ worktree: `id:${threadId}` });
+  send(success(request.id, snapshot));
+  emitCopiedSessionUpdate(ws, threadId, snapshot);
+}
+
+function createCopiedTerminalTab(request: RpcRequest, send: Send, ws: WebSocket): void {
+  const threadId = worktreeId(request.params.worktree);
+  const agent = text(request.params.launchAgent) || text(request.params.agent);
+  const handle = `tab:${threadId}:c3ltcGhvbnk:mock-${mockSessionTabs.length}`;
+  const tab = {
+    type: "terminal",
+    id: handle,
+    title: agent ? titleCase(agent) : "Terminal",
+    terminal: handle,
+    ...(agent ? { launchAgent: agent } : {}),
+    status: "ready",
+    isActive: request.params.activate !== false,
+  };
+  mockSessionTabs = [...mockSessionTabs, tab];
+  if (request.params.activate !== false) mockActiveTabId = handle;
+  mockSessionSnapshotVersion += 1;
+  send(success(request.id, { tab: { ...tab, isActive: mockActiveTabId === handle } }));
+  emitCopiedSessionUpdate(ws, threadId, copiedSessionSnapshot({ worktree: `id:${threadId}` }));
+}
+
+function closeCopiedSessionTab(request: RpcRequest, send: Send, ws: WebSocket): void {
+  const threadId = worktreeId(request.params.worktree);
+  const tabId = text(request.params.tabId);
+  if (tabId === `thread:${threadId}`) {
+    send(error(request.id, "protected_terminal", "The primary Symphony terminal cannot be closed"));
+    return;
+  }
+  const before = mockSessionTabs.length;
+  mockSessionTabs = mockSessionTabs.filter((tab) => tab.id !== tabId);
+  if (mockSessionTabs.length === before) {
+    send(error(request.id, "not_found", "Session tab was not found"));
+    return;
+  }
+  mockActiveTabId = `thread:${threadId}`;
+  mockSessionSnapshotVersion += 1;
+  const snapshot = copiedSessionSnapshot({ worktree: `id:${threadId}` });
+  send(success(request.id, { closed: true, tabId, snapshot }));
+  emitCopiedSessionUpdate(ws, threadId, snapshot);
+}
+
+function sendCopiedTerminalInput(request: RpcRequest, send: Send, ws: WebSocket): void {
+  const handle = text(request.params.terminal);
+  const raw = rawText(request.params.text);
+  const suffix =
+    request.params.interrupt === true ? "\u0003" : request.params.enter === true ? "\r" : "";
+  const input = raw + suffix;
+  send(
+    success(request.id, {
+      send: {
+        handle,
+        accepted: true,
+        bytesWritten: new TextEncoder().encode(input).byteLength,
+      },
+    }),
+  );
+  for (const subscription of matchingTerminalSubscriptions(ws, handle)) {
+    schedule(subscription, () =>
+      emit(subscription, "terminal.data", {
+        type: "data",
+        chunk: `${raw}${suffix ? "\n" : ""}mock: command accepted\n`,
+      }),
+    );
+  }
+}
+
+function focusCopiedTerminal(request: RpcRequest, send: Send, ws: WebSocket): void {
+  const handle = text(request.params.terminal);
+  const tab = mockSessionTabs.find((candidate) => candidate.terminal === handle);
+  if (!tab) {
+    send(error(request.id, "not_found", "Terminal was not found"));
+    return;
+  }
+  mockActiveTabId = String(tab.id);
+  mockSessionSnapshotVersion += 1;
+  send(success(request.id, { focus: { handle, focused: true } }));
+  emitCopiedSessionUpdate(
+    ws,
+    terminalThreadId(handle),
+    copiedSessionSnapshot({ worktree: `id:${terminalThreadId(handle)}` }),
+  );
+}
+
+function renameCopiedTerminal(request: RpcRequest, send: Send, ws: WebSocket): void {
+  const handle = text(request.params.terminal);
+  const title = text(request.params.title) || "Terminal";
+  let found = false;
+  mockSessionTabs = mockSessionTabs.map((tab) => {
+    if (tab.terminal !== handle) return tab;
+    found = true;
+    return { ...tab, title };
+  });
+  if (!found) {
+    send(error(request.id, "not_found", "Terminal was not found"));
+    return;
+  }
+  mockSessionSnapshotVersion += 1;
+  send(success(request.id, { rename: { handle, title } }));
+  emitCopiedSessionUpdate(
+    ws,
+    terminalThreadId(handle),
+    copiedSessionSnapshot({ worktree: `id:${terminalThreadId(handle)}` }),
+  );
+}
+
+function closeCopiedTerminal(request: RpcRequest, send: Send, ws: WebSocket): void {
+  closeCopiedSessionTab(
+    {
+      ...request,
+      params: {
+        worktree: `id:${terminalThreadId(text(request.params.terminal))}`,
+        tabId: text(request.params.terminal),
+      },
+    },
+    (response) => {
+      if (response.type === "result" && response.ok) {
+        send(
+          success(request.id, {
+            close: { handle: text(request.params.terminal), closed: true },
+          }),
+        );
+      } else {
+        send(response);
+      }
+    },
+    ws,
+  );
+}
+
+function copiedMarkdownTab(params: Record<string, unknown>): Record<string, unknown> {
+  const tabId = text(params.tabId) || "docs/mock-comparison.md";
+  const content =
+    "# Dev10x mobile\n\nThis read-only document comes from the Symphony mock RPC host.";
+  return {
+    tabId,
+    content,
+    baseVersion: "mock-markdown-v1",
+    editable: false,
+    readOnlyReason: "Symphony markdown tabs are read-only on mobile",
+  };
+}
+
+function emitCopiedSessionUpdate(
+  ws: WebSocket,
+  threadId: number,
+  snapshot: Record<string, unknown>,
+): void {
+  for (const subscription of matchingSubscriptions(ws, "session-tabs", threadId)) {
+    schedule(subscription, () =>
+      emit(subscription, "session.tabs.updated", {
+        type: "updated",
+        ...snapshot,
+      }),
+    );
+  }
+}
+
+function matchingTerminalSubscriptions(ws: WebSocket, handle: string): Subscription[] {
+  return [...(subscriptions.get(ws)?.values() ?? [])].filter(
+    (subscription) =>
+      subscription.kind === "orca-terminal" && subscription.terminalHandle === handle,
+  );
+}
+
+function copiedDisplayMode(handle: string): "auto" | "desktop" {
+  return mockDisplayModes.get(handle) ?? "auto";
+}
+
+function normalizeAutoRestoreFitMs(value: unknown): number | null {
+  if (value === null) return null;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return null;
+  return Math.max(5_000, Math.min(3_600_000, Math.round(parsed)));
+}
+
+function worktreeId(selector: unknown): number {
+  const raw = text(selector).replace(/^id:/, "");
+  return positiveInteger(raw, 101);
+}
+
+function terminalThreadId(handle: string): number {
+  const match = /^(?:thread|tab):(\d+)(?::|$)/.exec(handle);
+  return positiveInteger(match?.[1], 101);
+}
+
+function titleCase(value: string): string {
+  return value.replace(/[-_]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function subscribe(
+  kind: Subscription["kind"],
+  request: RpcRequest,
+  send: Send,
+  ws: WebSocket,
+): void {
+  const threadId = positiveInteger(request.params.thread_id, 101);
+  const subscription = registerSubscription(kind, threadId, send, ws);
+  send(success(request.id, { subscription_id: subscription.id }));
 
   if (kind === "sessions") {
     schedule(subscription, () =>
@@ -1026,6 +1426,10 @@ function record(value: unknown): Record<string, unknown> {
 
 function text(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function rawText(value: unknown): string {
+  return typeof value === "string" ? value : "";
 }
 
 function positiveInteger(value: unknown, fallback: number): number {

@@ -24,7 +24,9 @@ defmodule SymphonyElixir.MobileRpc.SessionBridge do
             active: false,
             pending: [],
             pending_overflowed: false,
-            max_pending: 256
+            max_pending: 256,
+            event_mapper: nil,
+            event_mapper_state: nil
 
   @type option ::
           {:connection_pid, pid()}
@@ -32,6 +34,7 @@ defmodule SymphonyElixir.MobileRpc.SessionBridge do
           | {:subscription_id, String.t()}
           | {:channel_module, module()}
           | {:max_pending, pos_integer()}
+          | {:event_mapper, (String.t(), term(), term() -> {String.t(), term(), term()})}
           | {:name, GenServer.name()}
 
   @spec start_link([option()]) :: GenServer.on_start()
@@ -87,16 +90,22 @@ defmodule SymphonyElixir.MobileRpc.SessionBridge do
     topic = Keyword.get(opts, :topic, "assistant:thread:#{thread_id}")
     join_payload = Keyword.get(opts, :join_payload, %{})
     event_prefix = Keyword.get(opts, :event_prefix, "sessions")
+    event_mapper = Keyword.get(opts, :event_mapper)
     max_pending = Keyword.get(opts, :max_pending, 256)
     true = is_integer(max_pending) and max_pending > 0
     socket = channel_socket(channel_module, topic)
 
     case channel_module.join(topic, join_payload, socket) do
       {:ok, joined_payload, joined_socket} ->
-        pending =
-          if Keyword.get(opts, :emit_joined, false),
-            do: [{"joined", joined_payload}],
-            else: []
+        {pending, event_mapper_state} =
+          if Keyword.get(opts, :emit_joined, false) do
+            {event, payload, mapper_state} =
+              map_event(event_mapper, nil, "joined", joined_payload)
+
+            {[{event, payload}], mapper_state}
+          else
+            {[], nil}
+          end
 
         {:ok,
          %__MODULE__{
@@ -107,7 +116,9 @@ defmodule SymphonyElixir.MobileRpc.SessionBridge do
            channel_module: channel_module,
            socket: joined_socket,
            pending: pending,
-           max_pending: max_pending
+           max_pending: max_pending,
+           event_mapper: event_mapper,
+           event_mapper_state: event_mapper_state
          }}
 
       {:error, reason} ->
@@ -154,16 +165,21 @@ defmodule SymphonyElixir.MobileRpc.SessionBridge do
 
   @impl true
   def handle_info({:mobile_assistant_push, event, payload}, state) do
+    {mapped_event, mapped_payload, mapper_state} =
+      map_event(state.event_mapper, state.event_mapper_state, event, payload)
+
+    state = %{state | event_mapper_state: mapper_state}
+
     cond do
       state.active ->
-        emit(state, event, payload)
+        emit(state, mapped_event, mapped_payload)
         {:noreply, state}
 
       state.pending_overflowed ->
         {:noreply, state}
 
       length(state.pending) < state.max_pending ->
-        {:noreply, %{state | pending: [{event, payload} | state.pending]}}
+        {:noreply, %{state | pending: [{mapped_event, mapped_payload} | state.pending]}}
 
       true ->
         {:noreply, %{state | pending: [], pending_overflowed: true}}
@@ -220,5 +236,21 @@ defmodule SymphonyElixir.MobileRpc.SessionBridge do
       state.connection_pid,
       {:mobile_rpc_event, state.subscription_id, "#{state.event_prefix}.#{event}", payload}
     )
+  end
+
+  defp map_event(nil, mapper_state, event, payload),
+    do: {event, payload, mapper_state}
+
+  defp map_event(mapper, mapper_state, event, payload) when is_function(mapper, 3) do
+    case mapper.(event, payload, mapper_state) do
+      {mapped_event, mapped_payload, next_state}
+      when is_binary(mapped_event) ->
+        {mapped_event, mapped_payload, next_state}
+
+      _unexpected ->
+        {event, payload, mapper_state}
+    end
+  rescue
+    _error -> {event, payload, mapper_state}
   end
 end

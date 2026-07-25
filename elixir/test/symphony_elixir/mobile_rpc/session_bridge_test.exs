@@ -76,4 +76,59 @@ defmodule SymphonyElixir.MobileRpc.SessionBridgeTest do
 
     assert :ok = GenServer.stop(bridge)
   end
+
+  defmodule MappedTerminalChannel do
+    def join("terminal:thread:42", %{}, socket) do
+      send(self(), {:capture, "prompt"})
+      {:ok, %{session: %{output: "prompt"}}, socket}
+    end
+
+    def handle_in("input", %{"data" => data}, socket) do
+      Phoenix.Channel.push(socket, "output", %{data: "prompt" <> data})
+      {:reply, :ok, socket}
+    end
+
+    def handle_info({:capture, output}, socket) do
+      Phoenix.Channel.push(socket, "output", %{data: output})
+      {:noreply, socket}
+    end
+  end
+
+  test "maps channel snapshots and output deltas without emitting before activation" do
+    mapper = fn
+      "joined", %{session: %{output: output}}, _state ->
+        {"scrollback", %{"type" => "scrollback", "serialized" => output}, output}
+
+      "output", %{data: output}, previous ->
+        chunk =
+          if is_binary(previous) and String.starts_with?(output, previous),
+            do: String.replace_prefix(output, previous, ""),
+            else: output
+
+        {"data", %{"type" => "data", "chunk" => chunk}, output}
+    end
+
+    assert {:ok, bridge} =
+             SessionBridge.start_link(
+               connection_pid: self(),
+               thread_id: 42,
+               subscription_id: "terminal_42",
+               channel_module: MappedTerminalChannel,
+               topic: "terminal:thread:42",
+               emit_joined: true,
+               event_prefix: "terminal",
+               event_mapper: mapper
+             )
+
+    refute_receive {:mobile_rpc_event, "terminal_42", _, _}
+    SessionBridge.activate(bridge)
+
+    assert_receive {:mobile_rpc_event, "terminal_42", "terminal.scrollback", %{"type" => "scrollback", "serialized" => "prompt"}}
+
+    assert :ok = SessionBridge.command(bridge, "input", %{"data" => " continue"})
+
+    assert_receive {:mobile_rpc_event, "terminal_42", "terminal.data", %{"type" => "data", "chunk" => " continue"}}
+
+    assert :ok = GenServer.stop(bridge)
+  end
 end

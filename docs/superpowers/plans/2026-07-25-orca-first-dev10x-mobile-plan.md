@@ -885,7 +885,7 @@ git commit -m "feat(mobile): connect Orca onboarding to Symphony hosts"
 - Modify: `mobile/scripts/mock-server-rpc-handlers.ts`
 - Modify: `mobile/src/rpc/mock-server-rpc-handlers.test.ts`
 
-- [ ] **Step 1: Write failing RPC compatibility tests**
+- [x] **Step 1: Write failing RPC compatibility tests**
 
 Cover the exact copied calls:
 
@@ -914,7 +914,7 @@ Assert `session.tabs.subscribe` activates only after the subscription result is
 encrypted and emits ordered `session.tabs.snapshot` / delta events. Assert
 terminal streams remain scoped to the authenticated selected host.
 
-- [ ] **Step 2: Run focused failing tests**
+- [x] **Step 2: Run focused failing tests**
 
 Run:
 
@@ -927,26 +927,26 @@ mix test \
 
 Expected: FAIL for missing Orca-compatible method modules.
 
-- [ ] **Step 3: Add compatibility handlers over existing session bridges**
+- [x] **Step 3: Add compatibility handlers over existing session bridges**
 
 Map copied tab/session operations onto `SessionBridge`,
 `TerminalBridge` and shared session services. Preserve upstream result shapes,
 including handles, titles, agent kind, active tab and terminal dimensions.
 Do not add a second session store.
 
-- [ ] **Step 4: Keep copied session presentation intact**
+- [x] **Step 4: Keep copied session presentation intact**
 
 Change only its transport imports, Dev10x/Symphony copy and capability gates.
 The terminal WebView, dock, tab strip, input actions, agent state, approval and
 question experiences remain copied from Orca.
 
-- [ ] **Step 5: Add matching mock handlers**
+- [x] **Step 5: Add matching mock handlers**
 
 The external mock implements the same method names and emits deterministic
 session/terminal snapshots through the normal encrypted transport. It does not
 branch on a mock flag in React code.
 
-- [ ] **Step 6: Run bounded validation**
+- [x] **Step 6: Run bounded validation**
 
 Run:
 
@@ -963,7 +963,7 @@ mix test test/symphony_elixir/mobile_rpc/methods/orca_sessions_test.exs
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add mobile/app/h mobile/src/orca/session mobile/scripts \

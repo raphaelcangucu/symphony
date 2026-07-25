@@ -3,7 +3,7 @@ defmodule SymphonyElixir.MobileRpc.Envelope do
 
   @max_deadline_ms 120_000
   @id_pattern ~r/^[A-Za-z0-9_.:-]{1,128}$/
-  @method_pattern ~r/^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$/
+  @method_pattern ~r/^[a-z][A-Za-z0-9_]*(?:\.[a-z][A-Za-z0-9_]*)+$/
 
   @spec decode(map()) :: {:ok, map()} | {:error, atom()}
   def decode(
