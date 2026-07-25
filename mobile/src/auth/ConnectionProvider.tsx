@@ -14,7 +14,9 @@ import {
   createConnectionProfile,
   type ConnectionProfile,
   type CreateConnectionProfileInput,
+  type HostProfile,
 } from "@/auth/connection-profile";
+import type { HostCredential } from "@/auth/host-credential-storage";
 import {
   removeConnectionProfileWithCleanup,
   validateAndReplaceConnectionToken,
@@ -39,6 +41,7 @@ export type ConnectionContextValue = {
   loadToken(id: string): Promise<string | null>;
   selectProfile(id: string): Promise<void>;
   saveProfile(input: SaveConnectionInput): Promise<ConnectionProfile>;
+  saveHostProfile(profile: HostProfile, credential: HostCredential): Promise<HostProfile>;
   removeProfile(id: string): Promise<void>;
   replaceToken(id: string, token: string): Promise<void>;
 };
@@ -137,23 +140,45 @@ export function ConnectionProvider({
 
   const removeProfile = useCallback(
     async (id: string) => {
-      const nextSnapshot = await removeConnectionProfileWithCleanup({
-        createClient: runtime.createTrackerClient,
-        deviceId: runtime.notifications.deviceId,
-        locale: resolvedLocale(),
-        profileId: id,
-        storage,
-      });
+      const profile = snapshot.profiles.find((candidate) => candidate.id === id);
+      const nextSnapshot =
+        profile?.transport === "rpc"
+          ? await storage.removeProfile(id)
+          : await removeConnectionProfileWithCleanup({
+              createClient: runtime.createTrackerClient,
+              deviceId: runtime.notifications.deviceId,
+              locale: resolvedLocale(),
+              profileId: id,
+              storage,
+            });
       setSnapshot(nextSnapshot);
       await loadActiveToken(nextSnapshot);
     },
-    [loadActiveToken, runtime.createTrackerClient, runtime.notifications.deviceId, storage],
+    [
+      loadActiveToken,
+      runtime.createTrackerClient,
+      runtime.notifications.deviceId,
+      snapshot.profiles,
+      storage,
+    ],
+  );
+  const saveHostProfile = useCallback(
+    async (profile: HostProfile, credential: HostCredential) => {
+      const nextSnapshot = await storage.saveHostProfile(profile, credential);
+      setSnapshot(nextSnapshot);
+      await loadActiveToken(nextSnapshot);
+      return profile;
+    },
+    [loadActiveToken, storage],
   );
 
   const replaceToken = useCallback(
     async (id: string, token: string) => {
       const profile = snapshot.profiles.find((candidate) => candidate.id === id);
       if (!profile) throw new Error("Connection profile not found");
+      if (profile.transport === "rpc") {
+        throw new Error("RPC device credentials are rotated by pairing again");
+      }
       await validateAndReplaceConnectionToken({
         createClient: runtime.createTrackerClient,
         locale: resolvedLocale(),
@@ -181,6 +206,7 @@ export function ConnectionProvider({
       loadToken,
       selectProfile,
       saveProfile,
+      saveHostProfile,
       removeProfile,
       replaceToken,
     }),
@@ -192,6 +218,7 @@ export function ConnectionProvider({
       removeProfile,
       replaceToken,
       saveProfile,
+      saveHostProfile,
       selectProfile,
       snapshot.profiles,
     ],

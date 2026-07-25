@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import type { ConnectionProfile } from "./connection-profile";
+import type { ConnectionProfile, HostProfile } from "./connection-profile";
 import {
   CONNECTIONS_STORAGE_KEY,
   connectionCredentialKey,
@@ -52,6 +52,64 @@ function createAdapters() {
 }
 
 describe("connection storage", () => {
+  it("migrates v1 tracker profiles to explicit legacy host metadata", async () => {
+    const adapters = createAdapters();
+    adapters.metadata.set(
+      CONNECTIONS_STORAGE_KEY,
+      JSON.stringify({
+        version: 1,
+        profiles: [firstProfile],
+        activeProfileId: firstProfile.id,
+      }),
+    );
+    const storage = createConnectionStorage(adapters);
+
+    await expect(storage.loadSnapshot()).resolves.toEqual({
+      profiles: [
+        {
+          ...firstProfile,
+          hostId: firstProfile.id,
+          endpoint: firstProfile.origin,
+          hostPublicKeyFingerprint: "legacy-unpinned",
+          transport: "legacy",
+          protocolVersion: null,
+        },
+      ],
+      activeProfileId: firstProfile.id,
+    });
+  });
+
+  it("stores RPC device credentials and the full pinned key only in SecureStore", async () => {
+    const adapters = createAdapters();
+    const storage = createConnectionStorage(adapters);
+    const rpcProfile: HostProfile = {
+      id: "profile-rpc",
+      hostId: "host_01",
+      name: "Mac Studio",
+      origin: "wss://mac-studio.test/mobile/rpc",
+      endpoint: "wss://mac-studio.test/mobile/rpc",
+      hostPublicKeyFingerprint: "sha256:abcd",
+      transport: "rpc",
+      protocolVersion: 1,
+      createdAt: "2026-07-25T12:00:00.000Z",
+      lastConnectedAt: null,
+    };
+
+    await storage.saveHostProfile(rpcProfile, {
+      deviceId: "device_01",
+      deviceToken: "device-secret",
+      hostPublicKey: "full-static-public-key",
+    });
+
+    expect(JSON.stringify([...adapters.metadata.values()])).not.toContain("device-secret");
+    expect(JSON.stringify([...adapters.metadata.values()])).not.toContain("full-static-public-key");
+    await expect(storage.loadHostCredential(rpcProfile.id)).resolves.toEqual({
+      deviceId: "device_01",
+      deviceToken: "device-secret",
+      hostPublicKey: "full-static-public-key",
+    });
+  });
+
   it("keeps profile metadata in AsyncStorage and the token only in SecureStore", async () => {
     const adapters = createAdapters();
     const storage = createConnectionStorage(adapters);

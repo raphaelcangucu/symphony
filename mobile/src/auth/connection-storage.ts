@@ -1,4 +1,10 @@
-import type { ConnectionProfile } from "./connection-profile";
+import type { ConnectionProfile, HostProfile } from "./connection-profile";
+import {
+  loadHostCredential,
+  removeHostCredential,
+  saveHostCredential,
+  type HostCredential,
+} from "./host-credential-storage";
 
 export const CONNECTIONS_STORAGE_KEY = "symphony.connections";
 const CONNECTION_CREDENTIAL_PREFIX = "symphony.connection.";
@@ -23,7 +29,12 @@ export interface ConnectionStorageSnapshot {
 export interface ConnectionStorage {
   loadSnapshot(): Promise<ConnectionStorageSnapshot>;
   loadToken(profileId: string): Promise<string | null>;
+  loadHostCredential(profileId: string): Promise<HostCredential | null>;
   saveProfile(profile: ConnectionProfile, token: string): Promise<ConnectionStorageSnapshot>;
+  saveHostProfile(
+    profile: HostProfile,
+    credential: HostCredential,
+  ): Promise<ConnectionStorageSnapshot>;
   selectProfile(profileId: string): Promise<ConnectionStorageSnapshot>;
   removeProfile(profileId: string): Promise<ConnectionStorageSnapshot>;
   replaceToken(profileId: string, token: string): Promise<void>;
@@ -35,7 +46,7 @@ type ConnectionStorageAdapters = {
 };
 
 type StoredConnections = ConnectionStorageSnapshot & {
-  version: 1;
+  version: 2;
 };
 
 const emptySnapshot: ConnectionStorageSnapshot = {
@@ -69,7 +80,7 @@ export function createConnectionStorage({
 
   async function persistSnapshot(snapshot: ConnectionStorageSnapshot): Promise<void> {
     const stored: StoredConnections = {
-      version: 1,
+      version: 2,
       profiles: snapshot.profiles,
       activeProfileId: snapshot.activeProfileId,
     };
@@ -92,7 +103,14 @@ export function createConnectionStorage({
 
     async loadToken(profileId) {
       await mutationQueue;
+      const hostCredential = await loadHostCredential(secureStorage, profileId);
+      if (hostCredential) return hostCredential.deviceToken;
       return secureStorage.getItemAsync(connectionCredentialKey(profileId));
+    },
+
+    async loadHostCredential(profileId) {
+      await mutationQueue;
+      return loadHostCredential(secureStorage, profileId);
     },
 
     saveProfile(profile, token) {
@@ -121,6 +139,24 @@ export function createConnectionStorage({
       });
     },
 
+    saveHostProfile(profile, credential) {
+      return enqueue(async () => {
+        const snapshot = await readSnapshot();
+        const profiles = [
+          ...snapshot.profiles.filter((candidate) => candidate.id !== profile.id),
+          profile,
+        ];
+        const nextSnapshot = {
+          profiles,
+          activeProfileId: snapshot.activeProfileId ?? profile.id,
+        };
+
+        await saveHostCredential(secureStorage, profile.id, credential);
+        await persistSnapshot(nextSnapshot);
+        return nextSnapshot;
+      });
+    },
+
     selectProfile(profileId) {
       return enqueue(async () => {
         const snapshot = await requireProfile(profileId);
@@ -141,6 +177,7 @@ export function createConnectionStorage({
         const nextSnapshot = { profiles, activeProfileId };
 
         await secureStorage.deleteItemAsync(connectionCredentialKey(profileId));
+        await removeHostCredential(secureStorage, profileId);
         await persistSnapshot(nextSnapshot);
         return nextSnapshot;
       });
@@ -160,11 +197,18 @@ function parseStoredConnections(raw: string | null): ConnectionStorageSnapshot {
 
   try {
     const value: unknown = JSON.parse(raw);
-    if (!isRecord(value) || value.version !== 1 || !Array.isArray(value.profiles)) {
+    if (
+      !isRecord(value) ||
+      (value.version !== 1 && value.version !== 2) ||
+      !Array.isArray(value.profiles)
+    ) {
       return { ...emptySnapshot };
     }
 
-    const profiles = value.profiles.filter(isConnectionProfile);
+    const profiles =
+      value.version === 1
+        ? value.profiles.filter(isConnectionProfile).map(migrateLegacyProfile)
+        : value.profiles.filter(isConnectionProfile);
     const uniqueProfiles = profiles.filter(
       (profile, index) => profiles.findIndex((candidate) => candidate.id === profile.id) === index,
     );
@@ -199,6 +243,17 @@ function isConnectionProfile(value: unknown): value is ConnectionProfile {
     typeof value.createdAt === "string" &&
     (value.lastConnectedAt === null || typeof value.lastConnectedAt === "string")
   );
+}
+
+function migrateLegacyProfile(profile: ConnectionProfile): HostProfile {
+  return {
+    ...profile,
+    hostId: profile.id,
+    endpoint: profile.origin,
+    hostPublicKeyFingerprint: "legacy-unpinned",
+    transport: "legacy",
+    protocolVersion: null,
+  };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -9,6 +9,7 @@ import type {
 } from "@/api/contracts";
 import type { ConnectionProfile } from "@/auth/connection-profile";
 import type { ConnectionStorage, ConnectionStorageSnapshot } from "@/auth/connection-storage";
+import type { HostCredential } from "@/auth/host-credential-storage";
 import type { AssistantMessage } from "@/features/sessions/session-reducer";
 import { createNotificationRouter } from "@/native/notifications";
 import type { CreateAssistantSessionOptions } from "@/realtime/assistant-session";
@@ -179,17 +180,31 @@ export function createFixtureConnectionStorage(): ConnectionStorage {
     [profile.id, "fixture-token"],
     [localProfile.id, "fixture-local-token"],
   ]);
+  const hostCredentials = new Map<string, HostCredential>();
   return {
     loadSnapshot: async () => ({
       profiles: [...current.profiles],
       activeProfileId: current.activeProfileId,
     }),
     loadToken: async (profileId) => tokens.get(profileId) ?? null,
+    loadHostCredential: async (profileId) => hostCredentials.get(profileId) ?? null,
     saveProfile: async (nextProfile, token) => {
       const profiles = current.profiles.some((item) => item.id === nextProfile.id)
         ? current.profiles.map((item) => (item.id === nextProfile.id ? nextProfile : item))
         : [...current.profiles, nextProfile];
       tokens.set(nextProfile.id, token);
+      current = {
+        profiles,
+        activeProfileId: current.activeProfileId ?? nextProfile.id,
+      };
+      return current;
+    },
+    saveHostProfile: async (nextProfile, credential) => {
+      const profiles = current.profiles.some((item) => item.id === nextProfile.id)
+        ? current.profiles.map((item) => (item.id === nextProfile.id ? nextProfile : item))
+        : [...current.profiles, nextProfile];
+      hostCredentials.set(nextProfile.id, credential);
+      tokens.set(nextProfile.id, credential.deviceToken);
       current = {
         profiles,
         activeProfileId: current.activeProfileId ?? nextProfile.id,
@@ -206,6 +221,7 @@ export function createFixtureConnectionStorage(): ConnectionStorage {
     removeProfile: async (profileId) => {
       const profiles = current.profiles.filter((item) => item.id !== profileId);
       tokens.delete(profileId);
+      hostCredentials.delete(profileId);
       current = {
         profiles,
         activeProfileId:

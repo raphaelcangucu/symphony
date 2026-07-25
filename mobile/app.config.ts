@@ -31,6 +31,13 @@ const config: ExpoConfig = {
     "expo-secure-store",
     "expo-notifications",
     [
+      "expo-camera",
+      {
+        cameraPermission: "Allow Dev10x to scan a Symphony host pairing QR code.",
+        barcodeScannerEnabled: true,
+      },
+    ],
+    [
       "expo-speech-recognition",
       {
         microphonePermission: "Allow Dev10x to turn your voice into a message.",

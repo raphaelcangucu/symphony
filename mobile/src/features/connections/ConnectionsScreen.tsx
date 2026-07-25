@@ -78,13 +78,16 @@ export function ConnectionsScreen({
                 <View style={styles.grow}>
                   <Text style={[styles.name, { color: colors.textPrimary }]}>{profile.name}</Text>
                   <Text selectable style={{ color: colors.textMuted }}>
-                    {profile.origin}
+                    {profile.endpoint ?? profile.origin}
                   </Text>
                 </View>
                 <View style={styles.badges}>
                   {active ? (
                     <Text style={[styles.badge, { color: colors.accent }]}>Active</Text>
                   ) : null}
+                  <Text style={[styles.badge, { color: colors.textMuted }]}>
+                    {profile.transport === "rpc" ? "Encrypted RPC" : "Legacy"}
+                  </Text>
                   <Text style={[styles.badge, { color: healthColor(state, colors) }]}>
                     {healthLabel(state)}
                   </Text>
@@ -132,14 +135,16 @@ export function ConnectionsScreen({
                   label={`Reconnect ${profile.name}`}
                   onPress={() => onReconnect(profile.id)}
                 />
-                <Action
-                  disabled={busy}
-                  label={`Replace token for ${profile.name}`}
-                  onPress={() => {
-                    setEditingId(profile.id);
-                    setToken("");
-                  }}
-                />
+                {profile.transport !== "rpc" ? (
+                  <Action
+                    disabled={busy}
+                    label={`Replace token for ${profile.name}`}
+                    onPress={() => {
+                      setEditingId(profile.id);
+                      setToken("");
+                    }}
+                  />
+                ) : null}
                 <Action
                   destructive
                   disabled={busy}

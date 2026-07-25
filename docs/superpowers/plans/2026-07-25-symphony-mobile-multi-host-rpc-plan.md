@@ -312,7 +312,7 @@ Commit: `refactor(mobile): introduce host transport compatibility layer`
 - Modify: `mobile/src/features/connections/ConnectionsScreen.tsx`
 - Modify: `mobile/app/connect.tsx`
 
-- [ ] **Step 1: Write failing profile migration and pairing UI tests**
+- [x] **Step 1: Write failing profile migration and pairing UI tests**
 
 Prove v1 legacy profile migration, v2 RPC profile storage, secret/key exclusion
 from AsyncStorage, QR/manual parsing, endpoint reachability, host key pinning,
@@ -332,16 +332,16 @@ export type HostProfile = {
 };
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run the storage and screen Jest tests in WSL.
 
-- [ ] **Step 3: Implement QR/deep-link pairing**
+- [x] **Step 3: Implement QR/deep-link pairing**
 
 Use Expo Camera only for QR capture. Manual paste is always present. Save
 device token and full pinned key only after encrypted authentication succeeds.
 
-- [ ] **Step 4: Verify GREEN and commit**
+- [x] **Step 4: Verify GREEN and commit**
 
 Commit: `feat(mobile): add encrypted Symphony host pairing`
 

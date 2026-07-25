@@ -2,8 +2,21 @@ export interface ConnectionProfile {
   id: string;
   name: string;
   origin: string;
+  hostId?: string;
+  endpoint?: string;
+  hostPublicKeyFingerprint?: string;
+  transport?: "rpc" | "legacy";
+  protocolVersion?: number | null;
   createdAt: string;
   lastConnectedAt: string | null;
+}
+
+export interface HostProfile extends ConnectionProfile {
+  hostId: string;
+  endpoint: string;
+  hostPublicKeyFingerprint: string;
+  transport: "rpc" | "legacy";
+  protocolVersion: number | null;
 }
 
 export interface ConnectionCredential {

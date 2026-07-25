@@ -76,9 +76,10 @@ export function ConnectScreen({ onConnected, validateConnection }: ConnectScreen
         <BrandMark />
       </View>
       <View style={styles.heading}>
-        <Text style={[styles.title, { color: colors.textPrimary }]}>Connect to Symphony</Text>
+        <Text style={[styles.title, { color: colors.textPrimary }]}>Legacy tracker connection</Text>
         <Text style={[styles.description, { color: colors.textSecondary }]}>
-          Add a reachable tracker and keep its token protected on this device.
+          Compatibility mode for an existing REST/Phoenix mobile profile. New hosts should use
+          encrypted QR pairing.
         </Text>
       </View>
 

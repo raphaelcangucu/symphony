@@ -26,7 +26,7 @@ export function TrackerClientProvider({
   const { activeProfile, activeToken } = useConnection();
   const client = useMemo(
     () =>
-      activeProfile && activeToken
+      activeProfile && activeToken && activeProfile.transport !== "rpc"
         ? createClient({
             origin: activeProfile.origin,
             token: activeToken,

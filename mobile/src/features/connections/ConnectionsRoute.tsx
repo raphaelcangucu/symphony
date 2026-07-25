@@ -21,6 +21,7 @@ export function ConnectionsRoute() {
     setHealth(Object.fromEntries(profiles.map((profile) => [profile.id, "checking"])));
     void Promise.all(
       profiles.map(async (profile) => {
+        if (profile.transport === "rpc") return;
         try {
           const token = await loadToken(profile.id);
           if (!token) throw new Error("Missing token");
@@ -64,6 +65,10 @@ export function ConnectionsRoute() {
     if (!profile) return;
     await perform(profileId, async () => {
       setHealth((current) => ({ ...current, [profileId]: "checking" }));
+      if (profile.transport === "rpc") {
+        await selectProfile(profileId);
+        return;
+      }
       const token = await loadToken(profileId);
       if (!token) throw new Error("Connection token is missing");
       const client = runtime.createTrackerClient({
@@ -83,7 +88,7 @@ export function ConnectionsRoute() {
     if (!profile) return;
     Alert.alert(
       "Remove connection?",
-      `${profile.name} and its protected token will be removed from this device.`,
+      `${profile.name} and its protected device credential will be removed from this device.`,
       [
         { text: "Cancel", style: "cancel" },
         {
