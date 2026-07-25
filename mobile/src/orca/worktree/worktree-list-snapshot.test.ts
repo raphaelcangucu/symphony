@@ -1,6 +1,6 @@
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import type { RuntimeWorktreeAgentRow } from '../../../src/shared/runtime-types'
+import type { RuntimeWorktreeAgentRow } from '../../shared/runtime-types'
 import type { Worktree } from './workspace-list-sections'
 import { areWorktreeListsEqual } from './worktree-list-snapshot'
 

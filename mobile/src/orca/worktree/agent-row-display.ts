@@ -1,4 +1,4 @@
-import type { RuntimeWorktreeAgentRow } from '../../../src/shared/runtime-types'
+import type { RuntimeWorktreeAgentRow } from '../../shared/runtime-types'
 
 // Mirrors the desktop AGENT_STATUS_STALE_AFTER_MS (src/shared/agent-status-types.ts:
 // 30 min). Defined locally rather than imported because a runtime-value import

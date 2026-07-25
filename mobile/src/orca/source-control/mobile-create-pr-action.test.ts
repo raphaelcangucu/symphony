@@ -3,7 +3,7 @@ import type {
   HostedReviewCreationBlockedReason,
   HostedReviewCreationEligibility,
   HostedReviewProvider
-} from '../../../src/shared/hosted-review'
+} from '../../shared/hosted-review'
 import { buildMobileCreatePrAction } from './mobile-create-pr-action'
 
 function eligibility(

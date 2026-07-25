@@ -207,7 +207,7 @@ import {
 } from '../../../../src/orca/session/mobile-session-create-warning-state'
 import { colors, spacing } from '../../../../src/orca/theme/mobile-theme'
 import { styles } from './mobile-session-styles'
-import type { DiffComment } from '../../../../../src/shared/types'
+import type { DiffComment } from '../../../../src/shared/types'
 import type {
   DiffCommentActions,
   DiffNotesDelivery,

@@ -1,5 +1,5 @@
 import { StyleSheet, Text, View } from 'react-native'
-import type { RuntimeWorktreeAgentRow } from '../../../src/shared/runtime-types'
+import type { RuntimeWorktreeAgentRow } from '../../shared/runtime-types'
 import { colors, spacing } from '../theme/mobile-theme'
 import { agentDisplayLabel, agentDotState, formatTimeAgo } from '../worktree/agent-row-display'
 import { AgentStateDot } from './AgentStateDot'

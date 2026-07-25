@@ -1,7 +1,7 @@
-import { stripLeadingAgentTitleDecorationOrEmpty } from '../../../src/shared/agent-title-decoration'
-import { resolveExplicitTerminalTitleAgentType } from '../../../src/shared/terminal-title-agent-type'
-import type { AgentStatusEntry } from '../../../src/shared/agent-status-types'
-import type { TuiAgent } from '../../../src/shared/types'
+import { stripLeadingAgentTitleDecorationOrEmpty } from '../../shared/agent-title-decoration'
+import { resolveExplicitTerminalTitleAgentType } from '../../shared/terminal-title-agent-type'
+import type { AgentStatusEntry } from '../../shared/agent-status-types'
+import type { TuiAgent } from '../../shared/types'
 import { isBlankBrowserUrl } from '../browser/browser-url'
 import type { MobileSessionTab } from '../../app/h/[hostId]/session/mobile-session-route-types'
 

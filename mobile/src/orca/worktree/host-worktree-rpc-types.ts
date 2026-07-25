@@ -1,5 +1,5 @@
-import type { RepoIcon } from '../../../src/shared/repo-icon'
-import type { ExecutionHostId } from '../../../src/shared/execution-host'
+import type { RepoIcon } from '../../shared/repo-icon'
+import type { ExecutionHostId } from '../../shared/execution-host'
 
 // Locally-typed subset of the desktop status payload read from status.get.
 export type DesktopStatus = {

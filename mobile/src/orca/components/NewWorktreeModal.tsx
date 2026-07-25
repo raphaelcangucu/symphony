@@ -33,8 +33,8 @@ import {
   isMobileTuiAgentEnabled,
   MOBILE_TUI_AGENT_LAUNCH_COMMANDS
 } from '../tasks/mobile-tui-agents'
-import type { PersistedTrustedOrcaHooks, TuiAgent } from '../../../src/shared/types'
-import type { SshConnectionState } from '../../../src/shared/ssh-types'
+import type { PersistedTrustedOrcaHooks, TuiAgent } from '../../shared/types'
+import type { SshConnectionState } from '../../shared/ssh-types'
 import {
   NEW_WORKTREE_AGENT_OPTIONS as AGENT_OPTIONS,
   NEW_WORKTREE_BLANK_AGENT as BLANK_TERMINAL,

@@ -132,8 +132,8 @@ import type {
   PersistedTrustedOrcaHooks,
   SparsePreset,
   TuiAgent
-} from '../../../../src/shared/types'
-import type { SshConnectionState } from '../../../../src/shared/ssh-types'
+} from '../../../src/shared/types'
+import type { SshConnectionState } from '../../../src/shared/ssh-types'
 
 type RepoSummary = {
   id: string

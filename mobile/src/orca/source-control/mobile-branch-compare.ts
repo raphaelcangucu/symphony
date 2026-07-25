@@ -2,7 +2,7 @@ import type {
   GitBranchChangeEntry,
   GitBranchCompareResult,
   GitBranchCompareSummary
-} from '../../../src/shared/types'
+} from '../../shared/types'
 
 export type MobileGitBranchChangeEntry = GitBranchChangeEntry
 export type MobileGitBranchCompareSummary = GitBranchCompareSummary

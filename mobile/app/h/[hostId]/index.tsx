@@ -49,7 +49,7 @@ import { MobileRepoIcon } from '../../../src/orca/components/MobileRepoIcon'
 import { WorktreeListRow } from '../../../src/orca/components/WorktreeListRow'
 import { useNow } from '../../../src/orca/hooks/use-now'
 import { useActiveWorktreeScroll } from '../../../src/orca/hooks/use-active-worktree-scroll'
-import type { RepoIcon } from '../../../../src/shared/repo-icon'
+import type { RepoIcon } from '../../../src/shared/repo-icon'
 import { PickerModal } from '../../../src/orca/components/PickerModal'
 import { ActionSheetContent } from '../../../src/orca/components/ActionSheetModal'
 import { ConfirmModal } from '../../../src/orca/components/ConfirmModal'
@@ -92,7 +92,7 @@ import {
   WORKSPACE_SORT_OPTIONS as SORT_OPTIONS
 } from '../../../src/orca/worktree/workspace-list-picker-options'
 import type { DesktopStatus, RepoSummary } from '../../../src/orca/worktree/host-worktree-rpc-types'
-import type { WorkspaceStatusDefinition } from '../../../../src/shared/types'
+import type { WorkspaceStatusDefinition } from '../../../src/shared/types'
 import { DEFAULT_MOBILE_WORKSPACE_STATUSES } from '../../../src/orca/worktree/mobile-workspace-statuses'
 
 function isErrorVerdict(v: ConnectionVerdict): boolean {

@@ -5,7 +5,7 @@ import {
   trustedOrcaHooksWithSetupApproval,
   wasSetupHookPreviouslyApproved
 } from './setup-hook-trust'
-import type { PersistedTrustedOrcaHooks } from '../../../src/shared/types'
+import type { PersistedTrustedOrcaHooks } from '../../shared/types'
 
 describe('setup hook trust', () => {
   it('trusts a setup script only when the approved hash matches', () => {

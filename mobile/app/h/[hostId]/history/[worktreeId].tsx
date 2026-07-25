@@ -11,7 +11,7 @@ import {
   mapMobileCommitRows,
   type MobileCommitRow
 } from '../../../../src/orca/source-control/mobile-git-history'
-import type { GitBranchChangeEntry } from '../../../../../src/shared/types'
+import type { GitBranchChangeEntry } from '../../../../src/shared/types'
 
 function firstParam(value: string | string[] | undefined): string {
   return Array.isArray(value) ? (value[0] ?? '') : (value ?? '')

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { resolveSourceControlCommitAreaPrimaryActionDecision } from '../../../src/shared/source-control-primary-action-decision'
+import { resolveSourceControlCommitAreaPrimaryActionDecision } from '../../shared/source-control-primary-action-decision'
 import {
   resolveMobileSourceControlCommitAreaPrimaryActionDecision,
   type MobileSourceControlPrimaryActionDecisionInputs

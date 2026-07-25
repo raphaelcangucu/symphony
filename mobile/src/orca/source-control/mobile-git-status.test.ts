@@ -1,5 +1,5 @@
 import { describe, expect, expectTypeOf, it } from 'vitest'
-import type { GitStatusResult } from '../../../src/shared/git-status-types'
+import type { GitStatusResult } from '../../shared/git-status-types'
 import {
   buildMobileSourceControlSections,
   countStagedEntries,

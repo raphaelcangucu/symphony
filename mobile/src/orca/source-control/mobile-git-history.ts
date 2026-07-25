@@ -1,4 +1,4 @@
-import type { GitHistoryItem, GitHistoryResult } from '../../../src/shared/git-history-types'
+import type { GitHistoryItem, GitHistoryResult } from '../../shared/git-history-types'
 import type { RpcClient } from '../transport/rpc-client'
 import type { RpcSuccess } from '../transport/types'
 

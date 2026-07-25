@@ -1,4 +1,4 @@
-import type { DiffComment, DiffReviewScope, MobileDiffReviewState } from '../../../src/shared/types'
+import type { DiffComment, DiffReviewScope, MobileDiffReviewState } from '../../shared/types'
 import type { MobileGitBranchChangeEntry } from '../source-control/mobile-branch-compare'
 import {
   isMobileGitDiscardableEntry,

@@ -1,4 +1,4 @@
-import type { RuntimeSpeechSetupState } from '../../../src/shared/runtime-types'
+import type { RuntimeSpeechSetupState } from '../../shared/runtime-types'
 import type { RpcClient } from '../transport/rpc-client'
 import type { RpcSuccess } from '../transport/types'
 

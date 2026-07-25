@@ -1,5 +1,5 @@
-import type { RuntimeTerminalPathResolution } from '../../../src/shared/runtime-types'
-import { filesystemPathToFileUri } from '../../../src/shared/file-uri-path'
+import type { RuntimeTerminalPathResolution } from '../../shared/runtime-types'
+import { filesystemPathToFileUri } from '../../shared/file-uri-path'
 import { createMobileFilePreviewHref } from '../files/mobile-file-preview-route'
 import { classifyMobileArtifact } from './mobile-artifact-kind'
 import type { RpcClient } from '../transport/rpc-client'

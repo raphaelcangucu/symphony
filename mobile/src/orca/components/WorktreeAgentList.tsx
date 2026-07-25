@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { StyleSheet, View } from 'react-native'
-import type { RuntimeWorktreeAgentRow } from '../../../src/shared/runtime-types'
+import type { RuntimeWorktreeAgentRow } from '../../shared/runtime-types'
 import { flattenAgentRowLineage } from '../worktree/agent-row-lineage'
 import { WorktreeAgentRow } from './WorktreeAgentRow'
 

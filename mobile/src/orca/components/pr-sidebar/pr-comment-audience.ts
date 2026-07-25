@@ -1,4 +1,4 @@
-import type { PRComment } from '../../../../src/shared/types'
+import type { PRComment } from '../../../shared/types'
 
 // Audience filtering for the PR comment timeline, ported from the desktop helper
 // (src/renderer/src/lib/pr-comment-audience.ts) minus its i18n wrapper so it stays

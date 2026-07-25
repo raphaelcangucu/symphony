@@ -1,4 +1,4 @@
-import type { SshConnectionState, SshConnectionStatus } from '../../../src/shared/ssh-types'
+import type { SshConnectionState, SshConnectionStatus } from '../../shared/ssh-types'
 
 export type WorkspaceSshGate = {
   status: SshConnectionStatus | null

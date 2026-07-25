@@ -1,4 +1,4 @@
-import type { PRComment, PRState } from '../../../src/shared/types'
+import type { PRComment, PRState } from '../../shared/types'
 
 // Pure helpers for the interactive PR comment timeline (reply / resolve / add
 // root comment). Kept free of React/native imports so they unit-test under the

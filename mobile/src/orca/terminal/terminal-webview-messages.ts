@@ -1,4 +1,4 @@
-import type { RuntimeMobileTerminalTheme } from '../../../src/shared/runtime-types'
+import type { RuntimeMobileTerminalTheme } from '../../shared/runtime-types'
 import type { TerminalOscLinkRange } from './terminal-osc-link-ranges'
 
 export type TerminalWebViewCommand =

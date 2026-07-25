@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   TERMINAL_FILE_LINK_TAP_CONFORMANCE_CASES,
   columnForTerminalFileLinkTap
-} from '../../../src/shared/terminal-file-link-conformance'
+} from '../../shared/terminal-file-link-conformance'
 import { TERMINAL_PATH_TAP_JS } from './terminal-path-tap-injected'
 import { matchFilePathAtColumn, parsePathWithOptionalLineColumn } from './terminal-path-tap'
 

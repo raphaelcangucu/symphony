@@ -5,7 +5,7 @@ export {
   buildFixCommitFailurePrompt,
   hasExpandedCommitFailureDetails,
   summarizeCommitFailure
-} from '../../../src/shared/source-control-commit-failure'
+} from '../../shared/source-control-commit-failure'
 
 export type MobileCommitFailureRecovery = {
   error: string

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { GitHistoryItem, GitHistoryResult } from '../../../src/shared/git-history-types'
+import type { GitHistoryItem, GitHistoryResult } from '../../shared/git-history-types'
 import { formatCommitTime, mapMobileCommitRows, toMobileCommitRow } from './mobile-git-history'
 
 const NOW = 1_000_000_000_000

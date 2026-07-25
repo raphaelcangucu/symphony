@@ -1,4 +1,4 @@
-import type { RuntimeWorktreeAgentRow } from '../../../src/shared/runtime-types'
+import type { RuntimeWorktreeAgentRow } from '../../shared/runtime-types'
 
 export type Worktree = {
   sectionListKey?: string

@@ -9,9 +9,9 @@ import type {
   PRCheckRunDetails,
   PRCheckStep,
   PRInfo
-} from '../../../src/shared/types'
+} from '../../shared/types'
 import { readPRComments } from './github-pr-comment-parsers'
-import type { HostedReviewInfo } from '../../../src/shared/hosted-review'
+import type { HostedReviewInfo } from '../../shared/hosted-review'
 import {
   isRecord,
   readAssignableUserArray,

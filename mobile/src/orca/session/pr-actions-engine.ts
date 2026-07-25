@@ -1,4 +1,4 @@
-import type { GitHubPRMergeMethod, PRState } from '../../../src/shared/types'
+import type { GitHubPRMergeMethod, PRState } from '../../shared/types'
 import { classifyPrSidebarFailure } from './mobile-pr-sidebar-state'
 import { createOptimisticField, type OptimisticField } from './optimistic-write-sequence'
 import type { GitHubPrMutationOutcome } from './github-pr-mutations'

@@ -6,7 +6,7 @@ import { useMobileCommitMessageGeneration } from './use-mobile-commit-message-ge
 import { useMobileSourceControlCommitRunners } from './use-mobile-source-control-commit-runners'
 import { useMobileSourceControlActionSheetRunners } from './use-mobile-source-control-action-sheet-runners'
 import { useMobileCreatePrRunner } from './use-mobile-create-pr-runner'
-import type { RuntimeGitLocalBranches } from '../../../src/shared/runtime-types'
+import type { RuntimeGitLocalBranches } from '../../shared/runtime-types'
 import type { MobileGitStatusResult } from './mobile-git-status'
 import type { LoadStatusOptions } from './mobile-source-control-screen-state'
 import type {

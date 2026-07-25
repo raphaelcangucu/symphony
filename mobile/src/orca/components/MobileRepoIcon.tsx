@@ -22,7 +22,7 @@ import {
   Wrench
 } from 'lucide-react-native'
 import { Image, StyleSheet, Text, View } from 'react-native'
-import type { RepoIcon } from '../../../src/shared/repo-icon'
+import type { RepoIcon } from '../../shared/repo-icon'
 import { colors } from '../theme/mobile-theme'
 
 // The lucide names the desktop repo-icon picker offers (src/renderer/src/

@@ -10,8 +10,8 @@ import type {
   PRMergeableState,
   PRReviewDecision,
   PRState
-} from '../../../src/shared/types'
-import type { HostedReviewProvider } from '../../../src/shared/hosted-review'
+} from '../../shared/types'
+import type { HostedReviewProvider } from '../../shared/hosted-review'
 
 // Primitive + enum value readers shared by the github.* PR parsers. Each narrows
 // `unknown` defensively (never throws) so RPC payloads can be parsed safely.

@@ -8,7 +8,7 @@ import { MOBILE_TUI_AGENT_AUTO_PICK_ORDER } from './mobile-tui-agents'
 const currentDir = import.meta.dirname
 
 function readDesktopSharedFile(relativePath: string): string {
-  return readFileSync(resolve(currentDir, '../../../src/shared', relativePath), 'utf8')
+  return readFileSync(resolve(currentDir, '../../shared', relativePath), 'utf8')
 }
 
 function parseDesktopAutoPickOrder(): string[] {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { AgentStatusEntry } from '../../../src/shared/agent-status-types'
-import type { TuiAgent } from '../../../src/shared/types'
+import type { AgentStatusEntry } from '../../shared/agent-status-types'
+import type { TuiAgent } from '../../shared/types'
 import type { MobileSessionTab } from '../../app/h/[hostId]/session/mobile-session-route-types'
 import {
   getMobileSessionTabTitle,

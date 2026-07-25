@@ -2,7 +2,7 @@ import type {
   DiffReviewScope,
   MobileDiffReviewFileState,
   MobileDiffReviewState
-} from '../../../src/shared/types'
+} from '../../shared/types'
 
 export type MobileDiffReviewFileDescriptor = {
   key: string

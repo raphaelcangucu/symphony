@@ -1,6 +1,6 @@
 import type { RpcClient } from '../transport/rpc-client'
 import type { RpcSuccess } from '../transport/types'
-import type { HostedReviewProvider } from '../../../src/shared/hosted-review'
+import type { HostedReviewProvider } from '../../shared/hosted-review'
 
 // Link / unlink review metadata via worktree.set (the same path desktop uses).
 // GitHub's existing manual link flow writes linkedPR; hosted-review creation maps

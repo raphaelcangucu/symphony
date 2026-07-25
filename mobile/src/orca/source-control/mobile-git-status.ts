@@ -4,7 +4,7 @@ import type {
   GitStatusEntry,
   GitStatusResult,
   GitUpstreamStatus
-} from '../../../src/shared/git-status-types'
+} from '../../shared/git-status-types'
 
 export type MobileGitFileStatus = GitFileStatus
 export type MobileGitStagingArea = GitStagingArea

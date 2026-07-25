@@ -1,4 +1,4 @@
-import type { GitHubWorkItemDetails, PRCheckDetail, PRInfo } from '../../../src/shared/types'
+import type { GitHubWorkItemDetails, PRCheckDetail, PRInfo } from '../../shared/types'
 import type { GitHubPrReadOutcome, GitHubPrRepoSlug } from './github-pr-rpc'
 import { resolveLinkedPrNumber } from './mobile-pr-sidebar-resolve'
 
@@ -47,7 +47,7 @@ export type PrSidebarLoadDeps = {
     worktreeId: string,
     args: { branch: string; linkedGitHubPR?: number | null }
   ) => Promise<
-    GitHubPrReadOutcome<import('../../../src/shared/hosted-review').HostedReviewInfo | null>
+    GitHubPrReadOutcome<import('../../shared/hosted-review').HostedReviewInfo | null>
   >
   // The worktree's persisted linkedPR (fallback resolver for closed/merged PRs).
   // Fetched in parallel with forBranch to keep it off the critical path.

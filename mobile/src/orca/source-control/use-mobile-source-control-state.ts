@@ -9,7 +9,7 @@ import { buildMobileSourceControlPrimaryAction } from './mobile-source-control-p
 import { useMobileSourceControlRunners } from './use-mobile-source-control-runners'
 import { useMobileSourceControlCreatePrAction } from './use-mobile-source-control-create-pr-action'
 import { useMobileSourceControlKeyboardLift } from './use-mobile-source-control-keyboard-lift'
-import type { RuntimeGitLocalBranches } from '../../../src/shared/runtime-types'
+import type { RuntimeGitLocalBranches } from '../../shared/runtime-types'
 import {
   buildMobileBranchCompareSection,
   canOpenMobileBranchCompareDiff,

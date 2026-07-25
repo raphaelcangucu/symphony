@@ -1,4 +1,4 @@
-import type { TerminalOscLinkRange } from '../../../src/shared/terminal-osc-link-ranges'
+import type { TerminalOscLinkRange } from '../../shared/terminal-osc-link-ranges'
 
 export type { TerminalOscLinkRange }
 

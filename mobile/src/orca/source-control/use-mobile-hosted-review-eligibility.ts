@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { HostedReviewCreationEligibility } from '../../../src/shared/hosted-review'
+import type { HostedReviewCreationEligibility } from '../../shared/hosted-review'
 import type { RpcClient } from '../transport/rpc-client'
 import type { ConnectionState } from '../transport/types'
 import {

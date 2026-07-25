@@ -1,4 +1,4 @@
-import type { DiffComment, DiffReviewScope } from '../../../src/shared/types'
+import type { DiffComment, DiffReviewScope } from '../../shared/types'
 
 export type CreateMobileDiffCommentInput = {
   worktreeId: string

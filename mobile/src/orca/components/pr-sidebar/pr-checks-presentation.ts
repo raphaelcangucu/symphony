@@ -1,4 +1,4 @@
-import type { PRCheckDetail, PRState } from '../../../../src/shared/types'
+import type { PRCheckDetail, PRState } from '../../../shared/types'
 import { prStateToken } from '../pr-state-token'
 
 // Pure presentation logic for the PR sidebar's checks + state badge. No React /

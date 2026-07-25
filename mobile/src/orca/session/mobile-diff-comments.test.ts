@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { DiffComment } from '../../../src/shared/types'
+import type { DiffComment } from '../../shared/types'
 import {
   addMobileDiffComment,
   formatDiffComments,

@@ -1,4 +1,4 @@
-import type { HostedReviewProvider } from '../../../src/shared/hosted-review'
+import type { HostedReviewProvider } from '../../shared/hosted-review'
 
 // Provider-aware review labels, ported from the desktop localized-copy mapping
 // (src/renderer/src/i18n/hosted-review-localized-copy.ts) minus i18n. GitLab uses

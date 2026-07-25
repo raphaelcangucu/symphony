@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { PRCheckRunDetails } from '../../../../src/shared/types'
+import type { PRCheckRunDetails } from '../../../shared/types'
 import { presentCheckDetail } from './pr-check-detail-content'
 
 function details(over: Partial<PRCheckRunDetails>): PRCheckRunDetails {
