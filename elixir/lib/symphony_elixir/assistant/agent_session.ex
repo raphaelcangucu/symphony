@@ -1873,7 +1873,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
         # Backend returned a session/thread id: persist both the agent kind and the id.
         with {:ok, updated_thread} <- History.set_thread_agent(thread, agent_kind),
              {:ok, updated_thread} <- History.put_agent_thread_id(updated_thread, agent_kind, backend_id) do
-          {:ok, maybe_sync_fresh_codex_thread(thread, updated_thread, agent_kind)}
+          {:ok, maybe_sync_codex_thread(updated_thread, agent_kind)}
         end
 
       stored_kind != agent_kind and is_binary(stored_kind) ->
@@ -1899,6 +1899,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
 
   defp maybe_put_codex_thread_name(opts, thread, "codex") do
     if codex_thread_id(thread) do
+      NativeThreadNames.sync(thread)
       opts
     else
       case Map.get(thread, :title) do
@@ -1916,11 +1917,8 @@ defmodule SymphonyElixir.Assistant.AgentSession do
 
   defp maybe_put_codex_thread_name(opts, _thread, _agent_kind), do: opts
 
-  defp maybe_sync_fresh_codex_thread(previous_thread, updated_thread, "codex") do
-    if codex_thread_id(previous_thread), do: updated_thread, else: NativeThreadNames.sync(updated_thread)
-  end
-
-  defp maybe_sync_fresh_codex_thread(_previous_thread, updated_thread, _agent_kind), do: updated_thread
+  defp maybe_sync_codex_thread(updated_thread, "codex"), do: NativeThreadNames.sync(updated_thread)
+  defp maybe_sync_codex_thread(updated_thread, _agent_kind), do: updated_thread
 
   defp codex_thread_id(thread) do
     case History.agent_thread_id(thread, "codex") || Map.get(thread, :codex_thread_id) do

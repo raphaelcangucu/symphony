@@ -4,8 +4,8 @@ defmodule SymphonyElixir.Assistant.NativeThreadNames do
   thread names.
 
   Symphony remains the source of truth. Native naming failures are logged and
-  never roll back a persisted session title; the next Codex turn also retries
-  the canonical title through its normal start/resume options.
+  never roll back a persisted session title; every completed Codex turn also
+  retries the canonical title after persisting the returned native thread id.
   """
 
   require Logger
@@ -20,13 +20,18 @@ defmodule SymphonyElixir.Assistant.NativeThreadNames do
     try do
       result =
         :global.trans({{__MODULE__, lock_id(thread)}, self()}, fn ->
-          current = reload_thread(thread, opts)
-          do_sync(current, opts)
+          case reload_thread(thread, opts) do
+            %Thread{} = current -> do_sync(current, opts)
+            :skip -> :skip
+          end
         end)
 
       case result do
         %Thread{} = current ->
           current
+
+        :skip ->
+          thread
 
         unexpected ->
           log_failure(native_thread_id(thread), {:lock_failed, unexpected})
@@ -71,12 +76,12 @@ defmodule SymphonyElixir.Assistant.NativeThreadNames do
     end
   end
 
-  defp reload_thread(%Thread{id: id} = thread, opts) when is_integer(id) and id > 0 do
+  defp reload_thread(%Thread{id: id}, opts) when is_integer(id) and id > 0 do
     reloader = Keyword.get(opts, :reloader, &History.get_thread/1)
 
     case reloader.(id) do
       {:ok, %Thread{} = current} -> current
-      _other -> thread
+      _other -> :skip
     end
   end
 
@@ -87,7 +92,7 @@ defmodule SymphonyElixir.Assistant.NativeThreadNames do
     thread_id = native_thread_id(thread)
     title = nonblank(thread.title)
 
-    if workspace && thread_id && title do
+    if codex_active?(thread) && workspace && thread_id && title do
       {:ok, workspace, thread_id, title}
     else
       :skip
@@ -97,6 +102,8 @@ defmodule SymphonyElixir.Assistant.NativeThreadNames do
   defp native_thread_id(%Thread{} = thread) do
     nonblank(History.agent_thread_id(thread, "codex")) || nonblank(thread.codex_thread_id)
   end
+
+  defp codex_active?(%Thread{agent_kind: agent_kind}), do: agent_kind in [nil, "codex"]
 
   defp lock_id(%Thread{id: id}) when is_integer(id) and id > 0, do: id
   defp lock_id(%Thread{} = thread), do: native_thread_id(thread) || make_ref()

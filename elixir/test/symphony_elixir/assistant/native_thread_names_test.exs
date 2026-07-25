@@ -9,7 +9,6 @@ defmodule SymphonyElixir.Assistant.NativeThreadNamesTest do
     test_pid = self()
 
     thread = %Thread{
-      id: 13,
       title: "  Chat · SYM-13 · Native titles  ",
       workspace_path: "/tmp/SYM-13",
       agent_thread_ids: %{"codex" => "codex-thread-13"}
@@ -29,7 +28,6 @@ defmodule SymphonyElixir.Assistant.NativeThreadNamesTest do
     test_pid = self()
 
     thread = %Thread{
-      id: 14,
       title: "Legacy title",
       workspace_path: "/tmp/SYM-14",
       codex_thread_id: "legacy-codex-thread",
@@ -82,9 +80,21 @@ defmodule SymphonyElixir.Assistant.NativeThreadNamesTest do
            )
   end
 
+  test "skips historical Codex ids when another agent is active" do
+    setter = fn _workspace, _thread_id, _name, _opts -> flunk("setter must not run") end
+
+    thread = %Thread{
+      title: "Claude session",
+      workspace_path: "/tmp/claude",
+      agent_kind: "claude",
+      agent_thread_ids: %{"codex" => "historical-codex-id"}
+    }
+
+    assert NativeThreadNames.sync(thread, setter: setter) == thread
+  end
+
   test "logs native failures without rolling back the Symphony title" do
     thread = %Thread{
-      id: 15,
       title: "Keep this title",
       workspace_path: "/tmp/SYM-15",
       agent_thread_ids: %{"codex" => "codex-thread-15"}
@@ -101,7 +111,6 @@ defmodule SymphonyElixir.Assistant.NativeThreadNamesTest do
 
   test "contains setter exceptions, exits, and unexpected results" do
     thread = %Thread{
-      id: 16,
       title: "Keep this title",
       workspace_path: "/tmp/SYM-16",
       agent_thread_ids: %{"codex" => "codex-thread-16"}
@@ -144,11 +153,26 @@ defmodule SymphonyElixir.Assistant.NativeThreadNamesTest do
     assert_receive {:canonical_name, "Current title"}
   end
 
+  test "skips synchronization when a persisted thread cannot be reloaded" do
+    thread = %Thread{
+      id: 19,
+      title: "Potentially stale",
+      workspace_path: "/tmp/SYM-19",
+      agent_thread_ids: %{"codex" => "codex-thread-19"}
+    }
+
+    setter = fn _workspace, _thread_id, _name, _opts -> flunk("setter must not run") end
+
+    assert NativeThreadNames.sync(thread,
+             reloader: fn 19 -> {:error, :not_found} end,
+             setter: setter
+           ) == thread
+  end
+
   test "serializes concurrent native updates for the same Symphony thread" do
     test_pid = self()
 
     thread = %Thread{
-      id: 18,
       title: "Canonical title",
       workspace_path: "/tmp/SYM-18",
       agent_thread_ids: %{"codex" => "codex-thread-18"}
