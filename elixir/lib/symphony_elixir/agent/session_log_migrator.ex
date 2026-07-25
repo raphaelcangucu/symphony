@@ -186,8 +186,7 @@ defmodule SymphonyElixir.Agent.SessionLogMigrator do
     slug = String.trim(project_slug)
 
     from(t in Thread,
-      where:
-        not is_nil(t.workspace_path) and t.workspace_path != "" and t.project_slug == ^slug
+      where: not is_nil(t.workspace_path) and t.workspace_path != "" and t.project_slug == ^slug
     )
     |> Repo.all()
   end

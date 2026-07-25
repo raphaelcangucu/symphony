@@ -364,9 +364,7 @@ defmodule SymphonyElixir.IssueDispatch do
         :ok
 
       {:error, reason} ->
-        Logger.warning(
-          "Hard reset could not archive execution session identifier=#{identifier} reason=#{inspect(reason)}"
-        )
+        Logger.warning("Hard reset could not archive execution session identifier=#{identifier} reason=#{inspect(reason)}")
 
         :ok
     end

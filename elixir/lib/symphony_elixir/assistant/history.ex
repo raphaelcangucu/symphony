@@ -11,6 +11,7 @@ defmodule SymphonyElixir.Assistant.History do
     TitleGenerator,
     TurnTimeline
   }
+
   alias SymphonyElixir.{ExecutionMode, Workspace}
   alias SymphonyElixir.LocalTracker.{Context, IssueAdapter}
   alias SymphonyElixir.Recents.Broadcaster, as: RecentsBroadcaster
@@ -1055,7 +1056,7 @@ defmodule SymphonyElixir.Assistant.History do
   # `:activity` keeps in-progress threads in the fetch window ahead of idle/closed
   # ones so project-session pagination does not drop live work.
   defp order_threads(query, :activity) do
-    order_by(query, [t], [
+    order_by(query, [t],
       asc:
         fragment(
           "CASE ? WHEN 'active' THEN 0 WHEN 'error' THEN 1 WHEN 'closed' THEN 2 WHEN 'archived' THEN 3 ELSE 4 END",
@@ -1063,7 +1064,7 @@ defmodule SymphonyElixir.Assistant.History do
         ),
       desc: t.updated_at,
       desc: t.id
-    ])
+    )
   end
 
   defp order_threads(query, _order) do

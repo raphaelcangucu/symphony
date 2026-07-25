@@ -73,6 +73,7 @@ defmodule SymphonyElixir.Observability.SlowQueryLogger do
   defp query_result(_metadata), do: "unknown"
 
   defp native_to_ms(nil), do: 0
+
   defp native_to_ms(native) when is_integer(native) do
     max(System.convert_time_unit(native, :native, :millisecond), 0)
   end

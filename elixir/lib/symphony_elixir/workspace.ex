@@ -108,9 +108,9 @@ defmodule SymphonyElixir.Workspace do
   under a custom `workspace.root` are not rejected as outside the process root.
   """
   @spec remove(Path.t()) :: {:ok, [String.t()]} | {:error, term(), String.t()}
-  @spec remove(Path.t(), Path.t()) :: {:ok, [String.t()]} | {:error, term(), String.t()}
   def remove(workspace), do: remove(workspace, Config.workspace_root())
 
+  @spec remove(Path.t(), Path.t()) :: {:ok, [String.t()]} | {:error, term(), String.t()}
   def remove(workspace, allowed_root) when is_binary(workspace) and is_binary(allowed_root) do
     case File.exists?(workspace) do
       true ->

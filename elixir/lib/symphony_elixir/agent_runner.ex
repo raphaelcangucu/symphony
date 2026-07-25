@@ -352,6 +352,7 @@ defmodule SymphonyElixir.AgentRunner do
   end
 
   defp issue_agent_kind_for_opts(%Issue{} = issue), do: issue_agent_kind(issue)
+
   defp issue_agent_kind_for_opts(issue) when is_map(issue) do
     issue_agent_kind(%Issue{
       project_slug: Map.get(issue, :project_slug),

@@ -81,6 +81,7 @@ defmodule SymphonyElixir.Jira.Adf do
 
       quote_line?(line) ->
         {quote_lines, remaining} = take_while_quote([line | rest], [])
+
         inner =
           quote_lines
           |> Enum.map(&strip_quote_prefix/1)
@@ -293,7 +294,7 @@ defmodule SymphonyElixir.Jira.Adf do
         {acc, rest}
 
       rule?(line) or heading_line(line) != nil or quote_line?(line) or list_line?(line) or
-          String.match?(line, ~r/^```/) or table_start?(line, rest) ->
+        String.match?(line, ~r/^```/) or table_start?(line, rest) ->
         {acc, [line | rest]}
 
       true ->
@@ -338,8 +339,7 @@ defmodule SymphonyElixir.Jira.Adf do
   defp parse_inline_segment(text, acc) do
     patterns = [
       {~r/^`([^`]+)`/, fn [_, code] -> text_node(code, [%{"type" => "code"}]) end},
-      {~r/^\[([^\]]+)\]\(([^)]+)\)/,
-       fn [_, label, href] -> text_node(label, [%{"type" => "link", "attrs" => %{"href" => href}}]) end},
+      {~r/^\[([^\]]+)\]\(([^)]+)\)/, fn [_, label, href] -> text_node(label, [%{"type" => "link", "attrs" => %{"href" => href}}]) end},
       {~r/^\*\*(.+?)\*\*/, fn [_, inner] -> text_node(inner, [%{"type" => "strong"}]) end},
       {~r/^~~(.+?)~~/, fn [_, inner] -> text_node(inner, [%{"type" => "strike"}]) end},
       {~r/^\*(.+?)\*/, fn [_, inner] -> text_node(inner, [%{"type" => "em"}]) end}

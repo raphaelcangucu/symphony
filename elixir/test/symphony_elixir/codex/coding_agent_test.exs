@@ -1,6 +1,94 @@
 defmodule SymphonyElixir.Codex.CodingAgentTest do
   use SymphonyElixir.TestSupport
 
+  describe "native thread presentation" do
+    test "sets a trimmed native thread name before starting the turn" do
+      with_fake_lifecycle_server(fn workspace, issue, trace_file ->
+        assert {:ok, _result} =
+                 AppServer.run(workspace, "Build the feature", issue, thread_name: "  Chat · SYM-13 · Native titles  ")
+
+        messages = outbound_messages(trace_file)
+
+        assert message_with_method(messages, "thread/name/set") == %{
+                 "id" => 9,
+                 "method" => "thread/name/set",
+                 "params" => %{
+                   "threadId" => "thread-lifecycle",
+                   "name" => "Chat · SYM-13 · Native titles"
+                 }
+               }
+
+        assert message_order(messages) == [
+                 "initialize",
+                 "initialized",
+                 "thread/start",
+                 "thread/name/set",
+                 "turn/start"
+               ]
+      end)
+    end
+
+    test "does not send a native thread name for a blank value" do
+      with_fake_lifecycle_server(fn workspace, issue, trace_file ->
+        assert {:ok, _result} =
+                 AppServer.run(workspace, "Build the feature", issue, thread_name: " \n ")
+
+        refute message_with_method(outbound_messages(trace_file), "thread/name/set")
+      end)
+    end
+
+    test "archives an auxiliary native thread after its turn completes" do
+      with_fake_lifecycle_server(fn workspace, issue, trace_file ->
+        assert {:ok, _result} =
+                 AppServer.run(workspace, "Generate a title", issue, archive_on_stop: true)
+
+        messages = outbound_messages(trace_file)
+
+        assert message_with_method(messages, "thread/archive") == %{
+                 "id" => 10,
+                 "method" => "thread/archive",
+                 "params" => %{"threadId" => "thread-lifecycle"}
+               }
+
+        assert List.last(message_order(messages)) == "thread/archive"
+      end)
+    end
+
+    test "preserves a completed turn when auxiliary archival cannot be sent" do
+      with_fake_archive_disconnect_server(fn workspace, issue ->
+        assert {:ok, result} =
+                 AppServer.run(workspace, "Generate a title", issue, archive_on_stop: true)
+
+        assert result[:result] == :turn_completed
+      end)
+    end
+
+    test "renames an existing native thread out of band" do
+      with_fake_lifecycle_server(fn workspace, _issue, trace_file ->
+        assert :ok =
+                 AppServer.set_thread_name(
+                   workspace,
+                   "thread-existing",
+                   "  Renamed from Symphony  ",
+                   workspace_root: Path.dirname(workspace)
+                 )
+
+        messages = outbound_messages(trace_file)
+
+        assert message_with_method(messages, "thread/name/set")["params"] == %{
+                 "threadId" => "thread-existing",
+                 "name" => "Renamed from Symphony"
+               }
+
+        assert message_order(messages) == [
+                 "initialize",
+                 "initialized",
+                 "thread/name/set"
+               ]
+      end)
+    end
+  end
+
   describe "goal mode" do
     test "sets the trimmed thread goal after thread start and before turn start when goals are enabled" do
       with_fake_goal_server(fn workspace, issue, trace_file ->
@@ -18,7 +106,13 @@ defmodule SymphonyElixir.Codex.CodingAgentTest do
                  "params" => %{"threadId" => "thread-goal", "objective" => "Ship the feature", "status" => "active"}
                }
 
-        assert message_order(messages) == ["initialize", "initialized", "thread/start", "thread/goal/set", "turn/start"]
+        assert Enum.take(message_order(messages), 5) == [
+                 "initialize",
+                 "initialized",
+                 "thread/start",
+                 "thread/goal/set",
+                 "turn/start"
+               ]
       end)
     end
 
@@ -521,6 +615,140 @@ defmodule SymphonyElixir.Codex.CodingAgentTest do
     end
   end
 
+  defp with_fake_lifecycle_server(fun) when is_function(fun, 3) do
+    test_root =
+      Path.join(
+        System.tmp_dir!(),
+        "symphony-elixir-coding-agent-lifecycle-#{System.unique_integer([:positive])}"
+      )
+
+    try do
+      workspace_root = Path.join(test_root, "workspaces")
+      workspace = Path.join(workspace_root, "MT-LIFECYCLE")
+      codex_binary = Path.join(test_root, "fake-codex")
+      trace_file = Path.join(test_root, "codex-lifecycle.trace")
+
+      File.mkdir_p!(workspace)
+      write_lifecycle_fake_codex!(codex_binary, trace_file)
+
+      write_workflow_file!(Workflow.workflow_file_path(),
+        workspace_root: workspace_root,
+        command: "#{codex_binary} app-server"
+      )
+
+      issue = %Issue{
+        id: "issue-lifecycle",
+        identifier: "MT-LIFECYCLE",
+        title: "Native thread lifecycle",
+        description: "Exercise Codex thread names and archival",
+        state: "In Progress",
+        url: "https://example.org/issues/MT-LIFECYCLE",
+        labels: ["backend"]
+      }
+
+      fun.(workspace, issue, trace_file)
+    after
+      File.rm_rf(test_root)
+    end
+  end
+
+  defp with_fake_archive_disconnect_server(fun) when is_function(fun, 2) do
+    test_root =
+      Path.join(
+        System.tmp_dir!(),
+        "symphony-elixir-coding-agent-archive-disconnect-#{System.unique_integer([:positive])}"
+      )
+
+    try do
+      workspace_root = Path.join(test_root, "workspaces")
+      workspace = Path.join(workspace_root, "MT-ARCHIVE")
+      codex_binary = Path.join(test_root, "fake-codex")
+
+      File.mkdir_p!(workspace)
+
+      File.write!(codex_binary, """
+      #!/bin/sh
+      while IFS= read -r line; do
+        case "$line" in
+          *'"method":"initialize"'*)
+            printf '%s\\n' '{"id":1,"result":{}}'
+            ;;
+          *'"method":"initialized"'*)
+            ;;
+          *'"method":"thread/start"'*)
+            printf '%s\\n' '{"id":2,"result":{"thread":{"id":"thread-archive-disconnect"}}}'
+            ;;
+          *'"method":"turn/start"'*)
+            printf '%s\\n' '{"id":3,"result":{"turn":{"id":"turn-archive-disconnect"}}}'
+            printf '%s\\n' '{"method":"turn/completed"}'
+            exit 0
+            ;;
+          *)
+            ;;
+        esac
+      done
+      """)
+
+      File.chmod!(codex_binary, 0o755)
+
+      write_workflow_file!(Workflow.workflow_file_path(),
+        workspace_root: workspace_root,
+        command: "#{codex_binary} app-server"
+      )
+
+      issue = %Issue{
+        id: "issue-archive-disconnect",
+        identifier: "MT-ARCHIVE",
+        title: "Archive disconnect",
+        description: "Exercise best-effort archival after app-server exit",
+        state: "In Progress",
+        url: "https://example.org/issues/MT-ARCHIVE",
+        labels: ["backend"]
+      }
+
+      fun.(workspace, issue)
+    after
+      File.rm_rf(test_root)
+    end
+  end
+
+  defp write_lifecycle_fake_codex!(codex_binary, trace_file) do
+    File.write!(codex_binary, """
+    #!/bin/sh
+    trace_file="#{trace_file}"
+
+    while IFS= read -r line; do
+      printf 'JSON:%s\\n' "$line" >> "$trace_file"
+
+      case "$line" in
+        *'"method":"initialize"'*)
+          printf '%s\\n' '{"id":1,"result":{}}'
+          ;;
+        *'"method":"initialized"'*)
+          ;;
+        *'"method":"thread/start"'*)
+          printf '%s\\n' '{"id":2,"result":{"thread":{"id":"thread-lifecycle"}}}'
+          ;;
+        *'"method":"thread/name/set"'*)
+          printf '%s\\n' '{"id":9,"result":{}}'
+          ;;
+        *'"method":"turn/start"'*)
+          printf '%s\\n' '{"id":3,"result":{"turn":{"id":"turn-lifecycle"}}}'
+          printf '%s\\n' '{"method":"turn/completed"}'
+          ;;
+        *'"method":"thread/archive"'*)
+          printf '%s\\n' '{"id":10,"result":{}}'
+          exit 0
+          ;;
+        *)
+          ;;
+      esac
+    done
+    """)
+
+    File.chmod!(codex_binary, 0o755)
+  end
+
   defp with_fake_resume_server(goal_get_mode, fun) when is_function(fun, 3) do
     test_root =
       Path.join(
@@ -882,8 +1110,6 @@ defmodule SymphonyElixir.Codex.CodingAgentTest do
         """
       end)
 
-    turn_completion_count = length(turn_completion_statuses(response_mode))
-
     File.write!(codex_binary, """
     #!/bin/sh
     trace_file="#{trace_file}"
@@ -916,9 +1142,6 @@ defmodule SymphonyElixir.Codex.CodingAgentTest do
               printf '%s\\n' '{"method":"turn/completed"}'
               ;;
           esac
-          if [ "$turn_count" -ge #{turn_completion_count} ]; then
-            exit 0
-          fi
           ;;
         *)
           ;;

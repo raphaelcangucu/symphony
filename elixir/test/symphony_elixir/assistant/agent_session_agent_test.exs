@@ -83,9 +83,7 @@ defmodule SymphonyElixir.Assistant.AgentSessionAgentTest do
     {:ok, thread} = History.set_goal_mode(thread, true, "Audit")
 
     assert {:error, {:authoring_goal_provider_mismatch, "codex", "claude"}} =
-             AgentSession.send_message_to_thread(thread, "switch", %{"agent" => "claude"},
-               runner: fn _, _, _, _ -> flunk("provider mismatch must fail before running") end
-             )
+             AgentSession.send_message_to_thread(thread, "switch", %{"agent" => "claude"}, runner: fn _, _, _, _ -> flunk("provider mismatch must fail before running") end)
 
     assert Repo.get!(SymphonyElixir.Assistant.Thread, thread.id).agent_kind == "codex"
     assert :error = GoalStore.read(workspace, :authoring, thread.id)

@@ -13,6 +13,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
     GitHubAuthoring,
     History,
     IssueDocuments,
+    NativeThreadNames,
     ProjectExploreWorkspace,
     SkillProfiles,
     SubtaskAuthoring,
@@ -78,6 +79,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
            |> Keyword.put(:agent_kind, agent_kind)
            |> Keyword.put(:agent_thread_id, History.agent_thread_id(thread, agent_kind))
            |> maybe_put_codex_resume_thread_id(agent_kind)
+           |> maybe_put_codex_thread_name(thread, agent_kind)
            |> Keyword.put(:assistant_thread_id, thread.id)
            |> maybe_put_authoring_goal(thread, agent_kind),
          history_before_turn <- thread_id |> History.list_messages_for_thread() |> Enum.map(&History.message_payload/1),
@@ -117,6 +119,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
            |> Keyword.put(:agent_kind, agent_kind)
            |> Keyword.put(:agent_thread_id, History.agent_thread_id(thread, agent_kind))
            |> maybe_put_codex_resume_thread_id(agent_kind)
+           |> maybe_put_codex_thread_name(thread, agent_kind)
            |> Keyword.put(:assistant_thread_id, thread.id)
            |> maybe_put_authoring_goal(thread, agent_kind),
          {:ok, trimmed} <- normalize_message(message),
@@ -160,6 +163,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
            |> Keyword.put(:agent_kind, agent_kind)
            |> Keyword.put(:agent_thread_id, History.agent_thread_id(thread, agent_kind))
            |> maybe_put_codex_resume_thread_id(agent_kind)
+           |> maybe_put_codex_thread_name(thread, agent_kind)
            |> Keyword.put(:assistant_thread_id, thread.id)
            |> maybe_put_authoring_goal(thread, agent_kind),
          {:ok, trimmed} <- normalize_message(message),
@@ -203,6 +207,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
            |> Keyword.put(:agent_kind, agent_kind)
            |> Keyword.put(:agent_thread_id, History.agent_thread_id(thread, agent_kind))
            |> maybe_put_codex_resume_thread_id(agent_kind)
+           |> maybe_put_codex_thread_name(thread, agent_kind)
            |> Keyword.put(:assistant_thread_id, thread.id)
            |> maybe_put_authoring_goal(thread, agent_kind),
          {:ok, trimmed} <- normalize_message(message),
@@ -266,6 +271,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
            |> Keyword.put(:agent_kind, agent_kind)
            |> Keyword.put(:agent_thread_id, History.agent_thread_id(thread, agent_kind))
            |> maybe_put_codex_resume_thread_id(agent_kind)
+           |> maybe_put_codex_thread_name(thread, agent_kind)
            |> Keyword.put(:assistant_thread_id, thread.id)
            |> maybe_put_authoring_goal(thread, agent_kind),
          {:ok, trimmed} <- normalize_message(message),
@@ -314,6 +320,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
            |> Keyword.put(:agent_kind, agent_kind)
            |> Keyword.put(:agent_thread_id, History.agent_thread_id(thread, agent_kind))
            |> maybe_put_codex_resume_thread_id(agent_kind)
+           |> maybe_put_codex_thread_name(thread, agent_kind)
            |> Keyword.put(:assistant_thread_id, thread.id)
            |> maybe_put_authoring_goal(thread, agent_kind) do
       continue_goal_turn(thread, context, opts, agent_kind)
@@ -1864,8 +1871,9 @@ defmodule SymphonyElixir.Assistant.AgentSession do
     cond do
       is_binary(backend_id) ->
         # Backend returned a session/thread id: persist both the agent kind and the id.
-        with {:ok, thread} <- History.set_thread_agent(thread, agent_kind) do
-          History.put_agent_thread_id(thread, agent_kind, backend_id)
+        with {:ok, updated_thread} <- History.set_thread_agent(thread, agent_kind),
+             {:ok, updated_thread} <- History.put_agent_thread_id(updated_thread, agent_kind, backend_id) do
+          {:ok, maybe_sync_codex_thread(updated_thread, agent_kind)}
         end
 
       stored_kind != agent_kind and is_binary(stored_kind) ->
@@ -1888,6 +1896,36 @@ defmodule SymphonyElixir.Assistant.AgentSession do
   end
 
   defp maybe_put_codex_resume_thread_id(opts, _agent_kind), do: opts
+
+  defp maybe_put_codex_thread_name(opts, thread, "codex") do
+    if codex_thread_id(thread) do
+      NativeThreadNames.sync(thread)
+      opts
+    else
+      case Map.get(thread, :title) do
+        title when is_binary(title) ->
+          case String.trim(title) do
+            "" -> opts
+            trimmed -> Keyword.put(opts, :thread_name, trimmed)
+          end
+
+        _other ->
+          opts
+      end
+    end
+  end
+
+  defp maybe_put_codex_thread_name(opts, _thread, _agent_kind), do: opts
+
+  defp maybe_sync_codex_thread(updated_thread, "codex"), do: NativeThreadNames.sync(updated_thread)
+  defp maybe_sync_codex_thread(updated_thread, _agent_kind), do: updated_thread
+
+  defp codex_thread_id(thread) do
+    case History.agent_thread_id(thread, "codex") || Map.get(thread, :codex_thread_id) do
+      id when is_binary(id) and id != "" -> id
+      _other -> nil
+    end
+  end
 
   # Resolves the effective agent kind for a turn with the priority chain:
   # active Goal provider > context (per-message) > thread's stored kind > operator default.

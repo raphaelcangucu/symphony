@@ -47,7 +47,11 @@ defmodule SymphonyElixir.HotpathCacheTest do
       key = unique_key(:cold)
       ref = counter()
 
-      value = HotpathCache.fetch_or_store(key, 1_000, fn -> bump(ref); :built end)
+      value =
+        HotpathCache.fetch_or_store(key, 1_000, fn ->
+          bump(ref)
+          :built
+        end)
 
       assert value == :built
       assert count(ref) == 1
@@ -58,8 +62,17 @@ defmodule SymphonyElixir.HotpathCacheTest do
       key = unique_key(:hit)
       ref = counter()
 
-      assert :built = HotpathCache.fetch_or_store(key, 1_000, fn -> bump(ref); :built end)
-      assert :built = HotpathCache.fetch_or_store(key, 1_000, fn -> bump(ref); :rebuilt end)
+      assert :built =
+               HotpathCache.fetch_or_store(key, 1_000, fn ->
+                 bump(ref)
+                 :built
+               end)
+
+      assert :built =
+               HotpathCache.fetch_or_store(key, 1_000, fn ->
+                 bump(ref)
+                 :rebuilt
+               end)
 
       assert count(ref) == 1
     end
@@ -105,7 +118,15 @@ defmodule SymphonyElixir.HotpathCacheTest do
       assert_receive :leader_acquired, 1_000
 
       loser =
-        HotpathCache.fetch_or_store(key, 1_000, fn -> bump(ref); :loser end, wait_ms: 50)
+        HotpathCache.fetch_or_store(
+          key,
+          1_000,
+          fn ->
+            bump(ref)
+            :loser
+          end,
+          wait_ms: 50
+        )
 
       assert loser == :loser
       assert Task.await(leader, 2_000) == :leader
@@ -119,7 +140,15 @@ defmodule SymphonyElixir.HotpathCacheTest do
       Process.sleep(40)
 
       assert :old =
-               HotpathCache.fetch_or_store(key, 500, fn -> Process.sleep(30); :new end, stale_ms: 2_000)
+               HotpathCache.fetch_or_store(
+                 key,
+                 500,
+                 fn ->
+                   Process.sleep(30)
+                   :new
+                 end,
+                 stale_ms: 2_000
+               )
 
       assert :new = eventually(fn -> HotpathCache.fetch(key) end)
     end
@@ -131,7 +160,11 @@ defmodule SymphonyElixir.HotpathCacheTest do
       assert :old = HotpathCache.fetch_or_store(key, 20, fn -> :old end, stale_ms: 2_000)
       Process.sleep(40)
 
-      refresh = fn -> bump(ref); Process.sleep(120); :new end
+      refresh = fn ->
+        bump(ref)
+        Process.sleep(120)
+        :new
+      end
 
       assert :old = HotpathCache.fetch_or_store(key, 500, refresh, stale_ms: 2_000)
       assert :old = HotpathCache.fetch_or_store(key, 500, refresh, stale_ms: 2_000)
@@ -169,8 +202,7 @@ defmodule SymphonyElixir.HotpathCacheTest do
 
       assert_receive {:telemetry, [:symphony, :hotpath, :fetch], %{count: 1}, %{hit: :miss}}
 
-      assert_receive {:telemetry, [:symphony, :hotpath, :recompute], %{duration_ms: duration},
-                      %{outcome: :computed}}
+      assert_receive {:telemetry, [:symphony, :hotpath, :recompute], %{duration_ms: duration}, %{outcome: :computed}}
 
       assert is_integer(duration)
     end

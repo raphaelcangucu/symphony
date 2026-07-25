@@ -52,8 +52,7 @@ defmodule SymphonyElixir.Notion.Url do
     if String.match?(hex, ~r/^[0-9a-f]{32}$/), do: to_uuid(hex), else: nil
   end
 
-  defp to_uuid(<<a::binary-size(8), b::binary-size(4), c::binary-size(4), d::binary-size(4),
-                 e::binary-size(12)>>) do
+  defp to_uuid(<<a::binary-size(8), b::binary-size(4), c::binary-size(4), d::binary-size(4), e::binary-size(12)>>) do
     "#{a}-#{b}-#{c}-#{d}-#{e}" |> String.downcase()
   end
 end
