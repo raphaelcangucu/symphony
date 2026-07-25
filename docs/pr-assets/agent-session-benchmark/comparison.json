@@ -8,7 +8,12 @@
       "symphony_status": "completed",
       "contract": "passed",
       "build": "passed",
-      "e2e": { "status": "passed", "passed": 1, "failed": 0 },
+      "e2e": {
+        "status": "passed",
+        "passed": 1,
+        "failed": 0,
+        "video": "videos/e2e/e2e-session-codex.mp4"
+      },
       "duration_seconds": 1292
     },
     {
@@ -29,7 +34,12 @@
       "symphony_status": "completed",
       "contract": "passed",
       "build": "passed",
-      "e2e": { "status": "passed", "passed": 6, "failed": 0 },
+      "e2e": {
+        "status": "passed",
+        "passed": 6,
+        "failed": 0,
+        "video": "videos/e2e/e2e-session-claude.mp4"
+      },
       "duration_seconds": 689
     },
     {
@@ -40,7 +50,12 @@
       "thread": { "id": 7, "status": "error", "provider_matches": true },
       "contract": "passed",
       "build": "passed",
-      "e2e": { "status": "passed", "passed": 2, "failed": 0 },
+      "e2e": {
+        "status": "passed",
+        "passed": 2,
+        "failed": 0,
+        "video": "videos/e2e/e2e-orchestrator-codex.mp4"
+      },
       "duration_seconds": 1742
     },
     {
@@ -51,7 +66,12 @@
       "thread": { "id": 8, "status": "error", "provider_matches": true },
       "contract": "passed",
       "build": "passed",
-      "e2e": { "status": "failed", "passed": 0, "failed": 1 },
+      "e2e": {
+        "status": "failed",
+        "passed": 0,
+        "failed": 1,
+        "video": "videos/e2e/e2e-orchestrator-cursor-failed.mp4"
+      },
       "duration_seconds": 389
     },
     {
@@ -62,7 +82,12 @@
       "thread": { "id": 9, "status": "error", "provider_matches": true },
       "contract": "passed",
       "build": "passed",
-      "e2e": { "status": "passed", "passed": 6, "failed": 0 },
+      "e2e": {
+        "status": "passed",
+        "passed": 6,
+        "failed": 0,
+        "video": "videos/e2e/e2e-orchestrator-claude.mp4"
+      },
       "duration_seconds": 715
     }
   ]

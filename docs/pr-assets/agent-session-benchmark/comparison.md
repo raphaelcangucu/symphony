@@ -32,3 +32,12 @@ Prompt SHA-256:
 - [Sessão Codex em vídeo MP4](videos/session-codex-4x.mp4)
 - [Falha Cursor em vídeo MP4](videos/session-cursor-blocked-4x.mp4)
 - [Sessão Claude em vídeo MP4](videos/session-claude-4x.mp4)
+
+### Vídeos E2E por página gerada
+
+- [Sessão Codex — 1 E2E aprovado](videos/e2e/e2e-session-codex.mp4)
+- Sessão Cursor — nenhuma página gerada
+- [Sessão Claude — 6 E2E aprovados](videos/e2e/e2e-session-claude.mp4)
+- [Orquestrador Codex — 2 E2E aprovados](videos/e2e/e2e-orchestrator-codex.mp4)
+- [Orquestrador Cursor — 1 E2E falho](videos/e2e/e2e-orchestrator-cursor-failed.mp4)
+- [Orquestrador Claude — 6 E2E aprovados](videos/e2e/e2e-orchestrator-claude.mp4)
