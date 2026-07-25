@@ -27,8 +27,12 @@ function message(id: string, content = id): AssistantChatMessage {
 function runningTurn(toolId = "tool-1"): AssistantTurnStatus {
   return {
     status: "running",
-    generation: "g1",
-    sessionId: "s1",
+    provider: "codex",
+    conversationId: "conversation-1",
+    runId: "run-1",
+    executionId: "execution-1",
+    queuedCount: 0,
+    error: null,
     startedAt: "2026-07-17T10:00:00.000Z",
     finishedAt: null,
     canResume: false,

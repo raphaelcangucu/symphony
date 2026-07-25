@@ -2,13 +2,6 @@ import axios from "axios";
 
 import {
   catalogAgentLabel,
-  fallbackCatalogBundle,
-  fallbackClaudeCatalog,
-  fallbackCodexCatalog,
-  fallbackCursorCatalog,
-  fallbackOpenCodeCatalog,
-  loadCachedCatalogBundle,
-  saveCachedCatalogBundle,
   type AssistantAgentCatalog,
   type AssistantCatalogBundle,
   type AssistantCodexCatalog,
@@ -67,7 +60,8 @@ export interface AssistantMessageResponse {
 
 export type AssistantChatRole = "user" | "assistant" | "tool" | "system";
 
-export type AssistantContentBlock = { type: "text"; text: string } | { type: "tool"; toolCallId: string };
+export type AssistantContentBlock =
+  { type: "text"; text: string } | { type: "tool"; toolCallId: string };
 
 export interface AssistantChatMessage {
   id: string;
@@ -75,7 +69,7 @@ export interface AssistantChatMessage {
   content: string;
   contentBlocks?: AssistantContentBlock[];
   toolCalls: AssistantToolCall[];
-  turnId?: string | null;
+  runId?: string | null;
   sequence?: number | null;
   insertedAt?: string | null;
   metadata: Record<string, unknown>;
@@ -107,7 +101,9 @@ export function normalizeUserQuestionsRequest(payload: {
   const requestId = payload.request_id;
   if (requestId == null) return null;
 
-  const rawQuestions = Array.isArray(payload.questions) ? payload.questions : [];
+  const rawQuestions = Array.isArray(payload.questions)
+    ? payload.questions
+    : [];
   const questions = rawQuestions
     .map((raw): UserQuestion | null => {
       const q = raw as Record<string, unknown>;
@@ -120,7 +116,8 @@ export function normalizeUserQuestionsRequest(payload: {
               const o = opt as Record<string, unknown>;
               if (typeof o.label !== "string") return null;
               const option: UserQuestionOption = { label: o.label };
-              if (typeof o.description === "string") option.description = o.description;
+              if (typeof o.description === "string")
+                option.description = o.description;
               return option;
             })
             .filter((opt): opt is UserQuestionOption => opt !== null)
@@ -173,7 +170,7 @@ export interface BackendAssistantChatMessageDto {
   content?: string | null;
   content_blocks?: unknown;
   tool_calls?: BackendAssistantToolCallDto[] | null;
-  turn_id?: string | null;
+  run_id?: string | null;
   sequence?: number | null;
   inserted_at?: string | null;
   metadata?: Record<string, unknown> | null;
@@ -236,13 +233,18 @@ export async function uploadAssistantAttachment(
   const form = new FormData();
   form.append("file", file);
 
-  const response = await http.post(trackerPath(`/projects/${encodeURIComponent(slug)}/assistant/attachments`), form, {
-    headers: { "Content-Type": "multipart/form-data" },
-  });
+  const response = await http.post(
+    trackerPath(`/projects/${encodeURIComponent(slug)}/assistant/attachments`),
+    form,
+    {
+      headers: { "Content-Type": "multipart/form-data" },
+    },
+  );
 
   const dto = unwrapData<BackendUploadedAttachmentDto>(response);
   const path = dto.path?.trim();
-  if (!path) throw new Error(i18n.t("project.services.validation.uploadPathMissing"));
+  if (!path)
+    throw new Error(i18n.t("project.services.validation.uploadPathMissing"));
 
   return {
     id: dto.id ?? path,
@@ -255,57 +257,38 @@ export async function uploadAssistantAttachment(
 }
 
 export async function fetchAssistantCatalogBundle(
-  projectSlug: string,
+  projectSlug?: string | null,
   signal?: AbortSignal,
 ): Promise<AssistantCatalogBundle> {
-  const slug = requireProjectSlug(projectSlug);
-  const cached = loadCachedCatalogBundle();
-
-  if (cached) {
-    void refreshAssistantCatalogBundle(slug, signal).catch(() => undefined);
-    return cached;
-  }
-
+  const slug = projectSlug?.trim() || null;
   return refreshAssistantCatalogBundle(slug, signal);
 }
 
-async function refreshAssistantCatalogBundle(slug: string, signal?: AbortSignal): Promise<AssistantCatalogBundle> {
+async function refreshAssistantCatalogBundle(
+  slug: string | null,
+  signal?: AbortSignal,
+): Promise<AssistantCatalogBundle> {
   try {
-    const response = await http.get(trackerPath(`/projects/${encodeURIComponent(slug)}/assistant/config`), { signal });
+    const path = slug
+      ? `/projects/${encodeURIComponent(slug)}/assistant/config`
+      : "/assistant/config";
+    const response = await http.get(
+      trackerPath(path),
+      { signal },
+    );
     const raw = unwrapData<BackendAssistantCatalogBundleDto>(response);
-    const bundle = normalizeAssistantCatalogBundle(raw);
-    saveCachedCatalogBundle(bundle);
-    return bundle;
+    return normalizeAssistantCatalogBundle(raw);
   } catch (cause) {
     if (axios.isAxiosError(cause) && cause.response?.status === 404) {
       throw new Error(i18n.t("assistant.catalog.errors.apiMissing"));
     }
 
-    if (axios.isAxiosError(cause) && cause.response?.status === 503) {
-      const cached = loadCachedCatalogBundle();
-      if (cached) return cached;
-
-      const bundle = fallbackCatalogBundle();
-      // Propagate error command hint from the 503 body when available
-      const errorMsg =
-        axios.isAxiosError(cause) &&
-        typeof cause.response?.data === "object" &&
-        cause.response?.data !== null &&
-        "error" in cause.response.data &&
-        typeof (cause.response.data as { error?: { message?: string } }).error?.message === "string"
-          ? (cause.response.data as { error?: { message?: string } }).error?.message
-          : null;
-      if (errorMsg) {
-        const codex = bundle.agents.find((a) => a.agent === "codex");
-        if (codex) codex.command = errorMsg;
-      }
-      return bundle;
-    }
-
-    const cached = loadCachedCatalogBundle();
-    if (cached) return cached;
-
-    throw new Error(extractApiErrorMessage(cause, i18n.t("assistant.catalog.errors.loadFailed")));
+    throw new Error(
+      extractApiErrorMessage(
+        cause,
+        i18n.t("assistant.catalog.errors.loadFailed"),
+      ),
+    );
   }
 }
 
@@ -313,86 +296,132 @@ async function refreshAssistantCatalogBundle(slug: string, signal?: AbortSignal)
  * @deprecated Use fetchAssistantCatalogBundle. Returns only the codex catalog
  * for callers that haven't been updated yet.
  */
-export async function fetchAssistantCodexCatalog(projectSlug: string): Promise<AssistantCodexCatalog> {
+export async function fetchAssistantCodexCatalog(
+  projectSlug: string,
+): Promise<AssistantCodexCatalog> {
   const bundle = await fetchAssistantCatalogBundle(projectSlug);
-  return bundle.agents.find((c) => c.agent === "codex") ?? bundle.agents[0];
+  const catalog = bundle.agents.find((candidate) => candidate.agent === "codex");
+  if (!catalog) {
+    throw new Error(i18n.t("assistant.catalog.errors.noCodexModels"));
+  }
+  return catalog;
 }
 
-export function normalizeAssistantCodexCatalog(dto: BackendAssistantCodexCatalogDto): AssistantCodexCatalog {
-  const models = (dto.models ?? []).map(normalizeAssistantModel).filter((model) => model.model.length > 0);
+export function normalizeAssistantCodexCatalog(
+  dto: BackendAssistantCodexCatalogDto,
+): AssistantCodexCatalog {
+  const models = (dto.models ?? [])
+    .map(normalizeAssistantModel)
+    .filter((model) => model.model.length > 0);
 
   if (models.length === 0) {
     throw new Error(i18n.t("assistant.catalog.errors.noCodexModels"));
+  }
+  const command = dto.command?.trim();
+  if (!command) {
+    throw new Error(i18n.t("assistant.catalog.errors.loadFailed"));
+  }
+  const defaultModel = dto.default_model?.trim();
+  if (!defaultModel || !models.some((model) => model.model === defaultModel)) {
+    throw new Error(i18n.t("assistant.catalog.errors.loadFailed"));
   }
 
   return {
     agent: "codex",
     agentLabel: dto.agent_label ?? catalogAgentLabel("codex"),
-    command: dto.command ?? "codex app-server",
-    defaultModel: dto.default_model ?? null,
+    command,
+    defaultModel,
     models,
   };
 }
 
-export function normalizeAssistantCatalogBundle(dto: BackendAssistantCatalogBundleDto): AssistantCatalogBundle {
+export function normalizeAssistantCatalogBundle(
+  dto: BackendAssistantCatalogBundleDto,
+): AssistantCatalogBundle {
   const rawAgents = Array.isArray(dto.agents) ? dto.agents : [];
 
   const agents: AssistantAgentCatalog[] = rawAgents
     .map((agentDto): AssistantAgentCatalog | null => {
       const agentKind = agentDto.agent;
-      if (agentKind !== "codex" && agentKind !== "claude" && agentKind !== "cursor" && agentKind !== "opencode") return null;
+      if (
+        agentKind !== "codex" &&
+        agentKind !== "claude" &&
+        agentKind !== "cursor" &&
+        agentKind !== "opencode"
+      )
+        return null;
 
-      const models = (agentDto.models ?? []).map(normalizeAssistantModel).filter((m) => m.model.length > 0);
-      if (models.length === 0) {
-        if (agentKind === "claude") return fallbackClaudeCatalog();
-        if (agentKind === "cursor") return fallbackCursorCatalog();
-        if (agentKind === "opencode") return fallbackOpenCodeCatalog();
-        return fallbackCodexCatalog();
+      const models = (agentDto.models ?? [])
+        .map(normalizeAssistantModel)
+        .filter((m) => m.model.length > 0);
+      if (models.length === 0) return null;
+
+      const command = agentDto.command?.trim();
+      if (!command) return null;
+      const defaultModel = agentDto.default_model?.trim();
+      if (
+        !defaultModel ||
+        !models.some((model) => model.model === defaultModel)
+      ) {
+        return null;
       }
-
-      const fallbackCommands: Record<AgentKind, string> = {
-        codex: "codex app-server",
-        claude: "claude",
-        cursor: "cursor-agent",
-        opencode: "opencode",
-      };
 
       return {
         agent: agentKind as AgentKind,
         agentLabel: agentDto.agent_label ?? catalogAgentLabel(agentKind),
-        command: agentDto.command ?? fallbackCommands[agentKind],
-        defaultModel: agentDto.default_model ?? null,
+        command,
+        defaultModel,
         models,
       };
     })
     .filter((a): a is AssistantAgentCatalog => a !== null);
 
   if (agents.length === 0) {
-    return fallbackCatalogBundle();
+    throw new Error(i18n.t("assistant.catalog.errors.noModels"));
   }
 
   const rawDefault = dto.default_agent;
-  const defaultAgent: AgentKind =
-    rawDefault === "codex" || rawDefault === "claude" || rawDefault === "cursor"
-      ? rawDefault
-      : (agents[0].agent as AgentKind);
+  if (
+    rawDefault !== "codex" &&
+    rawDefault !== "claude" &&
+    rawDefault !== "cursor" &&
+    rawDefault !== "opencode"
+  ) {
+    throw new Error(i18n.t("assistant.catalog.errors.loadFailed"));
+  }
+  const defaultAgent = rawDefault;
+  if (!agents.some((agent) => agent.agent === defaultAgent)) {
+    throw new Error(i18n.t("assistant.catalog.errors.loadFailed"));
+  }
 
   return { agents, defaultAgent };
 }
 
-function normalizeAssistantModel(dto: BackendAssistantModelDto): AssistantModelOption {
-  const model = dto.model ?? dto.id ?? "";
-  const efforts = (dto.efforts ?? []).map(normalizeAssistantEffort).filter((effort) => effort.id.length > 0);
-  const defaultEffort = dto.default_effort ?? efforts[0]?.id ?? "medium";
+function normalizeAssistantModel(
+  dto: BackendAssistantModelDto,
+): AssistantModelOption {
+  const model = dto.model ?? "";
+  const efforts = (dto.efforts ?? [])
+    .map(normalizeAssistantEffort)
+    .filter((effort) => effort.id.length > 0);
+  const defaultEffort = dto.default_effort ?? "";
+  if (
+    defaultEffort &&
+    !efforts.some((effort) => effort.id === defaultEffort)
+  ) {
+    throw new Error(
+      `assistant catalog default effort ${defaultEffort} is not advertised by model ${model}`,
+    );
+  }
 
   return {
-    id: dto.id ?? model,
+    id: model,
     model,
     label: dto.label ?? model,
     description: dto.description ?? undefined,
     isDefault: dto.is_default ?? false,
     defaultEffort,
-    efforts: efforts.length > 0 ? efforts : defaultEffort ? [{ id: defaultEffort, label: defaultEffort }] : [],
+    efforts,
     inputModalities: dto.input_modalities ?? undefined,
   };
 }
@@ -414,7 +443,9 @@ function extractApiErrorMessage(cause: unknown, fallback: string): string {
   return fallback;
 }
 
-function normalizeAssistantEffort(dto: BackendAssistantEffortDto): AssistantEffortOption {
+function normalizeAssistantEffort(
+  dto: BackendAssistantEffortDto,
+): AssistantEffortOption {
   const id = dto.id ?? "";
   return {
     id,
@@ -429,33 +460,47 @@ export async function sendAssistantMessage(
 ): Promise<AssistantMessageResponse> {
   const slug = requireProjectSlug(projectSlug);
   const message = input.message.trim();
-  if (!message) throw new Error(i18n.t("project.services.validation.fieldRequired", { field: "message" }));
+  if (!message)
+    throw new Error(
+      i18n.t("project.services.validation.fieldRequired", { field: "message" }),
+    );
 
-  const response = await http.post(trackerPath(`/projects/${encodeURIComponent(slug)}/assistant/messages`), {
-    message,
-    context: input.context ?? {},
-  });
+  const response = await http.post(
+    trackerPath(`/projects/${encodeURIComponent(slug)}/assistant/messages`),
+    {
+      message,
+      context: input.context ?? {},
+    },
+  );
 
-  return normalizeAssistantMessage(unwrapData<BackendAssistantMessageDto>(response));
+  return normalizeAssistantMessage(
+    unwrapData<BackendAssistantMessageDto>(response),
+  );
 }
 
-export function normalizeAssistantMessage(dto: BackendAssistantMessageDto): AssistantMessageResponse {
+export function normalizeAssistantMessage(
+  dto: BackendAssistantMessageDto,
+): AssistantMessageResponse {
   return {
     assistantMessage: dto.assistant_message ?? "",
     toolCalls: (dto.tool_calls ?? []).map(normalizeToolCall),
   };
 }
 
-export function normalizeAssistantChatMessage(dto: BackendAssistantChatMessageDto): AssistantChatMessage {
+export function normalizeAssistantChatMessage(
+  dto: BackendAssistantChatMessageDto,
+): AssistantChatMessage {
   const metadata = isObjectRecord(dto.metadata) ? dto.metadata : {};
 
   return {
-    id: String(dto.id ?? `assistant-message-${dto.sequence ?? cryptoRandomId()}`),
+    id: String(
+      dto.id ?? `assistant-message-${dto.sequence ?? cryptoRandomId()}`,
+    ),
     role: normalizeRole(dto.role),
     content: dto.content ?? "",
     contentBlocks: normalizeAssistantContentBlocks(dto, metadata),
     toolCalls: (dto.tool_calls ?? []).map(normalizeToolCall),
-    turnId: dto.turn_id ?? null,
+    runId: dto.run_id ?? null,
     sequence: dto.sequence ?? null,
     insertedAt: dto.inserted_at ?? null,
     metadata,
@@ -467,28 +512,36 @@ function normalizeAssistantContentBlocks(
   metadata: Record<string, unknown>,
 ): AssistantContentBlock[] | undefined {
   const topLevelField = selectPresentContentBlocksField(dto);
-  if (topLevelField.isPresent) return normalizeContentBlockValue(topLevelField.value);
+  if (topLevelField.isPresent)
+    return normalizeContentBlockValue(topLevelField.value);
 
   const legacyMetadataField = selectPresentContentBlocksField(metadata);
-  return legacyMetadataField.isPresent ? normalizeContentBlockValue(legacyMetadataField.value) : undefined;
+  return legacyMetadataField.isPresent
+    ? normalizeContentBlockValue(legacyMetadataField.value)
+    : undefined;
 }
 
-type SelectedContentBlocksField = { isPresent: true; value: unknown } | { isPresent: false };
+type SelectedContentBlocksField =
+  { isPresent: true; value: unknown } | { isPresent: false };
 
-function selectPresentContentBlocksField(
-  source: { content_blocks?: unknown },
-): SelectedContentBlocksField {
+function selectPresentContentBlocksField(source: {
+  content_blocks?: unknown;
+}): SelectedContentBlocksField {
   if (Object.prototype.hasOwnProperty.call(source, "content_blocks")) {
     return { isPresent: true, value: source.content_blocks };
   }
   return { isPresent: false };
 }
 
-function normalizeContentBlockValue(value: unknown): AssistantContentBlock[] | undefined {
+function normalizeContentBlockValue(
+  value: unknown,
+): AssistantContentBlock[] | undefined {
   return Array.isArray(value) ? normalizeContentBlockRows(value) : undefined;
 }
 
-function normalizeContentBlockRows(rows: readonly unknown[]): AssistantContentBlock[] | undefined {
+function normalizeContentBlockRows(
+  rows: readonly unknown[],
+): AssistantContentBlock[] | undefined {
   const contentBlocks: AssistantContentBlock[] = [];
   const seenToolCallIds = new Set<string>();
 
@@ -500,7 +553,10 @@ function normalizeContentBlockRows(rows: readonly unknown[]): AssistantContentBl
 
       const previousBlock = contentBlocks[contentBlocks.length - 1];
       if (previousBlock?.type === "text") {
-        contentBlocks[contentBlocks.length - 1] = { type: "text", text: `${previousBlock.text}${row.text}` };
+        contentBlocks[contentBlocks.length - 1] = {
+          type: "text",
+          text: `${previousBlock.text}${row.text}`,
+        };
       } else {
         contentBlocks.push({ type: "text", text: row.text });
       }
@@ -519,9 +575,12 @@ function normalizeContentBlockRows(rows: readonly unknown[]): AssistantContentBl
   return contentBlocks.length > 0 ? contentBlocks : undefined;
 }
 
-function readContentBlockToolCallId(row: Record<string, unknown>): string | undefined {
+function readContentBlockToolCallId(
+  row: Record<string, unknown>,
+): string | undefined {
   const toolCallId = row.tool_call_id;
-  if (typeof toolCallId === "string" && toolCallId.trim() !== "") return toolCallId;
+  if (typeof toolCallId === "string" && toolCallId.trim() !== "")
+    return toolCallId;
   return undefined;
 }
 
@@ -529,7 +588,9 @@ function isObjectRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-export function normalizeToolCall(dto: BackendAssistantToolCallDto): AssistantToolCall {
+export function normalizeToolCall(
+  dto: BackendAssistantToolCallDto,
+): AssistantToolCall {
   const result = dto.result ?? {};
 
   return {
@@ -539,11 +600,14 @@ export function normalizeToolCall(dto: BackendAssistantToolCallDto): AssistantTo
     arguments: dto.arguments ?? null,
     output: typeof dto.output === "string" ? dto.output : null,
     outputTruncated: dto.output_truncated === true,
-    outputByteSize: typeof dto.output_byte_size === "number" ? dto.output_byte_size : null,
+    outputByteSize:
+      typeof dto.output_byte_size === "number" ? dto.output_byte_size : null,
     result: {
       ...result,
       issue: result.issue ? normalizeIssue(result.issue) : undefined,
-      issues: Array.isArray(result.issues) ? result.issues.map(normalizeIssue) : undefined,
+      issues: Array.isArray(result.issues)
+        ? result.issues.map(normalizeIssue)
+        : undefined,
       comment: result.comment ? normalizeComment(result.comment) : undefined,
       agentExecutions: result.agent_executions ?? undefined,
     },
@@ -553,24 +617,36 @@ export function normalizeToolCall(dto: BackendAssistantToolCallDto): AssistantTo
 function normalizeToolCallId(dto: BackendAssistantToolCallDto): string | null {
   const candidates = [dto.id, dto.call_id, dto.tool_use_id];
   for (const candidate of candidates) {
-    if (typeof candidate === "string" && candidate.trim() !== "") return candidate;
-    if (typeof candidate === "number" && Number.isFinite(candidate)) return String(candidate);
+    if (typeof candidate === "string" && candidate.trim() !== "")
+      return candidate;
+    if (typeof candidate === "number" && Number.isFinite(candidate))
+      return String(candidate);
   }
 
   return null;
 }
 
-function normalizeToolStatus(status: string | null | undefined): AssistantToolStatus {
-  if (status === "running" || status === "complete" || status === "error") return status;
+function normalizeToolStatus(
+  status: string | null | undefined,
+): AssistantToolStatus {
+  if (status === "running" || status === "complete" || status === "error")
+    return status;
   return "complete";
 }
 
 function normalizeRole(role: string | null | undefined): AssistantChatRole {
-  if (role === "user" || role === "assistant" || role === "tool" || role === "system") return role;
+  if (
+    role === "user" ||
+    role === "assistant" ||
+    role === "tool" ||
+    role === "system"
+  )
+    return role;
   return "assistant";
 }
 
 function cryptoRandomId(): string {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto)
+    return crypto.randomUUID();
   return Math.random().toString(36).slice(2);
 }

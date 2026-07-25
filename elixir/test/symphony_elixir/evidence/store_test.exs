@@ -118,6 +118,57 @@ defmodule SymphonyElixir.Evidence.StoreTest do
     assert {:error, :not_found} = Store.resolve_artifact(record, "artifacts/missing.png")
   end
 
+  test "persist rejects symlinks anywhere in the evidence tree", ctx do
+    external = Path.join(ctx.workspace, "outside.txt")
+    link = Path.join(ctx.workspace, ".symphony/evidence/artifacts/external.txt")
+    File.write!(external, "secret")
+    File.ln_s!(external, link)
+
+    assert {:error, {:unsafe_artifact_symlink, ^link}} =
+             Store.persist(
+               ctx.project.slug,
+               "GAM-9",
+               ctx.workspace,
+               %{"issue" => "GAM-9", "runs" => []},
+               evidence_root: ctx.evidence_root
+             )
+  end
+
+  test "resolve_artifact rejects a symlink added to durable evidence", ctx do
+    {:ok, record} =
+      Store.persist(
+        ctx.project.slug,
+        "GAM-9",
+        ctx.workspace,
+        %{"issue" => "GAM-9", "runs" => []},
+        evidence_root: ctx.evidence_root
+      )
+
+    external = Path.join(ctx.evidence_root, "outside.txt")
+    link = Path.join(record.artifact_dir, "artifacts/external.txt")
+    File.write!(external, "secret")
+    File.ln_s!(external, link)
+
+    assert {:error, :invalid_path} = Store.resolve_artifact(record, "artifacts/external.txt")
+  end
+
+  test "project slugs cannot escape the durable evidence root", ctx do
+    {:ok, project} = Context.ensure_project(%{name: "Escaping", slug: "../escaping"})
+
+    assert {:ok, record} =
+             Store.persist(
+               project.slug,
+               "GAM-9",
+               ctx.workspace,
+               %{"issue" => "GAM-9", "runs" => []},
+               evidence_root: ctx.evidence_root
+             )
+
+    root = Path.expand(ctx.evidence_root)
+    assert String.starts_with?(Path.expand(record.artifact_dir), root <> "/")
+    refute Path.expand(record.artifact_dir) == Path.expand(Path.join(ctx.evidence_root, "../escaping"))
+  end
+
   defp migrate_repo do
     {:ok, _repo, _apps} =
       Ecto.Migrator.with_repo(Repo, fn repo -> Ecto.Migrator.run(repo, :up, all: true) end)

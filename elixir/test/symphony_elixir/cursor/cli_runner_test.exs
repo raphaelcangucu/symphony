@@ -34,7 +34,14 @@ defmodule SymphonyElixir.Cursor.CliRunnerTest do
   test "happy turn captures the chat id and emits translated events" do
     {result, events, workspace} = run("happy")
 
-    assert {:ok, %{cli_session_id: "chat-123", status: :completed, usage: usage}} = result
+    assert {:ok,
+            %{
+              cli_session_id: "chat-123",
+              status: :completed,
+              provider_model: "Composer 2.5",
+              usage: usage
+            }} = result
+
     assert usage["inputTokens"] == 1200
     assert usage["outputTokens"] == 340
 

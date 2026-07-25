@@ -1357,8 +1357,12 @@ defmodule SymphonyElixir.Workspace.Provision do
     {:error, {:git_repository_unusable, repository, check, status, String.trim_trailing(output)}}
   end
 
-  defp maybe_clone_repositories(staging, %{project_slug: slug, clone_branches: branches})
-       when is_binary(slug) and is_map(branches) and map_size(branches) > 0 do
+  defp maybe_clone_repositories(staging, %{
+         project_slug: slug,
+         clone_branches: branches,
+         after_create: nil
+       })
+       when is_binary(slug) and is_map(branches) do
     Clone.materialize(staging, slug, branches)
   end
 

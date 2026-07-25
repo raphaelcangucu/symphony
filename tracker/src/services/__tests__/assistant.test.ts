@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { i18n } from "@/i18n";
 import {
+  fetchAssistantCatalogBundle,
   fetchAssistantCodexCatalog,
   normalizeAssistantChatMessage,
   normalizeAssistantCodexCatalog,
@@ -128,26 +129,25 @@ describe("assistant service", () => {
     expect(catalog.models[0]?.defaultEffort).toBe("");
   });
 
-  it("synthesizes sentinel effort when efforts is empty but default_effort is non-empty (Codex fallback path)", () => {
-    const catalog = normalizeAssistantCodexCatalog({
-      agent: "codex",
-      agent_label: "Codex CLI",
-      command: "codex app-server",
-      default_model: "gpt-5.3-codex",
-      models: [
-        {
-          id: "gpt-5.3-codex",
-          model: "gpt-5.3-codex",
-          label: "GPT-5.3 Codex",
-          is_default: true,
-          default_effort: "medium",
-          efforts: [],
-        },
-      ],
-    });
-
-    expect(catalog.models[0]?.efforts).toEqual([{ id: "medium", label: "medium" }]);
-    expect(catalog.models[0]?.defaultEffort).toBe("medium");
+  it("rejects a default effort missing from the canonical effort options", () => {
+    expect(() =>
+      normalizeAssistantCodexCatalog({
+        agent: "codex",
+        agent_label: "Codex CLI",
+        command: "codex app-server",
+        default_model: "gpt-5.3-codex",
+        models: [
+          {
+            id: "gpt-5.3-codex",
+            model: "gpt-5.3-codex",
+            label: "GPT-5.3 Codex",
+            is_default: true,
+            default_effort: "medium",
+            efforts: [],
+          },
+        ],
+      }),
+    ).toThrow("default effort");
   });
 
   it("loads assistant config from the tracker API", async () => {
@@ -182,6 +182,40 @@ describe("assistant service", () => {
       signal: undefined,
     });
     expect(catalog.models[0]?.model).toBe("gpt-5.3-codex");
+  });
+
+  it("loads the live global catalog for sessions without a project", async () => {
+    const get = vi.spyOn(http, "get").mockResolvedValueOnce({
+      data: {
+        data: {
+          agents: [
+            {
+              agent: "codex",
+              agent_label: "Codex CLI",
+              command: "codex app-server",
+              default_model: "gpt-5.6-sol",
+              models: [
+                {
+                  model: "gpt-5.6-sol",
+                  label: "GPT-5.6 Sol",
+                  is_default: true,
+                  default_effort: "low",
+                  efforts: [{ id: "low", label: "Low" }],
+                },
+              ],
+            },
+          ],
+          default_agent: "codex",
+        },
+      },
+    });
+
+    const bundle = await fetchAssistantCatalogBundle();
+
+    expect(get).toHaveBeenCalledWith("/api/tracker/v1/assistant/config", {
+      signal: undefined,
+    });
+    expect(bundle.agents[0]?.models[0]?.model).toBe("gpt-5.6-sol");
   });
 
   it("fails fast for blank project slugs and messages", async () => {

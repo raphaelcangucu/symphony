@@ -10,7 +10,7 @@ defmodule SymphonyElixir.Claude.CodingAgent do
 
   require Logger
 
-  alias SymphonyElixir.Agent.SessionTranscript
+  alias SymphonyElixir.Agent.{ConversationRef, SessionTranscript}
   alias SymphonyElixir.AgentAvailability
   alias SymphonyElixir.Assistant.UserInputBroker
   alias SymphonyElixir.Claude.ApprovalBroker
@@ -51,6 +51,9 @@ defmodule SymphonyElixir.Claude.CodingAgent do
         }
 
   @impl true
+  def capabilities, do: SymphonyElixir.Agent.BackendCapabilities.for("claude")
+
+  @impl true
   def start_session(workspace, opts \\ []) do
     command = ClaudeConfig.resolve_command(opts)
 
@@ -65,7 +68,7 @@ defmodule SymphonyElixir.Claude.CodingAgent do
          session_uuid: generate_uuid(),
          workspace: Path.expand(workspace),
          command: command,
-         cli_session_id: nil,
+         cli_session_id: conversation_id(opts, "claude"),
          model: Keyword.get(opts, :model),
          effort: Keyword.get(opts, :effort),
          permission_mode: ExecutionMode.claude_permission_mode(Keyword.get(opts, :execution_mode), interactive?),
@@ -81,7 +84,6 @@ defmodule SymphonyElixir.Claude.CodingAgent do
 
   @impl true
   def run_turn(session, prompt, issue, opts \\ []) do
-    original_prompt = prompt
     on_message = Keyword.get(opts, :on_message, &default_on_message/1)
     turn_id = generate_uuid()
     session_id = "#{session.session_uuid}-#{turn_id}"
@@ -103,7 +105,12 @@ defmodule SymphonyElixir.Claude.CodingAgent do
         value -> value
       end
 
-    emit_message(on_message, :session_started, %{session_id: session_id, thread_id: session.session_uuid, turn_id: turn_id}, %{})
+    emit_message(
+      on_message,
+      :session_started,
+      %{provider: "claude", conversation_id: session.cli_session_id, run_id: turn_id},
+      %{}
+    )
 
     write_transcript_sidecar(session, opts)
 
@@ -135,12 +142,13 @@ defmodule SymphonyElixir.Claude.CodingAgent do
             {:ok,
              %{
                result: :turn_completed,
-               session_id: session_id,
-               thread_id: session.session_uuid,
-               turn_id: turn_id,
-               cli_session_id: result.cli_session_id,
+               provider: "claude",
+               conversation_id: result.cli_session_id,
+               run_id: turn_id,
                usage: result.usage,
-               cost_usd: result.cost_usd
+               cost_usd: result.cost_usd,
+               resolved_model: Map.get(result, :resolved_model),
+               resolved_effort: Map.get(result, :resolved_effort)
              }}
 
           {:error, reason} ->
@@ -148,38 +156,23 @@ defmodule SymphonyElixir.Claude.CodingAgent do
         end
 
       {:error, {:resume_session_not_found, stale_id}} when session.cli_session_id != nil ->
-        # The persisted backend session no longer exists in claude's local store
-        # (wiped session storage, or an id recorded while the backend was
-        # misconfigured). Restart the turn as a fresh session instead of
-        # hard-failing the thread forever; the fresh cli_session_id is persisted
-        # upstream, so the thread self-heals for subsequent turns.
-        Logger.warning("Claude resume session #{inspect(stale_id)} not found for #{issue_context(issue)}; retrying with a fresh session")
-
-        retry_fresh_session(
+        fail_resumed_session(
           session,
-          original_prompt,
           issue,
-          opts,
           goal_role,
           assistant_thread_id,
-          {:resume_session_not_found, stale_id},
+          {:resume_conversation_failed, stale_id, :not_found},
           on_message,
           session_id
         )
 
       {:error, {:turn_failed, "claude exited with code 1"}} when session.cli_session_id != nil ->
-        # A resumed Claude session can exit non-zero when the local conversation
-        # ended outside Symphony. Retry once as a fresh session before failing.
-        Logger.warning("Claude resumed session #{inspect(session.cli_session_id)} exited for #{issue_context(issue)}; retrying with a fresh session")
-
-        retry_fresh_session(
+        fail_resumed_session(
           session,
-          original_prompt,
           issue,
-          opts,
           goal_role,
           assistant_thread_id,
-          {:turn_failed, "claude exited with code 1"},
+          {:resume_conversation_failed, session.cli_session_id, :provider_exit},
           on_message,
           session_id
         )
@@ -347,11 +340,9 @@ defmodule SymphonyElixir.Claude.CodingAgent do
        ),
        do: :ok
 
-  defp retry_fresh_session(
+  defp fail_resumed_session(
          session,
-         original_prompt,
          issue,
-         opts,
          goal_role,
          assistant_thread_id,
          runner_error,
@@ -360,7 +351,7 @@ defmodule SymphonyElixir.Claude.CodingAgent do
        ) do
     case ClaudeGoal.requeue_set_if_active(session.workspace, goal_role, assistant_thread_id) do
       :ok ->
-        run_turn(%{session | cli_session_id: nil}, original_prompt, issue, opts)
+        report_turn_error(on_message, session_id, issue, runner_error)
 
       {:error, reason} ->
         restoration_error = {:goal_restoration_failed, runner_error, reason}
@@ -368,9 +359,9 @@ defmodule SymphonyElixir.Claude.CodingAgent do
     end
   end
 
-  defp report_turn_error(on_message, session_id, issue, reason) do
+  defp report_turn_error(on_message, _session_id, issue, reason) do
     Logger.warning("Claude turn failed for #{issue_context(issue)}: #{inspect(reason)}")
-    emit_message(on_message, :turn_ended_with_error, %{session_id: session_id, reason: reason}, %{})
+    emit_message(on_message, :turn_ended_with_error, %{reason: reason}, %{})
     {:error, reason}
   end
 
@@ -389,6 +380,16 @@ defmodule SymphonyElixir.Claude.CodingAgent do
       settings_path: Map.get(session, :settings_path),
       timeout_ms: Config.agent_turn_timeout_ms()
     }
+  end
+
+  defp conversation_id(opts, provider) do
+    case Keyword.get(opts, :conversation_ref) do
+      %ConversationRef{provider: ^provider, conversation_id: conversation_id} ->
+        conversation_id
+
+      _ ->
+        nil
+    end
   end
 
   # A per-turn execution mode (carried in the run opts) overrides the session's
@@ -492,7 +493,7 @@ defmodule SymphonyElixir.Claude.CodingAgent do
     request_id = generate_uuid()
 
     if is_function(on_approval_required, 1) do
-      on_approval_required.(%{
+      request = %{
         request_id: request_id,
         agent: "claude",
         tool_name: tool_name,
@@ -500,10 +501,10 @@ defmodule SymphonyElixir.Claude.CodingAgent do
         cwd: workspace,
         input: input,
         reason: "Claude requested approval to run #{tool_name}"
-      })
+      }
 
       request_id
-      |> ApprovalBroker.await(timeout_ms)
+      |> ApprovalBroker.await(timeout_ms, fn -> on_approval_required.(request) end)
       |> permission_result(input)
     else
       # No channel is listening for approvals; deny rather than silently running.

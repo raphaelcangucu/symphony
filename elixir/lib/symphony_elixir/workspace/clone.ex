@@ -31,7 +31,7 @@ defmodule SymphonyElixir.Workspace.Clone do
   defp clone_repository(git, workspace_root, %Repository{} = repo, branches) do
     dest = Path.join(workspace_root, repo.workspace_path)
 
-    if File.exists?(dest) do
+    if repository_materialized?(dest, repo.workspace_path) do
       :ok
     else
       url = repo.clone_url || "https://github.com/#{repo.github_full_name}.git"
@@ -43,6 +43,13 @@ defmodule SymphonyElixir.Workspace.Clone do
       end
     end
   end
+
+  defp repository_materialized?(destination, workspace_path)
+       when workspace_path in [".", ""] do
+    File.exists?(Path.join(destination, ".git"))
+  end
+
+  defp repository_materialized?(destination, _workspace_path), do: File.exists?(destination)
 
   defp clone_branch(%Repository{} = repo, branches) when is_map(branches) do
     Map.get(branches, repo.workspace_path) ||

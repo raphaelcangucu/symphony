@@ -100,7 +100,10 @@ defmodule SymphonyElixir.Assistant.NativeThreadNames do
   end
 
   defp native_thread_id(%Thread{} = thread) do
-    nonblank(History.agent_thread_id(thread, "codex")) || nonblank(thread.codex_thread_id)
+    case History.conversation_ref(thread, "codex") do
+      {:ok, conversation_ref} -> nonblank(conversation_ref.conversation_id)
+      :error -> nil
+    end
   end
 
   defp codex_active?(%Thread{agent_kind: agent_kind}), do: agent_kind in [nil, "codex"]

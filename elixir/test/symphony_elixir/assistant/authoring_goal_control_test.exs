@@ -150,7 +150,7 @@ defmodule SymphonyElixir.Assistant.AuthoringGoalControlTest do
     Application.put_env(:symphony_elixir, :claude_goal_supported_override, true)
     on_exit(fn -> Application.delete_env(:symphony_elixir, :claude_goal_supported_override) end)
 
-    claude_thread = %{thread | agent_kind: "claude"}
+    {:ok, claude_thread} = History.update_thread(thread, %{agent_kind: "claude"})
     {:ok, enabled} = History.set_goal_mode(claude_thread, true, "Audit")
     sidecar = SymphonyElixir.Claude.GoalStore.path(thread.workspace_path, :authoring, thread.id)
     File.mkdir_p!(sidecar)
@@ -199,6 +199,16 @@ defmodule SymphonyElixir.Assistant.AuthoringGoalControlTest do
     assert {:error, :no_codex_thread} = AuthoringGoalControl.pause(enabled)
   end
 
+  test "resume accepts a metadata-only goal before the first Codex conversation", %{thread: thread} do
+    {:ok, enabled} = History.set_goal_mode(thread, true, "Audit")
+
+    assert {:ok, payload, updated} = AuthoringGoalControl.resume(enabled)
+    assert payload.enabled
+    assert payload.objective == "Audit"
+    refute payload.native
+    assert History.thread_goal_mode(updated)
+  end
+
   test "activation fails clearly when the persisted workspace is not executable", %{thread: thread} do
     missing = %{thread | workspace_path: Path.join(thread.workspace_path, "missing"), agent_kind: "codex"}
 
@@ -215,7 +225,7 @@ defmodule SymphonyElixir.Assistant.AuthoringGoalControlTest do
   end
 
   test "activation rejects a thread without a persisted provider", %{thread: thread} do
-    providerless = %{thread | agent_kind: nil, agent_thread_ids: %{}, codex_thread_id: nil}
+    providerless = %{thread | agent_kind: nil, provider_bindings: %{}}
 
     assert {:error, {:authoring_goal_unavailable, {:unsupported_agent, "unknown"}}} =
              AuthoringGoalControl.set_objective(providerless, "Audit")
@@ -275,7 +285,7 @@ defmodule SymphonyElixir.Assistant.AuthoringGoalControlTest do
         issue_identifier: "DIS-8003",
         workspace_path: workspace,
         agent_kind: "codex",
-        agent_thread_ids: %{"codex" => "thread-8003"}
+        provider_bindings: %{"codex" => "thread-8003"}
       })
       |> Repo.update()
 

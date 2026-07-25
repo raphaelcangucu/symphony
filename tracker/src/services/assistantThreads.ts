@@ -1,6 +1,12 @@
 import { notifyTrackerProjectSessionsChanged } from "@/lib/projectEvents";
-import { graphemeCount, normalizeNullableString } from "@/lib/serviceNormalization";
-import { requireNonBlank, requirePositiveInteger } from "@/lib/serviceValidation";
+import {
+  graphemeCount,
+  normalizeNullableString,
+} from "@/lib/serviceNormalization";
+import {
+  requireNonBlank,
+  requirePositiveInteger,
+} from "@/lib/serviceValidation";
 import type { AssistantThread } from "@/types/assistant-thread";
 import type { AgentKind } from "@/types/issue";
 
@@ -12,6 +18,10 @@ export interface BackendAssistantThreadDto {
   project_slug?: string | null;
   project_name?: string | null;
   agent_kind?: string | null;
+  requested_model?: string | null;
+  requested_effort?: string | null;
+  resolved_model?: string | null;
+  resolved_effort?: string | null;
   issue_identifier?: string | null;
   workspace_path?: unknown;
   labels?: unknown;
@@ -22,11 +32,17 @@ export interface BackendAssistantThreadDto {
   updated_at?: string | null;
 }
 
-export function normalizeAssistantThread(dto: BackendAssistantThreadDto): AssistantThread {
+export function normalizeAssistantThread(
+  dto: BackendAssistantThreadDto,
+): AssistantThread {
   return {
     id: dto.id,
     scope: dto.scope,
     agentKind: normalizeAgentKind(dto.agent_kind),
+    requestedModel: normalizeNullableString(dto.requested_model),
+    requestedEffort: normalizeNullableString(dto.requested_effort),
+    resolvedModel: normalizeNullableString(dto.resolved_model),
+    resolvedEffort: normalizeNullableString(dto.resolved_effort),
     projectSlug: dto.project_slug ?? null,
     projectName: dto.project_name ?? null,
     issueIdentifier: dto.issue_identifier ?? null,
@@ -46,8 +62,13 @@ function normalizeStringArray(value: unknown): string[] {
     : [];
 }
 
-function normalizeAgentKind(value: string | null | undefined): AssistantThread["agentKind"] {
-  return value === "codex" || value === "claude" || value === "cursor" || value === "opencode"
+function normalizeAgentKind(
+  value: string | null | undefined,
+): AssistantThread["agentKind"] {
+  return value === "codex" ||
+    value === "claude" ||
+    value === "cursor" ||
+    value === "opencode"
     ? value
     : null;
 }
@@ -61,7 +82,11 @@ const listCache = new Map<string, CacheEntry<AssistantThread[]>>();
 const getInFlight = new Map<number, Promise<AssistantThread>>();
 const getCache = new Map<number, CacheEntry<AssistantThread>>();
 
-function readCache<T>(cache: Map<string | number, CacheEntry<T>>, key: string | number, ttlMs: number): T | null {
+function readCache<T>(
+  cache: Map<string | number, CacheEntry<T>>,
+  key: string | number,
+  ttlMs: number,
+): T | null {
   const entry = cache.get(key);
   if (!entry) return null;
   if (Date.now() - entry.at > ttlMs) {
@@ -87,11 +112,16 @@ export async function listAssistantThreads(
     params.set("scope", scopeOrOptions);
   } else {
     if (scopeOrOptions.scope) params.set("scope", scopeOrOptions.scope);
-    if (scopeOrOptions.scopes?.length) params.set("scopes", scopeOrOptions.scopes.join(","));
-    if (scopeOrOptions.projectSlug) params.set("project_slug", scopeOrOptions.projectSlug);
-    if (scopeOrOptions.issueIdentifier) params.set("issue_identifier", scopeOrOptions.issueIdentifier);
-    if (scopeOrOptions.limit != null) params.set("limit", String(scopeOrOptions.limit));
-    if (scopeOrOptions.includeArchived === true) params.set("include_archived", "true");
+    if (scopeOrOptions.scopes?.length)
+      params.set("scopes", scopeOrOptions.scopes.join(","));
+    if (scopeOrOptions.projectSlug)
+      params.set("project_slug", scopeOrOptions.projectSlug);
+    if (scopeOrOptions.issueIdentifier)
+      params.set("issue_identifier", scopeOrOptions.issueIdentifier);
+    if (scopeOrOptions.limit != null)
+      params.set("limit", String(scopeOrOptions.limit));
+    if (scopeOrOptions.includeArchived === true)
+      params.set("include_archived", "true");
   }
 
   const cacheKey = params.toString();
@@ -104,7 +134,9 @@ export async function listAssistantThreads(
   const request = http
     .get(trackerPath(`/assistant/threads?${cacheKey}`))
     .then((response) => {
-      const threads = unwrapData<BackendAssistantThreadDto[]>(response).map(normalizeAssistantThread);
+      const threads = unwrapData<BackendAssistantThreadDto[]>(response).map(
+        normalizeAssistantThread,
+      );
       listCache.set(cacheKey, { value: threads, at: Date.now() });
       return threads;
     })
@@ -135,10 +167,17 @@ export interface UpdateAssistantThreadInput {
 const MAX_THREAD_TITLE_GRAPHEMES = 160;
 const MAX_THREAD_LABELS = 12;
 const MAX_THREAD_LABEL_GRAPHEMES = 40;
-const UPDATE_THREAD_KEYS = ["title", "labels", "needsReview", "agentKind"] as const;
+const UPDATE_THREAD_KEYS = [
+  "title",
+  "labels",
+  "needsReview",
+  "agentKind",
+] as const;
 const UPDATE_AGENT_KINDS = ["codex", "claude", "cursor", "opencode"] as const;
 
-export async function getAssistantThread(threadId: number): Promise<AssistantThread> {
+export async function getAssistantThread(
+  threadId: number,
+): Promise<AssistantThread> {
   requirePositiveInteger(threadId, "threadId");
 
   const cached = readCache(getCache, threadId, GET_CACHE_TTL_MS);
@@ -148,9 +187,13 @@ export async function getAssistantThread(threadId: number): Promise<AssistantThr
   if (existing) return existing;
 
   const request = http
-    .get(trackerPath(`/assistant/threads/${encodeURIComponent(String(threadId))}`))
+    .get(
+      trackerPath(`/assistant/threads/${encodeURIComponent(String(threadId))}`),
+    )
     .then((response) => {
-      const thread = normalizeAssistantThread(unwrapData<BackendAssistantThreadDto>(response));
+      const thread = normalizeAssistantThread(
+        unwrapData<BackendAssistantThreadDto>(response),
+      );
       getCache.set(threadId, { value: thread, at: Date.now() });
       return thread;
     })
@@ -172,18 +215,26 @@ export async function updateAssistantThread(
     trackerPath(`/assistant/threads/${encodeURIComponent(String(threadId))}`),
     payload,
   );
-  const thread = normalizeAssistantThread(unwrapData<BackendAssistantThreadDto>(response));
+  const thread = normalizeAssistantThread(
+    unwrapData<BackendAssistantThreadDto>(response),
+  );
   getCache.set(threadId, { value: thread, at: Date.now() });
   listCache.clear();
   return thread;
 }
 
-export async function generateAssistantThreadTitle(threadId: number): Promise<AssistantThread> {
+export async function generateAssistantThreadTitle(
+  threadId: number,
+): Promise<AssistantThread> {
   requirePositiveInteger(threadId, "threadId");
   const response = await http.post(
-    trackerPath(`/assistant/threads/${encodeURIComponent(String(threadId))}/generate_title`),
+    trackerPath(
+      `/assistant/threads/${encodeURIComponent(String(threadId))}/generate_title`,
+    ),
   );
-  const thread = normalizeAssistantThread(unwrapData<BackendAssistantThreadDto>(response));
+  const thread = normalizeAssistantThread(
+    unwrapData<BackendAssistantThreadDto>(response),
+  );
   getCache.set(threadId, { value: thread, at: Date.now() });
   listCache.clear();
   return thread;
@@ -191,12 +242,16 @@ export async function generateAssistantThreadTitle(threadId: number): Promise<As
 
 export async function deleteAssistantThread(threadId: number): Promise<void> {
   requirePositiveInteger(threadId, "threadId");
-  await http.delete(trackerPath(`/assistant/threads/${encodeURIComponent(String(threadId))}`));
+  await http.delete(
+    trackerPath(`/assistant/threads/${encodeURIComponent(String(threadId))}`),
+  );
   getCache.delete(threadId);
   listCache.clear();
 }
 
-function normalizeUpdateAssistantThreadInput(input: UpdateAssistantThreadInput): {
+function normalizeUpdateAssistantThreadInput(
+  input: UpdateAssistantThreadInput,
+): {
   title?: string;
   labels?: string[];
   needs_review?: boolean;
@@ -210,18 +265,28 @@ function normalizeUpdateAssistantThreadInput(input: UpdateAssistantThreadInput):
     Object.prototype.propertyIsEnumerable.call(input, key),
   );
   const unknownKey = enumerableKeys.find(
-    (key) => typeof key !== "string" || !UPDATE_THREAD_KEYS.includes(key as never),
+    (key) =>
+      typeof key !== "string" || !UPDATE_THREAD_KEYS.includes(key as never),
   );
   if (unknownKey !== undefined) {
-    throw new Error(`Assistant thread update input contains unsupported field ${String(unknownKey)}`);
+    throw new Error(
+      `Assistant thread update input contains unsupported field ${String(unknownKey)}`,
+    );
   }
 
   const supportedKeys = enumerableKeys as (typeof UPDATE_THREAD_KEYS)[number][];
   if (supportedKeys.length === 0) {
-    throw new Error("Assistant thread update input must include at least one supported field");
+    throw new Error(
+      "Assistant thread update input must include at least one supported field",
+    );
   }
 
-  const payload: { title?: string; labels?: string[]; needs_review?: boolean; agent_kind?: AgentKind } = {};
+  const payload: {
+    title?: string;
+    labels?: string[];
+    needs_review?: boolean;
+    agent_kind?: AgentKind;
+  } = {};
   if (supportedKeys.includes("title")) {
     payload.title = normalizeTitle(input.title);
   }
@@ -259,32 +324,45 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 function normalizeTitle(value: unknown): string {
   const title = requireNonBlank(value as string, "title");
   if (graphemeCount(title) > MAX_THREAD_TITLE_GRAPHEMES) {
-    throw new Error(`title must not exceed ${MAX_THREAD_TITLE_GRAPHEMES} graphemes`);
+    throw new Error(
+      `title must not exceed ${MAX_THREAD_TITLE_GRAPHEMES} graphemes`,
+    );
   }
   return title;
 }
 
 function normalizeLabels(value: unknown): string[] {
-  if (!Array.isArray(value) || !value.every((label) => typeof label === "string")) {
+  if (
+    !Array.isArray(value) ||
+    !value.every((label) => typeof label === "string")
+  ) {
     throw new Error("labels must be an array of strings");
   }
 
-  const labels = [...new Set(value.map((label) => label.trim()).filter(Boolean))];
+  const labels = [
+    ...new Set(value.map((label) => label.trim()).filter(Boolean)),
+  ];
   if (labels.length > MAX_THREAD_LABELS) {
     throw new Error(`labels must contain at most ${MAX_THREAD_LABELS} entries`);
   }
-  if (labels.some((label) => graphemeCount(label) > MAX_THREAD_LABEL_GRAPHEMES)) {
-    throw new Error(`labels must not exceed ${MAX_THREAD_LABEL_GRAPHEMES} graphemes`);
+  if (
+    labels.some((label) => graphemeCount(label) > MAX_THREAD_LABEL_GRAPHEMES)
+  ) {
+    throw new Error(
+      `labels must not exceed ${MAX_THREAD_LABEL_GRAPHEMES} graphemes`,
+    );
   }
   return labels;
 }
 
-export async function createFreeformThread(input: {
-  title?: string;
-  agentKind?: AgentKind | null;
-  model?: string;
-  effort?: string;
-} = {}): Promise<AssistantThread> {
+export async function createFreeformThread(
+  input: {
+    title?: string;
+    agentKind?: AgentKind | null;
+    model?: string;
+    effort?: string;
+  } = {},
+): Promise<AssistantThread> {
   const response = await http.post(trackerPath("/assistant/threads"), {
     scope: "freeform",
     title: input.title,
@@ -292,7 +370,9 @@ export async function createFreeformThread(input: {
     ...(input.model ? { model: input.model } : {}),
     ...(input.effort ? { effort: input.effort } : {}),
   });
-  return normalizeAssistantThread(unwrapData<BackendAssistantThreadDto>(response));
+  return normalizeAssistantThread(
+    unwrapData<BackendAssistantThreadDto>(response),
+  );
 }
 
 /**
@@ -302,8 +382,13 @@ export async function createFreeformThread(input: {
  * host without a thread.
  */
 export async function ensureActiveFreeformThread(): Promise<AssistantThread> {
-  const response = await http.post(trackerPath("/assistant/threads/freeform/active"), {});
-  return normalizeAssistantThread(unwrapData<BackendAssistantThreadDto>(response));
+  const response = await http.post(
+    trackerPath("/assistant/threads/freeform/active"),
+    {},
+  );
+  return normalizeAssistantThread(
+    unwrapData<BackendAssistantThreadDto>(response),
+  );
 }
 
 export async function createProjectSessionThread(
@@ -326,7 +411,9 @@ export async function createProjectSessionThread(
     ...(input.effort ? { effort: input.effort } : {}),
     ...(workspacePath === undefined ? {} : { workspace_path: workspacePath }),
   });
-  const thread = normalizeAssistantThread(unwrapData<BackendAssistantThreadDto>(response));
+  const thread = normalizeAssistantThread(
+    unwrapData<BackendAssistantThreadDto>(response),
+  );
   notifyTrackerProjectSessionsChanged(projectSlug);
   return thread;
 }
@@ -367,7 +454,9 @@ export async function createIssueSessionThread(
     ...(workspacePath === undefined ? {} : { workspace_path: workspacePath }),
     ...(normalizeCloneBranches(input.cloneBranches, input.cloneBranch) ?? {}),
   });
-  const thread = normalizeAssistantThread(unwrapData<BackendAssistantThreadDto>(response));
+  const thread = normalizeAssistantThread(
+    unwrapData<BackendAssistantThreadDto>(response),
+  );
   notifyTrackerProjectSessionsChanged(projectSlug);
   return thread;
 }
@@ -375,9 +464,13 @@ export async function createIssueSessionThread(
 function normalizeCloneBranches(
   cloneBranches: Record<string, string> | undefined,
   cloneBranch: string | undefined,
-): { clone_branches?: Record<string, string>; clone_branch?: string } | undefined {
+):
+  | { clone_branches?: Record<string, string>; clone_branch?: string }
+  | undefined {
   const overrides = Object.fromEntries(
-    Object.entries(cloneBranches ?? {}).filter(([, branch]) => branch.trim() !== ""),
+    Object.entries(cloneBranches ?? {}).filter(
+      ([, branch]) => branch.trim() !== "",
+    ),
   );
 
   if (Object.keys(overrides).length > 0) {
@@ -389,15 +482,23 @@ function normalizeCloneBranches(
   return undefined;
 }
 
-function normalizeOptionalWorkspacePath(value: string | undefined): string | undefined {
+function normalizeOptionalWorkspacePath(
+  value: string | undefined,
+): string | undefined {
   if (value === undefined) return undefined;
   if (typeof value !== "string") {
     throw new Error("workspacePath must be an absolute path");
   }
 
   const workspacePath = value.trim();
-  if (workspacePath === "" || workspacePath.includes("\0") || !workspacePath.startsWith("/")) {
-    throw new Error("workspacePath must be a nonblank absolute path without NUL characters");
+  if (
+    workspacePath === "" ||
+    workspacePath.includes("\0") ||
+    !workspacePath.startsWith("/")
+  ) {
+    throw new Error(
+      "workspacePath must be a nonblank absolute path without NUL characters",
+    );
   }
   return workspacePath;
 }
@@ -415,16 +516,24 @@ function validateExplicitWorkspaceOptions(
     ["useParentWorkspace", input.useParentWorkspace],
   ] as const) {
     if (value !== undefined && value !== false) {
-      throw new Error(`${name} must be omitted or false when workspacePath is supplied`);
+      throw new Error(
+        `${name} must be omitted or false when workspacePath is supplied`,
+      );
     }
   }
 }
 
-export async function archiveAssistantThread(threadId: number): Promise<AssistantThread> {
+export async function archiveAssistantThread(
+  threadId: number,
+): Promise<AssistantThread> {
   requirePositiveInteger(threadId, "threadId");
 
   const response = await http.post(
-    trackerPath(`/assistant/threads/${encodeURIComponent(String(threadId))}/archive`),
+    trackerPath(
+      `/assistant/threads/${encodeURIComponent(String(threadId))}/archive`,
+    ),
   );
-  return normalizeAssistantThread(unwrapData<BackendAssistantThreadDto>(response));
+  return normalizeAssistantThread(
+    unwrapData<BackendAssistantThreadDto>(response),
+  );
 }

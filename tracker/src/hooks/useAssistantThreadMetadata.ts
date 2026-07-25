@@ -4,14 +4,23 @@ import { getAssistantThread } from "@/services/assistantThreads";
 import type { AssistantThread } from "@/types/assistant-thread";
 import type { RecentSession } from "@/types/recents";
 
-function threadFromRecent(threadId: number, relatedSessions: readonly RecentSession[]): AssistantThread | null {
-  const recent = relatedSessions.find((session) => session.threadId === threadId);
+function threadFromRecent(
+  threadId: number,
+  relatedSessions: readonly RecentSession[],
+): AssistantThread | null {
+  const recent = relatedSessions.find(
+    (session) => session.threadId === threadId,
+  );
   if (!recent) return null;
 
   return {
     id: threadId,
     scope: recent.scope ?? "project_session",
     agentKind: recent.agentKind === "opencode" ? null : recent.agentKind,
+    requestedModel: null,
+    requestedEffort: null,
+    resolvedModel: null,
+    resolvedEffort: null,
     projectSlug: recent.projectSlug,
     projectName: recent.projectName,
     issueIdentifier: recent.identifier,
@@ -31,7 +40,9 @@ export function useAssistantThreadMetadata(
   relatedSessions: readonly RecentSession[] = [],
 ): AssistantThread | null {
   const [thread, setThread] = useState<AssistantThread | null>(() =>
-    threadId != null && threadId > 0 ? threadFromRecent(threadId, relatedSessions) : null,
+    threadId != null && threadId > 0
+      ? threadFromRecent(threadId, relatedSessions)
+      : null,
   );
 
   useEffect(() => {
@@ -47,7 +58,11 @@ export function useAssistantThreadMetadata(
     void getAssistantThread(threadId)
       .then((match) => {
         if (!active) return;
-        if (projectSlug && match.projectSlug && match.projectSlug !== projectSlug) {
+        if (
+          projectSlug &&
+          match.projectSlug &&
+          match.projectSlug !== projectSlug
+        ) {
           setThread(optimistic);
           return;
         }

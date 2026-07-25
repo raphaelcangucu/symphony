@@ -5,7 +5,7 @@
 prompt="$(cat)"
 case "${FAKE_CURSOR_MODE:-happy}" in
   happy)
-    echo '{"type":"system","subtype":"init","apiKeySource":"login","cwd":"/tmp","session_id":"chat-123","model":"Composer 1","permissionMode":"default"}'
+    echo '{"type":"system","subtype":"init","apiKeySource":"login","cwd":"/tmp","session_id":"chat-123","model":"Composer 2.5","permissionMode":"default"}'
     echo '{"type":"user","message":{"role":"user","content":[{"type":"text","text":"do the thing"}]},"session_id":"chat-123"}'
     echo '{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Hel"}]},"session_id":"chat-123","timestamp_ms":1}'
     echo '{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Hello from fake cursor"}]},"session_id":"chat-123"}'

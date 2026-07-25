@@ -10,8 +10,9 @@ defmodule SymphonyElixir.Assistant.TurnManager do
   On boot it reconciles orphaned `running` threads (a full serve restart kills
   every worker) to `interrupted (serve_restart)`.
 
-  A per-thread FIFO queue serializes additional turns requested while one is
-  running, eliminating the parallel-Codex-session failure mode.
+  A durable per-thread FIFO queue serializes additional turns requested while
+  one is running, preventing overlapping provider conversations and surviving
+  process restarts.
 
   Live streaming (deltas / tool calls) is unchanged: it stays on the originating
   socket via closures the channel passes in `opts`. This module only owns
@@ -28,10 +29,10 @@ defmodule SymphonyElixir.Assistant.TurnManager do
 
   @type start_opts :: [
           trigger: String.t(),
-          agent_kind: String.t() | nil,
           model: String.t() | nil,
           effort: String.t() | nil,
-          codex_thread_id: String.t() | nil,
+          provider: String.t() | nil,
+          conversation_id: String.t() | nil,
           reply_to: pid(),
           run: (-> {:ok, map()} | {:error, term()}),
           run_builder: (String.t() -> (-> {:ok, map()} | {:error, term()}))
@@ -59,30 +60,50 @@ defmodule SymphonyElixir.Assistant.TurnManager do
   the thread (the channel then routes the message to steer/queue).
   """
   @spec start_turn(integer(), String.t(), start_opts()) ::
-          {:ok, %{pid: pid(), generation: String.t()}} | {:error, :turn_in_progress | term()}
+          {:ok, %{pid: pid(), execution_id: String.t()}} | {:error, :turn_in_progress | term()}
   def start_turn(thread_id, prompt, opts)
       when is_integer(thread_id) and is_binary(prompt) and is_list(opts) do
     GenServer.call(__MODULE__, {:start_turn, thread_id, prompt, opts})
   end
 
-  @doc "Record the live Codex thread/turn ids once the turn has started."
-  @spec note_codex_turn(integer(), String.t() | nil, String.t() | nil) :: :ok
-  def note_codex_turn(thread_id, codex_thread_id, turn_id) when is_integer(thread_id) do
-    GenServer.cast(__MODULE__, {:note_codex, thread_id, codex_thread_id, turn_id})
+  @doc "Records provider-neutral conversation/run identity after a turn starts."
+  @spec note_run(integer(), String.t(), String.t() | nil, String.t() | nil) :: :ok
+  def note_run(thread_id, provider, conversation_id, run_id)
+      when is_integer(thread_id) and is_binary(provider) do
+    GenServer.cast(
+      __MODULE__,
+      {:note_run, thread_id, provider, conversation_id, run_id}
+    )
   end
 
   @doc "Mark the running turn finished (completed/failed) and drain the queue."
   @spec finish_turn(integer(), String.t(), {:ok, map()} | {:error, term()}) ::
           {:accepted, {:ok, map()} | {:error, term()}} | :stale | {:error, term()}
-  def finish_turn(thread_id, generation, result)
-      when is_integer(thread_id) and is_binary(generation) do
-    GenServer.call(__MODULE__, {:finish_turn, thread_id, generation, result})
+  def finish_turn(thread_id, execution_id, result)
+      when is_integer(thread_id) and is_binary(execution_id) do
+    GenServer.call(__MODULE__, {:finish_turn, thread_id, execution_id, result})
   end
 
   @doc "Append a turn to the thread's FIFO queue (runs when the current turn finishes)."
-  @spec enqueue(integer(), String.t(), start_opts()) :: :ok
+  @spec enqueue(integer(), String.t(), start_opts()) :: :ok | {:error, term()}
   def enqueue(thread_id, prompt, opts) when is_integer(thread_id) do
-    GenServer.cast(__MODULE__, {:enqueue, thread_id, prompt, opts})
+    GenServer.call(__MODULE__, {:enqueue, thread_id, prompt, opts})
+  end
+
+  @doc """
+  Rehydrates durable pending turn intents with fresh runtime closures.
+
+  Durable queue entries intentionally contain no pids or functions. A channel
+  reconnect supplies a builder and the manager resumes FIFO execution.
+  """
+  @spec recover_pending(integer(), (map() -> (-> term())), keyword()) ::
+          {:ok, non_neg_integer()} | {:error, term()}
+  def recover_pending(thread_id, recovery_builder, opts \\ [])
+      when is_integer(thread_id) and is_function(recovery_builder, 1) and is_list(opts) do
+    GenServer.call(
+      __MODULE__,
+      {:recover_pending, thread_id, recovery_builder, opts}
+    )
   end
 
   @doc "Interrupt the live worker for a thread and persist an interrupted turn state."
@@ -132,11 +153,11 @@ defmodule SymphonyElixir.Assistant.TurnManager do
 
   def kill_tool(_thread_id, _tool_call_id), do: {:error, :invalid_tool_call_id}
 
-  @doc "Resolve the live worker pid + codex turn id for cross-channel steer/interrupt."
+  @doc "Resolve the live worker pid + provider run id for cross-channel steer/interrupt."
   @spec steer_target(integer()) :: {:ok, pid(), String.t() | nil} | :error
   def steer_target(thread_id) when is_integer(thread_id) do
     case lookup(thread_id) do
-      {pid, codex_turn_id} when is_pid(pid) -> {:ok, pid, codex_turn_id}
+      {pid, run_id} when is_pid(pid) -> {:ok, pid, run_id}
       _ -> :error
     end
   end
@@ -282,6 +303,46 @@ defmodule SymphonyElixir.Assistant.TurnManager do
     end
   end
 
+  def handle_call({:enqueue, thread_id, prompt, opts}, _from, state) do
+    case persist_queued_turn(thread_id, prompt, opts) do
+      {:ok, queue_id} ->
+        queued_entry = %{prompt: prompt, opts: opts, queue_id: queue_id}
+
+        if Map.has_key?(state, {:turn, thread_id}) or
+             Map.has_key?(state, {:goal_mutation, thread_id}) do
+          queued = Map.get(state, {:queue, thread_id}, [])
+          {:reply, :ok, Map.put(state, {:queue, thread_id}, queued ++ [queued_entry])}
+        else
+          case start_queued_turn(thread_id, queued_entry, state) do
+            {:ok, new_state} -> {:reply, :ok, new_state}
+            {:error, reason, new_state} -> {:reply, {:error, reason}, new_state}
+          end
+        end
+
+      {:error, reason} ->
+        {:reply, {:error, reason}, state}
+    end
+  end
+
+  def handle_call(
+        {:recover_pending, thread_id, recovery_builder, base_opts},
+        _from,
+        state
+      ) do
+    with {:ok, thread} <- History.get_thread(thread_id) do
+      entries =
+        thread
+        |> History.pending_turns()
+        |> Enum.reject(&queue_id_loaded?(state, thread_id, &1["id"]))
+        |> Enum.map(&rehydrate_queued_entry(&1, recovery_builder, base_opts))
+
+      state = append_recovered_queue(state, thread_id, entries)
+      {:reply, {:ok, length(entries)}, maybe_start_recovered_queue(thread_id, state)}
+    else
+      {:error, reason} -> {:reply, {:error, reason}, state}
+    end
+  end
+
   @impl true
   def handle_call({:interrupt, thread_id, reason, expected_worker_pid, preserve_queue?}, _from, state) do
     worker_pid = interrupt_worker_pid(thread_id, state)
@@ -296,10 +357,10 @@ defmodule SymphonyElixir.Assistant.TurnManager do
   end
 
   @impl true
-  def handle_call({:finish_turn, thread_id, generation, result}, _from, state) do
+  def handle_call({:finish_turn, thread_id, execution_id, result}, _from, state) do
     case Map.get(state, {:turn, thread_id}) do
-      %{generation: ^generation, monitor_ref: ref} ->
-        case persist_finish(thread_id, generation, result) do
+      %{execution_id: ^execution_id, monitor_ref: ref} ->
+        case persist_finish(thread_id, execution_id, result) do
           :ok ->
             Process.demonitor(ref, [:flush])
             unregister(thread_id)
@@ -340,8 +401,11 @@ defmodule SymphonyElixir.Assistant.TurnManager do
   defp do_interrupt_running_turn(thread_id, reason, worker_pid, preserve_queue?, state) do
     case persist_interrupt(thread_id, reason) do
       {:ok, updated_thread} ->
+        interrupted_entry = Map.get(state, {:turn, thread_id})
         if is_pid(worker_pid), do: send(worker_pid, {:agent_interrupt})
+        updated_thread = maybe_clear_durable_queue(updated_thread, preserve_queue?)
         state = cleanup_interrupted_turn(thread_id, preserve_queue?, state)
+        notify_reply_to(interrupted_entry, {:error, :interrupted})
         broadcast_from(self(), thread_id, {:turn_status, :interrupted, History.turn_payload(updated_thread)})
         {:reply, :ok, state}
 
@@ -354,13 +418,17 @@ defmodule SymphonyElixir.Assistant.TurnManager do
   end
 
   @impl true
-  def handle_cast({:note_codex, thread_id, codex_thread_id, turn_id}, state) do
+  def handle_cast({:note_run, thread_id, provider, conversation_id, run_id}, state) do
     case lookup(thread_id) do
       {pid, _old} when is_pid(pid) ->
-        update_registry(thread_id, {pid, turn_id})
+        update_registry(thread_id, {pid, run_id})
 
         with {:ok, thread} <- History.get_thread(thread_id) do
-          History.note_turn_codex(thread, %{codex_thread_id: codex_thread_id, turn_id: turn_id})
+          History.note_run_identity(thread, %{
+            provider: provider,
+            conversation_id: conversation_id,
+            run_id: run_id
+          })
         end
 
       _ ->
@@ -368,18 +436,6 @@ defmodule SymphonyElixir.Assistant.TurnManager do
     end
 
     {:noreply, state}
-  end
-
-  def handle_cast({:enqueue, thread_id, prompt, opts}, state) do
-    if Map.has_key?(state, {:turn, thread_id}) or Map.has_key?(state, {:goal_mutation, thread_id}) do
-      queued = Map.get(state, {:queue, thread_id}, [])
-      {:noreply, Map.put(state, {:queue, thread_id}, queued ++ [%{prompt: prompt, opts: opts}])}
-    else
-      case do_start_turn(thread_id, prompt, ensure_run(opts, prompt), state) do
-        {:reply, {:ok, _}, new_state} -> {:noreply, new_state}
-        {:reply, _err, new_state} -> {:noreply, new_state}
-      end
-    end
   end
 
   @impl true
@@ -452,7 +508,7 @@ defmodule SymphonyElixir.Assistant.TurnManager do
   defp handle_turn_down(ref, reason, state) do
     case find_turn_by_ref(state, ref) do
       {thread_id, entry} ->
-        interrupt_result = maybe_interrupt_running(thread_id, entry.generation, reason)
+        interrupt_result = maybe_interrupt_running(thread_id, entry.execution_id, reason)
         unregister(thread_id)
         result = {:error, {:turn_crashed, reason}}
 
@@ -606,12 +662,12 @@ defmodule SymphonyElixir.Assistant.TurnManager do
 
   defp do_start_turn(thread_id, prompt, opts, state) do
     run = Keyword.get(opts, :run)
-    generation = System.unique_integer([:positive, :monotonic]) |> Integer.to_string()
+    execution_id = System.unique_integer([:positive, :monotonic]) |> Integer.to_string()
 
     if is_function(run, 0) do
       with {:ok, thread} <- History.get_thread(thread_id),
-           {:ok, _updated} <- History.start_turn_state(thread, start_attrs(prompt, opts, generation)),
-           {:ok, pid} <- spawn_worker(thread_id, generation, run, Keyword.get(opts, :reply_to)) do
+           {:ok, _updated} <- History.start_turn_state(thread, start_attrs(prompt, opts, execution_id)),
+           {:ok, pid} <- spawn_worker(thread_id, execution_id, run, Keyword.get(opts, :reply_to)) do
         ref = Process.monitor(pid)
         register(thread_id, {pid, nil})
 
@@ -625,10 +681,10 @@ defmodule SymphonyElixir.Assistant.TurnManager do
             monitor_ref: ref,
             pid: pid,
             reply_to: reply_to,
-            generation: generation
+            execution_id: execution_id
           })
 
-        {:reply, {:ok, %{pid: pid, generation: generation}}, state}
+        {:reply, {:ok, %{pid: pid, execution_id: execution_id}}, state}
       else
         {:error, reason} ->
           rollback_failed_start(thread_id, reason)
@@ -652,26 +708,27 @@ defmodule SymphonyElixir.Assistant.TurnManager do
     end
   end
 
-  defp start_attrs(prompt, opts, generation) do
+  defp start_attrs(prompt, opts, execution_id) do
     %{
-      generation: generation,
+      execution_id: execution_id,
       trigger: Keyword.get(opts, :trigger, "user"),
       prompt: prompt,
-      agent_kind: Keyword.get(opts, :agent_kind),
       model: Keyword.get(opts, :model),
       effort: Keyword.get(opts, :effort),
-      codex_thread_id: Keyword.get(opts, :codex_thread_id)
+      provider: Keyword.get(opts, :provider),
+      conversation_id: Keyword.get(opts, :conversation_id),
+      queue_id: Keyword.get(opts, :queue_id)
     }
   end
 
-  defp spawn_worker(thread_id, generation, run, reply_to) do
+  defp spawn_worker(thread_id, execution_id, run, reply_to) do
     Task.Supervisor.start_child(SymphonyElixir.TaskSupervisor, fn ->
       result = run.()
 
-      case __MODULE__.finish_turn(thread_id, generation, result) do
+      case __MODULE__.finish_turn(thread_id, execution_id, result) do
         {:accepted, accepted_result} ->
           if is_pid(reply_to),
-            do: send(reply_to, {:assistant_turn_finished, generation, accepted_result})
+            do: send(reply_to, {:assistant_turn_finished, execution_id, accepted_result})
 
         _ ->
           :ok
@@ -679,17 +736,14 @@ defmodule SymphonyElixir.Assistant.TurnManager do
     end)
   end
 
-  defp persist_finish(thread_id, generation, result) do
+  defp persist_finish(thread_id, execution_id, result) do
     with {:ok, thread} <- History.get_thread(thread_id) do
       case History.current_turn(thread) do
-        %{"generation" => ^generation, "status" => "running"} ->
+        %{"execution_id" => ^execution_id, "status" => "running"} ->
           persistence_result =
             case result do
               {:ok, data} when is_map(data) ->
-                History.complete_turn_state(thread, %{
-                  codex_thread_id: Map.get(data, :codex_thread_id),
-                  turn_id: Map.get(data, :turn_id)
-                })
+                History.complete_turn_state(thread, result_identity_attrs(data))
 
               {:error, reason} ->
                 History.fail_turn_state(thread, reason)
@@ -706,9 +760,18 @@ defmodule SymphonyElixir.Assistant.TurnManager do
     end
   end
 
-  defp maybe_interrupt_running(thread_id, generation, _reason) do
+  defp result_identity_attrs(data) do
+    %{
+      provider: Map.get(data, :provider),
+      conversation_id: Map.get(data, :conversation_id),
+      run_id: Map.get(data, :run_id),
+      execution_id: Map.get(data, :execution_id)
+    }
+  end
+
+  defp maybe_interrupt_running(thread_id, execution_id, _reason) do
     with {:ok, thread} <- History.get_thread(thread_id),
-         %{"status" => "running", "generation" => ^generation} <- History.current_turn(thread) do
+         %{"status" => "running", "execution_id" => ^execution_id} <- History.current_turn(thread) do
       History.interrupt_turn_state_if_running(thread, "task_crash")
     end
   end
@@ -817,6 +880,20 @@ defmodule SymphonyElixir.Assistant.TurnManager do
   defp maybe_delete_turn_queue(state, _thread_id, true), do: state
   defp maybe_delete_turn_queue(state, thread_id, false), do: Map.delete(state, {:queue, thread_id})
 
+  defp maybe_clear_durable_queue(thread, true), do: thread
+
+  defp maybe_clear_durable_queue(thread, false) do
+    case History.clear_pending_turns(thread) do
+      {:ok, updated} ->
+        updated
+
+      {:error, reason} ->
+        Logger.warning("assistant turns: could not clear durable queue thread_id=#{thread.id} reason=#{inspect(reason)}")
+
+        thread
+    end
+  end
+
   defp maybe_drain_after_turn(thread_id, state) do
     if Map.has_key?(state, {:goal_mutation, thread_id}),
       do: state,
@@ -834,10 +911,72 @@ defmodule SymphonyElixir.Assistant.TurnManager do
             do: Map.delete(state, {:queue, thread_id}),
             else: Map.put(state, {:queue, thread_id}, rest)
 
-        case do_start_turn(thread_id, next.prompt, ensure_run(next.opts, next.prompt), state) do
-          {:reply, {:ok, _}, new_state} -> new_state
-          {:reply, _err, new_state} -> drain_queue(thread_id, new_state)
+        case start_queued_turn(thread_id, next, state) do
+          {:ok, new_state} -> new_state
+          {:error, _reason, new_state} -> drain_queue(thread_id, new_state)
         end
+    end
+  end
+
+  defp start_queued_turn(thread_id, queued_entry, state) do
+    opts =
+      queued_entry.opts
+      |> ensure_run(queued_entry.prompt)
+      |> Keyword.put(:queue_id, queued_entry.queue_id)
+
+    case do_start_turn(thread_id, queued_entry.prompt, opts, state) do
+      {:reply, {:ok, _}, new_state} ->
+        {:ok, new_state}
+
+      {:reply, {:error, reason}, new_state} ->
+        {:error, reason, new_state}
+    end
+  end
+
+  defp rehydrate_queued_entry(entry, recovery_builder, base_opts) do
+    opts =
+      base_opts
+      |> Keyword.put(:run, recovery_builder.(entry))
+      |> Keyword.put(:trigger, entry["trigger"] || "recovery")
+      |> Keyword.put(:provider, entry["provider"])
+      |> Keyword.put(:model, entry["model"])
+      |> Keyword.put(:effort, entry["effort"])
+
+    %{prompt: entry["prompt"], opts: opts, queue_id: entry["id"]}
+  end
+
+  defp append_recovered_queue(state, _thread_id, []), do: state
+
+  defp append_recovered_queue(state, thread_id, entries) do
+    existing = Map.get(state, {:queue, thread_id}, [])
+    Map.put(state, {:queue, thread_id}, existing ++ entries)
+  end
+
+  defp maybe_start_recovered_queue(thread_id, state) do
+    if running?(thread_id) or Map.has_key?(state, {:turn, thread_id}) or
+         Map.has_key?(state, {:goal_mutation, thread_id}),
+       do: state,
+       else: drain_queue(thread_id, state)
+  end
+
+  defp queue_id_loaded?(state, thread_id, queue_id) do
+    state
+    |> Map.get({:queue, thread_id}, [])
+    |> Enum.any?(&(&1.queue_id == queue_id))
+  end
+
+  defp persist_queued_turn(thread_id, prompt, opts) do
+    with {:ok, thread} <- History.get_thread(thread_id),
+         {:ok, _updated, entry} <-
+           History.enqueue_pending_turn(thread, %{
+             prompt: prompt,
+             trigger: Keyword.get(opts, :trigger, "user"),
+             provider: Keyword.get(opts, :provider),
+             model: Keyword.get(opts, :model),
+             effort: Keyword.get(opts, :effort),
+             context: Keyword.get(opts, :queue_context, %{})
+           }) do
+      {:ok, entry["id"]}
     end
   end
 
@@ -932,8 +1071,8 @@ defmodule SymphonyElixir.Assistant.TurnManager do
       :error
   end
 
-  defp notify_reply_to(%{reply_to: reply_to, generation: generation}, result) when is_pid(reply_to) do
-    send(reply_to, {:assistant_turn_finished, generation, result})
+  defp notify_reply_to(%{reply_to: reply_to, execution_id: execution_id}, result) when is_pid(reply_to) do
+    send(reply_to, {:assistant_turn_finished, execution_id, result})
   end
 
   defp notify_reply_to(_entry, _result), do: :ok

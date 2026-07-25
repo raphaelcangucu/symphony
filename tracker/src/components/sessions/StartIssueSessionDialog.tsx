@@ -24,7 +24,6 @@ import { createIssueSession, issueSessionStartErrorMessage } from "@/lib/createI
 import {
   catalogFor,
   defaultComposerSettings,
-  fallbackCatalogBundle,
   type AssistantCatalogBundle,
 } from "@/lib/assistantSettings";
 import {
@@ -91,7 +90,7 @@ export function StartIssueSessionDialog({
   const [agent, setAgent] = useState<AgentKind>("codex");
   const [model, setModel] = useState<string | null>(null);
   const [effort, setEffort] = useState<string | null>(null);
-  const [bundle, setBundle] = useState<AssistantCatalogBundle>(() => fallbackCatalogBundle());
+  const [bundle, setBundle] = useState<AssistantCatalogBundle | null>(null);
   const [title, setTitle] = useState("");
   const [instructions, setInstructions] = useState("");
   const [workspaceTarget, setWorkspaceTarget] = useState<WorkspaceTarget>("issue");
@@ -144,9 +143,14 @@ export function StartIssueSessionDialog({
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
-    void fetchAssistantCatalogBundle(projectSlug).then((next) => {
-      if (!cancelled) setBundle(next);
-    });
+    setBundle(null);
+    void fetchAssistantCatalogBundle(projectSlug)
+      .then((next) => {
+        if (!cancelled) setBundle(next);
+      })
+      .catch(() => {
+        if (!cancelled) setBundle(null);
+      });
     return () => {
       cancelled = true;
     };
@@ -208,7 +212,7 @@ export function StartIssueSessionDialog({
   ]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || !bundle) return;
     const defaults = defaultComposerSettings(catalogFor(bundle, agent));
     setModel((current) => current ?? defaults.model);
     setEffort((current) => current ?? defaults.effort);
@@ -300,16 +304,20 @@ export function StartIssueSessionDialog({
             </div>
 
             <div className="flex flex-wrap items-center gap-1.5">
-              <ExecutionSettingsFields
-                bundle={bundle}
-                agent={agent}
-                model={model}
-                effort={effort}
-                disabled={starting}
-                onAgentChange={(next) => setAgent(next ?? "codex")}
-                onModelChange={setModel}
-                onEffortChange={setEffort}
-              />
+              {bundle ? (
+                <ExecutionSettingsFields
+                  bundle={bundle}
+                  agent={agent}
+                  model={model}
+                  effort={effort}
+                  disabled={starting}
+                  onAgentChange={(next) => setAgent(next ?? "codex")}
+                  onModelChange={setModel}
+                  onEffortChange={setEffort}
+                />
+              ) : (
+                <span className="text-xs text-muted-foreground">{t("common.loading")}</span>
+              )}
               <ExecutionModeField agent={agent} mode={mode} disabled={starting} onChange={setMode} />
             </div>
 
@@ -383,7 +391,7 @@ export function StartIssueSessionDialog({
               {t("issueSession.dialog.cancel")}
             </Button>
           </DialogClose>
-          <Button type="button" size="sm" disabled={!issue || starting} onClick={() => void handleStart()}>
+          <Button type="button" size="sm" disabled={!issue || starting || !bundle} onClick={() => void handleStart()}>
             <PlayCircle className="mr-1.5 h-3.5 w-3.5" />
             {starting ? t("issueSession.dialog.starting") : t("issueSession.dialog.start")}
           </Button>
@@ -434,4 +442,3 @@ function WorkspaceTargetOption({
     </label>
   );
 }
-

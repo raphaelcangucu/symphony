@@ -75,21 +75,13 @@ defmodule SymphonyElixir.Cursor.ModelCatalogTest do
     refute "" in ids
   end
 
-  test "falls back to the static catalog when the CLI fails" do
-    assert {:ok, catalog} =
+  test "returns an explicit error when the CLI fails" do
+    assert {:error, {:cursor_catalog_unavailable, {:exit_status, 1}}} =
              ModelCatalog.list_models(list_models_fun: stub_cli("boom", 1))
-
-    ids = Enum.map(catalog.models, & &1.id)
-    assert "auto" in ids
-    assert Enum.find(catalog.models, & &1.is_default).id == "auto"
-    assert catalog.default_model == "auto"
   end
 
-  test "falls back to the static catalog when the CLI emits no model lines" do
-    assert {:ok, catalog} =
+  test "returns an explicit error when the CLI emits no model lines" do
+    assert {:error, {:cursor_catalog_unavailable, :empty_catalog}} =
              ModelCatalog.list_models(list_models_fun: stub_cli("Available models\n"))
-
-    ids = Enum.map(catalog.models, & &1.id)
-    assert "auto" in ids
   end
 end

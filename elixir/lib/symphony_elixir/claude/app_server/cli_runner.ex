@@ -74,6 +74,8 @@ defmodule SymphonyElixir.Claude.AppServer.CliRunner do
       cli_session_id: args.cli_session_id,
       usage: nil,
       cost_usd: nil,
+      resolved_model: nil,
+      resolved_effort: validated_effort(Map.get(args, :effort)),
       partial_text: %{},
       error: nil,
       resume_invalid: false
@@ -208,8 +210,8 @@ defmodule SymphonyElixir.Claude.AppServer.CliRunner do
   # Event processing: translate NDJSON -> bridge events
   # ────────────────────────────────────────────────────────────
 
-  defp process_event(%{"type" => "system", "subtype" => "init", "session_id" => sid}, _on_event, state) do
-    %{state | cli_session_id: sid}
+  defp process_event(%{"type" => "system", "subtype" => "init", "session_id" => sid} = payload, _on_event, state) do
+    %{state | cli_session_id: sid, resolved_model: normalize_model(Map.get(payload, "model"))}
   end
 
   defp process_event(%{"type" => "assistant"} = payload, on_event, state) do
@@ -277,6 +279,18 @@ defmodule SymphonyElixir.Claude.AppServer.CliRunner do
   defp process_event(_unknown, _on_event, state) do
     state
   end
+
+  defp validated_effort(effort) when effort in @valid_efforts, do: effort
+  defp validated_effort(_effort), do: nil
+
+  defp normalize_model(model) when is_binary(model) do
+    case String.trim(model) do
+      "" -> nil
+      value -> value
+    end
+  end
+
+  defp normalize_model(_model), do: nil
 
   # ────────────────────────────────────────────────────────────
   # Assistant content block handlers

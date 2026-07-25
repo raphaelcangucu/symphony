@@ -14,25 +14,35 @@ import {
 import { normalizeGoal } from "@/services/agentExecutions";
 import type { AgentExecutionGoal } from "@/types/agent-execution";
 import type { AgentKind, ExecutionMode } from "@/types/issue";
+import type { ModelProvenance } from "@/types/assistant-thread";
 
 export interface AssistantChannelHandlers {
-  onHistoryLoaded: (messages: AssistantChatMessage[], meta?: AssistantHistoryMeta) => void;
+  onHistoryLoaded: (
+    messages: AssistantChatMessage[],
+    meta?: AssistantHistoryMeta,
+  ) => void;
   onMessageCreated: (message: AssistantChatMessage) => void;
   onAssistantDelta: (delta: string) => void;
   onToolCallStarted: (toolCall: AssistantToolCall) => void;
   onToolCallCompleted: (toolCall: AssistantToolCall) => void;
   onAssistantCompleted: (message: AssistantChatMessage) => void;
-  onAssistantError: (message: string) => void;
-  onAssistantDocumentChanged?: (payload: AssistantDocumentChangedPayload) => void;
+  onModelProvenance?: (provenance: ModelProvenance) => void;
+  onAssistantError: (message: string, error?: AssistantTurnError) => void;
+  onAssistantDocumentChanged?: (
+    payload: AssistantDocumentChangedPayload,
+  ) => void;
   onAssistantIssueCreated?: (payload: AssistantIssueCreatedPayload) => void;
-  onSteerFailed?: (payload: { reason: string; message: string }) => void;
+  onSteerFailed?: (payload: { code: string; prompt: string }) => void;
   onUserInputRequired?: (request: UserQuestionsRequest) => void;
   onBtwDelta?: (payload: { btwId: string; delta: string }) => void;
   onBtwCompleted?: (payload: { btwId: string; message: string }) => void;
   onBtwError?: (payload: { btwId: string; message: string }) => void;
   onGoalStatus?: (status: AuthoringGoalStatus) => void;
   onTurnStatus?: (status: AssistantTurnStatus) => void;
-  onHistorySynced?: (messages: AssistantChatMessage[], meta?: AssistantHistoryMeta) => void;
+  onHistorySynced?: (
+    messages: AssistantChatMessage[],
+    meta?: AssistantHistoryPageMeta,
+  ) => void;
   onApprovalRequired?: (request: AssistantApprovalRequest) => void;
   onCreatePlanRequired?: (request: AssistantCreatePlanRequest) => void;
 }
@@ -45,13 +55,18 @@ export interface AssistantCreatePlanRequest {
   planUri: string | null;
 }
 
-export interface AssistantHistoryMeta {
+export interface AssistantHistoryPageMeta {
+  hasMoreBefore?: boolean;
+  oldestSequence?: number | null;
+}
+
+export interface AssistantHistoryMeta
+  extends ModelProvenance, AssistantHistoryPageMeta {
+  effectiveAgent?: AgentKind | null;
   executionMode?: string | null;
   skillProfile?: string | null;
   scope?: string | null;
   threadId?: number | null;
-  hasMoreBefore?: boolean;
-  oldestSequence?: number | null;
 }
 
 export interface OlderMessagesPage {
@@ -119,7 +134,10 @@ export function normalizeGoalStatus(payload: unknown): AuthoringGoalStatus {
   return {
     threadId: normalizeThreadId(data.thread_id),
     enabled: data.enabled === true,
-    objective: typeof data.objective === "string" && data.objective.trim() !== "" ? data.objective : null,
+    objective:
+      typeof data.objective === "string" && data.objective.trim() !== ""
+        ? data.objective
+        : null,
     native: data.native === true,
     status: nonEmptyString(data.status),
     provider: nonEmptyString(data.provider),
@@ -143,7 +161,9 @@ export function normalizeGoalStatus(payload: unknown): AuthoringGoalStatus {
   };
 }
 
-export function readGoalStatus(joinPayload: unknown): AuthoringGoalStatus | null {
+export function readGoalStatus(
+  joinPayload: unknown,
+): AuthoringGoalStatus | null {
   const data = (joinPayload ?? {}) as { goal_status?: unknown };
   return data.goal_status ? normalizeGoalStatus(data.goal_status) : null;
 }
@@ -153,7 +173,8 @@ export function shouldAcceptGoalStatus(
   current: AuthoringGoalStatus | null,
 ): boolean {
   if (!current) return true;
-  if (current.threadId != null && incoming.threadId !== current.threadId) return false;
+  if (current.threadId != null && incoming.threadId !== current.threadId)
+    return false;
 
   const durableComparison = compareGoalDurableRevision(incoming, current);
   if (durableComparison === null) return false;
@@ -176,13 +197,25 @@ export interface AssistantActiveTool {
 
 export interface AssistantTurnStatus {
   status: string;
-  generation: string | null;
-  sessionId: string | null;
+  provider: string | null;
+  conversationId: string | null;
+  runId: string | null;
+  executionId: string | null;
+  queuedCount: number;
+  error: AssistantTurnError | null;
   startedAt: string | null;
   finishedAt: string | null;
   canResume: boolean;
   activeTools: AssistantActiveTool[];
   lastActivityAt: string | null;
+}
+
+export interface AssistantTurnError {
+  code: string;
+  category: string;
+  retryable: boolean;
+  message: string;
+  details: Record<string, unknown>;
 }
 
 export interface AssistantApprovalRequest {
@@ -203,8 +236,12 @@ interface BackendActiveToolPayload {
 
 interface BackendTurnStatusPayload {
   status?: string | null;
-  generation?: string | null;
-  session_id?: string | null;
+  provider?: string | null;
+  conversation_id?: string | null;
+  run_id?: string | null;
+  execution_id?: string | null;
+  queued_count?: number | null;
+  error?: BackendTurnErrorPayload | null;
   started_at?: string | null;
   finished_at?: string | null;
   can_resume?: boolean | null;
@@ -212,21 +249,70 @@ interface BackendTurnStatusPayload {
   last_activity_at?: string | null;
 }
 
+interface BackendTurnErrorPayload {
+  code?: string | null;
+  category?: string | null;
+  retryable?: boolean | null;
+  message?: string | null;
+  details?: Record<string, unknown> | null;
+}
+
 export function normalizeTurnStatus(payload: unknown): AssistantTurnStatus {
   const data = (payload ?? {}) as BackendTurnStatusPayload;
   return {
     status: typeof data.status === "string" ? data.status : "unknown",
-    generation: typeof data.generation === "string" ? data.generation : null,
-    sessionId: typeof data.session_id === "string" ? data.session_id : null,
+    provider: nonEmptyString(data.provider),
+    conversationId: nonEmptyString(data.conversation_id),
+    runId: nonEmptyString(data.run_id),
+    executionId: nonEmptyString(data.execution_id),
+    queuedCount:
+      typeof data.queued_count === "number" &&
+      Number.isFinite(data.queued_count)
+        ? Math.max(0, Math.trunc(data.queued_count))
+        : 0,
+    error: normalizeTurnError(data.error),
     startedAt: typeof data.started_at === "string" ? data.started_at : null,
     finishedAt: typeof data.finished_at === "string" ? data.finished_at : null,
     canResume: data.can_resume === true,
     activeTools: normalizeActiveTools(data.active_tools),
-    lastActivityAt: typeof data.last_activity_at === "string" ? data.last_activity_at : null,
+    lastActivityAt:
+      typeof data.last_activity_at === "string" ? data.last_activity_at : null,
   };
 }
 
-function normalizeActiveTools(tools: BackendActiveToolPayload[] | null | undefined): AssistantActiveTool[] {
+function normalizeTurnError(
+  error: BackendTurnErrorPayload | null | undefined,
+): AssistantTurnError | null {
+  if (!error || typeof error !== "object") return null;
+
+  const code = nonEmptyString(error.code);
+  const category = nonEmptyString(error.category);
+  const message = nonEmptyString(error.message);
+  if (!code || !category || !message) return null;
+
+  return {
+    code,
+    category,
+    retryable: error.retryable === true,
+    message,
+    details:
+      error.details && typeof error.details === "object" ? error.details : {},
+  };
+}
+
+export function normalizeAssistantError(
+  payload: unknown,
+): AssistantTurnError | null {
+  return normalizeTurnError(
+    payload && typeof payload === "object"
+      ? (payload as BackendTurnErrorPayload)
+      : null,
+  );
+}
+
+function normalizeActiveTools(
+  tools: BackendActiveToolPayload[] | null | undefined,
+): AssistantActiveTool[] {
   if (!Array.isArray(tools)) return [];
 
   return tools.flatMap((tool) => {
@@ -241,8 +327,14 @@ function normalizeActiveTools(tools: BackendActiveToolPayload[] | null | undefin
       {
         id,
         name,
-        argumentsSummary: typeof summary === "string" && summary.trim().length > 0 ? summary : null,
-        startedAt: typeof started === "string" && started.trim().length > 0 ? started : null,
+        argumentsSummary:
+          typeof summary === "string" && summary.trim().length > 0
+            ? summary
+            : null,
+        startedAt:
+          typeof started === "string" && started.trim().length > 0
+            ? started
+            : null,
       },
     ];
   });
@@ -251,6 +343,40 @@ function normalizeActiveTools(tools: BackendActiveToolPayload[] | null | undefin
 export function readLastTurn(joinPayload: unknown): AssistantTurnStatus | null {
   const data = (joinPayload ?? {}) as { last_turn?: unknown };
   return data.last_turn ? normalizeTurnStatus(data.last_turn) : null;
+}
+
+export interface AssistantBackendCapabilities {
+  provider: string;
+  resume: boolean;
+  interrupt: boolean;
+  steer: boolean;
+  nativeGoal: boolean;
+  modelSelection: boolean;
+  reasoningEffort: boolean;
+  multiAgent: boolean;
+}
+
+export function readAgentCapabilities(
+  joinPayload: unknown,
+): AssistantBackendCapabilities | null {
+  const capabilities = (joinPayload as { agent_capabilities?: unknown } | null)
+    ?.agent_capabilities;
+  if (!capabilities || typeof capabilities !== "object") return null;
+
+  const data = capabilities as Record<string, unknown>;
+  const provider = nonEmptyString(data.provider);
+  if (!provider) return null;
+
+  return {
+    provider,
+    resume: data.resume === true,
+    interrupt: data.interrupt === true,
+    steer: data.steer === true,
+    nativeGoal: data.native_goal === true,
+    modelSelection: data.model_selection === true,
+    reasoningEffort: data.reasoning_effort === true,
+    multiAgent: data.multi_agent === true,
+  };
 }
 
 export interface AssistantDocumentChangedPayload {
@@ -265,10 +391,15 @@ export interface AssistantIssueCreatedPayload {
 
 interface HistoryLoadedPayload {
   messages?: BackendAssistantChatMessageDto[] | null;
+  effective_agent?: string | null;
   execution_mode?: string | null;
   skill_profile?: string | null;
   scope?: string | null;
   thread_id?: number | string | null;
+  requested_model?: string | null;
+  requested_effort?: string | null;
+  resolved_model?: string | null;
+  resolved_effort?: string | null;
   has_more_before?: boolean | null;
   oldest_sequence?: number | null;
 }
@@ -283,10 +414,6 @@ interface DeltaPayload {
 
 interface ToolCallPayload {
   tool_call?: Parameters<typeof normalizeToolCall>[0] | null;
-}
-
-interface ErrorPayload {
-  message?: string | null;
 }
 
 interface ApprovalRequiredPayload {
@@ -318,7 +445,11 @@ export function assistantExploreTopic(projectSlug: string): string {
   return `assistant:explore:${encodeURIComponent(slug)}`;
 }
 
-export function assistantKbTopic(projectSlug: string, repoSlug: string, pagePath: string): string {
+export function assistantKbTopic(
+  projectSlug: string,
+  repoSlug: string,
+  pagePath: string,
+): string {
   const slug = requireProjectSlug(projectSlug);
   const repo = requireNonBlank(repoSlug, "repoSlug");
   const path = requireNonBlank(pagePath, "pagePath");
@@ -331,7 +462,10 @@ export function assistantThreadTopic(threadId: number | string): string {
   return `assistant:thread:${id}`;
 }
 
-export function assistantIssueTopic(projectSlug: string, identifier: string): string {
+export function assistantIssueTopic(
+  projectSlug: string,
+  identifier: string,
+): string {
   const slug = requireProjectSlug(projectSlug);
   const issueIdentifier = requireNonBlank(identifier, "identifier");
 
@@ -340,7 +474,10 @@ export function assistantIssueTopic(projectSlug: string, identifier: string): st
 
 export type GoalStatusAcceptor = (payload: unknown) => boolean;
 
-export function bindAssistantEvents(channel: Channel, handlers: AssistantChannelHandlers): GoalStatusAcceptor {
+export function bindAssistantEvents(
+  channel: Channel,
+  handlers: AssistantChannelHandlers,
+): GoalStatusAcceptor {
   let latestGoalStatus: AuthoringGoalStatus | null = null;
 
   const acceptGoalStatus = (payload: unknown) => {
@@ -355,10 +492,17 @@ export function bindAssistantEvents(channel: Channel, handlers: AssistantChannel
     const data = payload as HistoryLoadedPayload & { last_turn?: unknown };
     const messages = (data.messages ?? []).map(normalizeAssistantChatMessage);
     handlers.onHistoryLoaded(messages, {
-      executionMode: typeof data.execution_mode === "string" ? data.execution_mode : null,
-      skillProfile: typeof data.skill_profile === "string" ? data.skill_profile : null,
+      effectiveAgent: normalizeApprovalAgent(data.effective_agent),
+      executionMode:
+        typeof data.execution_mode === "string" ? data.execution_mode : null,
+      skillProfile:
+        typeof data.skill_profile === "string" ? data.skill_profile : null,
       scope: typeof data.scope === "string" ? data.scope : null,
       threadId: normalizeThreadId(data.thread_id),
+      requestedModel: nonEmptyString(data.requested_model),
+      requestedEffort: nonEmptyString(data.requested_effort),
+      resolvedModel: nonEmptyString(data.resolved_model),
+      resolvedEffort: nonEmptyString(data.resolved_effort),
       ...readHistoryPageMeta(data),
     });
 
@@ -366,10 +510,23 @@ export function bindAssistantEvents(channel: Channel, handlers: AssistantChannel
     if (joinedLastTurn) handlers.onTurnStatus?.(joinedLastTurn);
 
     const joinedGoalStatus = readGoalStatus(data);
-    if (joinedGoalStatus && shouldAcceptGoalStatus(joinedGoalStatus, latestGoalStatus)) {
+    if (
+      joinedGoalStatus &&
+      shouldAcceptGoalStatus(joinedGoalStatus, latestGoalStatus)
+    ) {
       latestGoalStatus = joinedGoalStatus;
       handlers.onGoalStatus?.(joinedGoalStatus);
     }
+  });
+
+  channel.on("model_provenance", (payload) => {
+    const data = (payload ?? {}) as Record<string, unknown>;
+    handlers.onModelProvenance?.({
+      requestedModel: nonEmptyString(data.requested_model),
+      requestedEffort: nonEmptyString(data.requested_effort),
+      resolvedModel: nonEmptyString(data.resolved_model),
+      resolvedEffort: nonEmptyString(data.resolved_effort),
+    });
   });
 
   channel.on("history_synced", (payload) => {
@@ -380,12 +537,14 @@ export function bindAssistantEvents(channel: Channel, handlers: AssistantChannel
 
   channel.on("message_created", (payload) => {
     const message = (payload as MessagePayload).message;
-    if (message) handlers.onMessageCreated(normalizeAssistantChatMessage(message));
+    if (message)
+      handlers.onMessageCreated(normalizeAssistantChatMessage(message));
   });
 
   channel.on("assistant_delta", (payload) => {
     const delta = (payload as DeltaPayload).delta;
-    if (typeof delta === "string" && delta.length > 0) handlers.onAssistantDelta(delta);
+    if (typeof delta === "string" && delta.length > 0)
+      handlers.onAssistantDelta(delta);
   });
 
   channel.on("tool_call_started", (payload) => {
@@ -400,11 +559,20 @@ export function bindAssistantEvents(channel: Channel, handlers: AssistantChannel
 
   channel.on("assistant_completed", (payload) => {
     const message = (payload as MessagePayload).message;
-    if (message) handlers.onAssistantCompleted(normalizeAssistantChatMessage(message));
+    if (message)
+      handlers.onAssistantCompleted(normalizeAssistantChatMessage(message));
   });
 
   channel.on("assistant_error", (payload) => {
-    handlers.onAssistantError((payload as ErrorPayload).message ?? "Assistant request failed");
+    const error = normalizeAssistantError(payload) ?? {
+      code: "invalid_error_payload",
+      category: "protocol",
+      retryable: false,
+      message: "Invalid assistant error payload.",
+      details: {},
+    };
+
+    handlers.onAssistantError(error.message, error);
   });
 
   channel.on("assistant_document_changed", (payload) => {
@@ -414,7 +582,10 @@ export function bindAssistantEvents(channel: Channel, handlers: AssistantChannel
 
     if (!identifier && threadId == null) return;
 
-    handlers.onAssistantDocumentChanged?.({ identifier: identifier || undefined, threadId: threadId ?? undefined });
+    handlers.onAssistantDocumentChanged?.({
+      identifier: identifier || undefined,
+      threadId: threadId ?? undefined,
+    });
   });
 
   channel.on("assistant_issue_created", (payload) => {
@@ -422,11 +593,16 @@ export function bindAssistantEvents(channel: Channel, handlers: AssistantChannel
     const identifier = created.identifier?.trim();
     if (!identifier) return;
 
-    handlers.onAssistantIssueCreated?.({ identifier, threadId: normalizeThreadId(created.thread_id) });
+    handlers.onAssistantIssueCreated?.({
+      identifier,
+      threadId: normalizeThreadId(created.thread_id),
+    });
   });
 
   channel.on("user_input_required", (payload) => {
-    const request = normalizeUserQuestionsRequest(payload as Parameters<typeof normalizeUserQuestionsRequest>[0]);
+    const request = normalizeUserQuestionsRequest(
+      payload as Parameters<typeof normalizeUserQuestionsRequest>[0],
+    );
     if (request) handlers.onUserInputRequired?.(request);
   });
 
@@ -441,26 +617,35 @@ export function bindAssistantEvents(channel: Channel, handlers: AssistantChannel
   });
 
   channel.on("steer_failed", (payload) => {
-    const data = payload as { reason?: string | null; message?: string | null };
+    const data = payload as { code?: string | null; prompt?: string | null };
     handlers.onSteerFailed?.({
-      reason: data.reason ?? "steer_failed",
-      message: data.message ?? "",
+      code: data.code ?? "steer_failed",
+      prompt: data.prompt ?? "",
     });
   });
 
   channel.on("btw_delta", (payload) => {
     const data = payload as { btw_id?: string | null; delta?: string | null };
-    if (data.btw_id && typeof data.delta === "string") handlers.onBtwDelta?.({ btwId: data.btw_id, delta: data.delta });
+    if (data.btw_id && typeof data.delta === "string")
+      handlers.onBtwDelta?.({ btwId: data.btw_id, delta: data.delta });
   });
 
   channel.on("btw_completed", (payload) => {
     const data = payload as { btw_id?: string | null; message?: string | null };
-    if (data.btw_id) handlers.onBtwCompleted?.({ btwId: data.btw_id, message: data.message ?? "" });
+    if (data.btw_id)
+      handlers.onBtwCompleted?.({
+        btwId: data.btw_id,
+        message: data.message ?? "",
+      });
   });
 
   channel.on("btw_error", (payload) => {
     const data = payload as { btw_id?: string | null; message?: string | null };
-    if (data.btw_id) handlers.onBtwError?.({ btwId: data.btw_id, message: data.message ?? "Side question failed" });
+    if (data.btw_id)
+      handlers.onBtwError?.({
+        btwId: data.btw_id,
+        message: data.message ?? "Side question failed",
+      });
   });
 
   channel.on("goal_status", (payload) => {
@@ -478,19 +663,27 @@ export function bindAssistantEvents(channel: Channel, handlers: AssistantChannel
   return acceptGoalStatus;
 }
 
-export function requestGoalStatus(channel: Channel): ReturnType<Channel["push"]> {
+export function requestGoalStatus(
+  channel: Channel,
+): ReturnType<Channel["push"]> {
   return channel.push("goal_status", {});
 }
 
-export function pauseAuthoringGoal(channel: Channel): ReturnType<Channel["push"]> {
+export function pauseAuthoringGoal(
+  channel: Channel,
+): ReturnType<Channel["push"]> {
   return channel.push("goal_pause", {});
 }
 
-export function resumeAuthoringGoal(channel: Channel): ReturnType<Channel["push"]> {
+export function resumeAuthoringGoal(
+  channel: Channel,
+): ReturnType<Channel["push"]> {
   return channel.push("goal_resume", {});
 }
 
-export function clearAuthoringGoal(channel: Channel): ReturnType<Channel["push"]> {
+export function clearAuthoringGoal(
+  channel: Channel,
+): ReturnType<Channel["push"]> {
   return channel.push("goal_clear", {});
 }
 
@@ -498,7 +691,9 @@ export function resumeTurn(channel: Channel): ReturnType<Channel["push"]> {
   return channel.push("resume_turn", {});
 }
 
-export function dismissInterruptedTurn(channel: Channel): ReturnType<Channel["push"]> {
+export function dismissInterruptedTurn(
+  channel: Channel,
+): ReturnType<Channel["push"]> {
   return channel.push("dismiss_interrupted_turn", {});
 }
 
@@ -506,7 +701,10 @@ export function stopTurn(channel: Channel): ReturnType<Channel["push"]> {
   return channel.push("stop_turn", {});
 }
 
-export function killTool(channel: Channel, toolCallId: string): ReturnType<Channel["push"]> {
+export function killTool(
+  channel: Channel,
+  toolCallId: string,
+): ReturnType<Channel["push"]> {
   if (typeof toolCallId !== "string" || toolCallId.trim().length === 0) {
     throw new Error("toolCallId is required");
   }
@@ -514,7 +712,9 @@ export function killTool(channel: Channel, toolCallId: string): ReturnType<Chann
   return channel.push("kill_tool", { tool_call_id: toolCallId.trim() });
 }
 
-export function requestHistorySync(channel: Channel): ReturnType<Channel["push"]> {
+export function requestHistorySync(
+  channel: Channel,
+): ReturnType<Channel["push"]> {
   return channel.push("sync_history", {});
 }
 
@@ -524,7 +724,8 @@ function readHistoryPageMeta(data: HistoryLoadedPayload): {
 } {
   return {
     hasMoreBefore: data.has_more_before === true,
-    oldestSequence: typeof data.oldest_sequence === "number" ? data.oldest_sequence : null,
+    oldestSequence:
+      typeof data.oldest_sequence === "number" ? data.oldest_sequence : null,
   };
 }
 
@@ -535,26 +736,41 @@ export function fetchToolOutput(
   toolCallId: string,
 ): Promise<string> {
   const trimmedId = String(toolCallId).trim();
-  if (trimmedId === "") return Promise.reject(new Error("toolCallId is required"));
+  if (trimmedId === "")
+    return Promise.reject(new Error("toolCallId is required"));
 
   return new Promise((resolve, reject) => {
     channel
-      .push("fetch_tool_output", { message_id: messageId, tool_call_id: trimmedId })
+      .push("fetch_tool_output", {
+        message_id: messageId,
+        tool_call_id: trimmedId,
+      })
       .receive("ok", (response: unknown) => {
         const payload = response as { output?: string | null };
         resolve(typeof payload?.output === "string" ? payload.output : "");
       })
       .receive("error", (response: unknown) => {
-        reject(new Error(readReceiveErrorReason(response) ?? "fetch_tool_output failed"));
+        reject(
+          new Error(
+            readReceiveErrorReason(response) ?? "fetch_tool_output failed",
+          ),
+        );
       })
-      .receive("timeout", () => reject(new Error("fetch_tool_output timed out")));
+      .receive("timeout", () =>
+        reject(new Error("fetch_tool_output timed out")),
+      );
   });
 }
 
 /** Loads an older page of messages (sequence &lt; beforeSequence), newest-first window, ascending. */
-export function loadOlderMessages(channel: Channel, beforeSequence: number): Promise<OlderMessagesPage> {
+export function loadOlderMessages(
+  channel: Channel,
+  beforeSequence: number,
+): Promise<OlderMessagesPage> {
   if (!Number.isInteger(beforeSequence) || beforeSequence <= 0) {
-    return Promise.reject(new Error("beforeSequence must be a positive integer"));
+    return Promise.reject(
+      new Error("beforeSequence must be a positive integer"),
+    );
   }
 
   return new Promise((resolve, reject) => {
@@ -568,25 +784,37 @@ export function loadOlderMessages(channel: Channel, beforeSequence: number): Pro
         });
       })
       .receive("error", (response: unknown) => {
-        reject(new Error(readReceiveErrorReason(response) ?? "load_older_messages failed"));
+        reject(
+          new Error(
+            readReceiveErrorReason(response) ?? "load_older_messages failed",
+          ),
+        );
       })
-      .receive("timeout", () => reject(new Error("load_older_messages timed out")));
+      .receive("timeout", () =>
+        reject(new Error("load_older_messages timed out")),
+      );
   });
 }
 
 function readReceiveErrorReason(response: unknown): string | null {
-  if (typeof response === "object" && response !== null && "reason" in response) {
-    const reason = (response as { reason?: unknown }).reason;
-    return typeof reason === "string" && reason.trim() !== "" ? reason : null;
+  if (typeof response === "object" && response !== null) {
+    const data = response as { message?: unknown };
+    const message = typeof data.message === "string" ? data.message.trim() : "";
+    if (message !== "") return message;
   }
   return null;
 }
 
 export function isTerminalTurnStatus(status: string): boolean {
-  return status === "completed" || status === "failed" || status === "interrupted";
+  return (
+    status === "completed" || status === "failed" || status === "interrupted"
+  );
 }
 
-export function setAuthoringGoalObjective(channel: Channel, objective: string): ReturnType<Channel["push"]> {
+export function setAuthoringGoalObjective(
+  channel: Channel,
+  objective: string,
+): ReturnType<Channel["push"]> {
   return channel.push("goal_set_objective", { objective });
 }
 
@@ -614,11 +842,14 @@ export function submitCreatePlan(
   return channel.push("submit_create_plan", { request_id: requestId, action });
 }
 
-function normalizeCreatePlanRequest(payload: unknown): AssistantCreatePlanRequest | null {
+function normalizeCreatePlanRequest(
+  payload: unknown,
+): AssistantCreatePlanRequest | null {
   if (!payload || typeof payload !== "object") return null;
   const data = payload as Record<string, unknown>;
   const requestId = data.request_id ?? data.requestId;
-  if (typeof requestId !== "string" && typeof requestId !== "number") return null;
+  if (typeof requestId !== "string" && typeof requestId !== "number")
+    return null;
   const asNullableString = (value: unknown): string | null =>
     typeof value === "string" && value.trim() ? value : null;
 
@@ -633,7 +864,11 @@ function normalizeCreatePlanRequest(payload: unknown): AssistantCreatePlanReques
 
 export function dispatchCodingAgent(
   channel: Channel,
-  options: { goalMode: boolean; agent?: AgentKind | null; mode?: ExecutionMode | null },
+  options: {
+    goalMode: boolean;
+    agent?: AgentKind | null;
+    mode?: ExecutionMode | null;
+  },
 ): ReturnType<Channel["push"]> {
   const payload: Record<string, unknown> = { goal_mode: options.goalMode };
   if (options.agent != null) {
@@ -647,7 +882,10 @@ export function dispatchCodingAgent(
 
 export function setTurnPreferences(
   channel: Channel,
-  preferences: { executionMode?: ExecutionMode | null; skillProfile?: string | null },
+  preferences: {
+    executionMode?: ExecutionMode | null;
+    skillProfile?: string | null;
+  },
 ): ReturnType<Channel["push"]> {
   const payload: Record<string, unknown> = {};
   if (preferences.executionMode != null) {
@@ -659,18 +897,28 @@ export function setTurnPreferences(
   return channel.push("set_turn_preferences", payload);
 }
 
-function normalizeThreadId(value: number | string | null | undefined): number | null {
-  if (typeof value === "number" && Number.isInteger(value) && value > 0) return value;
+function normalizeThreadId(
+  value: number | string | null | undefined,
+): number | null {
+  if (typeof value === "number" && Number.isInteger(value) && value > 0)
+    return value;
   if (typeof value !== "string") return null;
 
   const parsed = Number.parseInt(value, 10);
-  return Number.isInteger(parsed) && String(parsed) === value.trim() && parsed > 0 ? parsed : null;
+  return Number.isInteger(parsed) &&
+    String(parsed) === value.trim() &&
+    parsed > 0
+    ? parsed
+    : null;
 }
 
-function normalizeApprovalRequest(payload: unknown): AssistantApprovalRequest | null {
+function normalizeApprovalRequest(
+  payload: unknown,
+): AssistantApprovalRequest | null {
   const data = (payload ?? {}) as ApprovalRequiredPayload;
   const requestId = data.request_id;
-  if (typeof requestId !== "string" && typeof requestId !== "number") return null;
+  if (typeof requestId !== "string" && typeof requestId !== "number")
+    return null;
 
   return {
     requestId,
@@ -755,6 +1003,7 @@ function goalRequestOrder(status: AuthoringGoalStatus): number {
 }
 
 function normalizeApprovalAgent(value: unknown): AgentKind | null {
-  if (value === "claude" || value === "codex" || value === "cursor") return value;
+  if (value === "claude" || value === "codex" || value === "cursor")
+    return value;
   return null;
 }

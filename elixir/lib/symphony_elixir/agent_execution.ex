@@ -512,14 +512,18 @@ defmodule SymphonyElixir.AgentExecution do
   defp session_log_interrupted?(agent_kind, path, workspace) do
     case session_log_entries(agent_kind, path, workspace) do
       {:ok, entries} when entries != [] ->
-        titles =
-          entries
-          |> Enum.take(-8)
-          |> Enum.map(fn entry -> Map.get(entry, "title") || Map.get(entry, :title) end)
-          |> Enum.reject(&is_nil/1)
+        entries
+        |> Enum.take(-8)
+        |> Enum.reverse()
+        |> Enum.reduce_while(false, fn entry, _state ->
+          title = Map.get(entry, "title") || Map.get(entry, :title)
 
-        Enum.any?(titles, &aborted_title?/1) or
-          (recent_activity?(titles) and not completed_recently?(titles))
+          cond do
+            resumed_title?(title) -> {:halt, false}
+            aborted_title?(title) -> {:halt, true}
+            true -> {:cont, false}
+          end
+        end)
 
       _ ->
         false
@@ -619,21 +623,15 @@ defmodule SymphonyElixir.AgentExecution do
 
   defp aborted_title?(_title), do: false
 
+  defp resumed_title?(title) when is_binary(title) do
+    String.downcase(title) in ["run resumed", "task resumed", "turn resumed"]
+  end
+
+  defp resumed_title?(_title), do: false
+
   defp abort_entry_kind("Agent run failed"), do: :run_failed
   defp abort_entry_kind("Worker crashed"), do: :worker_crashed
   defp abort_entry_kind(_title), do: :turn_aborted
-
-  defp recent_activity?(titles) when is_list(titles), do: titles != []
-  defp recent_activity?(_titles), do: false
-
-  defp completed_recently?(titles) when is_list(titles) do
-    Enum.any?(titles, fn title ->
-      is_binary(title) and
-        String.match?(String.downcase(title), ~r/turn completed|task complete|session completed/)
-    end)
-  end
-
-  defp completed_recently?(_titles), do: false
 
   defp normalize_status_name(value) when is_binary(value),
     do: value |> String.trim() |> String.downcase()

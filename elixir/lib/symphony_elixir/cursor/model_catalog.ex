@@ -5,9 +5,8 @@ defmodule SymphonyElixir.Cursor.ModelCatalog do
 
   Models are discovered at runtime from `cursor-agent --list-models` so the
   catalog tracks whatever the installed CLI accepts via `--model`, instead of a
-  hand-maintained list that drifts behind new releases. When the CLI is missing,
-  errors, or reports no parseable models, we fall back to a small static
-  catalog so the picker always offers at least `auto`.
+  hand-maintained list that drifts behind new releases. Discovery failures are
+  returned explicitly; stale synthetic models are never offered.
 
   Cursor model slugs encode reasoning variants themselves (for example
   `*-low`, `*-high`, `*-fast`), so every model exposes `efforts: []` and the
@@ -35,13 +34,6 @@ defmodule SymphonyElixir.Cursor.ModelCatalog do
   @cache_key :cursor_model_catalog
   @cache_ttl_ms 10 * 60 * 1_000
 
-  @fallback_models [
-    %{id: "auto", label: "Auto", default: true},
-    %{id: "composer-1", label: "Composer 1", default: false},
-    %{id: "gpt-5", label: "GPT-5", default: false},
-    %{id: "sonnet-4", label: "Claude Sonnet 4", default: false},
-    %{id: "sonnet-4-thinking", label: "Claude Sonnet 4 Thinking", default: false}
-  ]
   @type model_option :: %{
           id: String.t(),
           model: String.t(),
@@ -60,11 +52,13 @@ defmodule SymphonyElixir.Cursor.ModelCatalog do
           models: [model_option()]
         }
 
-  @spec list_models(keyword()) :: {:ok, catalog()}
+  @spec list_models(keyword()) :: {:ok, catalog()} | {:error, term()}
   def list_models(opts \\ []) do
     case Keyword.fetch(opts, :list_models_fun) do
       {:ok, list_models_fun} ->
-        {:ok, present_catalog(models_from_fun(list_models_fun))}
+        with {:ok, models} <- models_from_fun(list_models_fun) do
+          {:ok, present_catalog(models)}
+        end
 
       :error ->
         list_models_cached()
@@ -77,15 +71,19 @@ defmodule SymphonyElixir.Cursor.ModelCatalog do
         {:ok, catalog}
 
       :miss ->
-        refresh_cache_async()
-        {:ok, present_catalog(@fallback_models)}
+        with {:ok, models} <- models_from_fun(&run_list_models/0) do
+          catalog = present_catalog(models)
+          HotpathCache.put(@cache_key, catalog, @cache_ttl_ms)
+          {:ok, catalog}
+        end
     end
   end
 
   defp models_from_fun(list_models_fun) do
     case fetch_cli_models(list_models_fun) do
-      {:ok, [_ | _] = parsed} -> parsed
-      _ -> @fallback_models
+      {:ok, [_ | _] = parsed} -> {:ok, parsed}
+      {:ok, []} -> {:error, {:cursor_catalog_unavailable, :empty_catalog}}
+      {:error, reason} -> {:error, {:cursor_catalog_unavailable, reason}}
     end
   end
 
@@ -99,16 +97,6 @@ defmodule SymphonyElixir.Cursor.ModelCatalog do
     }
   end
 
-  defp refresh_cache_async do
-    Task.start(fn ->
-      catalog = present_catalog(models_from_fun(&run_list_models/0))
-      HotpathCache.put(@cache_key, catalog, @cache_ttl_ms)
-      SymphonyElixir.Assistant.CatalogBundle.invalidate()
-    end)
-
-    :ok
-  end
-
   defp fetch_cli_models(list_models_fun) do
     case safe_invoke(list_models_fun) do
       {output, 0} when is_binary(output) ->
@@ -116,7 +104,7 @@ defmodule SymphonyElixir.Cursor.ModelCatalog do
 
       {_output, status} ->
         Logger.warning("Cursor ModelCatalog: --list-models exited with status #{inspect(status)}")
-        :error
+        {:error, {:exit_status, status}}
     end
   end
 

@@ -12,8 +12,9 @@ description:
 - Prove the change works with focused unit evidence for every repo you changed:
   tests you created or modified, plus existing tests directly related to the
   same changed feature/surface.
-- When the change touches UI paths, prove it visually: e2e run with at least
-  1 screenshot AND 1 video (plus trace) of the affected flow.
+- When the change touches UI paths, prove it visually: e2e run with full-page
+  desktop and mobile screenshots, a browser-compatible MP4 walkthrough, the
+  original recorder video, and a trace of the affected flow.
 - Tick the issue's acceptance criteria as you prove them: when the issue body
   has an `## Acceptance criteria` checklist, mark each covered `- [ ]` with the
   `update_acceptance_criteria` tool (see "Symphony tracker tools" below). Leave
@@ -175,6 +176,23 @@ Each spec should screenshot the key states of the changed screen
 (`await page.screenshot({ path: "...", fullPage: true })` for before/after
 states where applicable).
 
+For a page-level UI change, capture the final real page twice with
+`fullPage: true`: once at a desktop viewport and once at a mobile viewport.
+Record the walkthrough at a stable desktop viewport, then transcode the
+finished WebM without deleting it:
+
+```bash
+ffmpeg -y -i flow.webm -c:v libx264 -pix_fmt yuv420p \
+  -movflags +faststart -an flow.mp4
+```
+
+Reference both video paths and both labeled screenshots in the final manifest
+so all four assets appear in the Evidence tab.
+
+Artifact paths must resolve to regular files or real directories below
+`.symphony/evidence/`. Never use symlinks, absolute paths, or `..` traversal;
+the import boundary rejects them.
+
 ## Real-flow proof (no fakes)
 
 The VALIDATE gate checks that an e2e **actually exercised the change** — not just
@@ -220,18 +238,23 @@ For each repo you changed that declares `impacts: [<ui repos>]`:
   `impacts_ui: false` and a concrete rationale. If you neither run the e2e nor
   record a decision, the gate fails with `impact_assessment_missing`.
 
-### Visual artifact naming (screenshots + videos)
+### Visual artifact naming (desktop/mobile screenshots + videos)
 
 Each screenshot and video must answer **"what evidence is this?"** for a human
 reviewer. Use the **Playwright test title** (or Cypress `it(...)` string) as the
 source of truth:
 
 1. **Filename** — kebab-case, issue-prefixed, under `.symphony/evidence/artifacts/`:
-   - `artifacts/screens/{ISSUE}-{test-intent-slug}.png`
+   - `artifacts/screens/{ISSUE}-{test-intent-slug}-desktop-full.png`
+   - `artifacts/screens/{ISSUE}-{test-intent-slug}-mobile-full.png`
    - `artifacts/videos/{ISSUE}-{test-intent-slug}.webm`
+   - `artifacts/videos/{ISSUE}-{test-intent-slug}.mp4`
    - Example: `artifacts/videos/cde-1142-long-share-dialog-header-real-app.webm`
      for a test titled `long share dialog header real app`.
    - Never leave generic names like `video.webm` or `screenshot.png`.
+   - Keep Playwright's WebM as the immutable recorder output. Derive an
+     MP4/H.264 copy with `yuv420p` and fast-start metadata for reliable browser,
+     PR, and mobile playback; never replace or relabel the WebM source.
 
 2. **Manifest entry** — prefer labeled objects (plain path strings still work,
    but objects are required when one e2e command runs multiple specs):
@@ -299,15 +322,25 @@ run's `repo` must be the UI repo it exercises:
       "report": "artifacts/playwright-report/",
       "screenshots": [
         {
-          "path": "artifacts/screens/gam-5-settings.png",
-          "label": "settings page renders for tenant admin",
+          "path": "artifacts/screens/gam-5-settings-desktop-full.png",
+          "label": "settings page renders for tenant admin — desktop full page",
+          "navigations": ["http://gam.localhost:4300/settings"]
+        },
+        {
+          "path": "artifacts/screens/gam-5-settings-mobile-full.png",
+          "label": "settings page renders for tenant admin — mobile full page",
           "navigations": ["http://gam.localhost:4300/settings"]
         }
       ],
       "videos": [
         {
           "path": "artifacts/videos/gam-5-settings-flow.webm",
-          "label": "settings page renders for tenant admin",
+          "label": "settings page renders for tenant admin — WebM source",
+          "navigations": ["http://gam.localhost:4300/settings"]
+        },
+        {
+          "path": "artifacts/videos/gam-5-settings-flow.mp4",
+          "label": "settings page renders for tenant admin — MP4 H.264",
           "navigations": ["http://gam.localhost:4300/settings"]
         }
       ],
@@ -473,11 +506,13 @@ be fine but the environment cannot prove it. Say so once in the workpad
 Symphony verifies ALL of the following per repo; the run cannot finish until
 they hold:
 
-1. `manifest.json` exists, is valid JSON, and every referenced artifact file
-   exists on disk.
+1. `manifest.json` exists, is valid JSON, every referenced artifact exists
+   below `.symphony/evidence/`, and none is a symlink.
 2. Every repo with a git diff has a `unit` run with `status: "passed"`.
 3. e2e is required for a UI repo (an `e2e` run for that repo with
-   `status: "passed"` plus at least 1 screenshot and 1 video) when ANY of:
+   `status: "passed"` plus a full-page desktop screenshot, a full-page mobile
+   screenshot, the original recorder video, an MP4/H.264 `yuv420p` fast-start
+   copy, and a trace) when ANY of:
    - its own `ui_paths` changed (deterministic floor, not your judgment); or
    - a changed source repo touched its `contract_paths` and `impacts` that UI
      repo (deterministic backstop, not your judgment); or
@@ -486,6 +521,11 @@ they hold:
    surface: either that UI repo's e2e ran, or the manifest has an `impact`
    decision for that source→UI pair.
 5. Every declared `command` appears in this session's execution log.
+6. The final manifest is persisted for the current `issue_session` or
+   `issue_execution` and the resulting Evidence-tab record is re-read before
+   handoff. A workspace-only manifest is not final evidence. Confirm that the
+   persisted record exposes both screenshots, both video formats, and the
+   trace; if the import or re-read fails, validation is incomplete.
 
 If a test fails, record that failed execution immediately, then fix the code and
 re-run the same focused command; the rerun replaces that command's prior entry

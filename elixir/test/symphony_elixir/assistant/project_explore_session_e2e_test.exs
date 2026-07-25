@@ -101,7 +101,7 @@ defmodule SymphonyElixir.Assistant.ProjectExploreSessionE2ETest do
         {:explore_turn, Path.expand(workspace), prompt, Keyword.get(opts, :workspace_root)}
       )
 
-      {:ok, %{assistant_message: "answered", tool_calls: [], codex_thread_id: "ct-e2e", turn_id: "t-e2e"}}
+      {:ok, %{assistant_message: "answered", tool_calls: [], conversation_id: "ct-e2e", run_id: "t-e2e"}}
     end
 
     assert {:ok, result} =

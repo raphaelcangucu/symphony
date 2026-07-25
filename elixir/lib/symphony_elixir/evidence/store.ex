@@ -17,13 +17,33 @@ defmodule SymphonyElixir.Evidence.Store do
           {:ok, Record.t()} | {:error, term()}
   def persist(project_slug, identifier, workspace, manifest_map, opts \\ []) do
     with {:ok, project} <- Context.get_project(project_slug) do
-      run_id = Keyword.get(opts, :run_id, generate_run_id())
-      destination = Path.join([evidence_root(opts), project_slug, safe(identifier), run_id])
+      case idempotent_record(project.id, identifier, manifest_map, opts) do
+        %Record{} = record -> {:ok, record}
+        nil -> persist_new(project.id, project_slug, identifier, workspace, manifest_map, opts)
+      end
+    end
+  end
 
-      with :ok <- copy_artifacts(Manifest.resolve_dir(workspace), destination) do
+  defp persist_new(project_id, project_slug, identifier, workspace, manifest_map, opts) do
+    run_id = Keyword.get(opts, :run_id, generate_run_id())
+    root = Path.expand(evidence_root(opts))
+
+    destination =
+      Path.join([
+        root,
+        safe_component(project_slug),
+        safe_component(identifier),
+        safe_component(run_id)
+      ])
+
+    source = Keyword.get(opts, :evidence_dir, Manifest.resolve_dir(workspace))
+
+    with :ok <- ensure_descendant(root, destination),
+         :ok <- copy_artifacts(source, destination, manifest_map) do
+      result =
         %Record{}
         |> Record.changeset(%{
-          project_id: project.id,
+          project_id: project_id,
           issue_identifier: identifier,
           run_id: run_id,
           session_id: Keyword.get(opts, :session_id),
@@ -33,7 +53,27 @@ defmodule SymphonyElixir.Evidence.Store do
           artifact_dir: destination
         })
         |> Repo.insert()
-      end
+
+      if match?({:error, _reason}, result), do: File.rm_rf(destination)
+      result
+    end
+  end
+
+  defp idempotent_record(project_id, identifier, manifest_map, opts) do
+    session_id = Keyword.get(opts, :session_id)
+
+    if Keyword.get(opts, :idempotent, false) and is_binary(session_id) do
+      Repo.all(
+        from(r in Record,
+          where:
+            r.project_id == ^project_id and r.issue_identifier == ^identifier and
+              r.session_id == ^session_id,
+          order_by: [desc: r.inserted_at]
+        )
+      )
+      |> Enum.find(fn record ->
+        record.manifest == manifest_map and File.dir?(record.artifact_dir)
+      end)
     end
   end
 
@@ -118,8 +158,8 @@ defmodule SymphonyElixir.Evidence.Store do
 
     cond do
       not String.starts_with?(full, base <> "/") -> {:error, :invalid_path}
-      not File.exists?(full) -> {:error, :not_found}
-      true -> {:ok, full}
+      symlink_in_tree?(base, full) -> {:error, :invalid_path}
+      true -> regular_artifact(full)
     end
   end
 
@@ -131,12 +171,88 @@ defmodule SymphonyElixir.Evidence.Store do
     end)
   end
 
-  defp copy_artifacts(source, destination) do
-    File.mkdir_p!(destination)
+  defp copy_artifacts(source, destination, manifest_map) do
+    with :ok <- ensure_symlink_free_tree(source),
+         :ok <- File.mkdir_p(destination),
+         {:ok, _copied} <- File.cp_r(source, destination),
+         :ok <- ensure_symlink_free_tree(destination),
+         :ok <-
+           File.write(
+             Path.join(destination, "manifest.json"),
+             Jason.encode_to_iodata!(manifest_map)
+           ) do
+      :ok
+    else
+      {:error, reason, file} ->
+        File.rm_rf(destination)
+        {:error, {:artifact_copy_failed, reason, file}}
 
-    case File.cp_r(source, destination) do
-      {:ok, _copied} -> :ok
-      {:error, reason, file} -> {:error, {:artifact_copy_failed, reason, file}}
+      {:error, _reason} = error ->
+        File.rm_rf(destination)
+        error
+    end
+  end
+
+  defp ensure_symlink_free_tree(path) do
+    case File.lstat(path) do
+      {:ok, %File.Stat{type: :symlink}} ->
+        {:error, {:unsafe_artifact_symlink, path}}
+
+      {:ok, %File.Stat{type: :directory}} ->
+        path
+        |> File.ls()
+        |> case do
+          {:ok, entries} ->
+            Enum.reduce_while(entries, :ok, fn entry, :ok ->
+              case ensure_symlink_free_tree(Path.join(path, entry)) do
+                :ok -> {:cont, :ok}
+                {:error, _reason} = error -> {:halt, error}
+              end
+            end)
+
+          {:error, reason} ->
+            {:error, {:artifact_tree_unreadable, path, reason}}
+        end
+
+      {:ok, _stat} ->
+        :ok
+
+      {:error, reason} ->
+        {:error, {:artifact_tree_unreadable, path, reason}}
+    end
+  end
+
+  defp regular_artifact(path) do
+    case File.lstat(path) do
+      {:ok, %File.Stat{type: :regular}} -> {:ok, path}
+      {:ok, _stat} -> {:error, :invalid_path}
+      {:error, :enoent} -> {:error, :not_found}
+      {:error, _reason} -> {:error, :not_found}
+    end
+  end
+
+  defp symlink_in_tree?(base, full) do
+    [base | relative_components(base, full)]
+    |> Enum.scan(fn
+      path, nil -> path
+      component, parent -> Path.join(parent, component)
+    end)
+    |> Enum.any?(fn path ->
+      match?({:ok, %File.Stat{type: :symlink}}, File.lstat(path))
+    end)
+  end
+
+  defp relative_components(base, full) do
+    full
+    |> Path.relative_to(base)
+    |> Path.split()
+  end
+
+  defp ensure_descendant(root, destination) do
+    if String.starts_with?(Path.expand(destination), root <> "/") do
+      :ok
+    else
+      {:error, :invalid_evidence_destination}
     end
   end
 
@@ -150,7 +266,10 @@ defmodule SymphonyElixir.Evidence.Store do
     |> Kernel.<>("-#{System.unique_integer([:positive])}")
   end
 
-  defp safe(identifier), do: String.replace(identifier, ~r/[^a-zA-Z0-9._-]/, "_")
+  defp safe_component(value) do
+    sanitized = value |> to_string() |> String.replace(~r/[^a-zA-Z0-9._-]/, "_")
+    if sanitized in ["", ".", ".."], do: "_#{sanitized}", else: sanitized
+  end
 
   defp find_record(project_id, identifier, run_id) do
     Repo.one(

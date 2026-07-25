@@ -806,9 +806,21 @@ assistant chat. These are sent on the dispatch endpoint and persisted per issue.
 Each assistant chat turn is tracked durably so the UI can recover after a refresh or a full serve
 restart. Design spec: `docs/superpowers/specs/2026-06-21-assistant-turn-session-tracking-design.md`.
 
-- **Durable state, no new table.** The thread's latest turn lives in `assistant_threads.metadata`
-  under `current_turn` (status, prompt, Codex thread/turn ids, timing) — written through
-  `SymphonyElixir.Assistant.History`. Full per-turn history stays in `log/symphony.log`.
+- **Separate identity layers.** `assistant_threads.id` is Symphony's stable chat ID.
+  `ConversationRef` identifies the provider conversation as `{provider, conversation_id}`; `run_id`
+  identifies a provider-native turn; and `execution_id` identifies the independent Symphony
+  execution attempt. A provider result must never overwrite `execution_id`.
+- **Durable provider bindings.** `assistant_threads.provider_bindings` is the canonical
+  flat provider-to-conversation map. Runtime code, channel payloads, and stored messages use only
+  `provider`, `conversation_id`, `run_id`, and `execution_id`. The canonical identity migration
+  normalizes provider names, flattens old nested values, removes invalid bindings and duplicate
+  current-turn and queued-turn aliases (including `agent_kind` and `generation`), then drops
+  `agent_thread_ids`, `codex_thread_id`, and message `turn_id`. Gateway bindings with missing or
+  invalid default providers are backfilled and then rejected by database constraints.
+- **Durable turn and queue state.** The latest turn lives under `metadata.current_turn`, while
+  serializable queued intent lives under `metadata.pending_turns`. `Assistant.History` owns both.
+  Every queued item requires one canonical `provider`; `queued_count` is included in lifecycle
+  payloads.
 - **`Assistant.TurnManager`** is an always-on GenServer (started by `SharedSupervisor` after
   `Repo`, independent of the web server). It owns the turn lifecycle: it spawns + monitors the
   worker, holds the live worker pid in a `:unique` registry keyed by `thread_id`, and streams
@@ -816,10 +828,95 @@ restart. Design spec: `docs/superpowers/specs/2026-06-21-assistant-turn-session-
   to `interrupted (serve_restart)`.
 - **Re-attach after refresh.** The channel join exposes `last_turn` + `turn_running`, so a reloaded
   tab immediately shows the running indicator (or an **Interrupted** banner with a **Resume** button
-  that re-dispatches the saved prompt, continuing the same Codex thread).
-- **Steer-then-queue.** A new message sent while a turn runs steers the live turn (cross-channel via
-  the registry) instead of starting a second Codex session; if it cannot steer, it is queued and run
-  next. Project-scoped chats (no durable thread) keep the legacy single-turn busy guard.
+  that re-dispatches the saved prompt against the matching provider conversation). Pending turns
+  are rehydrated FIFO after channel reconnect; an explicit interrupt clears both live and durable
+  queued intent unless preservation is requested.
+- **Capability-aware control.** Every adapter publishes `BackendCapabilities` (`resume`, `steer`,
+  `native_goal`, model selection, reasoning effort, and parallel-session support). The join payload
+  exposes these as `agent_capabilities`. A new message steers only a backend that supports steering;
+  otherwise it is queued for the next execution.
+- **Stable errors.** Public and persisted failures include `code`, `category`, `retryable`,
+  `message`, and `details`. Channel clients read `message` only; the removed `reason` alias is not
+  accepted. Clients should branch on `code`, not human-readable text.
+  A missing/stale provider conversation fails explicitly; it never starts a fresh conversation
+  behind the caller's back.
+- **Provider-normalized results.** Adapters convert native output into one `RunResult` at the
+  boundary. This keeps resume, history, multi-agent switching, and chat rendering independent of
+  Codex-specific names.
+
+Project-scoped chats without a durable assistant thread retain a single-turn busy guard.
+
+### Standalone multi-agent client
+
+The packaged `bin/symphony` escript also contains a lightweight client for Codex, Claude, and
+Cursor. It executes directly in a workspace without creating an assistant database thread, while
+using the same `ConversationRef`, `BackendCapabilities`, `RunResult`, and `Agent.Error` contracts
+as the web assistant.
+
+```bash
+cd elixir
+make build
+
+bin/symphony agent providers
+bin/symphony agent capabilities
+bin/symphony agent capabilities --agent codex
+
+bin/symphony agent run \
+  --agent claude \
+  --workspace /path/to/repository \
+  --prompt "Review the session architecture" \
+  --model sonnet \
+  --effort high \
+  --mode plan
+```
+
+All executable operations share the same options and the same result contract:
+
+```bash
+# Continue an existing conversation with a steering instruction.
+bin/symphony agent steer \
+  --agent claude \
+  --workspace /path/to/repository \
+  --conversation claude-conversation-id \
+  --prompt "Focus on the failing integration test"
+
+# Portable Goal emulation, including providers without a native Goal API.
+bin/symphony agent goal \
+  --agent cursor \
+  --workspace /path/to/repository \
+  --prompt "Finish the canonical session migration and validate it" \
+  --mode build
+```
+
+`run`, `steer`, and `goal` all route through the single
+`Agent.Client.execute(operation, options)` entry point. `steer` is implemented as an explicit
+resumed continuation and therefore requires `--conversation`. `goal` uses a portable objective
+envelope so its semantics remain available across Codex, Claude, and Cursor.
+
+The default output is one JSON object suitable for shell automation. It includes `provider`,
+`conversation_id`, `run_id`, the Symphony-owned `execution_id`, assistant content, tool calls,
+usage, and cost when the provider supplies them. Use `--text` to print only the final assistant
+message.
+
+Resume the provider conversation returned by an earlier invocation:
+
+```bash
+bin/symphony agent run \
+  --agent cursor \
+  --workspace /path/to/repository \
+  --conversation cursor-chat-id-from-previous-output \
+  --prompt "Continue with the implementation" \
+  --mode build
+```
+
+Conversation IDs are provider-scoped: a Claude conversation cannot be resumed through Cursor or
+Codex. A stale conversation returns `conversation_resume_failed`; there is no implicit fresh-run
+fallback. A result attributed to a backend other than the selected one returns
+`provider_mismatch` instead of being relabeled. `--mode` accepts `plan`, `build`, or `yolo`; omitted
+model and effort values use the selected provider's defaults. Agent execution failures are written
+to stderr as the same exact JSON error contract and return exit code 1. Invalid options, providers,
+modes, prompts, and commands use that contract too. Run `bin/symphony agent help` for the complete
+command synopsis.
 
 ### Local Tracker Development
 

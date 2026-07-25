@@ -396,6 +396,31 @@ defmodule SymphonyElixir.AgentRunner do
 
   defp send_codex_update(_recipient, _issue, _message), do: :ok
 
+  @doc false
+  @spec model_provenance_update(map()) :: map() | nil
+  def model_provenance_update(turn_session) when is_map(turn_session) do
+    resolved_model = normalized_setting(Map.get(turn_session, :resolved_model))
+    resolved_effort = normalized_setting(Map.get(turn_session, :resolved_effort))
+
+    if resolved_model || resolved_effort do
+      %{
+        event: :model_provenance,
+        timestamp: DateTime.utc_now(),
+        resolved_model: resolved_model,
+        resolved_effort: resolved_effort
+      }
+    end
+  end
+
+  defp normalized_setting(value) when is_binary(value) do
+    case String.trim(value) do
+      "" -> nil
+      normalized -> normalized
+    end
+  end
+
+  defp normalized_setting(_value), do: nil
+
   defp agent_turn_opts(opts, agent_kind, codex_update_recipient, issue) do
     Keyword.merge(opts, agent_kind: agent_kind, on_message: codex_message_handler(codex_update_recipient, issue, agent_kind))
   end
@@ -751,9 +776,13 @@ defmodule SymphonyElixir.AgentRunner do
              issue,
              agent_turn_opts(opts, agent_kind, codex_update_recipient, issue)
            ) do
+      if provenance = model_provenance_update(turn_session) do
+        send_codex_update(codex_update_recipient, issue, provenance)
+      end
+
       Logger.info("Completed agent run for #{issue_context(issue)} session_id=#{turn_session[:session_id]} workspace=#{workspace} turn=#{turn_number}/#{max_turns}")
 
-      advanced_session = maybe_advance_session(app_session, turn_session)
+      advanced_session = advance_session(app_session, turn_session)
 
       if turn_number == 1 do
         run_plan_gate(advanced_session, issue, opts, agent_kind, codex_update_recipient)
@@ -1337,13 +1366,16 @@ defmodule SymphonyElixir.AgentRunner do
     "issue_id=#{issue_id} issue_identifier=#{identifier}"
   end
 
-  defp maybe_advance_session(session, result) when is_map(result) do
+  @doc false
+  @spec advance_session(map(), term()) :: map()
+  def advance_session(session, result) when is_map(session) and is_map(result) do
     session
     |> maybe_put_cli_session_id(result)
     |> maybe_put_usage_totals(result)
+    |> maybe_put_resolved_provenance(result)
   end
 
-  defp maybe_advance_session(session, _result), do: session
+  def advance_session(session, _result), do: session
 
   defp maybe_put_cli_session_id(session, %{cli_session_id: cli_session_id})
        when is_binary(cli_session_id) do
@@ -1358,4 +1390,13 @@ defmodule SymphonyElixir.AgentRunner do
   end
 
   defp maybe_put_usage_totals(session, _result), do: session
+
+  defp maybe_put_resolved_provenance(session, result) do
+    [:resolved_model, :resolved_effort]
+    |> Enum.reduce(session, fn field, advanced ->
+      if Map.has_key?(result, field),
+        do: Map.put(advanced, field, Map.get(result, field)),
+        else: advanced
+    end)
+  end
 end

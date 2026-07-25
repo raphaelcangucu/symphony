@@ -3,11 +3,11 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import { ExecutionSettingsPicker } from "@/components/assistant/ExecutionSettingsPicker";
 import { initTestI18n, renderWithI18n } from "@/i18n/testUtils";
-import { fallbackCatalogBundle } from "@/lib/assistantSettings";
+import { createMockAssistantCatalogBundle } from "@/test-fixtures/assistantCatalog";
 import { mockAssistantCodexCatalog } from "@/test-fixtures/assistantCatalog";
 import { i18n } from "@/i18n";
 
-const bundle = fallbackCatalogBundle();
+const bundle = createMockAssistantCatalogBundle();
 bundle.agents = [
   { ...mockAssistantCodexCatalog },
   ...bundle.agents.filter((agent) => agent.agent !== "codex"),

@@ -5,9 +5,24 @@ import {
   type ThreadMessageLike,
 } from "@assistant-ui/react";
 import type { Channel } from "phoenix";
-import { Bot, BookOpen, ChevronDown, GitCompare, ListChecks, Loader2, Sparkles } from "lucide-react";
+import {
+  Bot,
+  BookOpen,
+  ChevronDown,
+  GitCompare,
+  ListChecks,
+  Loader2,
+  Sparkles,
+} from "lucide-react";
 import { i18n } from "@/i18n";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation } from "react-router-dom";
 
@@ -18,7 +33,10 @@ import {
   type ComposerDraftSeed,
 } from "@/components/assistant/AssistantComposer";
 import type { AssistantChatPlanApprovalAction } from "@/components/assistant/AssistantChatMessageBubble";
-import { AssistantMessageList, type LoadOlderControl } from "@/components/assistant/AssistantMessageList";
+import {
+  AssistantMessageList,
+  type LoadOlderControl,
+} from "@/components/assistant/AssistantMessageList";
 import { AssistantSessionErrorBoundary } from "@/components/assistant/AssistantSessionErrorBoundary";
 import { ExecutionSessionPanel } from "@/components/assistant/ExecutionSessionPanel";
 import {
@@ -53,7 +71,10 @@ import {
   replaceStreamingMessage,
   updateStreamingToolCall,
 } from "@/components/assistant/assistantStream";
-import { createAssistantDeltaBuffer, type AssistantDeltaBuffer } from "@/components/assistant/assistantDeltaBuffer";
+import {
+  createAssistantDeltaBuffer,
+  type AssistantDeltaBuffer,
+} from "@/components/assistant/assistantDeltaBuffer";
 import type { WorkingActiveToolDetail } from "@/components/assistant/WorkingIndicator";
 import { useNowTick } from "@/hooks/useNowTick";
 import { useStableValue } from "@/hooks/useStableValue";
@@ -102,20 +123,34 @@ import {
 import { AssistantKbDocumentLinksProvider } from "@/components/assistant/assistantKbDocumentLinksContext";
 import { KnowledgeBaseModal } from "@/components/kb/KnowledgeBaseModal";
 import { ExecutionModeMenu } from "@/components/issues/issue-detail/ExecutionModeMenu";
-import { SkillProfileMenu, resolvedSkillProfileForUi } from "@/components/assistant/SkillProfileMenu";
+import {
+  SkillProfileMenu,
+  resolvedSkillProfileForUi,
+} from "@/components/assistant/SkillProfileMenu";
 import { GitDiffLauncher } from "@/components/issues/issue-detail/git-diff/GitDiffLauncher";
 import { GoalPill } from "@/components/shared/GoalPill";
 import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { deriveAgentTasksFromAssistantMessages } from "@/lib/agentTasks";
-import { catalogFor, defaultComposerSettings, fallbackCatalogBundle, type AssistantCatalogBundle } from "@/lib/assistantSettings";
-import { clearPendingThreadSeed } from "@/lib/pendingThreadSeed";
 import {
-  DEFAULT_AUTONOMOUS_MODE,
-  normalizeAgentMode,
-} from "@/lib/agentModes";
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
+import { deriveAgentTasksFromAssistantMessages } from "@/lib/agentTasks";
+import {
+  catalogFor,
+  defaultComposerSettings,
+  type AssistantCatalogBundle,
+} from "@/lib/assistantSettings";
+import { clearPendingThreadSeed } from "@/lib/pendingThreadSeed";
+import { DEFAULT_AUTONOMOUS_MODE, normalizeAgentMode } from "@/lib/agentModes";
 import { normalizeIssueIdentifier } from "@/lib/issueIdentifiers";
-import { buildKbDocumentPageIndex, resolveKbDocumentLinkTarget } from "@/lib/kbDocumentLinks";
+import {
+  buildKbDocumentPageIndex,
+  resolveKbDocumentLinkTarget,
+} from "@/lib/kbDocumentLinks";
 import { normalizeKbDocumentReference } from "@/lib/assistantKbReferences";
 import { ensureIssueKbPage } from "@/lib/ensureIssueKbPage";
 import type { OpenKbPathOptions } from "@/lib/openKbPath";
@@ -132,7 +167,10 @@ import {
 import { isCanceledError } from "@/services/http";
 import { getIssueRepoTree, getRepoTree } from "@/services/knowledgeBase";
 import { WorkspaceDiffStatsChip } from "@/components/sessions/WorkspaceDiffStatsChip";
-import { provisionThreadWorkspace, provisionWorkspace } from "@/services/workspaceProvision";
+import {
+  provisionThreadWorkspace,
+  provisionWorkspace,
+} from "@/services/workspaceProvision";
 import { useIssueChangedDocPaths } from "@/hooks/useIssueChangedDocPaths";
 import { useKbAllRepoTrees } from "@/hooks/useKbAllRepoTrees";
 import { useKbProjectOverview } from "@/hooks/useKbProjectOverview";
@@ -187,6 +225,7 @@ import {
   type AssistantSessionSnapshot,
 } from "@/stores/assistantSessionStore";
 import type { AgentKind, ExecutionMode } from "@/types/issue";
+import type { ModelProvenance } from "@/types/assistant-thread";
 import {
   issueWorkspaceScope,
   threadWorkspaceScope,
@@ -196,8 +235,11 @@ import type { WorkspaceView } from "@/lib/workspaceRoutes";
 import { cn } from "@/lib/utils";
 import { useAssistantCommands } from "@/hooks/useAssistantCommands";
 
-function readThreadCache(threadId: number | null | undefined): AssistantSessionSnapshot | null {
-  if (threadId == null || !Number.isInteger(threadId) || threadId <= 0) return null;
+function readThreadCache(
+  threadId: number | null | undefined,
+): AssistantSessionSnapshot | null {
+  if (threadId == null || !Number.isInteger(threadId) || threadId <= 0)
+    return null;
   return getAssistantSessionSnapshot(threadId);
 }
 
@@ -205,7 +247,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function stringField(record: Record<string, unknown>, ...keys: string[]): string | undefined {
+function stringField(
+  record: Record<string, unknown>,
+  ...keys: string[]
+): string | undefined {
   for (const key of keys) {
     const value = record[key];
     if (typeof value === "string" && value.trim()) return value;
@@ -213,7 +258,10 @@ function stringField(record: Record<string, unknown>, ...keys: string[]): string
   return undefined;
 }
 
-function numberField(record: Record<string, unknown>, ...keys: string[]): number | undefined {
+function numberField(
+  record: Record<string, unknown>,
+  ...keys: string[]
+): number | undefined {
   for (const key of keys) {
     const value = record[key];
     if (typeof value === "number" && Number.isFinite(value)) return value;
@@ -221,7 +269,9 @@ function numberField(record: Record<string, unknown>, ...keys: string[]): number
   return undefined;
 }
 
-function notionImportResultFromUnknown(payload: unknown): NotionImportResult | null {
+function notionImportResultFromUnknown(
+  payload: unknown,
+): NotionImportResult | null {
   if (!isRecord(payload)) return null;
 
   const nested = isRecord(payload.data) ? payload.data : null;
@@ -243,9 +293,12 @@ function notionImportResultFromUnknown(payload: unknown): NotionImportResult | n
         meta_path: stringField(source, "meta_path", "metaPath"),
         asset_count: numberField(source, "asset_count", "assetCount"),
         warnings: Array.isArray(source.warnings)
-          ? source.warnings.filter((warning): warning is string => typeof warning === "string")
+          ? source.warnings.filter(
+              (warning): warning is string => typeof warning === "string",
+            )
           : undefined,
-        preview_markdown: stringField(source, "preview_markdown", "previewMarkdown") ?? "",
+        preview_markdown:
+          stringField(source, "preview_markdown", "previewMarkdown") ?? "",
       });
     } catch {
       continue;
@@ -262,7 +315,8 @@ function notionImportResultFromToolCall(toolCall: {
 }): NotionImportResult | null {
   const namedImport =
     toolCall.name === "import_notion_page" ||
-    (isRecord(toolCall.result) && toolCall.result.tool === "import_notion_page");
+    (isRecord(toolCall.result) &&
+      toolCall.result.tool === "import_notion_page");
   if (!namedImport) return null;
 
   const fromResult = notionImportResultFromUnknown(toolCall.result);
@@ -270,7 +324,9 @@ function notionImportResultFromToolCall(toolCall: {
 
   if (typeof toolCall.output === "string" && toolCall.output.trim()) {
     try {
-      return notionImportResultFromUnknown(JSON.parse(toolCall.output) as unknown);
+      return notionImportResultFromUnknown(
+        JSON.parse(toolCall.output) as unknown,
+      );
     } catch {
       return null;
     }
@@ -280,9 +336,19 @@ function notionImportResultFromToolCall(toolCall: {
 }
 
 function latestNotionImportFromMessages(
-  messages: Array<{ toolCalls: Array<{ name: string; result?: Record<string, unknown>; output?: string | null }> }>,
+  messages: Array<{
+    toolCalls: Array<{
+      name: string;
+      result?: Record<string, unknown>;
+      output?: string | null;
+    }>;
+  }>,
 ): NotionImportResult | null {
-  for (let messageIndex = messages.length - 1; messageIndex >= 0; messageIndex -= 1) {
+  for (
+    let messageIndex = messages.length - 1;
+    messageIndex >= 0;
+    messageIndex -= 1
+  ) {
     const toolCalls = messages[messageIndex]?.toolCalls ?? [];
     for (let toolIndex = toolCalls.length - 1; toolIndex >= 0; toolIndex -= 1) {
       const mapped = notionImportResultFromToolCall(toolCalls[toolIndex]!);
@@ -306,7 +372,9 @@ function hydrateStreamingActiveTools(
         id: tool.id,
         name: tool.name,
         status: "running",
-        arguments: tool.argumentsSummary ? { command: tool.argumentsSummary } : null,
+        arguments: tool.argumentsSummary
+          ? { command: tool.argumentsSummary }
+          : null,
         result: {},
       }),
     messages,
@@ -317,8 +385,12 @@ function activeToolDetailFromMessages(
   chatMessages: AssistantChatMessage[],
   turn: AssistantTurnStatus | null,
 ): WorkingActiveToolDetail | null {
-  const streaming = chatMessages.find((message) => message.id === STREAMING_ASSISTANT_ID);
-  const running = streaming?.toolCalls.find((toolCall) => toolCall.status === "running");
+  const streaming = chatMessages.find(
+    (message) => message.id === STREAMING_ASSISTANT_ID,
+  );
+  const running = streaming?.toolCalls.find(
+    (toolCall) => toolCall.status === "running",
+  );
   if (running) {
     const summary =
       typeof running.arguments?.command === "string"
@@ -327,7 +399,10 @@ function activeToolDetailFromMessages(
           ? JSON.stringify(running.arguments)
           : null;
     return {
-      id: typeof running.id === "string" && running.id.trim() !== "" ? running.id : running.name,
+      id:
+        typeof running.id === "string" && running.id.trim() !== ""
+          ? running.id
+          : running.name,
       name: running.name,
       argumentsSummary: summary,
     };
@@ -386,14 +461,18 @@ interface ProjectAssistantPanelProps {
   onOpenDocumentPath?: (path: string) => void;
   onKbDocumentReferencesChanged?: (paths: string[]) => void;
   /** Lets a parent toolbar open the same issue-scoped KB modal as the composer KB button. */
-  onKnowledgeBaseControlChange?: (control: { open: () => void; changedDocCount: number } | null) => void;
+  onKnowledgeBaseControlChange?: (
+    control: { open: () => void; changedDocCount: number } | null,
+  ) => void;
   /**
    * Reports the tasks dock control (progress + open state + toggle) so an
    * external surface (e.g. the session top bar) can mirror the composer's
    * tasks toggle. Reports `null` when there are no tasks or the panel is not
    * in page mode. Only wired by consumers that render an external toggle.
    */
-  onTasksDockControlChange?: (control: AssistantTasksDockControl | null) => void;
+  onTasksDockControlChange?: (
+    control: AssistantTasksDockControl | null,
+  ) => void;
   composerSeedMessage?: string | null;
   contentMaxWidth?: ProjectAssistantContentMaxWidth;
   /**
@@ -409,7 +488,9 @@ interface QueuedMessage {
   payload: AssistantComposerSubmit;
 }
 
-type PlanApprovalMode = Parameters<AssistantChatPlanApprovalAction["onApprove"]>[1];
+type PlanApprovalMode = Parameters<
+  AssistantChatPlanApprovalAction["onApprove"]
+>[1];
 
 const TASKS_DOCK_STORAGE_KEY = "symphony.assistantTasksDock.open";
 
@@ -512,16 +593,28 @@ function InteractiveProjectAssistantPanel({
   const gitDiffOpenRequestId = diffRequestId + composerDiffRequestId;
   const [diffFocusPathRequestId, setDiffFocusPathRequestId] = useState(0);
   const [diffFocusPath, setDiffFocusPath] = useState<string | null>(null);
-  const [turnRunning, setTurnRunning] = useState(() => readThreadCache(threadId)?.turnRunning ?? false);
-  const [runningStartedAt, setRunningStartedAt] = useState<number | null>(null);
-  const queueStorageKey = queuedMessagesStorageKey({ threadId, issueIdentifier, projectSlug });
-  const [queued, setQueued] = useState<QueuedMessage[]>(() => readQueuedMessages(queueStorageKey));
-  const hydratedQueueKeyRef = useRef(queueStorageKey);
-  const [composerDraftSeed, setComposerDraftSeed] = useState<ComposerDraftSeed | null>(null);
-  const composerDraftSeedRequestIdRef = useRef(0);
-  const [btw, setBtw] = useState<{ id: string | null; question: string; answer: string; status: BtwStatus } | null>(
-    null,
+  const [turnRunning, setTurnRunning] = useState(
+    () => readThreadCache(threadId)?.turnRunning ?? false,
   );
+  const [runningStartedAt, setRunningStartedAt] = useState<number | null>(null);
+  const queueStorageKey = queuedMessagesStorageKey({
+    threadId,
+    issueIdentifier,
+    projectSlug,
+  });
+  const [queued, setQueued] = useState<QueuedMessage[]>(() =>
+    readQueuedMessages(queueStorageKey),
+  );
+  const hydratedQueueKeyRef = useRef(queueStorageKey);
+  const [composerDraftSeed, setComposerDraftSeed] =
+    useState<ComposerDraftSeed | null>(null);
+  const composerDraftSeedRequestIdRef = useRef(0);
+  const [btw, setBtw] = useState<{
+    id: string | null;
+    question: string;
+    answer: string;
+    status: BtwStatus;
+  } | null>(null);
   const [messages, setMessages] = useState<AssistantChatMessage[]>(
     () => readThreadCache(threadId)?.messages ?? [],
   );
@@ -532,28 +625,32 @@ function InteractiveProjectAssistantPanel({
   const deltaBufferRef = useRef<AssistantDeltaBuffer | null>(null);
   if (deltaBufferRef.current === null) {
     deltaBufferRef.current = createAssistantDeltaBuffer({
-      onFlush: (coalesced) => setMessages((current) => appendAssistantDelta(current, coalesced)),
+      onFlush: (coalesced) =>
+        setMessages((current) => appendAssistantDelta(current, coalesced)),
     });
   }
   useEffect(() => () => deltaBufferRef.current?.dispose(), []);
   // Compact-history window: by default only the current run is rendered.
   // `historyRevealStartIndex` is null while collapsed; otherwise it is the
   // first visible message index after paginated "load older" reveals.
-  const [historyRevealStartIndex, setHistoryRevealStartIndex] = useState<number | null>(
-    () => readThreadCache(threadId)?.historyRevealStartIndex ?? null,
-  );
+  const [historyRevealStartIndex, setHistoryRevealStartIndex] = useState<
+    number | null
+  >(() => readThreadCache(threadId)?.historyRevealStartIndex ?? null);
   const [historyHasMoreBefore, setHistoryHasMoreBefore] = useState(
     () => readThreadCache(threadId)?.historyHasMoreBefore ?? false,
   );
-  const [historyOldestSequence, setHistoryOldestSequence] = useState<number | null>(
-    () => readThreadCache(threadId)?.historyOldestSequence ?? null,
-  );
+  const [historyOldestSequence, setHistoryOldestSequence] = useState<
+    number | null
+  >(() => readThreadCache(threadId)?.historyOldestSequence ?? null);
   const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
   const pendingPrependScrollRef = useRef<PendingScrollRestore | null>(null);
-  const [approvedPlanMessageIds, setApprovedPlanMessageIds] = useState<Set<string>>(() => new Set());
+  const [approvedPlanMessageIds, setApprovedPlanMessageIds] = useState<
+    Set<string>
+  >(() => new Set());
   // Tab-scoped Authoring Goal state is durable and independent from both the
   // issue's Execution goal and the lifecycle of an ordinary assistant turn.
-  const [authoringGoal, setAuthoringGoal] = useState<AuthoringGoalState>(emptyAuthoringGoal);
+  const [authoringGoal, setAuthoringGoal] =
+    useState<AuthoringGoalState>(emptyAuthoringGoal);
   const [goalQueuePermitted, setGoalQueuePermitted] = useState(false);
   const goalQueueHeld = authoringGoal.enabled && !goalQueuePermitted;
   const submissionBlocked = turnRunning || goalQueueHeld;
@@ -562,15 +659,24 @@ function InteractiveProjectAssistantPanel({
   const [lastTurn, setLastTurn] = useState<AssistantTurnStatus | null>(
     () => readThreadCache(threadId)?.lastTurn ?? null,
   );
-  const [pendingQuestions, setPendingQuestions] = useState<UserQuestionsRequest | null>(null);
-  const [pendingApproval, setPendingApproval] = useState<AssistantApprovalRequest | null>(null);
-  const [pendingCreatePlan, setPendingCreatePlan] = useState<AssistantCreatePlanRequest | null>(null);
-  const [notionImport, setNotionImport] = useState<NotionImportResult | null>(null);
+  const [pendingQuestions, setPendingQuestions] =
+    useState<UserQuestionsRequest | null>(null);
+  const [pendingApproval, setPendingApproval] =
+    useState<AssistantApprovalRequest | null>(null);
+  const [pendingCreatePlan, setPendingCreatePlan] =
+    useState<AssistantCreatePlanRequest | null>(null);
+  const [notionImport, setNotionImport] = useState<NotionImportResult | null>(
+    null,
+  );
   const [notionPreviewOpen, setNotionPreviewOpen] = useState(false);
-  const [notionPreviewImportId, setNotionPreviewImportId] = useState<string | null>(null);
+  const [notionPreviewImportId, setNotionPreviewImportId] = useState<
+    string | null
+  >(null);
   const [connectionError, setConnectionError] = useState<string | null>(null);
-  const [workspaceProvisionRetrying, setWorkspaceProvisionRetrying] = useState(false);
-  const [workspaceProvisionRetryError, setWorkspaceProvisionRetryError] = useState<string | null>(null);
+  const [workspaceProvisionRetrying, setWorkspaceProvisionRetrying] =
+    useState(false);
+  const [workspaceProvisionRetryError, setWorkspaceProvisionRetryError] =
+    useState<string | null>(null);
   const [bundle, setBundle] = useState<AssistantCatalogBundle | null>(null);
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const [channelReady, setChannelReady] = useState(false);
@@ -592,22 +698,33 @@ function InteractiveProjectAssistantPanel({
   const onIssueGoalModeChangedRef = useRef(onIssueGoalModeChanged);
   const panelRef = useRef<HTMLElement | null>(null);
   const lastConfirmedGoalModeRef = useRef<boolean | null>(null);
-  const pendingGoalModeRef = useRef<{ enabled: boolean; requestId: number } | null>(null);
+  const pendingGoalModeRef = useRef<{
+    enabled: boolean;
+    requestId: number;
+  } | null>(null);
   const lastDispatchRequestRef = useRef(0);
   // The composer owns agent selection; mirror it here so dispatch + the parent
   // panel can follow the live choice. A ref keeps the dispatch effect stable.
   const composerAgentRef = useRef<AgentKind | null>(null);
   const [composerAgent, setComposerAgent] = useState<AgentKind>("codex");
   const routeAgentSeed = useMemo(
-    () => normalizeAgentSeed(new URLSearchParams(location.search).get("assistant_agent")),
+    () =>
+      normalizeAgentSeed(
+        new URLSearchParams(location.search).get("assistant_agent"),
+      ),
     [location.search],
   );
-  const [serverAgentSeed, setServerAgentSeed] = useState<AgentKind | null>(routeAgentSeed);
-  const [settingsSeed, setSettingsSeed] = useState<{ agent: AgentKind; model: string; effort: string } | null>(
-    null,
+  const [serverAgentSeed, setServerAgentSeed] = useState<AgentKind | null>(
+    routeAgentSeed,
   );
+  const [settingsSeed, setSettingsSeed] = useState<{
+    agent: AgentKind;
+    model: string;
+    effort: string;
+  } | null>(null);
   const contextInsertRequestIdRef = useRef(0);
-  const [contextInsertRequest, setContextInsertRequest] = useState<ComposerContextInsertRequest | null>(null);
+  const [contextInsertRequest, setContextInsertRequest] =
+    useState<ComposerContextInsertRequest | null>(null);
   const [magicPaletteRequestId, setMagicPaletteRequestId] = useState(0);
   const [knowledgeBaseOpen, setKnowledgeBaseOpen] = useState(false);
   const [kbFocusPath, setKbFocusPath] = useState<string | null>(null);
@@ -636,7 +753,10 @@ function InteractiveProjectAssistantPanel({
     kbRepoSlugs,
     loadKbRepoTree,
   );
-  const kbDocumentPageIndex = useMemo(() => buildKbDocumentPageIndex(kbTreesByRepo), [kbTreesByRepo]);
+  const kbDocumentPageIndex = useMemo(
+    () => buildKbDocumentPageIndex(kbTreesByRepo),
+    [kbTreesByRepo],
+  );
   const preferredKbRepoSlug = useMemo(() => {
     if (kbRepoSlug) return kbRepoSlug;
     const fromChanged = changedDocs.entries.find((entry) => entry.repo)?.repo;
@@ -672,7 +792,8 @@ function InteractiveProjectAssistantPanel({
       }
 
       const resolved = resolveKbDocument(path);
-      const normalized = resolved?.path ?? normalizeKbDocumentReference(path) ?? path.trim();
+      const normalized =
+        resolved?.path ?? normalizeKbDocumentReference(path) ?? path.trim();
       const repo = resolved?.repoSlug ?? preferredKbRepoSlug;
       const seedMarkdown = options?.seedMarkdown?.trim() || null;
 
@@ -697,7 +818,14 @@ function InteractiveProjectAssistantPanel({
 
       openWith(normalized || null, repo);
     },
-    [issueIdentifier, kbRepoSlugs, preferredKbRepoSlug, projectSlug, resolveKbDocument, t],
+    [
+      issueIdentifier,
+      kbRepoSlugs,
+      preferredKbRepoSlug,
+      projectSlug,
+      resolveKbDocument,
+      t,
+    ],
   );
   const handleOpenDocumentPath = useCallback(
     (path: string, options?: OpenKbPathOptions) => {
@@ -736,7 +864,8 @@ function InteractiveProjectAssistantPanel({
     }),
   );
   const executionModeRef = useRef<ExecutionMode>(executionMode);
-  const [skillProfileSelection, setSkillProfileSelection] = useState<SkillProfileId>("auto");
+  const [skillProfileSelection, setSkillProfileSelection] =
+    useState<SkillProfileId>("auto");
   const skillProfileSelectionRef = useRef<SkillProfileId>("auto");
   const [threadScope, setThreadScope] = useState<string | null>(() =>
     inferScopeForPanel({
@@ -747,14 +876,23 @@ function InteractiveProjectAssistantPanel({
     }),
   );
   const [prefsApplyNextTurn, setPrefsApplyNextTurn] = useState(false);
+  const [modelProvenance, setModelProvenance] = useState<ModelProvenance>({
+    requestedModel: null,
+    requestedEffort: null,
+    resolvedModel: null,
+    resolvedEffort: null,
+  });
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   // Mentions work anywhere with a project context: issues are always searchable,
   // while file/PR sources self-disable when there is no bound issue identifier.
   const mentionsEnabled = Boolean(projectSlug);
   // Project surfaces (new-issue, project chat) also need mode/skill controls and
   // must send execution_mode — otherwise Cursor defaults omit --force for MCP writes.
-  const hasExecutableContext = Boolean(issueIdentifier || threadId || projectSlug);
-  const modeLocked = assistantMode === "explore" || threadScope === "project_explore";
+  const hasExecutableContext = Boolean(
+    issueIdentifier || threadId || projectSlug,
+  );
+  const modeLocked =
+    assistantMode === "explore" || threadScope === "project_explore";
   const resolvedSkillProfile = useMemo(
     () =>
       resolveSkillProfile({
@@ -777,11 +915,21 @@ function InteractiveProjectAssistantPanel({
     error: authoringCommandsError,
   } = useAssistantCommands({ projectSlug, context: slashContext });
   const authoringSlashCommandExtras = useMemo(() => {
-    if (authoringCommandsLoading || authoringCommandsError || authoringCommands.length === 0) {
+    if (
+      authoringCommandsLoading ||
+      authoringCommandsError ||
+      authoringCommands.length === 0
+    ) {
       return defaultSkillCommands(t, slashContext);
     }
     return assistantCommandsToSlashDefs(authoringCommands, t);
-  }, [authoringCommands, authoringCommandsError, authoringCommandsLoading, slashContext, t]);
+  }, [
+    authoringCommands,
+    authoringCommandsError,
+    authoringCommandsLoading,
+    slashContext,
+    t,
+  ]);
   // Keep the live extra-context getter in a ref so `dispatchSend` reads the
   // latest open-document snapshot at send time without re-subscribing the channel.
   const getExtraContextRef = useRef<typeof getExtraContext>(getExtraContext);
@@ -808,14 +956,21 @@ function InteractiveProjectAssistantPanel({
   const isEmbeddedMode = mode === "embedded";
   const isPanelMode = isPageMode || isEmbeddedMode;
   const embeddedPanelInset = "pl-5 pr-4";
-  const isFullPageProjectAssistant = isPageMode && Boolean(projectSlug) && !issueIdentifier && threadId == null;
+  const isFullPageProjectAssistant =
+    isPageMode && Boolean(projectSlug) && !issueIdentifier && threadId == null;
   const widePageContent = contentMaxWidth === "wide";
-  const chatReadingColumn = widePageContent ? CHAT_READING_COLUMN_WIDE_CLASS : CHAT_READING_COLUMN_CLASS;
+  const chatReadingColumn = widePageContent
+    ? CHAT_READING_COLUMN_WIDE_CLASS
+    : CHAT_READING_COLUMN_CLASS;
   const active = isPanelMode || open;
   const resolvedAssistantMode: ProjectAssistantMode =
-    assistantMode ?? (projectSlug ? (issueIdentifier ? "project" : "project") : "freeform");
+    assistantMode ??
+    (projectSlug ? (issueIdentifier ? "project" : "project") : "freeform");
   const isExploreMode = resolvedAssistantMode === "explore";
-  const isKbMode = resolvedAssistantMode === "kb" && Boolean(kbRepoSlug) && Boolean(kbPagePath);
+  const isKbMode =
+    resolvedAssistantMode === "kb" &&
+    Boolean(kbRepoSlug) &&
+    Boolean(kbPagePath);
 
   bundleRef.current = bundle;
   onDocumentChangedRef.current = onDocumentChanged;
@@ -899,12 +1054,6 @@ function InteractiveProjectAssistantPanel({
   useEffect(() => {
     if (!active) return;
 
-    if (!projectSlug) {
-      setBundle(fallbackCatalogBundle());
-      setCatalogError(null);
-      return;
-    }
-
     const controller = new AbortController();
     setBundle(null);
     setCatalogError(null);
@@ -918,7 +1067,11 @@ function InteractiveProjectAssistantPanel({
       .catch((cause) => {
         // A cancellation from unmount/route change is expected, not an error.
         if (controller.signal.aborted || isCanceledError(cause)) return;
-        setCatalogError(cause instanceof Error ? cause.message : t("assistant.panel.catalogLoadFailed"));
+        setCatalogError(
+          cause instanceof Error
+            ? cause.message
+            : t("assistant.panel.catalogLoadFailed"),
+        );
       });
 
     return () => {
@@ -935,6 +1088,13 @@ function InteractiveProjectAssistantPanel({
 
     setChannelReady(false);
     setHistoryHydrated(false);
+    setSettingsSeed(null);
+    setModelProvenance({
+      requestedModel: null,
+      requestedEffort: null,
+      resolvedModel: null,
+      resolvedEffort: null,
+    });
     seedAutoSentRef.current = null;
     lastConfirmedGoalModeRef.current = null;
     pendingGoalModeRef.current = null;
@@ -969,7 +1129,11 @@ function InteractiveProjectAssistantPanel({
         : issueIdentifier
           ? assistantIssueTopic(projectSlug ?? "", issueIdentifier)
           : isKbMode
-            ? assistantKbTopic(projectSlug ?? "", kbRepoSlug ?? "", kbPagePath ?? "")
+            ? assistantKbTopic(
+                projectSlug ?? "",
+                kbRepoSlug ?? "",
+                kbPagePath ?? "",
+              )
             : isExploreMode
               ? assistantExploreTopic(projectSlug ?? "")
               : assistantTopic(projectSlug ?? "");
@@ -983,14 +1147,45 @@ function InteractiveProjectAssistantPanel({
         deltaBufferRef.current?.dispose();
         if (meta?.scope) setThreadScope(meta.scope);
         if (meta?.executionMode) {
-          const mode = normalizeAgentMode(meta.executionMode, executionModeRef.current);
+          const mode = normalizeAgentMode(
+            meta.executionMode,
+            executionModeRef.current,
+          );
           setExecutionMode(mode);
           executionModeRef.current = mode;
         }
         if (meta?.skillProfile) {
-          const profile = normalizeSkillProfileId(meta.skillProfile, skillProfileSelectionRef.current);
+          const profile = normalizeSkillProfileId(
+            meta.skillProfile,
+            skillProfileSelectionRef.current,
+          );
           setSkillProfileSelection(profile);
           skillProfileSelectionRef.current = profile;
+        }
+        if (meta) {
+          setModelProvenance({
+            requestedModel: meta.requestedModel,
+            requestedEffort: meta.requestedEffort,
+            resolvedModel: meta.resolvedModel,
+            resolvedEffort: meta.resolvedEffort,
+          });
+          const persistedAgent =
+            meta.effectiveAgent ?? composerAgentRef.current;
+          if (meta.effectiveAgent) {
+            composerAgentRef.current = meta.effectiveAgent;
+            setComposerAgent(meta.effectiveAgent);
+            setServerAgentSeed(meta.effectiveAgent);
+            onEffectiveAgentResolvedRef.current?.(meta.effectiveAgent);
+          }
+          if (persistedAgent && meta.requestedModel) {
+            setSettingsSeed({
+              agent: persistedAgent,
+              model: meta.requestedModel,
+              effort: meta.requestedEffort ?? "",
+            });
+          } else {
+            setSettingsSeed(null);
+          }
         }
         setPrefsApplyNextTurn(false);
 
@@ -1052,9 +1247,12 @@ function InteractiveProjectAssistantPanel({
         const createdIssue = draftIssueCreatedFromMessage(message);
         if (createdIssue) onDraftIssueCreatedRef.current?.(createdIssue);
       },
+      onModelProvenance: setModelProvenance,
       onAssistantError: (message) => {
         deltaBufferRef.current?.flush();
-        setMessages((current) => appendMessage(current, assistantMessage("assistant-error", message)));
+        setMessages((current) =>
+          appendMessage(current, assistantMessage("assistant-error", message)),
+        );
         setConnectionError(message);
         setTurnRunning(false);
         setPendingQuestions(null);
@@ -1066,8 +1264,9 @@ function InteractiveProjectAssistantPanel({
         if (executionModeRef.current === "yolo") {
           const liveChannel = channelRef.current;
           if (!liveChannel) return;
-          submitApproval(liveChannel, request.requestId, "approve").receive("error", (reason) =>
-            setConnectionError(errorMessage(reason)),
+          submitApproval(liveChannel, request.requestId, "approve").receive(
+            "error",
+            (reason) => setConnectionError(errorMessage(reason)),
           );
           return;
         }
@@ -1075,23 +1274,33 @@ function InteractiveProjectAssistantPanel({
       },
       onCreatePlanRequired: (request) => setPendingCreatePlan(request),
       onAssistantDocumentChanged: (payload) => {
-        if (payload.identifier && issueIdentifier && normalizeIssueIdentifier(payload.identifier) === normalizeIssueIdentifier(issueIdentifier)) {
+        if (
+          payload.identifier &&
+          issueIdentifier &&
+          normalizeIssueIdentifier(payload.identifier) ===
+            normalizeIssueIdentifier(issueIdentifier)
+        ) {
           setChangedDocsRefreshKey((current) => current + 1);
         }
         onDocumentChangedRef.current?.(payload);
       },
-      onAssistantIssueCreated: (payload) => onIssueCreatedRef.current?.(payload),
-      onSteerFailed: ({ message }) => {
-        if (!message) return;
-        const activeBundle = bundleRef.current ?? fallbackCatalogBundle();
-        const activeCatalog = catalogFor(activeBundle, activeBundle.defaultAgent);
+      onAssistantIssueCreated: (payload) =>
+        onIssueCreatedRef.current?.(payload),
+      onSteerFailed: ({ prompt }) => {
+        if (!prompt) return;
+        const activeBundle = bundleRef.current;
+        if (!activeBundle) return;
+        const activeCatalog = catalogFor(
+          activeBundle,
+          activeBundle.defaultAgent,
+        );
         setQueued((current) => [
           ...current,
           {
             id: crypto.randomUUID(),
             payload: {
               kind: "message",
-              message,
+              message: prompt,
               agent: activeBundle.defaultAgent,
               settings: defaultComposerSettings(activeCatalog),
               attachments: [],
@@ -1107,16 +1316,28 @@ function InteractiveProjectAssistantPanel({
             : current,
         ),
       onBtwCompleted: ({ btwId, message }) =>
-        setBtw((current) => (current && current.id === btwId ? { ...current, answer: message, status: "complete" } : current)),
+        setBtw((current) =>
+          current && current.id === btwId
+            ? { ...current, answer: message, status: "complete" }
+            : current,
+        ),
       onBtwError: ({ btwId, message }) =>
-        setBtw((current) => (current && current.id === btwId ? { ...current, answer: message, status: "error" } : current)),
+        setBtw((current) =>
+          current && current.id === btwId
+            ? { ...current, answer: message, status: "error" }
+            : current,
+        ),
       onGoalStatus: (status) => {
         const newlyEnabled = status.enabled && !goalEnabledRef.current;
         goalEnabledRef.current = status.enabled;
 
         setGoalQueuePermitted((current) => {
           if (!status.enabled) return true;
-          if (status.status === "paused" || (status.interrupted && !status.processRunning)) return false;
+          if (
+            status.status === "paused" ||
+            (status.interrupted && !status.processRunning)
+          )
+            return false;
           if (status.processRunning) return true;
           if (newlyEnabled) return false;
           return current;
@@ -1137,7 +1358,9 @@ function InteractiveProjectAssistantPanel({
         setLastTurn(status);
         setTurnRunning(status.status === "running");
         if (status.status === "running" && status.activeTools.length > 0) {
-          setMessages((current) => hydrateStreamingActiveTools(current, status.activeTools));
+          setMessages((current) =>
+            hydrateStreamingActiveTools(current, status.activeTools),
+          );
         }
         if (isTerminalTurnStatus(status.status)) {
           setPendingQuestions(null);
@@ -1149,6 +1372,24 @@ function InteractiveProjectAssistantPanel({
     const joinPush = channel.join();
     joinPush.receive("ok", (response) => {
       setConnectionError(null);
+      const responseRecord =
+        response && typeof response === "object"
+          ? (response as Record<string, unknown>)
+          : {};
+      const model = modelFromResponse(response);
+      const effort = effortFromResponse(response);
+      setModelProvenance({
+        requestedModel: model,
+        requestedEffort: effort,
+        resolvedModel:
+          typeof responseRecord.resolved_model === "string"
+            ? responseRecord.resolved_model.trim() || null
+            : null,
+        resolvedEffort:
+          typeof responseRecord.resolved_effort === "string"
+            ? responseRecord.resolved_effort.trim() || null
+            : null,
+      });
       setChannelReady(true);
 
       // Reconcile the last turn on a freshly joined (e.g. reloaded) tab: surface the
@@ -1157,8 +1398,8 @@ function InteractiveProjectAssistantPanel({
       // server registry over durable metadata that may still say "interrupted".
       const joinedLastTurn = readLastTurn(response);
       const liveTurnRunning =
-        (response as { turn_running?: unknown } | null)?.turn_running === true ||
-        joinedLastTurn?.status === "running";
+        (response as { turn_running?: unknown } | null)?.turn_running ===
+          true || joinedLastTurn?.status === "running";
       const reconciledLastTurn =
         liveTurnRunning && joinedLastTurn
           ? { ...joinedLastTurn, status: "running", canResume: false }
@@ -1167,7 +1408,12 @@ function InteractiveProjectAssistantPanel({
       if (liveTurnRunning) {
         setTurnRunning(true);
         if (reconciledLastTurn && reconciledLastTurn.activeTools.length > 0) {
-          setMessages((current) => hydrateStreamingActiveTools(current, reconciledLastTurn.activeTools));
+          setMessages((current) =>
+            hydrateStreamingActiveTools(
+              current,
+              reconciledLastTurn.activeTools,
+            ),
+          );
         }
       }
 
@@ -1189,10 +1435,10 @@ function InteractiveProjectAssistantPanel({
         setServerAgentSeed(agent);
         onEffectiveAgentResolvedRef.current?.(agent);
       }
-      const model = modelFromResponse(response);
-      const effort = effortFromResponse(response);
-      if (agent && model && effort) {
-        setSettingsSeed({ agent, model, effort });
+      if (agent && model) {
+        setSettingsSeed({ agent, model, effort: effort ?? "" });
+      } else {
+        setSettingsSeed(null);
       }
     });
     joinPush.receive("error", (reason) => {
@@ -1210,21 +1456,40 @@ function InteractiveProjectAssistantPanel({
       channel.leave();
       socket.disconnect();
     };
-  }, [active, isExploreMode, isKbMode, kbRepoSlug, kbPagePath, issueIdentifier, projectSlug, threadId, t]);
+  }, [
+    active,
+    isExploreMode,
+    isKbMode,
+    kbRepoSlug,
+    kbPagePath,
+    issueIdentifier,
+    projectSlug,
+    threadId,
+    t,
+  ]);
 
   useEffect(() => {
-    if (!active || !channelReady || !issueIdentifier || typeof issueGoalMode !== "boolean") return;
+    if (
+      !active ||
+      !channelReady ||
+      !issueIdentifier ||
+      typeof issueGoalMode !== "boolean"
+    )
+      return;
     if (lastConfirmedGoalModeRef.current === issueGoalMode) return;
 
     const requestId = issueGoalModeRequestId;
     const pending = pendingGoalModeRef.current;
-    if (pending?.enabled === issueGoalMode && pending.requestId === requestId) return;
+    if (pending?.enabled === issueGoalMode && pending.requestId === requestId)
+      return;
 
     const channel = channelRef.current;
     if (!channel) return;
 
     pendingGoalModeRef.current = { enabled: issueGoalMode, requestId };
-    const pushResult = channel.push("set_goal_mode", { goal_mode: issueGoalMode });
+    const pushResult = channel.push("set_goal_mode", {
+      goal_mode: issueGoalMode,
+    });
     pushResult.receive("ok", (response) => {
       goalStatusAcceptorRef.current(response);
       const enabled = goalModeFromResponse(response) ?? issueGoalMode;
@@ -1240,11 +1505,24 @@ function InteractiveProjectAssistantPanel({
       pendingGoalModeRef.current = null;
       onIssueGoalModeError?.(t("assistant.panel.goalModeUpdateTimeout"));
     });
-  }, [active, channelReady, issueIdentifier, issueGoalMode, issueGoalModeRequestId, onIssueGoalModeChanged, onIssueGoalModeError, t]);
+  }, [
+    active,
+    channelReady,
+    issueIdentifier,
+    issueGoalMode,
+    issueGoalModeRequestId,
+    onIssueGoalModeChanged,
+    onIssueGoalModeError,
+    t,
+  ]);
 
   useEffect(() => {
     if (!active || !channelReady || !issueIdentifier) return;
-    if (dispatchRequestId <= 0 || dispatchRequestId === lastDispatchRequestRef.current) return;
+    if (
+      dispatchRequestId <= 0 ||
+      dispatchRequestId === lastDispatchRequestRef.current
+    )
+      return;
 
     const channel = channelRef.current;
     if (!channel) return;
@@ -1254,17 +1532,34 @@ function InteractiveProjectAssistantPanel({
     // resolves task > project > user at dispatch.
     const agent = composerAgentRef.current;
     const agentName = agentDisplayName(agent);
-    const pushResult = dispatchCodingAgent(channel, { goalMode: issueGoalMode === true, agent });
+    const pushResult = dispatchCodingAgent(channel, {
+      goalMode: issueGoalMode === true,
+      agent,
+    });
     pushResult.receive("ok", (response) => {
-      onDispatchSucceeded?.(messageFromResponse(response) ?? t("assistant.panel.dispatchedTo", { agent: agentName }));
+      onDispatchSucceeded?.(
+        messageFromResponse(response) ??
+          t("assistant.panel.dispatchedTo", { agent: agentName }),
+      );
     });
     pushResult.receive("error", (reason) => {
       onDispatchError?.(errorMessage(reason));
     });
     pushResult.receive("timeout", () => {
-      onDispatchError?.(t("assistant.panel.dispatchTimeout", { agent: agentName }));
+      onDispatchError?.(
+        t("assistant.panel.dispatchTimeout", { agent: agentName }),
+      );
     });
-  }, [active, channelReady, issueIdentifier, dispatchRequestId, issueGoalMode, onDispatchSucceeded, onDispatchError, t]);
+  }, [
+    active,
+    channelReady,
+    issueIdentifier,
+    dispatchRequestId,
+    issueGoalMode,
+    onDispatchSucceeded,
+    onDispatchError,
+    t,
+  ]);
 
   const persistTurnPreferences = useCallback(
     (next: { mode?: ExecutionMode; skillProfile?: SkillProfileId }) => {
@@ -1294,16 +1589,22 @@ function InteractiveProjectAssistantPanel({
     const pushResult = dispatchCodingAgent(channel, {
       goalMode: issueGoalMode === true,
       agent,
-      mode: executionModeRef.current === "plan" ? "yolo" : executionModeRef.current,
+      mode:
+        executionModeRef.current === "plan" ? "yolo" : executionModeRef.current,
     });
     pushResult.receive("ok", (response) => {
-      onDispatchSucceeded?.(messageFromResponse(response) ?? t("assistant.panel.dispatchedTo", { agent: agentName }));
+      onDispatchSucceeded?.(
+        messageFromResponse(response) ??
+          t("assistant.panel.dispatchedTo", { agent: agentName }),
+      );
     });
     pushResult.receive("error", (reason) => {
       onDispatchError?.(errorMessage(reason));
     });
     pushResult.receive("timeout", () => {
-      onDispatchError?.(t("assistant.panel.dispatchTimeout", { agent: agentName }));
+      onDispatchError?.(
+        t("assistant.panel.dispatchTimeout", { agent: agentName }),
+      );
     });
   }, [issueGoalMode, issueIdentifier, onDispatchError, onDispatchSucceeded, t]);
 
@@ -1363,7 +1664,9 @@ function InteractiveProjectAssistantPanel({
       }
 
       const extraContext = getExtraContextRef.current?.() ?? {};
-      const expandedMessage = expandMentions(trimmed || fallbackAttachmentMessage(submit.attachments, t));
+      const expandedMessage = expandMentions(
+        trimmed || fallbackAttachmentMessage(submit.attachments, t),
+      );
       const payload = {
         message: expandedMessage,
         context: {
@@ -1384,6 +1687,12 @@ function InteractiveProjectAssistantPanel({
       };
 
       setConnectionError(null);
+      setModelProvenance({
+        requestedModel: submit.settings.model || null,
+        requestedEffort: submit.settings.effort || null,
+        resolvedModel: null,
+        resolvedEffort: null,
+      });
       // Re-compact history to the new current run (spec 2026-07-10 §2 re-compact rule).
       setHistoryRevealStartIndex(null);
       stickToBottomRef.current = true;
@@ -1417,7 +1726,9 @@ function InteractiveProjectAssistantPanel({
       if (!channel || (!text && submit.contextRefs.length === 0)) return;
       channel.push("steer_turn", {
         message: text,
-        ...(submit.contextRefs.length > 0 ? { context_refs: submit.contextRefs } : {}),
+        ...(submit.contextRefs.length > 0
+          ? { context_refs: submit.contextRefs }
+          : {}),
       });
     },
     [expandMentions],
@@ -1436,7 +1747,11 @@ function InteractiveProjectAssistantPanel({
         objective.length > 0
           ? t("assistant.panel.goalCommandWithObjective", { objective })
           : t("assistant.panel.goalCommandDefault");
-      const framedSubmit: AssistantComposerSubmit = { ...submit, kind: "message", message: framed };
+      const framedSubmit: AssistantComposerSubmit = {
+        ...submit,
+        kind: "message",
+        message: framed,
+      };
 
       // Authoring goal: persist the chat goal + objective so this turn (and the next ones) run
       // Codex native goal mode directly in the conversation. This never dispatches the orchestrator
@@ -1452,15 +1767,28 @@ function InteractiveProjectAssistantPanel({
         onIssueGoalModeChanged?.(enabled);
 
         if (submissionBlocked) {
-          setQueued((current) => [...current, { id: crypto.randomUUID(), payload: framedSubmit }]);
+          setQueued((current) => [
+            ...current,
+            { id: crypto.randomUUID(), payload: framedSubmit },
+          ]);
         } else {
           dispatchSend(framedSubmit);
         }
       });
-      goalPush.receive("error", (reason) => onIssueGoalModeError?.(errorMessage(reason, t)));
-      goalPush.receive("timeout", () => onIssueGoalModeError?.(t("assistant.panel.goalModeUpdateTimeout")));
+      goalPush.receive("error", (reason) =>
+        onIssueGoalModeError?.(errorMessage(reason, t)),
+      );
+      goalPush.receive("timeout", () =>
+        onIssueGoalModeError?.(t("assistant.panel.goalModeUpdateTimeout")),
+      );
     },
-    [dispatchSend, submissionBlocked, onIssueGoalModeChanged, onIssueGoalModeError, t],
+    [
+      dispatchSend,
+      submissionBlocked,
+      onIssueGoalModeChanged,
+      onIssueGoalModeError,
+      t,
+    ],
   );
 
   const pauseGoal = useCallback(() => {
@@ -1470,7 +1798,9 @@ function InteractiveProjectAssistantPanel({
       .receive("ok", (response) => {
         goalStatusAcceptorRef.current(response);
       })
-      .receive("error", (reason) => onIssueGoalModeError?.(errorMessage(reason, t)));
+      .receive("error", (reason) =>
+        onIssueGoalModeError?.(errorMessage(reason, t)),
+      );
   }, [onIssueGoalModeError, t]);
 
   const resumeGoal = useCallback(() => {
@@ -1511,7 +1841,10 @@ function InteractiveProjectAssistantPanel({
       clearAuthoringGoal(channel)
         .receive("ok", (response) => applyClearedGoal(response))
         .receive("error", (reason) => {
-          if (allowBusyRetry && errorMessage(reason, t) === "assistant is busy") {
+          if (
+            allowBusyRetry &&
+            errorMessage(reason, t) === "assistant is busy"
+          ) {
             stopTurn(channel)
               .receive("ok", () => clearOnce(false))
               .receive("error", (stopReason) => reportGoalError(stopReason));
@@ -1534,7 +1867,9 @@ function InteractiveProjectAssistantPanel({
         .receive("ok", (response) => {
           goalStatusAcceptorRef.current(response);
         })
-        .receive("error", (reason) => onIssueGoalModeError?.(errorMessage(reason, t)));
+        .receive("error", (reason) =>
+          onIssueGoalModeError?.(errorMessage(reason, t)),
+        );
     },
     [onIssueGoalModeError, t],
   );
@@ -1559,7 +1894,10 @@ function InteractiveProjectAssistantPanel({
         if (submissionBlocked) {
           setQueued((current) => [
             ...current,
-            { id: crypto.randomUUID(), payload: { ...submit, kind: "message" } },
+            {
+              id: crypto.randomUUID(),
+              payload: { ...submit, kind: "message" },
+            },
           ]);
         } else {
           dispatchSend({ ...submit, kind: "message" });
@@ -1581,20 +1919,36 @@ function InteractiveProjectAssistantPanel({
           })
           .receive("error", () => {
             setBtw((current) =>
-              current ? { ...current, status: "error", answer: t("assistant.panel.btwFailed") } : current,
+              current
+                ? {
+                    ...current,
+                    status: "error",
+                    answer: t("assistant.panel.btwFailed"),
+                  }
+                : current,
             );
           });
         return;
       }
 
       if (submissionBlocked) {
-        setQueued((current) => [...current, { id: crypto.randomUUID(), payload: { ...submit, kind: "message" } }]);
+        setQueued((current) => [
+          ...current,
+          { id: crypto.randomUUID(), payload: { ...submit, kind: "message" } },
+        ]);
         return;
       }
 
       dispatchSend(submit);
     },
-    [dispatchSend, enableGoalCommand, steerTurn, submissionBlocked, t, turnRunning],
+    [
+      dispatchSend,
+      enableGoalCommand,
+      steerTurn,
+      submissionBlocked,
+      t,
+      turnRunning,
+    ],
   );
 
   const queueBlocked = submissionBlocked;
@@ -1652,7 +2006,8 @@ function InteractiveProjectAssistantPanel({
   const onNew = useCallback(
     async (message: AppendMessage) => {
       const firstPart = message.content[0];
-      if (firstPart?.type !== "text") throw new Error(i18n.t("assistant.errors.textOnlyMessages"));
+      if (firstPart?.type !== "text")
+        throw new Error(i18n.t("assistant.errors.textOnlyMessages"));
       const activeBundle = bundleRef.current;
       if (!activeBundle) return;
 
@@ -1675,8 +2030,12 @@ function InteractiveProjectAssistantPanel({
   );
   // `renderedMessages` is the compacted slice actually painted; `visibleMessages`
   // stays the full list so derivations (tasks, KB refs, runtime) keep full context.
-  const promptWindow = useMemo(() => getCurrentPromptWindow(visibleMessages), [visibleMessages]);
-  const effectiveHistoryStartIndex = historyRevealStartIndex ?? promptWindow.startIndex;
+  const promptWindow = useMemo(
+    () => getCurrentPromptWindow(visibleMessages),
+    [visibleMessages],
+  );
+  const effectiveHistoryStartIndex =
+    historyRevealStartIndex ?? promptWindow.startIndex;
   const hiddenPromptCount = useMemo(
     () => countHiddenPromptsBefore(visibleMessages, effectiveHistoryStartIndex),
     [visibleMessages, effectiveHistoryStartIndex],
@@ -1693,7 +2052,8 @@ function InteractiveProjectAssistantPanel({
   // Ephemeral same-browser cache: survives Workspaces remounts without persisting
   // transcript to disk. Skip the empty cold-start so we never clobber a richer entry.
   useEffect(() => {
-    if (threadId == null || !Number.isInteger(threadId) || threadId <= 0) return;
+    if (threadId == null || !Number.isInteger(threadId) || threadId <= 0)
+      return;
     if (!historyHydrated && messages.length === 0 && !turnRunning) return;
 
     putAssistantSessionSnapshot({
@@ -1732,7 +2092,9 @@ function InteractiveProjectAssistantPanel({
         pinnedScrollTopRef,
       );
       setIsAtBottom(false);
-      setHistoryRevealStartIndex(revealOlderPromptStartIndex(currentMessages, currentStart));
+      setHistoryRevealStartIndex(
+        revealOlderPromptStartIndex(currentMessages, currentStart),
+      );
       return;
     }
 
@@ -1758,7 +2120,12 @@ function InteractiveProjectAssistantPanel({
       })
       .catch((error) => setConnectionError(errorMessage(error)))
       .finally(() => setLoadingOlderMessages(false));
-  }, [historyRevealStartIndex, historyHasMoreBefore, historyOldestSequence, loadingOlderMessages]);
+  }, [
+    historyRevealStartIndex,
+    historyHasMoreBefore,
+    historyOldestSequence,
+    loadingOlderMessages,
+  ]);
 
   const loadOlderControl = useMemo<LoadOlderControl | null>(() => {
     const hasHiddenInMemory = effectiveHistoryStartIndex > 0;
@@ -1770,7 +2137,11 @@ function InteractiveProjectAssistantPanel({
         ? t("assistant.panel.loadOldPrompts", { count: hiddenPromptCount })
         : t("assistant.panel.loadOlderMessages");
 
-    return { label, disabled: loadingOlderMessages, onLoad: handleLoadOlderMessages };
+    return {
+      label,
+      disabled: loadingOlderMessages,
+      onLoad: handleLoadOlderMessages,
+    };
   }, [
     effectiveHistoryStartIndex,
     hiddenPromptCount,
@@ -1783,7 +2154,10 @@ function InteractiveProjectAssistantPanel({
   const handleFetchToolOutput = useCallback(
     (messageId: string, toolCallId: string): Promise<string> => {
       const channel = channelRef.current;
-      if (!channel) return Promise.reject(new Error(t("assistant.panel.channelNotConnected")));
+      if (!channel)
+        return Promise.reject(
+          new Error(t("assistant.panel.channelNotConnected")),
+        );
       return fetchToolOutput(channel, messageId, toolCallId);
     },
     [t],
@@ -1797,7 +2171,10 @@ function InteractiveProjectAssistantPanel({
   // reference so it does not defeat React.memo on every message bubble during
   // streaming, since it is passed down to all of them.
   const taskSnapshot = useStableValue(
-    useMemo(() => deriveAgentTasksFromAssistantMessages(visibleMessages), [visibleMessages]),
+    useMemo(
+      () => deriveAgentTasksFromAssistantMessages(visibleMessages),
+      [visibleMessages],
+    ),
   );
   const toolItems = useMemo(
     () => visibleMessages.flatMap((message) => message.toolCalls),
@@ -1806,7 +2183,9 @@ function InteractiveProjectAssistantPanel({
   useEffect(() => {
     const fromTools = latestNotionImportFromMessages(visibleMessages);
     if (!fromTools) return;
-    setNotionImport((current) => (current?.importId === fromTools.importId ? current : fromTools));
+    setNotionImport((current) =>
+      current?.importId === fromTools.importId ? current : fromTools,
+    );
   }, [visibleMessages]);
   const hasTasks = (taskSnapshot?.tasks.length ?? 0) > 0;
   const tasksDone = taskSnapshot ? completedTaskCount(taskSnapshot) : 0;
@@ -1819,15 +2198,23 @@ function InteractiveProjectAssistantPanel({
 
     const normalizedIssueIdentifier = issueIdentifier?.trim();
     if (normalizedIssueIdentifier) {
-      return issueWorkspaceScope(normalizedProjectSlug, normalizedIssueIdentifier, threadId);
+      return issueWorkspaceScope(
+        normalizedProjectSlug,
+        normalizedIssueIdentifier,
+        threadId,
+      );
     }
     if (threadId != null && Number.isInteger(threadId) && threadId > 0) {
       return threadWorkspaceScope(normalizedProjectSlug, threadId, null);
     }
     return null;
   }, [issueIdentifier, projectSlug, threadId]);
-  usePublishSessionTasksDockFeed(tasksDockScope, { tasks: taskSnapshot, toolItems });
-  const usesWorkspaceTasksDock = sessionTasksDock != null && tasksDockScope != null;
+  usePublishSessionTasksDockFeed(tasksDockScope, {
+    tasks: taskSnapshot,
+    toolItems,
+  });
+  const usesWorkspaceTasksDock =
+    sessionTasksDock != null && tasksDockScope != null;
   const [localTasksDockOpen, setLocalTasksDockOpen] = useState<boolean>(
     () => window.localStorage.getItem(TASKS_DOCK_STORAGE_KEY) !== "false",
   );
@@ -1837,8 +2224,12 @@ function InteractiveProjectAssistantPanel({
   const persistTasksDockOpen = useCallback(
     (next: boolean) => {
       if (usesWorkspaceTasksDock && sessionTasksDock && tasksDockScope) {
-        const currentlyOpen = workspaceScopesEqual(sessionTasksDock.openScope, tasksDockScope);
-        if (next !== currentlyOpen) sessionTasksDock.toggleTasks(tasksDockScope);
+        const currentlyOpen = workspaceScopesEqual(
+          sessionTasksDock.openScope,
+          tasksDockScope,
+        );
+        if (next !== currentlyOpen)
+          sessionTasksDock.toggleTasks(tasksDockScope);
         return;
       }
       window.localStorage.setItem(TASKS_DOCK_STORAGE_KEY, String(next));
@@ -1860,18 +2251,33 @@ function InteractiveProjectAssistantPanel({
   const tasksAvailable = isPageMode && hasTasks && taskSnapshot != null;
   // Workspace sessions use the shared lateral Tasks/Tools dock; keep the panel-local
   // dock/sheet only when that workspace control is unavailable.
-  const showTasksDock = tasksAvailable && tasksDockOpen && isLgUp && !usesWorkspaceTasksDock;
-  const showTasksSheet = tasksAvailable && tasksDockOpen && !isLgUp && !usesWorkspaceTasksDock;
+  const showTasksDock =
+    tasksAvailable && tasksDockOpen && isLgUp && !usesWorkspaceTasksDock;
+  const showTasksSheet =
+    tasksAvailable && tasksDockOpen && !isLgUp && !usesWorkspaceTasksDock;
 
   useEffect(() => {
     if (!onTasksDockControlChange) return undefined;
     onTasksDockControlChange(
       isPageMode && hasTasks
-        ? { done: tasksDone, total: tasksTotal, open: tasksDockOpen, toggle: toggleTasksDock }
+        ? {
+            done: tasksDone,
+            total: tasksTotal,
+            open: tasksDockOpen,
+            toggle: toggleTasksDock,
+          }
         : null,
     );
     return () => onTasksDockControlChange(null);
-  }, [onTasksDockControlChange, isPageMode, hasTasks, tasksDone, tasksTotal, tasksDockOpen, toggleTasksDock]);
+  }, [
+    onTasksDockControlChange,
+    isPageMode,
+    hasTasks,
+    tasksDone,
+    tasksTotal,
+    tasksDockOpen,
+    toggleTasksDock,
+  ]);
 
   useEffect(() => {
     if (!onKnowledgeBaseControlChange || !projectSlug) {
@@ -1883,12 +2289,19 @@ function InteractiveProjectAssistantPanel({
       changedDocCount: changedDocs.count,
     });
     return () => onKnowledgeBaseControlChange(null);
-  }, [changedDocs.count, onKnowledgeBaseControlChange, openKnowledgeBase, projectSlug]);
+  }, [
+    changedDocs.count,
+    onKnowledgeBaseControlChange,
+    openKnowledgeBase,
+    projectSlug,
+  ]);
 
   const kbDocumentReferences = useMemo(
     () =>
       visibleMessages.reduce<string[]>((references, message) => {
-        for (const reference of extractKbDocumentReferencesFromMessage(message)) {
+        for (const reference of extractKbDocumentReferencesFromMessage(
+          message,
+        )) {
           if (!references.includes(reference)) references.push(reference);
         }
         return references;
@@ -1896,7 +2309,6 @@ function InteractiveProjectAssistantPanel({
     [visibleMessages],
   );
   const kbDocumentReferencesKey = kbDocumentReferences.join("\0");
-  const composerBundle = useMemo(() => bundle ?? fallbackCatalogBundle(), [bundle]);
   const catalogLoading = !bundle && !catalogError;
 
   useEffect(() => {
@@ -1944,7 +2356,11 @@ function InteractiveProjectAssistantPanel({
 
   useEffect(() => {
     onKbDocumentReferencesChanged?.(kbDocumentReferences);
-  }, [kbDocumentReferences, kbDocumentReferencesKey, onKbDocumentReferencesChanged]);
+  }, [
+    kbDocumentReferences,
+    kbDocumentReferencesKey,
+    onKbDocumentReferencesChanged,
+  ]);
 
   useEffect(() => {
     if (!isPanelMode || !stickToBottomRef.current) return undefined;
@@ -1955,13 +2371,19 @@ function InteractiveProjectAssistantPanel({
     const frame = requestAnimationFrame(() => {
       if (!stickToBottomRef.current) return;
 
-      const behavior = turnRunning && scrollBehaviorRef.current !== "initial" ? "smooth" : "auto";
+      const behavior =
+        turnRunning && scrollBehaviorRef.current !== "initial"
+          ? "smooth"
+          : "auto";
       scrollBehaviorRef.current = "smooth";
       scroller.scrollTo({ top: scroller.scrollHeight, behavior });
       // Second frame: message/tool rows often grow after the first paint.
       secondFrame = requestAnimationFrame(() => {
         if (!stickToBottomRef.current || !scrollRef.current) return;
-        scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "auto" });
+        scrollRef.current.scrollTo({
+          top: scrollRef.current.scrollHeight,
+          behavior: "auto",
+        });
       });
     });
 
@@ -1997,7 +2419,9 @@ function InteractiveProjectAssistantPanel({
   // "Try again" affordance that hits the idempotent provisioning endpoint
   // directly, instead of leaving the user stuck re-sending the same message.
   const workspaceProvisioningError =
-    connectionError && /workspace (provisioning|setup)/i.test(connectionError) ? connectionError : null;
+    connectionError && /workspace (provisioning|setup)/i.test(connectionError)
+      ? connectionError
+      : null;
 
   const retryWorkspaceProvisioning = useCallback(() => {
     if (workspaceProvisionRetrying) return;
@@ -2019,7 +2443,9 @@ function InteractiveProjectAssistantPanel({
       .catch((cause) => {
         setWorkspaceProvisionRetrying(false);
         setWorkspaceProvisionRetryError(
-          cause instanceof Error ? cause.message : t("assistant.panel.workspaceProvision.retryFailed"),
+          cause instanceof Error
+            ? cause.message
+            : t("assistant.panel.workspaceProvision.retryFailed"),
         );
       });
   }, [projectSlug, issueIdentifier, threadId, workspaceProvisionRetrying, t]);
@@ -2031,7 +2457,9 @@ function InteractiveProjectAssistantPanel({
   const handleStopTurn = useCallback(() => {
     const channel = channelRef.current;
     if (!channel) return;
-    stopTurn(channel).receive("error", (reason) => setConnectionError(errorMessage(reason)));
+    stopTurn(channel).receive("error", (reason) =>
+      setConnectionError(errorMessage(reason)),
+    );
   }, []);
 
   const handleKillTool = useCallback(
@@ -2039,8 +2467,10 @@ function InteractiveProjectAssistantPanel({
       const channel = channelRef.current;
       if (!channel) return;
       killTool(channel, toolCallId).receive("error", (reason) => {
-        const payload = (reason ?? {}) as { can_stop_turn?: boolean; reason?: string };
-        if (payload.can_stop_turn === true) {
+        const payload = (reason ?? {}) as {
+          details?: { can_stop_turn?: boolean };
+        };
+        if (payload.details?.can_stop_turn === true) {
           toast.error(t("assistant.working.killFailed"));
           return;
         }
@@ -2055,11 +2485,10 @@ function InteractiveProjectAssistantPanel({
     : projectSlug
       ? t("assistant.panel.projectTitle")
       : t("assistant.panel.freeformTitle");
-  const panelModelCommand = bundle ? catalogFor(bundle, bundle.defaultAgent).command : null;
-
   const sendDiffReview = useCallback(
     (review: string) => {
-      const activeBundle = bundleRef.current ?? fallbackCatalogBundle();
+      const activeBundle = bundleRef.current;
+      if (!activeBundle) return;
       const activeCatalog = catalogFor(activeBundle, activeBundle.defaultAgent);
       sendMessage({
         kind: "infer",
@@ -2125,7 +2554,8 @@ function InteractiveProjectAssistantPanel({
   );
 
   const removeQueued = useCallback(
-    (id: string) => setQueued((current) => current.filter((entry) => entry.id !== id)),
+    (id: string) =>
+      setQueued((current) => current.filter((entry) => entry.id !== id)),
     [],
   );
 
@@ -2151,7 +2581,10 @@ function InteractiveProjectAssistantPanel({
   const queuedChips =
     queued.length > 0 ? (
       <QueuedMessageChips
-        items={queued.map((item) => ({ id: item.id, message: item.payload.message.trim() }))}
+        items={queued.map((item) => ({
+          id: item.id,
+          message: item.payload.message.trim(),
+        }))}
         onSendNow={forceSendQueued}
         onEdit={editQueued}
         onRemove={removeQueued}
@@ -2170,7 +2603,11 @@ function InteractiveProjectAssistantPanel({
 
   const questionsNode = pendingQuestions ? (
     <div className="px-4 pb-2">
-      <UserQuestionsCard request={pendingQuestions} onSubmit={submitQuestions} disabled={!channelReady} />
+      <UserQuestionsCard
+        request={pendingQuestions}
+        onSubmit={submitQuestions}
+        disabled={!channelReady}
+      />
     </div>
   ) : null;
 
@@ -2180,9 +2617,15 @@ function InteractiveProjectAssistantPanel({
       if (!channel) return;
 
       submitApproval(channel, requestId, action)
-        .receive("ok", () => setPendingApproval((current) => (current?.requestId === requestId ? null : current)))
+        .receive("ok", () =>
+          setPendingApproval((current) =>
+            current?.requestId === requestId ? null : current,
+          ),
+        )
         .receive("error", (reason) => {
-          setPendingApproval((current) => (current?.requestId === requestId ? null : current));
+          setPendingApproval((current) =>
+            current?.requestId === requestId ? null : current,
+          );
           setConnectionError(errorMessage(reason));
         });
     },
@@ -2196,9 +2639,15 @@ function InteractiveProjectAssistantPanel({
       executionModeRef.current = mode;
       persistTurnPreferences({ mode });
       if (mode !== "yolo") return;
-      if (pendingApproval) submitCommandApproval(pendingApproval.requestId, "approve");
+      if (pendingApproval)
+        submitCommandApproval(pendingApproval.requestId, "approve");
     },
-    [modeLocked, pendingApproval, persistTurnPreferences, submitCommandApproval],
+    [
+      modeLocked,
+      pendingApproval,
+      persistTurnPreferences,
+      submitCommandApproval,
+    ],
   );
 
   const handleSkillProfileChange = useCallback(
@@ -2228,10 +2677,14 @@ function InteractiveProjectAssistantPanel({
 
       submitCreatePlan(channel, requestId, action)
         .receive("ok", () =>
-          setPendingCreatePlan((current) => (current?.requestId === requestId ? null : current)),
+          setPendingCreatePlan((current) =>
+            current?.requestId === requestId ? null : current,
+          ),
         )
         .receive("error", (reason) => {
-          setPendingCreatePlan((current) => (current?.requestId === requestId ? null : current));
+          setPendingCreatePlan((current) =>
+            current?.requestId === requestId ? null : current,
+          );
           setConnectionError(errorMessage(reason));
         });
     },
@@ -2278,11 +2731,15 @@ function InteractiveProjectAssistantPanel({
         {workspaceProvisionRetrying ? (
           <>
             <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
-            <span className="min-w-0 flex-1">{t("assistant.panel.workspaceProvision.progress")}</span>
+            <span className="min-w-0 flex-1">
+              {t("assistant.panel.workspaceProvision.progress")}
+            </span>
           </>
         ) : (
           <>
-            <span className="min-w-0 flex-1">{workspaceProvisionRetryError ?? workspaceProvisioningError}</span>
+            <span className="min-w-0 flex-1">
+              {workspaceProvisionRetryError ?? workspaceProvisioningError}
+            </span>
             <Button
               type="button"
               size="sm"
@@ -2304,7 +2761,9 @@ function InteractiveProjectAssistantPanel({
     lastTurn?.canResume && !turnRunning ? (
       <div className="px-4 pb-2">
         <div className="flex items-center gap-2 rounded-lg border border-amber-300/60 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-400/30 dark:bg-amber-950/40 dark:text-amber-300">
-          <span className="min-w-0 flex-1">{t("assistant.panel.turnInterrupted")}</span>
+          <span className="min-w-0 flex-1">
+            {t("assistant.panel.turnInterrupted")}
+          </span>
           <Button
             type="button"
             size="sm"
@@ -2315,7 +2774,9 @@ function InteractiveProjectAssistantPanel({
               if (!channel) return;
               dismissInterruptedTurn(channel)
                 .receive("ok", () => setLastTurn(null))
-                .receive("error", (reason) => setConnectionError(errorMessage(reason)));
+                .receive("error", (reason) =>
+                  setConnectionError(errorMessage(reason)),
+                );
             }}
           >
             {t("assistant.panel.dismissInterrupted")}
@@ -2331,11 +2792,15 @@ function InteractiveProjectAssistantPanel({
               resumeTurn(channel)
                 .receive("ok", () => {
                   setLastTurn((current) =>
-                    current ? { ...current, status: "running", canResume: false } : current,
+                    current
+                      ? { ...current, status: "running", canResume: false }
+                      : current,
                   );
                   setTurnRunning(true);
                 })
-                .receive("error", (reason) => setConnectionError(errorMessage(reason)));
+                .receive("error", (reason) =>
+                  setConnectionError(errorMessage(reason)),
+                );
             }}
           >
             {t("assistant.panel.resume")}
@@ -2348,46 +2813,48 @@ function InteractiveProjectAssistantPanel({
   // reads as the top of the message box — one piece, no separating line.
   const authoringGoalControlsSupported =
     authoringGoal.provider === "codex" || authoringGoal.provider === "claude";
-  const authoringGoalPill =
-    authoringGoal.enabled ? (
-      <GoalPill
-        phase={authoringGoalPhase(authoringGoal)}
-        provider={authoringGoal.provider}
-        capabilities={authoringGoal.capabilities}
-        objective={authoringGoal.objective}
-        running={authoringGoal.processRunning}
-        timeUsedSeconds={authoringGoal.timeUsedSeconds}
-        onStop={
-          authoringGoal.processRunning &&
-          authoringGoalControlsSupported &&
-          authoringGoal.capabilities.includes("stop")
-            ? handleStopTurn
-            : undefined
-        }
-        onPause={
-          authoringGoalControlsSupported && authoringGoal.capabilities.includes("pause")
-            ? pauseGoal
-            : undefined
-        }
-        onResume={
-          authoringGoalControlsSupported && authoringGoal.capabilities.includes("resume")
-            ? resumeGoal
-            : undefined
-        }
-        onRemove={
-          authoringGoalControlsSupported && authoringGoal.capabilities.includes("clear")
-            ? removeGoal
-            : undefined
-        }
-        onEditObjective={
-          authoringGoalControlsSupported &&
-          (authoringGoal.capabilities.includes("edit") ||
-            authoringGoal.capabilities.includes("set_objective"))
-            ? editGoalObjective
-            : undefined
-        }
-      />
-    ) : null;
+  const authoringGoalPill = authoringGoal.enabled ? (
+    <GoalPill
+      phase={authoringGoalPhase(authoringGoal)}
+      provider={authoringGoal.provider}
+      capabilities={authoringGoal.capabilities}
+      objective={authoringGoal.objective}
+      running={authoringGoal.processRunning}
+      timeUsedSeconds={authoringGoal.timeUsedSeconds}
+      onStop={
+        authoringGoal.processRunning &&
+        authoringGoalControlsSupported &&
+        authoringGoal.capabilities.includes("stop")
+          ? handleStopTurn
+          : undefined
+      }
+      onPause={
+        authoringGoalControlsSupported &&
+        authoringGoal.capabilities.includes("pause")
+          ? pauseGoal
+          : undefined
+      }
+      onResume={
+        authoringGoalControlsSupported &&
+        authoringGoal.capabilities.includes("resume")
+          ? resumeGoal
+          : undefined
+      }
+      onRemove={
+        authoringGoalControlsSupported &&
+        authoringGoal.capabilities.includes("clear")
+          ? removeGoal
+          : undefined
+      }
+      onEditObjective={
+        authoringGoalControlsSupported &&
+        (authoringGoal.capabilities.includes("edit") ||
+          authoringGoal.capabilities.includes("set_objective"))
+          ? editGoalObjective
+          : undefined
+      }
+    />
+  ) : null;
 
   const openKnowledgeBaseShortcut = useCallback(() => {
     openKnowledgeBase();
@@ -2409,12 +2876,22 @@ function InteractiveProjectAssistantPanel({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [catalogLoading, openKnowledgeBaseShortcut, projectSlug]);
 
-  const composerNode = (
+  const composerNode = bundle ? (
     <AssistantComposer
+      key={
+        settingsSeed
+          ? `${threadId ?? "new"}:${settingsSeed.agent}:${settingsSeed.model}:${settingsSeed.effort}`
+          : `${threadId ?? "new"}:unseeded`
+      }
       projectSlug={projectSlug ?? ""}
-      bundle={composerBundle}
-      agentMenuDisabled={authoringGoal.enabled || turnRunning || catalogLoading}
-      composerDisabled={catalogLoading}
+      bundle={bundle}
+      agentMenuDisabled={
+        authoringGoal.enabled ||
+        turnRunning ||
+        catalogLoading ||
+        Boolean(catalogError)
+      }
+      composerDisabled={catalogLoading || Boolean(catalogError)}
       floating={isPanelMode}
       hasQueued={queued.length > 0}
       seedMessage={composerSeedMessage}
@@ -2425,6 +2902,7 @@ function InteractiveProjectAssistantPanel({
       header={authoringGoalPill}
       contextInsertRequest={contextInsertRequest}
       onNotionImported={setNotionImport}
+      persistLocalComposerState={threadId == null && !issueIdentifier}
       hint={
         catalogLoading
           ? t("assistant.panel.loadingModels")
@@ -2446,14 +2924,21 @@ function InteractiveProjectAssistantPanel({
             size="sm"
             className="h-8 gap-1 px-2 text-xs"
             aria-pressed={tasksDockOpen}
-            aria-label={tasksDockOpen ? t("issue.tasks.hide") : t("issue.tasks.show")}
-            title={tasksDockOpen ? t("issue.tasks.hide") : t("issue.tasks.show")}
+            aria-label={
+              tasksDockOpen ? t("issue.tasks.hide") : t("issue.tasks.show")
+            }
+            title={
+              tasksDockOpen ? t("issue.tasks.hide") : t("issue.tasks.show")
+            }
             onClick={toggleTasksDock}
           >
             <ListChecks className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">{t("issue.tasks.title")}</span>
             <span className="tabular-nums text-[11px] text-muted-foreground">
-              {t("issue.tasks.progress", { done: tasksDone, total: tasksTotal })}
+              {t("issue.tasks.progress", {
+                done: tasksDone,
+                total: tasksTotal,
+              })}
             </span>
           </Button>
         ) : undefined
@@ -2480,13 +2965,19 @@ function InteractiveProjectAssistantPanel({
                 className="h-8 gap-1 px-2 text-xs"
                 disabled={catalogLoading}
                 title={t("issue.diff.shortcutHint")}
-                onClick={() => setComposerDiffRequestId((current) => current + 1)}
+                onClick={() =>
+                  setComposerDiffRequestId((current) => current + 1)
+                }
               >
                 <GitCompare className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">{t("issue.diff.button")}</span>
+                <span className="hidden sm:inline">
+                  {t("issue.diff.button")}
+                </span>
               </Button>
             ) : null}
-            {hideHeader ? <WorkspaceDiffStatsChip stats={workspaceDiffStats} /> : null}
+            {hideHeader ? (
+              <WorkspaceDiffStatsChip stats={workspaceDiffStats} />
+            ) : null}
             {projectSlug ? (
               <Button
                 type="button"
@@ -2499,7 +2990,9 @@ function InteractiveProjectAssistantPanel({
                 onClick={() => openKnowledgeBase()}
               >
                 <BookOpen className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">{t("assistant.panel.openKnowledgeBase")}</span>
+                <span className="hidden sm:inline">
+                  {t("assistant.panel.openKnowledgeBase")}
+                </span>
                 {changedDocs.count > 0 ? (
                   <span
                     aria-hidden
@@ -2533,7 +3026,9 @@ function InteractiveProjectAssistantPanel({
                 data-testid="run-autonomously"
               >
                 <Bot className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">{t("assistant.panel.runAutonomously")}</span>
+                <span className="hidden sm:inline">
+                  {t("assistant.panel.runAutonomously")}
+                </span>
               </Button>
             ) : null}
             {hasExecutableContext ? (
@@ -2544,10 +3039,14 @@ function InteractiveProjectAssistantPanel({
                 className="h-8 gap-1 px-2 text-xs"
                 disabled={catalogLoading}
                 title={t("commands.magic.open")}
-                onClick={() => setMagicPaletteRequestId((current) => current + 1)}
+                onClick={() =>
+                  setMagicPaletteRequestId((current) => current + 1)
+                }
               >
                 <Sparkles className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">{t("commands.magic.button")}</span>
+                <span className="hidden sm:inline">
+                  {t("commands.magic.button")}
+                </span>
               </Button>
             ) : null}
           </>
@@ -2558,6 +3057,13 @@ function InteractiveProjectAssistantPanel({
       onAgentChange={handleComposerAgentChange}
       dropTargetRef={panelRef}
     />
+  ) : (
+    <div
+      className="m-3 rounded-md border border-dashed px-3 py-4 text-center text-sm text-muted-foreground"
+      role={catalogError ? "alert" : "status"}
+    >
+      {catalogError ?? t("assistant.panel.loadingModels")}
+    </div>
   );
 
   const knowledgeBaseDialog = projectSlug ? (
@@ -2610,78 +3116,190 @@ function InteractiveProjectAssistantPanel({
       >
         <AssistantKbDocumentLinksProvider value={kbDocumentLinksValue}>
           <AssistantRuntimeProvider runtime={runtime}>
-          <section
-            ref={panelRef}
-            className={cn(
-              "relative flex",
-              isPageMode && (isFullPageProjectAssistant ? "h-[calc(100vh-4rem)]" : "h-full min-h-0"),
-              isEmbeddedMode && "h-full min-h-0",
-              showTasksDock && "gap-3",
-            )}
-            aria-label={t("assistant.panel.ariaLabel")}
-          >
-            <AssistantSessionShell
-              className="min-w-0 flex-1"
-              feedRef={setScrollContainerRef}
-              toolbar={
-                isEmbeddedMode || hideHeader ? null : (
-                  <AssistantPanelHeader
-                    title={panelTitle}
-                    isPageMode={isPageMode}
-                    projectSlug={projectSlug}
-                    diffStats={workspaceDiffStats}
-                    modelCommand={panelModelCommand}
-                  />
-                )
-              }
-              feed={
-                <div className={cn("flex w-full flex-col gap-4 py-4", chatReadingColumn)}>
+            <section
+              ref={panelRef}
+              className={cn(
+                "relative flex",
+                isPageMode &&
+                  (isFullPageProjectAssistant
+                    ? "h-[calc(100vh-4rem)]"
+                    : "h-full min-h-0"),
+                isEmbeddedMode && "h-full min-h-0",
+                showTasksDock && "gap-3",
+              )}
+              aria-label={t("assistant.panel.ariaLabel")}
+            >
+              <AssistantSessionShell
+                className="min-w-0 flex-1"
+                feedRef={setScrollContainerRef}
+                toolbar={
+                  isEmbeddedMode || hideHeader ? null : (
+                    <AssistantPanelHeader
+                      title={panelTitle}
+                      isPageMode={isPageMode}
+                      projectSlug={projectSlug}
+                      diffStats={workspaceDiffStats}
+                      agentKind={composerAgent}
+                      modelProvenance={modelProvenance}
+                    />
+                  )
+                }
+                feed={
+                  <div
+                    className={cn(
+                      "flex w-full flex-col gap-4 py-4",
+                      chatReadingColumn,
+                    )}
+                  >
+                    {messageItems}
+                  </div>
+                }
+                feedOverlay={scrollToBottomButton}
+                dock={
+                  <div>
+                    <div className={chatReadingColumn}>
+                      {!isEmbeddedMode ? resumeBanner : null}
+                      {workspaceProvisionBanner}
+                      {queuedChips}
+                      {questionsNode}
+                      {approvalNode}
+                      {createPlanNode}
+                      {notionImportNode}
+                    </div>
+                  </div>
+                }
+                composer={
+                  <div
+                    className={cn(
+                      "bg-background",
+                      isPageMode ? "pr-2.5" : "pb-2 pt-2",
+                    )}
+                  >
+                    <div className={cn("py-2", chatReadingColumn)}>
+                      {composerNode ?? (
+                        <div className="rounded-2xl border bg-card px-4 py-6 text-sm text-muted-foreground shadow-sm">
+                          {t("assistant.panel.loadingModels")}
+                        </div>
+                      )}
+                      {catalogError ? (
+                        <p className="mt-2 text-xs text-amber-700 dark:text-amber-400">
+                          {catalogError}
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
+                }
+              />
+
+              {showTasksDock && taskSnapshot ? (
+                <AssistantTasksDock
+                  snapshot={taskSnapshot}
+                  onClose={toggleTasksDock}
+                />
+              ) : null}
+            </section>
+            {showTasksSheet && taskSnapshot ? (
+              <AssistantTasksSheet
+                open={tasksDockOpen}
+                snapshot={taskSnapshot}
+                onOpenChange={persistTasksDockOpen}
+              />
+            ) : null}
+            {btw ? (
+              <BtwOverlay
+                question={btw.question}
+                answer={btw.answer}
+                status={btw.status}
+                onClose={() => setBtw(null)}
+              />
+            ) : null}
+            {knowledgeBaseDialog}
+            {notionPreviewSheet}
+            {issueIdentifier || threadId ? (
+              <GitDiffLauncher
+                projectSlug={projectSlug ?? undefined}
+                identifier={issueIdentifier ?? null}
+                threadId={threadId ?? null}
+                disabled={catalogLoading}
+                onSendReview={sendDiffReview}
+                openRequestId={gitDiffOpenRequestId}
+                focusPathRequestId={diffFocusPathRequestId}
+                focusPath={diffFocusPath}
+                showTrigger={false}
+              />
+            ) : null}
+          </AssistantRuntimeProvider>
+        </AssistantKbDocumentLinksProvider>
+      </SubagentDrawerProvider>
+    );
+  }
+
+  return (
+    <SubagentDrawerProvider
+      projectSlug={projectSlug ?? ""}
+      threadId={threadId ?? null}
+      agentKind={composerAgent}
+    >
+      <AssistantKbDocumentLinksProvider value={kbDocumentLinksValue}>
+        <AssistantRuntimeProvider runtime={runtime}>
+          <Sheet open={open} onOpenChange={setOpen}>
+            <SheetTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                aria-label={t("assistant.panel.openAria")}
+              >
+                <Bot className="h-4 w-4" />
+                {t("assistant.panel.openButton")}
+              </Button>
+            </SheetTrigger>
+            <SheetContent className="flex w-full flex-col overflow-hidden p-0 sm:max-w-xl lg:max-w-2xl">
+              <SheetHeader className="border-b px-6 py-4">
+                <SheetTitle>
+                  {projectSlug
+                    ? t("assistant.panel.projectTitle")
+                    : t("assistant.panel.freeformTitle")}
+                </SheetTitle>
+                <SheetDescription>
+                  {projectSlug
+                    ? t("assistant.panel.projectDescription", {
+                        slug: projectSlug,
+                      })
+                    : t("assistant.panel.freeformDescription")}
+                </SheetDescription>
+              </SheetHeader>
+              <div className="flex min-h-0 flex-1 flex-col">
+                <div className="min-h-0 flex-1 space-y-3 overflow-auto px-6 py-4">
                   {messageItems}
                 </div>
-              }
-              feedOverlay={scrollToBottomButton}
-              dock={
-                <div>
-                  <div className={chatReadingColumn}>
-                    {!isEmbeddedMode ? resumeBanner : null}
-                    {workspaceProvisionBanner}
-                    {queuedChips}
-                    {questionsNode}
-                    {approvalNode}
-                    {createPlanNode}
-                    {notionImportNode}
+                {resumeBanner}
+                {workspaceProvisionBanner}
+                {queuedChips}
+                {questionsNode}
+                {approvalNode}
+                {createPlanNode}
+                {notionImportNode}
+                {composerNode ?? (
+                  <div className="border-t px-4 py-6 text-sm text-muted-foreground">
+                    {t("assistant.panel.loadingModels")}
                   </div>
-                </div>
-              }
-              composer={
-                <div className={cn("bg-background", isPageMode ? "pr-2.5" : "pb-2 pt-2")}>
-                  <div className={cn("py-2", chatReadingColumn)}>
-                    {composerNode ?? (
-                      <div className="rounded-2xl border bg-card px-4 py-6 text-sm text-muted-foreground shadow-sm">
-                        {t("assistant.panel.loadingModels")}
-                      </div>
-                    )}
-                    {catalogError ? (
-                      <p className="mt-2 text-xs text-amber-700 dark:text-amber-400">{catalogError}</p>
-                    ) : null}
-                  </div>
-                </div>
-              }
-            />
-
-            {showTasksDock && taskSnapshot ? (
-              <AssistantTasksDock snapshot={taskSnapshot} onClose={toggleTasksDock} />
-            ) : null}
-          </section>
-          {showTasksSheet && taskSnapshot ? (
-            <AssistantTasksSheet
-              open={tasksDockOpen}
-              snapshot={taskSnapshot}
-              onOpenChange={persistTasksDockOpen}
-            />
-          ) : null}
+                )}
+                {catalogError ? (
+                  <p className="border-t px-4 pb-3 text-xs text-amber-700 dark:text-amber-400">
+                    {catalogError}
+                  </p>
+                ) : null}
+              </div>
+            </SheetContent>
+          </Sheet>
           {btw ? (
-            <BtwOverlay question={btw.question} answer={btw.answer} status={btw.status} onClose={() => setBtw(null)} />
+            <BtwOverlay
+              question={btw.question}
+              answer={btw.answer}
+              status={btw.status}
+              onClose={() => setBtw(null)}
+            />
           ) : null}
           {knowledgeBaseDialog}
           {notionPreviewSheet}
@@ -2699,74 +3317,6 @@ function InteractiveProjectAssistantPanel({
             />
           ) : null}
         </AssistantRuntimeProvider>
-        </AssistantKbDocumentLinksProvider>
-      </SubagentDrawerProvider>
-    );
-  }
-
-  return (
-    <SubagentDrawerProvider
-      projectSlug={projectSlug ?? ""}
-      threadId={threadId ?? null}
-      agentKind={composerAgent}
-    >
-      <AssistantKbDocumentLinksProvider value={kbDocumentLinksValue}>
-      <AssistantRuntimeProvider runtime={runtime}>
-        <Sheet open={open} onOpenChange={setOpen}>
-          <SheetTrigger asChild>
-            <Button type="button" variant="outline" size="sm" aria-label={t("assistant.panel.openAria")}>
-              <Bot className="h-4 w-4" />
-              {t("assistant.panel.openButton")}
-            </Button>
-          </SheetTrigger>
-          <SheetContent className="flex w-full flex-col overflow-hidden p-0 sm:max-w-xl lg:max-w-2xl">
-            <SheetHeader className="border-b px-6 py-4">
-              <SheetTitle>
-                {projectSlug ? t("assistant.panel.projectTitle") : t("assistant.panel.freeformTitle")}
-              </SheetTitle>
-              <SheetDescription>
-                {projectSlug
-                  ? t("assistant.panel.projectDescription", { slug: projectSlug })
-                  : t("assistant.panel.freeformDescription")}
-              </SheetDescription>
-            </SheetHeader>
-            <div className="flex min-h-0 flex-1 flex-col">
-              <div className="min-h-0 flex-1 space-y-3 overflow-auto px-6 py-4">{messageItems}</div>
-              {resumeBanner}
-              {workspaceProvisionBanner}
-              {queuedChips}
-              {questionsNode}
-              {approvalNode}
-              {createPlanNode}
-              {notionImportNode}
-              {composerNode ?? (
-                <div className="border-t px-4 py-6 text-sm text-muted-foreground">{t("assistant.panel.loadingModels")}</div>
-              )}
-              {catalogError ? (
-                <p className="border-t px-4 pb-3 text-xs text-amber-700 dark:text-amber-400">{catalogError}</p>
-              ) : null}
-            </div>
-          </SheetContent>
-        </Sheet>
-        {btw ? (
-          <BtwOverlay question={btw.question} answer={btw.answer} status={btw.status} onClose={() => setBtw(null)} />
-        ) : null}
-        {knowledgeBaseDialog}
-        {notionPreviewSheet}
-        {issueIdentifier || threadId ? (
-          <GitDiffLauncher
-            projectSlug={projectSlug ?? undefined}
-            identifier={issueIdentifier ?? null}
-            threadId={threadId ?? null}
-            disabled={catalogLoading}
-            onSendReview={sendDiffReview}
-            openRequestId={gitDiffOpenRequestId}
-            focusPathRequestId={diffFocusPathRequestId}
-            focusPath={diffFocusPath}
-            showTrigger={false}
-          />
-        ) : null}
-      </AssistantRuntimeProvider>
       </AssistantKbDocumentLinksProvider>
     </SubagentDrawerProvider>
   );

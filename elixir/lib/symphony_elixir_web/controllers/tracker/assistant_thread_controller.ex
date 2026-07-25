@@ -474,23 +474,6 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
     end
   end
 
-  defp model_effort_metadata(params) when is_map(params) do
-    %{}
-    |> maybe_put_meta_string("model", params["model"])
-    |> maybe_put_meta_string("effort", params["effort"])
-  end
-
-  defp maybe_put_meta_string(metadata, _key, nil), do: metadata
-
-  defp maybe_put_meta_string(metadata, key, value) when is_binary(value) do
-    case String.trim(value) do
-      "" -> metadata
-      trimmed -> Map.put(metadata, key, trimmed)
-    end
-  end
-
-  defp maybe_put_meta_string(metadata, _key, _value), do: metadata
-
   # workspace_path is NOT NULL, but the canonical per-thread directory depends on
   # the autoincrement id we only learn after insert. Seed with the freeform root
   # as a placeholder, then immediately rewrite it to the per-thread path so the
@@ -500,7 +483,8 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
       title: params["title"],
       workspace_path: AgentSession.freeform_workspace_root(),
       agent_kind: normalize_agent(params["agent_kind"]),
-      metadata: model_effort_metadata(params)
+      requested_model: params["model"],
+      requested_effort: params["effort"]
     }
 
     with {:ok, thread} <- History.create_freeform_thread(attrs),

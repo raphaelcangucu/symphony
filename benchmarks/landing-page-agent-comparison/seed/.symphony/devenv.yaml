@@ -1,0 +1,10 @@
+steps:
+  - description: Dev10x landing preview
+    role: serve
+    working_dir: .
+    port_env: PORT
+    primary: true
+    url_path: /
+    ready: http
+    ready_path: /
+    command: sh -c 'npm run dev -- --host 0.0.0.0 --port "$PORT"'

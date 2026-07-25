@@ -10,6 +10,7 @@ defmodule SymphonyElixir.OpenCode.CodingAgent do
 
   require Logger
 
+  alias SymphonyElixir.Agent.ConversationRef
   alias SymphonyElixir.Claude.AppServer.ToolGateway
   alias SymphonyElixir.Config
   alias SymphonyElixir.OpenCode.CliRunner
@@ -31,6 +32,9 @@ defmodule SymphonyElixir.OpenCode.CodingAgent do
         }
 
   @impl true
+  def capabilities, do: SymphonyElixir.Agent.BackendCapabilities.for("opencode")
+
+  @impl true
   def start_session(workspace, opts \\ []) do
     with :ok <- validate_workspace_cwd(workspace, opts),
          {:ok, gateway} <- maybe_register_tools(workspace, opts) do
@@ -39,7 +43,7 @@ defmodule SymphonyElixir.OpenCode.CodingAgent do
          session_uuid: generate_uuid(),
          workspace: Path.expand(workspace),
          command: resolve_command(opts),
-         cli_session_id: nil,
+         cli_session_id: conversation_id(opts, "opencode"),
          model: Keyword.get(opts, :model),
          gateway_token: Map.get(gateway, :token),
          mcp_config_path: Map.get(gateway, :path),
@@ -55,7 +59,12 @@ defmodule SymphonyElixir.OpenCode.CodingAgent do
     turn_id = generate_uuid()
     session_id = "#{session.session_uuid}-#{turn_id}"
 
-    emit_message(on_message, :session_started, %{session_id: session_id, thread_id: session.session_uuid, turn_id: turn_id}, %{})
+    emit_message(
+      on_message,
+      :session_started,
+      %{provider: "opencode", conversation_id: session.cli_session_id, run_id: turn_id},
+      %{}
+    )
 
     on_event = fn notification ->
       emit_message(on_message, :notification, %{payload: notification, raw: Jason.encode!(notification)}, %{})
@@ -68,23 +77,29 @@ defmodule SymphonyElixir.OpenCode.CodingAgent do
         {:ok,
          %{
            result: :turn_completed,
-           session_id: session_id,
-           thread_id: session.session_uuid,
-           turn_id: turn_id,
-           cli_session_id: result.cli_session_id,
+           provider: "opencode",
+           conversation_id: result.cli_session_id,
+           run_id: turn_id,
            usage: result.usage,
            cost_usd: result.cost_usd
          }}
 
       {:error, {:resume_session_not_found, stale_id}} when session.cli_session_id != nil ->
-        Logger.warning("OpenCode resume session #{inspect(stale_id)} not found for #{issue_context(issue)}; retrying fresh")
-
-        run_turn(%{session | cli_session_id: nil}, prompt, issue, opts)
+        log_turn_failure(
+          on_message,
+          session_id,
+          issue,
+          {:resume_conversation_failed, stale_id, :not_found}
+        )
 
       {:error, {:turn_failed, message}} when session.cli_session_id != nil and is_binary(message) ->
         if String.contains?(message, "Session not found") do
-          Logger.warning("OpenCode resumed session #{inspect(session.cli_session_id)} missing for #{issue_context(issue)}; retrying fresh")
-          run_turn(%{session | cli_session_id: nil}, prompt, issue, opts)
+          log_turn_failure(
+            on_message,
+            session_id,
+            issue,
+            {:resume_conversation_failed, session.cli_session_id, :not_found}
+          )
         else
           log_turn_failure(on_message, session_id, issue, message)
         end
@@ -122,6 +137,16 @@ defmodule SymphonyElixir.OpenCode.CodingAgent do
       execution_mode: Keyword.get(opts, :execution_mode),
       timeout_ms: Config.agent_turn_timeout_ms()
     }
+  end
+
+  defp conversation_id(opts, provider) do
+    case Keyword.get(opts, :conversation_ref) do
+      %ConversationRef{provider: ^provider, conversation_id: conversation_id} ->
+        conversation_id
+
+      _ ->
+        nil
+    end
   end
 
   defp maybe_register_tools(workspace, opts) do
@@ -228,9 +253,9 @@ defmodule SymphonyElixir.OpenCode.CodingAgent do
     "issue_id=#{issue_id} issue_identifier=#{identifier}"
   end
 
-  defp log_turn_failure(on_message, session_id, issue, reason) do
+  defp log_turn_failure(on_message, _session_id, issue, reason) do
     Logger.warning("OpenCode turn failed for #{issue_context(issue)}: #{inspect(reason)}")
-    emit_message(on_message, :turn_ended_with_error, %{session_id: session_id, reason: reason}, %{})
+    emit_message(on_message, :turn_ended_with_error, %{reason: reason}, %{})
     {:error, reason}
   end
 

@@ -22,7 +22,14 @@ defmodule SymphonyElixir.Gateways.RouterDispatchTest do
     runner = fn _workspace, prompt, _issue, _opts ->
       assert prompt =~ "Current user message:"
       assert prompt =~ "hello freeform"
-      {:ok, %{assistant_message: "freeform reply", tool_calls: []}}
+
+      {:ok,
+       %{
+         assistant_message: "freeform reply",
+         conversation_id: "freeform-conversation",
+         run_id: "freeform-run",
+         tool_calls: []
+       }}
     end
 
     assert {:ok, :sent} =
@@ -46,8 +53,8 @@ defmodule SymphonyElixir.Gateways.RouterDispatchTest do
         {:ok,
          %{
            assistant_message: "first reply",
-           codex_thread_id: "shared-codex-thread",
-           turn_id: "turn-1",
+           conversation_id: "shared-codex-thread",
+           run_id: "turn-1",
            tool_calls: []
          }}
       else
@@ -56,8 +63,8 @@ defmodule SymphonyElixir.Gateways.RouterDispatchTest do
         {:ok,
          %{
            assistant_message: "second reply",
-           codex_thread_id: "shared-codex-thread",
-           turn_id: "turn-2",
+           conversation_id: "shared-codex-thread",
+           run_id: "turn-2",
            tool_calls: []
          }}
       end
@@ -86,7 +93,13 @@ defmodule SymphonyElixir.Gateways.RouterDispatchTest do
 
     assert {:ok, :sent} = Task.await(first, 1_000)
     assert_receive {:second_turn_started, second_opts}, 1_000
-    assert Keyword.fetch!(second_opts, :resume_thread_id) == "shared-codex-thread"
+
+    assert Keyword.fetch!(second_opts, :conversation_ref) ==
+             %SymphonyElixir.Agent.ConversationRef{
+               provider: "codex",
+               conversation_id: "shared-codex-thread"
+             }
+
     assert {:ok, :sent} = Task.await(second, 1_000)
   end
 
@@ -111,7 +124,14 @@ defmodule SymphonyElixir.Gateways.RouterDispatchTest do
     runner = fn _workspace, prompt, _issue, _opts ->
       assert prompt =~ "project explore assistant"
       assert prompt =~ "inspect repo"
-      {:ok, %{assistant_message: "project reply", tool_calls: []}}
+
+      {:ok,
+       %{
+         assistant_message: "project reply",
+         conversation_id: "project-conversation",
+         run_id: "project-run",
+         tool_calls: []
+       }}
     end
 
     assert {:ok, :sent} = Router.handle_message(topic_message("inspect repo"), adapter: __MODULE__.FakeAdapter, runner: runner)
@@ -144,7 +164,14 @@ defmodule SymphonyElixir.Gateways.RouterDispatchTest do
     runner = fn _workspace, prompt, _issue, _opts ->
       assert prompt =~ "Current user message:"
       assert prompt =~ "hello from general"
-      {:ok, %{assistant_message: "general reply", tool_calls: []}}
+
+      {:ok,
+       %{
+         assistant_message: "general reply",
+         conversation_id: "general-conversation",
+         run_id: "general-run",
+         tool_calls: []
+       }}
     end
 
     assert {:ok, :sent} =
@@ -162,7 +189,14 @@ defmodule SymphonyElixir.Gateways.RouterDispatchTest do
                adapter: __MODULE__.FakeAdapter,
                runner: fn _workspace, prompt, _issue, _opts ->
                  assert prompt =~ "second speaker"
-                 {:ok, %{assistant_message: "shared reply", tool_calls: []}}
+
+                 {:ok,
+                  %{
+                    assistant_message: "shared reply",
+                    conversation_id: "general-conversation",
+                    run_id: "general-run-2",
+                    tool_calls: []
+                  }}
                end
              )
 
@@ -177,7 +211,14 @@ defmodule SymphonyElixir.Gateways.RouterDispatchTest do
 
     runner = fn _workspace, prompt, _issue, _opts ->
       assert prompt =~ "general topic"
-      {:ok, %{assistant_message: "ok", tool_calls: []}}
+
+      {:ok,
+       %{
+         assistant_message: "ok",
+         conversation_id: "general-topic-conversation",
+         run_id: "general-topic-run",
+         tool_calls: []
+       }}
     end
 
     assert {:ok, :sent} =

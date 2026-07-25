@@ -1,4 +1,7 @@
-import type { AssistantCodexCatalog } from "@/lib/assistantSettings";
+import type {
+  AssistantCatalogBundle,
+  AssistantCodexCatalog,
+} from "@/lib/assistantSettings";
 
 export const mockAssistantCodexCatalog: AssistantCodexCatalog = {
   agent: "codex",
@@ -19,3 +22,47 @@ export const mockAssistantCodexCatalog: AssistantCodexCatalog = {
     },
   ],
 };
+
+export function createMockAssistantCatalogBundle(): AssistantCatalogBundle {
+  return {
+    defaultAgent: "codex",
+    agents: [
+      { ...mockAssistantCodexCatalog, models: [...mockAssistantCodexCatalog.models] },
+      {
+        agent: "claude",
+        agentLabel: "Claude Code",
+        command: "claude",
+        defaultModel: "claude-sonnet-5",
+        models: [
+          {
+            id: "claude-sonnet-5",
+            model: "claude-sonnet-5",
+            label: "Claude Sonnet 5",
+            isDefault: true,
+            defaultEffort: "medium",
+            efforts: [
+              { id: "medium", label: "Medium" },
+              { id: "high", label: "High" },
+            ],
+          },
+        ],
+      },
+      {
+        agent: "cursor",
+        agentLabel: "Cursor",
+        command: "cursor-agent",
+        defaultModel: "composer-2.5",
+        models: [
+          {
+            id: "composer-2.5",
+            model: "composer-2.5",
+            label: "Composer 2.5",
+            isDefault: true,
+            defaultEffort: "",
+            efforts: [],
+          },
+        ],
+      },
+    ],
+  };
+}

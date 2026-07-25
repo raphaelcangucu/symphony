@@ -247,7 +247,7 @@ defmodule SymphonyElixir.Gateways.Router do
       run: fn -> run_assistant_turn(thread, binding, message, opts) end,
       reply_to: reply_to,
       trigger: "gateway",
-      agent_kind: binding.default_agent_kind
+      provider: binding.default_agent_kind
     ]
 
     case TurnManager.start_turn(thread.id, message.raw_text, start_opts) do
@@ -255,8 +255,10 @@ defmodule SymphonyElixir.Gateways.Router do
         await_assistant_turn()
 
       {:error, :turn_in_progress} ->
-        TurnManager.enqueue(thread.id, message.raw_text, start_opts)
-        await_assistant_turn()
+        case TurnManager.enqueue(thread.id, message.raw_text, start_opts) do
+          :ok -> await_assistant_turn()
+          {:error, reason} -> {:error, reason}
+        end
 
       {:error, reason} ->
         {:error, reason}
@@ -265,7 +267,7 @@ defmodule SymphonyElixir.Gateways.Router do
 
   defp await_assistant_turn do
     receive do
-      {:assistant_turn_finished, _generation, result} -> result
+      {:assistant_turn_finished, _execution_id, result} -> result
     end
   end
 

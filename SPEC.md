@@ -244,6 +244,24 @@ Fields:
 - `turn_count` (integer)
   - Number of coding-agent turns started within the current worker lifetime.
 
+#### 4.1.6A Assistant Authoring Turn Identity
+
+Assistant authoring chats use a provider-neutral identity model distinct from the Codex-shaped
+orchestrator `Live Session` above:
+
+- `assistant_thread_id` — Symphony-owned durable chat aggregate.
+- `provider` + `conversation_id` — provider conversation reference.
+- `run_id` — provider-native turn/run identifier.
+- `execution_id` — Symphony-owned execution attempt identifier.
+
+`execution_id` MUST be assigned independently and MUST NOT be replaced by a provider result.
+Provider conversation bindings MUST be stored in a flat provider-keyed map. Runtime contracts MUST
+reject Codex-specific or session-shaped identity aliases; existing persisted aliases are handled
+only by the canonical identity data migration. That migration MUST normalize supported provider
+names, remove invalid or nested bindings, reduce current-turn and pending-turn identity to the
+canonical fields, remove the old execution-generation alias, and drop the legacy columns after
+conversion.
+
 #### 4.1.7 Retry Entry
 
 Scheduled retry state for an issue.
@@ -1393,6 +1411,44 @@ An implementation may provide an issue authoring assistant as a pre-dispatch wor
   `docs/superpowers/specs/*.md`, `docs/superpowers/plans/*.md`, and `docs/superpowers/handoff.md`
   content needed for execution continuity.
 
+#### 12.5.1 Provider-Neutral Assistant Lifecycle
+
+An assistant implementation that supports multiple coding-agent backends MUST:
+
+- normalize provider conversation references and run results at the adapter boundary;
+- advertise backend capabilities before offering resume, steer, native Goal, model, or reasoning
+  controls;
+- persist queued turn intent before acknowledging it, preserve FIFO ordering across process or
+  channel reconnects, and remove an item only after it becomes the durable current execution;
+- expose generic `provider`, `conversation_id`, `run_id`, and `execution_id` lifecycle fields;
+- reject provider-specific identity aliases at runtime and migrate old stored identities into the
+  canonical fields before dropping their legacy columns; and
+- expose machine-readable errors with stable `code`, `category`, `retryable`, `message`, and
+  `details` fields, without a parallel `reason` alias.
+
+Provider switching MUST NOT change the internal assistant thread ID. Resuming a backend MUST use
+only that backend's conversation binding, so multiple providers can coexist on one assistant
+thread without ID or variable-name collisions.
+
+#### 12.5.2 Standalone Agent Client
+
+The packaged command-line binary MAY expose the same provider-neutral contracts without requiring
+an assistant database thread. When implemented, it MUST:
+
+- list supported providers and their `BackendCapabilities`;
+- accept a provider, workspace, prompt, and optional conversation/model/effort/execution mode;
+- expose `run`, resumed `steer`, and portable `goal` operations through one client entry point and
+  one option signature, emulating Goal semantics with a provider-neutral objective prompt where a
+  native Goal API is unavailable;
+- reject a conversation reference whose provider differs from the selected backend;
+- assign a new Symphony-owned `execution_id` for every invocation;
+- emit a canonical `RunResult` as machine-readable output; and
+- return a non-zero exit status with the stable `Agent.Error` schema on failure.
+
+The command-line client MUST NOT reuse a provider-native session or turn ID as its
+`execution_id`. Conversation continuation is explicit through the returned provider-scoped
+`conversation_id`.
+
 ## 13. Logging, Status, and Observability
 
 ### 13.1 Logging Conventions
@@ -1409,8 +1465,9 @@ Required context for coding-agent session lifecycle logs:
 Recommended context for assistant authoring and Goal mode events:
 
 - `assistant_thread_id` when the event is tied to an assistant thread.
+- `provider`, `conversation_id`, `run_id`, and `execution_id` when available.
 - `issue_identifier` on `assistant_document_changed` and document API failures.
-- `goal_mode=true` or equivalent on Codex dispatches that provide a goal.
+- `goal_mode=true` or equivalent on provider dispatches that provide a native goal.
 
 Message formatting requirements:
 

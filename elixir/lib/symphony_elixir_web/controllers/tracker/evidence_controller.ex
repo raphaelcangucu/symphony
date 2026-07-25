@@ -8,8 +8,53 @@ defmodule SymphonyElixirWeb.Tracker.EvidenceController do
   use Phoenix.Controller, formats: [:json]
 
   alias Plug.Conn
-  alias SymphonyElixir.Evidence.Store
+  alias SymphonyElixir.Assistant.History
+  alias SymphonyElixir.Evidence.{Manifest, Store}
+  alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixirWeb.TrackerErrors
+
+  @spec create_for_thread(Conn.t(), map()) :: Conn.t()
+  def create_for_thread(conn, %{"thread_id" => raw_id}) do
+    with {:ok, thread_id} <- parse_thread_id(raw_id),
+         {:ok, thread} <- History.get_thread(thread_id),
+         {:ok, project_slug, issue_identifier, workspace_path} <- evidence_context(thread),
+         {:ok, _issue} <- Context.get_issue(project_slug, issue_identifier),
+         {:ok, snapshot} <- Manifest.read_snapshot(workspace_path),
+         :ok <- validate_manifest_issue(snapshot.manifest, issue_identifier),
+         {:ok, record} <-
+           Store.persist(project_slug, issue_identifier, workspace_path, snapshot.map,
+             session_id: to_string(thread.id),
+             evidence_dir: snapshot.evidence_dir,
+             idempotent: true
+           ) do
+      conn
+      |> put_status(:created)
+      |> json(%{data: present(record)})
+    else
+      {:error, :invalid_thread_id} ->
+        TrackerErrors.render(conn, :invalid_thread_id)
+
+      {:error, :not_found} ->
+        TrackerErrors.render(conn, :thread_not_found)
+
+      {:error, :invalid_evidence_context} ->
+        TrackerErrors.validation_msg(
+          conn,
+          "thread must have project_slug, issue_identifier, and workspace_path"
+        )
+
+      {:error, :evidence_issue_mismatch} ->
+        TrackerErrors.validation_msg(conn, "evidence manifest issue does not match the thread issue")
+
+      {:error, reason}
+      when reason == :manifest_missing or
+             (is_tuple(reason) and elem(reason, 0) in [:manifest_invalid, :artifacts_missing]) ->
+        TrackerErrors.validation_msg(conn, "thread workspace evidence manifest is invalid or incomplete")
+
+      {:error, reason} ->
+        TrackerErrors.render(conn, reason)
+    end
+  end
 
   @spec index(Conn.t(), map()) :: Conn.t()
   def index(conn, %{"project_slug" => project_slug, "identifier" => identifier}) do
@@ -74,6 +119,36 @@ defmodule SymphonyElixirWeb.Tracker.EvidenceController do
       record -> {:ok, record}
     end
   end
+
+  defp parse_thread_id(raw_id) do
+    case Integer.parse(to_string(raw_id)) do
+      {id, ""} when id > 0 -> {:ok, id}
+      _ -> {:error, :invalid_thread_id}
+    end
+  end
+
+  defp evidence_context(%{scope: scope} = thread)
+       when scope in ["issue_session", "issue_execution"] do
+    with project_slug when is_binary(project_slug) <- Map.get(thread, :project_slug),
+         issue_identifier when is_binary(issue_identifier) <- Map.get(thread, :issue_identifier),
+         workspace_path when is_binary(workspace_path) <- Map.get(thread, :workspace_path),
+         true <- String.trim(project_slug) != "",
+         true <- String.trim(issue_identifier) != "",
+         true <- String.trim(workspace_path) != "" do
+      {:ok, project_slug, issue_identifier, workspace_path}
+    else
+      _ -> {:error, :invalid_evidence_context}
+    end
+  end
+
+  defp evidence_context(_thread), do: {:error, :invalid_evidence_context}
+
+  defp validate_manifest_issue(%Manifest{issue: issue}, issue_identifier)
+       when issue == issue_identifier,
+       do: :ok
+
+  defp validate_manifest_issue(_manifest, _issue_identifier),
+    do: {:error, :evidence_issue_mismatch}
 
   defp present(record) do
     %{

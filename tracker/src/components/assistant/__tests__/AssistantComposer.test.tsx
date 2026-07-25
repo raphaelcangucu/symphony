@@ -2,19 +2,57 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { AssistantComposer, COMPOSER_TEXTAREA_MAX_HEIGHT_PX } from "@/components/assistant/AssistantComposer";
+import {
+  AssistantComposer,
+  COMPOSER_TEXTAREA_MAX_HEIGHT_PX,
+} from "@/components/assistant/AssistantComposer";
 import { uploadAssistantAttachment } from "@/services/assistant";
 import { i18n } from "@/i18n";
-import { mockAssistantCodexCatalog } from "@/test-fixtures/assistantCatalog";
-import { fallbackCatalogBundle } from "@/lib/assistantSettings";
+import {
+  createMockAssistantCatalogBundle,
+  mockAssistantCodexCatalog,
+} from "@/test-fixtures/assistantCatalog";
 import { LG_MEDIA_QUERY } from "@/hooks/useMediaQuery";
 
-const mockBundle = fallbackCatalogBundle();
+const mockBundle = createMockAssistantCatalogBundle();
 // Override codex catalog with the mock for predictable model/effort names
 mockBundle.agents = [
   { ...mockAssistantCodexCatalog },
   ...mockBundle.agents.filter((a) => a.agent !== "codex"),
 ];
+
+const provenanceBundle = {
+  agents: [
+    {
+      agent: "codex" as const,
+      agentLabel: "Codex CLI",
+      command: "codex app-server",
+      defaultModel: "gpt-5.3-codex",
+      models: [
+        {
+          id: "gpt-5.5",
+          model: "gpt-5.5",
+          label: "GPT-5.5",
+          isDefault: false,
+          defaultEffort: "medium",
+          efforts: [
+            { id: "medium", label: "Medium" },
+            { id: "high", label: "High" },
+          ],
+        },
+        {
+          id: "gpt-5.3-codex",
+          model: "gpt-5.3-codex",
+          label: "GPT-5.3 Codex",
+          isDefault: true,
+          defaultEffort: "low",
+          efforts: [{ id: "low", label: "Low" }],
+        },
+      ],
+    },
+  ],
+  defaultAgent: "codex" as const,
+};
 
 const speechMock = vi.hoisted(() => ({
   start: vi.fn(),
@@ -33,7 +71,9 @@ vi.mock("@/hooks/useSpeechRecognition", () => ({
 }));
 
 vi.mock("@/services/assistant", async () => {
-  const actual = await vi.importActual<typeof import("@/services/assistant")>("@/services/assistant");
+  const actual = await vi.importActual<typeof import("@/services/assistant")>(
+    "@/services/assistant",
+  );
   return {
     ...actual,
     uploadAssistantAttachment: vi.fn(async () => ({
@@ -69,26 +109,39 @@ function mockLgUp(matches: boolean) {
 describe("AssistantComposer", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.sessionStorage.clear();
     speechMock.listening = false;
-    speechMock.start.mockImplementation((onTranscript: (text: string, isFinal: boolean) => void) => {
-      onTranscript("texto ditado", true);
-    });
+    speechMock.start.mockImplementation(
+      (onTranscript: (text: string, isFinal: boolean) => void) => {
+        onTranscript("texto ditado", true);
+      },
+    );
   });
 
   afterEach(() => {
-    Object.defineProperty(window, "matchMedia", { writable: true, configurable: true, value: originalMatchMedia });
+    Object.defineProperty(window, "matchMedia", {
+      writable: true,
+      configurable: true,
+      value: originalMatchMedia,
+    });
   });
 
   it("sends on Enter and exposes model and effort controls", () => {
     const onSubmit = vi.fn();
 
     render(
-      <AssistantComposer projectSlug="macro-markets" bundle={mockBundle} onSubmit={onSubmit} />,
+      <AssistantComposer
+        projectSlug="macro-markets"
+        bundle={mockBundle}
+        onSubmit={onSubmit}
+      />,
     );
 
-    expect(screen.getByText(i18n.t("issue.sessionLog.agentLabels.codex"))).toBeTruthy();
-    expect(screen.getByText("GPT-5.3 Codex")).toBeTruthy();
-    expect(screen.getByText(i18n.t("assistant.effort.low"))).toBeTruthy();
+    expect(
+      screen.getByRole("button", {
+        name: i18n.t("assistant.composer.modelChipAria"),
+      }),
+    ).toHaveAttribute("title", "Codex · GPT-5.3 Codex · Low");
 
     const textarea = screen.getByPlaceholderText("Write a message...");
     fireEvent.change(textarea, { target: { value: "Hello assistant" } });
@@ -97,28 +150,66 @@ describe("AssistantComposer", () => {
     expect(onSubmit).toHaveBeenCalledWith(
       expect.objectContaining({
         message: "Hello assistant",
-        settings: expect.objectContaining({ model: "gpt-5.3-codex", effort: "low" }),
+        settings: expect.objectContaining({
+          model: "gpt-5.3-codex",
+          effort: "low",
+        }),
         attachments: [],
+      }),
+    );
+  });
+
+  it("submits the exact canonical settings seed", () => {
+    const onSubmit = vi.fn();
+
+    render(
+      <AssistantComposer
+        projectSlug="macro-markets"
+        bundle={provenanceBundle}
+        settingsSeed={{ agent: "codex", model: "gpt-5.5", effort: "high" }}
+        onSubmit={onSubmit}
+      />,
+    );
+
+    const textarea = screen.getByPlaceholderText("Write a message...");
+    fireEvent.change(textarea, { target: { value: "Execute" } });
+    fireEvent.keyDown(textarea, { key: "Enter", code: "Enter" });
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        settings: { model: "gpt-5.5", effort: "high" },
       }),
     );
   });
 
   it("renders a thinking/effort icon for each reasoning-effort option", () => {
     render(
-      <AssistantComposer projectSlug="macro-markets" bundle={mockBundle} onSubmit={vi.fn()} />,
+      <AssistantComposer
+        projectSlug="macro-markets"
+        bundle={mockBundle}
+        onSubmit={vi.fn()}
+      />,
     );
 
-    fireEvent.pointerDown(screen.getByRole("button", { name: i18n.t("assistant.effort.low") }));
+    fireEvent.pointerDown(
+      screen.getByRole("button", {
+        name: i18n.t("assistant.composer.modelChipAria"),
+      }),
+    );
 
-    expect(screen.getByTestId("effort-icon-low")).toBeTruthy();
-    expect(screen.getByTestId("effort-icon-high")).toBeTruthy();
+    expect(screen.getByTestId("compact-effort-icon-low")).toBeTruthy();
+    expect(screen.getByTestId("compact-effort-icon-high")).toBeTruthy();
   });
 
   it("sends with the send button", () => {
     const onSubmit = vi.fn();
 
     render(
-      <AssistantComposer projectSlug="macro-markets" bundle={mockBundle} onSubmit={onSubmit} />,
+      <AssistantComposer
+        projectSlug="macro-markets"
+        bundle={mockBundle}
+        onSubmit={onSubmit}
+      />,
     );
 
     const textarea = screen.getByPlaceholderText("Write a message...");
@@ -129,7 +220,10 @@ describe("AssistantComposer", () => {
       expect.objectContaining({
         kind: "message",
         message: "Hello from button",
-        settings: expect.objectContaining({ model: "gpt-5.3-codex", effort: "low" }),
+        settings: expect.objectContaining({
+          model: "gpt-5.3-codex",
+          effort: "low",
+        }),
         attachments: [],
       }),
     );
@@ -138,24 +232,36 @@ describe("AssistantComposer", () => {
   it("submits a default kind of 'message' with the typed text", () => {
     const onSubmit = vi.fn();
     render(
-      <AssistantComposer projectSlug="macro-markets" bundle={mockBundle} onSubmit={onSubmit} />,
+      <AssistantComposer
+        projectSlug="macro-markets"
+        bundle={mockBundle}
+        onSubmit={onSubmit}
+      />,
     );
 
     const textarea = screen.getByPlaceholderText("Write a message...");
     fireEvent.change(textarea, { target: { value: "hello" } });
     fireEvent.keyDown(textarea, { key: "Enter", code: "Enter" });
 
-    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ kind: "message", message: "hello" }));
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "message", message: "hello" }),
+    );
   });
 
   it("submits kind 'infer' when the message starts with /infer", () => {
     const onSubmit = vi.fn();
     render(
-      <AssistantComposer projectSlug="macro-markets" bundle={mockBundle} onSubmit={onSubmit} />,
+      <AssistantComposer
+        projectSlug="macro-markets"
+        bundle={mockBundle}
+        onSubmit={onSubmit}
+      />,
     );
 
     const textarea = screen.getByPlaceholderText("Write a message...");
-    fireEvent.change(textarea, { target: { value: "/infer look at the tests" } });
+    fireEvent.change(textarea, {
+      target: { value: "/infer look at the tests" },
+    });
     fireEvent.keyDown(textarea, { key: "Enter", code: "Enter" });
 
     expect(onSubmit).toHaveBeenCalledWith(
@@ -166,7 +272,11 @@ describe("AssistantComposer", () => {
   it("submits kind 'goal' with its objective when the message starts with /goal", () => {
     const onSubmit = vi.fn();
     render(
-      <AssistantComposer projectSlug="macro-markets" bundle={mockBundle} onSubmit={onSubmit} />,
+      <AssistantComposer
+        projectSlug="macro-markets"
+        bundle={mockBundle}
+        onSubmit={onSubmit}
+      />,
     );
 
     const textarea = screen.getByPlaceholderText("Write a message...");
@@ -181,19 +291,29 @@ describe("AssistantComposer", () => {
   it("submits kind 'goal' even without an objective", () => {
     const onSubmit = vi.fn();
     render(
-      <AssistantComposer projectSlug="macro-markets" bundle={mockBundle} onSubmit={onSubmit} />,
+      <AssistantComposer
+        projectSlug="macro-markets"
+        bundle={mockBundle}
+        onSubmit={onSubmit}
+      />,
     );
 
     const textarea = screen.getByPlaceholderText("Write a message...");
     fireEvent.change(textarea, { target: { value: "/goal" } });
     fireEvent.keyDown(textarea, { key: "Enter", code: "Enter" });
 
-    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ kind: "goal", message: "" }));
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "goal", message: "" }),
+    );
   });
 
   it("shows the slash-command palette when the input starts with a slash", () => {
     render(
-      <AssistantComposer projectSlug="macro-markets" bundle={mockBundle} onSubmit={vi.fn()} />,
+      <AssistantComposer
+        projectSlug="macro-markets"
+        bundle={mockBundle}
+        onSubmit={vi.fn()}
+      />,
     );
     const textarea = screen.getByPlaceholderText("Write a message...");
     fireEvent.change(textarea, { target: { value: "/" } });
@@ -205,7 +325,11 @@ describe("AssistantComposer", () => {
 
   it("completes the slash command on Tab from the palette", () => {
     render(
-      <AssistantComposer projectSlug="macro-markets" bundle={mockBundle} onSubmit={vi.fn()} />,
+      <AssistantComposer
+        projectSlug="macro-markets"
+        bundle={mockBundle}
+        onSubmit={vi.fn()}
+      />,
     );
 
     const textarea = screen.getByPlaceholderText("Write a message...");
@@ -217,7 +341,11 @@ describe("AssistantComposer", () => {
 
   it("highlights the first slash command and moves selection with arrow keys", () => {
     render(
-      <AssistantComposer projectSlug="macro-markets" bundle={mockBundle} onSubmit={vi.fn()} />,
+      <AssistantComposer
+        projectSlug="macro-markets"
+        bundle={mockBundle}
+        onSubmit={vi.fn()}
+      />,
     );
 
     const textarea = screen.getByPlaceholderText("Write a message...");
@@ -239,7 +367,11 @@ describe("AssistantComposer", () => {
 
   it("completes the highlighted slash command on Tab after arrow navigation", () => {
     render(
-      <AssistantComposer projectSlug="macro-markets" bundle={mockBundle} onSubmit={vi.fn()} />,
+      <AssistantComposer
+        projectSlug="macro-markets"
+        bundle={mockBundle}
+        onSubmit={vi.fn()}
+      />,
     );
 
     const textarea = screen.getByPlaceholderText("Write a message...");
@@ -272,7 +404,11 @@ describe("AssistantComposer", () => {
 
   it("applies a draftSeed request by replacing input and context refs", () => {
     const { rerender } = render(
-      <AssistantComposer projectSlug="macro-markets" bundle={mockBundle} onSubmit={vi.fn()} />,
+      <AssistantComposer
+        projectSlug="macro-markets"
+        bundle={mockBundle}
+        onSubmit={vi.fn()}
+      />,
     );
 
     const textarea = screen.getByPlaceholderText("Write a message...");
@@ -329,33 +465,57 @@ describe("AssistantComposer", () => {
 
   it("keeps the textarea enabled while the assistant is running", () => {
     render(
-      <AssistantComposer projectSlug="macro-markets" bundle={mockBundle} disabled onSubmit={vi.fn()} />,
+      <AssistantComposer
+        projectSlug="macro-markets"
+        bundle={mockBundle}
+        disabled
+        onSubmit={vi.fn()}
+      />,
     );
 
-    expect(screen.getByPlaceholderText("Write a message...")).not.toBeDisabled();
+    expect(
+      screen.getByPlaceholderText("Write a message..."),
+    ).not.toBeDisabled();
   });
 
   it("does not send on Shift+Enter", () => {
     const onSubmit = vi.fn();
 
     render(
-      <AssistantComposer projectSlug="macro-markets" bundle={mockBundle} onSubmit={onSubmit} />,
+      <AssistantComposer
+        projectSlug="macro-markets"
+        bundle={mockBundle}
+        onSubmit={onSubmit}
+      />,
     );
 
     const textarea = screen.getByPlaceholderText("Write a message...");
     fireEvent.change(textarea, { target: { value: "Line one" } });
-    fireEvent.keyDown(textarea, { key: "Enter", shiftKey: true, code: "Enter" });
+    fireEvent.keyDown(textarea, {
+      key: "Enter",
+      shiftKey: true,
+      code: "Enter",
+    });
 
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
   it("grows the textarea with content and caps height at the max", () => {
     render(
-      <AssistantComposer projectSlug="macro-markets" bundle={mockBundle} onSubmit={vi.fn()} />,
+      <AssistantComposer
+        projectSlug="macro-markets"
+        bundle={mockBundle}
+        onSubmit={vi.fn()}
+      />,
     );
 
-    const textarea = screen.getByPlaceholderText("Write a message...") as HTMLTextAreaElement;
-    Object.defineProperty(textarea, "scrollHeight", { configurable: true, value: 120 });
+    const textarea = screen.getByPlaceholderText(
+      "Write a message...",
+    ) as HTMLTextAreaElement;
+    Object.defineProperty(textarea, "scrollHeight", {
+      configurable: true,
+      value: 120,
+    });
     textarea.scrollTop = 0;
 
     fireEvent.change(textarea, {
@@ -365,9 +525,16 @@ describe("AssistantComposer", () => {
     expect(textarea.style.height).toBe("120px");
     expect(textarea.scrollTop).toBe(120);
 
-    Object.defineProperty(textarea, "scrollHeight", { configurable: true, value: 1200 });
+    Object.defineProperty(textarea, "scrollHeight", {
+      configurable: true,
+      value: 1200,
+    });
     fireEvent.change(textarea, {
-      target: { value: Array.from({ length: 40 }, (_, index) => `Line ${index}`).join("\n") },
+      target: {
+        value: Array.from({ length: 40 }, (_, index) => `Line ${index}`).join(
+          "\n",
+        ),
+      },
     });
 
     expect(textarea.style.height).toBe(`${COMPOSER_TEXTAREA_MAX_HEIGHT_PX}px`);
@@ -376,7 +543,11 @@ describe("AssistantComposer", () => {
 
   it("does not stop voice dictation on unrelated re-render", () => {
     render(
-      <AssistantComposer projectSlug="macro-markets" bundle={mockBundle} onSubmit={vi.fn()} />,
+      <AssistantComposer
+        projectSlug="macro-markets"
+        bundle={mockBundle}
+        onSubmit={vi.fn()}
+      />,
     );
 
     fireEvent.change(screen.getByPlaceholderText("Write a message..."), {
@@ -390,15 +561,24 @@ describe("AssistantComposer", () => {
     const onSubmit = vi.fn();
 
     render(
-      <AssistantComposer projectSlug="macro-markets" bundle={mockBundle} onSubmit={onSubmit} />,
+      <AssistantComposer
+        projectSlug="macro-markets"
+        bundle={mockBundle}
+        onSubmit={onSubmit}
+      />,
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Record audio" }));
 
-    expect(screen.getByPlaceholderText("Write a message...")).toHaveValue("texto ditado");
+    expect(screen.getByPlaceholderText("Write a message...")).toHaveValue(
+      "texto ditado",
+    );
     expect(screen.queryByText(/recording-/)).toBeNull();
 
-    fireEvent.keyDown(screen.getByPlaceholderText("Write a message..."), { key: "Enter", code: "Enter" });
+    fireEvent.keyDown(screen.getByPlaceholderText("Write a message..."), {
+      key: "Enter",
+      code: "Enter",
+    });
 
     expect(onSubmit).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -416,10 +596,18 @@ describe("AssistantComposer", () => {
 
     try {
       const onSubmit = vi.fn();
-      render(<AssistantComposer projectSlug="gamba" bundle={mockBundle} onSubmit={onSubmit} />);
+      render(
+        <AssistantComposer
+          projectSlug="gamba"
+          bundle={mockBundle}
+          onSubmit={onSubmit}
+        />,
+      );
 
       const textarea = screen.getByPlaceholderText("Write a message...");
-      const file = new File([new Uint8Array([1, 2, 3])], "shot.png", { type: "image/png" });
+      const file = new File([new Uint8Array([1, 2, 3])], "shot.png", {
+        type: "image/png",
+      });
 
       fireEvent.paste(textarea, {
         clipboardData: {
@@ -428,7 +616,9 @@ describe("AssistantComposer", () => {
         },
       });
 
-      const removeButton = await screen.findByRole("button", { name: "Remove diagram.png" });
+      const removeButton = await screen.findByRole("button", {
+        name: "Remove diagram.png",
+      });
       expect(removeButton).toBeTruthy();
 
       fireEvent.keyDown(textarea, { key: "Enter", code: "Enter" });
@@ -437,7 +627,11 @@ describe("AssistantComposer", () => {
         expect(onSubmit).toHaveBeenCalledWith(
           expect.objectContaining({
             attachments: [
-              expect.objectContaining({ type: "image", name: "diagram.png", path: "uploads/upload-1.png" }),
+              expect.objectContaining({
+                type: "image",
+                name: "diagram.png",
+                path: "uploads/upload-1.png",
+              }),
             ],
           }),
         ),
@@ -459,7 +653,11 @@ describe("AssistantComposer", () => {
 
     const onSubmit = vi.fn();
     const { container } = render(
-      <AssistantComposer projectSlug="gamba" bundle={mockBundle} onSubmit={onSubmit} />,
+      <AssistantComposer
+        projectSlug="gamba"
+        bundle={mockBundle}
+        onSubmit={onSubmit}
+      />,
     );
 
     const form = container.querySelector("form");
@@ -470,7 +668,9 @@ describe("AssistantComposer", () => {
       dataTransfer: { files: [file], types: ["Files"] },
     });
 
-    const removeButton = await screen.findByRole("button", { name: "Remove notes.md" });
+    const removeButton = await screen.findByRole("button", {
+      name: "Remove notes.md",
+    });
     expect(removeButton).toBeTruthy();
 
     const textarea = screen.getByPlaceholderText("Write a message...");
@@ -480,7 +680,11 @@ describe("AssistantComposer", () => {
       expect(onSubmit).toHaveBeenCalledWith(
         expect.objectContaining({
           attachments: [
-            expect.objectContaining({ type: "file", name: "notes.md", path: "uploads/upload-md.md" }),
+            expect.objectContaining({
+              type: "file",
+              name: "notes.md",
+              path: "uploads/upload-md.md",
+            }),
           ],
         }),
       ),
@@ -520,18 +724,29 @@ describe("AssistantComposer", () => {
     // Drop over the messages area (outside the composer form).
     const messages = screen.getByTestId("messages");
     const file = new File(["# Notes"], "notes.md", { type: "text/markdown" });
-    fireEvent.drop(messages, { dataTransfer: { files: [file], types: ["Files"] } });
+    fireEvent.drop(messages, {
+      dataTransfer: { files: [file], types: ["Files"] },
+    });
 
-    const removeButton = await screen.findByRole("button", { name: "Remove notes.md" });
+    const removeButton = await screen.findByRole("button", {
+      name: "Remove notes.md",
+    });
     expect(removeButton).toBeTruthy();
 
-    fireEvent.keyDown(screen.getByPlaceholderText("Write a message..."), { key: "Enter", code: "Enter" });
+    fireEvent.keyDown(screen.getByPlaceholderText("Write a message..."), {
+      key: "Enter",
+      code: "Enter",
+    });
 
     await waitFor(() =>
       expect(onSubmit).toHaveBeenCalledWith(
         expect.objectContaining({
           attachments: [
-            expect.objectContaining({ type: "file", name: "notes.md", path: "uploads/upload-md.md" }),
+            expect.objectContaining({
+              type: "file",
+              name: "notes.md",
+              path: "uploads/upload-md.md",
+            }),
           ],
         }),
       ),
@@ -542,7 +757,11 @@ describe("AssistantComposer", () => {
     speechMock.listening = true;
 
     const { container } = render(
-      <AssistantComposer projectSlug="macro-markets" bundle={mockBundle} onSubmit={vi.fn()} />,
+      <AssistantComposer
+        projectSlug="macro-markets"
+        bundle={mockBundle}
+        onSubmit={vi.fn()}
+      />,
     );
 
     const stopButton = screen.getByRole("button", { name: "Stop recording" });
@@ -550,12 +769,16 @@ describe("AssistantComposer", () => {
     expect(stopButton.className).toContain("text-red-600");
     expect(container.querySelector(".lucide-square")).toBeTruthy();
     expect(container.querySelector(".motion-safe\\:animate-ping")).toBeTruthy();
-    expect(container.querySelector(".motion-safe\\:animate-pulse")).toBeTruthy();
+    expect(
+      container.querySelector(".motion-safe\\:animate-pulse"),
+    ).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Record audio" })).toBeNull();
   });
 
   it("renders mention options in document flow so they are not clipped by overflow-hidden cards", () => {
-    const mentionOptions = [{ type: "issue" as const, id: "SYM-1", label: "Test issue" }];
+    const mentionOptions = [
+      { type: "issue" as const, id: "SYM-1", label: "Test issue" },
+    ];
 
     render(
       <AssistantComposer
@@ -578,7 +801,14 @@ describe("AssistantComposer", () => {
 
   it("turns selected @ mention options into context chips submitted as contextRefs", () => {
     const onSubmit = vi.fn();
-    const mentionOptions = [{ type: "issue" as const, id: "SYM-1", label: "Test issue", detail: "Todo" }];
+    const mentionOptions = [
+      {
+        type: "issue" as const,
+        id: "SYM-1",
+        label: "Test issue",
+        detail: "Todo",
+      },
+    ];
 
     render(
       <AssistantComposer
@@ -676,9 +906,15 @@ describe("AssistantComposer", () => {
       />,
     );
 
-    expect(screen.queryByRole("button", { name: "Diff" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Diff" }),
+    ).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: i18n.t("assistant.composer.moreToolsAria") }));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: i18n.t("assistant.composer.moreToolsAria"),
+      }),
+    );
 
     expect(screen.getByRole("button", { name: "Diff" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "KB" })).toBeInTheDocument();

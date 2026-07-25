@@ -7,9 +7,11 @@ defmodule SymphonyElixir.Claude.CodingAgentTest do
   @issue %{id: "1", identifier: "PREF-1", title: "Test issue"}
 
   defp workspace do
-    root = Path.join(System.tmp_dir!(), "claude-adapter-#{System.unique_integer([:positive])}")
+    suffix = 10 |> :crypto.strong_rand_bytes() |> Base.url_encode64(padding: false)
+    root = Path.join(System.tmp_dir!(), "claude-adapter-#{suffix}")
     ws = Path.join(root, "issue-1")
     File.mkdir_p!(ws)
+    on_exit(fn -> File.rm_rf(root) end)
     {root, ws}
   end
 
@@ -36,8 +38,9 @@ defmodule SymphonyElixir.Claude.CodingAgentTest do
     on_message = fn message -> Agent.update(collector, &[message | &1]) end
 
     assert {:ok, result} = CodingAgent.run_turn(session, "do it", @issue, on_message: on_message)
-    assert result.session_id =~ session.session_uuid
-    assert result.cli_session_id == "sess-123"
+    assert result.provider == "claude"
+    assert result.conversation_id == "sess-123"
+    assert is_binary(result.run_id)
 
     events = collector |> Agent.get(&Enum.reverse/1) |> Enum.map(& &1.event)
     assert :session_started in events
@@ -343,7 +346,7 @@ defmodule SymphonyElixir.Claude.CodingAgentTest do
       CodingAgent.start_session(ws, workspace_root: root, claude_command: "FAKE_CLAUDE_MODE=happy #{@fake}")
 
     {:ok, result} = CodingAgent.run_turn(session, "turn 1", @issue, [])
-    session = Map.put(session, :cli_session_id, result.cli_session_id)
+    session = Map.put(session, :cli_session_id, result.conversation_id)
 
     args =
       SymphonyElixir.Claude.AppServer.CliRunner.build_args(%{

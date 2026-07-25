@@ -66,6 +66,17 @@ defmodule SymphonyElixir.Evidence.ManifestTest do
     assert [%{kind: "unit"}, %{kind: "e2e"}] = manifest.runs
   end
 
+  test "returns the validated struct and decoded map from one snapshot", %{tmp_dir: ws} do
+    expected = valid_manifest()
+    write_manifest!(ws, expected)
+    touch_artifacts!(ws)
+
+    assert {:ok, snapshot} = Manifest.read_snapshot(ws)
+    assert snapshot.manifest.issue == "GAM-9"
+    assert snapshot.map == expected
+    assert snapshot.evidence_dir == Path.join(ws, ".symphony/evidence")
+  end
+
   test "missing manifest", %{tmp_dir: ws} do
     assert {:error, :manifest_missing} = Manifest.read(ws)
   end
@@ -152,6 +163,43 @@ defmodule SymphonyElixir.Evidence.ManifestTest do
     write_manifest!(ws, valid_manifest())
     assert {:error, {:artifacts_missing, missing}} = Manifest.read(ws)
     assert "artifacts/unit.txt" in missing
+  end
+
+  test "rejects a referenced artifact symlink", %{tmp_dir: ws} do
+    write_manifest!(ws, valid_manifest())
+    touch_artifacts!(ws)
+    external = Path.join(ws, "external.txt")
+    artifact = Path.join(ws, ".symphony/evidence/artifacts/unit.txt")
+    File.write!(external, "secret")
+    File.rm!(artifact)
+    File.ln_s!(external, artifact)
+
+    assert {:error, {:manifest_invalid, {:unsafe_artifacts, unsafe}}} =
+             Manifest.read(ws)
+
+    assert "artifacts/unit.txt" in unsafe
+  end
+
+  test "rejects artifact traversal even when the target exists", %{tmp_dir: ws} do
+    external = Path.join(ws, ".symphony/outside.txt")
+    File.mkdir_p!(Path.dirname(external))
+    File.write!(external, "secret")
+
+    write_manifest!(ws, %{
+      "issue" => "GAM-9",
+      "runs" => [
+        %{
+          "kind" => "unit",
+          "repo" => "frontend",
+          "command" => "npm test",
+          "status" => "passed",
+          "report" => "../outside.txt"
+        }
+      ]
+    })
+
+    assert {:error, {:manifest_invalid, {:unsafe_artifacts, ["../outside.txt"]}}} =
+             Manifest.read(ws)
   end
 
   test "parses cross-repo impact decisions", %{tmp_dir: ws} do

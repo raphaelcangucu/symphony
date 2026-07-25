@@ -5,7 +5,7 @@ defmodule SymphonyElixir.Assistant.ForkSession do
   A fork creates a brand-new thread that carries over the source conversation
   transcript (so the new agent starts with the same context) but gets its own
   fresh isolated working tree and a fresh agent brain: native agent thread ids
-  (`agent_thread_ids`/`codex_thread_id`) and goal state are intentionally NOT
+  (`provider_bindings`) and goal state are intentionally NOT
   copied, so the source and the fork can run in parallel without colliding.
 
   Supported source scopes:
@@ -33,6 +33,8 @@ defmodule SymphonyElixir.Assistant.ForkSession do
     History.create_issue_session_thread(source.project_slug, source.issue_identifier, %{
       title: fork_title(source),
       agent_kind: source.agent_kind,
+      requested_model: source.requested_model,
+      requested_effort: source.requested_effort,
       execution_mode: execution_mode(source),
       isolated_workspace: true,
       metadata: %{"forked_from_thread_id" => source.id}
@@ -46,6 +48,8 @@ defmodule SymphonyElixir.Assistant.ForkSession do
       History.create_workspace_session_thread(source.project_slug, path, %{
         title: fork_title(source),
         agent_kind: source.agent_kind,
+        requested_model: source.requested_model,
+        requested_effort: source.requested_effort,
         metadata: %{"forked_from_thread_id" => source.id}
       })
     end

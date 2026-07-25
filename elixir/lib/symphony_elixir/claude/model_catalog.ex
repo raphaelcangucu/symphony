@@ -15,7 +15,7 @@ defmodule SymphonyElixir.Claude.ModelCatalog do
 
   alias SymphonyElixir.Claude.Config, as: ClaudeConfig
 
-  @default_model "claude-opus-4-8"
+  @default_model "claude-opus-5"
 
   @effort_labels %{
     "low" => "Low",
@@ -31,8 +31,9 @@ defmodule SymphonyElixir.Claude.ModelCatalog do
   @sonnet_next_efforts ~w(low medium high xhigh)
 
   @models [
-    %{id: "claude-opus-4-8", label: "Claude Opus 4.8", default: true, efforts: @opus_efforts, default_effort: "xhigh"},
+    %{id: "claude-opus-5", label: "Claude Opus 5", default: true, efforts: @opus_efforts, default_effort: "xhigh"},
     %{id: "claude-fable-5", label: "Claude Fable 5", default: false, efforts: @opus_efforts, default_effort: "xhigh"},
+    %{id: "claude-opus-4-8", label: "Claude Opus 4.8", default: false, efforts: @opus_efforts, default_effort: "xhigh"},
     %{id: "claude-opus-4-7", label: "Claude Opus 4.7", default: false, efforts: @opus_efforts, default_effort: "xhigh"},
     %{id: "claude-opus-4-6", label: "Claude Opus 4.6", default: false, efforts: @opus_legacy_efforts, default_effort: "high"},
     %{id: "claude-sonnet-5", label: "Claude Sonnet 5", default: false, efforts: @sonnet_next_efforts, default_effort: "high"},

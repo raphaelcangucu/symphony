@@ -33,6 +33,18 @@ defmodule SymphonyElixir.SessionEventsTest do
     assert entry["abort_reason"] == "user_stop"
   end
 
+  test "append_resume preserves failure history and establishes a new run boundary", %{
+    workspace: workspace
+  } do
+    assert :ok = SessionEvents.append_run_failure(workspace, {:turn_failed, "context full"})
+    assert :ok = SessionEvents.append_resume(workspace)
+
+    assert {:ok, [failed, resumed], _} = SessionEvents.tail(workspace)
+    assert failed["title"] == "Agent run failed"
+    assert resumed["title"] == "Run resumed"
+    assert resumed["status"] == "running"
+  end
+
   test "tail and read_from stream appended entries", %{workspace: workspace} do
     assert :ok = SessionEvents.append_abort(workspace, "stall_timeout", detail: "No activity")
 

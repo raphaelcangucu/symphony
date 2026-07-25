@@ -2,9 +2,15 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   displayMessages,
+  effortFromResponse,
+  errorMessage,
   extractKbDocumentReferencesFromMessage,
+  modelFromResponse,
 } from "@/components/assistant/assistantPanelHelpers";
-import type { AssistantChatMessage, AssistantToolCall } from "@/services/assistant";
+import type {
+  AssistantChatMessage,
+  AssistantToolCall,
+} from "@/services/assistant";
 
 function toolCall(overrides: Partial<AssistantToolCall>): AssistantToolCall {
   return {
@@ -18,7 +24,9 @@ function toolCall(overrides: Partial<AssistantToolCall>): AssistantToolCall {
   };
 }
 
-function message(overrides: Partial<AssistantChatMessage>): AssistantChatMessage {
+function message(
+  overrides: Partial<AssistantChatMessage>,
+): AssistantChatMessage {
   return {
     id: "message-1",
     role: "assistant",
@@ -28,6 +36,22 @@ function message(overrides: Partial<AssistantChatMessage>): AssistantChatMessage
     ...overrides,
   };
 }
+
+describe("canonical model settings", () => {
+  it("reads only requested model provenance from join metadata", () => {
+    const response = {
+      requested_model: "composer-2.5",
+      requested_effort: "medium",
+      model: "legacy-model",
+      effort: "legacy-effort",
+    };
+
+    expect(modelFromResponse(response)).toBe("composer-2.5");
+    expect(effortFromResponse(response)).toBe("medium");
+    expect(modelFromResponse({ model: "legacy-model" })).toBeNull();
+    expect(effortFromResponse({ effort: "legacy-effort" })).toBeNull();
+  });
+});
 
 describe("displayMessages", () => {
   const tMock = vi.fn((key: string, options?: { agent?: string }) => {
@@ -43,7 +67,9 @@ describe("displayMessages", () => {
     const [welcome] = displayMessages([], t, "cursor");
 
     expect(welcome.content).toBe("Welcome via Cursor");
-    expect(tMock).toHaveBeenCalledWith("assistant.panel.welcome", { agent: "Cursor" });
+    expect(tMock).toHaveBeenCalledWith("assistant.panel.welcome", {
+      agent: "Cursor",
+    });
   });
 
   it("falls back to a neutral agent label when none is resolved yet", () => {
@@ -52,12 +78,41 @@ describe("displayMessages", () => {
 
     expect(welcome.content).toBe("Welcome via the coding agent");
     expect(tMock).toHaveBeenCalledWith("assistant.panel.codingAgent");
-    expect(tMock).toHaveBeenCalledWith("assistant.panel.welcome", { agent: "the coding agent" });
+    expect(tMock).toHaveBeenCalledWith("assistant.panel.welcome", {
+      agent: "the coding agent",
+    });
   });
 
   it("returns real messages unchanged when the transcript is non-empty", () => {
     const existing = [message({ content: "hello" })];
     expect(displayMessages(existing, t, "cursor")).toBe(existing);
+  });
+});
+
+describe("errorMessage", () => {
+  const t = vi.fn(
+    () => "request failed",
+  ) as unknown as import("i18next").TFunction;
+
+  it("reads the canonical error message", () => {
+    expect(
+      errorMessage(
+        {
+          code: "assistant_busy",
+          category: "lifecycle",
+          retryable: true,
+          message: "assistant is busy",
+          details: {},
+        },
+        t,
+      ),
+    ).toBe("assistant is busy");
+  });
+
+  it("does not accept the removed reason alias", () => {
+    expect(errorMessage({ reason: "legacy failure" }, t)).toBe(
+      "request failed",
+    );
   });
 });
 
@@ -96,7 +151,12 @@ describe("extractKbDocumentReferencesFromMessage", () => {
   it("scans small tool arguments that contain a markdown path", () => {
     const result = extractKbDocumentReferencesFromMessage(
       message({
-        toolCalls: [toolCall({ name: "read_file", arguments: { path: "docs/market/spec.md" } })],
+        toolCalls: [
+          toolCall({
+            name: "read_file",
+            arguments: { path: "docs/market/spec.md" },
+          }),
+        ],
       }),
     );
 
@@ -108,7 +168,9 @@ describe("extractKbDocumentReferencesFromMessage", () => {
 
     const result = extractKbDocumentReferencesFromMessage(
       message({
-        toolCalls: [toolCall({ name: "apply_patch", arguments: bulkyArguments })],
+        toolCalls: [
+          toolCall({ name: "apply_patch", arguments: bulkyArguments }),
+        ],
       }),
     );
 
@@ -130,7 +192,10 @@ describe("extractKbDocumentReferencesFromMessage", () => {
       message({ id: "stream-1", content: "Início sem referência" }),
     );
     const after = extractKbDocumentReferencesFromMessage(
-      message({ id: "stream-1", content: "Início sem referência e docs/market/spec.md" }),
+      message({
+        id: "stream-1",
+        content: "Início sem referência e docs/market/spec.md",
+      }),
     );
 
     expect(before).toEqual([]);

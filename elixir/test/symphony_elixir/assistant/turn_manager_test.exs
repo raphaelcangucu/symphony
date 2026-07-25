@@ -21,7 +21,7 @@ defmodule SymphonyElixir.Assistant.TurnManagerTest do
     run = fn ->
       send(test_pid, {:worker, self()})
       receive do: (:go -> :ok)
-      {:ok, %{assistant_message: "done", codex_thread_id: "ct", turn_id: "tn"}}
+      {:ok, %{assistant_message: "done", conversation_id: "ct", run_id: "tn"}}
     end
 
     assert {:ok, %{pid: worker}} =
@@ -35,13 +35,14 @@ defmodule SymphonyElixir.Assistant.TurnManagerTest do
     assert History.turn_running?(reloaded)
 
     send(worker, :go)
-    assert_receive {:assistant_turn_finished, _generation, {:ok, _}}, 1_000
+    assert_receive {:assistant_turn_finished, _execution_id, {:ok, _}}, 1_000
     assert_receive {:turn_status, :finished, %{status: "completed"}}, 1_000
     refute TurnManager.running?(thread.id)
 
     {:ok, done} = History.get_thread(thread.id)
     assert History.current_turn(done)["status"] == "completed"
-    assert History.current_turn(done)["session_id"] == "ct-tn"
+    assert History.current_turn(done)["conversation_id"] == "ct"
+    assert History.current_turn(done)["run_id"] == "tn"
   end
 
   test "slow goal mutation on one thread does not block another thread", %{thread: thread_a} do
@@ -180,6 +181,7 @@ defmodule SymphonyElixir.Assistant.TurnManagerTest do
     assert_receive {:mutation_worker, worker}
 
     TurnManager.enqueue(thread.id, "queued",
+      provider: "codex",
       run: fn ->
         send(test_pid, :queued_turn_started)
         {:ok, %{assistant_message: "done", tool_calls: []}}
@@ -211,6 +213,7 @@ defmodule SymphonyElixir.Assistant.TurnManagerTest do
     assert_receive {:pause_reserved, pause_worker}
 
     TurnManager.enqueue(thread.id, "queued during pause",
+      provider: "codex",
       run: fn ->
         send(test_pid, :paused_queue_started)
         {:ok, %{assistant_message: "continued"}}
@@ -241,7 +244,7 @@ defmodule SymphonyElixir.Assistant.TurnManagerTest do
              TurnManager.start_turn(thread.id, "second", run: fn -> {:ok, %{}} end, reply_to: self())
 
     send(worker, :go)
-    assert_receive {:assistant_turn_finished, _generation, _result}, 1_000
+    assert_receive {:assistant_turn_finished, _execution_id, _result}, 1_000
   end
 
   test "abnormal worker exit interrupts the current turn (task_crash)", %{thread: thread} do
@@ -256,7 +259,7 @@ defmodule SymphonyElixir.Assistant.TurnManagerTest do
     assert_receive {:worker, ^worker}, 1_000
     send(worker, :boom)
 
-    assert_receive {:assistant_turn_finished, _generation, {:error, {:turn_crashed, _}}}, 1_000
+    assert_receive {:assistant_turn_finished, _execution_id, {:error, {:turn_crashed, _}}}, 1_000
 
     wait_until(fn ->
       {:ok, t} = History.get_thread(thread.id)
@@ -268,7 +271,7 @@ defmodule SymphonyElixir.Assistant.TurnManagerTest do
     refute TurnManager.running?(thread.id)
   end
 
-  test "note_codex_turn fills the codex ids on the running turn", %{thread: thread} do
+  test "note_run records canonical Codex identity without aliases", %{thread: thread} do
     test_pid = self()
 
     run = fn ->
@@ -279,15 +282,72 @@ defmodule SymphonyElixir.Assistant.TurnManagerTest do
 
     assert {:ok, %{pid: worker}} = TurnManager.start_turn(thread.id, "x", run: run, reply_to: self())
     assert_receive {:worker, ^worker}, 1_000
-    TurnManager.note_codex_turn(thread.id, "ct-7", "tn-7")
+    TurnManager.note_run(thread.id, "codex", "ct-7", "tn-7")
 
     wait_until(fn ->
       {:ok, t} = History.get_thread(thread.id)
-      History.current_turn(t)["session_id"] == "ct-7-tn-7"
+      turn = History.current_turn(t)
+
+      turn["provider"] == "codex" and turn["conversation_id"] == "ct-7" and
+        turn["run_id"] == "tn-7" and not Map.has_key?(turn, "session_id")
     end)
 
     send(worker, :go)
-    assert_receive {:assistant_turn_finished, _generation, _result}, 1_000
+    assert_receive {:assistant_turn_finished, _execution_id, _result}, 1_000
+  end
+
+  test "note_run persists provider-neutral conversation and run identity", %{thread: thread} do
+    test_pid = self()
+
+    run = fn ->
+      send(test_pid, {:generic_worker, self()})
+      receive do: (:go -> :ok)
+
+      {:ok,
+       %{
+         assistant_message: "done",
+         provider: "claude",
+         conversation_id: "claude-session-7",
+         run_id: "claude-run-7",
+         execution_id: "provider-owned-execution"
+       }}
+    end
+
+    assert {:ok, %{pid: worker, execution_id: execution_id}} =
+             TurnManager.start_turn(thread.id, "x",
+               run: run,
+               reply_to: self(),
+               provider: "claude"
+             )
+
+    assert_receive {:generic_worker, ^worker}, 1_000
+    TurnManager.note_run(thread.id, "claude", "claude-session-7", "claude-run-7")
+
+    wait_until(fn ->
+      {:ok, current} = History.get_thread(thread.id)
+      turn = History.current_turn(current)
+
+      turn["provider"] == "claude" and
+        turn["conversation_id"] == "claude-session-7" and
+        turn["run_id"] == "claude-run-7"
+    end)
+
+    {:ok, current} = History.get_thread(thread.id)
+    payload = History.turn_payload(current)
+    assert payload.provider == "claude"
+    assert payload.conversation_id == "claude-session-7"
+    assert payload.run_id == "claude-run-7"
+    assert payload.execution_id == execution_id
+    refute Map.has_key?(payload, :generation)
+    refute Map.has_key?(payload, :session_id)
+    refute Map.has_key?(payload, :codex_thread_id)
+
+    send(worker, :go)
+    assert_receive {:assistant_turn_finished, ^execution_id, {:ok, _}}, 1_000
+
+    {:ok, completed} = History.get_thread(thread.id)
+    completed_payload = History.turn_payload(completed)
+    assert completed_payload.execution_id == execution_id
   end
 
   test "interrupt sends agent_interrupt, clears active tools, and keeps interrupted state", %{thread: thread} do
@@ -335,7 +395,7 @@ defmodule SymphonyElixir.Assistant.TurnManagerTest do
     assert_receive {:turn_status, :interrupted, %{status: "interrupted", can_resume: true, active_tools: []}},
                    1_000
 
-    assert_receive {:assistant_turn_finished, _generation, {:error, :interrupted}}, 1_000
+    assert_receive {:assistant_turn_finished, _execution_id, {:error, :interrupted}}, 1_000
     Process.sleep(20)
 
     {:ok, interrupted_thread} = History.get_thread(thread.id)
@@ -345,27 +405,63 @@ defmodule SymphonyElixir.Assistant.TurnManagerTest do
     assert turn["active_tools"] == []
   end
 
-  test "stale completion generation cannot finish the live turn", %{thread: thread} do
+  test "interrupt clears queued intent from memory and durable state", %{thread: thread} do
     test_pid = self()
 
     run = fn ->
-      send(test_pid, {:generation_worker, self()})
+      send(test_pid, {:interrupt_queue_worker, self()})
+
+      receive do
+        {:agent_interrupt} -> {:error, :interrupted}
+      end
+    end
+
+    assert {:ok, %{pid: worker}} =
+             TurnManager.start_turn(thread.id, "active", run: run, reply_to: self())
+
+    assert_receive {:interrupt_queue_worker, ^worker}
+
+    assert :ok =
+             TurnManager.enqueue(thread.id, "must not run",
+               provider: "codex",
+               run: fn ->
+                 send(test_pid, :unexpected_queued_turn)
+                 {:ok, %{}}
+               end,
+               reply_to: self()
+             )
+
+    assert :ok = TurnManager.interrupt(thread.id, "user_stop")
+    assert_receive {:assistant_turn_finished, _execution_id, {:error, :interrupted}}
+    refute_receive :unexpected_queued_turn, 100
+
+    assert {:ok, interrupted} = History.get_thread(thread.id)
+    assert History.pending_turns(interrupted) == []
+    assert History.turn_payload(interrupted).queued_count == 0
+  end
+
+  test "stale execution id cannot finish the live turn", %{thread: thread} do
+    test_pid = self()
+
+    run = fn ->
+      send(test_pid, {:execution_worker, self()})
       receive do: (:finish -> {:ok, %{assistant_message: "current"}})
     end
 
-    assert {:ok, %{pid: worker, generation: generation}} =
+    assert {:ok, %{pid: worker, execution_id: execution_id}} =
              TurnManager.start_turn(thread.id, "current", run: run, reply_to: self())
 
-    assert_receive {:generation_worker, ^worker}
-    assert :stale = TurnManager.finish_turn(thread.id, "stale-generation", {:ok, %{assistant_message: "stale"}})
+    assert_receive {:execution_worker, ^worker}
+    assert :stale = TurnManager.finish_turn(thread.id, "stale-execution", {:ok, %{assistant_message: "stale"}})
     assert TurnManager.running?(thread.id)
 
     assert {:ok, running_thread} = History.get_thread(thread.id)
-    assert History.current_turn(running_thread)["generation"] == generation
+    assert History.current_turn(running_thread)["execution_id"] == execution_id
+    refute Map.has_key?(History.current_turn(running_thread), "generation")
     assert History.current_turn(running_thread)["status"] == "running"
 
     send(worker, :finish)
-    assert_receive {:assistant_turn_finished, ^generation, {:ok, %{assistant_message: "current"}}}
+    assert_receive {:assistant_turn_finished, ^execution_id, {:ok, %{assistant_message: "current"}}}
   end
 
   test "interrupt CAS preserves a completion that already won the race", %{thread: thread} do
@@ -382,13 +478,13 @@ defmodule SymphonyElixir.Assistant.TurnManagerTest do
       {:ok, %{assistant_message: "finished"}}
     end
 
-    assert {:ok, %{pid: worker, generation: generation}} =
+    assert {:ok, %{pid: worker, execution_id: execution_id}} =
              TurnManager.start_turn(thread.id, "race", run: run, reply_to: self())
 
     assert_receive {:cas_worker, ^worker}
     assert {:ok, running_thread} = History.get_thread(thread.id)
 
-    assert History.current_turn(running_thread)["generation"] == generation
+    assert History.current_turn(running_thread)["execution_id"] == execution_id
     assert {:ok, _completed} = History.complete_turn_state(running_thread, %{assistant_message: "winner"})
 
     assert {:ok, :already_finished} = TurnManager.interrupt(thread.id, "goal_pause")
@@ -449,12 +545,12 @@ defmodule SymphonyElixir.Assistant.TurnManagerTest do
     assert History.current_turn(updated_thread)["active_tools"] == []
 
     send(worker, :finish)
-    assert_receive {:assistant_turn_finished, _generation, {:ok, _}}, 1_000
+    assert_receive {:assistant_turn_finished, _execution_id, {:ok, _}}, 1_000
   end
 
   test "kill_tool returns tool_not_running when the id is absent", %{thread: thread} do
     assert {:ok, running_thread} =
-             History.start_turn_state(thread, %{trigger: "user", prompt: "kill missing", agent_kind: "codex"})
+             History.start_turn_state(thread, %{trigger: "user", prompt: "kill missing", provider: "codex"})
 
     {:ok, _with_tool} =
       History.upsert_active_tool(running_thread, %{
@@ -469,7 +565,7 @@ defmodule SymphonyElixir.Assistant.TurnManagerTest do
 
   test "kill_tool returns no_worker when the tool is active without a worker", %{thread: thread} do
     assert {:ok, running_thread} =
-             History.start_turn_state(thread, %{trigger: "user", prompt: "orphan tool", agent_kind: "codex"})
+             History.start_turn_state(thread, %{trigger: "user", prompt: "orphan tool", provider: "codex"})
 
     {:ok, _with_tool} =
       History.upsert_active_tool(running_thread, %{
@@ -504,11 +600,23 @@ defmodule SymphonyElixir.Assistant.TurnManagerTest do
       end
     end
 
-    TurnManager.enqueue(thread.id, "second", run_builder: second_builder, reply_to: self())
+    TurnManager.enqueue(thread.id, "second",
+      provider: "codex",
+      run_builder: second_builder,
+      reply_to: self()
+    )
+
+    assert {:ok, queued_thread} = History.get_thread(thread.id)
+    assert Enum.map(History.pending_turns(queued_thread), & &1["prompt"]) == ["second"]
 
     send(worker1, :go)
-    assert_receive {:assistant_turn_finished, _generation, _result}, 1_000
+    assert_receive {:assistant_turn_finished, _execution_id, _result}, 1_000
     assert_receive {:second, "second"}, 1_000
+
+    wait_until(fn ->
+      {:ok, updated} = History.get_thread(thread.id)
+      History.pending_turns(updated) == []
+    end)
   end
 
   test "enqueue with no running turn starts immediately", %{thread: thread} do
@@ -521,12 +629,54 @@ defmodule SymphonyElixir.Assistant.TurnManagerTest do
       end
     end
 
-    TurnManager.enqueue(thread.id, "solo", run_builder: builder, reply_to: self())
+    TurnManager.enqueue(thread.id, "solo",
+      provider: "codex",
+      run_builder: builder,
+      reply_to: self()
+    )
 
     assert_receive {:ran, "solo"}, 1_000
-    assert_receive {:assistant_turn_finished, _generation, {:ok, _}}, 1_000
+    assert_receive {:assistant_turn_finished, _execution_id, {:ok, _}}, 1_000
     wait_until(fn -> not TurnManager.running?(thread.id) end)
     refute TurnManager.running?(thread.id)
+  end
+
+  test "recover_pending rehydrates durable turns after volatile manager state is lost", %{
+    thread: thread
+  } do
+    {:ok, thread, _first} =
+      History.enqueue_pending_turn(thread, %{
+        prompt: "persisted first",
+        trigger: "user",
+        provider: "claude"
+      })
+
+    {:ok, _thread, _second} =
+      History.enqueue_pending_turn(thread, %{
+        prompt: "persisted second",
+        trigger: "gateway",
+        provider: "codex"
+      })
+
+    test_pid = self()
+
+    recovery_builder = fn entry ->
+      fn ->
+        send(test_pid, {:recovered_turn, entry["prompt"], entry["provider"]})
+        {:ok, %{assistant_message: "done", provider: entry["provider"]}}
+      end
+    end
+
+    assert {:ok, 2} =
+             TurnManager.recover_pending(thread.id, recovery_builder, reply_to: self())
+
+    assert_receive {:recovered_turn, "persisted first", "claude"}, 1_000
+    assert_receive {:recovered_turn, "persisted second", "codex"}, 1_000
+
+    wait_until(fn ->
+      {:ok, updated} = History.get_thread(thread.id)
+      History.pending_turns(updated) == [] and not TurnManager.running?(thread.id)
+    end)
   end
 
   test "start_turn without a run fn errors and does not strand running", %{thread: thread} do

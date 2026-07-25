@@ -2304,6 +2304,14 @@
       "addToContext": "Adicionar ao contexto",
       "loadingModels": "Carregando modelos do assistente...",
       "catalogLoadFailed": "Falha ao carregar modelos do assistente.",
+      "modelProvenance": {
+        "requested": "Solicitado",
+        "resolved": "Resolvido",
+        "notSpecified": "Não especificado",
+        "awaitingConfirmation": "Aguardando confirmação do provedor",
+        "reroutedFrom": "redirecionado de {{value}}",
+        "requestedAwaiting": "solicitado {{model}} · aguardando confirmação"
+      },
       "renderErrorTitle": "Esta conversa encontrou um erro de renderização.",
       "renderErrorDescription": "A navegação e o compositor continuam funcionando. Tente novamente para redesenhar o histórico.",
       "renderErrorRetry": "Recarregar conversa",
@@ -2448,6 +2456,7 @@
       },
       "errors": {
         "noCodexModels": "O Codex CLI não retornou modelos",
+        "noModels": "O servidor não retornou modelos utilizáveis para o assistente.",
         "loadFailed": "Falha ao carregar modelos do assistente.",
         "apiMissing": "A API do assistente não está disponível no servidor. Reinicie o Symphony para carregar as rotas mais recentes do tracker."
       }

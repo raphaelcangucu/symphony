@@ -12,13 +12,6 @@ defmodule SymphonyElixir.Codex.ModelCatalog do
   @cache_ttl_ms 10 * 60 * 1_000
   @version Mix.Project.config()[:version]
 
-  @fallback_efforts [
-    %{id: "low", label: "Low"},
-    %{id: "medium", label: "Medium"},
-    %{id: "high", label: "High"},
-    %{id: "xhigh", label: "Extra high"}
-  ]
-
   @type effort_option :: %{
           required(:id) => String.t(),
           required(:label) => String.t(),
@@ -51,7 +44,11 @@ defmodule SymphonyElixir.Codex.ModelCatalog do
         {:ok, catalog}
 
       _ ->
-        list_models_cached(opts)
+        if Keyword.get(opts, :fresh, false) or Keyword.has_key?(opts, :fetch_fun) do
+          fetch_catalog(opts)
+        else
+          list_models_cached(opts)
+        end
     end
   end
 
@@ -62,8 +59,21 @@ defmodule SymphonyElixir.Codex.ModelCatalog do
         {:ok, catalog}
 
       :error ->
-        refresh_cache_async(opts)
-        {:ok, fallback_catalog()}
+        case fetch_catalog(opts) do
+          {:ok, catalog} = ok ->
+            write_cache(catalog)
+            ok
+
+          {:error, _reason} = error ->
+            error
+        end
+    end
+  end
+
+  defp fetch_catalog(opts) do
+    case Keyword.get(opts, :fetch_fun) do
+      fun when is_function(fun, 0) -> fun.()
+      _fun -> list_models_from_cli(opts)
     end
   end
 
@@ -98,32 +108,6 @@ defmodule SymphonyElixir.Codex.ModelCatalog do
       command: Config.command(),
       default_model: default && default.model,
       models: options
-    }
-  end
-
-  defp fallback_catalog do
-    %{
-      agent: "codex",
-      agent_label: "Codex CLI",
-      command: Config.command(),
-      default_model: "gpt-5.5",
-      models: [
-        fallback_model("gpt-5.5", "GPT-5.5", true),
-        fallback_model("gpt-5.4", "GPT-5.4", false),
-        fallback_model("gpt-5.3-codex", "GPT-5.3 Codex", false)
-      ]
-    }
-  end
-
-  defp fallback_model(model, label, default?) do
-    %{
-      id: model,
-      model: model,
-      label: label,
-      is_default: default?,
-      default_effort: "medium",
-      efforts: @fallback_efforts,
-      input_modalities: ["text", "image"]
     }
   end
 
@@ -256,6 +240,7 @@ defmodule SymphonyElixir.Codex.ModelCatalog do
       |> map_get("models", :models, [])
       |> List.wrap()
       |> Enum.map(&normalize_cached_model/1)
+      |> Enum.reject(&is_nil/1)
       |> Enum.reject(&(&1.model == ""))
 
     if models == [] do
@@ -274,7 +259,7 @@ defmodule SymphonyElixir.Codex.ModelCatalog do
 
   defp normalize_cached_model(%{} = model) do
     model_id = map_get(model, "model", :model, map_get(model, "id", :id, ""))
-    efforts = model |> map_get("efforts", :efforts, @fallback_efforts) |> List.wrap() |> Enum.map(&normalize_cached_effort/1)
+    efforts = model |> map_get("efforts", :efforts, []) |> List.wrap() |> Enum.map(&normalize_cached_effort/1)
 
     %{
       id: map_get(model, "id", :id, model_id),
@@ -288,7 +273,7 @@ defmodule SymphonyElixir.Codex.ModelCatalog do
     }
   end
 
-  defp normalize_cached_model(_model), do: fallback_model("", "", false)
+  defp normalize_cached_model(_model), do: nil
 
   defp normalize_cached_effort(%{} = effort) do
     id = map_get(effort, "id", :id, "medium")
