@@ -107,17 +107,28 @@ swipe_down() {
     450
 }
 
-scroll_until_text() {
-  local value="$1"
-  local attempts="${2:-8}"
+scroll_until_selector() {
+  local attribute="$1"
+  local value="$2"
+  local direction="${3:-up}"
+  local attempts="${4:-8}"
   for _ in $(seq 1 "${attempts}"); do
     dump_ui
-    grep -Fq "text=\"${value}\"" "${UI_DUMP_PATH}" && return 0
-    swipe_up
+    grep -Fq "${attribute}=\"${value}\"" "${UI_DUMP_PATH}" && return 0
+    if [[ "${direction}" == "down" ]]; then
+      swipe_down
+    else
+      swipe_up
+    fi
     sleep 1
   done
-  printf "Text not found while scrolling: %s\n" "${value}" >&2
+  printf "Selector not found while scrolling %s: %s=%s\n" \
+    "${direction}" "${attribute}" "${value}" >&2
   return 1
+}
+
+scroll_until_text() {
+  scroll_until_selector "text" "$1" "up" "${2:-8}"
 }
 
 tap_selector() {
@@ -371,9 +382,10 @@ tap_accessible "Connections"
 wait_for_text "${HOST_A_NAME}"
 wait_for_text "${HOST_B_NAME}"
 wait_for_text "Paired devices"
-wait_for_text "This device"
+scroll_until_text "This device"
 trace_step "assert two direct hosts plus per-device credential metadata"
 
+scroll_until_selector "content-desc" "Use ${HOST_A_NAME}" "down"
 tap_accessible "Use ${HOST_A_NAME}"
 tap_accessible "Back"
 wait_for_text "${HOST_A_NAME} — Direct RPC session"
