@@ -150,7 +150,7 @@ prepare_host() {
     host_env "${host_key}" "${port}" mix ecto.create --quiet
     host_env "${host_key}" "${port}" mix ecto.migrate --quiet
     host_env "${host_key}" "${port}" \
-      mix run dev/mobile_e2e_seed.exs -- "${host_name}" "${project_slug}" "${workspace}"
+      mix run dev/mobile_e2e_seed.exs "${host_name}" "${project_slug}" "${workspace}"
   ) >"${E2E_ROOT}/${host_key}-seed.log"
 }
 

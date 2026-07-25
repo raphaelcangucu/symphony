@@ -8,7 +8,7 @@ alias SymphonyElixir.Repo
       [host_label, project_slug, Path.expand(workspace_path)]
 
     _ ->
-      raise "usage: mix run dev/mobile_e2e_seed.exs -- HOST_LABEL PROJECT_SLUG WORKSPACE_PATH"
+      raise "usage: mix run dev/mobile_e2e_seed.exs HOST_LABEL PROJECT_SLUG WORKSPACE_PATH"
   end
 
 File.mkdir_p!(workspace_path)
