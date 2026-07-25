@@ -89,6 +89,7 @@ O runtime contém:
 - `report/comparison.{json,md}`: matriz objetiva;
 - `report/visual-comparison.md`: heros e páginas completas no mesmo viewport;
 - `report/screens/`: capturas visuais padronizadas.
+- `report/videos/`: WebM, MP4/H.264 e prévia GIF inline por célula.
 
 Os artefatos de runtime não são versionados: vídeos e traces podem ser grandes
 e podem conter caminhos locais do ambiente de execução.

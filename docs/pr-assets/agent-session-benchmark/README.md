@@ -11,7 +11,7 @@ executado em 25 de julho de 2026 por sessão interativa e orquestrador.
 - 18/18 runs abertos e renderizados na aba Evidências real;
 - 72 screenshots PNG: hero, desktop full-page, mobile full-page e aba
   Evidências por célula;
-- 18 vídeos E2E MP4/H.264, com players embutidos na comparação visual;
+- 18 vídeos E2E MP4/H.264, com prévias animadas embutidas na comparação visual;
 - 18 traces canônicos íntegros.
 
 ## Matrizes
@@ -37,7 +37,7 @@ canônica completa, como `session-cursor-grok4.5-high` e
 - [`visuals.json`](visuals.json): manifests e ids dos runs importados;
 - [`evidence-audit.md`](evidence-audit.md): dimensões, codecs e persistência;
 - `screens/`: 72 capturas PNG;
-- `videos/`: 18 walkthroughs E2E em MP4.
+- `videos/`: 18 walkthroughs E2E em MP4 e 18 prévias GIF inline.
 
 Prompt SHA-256:
 `21315a3c30282f0813eb486ba8e2b124cd744d3528dd275a32ab75b2f9bf38f5`

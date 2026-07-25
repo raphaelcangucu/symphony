@@ -41,7 +41,8 @@ Os 18 MP4:
 - foram derivados do WebM gravado pelo Playwright.
 
 Os 18 traces canônicos passaram em `unzip -t`; nenhum artefato canônico é
-symlink. Os MP4 reproduzíveis estão em [`videos/`](videos/).
+symlink. Os MP4 reproduzíveis e suas 18 prévias GIF compatíveis com o Markdown
+do GitHub estão em [`videos/`](videos/).
 
 ## Validação independente
 

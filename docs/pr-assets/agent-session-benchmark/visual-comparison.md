@@ -8,8 +8,8 @@ O vencedor geral foi **`session-codex-gpt5.6.terra-medium`** (97/100), seguido
 por Luna (95) e Sol (94). Consulte o
 [rubric e ranking detalhado](evaluation.md).
 
-Os players abaixo usam os MP4/H.264 versionados. Cada seção também mantém um
-link direto como alternativa para renderizadores que removam a tag `<video>`.
+As prévias GIF abaixo são renderizadas inline pelo GitHub e abrem o MP4/H.264
+completo ao clicar. O link direto ao MP4 também fica disponível em cada seção.
 
 ## session-codex-gpt5.5-medium
 
@@ -21,10 +21,7 @@ link direto como alternativa para renderizadores que removam a tag `<video>`.
 
 ![Run renderizado na aba Evidências de session-codex-gpt5.5-medium](screens/session-codex-gpt5.5-medium-evidence-tab.png)
 
-<video controls preload="metadata" width="960">
-  <source src="videos/session-codex-gpt5.5-medium-e2e.mp4" type="video/mp4">
-  Seu navegador não conseguiu reproduzir o vídeo. Use o link MP4 abaixo.
-</video>
+[![Prévia animada de session-codex-gpt5.5-medium](videos/session-codex-gpt5.5-medium-e2e-preview.gif)](videos/session-codex-gpt5.5-medium-e2e.mp4)
 
 [Vídeo E2E MP4 de session-codex-gpt5.5-medium](videos/session-codex-gpt5.5-medium-e2e.mp4)
 
@@ -38,10 +35,7 @@ link direto como alternativa para renderizadores que removam a tag `<video>`.
 
 ![Run renderizado na aba Evidências de session-cursor-composer2.5](screens/session-cursor-composer2.5-evidence-tab.png)
 
-<video controls preload="metadata" width="960">
-  <source src="videos/session-cursor-composer2.5-e2e.mp4" type="video/mp4">
-  Seu navegador não conseguiu reproduzir o vídeo. Use o link MP4 abaixo.
-</video>
+[![Prévia animada de session-cursor-composer2.5](videos/session-cursor-composer2.5-e2e-preview.gif)](videos/session-cursor-composer2.5-e2e.mp4)
 
 [Vídeo E2E MP4 de session-cursor-composer2.5](videos/session-cursor-composer2.5-e2e.mp4)
 
@@ -55,10 +49,7 @@ link direto como alternativa para renderizadores que removam a tag `<video>`.
 
 ![Run renderizado na aba Evidências de session-claude-sonnet5-medium](screens/session-claude-sonnet5-medium-evidence-tab.png)
 
-<video controls preload="metadata" width="960">
-  <source src="videos/session-claude-sonnet5-medium-e2e.mp4" type="video/mp4">
-  Seu navegador não conseguiu reproduzir o vídeo. Use o link MP4 abaixo.
-</video>
+[![Prévia animada de session-claude-sonnet5-medium](videos/session-claude-sonnet5-medium-e2e-preview.gif)](videos/session-claude-sonnet5-medium-e2e.mp4)
 
 [Vídeo E2E MP4 de session-claude-sonnet5-medium](videos/session-claude-sonnet5-medium-e2e.mp4)
 
@@ -72,10 +63,7 @@ link direto como alternativa para renderizadores que removam a tag `<video>`.
 
 ![Run renderizado na aba Evidências de orchestrator-codex-gpt5.5-medium](screens/orchestrator-codex-gpt5.5-medium-evidence-tab.png)
 
-<video controls preload="metadata" width="960">
-  <source src="videos/orchestrator-codex-gpt5.5-medium-e2e.mp4" type="video/mp4">
-  Seu navegador não conseguiu reproduzir o vídeo. Use o link MP4 abaixo.
-</video>
+[![Prévia animada de orchestrator-codex-gpt5.5-medium](videos/orchestrator-codex-gpt5.5-medium-e2e-preview.gif)](videos/orchestrator-codex-gpt5.5-medium-e2e.mp4)
 
 [Vídeo E2E MP4 de orchestrator-codex-gpt5.5-medium](videos/orchestrator-codex-gpt5.5-medium-e2e.mp4)
 
@@ -89,10 +77,7 @@ link direto como alternativa para renderizadores que removam a tag `<video>`.
 
 ![Run renderizado na aba Evidências de orchestrator-cursor-composer2.5](screens/orchestrator-cursor-composer2.5-evidence-tab.png)
 
-<video controls preload="metadata" width="960">
-  <source src="videos/orchestrator-cursor-composer2.5-e2e.mp4" type="video/mp4">
-  Seu navegador não conseguiu reproduzir o vídeo. Use o link MP4 abaixo.
-</video>
+[![Prévia animada de orchestrator-cursor-composer2.5](videos/orchestrator-cursor-composer2.5-e2e-preview.gif)](videos/orchestrator-cursor-composer2.5-e2e.mp4)
 
 [Vídeo E2E MP4 de orchestrator-cursor-composer2.5](videos/orchestrator-cursor-composer2.5-e2e.mp4)
 
@@ -106,10 +91,7 @@ link direto como alternativa para renderizadores que removam a tag `<video>`.
 
 ![Run renderizado na aba Evidências de orchestrator-claude-sonnet5-medium](screens/orchestrator-claude-sonnet5-medium-evidence-tab.png)
 
-<video controls preload="metadata" width="960">
-  <source src="videos/orchestrator-claude-sonnet5-medium-e2e.mp4" type="video/mp4">
-  Seu navegador não conseguiu reproduzir o vídeo. Use o link MP4 abaixo.
-</video>
+[![Prévia animada de orchestrator-claude-sonnet5-medium](videos/orchestrator-claude-sonnet5-medium-e2e-preview.gif)](videos/orchestrator-claude-sonnet5-medium-e2e.mp4)
 
 [Vídeo E2E MP4 de orchestrator-claude-sonnet5-medium](videos/orchestrator-claude-sonnet5-medium-e2e.mp4)
 
@@ -123,10 +105,7 @@ link direto como alternativa para renderizadores que removam a tag `<video>`.
 
 ![Run renderizado na aba Evidências de session-codex-gpt5.5-high](screens/session-codex-gpt5.5-high-evidence-tab.png)
 
-<video controls preload="metadata" width="960">
-  <source src="videos/session-codex-gpt5.5-high-e2e.mp4" type="video/mp4">
-  Seu navegador não conseguiu reproduzir o vídeo. Use o link MP4 abaixo.
-</video>
+[![Prévia animada de session-codex-gpt5.5-high](videos/session-codex-gpt5.5-high-e2e-preview.gif)](videos/session-codex-gpt5.5-high-e2e.mp4)
 
 [Vídeo E2E MP4 de session-codex-gpt5.5-high](videos/session-codex-gpt5.5-high-e2e.mp4)
 
@@ -140,10 +119,7 @@ link direto como alternativa para renderizadores que removam a tag `<video>`.
 
 ![Run renderizado na aba Evidências de session-cursor-grok4.5-high](screens/session-cursor-grok4.5-high-evidence-tab.png)
 
-<video controls preload="metadata" width="960">
-  <source src="videos/session-cursor-grok4.5-high-e2e.mp4" type="video/mp4">
-  Seu navegador não conseguiu reproduzir o vídeo. Use o link MP4 abaixo.
-</video>
+[![Prévia animada de session-cursor-grok4.5-high](videos/session-cursor-grok4.5-high-e2e-preview.gif)](videos/session-cursor-grok4.5-high-e2e.mp4)
 
 [Vídeo E2E MP4 de session-cursor-grok4.5-high](videos/session-cursor-grok4.5-high-e2e.mp4)
 
@@ -157,10 +133,7 @@ link direto como alternativa para renderizadores que removam a tag `<video>`.
 
 ![Run renderizado na aba Evidências de session-claude-opus5-high](screens/session-claude-opus5-high-evidence-tab.png)
 
-<video controls preload="metadata" width="960">
-  <source src="videos/session-claude-opus5-high-e2e.mp4" type="video/mp4">
-  Seu navegador não conseguiu reproduzir o vídeo. Use o link MP4 abaixo.
-</video>
+[![Prévia animada de session-claude-opus5-high](videos/session-claude-opus5-high-e2e-preview.gif)](videos/session-claude-opus5-high-e2e.mp4)
 
 [Vídeo E2E MP4 de session-claude-opus5-high](videos/session-claude-opus5-high-e2e.mp4)
 
@@ -174,10 +147,7 @@ link direto como alternativa para renderizadores que removam a tag `<video>`.
 
 ![Run renderizado na aba Evidências de orchestrator-codex-gpt5.5-high](screens/orchestrator-codex-gpt5.5-high-evidence-tab.png)
 
-<video controls preload="metadata" width="960">
-  <source src="videos/orchestrator-codex-gpt5.5-high-e2e.mp4" type="video/mp4">
-  Seu navegador não conseguiu reproduzir o vídeo. Use o link MP4 abaixo.
-</video>
+[![Prévia animada de orchestrator-codex-gpt5.5-high](videos/orchestrator-codex-gpt5.5-high-e2e-preview.gif)](videos/orchestrator-codex-gpt5.5-high-e2e.mp4)
 
 [Vídeo E2E MP4 de orchestrator-codex-gpt5.5-high](videos/orchestrator-codex-gpt5.5-high-e2e.mp4)
 
@@ -191,10 +161,7 @@ link direto como alternativa para renderizadores que removam a tag `<video>`.
 
 ![Run renderizado na aba Evidências de orchestrator-cursor-grok4.5-high](screens/orchestrator-cursor-grok4.5-high-evidence-tab.png)
 
-<video controls preload="metadata" width="960">
-  <source src="videos/orchestrator-cursor-grok4.5-high-e2e.mp4" type="video/mp4">
-  Seu navegador não conseguiu reproduzir o vídeo. Use o link MP4 abaixo.
-</video>
+[![Prévia animada de orchestrator-cursor-grok4.5-high](videos/orchestrator-cursor-grok4.5-high-e2e-preview.gif)](videos/orchestrator-cursor-grok4.5-high-e2e.mp4)
 
 [Vídeo E2E MP4 de orchestrator-cursor-grok4.5-high](videos/orchestrator-cursor-grok4.5-high-e2e.mp4)
 
@@ -208,10 +175,7 @@ link direto como alternativa para renderizadores que removam a tag `<video>`.
 
 ![Run renderizado na aba Evidências de orchestrator-claude-opus5-high](screens/orchestrator-claude-opus5-high-evidence-tab.png)
 
-<video controls preload="metadata" width="960">
-  <source src="videos/orchestrator-claude-opus5-high-e2e.mp4" type="video/mp4">
-  Seu navegador não conseguiu reproduzir o vídeo. Use o link MP4 abaixo.
-</video>
+[![Prévia animada de orchestrator-claude-opus5-high](videos/orchestrator-claude-opus5-high-e2e-preview.gif)](videos/orchestrator-claude-opus5-high-e2e.mp4)
 
 [Vídeo E2E MP4 de orchestrator-claude-opus5-high](videos/orchestrator-claude-opus5-high-e2e.mp4)
 
@@ -225,10 +189,7 @@ link direto como alternativa para renderizadores que removam a tag `<video>`.
 
 ![Run renderizado na aba Evidências de session-codex-gpt5.6.sol-low](screens/session-codex-gpt5.6.sol-low-evidence-tab.png)
 
-<video controls preload="metadata" width="960">
-  <source src="videos/session-codex-gpt5.6.sol-low-e2e.mp4" type="video/mp4">
-  Seu navegador não conseguiu reproduzir o vídeo. Use o link MP4 abaixo.
-</video>
+[![Prévia animada de session-codex-gpt5.6.sol-low](videos/session-codex-gpt5.6.sol-low-e2e-preview.gif)](videos/session-codex-gpt5.6.sol-low-e2e.mp4)
 
 [Vídeo E2E MP4 de session-codex-gpt5.6.sol-low](videos/session-codex-gpt5.6.sol-low-e2e.mp4)
 
@@ -242,10 +203,7 @@ link direto como alternativa para renderizadores que removam a tag `<video>`.
 
 ![Run renderizado na aba Evidências de orchestrator-codex-gpt5.6.sol-low](screens/orchestrator-codex-gpt5.6.sol-low-evidence-tab.png)
 
-<video controls preload="metadata" width="960">
-  <source src="videos/orchestrator-codex-gpt5.6.sol-low-e2e.mp4" type="video/mp4">
-  Seu navegador não conseguiu reproduzir o vídeo. Use o link MP4 abaixo.
-</video>
+[![Prévia animada de orchestrator-codex-gpt5.6.sol-low](videos/orchestrator-codex-gpt5.6.sol-low-e2e-preview.gif)](videos/orchestrator-codex-gpt5.6.sol-low-e2e.mp4)
 
 [Vídeo E2E MP4 de orchestrator-codex-gpt5.6.sol-low](videos/orchestrator-codex-gpt5.6.sol-low-e2e.mp4)
 
@@ -259,10 +217,7 @@ link direto como alternativa para renderizadores que removam a tag `<video>`.
 
 ![Run renderizado na aba Evidências de session-codex-gpt5.6.terra-medium](screens/session-codex-gpt5.6.terra-medium-evidence-tab.png)
 
-<video controls preload="metadata" width="960">
-  <source src="videos/session-codex-gpt5.6.terra-medium-e2e.mp4" type="video/mp4">
-  Seu navegador não conseguiu reproduzir o vídeo. Use o link MP4 abaixo.
-</video>
+[![Prévia animada de session-codex-gpt5.6.terra-medium](videos/session-codex-gpt5.6.terra-medium-e2e-preview.gif)](videos/session-codex-gpt5.6.terra-medium-e2e.mp4)
 
 [Vídeo E2E MP4 de session-codex-gpt5.6.terra-medium](videos/session-codex-gpt5.6.terra-medium-e2e.mp4)
 
@@ -276,10 +231,7 @@ link direto como alternativa para renderizadores que removam a tag `<video>`.
 
 ![Run renderizado na aba Evidências de orchestrator-codex-gpt5.6.terra-medium](screens/orchestrator-codex-gpt5.6.terra-medium-evidence-tab.png)
 
-<video controls preload="metadata" width="960">
-  <source src="videos/orchestrator-codex-gpt5.6.terra-medium-e2e.mp4" type="video/mp4">
-  Seu navegador não conseguiu reproduzir o vídeo. Use o link MP4 abaixo.
-</video>
+[![Prévia animada de orchestrator-codex-gpt5.6.terra-medium](videos/orchestrator-codex-gpt5.6.terra-medium-e2e-preview.gif)](videos/orchestrator-codex-gpt5.6.terra-medium-e2e.mp4)
 
 [Vídeo E2E MP4 de orchestrator-codex-gpt5.6.terra-medium](videos/orchestrator-codex-gpt5.6.terra-medium-e2e.mp4)
 
@@ -293,10 +245,7 @@ link direto como alternativa para renderizadores que removam a tag `<video>`.
 
 ![Run renderizado na aba Evidências de session-codex-gpt5.6.luna-medium](screens/session-codex-gpt5.6.luna-medium-evidence-tab.png)
 
-<video controls preload="metadata" width="960">
-  <source src="videos/session-codex-gpt5.6.luna-medium-e2e.mp4" type="video/mp4">
-  Seu navegador não conseguiu reproduzir o vídeo. Use o link MP4 abaixo.
-</video>
+[![Prévia animada de session-codex-gpt5.6.luna-medium](videos/session-codex-gpt5.6.luna-medium-e2e-preview.gif)](videos/session-codex-gpt5.6.luna-medium-e2e.mp4)
 
 [Vídeo E2E MP4 de session-codex-gpt5.6.luna-medium](videos/session-codex-gpt5.6.luna-medium-e2e.mp4)
 
@@ -310,9 +259,6 @@ link direto como alternativa para renderizadores que removam a tag `<video>`.
 
 ![Run renderizado na aba Evidências de orchestrator-codex-gpt5.6.luna-medium](screens/orchestrator-codex-gpt5.6.luna-medium-evidence-tab.png)
 
-<video controls preload="metadata" width="960">
-  <source src="videos/orchestrator-codex-gpt5.6.luna-medium-e2e.mp4" type="video/mp4">
-  Seu navegador não conseguiu reproduzir o vídeo. Use o link MP4 abaixo.
-</video>
+[![Prévia animada de orchestrator-codex-gpt5.6.luna-medium](videos/orchestrator-codex-gpt5.6.luna-medium-e2e-preview.gif)](videos/orchestrator-codex-gpt5.6.luna-medium-e2e.mp4)
 
 [Vídeo E2E MP4 de orchestrator-codex-gpt5.6.luna-medium](videos/orchestrator-codex-gpt5.6.luna-medium-e2e.mp4)

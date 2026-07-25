@@ -143,6 +143,7 @@ test("visual captures use safe stable report names", () => {
         "orchestrator-claude-opus5-high-evidence-tab.png",
       video: "orchestrator-claude-opus5-high-e2e.webm",
       mp4: "orchestrator-claude-opus5-high-e2e.mp4",
+      previewGif: "orchestrator-claude-opus5-high-e2e-preview.gif",
     },
   );
   assert.throws(
@@ -161,11 +162,11 @@ test("visual report preserves captured and blocked cells", () => {
     report,
     /screens\/session-codex-gpt5\.6\.sol-low-mobile-full\.png/,
   );
-  assert.match(report, /<video controls preload="metadata" width="960">/);
   assert.match(
     report,
-    /<source src="videos\/session-codex-gpt5\.6\.sol-low-e2e\.mp4" type="video\/mp4">/,
+    /\[!\[Prévia animada de session-codex-gpt5\.6\.sol-low\]\(videos\/session-codex-gpt5\.6\.sol-low-e2e-preview\.gif\)\]\(videos\/session-codex-gpt5\.6\.sol-low-e2e\.mp4\)/,
   );
+  assert.doesNotMatch(report, /<video/);
   assert.match(report, /videos\/session-codex-gpt5\.6\.sol-low-e2e\.mp4/);
   assert.match(report, /session-cursor-composer2\.5/);
   assert.match(report, /skipped-contract/);

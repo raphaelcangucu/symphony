@@ -45,6 +45,7 @@ export function visualScreenshotNames(runId) {
     evidenceTab: `${safeRunId}-evidence-tab.png`,
     video: `${safeRunId}-e2e.webm`,
     mp4: `${safeRunId}-e2e.mp4`,
+    previewGif: `${safeRunId}-e2e-preview.gif`,
   };
 }
 
@@ -67,10 +68,7 @@ export function renderVisualComparison(captures) {
         "",
         `![Run renderizado na aba Evidências de ${capture.id}](screens/${capture.id}-evidence-tab.png)`,
         "",
-        `<video controls preload="metadata" width="960">`,
-        `  <source src="videos/${capture.id}-e2e.mp4" type="video/mp4">`,
-        `  Seu navegador não conseguiu reproduzir o vídeo. Use o link MP4 abaixo.`,
-        `</video>`,
+        `[![Prévia animada de ${capture.id}](videos/${capture.id}-e2e-preview.gif)](videos/${capture.id}-e2e.mp4)`,
         "",
         `[Vídeo E2E MP4 de ${capture.id}](videos/${capture.id}-e2e.mp4)`,
       );
@@ -434,6 +432,25 @@ async function transcodeMp4(webmPath, mp4Path) {
   }
 }
 
+async function transcodeGifPreview(mp4Path, gifPath) {
+  const result = await executeProcess(
+    "ffmpeg",
+    [
+      "-y",
+      "-i",
+      mp4Path,
+      "-filter_complex",
+      "[0:v]fps=6,scale=480:-1:flags=lanczos,split[frames][palette_source];[palette_source]palettegen=max_colors=96[palette];[frames][palette]paletteuse=dither=bayer:bayer_scale=5",
+      "-an",
+      gifPath,
+    ],
+    { cwd: resolve(mp4Path, ".."), timeout: 2 * 60 * 1000 },
+  );
+  if (result.status !== "passed") {
+    throw new Error(`ffmpeg GIF preview conversion failed: ${result.output}`);
+  }
+}
+
 async function writeEvidenceManifest({
   run,
   collected,
@@ -505,6 +522,7 @@ async function captureRun({
   const evidenceTabPath = join(reportRoot, names.evidenceTab);
   const webmPath = join(videosRoot, names.video);
   const mp4Path = join(videosRoot, names.mp4);
+  const gifPreviewPath = join(videosRoot, names.previewGif);
   const tracePath = join(tracesRoot, `${run.id}-e2e.zip`);
   const child = spawn(
     "npm",
@@ -583,12 +601,14 @@ async function captureRun({
     await mobileContext.close();
 
     await transcodeMp4(webmPath, mp4Path);
+    await transcodeGifPreview(mp4Path, gifPreviewPath);
     await Promise.all([
       copyFile(heroPath, join(reportRoot, names.hero)),
       copyFile(desktopPath, join(reportRoot, names.full)),
       copyFile(mobilePath, join(reportRoot, names.mobileFull)),
       copyFile(webmPath, join(reportVideoRoot, names.video)),
       copyFile(mp4Path, join(reportVideoRoot, names.mp4)),
+      copyFile(gifPreviewPath, join(reportVideoRoot, names.previewGif)),
     ]);
     const evidence = await writeEvidenceManifest({
       run,
