@@ -45,6 +45,8 @@ recording_pid=""
 host_a_pid=""
 host_b_pid=""
 last_host_pid=""
+screen_width=""
+screen_height=""
 
 trace_step() {
   printf "%s %s\n" "$(date --iso-8601=seconds)" "$*" >>"${TRACE_PATH}"
@@ -74,13 +76,44 @@ wait_for_text() {
   wait_for_selector "text" "$1" "${2:-45}"
 }
 
+configure_screen_geometry() {
+  local size
+  size="$(
+    "${ADB}" shell wm size |
+      tr -d '\r' |
+      awk -F': ' '/Physical size|Override size/ {print $2}' |
+      tail -n 1
+  )"
+  if [[ ! "${size}" =~ ^([0-9]+)x([0-9]+)$ ]]; then
+    printf "Could not detect emulator screen geometry: %s\n" "${size}" >&2
+    return 1
+  fi
+  screen_width="${BASH_REMATCH[1]}"
+  screen_height="${BASH_REMATCH[2]}"
+  trace_step "screen geometry ${screen_width}x${screen_height}"
+}
+
+swipe_up() {
+  "${ADB}" shell input swipe \
+    "$((screen_width / 2))" "$((screen_height * 4 / 5))" \
+    "$((screen_width / 2))" "$((screen_height * 3 / 10))" \
+    450
+}
+
+swipe_down() {
+  "${ADB}" shell input swipe \
+    "$((screen_width / 2))" "$((screen_height * 3 / 10))" \
+    "$((screen_width / 2))" "$((screen_height * 4 / 5))" \
+    450
+}
+
 scroll_until_text() {
   local value="$1"
   local attempts="${2:-8}"
   for _ in $(seq 1 "${attempts}"); do
     dump_ui
     grep -Fq "text=\"${value}\"" "${UI_DUMP_PATH}" && return 0
-    "${ADB}" shell input swipe 540 2100 540 750 450
+    swipe_up
     sleep 1
   done
   printf "Text not found while scrolling: %s\n" "${value}" >&2
@@ -265,6 +298,7 @@ host_b_offer="$(
 )"
 
 "${ADB}" wait-for-device
+configure_screen_geometry
 "${ADB}" install --no-streaming -r "${APK_PATH}" >/dev/null
 "${ADB}" shell pm clear "${APP_PACKAGE}" >/dev/null
 "${ADB}" shell settings put global window_animation_scale 0
@@ -294,8 +328,8 @@ scroll_until_text "${HOST_A_NAME}: verify host isolation"
 scroll_until_text "${HOST_A_NAME}: record native evidence"
 scroll_until_text "This task is served by ${HOST_A_NAME} over its own encrypted RPC connection."
 trace_step "assert task, blocker, subtask and comment parity on Host A"
-"${ADB}" shell input swipe 540 700 540 2100 450
-"${ADB}" shell input swipe 540 700 540 2100 450
+swipe_down
+swipe_down
 trace_step "return to Host A workspace controls"
 sleep 1
 
