@@ -4,9 +4,11 @@ import { RpcClient, RpcError, type RpcWireTransport } from "./client";
 
 class FakeTransport implements RpcWireTransport {
   readonly sent: string[] = [];
+  failure: Error | null = null;
   private handler: ((message: string) => void) | null = null;
 
   send(message: string): void {
+    if (this.failure) throw this.failure;
     this.sent.push(message);
   }
 
@@ -133,6 +135,63 @@ describe("RpcClient", () => {
 
     client.close();
     expect(client.subscriptionCount).toBe(0);
+  });
+
+  it("rejects pending calls and clears remote subscriptions when the wire disconnects", async () => {
+    const transport = new FakeTransport();
+    let nextId = 0;
+    const client = new RpcClient(transport, { createId: () => `rpc_${++nextId}` });
+    client.trackSubscription("sub_01", vi.fn());
+    const pending = client.call("system.health", {});
+
+    client.resetConnection();
+
+    await expect(pending).rejects.toMatchObject({
+      code: "connection_lost",
+      retryable: true,
+    });
+    expect(client.subscriptionCount).toBe(0);
+    const afterReconnect = client.call("system.health", {});
+    transport.receive({
+      type: "result",
+      id: "rpc_2",
+      ok: true,
+      result: { status: "healthy" },
+      meta: metadata(),
+    });
+    await expect(afterReconnect).resolves.toEqual({ status: "healthy" });
+    client.close();
+  });
+
+  it("cleans pending calls when offline send or cancellation delivery throws", async () => {
+    const transport = new FakeTransport();
+    let nextId = 0;
+    const client = new RpcClient(transport, { createId: () => `rpc_${++nextId}` });
+
+    transport.failure = new Error("socket offline");
+    await expect(client.call("system.health", {})).rejects.toMatchObject({
+      code: "connection_unavailable",
+      retryable: true,
+    });
+
+    transport.failure = null;
+    const controller = new AbortController();
+    const pending = client.call("system.health", {}, { signal: controller.signal });
+    transport.failure = new Error("socket dropped before cancel");
+    controller.abort();
+    await expect(pending).rejects.toMatchObject({ code: "cancelled" });
+
+    transport.failure = null;
+    const recovered = client.call("system.health", {});
+    transport.receive({
+      type: "result",
+      id: "rpc_3",
+      ok: true,
+      result: { status: "healthy" },
+      meta: metadata(),
+    });
+    await expect(recovered).resolves.toEqual({ status: "healthy" });
+    client.close();
   });
 });
 

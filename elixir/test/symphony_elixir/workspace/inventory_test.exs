@@ -272,10 +272,12 @@ defmodule SymphonyElixir.Workspace.InventoryTest do
     File.mkdir_p!(project_root)
 
     workflow_file = Path.join(ctx.tmp, "WORKFLOW-global.md")
+
     SymphonyElixir.TestSupport.write_workflow_file!(workflow_file,
       tracker_kind: "local",
       workspace_root: global_root
     )
+
     Workflow.set_workflow_file_path(workflow_file)
 
     markdown = Workflow.to_markdown(%{"workspace" => %{"root" => project_root}}, "")

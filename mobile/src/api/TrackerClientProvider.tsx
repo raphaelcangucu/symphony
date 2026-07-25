@@ -1,6 +1,8 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { AppState } from "react-native";
 
 import { useConnection } from "@/auth/ConnectionProvider";
+import { HostConnectionManager, type HostConnectionStatus } from "@/rpc/host-connection-manager";
 import { LegacyHostTransport } from "@/transport/LegacyHostTransport";
 import { RpcHostTransport } from "@/transport/RpcHostTransport";
 import type { HostTransport } from "@/transport/HostTransport";
@@ -51,6 +53,8 @@ export function TrackerClientProvider({
     ) {
       const hostId = activeProfile.hostId;
       let latestState: HandshakeState = "connecting";
+      let rpcTransport: RpcHostTransport | null = null;
+      let manager: HostConnectionManager | null = null;
       const adapter = new HandshakeWebSocketAdapter(
         {
           v: 1,
@@ -67,34 +71,82 @@ export function TrackerClientProvider({
         {
           onStateChange: (status) => {
             latestState = status;
+            if (status === "online") manager?.markOnline(hostId);
             setRpcState({ hostId, status, error: null });
           },
-          onOnline: () => undefined,
+          onOnline: () => {
+            manager?.markOnline(hostId);
+            void rpcTransport?.handleOnline().catch((error: unknown) => {
+              rpcTransport?.handleDisconnect();
+              manager?.markFailure(hostId, "offline");
+              setRpcState({
+                hostId,
+                status: "offline",
+                error: errorMessage(error),
+              });
+            });
+          },
           onError: (error) => {
-            const terminal =
-              latestState === "revoked" ||
-              latestState === "host_key_mismatch" ||
-              latestState === "protocol_incompatible";
+            const terminalStatus = terminalHandshakeState(latestState);
+            const status = terminalStatus ?? "offline";
+            if (terminalStatus) rpcTransport?.close();
+            else rpcTransport?.handleDisconnect();
+            manager?.markFailure(hostId, status);
             setRpcState({
               hostId,
-              status: terminal ? latestState : "offline",
+              status,
               error: error.message,
             });
           },
         },
       );
       const rpc = new RpcClient(adapter, { createId: createRpcId });
-      return new RpcHostTransport(activeProfile.hostId, rpc, {
+      rpcTransport = new RpcHostTransport(activeProfile.hostId, rpc, {
         reconnect: () => adapter.connect(),
         close: () => adapter.close(),
       });
+      manager = new HostConnectionManager();
+      manager.register({
+        hostId,
+        endpoint: activeProfile.endpoint,
+        fingerprint: activeHostCredential.hostPublicKey,
+        protocolVersion: 1,
+        transport: rpcTransport,
+      });
+      manager.select(hostId);
+      const activeManager = manager;
+      return {
+        hostId,
+        call: <TResult,>(method: string, params: unknown, signal?: AbortSignal) =>
+          activeManager.call<TResult>(method, params, signal),
+        subscribe: <TEvent,>(
+          method: string,
+          params: unknown,
+          onEvent: (event: TEvent, eventName?: string) => void,
+        ) => activeManager.subscribe(method, params, onEvent),
+        reconnect: () => {
+          activeManager.startHeartbeat();
+          activeManager.onNetworkReachable();
+        },
+        deactivate: () => rpcTransport?.deactivate(),
+        close: () => activeManager.close(),
+      } satisfies HostTransport;
     }
     return client ? createTransport(activeProfile.id, client) : null;
   }, [activeHostCredential, activeProfile, client, createTransport]);
 
   useEffect(() => {
     if (activeProfile?.transport === "rpc") transport?.reconnect();
-    return () => transport?.close();
+    const appStateSubscription =
+      activeProfile?.transport === "rpc"
+        ? AppState.addEventListener("change", (state) => {
+            if (state === "active") transport?.reconnect();
+          })
+        : null;
+    return () => {
+      appStateSubscription?.remove();
+      transport?.close();
+    };
   }, [activeProfile?.transport, transport]);
 
   const trackerClient = useMemo(
@@ -139,4 +191,16 @@ function resolvedLocale(): string {
   } catch {
     return "en";
   }
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "Unable to restore Symphony RPC streams";
+}
+
+function terminalHandshakeState(
+  state: HandshakeState,
+): Extract<HostConnectionStatus, "revoked" | "host_key_mismatch" | "protocol_incompatible"> | null {
+  return state === "revoked" || state === "host_key_mismatch" || state === "protocol_incompatible"
+    ? state
+    : null;
 }

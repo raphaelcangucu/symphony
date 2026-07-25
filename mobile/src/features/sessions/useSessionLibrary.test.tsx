@@ -109,6 +109,30 @@ describe("useSessionLibrary", () => {
     expect(client.projectSessions).toHaveBeenCalledTimes(2);
   });
 
+  it("keeps the host live when only optional viewer identity is unavailable", async () => {
+    const client = createClient();
+    client.viewer.mockRejectedValueOnce(new Error("Viewer unavailable"));
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { gcTime: Infinity, retry: false } },
+    });
+    const { result } = renderHook(
+      () =>
+        useSessionLibrary({
+          client,
+          profileId: "remote-1",
+          query: "",
+          collapsedProjectSlugs: new Set(),
+        }),
+      { wrapper: createWrapper(queryClient) },
+    );
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.viewerName).toBeNull();
+    expect(result.current.error).toBeNull();
+    expect(result.current.groups.flatMap((group) => group.sessions)).toHaveLength(1);
+  });
+
   it("surfaces a refresh action after a recoverable request failure", async () => {
     const client = createClient();
     client.projects.mockRejectedValueOnce(new Error("Tracker offline"));

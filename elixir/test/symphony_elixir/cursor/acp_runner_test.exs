@@ -72,6 +72,7 @@ defmodule SymphonyElixir.Cursor.AcpRunnerTest do
     assert :ok = ApprovalBroker.resolve(req.request_id, :approve)
 
     assert_receive {:written, perm_line}, 2_000
+
     assert %{"id" => 9001, "result" => %{"outcome" => %{"optionId" => "allow-once"}}} =
              Jason.decode!(perm_line)
 

@@ -90,8 +90,9 @@ end
 {:ok, thread} =
   %Thread{}
   |> Thread.changeset(%{
-    scope: "project_session",
+    scope: "issue_session",
     project_slug: project_slug,
+    issue_identifier: primary.identifier,
     title: "#{host_label} — Direct RPC session",
     workspace_path: workspace_path,
     status: "active",

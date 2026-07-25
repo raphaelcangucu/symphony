@@ -39,6 +39,16 @@ export function createRpcAssistantSession({
         { thread_id: threadId },
         (payload, eventName) => {
           if (!started || generation !== connectionGeneration || !eventName) return;
+          if (eventName === "sessions.resync_required") {
+            void transport
+              .call("sessions.command", {
+                thread_id: threadId,
+                event: "sync_history",
+                payload: {},
+              })
+              .catch((error: unknown) => onAction({ type: "error", message: errorMessage(error) }));
+            return;
+          }
           handleAssistantEvent(eventName, payload, onAction, reconcileSeed);
         },
       )

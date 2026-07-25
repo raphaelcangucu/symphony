@@ -270,8 +270,14 @@ defmodule SymphonyElixir.ExtensionsTest do
                  "issue_identifier" => "MT-HTTP",
                  "project_slug" => nil,
                  "state" => "In Progress",
+                 "status" => "live",
                  "session_id" => "thread-http",
+                 "repo" => nil,
                  "turn_count" => 7,
+                 "bundle_role" => nil,
+                 "parent_identifier" => nil,
+                 "unit_id" => nil,
+                 "child_identifiers" => [],
                  "last_event" => "notification",
                  "last_message" => "rendered",
                  "started_at" => state_payload["running"] |> List.first() |> Map.fetch!("started_at"),
@@ -443,6 +449,18 @@ defmodule SymphonyElixir.ExtensionsTest do
 
     port = wait_for_bound_port()
     assert port == HttpServer.bound_port()
+
+    secret_key_base =
+      :symphony_elixir
+      |> Application.fetch_env!(SymphonyElixirWeb.Endpoint)
+      |> Keyword.fetch!(:secret_key_base)
+
+    assert byte_size(secret_key_base) >= 64
+
+    cookie_store = Plug.Session.COOKIE.init(signing_salt: "symphony-session")
+    cookie_conn = %{build_conn() | secret_key_base: secret_key_base}
+    cookie = Plug.Session.COOKIE.put(cookie_conn, nil, %{"host" => "symphony"}, cookie_store)
+    assert {_sid, %{"host" => "symphony"}} = Plug.Session.COOKIE.get(cookie_conn, cookie, cookie_store)
 
     response = Req.get!("http://127.0.0.1:#{port}/api/v1/state")
     assert response.status == 200

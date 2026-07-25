@@ -5,7 +5,8 @@ defmodule SymphonyElixir.MobileRpc.Methods.CoreTest do
   alias SymphonyElixir.MobileRpc.Methods.{Projects, Sessions, System, Tasks}
 
   defmodule FakeBridge do
-    def request(domain, params) do
+    def request(domain, params, context) do
+      send(context.test_pid, {:bridge_context, context.host_id, context.device_id})
       {:ok, %{"domain" => Atom.to_string(domain), "path" => params["path"]}}
     end
   end
@@ -78,7 +79,12 @@ defmodule SymphonyElixir.MobileRpc.Methods.CoreTest do
   end
 
   test "core methods validate requests and delegate to the selected host bridge" do
-    context = %{tracker_bridge: FakeBridge}
+    context = %{
+      tracker_bridge: FakeBridge,
+      test_pid: self(),
+      host_id: "host_01",
+      device_id: "paired_device_01"
+    }
 
     assert {:ok, %{"domain" => "projects"}} =
              Projects.Request.call(request("/projects"), context)
@@ -91,6 +97,8 @@ defmodule SymphonyElixir.MobileRpc.Methods.CoreTest do
 
     assert {:ok, %{"domain" => "system"}} =
              System.Tracker.call(request("/viewer"), context)
+
+    assert_receive {:bridge_context, "host_01", "paired_device_01"}
   end
 
   defp request(path) do

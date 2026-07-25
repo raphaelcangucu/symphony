@@ -9,7 +9,7 @@ defmodule SymphonyElixirWeb.Tracker.MobilePushController do
 
   @spec create(Conn.t(), map()) :: Conn.t()
   def create(conn, params) do
-    case MobileSubscriptions.upsert(params) do
+    case upsert(conn, params) do
       {:ok, %MobileSubscription{} = subscription} ->
         conn
         |> put_status(:created)
@@ -23,14 +23,33 @@ defmodule SymphonyElixirWeb.Tracker.MobilePushController do
 
       {:error, %Ecto.Changeset{} = changeset} ->
         TrackerErrors.render(conn, changeset)
+
+      {:error, :not_owner} ->
+        conn
+        |> put_status(:forbidden)
+        |> json(%{
+          error: %{
+            code: "mobile_push_not_owned",
+            message: "This push registration belongs to another paired mobile device."
+          }
+        })
     end
   end
 
   @spec delete(Conn.t(), map()) :: Conn.t()
-  def delete(conn, %{"profile_id" => profile_id, "device_id" => device_id})
-      when is_binary(profile_id) and profile_id != "" and is_binary(device_id) and device_id != "" do
-    :ok = MobileSubscriptions.delete(profile_id, device_id)
-    json(conn, %{data: %{deleted: true}})
+  def delete(
+        %Conn{assigns: %{mobile_rpc_context: context}} = conn,
+        %{"device_id" => device_id} = params
+      )
+      when is_map_key(context, :host_id) and is_map_key(context, :device_id) and
+             is_binary(device_id) and device_id != "" do
+    render_delete(conn, delete_subscription(conn, params, device_id))
+  end
+
+  def delete(conn, %{"profile_id" => profile_id, "device_id" => device_id} = params)
+      when is_binary(profile_id) and profile_id != "" and
+             is_binary(device_id) and device_id != "" do
+    render_delete(conn, delete_subscription(conn, params, device_id))
   end
 
   def delete(conn, _params),
@@ -47,7 +66,49 @@ defmodule SymphonyElixirWeb.Tracker.MobilePushController do
     json(conn, %{data: %{sent: true, device_count: MobileSubscriptions.count()}})
   end
 
+  defp render_delete(conn, result) do
+    case result do
+      :ok ->
+        json(conn, %{data: %{deleted: true}})
+
+      {:error, :not_found} ->
+        conn
+        |> put_status(:not_found)
+        |> json(%{
+          error: %{
+            code: "mobile_push_not_found",
+            message: "Push registration was not found for this paired mobile device."
+          }
+        })
+    end
+  end
+
   defp sender do
     Application.get_env(:symphony_elixir, :native_push_sender, NativeSender)
   end
+
+  defp upsert(%Conn{assigns: %{mobile_rpc_context: context}}, params)
+       when is_map_key(context, :host_id) and is_map_key(context, :device_id) do
+    params
+    |> Map.put("profile_id", context.host_id)
+    |> MobileSubscriptions.upsert_owned(context.device_id)
+  end
+
+  defp upsert(_conn, params), do: MobileSubscriptions.upsert(params)
+
+  defp delete_subscription(
+         %Conn{assigns: %{mobile_rpc_context: context}},
+         _params,
+         device_id
+       )
+       when is_map_key(context, :host_id) and is_map_key(context, :device_id) do
+    MobileSubscriptions.delete_owned(context.host_id, device_id, context.device_id)
+  end
+
+  defp delete_subscription(_conn, %{"profile_id" => profile_id}, device_id)
+       when is_binary(profile_id) and profile_id != "" do
+    MobileSubscriptions.delete(profile_id, device_id)
+  end
+
+  defp delete_subscription(_conn, _params, _device_id), do: {:error, :not_found}
 end

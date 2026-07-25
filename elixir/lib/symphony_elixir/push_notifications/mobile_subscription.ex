@@ -12,6 +12,7 @@ defmodule SymphonyElixir.PushNotifications.MobileSubscription do
   schema "mobile_push_subscriptions" do
     field(:profile_id, :string)
     field(:device_id, :string)
+    field(:owner_device_id, :string)
     field(:platform, :string)
     field(:token, :string, virtual: true, redact: true)
     field(:token_ciphertext, :string, redact: true)
@@ -22,9 +23,10 @@ defmodule SymphonyElixir.PushNotifications.MobileSubscription do
   @spec changeset(t() | Ecto.Changeset.t(), map()) :: Ecto.Changeset.t()
   def changeset(subscription, attrs) do
     subscription
-    |> cast(attrs, [:profile_id, :device_id, :platform, :token])
+    |> cast(attrs, [:profile_id, :device_id, :owner_device_id, :platform, :token])
     |> update_change(:profile_id, &String.trim/1)
     |> update_change(:device_id, &String.trim/1)
+    |> update_change(:owner_device_id, &String.trim/1)
     |> validate_required([:profile_id, :device_id, :platform, :token])
     |> validate_inclusion(:platform, ["android", "ios"])
     |> validate_format(:token, @token_pattern)

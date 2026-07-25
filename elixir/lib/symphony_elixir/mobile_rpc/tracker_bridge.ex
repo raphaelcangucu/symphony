@@ -64,9 +64,12 @@ defmodule SymphonyElixir.MobileRpc.TrackerBridge do
         }
 
   @spec request(domain(), map()) :: {:ok, map()} | {:error, term()}
-  def request(domain, request) do
+  def request(domain, request), do: request(domain, request, %{})
+
+  @spec request(domain(), map(), map()) :: {:ok, map()} | {:error, term()}
+  def request(domain, request, context) do
     with {:ok, route} <- resolve(domain, request),
-         {:ok, conn} <- invoke(route),
+         {:ok, conn} <- invoke(route, context),
          {:ok, payload} <- decode_response(conn) do
       {:ok, payload}
     end
@@ -94,13 +97,14 @@ defmodule SymphonyElixir.MobileRpc.TrackerBridge do
 
   def resolve(_domain, _request), do: {:error, :invalid_request}
 
-  defp invoke(route) do
+  defp invoke(route, context) do
     conn =
       route.method
       |> Plug.Test.conn(route.path)
       |> Plug.Conn.put_private(:phoenix_endpoint, SymphonyElixirWeb.Endpoint)
       |> Plug.Conn.put_private(:phoenix_format, "json")
       |> Plug.Conn.put_req_header("accept", "application/json")
+      |> Plug.Conn.assign(:mobile_rpc_context, context)
       |> maybe_put_idempotency_key(route.idempotency_key)
 
     {:ok, apply(route.controller, route.action, [conn, route.params])}

@@ -10,6 +10,7 @@ type LegacyHostTransportOptions = {
     onEvent: (event: unknown) => void,
   ) => Promise<() => void>;
   reconnect?: () => void;
+  deactivate?: () => void;
   close?: () => void;
 };
 
@@ -79,6 +80,10 @@ export class LegacyHostTransport implements HostTransport {
 
   reconnect(): void {
     this.options.reconnect?.();
+  }
+
+  deactivate(): void {
+    this.options.deactivate?.();
   }
 
   close(): void {

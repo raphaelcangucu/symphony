@@ -77,7 +77,6 @@ export function useSessionLibrary({
     [collapsedProjectSlugs, projectSessions, projectsQuery.data, query, threadsQuery.data],
   );
   const firstError =
-    viewerQuery.error ??
     projectsQuery.error ??
     threadsQuery.error ??
     sessionQueries.find((sessionQuery) => sessionQuery.error)?.error ??

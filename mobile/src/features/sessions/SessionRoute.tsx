@@ -4,6 +4,7 @@ import { useEffect, useMemo, useReducer } from "react";
 
 import { useHostTransport } from "@/api/HostTransportContext";
 import { useConnection } from "@/auth/ConnectionProvider";
+import type { ConnectionProfile } from "@/auth/connection-profile";
 import { StateView } from "@/components/StateView";
 import { createRpcAssistantSession } from "@/realtime/rpc-assistant-session";
 import { useAppRuntime } from "@/runtime/AppRuntime";
@@ -13,19 +14,56 @@ import { SessionScreen } from "./SessionScreen";
 
 export function SessionRoute() {
   const router = useRouter();
-  const { createAssistantSession, dictate } = useAppRuntime();
-  const hostTransport = useHostTransport();
   const params = useLocalSearchParams<{ threadId?: string | string[]; seed?: string | string[] }>();
   const { activeProfile, activeToken } = useConnection();
+  const threadId = parseThreadId(firstParam(params.threadId));
+  const seed = firstParam(params.seed);
+
+  if (!threadId) {
+    return (
+      <StateView
+        actionLabel="Back"
+        kind="error"
+        onAction={() => router.back()}
+        title="Invalid session"
+      />
+    );
+  }
+  if (!activeProfile) return null;
+
+  return (
+    <ConnectedSessionRoute
+      key={`${activeProfile.hostId ?? activeProfile.id}:${threadId}`}
+      activeProfile={activeProfile}
+      activeToken={activeToken}
+      router={router}
+      seed={seed}
+      threadId={threadId}
+    />
+  );
+}
+
+function ConnectedSessionRoute({
+  activeProfile,
+  activeToken,
+  router,
+  seed,
+  threadId,
+}: {
+  activeProfile: ConnectionProfile;
+  activeToken: string | null;
+  router: ReturnType<typeof useRouter>;
+  seed: string | null;
+  threadId: number;
+}) {
+  const { createAssistantSession, dictate } = useAppRuntime();
+  const hostTransport = useHostTransport();
   const [timeline, dispatch] = useReducer(
     sessionTimelineReducer,
     undefined,
     createSessionTimelineState,
   );
-  const threadId = parseThreadId(firstParam(params.threadId));
-  const seed = firstParam(params.seed);
   const session = useMemo(() => {
-    if (!threadId || !activeProfile) return null;
     const onSeedAccepted = () => {
       void AsyncStorage.removeItem(
         `symphony.new-session.draft.${activeProfile.hostId ?? activeProfile.id}`,
@@ -60,16 +98,6 @@ export function SessionRoute() {
     return () => session?.disconnect();
   }, [session]);
 
-  if (!threadId) {
-    return (
-      <StateView
-        actionLabel="Back"
-        kind="error"
-        onAction={() => router.back()}
-        title="Invalid session"
-      />
-    );
-  }
   if (!session) return null;
 
   return (

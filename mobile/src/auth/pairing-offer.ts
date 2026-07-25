@@ -117,6 +117,9 @@ function validateEndpoint(input: string): string {
     throw new Error("Pairing endpoint must use ws or wss");
   }
   if (!endpoint.hostname) throw new Error("Pairing endpoint must include a host");
+  if (endpoint.protocol === "ws:" && !isLocalDevelopmentHost(endpoint.hostname)) {
+    throw new Error("Pairing endpoint must use wss outside local development networks");
+  }
   if (endpoint.username || endpoint.password) {
     throw new Error("Pairing endpoint must not contain credentials");
   }
@@ -124,6 +127,25 @@ function validateEndpoint(input: string): string {
     throw new Error("Pairing endpoint must not contain query parameters or fragments");
   }
   return endpoint.toString();
+}
+
+function isLocalDevelopmentHost(hostname: string): boolean {
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  if (host === "localhost" || host === "::1" || host.endsWith(".local")) return true;
+  const octets = host.split(".").map(Number);
+  if (
+    octets.length === 4 &&
+    octets.every((octet) => Number.isInteger(octet) && octet >= 0 && octet <= 255)
+  ) {
+    return (
+      octets[0] === 10 ||
+      octets[0] === 127 ||
+      (octets[0] === 169 && octets[1] === 254) ||
+      (octets[0] === 172 && octets[1]! >= 16 && octets[1]! <= 31) ||
+      (octets[0] === 192 && octets[1] === 168)
+    );
+  }
+  return host.includes(":") && /^(fc|fd|fe8|fe9|fea|feb)/.test(host);
 }
 
 function requiredString(value: unknown, label: string): string {

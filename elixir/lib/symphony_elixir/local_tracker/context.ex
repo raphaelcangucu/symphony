@@ -842,7 +842,7 @@ defmodule SymphonyElixir.LocalTracker.Context do
         IssueRelation
         |> where([relation], relation.source_issue_id == ^issue.id)
         |> order_by([relation], asc: relation.inserted_at, asc: relation.id)
-        |> preload([:source_issue, :target_issue])
+        |> preload(source_issue: :status, target_issue: :status)
         |> Repo.all()
 
       {:ok, relations}
@@ -2176,7 +2176,7 @@ defmodule SymphonyElixir.LocalTracker.Context do
   end
 
   defp preload_relation_result({:ok, %IssueRelation{} = relation}) do
-    {:ok, Repo.preload(relation, [:source_issue, :target_issue])}
+    {:ok, Repo.preload(relation, source_issue: :status, target_issue: :status)}
   end
 
   defp preload_relation_result(result), do: result

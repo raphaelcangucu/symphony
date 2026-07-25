@@ -39,6 +39,12 @@ defmodule SymphonyElixir.MobileRpc.PairingOfferTest do
 
     assert {:error, :endpoint_contains_credentials} =
              PairingOffer.generate("wss://user:pass@host.test/mobile/rpc", "Host", "Phone")
+
+    assert {:error, :insecure_remote_endpoint} =
+             PairingOffer.generate("ws://public.example.test/mobile/rpc", "Host", "Phone")
+
+    assert {:ok, %{offer: %{"endpoint" => "ws://10.0.2.2:4101/mobile/rpc"}}} =
+             PairingOffer.generate("ws://10.0.2.2:4101/mobile/rpc", "Host", "Phone")
   end
 
   defp migrate_repo do

@@ -22,6 +22,7 @@ function fakeHost(id: string) {
       };
     }),
     reconnect: vi.fn(),
+    deactivate: vi.fn(),
     close: vi.fn(),
   };
   const host: ManagedHost = {
@@ -47,7 +48,7 @@ describe("HostConnectionManager isolation", () => {
     );
   });
 
-  it("closes old subscriptions and transport before selecting another host", async () => {
+  it("deactivates old sessions and supports switching A to B to A before disposal", async () => {
     const first = fakeHost("host_a");
     const second = fakeHost("host_b");
     const manager = new HostConnectionManager();
@@ -58,9 +59,25 @@ describe("HostConnectionManager isolation", () => {
 
     manager.select("host_b");
 
-    expect(first.transport.close).toHaveBeenCalledTimes(1);
+    expect(first.transport.deactivate).toHaveBeenCalledTimes(1);
+    expect(first.transport.close).not.toHaveBeenCalled();
     expect(first.subscriptions.size).toBe(0);
     expect(manager.activeHostId).toBe("host_b");
+
+    manager.select("host_a");
+    expect(second.transport.deactivate).toHaveBeenCalledTimes(1);
+    manager.onNetworkReachable();
+    await expect(manager.call("system.health", {})).resolves.toEqual({
+      id: "shared-id",
+      hostId: "host_a",
+    });
+    expect(manager.activeHostId).toBe("host_a");
+    expect(first.transport.reconnect).toHaveBeenCalledTimes(1);
+    expect(first.transport.close).not.toHaveBeenCalled();
+
+    manager.close();
+    expect(first.transport.close).toHaveBeenCalledTimes(1);
+    expect(second.transport.close).toHaveBeenCalledTimes(1);
     unsubscribe();
   });
 });
@@ -112,6 +129,37 @@ describe("HostConnectionManager reconnection", () => {
     manager.markFailure("host_a", "revoked");
     expect(manager.state("host_a").status).toBe("revoked");
     manager.close();
+  });
+
+  it("backs off immediately after a socket failure and cancels retries once online", async () => {
+    vi.useFakeTimers();
+    const current = fakeHost("host_a");
+    const manager = new HostConnectionManager({
+      baseReconnectDelayMs: 500,
+      jitter: () => 0,
+    });
+    manager.register(current.host);
+    manager.select("host_a");
+
+    manager.markFailure("host_a", "offline");
+    expect(manager.state("host_a").reconnectTimer).not.toBeNull();
+
+    await vi.advanceTimersByTimeAsync(500);
+    expect(current.transport.reconnect).toHaveBeenCalledTimes(1);
+
+    manager.markOnline("host_a");
+    expect(manager.state("host_a")).toMatchObject({
+      status: "online",
+      missedHeartbeats: 0,
+      failureCode: null,
+      reconnectAttempt: 0,
+      reconnectTimer: null,
+    });
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(current.transport.reconnect).toHaveBeenCalledTimes(1);
+
+    manager.close();
+    vi.useRealTimers();
   });
 
   it("exports only redacted reachability diagnostics", () => {

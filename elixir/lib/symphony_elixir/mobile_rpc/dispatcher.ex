@@ -250,6 +250,33 @@ defmodule SymphonyElixir.MobileRpc.Dispatcher do
 
   defp method_response(id, {:ok, result}, state), do: Envelope.result(id, result, state.context)
 
+  defp method_response(
+         id,
+         {:error, {:tracker_request_failed, status, message}},
+         state
+       )
+       when is_integer(status) and is_binary(message) do
+    {code, retryable} = tracker_error(status)
+
+    error_response(
+      id,
+      code,
+      message,
+      retryable,
+      %{"status" => status},
+      state
+    )
+  end
+
+  defp method_response(
+         id,
+         {:error, {:rpc_error, code, message, retryable, data}},
+         state
+       )
+       when is_binary(code) and is_binary(message) and is_boolean(retryable) do
+    error_response(id, code, message, retryable, data, state)
+  end
+
   defp method_response(id, {:error, _reason}, state) do
     error_response(id, "method_failed", "RPC method failed", false, state)
   end
@@ -277,6 +304,19 @@ defmodule SymphonyElixir.MobileRpc.Dispatcher do
   defp error_response(id, code, message, retryable, state) do
     Envelope.error(id, code, message, retryable, state.context)
   end
+
+  defp error_response(id, code, message, retryable, data, state) do
+    Envelope.error(id, code, message, retryable, data, state.context)
+  end
+
+  defp tracker_error(status) when status in [400, 422], do: {"validation_failed", false}
+  defp tracker_error(401), do: {"unauthenticated", false}
+  defp tracker_error(403), do: {"forbidden", false}
+  defp tracker_error(404), do: {"not_found", false}
+  defp tracker_error(409), do: {"conflict", false}
+  defp tracker_error(429), do: {"rate_limited", true}
+  defp tracker_error(status) when status >= 500, do: {"tracker_unavailable", true}
+  defp tracker_error(_status), do: {"tracker_request_failed", false}
 
   defp drop_request(state, ref), do: %{state | in_flight: Map.delete(state.in_flight, ref)}
 

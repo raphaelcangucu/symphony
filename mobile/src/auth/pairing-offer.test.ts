@@ -61,6 +61,30 @@ describe("parsePairingOffer", () => {
         }),
       ),
     ).toThrow("Pairing endpoint must not contain credentials");
+    expect(() =>
+      parsePairingOffer(
+        encodePairingOffer({
+          ...offer,
+          endpoint: "ws://public.example.test/mobile/rpc",
+        }),
+      ),
+    ).toThrow("Pairing endpoint must use wss outside local development networks");
+    expect(() =>
+      parsePairingOffer(
+        encodePairingOffer({
+          ...offer,
+          endpoint: "ws://fcoffee.example/mobile/rpc",
+        }),
+      ),
+    ).toThrow("Pairing endpoint must use wss outside local development networks");
+    expect(
+      parsePairingOffer(
+        encodePairingOffer({
+          ...offer,
+          endpoint: "ws://10.0.2.2:4101/mobile/rpc",
+        }),
+      ).endpoint,
+    ).toBe("ws://10.0.2.2:4101/mobile/rpc");
   });
 
   it("rejects malformed host keys, blank identities and extra link parameters", () => {

@@ -70,15 +70,24 @@ defmodule SymphonyElixir.MobileRpc.Envelope do
 
   @spec error(String.t(), String.t(), String.t(), boolean(), map()) :: String.t()
   def error(id, code, message, retryable, context) do
+    error(id, code, message, retryable, nil, context)
+  end
+
+  @spec error(String.t(), String.t(), String.t(), boolean(), term(), map()) :: String.t()
+  def error(id, code, message, retryable, data, context) do
+    error =
+      %{
+        "code" => code,
+        "message" => message,
+        "retryable" => retryable
+      }
+      |> maybe_put_data(data)
+
     Jason.encode!(%{
       "type" => "result",
       "id" => id,
       "ok" => false,
-      "error" => %{
-        "code" => code,
-        "message" => message,
-        "retryable" => retryable
-      },
+      "error" => error,
       "meta" => metadata(context)
     })
   end
@@ -101,6 +110,9 @@ defmodule SymphonyElixir.MobileRpc.Envelope do
       "server_timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
     }
   end
+
+  defp maybe_put_data(error, nil), do: error
+  defp maybe_put_data(error, data), do: Map.put(error, "data", data)
 
   defp validate_id(id) do
     if Regex.match?(@id_pattern, id), do: :ok, else: {:error, :invalid_id}

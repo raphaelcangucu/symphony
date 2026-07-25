@@ -12,13 +12,12 @@ readonly APK_PATH="${1:-${MOBILE_DIR}/android/app/build/outputs/apk/release/app-
 readonly OUTPUT_DIR="${E2E_OUTPUT_DIR:-${MOBILE_DIR}/artifacts/e2e}"
 readonly ARTIFACT_SLUG="pr-7-encrypted-multi-host-complete-experience"
 readonly VIDEO_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}.mp4"
-readonly RAW_VIDEO_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}-raw.mp4"
+readonly RAW_VIDEO_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}-raw.webm"
 readonly SCREENSHOT_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}.png"
 readonly UI_DUMP_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}.xml"
 readonly TRACE_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}-trace.txt"
 readonly REPORT_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}-report.md"
 readonly REPORT_JSON_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}.json"
-readonly REMOTE_VIDEO="/data/local/tmp/${ARTIFACT_SLUG}.mp4"
 readonly REMOTE_UI_DUMP="/data/local/tmp/symphony-mobile-window.xml"
 readonly ADMIN_TOKEN="mobile-e2e-admin-token"
 readonly HOST_A_PORT=4101
@@ -27,8 +26,6 @@ readonly HOST_A_NAME="Studio Alpha"
 readonly HOST_B_NAME="Studio Beta"
 readonly HOST_A_PROJECT="alpha"
 readonly HOST_B_PROJECT="beta"
-readonly RECORDING_SECONDS=180
-readonly RECORDING_SIZE="576x1280"
 readonly E2E_ROOT="$(mktemp -d)"
 
 resolve_adb() {
@@ -110,17 +107,16 @@ tap_accessible() {
 
 stop_recording() {
   if [[ -n "${recording_pid}" ]]; then
-    "${ADB}" shell pkill -l 2 screenrecord >/dev/null 2>&1 || true
-    wait "${recording_pid}" 2>/dev/null || true
+    "${ADB}" emu screenrecord stop >/dev/null 2>&1 || true
     recording_pid=""
   fi
 }
 
 cleanup() {
   stop_recording
-  [[ -n "${host_a_pid}" ]] && kill "${host_a_pid}" >/dev/null 2>&1 || true
-  [[ -n "${host_b_pid}" ]] && kill "${host_b_pid}" >/dev/null 2>&1 || true
-  "${ADB}" shell rm -f "${REMOTE_VIDEO}" "${REMOTE_UI_DUMP}" >/dev/null 2>&1 || true
+  [[ -n "${host_a_pid}" ]] && kill -TERM -- "-${host_a_pid}" >/dev/null 2>&1 || true
+  [[ -n "${host_b_pid}" ]] && kill -TERM -- "-${host_b_pid}" >/dev/null 2>&1 || true
+  "${ADB}" shell rm -f "${REMOTE_UI_DUMP}" >/dev/null 2>&1 || true
   rm -rf "${E2E_ROOT}"
 }
 
@@ -169,7 +165,15 @@ start_host() {
   local port="$2"
   (
     cd "${ELIXIR_DIR}"
-    host_env "${host_key}" "${port}" mix run --no-halt
+    exec setsid env \
+      SYMPHONY_LOCAL_TRACKER_DATABASE="${E2E_ROOT}/${host_key}.sqlite3" \
+      SYMPHONY_TRACKER_HOST="0.0.0.0" \
+      SYMPHONY_TRACKER_PORT="${port}" \
+      SYMPHONY_TRACKER_TOKEN="${ADMIN_TOKEN}" \
+      SYMPHONY_EDITOR_ENABLED="false" \
+      SYMPHONY_OBSERVABILITY_ENABLED="false" \
+      SYMPHONY_SERVE_LOCK_PATH="${E2E_ROOT}/${host_key}.lock" \
+      mix run --no-halt
   ) >"${E2E_ROOT}/${host_key}-server.log" 2>&1 &
   last_host_pid="$!"
 }
@@ -253,14 +257,10 @@ host_b_offer="$(
 "${ADB}" shell settings put global window_animation_scale 0
 "${ADB}" shell settings put global transition_animation_scale 0
 "${ADB}" shell settings put global animator_duration_scale 0
-"${ADB}" shell rm -f "${REMOTE_VIDEO}"
+rm -f "${RAW_VIDEO_PATH}"
 
-"${ADB}" shell screenrecord \
-  --size "${RECORDING_SIZE}" \
-  --bit-rate 6000000 \
-  --time-limit "${RECORDING_SECONDS}" \
-  "${REMOTE_VIDEO}" >"${E2E_ROOT}/screenrecord.log" 2>&1 &
-recording_pid=$!
+"${ADB}" emu screenrecord start "${RAW_VIDEO_PATH}" >"${E2E_ROOT}/screenrecord.log" 2>&1
+recording_pid="active"
 
 launch_pairing_offer "${host_a_offer}"
 wait_for_text "${HOST_A_NAME}"
@@ -279,8 +279,15 @@ tap_accessible "Open task ${host_a_issue}"
 wait_for_text "${HOST_A_NAME}: encrypted mobile control"
 wait_for_text "${HOST_A_NAME}: verify host isolation"
 wait_for_text "${HOST_A_NAME}: record native evidence"
+"${ADB}" shell input swipe 540 2100 540 750 450
+trace_step "scroll to Host A task comments"
+sleep 1
 wait_for_text "This task is served by ${HOST_A_NAME} over its own encrypted RPC connection."
 trace_step "assert task, blocker, subtask and comment parity on Host A"
+"${ADB}" shell input swipe 540 700 540 2100 450
+"${ADB}" shell input swipe 540 700 540 2100 450
+trace_step "return to Host A workspace controls"
+sleep 1
 
 tap_accessible "Files"
 wait_for_text "README.md"
@@ -293,7 +300,7 @@ trace_step "assert selected-host uncommitted diff"
 tap_accessible "Back"
 
 tap_accessible "Terminal"
-wait_for_text "Terminal"
+wait_for_selector "content-desc" "Terminal command"
 tap_accessible "Terminal command"
 "${ADB}" shell input text "pwd"
 tap_accessible "Run command"
@@ -330,7 +337,6 @@ trace_step "switch back to Host A and assert isolated cache hydration"
 
 "${ADB}" exec-out screencap -p >"${SCREENSHOT_PATH}"
 stop_recording
-"${ADB}" pull "${REMOTE_VIDEO}" "${RAW_VIDEO_PATH}" >/dev/null
 
 ffmpeg -y -v error \
   -i "${RAW_VIDEO_PATH}" \

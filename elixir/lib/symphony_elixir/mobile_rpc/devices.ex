@@ -8,6 +8,7 @@ defmodule SymphonyElixir.MobileRpc.Devices do
 
   import Ecto.Query
 
+  alias SymphonyElixir.InstanceSecret
   alias SymphonyElixir.MobileRpc.{Device, Socket}
   alias SymphonyElixir.Repo
 
@@ -63,11 +64,17 @@ defmodule SymphonyElixir.MobileRpc.Devices do
       %Device{} = device ->
         supplied_digest = token_digest(token)
 
-        if byte_size(supplied_digest) == byte_size(device.token_digest) and
-             Plug.Crypto.secure_compare(supplied_digest, device.token_digest) do
-          {:ok, device}
-        else
-          {:error, :invalid_token}
+        cond do
+          digest_match?(supplied_digest, device.token_digest) ->
+            {:ok, device}
+
+          digest_match?(legacy_token_digest(token), device.token_digest) ->
+            device
+            |> Device.changeset(%{token_digest: supplied_digest})
+            |> Repo.update()
+
+          true ->
+            {:error, :invalid_token}
         end
     end
   end
@@ -149,12 +156,24 @@ defmodule SymphonyElixir.MobileRpc.Devices do
   end
 
   defp token_digest_key do
+    InstanceSecret.derive("mobile_rpc.device_token.v1")
+  end
+
+  defp legacy_token_digest(token) do
+    :crypto.mac(:hmac, :sha256, legacy_token_digest_key(), token)
+  end
+
+  defp legacy_token_digest_key do
     secret =
       :symphony_elixir
       |> Application.get_env(SymphonyElixirWeb.Endpoint, [])
       |> Keyword.get(:secret_key_base, "")
 
     :crypto.hash(:sha256, "symphony.mobile_rpc.device_token.v1\0" <> secret)
+  end
+
+  defp digest_match?(left, right) do
+    byte_size(left) == byte_size(right) and Plug.Crypto.secure_compare(left, right)
   end
 
   defp random_id(prefix, bytes) do

@@ -7,6 +7,7 @@ defmodule SymphonyElixirWeb.Tracker.MobilePushControllerTest do
   alias SymphonyElixir.PushNotifications.MobileSubscription
   alias SymphonyElixir.Repo
   alias SymphonyElixir.Settings.Vault
+  alias SymphonyElixirWeb.Tracker.MobilePushController
 
   @endpoint SymphonyElixirWeb.Endpoint
   @token_env "SYMPHONY_TRACKER_TOKEN"
@@ -74,6 +75,16 @@ defmodule SymphonyElixirWeb.Tracker.MobilePushControllerTest do
     assert Repo.aggregate(MobileSubscription, :count) == 0
   end
 
+  test "keeps legacy validation for an incomplete delete payload" do
+    conn =
+      delete(authed_conn(), "/api/tracker/v1/mobile_push/subscriptions", %{
+        "device_id" => "device-1"
+      })
+
+    assert %{"error" => %{"code" => "validation_failed"}} =
+             json_response(conn, 422)
+  end
+
   test "sends a test notification through the native sender boundary" do
     conn = post(authed_conn(), "/api/tracker/v1/mobile_push/test", %{})
 
@@ -81,6 +92,56 @@ defmodule SymphonyElixirWeb.Tracker.MobilePushControllerTest do
              json_response(conn, 200)
 
     assert_receive {:native_push, "test", %{title: "Symphony test"}}
+  end
+
+  test "binds RPC push registration and deletion to the authenticated paired device" do
+    token = "ExponentPushToken[rpc-private-value]"
+    native_device_id = "expo-native-device"
+
+    registered =
+      rpc_conn("host-alpha", "paired-alpha")
+      |> MobilePushController.create(%{
+        "profile_id" => "forged-profile",
+        "device_id" => native_device_id,
+        "platform" => "android",
+        "token" => token
+      })
+
+    assert %{"data" => %{"registered" => true}} = json_response(registered, 201)
+    subscription = Repo.one!(MobileSubscription)
+    assert subscription.profile_id == "host-alpha"
+    assert subscription.owner_device_id == "paired-alpha"
+
+    rejected =
+      rpc_conn("host-alpha", "paired-beta")
+      |> MobilePushController.create(%{
+        "profile_id" => "host-alpha",
+        "device_id" => native_device_id,
+        "platform" => "android",
+        "token" => "ExponentPushToken[attacker]"
+      })
+
+    assert %{"error" => %{"code" => "mobile_push_not_owned"}} =
+             json_response(rejected, 403)
+
+    not_deleted =
+      rpc_conn("host-alpha", "paired-beta")
+      |> MobilePushController.delete(%{
+        "profile_id" => "forged-profile",
+        "device_id" => native_device_id
+      })
+
+    assert %{"error" => %{"code" => "mobile_push_not_found"}} =
+             json_response(not_deleted, 404)
+
+    assert Repo.aggregate(MobileSubscription, :count) == 1
+
+    deleted =
+      rpc_conn("host-alpha", "paired-alpha")
+      |> MobilePushController.delete(%{"device_id" => native_device_id})
+
+    assert %{"data" => %{"deleted" => true}} = json_response(deleted, 200)
+    assert Repo.aggregate(MobileSubscription, :count) == 0
   end
 
   defmodule Sender do
@@ -92,6 +153,11 @@ defmodule SymphonyElixirWeb.Tracker.MobilePushControllerTest do
 
   defp authed_conn do
     build_conn() |> put_req_header("authorization", "Bearer test-token")
+  end
+
+  defp rpc_conn(host_id, device_id) do
+    build_conn()
+    |> assign(:mobile_rpc_context, %{host_id: host_id, device_id: device_id})
   end
 
   defp migrate_repo do

@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useTrackerClient } from "@/api/TrackerClientProvider";
 import { useHostTransport } from "@/api/HostTransportContext";
 import { useConnection } from "@/auth/ConnectionProvider";
+import type { ConnectionProfile } from "@/auth/connection-profile";
 import { createRpcTerminalSession } from "@/realtime/rpc-terminal-session";
 import type { TerminalConnectionState } from "@/realtime/terminal-session";
 import { useAppRuntime } from "@/runtime/AppRuntime";
@@ -13,15 +14,36 @@ import { TerminalScreen } from "./TerminalScreen";
 
 export function TerminalRoute() {
   const params = useLocalSearchParams<{ threadId?: string | string[] }>();
+  const { activeProfile, activeToken } = useConnection();
+  const threadId = parseThreadId(firstParam(params.threadId));
+
+  if (!threadId || !activeProfile) return null;
+  return (
+    <ConnectedTerminalRoute
+      key={`${activeProfile.hostId ?? activeProfile.id}:${threadId}`}
+      activeProfile={activeProfile}
+      activeToken={activeToken}
+      threadId={threadId}
+    />
+  );
+}
+
+function ConnectedTerminalRoute({
+  activeProfile,
+  activeToken,
+  threadId,
+}: {
+  activeProfile: ConnectionProfile;
+  activeToken: string | null;
+  threadId: number;
+}) {
   const router = useRouter();
   const client = useTrackerClient();
   const hostTransport = useHostTransport();
-  const { activeProfile, activeToken } = useConnection();
   const { createTerminalSession } = useAppRuntime();
-  const threadId = parseThreadId(firstParam(params.threadId));
   const threadQuery = useQuery({
-    queryKey: ["host", activeProfile?.hostId ?? activeProfile?.id, "terminal-thread", threadId],
-    enabled: Boolean(client && threadId),
+    queryKey: ["host", activeProfile.hostId ?? activeProfile.id, "terminal-thread", threadId],
+    enabled: Boolean(client),
     queryFn: async ({ signal }) => {
       const threads = await client!.threads({ limit: 100, includeArchived: true }, signal);
       return threads.find((thread) => thread.id === threadId) ?? null;
@@ -33,7 +55,7 @@ export function TerminalRoute() {
   const [generation, setGeneration] = useState(0);
   const session = useMemo(() => {
     const projectSlug = threadQuery.data?.projectSlug;
-    if (!threadId || !projectSlug || !activeProfile) return null;
+    if (!projectSlug) return null;
     if (activeProfile.transport === "rpc") {
       if (!hostTransport) return null;
       return createRpcTerminalSession({
@@ -69,7 +91,6 @@ export function TerminalRoute() {
     return () => session?.disconnect();
   }, [session]);
 
-  if (!threadId) return null;
   return (
     <TerminalScreen
       connectionState={connectionState}

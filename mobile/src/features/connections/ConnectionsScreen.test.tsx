@@ -27,7 +27,7 @@ function renderScreen(props: Partial<React.ComponentProps<typeof ConnectionsScre
     activeProfileId: "profile-1",
     busyProfileId: null,
     error: null,
-    health: { "profile-1": "live", "profile-2": "offline" },
+    health: { "profile-1": "live", "profile-2": "idle" },
     onAdd: jest.fn(),
     onBack: jest.fn(),
     onRefreshDevices: jest.fn(),
@@ -57,7 +57,7 @@ describe("ConnectionsScreen", () => {
     renderScreen({ onReconnect, onRemove, onReplaceToken, onSelect });
 
     expect(screen.getByText("Active")).toBeTruthy();
-    expect(screen.getByText("Offline")).toBeTruthy();
+    expect(screen.getByText("Idle")).toBeTruthy();
     fireEvent.press(screen.getByRole("button", { name: "Use Local" }));
     fireEvent.press(screen.getByRole("button", { name: "Reconnect Local" }));
     fireEvent.press(screen.getByRole("button", { name: "Replace token for Local" }));

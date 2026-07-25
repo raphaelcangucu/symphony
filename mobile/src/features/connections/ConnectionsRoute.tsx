@@ -32,7 +32,11 @@ export function ConnectionsRoute() {
       Object.fromEntries(
         profiles.map((profile) => [
           profile.id,
-          profile.transport === "rpc" ? "offline" : "checking",
+          profile.transport === "rpc"
+            ? profile.id === activeProfile?.id
+              ? "checking"
+              : "idle"
+            : "checking",
         ]),
       ),
     );
@@ -62,7 +66,7 @@ export function ConnectionsRoute() {
     return () => {
       active = false;
     };
-  }, [loadToken, profiles, runtime.createTrackerClient]);
+  }, [activeProfile?.id, loadToken, profiles, runtime.createTrackerClient]);
 
   useEffect(() => {
     if (activeProfile?.transport !== "rpc") return;

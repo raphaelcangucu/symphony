@@ -1,5 +1,5 @@
 import { act, render, screen } from "@testing-library/react-native";
-import { Text } from "react-native";
+import { AppState, Text, type AppStateStatus } from "react-native";
 
 import type { TrackerClient } from "./contracts";
 import {
@@ -112,10 +112,25 @@ describe("TrackerClientProvider", () => {
     });
   });
 
-  it("connects the selected encrypted host and exposes its live state", () => {
-    let callbacks: { onStateChange(state: string): void } | undefined;
+  it("connects the selected encrypted host and exposes its live state", async () => {
+    jest.useFakeTimers();
+    let callbacks:
+      | {
+          onStateChange(state: string): void;
+          onOnline(): void;
+          onError(error: Error): void;
+        }
+      | undefined;
+    let appStateListener: ((state: AppStateStatus) => void) | undefined;
+    const removeAppStateListener = jest.fn();
+    jest.spyOn(AppState, "addEventListener").mockImplementation((_type, listener) => {
+      appStateListener = listener;
+      return { remove: removeAppStateListener };
+    });
     const connect = jest.fn();
     const close = jest.fn();
+    const closeRpc = jest.fn();
+    const resetConnection = jest.fn();
     const Adapter = jest.requireMock("@/rpc/websocket-adapter")
       .HandshakeWebSocketAdapter as jest.Mock;
     const RpcClient = jest.requireMock("@/rpc/client").RpcClient as jest.Mock;
@@ -123,7 +138,12 @@ describe("TrackerClientProvider", () => {
       callbacks = nextCallbacks;
       return { close, connect, onMessage: jest.fn(() => jest.fn()), send: jest.fn() };
     });
-    RpcClient.mockImplementation(() => ({ close: jest.fn() }));
+    RpcClient.mockImplementation(() => ({
+      call: jest.fn(),
+      close: closeRpc,
+      resetConnection,
+      trackSubscription: jest.fn(),
+    }));
     const createClient = jest.fn();
     mockUseConnection.mockReturnValue({
       activeProfile: {
@@ -142,7 +162,7 @@ describe("TrackerClientProvider", () => {
       activeToken: "device-secret",
     });
 
-    render(
+    const view = render(
       <TrackerClientProvider createClient={createClient} locale="pt-BR">
         <TransportState />
         <ClientState />
@@ -157,5 +177,25 @@ describe("TrackerClientProvider", () => {
     act(() => callbacks?.onStateChange("online"));
 
     expect(screen.getByText("host-studio:online")).toBeTruthy();
+
+    act(() => callbacks?.onError(new Error("network dropped")));
+    expect(screen.getByText("host-studio:offline")).toBeTruthy();
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(700);
+    });
+    expect(connect).toHaveBeenCalledTimes(2);
+    expect(resetConnection).toHaveBeenCalled();
+
+    act(() => appStateListener?.("active"));
+    expect(connect).toHaveBeenCalledTimes(3);
+
+    act(() => callbacks?.onStateChange("revoked"));
+    act(() => callbacks?.onError(new Error("device revoked")));
+    expect(screen.getByText("host-studio:revoked")).toBeTruthy();
+    expect(closeRpc).toHaveBeenCalledTimes(1);
+
+    view.unmount();
+    expect(removeAppStateListener).toHaveBeenCalledTimes(1);
+    jest.useRealTimers();
   });
 });

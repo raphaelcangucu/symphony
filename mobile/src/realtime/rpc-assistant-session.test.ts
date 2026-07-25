@@ -31,6 +31,15 @@ describe("RPC assistant session", () => {
       messages: [expect.objectContaining({ id: "1", content: "Ready" })],
     });
 
+    handler?.({ reason: "preactivation_overflow" }, "sessions.resync_required");
+    await vi.waitFor(() =>
+      expect(transport.call).toHaveBeenCalledWith("sessions.command", {
+        thread_id: 42,
+        event: "sync_history",
+        payload: {},
+      }),
+    );
+
     await session.sendMessage("Continue");
     expect(transport.call).toHaveBeenCalledWith("sessions.command", {
       thread_id: 42,

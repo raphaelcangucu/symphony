@@ -38,7 +38,7 @@ export class HandshakeWebSocketAdapter implements RpcWireTransport {
         socket.send(handshake.start());
         this.callbacks.onStateChange(handshake.state);
       } catch (error) {
-        this.fail(error);
+        this.fail(error, socket);
       }
     };
 
@@ -64,17 +64,26 @@ export class HandshakeWebSocketAdapter implements RpcWireTransport {
           for (const handler of this.messageHandlers) handler(message);
         }
       } catch (error) {
-        this.fail(error);
+        this.fail(error, socket);
       }
     };
 
-    socket.onerror = () => this.fail(new Error("Unable to reach the Symphony host"));
+    socket.onerror = () => this.fail(new Error("Unable to reach the Symphony host"), socket);
+    socket.onclose = () => {
+      if (this.socket !== socket) return;
+      this.socket = null;
+      this.handshake = null;
+      this.callbacks.onError(new Error("Symphony host closed the RPC connection"));
+    };
   }
 
   close(): void {
-    this.socket?.close();
+    const socket = this.socket;
     this.socket = null;
     this.handshake = null;
+    if (!socket) return;
+    detachSocket(socket);
+    socket.close();
   }
 
   send(message: string): void {
@@ -89,9 +98,24 @@ export class HandshakeWebSocketAdapter implements RpcWireTransport {
     return () => this.messageHandlers.delete(handler);
   }
 
-  private fail(error: unknown): void {
+  private fail(error: unknown, socket: WebSocket): void {
+    if (this.socket !== socket) return;
     const normalized = error instanceof Error ? error : new Error("Symphony handshake failed");
+    const state = this.handshake?.state;
+    this.socket = null;
+    this.handshake = null;
+    detachSocket(socket);
+    socket.close();
+    if (state === "revoked" || state === "host_key_mismatch" || state === "protocol_incompatible") {
+      this.callbacks.onStateChange(state);
+    }
     this.callbacks.onError(normalized);
-    this.close();
   }
+}
+
+function detachSocket(socket: WebSocket): void {
+  socket.onopen = null;
+  socket.onmessage = null;
+  socket.onerror = null;
+  socket.onclose = null;
 }

@@ -26,6 +26,18 @@ defmodule SymphonyElixir.MobileRpc.DispatcherTest do
     end
   end
 
+  defmodule MissingMethod do
+    @behaviour SymphonyElixir.MobileRpc.Method
+    def name, do: "test.missing"
+    def scope, do: :mobile
+    def timeout_ms, do: 100
+    def validate(params), do: {:ok, params}
+
+    def call(_params, _context) do
+      {:error, {:tracker_request_failed, 404, "Session was not found"}}
+    end
+  end
+
   defmodule SubscribeMethod do
     @behaviour SymphonyElixir.MobileRpc.Method
     def name, do: "test.subscribe"
@@ -130,6 +142,30 @@ defmodule SymphonyElixir.MobileRpc.DispatcherTest do
 
     assert Jason.decode!(timeout_response)["error"]["code"] == "deadline_exceeded"
     assert timed_out.in_flight == %{}
+  end
+
+  test "preserves actionable tracker status and message in structured RPC errors" do
+    dispatcher =
+      Dispatcher.new(
+        %{host_id: "host_01", protocol: 1, device_id: "device_01"},
+        methods: [MissingMethod]
+      )
+
+    assert {:noreply, running} =
+             Dispatcher.handle_frame(rpc("missing", "test.missing", %{}), dispatcher)
+
+    assert_receive message
+    assert {:reply, response, _complete} = Dispatcher.handle_info(message, running)
+
+    assert %{
+             "ok" => false,
+             "error" => %{
+               "code" => "not_found",
+               "message" => "Session was not found",
+               "retryable" => false,
+               "data" => %{"status" => 404}
+             }
+           } = Jason.decode!(response)
   end
 
   test "implements host identity, health, capabilities and heartbeat system RPCs" do

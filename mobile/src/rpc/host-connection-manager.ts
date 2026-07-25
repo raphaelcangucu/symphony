@@ -81,7 +81,7 @@ export class HostConnectionManager {
     if (previousId) {
       this.cleanupSubscriptions(previousId);
       this.clearReconnect(previousId);
-      this.hosts.get(previousId)?.transport.close();
+      this.hosts.get(previousId)?.transport.deactivate();
     }
 
     this.selectedHostId = next.hostId;
@@ -121,7 +121,21 @@ export class HostConnectionManager {
     const state = this.requireState(hostId);
     state.status = status;
     state.failureCode = status;
-    if (terminalStates.has(status)) this.clearReconnect(hostId);
+    if (terminalStates.has(status)) {
+      this.clearReconnect(hostId);
+    } else {
+      this.scheduleReconnect(hostId);
+    }
+  }
+
+  markOnline(hostId: string): void {
+    const state = this.requireState(hostId);
+    state.status = "online";
+    state.missedHeartbeats = 0;
+    state.lastHeartbeatAt = this.now();
+    state.failureCode = null;
+    state.reconnectAttempt = 0;
+    this.clearReconnect(hostId);
   }
 
   onForeground(): void {

@@ -59,6 +59,9 @@ defmodule SymphonyElixir.MobileRpc.PairingOffer do
       is_nil(parsed.host) or parsed.host == "" ->
         {:error, :endpoint_missing_host}
 
+      parsed.scheme == "ws" and not local_development_host?(parsed.host) ->
+        {:error, :insecure_remote_endpoint}
+
       is_binary(parsed.userinfo) and parsed.userinfo != "" ->
         {:error, :endpoint_contains_credentials}
 
@@ -68,5 +71,22 @@ defmodule SymphonyElixir.MobileRpc.PairingOffer do
       true ->
         {:ok, URI.to_string(parsed)}
     end
+  end
+
+  defp local_development_host?(host) do
+    normalized = String.downcase(host)
+
+    normalized == "localhost" or String.ends_with?(normalized, ".local") or
+      case :inet.parse_address(String.to_charlist(normalized)) do
+        {:ok, {10, _, _, _}} -> true
+        {:ok, {127, _, _, _}} -> true
+        {:ok, {169, 254, _, _}} -> true
+        {:ok, {172, second, _, _}} when second in 16..31 -> true
+        {:ok, {192, 168, _, _}} -> true
+        {:ok, {0, 0, 0, 0, 0, 0, 0, 1}} -> true
+        {:ok, {first, _, _, _, _, _, _, _}} when first in 0xFC00..0xFDFF -> true
+        {:ok, {first, _, _, _, _, _, _, _}} when first in 0xFE80..0xFEBF -> true
+        _ -> false
+      end
   end
 end

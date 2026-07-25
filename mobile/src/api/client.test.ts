@@ -46,6 +46,21 @@ describe("createTrackerClient", () => {
     );
   });
 
+  it("normalizes numeric local project ids returned by a Symphony host", async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(jsonResponse({ data: [{ id: 1, slug: "alpha", name: "Studio Alpha" }] }));
+    const client = createTrackerClient({
+      origin: "https://demo.test",
+      token: "secret",
+      fetchImpl,
+    });
+
+    await expect(client.projects()).resolves.toEqual([
+      { id: "1", slug: "alpha", name: "Studio Alpha" },
+    ]);
+  });
+
   it("keeps health outside the tracker API prefix", async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({ status: "ok" }));
     const client = createTrackerClient({
@@ -338,6 +353,30 @@ describe("createTrackerClient", () => {
       action: "continue_work",
       instructions: "Finish mobile parity",
     });
+  });
+
+  it("normalizes numeric local comment ids returned by a Symphony host", async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse({
+        data: [
+          {
+            id: 7,
+            body: "Served directly by this host",
+            author: "Symphony E2E",
+            kind: "comment",
+          },
+        ],
+      }),
+    );
+    const client = createTrackerClient({
+      origin: "https://demo.test",
+      token: "secret",
+      fetchImpl,
+    });
+
+    await expect(client.comments("alpha", "ALP-1")).resolves.toEqual([
+      expect.objectContaining({ id: "7", body: "Served directly by this host" }),
+    ]);
   });
 
   it("maps issue creation options", async () => {

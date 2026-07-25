@@ -31,6 +31,11 @@ defmodule SymphonyElixir.MobileRpc.TrackerRequest do
 
   def call(domain, params, context) do
     bridge = Map.get(context, :tracker_bridge, SymphonyElixir.MobileRpc.TrackerBridge)
-    bridge.request(domain, params)
+
+    if function_exported?(bridge, :request, 3) do
+      bridge.request(domain, params, context)
+    else
+      bridge.request(domain, params)
+    end
   end
 end

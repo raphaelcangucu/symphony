@@ -98,7 +98,18 @@ export class RpcClient {
         }
       }
 
-      this.transport.send(JSON.stringify(request));
+      try {
+        this.transport.send(JSON.stringify(request));
+      } catch {
+        this.rejectPending(
+          id,
+          new RpcError(
+            "connection_unavailable",
+            "RPC request could not be sent while the connection is offline",
+            true,
+          ),
+        );
+      }
     });
   }
 
@@ -113,8 +124,25 @@ export class RpcClient {
 
     return () => {
       if (!this.subscriptions.delete(subscriptionId)) return;
-      this.transport.send(JSON.stringify({ type: "unsubscribe", subscription_id: subscriptionId }));
+      try {
+        this.transport.send(
+          JSON.stringify({ type: "unsubscribe", subscription_id: subscriptionId }),
+        );
+      } catch {
+        // The remote subscription already dies with the disconnected socket.
+      }
     };
+  }
+
+  resetConnection(): void {
+    if (this.closed) return;
+    for (const [id] of this.pending) {
+      this.rejectPending(
+        id,
+        new RpcError("connection_lost", "RPC connection lost before response", true),
+      );
+    }
+    this.subscriptions.clear();
   }
 
   close(): void {
@@ -170,7 +198,11 @@ export class RpcClient {
   private cancel(id: string, error: RpcError): void {
     if (!this.pending.has(id)) return;
     const cancel: RpcCancel = { type: "cancel", id };
-    this.transport.send(JSON.stringify(cancel));
+    try {
+      this.transport.send(JSON.stringify(cancel));
+    } catch {
+      // Cancellation remains local when the wire is already unavailable.
+    }
     this.rejectPending(id, error);
   }
 

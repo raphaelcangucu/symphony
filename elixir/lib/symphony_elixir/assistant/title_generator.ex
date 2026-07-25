@@ -140,7 +140,8 @@ defmodule SymphonyElixir.Assistant.TitleGenerator do
          :ok <- check_mode(thread, mode),
          messages <- history_payloads(thread_id),
          {:ok, title} <-
-           generate(messages,
+           generate(
+             messages,
              Keyword.take(opts, [:runner]) ++
                [workspace: thread.workspace_path || System.tmp_dir!()]
            ),
@@ -259,7 +260,7 @@ defmodule SymphonyElixir.Assistant.TitleGenerator do
   defp resolve_runner(opts) do
     Keyword.get(opts, :runner) ||
       Application.get_env(:symphony_elixir, :title_generator_runner) ||
-      &default_runner/4
+      (&default_runner/4)
   end
 
   defp runner_opts(_opts) do

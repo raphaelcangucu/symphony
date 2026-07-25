@@ -3,10 +3,8 @@ defmodule SymphonyElixir.HttpServer do
   Compatibility facade that starts the Phoenix observability endpoint when enabled.
   """
 
-  alias SymphonyElixir.{Config, Orchestrator}
+  alias SymphonyElixir.{Config, InstanceSecret, Orchestrator}
   alias SymphonyElixirWeb.Endpoint
-
-  @secret_key_bytes 48
 
   @spec child_spec(keyword()) :: Supervisor.child_spec()
   def child_spec(opts) do
@@ -83,6 +81,7 @@ defmodule SymphonyElixir.HttpServer do
   defp normalize_host(host), do: to_string(host)
 
   defp secret_key_base do
-    Base.encode64(:crypto.strong_rand_bytes(@secret_key_bytes), padding: false)
+    InstanceSecret.derive("phoenix.endpoint.secret_key_base.v1")
+    |> Base.encode16(case: :lower)
   end
 end

@@ -916,7 +916,7 @@ function mapUsageWindows(value: unknown): AgentUsageWindow[] {
 function mapProject(payload: unknown): ProjectSummary {
   const record = asRecord(payload, "project");
   return {
-    id: requireText(record.id, "project id"),
+    id: requireIdentifier(record.id, "project id"),
     slug: requireText(record.slug, "project slug"),
     name: requireText(record.name, "project name"),
   };
@@ -950,7 +950,7 @@ function mapIssue(payload: unknown): IssueSummary {
 function mapComment(payload: unknown): IssueComment {
   const record = asRecord(payload, "comment");
   return {
-    id: requireText(record.id, "comment id"),
+    id: requireIdentifier(record.id, "comment id"),
     body: requireText(record.body, "comment body"),
     author: optionalText(record.author),
     kind: optionalText(record.kind) ?? "comment",
@@ -1492,6 +1492,11 @@ function requireText(value: unknown, label: string): string {
     throw new TrackerProtocolError(`Tracker ${label} is missing`);
   }
   return value.trim();
+}
+
+function requireIdentifier(value: unknown, label: string): string {
+  if (typeof value === "number" && Number.isSafeInteger(value)) return String(value);
+  return requireText(value, label);
 }
 
 function optionalText(value: unknown): string | null {

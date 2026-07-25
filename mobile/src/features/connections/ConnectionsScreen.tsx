@@ -6,7 +6,7 @@ import type { ConnectionProfile } from "@/auth/connection-profile";
 import { radii, spacing } from "@/theme/tokens";
 import { useAppTheme } from "@/theme/ThemeProvider";
 
-export type ConnectionHealth = "checking" | "live" | "offline";
+export type ConnectionHealth = "checking" | "idle" | "live" | "offline";
 
 export type PairedDevice = {
   deviceId: string;
@@ -274,6 +274,7 @@ function Action({
 function healthLabel(state: ConnectionHealth): string {
   if (state === "live") return "Live";
   if (state === "offline") return "Offline";
+  if (state === "idle") return "Idle";
   return "Checking";
 }
 
@@ -283,6 +284,7 @@ function healthColor(
 ): string {
   if (state === "live") return colors.statusGreen;
   if (state === "offline") return colors.statusRed;
+  if (state === "idle") return colors.textMuted;
   return colors.statusAmber;
 }
 

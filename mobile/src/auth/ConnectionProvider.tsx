@@ -65,6 +65,14 @@ const emptySnapshot: ConnectionStorageSnapshot = {
   profiles: [],
   activeProfileId: null,
 };
+const emptyTokenState = {
+  profileId: null as string | null,
+  token: null as string | null,
+};
+const emptyHostCredentialState = {
+  profileId: null as string | null,
+  credential: null as HostCredential | null,
+};
 
 const ConnectionContext = createContext<ConnectionContextValue | null>(null);
 
@@ -74,20 +82,17 @@ export function ConnectionProvider({
 }: ConnectionProviderProps) {
   const runtime = useAppRuntime();
   const [snapshot, setSnapshot] = useState(emptySnapshot);
-  const [activeToken, setActiveToken] = useState<string | null>(null);
-  const [activeHostCredential, setActiveHostCredential] = useState<HostCredential | null>(null);
+  const [tokenState, setTokenState] = useState(emptyTokenState);
+  const [hostCredentialState, setHostCredentialState] = useState(emptyHostCredentialState);
   const [hydrated, setHydrated] = useState(false);
 
   const loadActiveToken = useCallback(
     async (nextSnapshot: ConnectionStorageSnapshot) => {
-      const token = nextSnapshot.activeProfileId
-        ? await storage.loadToken(nextSnapshot.activeProfileId)
-        : null;
-      const hostCredential = nextSnapshot.activeProfileId
-        ? await storage.loadHostCredential(nextSnapshot.activeProfileId)
-        : null;
-      setActiveToken(token);
-      setActiveHostCredential(hostCredential);
+      const profileId = nextSnapshot.activeProfileId;
+      const token = profileId ? await storage.loadToken(profileId) : null;
+      const hostCredential = profileId ? await storage.loadHostCredential(profileId) : null;
+      setTokenState({ profileId, token });
+      setHostCredentialState({ profileId, credential: hostCredential });
     },
     [storage],
   );
@@ -106,15 +111,18 @@ export function ConnectionProvider({
           : [null, null];
         if (!cancelled) {
           setSnapshot(storedSnapshot);
-          setActiveToken(token);
-          setActiveHostCredential(hostCredential);
+          setTokenState({ profileId: storedSnapshot.activeProfileId, token });
+          setHostCredentialState({
+            profileId: storedSnapshot.activeProfileId,
+            credential: hostCredential,
+          });
         }
       })
       .catch(() => {
         if (!cancelled) {
           setSnapshot(emptySnapshot);
-          setActiveToken(null);
-          setActiveHostCredential(null);
+          setTokenState(emptyTokenState);
+          setHostCredentialState(emptyHostCredentialState);
         }
       })
       .finally(() => {
@@ -198,7 +206,7 @@ export function ConnectionProvider({
         token,
       });
       if (snapshot.activeProfileId === id) {
-        setActiveToken(await storage.loadToken(id));
+        setTokenState({ profileId: id, token: await storage.loadToken(id) });
       }
     },
     [runtime.createTrackerClient, snapshot.activeProfileId, snapshot.profiles, storage],
@@ -207,6 +215,9 @@ export function ConnectionProvider({
 
   const activeProfile =
     snapshot.profiles.find((profile) => profile.id === snapshot.activeProfileId) ?? null;
+  const activeToken = tokenState.profileId === activeProfile?.id ? tokenState.token : null;
+  const activeHostCredential =
+    hostCredentialState.profileId === activeProfile?.id ? hostCredentialState.credential : null;
   const value = useMemo<ConnectionContextValue>(
     () => ({
       profiles: snapshot.profiles,

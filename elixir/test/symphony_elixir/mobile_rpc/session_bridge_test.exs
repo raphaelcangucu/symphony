@@ -42,4 +42,38 @@ defmodule SymphonyElixir.MobileRpc.SessionBridgeTest do
 
     assert :ok = GenServer.stop(bridge)
   end
+
+  defmodule OverflowChannel do
+    def join("assistant:thread:42", %{}, socket), do: {:ok, %{}, socket}
+
+    def handle_in("sync_history", %{}, socket) do
+      Phoenix.Channel.push(socket, "history_synced", %{messages: []})
+      {:reply, :ok, socket}
+    end
+  end
+
+  test "requests an explicit history resync when the preactivation buffer overflows" do
+    assert {:ok, bridge} =
+             SessionBridge.start_link(
+               connection_pid: self(),
+               thread_id: 42,
+               subscription_id: "sub_bounded",
+               channel_module: OverflowChannel,
+               max_pending: 2
+             )
+
+    send(bridge, {:mobile_assistant_push, "assistant_delta", %{delta: "first"}})
+    send(bridge, {:mobile_assistant_push, "assistant_delta", %{delta: "second"}})
+    send(bridge, {:mobile_assistant_push, "assistant_delta", %{delta: "third"}})
+    SessionBridge.activate(bridge)
+
+    assert_receive {:mobile_rpc_event, "sub_bounded", "sessions.resync_required", %{reason: "preactivation_overflow"}}
+
+    refute_receive {:mobile_rpc_event, "sub_bounded", "sessions.assistant_delta", _}
+
+    assert :ok = SessionBridge.command(bridge, "sync_history", %{})
+    assert_receive {:mobile_rpc_event, "sub_bounded", "sessions.history_synced", %{messages: []}}
+
+    assert :ok = GenServer.stop(bridge)
+  end
 end

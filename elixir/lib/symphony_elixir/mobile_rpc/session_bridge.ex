@@ -22,13 +22,16 @@ defmodule SymphonyElixir.MobileRpc.SessionBridge do
             channel_module: nil,
             socket: nil,
             active: false,
-            pending: []
+            pending: [],
+            pending_overflowed: false,
+            max_pending: 256
 
   @type option ::
           {:connection_pid, pid()}
           | {:thread_id, pos_integer()}
           | {:subscription_id, String.t()}
           | {:channel_module, module()}
+          | {:max_pending, pos_integer()}
           | {:name, GenServer.name()}
 
   @spec start_link([option()]) :: GenServer.on_start()
@@ -84,6 +87,8 @@ defmodule SymphonyElixir.MobileRpc.SessionBridge do
     topic = Keyword.get(opts, :topic, "assistant:thread:#{thread_id}")
     join_payload = Keyword.get(opts, :join_payload, %{})
     event_prefix = Keyword.get(opts, :event_prefix, "sessions")
+    max_pending = Keyword.get(opts, :max_pending, 256)
+    true = is_integer(max_pending) and max_pending > 0
     socket = channel_socket(channel_module, topic)
 
     case channel_module.join(topic, join_payload, socket) do
@@ -101,7 +106,8 @@ defmodule SymphonyElixir.MobileRpc.SessionBridge do
            event_prefix: event_prefix,
            channel_module: channel_module,
            socket: joined_socket,
-           pending: pending
+           pending: pending,
+           max_pending: max_pending
          }}
 
       {:error, reason} ->
@@ -110,10 +116,14 @@ defmodule SymphonyElixir.MobileRpc.SessionBridge do
   end
 
   @impl true
+  def handle_cast(:activate, %{pending_overflowed: true} = state) do
+    emit(state, "resync_required", %{reason: "preactivation_overflow"})
+
+    {:noreply, %{state | active: true, pending: [], pending_overflowed: false}}
+  end
+
   def handle_cast(:activate, state) do
-    Enum.each(Enum.reverse(state.pending), fn {event, payload} ->
-      emit(state, event, payload)
-    end)
+    Enum.each(Enum.reverse(state.pending), fn {event, payload} -> emit(state, event, payload) end)
 
     {:noreply, %{state | active: true, pending: []}}
   end
@@ -144,11 +154,19 @@ defmodule SymphonyElixir.MobileRpc.SessionBridge do
 
   @impl true
   def handle_info({:mobile_assistant_push, event, payload}, state) do
-    if state.active do
-      emit(state, event, payload)
-      {:noreply, state}
-    else
-      {:noreply, %{state | pending: [{event, payload} | state.pending]}}
+    cond do
+      state.active ->
+        emit(state, event, payload)
+        {:noreply, state}
+
+      state.pending_overflowed ->
+        {:noreply, state}
+
+      length(state.pending) < state.max_pending ->
+        {:noreply, %{state | pending: [{event, payload} | state.pending]}}
+
+      true ->
+        {:noreply, %{state | pending: [], pending_overflowed: true}}
     end
   end
 

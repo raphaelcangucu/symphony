@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { TrackerClient } from "@/api/contracts";
-import type { RpcClient } from "@/rpc/client";
+import { RpcError, type RpcClient } from "@/rpc/client";
 
 import { LegacyHostTransport } from "./LegacyHostTransport";
 import { RpcHostTransport } from "./RpcHostTransport";
@@ -61,7 +61,97 @@ describe.each([
     expect(events).toEqual([{ type: "session.updated", id: "thread_1" }]);
     unsubscribe();
     transport.reconnect();
+    transport.deactivate();
     transport.close();
+  });
+});
+
+describe("RpcHostTransport reconnectable streams", () => {
+  it("rejects the disconnected generation and re-subscribes logical streams when online again", async () => {
+    const remoteCleanups: Array<ReturnType<typeof vi.fn>> = [];
+    const rpc = {
+      call: vi
+        .fn()
+        .mockResolvedValueOnce({ subscription_id: "sub_1" })
+        .mockResolvedValueOnce({ subscription_id: "sub_2" }),
+      trackSubscription: vi.fn((_id: string, _handler: (event: unknown) => void) => {
+        const cleanup = vi.fn();
+        remoteCleanups.push(cleanup);
+        return cleanup;
+      }),
+      resetConnection: vi.fn(),
+      close: vi.fn(),
+    } as unknown as RpcClient;
+    const transport = new RpcHostTransport("host_1", rpc, { reconnect: vi.fn() });
+
+    const unsubscribe = await transport.subscribe("sessions.events", {}, vi.fn());
+    transport.handleDisconnect();
+    await transport.handleOnline();
+
+    expect(rpc.resetConnection).toHaveBeenCalledTimes(1);
+    expect(rpc.call).toHaveBeenNthCalledWith(1, "sessions.subscribe", {});
+    expect(rpc.call).toHaveBeenNthCalledWith(2, "sessions.subscribe", {});
+    unsubscribe();
+    expect(remoteCleanups.at(-1)).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a cold-start subscription pending until the RPC socket comes online", async () => {
+    const rpc = {
+      call: vi
+        .fn()
+        .mockRejectedValueOnce(
+          new RpcError("connection_unavailable", "RPC connection is offline", true),
+        )
+        .mockResolvedValueOnce({ subscription_id: "sub_online" }),
+      trackSubscription: vi.fn(() => vi.fn()),
+      resetConnection: vi.fn(),
+      close: vi.fn(),
+    } as unknown as RpcClient;
+    const transport = new RpcHostTransport("host_1", rpc, { reconnect: vi.fn() });
+
+    const pendingSubscription = transport.subscribe("terminal.events", { thread_id: 7 }, vi.fn());
+    await vi.waitFor(() => expect(rpc.call).toHaveBeenCalledTimes(1));
+
+    await transport.handleOnline();
+    const unsubscribe = await pendingSubscription;
+
+    expect(rpc.call).toHaveBeenNthCalledWith(2, "terminal.subscribe", { thread_id: 7 });
+    expect(rpc.trackSubscription).toHaveBeenCalledWith("sub_online", expect.any(Function));
+    unsubscribe();
+  });
+
+  it("rejects retryable RPC method errors instead of waiting for another socket transition", async () => {
+    const rpc = {
+      call: vi.fn().mockRejectedValue(new RpcError("deadline_exceeded", "Host timed out", true)),
+      trackSubscription: vi.fn(),
+      resetConnection: vi.fn(),
+      close: vi.fn(),
+    } as unknown as RpcClient;
+    const transport = new RpcHostTransport("host_1", rpc, { reconnect: vi.fn() });
+
+    await expect(transport.subscribe("sessions.events", {}, vi.fn())).rejects.toMatchObject({
+      code: "deadline_exceeded",
+    });
+  });
+
+  it("rejects a pending cold-start subscription when the transport closes", async () => {
+    const rpc = {
+      call: vi
+        .fn()
+        .mockRejectedValue(
+          new RpcError("connection_unavailable", "RPC connection is offline", true),
+        ),
+      trackSubscription: vi.fn(),
+      resetConnection: vi.fn(),
+      close: vi.fn(),
+    } as unknown as RpcClient;
+    const transport = new RpcHostTransport("host_1", rpc, { reconnect: vi.fn() });
+
+    const pendingSubscription = transport.subscribe("terminal.events", { thread_id: 7 }, vi.fn());
+    await vi.waitFor(() => expect(rpc.call).toHaveBeenCalledTimes(1));
+    transport.close();
+
+    await expect(pendingSubscription).rejects.toMatchObject({ code: "connection_closed" });
   });
 });
 
@@ -79,6 +169,7 @@ function createRpcTransport(): HostTransport {
       handler({ type: "session.updated", id: "thread_1" });
       return vi.fn();
     }),
+    resetConnection: vi.fn(),
     close: vi.fn(),
   } as unknown as RpcClient;
 
@@ -100,6 +191,7 @@ function createLegacyTransport(): HostTransport {
       return vi.fn();
     },
     reconnect: vi.fn(),
+    deactivate: vi.fn(),
     close: vi.fn(),
     capabilities: fixtures.capabilities,
   });

@@ -133,4 +133,54 @@ describe("SessionRoute", () => {
     expect(session.sendMessage).toHaveBeenCalledWith("Continue");
     await waitFor(() => expect(screen.getByLabelText("Message")).toHaveProp("value", ""));
   });
+
+  it("clears the previous host timeline before connecting the same route on another host", () => {
+    const firstSession = { ...session, connect: jest.fn(), disconnect: jest.fn() };
+    const secondSession = { ...session, connect: jest.fn(), disconnect: jest.fn() };
+    jest
+      .mocked(createAssistantSession)
+      .mockReturnValueOnce(firstSession)
+      .mockReturnValueOnce(secondSession);
+    const view = render(
+      <ThemeProvider colorScheme="dark">
+        <SessionRoute />
+      </ThemeProvider>,
+    );
+    const firstOptions = jest.mocked(createAssistantSession).mock.calls[0]?.[0];
+    act(() =>
+      firstOptions?.onAction({
+        type: "history_loaded",
+        messages: [
+          {
+            id: "alpha-message",
+            role: "assistant",
+            content: "Studio Alpha private history",
+            toolCalls: [],
+            insertedAt: null,
+          },
+        ],
+      }),
+    );
+    expect(screen.getByText("Studio Alpha private history")).toBeTruthy();
+
+    jest.mocked(useConnection).mockReturnValue({
+      activeProfile: {
+        id: "remote-2",
+        name: "Remote Beta",
+        origin: "https://beta.test",
+        createdAt: "2026-07-24T00:00:00Z",
+        lastConnectedAt: null,
+      },
+      activeToken: "beta-secret",
+    } as ReturnType<typeof useConnection>);
+    view.rerender(
+      <ThemeProvider colorScheme="dark">
+        <SessionRoute />
+      </ThemeProvider>,
+    );
+
+    expect(screen.queryByText("Studio Alpha private history")).toBeNull();
+    expect(firstSession.disconnect).toHaveBeenCalledTimes(1);
+    expect(secondSession.connect).toHaveBeenCalledTimes(1);
+  });
 });

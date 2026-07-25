@@ -7,5 +7,6 @@ export interface HostTransport {
     onEvent: (event: TEvent, eventName?: string) => void,
   ): Promise<() => void>;
   reconnect(): void;
+  deactivate(): void;
   close(): void;
 }

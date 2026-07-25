@@ -550,5 +550,4 @@ defmodule SymphonyElixir.Cursor.CliRunner do
   defp encode_content(nil), do: ""
   defp encode_content(content) when is_binary(content), do: content
   defp encode_content(content), do: Jason.encode!(content)
-
 end
