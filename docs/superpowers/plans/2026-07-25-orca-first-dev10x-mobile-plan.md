@@ -284,7 +284,7 @@ git commit -m "chore(mobile): establish Dev10x brand and Orca provenance"
 - Modify: `mobile/src/features/settings/SettingsScreen.tsx`
 - Modify: `mobile/src/features/settings/SettingsRoute.tsx`
 
-- [ ] **Step 1: Write the failing persistence test**
+- [x] **Step 1: Write the failing persistence test**
 
 Create `mobile/src/preferences/view-mode.test.ts`:
 
@@ -316,7 +316,7 @@ describe("view mode preference", () => {
 });
 ```
 
-- [ ] **Step 2: Run the test and confirm it fails**
+- [x] **Step 2: Run the test and confirm it fails**
 
 Run:
 
@@ -327,7 +327,7 @@ npx vitest run src/preferences/view-mode.test.ts
 
 Expected: FAIL because `createViewModeStorage` does not exist.
 
-- [ ] **Step 3: Implement the storage contract**
+- [x] **Step 3: Implement the storage contract**
 
 Create `mobile/src/preferences/view-mode.ts`:
 
@@ -359,6 +359,11 @@ navigation stack in `app/_layout.tsx`.
 
 - [ ] **Step 4: Make root selection independent of the selected host**
 
+Implementation note: the provider and settings control land first. The root
+switch is completed immediately after `OrcaHomeRoute` is vendored in Task 4,
+so the branch never carries a synthetic placeholder that differs from
+upstream Orca.
+
 `mobile/app/index.tsx` must render the Orca home route when mode is `orca` and
 the existing `ConnectionGate` + `SessionLibraryRoute` when mode is `codex`:
 
@@ -381,7 +386,7 @@ Add an Orca-style settings row labeled `Interface` with values
 `Dev10x Workspace` and `Compact Sessions`. Do not use Orca as a user-visible
 mode name.
 
-- [ ] **Step 5: Run focused preference and settings tests**
+- [x] **Step 5: Run focused preference and settings tests**
 
 Run:
 
@@ -395,7 +400,7 @@ npx jest src/preferences/ViewModeProvider.test.tsx \
 Expected: PASS; changing modes does not call connection storage or transport
 cleanup.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add mobile/app mobile/src/preferences mobile/src/runtime \

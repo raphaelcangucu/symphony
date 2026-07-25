@@ -11,6 +11,7 @@ import { TrackerClientProvider } from "@/api/TrackerClientProvider";
 import { ConnectionProvider, useConnection } from "@/auth/ConnectionProvider";
 import { createFixtureRuntime, fixtureModeFromUrl } from "@/e2e/fixture-runtime";
 import { activateNotificationDestination } from "@/native/notifications";
+import { ViewModeProvider } from "@/preferences/ViewModeProvider";
 import { AppRuntimeProvider, productionRuntime, useAppRuntime } from "@/runtime/AppRuntime";
 import { ThemeProvider, useAppTheme } from "@/theme/ThemeProvider";
 
@@ -35,15 +36,17 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <ThemeProvider>
-        <AppRuntimeProvider runtime={runtime}>
-          <ConnectionProvider storage={runtime.connectionStorage}>
-            <TrackerClientProvider createClient={runtime.createTrackerClient}>
-              <QueryProvider>
-                <ThemedStack />
-              </QueryProvider>
-            </TrackerClientProvider>
-          </ConnectionProvider>
-        </AppRuntimeProvider>
+        <ViewModeProvider>
+          <AppRuntimeProvider runtime={runtime}>
+            <ConnectionProvider storage={runtime.connectionStorage}>
+              <TrackerClientProvider createClient={runtime.createTrackerClient}>
+                <QueryProvider>
+                  <ThemedStack />
+                </QueryProvider>
+              </TrackerClientProvider>
+            </ConnectionProvider>
+          </AppRuntimeProvider>
+        </ViewModeProvider>
       </ThemeProvider>
     </SafeAreaProvider>
   );

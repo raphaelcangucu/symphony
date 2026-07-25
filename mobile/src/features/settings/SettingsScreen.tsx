@@ -2,6 +2,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import type { AgentAvailabilityMap, AgentUsageMap } from "@/api/contracts";
+import type { MobileViewMode } from "@/preferences/view-mode";
 import { radii, spacing } from "@/theme/tokens";
 import { useAppTheme } from "@/theme/ThemeProvider";
 
@@ -11,9 +12,11 @@ type SettingsScreenProps = {
   loading: boolean;
   error: string | null;
   onBack(): void;
+  onChangeViewMode(mode: MobileViewMode): void;
   onOpenDiagnostics(): void;
   onOpenNotifications(): void;
   onRefresh(): void;
+  viewMode: MobileViewMode;
 };
 
 export function SettingsScreen({
@@ -21,10 +24,12 @@ export function SettingsScreen({
   error,
   loading,
   onBack,
+  onChangeViewMode,
   onOpenDiagnostics,
   onOpenNotifications,
   onRefresh,
   usage,
+  viewMode,
 }: SettingsScreenProps) {
   const { colors } = useAppTheme();
   const agents = [...new Set([...Object.keys(availability), ...Object.keys(usage)])];
@@ -48,6 +53,7 @@ export function SettingsScreen({
       <ScrollView contentContainerStyle={styles.content}>
         <Section title="General">
           <SettingRow label="Appearance" value="System appearance" />
+          <InterfaceRow mode={viewMode} onChange={onChangeViewMode} />
           <NavigationRow label="Notifications" onPress={onOpenNotifications} />
           <NavigationRow label="Diagnostics" onPress={onOpenDiagnostics} />
         </Section>
@@ -84,6 +90,34 @@ export function SettingsScreen({
         </Section>
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+function InterfaceRow({
+  mode,
+  onChange,
+}: {
+  mode: MobileViewMode;
+  onChange(mode: MobileViewMode): void;
+}) {
+  const { colors } = useAppTheme();
+  const nextMode = mode === "orca" ? "codex" : "orca";
+  const nextLabel = nextMode === "orca" ? "Dev10x Workspace" : "Compact Sessions";
+  return (
+    <Pressable
+      accessibilityLabel={`Use ${nextLabel.toLowerCase()} interface`}
+      accessibilityRole="button"
+      onPress={() => onChange(nextMode)}
+      style={styles.row}
+    >
+      <Text style={{ color: colors.textPrimary, fontWeight: "600" }}>Interface</Text>
+      <View style={styles.rowValue}>
+        <Text style={{ color: colors.textMuted }}>
+          {mode === "orca" ? "Dev10x Workspace" : "Compact Sessions"}
+        </Text>
+        <Text style={{ color: colors.textMuted }}>›</Text>
+      </View>
+    </Pressable>
   );
 }
 
@@ -204,6 +238,7 @@ const styles = StyleSheet.create({
     minHeight: 44,
     gap: spacing.sm,
   },
+  rowValue: { alignItems: "center", flexDirection: "row", gap: spacing.xs },
   safeArea: { flex: 1 },
   section: { gap: spacing.xs },
   sectionTitle: { fontSize: 13, fontWeight: "700", textTransform: "uppercase" },
