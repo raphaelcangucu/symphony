@@ -113,7 +113,7 @@ Commit: `feat(mobile-rpc): add interoperable encrypted frame contract`
 - Create: `mobile/src/auth/pairing-offer.ts`
 - Create: `mobile/src/auth/pairing-offer.test.ts`
 
-- [ ] **Step 1: Write failing registry and parser tests**
+- [x] **Step 1: Write failing registry and parser tests**
 
 Prove singleton host identity persistence, distinct tokens, keyed token digests,
 constant-time validation, pending-offer rotation, first-seen activation,
@@ -135,17 +135,17 @@ export type PairingOfferV1 = {
 };
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run the focused mobile parser test in WSL. Run registry tests in CI.
 
-- [ ] **Step 3: Implement persistence and offer generation**
+- [x] **Step 3: Implement persistence and offer generation**
 
 Store the host private key encrypted through `Settings.Vault`; store only a
 keyed token digest in `mobile_rpc_devices`. A generated unused offer is pending,
 and regeneration revokes the previous pending row.
 
-- [ ] **Step 4: Verify GREEN and commit**
+- [x] **Step 4: Verify GREEN and commit**
 
 Commit: `feat(mobile-rpc): add host identity and device pairing`
 
