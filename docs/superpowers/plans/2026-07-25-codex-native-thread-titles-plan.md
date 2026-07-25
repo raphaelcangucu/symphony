@@ -221,7 +221,7 @@ Expected: no whitespace errors and only intended files changed.
 Review the diff against the three requested behaviors, fix all Critical and
 Important findings, then rerun the affected focused tests and full quality gate.
 
-- [ ] **Step 4: Commit, push, and open the PR**
+- [x] **Step 4: Commit, push, and open the PR**
 
 Use a conventional commit, push `fix/codex-native-thread-titles`, fill every
 section of `.github/pull_request_template.md`, validate it with
