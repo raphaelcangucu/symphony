@@ -96,4 +96,5 @@ jobs:
             mobile/artifacts/e2e/*.png
             mobile/artifacts/e2e/*.md
             mobile/artifacts/e2e/*.json
+            mobile/artifacts/e2e/*.xml
             mobile/artifacts/e2e/*-trace.txt

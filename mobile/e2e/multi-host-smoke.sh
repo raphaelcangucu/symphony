@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -euo pipefail
+set -Eeuo pipefail
 
 readonly APP_PACKAGE="dev.dev10x.symphony"
 readonly APP_ACTIVITY="${APP_PACKAGE}/.MainActivity"
@@ -18,7 +18,7 @@ readonly UI_DUMP_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}.xml"
 readonly TRACE_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}-trace.txt"
 readonly REPORT_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}-report.md"
 readonly REPORT_JSON_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}.json"
-readonly REMOTE_VIDEO="/sdcard/${ARTIFACT_SLUG}.mp4"
+readonly REMOTE_VIDEO="/data/local/tmp/${ARTIFACT_SLUG}.mp4"
 readonly ADMIN_TOKEN="mobile-e2e-admin-token"
 readonly HOST_A_PORT=4101
 readonly HOST_B_PORT=4102
@@ -121,6 +121,13 @@ cleanup() {
   rm -rf "${E2E_ROOT}"
 }
 
+capture_failure_evidence() {
+  trace_step "FAIL: native journey aborted before completion"
+  dump_ui
+  "${ADB}" exec-out screencap -p >"${SCREENSHOT_PATH}" 2>/dev/null || true
+}
+
+trap capture_failure_evidence ERR
 trap cleanup EXIT
 
 host_env() {
