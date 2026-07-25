@@ -17,6 +17,7 @@ The mechanical presentation import covers these upstream directories:
 mobile/src/browser
 mobile/src/cache
 mobile/src/components
+mobile/src/constants
 mobile/src/diagnostics
 mobile/src/dictation
 mobile/src/files
@@ -28,12 +29,16 @@ mobile/src/session
 mobile/src/source-control
 mobile/src/storage
 mobile/src/tasks
+mobile/src/terminal
 mobile/src/theme
+mobile/src/worktree
 ```
 
 It also covers the production host routes below `mobile/app/h/`, pairing
 routes, settings routes, troubleshooting, about, and the home route. Imported
 files live below `src/orca/` or retain their Expo route under `app/`.
+Non-cryptographic transport helpers and the exact `src/shared/` types required
+by these screens are included as supporting source.
 
 ## Deliberate transport exclusions
 

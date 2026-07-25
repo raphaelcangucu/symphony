@@ -357,7 +357,7 @@ Add `ViewModeProvider` with `{hydrated, mode, setMode}`. Its production storage
 is AsyncStorage; tests inject an in-memory storage. Add the provider above the
 navigation stack in `app/_layout.tsx`.
 
-- [ ] **Step 4: Make root selection independent of the selected host**
+- [x] **Step 4: Make root selection independent of the selected host**
 
 Implementation note: the provider and settings control land first. The root
 switch is completed immediately after `OrcaHomeRoute` is vendored in Task 4,
@@ -427,7 +427,7 @@ git commit -m "feat(mobile): add device-wide interface preference"
 - Modify: `mobile/package-lock.json`
 - Modify: `mobile/tsconfig.json`
 
-- [ ] **Step 1: Verify the exact upstream checkout**
+- [x] **Step 1: Verify the exact upstream checkout**
 
 Run:
 
@@ -440,7 +440,7 @@ git -C "$ORCA_SOURCE" status --short
 
 Expected: the exact pinned commit and no uncommitted upstream source edits.
 
-- [ ] **Step 2: Import the upstream presentation directories mechanically**
+- [x] **Step 2: Import the upstream presentation directories mechanically**
 
 Copy the following upstream directories intact into `mobile/src/orca/`:
 
@@ -448,6 +448,7 @@ Copy the following upstream directories intact into `mobile/src/orca/`:
 browser
 cache
 components
+constants
 diagnostics
 dictation
 files
@@ -459,8 +460,16 @@ session
 source-control
 storage
 tasks
+terminal
 theme
+worktree
 ```
+
+The production routes import these three additional directories directly, so
+they are part of the pinned mechanical source boundary. Copy the required
+non-cryptographic transport helpers and their exact `src/shared/` type
+dependencies as well; continue to exclude the five transport implementations
+listed below.
 
 Also copy the upstream route files listed in the Files section. Rewrite only
 their import roots from `src/...` to `src/orca/...`. Do not copy:
@@ -479,9 +488,10 @@ Use this bounded mechanical import:
 
 ```bash
 ORCA_SOURCE=/home/raphaelcangucu/orca
-mkdir -p mobile/src/orca mobile/src/orca/routes
-for ORCA_UI_DIR in browser cache components diagnostics dictation files hooks \
-  layout notifications platform session source-control storage tasks theme
+mkdir -p mobile/src/orca mobile/src/orca/routes mobile/src/shared
+for ORCA_UI_DIR in browser cache components constants diagnostics dictation \
+  files hooks layout notifications platform session source-control storage \
+  tasks terminal theme worktree
 do
   rsync -a "$ORCA_SOURCE/mobile/src/$ORCA_UI_DIR/" \
     "mobile/src/orca/$ORCA_UI_DIR/"
@@ -504,7 +514,7 @@ mobile/src/orca/routes/OrcaHomeRoute.tsx` to enumerate every route import and
 change those imports explicitly with `apply_patch`. The home copy exports
 `OrcaHomeRoute` instead of a default Expo route.
 
-- [ ] **Step 3: Install only dependencies actually imported by the vendored tree**
+- [x] **Step 3: Install only dependencies actually imported by the vendored tree**
 
 Align compatible versions with the pinned Orca `mobile/package.json` using
 `npx expo install`. Include xterm, clipboard, document picker, file system,
@@ -523,7 +533,7 @@ npx expo install --check
 
 Expected: dependency versions are Expo 55 compatible.
 
-- [ ] **Step 4: Add an upstream-drift inventory**
+- [x] **Step 4: Add an upstream-drift inventory**
 
 Create `mobile/src/orca/upstream-manifest.test.ts` that verifies the pinned
 commit in `ORCA_UPSTREAM.md` and asserts the presence of these representative
@@ -543,7 +553,7 @@ const required = [
 
 The test must fail if a foundational upstream file is silently omitted.
 
-- [ ] **Step 5: Run copied pure tests in bounded batches**
+- [x] **Step 5: Run copied pure tests in bounded batches**
 
 Run only tests for imported pure helpers:
 
@@ -559,7 +569,7 @@ npx vitest run \
 
 Expected: PASS after import-path normalization.
 
-- [ ] **Step 6: Commit the mechanical import**
+- [x] **Step 6: Commit the mechanical import**
 
 ```bash
 git add mobile/app mobile/src/orca mobile/package.json \

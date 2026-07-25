@@ -29,6 +29,7 @@ const config: ExpoConfig = {
   },
   plugins: [
     "expo-router",
+    "expo-build-properties",
     "expo-secure-store",
     "expo-notifications",
     [
