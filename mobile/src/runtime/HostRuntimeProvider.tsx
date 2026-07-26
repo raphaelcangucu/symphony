@@ -58,8 +58,7 @@ export function HostRuntimeProvider({
   children: ReactNode;
   createTransport?: HostRuntimeTransportFactory;
 }) {
-  const { activeProfile, hydrated, loadHostCredential, profiles, selectProfile } =
-    useConnection();
+  const { activeProfile, hydrated, loadHostCredential, profiles, selectProfile } = useConnection();
   const managerRef = useRef<HostConnectionManager | null>(null);
   if (!managerRef.current) managerRef.current = new HostConnectionManager();
   const manager = managerRef.current;
@@ -116,15 +115,7 @@ export function HostRuntimeProvider({
     return () => {
       cancelled = true;
     };
-  }, [
-    activeProfile,
-    createTransport,
-    hydrated,
-    loadHostCredential,
-    manager,
-    profiles,
-    refresh,
-  ]);
+  }, [activeProfile, createTransport, hydrated, loadHostCredential, manager, profiles, refresh]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (state) => {
@@ -245,10 +236,7 @@ function runtimeStatus(state: HandshakeState): HostConnectionStatus {
 
 function terminalHandshakeState(
   state: HandshakeState,
-): Extract<
-  HostConnectionStatus,
-  "revoked" | "host_key_mismatch" | "protocol_incompatible"
-> | null {
+): Extract<HostConnectionStatus, "revoked" | "host_key_mismatch" | "protocol_incompatible"> | null {
   return state === "revoked" || state === "host_key_mismatch" || state === "protocol_incompatible"
     ? state
     : null;

@@ -213,10 +213,7 @@ export function ConnectionProvider({
     [runtime.createTrackerClient, snapshot.activeProfileId, snapshot.profiles, storage],
   );
   const loadToken = useCallback((id: string) => storage.loadToken(id), [storage]);
-  const loadHostCredential = useCallback(
-    (id: string) => storage.loadHostCredential(id),
-    [storage],
-  );
+  const loadHostCredential = useCallback((id: string) => storage.loadHostCredential(id), [storage]);
 
   const activeProfile =
     snapshot.profiles.find((profile) => profile.id === snapshot.activeProfileId) ?? null;

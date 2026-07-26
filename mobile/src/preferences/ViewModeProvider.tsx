@@ -58,10 +58,7 @@ export function ViewModeProvider({
     [persistence],
   );
 
-  const value = useMemo(
-    () => ({ hydrated, mode, setMode }),
-    [hydrated, mode, setMode],
-  );
+  const value = useMemo(() => ({ hydrated, mode, setMode }), [hydrated, mode, setMode]);
 
   return <ViewModeContext.Provider value={value}>{children}</ViewModeContext.Provider>;
 }

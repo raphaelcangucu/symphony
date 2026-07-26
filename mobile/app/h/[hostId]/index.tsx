@@ -1031,6 +1031,8 @@ export function HostScreen({
             <Pressable
               style={[styles.filterChip, activeFilterCount > 0 && styles.filterChipActive]}
               onPress={() => setShowFilterModal(true)}
+              accessibilityRole="button"
+              accessibilityLabel={`Filter workspaces${activeFilterCount > 0 ? `, ${activeFilterCount} active` : ''}`}
             >
               <Filter
                 size={12}
@@ -1046,14 +1048,24 @@ export function HostScreen({
               </Text>
             </Pressable>
 
-            <Pressable style={styles.modeButton} onPress={() => setShowSortPicker(true)}>
+            <Pressable
+              style={styles.modeButton}
+              onPress={() => setShowSortPicker(true)}
+              accessibilityRole="button"
+              accessibilityLabel={`Sort by ${selectedSortLabel}`}
+            >
               <SlidersHorizontal size={14} color={colors.textSecondary} />
               <Text style={styles.sortLabel} numberOfLines={1}>
                 {selectedSortLabel}
               </Text>
             </Pressable>
 
-            <Pressable style={styles.modeButton} onPress={() => setShowGroupPicker(true)}>
+            <Pressable
+              style={styles.modeButton}
+              onPress={() => setShowGroupPicker(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Group workspaces"
+            >
               <Layers size={14} color={colors.textSecondary} />
               <Text style={styles.sortLabel} numberOfLines={1}>
                 {groupMode === 'none'
@@ -1072,6 +1084,8 @@ export function HostScreen({
               style={styles.searchToggle}
               onPress={() => navigateFromHostList(`/h/${hostId}/accounts`)}
               disabled={connState !== 'connected'}
+              accessibilityRole="button"
+              accessibilityLabel="Accounts"
             >
               <UserCircle
                 size={16}
@@ -1083,6 +1097,8 @@ export function HostScreen({
               style={styles.searchToggle}
               onPress={() => navigateFromHostList(`/h/${hostId}/tasks`)}
               disabled={connState !== 'connected'}
+              accessibilityRole="button"
+              accessibilityLabel="Tasks"
             >
               <List
                 size={16}
@@ -1090,7 +1106,12 @@ export function HostScreen({
               />
             </Pressable>
 
-            <Pressable style={styles.searchToggle} onPress={() => setShowSearch((s) => !s)}>
+            <Pressable
+              style={styles.searchToggle}
+              onPress={() => setShowSearch((s) => !s)}
+              accessibilityRole="button"
+              accessibilityLabel={showSearch ? 'Close search' : 'Search workspaces'}
+            >
               {showSearch ? (
                 <X size={16} color={colors.textSecondary} />
               ) : (

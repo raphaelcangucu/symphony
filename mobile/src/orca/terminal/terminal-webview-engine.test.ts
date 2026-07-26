@@ -18,8 +18,15 @@ describe('terminal WebView bundled engine', () => {
     expect(XTERM_HTML).not.toContain('rel="stylesheet" href=')
   })
 
-  it('parses the bundled engine at the Chrome 74 syntax floor', () => {
-    expect(() => parse(XTERM_ENGINE_JS, { ecmaVersion: 2019 })).not.toThrow()
+  it('parses the bundled engine at the Android 7 Chrome 52 syntax floor', () => {
+    expect(() => parse(XTERM_ENGINE_JS, { ecmaVersion: 2016 })).not.toThrow()
+    // The stock API 24 WebView identifies as Chrome 52 but rejects arrow
+    // functions in an inline xterm bundle. Keep this device-tested constraint
+    // separate from the broader ES2016 parser floor.
+    expect(XTERM_ENGINE_JS).not.toContain('=>')
+    expect(XTERM_ENGINE_JS).toContain(
+      'var globalThis=typeof self!=="undefined"?self:window'
+    )
   })
 
   // Why: the context deliberately omits WeakRef (Chrome 84+) / structuredClone
@@ -28,11 +35,20 @@ describe('terminal WebView bundled engine', () => {
   // which are the linchpin of the old-WebView support (esbuild lowers syntax only).
   it('exposes the xterm globals and installs the old-WebView runtime shims', () => {
     const window: Record<string, unknown> = {}
-    class ElementStub {}
+    const appended: unknown[] = []
+    class ElementStub {
+      firstChild: unknown = null
+      removeChild() {}
+      appendChild(value: unknown) {
+        appended.push(value)
+      }
+    }
     const context = {
       window,
       self: window,
-      document: {},
+      document: {
+        createTextNode: (text: string) => ({ nodeType: 3, text })
+      },
       Element: ElementStub,
       navigator: {
         platform: 'Linux armv8l',
@@ -41,11 +57,13 @@ describe('terminal WebView bundled engine', () => {
       console,
       setTimeout,
       clearTimeout,
-      queueMicrotask,
+      queueMicrotask: undefined as unknown as typeof queueMicrotask,
       URL
     }
 
-    new Script(XTERM_ENGINE_JS).runInNewContext(context)
+    new Script(
+      `Object.fromEntries = undefined; Array.prototype.values = undefined;\n${XTERM_ENGINE_JS}`
+    ).runInNewContext(context)
 
     expect(window).toMatchObject({
       Terminal: expect.any(Function),
@@ -58,9 +76,30 @@ describe('terminal WebView bundled engine', () => {
     const token = {}
     expect(new weakRef!(token).deref()).toBe(token)
     expect(typeof window.structuredClone).toBe('function')
+    expect(typeof window.queueMicrotask).toBe('function')
     expect(typeof (ElementStub.prototype as { replaceChildren?: unknown }).replaceChildren).toBe(
       'function'
     )
+    const replaceChildren = (
+      ElementStub.prototype as {
+        replaceChildren: (...values: unknown[]) => void
+      }
+    ).replaceChildren
+    const element = new ElementStub()
+    const node = { nodeType: 1 }
+    replaceChildren.call(element, 'hello', node)
+    expect(appended).toEqual([{ nodeType: 3, text: 'hello' }, node])
+    expect(
+      new Script(`
+        var iterator = [10, 20].values();
+        [iterator.next(), iterator.next(), iterator.next(), iterator[Symbol.iterator]() === iterator];
+      `).runInNewContext(context)
+    ).toEqual([
+      { value: 10, done: false },
+      { value: 20, done: false },
+      { value: undefined, done: true },
+      true
+    ])
   })
 
   it('keeps the bundled engine from breaking out of its inline script/style tags', () => {
@@ -84,6 +123,11 @@ describe('terminal WebView bundled engine', () => {
     expect(handlerSource).toContain("'terminal init failed'")
     expect(handlerSource).toContain("'terminal message failed'")
     expect(handlerSource).not.toContain('catch(ex) {}')
+  })
+
+  it('captures WebView error locations and stacks for device diagnostics', () => {
+    expect(terminalHtmlSource).toContain("detail += ' @' + line + ':' + column")
+    expect(terminalHtmlSource).toContain("detail += ' stack=' + err.stack")
   })
 
   it('classifies runtime errors by a document-scoped ever-ready latch', () => {

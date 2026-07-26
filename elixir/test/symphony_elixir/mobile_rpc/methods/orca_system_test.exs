@@ -40,8 +40,25 @@ defmodule SymphonyElixir.MobileRpc.Methods.OrcaSystemTest do
              "runtimeId" => "host-a",
              "product" => "Symphony",
              "displayName" => "Mac Studio",
-             "version" => "1.4.0"
+             "version" => "1.4.0",
+             "protocolVersion" => 3,
+             "minCompatibleMobileVersion" => 2
            } = dispatch(dispatcher, "status.get", %{})
+  end
+
+  test "supplies the complete upstream GitHub project settings shape", %{
+    dispatcher: dispatcher
+  } do
+    assert %{
+             "settings" => %{
+               "githubProjects" => %{
+                 "pinned" => [],
+                 "recent" => [],
+                 "lastViewByProject" => %{},
+                 "activeProject" => nil
+               }
+             }
+           } = dispatch(dispatcher, "settings.get", %{})
   end
 
   test "accounts subscription returns its binding id before streaming a snapshot", %{

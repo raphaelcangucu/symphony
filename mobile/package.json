@@ -78,6 +78,9 @@
     "zustand": "^5.0.13"
   },
   "devDependencies": {
+    "@babel/core": "^7.29.7",
+    "@babel/plugin-transform-arrow-functions": "^7.27.1",
+    "@babel/plugin-transform-classes": "^7.28.6",
     "@testing-library/react-native": "13.3.3",
     "@types/jest": "29.5.14",
     "@types/phoenix": "^1.6.7",

@@ -50,10 +50,18 @@ export const XTERM_HTML = `<!DOCTYPE html>
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
 <script>
 window.__engineErrors = [];
-window.onerror = function(msg) {
+window.__captureEngineError = function(msg, line, column, err) {
+  var detail = String(msg);
+  if (line) detail += ' @' + line + ':' + column;
+  if (err && err.stack) detail += ' stack=' + err.stack;
+  return detail;
+};
+window.onerror = function(msg, source, line, column, err) {
   // Why: a degraded engine can throw per frame; cap so the capture buffer
   // and downstream reporting stay bounded for the document's lifetime.
-  if (window.__engineErrors.length < 20) window.__engineErrors.push(String(msg));
+  if (window.__engineErrors.length < 20) {
+    window.__engineErrors.push(window.__captureEngineError(msg, line, column, err));
+  }
 };
 </script>
 <style>${XTERM_ENGINE_CSS}</style>
@@ -863,7 +871,9 @@ window.onerror = function(msg) {
   }
 
   window.onerror = function(msg, source, line, column, err) {
-    if (window.__engineErrors.length < 20) window.__engineErrors.push(String(msg));
+    if (window.__engineErrors.length < 20) {
+      window.__engineErrors.push(window.__captureEngineError(msg, line, column, err));
+    }
     reportEngineError('terminal runtime error', err || msg);
   };
 
@@ -1004,7 +1014,16 @@ window.onerror = function(msg) {
   // ============================================================
   // SELECTION MODE (long-press → handles → Copy)
   // ============================================================
-  var WORD_RE = /[\\p{L}\\p{N}_./:@~+=?&#%-]/u;
+  // Why: Android 7's WebView cannot parse Unicode property escapes in a
+  // regex literal, which aborts the whole terminal script before init. Build
+  // the Unicode matcher at runtime and retain word selection with an ASCII
+  // fallback on older WebViews.
+  var WORD_RE;
+  try {
+    WORD_RE = new RegExp('[\\\\p{L}\\\\p{N}_./:@~+=?&#%-]', 'u');
+  } catch (e) {
+    WORD_RE = /[A-Za-z0-9_./:@~+=?&#%-]/;
+  }
   var LONG_PRESS_MS = 500;
   var LONG_PRESS_SLOP = 10;
   // Why: a tap that opens a link/path must survive small finger jitter. The

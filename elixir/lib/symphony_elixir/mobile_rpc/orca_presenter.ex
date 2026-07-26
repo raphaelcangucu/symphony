@@ -8,12 +8,21 @@ defmodule SymphonyElixir.MobileRpc.OrcaPresenter do
   alias SymphonyElixir.LocalTracker.Context
 
   @state_table :symphony_mobile_rpc_orca_state
+  # Keep these aligned with the pinned Orca runtime compatibility contract.
+  # They are intentionally separate from Symphony's E2EE wire protocol v1.
+  @runtime_protocol_version 3
+  @min_compatible_mobile_version 2
   @default_settings %{
     "defaultTaskSource" => "dev10x",
     "defaultRepoSelection" => nil,
     "defaultTaskViewPreset" => nil,
     "defaultLinearTeamSelection" => nil,
-    "githubProjects" => %{},
+    "githubProjects" => %{
+      "pinned" => [],
+      "recent" => [],
+      "lastViewByProject" => %{},
+      "activeProject" => nil
+    },
     "visibleTaskProviders" => ["dev10x"],
     "disabledTuiAgents" => [],
     "agentCmdOverrides" => %{}
@@ -26,6 +35,8 @@ defmodule SymphonyElixir.MobileRpc.OrcaPresenter do
       "product" => "Symphony",
       "displayName" => Map.get(identity, :host_name, "Symphony host"),
       "version" => Map.get(identity, :host_version, "development"),
+      "protocolVersion" => @runtime_protocol_version,
+      "minCompatibleMobileVersion" => @min_compatible_mobile_version,
       "capabilities" => capabilities
     }
   end

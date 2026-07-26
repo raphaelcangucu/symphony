@@ -2,7 +2,12 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { HostCredential } from "@/auth/host-credential-storage";
 
-import { createConnectionBackedHostStore } from "./host-store";
+import {
+  bindConnectionHostStore,
+  createConnectionBackedHostStore,
+  loadHosts,
+  unbindConnectionHostStore,
+} from "./host-store";
 import type { HostProfile } from "./types";
 
 const host: HostProfile = {
@@ -18,6 +23,45 @@ const host: HostProfile = {
 };
 
 describe("connection-backed Orca host store", () => {
+  it("does not let a stale provider cleanup clear the current binding", async () => {
+    const staleBinding = bindConnectionHostStore({
+      profiles: [],
+      loadHostCredential: vi.fn(async () => null),
+      saveHostProfile: vi.fn(),
+      removeProfile: vi.fn(),
+    });
+    bindConnectionHostStore({
+      profiles: [
+        {
+          id: "host-a",
+          hostId: "host-a",
+          name: "Mac Studio",
+          origin: host.endpoint,
+          endpoint: host.endpoint,
+          hostPublicKeyFingerprint: "sha256:key",
+          transport: "rpc",
+          protocolVersion: 1,
+          createdAt: "2026-07-25T00:00:00.000Z",
+          lastConnectedAt: "2026-07-25T00:00:01.000Z",
+        },
+      ],
+      loadHostCredential: vi.fn(async () => ({
+        deviceId: host.deviceId,
+        deviceToken: host.deviceToken,
+        hostPublicKey: host.publicKeyB64,
+      })),
+      saveHostProfile: vi.fn(),
+      removeProfile: vi.fn(),
+    });
+
+    unbindConnectionHostStore(staleBinding);
+
+    await expect(loadHosts()).resolves.toEqual([
+      expect.objectContaining({ id: "host-a", hostId: "host-a" }),
+    ]);
+    unbindConnectionHostStore();
+  });
+
   it("keeps device credentials separate from persisted host metadata", async () => {
     const saveHostProfile = vi.fn(async (profile, _credential) => profile);
     const store = createConnectionBackedHostStore(

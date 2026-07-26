@@ -9,8 +9,8 @@ export function HostStoreProvider({ children }: { children: ReactNode }) {
 
   bindConnectionHostStore(connection);
   useEffect(() => {
-    bindConnectionHostStore(connection);
-    return () => unbindConnectionHostStore();
+    const binding = bindConnectionHostStore(connection);
+    return () => unbindConnectionHostStore(binding);
   }, [connection]);
 
   return children;

@@ -749,6 +749,8 @@ export function OrcaHomeRoute() {
         <Pressable
           style={({ pressed }) => [styles.iconButton, pressed && styles.iconButtonPressed]}
           onPress={() => router.push('/settings')}
+          accessibilityRole="button"
+          accessibilityLabel="Open settings"
         >
           <Settings size={18} color={colors.textSecondary} />
         </Pressable>

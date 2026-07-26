@@ -8970,7 +8970,12 @@ export default function MobileTasksScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <View ref={setTaskCopyFeedbackRootRef} style={styles.topChrome}>
         <View style={styles.statusBar}>
-          <Pressable style={styles.backButton} onPress={() => router.back()}>
+          <Pressable
+            style={styles.backButton}
+            onPress={() => router.back()}
+            accessibilityRole="button"
+            accessibilityLabel="Back to worktrees"
+          >
             <ChevronLeft size={22} color={colors.textPrimary} />
           </Pressable>
           <View style={styles.titleWrap}>

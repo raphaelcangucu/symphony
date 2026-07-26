@@ -102,12 +102,18 @@ export function createConnectionBackedHostStore(
   };
 }
 
-export function bindConnectionHostStore(source: ConnectionHostStoreSource): void {
-  activeStore = createConnectionBackedHostStore(source);
+export function bindConnectionHostStore(
+  source: ConnectionHostStoreSource,
+): ConnectionBackedHostStore {
+  const store = createConnectionBackedHostStore(source);
+  activeStore = store;
+  return store;
 }
 
-export function unbindConnectionHostStore(): void {
-  activeStore = null;
+export function unbindConnectionHostStore(store?: ConnectionBackedHostStore): void {
+  if (!store || activeStore === store) {
+    activeStore = null;
+  }
 }
 
 export function loadHosts(): Promise<HostProfile[]> {
