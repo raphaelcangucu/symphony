@@ -1,4 +1,4 @@
-# Production Orca presentation sources are kept in the upstream style so
+# Production Dev10x presentation sources are kept in the upstream style so
 # mechanical comparisons remain meaningful.
 app/about.tsx
 app/browser-settings.tsx
@@ -10,7 +10,7 @@ app/settings.tsx
 app/terminal-settings.tsx
 app/troubleshoot.tsx
 app/voice-settings.tsx
-src/orca/
+src/dev10x/
 src/renderer/
 src/shared/
 
@@ -18,4 +18,4 @@ src/shared/
 packages/expo-two-way-audio/
 
 # Provenance is hand-wrapped for readable Markdown tables and commands.
-ORCA_UPSTREAM.md
+UPSTREAM_PROVENANCE.md

@@ -22,9 +22,10 @@ há uma matriz adicional de seis células com os defaults atuais dos provedores:
 O prompt canônico fica em [`prompt.md`](prompt.md); seu SHA-256 é gravado em
 todas as execuções para impedir comparações com instruções diferentes. Cada
 célula também valida o agente, o modelo solicitado, o modelo confirmado pelo
-provedor e o esforço. O adapter Cursor resolve nomes e identificadores nativos
-contra o catálogo vivo e persiste um único slug canônico. Como o esforço está
-codificado no slug do Cursor, os dois campos de esforço permanecem nulos.
+provedor e o esforço. O adapter Cursor resolve identificadores selecionáveis
+contra o catálogo vivo e preserva a confirmação nativa quando o roteador
+`auto` devolve um identificador dinâmico fora desse catálogo. Como o esforço
+está codificado no slug do Cursor, os dois campos de esforço permanecem nulos.
 
 ## Contrato
 
@@ -71,6 +72,14 @@ Para repetir apenas uma célula, use
 `SYMPHONY_BENCH_RUN_ID=<id> npm run run:cell`.
 O runner limita a concorrência a seis células e, se houver falhas, aguarda as
 demais células do lote e apresenta um resumo agregado.
+
+Sessão e orquestrador compartilham uma única janela de settlement de 70
+minutos. Os limites externos têm cinco minutos adicionais em cada camada
+(Playwright, processo e célula) para que falhas ainda tenham tempo de registrar
+artefatos e encerrar uma execução remota. Quando uma célula do orquestrador
+falha, o runner envia `stop` e aguarda o estado terminal; o backend interrompe
+cooperativamente o runner do agente antes do fallback forçado, evitando deixar
+o processo do CLI ativo.
 
 Colete build/E2E e gere as capturas visuais padronizadas:
 

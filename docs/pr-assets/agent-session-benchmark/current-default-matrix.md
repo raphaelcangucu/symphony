@@ -22,19 +22,19 @@ Cada célula produziu uma aplicação React/Vite, executou build e Playwright E2
 iniciou um preview HTTP real e terminou com correspondência entre o provider
 solicitado e o registrado na thread.
 
-## Recuperações observadas
+## Recuperações históricas e correções
 
 - A primeira sessão Cursor concluiu o trabalho, mas foi bloqueada porque a
   versão anterior descartava o identificador dinâmico devolvido pelo roteador
-  `auto`. O backend passou a preservar essa confirmação nativa; a nova
-  tentativa completou com proveniência verificável.
+  `auto`. O backend agora preserva essa confirmação nativa e há uma regressão
+  para `auto-smart[optimize_for=balanced]`.
 - A primeira sessão Claude ultrapassou a janela anterior de 25 minutos. A
-  janela de sessão foi alinhada aos 40 minutos já usados pelo orquestrador, e a
-  nova tentativa completou.
-- Claude no orquestrador exigiu recuperação de um processo órfão. O processo
-  obsoleto foi encerrado, o turno canônico retomou o workspace preservado,
-  produziu build/E2E/evidências e fechou como `saved`. A coleta final não fez
-  redispatch.
+  janela deixou de ser um número isolado: sessão e orquestrador compartilham
+  70 minutos, com margens externas ordenadas de 75/80/85 minutos.
+- A tentativa Claude do orquestrador expirou enquanto a execução remota
+  continuava ativa. O runner agora encerra e confirma o estado terminal em
+  qualquer falha; no backend, o worker recebe `:agent_interrupt` para matar o
+  grupo de processos do CLI antes do fallback forçado.
 
 Tentativas bloqueadas e seus artefatos foram mantidos no runtime do benchmark
 para auditoria; somente as tentativas canônicas concluídas aparecem como

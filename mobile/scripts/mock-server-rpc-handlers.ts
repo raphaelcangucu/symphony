@@ -1077,11 +1077,7 @@ function mockOrchestratorEntries(): Record<string, unknown>[] {
   ];
 }
 
-function subscribeMockOrchestratorExecutions(
-  request: RpcRequest,
-  send: Send,
-  ws: WebSocket,
-): void {
+function subscribeMockOrchestratorExecutions(request: RpcRequest, send: Send, ws: WebSocket): void {
   const subscription = registerSubscription("orchestrator-executions", 0, send, ws);
   send(success(request.id, { subscription_id: subscription.id }));
   schedule(subscription, () =>
@@ -1091,18 +1087,9 @@ function subscribeMockOrchestratorExecutions(
   );
 }
 
-function subscribeMockOrchestratorSession(
-  request: RpcRequest,
-  send: Send,
-  ws: WebSocket,
-): void {
+function subscribeMockOrchestratorSession(request: RpcRequest, send: Send, ws: WebSocket): void {
   const executionSessionId = positiveInteger(request.params.execution_session_id, 101);
-  const subscription = registerSubscription(
-    "orchestrator-session",
-    executionSessionId,
-    send,
-    ws,
-  );
+  const subscription = registerSubscription("orchestrator-session", executionSessionId, send, ws);
   send(success(request.id, { subscription_id: subscription.id }));
   schedule(subscription, () =>
     emit(subscription, "orchestrator.session.joined", {
@@ -1114,11 +1101,7 @@ function subscribeMockOrchestratorSession(
   );
 }
 
-function handleMockOrchestratorCommand(
-  request: RpcRequest,
-  send: Send,
-  ws: WebSocket,
-): void {
+function handleMockOrchestratorCommand(request: RpcRequest, send: Send, ws: WebSocket): void {
   const executionSessionId = positiveInteger(request.params.execution_session_id, 101);
   const event = text(request.params.event);
   const payload = record(request.params.payload);
@@ -1156,9 +1139,7 @@ function handleMockOrchestratorCommand(
         ],
       }),
     );
-    schedule(subscription, () =>
-      emit(subscription, "orchestrator.session.steer_ok", {}),
-    );
+    schedule(subscription, () => emit(subscription, "orchestrator.session.steer_ok", {}));
   }
 }
 

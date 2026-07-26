@@ -34,7 +34,8 @@ defmodule SymphonyElixir.Orchestrator do
     BundleGate,
     DispatchOrder,
     IncompleteReason,
-    RunUpdate
+    RunUpdate,
+    WorkerTerminator
   }
 
   alias SymphonyElixir.PublicRouting
@@ -562,13 +563,7 @@ defmodule SymphonyElixir.Orchestrator do
   defp last_activity_timestamp(_running_entry), do: nil
 
   defp terminate_task(pid) when is_pid(pid) do
-    case Task.Supervisor.terminate_child(SymphonyElixir.Orchestrator.TaskSupervisor, pid) do
-      :ok ->
-        :ok
-
-      {:error, :not_found} ->
-        Process.exit(pid, :shutdown)
-    end
+    WorkerTerminator.stop(pid)
   end
 
   defp terminate_task(_pid), do: :ok

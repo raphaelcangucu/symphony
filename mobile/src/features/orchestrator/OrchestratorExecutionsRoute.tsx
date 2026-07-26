@@ -4,10 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { StateView } from "@/components/StateView";
 import { useHostRuntime } from "@/runtime/HostRuntimeProvider";
 
-import {
-  orchestratorRunRoute,
-  type OrchestratorExecution,
-} from "./orchestrator-executions";
+import { orchestratorRunRoute, type OrchestratorExecution } from "./orchestrator-executions";
 import { OrchestratorExecutionsScreen } from "./OrchestratorExecutionsScreen";
 import { createRpcOrchestratorExecutions } from "./rpc-orchestrator-executions";
 
@@ -23,10 +20,7 @@ export function OrchestratorExecutionsRoute() {
   const [connectionState, setConnectionState] = useState<ConnectionState>("connecting");
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
-  const onSnapshot = useCallback(
-    (next: OrchestratorExecution[]) => setExecutions(next),
-    [],
-  );
+  const onSnapshot = useCallback((next: OrchestratorExecution[]) => setExecutions(next), []);
 
   const stream = useMemo(
     () =>

@@ -69,11 +69,11 @@ export function HostSessionRoute() {
   const profile =
     hostId === null
       ? null
-      : profiles.find(
+      : (profiles.find(
           (candidate) =>
             candidate.transport === "rpc" &&
             (candidate.hostId === hostId || candidate.id === hostId),
-        ) ?? null;
+        ) ?? null);
   const transport = hostId ? hostRuntime.transport(hostId) : null;
 
   if (!hydrated) return <StateView kind="loading" title="Loading Dev10x" />;

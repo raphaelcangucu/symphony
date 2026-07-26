@@ -1,10 +1,7 @@
 import type { SessionTimelineState } from "@/features/sessions/session-reducer";
 import type { HostTransport } from "@/transport/HostTransport";
 
-import {
-  normalizeExecutionPayload,
-  type OrchestratorExecution,
-} from "./orchestrator-executions";
+import { normalizeExecutionPayload, type OrchestratorExecution } from "./orchestrator-executions";
 
 export function createRpcOrchestratorExecutions({
   transport,

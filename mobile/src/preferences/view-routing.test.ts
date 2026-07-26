@@ -17,9 +17,7 @@ describe("view routing", () => {
       identifier: "DEV-101",
     };
 
-    expect(routeForView(issue)).toBe(
-      "/h/host-a/tasks?projectSlug=dev10x&identifier=DEV-101",
-    );
+    expect(routeForView(issue)).toBe("/h/host-a/tasks?projectSlug=dev10x&identifier=DEV-101");
     expect(routeForView({ ...issue, pullRequest: true })).toBe(
       "/h/host-a/tasks?projectSlug=dev10x&identifier=DEV-101",
     );

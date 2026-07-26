@@ -74,11 +74,7 @@ export function OrchestratorExecutionsScreen({
           </View>
         ) : null}
         {executions.map((execution) => (
-          <ExecutionRow
-            execution={execution}
-            key={execution.executionSessionId}
-            onOpen={onOpen}
-          />
+          <ExecutionRow execution={execution} key={execution.executionSessionId} onOpen={onOpen} />
         ))}
       </ScrollView>
     </SafeAreaView>
@@ -107,7 +103,9 @@ function ExecutionRow({
         },
       ]}
     >
-      <View style={[styles.statusDot, { backgroundColor: statusColor(execution.status, colors) }]} />
+      <View
+        style={[styles.statusDot, { backgroundColor: statusColor(execution.status, colors) }]}
+      />
       <View style={styles.rowMain}>
         <View style={styles.rowTitleLine}>
           <Text style={[styles.identifier, { color: colors.textPrimary }]}>

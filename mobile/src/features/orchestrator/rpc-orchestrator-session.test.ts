@@ -23,8 +23,14 @@ describe("orchestrator RPC session", () => {
     await vi.waitFor(() => expect(onConnection).toHaveBeenLastCalledWith("live"));
 
     const handler = vi.mocked(transport.subscribe).mock.calls[0]?.[2];
-    handler?.({ entries: [{ kind: "assistant", title: "Codex", body: "Restored" }] }, "orchestrator.session.joined");
-    handler?.({ entries: [{ kind: "assistant", title: "Codex", body: "Streaming" }] }, "orchestrator.session.entries");
+    handler?.(
+      { entries: [{ kind: "assistant", title: "Codex", body: "Restored" }] },
+      "orchestrator.session.joined",
+    );
+    handler?.(
+      { entries: [{ kind: "assistant", title: "Codex", body: "Streaming" }] },
+      "orchestrator.session.entries",
+    );
 
     expect(onSnapshot).toHaveBeenCalledWith(
       expect.arrayContaining([expect.objectContaining({ body: "Restored" })]),

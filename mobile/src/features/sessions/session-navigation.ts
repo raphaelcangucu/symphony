@@ -15,10 +15,7 @@ export function assistantThreadDiffRoute(worktreeId: string): string | null {
   return Number.isInteger(threadId) && threadId > 0 ? `/session/${threadId}/diff` : null;
 }
 
-export function sessionNotificationRoute(
-  hostId: string,
-  threadId: string | number,
-): string {
+export function sessionNotificationRoute(hostId: string, threadId: string | number): string {
   return hostChatRoute(hostId, threadId);
 }
 

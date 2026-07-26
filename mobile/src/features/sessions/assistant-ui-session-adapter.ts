@@ -1,18 +1,12 @@
 import type { ThreadMessageLike } from "@assistant-ui/react-native";
 
-import type {
-  AssistantMessage,
-  AssistantToolCall,
-  SessionTimelineState,
-} from "./session-reducer";
+import type { AssistantMessage, AssistantToolCall, SessionTimelineState } from "./session-reducer";
 
 type ComposerMessage = {
   content?: readonly unknown[];
 };
 
-export function buildAssistantUiMessages(
-  timeline: SessionTimelineState,
-): ThreadMessageLike[] {
+export function buildAssistantUiMessages(timeline: SessionTimelineState): ThreadMessageLike[] {
   const history = timeline.messages.map(historyMessage);
   if (!timeline.streamingText && timeline.activeTools.length === 0) return history;
 
@@ -37,9 +31,7 @@ export function buildAssistantUiMessages(
 export function messageText(message: ComposerMessage): string {
   return (message.content ?? [])
     .flatMap((part) =>
-      isRecord(part) && part.type === "text" && typeof part.text === "string"
-        ? [part.text]
-        : [],
+      isRecord(part) && part.type === "text" && typeof part.text === "string" ? [part.text] : [],
     )
     .join("")
     .trim();
@@ -55,8 +47,7 @@ export async function submitAssistantUiMessage(
 }
 
 function historyMessage(message: AssistantMessage): ThreadMessageLike {
-  const role =
-    message.role === "user" || message.role === "system" ? message.role : "assistant";
+  const role = message.role === "user" || message.role === "system" ? message.role : "assistant";
   const content = [
     ...(message.content ? [{ type: "text" as const, text: message.content }] : []),
     ...message.toolCalls.map(toolPart),
@@ -69,9 +60,7 @@ function historyMessage(message: AssistantMessage): ThreadMessageLike {
     metadata: { custom: { source: "symphony-history" } },
   } satisfies ThreadMessageLike;
 
-  return role === "assistant"
-    ? { ...base, status: { type: "complete", reason: "stop" } }
-    : base;
+  return role === "assistant" ? { ...base, status: { type: "complete", reason: "stop" } } : base;
 }
 
 function toolPart(tool: AssistantToolCall) {

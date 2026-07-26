@@ -87,13 +87,8 @@ function normalizeStatus(value: unknown): OrchestratorExecutionStatus {
     : "idle";
 }
 
-function normalizeAgent(
-  value: unknown,
-): OrchestratorExecution["agentKind"] {
-  return value === "codex" ||
-    value === "claude" ||
-    value === "cursor" ||
-    value === "opencode"
+function normalizeAgent(value: unknown): OrchestratorExecution["agentKind"] {
+  return value === "codex" || value === "claude" || value === "cursor" || value === "opencode"
     ? value
     : null;
 }

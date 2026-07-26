@@ -51,9 +51,7 @@ describe("OrchestratorExecutionsScreen", () => {
       </ThemeProvider>,
     );
 
-    fireEvent.press(
-      screen.getByRole("button", { name: "Open DEV-10 Codex execution" }),
-    );
+    fireEvent.press(screen.getByRole("button", { name: "Open DEV-10 Codex execution" }));
     expect(onOpen).toHaveBeenCalledWith(execution);
   });
 });

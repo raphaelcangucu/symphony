@@ -39,10 +39,7 @@ import { StatusDot } from "@/components/StatusDot";
 import { radii, spacing } from "@/theme/tokens";
 import { useAppTheme } from "@/theme/ThemeProvider";
 
-import {
-  buildAssistantUiMessages,
-  submitAssistantUiMessage,
-} from "./assistant-ui-session-adapter";
+import { buildAssistantUiMessages, submitAssistantUiMessage } from "./assistant-ui-session-adapter";
 import { followLatestMessage } from "./chat-scroll";
 import type {
   AssistantApprovalRequest,
@@ -66,10 +63,7 @@ export type AssistantChatScreenProps = {
 };
 
 export function AssistantChatScreen(props: AssistantChatScreenProps) {
-  const messages = useMemo(
-    () => buildAssistantUiMessages(props.timeline),
-    [props.timeline],
-  );
+  const messages = useMemo(() => buildAssistantUiMessages(props.timeline), [props.timeline]);
   const runtime = useExternalStoreRuntime<ThreadMessageLike>({
     messages,
     convertMessage: (message) => message,
@@ -229,17 +223,14 @@ function ChatMessage({ role }: { role: "assistant" | "user" | "system" }) {
 }
 
 function activityIcon(text: string): "reasoning" | "system" {
-  const title = text.split(/\n\s*\n/, 1)[0]?.trim().toLowerCase();
+  const title = text
+    .split(/\n\s*\n/, 1)[0]
+    ?.trim()
+    .toLowerCase();
   return title === "reasoning" || title === "thinking" ? "reasoning" : "system";
 }
 
-function ActivityDisclosure({
-  icon,
-  text,
-}: {
-  icon: "reasoning" | "system";
-  text: string;
-}) {
+function ActivityDisclosure({ icon, text }: { icon: "reasoning" | "system"; text: string }) {
   const { colors } = useAppTheme();
   const [expanded, setExpanded] = useState(false);
   const { title, body } = disclosureText(text, icon === "reasoning" ? "Thinking" : "System");
@@ -347,11 +338,7 @@ function disclosureText(text: string, fallbackTitle: string): { title: string; b
   };
 }
 
-function ChatComposer({
-  onDictate,
-}: {
-  onDictate?: (() => Promise<string>) | undefined;
-}) {
+function ChatComposer({ onDictate }: { onDictate?: (() => Promise<string>) | undefined }) {
   const { colors } = useAppTheme();
   const [dictating, setDictating] = useState(false);
   const aui = useAui();
@@ -382,9 +369,7 @@ function ChatComposer({
             setDictating(true);
             void onDictate()
               .then((transcript) => {
-                const nextText = [composerText.trim(), transcript.trim()]
-                  .filter(Boolean)
-                  .join(" ");
+                const nextText = [composerText.trim(), transcript.trim()].filter(Boolean).join(" ");
                 if (nextText) aui.composer().setText(nextText);
               })
               .finally(() => setDictating(false));

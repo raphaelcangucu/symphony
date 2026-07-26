@@ -3,11 +3,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
 import { createApi } from "../src/api.mjs";
-import {
-  promptSha256,
-  readCanonicalPrompt,
-  workflowPromptTemplate,
-} from "../src/contract.mjs";
+import { promptSha256, readCanonicalPrompt, workflowPromptTemplate } from "../src/contract.mjs";
 import {
   benchmarkResultStatus,
   classifySessionOutcome,
@@ -15,15 +11,17 @@ import {
   classifyOrchestratorOutcome,
   modelProvenanceMatches,
   issueRoute,
-  issueStatusName,
-  isSettledOrchestratorExecution,
   selectRun,
   selectIssueAgentExecution,
-  selectIssueExecutionThread,
   sessionRoute,
   sessionProviderError,
   shouldDispatchIssue,
 } from "../src/run-cell.mjs";
+import {
+  stopUnsettledOrchestrator,
+  waitForIssueCompletion,
+} from "../src/orchestrator-settlement.mjs";
+import { AGENT_SETTLEMENT_TIMEOUT_MS, ORCHESTRATOR_CLEANUP_TIMEOUT_MS } from "../src/timeouts.mjs";
 
 const runtimeRoot = resolve(process.env.SYMPHONY_BENCH_RUNTIME ?? "");
 const runId = process.env.SYMPHONY_BENCH_RUN_ID ?? "";
@@ -34,38 +32,8 @@ const artifactRoot = resolve(process.env.SYMPHONY_BENCH_ARTIFACT_ROOT ?? "");
 const resultPath = join(runtimeRoot, "results", `${runId}.json`);
 
 async function loadRun() {
-  const manifest = JSON.parse(
-    await readFile(join(runtimeRoot, "runs.json"), "utf8"),
-  );
+  const manifest = JSON.parse(await readFile(join(runtimeRoot, "runs.json"), "utf8"));
   return { manifest, run: selectRun(manifest, runId) };
-}
-
-async function waitForIssueCompletion(api, projectSlug, identifier, timeoutMs) {
-  const startedAt = Date.now();
-  let issue;
-  let execution;
-  let executionThread;
-  while (Date.now() - startedAt < timeoutMs) {
-    issue = await api.request(
-      `/projects/${encodeURIComponent(projectSlug)}/issues/${encodeURIComponent(identifier)}`,
-    );
-    const executions = await api.request("/agent_executions");
-    execution = selectIssueAgentExecution(executions, identifier);
-    const threads = await api.request(
-      `/assistant/threads?project_slug=${encodeURIComponent(projectSlug)}`,
-    );
-    executionThread = selectIssueExecutionThread(threads, identifier);
-    if (isSettledOrchestratorExecution(executionThread, execution)) {
-      return { issue, execution, executionThread };
-    }
-    await new Promise((resolvePromise) => setTimeout(resolvePromise, 2_000));
-  }
-  throw new Error(
-    `orchestrator issue ${identifier} did not settle; ` +
-      `last issue status=${issueStatusName(issue) ?? "unknown"}, ` +
-      `execution status=${execution?.status ?? "missing"}, ` +
-      `thread status=${executionThread?.status ?? "missing"}`,
-  );
 }
 
 async function startPreview(api, run, projectSlug) {
@@ -76,9 +44,7 @@ async function startPreview(api, run, projectSlug) {
   return api.request(path, { method: "POST", body: {} });
 }
 
-test("executes one provider cell through the real Symphony tracker", async ({
-  page,
-}, testInfo) => {
+test("executes one provider cell through the real Symphony tracker", async ({ page }, testInfo) => {
   const startedAt = new Date();
   const { manifest, run } = await loadRun();
   const prompt = await readCanonicalPrompt();
@@ -124,11 +90,7 @@ test("executes one provider cell through the real Symphony tracker", async ({
       await expect(composer).toBeVisible({ timeout: 60_000 });
       const executionMode = page.getByTestId("execution-mode-menu");
       await expect(executionMode).toBeVisible();
-      if (
-        !((await executionMode.textContent()) ?? "")
-          .toLowerCase()
-          .includes(run.execution_mode)
-      ) {
+      if (!((await executionMode.textContent()) ?? "").toLowerCase().includes(run.execution_mode)) {
         await executionMode.click();
         await page
           .getByRole("menuitemradio", {
@@ -136,9 +98,7 @@ test("executes one provider cell through the real Symphony tracker", async ({
           })
           .click();
       }
-      const assistantMessages = page.locator(
-        '[data-testid="assistant-chat-message"]',
-      );
+      const assistantMessages = page.locator('[data-testid="assistant-chat-message"]');
       const initialMessageCount = await assistantMessages.count();
       const initialThread = await api
         .request(`/assistant/threads/${run.thread_id}`)
@@ -155,15 +115,9 @@ test("executes one provider cell through the real Symphony tracker", async ({
         .waitFor({ state: "visible", timeout: 10_000 })
         .catch(() => {});
       await expect(page.getByRole("status")).toHaveCount(0, {
-        // Default Claude Opus turns can legitimately spend more than 25
-        // minutes implementing and validating the full evidence contract.
-        // Match the orchestrator settlement budget so the two paths are
-        // compared under the same real execution window.
-        timeout: 40 * 60 * 1000,
+        timeout: AGENT_SETTLEMENT_TIMEOUT_MS,
       });
-      const thread = await api
-        .request(`/assistant/threads/${run.thread_id}`)
-        .catch(() => null);
+      const thread = await api.request(`/assistant/threads/${run.thread_id}`).catch(() => null);
       result.agent_outcome = classifySessionOutcome(
         initialMessageCount,
         await assistantMessages.count(),
@@ -194,12 +148,8 @@ test("executes one provider cell through the real Symphony tracker", async ({
       result.tracker_url = new URL(route, baseUrl).href;
       const issuePath = `/projects/${encodeURIComponent(manifest.project_slug)}/issues/${encodeURIComponent(run.issue_identifier)}`;
       const issueBefore = await api.request(issuePath);
-      const project = await api.request(
-        `/projects/${encodeURIComponent(manifest.project_slug)}`,
-      );
-      const promptTemplate = workflowPromptTemplate(
-        project?.setup?.workflow_markdown,
-      );
+      const project = await api.request(`/projects/${encodeURIComponent(manifest.project_slug)}`);
+      const promptTemplate = workflowPromptTemplate(project?.setup?.workflow_markdown);
       if (promptTemplate !== "{{ issue.description }}") {
         throw new Error("orchestrator workflow prompt body is not canonical");
       }
@@ -210,10 +160,7 @@ test("executes one provider cell through the real Symphony tracker", async ({
       }
       result.effective_prompt_sha256 = promptSha256(issueBefore.description);
       const executionsBefore = await api.request("/agent_executions");
-      const previousExecution = selectIssueAgentExecution(
-        executionsBefore,
-        run.issue_identifier,
-      );
+      const previousExecution = selectIssueAgentExecution(executionsBefore, run.issue_identifier);
       if (shouldDispatchIssue(issueBefore, previousExecution)) {
         await api.request(`${issuePath}/dispatch`, {
           method: "POST",
@@ -231,14 +178,11 @@ test("executes one provider cell through the real Symphony tracker", async ({
         api,
         manifest.project_slug,
         run.issue_identifier,
-        40 * 60 * 1000,
+        { timeoutMs: AGENT_SETTLEMENT_TIMEOUT_MS },
       );
       await page.reload({ waitUntil: "domcontentloaded" });
       const executionThread = settlement.executionThread;
-      result.agent_outcome = classifyOrchestratorOutcome(
-        executionThread,
-        settlement.execution,
-      );
+      result.agent_outcome = classifyOrchestratorOutcome(executionThread, settlement.execution);
       result.identity = {
         assistant_thread_id: executionThread?.id ?? null,
         issue_identifier: run.issue_identifier,
@@ -250,11 +194,9 @@ test("executes one provider cell through the real Symphony tracker", async ({
         resolved_model: executionThread?.resolved_model ?? null,
         resolved_effort: executionThread?.resolved_effort ?? null,
         agent_execution_status: settlement.execution?.status ?? null,
-        agent_execution_runtime_seconds:
-          settlement.execution?.runtime_seconds ?? null,
+        agent_execution_runtime_seconds: settlement.execution?.runtime_seconds ?? null,
         agent_execution_started_at: settlement.execution?.started_at ?? null,
-        agent_execution_last_event_at:
-          settlement.execution?.last_event_at ?? null,
+        agent_execution_last_event_at: settlement.execution?.last_event_at ?? null,
       };
       if (
         result.agent_outcome !== "completed" ||
@@ -279,6 +221,26 @@ test("executes one provider cell through the real Symphony tracker", async ({
   } catch (error) {
     result.status = "blocked";
     result.error ??= error?.stack ?? String(error);
+    if (run.path === "orchestrator") {
+      try {
+        const cleanup = await stopUnsettledOrchestrator(
+          api,
+          manifest.project_slug,
+          run.issue_identifier,
+          { timeoutMs: ORCHESTRATOR_CLEANUP_TIMEOUT_MS },
+        );
+        result.cleanup = {
+          stopped: cleanup.stopped,
+          execution_status: cleanup.execution?.status ?? null,
+          thread_status: cleanup.executionThread?.status ?? null,
+        };
+      } catch (cleanupError) {
+        result.cleanup = {
+          stopped: false,
+          error: cleanupError?.stack ?? String(cleanupError),
+        };
+      }
+    }
     await page
       .screenshot({
         path: join(artifactRoot, "symphony-blocked.png"),
@@ -293,10 +255,7 @@ test("executes one provider cell through the real Symphony tracker", async ({
     const attemptResultRoot = join(runtimeRoot, "results", "attempts", run.id);
     await mkdir(attemptResultRoot, { recursive: true });
     await writeFile(resultPath, serializedResult);
-    await writeFile(
-      join(attemptResultRoot, `${attemptId}.json`),
-      serializedResult,
-    );
+    await writeFile(join(attemptResultRoot, `${attemptId}.json`), serializedResult);
     await testInfo.attach("benchmark-result", {
       body: Buffer.from(JSON.stringify(result, null, 2)),
       contentType: "application/json",

@@ -41,9 +41,7 @@ describe("unified Dev10x session navigation", () => {
         status: "working",
         threadId: "73",
       }),
-    ).toBe(
-      "/h/profile%20alpha/run/73?identifier=DEV-42&agent=claude&status=live",
-    );
+    ).toBe("/h/profile%20alpha/run/73?identifier=DEV-42&agent=claude&status=live");
   });
 
   it("keeps regular project sessions on the interactive chat transport", () => {

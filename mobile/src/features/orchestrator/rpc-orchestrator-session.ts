@@ -1,10 +1,7 @@
 import type { SessionTimelineState } from "@/features/sessions/session-reducer";
 import type { HostTransport } from "@/transport/HostTransport";
 
-import {
-  payloadSessionLogEntries,
-  type SessionLogEntry,
-} from "./orchestrator-session-adapter";
+import { payloadSessionLogEntries, type SessionLogEntry } from "./orchestrator-session-adapter";
 
 const STEER_STREAM_REFRESH_MS = 2_500;
 

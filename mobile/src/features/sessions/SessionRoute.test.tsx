@@ -237,8 +237,6 @@ describe("SessionRoute", () => {
     expect(screen.getByText("Studio Alpha")).toBeTruthy();
 
     fireEvent.press(screen.getByRole("button", { name: "Open terminal" }));
-    expect(router.push).toHaveBeenCalledWith(
-      "/h/host-1/session/42?name=Studio%20Alpha",
-    );
+    expect(router.push).toHaveBeenCalledWith("/h/host-1/session/42?name=Studio%20Alpha");
   });
 });

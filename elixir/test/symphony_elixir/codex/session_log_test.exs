@@ -44,8 +44,7 @@ defmodule SymphonyElixir.Codex.SessionLogTest do
           "content" => [
             %{
               "type" => "input_text",
-              "text" =>
-                "## Plan gate failed (Symphony)\n\nThe issue is missing a valid workpad."
+              "text" => "## Plan gate failed (Symphony)\n\nThe issue is missing a valid workpad."
             }
           ]
         }

@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  normalizeExecutionPayload,
-  orchestratorRunRoute,
-} from "./orchestrator-executions";
+import { normalizeExecutionPayload, orchestratorRunRoute } from "./orchestrator-executions";
 
 describe("orchestrator execution presentation", () => {
   it("normalizes list and streamed snapshot payloads from the selected host", () => {
