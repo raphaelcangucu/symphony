@@ -10,7 +10,7 @@ const config: ExpoConfig = {
   orientation: "default",
   icon: "./assets/dev10x-icon.png",
   scheme: "symphony",
-  userInterfaceStyle: "automatic",
+  userInterfaceStyle: "dark",
   newArchEnabled: true,
   ios: {
     bundleIdentifier: "dev.dev10x.symphony",

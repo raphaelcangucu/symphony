@@ -26,6 +26,8 @@
     "doctor": "expo-doctor"
   },
   "dependencies": {
+    "@assistant-ui/core": "^0.2.21",
+    "@assistant-ui/react-native": "^0.1.30",
     "@dev10x/expo-two-way-audio": "file:packages/expo-two-way-audio",
     "@expo/metro-runtime": "^55.0.11",
     "@noble/ciphers": "^2.2.0",
@@ -36,6 +38,7 @@
     "@xterm/addon-unicode11": "^0.10.0-beta.285",
     "@xterm/addon-webgl": "^0.20.0-beta.284",
     "@xterm/xterm": "^6.1.0-beta.285",
+    "assistant-cloud": "^0.1.36",
     "base64-js": "^1.5.1",
     "buffer": "^6.0.3",
     "expo": "^55.0.27",
@@ -67,6 +70,7 @@
     "react-dom": "19.2.0",
     "react-native": "0.83.10",
     "react-native-gesture-handler": "~2.30.0",
+    "react-native-markdown-display": "^7.0.2",
     "react-native-reanimated": "4.2.1",
     "react-native-safe-area-context": "~5.6.2",
     "react-native-screens": "~4.23.0",

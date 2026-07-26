@@ -33,6 +33,10 @@ defmodule SymphonyElixir.MobileRpc.SessionBridge do
           | {:thread_id, pos_integer()}
           | {:subscription_id, String.t()}
           | {:channel_module, module()}
+          | {:topic, String.t()}
+          | {:join_payload, map()}
+          | {:event_prefix, String.t()}
+          | {:emit_joined, boolean()}
           | {:max_pending, pos_integer()}
           | {:event_mapper, (String.t(), term(), term() -> {String.t(), term(), term()})}
           | {:name, GenServer.name()}
@@ -46,19 +50,30 @@ defmodule SymphonyElixir.MobileRpc.SessionBridge do
   def subscribe(connection_pid, thread_id, subscription_id)
       when is_pid(connection_pid) and is_integer(thread_id) and thread_id > 0 and
              is_binary(subscription_id) do
-    key = {connection_pid, thread_id}
+    subscribe_channel(
+      connection_pid,
+      {:session, thread_id},
+      subscription_id,
+      thread_id: thread_id
+    )
+  end
+
+  @spec subscribe_channel(pid(), term(), String.t(), [option()]) ::
+          {:ok, pid()} | {:error, term()}
+  def subscribe_channel(connection_pid, registry_key, subscription_id, opts \\ [])
+      when is_pid(connection_pid) and is_binary(subscription_id) and is_list(opts) do
+    key = {connection_pid, registry_key}
 
     case Registry.lookup(@registry, key) do
       [{_pid, _value}] ->
         {:error, :already_subscribed}
 
       [] ->
-        opts = [
-          connection_pid: connection_pid,
-          thread_id: thread_id,
-          subscription_id: subscription_id,
-          name: {:via, Registry, {@registry, key}}
-        ]
+        opts =
+          opts
+          |> Keyword.put(:connection_pid, connection_pid)
+          |> Keyword.put(:subscription_id, subscription_id)
+          |> Keyword.put(:name, {:via, Registry, {@registry, key}})
 
         DynamicSupervisor.start_child(@supervisor, {__MODULE__, opts})
     end
@@ -66,7 +81,12 @@ defmodule SymphonyElixir.MobileRpc.SessionBridge do
 
   @spec lookup(pid(), pos_integer()) :: {:ok, pid()} | {:error, :not_found}
   def lookup(connection_pid, thread_id) do
-    case Registry.lookup(@registry, {connection_pid, thread_id}) do
+    lookup_channel(connection_pid, {:session, thread_id})
+  end
+
+  @spec lookup_channel(pid(), term()) :: {:ok, pid()} | {:error, :not_found}
+  def lookup_channel(connection_pid, registry_key) do
+    case Registry.lookup(@registry, {connection_pid, registry_key}) do
       [{pid, _value}] -> {:ok, pid}
       [] -> {:error, :not_found}
     end
@@ -84,10 +104,16 @@ defmodule SymphonyElixir.MobileRpc.SessionBridge do
   @impl true
   def init(opts) do
     connection_pid = Keyword.fetch!(opts, :connection_pid)
-    thread_id = Keyword.fetch!(opts, :thread_id)
+    thread_id = Keyword.get(opts, :thread_id)
     subscription_id = Keyword.fetch!(opts, :subscription_id)
     channel_module = Keyword.get(opts, :channel_module, SymphonyElixirWeb.AssistantChannel)
-    topic = Keyword.get(opts, :topic, "assistant:thread:#{thread_id}")
+
+    topic =
+      Keyword.get_lazy(opts, :topic, fn ->
+        true = is_integer(thread_id) and thread_id > 0
+        "assistant:thread:#{thread_id}"
+      end)
+
     join_payload = Keyword.get(opts, :join_payload, %{})
     event_prefix = Keyword.get(opts, :event_prefix, "sessions")
     event_mapper = Keyword.get(opts, :event_mapper)

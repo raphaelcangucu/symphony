@@ -13,6 +13,9 @@ type WorktreeSummary = {
   repo: string
   branch: string
   displayName: string
+  sessionScope?: string
+  issueIdentifier?: string | null
+  agentKind?: string | null
   liveTerminalCount: number
   status?: 'working' | 'active' | 'permission' | 'done' | 'inactive'
 }

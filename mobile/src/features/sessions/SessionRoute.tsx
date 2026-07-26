@@ -8,16 +8,24 @@ import type { ConnectionProfile } from "@/auth/connection-profile";
 import { StateView } from "@/components/StateView";
 import { createRpcAssistantSession } from "@/realtime/rpc-assistant-session";
 import { useAppRuntime } from "@/runtime/AppRuntime";
+import { useHostRuntime } from "@/runtime/HostRuntimeProvider";
+import type { HostTransport } from "@/transport/HostTransport";
 
 import { createSessionTimelineState, sessionTimelineReducer } from "./session-reducer";
-import { SessionScreen } from "./SessionScreen";
+import { AssistantChatScreen } from "./AssistantChatScreen";
+import { hostChatRoute, hostTerminalRoute } from "./session-navigation";
 
 export function SessionRoute() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ threadId?: string | string[]; seed?: string | string[] }>();
+  const params = useLocalSearchParams<{
+    name?: string | string[];
+    threadId?: string | string[];
+    seed?: string | string[];
+  }>();
   const { activeProfile, activeToken } = useConnection();
   const threadId = parseThreadId(firstParam(params.threadId));
   const seed = firstParam(params.seed);
+  const title = firstParam(params.name);
 
   if (!threadId) {
     return (
@@ -38,6 +46,78 @@ export function SessionRoute() {
       activeToken={activeToken}
       router={router}
       seed={seed}
+      title={title}
+      threadId={threadId}
+    />
+  );
+}
+
+export function HostSessionRoute() {
+  const router = useRouter();
+  const params = useLocalSearchParams<{
+    hostId?: string | string[];
+    name?: string | string[];
+    threadId?: string | string[];
+    seed?: string | string[];
+  }>();
+  const { hydrated, profiles } = useConnection();
+  const hostRuntime = useHostRuntime();
+  const hostId = firstParam(params.hostId);
+  const threadId = parseThreadId(firstParam(params.threadId));
+  const title = firstParam(params.name);
+  const seed = firstParam(params.seed);
+  const profile =
+    hostId === null
+      ? null
+      : profiles.find(
+          (candidate) =>
+            candidate.transport === "rpc" &&
+            (candidate.hostId === hostId || candidate.id === hostId),
+        ) ?? null;
+  const transport = hostId ? hostRuntime.transport(hostId) : null;
+
+  if (!hydrated) return <StateView kind="loading" title="Loading Dev10x" />;
+  if (!hostId || !threadId) {
+    return (
+      <StateView
+        actionLabel="Back"
+        kind="error"
+        onAction={() => router.back()}
+        title="Invalid session"
+      />
+    );
+  }
+  if (!profile) {
+    return (
+      <StateView
+        actionLabel="Back"
+        description="Pair this Symphony host again to restore its encrypted device credential."
+        kind="error"
+        onAction={() => router.back()}
+        title="Host is not paired"
+      />
+    );
+  }
+  if (!transport) {
+    return (
+      <StateView
+        description="Restoring the direct encrypted connection to this Symphony host."
+        kind="loading"
+        title="Connecting to host"
+      />
+    );
+  }
+
+  return (
+    <ConnectedSessionRoute
+      key={`${hostId}:${threadId}`}
+      activeProfile={profile}
+      activeToken={null}
+      hostId={hostId}
+      hostTransport={transport}
+      router={router}
+      seed={seed}
+      title={title}
       threadId={threadId}
     />
   );
@@ -46,18 +126,25 @@ export function SessionRoute() {
 function ConnectedSessionRoute({
   activeProfile,
   activeToken,
+  hostId,
+  hostTransport: hostTransportOverride,
   router,
   seed,
+  title,
   threadId,
 }: {
   activeProfile: ConnectionProfile;
   activeToken: string | null;
+  hostId?: string;
+  hostTransport?: HostTransport;
   router: ReturnType<typeof useRouter>;
   seed: string | null;
+  title: string | null;
   threadId: number;
 }) {
   const { createAssistantSession, dictate } = useAppRuntime();
-  const hostTransport = useHostTransport();
+  const activeHostTransport = useHostTransport();
+  const hostTransport = hostTransportOverride ?? activeHostTransport;
   const [timeline, dispatch] = useReducer(
     sessionTimelineReducer,
     undefined,
@@ -69,7 +156,13 @@ function ConnectedSessionRoute({
         `symphony.new-session.draft.${activeProfile.hostId ?? activeProfile.id}`,
       )
         .catch(() => undefined)
-        .then(() => router.replace(`/codex/session/${threadId}`));
+        .then(() =>
+          router.replace(
+            (hostId
+              ? hostChatRoute(hostId, threadId, title ?? undefined)
+              : `/session/${threadId}`) as never,
+          ),
+        );
     };
     if (activeProfile.transport === "rpc") {
       if (!hostTransport) return null;
@@ -101,15 +194,23 @@ function ConnectedSessionRoute({
   if (!session) return null;
 
   return (
-    <SessionScreen
+    <AssistantChatScreen
       onApproval={(requestId, action) => session.submitApproval(requestId, action)}
       onBack={() => router.back()}
       onDictate={() => dictate(resolvedLocale())}
+      onOpenTerminal={() =>
+        router.push(
+          (hostId
+            ? hostTerminalRoute(hostId, threadId, title ?? undefined)
+            : `/session/${threadId}/terminal`) as never,
+        )
+      }
       onResumeTurn={() => session.resumeTurn()}
       onRetrySeed={seed ? () => session.retrySeed() : undefined}
       onSend={(message) => session.sendMessage(message)}
       onStopTurn={() => session.stopTurn()}
       onSubmitUserInput={(requestId, answers) => session.submitUserInput(requestId, answers)}
+      title={title ?? `Session ${threadId}`}
       threadId={threadId}
       timeline={timeline}
     />

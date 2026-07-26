@@ -65,5 +65,5 @@ export function getNotificationNavigationPath(
     return hostPath
   }
 
-  return `${hostPath}/session/${encodeURIComponent(worktreeId)}`
+  return `${hostPath}/chat/${encodeURIComponent(worktreeId)}`
 }

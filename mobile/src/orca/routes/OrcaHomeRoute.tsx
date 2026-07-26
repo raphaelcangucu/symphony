@@ -7,7 +7,7 @@ import {
   QrCode,
   Settings,
   ChevronRight,
-  Terminal,
+  MessageSquare,
   Plus,
   RefreshCw,
   PowerOff,
@@ -53,6 +53,7 @@ import {
   type TaskProvider
 } from '../tasks/mobile-task-providers'
 import { useResponsiveLayout } from '../layout/responsive-layout'
+import { hostWorktreeRoute } from '../../features/sessions/session-navigation'
 
 function endpointLabel(endpoint: string): string {
   try {
@@ -75,6 +76,9 @@ type WorktreeSummary = {
   repo: string
   branch: string
   displayName: string
+  sessionScope?: string
+  issueIdentifier?: string | null
+  agentKind?: string | null
   liveTerminalCount: number
   status?: 'working' | 'active' | 'permission' | 'done' | 'inactive'
   // The worktree the desktop currently has focused (exactly one is true).
@@ -906,14 +910,20 @@ export function OrcaHomeRoute() {
                     style={({ pressed }) => [styles.resumeCard, pressed && styles.hostCardPressed]}
                     onPress={() =>
                       router.push(
-                        `/h/${resumeWorktree.hostId}/session/${encodeURIComponent(
-                          resumeWorktree.worktree.worktreeId
-                        )}`
+                        hostWorktreeRoute({
+                          agentKind: resumeWorktree.worktree.agentKind,
+                          hostId: resumeWorktree.hostId,
+                          issueIdentifier: resumeWorktree.worktree.issueIdentifier,
+                          name: resumeWorktree.worktree.displayName,
+                          scope: resumeWorktree.worktree.sessionScope,
+                          status: resumeWorktree.worktree.status,
+                          threadId: resumeWorktree.worktree.worktreeId
+                        })
                       )
                     }
                   >
                     <View style={styles.resumeIcon}>
-                      <Terminal size={18} color={colors.textSecondary} />
+                      <MessageSquare size={18} color={colors.textSecondary} />
                     </View>
                     <View style={styles.resumeMain}>
                       <Text style={styles.resumeTitle} numberOfLines={1}>

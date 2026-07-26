@@ -1,7 +1,6 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
-import { Pressable, Text } from "react-native";
+import { render, screen, waitFor } from "@testing-library/react-native";
+import { Text } from "react-native";
 
-import { useViewMode, ViewModeProvider } from "@/preferences/ViewModeProvider";
 import type { HostTransport } from "@/transport/HostTransport";
 
 import {
@@ -24,23 +23,19 @@ jest.mock("@/rpc/websocket-adapter", () => ({
 
 function RuntimeConsumers() {
   const runtime = useHostRuntime();
-  const { mode, setMode } = useViewMode();
-  const transport = runtime.transport("host-a");
+  const transport = runtime.transport("profile-a");
+  const state = runtime.state("profile-a");
   return (
     <>
-      <Text>{transport ? `orca:${transport.hostId}` : "orca:missing"}</Text>
-      <Text>{transport ? `codex:${transport.hostId}` : "codex:missing"}</Text>
+      <Text>{transport ? `dev10x:${transport.hostId}` : "dev10x:missing"}</Text>
       <Text>{`selected:${runtime.selectedHostId}`}</Text>
-      <Text>{mode}</Text>
-      <Pressable accessibilityRole="button" onPress={() => void setMode("codex")}>
-        <Text>Change interface</Text>
-      </Pressable>
+      <Text>{`state:${state.hostId}`}</Text>
     </>
   );
 }
 
 describe("HostRuntimeProvider", () => {
-  it("creates one Symphony transport shared by both interfaces across view changes", async () => {
+  it("creates one Symphony transport for the unified Dev10x interface", async () => {
     const transport: HostTransport = {
       hostId: "host-a",
       call: jest.fn(),
@@ -75,26 +70,14 @@ describe("HostRuntimeProvider", () => {
     });
 
     render(
-      <ViewModeProvider
-        storage={{
-          getItem: jest.fn(async () => null),
-          setItem: jest.fn(async () => undefined),
-        }}
-      >
-        <HostRuntimeProvider createTransport={createTransport}>
-          <RuntimeConsumers />
-        </HostRuntimeProvider>
-      </ViewModeProvider>,
+      <HostRuntimeProvider createTransport={createTransport}>
+        <RuntimeConsumers />
+      </HostRuntimeProvider>,
     );
 
-    await waitFor(() => expect(screen.getByText("orca:host-a")).toBeTruthy());
-    expect(screen.getByText("codex:host-a")).toBeTruthy();
+    await waitFor(() => expect(screen.getByText("dev10x:host-a")).toBeTruthy());
     expect(screen.getByText("selected:host-a")).toBeTruthy();
-    expect(createTransport).toHaveBeenCalledTimes(1);
-
-    fireEvent.press(screen.getByRole("button", { name: "Change interface" }));
-    await waitFor(() => expect(screen.getByText("codex")).toBeTruthy());
-    expect(screen.getByText("selected:host-a")).toBeTruthy();
+    expect(screen.getByText("state:host-a")).toBeTruthy();
     expect(createTransport).toHaveBeenCalledTimes(1);
   });
 });

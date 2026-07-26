@@ -1,6 +1,10 @@
 module.exports = {
   preset: "jest-expo",
   clearMocks: true,
+  setupFilesAfterEnv: ["<rootDir>/src/test/jest-setup.ts"],
+  transformIgnorePatterns: [
+    "node_modules/(?!((jest-)?react-native|@react-native(-community)?|expo(?:-.*)?|@expo/.*|@expo-google-fonts/.*|@noble/.*|react-navigation|@react-navigation/.*|@unimodules/.*|unimodules|sentry-expo|native-base|react-native-svg|react-native-markdown-display|@assistant-ui/.*|assistant-cloud|assistant-stream|use-effect-event|nanoid)/)",
+  ],
   moduleNameMapper: {
     "^@/(.*)$": "<rootDir>/src/$1",
     "^@react-native-async-storage/async-storage$":

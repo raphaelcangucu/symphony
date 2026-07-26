@@ -145,7 +145,6 @@ describe("notification response routing", () => {
           hostId: "host-b",
           target: { kind: "session", id: "42" },
         },
-        mode: "orca",
         profiles: [
           { id: "profile-a", hostId: "host-a" },
           { id: "profile-b", hostId: "host-b" },
@@ -159,7 +158,7 @@ describe("notification response routing", () => {
       }),
     ).resolves.toBe(true);
 
-    expect(calls).toEqual(["select:profile-b", "open:/h/host-b/session/42"]);
+    expect(calls).toEqual(["select:profile-b", "open:/h/host-b/chat/42"]);
   });
 });
 

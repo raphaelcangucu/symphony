@@ -6,6 +6,7 @@ defmodule SymphonyElixir.MobileRpc.Dispatcher do
   alias SymphonyElixir.MobileRpc.Methods.{
     Git,
     Notifications,
+    Orchestrator,
     OrcaFiles,
     OrcaGit,
     OrcaSessions,
@@ -53,6 +54,7 @@ defmodule SymphonyElixir.MobileRpc.Dispatcher do
           Previews.modules() ++
           PullRequests.modules() ++
           Notifications.modules() ++
+          Orchestrator.modules() ++
           Terminal.modules()
       )
 

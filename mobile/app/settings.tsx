@@ -11,17 +11,13 @@ import {
   LifeBuoy,
   Mic,
   Globe,
-  LayoutGrid,
   Terminal as TerminalIcon
 } from 'lucide-react-native'
 import { colors, spacing, typography } from '../src/orca/theme/mobile-theme'
-import { useViewMode } from '../src/preferences/ViewModeProvider'
 
 export default function SettingsScreen() {
   const router = useRouter()
   const insets = useSafeAreaInsets()
-  const { mode, setMode } = useViewMode()
-  const nextMode = mode === 'orca' ? 'codex' : 'orca'
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + spacing.sm }]}>
@@ -37,21 +33,6 @@ export default function SettingsScreen() {
       </View>
 
       <View style={styles.section}>
-        <Pressable
-          accessibilityLabel={`Use ${nextMode === 'orca' ? 'Dev10x Workspace' : 'Compact Sessions'} interface`}
-          style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
-          onPress={() => {
-            void setMode(nextMode).then(() => router.replace(nextMode === 'orca' ? '/' : '/codex'))
-          }}
-        >
-          <LayoutGrid size={16} color={colors.textSecondary} />
-          <Text style={styles.rowLabel}>Interface</Text>
-          <Text style={styles.rowValue}>
-            {mode === 'orca' ? 'Dev10x Workspace' : 'Compact Sessions'}
-          </Text>
-          <ChevronRight size={16} color={colors.textMuted} />
-        </Pressable>
-        <View style={styles.separator} />
         <SettingsRow
           icon={<TerminalIcon size={16} color={colors.textSecondary} />}
           label="Terminal"
@@ -182,10 +163,6 @@ const styles = StyleSheet.create({
     fontSize: typography.bodySize,
     fontWeight: '500',
     color: colors.textPrimary
-  },
-  rowValue: {
-    fontSize: typography.metaSize,
-    color: colors.textMuted
   },
   separator: {
     height: StyleSheet.hairlineWidth,

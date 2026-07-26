@@ -20,13 +20,13 @@ describe('notification routing', () => {
     })
   })
 
-  it('routes notification taps to the worktree terminal screen', () => {
+  it('routes notification taps to the worktree chat', () => {
     expect(
       getNotificationNavigationPath({
         hostId: 'host-1',
         worktreeId: 'repo::/Users/me/orca/workspaces/feature'
       })
-    ).toBe('/h/host-1/session/repo%3A%3A%2FUsers%2Fme%2Forca%2Fworkspaces%2Ffeature')
+    ).toBe('/h/host-1/chat/repo%3A%3A%2FUsers%2Fme%2Forca%2Fworkspaces%2Ffeature')
   })
 
   it('falls back to the host screen when the payload has no worktree id', () => {

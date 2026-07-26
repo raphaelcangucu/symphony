@@ -41,6 +41,12 @@ function HostStack({ animation }: { animation: 'none' | 'default' }) {
       <Stack.Screen name="[hostId]/index" options={{ title: 'Host' }} />
       <Stack.Screen name="[hostId]/accounts" options={{ title: 'Accounts' }} />
       <Stack.Screen name="[hostId]/tasks" options={{ title: 'Tasks' }} />
+      <Stack.Screen name="[hostId]/runs" options={{ title: 'Orchestrator runs' }} />
+      <Stack.Screen
+        name="[hostId]/run/[executionSessionId]"
+        options={{ title: 'Orchestrator session' }}
+      />
+      <Stack.Screen name="[hostId]/chat/[threadId]" options={{ title: 'Chat' }} />
       <Stack.Screen name="[hostId]/session/[worktreeId]" options={{ title: 'Terminal' }} />
       <Stack.Screen
         name="[hostId]/source-control/[worktreeId]"

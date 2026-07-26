@@ -3,7 +3,6 @@ import { useRouter } from "expo-router";
 
 import { useTrackerClient } from "@/api/TrackerClientProvider";
 import { useConnection } from "@/auth/ConnectionProvider";
-import { useViewMode } from "@/preferences/ViewModeProvider";
 
 import { SettingsScreen } from "./SettingsScreen";
 
@@ -11,7 +10,6 @@ export function SettingsRoute() {
   const router = useRouter();
   const client = useTrackerClient();
   const { activeProfile } = useConnection();
-  const { mode, setMode } = useViewMode();
   const profileId = activeProfile?.hostId ?? activeProfile?.id ?? null;
   const availability = useQuery({
     queryKey: ["host", profileId, "settings", "agent-availability"],
@@ -37,9 +35,6 @@ export function SettingsRoute() {
       error={error ? errorMessage(error) : null}
       loading={availability.isPending || usage.isPending}
       onBack={() => router.back()}
-      onChangeViewMode={(nextMode) => {
-        void setMode(nextMode).then(() => router.replace(nextMode === "orca" ? "/" : "/codex"));
-      }}
       onOpenDiagnostics={() => router.push("/diagnostics")}
       onOpenNotifications={() => router.push("/notifications")}
       onRefresh={() => {
@@ -47,7 +42,6 @@ export function SettingsRoute() {
         void usage.refetch();
       }}
       usage={usage.data ?? {}}
-      viewMode={mode}
     />
   );
 }

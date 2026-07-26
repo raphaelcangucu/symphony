@@ -1,4 +1,3 @@
-import type { MobileViewMode } from "@/preferences/view-mode";
 import { routeForView, type ViewTarget } from "@/preferences/view-routing";
 
 export type NotificationPermission = "granted" | "denied" | "undetermined";
@@ -142,14 +141,12 @@ export async function activateNotificationDestination({
   profiles,
   selectProfile,
   openRoute,
-  mode = "codex",
   selectedHostId = null,
 }: {
   destination: NotificationDestination;
   profiles: NotificationProfile[];
   selectProfile(profileId: string): Promise<void>;
   openRoute(route: string): void;
-  mode?: MobileViewMode;
   selectedHostId?: string | null;
 }): Promise<boolean> {
   const hostId = destination.hostId ?? selectedHostId;
@@ -161,7 +158,7 @@ export async function activateNotificationDestination({
     if (!profile) return false;
     await selectProfile(profile.id);
   }
-  openRoute(routeForView(mode, { ...destination.target, hostId } as ViewTarget));
+  openRoute(routeForView({ ...destination.target, hostId } as ViewTarget));
   return true;
 }
 

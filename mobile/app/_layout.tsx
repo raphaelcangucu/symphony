@@ -14,7 +14,6 @@ import {
 } from "@/native/notifications";
 import { RpcClientProvider } from "@/orca/transport/client-context";
 import { HostStoreProvider } from "@/orca/transport/HostStoreProvider";
-import { useViewMode, ViewModeProvider } from "@/preferences/ViewModeProvider";
 import { AppRuntimeProvider, productionRuntime, useAppRuntime } from "@/runtime/AppRuntime";
 import { HostRuntimeProvider } from "@/runtime/HostRuntimeProvider";
 import { ThemeProvider, useAppTheme } from "@/theme/ThemeProvider";
@@ -22,24 +21,22 @@ import { ThemeProvider, useAppTheme } from "@/theme/ThemeProvider";
 export default function RootLayout() {
   return (
     <SafeAreaProvider>
-      <ThemeProvider>
-        <ViewModeProvider>
-          <AppRuntimeProvider runtime={productionRuntime}>
-            <ConnectionProvider storage={productionRuntime.connectionStorage}>
-              <HostStoreProvider>
-                <HostRuntimeProvider>
-                  <RpcClientProvider>
-                    <TrackerClientProvider createClient={productionRuntime.createTrackerClient}>
-                      <QueryProvider>
-                        <ThemedStack />
-                      </QueryProvider>
-                    </TrackerClientProvider>
-                  </RpcClientProvider>
-                </HostRuntimeProvider>
-              </HostStoreProvider>
-            </ConnectionProvider>
-          </AppRuntimeProvider>
-        </ViewModeProvider>
+      <ThemeProvider colorScheme="dark">
+        <AppRuntimeProvider runtime={productionRuntime}>
+          <ConnectionProvider storage={productionRuntime.connectionStorage}>
+            <HostStoreProvider>
+              <HostRuntimeProvider>
+                <RpcClientProvider>
+                  <TrackerClientProvider createClient={productionRuntime.createTrackerClient}>
+                    <QueryProvider>
+                      <ThemedStack />
+                    </QueryProvider>
+                  </TrackerClientProvider>
+                </RpcClientProvider>
+              </HostRuntimeProvider>
+            </HostStoreProvider>
+          </ConnectionProvider>
+        </AppRuntimeProvider>
       </ThemeProvider>
     </SafeAreaProvider>
   );
@@ -50,7 +47,6 @@ function ThemedStack() {
   const router = useRouter();
   const { notifications } = useAppRuntime();
   const { hydrated, activeProfile, profiles, selectProfile } = useConnection();
-  const { mode } = useViewMode();
 
   useEffect(() => {
     if (!hydrated) return;
@@ -60,7 +56,6 @@ function ThemedStack() {
         destination,
         profiles,
         selectProfile,
-        mode,
         selectedHostId: activeProfile?.hostId ?? activeProfile?.id ?? null,
         openRoute: (route) => {
           if (active) router.push(route as never);
@@ -76,7 +71,7 @@ function ThemedStack() {
       active = false;
       subscription.remove();
     };
-  }, [activeProfile, hydrated, mode, notifications, profiles, router, selectProfile]);
+  }, [activeProfile, hydrated, notifications, profiles, router, selectProfile]);
 
   return (
     <>

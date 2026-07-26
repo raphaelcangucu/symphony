@@ -131,4 +131,39 @@ defmodule SymphonyElixir.MobileRpc.SessionBridgeTest do
 
     assert :ok = GenServer.stop(bridge)
   end
+
+  defmodule NamespacedChannel do
+    def join(topic, %{}, socket) do
+      {:ok, %{"topic" => topic}, socket}
+    end
+  end
+
+  test "keeps interactive and orchestrator streams with the same numeric id isolated" do
+    assert {:ok, interactive} =
+             SessionBridge.subscribe_channel(
+               self(),
+               {:session, 42},
+               "interactive_42",
+               thread_id: 42,
+               channel_module: NamespacedChannel,
+               topic: "assistant:thread:42"
+             )
+
+    assert {:ok, orchestrator} =
+             SessionBridge.subscribe_channel(
+               self(),
+               {:orchestrator, 42},
+               "orchestrator_42",
+               thread_id: 42,
+               channel_module: NamespacedChannel,
+               topic: "session_log:42"
+             )
+
+    refute interactive == orchestrator
+    assert {:ok, ^interactive} = SessionBridge.lookup_channel(self(), {:session, 42})
+    assert {:ok, ^orchestrator} = SessionBridge.lookup_channel(self(), {:orchestrator, 42})
+
+    assert :ok = GenServer.stop(interactive)
+    assert :ok = GenServer.stop(orchestrator)
+  end
 end

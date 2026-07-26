@@ -1,5 +1,3 @@
-import type { MobileViewMode } from "./view-mode";
-
 export type ViewTarget =
   | {
       hostId: string;
@@ -15,22 +13,21 @@ export type ViewTarget =
       pullRequest?: boolean;
     };
 
-export function routeForView(mode: MobileViewMode, target: ViewTarget): string {
+export function routeForView(target: ViewTarget): string {
   if (target.kind === "session") {
     const id = pathSegment(target.id);
-    if (mode === "orca") {
+    if (target.surface === "terminal") {
       return `/h/${pathSegment(target.hostId)}/session/${id}`;
     }
-    const suffix = target.surface ? `/${target.surface}` : "";
-    return `/codex/session/${id}${suffix}`;
+    if (target.surface) {
+      return `/h/${pathSegment(target.hostId)}/${target.surface}/${id}`;
+    }
+    return `/h/${pathSegment(target.hostId)}/chat/${id}`;
   }
 
   const projectSlug = pathSegment(target.projectSlug);
   const identifier = pathSegment(target.identifier);
-  if (mode === "orca") {
-    return `/h/${pathSegment(target.hostId)}/tasks?projectSlug=${projectSlug}&identifier=${identifier}`;
-  }
-  return `/codex/issue/${projectSlug}/${identifier}${target.pullRequest ? "/pull-request" : ""}`;
+  return `/h/${pathSegment(target.hostId)}/tasks?projectSlug=${projectSlug}&identifier=${identifier}`;
 }
 
 function pathSegment(value: string): string {

@@ -8,6 +8,9 @@ export type Worktree = {
   repo: string
   branch: string
   displayName: string
+  sessionScope?: string
+  issueIdentifier?: string | null
+  agentKind?: string | null
   workspaceStatus?: string
   sortOrder?: number
   manualOrder?: number

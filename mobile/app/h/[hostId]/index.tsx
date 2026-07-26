@@ -25,6 +25,7 @@ import {
   Moon,
   Filter,
   Check,
+  Bot,
   UserCircle,
   PanelLeftClose
 } from 'lucide-react-native'
@@ -94,6 +95,7 @@ import {
 import type { DesktopStatus, RepoSummary } from '../../../src/orca/worktree/host-worktree-rpc-types'
 import type { WorkspaceStatusDefinition } from '../../../src/shared/types'
 import { DEFAULT_MOBILE_WORKSPACE_STATUSES } from '../../../src/orca/worktree/mobile-workspace-statuses'
+import { hostWorktreeRoute } from '../../../src/features/sessions/session-navigation'
 
 function isErrorVerdict(v: ConnectionVerdict): boolean {
   return v.kind === 'warning' || v.kind === 'unreachable' || v.kind === 'auth-failed'
@@ -703,7 +705,7 @@ export function HostScreen({
     (item: Worktree) => {
       // Highlight the row immediately; the next worktree.ps poll confirms it.
       setOptimisticActiveWorktreeId(item.worktreeId)
-      if (client && connState === 'connected') {
+      if (item.sessionScope !== 'issue_execution' && client && connState === 'connected') {
         // Why: opening a mobile session should hydrate host-owned tabs without
         // pulling other paired clients, especially desktop, into this worktree.
         void client
@@ -713,7 +715,15 @@ export function HostScreen({
           })
           .catch(() => null)
       }
-      const target = `/h/${hostId}/session/${encodeURIComponent(item.worktreeId)}?name=${encodeURIComponent(item.displayName || item.repo)}`
+      const target = hostWorktreeRoute({
+        agentKind: item.agentKind,
+        hostId,
+        issueIdentifier: item.issueIdentifier,
+        name: item.displayName || item.repo,
+        scope: item.sessionScope,
+        status: item.status,
+        threadId: item.worktreeId
+      })
       navigateFromHostList(target)
     },
     [client, connState, hostId, navigateFromHostList]
@@ -985,6 +995,22 @@ export function HostScreen({
                   styles.embeddedToolbarIconButton,
                   connState !== 'connected' && styles.toolbarIconDisabled
                 ]}
+                onPress={() => navigateFromHostList(`/h/${hostId}/runs`)}
+                disabled={connState !== 'connected'}
+                accessibilityRole="button"
+                accessibilityLabel="Orchestrator runs"
+              >
+                <Bot
+                  size={16}
+                  color={connState === 'connected' ? colors.textSecondary : colors.textMuted}
+                />
+              </Pressable>
+
+              <Pressable
+                style={[
+                  styles.embeddedToolbarIconButton,
+                  connState !== 'connected' && styles.toolbarIconDisabled
+                ]}
                 onPress={() => navigateFromHostList(`/h/${hostId}/tasks`)}
                 disabled={connState !== 'connected'}
                 accessibilityRole="button"
@@ -1101,6 +1127,19 @@ export function HostScreen({
               accessibilityLabel="Tasks"
             >
               <List
+                size={16}
+                color={connState === 'connected' ? colors.textSecondary : colors.textMuted}
+              />
+            </Pressable>
+
+            <Pressable
+              style={styles.searchToggle}
+              onPress={() => navigateFromHostList(`/h/${hostId}/runs`)}
+              disabled={connState !== 'connected'}
+              accessibilityRole="button"
+              accessibilityLabel="Orchestrator runs"
+            >
+              <Bot
                 size={16}
                 color={connState === 'connected' ? colors.textSecondary : colors.textMuted}
               />

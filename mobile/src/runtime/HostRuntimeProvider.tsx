@@ -126,12 +126,26 @@ export function HostRuntimeProvider({
 
   useEffect(() => () => manager.close(), [manager]);
 
+  const resolveHostId = useCallback(
+    (hostIdOrProfileId: string): string =>
+      profiles.find(
+        (candidate) =>
+          isRpcHostProfile(candidate) &&
+          (candidate.id === hostIdOrProfileId || candidate.hostId === hostIdOrProfileId),
+      )?.hostId ?? hostIdOrProfileId,
+    [profiles],
+  );
   const selectHost = useCallback(
-    async (hostId: string) => {
+    async (hostIdOrProfileId: string) => {
       const profile = profiles.find(
-        (candidate) => isRpcHostProfile(candidate) && candidate.hostId === hostId,
+        (candidate) =>
+          isRpcHostProfile(candidate) &&
+          (candidate.id === hostIdOrProfileId || candidate.hostId === hostIdOrProfileId),
       );
-      if (!profile) throw new Error("Symphony host is not registered");
+      if (!profile || !isRpcHostProfile(profile)) {
+        throw new Error("Symphony host is not registered");
+      }
+      const hostId = profile.hostId;
       manager.select(hostId);
       manager.transport(hostId)?.reconnect();
       await selectProfile(profile.id);
@@ -139,22 +153,27 @@ export function HostRuntimeProvider({
     },
     [manager, profiles, refresh, selectProfile],
   );
-  const transport = useCallback((hostId: string) => manager.transport(hostId), [manager]);
+  const transport = useCallback(
+    (hostId: string) => manager.transport(resolveHostId(hostId)),
+    [manager, resolveHostId],
+  );
   const state = useCallback(
     (hostId: string): HostRuntimeState => {
-      const transport = manager.transport(hostId);
-      if (!transport) return offlineState(hostId);
+      const resolvedHostId = resolveHostId(hostId);
+      const transport = manager.transport(resolvedHostId);
+      if (!transport) return offlineState(resolvedHostId);
       return {
-        ...manager.state(hostId),
-        hostId,
-        error: errorsRef.current.get(hostId) ?? null,
+        ...manager.state(resolvedHostId),
+        hostId: resolvedHostId,
+        error: errorsRef.current.get(resolvedHostId) ?? null,
       };
     },
-    [manager],
+    [manager, resolveHostId],
   );
   const subscribe = useCallback(
-    (hostId: string, listener: () => void) => manager.subscribeState(hostId, listener),
-    [manager],
+    (hostId: string, listener: () => void) =>
+      manager.subscribeState(resolveHostId(hostId), listener),
+    [manager, resolveHostId],
   );
   const selectedHostId =
     manager.activeHostId ??

@@ -41,6 +41,10 @@ const METHODS = [
   "sessions.request",
   "sessions.subscribe",
   "sessions.command",
+  "orchestrator.executions.list",
+  "orchestrator.executions.subscribe",
+  "orchestrator.session.subscribe",
+  "orchestrator.session.command",
   "workspace.request",
   "git.request",
   "previews.request",
@@ -145,7 +149,14 @@ export type RpcResponse = RpcResult | RpcEvent;
 type Send = (response: RpcResponse) => void;
 type Subscription = {
   id: string;
-  kind: "sessions" | "terminal" | "session-tabs" | "orca-terminal" | "notifications";
+  kind:
+    | "sessions"
+    | "terminal"
+    | "session-tabs"
+    | "orca-terminal"
+    | "notifications"
+    | "orchestrator-executions"
+    | "orchestrator-session";
   threadId: number;
   terminalHandle?: string;
   sequence: number;
@@ -398,6 +409,18 @@ export function handleRequest(request: RpcRequest, send: Send, ws: WebSocket): v
         break;
       case "sessions.command":
         handleSessionCommand(request, respond, ws);
+        break;
+      case "orchestrator.executions.list":
+        respond(success(request.id, { executions: mockOrchestratorExecutions() }));
+        break;
+      case "orchestrator.executions.subscribe":
+        subscribeMockOrchestratorExecutions(request, respond, ws);
+        break;
+      case "orchestrator.session.subscribe":
+        subscribeMockOrchestratorSession(request, respond, ws);
+        break;
+      case "orchestrator.session.command":
+        handleMockOrchestratorCommand(request, respond, ws);
         break;
       case "terminal.command":
         handleTerminalCommand(request, respond, ws);
@@ -994,6 +1017,148 @@ function handleSessionCommand(request: RpcRequest, send: Send, ws: WebSocket): v
         }),
       );
     }
+  }
+}
+
+function mockOrchestratorExecutions(): Record<string, unknown>[] {
+  return [
+    {
+      issue_identifier: "SYM-101",
+      execution_session_id: 101,
+      session_id: "101",
+      status: "live",
+      agent_kind: "codex",
+      model: null,
+      last_message: "Building the Dev10x mobile RPC experience",
+      last_event_at: now(),
+      turn_count: 2,
+    },
+  ];
+}
+
+function mockOrchestratorEntries(): Record<string, unknown>[] {
+  return [
+    {
+      kind: "user",
+      title: "Operator",
+      body: "Implement the unified mobile chat.",
+      language: "markdown",
+      status: "completed",
+      collapsed: false,
+      call_id: null,
+    },
+    {
+      kind: "assistant",
+      title: "Codex",
+      body: "Dev10x is following this real Symphony execution transcript.",
+      language: "markdown",
+      status: "completed",
+      collapsed: false,
+      call_id: null,
+    },
+    {
+      kind: "tool_call",
+      title: "exec_command",
+      body: '{"cmd":"mix test"}',
+      language: "json",
+      status: "completed",
+      collapsed: false,
+      call_id: "mock-call-1",
+    },
+    {
+      kind: "tool_result",
+      title: "exec_command output",
+      body: "Focused tests passed",
+      language: "text",
+      status: "completed",
+      collapsed: false,
+      call_id: "mock-call-1",
+    },
+  ];
+}
+
+function subscribeMockOrchestratorExecutions(
+  request: RpcRequest,
+  send: Send,
+  ws: WebSocket,
+): void {
+  const subscription = registerSubscription("orchestrator-executions", 0, send, ws);
+  send(success(request.id, { subscription_id: subscription.id }));
+  schedule(subscription, () =>
+    emit(subscription, "orchestrator.executions.snapshot", {
+      data: mockOrchestratorExecutions(),
+    }),
+  );
+}
+
+function subscribeMockOrchestratorSession(
+  request: RpcRequest,
+  send: Send,
+  ws: WebSocket,
+): void {
+  const executionSessionId = positiveInteger(request.params.execution_session_id, 101);
+  const subscription = registerSubscription(
+    "orchestrator-session",
+    executionSessionId,
+    send,
+    ws,
+  );
+  send(success(request.id, { subscription_id: subscription.id }));
+  schedule(subscription, () =>
+    emit(subscription, "orchestrator.session.joined", {
+      entries: mockOrchestratorEntries(),
+      agent_kind: "codex",
+      preferred_agent_kind: "codex",
+      log_fallback: false,
+    }),
+  );
+}
+
+function handleMockOrchestratorCommand(
+  request: RpcRequest,
+  send: Send,
+  ws: WebSocket,
+): void {
+  const executionSessionId = positiveInteger(request.params.execution_session_id, 101);
+  const event = text(request.params.event);
+  const payload = record(request.params.payload);
+  if (event !== "steer" || !text(payload.message)) {
+    send(error(request.id, "invalid_params", "A steer message is required"));
+    return;
+  }
+  send(success(request.id, { accepted: true }));
+  for (const subscription of matchingSubscriptions(
+    ws,
+    "orchestrator-session",
+    executionSessionId,
+  )) {
+    schedule(subscription, () =>
+      emit(subscription, "orchestrator.session.entries", {
+        entries: [
+          {
+            kind: "user",
+            title: "Operator",
+            body: text(payload.message),
+            language: "markdown",
+            status: "completed",
+            collapsed: false,
+            call_id: null,
+          },
+          {
+            kind: "assistant",
+            title: "Codex",
+            body: "Steer received by the Symphony orchestrator.",
+            language: "markdown",
+            status: "completed",
+            collapsed: false,
+            call_id: null,
+          },
+        ],
+      }),
+    );
+    schedule(subscription, () =>
+      emit(subscription, "orchestrator.session.steer_ok", {}),
+    );
   }
 }
 

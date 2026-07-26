@@ -141,6 +141,83 @@ describe("Symphony mock RPC handlers", () => {
     expect(unsubscribe(socket, subscriptionId)).toBe(true);
   });
 
+  it("supports development-only orchestrator lists, transcripts and steer", async () => {
+    vi.useFakeTimers();
+    const sent: RpcResponse[] = [];
+    const send = (message: RpcResponse) => sent.push(message);
+
+    handleRequest(
+      {
+        type: "rpc",
+        id: "runs",
+        method: "orchestrator.executions.list",
+        params: {},
+      },
+      send,
+      socket,
+    );
+    handleRequest(
+      {
+        type: "rpc",
+        id: "run-subscribe",
+        method: "orchestrator.session.subscribe",
+        params: { execution_session_id: 101 },
+      },
+      send,
+      socket,
+    );
+    await vi.runOnlyPendingTimersAsync();
+
+    expect(sent[0]).toMatchObject({
+      id: "runs",
+      result: {
+        executions: [
+          {
+            issue_identifier: "SYM-101",
+            execution_session_id: 101,
+            agent_kind: "codex",
+          },
+        ],
+      },
+    });
+    expect(sent[2]).toMatchObject({
+      type: "event",
+      event: "orchestrator.session.joined",
+      payload: {
+        entries: expect.arrayContaining([
+          expect.objectContaining({ kind: "assistant", body: expect.stringContaining("Dev10x") }),
+        ]),
+      },
+    });
+
+    handleRequest(
+      {
+        type: "rpc",
+        id: "steer",
+        method: "orchestrator.session.command",
+        params: {
+          execution_session_id: 101,
+          event: "steer",
+          payload: { message: "Focus on the RPC" },
+        },
+      },
+      send,
+      socket,
+    );
+    await vi.runOnlyPendingTimersAsync();
+    expect(sent).toContainEqual(
+      expect.objectContaining({
+        type: "event",
+        event: "orchestrator.session.entries",
+        payload: {
+          entries: expect.arrayContaining([
+            expect.objectContaining({ kind: "user", body: "Focus on the RPC" }),
+          ]),
+        },
+      }),
+    );
+  });
+
   it("serves the copied Dev10x session and terminal DTOs", () => {
     const sent: RpcResponse[] = [];
     const send = (message: RpcResponse) => sent.push(message);
