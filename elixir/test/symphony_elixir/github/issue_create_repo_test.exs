@@ -75,4 +75,21 @@ defmodule SymphonyElixir.GitHub.IssueCreateRepoTest do
     assert {:ok, "GambaLabs/frontend"} =
              IssueCreateRepo.resolve(project(), %{"title" => "Frontend task"})
   end
+
+  test "candidates prefer explicit repo then tracker.config.repo then linked repos" do
+    {:ok, _} = Context.ensure_project(%{name: "Gamba", slug: "gamba"})
+
+    {:ok, _} =
+      Context.replace_repositories("gamba", [
+        %{"github_full_name" => "GambaLabs/frontend", "workspace_path" => "frontend", "role" => "primary"},
+        %{"github_full_name" => "GambaLabs/goapi", "workspace_path" => "goapi", "role" => "service"},
+        %{"github_full_name" => "GambaLabs/backend", "workspace_path" => "backend", "role" => "backend"}
+      ])
+
+    assert IssueCreateRepo.candidates(project(), %{"repository" => "GambaLabs/goapi", "title" => "Go"}) == [
+             "GambaLabs/goapi",
+             "GambaLabs/frontend",
+             "GambaLabs/backend"
+           ]
+  end
 end

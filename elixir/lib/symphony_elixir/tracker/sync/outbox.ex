@@ -66,6 +66,26 @@ defmodule SymphonyElixir.Tracker.Sync.Outbox do
     entry |> OutboxEntry.changeset(%{status: "done", remote_id: remote_id}) |> Repo.update()
   end
 
+  @doc """
+  Returns an `in_flight` entry to `pending` without burning an attempt. Used when
+  a dependent write (update/comment/move) cannot push because the issue create
+  has not linked a remote id yet — sync failure must not exhaust the outbox or
+  overwrite the create error.
+  """
+  @spec mark_deferred(OutboxEntry.t()) :: {:ok, OutboxEntry.t()} | {:error, Ecto.Changeset.t()}
+  def mark_deferred(%OutboxEntry{} = entry) do
+    entry
+    |> OutboxEntry.changeset(%{status: "pending"})
+    |> Repo.update()
+    |> case do
+      {:error, %Ecto.Changeset{} = changeset} ->
+        coalesce_requeue_conflict(entry, changeset)
+
+      result ->
+        result
+    end
+  end
+
   @spec mark_failed(OutboxEntry.t(), String.t(), pos_integer()) ::
           {:ok, OutboxEntry.t()} | {:error, Ecto.Changeset.t()}
   def mark_failed(%OutboxEntry{} = entry, error, max_attempts) when is_integer(max_attempts) do
@@ -192,14 +212,18 @@ defmodule SymphonyElixir.Tracker.Sync.Outbox do
   @doc """
   Requeues failed or stuck `in_flight` `issue:create` entries so an on-demand
   two-way sync can push local-only drafts that never reached the remote.
+
+  Pass an explicit `statuses` list to also reset `pending` creates (force Retry
+  sync needs a fresh attempt budget).
   """
   @spec requeue_issue_creates(integer(), [String.t()]) :: non_neg_integer()
   def requeue_issue_creates(project_id, identifiers) when is_integer(project_id) and is_list(identifiers) do
     requeue_issue_creates(project_id, identifiers, ["failed", "in_flight"])
   end
 
-  defp requeue_issue_creates(project_id, identifiers, statuses)
-       when is_integer(project_id) and is_list(identifiers) and is_list(statuses) do
+  @spec requeue_issue_creates(integer(), [String.t()], [String.t()]) :: non_neg_integer()
+  def requeue_issue_creates(project_id, identifiers, statuses)
+      when is_integer(project_id) and is_list(identifiers) and is_list(statuses) do
     dedup_keys =
       identifiers
       |> Enum.filter(&(is_binary(&1) and String.trim(&1) != ""))
@@ -229,6 +253,26 @@ defmodule SymphonyElixir.Tracker.Sync.Outbox do
 
         count
     end
+  end
+
+  @doc """
+  Requeues failed outbox rows for one local issue (by `issue_id`) so Retry sync
+  can push comments/updates/moves that exhausted while the create was still
+  blocked (e.g. `:issue_not_found` before a remote id existed).
+  """
+  @spec requeue_failed_for_issue(integer(), integer()) :: non_neg_integer()
+  def requeue_failed_for_issue(project_id, issue_id)
+      when is_integer(project_id) and is_integer(issue_id) do
+    ids =
+      OutboxEntry
+      |> where(
+        [e],
+        e.project_id == ^project_id and e.issue_id == ^issue_id and e.status == "failed"
+      )
+      |> select([e], e.id)
+      |> Repo.all()
+
+    requeue_failed_entries(ids)
   end
 
   @doc """
