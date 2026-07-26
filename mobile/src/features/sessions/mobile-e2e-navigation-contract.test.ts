@@ -9,11 +9,10 @@ const realHostJourney = readFileSync(
 );
 
 describe("real-host mobile E2E navigation", () => {
-  it("uses accessibility contracts instead of screen coordinates for workspace tools", () => {
-    expect(realHostJourney).toContain('tap_accessible "Open file explorer"');
-    expect(realHostJourney).toContain('tap_accessible "Open source control"');
-    expect(realHostJourney).not.toMatch(
-      /tap_screen_fraction .*"Open (file explorer|source control)"/,
-    );
+  it("keeps WebView-obscured workspace tools in distinct semantic header slots", () => {
+    expect(realHostJourney).toContain('tap_terminal_header_tool "files"');
+    expect(realHostJourney).toContain('tap_terminal_header_tool "source-control"');
+    expect(realHostJourney).toMatch(/files\)\s+tap_screen_fraction 51 64 1 20/);
+    expect(realHostJourney).toMatch(/source-control\)\s+tap_screen_fraction 59 64 1 20/);
   });
 });

@@ -260,6 +260,26 @@ tap_screen_fraction() {
   sleep 1
 }
 
+tap_terminal_header_tool() {
+  local tool="$1"
+
+  # UI Automator can return an empty hierarchy while the xterm WebView owns the
+  # active window. Keep these semantic targets centralized and separated by the
+  # same responsive header proportions used by the native terminal layout.
+  case "${tool}" in
+    files)
+      tap_screen_fraction 51 64 1 20 "Open file explorer"
+      ;;
+    source-control)
+      tap_screen_fraction 59 64 1 20 "Open source control"
+      ;;
+    *)
+      printf "Unknown terminal header tool: %s\n" "${tool}" >&2
+      return 1
+      ;;
+  esac
+}
+
 stop_recording() {
   if [[ -n "${recording_pid}" ]]; then
     "${ADB}" emu screenrecord stop >/dev/null 2>&1 || true
@@ -560,13 +580,13 @@ sleep 2
 test -s "${TERMINAL_SCREENSHOT_PATH}"
 trace_step "assert terminal remains an explicit xterm tool over the same host RPC"
 
-tap_accessible "Open file explorer"
+tap_terminal_header_tool "files"
 tap_accessible "app"
 wait_for_text "README.md"
 trace_step "assert selected-host workspace files"
 tap_accessible "Back to session"
 
-tap_accessible "Open source control"
+tap_terminal_header_tool "source-control"
 wait_for_text "README.md"
 trace_step "assert selected-host uncommitted diff"
 tap_accessible "Back"
