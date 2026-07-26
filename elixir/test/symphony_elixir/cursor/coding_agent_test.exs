@@ -102,6 +102,9 @@ defmodule SymphonyElixir.Cursor.CodingAgentTest do
 
   test "resolved_model/2 resolves automatic selection through the live catalog" do
     assert {:ok, "composer-2.5"} = CodingAgent.resolved_model("Composer 2.5", nil)
+
+    assert {:ok, "auto-smart[optimize_for=balanced]"} =
+             CodingAgent.resolved_model("auto-smart[optimize_for=balanced]", "auto")
   end
 
   test "resolved_model/2 rejects missing or contradictory native confirmation" do

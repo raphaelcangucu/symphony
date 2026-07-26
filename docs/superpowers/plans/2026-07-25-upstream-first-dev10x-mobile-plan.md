@@ -32,7 +32,7 @@
 
 ```text
 mobile/
-├── ORCA_UPSTREAM.md
+├── UPSTREAM_PROVENANCE.md
 ├── THIRD_PARTY_NOTICES.md
 ├── app.config.ts
 ├── app/
@@ -71,7 +71,7 @@ elixir/lib/symphony_elixir/mobile_rpc/
 └── orca_subscription.ex
 ```
 
-The `mobile/src/orca/` tree preserves upstream folder boundaries. It does not
+The `mobile/src/dev10x/` tree preserves upstream folder boundaries. It does not
 contain Orca's handshake implementation or its persistent host store; those
 responsibilities stay in the shared Symphony core.
 
@@ -88,9 +88,9 @@ responsibilities stay in the shared Symphony core.
 Run:
 
 ```bash
-git add docs/reports/2026-07-25-orca-vs-symphony-mobile.md \
-  docs/superpowers/specs/2026-07-25-orca-first-symphony-mobile-design.md \
-  docs/superpowers/plans/2026-07-25-orca-first-dev10x-mobile-plan.md
+git add docs/reports/2026-07-25-upstream-vs-dev10x-mobile.md \
+  docs/superpowers/specs/2026-07-25-upstream-first-symphony-mobile-design.md \
+  docs/superpowers/plans/2026-07-25-upstream-first-dev10x-mobile-plan.md
 git diff --cached --check
 git commit -m "docs(mobile): plan Orca-first Dev10x migration"
 ```
@@ -163,7 +163,7 @@ Expected: clean worktree with `origin/main` in branch ancestry.
 
 **Files:**
 
-- Create: `mobile/ORCA_UPSTREAM.md`
+- Create: `mobile/UPSTREAM_PROVENANCE.md`
 - Create: `mobile/THIRD_PARTY_NOTICES.md`
 - Create: `mobile/src/brand/dev10x.ts`
 - Create: `mobile/src/brand/dev10x-brand.test.ts`
@@ -194,7 +194,7 @@ describe("Dev10x mobile brand", () => {
   });
 
   it("records the exact Orca source and MIT attribution", () => {
-    expect(readFileSync(resolve(root, "ORCA_UPSTREAM.md"), "utf8")).toContain(
+    expect(readFileSync(resolve(root, "UPSTREAM_PROVENANCE.md"), "utf8")).toContain(
       "5c3c2f2b3daf9d8563581c389712d805bfb256a1",
     );
     expect(readFileSync(resolve(root, "THIRD_PARTY_NOTICES.md"), "utf8")).toContain(
@@ -213,7 +213,7 @@ cd mobile
 npx vitest run src/brand/dev10x-brand.test.ts
 ```
 
-Expected: FAIL because `dev10x.ts`, `ORCA_UPSTREAM.md` and
+Expected: FAIL because `dev10x.ts`, `UPSTREAM_PROVENANCE.md` and
 `THIRD_PARTY_NOTICES.md` do not exist.
 
 - [x] **Step 3: Add the canonical brand constants**
@@ -230,7 +230,7 @@ export function hostLabel(name: string): string {
 }
 ```
 
-Write `mobile/ORCA_UPSTREAM.md` with the repository URL, exact baseline commit,
+Write `mobile/UPSTREAM_PROVENANCE.md` with the repository URL, exact baseline commit,
 import date, copied directories, excluded Orca crypto/host-store files and the
 command used to compare future upstream changes. Write
 `mobile/THIRD_PARTY_NOTICES.md` with the complete Orca MIT license text.
@@ -265,7 +265,7 @@ Expected: PASS.
 Run:
 
 ```bash
-git add mobile/ORCA_UPSTREAM.md mobile/THIRD_PARTY_NOTICES.md \
+git add mobile/UPSTREAM_PROVENANCE.md mobile/THIRD_PARTY_NOTICES.md \
   mobile/src/brand mobile/assets mobile/app.config.ts mobile/package.json
 git commit -m "chore(mobile): establish Dev10x brand and Orca provenance"
 ```
@@ -360,7 +360,7 @@ navigation stack in `app/_layout.tsx`.
 - [x] **Step 4: Make root selection independent of the selected host**
 
 Implementation note: the provider and settings control land first. The root
-switch is completed immediately after `OrcaHomeRoute` is vendored in Task 4,
+switch is completed immediately after `Dev10xHomeRoute` is vendored in Task 4,
 so the branch never carries a synthetic placeholder that differs from
 upstream Orca.
 
@@ -378,7 +378,7 @@ export default function IndexRoute() {
       </ConnectionGate>
     );
   }
-  return <OrcaHomeRoute />;
+  return <Dev10xHomeRoute />;
 }
 ```
 
@@ -412,7 +412,7 @@ git commit -m "feat(mobile): add device-wide interface preference"
 
 **Files:**
 
-- Create: `mobile/src/orca/**` from upstream `mobile/src/**`
+- Create: `mobile/src/dev10x/**` from upstream `mobile/src/**`
 - Create: `mobile/app/pair-scan.tsx`
 - Create or replace: `mobile/app/pair.tsx`
 - Create: `mobile/app/pair-confirm.tsx`
@@ -442,7 +442,7 @@ Expected: the exact pinned commit and no uncommitted upstream source edits.
 
 - [x] **Step 2: Import the upstream presentation directories mechanically**
 
-Copy the following upstream directories intact into `mobile/src/orca/`:
+Copy the following upstream directories intact into `mobile/src/dev10x/`:
 
 ```text
 browser
@@ -472,7 +472,7 @@ dependencies as well; continue to exclude the five transport implementations
 listed below.
 
 Also copy the upstream route files listed in the Files section. Rewrite only
-their import roots from `src/...` to `src/orca/...`. Do not copy:
+their import roots from `src/...` to `src/dev10x/...`. Do not copy:
 
 ```text
 src/transport/e2ee.ts
@@ -488,13 +488,13 @@ Use this bounded mechanical import:
 
 ```bash
 ORCA_SOURCE=/home/raphaelcangucu/orca
-mkdir -p mobile/src/orca mobile/src/orca/routes mobile/src/shared
+mkdir -p mobile/src/dev10x mobile/src/dev10x/routes mobile/src/shared
 for ORCA_UI_DIR in browser cache components constants diagnostics dictation \
   files hooks layout notifications platform session source-control storage \
   tasks terminal theme worktree
 do
   rsync -a "$ORCA_SOURCE/mobile/src/$ORCA_UI_DIR/" \
-    "mobile/src/orca/$ORCA_UI_DIR/"
+    "mobile/src/dev10x/$ORCA_UI_DIR/"
 done
 rsync -a "$ORCA_SOURCE/mobile/app/h/" mobile/app/h/
 cp "$ORCA_SOURCE/mobile/app/pair.tsx" mobile/app/pair.tsx
@@ -506,13 +506,13 @@ cp "$ORCA_SOURCE/mobile/app/terminal-settings.tsx" mobile/app/terminal-settings.
 cp "$ORCA_SOURCE/mobile/app/voice-settings.tsx" mobile/app/voice-settings.tsx
 cp "$ORCA_SOURCE/mobile/app/troubleshoot.tsx" mobile/app/troubleshoot.tsx
 cp "$ORCA_SOURCE/mobile/app/index.tsx" \
-  mobile/src/orca/routes/OrcaHomeRoute.tsx
+  mobile/src/dev10x/routes/Dev10xHomeRoute.tsx
 ```
 
 Then use `rg -n "src/" mobile/app/h mobile/app/pair*.tsx
-mobile/src/orca/routes/OrcaHomeRoute.tsx` to enumerate every route import and
+mobile/src/dev10x/routes/Dev10xHomeRoute.tsx` to enumerate every route import and
 change those imports explicitly with `apply_patch`. The home copy exports
-`OrcaHomeRoute` instead of a default Expo route.
+`Dev10xHomeRoute` instead of a default Expo route.
 
 - [x] **Step 3: Install only dependencies actually imported by the vendored tree**
 
@@ -535,8 +535,8 @@ Expected: dependency versions are Expo 55 compatible.
 
 - [x] **Step 4: Add an upstream-drift inventory**
 
-Create `mobile/src/orca/upstream-manifest.test.ts` that verifies the pinned
-commit in `ORCA_UPSTREAM.md` and asserts the presence of these representative
+Create `mobile/src/dev10x/upstream-manifest.test.ts` that verifies the pinned
+commit in `UPSTREAM_PROVENANCE.md` and asserts the presence of these representative
 copied files:
 
 ```ts
@@ -560,11 +560,11 @@ Run only tests for imported pure helpers:
 ```bash
 cd mobile
 npx vitest run \
-  src/orca/layout/responsive-layout-metrics.test.ts \
-  src/orca/files/file-tree.test.ts \
-  src/orca/source-control/mobile-git-status.test.ts \
-  src/orca/session/mobile-terminal-records.test.ts \
-  src/orca/upstream-manifest.test.ts
+  src/dev10x/layout/responsive-layout-metrics.test.ts \
+  src/dev10x/files/file-tree.test.ts \
+  src/dev10x/source-control/mobile-git-status.test.ts \
+  src/dev10x/session/mobile-terminal-records.test.ts \
+  src/dev10x/upstream-manifest.test.ts
 ```
 
 Expected: PASS after import-path normalization.
@@ -572,7 +572,7 @@ Expected: PASS after import-path normalization.
 - [x] **Step 6: Commit the mechanical import**
 
 ```bash
-git add mobile/app mobile/src/orca mobile/package.json \
+git add mobile/app mobile/src/dev10x mobile/package.json \
   mobile/package-lock.json mobile/tsconfig.json
 git commit -m "feat(mobile): vendor production Orca interface"
 ```
@@ -586,17 +586,17 @@ that Orca wire crypto and host persistence were excluded.
 
 - Create: `mobile/src/runtime/HostRuntimeProvider.tsx`
 - Create: `mobile/src/runtime/HostRuntimeProvider.test.tsx`
-- Create: `mobile/src/orca/transport/rpc-client.ts`
-- Create: `mobile/src/orca/transport/rpc-client.test.ts`
-- Create: `mobile/src/orca/transport/client-context.tsx`
-- Create: `mobile/src/orca/transport/types.ts`
+- Create: `mobile/src/dev10x/transport/rpc-client.ts`
+- Create: `mobile/src/dev10x/transport/rpc-client.test.ts`
+- Create: `mobile/src/dev10x/transport/client-context.tsx`
+- Create: `mobile/src/dev10x/transport/types.ts`
 - Modify: `mobile/src/rpc/host-connection-manager.ts`
 - Modify: `mobile/src/api/TrackerClientProvider.tsx`
 - Modify: `mobile/app/_layout.tsx`
 
 - [x] **Step 1: Write the failing facade contract test**
 
-Create `mobile/src/orca/transport/rpc-client.test.ts`:
+Create `mobile/src/dev10x/transport/rpc-client.test.ts`:
 
 ```ts
 it("presents Symphony results with the response shape expected by Orca", async () => {
@@ -629,7 +629,7 @@ Run:
 
 ```bash
 cd mobile
-npx vitest run src/orca/transport/rpc-client.test.ts
+npx vitest run src/dev10x/transport/rpc-client.test.ts
 ```
 
 Expected: FAIL because the facade does not exist.
@@ -712,7 +712,7 @@ Run:
 
 ```bash
 cd mobile
-npx vitest run src/orca/transport/rpc-client.test.ts
+npx vitest run src/dev10x/transport/rpc-client.test.ts
 npx jest src/runtime/HostRuntimeProvider.test.tsx \
   src/api/TrackerClientProvider.test.tsx --runInBand
 ```
@@ -722,7 +722,7 @@ Expected: PASS.
 - [x] **Step 6: Commit**
 
 ```bash
-git add mobile/src/runtime mobile/src/orca/transport \
+git add mobile/src/runtime mobile/src/dev10x/transport \
   mobile/src/rpc/host-connection-manager.ts \
   mobile/src/api/TrackerClientProvider.tsx mobile/app/_layout.tsx
 git commit -m "feat(mobile): share Symphony host runtime across interfaces"
@@ -732,13 +732,13 @@ git commit -m "feat(mobile): share Symphony host runtime across interfaces"
 
 **Files:**
 
-- Create: `mobile/src/orca/transport/pairing.ts`
-- Create: `mobile/src/orca/transport/pair-confirm-state.ts`
-- Create: `mobile/src/orca/transport/host-store.ts`
+- Create: `mobile/src/dev10x/transport/pairing.ts`
+- Create: `mobile/src/dev10x/transport/pair-confirm-state.ts`
+- Create: `mobile/src/dev10x/transport/host-store.ts`
 - Modify: `mobile/app/pair.tsx`
 - Modify: `mobile/app/pair-scan.tsx`
 - Modify: `mobile/app/pair-confirm.tsx`
-- Modify: `mobile/src/orca/routes/OrcaHomeRoute.tsx`
+- Modify: `mobile/src/dev10x/routes/Dev10xHomeRoute.tsx`
 - Modify: `mobile/app/h/[hostId]/index.tsx`
 - Create: `elixir/lib/symphony_elixir/mobile_rpc/methods/orca_system.ex`
 - Create: `elixir/lib/symphony_elixir/mobile_rpc/methods/orca_workspaces.ex`
@@ -851,8 +851,8 @@ Run:
 cd mobile
 npx vitest run \
   src/auth/pairing-offer.test.ts \
-  src/orca/transport/pair-confirm-state.test.ts \
-  src/orca/transport/rpc-client.test.ts
+  src/dev10x/transport/pair-confirm-state.test.ts \
+  src/dev10x/transport/rpc-client.test.ts
 cd ../elixir
 mix test \
   test/symphony_elixir/mobile_rpc/methods/orca_system_test.exs \
@@ -864,7 +864,7 @@ Expected: PASS.
 - [x] **Step 6: Commit**
 
 ```bash
-git add mobile/app mobile/src/orca/transport mobile/src/orca/routes \
+git add mobile/app mobile/src/dev10x/transport mobile/src/dev10x/routes \
   elixir/lib/symphony_elixir/mobile_rpc \
   elixir/test/symphony_elixir/mobile_rpc \
   docs/superpowers/specs/fixtures/mobile-rpc-capabilities-v1.json
@@ -876,7 +876,7 @@ git commit -m "feat(mobile): connect Orca onboarding to Symphony hosts"
 **Files:**
 
 - Modify: `mobile/app/h/[hostId]/session/[worktreeId].tsx`
-- Modify: `mobile/src/orca/session/**`
+- Modify: `mobile/src/dev10x/session/**`
 - Create: `elixir/lib/symphony_elixir/mobile_rpc/methods/orca_sessions.ex`
 - Create: `elixir/lib/symphony_elixir/mobile_rpc/orca_subscription.ex`
 - Create: `elixir/test/symphony_elixir/mobile_rpc/methods/orca_sessions_test.exs`
@@ -953,8 +953,8 @@ Run:
 ```bash
 cd mobile
 npx vitest run \
-  src/orca/session/opened-mobile-session-tab.test.ts \
-  src/orca/session/mobile-terminal-records.test.ts \
+  src/dev10x/session/opened-mobile-session-tab.test.ts \
+  src/dev10x/session/mobile-terminal-records.test.ts \
   src/rpc/mock-server-rpc-handlers.test.ts
 npm run typecheck
 cd ../elixir
@@ -966,7 +966,7 @@ Expected: PASS.
 - [x] **Step 7: Commit**
 
 ```bash
-git add mobile/app/h mobile/src/orca/session mobile/scripts \
+git add mobile/app/h mobile/src/dev10x/session mobile/scripts \
   mobile/src/rpc/mock-server-rpc-handlers.test.ts \
   elixir/lib/symphony_elixir/mobile_rpc \
   elixir/test/symphony_elixir/mobile_rpc
@@ -979,8 +979,8 @@ git commit -m "feat(mobile): connect Orca sessions and terminal to Symphony"
 
 - Modify: `mobile/app/h/[hostId]/files/[worktreeId].tsx`
 - Modify: `mobile/app/h/[hostId]/files/preview/[worktreeId].tsx`
-- Modify: `mobile/src/orca/files/**`
-- Modify: `mobile/src/orca/browser/**`
+- Modify: `mobile/src/dev10x/files/**`
+- Modify: `mobile/src/dev10x/browser/**`
 - Create: `elixir/lib/symphony_elixir/mobile_rpc/methods/orca_files.ex`
 - Create: `elixir/test/symphony_elixir/mobile_rpc/methods/orca_files_test.exs`
 - Modify: `elixir/lib/symphony_elixir/mobile_rpc/methods/workspace.ex`
@@ -1041,9 +1041,9 @@ Run:
 ```bash
 cd mobile
 npx vitest run \
-  src/orca/files/file-tree.test.ts \
-  src/orca/files/mobile-file-preview-request.test.ts \
-  src/orca/browser/browser-touch-geometry.test.ts
+  src/dev10x/files/file-tree.test.ts \
+  src/dev10x/files/mobile-file-preview-request.test.ts \
+  src/dev10x/browser/browser-touch-geometry.test.ts
 cd ../elixir
 mix test test/symphony_elixir/mobile_rpc/methods/orca_files_test.exs
 ```
@@ -1053,7 +1053,7 @@ Expected: PASS.
 - [x] **Step 5: Commit**
 
 ```bash
-git add mobile/app/h mobile/src/orca/files mobile/src/orca/browser \
+git add mobile/app/h mobile/src/dev10x/files mobile/src/dev10x/browser \
   mobile/scripts elixir/lib/symphony_elixir/mobile_rpc \
   elixir/test/symphony_elixir/mobile_rpc
 git commit -m "feat(mobile): connect Orca files and previews to Symphony"
@@ -1067,8 +1067,8 @@ git commit -m "feat(mobile): connect Orca files and previews to Symphony"
 - Modify: `mobile/app/h/[hostId]/history/[worktreeId].tsx`
 - Modify: `mobile/app/h/[hostId]/pr/[worktreeId].tsx`
 - Modify: `mobile/app/h/[hostId]/review/[worktreeId].tsx`
-- Modify: `mobile/src/orca/source-control/**`
-- Modify: `mobile/src/orca/components/pr-sidebar/**`
+- Modify: `mobile/src/dev10x/source-control/**`
+- Modify: `mobile/src/dev10x/components/pr-sidebar/**`
 - Create: `elixir/lib/symphony_elixir/mobile_rpc/methods/orca_git.ex`
 - Create: `elixir/test/symphony_elixir/mobile_rpc/methods/orca_git_test.exs`
 - Modify: `elixir/lib/symphony_elixir/mobile_rpc/methods/git.ex`
@@ -1125,10 +1125,10 @@ Run:
 ```bash
 cd mobile
 npx vitest run \
-  src/orca/source-control/mobile-git-status.test.ts \
-  src/orca/source-control/mobile-git-history.test.ts \
-  src/orca/source-control/mobile-source-control-actions.test.ts \
-  src/orca/components/pr-sidebar/pr-actions-state.test.ts
+  src/dev10x/source-control/mobile-git-status.test.ts \
+  src/dev10x/source-control/mobile-git-history.test.ts \
+  src/dev10x/source-control/mobile-source-control-actions.test.ts \
+  src/dev10x/components/pr-sidebar/pr-actions-state.test.ts
 cd ../elixir
 mix test test/symphony_elixir/mobile_rpc/methods/orca_git_test.exs
 ```
@@ -1138,8 +1138,8 @@ Expected: PASS.
 - [x] **Step 5: Commit**
 
 ```bash
-git add mobile/app/h mobile/src/orca/source-control \
-  mobile/src/orca/components/pr-sidebar mobile/scripts \
+git add mobile/app/h mobile/src/dev10x/source-control \
+  mobile/src/dev10x/components/pr-sidebar mobile/scripts \
   elixir/lib/symphony_elixir/mobile_rpc \
   elixir/test/symphony_elixir/mobile_rpc
 git commit -m "feat(mobile): connect Orca source control to Symphony"
@@ -1154,10 +1154,10 @@ git commit -m "feat(mobile): connect Orca source control to Symphony"
 - Modify: `mobile/app/notifications.tsx`
 - Modify: `mobile/app/troubleshoot.tsx`
 - Modify: `mobile/app/voice-settings.tsx`
-- Modify: `mobile/src/orca/tasks/**`
-- Modify: `mobile/src/orca/notifications/**`
-- Modify: `mobile/src/orca/diagnostics/**`
-- Modify: `mobile/src/orca/dictation/**`
+- Modify: `mobile/src/dev10x/tasks/**`
+- Modify: `mobile/src/dev10x/notifications/**`
+- Modify: `mobile/src/dev10x/diagnostics/**`
+- Modify: `mobile/src/dev10x/dictation/**`
 - Create: `elixir/lib/symphony_elixir/mobile_rpc/methods/orca_tasks.ex`
 - Create: `elixir/test/symphony_elixir/mobile_rpc/methods/orca_tasks_test.exs`
 - Modify: `elixir/lib/symphony_elixir/mobile_rpc/methods/tasks.ex`
@@ -1236,10 +1236,10 @@ Run:
 ```bash
 cd mobile
 npx vitest run \
-  src/orca/tasks/mobile-work-items.test.ts \
-  src/orca/notifications/mobile-notifications.test.ts \
-  src/orca/diagnostics/host-reachability.test.ts \
-  src/orca/dictation/mobile-dictation-setup.test.ts
+  src/dev10x/tasks/mobile-work-items.test.ts \
+  src/dev10x/notifications/mobile-notifications.test.ts \
+  src/dev10x/diagnostics/host-reachability.test.ts \
+  src/dev10x/dictation/mobile-dictation-setup.test.ts
 cd ../elixir
 mix test test/symphony_elixir/mobile_rpc/methods/orca_tasks_test.exs
 ```
@@ -1250,7 +1250,7 @@ than backed by fixtures in production.
 - [x] **Step 6: Commit**
 
 ```bash
-git add mobile/app mobile/src/orca mobile/package.json mobile/package-lock.json \
+git add mobile/app mobile/src/dev10x mobile/package.json mobile/package-lock.json \
   elixir/lib/symphony_elixir/mobile_rpc \
   elixir/test/symphony_elixir/mobile_rpc
 git commit -m "feat(mobile): expose Symphony tasks in the Orca experience"
@@ -1422,9 +1422,9 @@ git commit -m "test(mobile): mirror Orca mock server coverage"
 **Files:**
 
 - Create: `mobile/src/brand/visible-copy.test.ts`
-- Modify: copied `mobile/app/**` and `mobile/src/orca/**` visible strings
-- Modify: `mobile/src/orca/components/OrcaLogo.tsx` and rename to
-  `mobile/src/orca/components/Dev10xLogo.tsx`
+- Modify: copied `mobile/app/**` and `mobile/src/dev10x/**` visible strings
+- Modify: `mobile/src/dev10x/components/OrcaLogo.tsx` and rename to
+  `mobile/src/dev10x/components/Dev10xLogo.tsx`
 - Modify: `mobile/app.config.ts`
 - Modify: `mobile/assets/**`
 
@@ -1469,10 +1469,10 @@ Run:
 ```bash
 git diff --no-index \
   /home/raphaelcangucu/orca/mobile/src/components/BottomDrawer.tsx \
-  mobile/src/orca/components/BottomDrawer.tsx
+  mobile/src/dev10x/components/BottomDrawer.tsx
 git diff --no-index \
   /home/raphaelcangucu/orca/mobile/src/files/MobileFileExplorerPanel.tsx \
-  mobile/src/orca/files/MobileFileExplorerPanel.tsx
+  mobile/src/dev10x/files/MobileFileExplorerPanel.tsx
 ```
 
 Expected: no differences except import roots, formatting forced by this repo,
@@ -1486,8 +1486,8 @@ Run:
 cd mobile
 npx vitest run src/brand/dev10x-brand.test.ts \
   src/brand/visible-copy.test.ts \
-  src/orca/upstream-manifest.test.ts \
-  src/orca/components/MobileMarkdown.test.ts
+  src/dev10x/upstream-manifest.test.ts \
+  src/dev10x/components/MobileMarkdown.test.ts
 ```
 
 Expected: PASS.
@@ -1496,7 +1496,7 @@ Expected: PASS.
 
 ```bash
 git add mobile/app.config.ts mobile/app mobile/assets \
-  mobile/src/brand mobile/src/orca
+  mobile/src/brand mobile/src/dev10x
 git commit -m "fix(mobile): apply Dev10x brand across copied Orca flows"
 ```
 

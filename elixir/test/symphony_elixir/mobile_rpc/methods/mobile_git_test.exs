@@ -1,7 +1,7 @@
-defmodule SymphonyElixir.MobileRpc.Methods.OrcaGitTest do
+defmodule SymphonyElixir.MobileRpc.Methods.MobileGitTest do
   use ExUnit.Case, async: false
 
-  alias SymphonyElixir.MobileRpc.{Dispatcher, OrcaGitService}
+  alias SymphonyElixir.MobileRpc.{Dispatcher, MobileGitService}
 
   @methods ~w(
     git.status
@@ -93,26 +93,26 @@ defmodule SymphonyElixir.MobileRpc.Methods.OrcaGitTest do
     File.write!(Path.join(root, "new.txt"), "new\n")
 
     assert {:ok, %{"entries" => entries, "branch" => "main", "head" => head}} =
-             OrcaGitService.call("git.status", %{"worktree" => "id:42"}, context)
+             MobileGitService.call("git.status", %{"worktree" => "id:42"}, context)
 
     assert is_binary(head)
     assert Enum.any?(entries, &(&1 == %{"path" => "README.md", "status" => "modified", "area" => "unstaged"}))
     assert Enum.any?(entries, &(&1 == %{"path" => "new.txt", "status" => "untracked", "area" => "untracked"}))
 
     assert {:ok, %{"staged" => true, "filePath" => "README.md"}} =
-             OrcaGitService.call(
+             MobileGitService.call(
                "git.stage",
                %{"worktree" => "id:42", "filePath" => "README.md"},
                context
              )
 
     assert {:ok, %{"entries" => staged_entries}} =
-             OrcaGitService.call("git.status", %{"worktree" => "id:42"}, context)
+             MobileGitService.call("git.status", %{"worktree" => "id:42"}, context)
 
     assert Enum.any?(staged_entries, &(&1 == %{"path" => "README.md", "status" => "modified", "area" => "staged"}))
 
     assert {:error, {:rpc_error, "invalid_path", _, false, nil}} =
-             OrcaGitService.call(
+             MobileGitService.call(
                "git.stage",
                %{"worktree" => "id:42", "filePath" => "--upload-pack=evil"},
                context
@@ -132,7 +132,7 @@ defmodule SymphonyElixir.MobileRpc.Methods.OrcaGitTest do
               "originalContent" => "# Dev10x\n",
               "modifiedContent" => "# Dev10x mobile\n"
             }} =
-             OrcaGitService.call(
+             MobileGitService.call(
                "git.diff",
                %{"worktree" => "id:42", "filePath" => "README.md", "staged" => false},
                context
@@ -151,7 +151,7 @@ defmodule SymphonyElixir.MobileRpc.Methods.OrcaGitTest do
               "hasMore" => false,
               "limit" => 20
             }} =
-             OrcaGitService.call(
+             MobileGitService.call(
                "git.history",
                %{"worktree" => "id:42", "limit" => 20},
                context
@@ -168,7 +168,7 @@ defmodule SymphonyElixir.MobileRpc.Methods.OrcaGitTest do
               },
               "entries" => []
             }} =
-             OrcaGitService.call(
+             MobileGitService.call(
                "git.branchCompare",
                %{"worktree" => "id:42", "baseRef" => "main"},
                context
@@ -182,7 +182,7 @@ defmodule SymphonyElixir.MobileRpc.Methods.OrcaGitTest do
                 "changedFiles" => 1
               }
             }} =
-             OrcaGitService.call(
+             MobileGitService.call(
                "git.commitCompare",
                %{"worktree" => "id:42", "commitId" => baseline},
                context
@@ -197,14 +197,14 @@ defmodule SymphonyElixir.MobileRpc.Methods.OrcaGitTest do
     File.write!(Path.join(root, "unrelated.txt"), "leave me\n")
 
     assert {:ok, _result} =
-             OrcaGitService.call(
+             MobileGitService.call(
                "git.stage",
                %{"worktree" => "id:42", "filePath" => "README.md"},
                context
              )
 
     assert {:ok, %{"success" => true, "committed" => true, "sha" => sha}} =
-             OrcaGitService.call(
+             MobileGitService.call(
                "git.commit",
                %{"worktree" => "id:42", "message" => "feat: copied source control"},
                context
@@ -214,7 +214,7 @@ defmodule SymphonyElixir.MobileRpc.Methods.OrcaGitTest do
     assert git!(root, ["status", "--porcelain"]) == "?? unrelated.txt"
 
     assert {:ok, %{"success" => true, "committed" => false, "sha" => ^sha}} =
-             OrcaGitService.call(
+             MobileGitService.call(
                "git.commit",
                %{"worktree" => "id:42", "message" => "feat: copied source control"},
                context
@@ -230,10 +230,10 @@ defmodule SymphonyElixir.MobileRpc.Methods.OrcaGitTest do
       end)
 
     assert {:error, {:rpc_error, "push_failed", "Push failed: remote rejected: permission denied", true, nil}} =
-             OrcaGitService.call("git.push", %{"worktree" => "id:42"}, push_context)
+             MobileGitService.call("git.push", %{"worktree" => "id:42"}, push_context)
 
     assert {:ok, %{"success" => true, "message" => message}} =
-             OrcaGitService.call(
+             MobileGitService.call(
                "git.generateCommitMessage",
                %{"worktree" => "id:42"},
                context
@@ -246,7 +246,7 @@ defmodule SymphonyElixir.MobileRpc.Methods.OrcaGitTest do
               "success" => true,
               "fields" => %{"title" => title, "body" => body, "base" => "main", "draft" => true}
             }} =
-             OrcaGitService.call(
+             MobileGitService.call(
                "git.generatePullRequestFields",
                %{
                  "worktree" => "id:42",
@@ -266,7 +266,7 @@ defmodule SymphonyElixir.MobileRpc.Methods.OrcaGitTest do
               "canCreate" => false,
               "blockedReason" => "unsupported_provider"
             }} =
-             OrcaGitService.call(
+             MobileGitService.call(
                "hostedReview.getCreationEligibility",
                %{"repo" => "id:repo", "worktree" => "id:42", "branch" => "main"},
                context

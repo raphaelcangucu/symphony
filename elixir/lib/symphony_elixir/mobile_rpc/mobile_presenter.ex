@@ -1,4 +1,4 @@
-defmodule SymphonyElixir.MobileRpc.OrcaPresenter do
+defmodule SymphonyElixir.MobileRpc.MobilePresenter do
   @moduledoc """
   Adapts Symphony's host-owned project and session services to the stable
   response shapes consumed by the vendored mobile interface.

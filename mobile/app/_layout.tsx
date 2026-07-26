@@ -12,8 +12,8 @@ import {
   activateNotificationDestination,
   type NotificationDestination,
 } from "@/native/notifications";
-import { RpcClientProvider } from "@/orca/transport/client-context";
-import { HostStoreProvider } from "@/orca/transport/HostStoreProvider";
+import { RpcClientProvider } from "@/dev10x/transport/client-context";
+import { HostStoreProvider } from "@/dev10x/transport/HostStoreProvider";
 import { AppRuntimeProvider, productionRuntime, useAppRuntime } from "@/runtime/AppRuntime";
 import { HostRuntimeProvider } from "@/runtime/HostRuntimeProvider";
 import { ThemeProvider, useAppTheme } from "@/theme/ThemeProvider";

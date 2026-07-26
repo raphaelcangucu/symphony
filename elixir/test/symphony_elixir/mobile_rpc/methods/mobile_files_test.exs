@@ -1,7 +1,7 @@
-defmodule SymphonyElixir.MobileRpc.Methods.OrcaFilesTest do
+defmodule SymphonyElixir.MobileRpc.Methods.MobileFilesTest do
   use ExUnit.Case, async: false
 
-  alias SymphonyElixir.MobileRpc.{Dispatcher, OrcaFileService}
+  alias SymphonyElixir.MobileRpc.{Dispatcher, MobileFileService}
 
   @methods ~w(
     files.list
@@ -145,7 +145,7 @@ defmodule SymphonyElixir.MobileRpc.Methods.OrcaFilesTest do
               "files" => files,
               "totalCount" => 3,
               "truncated" => false
-            }} = OrcaFileService.call("files.list", %{"worktree" => "id:42"}, context)
+            }} = MobileFileService.call("files.list", %{"worktree" => "id:42"}, context)
 
     assert Enum.any?(files, &(&1["relativePath"] == "README.md" and &1["kind"] == "text"))
     assert Enum.any?(files, &(&1["relativePath"] == "logo.png" and &1["kind"] == "binary"))
@@ -156,7 +156,7 @@ defmodule SymphonyElixir.MobileRpc.Methods.OrcaFilesTest do
               %{"name" => "logo.png", "isDirectory" => false},
               %{"name" => "README.md", "isDirectory" => false}
             ]} =
-             OrcaFileService.call(
+             MobileFileService.call(
                "files.readDir",
                %{"worktree" => "id:42", "relativePath" => ""},
                context
@@ -170,14 +170,14 @@ defmodule SymphonyElixir.MobileRpc.Methods.OrcaFilesTest do
               "truncated" => false,
               "byteLength" => 9
             }} =
-             OrcaFileService.call(
+             MobileFileService.call(
                "files.read",
                %{"worktree" => "id:42", "relativePath" => "README.md"},
                context
              )
 
     assert {:error, {:rpc_error, "invalid_relative_path", _, false, nil}} =
-             OrcaFileService.call(
+             MobileFileService.call(
                "files.read",
                %{"worktree" => "id:42", "relativePath" => "../../etc/passwd"},
                context
@@ -186,7 +186,7 @@ defmodule SymphonyElixir.MobileRpc.Methods.OrcaFilesTest do
     File.ln_s!(outside, Path.join(workspace, "outside-link.txt"))
 
     assert {:error, {:rpc_error, "invalid_relative_path", _, false, nil}} =
-             OrcaFileService.call(
+             MobileFileService.call(
                "files.read",
                %{"worktree" => "id:42", "relativePath" => "outside-link.txt"},
                context
@@ -200,7 +200,7 @@ defmodule SymphonyElixir.MobileRpc.Methods.OrcaFilesTest do
     File.write!(Path.join(workspace, "too-large.txt"), :binary.copy("x", 512 * 1024 + 1))
 
     assert {:error, {:rpc_error, "file_too_large", _, false, nil}} =
-             OrcaFileService.call(
+             MobileFileService.call(
                "files.read",
                %{"worktree" => "id:42", "relativePath" => "too-large.txt"},
                context
@@ -213,7 +213,7 @@ defmodule SymphonyElixir.MobileRpc.Methods.OrcaFilesTest do
               "isImage" => true,
               "mimeType" => "image/png"
             }} =
-             OrcaFileService.call(
+             MobileFileService.call(
                "files.readPreview",
                %{"worktree" => "id:42", "relativePath" => "logo.png"},
                context
@@ -238,7 +238,7 @@ defmodule SymphonyElixir.MobileRpc.Methods.OrcaFilesTest do
                 "relativePath" => "src/app.ex"
               }
             }} =
-             OrcaFileService.call(
+             MobileFileService.call(
                "files.resolveTerminalPath",
                %{
                  "worktree" => "id:42",
@@ -258,7 +258,7 @@ defmodule SymphonyElixir.MobileRpc.Methods.OrcaFilesTest do
                 "grantId" => grant_id
               }
             }} =
-             OrcaFileService.call(
+             MobileFileService.call(
                "files.resolveTerminalPath",
                %{
                  "worktree" => "id:42",
@@ -269,7 +269,7 @@ defmodule SymphonyElixir.MobileRpc.Methods.OrcaFilesTest do
              )
 
     assert {:ok, %{"content" => "before", "truncated" => false, "byteLength" => 6}} =
-             OrcaFileService.call(
+             MobileFileService.call(
                "files.readTerminalArtifact",
                %{
                  "worktree" => "id:42",
@@ -280,7 +280,7 @@ defmodule SymphonyElixir.MobileRpc.Methods.OrcaFilesTest do
              )
 
     assert {:ok, %{"written" => true, "byteLength" => 5}} =
-             OrcaFileService.call(
+             MobileFileService.call(
                "files.writeTerminalArtifact",
                %{
                  "worktree" => "id:42",
@@ -296,7 +296,7 @@ defmodule SymphonyElixir.MobileRpc.Methods.OrcaFilesTest do
     denied_context = %{context | orca_terminal_output: fn _handle -> {:ok, "no artifact"} end}
 
     assert {:ok, %{"exists" => false, "openTarget" => nil}} =
-             OrcaFileService.call(
+             MobileFileService.call(
                "files.resolveTerminalPath",
                %{
                  "worktree" => "id:42",
@@ -311,7 +311,7 @@ defmodule SymphonyElixir.MobileRpc.Methods.OrcaFilesTest do
     context: context
   } do
     assert {:error, {:rpc_error, "image_too_large", _, false, nil}} =
-             OrcaFileService.call(
+             MobileFileService.call(
                "clipboard.startImageUpload",
                %{"expectedBase64Length" => 24 * 1024 * 1024 + 1, "connectionId" => "mobile"},
                context
@@ -320,21 +320,21 @@ defmodule SymphonyElixir.MobileRpc.Methods.OrcaFilesTest do
     encoded = Base.encode64("dev10x-image")
 
     assert {:ok, %{"uploadId" => upload_id}} =
-             OrcaFileService.call(
+             MobileFileService.call(
                "clipboard.startImageUpload",
                %{"expectedBase64Length" => byte_size(encoded), "connectionId" => "mobile"},
                context
              )
 
     assert {:ok, %{"receivedBase64Length" => size}} =
-             OrcaFileService.call(
+             MobileFileService.call(
                "clipboard.appendImageUploadChunk",
                %{"uploadId" => upload_id, "offset" => 0, "contentBase64" => encoded},
                context
              )
 
     assert size == byte_size(encoded)
-    assert {:ok, saved_path} = OrcaFileService.call("clipboard.commitImageUpload", %{"uploadId" => upload_id}, context)
+    assert {:ok, saved_path} = MobileFileService.call("clipboard.commitImageUpload", %{"uploadId" => upload_id}, context)
     assert File.read!(saved_path) == "dev10x-image"
   end
 
@@ -343,7 +343,7 @@ defmodule SymphonyElixir.MobileRpc.Methods.OrcaFilesTest do
   } do
     for method <- ~w(browser.mouseDown browser.mouseMove browser.mouseUp browser.mouseWheel) do
       assert {:error, {:rpc_error, "capability_unavailable", _, false, nil}} =
-               OrcaFileService.call(
+               MobileFileService.call(
                  method,
                  %{"worktree" => "id:42", "page" => "page-1"},
                  context
@@ -351,7 +351,7 @@ defmodule SymphonyElixir.MobileRpc.Methods.OrcaFilesTest do
     end
 
     assert {:error, {:rpc_error, "capability_unavailable", _, false, nil}} =
-             OrcaFileService.subscribe(
+             MobileFileService.subscribe(
                "browser.screencast",
                %{"worktree" => "id:42", "page" => "page-1"},
                Map.put(context, :connection_pid, self())

@@ -1,15 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { View, StyleSheet, PanResponder } from 'react-native'
 import { Stack, useGlobalSearchParams, usePathname } from 'expo-router'
-import { colors } from '../../src/orca/theme/mobile-theme'
-import { useResponsiveLayout } from '../../src/orca/layout/responsive-layout'
+import { colors } from '../../src/dev10x/theme/mobile-theme'
+import { useResponsiveLayout } from '../../src/dev10x/layout/responsive-layout'
 import {
   HOST_SIDEBAR_DEFAULT_WIDTH,
   HOST_SIDEBAR_MAX_WIDTH,
   HOST_SIDEBAR_MIN_WIDTH,
   loadHostSidebarWidth,
   saveHostSidebarWidth
-} from '../../src/orca/storage/preferences'
+} from '../../src/dev10x/storage/preferences'
 import { HostScreen } from './[hostId]/index'
 
 // Keep at least this much room for the detail pane when resizing the sidebar.

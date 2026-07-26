@@ -75,6 +75,9 @@ defmodule SymphonyElixir.MobileRpc.Methods.OrchestratorTest do
     assert opts[:topic] == "agent_executions"
     assert opts[:event_prefix] == "orchestrator.executions"
 
+    assert {"snapshot", %{"data" => [%{"execution_session_id" => 77}]}, nil} =
+             opts[:event_mapper].("snapshot", %{"data" => []}, nil)
+
     activate.()
     assert_receive :bridge_activated
     send(bridge, :stop)

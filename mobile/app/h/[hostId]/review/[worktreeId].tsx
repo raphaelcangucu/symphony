@@ -1,13 +1,13 @@
 import { useCallback, useMemo } from 'react'
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import { MobileDiffReviewScreenView } from '../../../../src/orca/components/MobileDiffReviewScreenView'
+import { MobileDiffReviewScreenView } from '../../../../src/dev10x/components/MobileDiffReviewScreenView'
 import {
   firstReviewParam,
   normalizeReviewFilterParam
-} from '../../../../src/orca/session/mobile-diff-review-screen-model'
-import { normalizeReviewAreaParam } from '../../../../src/orca/session/mobile-diff-review-positioning'
-import { useMobileDiffReviewController } from '../../../../src/orca/session/use-mobile-diff-review-controller'
-import { useForceReconnect, useHostClient } from '../../../../src/orca/transport/client-context'
+} from '../../../../src/dev10x/session/mobile-diff-review-screen-model'
+import { normalizeReviewAreaParam } from '../../../../src/dev10x/session/mobile-diff-review-positioning'
+import { useMobileDiffReviewController } from '../../../../src/dev10x/session/use-mobile-diff-review-controller'
+import { useForceReconnect, useHostClient } from '../../../../src/dev10x/transport/client-context'
 
 export default function MobileDiffReviewScreen() {
   const params = useLocalSearchParams<{

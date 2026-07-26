@@ -68,7 +68,8 @@ defmodule SymphonyElixir.MobileRpc.Methods.Orchestrator do
                subscription_id,
                channel_module: channel_module,
                topic: "agent_executions",
-               event_prefix: "orchestrator.executions"
+               event_prefix: "orchestrator.executions",
+               event_mapper: execution_event_mapper(service(context))
              ) do
         {:ok, subscription(bridge_module, bridge_pid, subscription_id)}
       else
@@ -78,6 +79,21 @@ defmodule SymphonyElixir.MobileRpc.Methods.Orchestrator do
 
     defp bridge(context),
       do: Map.get(context, :session_bridge, SymphonyElixir.MobileRpc.SessionBridge)
+
+    defp service(context) do
+      Map.get(
+        context,
+        :orchestrator_mobile_service,
+        SymphonyElixir.MobileRpc.OrchestratorService
+      )
+    end
+
+    defp execution_event_mapper(service) do
+      fn
+        "snapshot", _payload, state -> {"snapshot", %{"data" => service.list_executions()}, state}
+        event, payload, state -> {event, payload, state}
+      end
+    end
 
     defp subscription(bridge_module, bridge_pid, subscription_id) do
       cleanup = fn ->

@@ -1,4 +1,4 @@
-defmodule SymphonyElixir.MobileRpc.Methods.OrcaGit do
+defmodule SymphonyElixir.MobileRpc.Methods.MobileGit do
   @moduledoc "Orca-compatible source-control and hosted-review operations."
 
   @spec modules() :: [module()]
@@ -21,72 +21,72 @@ defmodule SymphonyElixir.MobileRpc.Methods.OrcaGit do
   end
 
   defmodule Status do
-    use SymphonyElixir.MobileRpc.OrcaMethod,
+    use SymphonyElixir.MobileRpc.MobileMethod,
       name: "git.status",
-      service: SymphonyElixir.MobileRpc.OrcaGitService,
+      service: SymphonyElixir.MobileRpc.MobileGitService,
       service_key: :orca_git_service,
       allowed_keys: ["worktree", "includeIgnored", "bypassEffectiveUpstreamNegativeCache"],
       required_keys: ["worktree"]
   end
 
   defmodule Diff do
-    use SymphonyElixir.MobileRpc.OrcaMethod,
+    use SymphonyElixir.MobileRpc.MobileMethod,
       name: "git.diff",
-      service: SymphonyElixir.MobileRpc.OrcaGitService,
+      service: SymphonyElixir.MobileRpc.MobileGitService,
       service_key: :orca_git_service,
       allowed_keys: ["worktree", "filePath", "staged", "compareAgainstHead"],
       required_keys: ["worktree", "filePath", "staged"]
   end
 
   defmodule BranchDiff do
-    use SymphonyElixir.MobileRpc.OrcaMethod,
+    use SymphonyElixir.MobileRpc.MobileMethod,
       name: "git.branchDiff",
-      service: SymphonyElixir.MobileRpc.OrcaGitService,
+      service: SymphonyElixir.MobileRpc.MobileGitService,
       service_key: :orca_git_service,
       allowed_keys: ["worktree", "filePath", "oldPath", "compare"],
       required_keys: ["worktree", "filePath", "compare"]
   end
 
   defmodule BranchCompare do
-    use SymphonyElixir.MobileRpc.OrcaMethod,
+    use SymphonyElixir.MobileRpc.MobileMethod,
       name: "git.branchCompare",
-      service: SymphonyElixir.MobileRpc.OrcaGitService,
+      service: SymphonyElixir.MobileRpc.MobileGitService,
       service_key: :orca_git_service,
       allowed_keys: ["worktree", "baseRef"],
       required_keys: ["worktree", "baseRef"]
   end
 
   defmodule CommitCompare do
-    use SymphonyElixir.MobileRpc.OrcaMethod,
+    use SymphonyElixir.MobileRpc.MobileMethod,
       name: "git.commitCompare",
-      service: SymphonyElixir.MobileRpc.OrcaGitService,
+      service: SymphonyElixir.MobileRpc.MobileGitService,
       service_key: :orca_git_service,
       allowed_keys: ["worktree", "commitId"],
       required_keys: ["worktree", "commitId"]
   end
 
   defmodule History do
-    use SymphonyElixir.MobileRpc.OrcaMethod,
+    use SymphonyElixir.MobileRpc.MobileMethod,
       name: "git.history",
-      service: SymphonyElixir.MobileRpc.OrcaGitService,
+      service: SymphonyElixir.MobileRpc.MobileGitService,
       service_key: :orca_git_service,
       allowed_keys: ["worktree", "limit", "baseRef"],
       required_keys: ["worktree"]
   end
 
   defmodule Stage do
-    use SymphonyElixir.MobileRpc.OrcaMethod,
+    use SymphonyElixir.MobileRpc.MobileMethod,
       name: "git.stage",
-      service: SymphonyElixir.MobileRpc.OrcaGitService,
+      service: SymphonyElixir.MobileRpc.MobileGitService,
       service_key: :orca_git_service,
       allowed_keys: ["worktree", "filePath"],
       required_keys: ["worktree", "filePath"]
   end
 
   defmodule Commit do
-    use SymphonyElixir.MobileRpc.OrcaMethod,
+    use SymphonyElixir.MobileRpc.MobileMethod,
       name: "git.commit",
-      service: SymphonyElixir.MobileRpc.OrcaGitService,
+      service: SymphonyElixir.MobileRpc.MobileGitService,
       service_key: :orca_git_service,
       allowed_keys: ["worktree", "message"],
       required_keys: ["worktree", "message"],
@@ -94,9 +94,9 @@ defmodule SymphonyElixir.MobileRpc.Methods.OrcaGit do
   end
 
   defmodule Push do
-    use SymphonyElixir.MobileRpc.OrcaMethod,
+    use SymphonyElixir.MobileRpc.MobileMethod,
       name: "git.push",
-      service: SymphonyElixir.MobileRpc.OrcaGitService,
+      service: SymphonyElixir.MobileRpc.MobileGitService,
       service_key: :orca_git_service,
       allowed_keys: ["worktree", "publish", "pushTarget", "forceWithLease"],
       required_keys: ["worktree"],
@@ -104,9 +104,9 @@ defmodule SymphonyElixir.MobileRpc.Methods.OrcaGit do
   end
 
   defmodule GenerateCommitMessage do
-    use SymphonyElixir.MobileRpc.OrcaMethod,
+    use SymphonyElixir.MobileRpc.MobileMethod,
       name: "git.generateCommitMessage",
-      service: SymphonyElixir.MobileRpc.OrcaGitService,
+      service: SymphonyElixir.MobileRpc.MobileGitService,
       service_key: :orca_git_service,
       allowed_keys: [
         "worktree",
@@ -122,18 +122,18 @@ defmodule SymphonyElixir.MobileRpc.Methods.OrcaGit do
   end
 
   defmodule CancelGenerateCommitMessage do
-    use SymphonyElixir.MobileRpc.OrcaMethod,
+    use SymphonyElixir.MobileRpc.MobileMethod,
       name: "git.cancelGenerateCommitMessage",
-      service: SymphonyElixir.MobileRpc.OrcaGitService,
+      service: SymphonyElixir.MobileRpc.MobileGitService,
       service_key: :orca_git_service,
       allowed_keys: ["worktree"],
       required_keys: ["worktree"]
   end
 
   defmodule GeneratePullRequestFields do
-    use SymphonyElixir.MobileRpc.OrcaMethod,
+    use SymphonyElixir.MobileRpc.MobileMethod,
       name: "git.generatePullRequestFields",
-      service: SymphonyElixir.MobileRpc.OrcaGitService,
+      service: SymphonyElixir.MobileRpc.MobileGitService,
       service_key: :orca_git_service,
       allowed_keys: [
         "worktree",
@@ -156,9 +156,9 @@ defmodule SymphonyElixir.MobileRpc.Methods.OrcaGit do
   end
 
   defmodule HostedReviewCreationEligibility do
-    use SymphonyElixir.MobileRpc.OrcaMethod,
+    use SymphonyElixir.MobileRpc.MobileMethod,
       name: "hostedReview.getCreationEligibility",
-      service: SymphonyElixir.MobileRpc.OrcaGitService,
+      service: SymphonyElixir.MobileRpc.MobileGitService,
       service_key: :orca_git_service,
       allowed_keys: [
         "repo",

@@ -27,7 +27,7 @@ const forbiddenVisibleCopy = [
 
 describe("visible Dev10x brand", () => {
   it("does not expose the upstream Orca brand in routes or components", () => {
-    const violations = sourceFiles(["app", "src/orca"]).flatMap((file) => {
+    const violations = sourceFiles(["app", "src/dev10x"]).flatMap((file) => {
       const source = readFileSync(file, "utf8");
       return forbiddenVisibleCopy
         .filter((pattern) => pattern.test(source))

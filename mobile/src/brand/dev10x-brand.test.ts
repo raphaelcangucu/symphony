@@ -14,7 +14,7 @@ describe("Dev10x mobile brand", () => {
   });
 
   it("records the exact Orca source and MIT attribution", () => {
-    expect(readFileSync(resolve(root, "ORCA_UPSTREAM.md"), "utf8")).toContain(
+    expect(readFileSync(resolve(root, "UPSTREAM_PROVENANCE.md"), "utf8")).toContain(
       "5c3c2f2b3daf9d8563581c389712d805bfb256a1",
     );
     expect(readFileSync(resolve(root, "THIRD_PARTY_NOTICES.md"), "utf8")).toContain(

@@ -1,4 +1,4 @@
-defmodule SymphonyElixir.MobileRpc.OrcaMethod do
+defmodule SymphonyElixir.MobileRpc.MobileMethod do
   @moduledoc false
 
   @spec validate_params(map(), [String.t()], [String.t()], [String.t()]) ::
@@ -29,7 +29,7 @@ defmodule SymphonyElixir.MobileRpc.OrcaMethod do
     required_keys = Keyword.get(opts, :required_keys, [])
     nullable_required_keys = Keyword.get(opts, :nullable_required_keys, [])
     timeout_ms = Keyword.get(opts, :timeout_ms, 5_000)
-    service = Keyword.get(opts, :service, SymphonyElixir.MobileRpc.OrcaPresenter)
+    service = Keyword.get(opts, :service, SymphonyElixir.MobileRpc.MobilePresenter)
     service_key = Keyword.get(opts, :service_key)
     subscription = Keyword.get(opts, :subscription, false)
 
@@ -64,7 +64,7 @@ defmodule SymphonyElixir.MobileRpc.OrcaMethod do
 
       @impl true
       def validate(params) do
-        SymphonyElixir.MobileRpc.OrcaMethod.validate_params(
+        SymphonyElixir.MobileRpc.MobileMethod.validate_params(
           params,
           @allowed_keys,
           @required_keys,

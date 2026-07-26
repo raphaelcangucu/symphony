@@ -36,7 +36,7 @@ mobile/src/worktree
 
 It also covers the production host routes below `mobile/app/h/`, pairing
 routes, settings routes, troubleshooting, about, and the home route. Imported
-files live below `src/orca/` or retain their Expo route under `app/`.
+files live below `src/dev10x/` or retain their Expo route under `app/`.
 Non-cryptographic transport helpers and the exact `src/shared/` types required
 by these screens are included as supporting source.
 
@@ -69,7 +69,7 @@ test "$(git -C "$ORCA_SOURCE" rev-parse HEAD)" = \
   "5c3c2f2b3daf9d8563581c389712d805bfb256a1"
 git diff --no-index \
   "$ORCA_SOURCE/mobile/src/components" \
-  mobile/src/orca/components
+  mobile/src/dev10x/components
 ```
 
 Repeat the final comparison for each imported directory. Expected differences

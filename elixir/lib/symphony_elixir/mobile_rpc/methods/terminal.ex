@@ -33,7 +33,7 @@ defmodule SymphonyElixir.MobileRpc.Methods.Terminal do
     @impl true
     def validate(%{"terminal" => terminal} = params)
         when is_binary(terminal) and terminal != "" do
-      SymphonyElixir.MobileRpc.OrcaMethod.validate_params(
+      SymphonyElixir.MobileRpc.MobileMethod.validate_params(
         params,
         ["terminal", "client", "viewport", "capabilities"],
         ["terminal"]
@@ -53,7 +53,7 @@ defmodule SymphonyElixir.MobileRpc.Methods.Terminal do
         Map.get(
           context,
           :orca_session_service,
-          SymphonyElixir.MobileRpc.OrcaSessionService
+          SymphonyElixir.MobileRpc.MobileSessionService
         )
 
       service.subscribe("terminal.subscribe", params, context)
@@ -85,88 +85,88 @@ defmodule SymphonyElixir.MobileRpc.Methods.Terminal do
   end
 
   defmodule List do
-    use SymphonyElixir.MobileRpc.OrcaMethod,
+    use SymphonyElixir.MobileRpc.MobileMethod,
       name: "terminal.list",
-      service: SymphonyElixir.MobileRpc.OrcaSessionService,
+      service: SymphonyElixir.MobileRpc.MobileSessionService,
       service_key: :orca_session_service,
       allowed_keys: ["worktree", "limit", "requireFreshPtyLiveness"],
       required_keys: ["worktree"]
   end
 
   defmodule Send do
-    use SymphonyElixir.MobileRpc.OrcaMethod,
+    use SymphonyElixir.MobileRpc.MobileMethod,
       name: "terminal.send",
-      service: SymphonyElixir.MobileRpc.OrcaSessionService,
+      service: SymphonyElixir.MobileRpc.MobileSessionService,
       service_key: :orca_session_service,
       allowed_keys: ["terminal", "text", "enter", "interrupt", "client", "requireAgentStatus"],
       required_keys: ["terminal"]
   end
 
   defmodule UpdateViewport do
-    use SymphonyElixir.MobileRpc.OrcaMethod,
+    use SymphonyElixir.MobileRpc.MobileMethod,
       name: "terminal.updateViewport",
-      service: SymphonyElixir.MobileRpc.OrcaSessionService,
+      service: SymphonyElixir.MobileRpc.MobileSessionService,
       service_key: :orca_session_service,
       allowed_keys: ["terminal", "client", "viewport"],
       required_keys: ["terminal", "client", "viewport"]
   end
 
   defmodule Focus do
-    use SymphonyElixir.MobileRpc.OrcaMethod,
+    use SymphonyElixir.MobileRpc.MobileMethod,
       name: "terminal.focus",
-      service: SymphonyElixir.MobileRpc.OrcaSessionService,
+      service: SymphonyElixir.MobileRpc.MobileSessionService,
       service_key: :orca_session_service,
       allowed_keys: ["terminal"],
       required_keys: ["terminal"]
   end
 
   defmodule Rename do
-    use SymphonyElixir.MobileRpc.OrcaMethod,
+    use SymphonyElixir.MobileRpc.MobileMethod,
       name: "terminal.rename",
-      service: SymphonyElixir.MobileRpc.OrcaSessionService,
+      service: SymphonyElixir.MobileRpc.MobileSessionService,
       service_key: :orca_session_service,
       allowed_keys: ["terminal", "title"],
       required_keys: ["terminal"]
   end
 
   defmodule Close do
-    use SymphonyElixir.MobileRpc.OrcaMethod,
+    use SymphonyElixir.MobileRpc.MobileMethod,
       name: "terminal.close",
-      service: SymphonyElixir.MobileRpc.OrcaSessionService,
+      service: SymphonyElixir.MobileRpc.MobileSessionService,
       service_key: :orca_session_service,
       allowed_keys: ["terminal"],
       required_keys: ["terminal"]
   end
 
   defmodule ClearBuffer do
-    use SymphonyElixir.MobileRpc.OrcaMethod,
+    use SymphonyElixir.MobileRpc.MobileMethod,
       name: "terminal.clearBuffer",
-      service: SymphonyElixir.MobileRpc.OrcaSessionService,
+      service: SymphonyElixir.MobileRpc.MobileSessionService,
       service_key: :orca_session_service,
       allowed_keys: ["terminal"],
       required_keys: ["terminal"]
   end
 
   defmodule SetDisplayMode do
-    use SymphonyElixir.MobileRpc.OrcaMethod,
+    use SymphonyElixir.MobileRpc.MobileMethod,
       name: "terminal.setDisplayMode",
-      service: SymphonyElixir.MobileRpc.OrcaSessionService,
+      service: SymphonyElixir.MobileRpc.MobileSessionService,
       service_key: :orca_session_service,
       allowed_keys: ["terminal", "mode", "client", "viewport"],
       required_keys: ["terminal", "mode"]
   end
 
   defmodule GetAutoRestoreFit do
-    use SymphonyElixir.MobileRpc.OrcaMethod,
+    use SymphonyElixir.MobileRpc.MobileMethod,
       name: "terminal.getAutoRestoreFit",
-      service: SymphonyElixir.MobileRpc.OrcaSessionService,
+      service: SymphonyElixir.MobileRpc.MobileSessionService,
       service_key: :orca_session_service
   end
 
   defmodule SetAutoRestoreFit do
-    use SymphonyElixir.MobileRpc.OrcaMethod,
+    use SymphonyElixir.MobileRpc.MobileMethod,
       name: "terminal.setAutoRestoreFit",
-      service: SymphonyElixir.MobileRpc.OrcaSessionService,
+      service: SymphonyElixir.MobileRpc.MobileSessionService,
       service_key: :orca_session_service,
       allowed_keys: ["ms"],
       required_keys: ["ms"],

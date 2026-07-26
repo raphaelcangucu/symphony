@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  assistantThreadDiffRoute,
   hostChatRoute,
   hostTerminalRoute,
   hostWorktreeRoute,
@@ -18,6 +19,11 @@ describe("unified Dev10x session navigation", () => {
     expect(hostTerminalRoute("host alpha", "42", "Studio Alpha")).toBe(
       "/h/host%20alpha/session/42?name=Studio%20Alpha",
     );
+  });
+
+  it("routes a numeric assistant terminal to the thread-native diff surface", () => {
+    expect(assistantThreadDiffRoute("42")).toBe("/session/42/diff");
+    expect(assistantThreadDiffRoute("worktree-uuid")).toBeNull();
   });
 
   it("routes session notifications into the unified chat", () => {

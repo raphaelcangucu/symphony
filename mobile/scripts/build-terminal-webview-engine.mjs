@@ -12,7 +12,7 @@ const mobileRoot = path.resolve(scriptDir, "..");
 const outputPath = path.join(
   mobileRoot,
   "src",
-  "orca",
+  "dev10x",
   "terminal",
   "terminal-webview-engine.generated.ts",
 );

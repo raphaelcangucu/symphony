@@ -53,6 +53,64 @@ describe("orchestrator RPC session", () => {
 
     await expect(session.steer("   ")).rejects.toThrow("Message is required");
   });
+
+  it("refreshes only the selected transcript when its stream stays silent after steer", async () => {
+    vi.useFakeTimers();
+    const transport = fakeTransport();
+    const firstCleanup = vi.fn();
+    const secondCleanup = vi.fn();
+    vi.mocked(transport.subscribe)
+      .mockResolvedValueOnce(firstCleanup)
+      .mockResolvedValueOnce(secondCleanup);
+    const session = createRpcOrchestratorSession({
+      executionSessionId: 77,
+      transport,
+      onSnapshot: vi.fn(),
+      onEntries: vi.fn(),
+      onConnection: vi.fn(),
+      onError: vi.fn(),
+    });
+
+    session.connect();
+    await vi.waitFor(() => expect(transport.subscribe).toHaveBeenCalledTimes(1));
+    await session.steer("Show the latest result");
+    await vi.advanceTimersByTimeAsync(3_000);
+
+    expect(firstCleanup).toHaveBeenCalledOnce();
+    expect(transport.subscribe).toHaveBeenCalledTimes(2);
+    expect(transport.reconnect).not.toHaveBeenCalled();
+
+    session.disconnect();
+    vi.useRealTimers();
+  });
+
+  it("does not refresh a transcript that publishes entries after steer", async () => {
+    vi.useFakeTimers();
+    const transport = fakeTransport();
+    const session = createRpcOrchestratorSession({
+      executionSessionId: 77,
+      transport,
+      onSnapshot: vi.fn(),
+      onEntries: vi.fn(),
+      onConnection: vi.fn(),
+      onError: vi.fn(),
+    });
+
+    session.connect();
+    await vi.waitFor(() => expect(transport.subscribe).toHaveBeenCalledTimes(1));
+    await session.steer("Show the latest result");
+    const handler = vi.mocked(transport.subscribe).mock.calls[0]?.[2];
+    handler?.(
+      { entries: [{ kind: "user", title: "You", body: "Show the latest result" }] },
+      "orchestrator.session.entries",
+    );
+    await vi.advanceTimersByTimeAsync(3_000);
+
+    expect(transport.subscribe).toHaveBeenCalledTimes(1);
+
+    session.disconnect();
+    vi.useRealTimers();
+  });
 });
 
 function fakeTransport(): HostTransport {

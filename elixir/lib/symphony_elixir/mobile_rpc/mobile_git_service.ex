@@ -1,4 +1,4 @@
-defmodule SymphonyElixir.MobileRpc.OrcaGitService do
+defmodule SymphonyElixir.MobileRpc.MobileGitService do
   @moduledoc """
   Maps Orca's source-control DTOs onto a selected Symphony worktree.
 

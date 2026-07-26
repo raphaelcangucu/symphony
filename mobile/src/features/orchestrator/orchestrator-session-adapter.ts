@@ -97,7 +97,12 @@ function messagesFromEntries(entries: SessionLogEntry[]): AssistantMessage[] {
     }
 
     if (entry.kind === "user") {
-      messages.push(message(`entry:${index}`, "user", entry.body ?? entry.title));
+      if (entry.collapsed || entry.title === "Initial prompt") {
+        const body = [entry.title, entry.body].filter(Boolean).join("\n\n");
+        messages.push(message(`entry:${index}`, "system", body));
+      } else {
+        messages.push(message(`entry:${index}`, "user", entry.body ?? entry.title));
+      }
       return;
     }
 
@@ -110,7 +115,10 @@ function messagesFromEntries(entries: SessionLogEntry[]): AssistantMessage[] {
     messages.push(
       message(
         `entry:${index}`,
-        entry.kind === "system" || entry.kind === "meta" || entry.kind === "event"
+        entry.kind === "system" ||
+          entry.kind === "meta" ||
+          entry.kind === "event" ||
+          entry.kind === "reasoning"
           ? "system"
           : "assistant",
         body,

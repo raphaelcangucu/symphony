@@ -33,34 +33,34 @@ import {
   Send,
   X
 } from 'lucide-react-native'
-import type { RpcClient } from '../../../src/orca/transport/rpc-client'
-import type { RpcSuccess } from '../../../src/orca/transport/types'
+import type { RpcClient } from '../../../src/dev10x/transport/rpc-client'
+import type { RpcSuccess } from '../../../src/dev10x/transport/types'
 import {
   useHostClient,
   useLastConnectedAt,
   useReconnectAttempt
-} from '../../../src/orca/transport/client-context'
-import { classifyConnection } from '../../../src/orca/transport/connection-health'
-import { StatusDot } from '../../../src/orca/components/StatusDot'
-import { ActionSheetModal } from '../../../src/orca/components/ActionSheetModal'
-import { BottomDrawer } from '../../../src/orca/components/BottomDrawer'
-import { ConfirmModal } from '../../../src/orca/components/ConfirmModal'
-import { MobileMarkdown } from '../../../src/orca/components/MobileMarkdown'
-import { MobileAgentIcon } from '../../../src/orca/components/MobileAgentIcon'
-import { MobileWorkspaceNameInput } from '../../../src/orca/components/MobileWorkspaceNameInput'
-import { MobileSyntaxSegments } from '../../../src/orca/components/MobileSyntaxSegments'
-import { PickerModal, type PickerOption } from '../../../src/orca/components/PickerModal'
-import { TaskProviderLogo } from '../../../src/orca/components/TaskProviderLogo'
+} from '../../../src/dev10x/transport/client-context'
+import { classifyConnection } from '../../../src/dev10x/transport/connection-health'
+import { StatusDot } from '../../../src/dev10x/components/StatusDot'
+import { ActionSheetModal } from '../../../src/dev10x/components/ActionSheetModal'
+import { BottomDrawer } from '../../../src/dev10x/components/BottomDrawer'
+import { ConfirmModal } from '../../../src/dev10x/components/ConfirmModal'
+import { MobileMarkdown } from '../../../src/dev10x/components/MobileMarkdown'
+import { MobileAgentIcon } from '../../../src/dev10x/components/MobileAgentIcon'
+import { MobileWorkspaceNameInput } from '../../../src/dev10x/components/MobileWorkspaceNameInput'
+import { MobileSyntaxSegments } from '../../../src/dev10x/components/MobileSyntaxSegments'
+import { PickerModal, type PickerOption } from '../../../src/dev10x/components/PickerModal'
+import { TaskProviderLogo } from '../../../src/dev10x/components/TaskProviderLogo'
 import {
   buildGitHubPrFileDiffPreview,
   type GitHubPrFileDiffLine
-} from '../../../src/orca/tasks/github-pr-file-diff'
+} from '../../../src/dev10x/tasks/github-pr-file-diff'
 import {
   highlightMobileDiffLines,
   resolveMobileSyntaxLanguage
-} from '../../../src/orca/session/mobile-file-syntax'
-import { buildGitHubCheckSummary } from '../../../src/orca/tasks/github-check-summary'
-import { buildTaskWorkspaceCreateParams } from '../../../src/orca/tasks/workspace-create-params'
+} from '../../../src/dev10x/session/mobile-file-syntax'
+import { buildGitHubCheckSummary } from '../../../src/dev10x/tasks/github-check-summary'
+import { buildTaskWorkspaceCreateParams } from '../../../src/dev10x/tasks/workspace-create-params'
 import {
   filterWorkspaceAgents,
   isWorkspaceAgentEnabled,
@@ -68,67 +68,67 @@ import {
   resolveWorkspaceAgentSelection,
   workspaceAgentLabel,
   type WorkspaceAgentChoice
-} from '../../../src/orca/tasks/workspace-agent-selection'
-import { shouldResolveHostedReviewStartPoint } from '../../../src/orca/tasks/hosted-review-start-point'
-import { getLinkedWorkItemSuggestedName } from '../../../src/orca/tasks/mobile-workspace-name'
+} from '../../../src/dev10x/tasks/workspace-agent-selection'
+import { shouldResolveHostedReviewStartPoint } from '../../../src/dev10x/tasks/hosted-review-start-point'
+import { getLinkedWorkItemSuggestedName } from '../../../src/dev10x/tasks/mobile-workspace-name'
 import {
   filterGitHubProjectRowsForRepos,
   findRepoForGitHubProjectRepository,
   type GitHubRepoSlugCacheEntry
-} from '../../../src/orca/tasks/github-project-repo-match'
+} from '../../../src/dev10x/tasks/github-project-repo-match'
 import {
   extractGitHubIssueSourceFallback,
   extractGitHubIssueSourceError,
   type GitHubIssueSourceFallback,
   type GitHubIssueSourceError
-} from '../../../src/orca/tasks/github-work-item-source-errors'
-import { parseSparsePresetDirectories } from '../../../src/orca/tasks/sparse-preset-draft'
+} from '../../../src/dev10x/tasks/github-work-item-source-errors'
+import { parseSparsePresetDirectories } from '../../../src/dev10x/tasks/sparse-preset-draft'
 import {
   deriveWorkspaceSshGate,
   workspaceSshStatusLabel
-} from '../../../src/orca/tasks/workspace-ssh-gate'
-import { WORKTREE_CREATE_TIMEOUT_MS } from '../../../src/orca/tasks/workspace-create-timeout'
+} from '../../../src/dev10x/tasks/workspace-ssh-gate'
+import { WORKTREE_CREATE_TIMEOUT_MS } from '../../../src/dev10x/tasks/workspace-create-timeout'
 import {
   isSetupHookTrusted,
   normalizeSetupHookTrust,
   trustedOrcaHooksWithSetupApproval,
   wasSetupHookPreviouslyApproved
-} from '../../../src/orca/tasks/setup-hook-trust'
-import { colors, radii, spacing, typography } from '../../../src/orca/theme/mobile-theme'
-import { triggerMediumImpact } from '../../../src/orca/platform/haptics'
+} from '../../../src/dev10x/tasks/setup-hook-trust'
+import { colors, radii, spacing, typography } from '../../../src/dev10x/theme/mobile-theme'
+import { triggerMediumImpact } from '../../../src/dev10x/platform/haptics'
 import type {
   GitHubProjectSortDirection,
   GitHubProjectTable as SharedGitHubProjectTable
-} from '../../../src/orca/tasks/mobile-github-project-group-sort'
+} from '../../../src/dev10x/tasks/mobile-github-project-group-sort'
 import {
   groupRows,
   isIterationCurrent,
   sortRows,
   type ProjectGroup
-} from '../../../src/orca/tasks/mobile-github-project-group-sort'
+} from '../../../src/dev10x/tasks/mobile-github-project-group-sort'
 import {
   CROSS_REPO_DISPLAY_LIMIT,
   fetchDev10xWorkItems,
   isGitHubWorkItemsSshRemoteRequiredError,
   PER_REPO_FETCH_LIMIT,
   type Dev10xWorkItem
-} from '../../../src/orca/tasks/mobile-work-items'
+} from '../../../src/dev10x/tasks/mobile-work-items'
 import {
   filterAvailableTaskProviders,
   normalizeVisibleTaskProviders,
   resolveVisibleTaskProvider,
   type TaskProvider
-} from '../../../src/orca/tasks/mobile-task-providers'
+} from '../../../src/dev10x/tasks/mobile-task-providers'
 import {
   extractLinearIssueReadItems,
   type LinearMobileIssue
-} from '../../../src/orca/tasks/linear-mobile-issue-read'
-import { MOBILE_TUI_AGENT_AUTO_PICK_ORDER } from '../../../src/orca/tasks/mobile-tui-agents'
-import { resolveComposerBranchSelection } from '../../../src/orca/tasks/mobile-composer-branch-selection'
+} from '../../../src/dev10x/tasks/linear-mobile-issue-read'
+import { MOBILE_TUI_AGENT_AUTO_PICK_ORDER } from '../../../src/dev10x/tasks/mobile-tui-agents'
+import { resolveComposerBranchSelection } from '../../../src/dev10x/tasks/mobile-composer-branch-selection'
 import {
   clearMobileTaskCopyFeedbackTimer,
   scheduleMobileTaskCopyFeedbackReset
-} from '../../../src/orca/tasks/mobile-task-copy-feedback-timer'
+} from '../../../src/dev10x/tasks/mobile-task-copy-feedback-timer'
 import type {
   BaseRefSearchResult,
   PersistedTrustedOrcaHooks,

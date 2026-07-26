@@ -1,5 +1,5 @@
-import { OrcaHomeRoute } from "@/orca/routes/OrcaHomeRoute";
+import { Dev10xHomeRoute } from "@/dev10x/routes/Dev10xHomeRoute";
 
 export default function IndexRoute() {
-  return <OrcaHomeRoute />;
+  return <Dev10xHomeRoute />;
 }

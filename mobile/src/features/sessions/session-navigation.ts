@@ -10,6 +10,11 @@ export function hostTerminalRoute(
   return hostSessionRoute("session", hostId, threadId, name);
 }
 
+export function assistantThreadDiffRoute(worktreeId: string): string | null {
+  const threadId = Number(worktreeId);
+  return Number.isInteger(threadId) && threadId > 0 ? `/session/${threadId}/diff` : null;
+}
+
 export function sessionNotificationRoute(
   hostId: string,
   threadId: string | number,

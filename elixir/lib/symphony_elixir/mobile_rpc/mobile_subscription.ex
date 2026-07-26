@@ -1,4 +1,4 @@
-defmodule SymphonyElixir.MobileRpc.OrcaSubscription do
+defmodule SymphonyElixir.MobileRpc.MobileSubscription do
   @moduledoc """
   Connection-scoped snapshot subscription for copied Orca views.
 

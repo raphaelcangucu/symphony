@@ -29,47 +29,47 @@ import {
   UserCircle,
   PanelLeftClose
 } from 'lucide-react-native'
-import type { RpcClient } from '../../../src/orca/transport/rpc-client'
-import { loadHosts, updateLastConnected, removeHost } from '../../../src/orca/transport/host-store'
+import type { RpcClient } from '../../../src/dev10x/transport/rpc-client'
+import { loadHosts, updateLastConnected, removeHost } from '../../../src/dev10x/transport/host-store'
 import {
   useHostClient,
   useCloseHost,
   useForceReconnect,
   useReconnectAttempt,
   useLastConnectedAt
-} from '../../../src/orca/transport/client-context'
+} from '../../../src/dev10x/transport/client-context'
 import {
   classifyConnection,
   type ConnectionVerdict
-} from '../../../src/orca/transport/connection-health'
-import type { RpcSuccess } from '../../../src/orca/transport/types'
-import { StatusDot } from '../../../src/orca/components/StatusDot'
-import { NewWorktreeModalController } from '../../../src/orca/components/NewWorktreeModalController'
-import { NewWorkspaceFab, FAB_SIZE } from '../../../src/orca/components/NewWorkspaceFab'
-import { MobileRepoIcon } from '../../../src/orca/components/MobileRepoIcon'
-import { WorktreeListRow } from '../../../src/orca/components/WorktreeListRow'
-import { useNow } from '../../../src/orca/hooks/use-now'
-import { useActiveWorktreeScroll } from '../../../src/orca/hooks/use-active-worktree-scroll'
+} from '../../../src/dev10x/transport/connection-health'
+import type { RpcSuccess } from '../../../src/dev10x/transport/types'
+import { StatusDot } from '../../../src/dev10x/components/StatusDot'
+import { NewWorktreeModalController } from '../../../src/dev10x/components/NewWorktreeModalController'
+import { NewWorkspaceFab, FAB_SIZE } from '../../../src/dev10x/components/NewWorkspaceFab'
+import { MobileRepoIcon } from '../../../src/dev10x/components/MobileRepoIcon'
+import { WorktreeListRow } from '../../../src/dev10x/components/WorktreeListRow'
+import { useNow } from '../../../src/dev10x/hooks/use-now'
+import { useActiveWorktreeScroll } from '../../../src/dev10x/hooks/use-active-worktree-scroll'
 import type { RepoIcon } from '../../../src/shared/repo-icon'
-import { PickerModal } from '../../../src/orca/components/PickerModal'
-import { ActionSheetContent } from '../../../src/orca/components/ActionSheetModal'
-import { ConfirmModal } from '../../../src/orca/components/ConfirmModal'
-import { BottomDrawer } from '../../../src/orca/components/BottomDrawer'
-import { ProtocolBlockScreen } from '../../../src/orca/components/ProtocolBlockScreen'
-import { AuthFailedBanner } from '../../../src/orca/components/AuthFailedBanner'
-import { WorkspaceDetailPlaceholder } from '../../../src/orca/components/WorkspaceDetailPlaceholder'
-import { getCachedWorktrees } from '../../../src/orca/cache/worktree-cache'
-import { setCachedRepos } from '../../../src/orca/cache/repo-cache'
-import { colors, radii, spacing, typography } from '../../../src/orca/theme/mobile-theme'
-import { useResponsiveLayout } from '../../../src/orca/layout/responsive-layout'
-import { leaveHostRoute } from '../../../src/orca/host-route-exit'
-import { evaluateCompat, type CompatVerdict } from '../../../src/orca/transport/protocol-compat'
-import { loadPinnedIds, savePinnedIds } from '../../../src/orca/storage/preferences'
+import { PickerModal } from '../../../src/dev10x/components/PickerModal'
+import { ActionSheetContent } from '../../../src/dev10x/components/ActionSheetModal'
+import { ConfirmModal } from '../../../src/dev10x/components/ConfirmModal'
+import { BottomDrawer } from '../../../src/dev10x/components/BottomDrawer'
+import { ProtocolBlockScreen } from '../../../src/dev10x/components/ProtocolBlockScreen'
+import { AuthFailedBanner } from '../../../src/dev10x/components/AuthFailedBanner'
+import { WorkspaceDetailPlaceholder } from '../../../src/dev10x/components/WorkspaceDetailPlaceholder'
+import { getCachedWorktrees } from '../../../src/dev10x/cache/worktree-cache'
+import { setCachedRepos } from '../../../src/dev10x/cache/repo-cache'
+import { colors, radii, spacing, typography } from '../../../src/dev10x/theme/mobile-theme'
+import { useResponsiveLayout } from '../../../src/dev10x/layout/responsive-layout'
+import { leaveHostRoute } from '../../../src/dev10x/host-route-exit'
+import { evaluateCompat, type CompatVerdict } from '../../../src/dev10x/transport/protocol-compat'
+import { loadPinnedIds, savePinnedIds } from '../../../src/dev10x/storage/preferences'
 import {
   createInitialHostRouteActionState,
   resolveHostRouteActionState,
   setHostRouteNewWorktreeVisible
-} from '../../../src/orca/host-route-action-state'
+} from '../../../src/dev10x/host-route-action-state'
 import {
   applyDesktopViewSettings,
   groupModeToDesktop,
@@ -77,24 +77,24 @@ import {
   type MobileSortMode,
   type MobileViewState,
   type WorkspaceViewSettings
-} from '../../../src/orca/worktree/workspace-view-settings'
+} from '../../../src/dev10x/worktree/workspace-view-settings'
 import {
   getWorktreeStatus,
   isWorktreePinned,
   type FilterState,
   type Worktree
-} from '../../../src/orca/worktree/workspace-list-sections'
-import { useWorkspaceSections } from '../../../src/orca/worktree/use-workspace-sections'
-import { getMobileWorkspaceLineageGroupKey } from '../../../src/orca/worktree/mobile-workspace-lineage'
-import { areWorktreeListsEqual } from '../../../src/orca/worktree/worktree-list-snapshot'
-import { repoColor } from '../../../src/orca/worktree/repo-color'
+} from '../../../src/dev10x/worktree/workspace-list-sections'
+import { useWorkspaceSections } from '../../../src/dev10x/worktree/use-workspace-sections'
+import { getMobileWorkspaceLineageGroupKey } from '../../../src/dev10x/worktree/mobile-workspace-lineage'
+import { areWorktreeListsEqual } from '../../../src/dev10x/worktree/worktree-list-snapshot'
+import { repoColor } from '../../../src/dev10x/worktree/repo-color'
 import {
   WORKSPACE_GROUP_OPTIONS as GROUP_OPTIONS,
   WORKSPACE_SORT_OPTIONS as SORT_OPTIONS
-} from '../../../src/orca/worktree/workspace-list-picker-options'
-import type { DesktopStatus, RepoSummary } from '../../../src/orca/worktree/host-worktree-rpc-types'
+} from '../../../src/dev10x/worktree/workspace-list-picker-options'
+import type { DesktopStatus, RepoSummary } from '../../../src/dev10x/worktree/host-worktree-rpc-types'
 import type { WorkspaceStatusDefinition } from '../../../src/shared/types'
-import { DEFAULT_MOBILE_WORKSPACE_STATUSES } from '../../../src/orca/worktree/mobile-workspace-statuses'
+import { DEFAULT_MOBILE_WORKSPACE_STATUSES } from '../../../src/dev10x/worktree/mobile-workspace-statuses'
 import { hostWorktreeRoute } from '../../../src/features/sessions/session-navigation'
 
 function isErrorVerdict(v: ConnectionVerdict): boolean {

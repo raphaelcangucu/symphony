@@ -3,13 +3,13 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { ChevronLeft, ChevronRight, Globe } from 'lucide-react-native'
-import { PickerModal, type PickerOption } from '../src/orca/components/PickerModal'
+import { PickerModal, type PickerOption } from '../src/dev10x/components/PickerModal'
 import {
   loadTerminalLinkOpenMode,
   saveTerminalLinkOpenMode,
   type MobileTerminalLinkOpenMode
-} from '../src/orca/storage/preferences'
-import { colors, radii, spacing, typography } from '../src/orca/theme/mobile-theme'
+} from '../src/dev10x/storage/preferences'
+import { colors, radii, spacing, typography } from '../src/dev10x/theme/mobile-theme'
 
 const LINK_MODE_OPTIONS: PickerOption<MobileTerminalLinkOpenMode>[] = [
   {

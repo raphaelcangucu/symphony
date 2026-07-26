@@ -2,7 +2,7 @@ import { Pressable, StyleSheet, Switch, Text, View } from "react-native";
 import { ChevronLeft } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { colors, spacing, typography } from "@/orca/theme/mobile-theme";
+import { colors, spacing, typography } from "@/dev10x/theme/mobile-theme";
 
 export type NotificationState = "inactive" | "registered" | "denied" | "unsupported" | "error";
 

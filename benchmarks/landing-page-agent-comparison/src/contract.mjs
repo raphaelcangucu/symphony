@@ -23,6 +23,12 @@ const CODEX_56_DEFAULTS = Object.freeze([
   Object.freeze({ variant: "luna", model: "gpt-5.6-luna", effort: "medium" }),
 ]);
 
+const CURRENT_PROVIDER_DEFAULTS = Object.freeze({
+  codex: Object.freeze({ model: "gpt-5.6-sol", effort: "low" }),
+  cursor: Object.freeze({ model: "auto", effort: null }),
+  claude: Object.freeze({ model: "claude-opus-5", effort: "xhigh" }),
+});
+
 const MODEL_FILE_NAMES = Object.freeze({
   "gpt-5.5": "gpt5.5",
   "gpt-5.6-sol": "gpt5.6.sol",
@@ -32,6 +38,7 @@ const MODEL_FILE_NAMES = Object.freeze({
   "claude-opus-5": "opus5",
   "composer-2.5": "composer2.5",
   "cursor-grok-4.5-high": "grok4.5-high",
+  auto: "auto",
 });
 
 export function benchmarkRunId({ path, provider, model, effort }) {
@@ -82,7 +89,31 @@ const codexRuns = CODEX_56_DEFAULTS.flatMap(({ variant, model, effort }) =>
   ),
 );
 
-export const RUN_MATRIX = Object.freeze([...providerRuns, ...codexRuns]);
+const currentDefaultRuns = PATHS.flatMap((path) =>
+  PROVIDERS.map((provider) => {
+    const requested = CURRENT_PROVIDER_DEFAULTS[provider];
+    const identity = benchmarkRunId({
+      path,
+      provider,
+      model: requested.model,
+      effort: requested.effort,
+    });
+    return Object.freeze({
+      id: identity.replace(`${path}-`, `${path}-default-`),
+      matrix: "providers-current-default",
+      path,
+      provider,
+      requested_model: requested.model,
+      requested_effort: requested.effort,
+    });
+  }),
+);
+
+export const RUN_MATRIX = Object.freeze([
+  ...providerRuns,
+  ...codexRuns,
+  ...currentDefaultRuns,
+]);
 
 export async function readCanonicalPrompt() {
   return readFile(new URL("../prompt.md", import.meta.url), "utf8");

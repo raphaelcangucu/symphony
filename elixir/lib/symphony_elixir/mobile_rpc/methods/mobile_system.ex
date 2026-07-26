@@ -1,4 +1,4 @@
-defmodule SymphonyElixir.MobileRpc.Methods.OrcaSystem do
+defmodule SymphonyElixir.MobileRpc.Methods.MobileSystem do
   @moduledoc "Orca-compatible system methods backed by the selected Symphony host."
 
   @spec modules() :: [module()]
@@ -17,15 +17,15 @@ defmodule SymphonyElixir.MobileRpc.Methods.OrcaSystem do
   end
 
   defmodule StatusGet do
-    use SymphonyElixir.MobileRpc.OrcaMethod, name: "status.get"
+    use SymphonyElixir.MobileRpc.MobileMethod, name: "status.get"
   end
 
   defmodule SettingsGet do
-    use SymphonyElixir.MobileRpc.OrcaMethod, name: "settings.get"
+    use SymphonyElixir.MobileRpc.MobileMethod, name: "settings.get"
   end
 
   defmodule SettingsUpdate do
-    use SymphonyElixir.MobileRpc.OrcaMethod,
+    use SymphonyElixir.MobileRpc.MobileMethod,
       name: "settings.update",
       allowed_keys: [
         "defaultTaskSource",
@@ -40,26 +40,26 @@ defmodule SymphonyElixir.MobileRpc.Methods.OrcaSystem do
   end
 
   defmodule PreflightCheck do
-    use SymphonyElixir.MobileRpc.OrcaMethod, name: "preflight.check"
+    use SymphonyElixir.MobileRpc.MobileMethod, name: "preflight.check"
   end
 
   defmodule PreflightDetectAgents do
-    use SymphonyElixir.MobileRpc.OrcaMethod, name: "preflight.detectAgents"
+    use SymphonyElixir.MobileRpc.MobileMethod, name: "preflight.detectAgents"
   end
 
   defmodule PreflightDetectRemoteAgents do
-    use SymphonyElixir.MobileRpc.OrcaMethod,
+    use SymphonyElixir.MobileRpc.MobileMethod,
       name: "preflight.detectRemoteAgents",
       allowed_keys: ["connectionId"],
       required_keys: ["connectionId"]
   end
 
   defmodule StatsSummary do
-    use SymphonyElixir.MobileRpc.OrcaMethod, name: "stats.summary"
+    use SymphonyElixir.MobileRpc.MobileMethod, name: "stats.summary"
   end
 
   defmodule AccountsList do
-    use SymphonyElixir.MobileRpc.OrcaMethod, name: "accounts.list"
+    use SymphonyElixir.MobileRpc.MobileMethod, name: "accounts.list"
   end
 
   defmodule AccountsSubscribe do
@@ -76,13 +76,13 @@ defmodule SymphonyElixir.MobileRpc.Methods.OrcaSystem do
 
     @impl true
     def validate(params) do
-      SymphonyElixir.MobileRpc.OrcaMethod.validate_params(params, [], [])
+      SymphonyElixir.MobileRpc.MobileMethod.validate_params(params, [], [])
     end
 
     @impl true
     def call(_params, context) do
       subscription_id = "accounts-#{System.unique_integer([:positive])}"
-      snapshot = SymphonyElixir.MobileRpc.OrcaPresenter.accounts_snapshot(context)
+      snapshot = SymphonyElixir.MobileRpc.MobilePresenter.accounts_snapshot(context)
       connection_pid = Map.get(context, :connection_pid)
 
       activate = fn ->

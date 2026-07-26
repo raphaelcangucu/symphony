@@ -1,11 +1,11 @@
-import type { MobileBrowserTab } from '../../../../src/orca/browser/MobileBrowserPane'
-import type { MobileTerminalTheme } from '../../../../src/orca/terminal/TerminalWebView'
-import type { MobileDiffLine } from '../../../../src/orca/session/mobile-diff-lines'
+import type { MobileBrowserTab } from '../../../../src/dev10x/browser/MobileBrowserPane'
+import type { MobileTerminalTheme } from '../../../../src/dev10x/terminal/TerminalWebView'
+import type { MobileDiffLine } from '../../../../src/dev10x/session/mobile-diff-lines'
 import type {
   MobileHighlightedDiffLine,
   MobileSyntaxSegment
-} from '../../../../src/orca/session/mobile-file-syntax'
-import type { TerminalRecord } from '../../../../src/orca/session/mobile-terminal-records'
+} from '../../../../src/dev10x/session/mobile-file-syntax'
+import type { TerminalRecord } from '../../../../src/dev10x/session/mobile-terminal-records'
 import type { DiffComment, TuiAgent } from '../../../../src/shared/types'
 import type { AgentStatusEntry } from '../../../../src/shared/agent-status-types'
 

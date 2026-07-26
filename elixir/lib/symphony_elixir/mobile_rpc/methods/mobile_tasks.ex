@@ -1,4 +1,4 @@
-defmodule SymphonyElixir.MobileRpc.Methods.OrcaTasks do
+defmodule SymphonyElixir.MobileRpc.Methods.MobileTasks do
   @moduledoc "Dev10x-branded task and notification operations backed by the selected Symphony host."
 
   @spec modules() :: [module()]
@@ -12,35 +12,35 @@ defmodule SymphonyElixir.MobileRpc.Methods.OrcaTasks do
   end
 
   defmodule List do
-    use SymphonyElixir.MobileRpc.OrcaMethod,
+    use SymphonyElixir.MobileRpc.MobileMethod,
       name: "symphony.tasks.list",
-      service: SymphonyElixir.MobileRpc.OrcaTasksService,
+      service: SymphonyElixir.MobileRpc.MobileTasksService,
       service_key: :orca_tasks_service,
       allowed_keys: ["query", "projectSlugs", "limit"]
   end
 
   defmodule Get do
-    use SymphonyElixir.MobileRpc.OrcaMethod,
+    use SymphonyElixir.MobileRpc.MobileMethod,
       name: "symphony.tasks.get",
-      service: SymphonyElixir.MobileRpc.OrcaTasksService,
+      service: SymphonyElixir.MobileRpc.MobileTasksService,
       service_key: :orca_tasks_service,
       allowed_keys: ["projectSlug", "identifier"],
       required_keys: ["projectSlug", "identifier"]
   end
 
   defmodule NotificationsSubscribe do
-    use SymphonyElixir.MobileRpc.OrcaMethod,
+    use SymphonyElixir.MobileRpc.MobileMethod,
       name: "notifications.subscribe",
-      service: SymphonyElixir.MobileRpc.OrcaTasksService,
+      service: SymphonyElixir.MobileRpc.MobileTasksService,
       service_key: :orca_tasks_service,
       subscription: true,
       allowed_keys: []
   end
 
   defmodule NotificationsUnsubscribe do
-    use SymphonyElixir.MobileRpc.OrcaMethod,
+    use SymphonyElixir.MobileRpc.MobileMethod,
       name: "notifications.unsubscribe",
-      service: SymphonyElixir.MobileRpc.OrcaTasksService,
+      service: SymphonyElixir.MobileRpc.MobileTasksService,
       service_key: :orca_tasks_service,
       allowed_keys: ["subscriptionId"],
       required_keys: ["subscriptionId"]

@@ -11,13 +11,13 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { ChevronLeft, ChevronRight } from 'lucide-react-native'
-import { colors, radii, spacing, typography } from '../src/orca/theme/mobile-theme'
-import { loadHosts } from '../src/orca/transport/host-store'
-import type { HostProfile } from '../src/orca/transport/types'
-import { useAllHostClients } from '../src/orca/transport/client-context'
-import type { RpcClient } from '../src/orca/transport/rpc-client'
-import { BottomDrawer } from '../src/orca/components/BottomDrawer'
-import { VoiceModelList } from '../src/orca/components/VoiceModelList'
+import { colors, radii, spacing, typography } from '../src/dev10x/theme/mobile-theme'
+import { loadHosts } from '../src/dev10x/transport/host-store'
+import type { HostProfile } from '../src/dev10x/transport/types'
+import { useAllHostClients } from '../src/dev10x/transport/client-context'
+import type { RpcClient } from '../src/dev10x/transport/rpc-client'
+import { BottomDrawer } from '../src/dev10x/components/BottomDrawer'
+import { VoiceModelList } from '../src/dev10x/components/VoiceModelList'
 import {
   deleteDictationModel,
   downloadDictationModel,
@@ -26,7 +26,7 @@ import {
   setDictationConfig,
   type MobileSpeechModel,
   type MobileSpeechSetup
-} from '../src/orca/dictation/mobile-dictation-setup'
+} from '../src/dev10x/dictation/mobile-dictation-setup'
 
 const POLL_INTERVAL_MS = 1500
 

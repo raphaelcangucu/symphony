@@ -1,4 +1,4 @@
-defmodule SymphonyElixir.MobileRpc.OrcaFileService do
+defmodule SymphonyElixir.MobileRpc.MobileFileService do
   @moduledoc """
   Presents Symphony worktrees through the production Orca mobile file DTOs.
 

@@ -13,7 +13,7 @@ import {
   Globe,
   Terminal as TerminalIcon
 } from 'lucide-react-native'
-import { colors, spacing, typography } from '../src/orca/theme/mobile-theme'
+import { colors, spacing, typography } from '../src/dev10x/theme/mobile-theme'
 
 export default function SettingsScreen() {
   const router = useRouter()

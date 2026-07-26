@@ -13,6 +13,7 @@ import {
   isTerminalAgentExecution,
   isTerminalExecutionThread,
   isSettledOrchestratorExecution,
+  modelProvenanceMatches,
   selectRun,
   selectIssueAgentExecution,
   selectIssueExecutionThread,
@@ -282,6 +283,25 @@ test("session outcome requires Cursor's catalog-canonical model confirmation", (
       },
     ),
     "failed",
+  );
+});
+
+test("Cursor default accepts the concrete live model selected behind auto", () => {
+  assert.equal(
+    modelProvenanceMatches(
+      {
+        requested_model: "auto",
+        requested_effort: null,
+        resolved_model: "composer-2.5",
+        resolved_effort: null,
+      },
+      {
+        provider: "cursor",
+        requested_model: "auto",
+        requested_effort: null,
+      },
+    ),
+    true,
   );
 });
 

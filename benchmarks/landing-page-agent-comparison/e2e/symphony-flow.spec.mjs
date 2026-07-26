@@ -155,7 +155,11 @@ test("executes one provider cell through the real Symphony tracker", async ({
         .waitFor({ state: "visible", timeout: 10_000 })
         .catch(() => {});
       await expect(page.getByRole("status")).toHaveCount(0, {
-        timeout: 25 * 60 * 1000,
+        // Default Claude Opus turns can legitimately spend more than 25
+        // minutes implementing and validating the full evidence contract.
+        // Match the orchestrator settlement budget so the two paths are
+        // compared under the same real execution window.
+        timeout: 40 * 60 * 1000,
       });
       const thread = await api
         .request(`/assistant/threads/${run.thread_id}`)

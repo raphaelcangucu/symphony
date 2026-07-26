@@ -6,7 +6,11 @@ Symphony:
 - sessão interativa;
 - issue despachado pelo orquestrador.
 
-A matriz fixa modelo e esforço e contém 18 células:
+A matriz histórica fixa modelo e esforço em 18 células. Para a validação mobile,
+há uma matriz adicional de seis células com os defaults atuais dos provedores:
+
+- `providers-current-default`: sessão e orquestrador com Codex
+  `gpt-5.6-sol` low, Cursor `auto` e Claude `claude-opus-5` xhigh;
 
 - `providers-default`: sessão e orquestrador com Codex `gpt-5.5` medium,
   Claude `claude-sonnet-5` medium e Cursor `composer-2.5`;
@@ -60,6 +64,7 @@ capacidade. Os testes unitários do Symphony continuam focados e sequenciais:
 SYMPHONY_BENCH_CONCURRENCY=3 npm run run:default
 SYMPHONY_BENCH_CONCURRENCY=3 npm run run:advanced
 SYMPHONY_BENCH_CONCURRENCY=3 npm run run:codex-5.6
+SYMPHONY_BENCH_CONCURRENCY=1 npm run run:current-default
 ```
 
 Para repetir apenas uma célula, use

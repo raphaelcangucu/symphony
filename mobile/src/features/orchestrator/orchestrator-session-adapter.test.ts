@@ -97,6 +97,57 @@ describe("orchestrator transcript adapter", () => {
     expect(timeline.messages[1]?.content).toBe("Patch applied.");
   });
 
+  it("keeps a collapsed initial provider prompt out of the user bubble", () => {
+    const entries = payloadSessionLogEntries({
+      entries: [
+        {
+          kind: "user",
+          title: "Initial prompt",
+          body: "<recommended_plugins>A very long runtime prompt</recommended_plugins>",
+          collapsed: true,
+          language: "text",
+        },
+        {
+          kind: "user",
+          title: "You",
+          body: "Stop and reply exactly ACK73",
+          collapsed: false,
+          language: "markdown",
+        },
+      ],
+    });
+
+    const timeline = buildOrchestratorTimeline(entries, "live");
+
+    expect(timeline.messages[0]).toMatchObject({
+      role: "system",
+      content:
+        "Initial prompt\n\n<recommended_plugins>A very long runtime prompt</recommended_plugins>",
+    });
+    expect(timeline.messages[1]).toMatchObject({
+      role: "user",
+      content: "Stop and reply exactly ACK73",
+    });
+  });
+
+  it("renders provider reasoning as a compact activity instead of assistant prose", () => {
+    const timeline = buildOrchestratorTimeline(
+      [
+        {
+          kind: "reasoning",
+          title: "Reasoning",
+          body: "The model worked through the next step internally.",
+        },
+      ],
+      "live",
+    );
+
+    expect(timeline.messages[0]).toMatchObject({
+      role: "system",
+      content: "Reasoning\n\nThe model worked through the next step internally.",
+    });
+  });
+
   it("accepts legacy string lines emitted by older Symphony hosts", () => {
     expect(payloadSessionLogEntries({ lines: ["assistant: Restored transcript"] })).toEqual([
       expect.objectContaining({

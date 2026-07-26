@@ -3,14 +3,14 @@ import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from '
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react-native'
-import { useHostClient } from '../../../../src/orca/transport/client-context'
-import type { RpcSuccess } from '../../../../src/orca/transport/types'
-import { colors, spacing, typography } from '../../../../src/orca/theme/mobile-theme'
+import { useHostClient } from '../../../../src/dev10x/transport/client-context'
+import type { RpcSuccess } from '../../../../src/dev10x/transport/types'
+import { colors, spacing, typography } from '../../../../src/dev10x/theme/mobile-theme'
 import {
   fetchMobileGitHistory,
   mapMobileCommitRows,
   type MobileCommitRow
-} from '../../../../src/orca/source-control/mobile-git-history'
+} from '../../../../src/dev10x/source-control/mobile-git-history'
 import type { GitBranchChangeEntry } from '../../../../src/shared/types'
 
 function firstParam(value: string | string[] | undefined): string {

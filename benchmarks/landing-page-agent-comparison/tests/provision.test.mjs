@@ -42,7 +42,7 @@ test("workflow prompt injects the issue description without provider branches", 
   assert.equal(markdown.endsWith("{{ issue.description }}\n"), false);
 });
 
-test("all 18 run records carry the same prompt hash and explicit model contract", () => {
+test("all run records carry the same prompt hash and explicit model contract", () => {
   const prompt = "identical prompt\n";
   const records = buildRunRecords(prompt);
 

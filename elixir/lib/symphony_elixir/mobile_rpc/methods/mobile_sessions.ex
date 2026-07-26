@@ -1,4 +1,4 @@
-defmodule SymphonyElixir.MobileRpc.Methods.OrcaSessions do
+defmodule SymphonyElixir.MobileRpc.Methods.MobileSessions do
   @moduledoc "Orca-compatible session-tab and markdown operations."
 
   @spec modules() :: [module()]
@@ -15,18 +15,18 @@ defmodule SymphonyElixir.MobileRpc.Methods.OrcaSessions do
   end
 
   defmodule TabsList do
-    use SymphonyElixir.MobileRpc.OrcaMethod,
+    use SymphonyElixir.MobileRpc.MobileMethod,
       name: "session.tabs.list",
-      service: SymphonyElixir.MobileRpc.OrcaSessionService,
+      service: SymphonyElixir.MobileRpc.MobileSessionService,
       service_key: :orca_session_service,
       allowed_keys: ["worktree"],
       required_keys: ["worktree"]
   end
 
   defmodule TabsSubscribe do
-    use SymphonyElixir.MobileRpc.OrcaMethod,
+    use SymphonyElixir.MobileRpc.MobileMethod,
       name: "session.tabs.subscribe",
-      service: SymphonyElixir.MobileRpc.OrcaSessionService,
+      service: SymphonyElixir.MobileRpc.MobileSessionService,
       service_key: :orca_session_service,
       subscription: true,
       allowed_keys: ["worktree"],
@@ -34,18 +34,18 @@ defmodule SymphonyElixir.MobileRpc.Methods.OrcaSessions do
   end
 
   defmodule TabsActivate do
-    use SymphonyElixir.MobileRpc.OrcaMethod,
+    use SymphonyElixir.MobileRpc.MobileMethod,
       name: "session.tabs.activate",
-      service: SymphonyElixir.MobileRpc.OrcaSessionService,
+      service: SymphonyElixir.MobileRpc.MobileSessionService,
       service_key: :orca_session_service,
       allowed_keys: ["worktree", "tabId", "leafId", "notifyClients"],
       required_keys: ["worktree", "tabId"]
   end
 
   defmodule TabsCreateTerminal do
-    use SymphonyElixir.MobileRpc.OrcaMethod,
+    use SymphonyElixir.MobileRpc.MobileMethod,
       name: "session.tabs.createTerminal",
-      service: SymphonyElixir.MobileRpc.OrcaSessionService,
+      service: SymphonyElixir.MobileRpc.MobileSessionService,
       service_key: :orca_session_service,
       timeout_ms: 30_000,
       allowed_keys: [
@@ -67,27 +67,27 @@ defmodule SymphonyElixir.MobileRpc.Methods.OrcaSessions do
   end
 
   defmodule TabsClose do
-    use SymphonyElixir.MobileRpc.OrcaMethod,
+    use SymphonyElixir.MobileRpc.MobileMethod,
       name: "session.tabs.close",
-      service: SymphonyElixir.MobileRpc.OrcaSessionService,
+      service: SymphonyElixir.MobileRpc.MobileSessionService,
       service_key: :orca_session_service,
       allowed_keys: ["worktree", "tabId", "leafId", "notifyClients"],
       required_keys: ["worktree", "tabId"]
   end
 
   defmodule MarkdownReadTab do
-    use SymphonyElixir.MobileRpc.OrcaMethod,
+    use SymphonyElixir.MobileRpc.MobileMethod,
       name: "markdown.readTab",
-      service: SymphonyElixir.MobileRpc.OrcaSessionService,
+      service: SymphonyElixir.MobileRpc.MobileSessionService,
       service_key: :orca_session_service,
       allowed_keys: ["worktree", "tabId", "leafId", "notifyClients"],
       required_keys: ["worktree", "tabId"]
   end
 
   defmodule MarkdownSaveTab do
-    use SymphonyElixir.MobileRpc.OrcaMethod,
+    use SymphonyElixir.MobileRpc.MobileMethod,
       name: "markdown.saveTab",
-      service: SymphonyElixir.MobileRpc.OrcaSessionService,
+      service: SymphonyElixir.MobileRpc.MobileSessionService,
       service_key: :orca_session_service,
       allowed_keys: [
         "worktree",

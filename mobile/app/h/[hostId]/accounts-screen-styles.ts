@@ -1,5 +1,5 @@
 import { StyleSheet } from 'react-native'
-import { colors, spacing, typography, radii } from '../../../src/orca/theme/mobile-theme'
+import { colors, spacing, typography, radii } from '../../../src/dev10x/theme/mobile-theme'
 
 export const styles = StyleSheet.create({
   container: {

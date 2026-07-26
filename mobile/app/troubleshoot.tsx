@@ -24,13 +24,13 @@ import {
   XCircle,
   AlertTriangle
 } from 'lucide-react-native'
-import { colors, spacing, typography } from '../src/orca/theme/mobile-theme'
-import { loadHosts } from '../src/orca/transport/host-store'
+import { colors, spacing, typography } from '../src/dev10x/theme/mobile-theme'
+import { loadHosts } from '../src/dev10x/transport/host-store'
 import {
   startDiagnosticFetchTimeout,
   type DiagnosticFetchTimeout
-} from '../src/orca/diagnostics/diagnostic-fetch-timeout'
-import { formatEndpoint, testHostReachability } from '../src/orca/diagnostics/host-reachability'
+} from '../src/dev10x/diagnostics/diagnostic-fetch-timeout'
+import { formatEndpoint, testHostReachability } from '../src/dev10x/diagnostics/host-reachability'
 
 type DiagnosticStatus = 'idle' | 'running' | 'done'
 

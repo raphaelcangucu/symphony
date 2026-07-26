@@ -11,12 +11,12 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { ChevronLeft, Check, RefreshCw, User } from 'lucide-react-native'
-import { loadHosts } from '../../../src/orca/transport/host-store'
-import { useHostClient } from '../../../src/orca/transport/client-context'
-import type { RpcSuccess } from '../../../src/orca/transport/types'
-import { colors, spacing } from '../../../src/orca/theme/mobile-theme'
+import { loadHosts } from '../../../src/dev10x/transport/host-store'
+import { useHostClient } from '../../../src/dev10x/transport/client-context'
+import type { RpcSuccess } from '../../../src/dev10x/transport/types'
+import { colors, spacing } from '../../../src/dev10x/theme/mobile-theme'
 import { styles } from './accounts-screen-styles'
-import { ClaudeIcon, OpenAIIcon } from '../../../src/orca/components/AgentIcons'
+import { ClaudeIcon, OpenAIIcon } from '../../../src/dev10x/components/AgentIcons'
 import {
   type AccountsSnapshot,
   type ProviderKey,
@@ -25,7 +25,7 @@ import {
   getUsageBarState,
   hasActiveProviderUsage,
   UsageBar
-} from '../../../src/orca/components/AccountUsage'
+} from '../../../src/dev10x/components/AccountUsage'
 
 export default function AccountsScreen() {
   const router = useRouter()

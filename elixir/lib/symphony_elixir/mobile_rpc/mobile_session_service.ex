@@ -1,4 +1,4 @@
-defmodule SymphonyElixir.MobileRpc.OrcaSessionService do
+defmodule SymphonyElixir.MobileRpc.MobileSessionService do
   @moduledoc """
   Presents Symphony sessions and terminals through Orca's production RPC shapes.
 
@@ -7,7 +7,7 @@ defmodule SymphonyElixir.MobileRpc.OrcaSessionService do
   """
 
   alias SymphonyElixir.Assistant.{History, ThreadDocuments}
-  alias SymphonyElixir.MobileRpc.{OrcaSubscription, TerminalBridge}
+  alias SymphonyElixir.MobileRpc.{MobileSubscription, TerminalBridge}
   alias SymphonyElixir.Terminal.Registry
 
   @state_table :symphony_mobile_rpc_orca_session_preferences
@@ -253,7 +253,7 @@ defmodule SymphonyElixir.MobileRpc.OrcaSessionService do
          connection_pid when is_pid(connection_pid) <- Map.get(context, :connection_pid) do
       subscription_id = unique_subscription_id("tabs", thread.id)
 
-      OrcaSubscription.subscribe(
+      MobileSubscription.subscribe(
         connection_pid: connection_pid,
         subscription_id: subscription_id,
         event_prefix: "session.tabs",

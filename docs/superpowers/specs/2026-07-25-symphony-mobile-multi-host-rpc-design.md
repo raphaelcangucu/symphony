@@ -20,7 +20,7 @@ services are reused behind the new RPC boundary.
 
 The host, credential and transport decisions in this document are independent
 of presentation. The later approved
-`2026-07-25-orca-first-symphony-mobile-design.md` makes the copied Orca shell
+`2026-07-25-upstream-first-symphony-mobile-design.md` makes the copied Orca shell
 the default UX and preserves the clean Codex-style hierarchy as a
 device-selectable alternate view. Both shells connect to the concrete selected
 Symphony machine through the same transport and state core.

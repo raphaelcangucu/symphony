@@ -1,4 +1,4 @@
-import type { MobileGitStatusEntry } from "../src/orca/source-control/mobile-git-status";
+import type { MobileGitStatusEntry } from "../src/dev10x/source-control/mobile-git-status";
 
 type FakeGitEntry = MobileGitStatusEntry & {
   stagedFromUntracked?: boolean;

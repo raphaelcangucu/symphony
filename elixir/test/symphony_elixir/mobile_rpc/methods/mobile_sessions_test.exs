@@ -1,7 +1,7 @@
-defmodule SymphonyElixir.MobileRpc.Methods.OrcaSessionsTest do
+defmodule SymphonyElixir.MobileRpc.Methods.MobileSessionsTest do
   use ExUnit.Case, async: true
 
-  alias SymphonyElixir.MobileRpc.{Dispatcher, OrcaSessionService, OrcaSubscription}
+  alias SymphonyElixir.MobileRpc.{Dispatcher, MobileSessionService, MobileSubscription}
 
   @methods ~w(
     session.tabs.list
@@ -351,7 +351,7 @@ defmodule SymphonyElixir.MobileRpc.Methods.OrcaSessionsTest do
                 }
               ]
             }} =
-             OrcaSessionService.call("session.tabs.list", %{"worktree" => "id:42"}, context)
+             MobileSessionService.call("session.tabs.list", %{"worktree" => "id:42"}, context)
 
     assert {:ok,
             %{
@@ -362,7 +362,7 @@ defmodule SymphonyElixir.MobileRpc.Methods.OrcaSessionsTest do
               "totalCount" => 2,
               "truncated" => false
             }} =
-             OrcaSessionService.call("terminal.list", %{"worktree" => "id:42"}, context)
+             MobileSessionService.call("terminal.list", %{"worktree" => "id:42"}, context)
 
     assert {:ok,
             %{
@@ -372,7 +372,7 @@ defmodule SymphonyElixir.MobileRpc.Methods.OrcaSessionsTest do
                 "bytesWritten" => 9
               }
             }} =
-             OrcaSessionService.call(
+             MobileSessionService.call(
                "terminal.send",
                %{"terminal" => "thread:42", "text" => "Continue", "enter" => true},
                context
@@ -385,7 +385,7 @@ defmodule SymphonyElixir.MobileRpc.Methods.OrcaSessionsTest do
               "baseVersion" => base_version,
               "editable" => false
             }} =
-             OrcaSessionService.call(
+             MobileSessionService.call(
                "markdown.readTab",
                %{"worktree" => "id:42", "tabId" => "notes.md"},
                context
@@ -400,7 +400,7 @@ defmodule SymphonyElixir.MobileRpc.Methods.OrcaSessionsTest do
                 "title" => "Verification"
               }
             }} =
-             OrcaSessionService.call(
+             MobileSessionService.call(
                "terminal.rename",
                %{
                  "terminal" => "tab:42:c3ltcGhvbnk:tab-a",
@@ -430,7 +430,7 @@ defmodule SymphonyElixir.MobileRpc.Methods.OrcaSessionsTest do
       end)
 
     assert {:ok, {:subscription, "tabs:host-a:42", %{"subscription_id" => "tabs:host-a:42"}, cleanup, activate}} =
-             OrcaSubscription.subscribe(
+             MobileSubscription.subscribe(
                connection_pid: self(),
                subscription_id: "tabs:host-a:42",
                event_prefix: "session.tabs",

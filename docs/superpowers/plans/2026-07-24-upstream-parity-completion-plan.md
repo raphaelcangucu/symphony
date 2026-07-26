@@ -414,7 +414,7 @@ Commit message: `feat(mobile): add connection diagnostics and settings`
 - Create: `mobile/e2e/ios-smoke.sh`
 - Modify: `mobile/src/e2e/fixture-runtime.ts`
 - Modify: `mobile/src/e2e/fixture-runtime.test.ts`
-- Modify: `docs/superpowers/plans/2026-07-24-orca-parity-completion-plan.md`
+- Modify: `docs/superpowers/plans/2026-07-24-upstream-parity-completion-plan.md`
 
 - [ ] **Step 1: Extend deterministic fixture boundaries**
 

@@ -13,10 +13,10 @@ import { CameraView, useCameraPermissions } from 'expo-camera'
 import { useRouter } from 'expo-router'
 import { ChevronLeft, Clipboard as ClipboardIcon, QrCode } from 'lucide-react-native'
 import { encodePairingOffer } from '../src/auth/pairing-offer'
-import { decodePairingUrl, parsePairingCode } from '../src/orca/transport/pairing'
-import type { PairingOffer } from '../src/orca/transport/types'
-import { colors, spacing, radii, typography } from '../src/orca/theme/mobile-theme'
-import { TextInputModal } from '../src/orca/components/TextInputModal'
+import { decodePairingUrl, parsePairingCode } from '../src/dev10x/transport/pairing'
+import type { PairingOffer } from '../src/dev10x/transport/types'
+import { colors, spacing, radii, typography } from '../src/dev10x/theme/mobile-theme'
+import { TextInputModal } from '../src/dev10x/components/TextInputModal'
 
 const SCAN_RETICLE_SCALE = 0.62
 const SCAN_RETICLE_MAX_SIZE = 360

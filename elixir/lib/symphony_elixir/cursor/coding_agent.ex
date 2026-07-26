@@ -209,7 +209,13 @@ defmodule SymphonyElixir.Cursor.CodingAgent do
         {:ok, model.model}
 
       [] ->
-        {:error, {:model_confirmation_unmatched, provider_model}}
+        # Cursor's automatic router can return a provider-owned, parameterized
+        # identifier that is intentionally absent from the selectable catalog
+        # (for example `auto-smart[optimize_for=balanced]`). It is still the
+        # strongest native confirmation available for an `auto` request, so
+        # preserve it verbatim as provenance instead of discarding a completed
+        # turn.
+        {:ok, provider_model}
 
       matches ->
         {:error, {:model_confirmation_ambiguous, provider_model, Enum.map(matches, & &1.model)}}

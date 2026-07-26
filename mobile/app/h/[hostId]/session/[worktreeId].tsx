@@ -20,6 +20,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router'
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import { assistantThreadDiffRoute } from '../../../../src/features/sessions/session-navigation'
 import {
   AlertTriangle,
   ArrowUp,
@@ -45,8 +46,8 @@ import {
   SquareTerminal,
   X
 } from 'lucide-react-native'
-import type { RpcClient } from '../../../../src/orca/transport/rpc-client'
-import { loadHosts } from '../../../../src/orca/transport/host-store'
+import type { RpcClient } from '../../../../src/dev10x/transport/rpc-client'
+import { loadHosts } from '../../../../src/dev10x/transport/host-store'
 import {
   loadTerminalAutocompleteEnabled,
   loadTerminalLinkOpenMode,
@@ -54,138 +55,138 @@ import {
   HOST_DOCK_MIN_WIDTH,
   saveTerminalTextScale,
   type MobileTerminalLinkOpenMode
-} from '../../../../src/orca/storage/preferences'
+} from '../../../../src/dev10x/storage/preferences'
 import {
   useHostClient,
   useForceReconnect,
   useReconnectAttempt,
   useLastConnectedAt
-} from '../../../../src/orca/transport/client-context'
-import { classifyConnection } from '../../../../src/orca/transport/connection-health'
-import { useResponsiveLayout } from '../../../../src/orca/layout/responsive-layout'
+} from '../../../../src/dev10x/transport/client-context'
+import { classifyConnection } from '../../../../src/dev10x/transport/connection-health'
+import { useResponsiveLayout } from '../../../../src/dev10x/layout/responsive-layout'
 import {
   type ActivePanel,
   canDockSessionPanel,
   resolvePanelAction,
   panelRouteDescriptor
-} from '../../../../src/orca/session/session-panel-host'
-import { useMobilePrBranchContext } from '../../../../src/orca/session/use-mobile-pr-branch-context'
-import { SessionDockColumn } from '../../../../src/orca/session/SessionDockColumn'
-import type { ConnectionState, RpcFailure, RpcSuccess } from '../../../../src/orca/transport/types'
-import { useMobileDictation } from '../../../../src/orca/hooks/use-mobile-dictation'
+} from '../../../../src/dev10x/session/session-panel-host'
+import { useMobilePrBranchContext } from '../../../../src/dev10x/session/use-mobile-pr-branch-context'
+import { SessionDockColumn } from '../../../../src/dev10x/session/SessionDockColumn'
+import type { ConnectionState, RpcFailure, RpcSuccess } from '../../../../src/dev10x/transport/types'
+import { useMobileDictation } from '../../../../src/dev10x/hooks/use-mobile-dictation'
 import {
   triggerMediumImpact,
   triggerSelection,
   triggerSuccess,
   triggerError,
   triggerEdgeBump
-} from '../../../../src/orca/platform/haptics'
+} from '../../../../src/dev10x/platform/haptics'
 import type {
   TerminalKeyboardAvoidanceMetrics,
   TerminalModes,
   TerminalWebViewHandle
-} from '../../../../src/orca/terminal/TerminalWebView'
-import { isTerminalOscLinkRanges } from '../../../../src/orca/terminal/terminal-osc-link-ranges'
-import { useTerminalViewportRefit } from '../../../../src/orca/terminal/terminal-viewport-refit'
+} from '../../../../src/dev10x/terminal/TerminalWebView'
+import { isTerminalOscLinkRanges } from '../../../../src/dev10x/terminal/terminal-osc-link-ranges'
+import { useTerminalViewportRefit } from '../../../../src/dev10x/terminal/terminal-viewport-refit'
 import {
   getDefaultTerminalAccessoryBuiltInIds,
   getVisibleTerminalAccessoryKeys,
   loadTerminalAccessoryLayout
-} from '../../../../src/orca/terminal/terminal-accessory-layout'
-import { createTerminalLiveAccessoryInput } from '../../../../src/orca/terminal/terminal-live-accessory-input'
-import { getTerminalLiveAccessoryRawSendTarget } from '../../../../src/orca/terminal/terminal-live-accessory-raw-send-target'
+} from '../../../../src/dev10x/terminal/terminal-accessory-layout'
+import { createTerminalLiveAccessoryInput } from '../../../../src/dev10x/terminal/terminal-live-accessory-input'
+import { getTerminalLiveAccessoryRawSendTarget } from '../../../../src/dev10x/terminal/terminal-live-accessory-raw-send-target'
 import {
   clearTerminalLiveInputFocusTimer,
   focusTerminalLiveInputTarget,
   isTerminalLiveInputWithinByteLimit,
   scheduleTerminalLiveInputFocus
-} from '../../../../src/orca/terminal/terminal-live-input'
-import type { TerminalLiveInputSender } from '../../../../src/orca/terminal/terminal-live-input-sender'
-import { isTerminalSendRpcAccepted } from '../../../../src/orca/terminal/terminal-send-rpc-response'
-import { useTerminalLiveInputCommit } from '../../../../src/orca/terminal/use-terminal-live-input-commit'
+} from '../../../../src/dev10x/terminal/terminal-live-input'
+import type { TerminalLiveInputSender } from '../../../../src/dev10x/terminal/terminal-live-input-sender'
+import { isTerminalSendRpcAccepted } from '../../../../src/dev10x/terminal/terminal-send-rpc-response'
+import { useTerminalLiveInputCommit } from '../../../../src/dev10x/terminal/use-terminal-live-input-commit'
 import {
   getTerminalCommandKeyboardType,
   getTerminalLiveInputKeyboardType
-} from '../../../../src/orca/terminal/terminal-keyboard-type'
-import { normalizeTerminalTextInput } from '../../../../src/orca/terminal/terminal-text-input-normalization'
+} from '../../../../src/dev10x/terminal/terminal-keyboard-type'
+import { normalizeTerminalTextInput } from '../../../../src/dev10x/terminal/terminal-text-input-normalization'
 import {
   appendBufferedDictation,
   routeDictationTranscript
-} from '../../../../src/orca/terminal/terminal-live-dictation-routing'
-import { countTerminalGestureInputSequences } from '../../../../src/orca/terminal/terminal-gesture-input'
+} from '../../../../src/dev10x/terminal/terminal-live-dictation-routing'
+import { countTerminalGestureInputSequences } from '../../../../src/dev10x/terminal/terminal-gesture-input'
 import {
   recoverActiveTerminalAfterForeground,
   shouldRecoverTerminalOnAppStateChange
-} from '../../../../src/orca/terminal/terminal-foreground-recovery'
-import { MobileBrowserPane } from '../../../../src/orca/browser/MobileBrowserPane'
-import { normalizeBrowserUrl } from '../../../../src/orca/browser/browser-url'
-import { StatusDot } from '../../../../src/orca/components/StatusDot'
-import { ActionSheetModal } from '../../../../src/orca/components/ActionSheetModal'
-import { MobileAgentIcon } from '../../../../src/orca/components/MobileAgentIcon'
-import { TextInputModal } from '../../../../src/orca/components/TextInputModal'
-import { ConfirmModal } from '../../../../src/orca/components/ConfirmModal'
-import { MobileRichMarkdownEditor } from '../../../../src/orca/components/MobileRichMarkdownEditor'
-import { MobileSyntaxSegments } from '../../../../src/orca/components/MobileSyntaxSegments'
+} from '../../../../src/dev10x/terminal/terminal-foreground-recovery'
+import { MobileBrowserPane } from '../../../../src/dev10x/browser/MobileBrowserPane'
+import { normalizeBrowserUrl } from '../../../../src/dev10x/browser/browser-url'
+import { StatusDot } from '../../../../src/dev10x/components/StatusDot'
+import { ActionSheetModal } from '../../../../src/dev10x/components/ActionSheetModal'
+import { MobileAgentIcon } from '../../../../src/dev10x/components/MobileAgentIcon'
+import { TextInputModal } from '../../../../src/dev10x/components/TextInputModal'
+import { ConfirmModal } from '../../../../src/dev10x/components/ConfirmModal'
+import { MobileRichMarkdownEditor } from '../../../../src/dev10x/components/MobileRichMarkdownEditor'
+import { MobileSyntaxSegments } from '../../../../src/dev10x/components/MobileSyntaxSegments'
 import {
   CustomKeyModal,
   loadCustomKeys,
   saveCustomKeys,
   type CustomKey
-} from '../../../../src/orca/components/CustomKeyModal'
-import { buildMobileDiffLines } from '../../../../src/orca/session/mobile-diff-lines'
+} from '../../../../src/dev10x/components/CustomKeyModal'
+import { buildMobileDiffLines } from '../../../../src/dev10x/session/mobile-diff-lines'
 import {
   addMobileDiffComment,
   formatDiffComments,
   normalizeMobileDiffComments,
   removeDeliveredMobileDiffComments,
   removeMobileDiffComments
-} from '../../../../src/orca/session/mobile-diff-comments'
+} from '../../../../src/dev10x/session/mobile-diff-comments'
 import {
   buildPlainMobileDiffSyntaxLines,
   highlightMobileCode,
   highlightMobileDiffLines,
   resolveMobileSyntaxLanguage
-} from '../../../../src/orca/session/mobile-file-syntax'
+} from '../../../../src/dev10x/session/mobile-file-syntax'
 import {
   getTerminalRecordsFromSessionTabs,
   mergeTerminalListWithKnownRecords,
   mergeTerminalRecordsByCurrentOrder,
   mobileSessionTabsEqual,
   terminalRecordsEqual
-} from '../../../../src/orca/session/mobile-terminal-records'
+} from '../../../../src/dev10x/session/mobile-terminal-records'
 import {
   getMobileSessionTabTitle,
   resolveMobileTerminalTabAgentId
-} from '../../../../src/orca/session/mobile-terminal-tab-agent'
+} from '../../../../src/dev10x/session/mobile-terminal-tab-agent'
 import {
   buildMobileNewTabAgentOptions,
   type MobileNewTabAgentOption,
   type MobileNewTabAgentSettings
-} from '../../../../src/orca/session/mobile-new-tab-agent-options'
-import { useMobileImageAttachment } from '../../../../src/orca/session/use-mobile-image-attachment'
-import { useMobileTerminalPaste } from '../../../../src/orca/session/use-mobile-terminal-paste'
-import { useTerminalLiveInputModePreference } from '../../../../src/orca/session/use-terminal-live-input-mode-preference'
-import { MobileTerminalLiveInputStatus } from '../../../../src/orca/session/MobileTerminalLiveInputStatus'
-import { MobileTerminalInputActions } from '../../../../src/orca/session/MobileTerminalInputActions'
-import { classifyMobileArtifact } from '../../../../src/orca/session/mobile-artifact-kind'
-import { openMobileTerminalFileTap } from '../../../../src/orca/session/mobile-terminal-file-tap-open'
-import { useLiveWorktreeName } from '../../../../src/orca/session/use-live-worktree-name'
+} from '../../../../src/dev10x/session/mobile-new-tab-agent-options'
+import { useMobileImageAttachment } from '../../../../src/dev10x/session/use-mobile-image-attachment'
+import { useMobileTerminalPaste } from '../../../../src/dev10x/session/use-mobile-terminal-paste'
+import { useTerminalLiveInputModePreference } from '../../../../src/dev10x/session/use-terminal-live-input-mode-preference'
+import { MobileTerminalLiveInputStatus } from '../../../../src/dev10x/session/MobileTerminalLiveInputStatus'
+import { MobileTerminalInputActions } from '../../../../src/dev10x/session/MobileTerminalInputActions'
+import { classifyMobileArtifact } from '../../../../src/dev10x/session/mobile-artifact-kind'
+import { openMobileTerminalFileTap } from '../../../../src/dev10x/session/mobile-terminal-file-tap-open'
+import { useLiveWorktreeName } from '../../../../src/dev10x/session/use-live-worktree-name'
 import {
   acceptSessionSnapshot,
   applyClosedTabTombstones,
   type AppliedSnapshotMarker
-} from '../../../../src/orca/session/session-tab-snapshot-gate'
+} from '../../../../src/dev10x/session/session-tab-snapshot-gate'
 import {
   buildMarkdownDiskFallbackDoc,
   shouldReadMarkdownFromDiskAfterReadTabFailure
-} from '../../../../src/orca/session/mobile-markdown-disk-fallback'
-import { MobileHtmlPreview } from '../../../../src/orca/components/MobileHtmlPreview'
-import { MobileDictationSetupSheet } from '../../../../src/orca/components/MobileDictationSetupSheet'
+} from '../../../../src/dev10x/session/mobile-markdown-disk-fallback'
+import { MobileHtmlPreview } from '../../../../src/dev10x/components/MobileHtmlPreview'
+import { MobileDictationSetupSheet } from '../../../../src/dev10x/components/MobileDictationSetupSheet'
 import {
   fetchDictationSetup,
   isDictationSetupRequiredError
-} from '../../../../src/orca/dictation/mobile-dictation-setup'
-import { TerminalPaneView } from '../../../../src/orca/session/TerminalPaneView'
+} from '../../../../src/dev10x/dictation/mobile-dictation-setup'
+import { TerminalPaneView } from '../../../../src/dev10x/session/TerminalPaneView'
 import {
   getRepoIdFromMobileWorktreeId,
   isFileExistsErrorMessage,
@@ -196,16 +197,16 @@ import {
   TERMINAL_GESTURE_INPUT_MAX_PENDING_SEQUENCES,
   TERMINAL_GESTURE_INPUT_MAX_QUEUE_AGE_MS,
   TERMINAL_GESTURE_INPUT_REFILL_PER_SECOND
-} from '../../../../src/orca/session/mobile-session-route-helpers'
-import { resolveMarkdownFloatingActionsBottom } from '../../../../src/orca/session/markdown-floating-actions-layout'
-import { resolveTabStripScrollOffset } from '../../../../src/orca/session/tab-strip-scroll'
-import { activateOpenedSourceControlDiffTab } from '../../../../src/orca/session/opened-mobile-session-tab'
+} from '../../../../src/dev10x/session/mobile-session-route-helpers'
+import { resolveMarkdownFloatingActionsBottom } from '../../../../src/dev10x/session/markdown-floating-actions-layout'
+import { resolveTabStripScrollOffset } from '../../../../src/dev10x/session/tab-strip-scroll'
+import { activateOpenedSourceControlDiffTab } from '../../../../src/dev10x/session/opened-mobile-session-tab'
 import {
   createMobileSessionCreateWarningState,
   dismissMobileSessionCreateWarningState,
   reconcileMobileSessionCreateWarningState
-} from '../../../../src/orca/session/mobile-session-create-warning-state'
-import { colors, spacing } from '../../../../src/orca/theme/mobile-theme'
+} from '../../../../src/dev10x/session/mobile-session-create-warning-state'
+import { colors, spacing } from '../../../../src/dev10x/theme/mobile-theme'
 import { styles } from './mobile-session-styles'
 import type { DiffComment } from '../../../../src/shared/types'
 import type {
@@ -4406,6 +4407,12 @@ export default function SessionScreen() {
   }, [])
 
   const handlePanelTap = (tapped: Exclude<ActivePanel, null>) => {
+    const assistantDiffRoute =
+      tapped === 'sourceControl' ? assistantThreadDiffRoute(worktreeId) : null
+    if (assistantDiffRoute) {
+      router.push(assistantDiffRoute as never)
+      return
+    }
     const action = resolvePanelAction({ canDock: canDockPanel, tapped, current: activePanel })
     if (action.kind === 'dock') {
       setActivePanel(action.next)

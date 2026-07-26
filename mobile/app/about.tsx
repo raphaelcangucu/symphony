@@ -4,8 +4,8 @@ import { useRouter } from 'expo-router'
 import { ChevronLeft, Globe, LifeBuoy } from 'lucide-react-native'
 import Svg, { Path } from 'react-native-svg'
 import Constants from 'expo-constants'
-import { Dev10xLogo } from '../src/orca/components/Dev10xLogo'
-import { colors, spacing, typography } from '../src/orca/theme/mobile-theme'
+import { Dev10xLogo } from '../src/dev10x/components/Dev10xLogo'
+import { colors, spacing, typography } from '../src/dev10x/theme/mobile-theme'
 
 // Why: read version + native build identifier from expo-constants at
 // runtime so the About screen never drifts out of sync with app.json.

@@ -8,6 +8,7 @@
     "provision": "node src/provision.mjs",
     "run:cell": "node src/run-cell.mjs",
     "run:default": "SYMPHONY_BENCH_MATRIX=providers-default node src/run-matrix.mjs",
+    "run:current-default": "SYMPHONY_BENCH_MATRIX=providers-current-default node src/run-matrix.mjs",
     "run:advanced": "SYMPHONY_BENCH_MATRIX=providers-advanced node src/run-matrix.mjs",
     "run:codex-5.6": "SYMPHONY_BENCH_MATRIX=codex-5.6-defaults node src/run-matrix.mjs",
     "collect": "node src/collect.mjs",

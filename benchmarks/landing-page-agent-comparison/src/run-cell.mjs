@@ -146,6 +146,9 @@ export function modelProvenanceMatches(thread, run) {
 }
 
 export function resolvedModelMatches(provider, resolvedModel, requestedModel) {
+  if (provider === "cursor" && requestedModel === "auto") {
+    return typeof resolvedModel === "string" && resolvedModel !== "" && resolvedModel !== "auto";
+  }
   return Boolean(provider) && resolvedModel === requestedModel;
 }
 

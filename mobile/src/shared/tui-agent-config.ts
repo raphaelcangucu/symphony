@@ -1,5 +1,5 @@
 import type { TuiAgent } from './types'
-import { getOrcaCliCommandNameForPlatform } from './orca-cli-command-name'
+import { getOrcaCliCommandNameForPlatform } from './upstream-cli-command-name'
 
 export type AgentPromptInjectionMode =
   | 'argv'

@@ -1,6 +1,6 @@
 import { useLocalSearchParams } from 'expo-router'
-import { MobileSourceControlPanel } from '../../../../src/orca/source-control/MobileSourceControlPanel'
-import { firstParam } from '../../../../src/orca/source-control/mobile-source-control-screen-state'
+import { MobileSourceControlPanel } from '../../../../src/dev10x/source-control/MobileSourceControlPanel'
+import { firstParam } from '../../../../src/dev10x/source-control/mobile-source-control-screen-state'
 
 export default function MobileSourceControlScreen() {
   const params = useLocalSearchParams<{

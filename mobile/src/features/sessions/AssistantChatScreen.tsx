@@ -4,20 +4,25 @@ import {
   ComposerPrimitive,
   MessagePrimitive,
   ThreadPrimitive,
+  type ThreadMessage,
   type ThreadMessageLike,
   useAui,
   useAuiState,
 } from "@assistant-ui/react-native";
 import {
   ArrowLeft,
+  Brain,
+  ChevronDown,
+  ChevronRight,
+  Info,
   Mic,
   SendHorizontal,
-  Square,
   SquareTerminal,
 } from "lucide-react-native";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  FlatList,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -38,6 +43,7 @@ import {
   buildAssistantUiMessages,
   submitAssistantUiMessage,
 } from "./assistant-ui-session-adapter";
+import { followLatestMessage } from "./chat-scroll";
 import type {
   AssistantApprovalRequest,
   AssistantUserInputRequest,
@@ -98,6 +104,7 @@ function AssistantChatContent({
   onSubmitUserInput,
 }: AssistantChatScreenProps) {
   const { colors } = useAppTheme();
+  const messageList = useRef<FlatList<ThreadMessage>>(null);
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.bgBase }]}>
@@ -147,6 +154,8 @@ function AssistantChatContent({
           <ThreadPrimitive.Messages
             contentContainerStyle={styles.messageListContent}
             keyboardShouldPersistTaps="handled"
+            onContentSizeChange={() => followLatestMessage(messageList.current)}
+            ref={messageList}
             testID="session-message-list"
           >
             {({ message }) => <ChatMessage role={message.role} />}
@@ -186,63 +195,156 @@ function AssistantChatContent({
 function ChatMessage({ role }: { role: "assistant" | "user" | "system" }) {
   const { colors } = useAppTheme();
   const user = role === "user";
+  const system = role === "system";
   return (
     <MessagePrimitive.Root
+      testID={`chat-message-${role}`}
       style={[
         styles.message,
+        user ? styles.userMessage : system ? styles.activityMessage : styles.assistantMessage,
         {
-          alignSelf: user ? "flex-end" : "flex-start",
-          backgroundColor: user ? colors.accentSoft : colors.bgPanel,
-          borderColor: user ? colors.accent : colors.borderSubtle,
+          alignSelf: user ? "flex-end" : "stretch",
+          backgroundColor: user ? colors.accentSoft : "transparent",
+          borderColor: user ? colors.accent : "transparent",
         },
       ]}
     >
-      <Text style={[styles.messageRole, { color: colors.textMuted }]}>
-        {user ? "You" : role === "assistant" ? "Dev10x" : "System"}
-      </Text>
       <MessagePrimitive.Content
         renderReasoning={({ part }) => (
-          <View style={[styles.reasoning, { borderColor: colors.borderSubtle }]}>
-            <Text style={[styles.reasoningLabel, { color: colors.textMuted }]}>Thinking</Text>
-            <Markdown style={markdownStyles(colors)}>{part.text}</Markdown>
-          </View>
+          <ActivityDisclosure icon="reasoning" text={`Thinking\n\n${part.text}`} />
         )}
         renderText={({ part }) =>
           user ? (
             <Text style={[styles.messageText, { color: colors.textPrimary }]}>{part.text}</Text>
+          ) : system ? (
+            <ActivityDisclosure icon={activityIcon(part.text)} text={part.text} />
           ) : (
             <Markdown style={markdownStyles(colors)}>{part.text}</Markdown>
           )
         }
-        renderToolCall={({ part }) => (
-          <View
-            style={[
-              styles.toolCard,
-              { backgroundColor: colors.bgRaised, borderColor: colors.borderStrong },
-            ]}
-          >
-            <View style={styles.toolHeader}>
-              <StatusDot tone={part.result === undefined ? "accent" : "success"} />
-              <Text style={[styles.toolName, { color: colors.textSecondary }]}>
-                {part.toolName}
-              </Text>
-              <Text style={[styles.toolStatus, { color: colors.textMuted }]}>
-                {part.result === undefined ? "Running" : "Done"}
-              </Text>
-            </View>
-            {part.result !== undefined && String(part.result).trim() ? (
-              <Text
-                numberOfLines={6}
-                style={[styles.toolOutput, { color: colors.textSecondary }]}
-              >
-                {String(part.result)}
-              </Text>
-            ) : null}
-          </View>
-        )}
+        renderToolCall={({ part }) => <ToolActivity part={part} />}
       />
     </MessagePrimitive.Root>
   );
+}
+
+function activityIcon(text: string): "reasoning" | "system" {
+  const title = text.split(/\n\s*\n/, 1)[0]?.trim().toLowerCase();
+  return title === "reasoning" || title === "thinking" ? "reasoning" : "system";
+}
+
+function ActivityDisclosure({
+  icon,
+  text,
+}: {
+  icon: "reasoning" | "system";
+  text: string;
+}) {
+  const { colors } = useAppTheme();
+  const [expanded, setExpanded] = useState(false);
+  const { title, body } = disclosureText(text, icon === "reasoning" ? "Thinking" : "System");
+  const Icon = icon === "reasoning" ? Brain : Info;
+  const canExpand = body.length > 0;
+
+  return (
+    <View style={styles.activityDisclosure}>
+      <Pressable
+        accessibilityLabel={`${expanded ? "Hide" : "Show"} ${title} details`}
+        accessibilityRole="button"
+        disabled={!canExpand}
+        onPress={() => setExpanded((current) => !current)}
+        style={styles.activityHeader}
+      >
+        <Icon color={colors.textMuted} size={15} />
+        <Text numberOfLines={1} style={[styles.activityTitle, { color: colors.textSecondary }]}>
+          {title}
+        </Text>
+        <Text style={[styles.activityMeta, { color: colors.textMuted }]}>
+          {icon === "reasoning" ? "Reasoning" : "System"}
+        </Text>
+        {canExpand ? (
+          expanded ? (
+            <ChevronDown color={colors.textMuted} size={15} />
+          ) : (
+            <ChevronRight color={colors.textMuted} size={15} />
+          )
+        ) : null}
+      </Pressable>
+      {expanded && body ? (
+        <View style={[styles.activityBody, { borderColor: colors.borderSubtle }]}>
+          <Markdown style={activityMarkdownStyles(colors)}>{body}</Markdown>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function ToolActivity({
+  part,
+}: {
+  part: {
+    toolName: string;
+    result?: unknown;
+  };
+}) {
+  const { colors } = useAppTheme();
+  const [expanded, setExpanded] = useState(false);
+  const output = part.result === undefined ? "" : String(part.result).trim();
+  const running = part.result === undefined;
+
+  return (
+    <View
+      style={[
+        styles.toolCard,
+        { backgroundColor: colors.bgRaised, borderColor: colors.borderSubtle },
+      ]}
+    >
+      <Pressable
+        accessibilityLabel={`${expanded ? "Hide" : "Show"} ${part.toolName} details`}
+        accessibilityRole="button"
+        disabled={!output}
+        onPress={() => setExpanded((current) => !current)}
+        style={styles.toolHeader}
+      >
+        <StatusDot tone={running ? "accent" : "success"} />
+        <Text numberOfLines={1} style={[styles.toolName, { color: colors.textSecondary }]}>
+          {part.toolName}
+        </Text>
+        <Text style={[styles.toolStatus, { color: colors.textMuted }]}>
+          {running ? "Running" : "Done"}
+        </Text>
+        {output ? (
+          expanded ? (
+            <ChevronDown color={colors.textMuted} size={15} />
+          ) : (
+            <ChevronRight color={colors.textMuted} size={15} />
+          )
+        ) : null}
+      </Pressable>
+      {expanded && output ? (
+        <Text
+          selectable
+          style={[
+            styles.toolOutput,
+            { borderColor: colors.borderSubtle, color: colors.textSecondary },
+          ]}
+        >
+          {output}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
+function disclosureText(text: string, fallbackTitle: string): { title: string; body: string } {
+  const trimmed = text.trim();
+  if (!trimmed) return { title: fallbackTitle, body: "" };
+  const divider = trimmed.search(/\n\s*\n/);
+  if (divider < 0) return { title: trimmed, body: "" };
+  return {
+    title: trimmed.slice(0, divider).trim() || fallbackTitle,
+    body: trimmed.slice(divider).trim(),
+  };
 }
 
 function ChatComposer({
@@ -303,13 +405,6 @@ function ChatComposer({
       >
         <SendHorizontal color={colors.bgBase} size={20} />
       </ComposerPrimitive.Send>
-      <ComposerPrimitive.Cancel
-        accessibilityLabel="Stop generation"
-        accessibilityRole="button"
-        style={[styles.composerButton, { backgroundColor: colors.bgPressed }]}
-      >
-        <Square color={colors.statusRed} fill={colors.statusRed} size={15} />
-      </ComposerPrimitive.Cancel>
     </ComposerPrimitive.Root>
   );
 }
@@ -506,7 +601,7 @@ function connectionState(state: SessionTimelineState["connectionState"]): Connec
 
 function markdownStyles(colors: ReturnType<typeof useAppTheme>["colors"]) {
   return {
-    body: { color: colors.textPrimary, fontSize: 16, lineHeight: 23, margin: 0 },
+    body: { color: colors.textPrimary, fontSize: 15.5, lineHeight: 23, margin: 0 },
     code_inline: {
       backgroundColor: colors.bgRaised,
       color: colors.textPrimary,
@@ -525,6 +620,14 @@ function markdownStyles(colors: ReturnType<typeof useAppTheme>["colors"]) {
       fontFamily: Platform.select({ ios: "Menlo", default: "monospace" }),
     },
     link: { color: colors.accent },
+  };
+}
+
+function activityMarkdownStyles(colors: ReturnType<typeof useAppTheme>["colors"]) {
+  const base = markdownStyles(colors);
+  return {
+    ...base,
+    body: { ...base.body, color: colors.textSecondary, fontSize: 13, lineHeight: 19 },
   };
 }
 
@@ -556,42 +659,64 @@ const styles = StyleSheet.create({
   },
   messageListContent: {
     flexGrow: 1,
-    gap: spacing.sm,
+    gap: spacing.md,
     justifyContent: "flex-end",
     padding: spacing.md,
   },
   message: {
+    maxWidth: "100%",
+  },
+  userMessage: {
     borderRadius: radii.lg,
     borderWidth: StyleSheet.hairlineWidth,
-    gap: spacing.xs,
     maxWidth: "92%",
-    padding: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
   },
-  messageRole: {
-    fontSize: 11,
-    fontWeight: "700",
-    textTransform: "uppercase",
+  assistantMessage: {
+    paddingHorizontal: spacing.xxs,
+    paddingVertical: spacing.xs,
+    width: "100%",
   },
+  activityMessage: { paddingVertical: spacing.xxs, width: "100%" },
   messageText: { fontSize: 16, lineHeight: 23 },
-  reasoning: {
-    borderLeftWidth: 2,
-    gap: spacing.xxs,
-    paddingLeft: spacing.sm,
+  activityDisclosure: { width: "100%" },
+  activityHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: spacing.xs,
+    minHeight: 36,
+    paddingHorizontal: spacing.xs,
   },
-  reasoningLabel: { fontSize: 11, fontWeight: "700", textTransform: "uppercase" },
+  activityTitle: { flex: 1, fontSize: 13, fontWeight: "600" },
+  activityMeta: { fontSize: 11 },
+  activityBody: {
+    borderLeftWidth: 2,
+    marginLeft: spacing.sm,
+    paddingBottom: spacing.xs,
+    paddingLeft: spacing.md,
+    paddingTop: spacing.xs,
+  },
   toolCard: {
     borderRadius: radii.md,
     borderWidth: StyleSheet.hairlineWidth,
-    gap: spacing.xs,
-    padding: spacing.sm,
   },
-  toolHeader: { alignItems: "center", flexDirection: "row", gap: spacing.xs },
+  toolHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: spacing.xs,
+    minHeight: 38,
+    paddingHorizontal: spacing.sm,
+  },
   toolName: { flex: 1, fontSize: 13, fontWeight: "700" },
   toolStatus: { fontSize: 11 },
   toolOutput: {
+    borderTopWidth: StyleSheet.hairlineWidth,
     fontFamily: Platform.select({ ios: "Menlo", default: "monospace" }),
     fontSize: 12,
     lineHeight: 17,
+    maxHeight: 220,
+    padding: spacing.sm,
   },
   composer: {
     alignItems: "flex-end",

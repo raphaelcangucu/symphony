@@ -293,10 +293,15 @@ defmodule SymphonyElixir.Codex.SessionLog do
   # credo:disable-for-next-line Credo.Check.Refactor.CyclomaticComplexity
   defp parse_response_item(%{"type" => "message", "role" => role, "content" => content}) when is_list(content) do
     body = content_text(content)
+    injected_system = injected_system_prompt(body)
 
     cond do
       role == "developer" ->
         entry("system", "System instructions", body, collapsed: true)
+
+      role == "user" and match?({:ok, _, _}, injected_system) ->
+        {:ok, title, details} = injected_system
+        entry("system", title, details, collapsed: true)
 
       role == "user" and byte_size(body || "") > 2_000 ->
         entry("user", "Initial prompt", body, collapsed: true)
@@ -371,6 +376,21 @@ defmodule SymphonyElixir.Codex.SessionLog do
   end
 
   defp parse_response_item(_payload), do: nil
+
+  defp injected_system_prompt(body) when is_binary(body) do
+    [
+      {"## Plan gate failed (Symphony)", "Plan gate failed"},
+      {"## Workpad gate failed (Symphony)", "Workpad gate failed"}
+    ]
+    |> Enum.find_value(:error, fn {heading, title} ->
+      case String.split(body, heading, parts: 2) do
+        ["", details] -> {:ok, title, String.trim(details)}
+        _ -> nil
+      end
+    end)
+  end
+
+  defp injected_system_prompt(_body), do: :error
 
   defp entry(kind, title, body, opts \\ []) do
     body = if is_binary(body), do: String.trim(body), else: nil

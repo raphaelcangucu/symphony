@@ -1,7 +1,7 @@
 import { useLocalSearchParams } from 'expo-router'
-import { useHostClient } from '../../../../src/orca/transport/client-context'
-import { useMobilePrBranchContext } from '../../../../src/orca/session/use-mobile-pr-branch-context'
-import { MobilePrViewPanel } from '../../../../src/orca/components/pr-sidebar/MobilePrViewPanel'
+import { useHostClient } from '../../../../src/dev10x/transport/client-context'
+import { useMobilePrBranchContext } from '../../../../src/dev10x/session/use-mobile-pr-branch-context'
+import { MobilePrViewPanel } from '../../../../src/dev10x/components/pr-sidebar/MobilePrViewPanel'
 
 // Narrow-layout full-screen PR route. The standalone panel can't ride on the review
 // screen's diff state, so branch/head SHA are resolved here from git.status + branchCompare.

@@ -308,7 +308,7 @@ function repoColor(name: string): string {
   return REPO_COLORS[Math.abs(hash) % REPO_COLORS.length]
 }
 
-export function OrcaHomeRoute() {
+export function Dev10xHomeRoute() {
   const router = useRouter()
   const insets = useSafeAreaInsets()
   // Why: cap and center content on wide/tablet canvases so cards don't stretch

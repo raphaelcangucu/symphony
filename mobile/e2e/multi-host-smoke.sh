@@ -10,10 +10,12 @@ readonly REPO_DIR="$(cd "${MOBILE_DIR}/.." && pwd)"
 readonly ELIXIR_DIR="${REPO_DIR}/elixir"
 readonly APK_PATH="${1:-${MOBILE_DIR}/android/app/build/outputs/apk/release/app-release.apk}"
 readonly OUTPUT_DIR="${E2E_OUTPUT_DIR:-${MOBILE_DIR}/artifacts/e2e}"
-readonly ARTIFACT_SLUG="pr-7-encrypted-multi-host-complete-experience"
+readonly ARTIFACT_SLUG="pr-7-dev10x-rich-chat-real-host-experience"
 readonly VIDEO_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}.mp4"
 readonly RAW_VIDEO_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}-raw.webm"
 readonly SCREENSHOT_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}.png"
+readonly CHAT_SCREENSHOT_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}-chat.png"
+readonly ORCHESTRATOR_SCREENSHOT_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}-orchestrator.png"
 readonly TERMINAL_SCREENSHOT_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}-terminal.png"
 readonly TERMINAL_COMMAND_SCREENSHOT_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}-terminal-command.png"
 readonly UI_DUMP_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}.xml"
@@ -56,6 +58,7 @@ recording_pid=""
 host_a_pid=""
 host_b_pid=""
 last_host_pid=""
+orchestrator_session_id=""
 screen_width=""
 screen_height=""
 
@@ -80,6 +83,26 @@ wait_for_selector() {
     sleep 1
   done
   printf "Selector not found: %s=%s\n" "${attribute}" "${value}" >&2
+  return 1
+}
+
+wait_for_enabled_accessible() {
+  local value="$1"
+  local attempts="${2:-45}"
+  local node
+  for _ in $(seq 1 "${attempts}"); do
+    dump_ui
+    node="$(
+      sed 's/></>\n</g' "${UI_DUMP_PATH}" |
+        grep -F "content-desc=\"${value}\"" |
+        head -n 1
+    )"
+    if [[ "${node}" == *'enabled="true"'* ]]; then
+      return 0
+    fi
+    sleep 1
+  done
+  printf "Accessible control not enabled: %s\n" "${value}" >&2
   return 1
 }
 
@@ -207,6 +230,21 @@ tap_accessible() {
   else
     tap_selector "text" "${value}"
   fi
+}
+
+input_text() {
+  local value="$1"
+  local character
+  for ((index = 0; index < ${#value}; index++)); do
+    character="${value:index:1}"
+    if [[ "${character}" == " " ]]; then
+      "${ADB}" shell input keyevent 62
+    else
+      "${ADB}" shell input text "${character}"
+    fi
+    sleep 0.08
+  done
+  trace_step "enter redacted text"
 }
 
 tap_screen_fraction() {
@@ -359,6 +397,67 @@ assert_paired_device() {
   return 1
 }
 
+dispatch_orchestrator_run() {
+  local port="$1"
+  local project_slug="$2"
+  local issue_identifier="$3"
+  curl --fail --silent \
+    -X POST \
+    -H "authorization: Bearer ${ADMIN_TOKEN}" \
+    -H "content-type: application/json" \
+    --data '{"action":"hard_reset","agent":"codex","mode":"yolo"}' \
+    "http://127.0.0.1:${port}/api/tracker/v1/projects/${project_slug}/issues/${issue_identifier}/dispatch" \
+    >/dev/null
+  trace_step "dispatch real local orchestrator run ${issue_identifier}"
+}
+
+wait_for_orchestrator_run() {
+  local port="$1"
+  local issue_identifier="$2"
+  local project_slug="$3"
+  for _ in $(seq 1 120); do
+    orchestrator_session_id="$(
+      curl --fail --silent \
+        -H "authorization: Bearer ${ADMIN_TOKEN}" \
+        "http://127.0.0.1:${port}/api/tracker/v1/agent_executions" |
+        jq -r --arg issue "${issue_identifier}" '
+          (
+            if (.data | type) == "array" then .data
+            elif (.data | type) == "object" then (.data.executions // [])
+            elif (.executions | type) == "array" then .executions
+            else []
+            end
+          )
+          | map(select(.issue_identifier == $issue and (.execution_session_id | type == "number")))
+          | sort_by(.execution_session_id)
+          | last
+          | .execution_session_id // empty
+        '
+    )"
+    if [[ ! "${orchestrator_session_id}" =~ ^[0-9]+$ ]]; then
+      orchestrator_session_id="$(
+        curl --fail --silent \
+          -H "authorization: Bearer ${ADMIN_TOKEN}" \
+          "http://127.0.0.1:${port}/api/tracker/v1/assistant/threads?project_slug=${project_slug}&limit=100" |
+          jq -r --arg issue "${issue_identifier}" '
+            (.data // [])
+            | map(select(.scope == "issue_execution" and .issue_identifier == $issue and (.id | type == "number")))
+            | sort_by(.id)
+            | last
+            | .id // empty
+          '
+      )"
+    fi
+    if [[ "${orchestrator_session_id}" =~ ^[0-9]+$ ]]; then
+      trace_step "observe real execution session ${orchestrator_session_id}"
+      return 0
+    fi
+    sleep 1
+  done
+  printf "Orchestrator run was not observed for %s\n" "${issue_identifier}" >&2
+  return 1
+}
+
 launch_pairing_offer() {
   local offer="$1"
   "${ADB}" shell am start -W \
@@ -386,6 +485,11 @@ host_a_issue="$(
     tail -n 1 |
     jq -er '.issue_identifier'
 )"
+host_a_orchestrator_issue="$(
+  grep '"orchestrator_issue_identifier"' "${E2E_ROOT}/host-a-seed.log" |
+    tail -n 1 |
+    jq -er '.orchestrator_issue_identifier'
+)"
 start_host "host-a" "${HOST_A_PORT}"
 host_a_pid="${last_host_pid}"
 start_host "host-b" "${HOST_B_PORT}"
@@ -412,6 +516,8 @@ host_b_offer="$(
 configure_screen_geometry
 "${ADB}" install --no-streaming -r "${APK_PATH}" >/dev/null
 "${ADB}" shell pm clear "${APP_PACKAGE}" >/dev/null
+"${ADB}" shell input keyevent 224
+"${ADB}" shell wm dismiss-keyguard
 "${ADB}" shell settings put global window_animation_scale 0
 "${ADB}" shell settings put global transition_animation_scale 0
 "${ADB}" shell settings put global animator_duration_scale 0
@@ -428,15 +534,54 @@ trace_step "assert Host A identity, health and isolated session library"
 
 tap_accessible "${HOST_A_NAME} — Direct RPC session"
 wait_for_text "${HOST_A_NAME} — Direct RPC session"
+wait_for_ui_contains "${HOST_A_NAME} is online"
+wait_for_selector "content-desc" "Message"
+trace_step "assert rich chat opens by default with real persisted host history"
+
+tap_accessible "Message"
+input_text "Reply exactly VERIFIED42"
+wait_for_enabled_accessible "Send"
+"${ADB}" shell input keyevent 4
+tap_accessible "Send"
+wait_for_ui_contains "VERIFIED42" 180
+"${ADB}" exec-out screencap -p >"${CHAT_SCREENSHOT_PATH}"
+test -s "${CHAT_SCREENSHOT_PATH}"
+trace_step "assert real Codex response streamed into the unified chat"
+
+tap_accessible "Go back"
+wait_for_text "${HOST_A_NAME} — Direct RPC session"
+tap_accessible "${HOST_A_NAME} — Direct RPC session"
+wait_for_ui_contains "VERIFIED42" 45
+trace_step "assert chat history is restored after closing and reopening the session"
+
+tap_accessible "Open terminal"
 sleep 2
 "${ADB}" exec-out screencap -p >"${TERMINAL_SCREENSHOT_PATH}"
 test -s "${TERMINAL_SCREENSHOT_PATH}"
-trace_step "assert Host A copied xterm rendered over encrypted RPC"
-# Android 7's uiautomator can block while xterm's WebView accessibility tree is
-# live. These are the copied Orca header controls, expressed as screen
-# fractions so the journey remains resolution-independent without querying the
-# WebView tree.
+trace_step "assert terminal remains an explicit xterm tool over the same host RPC"
+
+tap_screen_fraction 27 32 1 20 "Open file explorer"
+tap_accessible "app"
+wait_for_text "README.md"
+trace_step "assert selected-host workspace files"
+tap_accessible "Back to session"
+
+tap_screen_fraction 15 16 1 20 "Open source control"
+wait_for_text "README.md"
+trace_step "assert selected-host uncommitted diff"
+tap_accessible "Back"
+
+tap_screen_fraction 5 32 87 100 "Switch to buffered command input"
+tap_screen_fraction 3 8 11 12 "Type a command"
+input_text "pwd"
+"${ADB}" shell input keyevent 66
+sleep 2
+"${ADB}" exec-out screencap -p >"${TERMINAL_COMMAND_SCREENSHOT_PATH}"
+test -s "${TERMINAL_COMMAND_SCREENSHOT_PATH}"
+trace_step "exercise selected-host terminal input and output"
 tap_screen_fraction 1 16 1 20 "Back to worktrees"
+wait_for_ui_contains "VERIFIED42" 45
+tap_accessible "Go back"
 wait_for_text "${HOST_A_NAME} — Direct RPC session"
 
 tap_accessible "Tasks"
@@ -451,26 +596,32 @@ trace_step "assert task, blocker, subtask and comment parity on Host A"
 sleep 1
 tap_accessible "Back to worktrees"
 
-tap_accessible "${HOST_A_NAME} — Direct RPC session"
-tap_screen_fraction 27 32 1 20 "Open file explorer"
-wait_for_text "README.md"
-trace_step "assert selected-host workspace files"
-tap_accessible "Back to session"
+dispatch_orchestrator_run \
+  "${HOST_A_PORT}" \
+  "${HOST_A_PROJECT}" \
+  "${host_a_orchestrator_issue}"
+wait_for_orchestrator_run "${HOST_A_PORT}" "${host_a_orchestrator_issue}" "${HOST_A_PROJECT}"
+tap_accessible "Orchestrator runs"
+wait_for_text "Orchestrator runs"
+wait_for_text "${host_a_orchestrator_issue}"
+tap_accessible "Open ${host_a_orchestrator_issue} Codex execution"
+wait_for_ui_contains "#${orchestrator_session_id}"
+wait_for_selector "content-desc" "Message"
+trace_step "assert real orchestrator execution transcript opens in the same rich chat"
 
-tap_screen_fraction 15 16 1 20 "Open source control"
-wait_for_text "README.md"
-trace_step "assert selected-host uncommitted diff"
-tap_accessible "Back to session"
+tap_accessible "Message"
+input_text "Stop and reply exactly ACK73"
+wait_for_enabled_accessible "Send"
+"${ADB}" shell input keyevent 4
+tap_accessible "Send"
+wait_for_text "ACK73" 180
+"${ADB}" exec-out screencap -p >"${ORCHESTRATOR_SCREENSHOT_PATH}"
+test -s "${ORCHESTRATOR_SCREENSHOT_PATH}"
+trace_step "assert mobile steer was accepted and streamed back from the real orchestrator"
 
-tap_screen_fraction 5 32 87 100 "Switch to buffered command input"
-tap_screen_fraction 3 8 11 12 "Type a command"
-"${ADB}" shell input text "pwd"
-"${ADB}" shell input keyevent 66
-sleep 2
-"${ADB}" exec-out screencap -p >"${TERMINAL_COMMAND_SCREENSHOT_PATH}"
-test -s "${TERMINAL_COMMAND_SCREENSHOT_PATH}"
-trace_step "exercise selected-host terminal input and output"
-tap_screen_fraction 1 16 1 20 "Back to worktrees"
+tap_accessible "Go back"
+wait_for_text "Orchestrator runs"
+tap_accessible "Go back"
 wait_for_text "${HOST_A_NAME} — Direct RPC session"
 tap_accessible "Back to hosts"
 
@@ -485,6 +636,12 @@ if grep -Fq "${HOST_A_NAME} — Direct RPC session" "${UI_DUMP_PATH}"; then
 fi
 trace_step "assert Host B selected with no Host A cache/session leakage"
 
+tap_accessible "${HOST_B_NAME} — Direct RPC session"
+wait_for_ui_contains "${HOST_B_NAME} is online"
+wait_for_selector "content-desc" "Message"
+trace_step "assert Host B opens its own isolated chat history"
+tap_accessible "Go back"
+wait_for_text "${HOST_B_NAME} — Direct RPC session"
 tap_accessible "Back to hosts"
 wait_for_text "${HOST_A_NAME}"
 wait_for_text "${HOST_B_NAME}"
@@ -514,26 +671,14 @@ trace_step "assert selected host automatically reconnects to the same paired dev
 
 tap_accessible "Open settings"
 wait_for_text "Settings"
-wait_for_text "Interface"
-wait_for_text "Dev10x Workspace"
 wait_for_text "Terminal"
+wait_for_text "Voice"
+wait_for_text "Notifications"
 wait_for_text "About"
-trace_step "assert Dev10x brand and retained Compact Sessions interface option"
-tap_accessible "Use Compact Sessions interface"
-wait_for_text "Projects"
-wait_for_text "${HOST_B_NAME}"
-wait_for_text "${HOST_B_NAME} — Direct RPC session"
-trace_step "switch to Compact Sessions with the same selected host and session"
-
-tap_accessible "Open main menu"
-tap_accessible "Settings"
-wait_for_text "Interface"
-wait_for_text "Compact Sessions"
-tap_accessible "Use dev10x workspace interface"
-wait_for_text "Welcome back"
+trace_step "assert the single Dev10x interface and native device settings"
+tap_accessible "Back"
 wait_for_text "${HOST_A_NAME}"
 wait_for_text "${HOST_B_NAME}"
-trace_step "switch back to Dev10x Workspace without pairing or opening a second connection"
 
 tap_accessible "${HOST_A_NAME}"
 wait_for_text "${HOST_A_NAME} — Direct RPC session"
@@ -589,9 +734,11 @@ jq -n \
   --arg resolution "${resolution}" \
   '{
     status:"passed",
-    scenario:"encrypted direct control and isolation of two independent Symphony hosts",
+    scenario:"Dev10x rich chat, real session history and orchestrator steer across independent Symphony hosts",
     generated_at:$generated_at,
     hosts:2,
+    interactive_chat:"real Codex turn over selected-host RPC",
+    orchestrator_chat:"real execution transcript and steer over selected-host RPC",
     transport:"X25519/HKDF/ChaCha20-Poly1305 WebSocket RPC",
     apk_sha256:$apk_sha256,
     video_sha256:$video_sha256,
@@ -602,13 +749,13 @@ jq -n \
   }' >"${REPORT_JSON_PATH}"
 
 cat >"${REPORT_PATH}" <<EOF
-# Symphony Mobile encrypted multi-host E2E
+# Dev10x Mobile rich-chat real-host E2E
 
 - Status: passed
 - Generated: ${generated_at}
 - Hosts: ${HOST_A_NAME} and ${HOST_B_NAME}
 - Transport: direct host WebSocket RPC with application-layer E2EE
-- Journey: deep-link pairing, host identity/health, session stream, task/blocker/subtask/comment, files, diff, terminal, second-host pairing, cache-isolation assertion, paired-device metadata and host switching
+- Journey: deep-link pairing, host identity/health, chat-first real Codex turn, streamed response, history restore, tools, terminal, task/blocker/subtask/comment, files, diff, real orchestrator transcript and steer, second-host pairing, cache isolation, offline recovery and host switching
 - Video: \`${ARTIFACT_SLUG}.mp4\`
 - Duration: ${duration_seconds}s
 - Resolution: ${resolution}
@@ -619,6 +766,6 @@ cat >"${REPORT_PATH}" <<EOF
 Pairing offers and device credentials were redacted from the recording, trace and report.
 EOF
 
-printf "PASS: encrypted two-host mobile E2E\n"
+printf "PASS: Dev10x rich-chat two-host mobile E2E\n"
 printf "Video: %s\n" "${VIDEO_PATH}"
 printf "Report: %s\n" "${REPORT_PATH}"

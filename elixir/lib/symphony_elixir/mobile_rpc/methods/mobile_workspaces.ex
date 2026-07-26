@@ -1,4 +1,4 @@
-defmodule SymphonyElixir.MobileRpc.Methods.OrcaWorkspaces do
+defmodule SymphonyElixir.MobileRpc.Methods.MobileWorkspaces do
   @moduledoc "Orca-compatible repository, UI-state and workspace methods."
 
   @spec modules() :: [module()]
@@ -23,50 +23,50 @@ defmodule SymphonyElixir.MobileRpc.Methods.OrcaWorkspaces do
   end
 
   defmodule RepoList do
-    use SymphonyElixir.MobileRpc.OrcaMethod, name: "repo.list"
+    use SymphonyElixir.MobileRpc.MobileMethod, name: "repo.list"
   end
 
   defmodule RepoHooks do
-    use SymphonyElixir.MobileRpc.OrcaMethod,
+    use SymphonyElixir.MobileRpc.MobileMethod,
       name: "repo.hooks",
       allowed_keys: ["repo"],
       required_keys: ["repo"]
   end
 
   defmodule RepoSearchRefs do
-    use SymphonyElixir.MobileRpc.OrcaMethod,
+    use SymphonyElixir.MobileRpc.MobileMethod,
       name: "repo.searchRefs",
       allowed_keys: ["repo", "query", "limit"],
       required_keys: ["repo", "query"]
   end
 
   defmodule RepoBaseRefDefault do
-    use SymphonyElixir.MobileRpc.OrcaMethod,
+    use SymphonyElixir.MobileRpc.MobileMethod,
       name: "repo.baseRefDefault",
       allowed_keys: ["repo"],
       required_keys: ["repo"]
   end
 
   defmodule RepoSparsePresets do
-    use SymphonyElixir.MobileRpc.OrcaMethod,
+    use SymphonyElixir.MobileRpc.MobileMethod,
       name: "repo.sparsePresets",
       allowed_keys: ["repo"],
       required_keys: ["repo"]
   end
 
   defmodule RepoSaveSparsePreset do
-    use SymphonyElixir.MobileRpc.OrcaMethod,
+    use SymphonyElixir.MobileRpc.MobileMethod,
       name: "repo.saveSparsePreset",
       allowed_keys: ["repo", "id", "name", "directories"],
       required_keys: ["repo", "name", "directories"]
   end
 
   defmodule UiGet do
-    use SymphonyElixir.MobileRpc.OrcaMethod, name: "ui.get"
+    use SymphonyElixir.MobileRpc.MobileMethod, name: "ui.get"
   end
 
   defmodule UiSet do
-    use SymphonyElixir.MobileRpc.OrcaMethod,
+    use SymphonyElixir.MobileRpc.MobileMethod,
       name: "ui.set",
       allowed_keys: [
         "taskResumeState",
@@ -87,20 +87,20 @@ defmodule SymphonyElixir.MobileRpc.Methods.OrcaWorkspaces do
   end
 
   defmodule WorktreePs do
-    use SymphonyElixir.MobileRpc.OrcaMethod,
+    use SymphonyElixir.MobileRpc.MobileMethod,
       name: "worktree.ps",
       allowed_keys: ["limit"]
   end
 
   defmodule WorktreeShow do
-    use SymphonyElixir.MobileRpc.OrcaMethod,
+    use SymphonyElixir.MobileRpc.MobileMethod,
       name: "worktree.show",
       allowed_keys: ["worktree"],
       required_keys: ["worktree"]
   end
 
   defmodule WorktreeCreate do
-    use SymphonyElixir.MobileRpc.OrcaMethod,
+    use SymphonyElixir.MobileRpc.MobileMethod,
       name: "worktree.create",
       timeout_ms: 120_000,
       allowed_keys: [
@@ -133,14 +133,14 @@ defmodule SymphonyElixir.MobileRpc.Methods.OrcaWorkspaces do
   end
 
   defmodule WorktreeActivate do
-    use SymphonyElixir.MobileRpc.OrcaMethod,
+    use SymphonyElixir.MobileRpc.MobileMethod,
       name: "worktree.activate",
       allowed_keys: ["worktree", "notifyClients"],
       required_keys: ["worktree"]
   end
 
   defmodule WorktreeSet do
-    use SymphonyElixir.MobileRpc.OrcaMethod,
+    use SymphonyElixir.MobileRpc.MobileMethod,
       name: "worktree.set",
       allowed_keys: [
         "worktree",
@@ -166,14 +166,14 @@ defmodule SymphonyElixir.MobileRpc.Methods.OrcaWorkspaces do
   end
 
   defmodule WorktreeSleep do
-    use SymphonyElixir.MobileRpc.OrcaMethod,
+    use SymphonyElixir.MobileRpc.MobileMethod,
       name: "worktree.sleep",
       allowed_keys: ["worktree"],
       required_keys: ["worktree"]
   end
 
   defmodule WorktreeRemove do
-    use SymphonyElixir.MobileRpc.OrcaMethod,
+    use SymphonyElixir.MobileRpc.MobileMethod,
       name: "worktree.rm",
       allowed_keys: ["worktree", "force"],
       required_keys: ["worktree"]

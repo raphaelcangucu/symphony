@@ -9,9 +9,9 @@ import {
   readCanonicalPrompt,
 } from "../src/contract.mjs";
 
-test("defines 18 unique model-pinned benchmark runs", () => {
-  assert.equal(RUN_MATRIX.length, 18);
-  assert.equal(new Set(RUN_MATRIX.map((run) => run.id)).size, 18);
+test("defines the historical matrices plus 6 current provider defaults", () => {
+  assert.equal(RUN_MATRIX.length, 24);
+  assert.equal(new Set(RUN_MATRIX.map((run) => run.id)).size, 24);
   assert.deepEqual(
     new Set(RUN_MATRIX.map((run) => run.provider)),
     new Set(PROVIDERS),
@@ -28,6 +28,10 @@ test("defines 18 unique model-pinned benchmark runs", () => {
   );
   assert.equal(
     RUN_MATRIX.filter((run) => run.matrix === "codex-5.6-defaults").length,
+    6,
+  );
+  assert.equal(
+    RUN_MATRIX.filter((run) => run.matrix === "providers-current-default").length,
     6,
   );
   assert.equal(
@@ -55,6 +59,28 @@ test("defines 18 unique model-pinned benchmark runs", () => {
       "orchestrator-codex-gpt5.6.terra-medium",
       "session-codex-gpt5.6.luna-medium",
       "orchestrator-codex-gpt5.6.luna-medium",
+      "session-default-codex-gpt5.6.sol-low",
+      "session-default-cursor-auto",
+      "session-default-claude-opus5-xhigh",
+      "orchestrator-default-codex-gpt5.6.sol-low",
+      "orchestrator-default-cursor-auto",
+      "orchestrator-default-claude-opus5-xhigh",
+    ],
+  );
+
+  assert.deepEqual(
+    RUN_MATRIX.filter(
+      (run) =>
+        run.matrix === "providers-current-default" && run.path === "session",
+    ).map(({ provider, requested_model, requested_effort }) => [
+      provider,
+      requested_model,
+      requested_effort,
+    ]),
+    [
+      ["codex", "gpt-5.6-sol", "low"],
+      ["cursor", "auto", null],
+      ["claude", "claude-opus-5", "xhigh"],
     ],
   );
 

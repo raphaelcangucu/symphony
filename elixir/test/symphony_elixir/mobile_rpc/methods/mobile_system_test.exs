@@ -1,4 +1,4 @@
-defmodule SymphonyElixir.MobileRpc.Methods.OrcaSystemTest do
+defmodule SymphonyElixir.MobileRpc.Methods.MobileSystemTest do
   use ExUnit.Case, async: true
 
   alias SymphonyElixir.MobileRpc.Dispatcher

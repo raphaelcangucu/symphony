@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, View } from 'react-native'
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import { colors, radii, spacing, typography } from '../src/orca/theme/mobile-theme'
-import { extractPairingCodeFromUrl } from '../src/orca/transport/pairing'
+import { colors, radii, spacing, typography } from '../src/dev10x/theme/mobile-theme'
+import { extractPairingCodeFromUrl } from '../src/dev10x/transport/pairing'
 
 export default function PairRedirectScreen() {
   const router = useRouter()

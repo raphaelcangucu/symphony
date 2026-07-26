@@ -1,4 +1,4 @@
-defmodule SymphonyElixir.MobileRpc.OrcaTasksService do
+defmodule SymphonyElixir.MobileRpc.MobileTasksService do
   @moduledoc """
   Presents native Symphony projects and issues to the copied Orca Tasks surface.
 

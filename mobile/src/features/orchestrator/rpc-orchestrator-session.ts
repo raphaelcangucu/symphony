@@ -6,6 +6,8 @@ import {
   type SessionLogEntry,
 } from "./orchestrator-session-adapter";
 
+const STEER_STREAM_REFRESH_MS = 2_500;
+
 export type RpcOrchestratorSession = {
   connect(): void;
   disconnect(): void;
@@ -31,14 +33,20 @@ export function createRpcOrchestratorSession({
   let connected = false;
   let unsubscribe: (() => void) | null = null;
   let generation = 0;
+  let transcriptRevision = 0;
+  let refreshTimer: ReturnType<typeof setTimeout> | null = null;
 
   function connect(): void {
     if (active) return;
     active = true;
-    connected = false;
-    const currentGeneration = ++generation;
     onConnection("connecting");
     onError(null);
+    subscribe();
+  }
+
+  function subscribe(): void {
+    connected = false;
+    const currentGeneration = ++generation;
 
     void transport
       .subscribe<Record<string, unknown>>(
@@ -47,8 +55,10 @@ export function createRpcOrchestratorSession({
         (payload, eventName) => {
           if (!active || currentGeneration !== generation || !eventName) return;
           if (eventName === "orchestrator.session.joined") {
+            noteTranscriptUpdate();
             onSnapshot(payloadSessionLogEntries(payload));
           } else if (eventName === "orchestrator.session.entries") {
+            noteTranscriptUpdate();
             onEntries(payloadSessionLogEntries(payload));
           } else if (eventName === "orchestrator.session.steer_ok") {
             onError(null);
@@ -76,11 +86,33 @@ export function createRpcOrchestratorSession({
       });
   }
 
+  function noteTranscriptUpdate(): void {
+    transcriptRevision += 1;
+    clearRefreshTimer();
+  }
+
+  function refreshTranscript(): void {
+    if (!active) return;
+    connected = false;
+    generation += 1;
+    unsubscribe?.();
+    unsubscribe = null;
+    onConnection("connecting");
+    subscribe();
+  }
+
+  function clearRefreshTimer(): void {
+    if (!refreshTimer) return;
+    clearTimeout(refreshTimer);
+    refreshTimer = null;
+  }
+
   function disconnect(): void {
     if (!active) return;
     active = false;
     connected = false;
     generation += 1;
+    clearRefreshTimer();
     unsubscribe?.();
     unsubscribe = null;
     onConnection("offline");
@@ -90,11 +122,17 @@ export function createRpcOrchestratorSession({
     const normalized = message.trim();
     if (!normalized) throw new Error("Message is required");
     if (!connected && active) throw new Error("Execution session is not connected");
+    const revisionBeforeSteer = transcriptRevision;
     await transport.call("orchestrator.session.command", {
       execution_session_id: executionSessionId,
       event: "steer",
       payload: { message: normalized, attachments: [], context_refs: [] },
     });
+    clearRefreshTimer();
+    refreshTimer = setTimeout(() => {
+      refreshTimer = null;
+      if (active && transcriptRevision === revisionBeforeSteer) refreshTranscript();
+    }, STEER_STREAM_REFRESH_MS);
   }
 
   return { connect, disconnect, steer };
