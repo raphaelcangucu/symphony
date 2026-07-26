@@ -1610,13 +1610,13 @@ sha256sum mobile/artifacts/e2e/dev10x-real-host-e2e.mp4
 Expected: H.264 video, portrait dimensions, non-zero duration and a recorded
 SHA-256. Generate and visually inspect a contact sheet before publishing.
 
-- [ ] **Step 4: Update the existing Gist**
+- [x] **Step 4: Update the existing Gist**
 
 Replace the old walkthrough files in Gist
 `89652c626c9583cb9b0c52d8d5b2a708` with the new MP4, contact sheet, redacted
 trace and report. Verify each raw URL returns the new SHA/content.
 
-- [ ] **Step 5: Update and push the PR**
+- [x] **Step 5: Update and push the PR**
 
 Run focused final checks, push the branch normally, and update PR #7 with:
 
