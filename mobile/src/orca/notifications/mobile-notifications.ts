@@ -97,8 +97,8 @@ export async function ensureNotificationPermissions(): Promise<boolean> {
 
 function configureNotificationChannel(): void {
   if (Platform.OS === 'android') {
-    void Notifications.setNotificationChannelAsync('orca-desktop', {
-      name: 'Desktop Notifications',
+    void Notifications.setNotificationChannelAsync('dev10x-host', {
+      name: 'Dev10x Host Notifications',
       importance: Notifications.AndroidImportance.HIGH,
       vibrationPattern: [0, 250],
       lightColor: '#6366f1'
@@ -127,7 +127,7 @@ async function showLocalNotification(event: NotificationEvent, hostId: string): 
         title: event.title,
         body: event.body,
         data: buildLocalNotificationData(event, hostId),
-        ...(Platform.OS === 'android' ? { channelId: 'orca-desktop' } : {})
+        ...(Platform.OS === 'android' ? { channelId: 'dev10x-host' } : {})
       },
       trigger: null
     })
@@ -165,7 +165,7 @@ async function showLocalNotification(event: NotificationEvent, hostId: string): 
         title: event.title,
         body: event.body,
         data: buildLocalNotificationData(event, hostId),
-        ...(Platform.OS === 'android' ? { channelId: 'orca-desktop' } : {})
+        ...(Platform.OS === 'android' ? { channelId: 'dev10x-host' } : {})
       },
       trigger: null
     })

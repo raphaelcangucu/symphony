@@ -108,8 +108,10 @@ import {
 } from '../../../src/orca/tasks/mobile-github-project-group-sort'
 import {
   CROSS_REPO_DISPLAY_LIMIT,
+  fetchDev10xWorkItems,
   isGitHubWorkItemsSshRemoteRequiredError,
-  PER_REPO_FETCH_LIMIT
+  PER_REPO_FETCH_LIMIT,
+  type Dev10xWorkItem
 } from '../../../src/orca/tasks/mobile-work-items'
 import {
   filterAvailableTaskProviders,
@@ -357,6 +359,14 @@ type GitHubPRFileContents = {
 
 type DetailPayload =
   | {
+      provider: 'dev10x'
+      description: string
+      comments: DetailComment[]
+      labels: string[]
+      blockers: Array<{ identifier?: string; title?: string }>
+      subtasks: Array<{ identifier?: string; title?: string }>
+    }
+  | {
       provider: 'github'
       body: string
       comments: DetailComment[]
@@ -409,7 +419,12 @@ type LinearDisplayProperty = 'state' | 'priority' | 'assignee' | 'team' | 'label
 type TaskSort = 'updated' | 'repository'
 type DetailCommentGroup =
   | { kind: 'standalone'; comment: DetailComment }
-  | { kind: 'thread'; threadId: string; root: DetailComment; replies: DetailComment[] }
+  | {
+      kind: 'thread'
+      threadId: string
+      root: DetailComment
+      replies: DetailComment[]
+    }
 type TaskResumeState = {
   githubMode?: 'items' | 'project'
   githubItemsPreset?: GitHubPreset | 'all' | null
@@ -509,7 +524,13 @@ type GitHubProjectSort = {
   field: GitHubProjectField
 }
 type GitHubProjectFieldValue =
-  | { kind: 'single-select'; fieldId: string; optionId: string; name: string; color: string }
+  | {
+      kind: 'single-select'
+      fieldId: string
+      optionId: string
+      name: string
+      color: string
+    }
   | {
       kind: 'iteration'
       fieldId: string
@@ -521,8 +542,16 @@ type GitHubProjectFieldValue =
   | { kind: 'text'; fieldId: string; text: string }
   | { kind: 'number'; fieldId: string; number: number }
   | { kind: 'date'; fieldId: string; date: string }
-  | { kind: 'labels'; fieldId: string; labels: Array<{ name: string; color: string }> }
-  | { kind: 'users'; fieldId: string; users: Array<{ login: string; name: string | null }> }
+  | {
+      kind: 'labels'
+      fieldId: string
+      labels: Array<{ name: string; color: string }>
+    }
+  | {
+      kind: 'users'
+      fieldId: string
+      users: Array<{ login: string; name: string | null }>
+    }
 type GitHubProjectFieldMutationValue =
   | { kind: 'text'; text: string }
   | { kind: 'number'; number: number }
@@ -572,6 +601,15 @@ type GitHubProjectTable = {
 }
 
 type TaskItem =
+  | {
+      key: string
+      provider: 'dev10x'
+      title: string
+      subtitle: string
+      status: string
+      updatedAt: string
+      source: Dev10xWorkItem
+    }
   | {
       key: string
       provider: 'github'
@@ -700,6 +738,18 @@ type TaskListEntry =
 
 const PROVIDER_OPTIONS: PickerOption<TaskProvider>[] = [
   {
+    value: 'dev10x',
+    label: 'Dev10x',
+    subtitle: 'Symphony projects, tasks and agents',
+    renderIcon: (selected) => (
+      <TaskProviderLogo
+        provider="dev10x"
+        size={16}
+        color={selected ? colors.textPrimary : colors.textSecondary}
+      />
+    )
+  },
+  {
     value: 'github',
     label: 'GitHub',
     subtitle: 'Issues and pull requests',
@@ -738,17 +788,33 @@ const PROVIDER_OPTIONS: PickerOption<TaskProvider>[] = [
 ]
 
 const GITLAB_FILTER_OPTIONS: PickerOption<GitLabFilter>[] = [
-  { value: 'opened', label: 'Open', subtitle: 'Open issues and merge requests' },
+  {
+    value: 'opened',
+    label: 'Open',
+    subtitle: 'Open issues and merge requests'
+  },
   { value: 'merged', label: 'Merged', subtitle: 'Merged merge requests' },
-  { value: 'closed', label: 'Closed', subtitle: 'Closed issues and merge requests' },
+  {
+    value: 'closed',
+    label: 'Closed',
+    subtitle: 'Closed issues and merge requests'
+  },
   { value: 'all', label: 'All', subtitle: 'Any GitLab state' }
 ]
 
 const LINEAR_FILTER_OPTIONS: PickerOption<LinearFilter>[] = [
-  { value: 'all', label: 'All', subtitle: 'Open issues across connected workspaces' },
+  {
+    value: 'all',
+    label: 'All',
+    subtitle: 'Open issues across connected workspaces'
+  },
   { value: 'assigned', label: 'My Issues', subtitle: 'Issues assigned to you' },
   { value: 'created', label: 'Created', subtitle: 'Issues created by you' },
-  { value: 'completed', label: 'Completed', subtitle: 'Recently completed issues' }
+  {
+    value: 'completed',
+    label: 'Completed',
+    subtitle: 'Recently completed issues'
+  }
 ]
 
 const LINEAR_VIEW_OPTIONS: PickerOption<LinearViewMode>[] = [
@@ -821,17 +887,29 @@ const GITHUB_KIND_OPTIONS: PickerOption<GitHubMode>[] = [
 
 const ISSUE_PRESETS: PickerOption<GitHubPreset>[] = [
   { value: 'issues', label: 'Open', subtitle: 'Open GitHub issues' },
-  { value: 'my-issues', label: 'Assigned to me', subtitle: 'Open issues assigned to you' }
+  {
+    value: 'my-issues',
+    label: 'Assigned to me',
+    subtitle: 'Open issues assigned to you'
+  }
 ]
 
 const PR_PRESETS: PickerOption<GitHubPreset>[] = [
   { value: 'prs', label: 'Open', subtitle: 'Open pull requests' },
   { value: 'my-prs', label: 'Mine', subtitle: 'Pull requests authored by you' },
-  { value: 'review', label: 'Needs review', subtitle: 'Review requests assigned to you' }
+  {
+    value: 'review',
+    label: 'Needs review',
+    subtitle: 'Review requests assigned to you'
+  }
 ]
 
 const GITLAB_VIEW_OPTIONS: PickerOption<GitLabView>[] = [
-  { value: 'project', label: 'Project MRs', subtitle: 'Merge requests and issues by repository' },
+  {
+    value: 'project',
+    label: 'Project MRs',
+    subtitle: 'Merge requests and issues by repository'
+  },
   { value: 'todos', label: 'My Todos', subtitle: 'Pending GitLab todos' }
 ]
 
@@ -844,11 +922,19 @@ const SORT_OPTIONS: PickerOption<TaskSort>[] = [
   }
 ]
 
-type ProjectSortOverride = { fieldId: string; direction: GitHubProjectSortDirection }
+type ProjectSortOverride = {
+  fieldId: string
+  direction: GitHubProjectSortDirection
+}
 type ProjectListEntry =
   | { type: 'group'; group: ProjectGroup; collapsed: boolean }
   | { type: 'row'; row: GitHubProjectRow }
-type LinearIssueSection = { key: string; label: string; color: string; issues: LinearIssue[] }
+type LinearIssueSection = {
+  key: string
+  label: string
+  color: string
+  issues: LinearIssue[]
+}
 type LinearListEntry =
   | { type: 'section'; section: LinearIssueSection }
   | { type: 'issue'; issue: LinearIssue }
@@ -920,7 +1006,7 @@ function getTaskPresetQuery(preset: GitHubPreset): string {
 }
 
 function isTaskProvider(value: unknown): value is TaskProvider {
-  return value === 'github' || value === 'gitlab' || value === 'linear'
+  return value === 'dev10x' || value === 'github' || value === 'gitlab' || value === 'linear'
 }
 
 function normalizeGitHubPreset(value: unknown): GitHubPreset {
@@ -1083,7 +1169,11 @@ function gitHubTaskSubtitle(item: GitHubWorkItem): string {
 }
 
 function createGitHubTask(repo: RepoSummary, item: Omit<GitHubWorkItem, 'repoId' | 'repoName'>) {
-  const source: GitHubWorkItem = { ...item, repoId: repo.id, repoName: repo.displayName }
+  const source: GitHubWorkItem = {
+    ...item,
+    repoId: repo.id,
+    repoName: repo.displayName
+  }
   return {
     key: `github:${repo.id}:${item.type}:${item.number}`,
     provider: 'github' as const,
@@ -1109,7 +1199,11 @@ function gitLabStatusLabel(item: GitLabWorkItem): string {
 }
 
 function createGitLabTask(repo: RepoSummary, item: Omit<GitLabWorkItem, 'repoId' | 'repoName'>) {
-  const source: GitLabWorkItem = { ...item, repoId: repo.id, repoName: repo.displayName }
+  const source: GitLabWorkItem = {
+    ...item,
+    repoId: repo.id,
+    repoName: repo.displayName
+  }
   return {
     key: `gitlab:${repo.id}:${item.type}:${item.number}`,
     provider: 'gitlab' as const,
@@ -1200,6 +1294,23 @@ function createLinearTask(issue: LinearIssue): TaskItem {
     status: issue.state.name,
     updatedAt: issue.updatedAt,
     source: issue
+  }
+}
+
+function createDev10xTask(item: Dev10xWorkItem): TaskItem {
+  const attention = item.pendingApproval
+    ? ' · Approval needed'
+    : item.pendingQuestion
+    ? ' · Question pending'
+    : ''
+  return {
+    key: `dev10x:${item.projectSlug}:${item.identifier}`,
+    provider: 'dev10x',
+    title: item.title,
+    subtitle: `${item.identifier} · ${item.projectName}${attention}`,
+    status: item.agentState === 'live' ? `${item.status} · Agent running` : item.status,
+    updatedAt: item.updatedAt,
+    source: item
   }
 }
 
@@ -1539,8 +1650,8 @@ function sameGitHubOwnerRepo(
 function hasGitHubIssueSourceChoice(sources: GitHubRepoSources | undefined): boolean {
   return Boolean(
     sources?.prs &&
-    sources.upstreamCandidate &&
-    !sameGitHubOwnerRepo(sources.prs, sources.upstreamCandidate)
+      sources.upstreamCandidate &&
+      !sameGitHubOwnerRepo(sources.prs, sources.upstreamCandidate)
   )
 }
 
@@ -1553,7 +1664,9 @@ function compareLinearIssues(a: LinearIssue, b: LinearIssue, orderBy: LinearOrde
     return taskTime(b.updatedAt) - taskTime(a.updatedAt)
   }
   if (orderBy === 'identifier') {
-    return a.identifier.localeCompare(b.identifier, undefined, { numeric: true })
+    return a.identifier.localeCompare(b.identifier, undefined, {
+      numeric: true
+    })
   }
   const priorityDelta = getLinearPriorityRank(a.priority) - getLinearPriorityRank(b.priority)
   return priorityDelta || taskTime(b.updatedAt) - taskTime(a.updatedAt)
@@ -1568,7 +1681,11 @@ function getLinearIssueGroup(
   color: string
 } {
   if (groupBy === 'status') {
-    return { key: `status:${issue.state.name}`, label: issue.state.name, color: issue.state.color }
+    return {
+      key: `status:${issue.state.name}`,
+      label: issue.state.name,
+      color: issue.state.color
+    }
   }
   if (groupBy === 'assignee') {
     return {
@@ -1585,7 +1702,11 @@ function getLinearIssueGroup(
     }
   }
   if (groupBy === 'team') {
-    return { key: `team:${issue.team.id}`, label: issue.team.name, color: issue.state.color }
+    return {
+      key: `team:${issue.team.id}`,
+      label: issue.team.name,
+      color: issue.state.color
+    }
   }
   return { key: 'all', label: 'Issues', color: colors.accentBlue }
 }
@@ -1787,7 +1908,7 @@ function normalizeProjectTableForMobileSort(
       sortByFields:
         sortOverride && overrideField
           ? [{ field: overrideField, direction: sortOverride.direction }]
-          : (table.selectedView.sortByFields ?? [])
+          : table.selectedView.sortByFields ?? []
     },
     rows: normalizedRows,
     parentFieldDropped: table.parentFieldDropped === true
@@ -1840,10 +1961,17 @@ function optimisticProjectFieldValue(
   if (value.kind === 'date') {
     return { kind: 'date', fieldId: field.id, date: value.date }
   }
-  return { kind: 'text', fieldId: field.id, text: value.kind === 'text' ? value.text : '' }
+  return {
+    kind: 'text',
+    fieldId: field.id,
+    text: value.kind === 'text' ? value.text : ''
+  }
 }
 
 function taskKindLabel(item: TaskItem): string {
+  if (item.provider === 'dev10x') {
+    return 'Dev10x task'
+  }
   if (item.provider === 'github') {
     return item.source.type === 'pr' ? 'Pull request' : 'Issue'
   }
@@ -1857,6 +1985,9 @@ function taskKindLabel(item: TaskItem): string {
 }
 
 function taskExternalOpenLabel(item: TaskItem): string {
+  if (item.provider === 'dev10x') {
+    return 'Open in Dev10x'
+  }
   if (item.provider === 'github') {
     return 'Open in GitHub'
   }
@@ -1864,6 +1995,13 @@ function taskExternalOpenLabel(item: TaskItem): string {
     return 'Open in GitLab'
   }
   return 'Open in Linear'
+}
+
+function detailDescription(detail: DetailPayload): string {
+  if (detail.provider === 'github' || detail.provider === 'gitlab') {
+    return detail.body
+  }
+  return detail.description
 }
 
 function taskStatusActionLabel(item: TaskItem): string {
@@ -2063,8 +2201,8 @@ function GitHubPrFileDiff({
               line.kind === 'added'
                 ? styles.diffLineAdded
                 : line.kind === 'removed'
-                  ? styles.diffLineRemoved
-                  : null
+                ? styles.diffLineRemoved
+                : null
             ]}
           >
             <View style={styles.diffCodeRow}>
@@ -2078,8 +2216,8 @@ function GitHubPrFileDiff({
                   line.kind === 'added'
                     ? styles.diffCodeAdded
                     : line.kind === 'removed'
-                      ? styles.diffCodeRemoved
-                      : null
+                    ? styles.diffCodeRemoved
+                    : null
                 ]}
               >
                 <Text>{diffLinePrefix(line.kind)} </Text>
@@ -2153,6 +2291,13 @@ function taskRepositoryMeta(
   item: TaskItem,
   reposById: Map<string, RepoSummary>
 ): { key: string; label: string; color: string } {
+  if (item.provider === 'dev10x') {
+    return {
+      key: item.source.projectSlug,
+      label: item.source.projectName,
+      color: getRepoBadgeColor(reposById.get(item.source.projectSlug), item.source.projectName)
+    }
+  }
   if (item.provider === 'github' || item.provider === 'gitlab') {
     const repo = reposById.get(item.source.repoId)
     return {
@@ -2186,12 +2331,17 @@ function compareTasksByRepository(
 ): number {
   const aRepo = taskRepositoryMeta(a, reposById)
   const bRepo = taskRepositoryMeta(b, reposById)
-  const repoComparison = aRepo.label.localeCompare(bRepo.label, undefined, { sensitivity: 'base' })
+  const repoComparison = aRepo.label.localeCompare(bRepo.label, undefined, {
+    sensitivity: 'base'
+  })
   return repoComparison || compareTasksByUpdated(a, b)
 }
 
 export default function MobileTasksScreen() {
-  const { hostId, taskSource } = useLocalSearchParams<{ hostId: string; taskSource?: string }>()
+  const { hostId, taskSource } = useLocalSearchParams<{
+    hostId: string
+    taskSource?: string
+  }>()
   const router = useRouter()
   const insets = useSafeAreaInsets()
   const { client, state: connState } = useHostClient(hostId)
@@ -2202,7 +2352,7 @@ export default function MobileTasksScreen() {
   const loadGenerationRef = useRef(0)
   const taskResumeRef = useRef<TaskResumeState>({})
   const [repos, setRepos] = useState<RepoSummary[]>([])
-  const [provider, setProvider] = useState<TaskProvider>('github')
+  const [provider, setProvider] = useState<TaskProvider>('dev10x')
   const [visibleProviders, setVisibleProviders] = useState<TaskProvider[]>(() =>
     normalizeVisibleTaskProviders(undefined)
   )
@@ -2552,7 +2702,7 @@ export default function MobileTasksScreen() {
     () =>
       new Set(
         githubProjectFieldVisibilityScope
-          ? (githubProjectHiddenFieldIdsByView[githubProjectFieldVisibilityScope] ?? [])
+          ? githubProjectHiddenFieldIdsByView[githubProjectFieldVisibilityScope] ?? []
           : []
       ),
     [githubProjectFieldVisibilityScope, githubProjectHiddenFieldIdsByView]
@@ -2680,7 +2830,7 @@ export default function MobileTasksScreen() {
     const reviewRequests =
       detailPayload?.provider === 'github'
         ? detailPayload.reviewRequests
-        : (actionItem.source.reviewRequests ?? [])
+        : actionItem.source.reviewRequests ?? []
     return new Set(
       reviewRequests.map((reviewer) => reviewer.login.trim().toLowerCase()).filter(Boolean)
     )
@@ -2839,7 +2989,9 @@ export default function MobileTasksScreen() {
         contentHash,
         alwaysTrust
       })
-      const response = await client.sendRequest('ui.set', { trustedOrcaHooks: next })
+      const response = await client.sendRequest('ui.set', {
+        trustedOrcaHooks: next
+      })
       if (!isSuccess(response)) {
         throw new Error(response.error.message)
       }
@@ -3070,8 +3222,12 @@ export default function MobileTasksScreen() {
       const preferredProviders = normalizeVisibleTaskProviders(settings.visibleTaskProviders)
       const linearIsConnected = linearStatus?.connected === true
       const availableProviders = filterAvailableTaskProviders(preferredProviders, {
-        gitlabInstalled: preflight?.glab?.installed === true,
-        linearConnected: linearIsConnected
+        githubAvailable: status.capabilities?.includes('github.listWorkItems') === true,
+        gitlabInstalled:
+          preflight?.glab?.installed === true &&
+          status.capabilities?.includes('gitlab.listWorkItems') === true,
+        linearConnected:
+          linearIsConnected && status.capabilities?.includes('linear.listIssues') === true
       })
       const nextVisibleProviders =
         preferredProviders.includes('linear') && !availableProviders.includes('linear')
@@ -3098,7 +3254,7 @@ export default function MobileTasksScreen() {
       const defaultPreset = normalizeGitHubPreset(settings.defaultTaskViewPreset)
       const githubQuery =
         resume.githubItemsPreset === null
-          ? (resume.githubItemsQuery ?? '')
+          ? resume.githubItemsQuery ?? ''
           : getTaskPresetQuery(preset)
       const nextLinearFilter = normalizeLinearFilter(resume.linearPreset)
       const nextLinearQuery = resume.linearQuery ?? ''
@@ -3213,7 +3369,9 @@ export default function MobileTasksScreen() {
       const selection = teamIds.size === allTeams.length ? null : [...teamIds]
       defaultLinearTeamSelectionRef.current = selection
       void client
-        .sendRequest('settings.update', { defaultLinearTeamSelection: selection })
+        .sendRequest('settings.update', {
+          defaultLinearTeamSelection: selection
+        })
         .catch(() => {
           // Best-effort preference persistence; the local picker state already changed.
         })
@@ -3374,6 +3532,17 @@ export default function MobileTasksScreen() {
           setItems([])
           return
         }
+        if (provider === 'dev10x') {
+          const result = await fetchDev10xWorkItems(requestClient, {
+            query: appliedQuery,
+            limit: CROSS_REPO_DISPLAY_LIMIT
+          })
+          if (!isCurrent()) {
+            return
+          }
+          setItems(result.items.map(createDev10xTask))
+          return
+        }
         const currentRepos = reposRef.current.length > 0 ? reposRef.current : await loadRepos()
         if (!isCurrent()) {
           return
@@ -3401,7 +3570,10 @@ export default function MobileTasksScreen() {
             if (!isCurrent()) {
               return
             }
-            setGithubRepoSources((current) => ({ ...current, ...page.sourcesByRepoId }))
+            setGithubRepoSources((current) => ({
+              ...current,
+              ...page.sourcesByRepoId
+            }))
             setGithubSourceErrors(page.sourceErrors)
             setGithubSourceFallbacks(page.sourceFallbacks)
             if (page.failedCount === queriedRepos.length) {
@@ -3477,7 +3649,9 @@ export default function MobileTasksScreen() {
                 if (envelope.error?.type && envelope.error.type !== 'not_found') {
                   return { items: [], error: envelope.error.message }
                 }
-                return { items: envelope.items.map((item) => createGitLabTask(repo, item)) }
+                return {
+                  items: envelope.items.map((item) => createGitLabTask(repo, item))
+                }
               } catch (err) {
                 console.warn(`[mobile tasks] failed to fetch ${provider} work items`, repo.id, err)
                 return {
@@ -3940,7 +4114,9 @@ export default function MobileTasksScreen() {
     setGithubProjectPasteError('')
     setGithubProjectError('')
     try {
-      const response = await client.sendRequest('github.project.resolveRef', { input })
+      const response = await client.sendRequest('github.project.resolveRef', {
+        input
+      })
       if (!isSuccess(response)) {
         throw new Error(response.error.message)
       }
@@ -4047,7 +4223,9 @@ export default function MobileTasksScreen() {
     }
     persistTaskResumeState({ githubMode: 'project' })
     if (activeGitHubProject && activeGitHubProjectViewId) {
-      void loadGitHubProjectTable({ queryOverride: appliedGithubProjectSearch })
+      void loadGitHubProjectTable({
+        queryOverride: appliedGithubProjectSearch
+      })
     } else if (activeGitHubProject) {
       void selectGitHubProject(activeGitHubProject)
     } else {
@@ -4086,7 +4264,7 @@ export default function MobileTasksScreen() {
       setCreateRepoId((current) =>
         current && hostedRepos.some((repo) => repo.id === current)
           ? current
-          : (hostedRepos[0]?.id ?? null)
+          : hostedRepos[0]?.id ?? null
       )
       return
     }
@@ -4202,9 +4380,7 @@ export default function MobileTasksScreen() {
       setItemBodyDraft('')
       return
     }
-    setItemBodyDraft(
-      detailPayload.provider === 'linear' ? detailPayload.description : detailPayload.body
-    )
+    setItemBodyDraft(detailDescription(detailPayload))
   }, [detailPayload])
 
   useEffect(() => {
@@ -4304,6 +4480,37 @@ export default function MobileTasksScreen() {
     setDetailLoading(true)
 
     const loadDetails = async (): Promise<void> => {
+      if (actionItem.provider === 'dev10x') {
+        const response = await client.sendRequest(
+          'symphony.tasks.get',
+          {
+            projectSlug: actionItem.source.projectSlug,
+            identifier: actionItem.source.identifier
+          },
+          { timeoutMs: 30_000 }
+        )
+        if (!isSuccess(response)) {
+          throw new Error(response.error.message)
+        }
+        const details = response.result as {
+          description?: string
+          comments?: DetailComment[]
+          blockers?: Array<{ identifier?: string; title?: string }>
+          subtasks?: Array<{ identifier?: string; title?: string }>
+        }
+        if (!stale) {
+          setDetailPayload({
+            provider: 'dev10x',
+            description: details.description ?? actionItem.source.description ?? '',
+            comments: details.comments ?? [],
+            labels: [],
+            blockers: details.blockers ?? [],
+            subtasks: details.subtasks ?? []
+          })
+        }
+        return
+      }
+
       if (actionItem.provider === 'github') {
         const response = await client.sendRequest(
           'github.workItemDetails',
@@ -4431,7 +4638,7 @@ export default function MobileTasksScreen() {
       }
       const issue = issueResponse.result as LinearIssue | null
       const comments = isSuccess(commentsResponse)
-        ? ((commentsResponse.result as DetailComment[]) ?? [])
+        ? (commentsResponse.result as DetailComment[]) ?? []
         : []
       if (!issue) {
         throw new Error('Details not found')
@@ -4775,6 +4982,11 @@ export default function MobileTasksScreen() {
       if (item.provider === 'github' || item.provider === 'gitlab') {
         return repos.find((entry) => entry.id === item.source.repoId) ?? null
       }
+      if (item.provider === 'dev10x') {
+        return (
+          repos.find((entry) => entry.id === item.source.projectSlug) ?? workspaceRepos[0] ?? null
+        )
+      }
       if (repoIdOverride) {
         return workspaceRepos.find((entry) => entry.id === repoIdOverride) ?? null
       }
@@ -4814,20 +5026,20 @@ export default function MobileTasksScreen() {
   const workspaceSparseDraftName = workspaceSparseDraft?.name.trim() ?? ''
   const workspaceSparseDraftNameCollision =
     workspaceSparseDraft && workspaceSparseDraftName
-      ? (workspaceSparsePresets.find(
+      ? workspaceSparsePresets.find(
           (preset) =>
             preset.id !== workspaceSparseDraft.presetId &&
             preset.name.toLowerCase() === workspaceSparseDraftName.toLowerCase()
-        ) ?? null)
+        ) ?? null
       : null
   const workspaceSparseDraftError =
     workspaceSparseDraft && workspaceSparseDraftName.length === 0
       ? 'Name is required.'
       : workspaceSparseDraftName.length > 80
-        ? 'Name must be 80 characters or fewer.'
-        : workspaceSparseDraftNameCollision
-          ? `"${workspaceSparseDraftNameCollision.name}" already exists.`
-          : (workspaceSparseDraftParsed?.error ?? null)
+      ? 'Name must be 80 characters or fewer.'
+      : workspaceSparseDraftNameCollision
+      ? `"${workspaceSparseDraftNameCollision.name}" already exists.`
+      : workspaceSparseDraftParsed?.error ?? null
   const canSaveWorkspaceSparseDraft =
     workspaceSparseDraft !== null &&
     workspaceCreateTargetRepo !== null &&
@@ -4873,7 +5085,10 @@ export default function MobileTasksScreen() {
   }, [runtimeTaskSettings.disabledTuiAgents, workspaceAgent, workspaceDetectedAgentIds])
   const openWorkspaceCreate = useCallback((item: ActionableTaskItem, repoIdOverride?: string) => {
     const suggestedName = taskWorkspaceSuggestedName(item)
-    setWorkspaceCreateDraft({ item, ...(repoIdOverride ? { repoIdOverride } : {}) })
+    setWorkspaceCreateDraft({
+      item,
+      ...(repoIdOverride ? { repoIdOverride } : {})
+    })
     setWorkspaceNameDraft(suggestedName)
     setWorkspaceLastAutoName(suggestedName)
     setWorkspaceBranchAutoName('')
@@ -4974,7 +5189,9 @@ export default function MobileTasksScreen() {
     setWorkspaceSparsePresetsLoaded(false)
     setWorkspaceSparsePresetsError('')
     void client
-      .sendRequest('repo.sparsePresets', { repo: `id:${workspaceCreateTargetRepo.id}` })
+      .sendRequest('repo.sparsePresets', {
+        repo: `id:${workspaceCreateTargetRepo.id}`
+      })
       .then((response) => {
         if (stale) {
           return
@@ -5059,7 +5276,10 @@ export default function MobileTasksScreen() {
         }
         setWorkspaceBaseBranchResults(
           result.refDetails ??
-            (result.refs ?? []).map((refName) => ({ refName, localBranchName: refName }))
+            (result.refs ?? []).map((refName) => ({
+              refName,
+              localBranchName: refName
+            }))
         )
       })
       .catch((err) => {
@@ -5187,7 +5407,9 @@ export default function MobileTasksScreen() {
 
     let stale = false
     void client
-      .sendRequest('ssh.getState', { targetId: workspaceCreateTargetConnectionId })
+      .sendRequest('ssh.getState', {
+        targetId: workspaceCreateTargetConnectionId
+      })
       .then((response) => {
         if (stale) {
           return
@@ -5273,7 +5495,9 @@ export default function MobileTasksScreen() {
       ) {
         return
       }
-      const response = await client.sendRequest('ssh.getState', { targetId: repo.connectionId })
+      const response = await client.sendRequest('ssh.getState', {
+        targetId: repo.connectionId
+      })
       if (!isSuccess(response)) {
         throw new Error(response.error.message)
       }
@@ -5363,7 +5587,11 @@ export default function MobileTasksScreen() {
       repo: RepoSummary,
       override?: Exclude<SetupDecision, 'inherit'>
     ): Promise<
-      | { kind: 'decision'; decision: SetupDecision; setupTrust?: RepoHooksResponse['setupTrust'] }
+      | {
+          kind: 'decision'
+          decision: SetupDecision
+          setupTrust?: RepoHooksResponse['setupTrust']
+        }
       | {
           kind: 'prompt'
           command: string
@@ -5374,7 +5602,9 @@ export default function MobileTasksScreen() {
       if (!client || !tasksSupported) {
         return { kind: 'decision', decision: override ?? 'inherit' }
       }
-      const response = await client.sendRequest('repo.hooks', { repo: `id:${repo.id}` })
+      const response = await client.sendRequest('repo.hooks', {
+        repo: `id:${repo.id}`
+      })
       if (!isSuccess(response)) {
         throw new Error(response.error.message)
       }
@@ -5389,7 +5619,12 @@ export default function MobileTasksScreen() {
       }
       const setupRunPolicy = result.setupRunPolicy ?? 'run-by-default'
       if (setupRunPolicy === 'ask') {
-        return { kind: 'prompt', command: setupCommand, source: result.source, setupTrust }
+        return {
+          kind: 'prompt',
+          command: setupCommand,
+          source: result.source,
+          setupTrust
+        }
       }
       return {
         kind: 'decision',
@@ -5676,10 +5911,10 @@ export default function MobileTasksScreen() {
         row.content.state === 'MERGED'
           ? 'merged'
           : row.content.state === 'CLOSED'
-            ? 'closed'
-            : row.content.isDraft
-              ? 'draft'
-              : 'open'
+          ? 'closed'
+          : row.content.isDraft
+          ? 'draft'
+          : 'open'
       const source: GitHubWorkItem = {
         id: row.id,
         type: kind,
@@ -5737,7 +5972,10 @@ export default function MobileTasksScreen() {
         if (!isSuccess(response)) {
           throw new Error(response.error.message)
         }
-        const result = response.result as { ok?: boolean; error?: { message?: string } }
+        const result = response.result as {
+          ok?: boolean
+          error?: { message?: string }
+        }
         if (result.ok === false) {
           throw new Error(result.error?.message ?? 'Failed to update GitHub item')
         }
@@ -5770,7 +6008,9 @@ export default function MobileTasksScreen() {
                           ...(updates.title !== undefined ? { title: updates.title } : {}),
                           ...(updates.body !== undefined ? { body: updates.body } : {}),
                           ...(updates.state !== undefined
-                            ? { state: updates.state === 'closed' ? 'CLOSED' : 'OPEN' }
+                            ? {
+                                state: updates.state === 'closed' ? 'CLOSED' : 'OPEN'
+                              }
                             : {})
                         }
                       }
@@ -5828,7 +6068,10 @@ export default function MobileTasksScreen() {
         if (result.comment) {
           setProjectRowDetail((current) =>
             current?.provider === 'github'
-              ? { ...current, comments: [...current.comments, result.comment as DetailComment] }
+              ? {
+                  ...current,
+                  comments: [...current.comments, result.comment as DetailComment]
+                }
               : current
           )
         }
@@ -5877,7 +6120,7 @@ export default function MobileTasksScreen() {
           throw new Error(
             typeof result.error === 'string'
               ? result.error
-              : (result.error?.message ?? 'Failed to edit comment')
+              : result.error?.message ?? 'Failed to edit comment'
           )
         }
         setProjectRowDetail((current) =>
@@ -5935,7 +6178,7 @@ export default function MobileTasksScreen() {
           throw new Error(
             typeof result.error === 'string'
               ? result.error
-              : (result.error?.message ?? 'Failed to delete comment')
+              : result.error?.message ?? 'Failed to delete comment'
           )
         }
         setProjectRowDetail((current) =>
@@ -6128,7 +6371,10 @@ export default function MobileTasksScreen() {
         if (!isSuccess(response)) {
           throw new Error(response.error.message)
         }
-        const result = response.result as { ok?: boolean; error?: { message?: string } }
+        const result = response.result as {
+          ok?: boolean
+          error?: { message?: string }
+        }
         if (result.ok === false) {
           throw new Error(result.error?.message ?? 'Failed to update GitHub item')
         }
@@ -6237,7 +6483,10 @@ export default function MobileTasksScreen() {
         if (!isSuccess(response)) {
           throw new Error(response.error.message)
         }
-        const result = response.result as { ok?: boolean; error?: { message?: string } }
+        const result = response.result as {
+          ok?: boolean
+          error?: { message?: string }
+        }
         if (result.ok === false) {
           throw new Error(result.error?.message ?? 'Failed to update project field')
         }
@@ -6302,7 +6551,10 @@ export default function MobileTasksScreen() {
         if (!isSuccess(response)) {
           throw new Error(response.error.message)
         }
-        const result = response.result as { ok?: boolean; error?: { message?: string } }
+        const result = response.result as {
+          ok?: boolean
+          error?: { message?: string }
+        }
         if (result.ok === false) {
           throw new Error(result.error?.message ?? 'Failed to update issue type')
         }
@@ -6522,7 +6774,10 @@ export default function MobileTasksScreen() {
                 ...current,
                 files: current.files.map((candidate) =>
                   candidate.path === file.path
-                    ? { ...candidate, viewerViewedState: viewed ? 'VIEWED' : 'UNVIEWED' }
+                    ? {
+                        ...candidate,
+                        viewerViewedState: viewed ? 'VIEWED' : 'UNVIEWED'
+                      }
                     : candidate
                 )
               }
@@ -6717,7 +6972,10 @@ export default function MobileTasksScreen() {
                 ...table,
                 rows: table.rows.map((candidate) =>
                   candidate.id === row.id
-                    ? { ...candidate, content: { ...candidate.content, state: 'MERGED' } }
+                    ? {
+                        ...candidate,
+                        content: { ...candidate.content, state: 'MERGED' }
+                      }
                     : candidate
                 )
               }
@@ -7036,7 +7294,9 @@ export default function MobileTasksScreen() {
                   removeLabels: updates.removeLabels
                 }
               }
-        const response = await client.sendRequest(method, params, { timeoutMs: 30_000 })
+        const response = await client.sendRequest(method, params, {
+          timeoutMs: 30_000
+        })
         if (!isSuccess(response)) {
           throw new Error(response.error.message)
         }
@@ -7251,7 +7511,7 @@ export default function MobileTasksScreen() {
           const byLogin = new Map<string, GitHubAssignableUser>()
           for (const reviewer of detailPayload?.provider === 'github'
             ? detailPayload.reviewRequests
-            : (item.source.reviewRequests ?? [])) {
+            : item.source.reviewRequests ?? []) {
             const login = reviewer.login.trim()
             if (login) {
               byLogin.set(login.toLowerCase(), reviewer)
@@ -7273,7 +7533,10 @@ export default function MobileTasksScreen() {
           current?.provider === 'github' && current.source.id === item.source.id
             ? {
                 ...current,
-                source: { ...current.source, reviewRequests: nextReviewRequests }
+                source: {
+                  ...current.source,
+                  reviewRequests: nextReviewRequests
+                }
               }
             : current
         )
@@ -7282,7 +7545,10 @@ export default function MobileTasksScreen() {
             candidate.provider === 'github' && candidate.source.id === item.source.id
               ? {
                   ...candidate,
-                  source: { ...candidate.source, reviewRequests: nextReviewRequests }
+                  source: {
+                    ...candidate.source,
+                    reviewRequests: nextReviewRequests
+                  }
                 }
               : candidate
           )
@@ -7433,7 +7699,10 @@ export default function MobileTasksScreen() {
                 ...current,
                 files: current.files.map((candidate) =>
                   candidate.path === file.path
-                    ? { ...candidate, viewerViewedState: viewed ? 'VIEWED' : 'UNVIEWED' }
+                    ? {
+                        ...candidate,
+                        viewerViewedState: viewed ? 'VIEWED' : 'UNVIEWED'
+                      }
                     : candidate
                 )
               }
@@ -7844,7 +8113,11 @@ export default function MobileTasksScreen() {
         if (!isSuccess(response)) {
           throw new Error(response.error.message)
         }
-        const result = response.result as { ok?: boolean; id?: string; error?: string }
+        const result = response.result as {
+          ok?: boolean
+          id?: string
+          error?: string
+        }
         if (result.ok === false) {
           throw new Error(result.error ?? 'Failed to add comment')
         }
@@ -7977,7 +8250,9 @@ export default function MobileTasksScreen() {
         const repo = hostedRepos.find((entry) => entry.id === createRepoId) ?? hostedRepos[0]
         if (!repo) {
           throw new Error(
-            `Add a Git repository before creating a ${provider === 'github' ? 'GitHub' : 'GitLab'} issue.`
+            `Add a Git repository before creating a ${
+              provider === 'github' ? 'GitHub' : 'GitLab'
+            } issue.`
           )
         }
         const response = await client.sendRequest(
@@ -8068,7 +8343,11 @@ export default function MobileTasksScreen() {
             title: result.title ?? title,
             description: createBody.trim(),
             url: result.url ?? '',
-            state: { name: 'Open', type: 'unstarted', color: colors.accentBlue },
+            state: {
+              name: 'Open',
+              type: 'unstarted',
+              color: colors.accentBlue
+            },
             team,
             labels: [],
             priority: 0,
@@ -8294,7 +8573,9 @@ export default function MobileTasksScreen() {
               <View
                 style={[
                   styles.pickerRepoDot,
-                  { backgroundColor: getRepoBadgeColor(repo, repo.displayName) }
+                  {
+                    backgroundColor: getRepoBadgeColor(repo, repo.displayName)
+                  }
                 ]}
               />
             )
@@ -8308,14 +8589,20 @@ export default function MobileTasksScreen() {
   )
   const selectedCreateTarget =
     provider === 'github' || provider === 'gitlab'
-      ? (hostedRepos.find((repo) => repo.id === createRepoId) ?? hostedRepos[0] ?? null)
-      : (linearTeams.find((team) => team.id === createTeamId) ?? linearTeams[0] ?? null)
+      ? hostedRepos.find((repo) => repo.id === createRepoId) ?? hostedRepos[0] ?? null
+      : linearTeams.find((team) => team.id === createTeamId) ?? linearTeams[0] ?? null
   const selectedCreateTargetLabel =
     provider === 'github' || provider === 'gitlab'
-      ? ((selectedCreateTarget as RepoSummary | null)?.displayName ?? 'Select target')
-      : ((selectedCreateTarget as LinearTeam | null)?.name ?? 'Select target')
+      ? (selectedCreateTarget as RepoSummary | null)?.displayName ?? 'Select target'
+      : (selectedCreateTarget as LinearTeam | null)?.name ?? 'Select target'
   const providerLabel =
-    provider === 'github' ? 'GitHub' : provider === 'gitlab' ? 'GitLab' : 'Linear'
+    provider === 'dev10x'
+      ? 'Dev10x'
+      : provider === 'github'
+      ? 'GitHub'
+      : provider === 'gitlab'
+      ? 'GitLab'
+      : 'Linear'
   const showHeaderCreateTask =
     provider === 'linear' || (provider === 'github' && githubMode === 'items')
   const providerOptions = useMemo(
@@ -8356,8 +8643,8 @@ export default function MobileTasksScreen() {
     selectedRepoIds.size === 0 || selectedHostedRepos.length === hostedRepos.length
       ? 'All repos'
       : selectedHostedRepos.length === 1
-        ? selectedHostedRepos[0]!.displayName
-        : `${selectedHostedRepos.length} repos`
+      ? selectedHostedRepos[0]!.displayName
+      : `${selectedHostedRepos.length} repos`
   const repoPickerSelectedRepo =
     selectedRepoIds.size > 0 && selectedHostedRepos.length === 1 ? selectedHostedRepos[0]! : null
   const workspaceRepoOptions = useMemo<PickerOption<string>[]>(
@@ -8428,7 +8715,9 @@ export default function MobileTasksScreen() {
         value: PROJECT_VIEW_DEFAULT_SORT,
         label: 'View order',
         subtitle: githubProjectViewSort
-          ? `Uses ${githubProjectViewSort.field.name} ${githubProjectViewSort.direction.toLowerCase()}`
+          ? `Uses ${
+              githubProjectViewSort.field.name
+            } ${githubProjectViewSort.direction.toLowerCase()}`
           : 'Uses GitHub rank order'
       },
       ...githubProjectFields.map((field) => {
@@ -8462,7 +8751,10 @@ export default function MobileTasksScreen() {
     () =>
       githubPresetOptions.map((option) =>
         option.value === defaultGitHubPreset
-          ? { ...option, subtitle: option.subtitle ? `${option.subtitle} · Default` : 'Default' }
+          ? {
+              ...option,
+              subtitle: option.subtitle ? `${option.subtitle} · Default` : 'Default'
+            }
           : option
       ),
     [defaultGitHubPreset, githubPresetOptions]
@@ -8482,11 +8774,11 @@ export default function MobileTasksScreen() {
   const linearWorkspaceLabel =
     selectedLinearWorkspaceId === 'all'
       ? 'All workspaces'
-      : (linearWorkspaces.find((workspace) => workspace.id === selectedLinearWorkspaceId)
+      : linearWorkspaces.find((workspace) => workspace.id === selectedLinearWorkspaceId)
           ?.organizationName ??
         linearWorkspaces.find((workspace) => workspace.id === selectedLinearWorkspaceId)
           ?.displayName ??
-        'Workspace')
+        'Workspace'
   const linearWorkspaceOptions = useMemo<PickerOption<string>[]>(
     () => [
       { value: 'all', label: 'All workspaces' },
@@ -8501,8 +8793,8 @@ export default function MobileTasksScreen() {
     selectedLinearTeamIds.size === 0 || selectedLinearTeamIds.size === linearTeams.length
       ? 'All teams'
       : selectedLinearTeamIds.size === 1
-        ? (linearTeams.find((team) => selectedLinearTeamIds.has(team.id))?.name ?? '1 team')
-        : `${selectedLinearTeamIds.size} teams`
+      ? linearTeams.find((team) => selectedLinearTeamIds.has(team.id))?.name ?? '1 team'
+      : `${selectedLinearTeamIds.size} teams`
   const effectiveLinearDisplayProperties = useMemo(() => {
     const next = new Set(linearDisplayProperties)
     if (linearGroupBy === 'status') {
@@ -8552,7 +8844,10 @@ export default function MobileTasksScreen() {
           ? section.issues.map((issue) => ({ type: 'issue' as const, issue }))
           : [
               { type: 'section' as const, section },
-              ...section.issues.map((issue) => ({ type: 'issue' as const, issue }))
+              ...section.issues.map((issue) => ({
+                type: 'issue' as const,
+                issue
+              }))
             ]
       ),
     [linearGroupBy, linearIssueSections]
@@ -8571,8 +8866,8 @@ export default function MobileTasksScreen() {
   const activeProjectLabel = githubProjectTable
     ? githubProjectTable.project.title
     : activeGitHubProject
-      ? `${activeGitHubProject.owner} #${activeGitHubProject.number}`
-      : 'Choose project'
+    ? `${activeGitHubProject.owner} #${activeGitHubProject.number}`
+    : 'Choose project'
   const selectedGitHubProjectViewUrl = githubProjectTable
     ? `${githubProjectTable.project.url}/views/${githubProjectTable.selectedView.number}`
     : null
@@ -8662,12 +8957,12 @@ export default function MobileTasksScreen() {
     connState !== 'connected'
       ? 'Connect to a host to load tasks'
       : query
-        ? 'No matching tasks'
-        : provider === 'github'
-          ? 'No GitHub tasks'
-          : provider === 'gitlab'
-            ? 'No GitLab tasks'
-            : 'No Linear tasks'
+      ? 'No matching tasks'
+      : provider === 'github'
+      ? 'No GitHub tasks'
+      : provider === 'gitlab'
+      ? 'No GitLab tasks'
+      : 'No Linear tasks'
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -8688,7 +8983,9 @@ export default function MobileTasksScreen() {
                 return
               }
               if (provider === 'github' && githubMode === 'project') {
-                void loadGitHubProjectTable({ queryOverride: appliedGithubProjectSearch })
+                void loadGitHubProjectTable({
+                  queryOverride: appliedGithubProjectSearch
+                })
                 return
               }
               void loadTasks({ silent: true })
@@ -9278,7 +9575,9 @@ export default function MobileTasksScreen() {
             contentContainerStyle={[styles.list, { paddingBottom: spacing.lg + insets.bottom }]}
             refreshing={githubProjectLoading}
             onRefresh={() =>
-              void loadGitHubProjectTable({ queryOverride: appliedGithubProjectSearch })
+              void loadGitHubProjectTable({
+                queryOverride: appliedGithubProjectSearch
+              })
             }
             renderItem={({ item: entry }) => {
               if (entry.type === 'group') {
@@ -9345,8 +9644,8 @@ export default function MobileTasksScreen() {
                         {row.itemType === 'PULL_REQUEST'
                           ? 'Pull request'
                           : row.itemType === 'ISSUE'
-                            ? 'Issue'
-                            : 'Project item'}{' '}
+                          ? 'Issue'
+                          : 'Project item'}{' '}
                         · {row.content.repository ?? githubProjectTable.project.title}
                         {row.content.number ? ` #${row.content.number}` : ''}
                       </Text>
@@ -9453,7 +9752,9 @@ export default function MobileTasksScreen() {
                           <View
                             style={[
                               styles.linearStateDot,
-                              { backgroundColor: issue.state.color || colors.textMuted }
+                              {
+                                backgroundColor: issue.state.color || colors.textMuted
+                              }
                             ]}
                           />
                           <Text
@@ -9549,7 +9850,9 @@ export default function MobileTasksScreen() {
                         <View
                           style={[
                             styles.linearStateDot,
-                            { backgroundColor: issue.state.color || colors.textMuted }
+                            {
+                              backgroundColor: issue.state.color || colors.textMuted
+                            }
                           ]}
                         />
                         <Text style={[styles.statusText, styles.statusTextFlex]} numberOfLines={1}>
@@ -9796,7 +10099,7 @@ export default function MobileTasksScreen() {
                 : normalizeGitHubPreset(resume.githubItemsPreset ?? githubPreset)
             const nextQuery =
               resume.githubItemsPreset === null
-                ? (resume.githubItemsQuery ?? '')
+                ? resume.githubItemsQuery ?? ''
                 : getTaskPresetQuery(preset)
             const nextKind = githubKindFromQuery(nextQuery, preset)
             setGithubPreset(preset)
@@ -9853,7 +10156,9 @@ export default function MobileTasksScreen() {
                   <View
                     style={[
                       styles.pickerRepoDot,
-                      { backgroundColor: getRepoBadgeColor(repo, repo.displayName) }
+                      {
+                        backgroundColor: getRepoBadgeColor(repo, repo.displayName)
+                      }
                     ]}
                   />
                   <View style={styles.repoPickerTextWrap}>
@@ -10279,7 +10584,7 @@ export default function MobileTasksScreen() {
         visible={taskUiReady && showGitHubProjectViewPicker}
         title={pendingGitHubProjectViewSelection ? 'Choose Project View' : 'Project View'}
         options={githubProjectViewOptions}
-        selected={pendingGitHubProjectViewSelection ? '' : (activeGitHubProjectViewId ?? '')}
+        selected={pendingGitHubProjectViewSelection ? '' : activeGitHubProjectViewId ?? ''}
         onSelect={(viewId) => {
           const view = githubProjectViews.find((candidate) => candidate.id === viewId)
           if (view && view.layout !== 'TABLE_LAYOUT') {
@@ -10777,8 +11082,8 @@ export default function MobileTasksScreen() {
         options={createTargetOptions}
         selected={
           provider === 'github' || provider === 'gitlab'
-            ? ((selectedCreateTarget as RepoSummary | null)?.id ?? '')
-            : ((selectedCreateTarget as LinearTeam | null)?.id ?? '')
+            ? (selectedCreateTarget as RepoSummary | null)?.id ?? ''
+            : (selectedCreateTarget as LinearTeam | null)?.id ?? ''
         }
         onSelect={(value) => {
           if (provider === 'github' || provider === 'gitlab') {
@@ -10937,8 +11242,8 @@ export default function MobileTasksScreen() {
                           workspaceCreateSshStatus === 'connected'
                             ? styles.sshStatusDotConnected
                             : workspaceCreateSshConnectInProgress
-                              ? styles.sshStatusDotProgress
-                              : styles.sshStatusDotDisconnected
+                            ? styles.sshStatusDotProgress
+                            : styles.sshStatusDotDisconnected
                         ]}
                       />
                       <View style={styles.sshStatusCopy}>
@@ -11004,8 +11309,8 @@ export default function MobileTasksScreen() {
                     {workspaceCreateRequiresSshConnection
                       ? 'Connect repository first'
                       : workspaceAgentDetectionPending
-                        ? 'Detecting agents...'
-                        : workspaceAgentLabel(resolvedWorkspaceAgent)}
+                      ? 'Detecting agents...'
+                      : workspaceAgentLabel(resolvedWorkspaceAgent)}
                   </Text>
                   <ChevronDown size={14} color={colors.textMuted} />
                 </Pressable>
@@ -11099,8 +11404,8 @@ export default function MobileTasksScreen() {
                     {workspaceAgentDetectionPending
                       ? 'Detecting agents...'
                       : workspaceCreateRequiresSshConnection
-                        ? 'Connect Repository'
-                        : 'Create Workspace'}
+                      ? 'Connect Repository'
+                      : 'Create Workspace'}
                   </Text>
                 )}
               </Pressable>
@@ -11331,7 +11636,10 @@ export default function MobileTasksScreen() {
                   style={[styles.input, styles.bodyInput, styles.monoInput]}
                   value={workspaceSparseDraft.directoriesText}
                   onChangeText={(directoriesText) =>
-                    setWorkspaceSparseDraft({ ...workspaceSparseDraft, directoriesText })
+                    setWorkspaceSparseDraft({
+                      ...workspaceSparseDraft,
+                      directoriesText
+                    })
                   }
                   placeholder={'src/renderer\npackages/ui'}
                   placeholderTextColor={colors.textMuted}
@@ -11650,10 +11958,10 @@ export default function MobileTasksScreen() {
                     {projectRowItem.itemType === 'PULL_REQUEST'
                       ? 'Pull request'
                       : projectRowItem.itemType === 'ISSUE'
-                        ? 'Issue'
-                        : projectRowItem.itemType === 'DRAFT_ISSUE'
-                          ? 'Draft issue'
-                          : 'Project item'}
+                      ? 'Issue'
+                      : projectRowItem.itemType === 'DRAFT_ISSUE'
+                      ? 'Draft issue'
+                      : 'Project item'}
                   </Text>
                 </View>
                 <View style={styles.detailMetaItem}>
@@ -11720,7 +12028,9 @@ export default function MobileTasksScreen() {
                               <View
                                 style={[
                                   styles.issueTypeDot,
-                                  { backgroundColor: githubProjectOptionColor(issueType.color) }
+                                  {
+                                    backgroundColor: githubProjectOptionColor(issueType.color)
+                                  }
                                 ]}
                               />
                               <Text style={styles.detailChipText}>{issueType.name}</Text>
@@ -11767,7 +12077,10 @@ export default function MobileTasksScreen() {
                           setProjectRowDetailError('Enter a date as YYYY-MM-DD.')
                           return
                         }
-                        void mutateProjectRowField(projectRowItem, field, { kind: 'date', date })
+                        void mutateProjectRowField(projectRowItem, field, {
+                          kind: 'date',
+                          date
+                        })
                         return
                       }
                       void mutateProjectRowField(projectRowItem, field, {
@@ -11869,8 +12182,8 @@ export default function MobileTasksScreen() {
                                 field.dataType === 'DATE'
                                   ? 'YYYY-MM-DD'
                                   : field.dataType === 'NUMBER'
-                                    ? 'Number'
-                                    : 'Text'
+                                  ? 'Number'
+                                  : 'Text'
                               }
                               placeholderTextColor={colors.textMuted}
                               keyboardType={field.dataType === 'NUMBER' ? 'numeric' : 'default'}
@@ -12082,7 +12395,7 @@ export default function MobileTasksScreen() {
                             projectBodyDraft ===
                               (projectRowDetail?.provider === 'github'
                                 ? projectRowDetail.body
-                                : (projectRowItem.content.body ?? ''))
+                                : projectRowItem.content.body ?? '')
                           }
                           onPress={() =>
                             void mutateProjectRowIssueOrPr(projectRowItem, {
@@ -12524,7 +12837,9 @@ export default function MobileTasksScreen() {
                                 ? [
                                     renderProjectComment(group.root),
                                     ...group.replies.map((reply) =>
-                                      renderProjectComment(reply, { nested: true })
+                                      renderProjectComment(reply, {
+                                        nested: true
+                                      })
                                     )
                                   ]
                                 : renderProjectComment(group.comment)}
@@ -12799,15 +13114,47 @@ export default function MobileTasksScreen() {
                       </>
                     ) : (
                       <MobileMarkdown
-                        content={
-                          detailPayload.provider === 'linear'
-                            ? detailPayload.description
-                            : detailPayload.body
-                        }
+                        content={detailDescription(detailPayload)}
                         fallback="No description."
                       />
                     )}
                   </View>
+
+                  {detailPayload.provider === 'dev10x' && actionItem.provider === 'dev10x' ? (
+                    <View style={styles.detailSection}>
+                      <Text style={styles.detailSectionTitle}>Execution</Text>
+                      <Text style={styles.detailMuted}>
+                        Agent: {actionItem.source.agent || 'Project default'} ·{' '}
+                        {actionItem.source.agentState === 'live'
+                          ? 'Running'
+                          : actionItem.source.agentState}
+                      </Text>
+                      {actionItem.source.pendingApproval ? (
+                        <Text style={styles.detailError}>Approval needed</Text>
+                      ) : null}
+                      {actionItem.source.pendingQuestion ? (
+                        <Text style={styles.detailError}>Question waiting for your answer</Text>
+                      ) : null}
+                      {detailPayload.blockers.length > 0 ? (
+                        <Text style={styles.detailMuted}>
+                          Blocked by:{' '}
+                          {detailPayload.blockers
+                            .map((blocker) => blocker.identifier || blocker.title)
+                            .filter(Boolean)
+                            .join(', ')}
+                        </Text>
+                      ) : null}
+                      {detailPayload.subtasks.length > 0 ? (
+                        <Text style={styles.detailMuted}>
+                          Subtasks:{' '}
+                          {detailPayload.subtasks
+                            .map((subtask) => subtask.identifier || subtask.title)
+                            .filter(Boolean)
+                            .join(', ')}
+                        </Text>
+                      ) : null}
+                    </View>
+                  ) : null}
 
                   {SHOW_MOBILE_DETAIL_METADATA_EDITORS &&
                   ((actionItem.provider === 'github' &&
@@ -13431,14 +13778,18 @@ export default function MobileTasksScreen() {
                 </Text>
               </Pressable>
 
-              <View style={styles.actionSeparator} />
-              <Pressable
-                style={styles.actionRow}
-                onPress={() => void Linking.openURL(actionItem.source.url)}
-              >
-                <ExternalLink size={16} color={colors.textPrimary} />
-                <Text style={styles.actionText}>{taskExternalOpenLabel(actionItem)}</Text>
-              </Pressable>
+              {actionItem.source.url ? (
+                <>
+                  <View style={styles.actionSeparator} />
+                  <Pressable
+                    style={styles.actionRow}
+                    onPress={() => void Linking.openURL(actionItem.source.url!)}
+                  >
+                    <ExternalLink size={16} color={colors.textPrimary} />
+                    <Text style={styles.actionText}>{taskExternalOpenLabel(actionItem)}</Text>
+                  </Pressable>
+                </>
+              ) : null}
 
               {actionItem.provider === 'linear' ? (
                 <>
@@ -13606,7 +13957,10 @@ export default function MobileTasksScreen() {
                 label: getHostedReviewMergeMethodLabel(method),
                 icon: GitBranch,
                 onPress: () => {
-                  setPendingProjectGitHubMerge({ row: mergeMethodProjectRow, method })
+                  setPendingProjectGitHubMerge({
+                    row: mergeMethodProjectRow,
+                    method
+                  })
                 }
               }))
             : []
@@ -14338,7 +14692,11 @@ const styles = StyleSheet.create({
     color: colors.textPrimary
   },
   monoText: {
-    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' })
+    fontFamily: Platform.select({
+      ios: 'Menlo',
+      android: 'monospace',
+      default: 'monospace'
+    })
   },
   pickerSubtitle: {
     fontSize: 11,
@@ -14990,7 +15348,11 @@ const styles = StyleSheet.create({
     minHeight: 88
   },
   monoInput: {
-    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' })
+    fontFamily: Platform.select({
+      ios: 'Menlo',
+      android: 'monospace',
+      default: 'monospace'
+    })
   },
   commentInput: {
     minHeight: 72,

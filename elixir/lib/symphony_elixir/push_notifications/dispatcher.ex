@@ -13,6 +13,7 @@ defmodule SymphonyElixir.PushNotifications.Dispatcher do
   alias SymphonyElixir.LocalTracker.{Comment, IssueRecord, Project}
   alias SymphonyElixir.ProjectConfig
   alias SymphonyElixir.PushNotifications.{Config, MentionParser, NativeSender, Sender}
+  alias SymphonyElixir.MobileRpc.NotificationSubscription
   alias SymphonyElixir.Settings.Ui
   alias SymphonyElixir.Tracker.Identity
   alias SymphonyElixirWeb.Gettext, as: GettextBackend
@@ -333,6 +334,12 @@ defmodule SymphonyElixir.PushNotifications.Dispatcher do
 
   @spec notify(String.t(), map()) :: :ok
   def notify(kind, payload) when is_binary(kind) and is_map(payload) do
+    Phoenix.PubSub.broadcast(
+      SymphonyElixir.PubSub,
+      NotificationSubscription.topic(),
+      {:mobile_notification, kind, Map.take(payload, [:title, :body, :url, :tag])}
+    )
+
     NativeSender.deliver_all(kind, payload)
 
     if Config.enabled?() do

@@ -60,6 +60,57 @@ describe("Symphony mock RPC handlers", () => {
     });
   });
 
+  it("hydrates copied Orca task surfaces without fabricating external providers", () => {
+    const sent: RpcResponse[] = [];
+    const send = (message: RpcResponse) => sent.push(message);
+
+    for (const [id, method] of [
+      ["status", "status.get"],
+      ["settings", "settings.get"],
+      ["ui", "ui.get"],
+      ["preflight", "preflight.check"],
+    ] as const) {
+      handleRequest({ type: "rpc", id, method, params: {} }, send, socket);
+    }
+
+    expect(sent[0]).toMatchObject({
+      ok: true,
+      result: {
+        product: "Symphony",
+        capabilities: expect.arrayContaining([
+          "mobile.tasks.v1",
+          "symphony.tasks.list",
+          "notifications.subscribe",
+        ]),
+      },
+    });
+    expect(sent[0]).not.toMatchObject({
+      result: {
+        capabilities: expect.arrayContaining([
+          "github.listWorkItems",
+          "linear.listIssues",
+          "speech.dictation.start",
+        ]),
+      },
+    });
+    expect(sent[1]).toMatchObject({
+      result: {
+        settings: {
+          defaultTaskSource: "dev10x",
+          visibleTaskProviders: ["dev10x"],
+        },
+      },
+    });
+    expect(sent[2]).toMatchObject({ result: { ui: {} } });
+    expect(sent[3]).toMatchObject({
+      result: {
+        git: { installed: true },
+        gh: { installed: false },
+        glab: { installed: false },
+      },
+    });
+  });
+
   it("returns one subscription result followed by monotonic events and cleanup", async () => {
     vi.useFakeTimers();
     const sent: RpcResponse[] = [];
@@ -433,6 +484,68 @@ describe("Symphony mock RPC handlers", () => {
         },
       },
     });
+  });
+
+  it("serves native Dev10x tasks and host-routed notification events", async () => {
+    vi.useFakeTimers();
+    const sent: RpcResponse[] = [];
+    const send = (message: RpcResponse) => sent.push(message);
+
+    handleRequest(
+      {
+        type: "rpc",
+        id: "dev10x-tasks",
+        method: "symphony.tasks.list",
+        params: { query: "mobile" },
+      },
+      send,
+      socket
+    );
+    handleRequest(
+      {
+        type: "rpc",
+        id: "notifications",
+        method: "notifications.subscribe",
+        params: {},
+      },
+      send,
+      socket
+    );
+
+    await vi.runOnlyPendingTimersAsync();
+
+    expect(sent[0]).toMatchObject({
+      id: "dev10x-tasks",
+      ok: true,
+      result: {
+        provider: "symphony",
+        items: [
+          {
+            identifier: "DEV-101",
+            projectName: "Dev10x Symphony",
+            pendingApproval: true,
+          },
+        ],
+      },
+    });
+    expect(sent[1]).toMatchObject({
+      id: "notifications",
+      ok: true,
+      result: { subscription_id: expect.any(String) },
+    });
+    expect(sent.slice(2)).toMatchObject([
+      {
+        type: "event",
+        sequence: 1,
+        event: "notifications.ready",
+      },
+      {
+        type: "event",
+        sequence: 2,
+        event: "notifications.notification",
+        payload: { source: "dev10x-host", title: "Dev10x host" },
+      },
+    ]);
   });
 
   it("fails closed for unknown methods without reflecting params", () => {

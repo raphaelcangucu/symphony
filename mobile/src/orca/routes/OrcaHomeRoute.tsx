@@ -103,6 +103,7 @@ type HomeLinearStatus = {
 }
 
 const TASK_PROVIDER_LABELS: Record<TaskProvider, string> = {
+  dev10x: 'Dev10x',
   github: 'GitHub',
   gitlab: 'GitLab',
   linear: 'Linear'
@@ -253,11 +254,12 @@ function fetchTaskProviders(
   disposed: () => boolean
 ) {
   Promise.all([
+    client.sendRequest('status.get'),
     client.sendRequest('settings.get'),
     client.sendRequest('preflight.check'),
     client.sendRequest('linear.status')
   ])
-    .then(([settingsResponse, preflightResponse, linearResponse]) => {
+    .then(([statusResponse, settingsResponse, preflightResponse, linearResponse]) => {
       if (disposed()) {
         return
       }
@@ -269,11 +271,16 @@ function fetchTaskProviders(
         ? (preflightResponse.result as HomePreflightStatus)
         : null
       const linear = linearResponse.ok ? (linearResponse.result as HomeLinearStatus) : null
+      const capabilities = statusResponse.ok
+        ? (statusResponse.result as { capabilities?: string[] }).capabilities ?? []
+        : []
       const providers = filterAvailableTaskProviders(
         normalizeVisibleTaskProviders(settings.visibleTaskProviders),
         {
-          gitlabInstalled: preflight?.glab?.installed === true,
-          linearConnected: linear?.connected === true
+          githubAvailable: capabilities.includes('github.listWorkItems'),
+          gitlabInstalled:
+            preflight?.glab?.installed === true && capabilities.includes('gitlab.listWorkItems'),
+          linearConnected: linear?.connected === true && capabilities.includes('linear.listIssues')
         }
       )
       setProviders((prev) => ({ ...prev, [hostId]: providers }))
@@ -282,7 +289,7 @@ function fetchTaskProviders(
       if (disposed()) {
         return
       }
-      setProviders((prev) => (prev[hostId] ? prev : { ...prev, [hostId]: ['github'] }))
+      setProviders((prev) => (prev[hostId] ? prev : { ...prev, [hostId]: ['dev10x'] }))
     })
 }
 
@@ -314,9 +321,10 @@ export function OrcaHomeRoute() {
   const [worktreeInfo, setWorktreeInfo] = useState<Record<string, HostWorktreeInfo>>({})
   const [accountsByHost, setAccountsByHost] = useState<Record<string, AccountsSnapshot>>({})
   const [taskProvidersByHost, setTaskProvidersByHost] = useState<Record<string, TaskProvider[]>>({})
-  const [lastVisited, setLastVisited] = useState<{ hostId: string; worktreeId: string } | null>(
-    null
-  )
+  const [lastVisited, setLastVisited] = useState<{
+    hostId: string
+    worktreeId: string
+  } | null>(null)
 
   // Why: read shared clients from the per-host store. Replaces the prior
   // pattern of opening N independent WebSockets here. See
@@ -514,9 +522,15 @@ export function OrcaHomeRoute() {
               if (!payload || typeof payload !== 'object') {
                 return
               }
-              const evt = payload as { type?: string; snapshot?: AccountsSnapshot }
+              const evt = payload as {
+                type?: string
+                snapshot?: AccountsSnapshot
+              }
               if ((evt.type === 'ready' || evt.type === 'snapshot') && evt.snapshot) {
-                setAccountsByHost((prev) => ({ ...prev, [entry.hostId]: evt.snapshot! }))
+                setAccountsByHost((prev) => ({
+                  ...prev,
+                  [entry.hostId]: evt.snapshot!
+                }))
               }
             })
           }
@@ -627,7 +641,7 @@ export function OrcaHomeRoute() {
     [sortedHosts, hostStates]
   )
   const primaryTaskProviders = primaryConnectedHost
-    ? (taskProvidersByHost[primaryConnectedHost.id] ?? ['github'])
+    ? taskProvidersByHost[primaryConnectedHost.id] ?? ['github']
     : []
   const openTasks = useCallback(
     (provider?: TaskProvider) => {
@@ -730,7 +744,7 @@ export function OrcaHomeRoute() {
           <View style={styles.logoMark}>
             <OrcaLogo size={18} />
           </View>
-          <Text style={styles.brandName}>Orca</Text>
+          <Text style={styles.brandName}>Dev10x</Text>
         </View>
         <Pressable
           style={({ pressed }) => [styles.iconButton, pressed && styles.iconButtonPressed]}
@@ -746,14 +760,18 @@ export function OrcaHomeRoute() {
           style={[
             styles.emptyContainer,
             { paddingBottom: insets.bottom },
-            isWideLayout && { maxWidth: contentMaxWidth, width: '100%', alignSelf: 'center' }
+            isWideLayout && {
+              maxWidth: contentMaxWidth,
+              width: '100%',
+              alignSelf: 'center'
+            }
           ]}
         >
           <View style={styles.emptyHero}>
             <Text style={styles.emptyTitle}>Connect your desktop</Text>
             <Text style={styles.emptyBody}>
-              Pair with Orca on your computer to check on your agents, jump into any terminal, and
-              drive work from your phone.
+              Pair with a Symphony host to check on your agents, jump into any terminal, and drive
+              work from your phone.
             </Text>
             <Pressable style={styles.primaryButton} onPress={() => router.push('/pair-scan')}>
               <QrCode size={17} color={colors.bgBase} />
@@ -787,7 +805,11 @@ export function OrcaHomeRoute() {
           contentContainerStyle={[
             styles.list,
             { paddingBottom: spacing.xl + insets.bottom },
-            isWideLayout && { maxWidth: contentMaxWidth, width: '100%', alignSelf: 'center' }
+            isWideLayout && {
+              maxWidth: contentMaxWidth,
+              width: '100%',
+              alignSelf: 'center'
+            }
           ]}
           ListHeaderComponent={
             <View>
@@ -861,7 +883,9 @@ export function OrcaHomeRoute() {
                     <Text style={[styles.hostMetaItem, isError && { color: colors.statusRed }]}>
                       {verdict.label}
                       {connected && info
-                        ? ` · ${info.totalWorktrees} worktree${info.totalWorktrees !== 1 ? 's' : ''}${info.activeCount > 0 ? ` · ${info.activeCount} active` : ''}`
+                        ? ` · ${info.totalWorktrees} worktree${
+                            info.totalWorktrees !== 1 ? 's' : ''
+                          }${info.activeCount > 0 ? ` · ${info.activeCount} active` : ''}`
                         : ''}
                     </Text>
                   </View>
@@ -880,7 +904,9 @@ export function OrcaHomeRoute() {
                     style={({ pressed }) => [styles.resumeCard, pressed && styles.hostCardPressed]}
                     onPress={() =>
                       router.push(
-                        `/h/${resumeWorktree.hostId}/session/${encodeURIComponent(resumeWorktree.worktree.worktreeId)}`
+                        `/h/${resumeWorktree.hostId}/session/${encodeURIComponent(
+                          resumeWorktree.worktree.worktreeId
+                        )}`
                       )
                     }
                   >
@@ -895,7 +921,9 @@ export function OrcaHomeRoute() {
                         <View
                           style={[
                             styles.repoDot,
-                            { backgroundColor: repoColor(resumeWorktree.worktree.repo) }
+                            {
+                              backgroundColor: repoColor(resumeWorktree.worktree.repo)
+                            }
                           ]}
                         />
                         <Text style={styles.resumeSubText} numberOfLines={1}>
@@ -1125,7 +1153,7 @@ function CardGap() {
 
 const ONBOARDING_STEPS = [
   {
-    title: 'Open Orca desktop',
+    title: 'Open Dev10x workspace',
     desc: 'Go to Settings → Mobile and generate a pairing QR code.'
   },
   {

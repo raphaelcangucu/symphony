@@ -2,6 +2,7 @@ import type { WebSocket } from "ws";
 
 import { handleMockFilePreviewRequest } from "./mock-server-file-preview-data";
 import { handleMockGitRequest } from "./mock-server-git-state";
+import { handleMockTaskRequest } from "./mock-server-task-state";
 
 const HOST_ID = process.env.MOCK_HOST_ID || "host_mock";
 const DEFAULT_DELAY_MS = readDelay("MOCK_RPC_DELAY_MS", 0);
@@ -12,6 +13,10 @@ const METHODS = [
   "system.heartbeat",
   "system.usage",
   "system.tracker",
+  "status.get",
+  "settings.get",
+  "ui.get",
+  "preflight.check",
   "devices.list",
   "devices.revoke",
   "devices.self_revoke",
@@ -79,6 +84,10 @@ const METHODS = [
   "git.cancelGenerateCommitMessage",
   "git.generatePullRequestFields",
   "hostedReview.getCreationEligibility",
+  "symphony.tasks.list",
+  "symphony.tasks.get",
+  "notifications.subscribe",
+  "notifications.unsubscribe",
 ] as const;
 
 export type RpcRequest = {
@@ -120,7 +129,12 @@ export type RpcResponse = RpcResult | RpcEvent;
 type Send = (response: RpcResponse) => void;
 type Subscription = {
   id: string;
-  kind: "sessions" | "terminal" | "session-tabs" | "orca-terminal";
+  kind:
+    | "sessions"
+    | "terminal"
+    | "session-tabs"
+    | "orca-terminal"
+    | "notifications";
   threadId: number;
   terminalHandle?: string;
   sequence: number;
@@ -217,6 +231,10 @@ export function handleRequest(
     return;
   }
 
+  if (handleMockTaskRequest(request, respond, success)) {
+    return;
+  }
+
   try {
     switch (request.method) {
       case "system.identity":
@@ -242,6 +260,38 @@ export function handleRequest(
           success(request.id, {
             connections: 1,
             subscriptions: countSubscriptions(ws),
+          })
+        );
+        break;
+      case "status.get":
+        respond(
+          success(request.id, {
+            runtimeId: HOST_ID,
+            product: "Symphony",
+            displayName: "Symphony Mock Host — NOT REAL",
+            capabilities: ["mobile.tasks.v1", ...METHODS],
+          })
+        );
+        break;
+      case "settings.get":
+        respond(
+          success(request.id, {
+            settings: {
+              defaultTaskSource: "dev10x",
+              visibleTaskProviders: ["dev10x"],
+            },
+          })
+        );
+        break;
+      case "ui.get":
+        respond(success(request.id, { ui: {} }));
+        break;
+      case "preflight.check":
+        respond(
+          success(request.id, {
+            git: { installed: true },
+            gh: { installed: false },
+            glab: { installed: false },
           })
         );
         break;
@@ -290,6 +340,9 @@ export function handleRequest(
         break;
       case "notifications.request":
         respond(success(request.id, notificationResponse(request.params)));
+        break;
+      case "notifications.subscribe":
+        subscribeMockNotifications(request, respond, ws);
         break;
       case "sessions.subscribe":
         subscribe("sessions", request, respond, ws);
@@ -577,6 +630,30 @@ function subscribeCopiedTerminal(
       cols,
       rows,
       displayMode: copiedDisplayMode(handle),
+    })
+  );
+}
+
+function subscribeMockNotifications(
+  request: RpcRequest,
+  send: Send,
+  ws: WebSocket
+): void {
+  const subscription = registerSubscription("notifications", 0, send, ws);
+  send(success(request.id, { subscription_id: subscription.id }));
+  schedule(subscription, () =>
+    emit(subscription, "notifications.ready", {
+      type: "ready",
+      subscriptionId: subscription.id,
+    })
+  );
+  schedule(subscription, () =>
+    emit(subscription, "notifications.notification", {
+      type: "notification",
+      source: "dev10x-host",
+      title: "Dev10x host",
+      body: "DEV-101 needs your approval",
+      notificationId: "DEV-101:approval",
     })
   );
 }

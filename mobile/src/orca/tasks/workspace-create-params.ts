@@ -51,7 +51,17 @@ type WorkspaceCreateLinearItem = {
   }
 }
 
+type WorkspaceCreateDev10xItem = {
+  provider: 'dev10x'
+  source: {
+    identifier: string
+    title: string
+    url?: string | null
+  }
+}
+
 export type WorkspaceCreateTaskItem =
+  | WorkspaceCreateDev10xItem
   | WorkspaceCreateGitHubItem
   | WorkspaceCreateGitLabItem
   | WorkspaceCreateLinearItem
@@ -89,7 +99,7 @@ export function buildTaskWorkspaceCreateParams(args: {
   const common = {
     setupDecision,
     activate: true,
-    ...(shouldLaunchAgent ? { startupDraft: item.source.url } : {}),
+    ...(shouldLaunchAgent && item.source.url ? { startupDraft: item.source.url } : {}),
     ...(createdWithAgent ? { createdWithAgent } : {}),
     ...(selectedBaseBranch ? { baseBranch: selectedBaseBranch } : {}),
     ...(branchNameOverride ? { branchNameOverride } : {}),
@@ -102,7 +112,10 @@ export function buildTaskWorkspaceCreateParams(args: {
     const fallback = `${item.source.type}-${item.source.number}`
     return {
       repo: `id:${item.source.repoId}`,
-      name: resolveMobileWorkspaceCreateName({ draft: workspaceName, fallback }),
+      name: resolveMobileWorkspaceCreateName({
+        draft: workspaceName,
+        fallback
+      }),
       displayName: item.source.title,
       ...common,
       ...(item.source.type === 'issue'
@@ -115,12 +128,28 @@ export function buildTaskWorkspaceCreateParams(args: {
     const fallback = `${item.source.type}-${item.source.number}`
     return {
       repo: `id:${item.source.repoId}`,
-      name: resolveMobileWorkspaceCreateName({ draft: workspaceName, fallback }),
+      name: resolveMobileWorkspaceCreateName({
+        draft: workspaceName,
+        fallback
+      }),
       displayName: item.source.title,
       ...common,
       ...(item.source.type === 'issue'
         ? { linkedGitLabIssue: item.source.number }
         : { linkedGitLabMR: item.source.number })
+    }
+  }
+
+  if (item.provider === 'dev10x') {
+    return {
+      repo: `id:${targetRepoId}`,
+      name: resolveMobileWorkspaceCreateName({
+        draft: workspaceName,
+        fallback: item.source.identifier.toLowerCase()
+      }),
+      displayName: item.source.title,
+      linkedIssue: item.source.identifier,
+      ...common
     }
   }
 

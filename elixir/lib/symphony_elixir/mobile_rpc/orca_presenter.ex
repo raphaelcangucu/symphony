@@ -9,12 +9,12 @@ defmodule SymphonyElixir.MobileRpc.OrcaPresenter do
 
   @state_table :symphony_mobile_rpc_orca_state
   @default_settings %{
-    "defaultTaskSource" => "github",
+    "defaultTaskSource" => "dev10x",
     "defaultRepoSelection" => nil,
     "defaultTaskViewPreset" => nil,
     "defaultLinearTeamSelection" => nil,
     "githubProjects" => %{},
-    "visibleTaskProviders" => ["github"],
+    "visibleTaskProviders" => ["dev10x"],
     "disabledTuiAgents" => [],
     "agentCmdOverrides" => %{}
   }

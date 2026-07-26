@@ -75,3 +75,21 @@ git diff --no-index \
 Repeat the final comparison for each imported directory. Expected differences
 are limited to import roots, Dev10x/Symphony user-facing copy, capability
 gates, and the transport facade.
+
+## Symphony host capability matrix
+
+The copied interface only exposes a feature when the selected Symphony host
+advertises the corresponding RPC capability. The current bridge intentionally
+has this support:
+
+| Orca surface | Symphony RPC capability | Current behavior |
+| --- | --- | --- |
+| Dev10x tasks | `symphony.tasks.list`, `symphony.tasks.get` | Native Symphony projects, issues, agents, blockers and subtasks |
+| Notifications | `notifications.subscribe`, `notifications.unsubscribe` | Host-routed real-time stream with redacted payloads |
+| Diagnostics | `status.get`, `system.health`, `system.heartbeat` | Direct selected-host reachability and protocol health |
+| GitHub, GitLab, Linear | Provider-specific methods | Hidden unless a selected host explicitly advertises them |
+| Voice and speech models | `speech.*` methods | Upstream unavailable state; not advertised by the current host |
+
+No native two-way audio dependency is installed while `speech.*` is absent.
+This preserves Orca's capability-disabled behavior without fabricating
+production data or coupling the app to a central service.

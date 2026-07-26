@@ -17,10 +17,20 @@ function ok(result: unknown): RpcSuccess {
   return { id: 'r', ok: true, result, _meta: { runtimeId: 'rt' } }
 }
 function fail(message: string): RpcFailure {
-  return { id: 'r', ok: false, error: { code: 'x', message }, _meta: { runtimeId: 'rt' } }
+  return {
+    id: 'r',
+    ok: false,
+    error: { code: 'x', message },
+    _meta: { runtimeId: 'rt' }
+  }
 }
 function malformedFailure(error: { code?: string; message?: string }): RpcResponse {
-  return { id: 'r', ok: false, error, _meta: { runtimeId: 'rt' } } as unknown as RpcResponse
+  return {
+    id: 'r',
+    ok: false,
+    error,
+    _meta: { runtimeId: 'rt' }
+  } as unknown as RpcResponse
 }
 
 function clientWith(responses: RpcResponse[]): Pick<RpcClient, 'sendRequest'> & {
@@ -61,27 +71,48 @@ describe('isDictationSetupRequiredError', () => {
 
 describe('rpc wrappers', () => {
   it('fetches setup', async () => {
-    const setup: MobileSpeechSetup = { enabled: false, selectedModelId: '', models: [] }
+    const setup: MobileSpeechSetup = {
+      enabled: false,
+      selectedModelId: '',
+      models: []
+    }
     const client = clientWith([ok(setup)])
     await expect(fetchDictationSetup(client)).resolves.toEqual(setup)
-    expect(client.calls[0]).toEqual({ method: 'speech.models.list', params: null })
+    expect(client.calls[0]).toEqual({
+      method: 'speech.models.list',
+      params: null
+    })
   })
 
   it('starts a download', async () => {
     const client = clientWith([ok({ started: true })])
     await downloadDictationModel(client, 'm1')
-    expect(client.calls[0]).toEqual({ method: 'speech.models.download', params: { modelId: 'm1' } })
+    expect(client.calls[0]).toEqual({
+      method: 'speech.models.download',
+      params: { modelId: 'm1' }
+    })
   })
 
   it('deletes a model and returns refreshed setup', async () => {
-    const setup: MobileSpeechSetup = { enabled: true, selectedModelId: '', models: [] }
+    const setup: MobileSpeechSetup = {
+      enabled: true,
+      selectedModelId: '',
+      models: []
+    }
     const client = clientWith([ok(setup)])
     await expect(deleteDictationModel(client, 'm1')).resolves.toEqual(setup)
-    expect(client.calls[0]).toEqual({ method: 'speech.models.delete', params: { modelId: 'm1' } })
+    expect(client.calls[0]).toEqual({
+      method: 'speech.models.delete',
+      params: { modelId: 'm1' }
+    })
   })
 
   it('sets config', async () => {
-    const setup: MobileSpeechSetup = { enabled: true, selectedModelId: 'm1', models: [] }
+    const setup: MobileSpeechSetup = {
+      enabled: true,
+      selectedModelId: 'm1',
+      models: []
+    }
     const client = clientWith([ok(setup)])
     await expect(setDictationConfig(client, { enabled: true, modelId: 'm1' })).resolves.toEqual(
       setup
@@ -111,7 +142,7 @@ describe('rpc wrappers', () => {
     ])
 
     await expect(fetchDictationSetup(client)).rejects.toThrow(
-      'Update the paired desktop Orca app to use mobile voice settings.'
+      'Update the paired Symphony host to use Dev10x mobile voice settings.'
     )
   })
 
@@ -124,7 +155,7 @@ describe('rpc wrappers', () => {
     ])
 
     await expect(fetchDictationSetup(client)).rejects.toThrow(
-      'Update the paired desktop Orca app to use mobile voice settings.'
+      'Update the paired Symphony host to use Dev10x mobile voice settings.'
     )
   })
 

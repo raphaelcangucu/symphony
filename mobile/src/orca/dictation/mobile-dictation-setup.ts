@@ -10,7 +10,7 @@ export type MobileSpeechModel = RuntimeSpeechSetupState['models'][number]
 // instead of dead-ending on a toast.
 const SETUP_REQUIRED_CODES = new Set(['voice_dictation_disabled', 'voice_model_not_selected'])
 const LEGACY_DESKTOP_SPEECH_SETUP_MESSAGE =
-  'Update the paired desktop Orca app to use mobile voice settings.'
+  'Update the paired Symphony host to use Dev10x mobile voice settings.'
 
 // Why: mobile can pair with older desktop runtimes that predate speech.models.list;
 // show upgrade guidance instead of leaking the raw denial or not-found error.
@@ -45,7 +45,9 @@ export async function downloadDictationModel(
   client: Pick<RpcClient, 'sendRequest'>,
   modelId: string
 ): Promise<void> {
-  const response = await client.sendRequest('speech.models.download', { modelId })
+  const response = await client.sendRequest('speech.models.download', {
+    modelId
+  })
   if (!response.ok) {
     throw new Error(response.error?.message || 'Failed to start download')
   }
@@ -55,7 +57,9 @@ export async function deleteDictationModel(
   client: Pick<RpcClient, 'sendRequest'>,
   modelId: string
 ): Promise<MobileSpeechSetup> {
-  const response = await client.sendRequest('speech.models.delete', { modelId })
+  const response = await client.sendRequest('speech.models.delete', {
+    modelId
+  })
   if (!response.ok) {
     throw new Error(response.error?.message || 'Failed to delete model')
   }
@@ -64,7 +68,11 @@ export async function deleteDictationModel(
 
 export async function setDictationConfig(
   client: Pick<RpcClient, 'sendRequest'>,
-  params: { enabled?: boolean; modelId?: string; dictationMode?: 'toggle' | 'hold' }
+  params: {
+    enabled?: boolean
+    modelId?: string
+    dictationMode?: 'toggle' | 'hold'
+  }
 ): Promise<MobileSpeechSetup> {
   const response = await client.sendRequest('speech.dictation.setup', params)
   if (!response.ok) {

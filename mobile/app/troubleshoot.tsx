@@ -63,8 +63,8 @@ const sections: TroubleshootSection[] = [
     icon: <Shield size={16} color={colors.textSecondary} />,
     title: 'Firewall Blocking Port 6768',
     steps: [
-      'macOS: System Settings → Network → Firewall — allow Orca.',
-      'Windows: Defender Firewall → Allow app — enable Orca for Private networks.',
+      'macOS: System Settings → Network → Firewall — allow the Symphony host.',
+      'Windows: Defender Firewall → Allow app — enable the Symphony host for Private networks.',
       'Linux: sudo ufw allow 6768',
       'Corporate/school networks may block P2P — try a personal hotspot.'
     ]
@@ -72,10 +72,10 @@ const sections: TroubleshootSection[] = [
   {
     id: 'desktop',
     icon: <Monitor size={16} color={colors.textSecondary} />,
-    title: 'Desktop App Not Running',
+    title: 'Symphony Host Not Running',
     steps: [
-      'Orca must be open on your desktop to accept connections.',
-      'Try restarting Orca — the companion server starts on launch.',
+      'Symphony must be running on the selected machine to accept connections.',
+      'Try restarting the Symphony host — mobile RPC starts with the runtime.',
       'After an update, you may need to re-pair via QR code.'
     ]
   },
@@ -153,11 +153,23 @@ export default function TroubleshootScreen() {
       const hosts = await loadHosts()
       results.push(
         hosts.length > 0
-          ? { label: 'Paired hosts', status: 'pass', detail: `${hosts.length} paired` }
-          : { label: 'Paired hosts', status: 'fail', detail: 'None — scan a QR to pair' }
+          ? {
+              label: 'Paired hosts',
+              status: 'pass',
+              detail: `${hosts.length} paired`
+            }
+          : {
+              label: 'Paired hosts',
+              status: 'fail',
+              detail: 'None — scan a QR to pair'
+            }
       )
     } catch {
-      results.push({ label: 'Paired hosts', status: 'warn', detail: 'Could not read host data' })
+      results.push({
+        label: 'Paired hosts',
+        status: 'warn',
+        detail: 'Could not read host data'
+      })
     }
 
     if (!isCurrentRun()) {
@@ -183,7 +195,11 @@ export default function TroubleshootScreen() {
       if (!isCurrentRun()) {
         return
       }
-      results.push({ label: 'Internet', status: 'fail', detail: 'No connection' })
+      results.push({
+        label: 'Internet',
+        status: 'fail',
+        detail: 'No connection'
+      })
     } finally {
       internetCheck.dispose()
       if (activeInternetCheckRef.current === internetCheck) {
@@ -216,7 +232,11 @@ export default function TroubleshootScreen() {
         setChecks([...results])
       }
     } catch {
-      results.push({ label: 'Hosts', status: 'warn', detail: 'Could not test' })
+      results.push({
+        label: 'Hosts',
+        status: 'warn',
+        detail: 'Could not test'
+      })
     }
 
     if (!isCurrentRun()) {
@@ -268,8 +288,8 @@ export default function TroubleshootScreen() {
             {diagnosticStatus === 'running'
               ? 'Running…'
               : diagnosticStatus === 'done'
-                ? 'Run again'
-                : 'Run diagnostics'}
+              ? 'Run again'
+              : 'Run diagnostics'}
           </Text>
         </Pressable>
 

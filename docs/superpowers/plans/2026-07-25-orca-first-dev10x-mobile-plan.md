@@ -1135,7 +1135,7 @@ mix test test/symphony_elixir/mobile_rpc/methods/orca_git_test.exs
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add mobile/app/h mobile/src/orca/source-control \
@@ -1165,7 +1165,7 @@ git commit -m "feat(mobile): connect Orca source control to Symphony"
 - Modify: `mobile/package.json`
 - Modify: `mobile/package-lock.json`
 
-- [ ] **Step 1: Write failing Symphony-domain extension tests**
+- [x] **Step 1: Write failing Symphony-domain extension tests**
 
 Assert copied task surfaces receive Symphony projects, issues, blockers,
 subtasks, comments and agent state without fabricating GitHub/Linear data.
@@ -1202,7 +1202,7 @@ speech.models.delete
 Only advertise provider/voice methods backed by the selected host. Unavailable
 providers retain the copied Orca hidden or disabled state.
 
-- [ ] **Step 2: Run focused failing tests**
+- [x] **Step 2: Run focused failing tests**
 
 Run:
 
@@ -1213,14 +1213,14 @@ mix test test/symphony_elixir/mobile_rpc/methods/orca_tasks_test.exs
 
 Expected: FAIL for missing compatibility methods.
 
-- [ ] **Step 3: Connect Symphony-specific task and agent data**
+- [x] **Step 3: Connect Symphony-specific task and agent data**
 
 Extend copied Orca rows and drawers through existing component patterns.
 Include task identifier, status, blockers, subtasks, selected agent, approval
 and pending-question indicators. Do not replace the copied host/workspace
 hierarchy with the old Codex session list.
 
-- [ ] **Step 4: Retain upstream notification and diagnostic behavior**
+- [x] **Step 4: Retain upstream notification and diagnostic behavior**
 
 Route notification payloads by `host_id`; redact device tokens, pair codes,
 session keys and plaintext RPC bodies from connection logs and exports.
@@ -1229,7 +1229,7 @@ passes a focused native compile; otherwise keep voice controls capability-
 disabled with the upstream unavailable state and record the missing host
 capability in the matrix.
 
-- [ ] **Step 5: Run focused validation**
+- [x] **Step 5: Run focused validation**
 
 Run:
 

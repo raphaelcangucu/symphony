@@ -1,6 +1,7 @@
+import { Image } from 'react-native'
 import Svg, { Path } from 'react-native-svg'
 
-export type TaskProviderLogoKind = 'github' | 'gitlab' | 'linear'
+export type TaskProviderLogoKind = 'dev10x' | 'github' | 'gitlab' | 'linear'
 
 type Props = {
   provider: TaskProviderLogoKind
@@ -9,6 +10,17 @@ type Props = {
 }
 
 export function TaskProviderLogo({ provider, size = 16, color }: Props) {
+  if (provider === 'dev10x') {
+    return (
+      <Image
+        source={require('../../../assets/dev10x-icon.png')}
+        style={{ width: size, height: size }}
+        resizeMode="contain"
+        accessibilityLabel="Dev10x"
+      />
+    )
+  }
+
   if (provider === 'github') {
     return (
       <Svg
