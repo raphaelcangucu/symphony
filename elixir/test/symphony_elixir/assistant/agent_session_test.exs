@@ -546,6 +546,80 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
     assert result.assistant_message == "ok"
   end
 
+  test "default Codex runner keeps the composed prompt out of the visible user message", %{
+    workspace_root: workspace_root
+  } do
+    trace_file = Path.join(workspace_root, "codex-visible-input.jsonl")
+
+    {:ok, thread} =
+      History.create_freeform_thread(%{
+        title: "Telegram session",
+        workspace_path: Path.join(workspace_root, "telegram-session")
+      })
+
+    assert {:ok, result} =
+             AgentSession.send_message_to_thread(
+               thread,
+               "Reinicie o codex remoto por favor",
+               %{"agent" => "codex", "source" => "telegram"},
+               codex_config: %{
+                 "command" => "FAKE_CODEX_TRACE=#{trace_file} python3 #{@fake_codex_app_server}",
+                 "approval_policy" => "never",
+                 "thread_sandbox" => "danger-full-access"
+               },
+               dynamic_tools: [],
+               workspace_root: workspace_root
+             )
+
+    assert result.assistant_message == "ok"
+
+    messages =
+      trace_file
+      |> File.read!()
+      |> String.split("\n", trim: true)
+      |> Enum.map(&Jason.decode!/1)
+
+    thread_start = Enum.find(messages, &(&1["method"] == "thread/start"))
+    turn_start = Enum.find(messages, &(&1["method"] == "turn/start"))
+
+    assert thread_start["params"]["developerInstructions"] =~
+             "You are the Symphony freeform assistant."
+
+    assert turn_start["params"]["input"] == [
+             %{"type" => "text", "text" => "Reinicie o codex remoto por favor"}
+           ]
+
+    assert {:ok, _result} =
+             AgentSession.send_message_to_thread(
+               thread,
+               "Qual foi o resultado?",
+               %{"agent" => "codex", "source" => "telegram"},
+               codex_config: %{
+                 "command" => "FAKE_CODEX_TRACE=#{trace_file} python3 #{@fake_codex_app_server}",
+                 "approval_policy" => "never",
+                 "thread_sandbox" => "danger-full-access"
+               },
+               dynamic_tools: [],
+               workspace_root: workspace_root
+             )
+
+    resumed_messages =
+      trace_file
+      |> File.read!()
+      |> String.split("\n", trim: true)
+      |> Enum.map(&Jason.decode!/1)
+
+    thread_resume = Enum.find(resumed_messages, &(&1["method"] == "thread/resume"))
+    resumed_turn = resumed_messages |> Enum.filter(&(&1["method"] == "turn/start")) |> List.last()
+
+    assert thread_resume["params"]["developerInstructions"] =~
+             "Recent conversation:\nuser: Reinicie o codex remoto por favor"
+
+    assert resumed_turn["params"]["input"] == [
+             %{"type" => "text", "text" => "Qual foi o resultado?"}
+           ]
+  end
+
   test "default Codex runner persists and reloads text tool text order", %{workspace_root: workspace_root} do
     {:ok, thread} =
       History.create_freeform_thread(%{

@@ -911,6 +911,21 @@ defmodule SymphonyElixir.GitHub.IssueAdapterTest do
     end
   end
 
+  defmodule IssuesDisabledThenFallbackStub do
+    def graphql(query, vars, opts) do
+      cond do
+        String.contains?(query, "SymphonyUiCreateIssue") and vars["input"]["repositoryId"] == "REPO_GambaLabs_goapi" ->
+          send(self(), {:create_input, vars["input"]})
+
+          {:error,
+           {:github_graphql_errors, [%{"message" => "Issues has been disabled in this repository."}]}}
+
+        true ->
+          MultiRepoCreateClientStub.graphql(query, vars, opts)
+      end
+    end
+  end
+
   describe "create_issue" do
     setup do
       Application.put_env(:symphony_elixir, :github_client_module, CreateClientStub)
@@ -1074,6 +1089,41 @@ defmodule SymphonyElixir.GitHub.IssueAdapterTest do
                })
 
       assert message =~ "not linked"
+    end
+
+    test "retries create on another linked repo when Issues are disabled" do
+      Application.put_env(:symphony_elixir, :github_client_module, IssuesDisabledThenFallbackStub)
+
+      migrate_repo()
+      clean_repo()
+
+      {:ok, _} = SymphonyElixir.LocalTracker.Context.ensure_project(%{name: "Gamba", slug: "gamba"})
+
+      {:ok, _} =
+        SymphonyElixir.LocalTracker.Context.replace_repositories("gamba", [
+          %{"github_full_name" => "GambaLabs/frontend", "workspace_path" => "frontend", "role" => "primary"},
+          %{"github_full_name" => "GambaLabs/goapi", "workspace_path" => "goapi", "role" => "service"}
+        ])
+
+      project = %{
+        project()
+        | slug: "gamba",
+          tracker_config: %{
+            "repo" => "GambaLabs/frontend",
+            "project_id" => "PVT_1",
+            "status_field" => "Symphony State"
+          }
+      }
+
+      assert {:ok, %IssueDTO{identifier: "10"}} =
+               IssueAdapter.create_issue(project, %{
+                 "title" => "Go API task",
+                 "status" => "Todo",
+                 "repository" => "GambaLabs/goapi"
+               })
+
+      assert_received {:create_input, %{"repositoryId" => "REPO_GambaLabs_goapi"}}
+      assert_received {:create_input, %{"repositoryId" => "REPO_GambaLabs_frontend"}}
     end
   end
 

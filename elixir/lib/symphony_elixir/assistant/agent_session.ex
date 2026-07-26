@@ -108,6 +108,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
              content: trimmed_message,
              metadata: stringify_map(context)
            }),
+         opts = Keyword.put(opts, :visible_user_message, trimmed_message),
          prompt <- build_prompt(project_slug, trimmed_message, context, history_before_turn),
          :ok <- maybe_call(opts, :on_message_created, History.message_payload(user_message)),
          {:ok, runner_result} <- run_codex_turn(workspace, prompt, project_slug, opts),
@@ -146,6 +147,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
          history <- thread_id |> History.list_messages_for_thread() |> Enum.map(&History.message_payload/1),
          {:ok, user_message} <-
            History.append_message(thread, %{role: "user", content: trimmed, metadata: stringify_map(context)}),
+         opts = Keyword.put(opts, :visible_user_message, trimmed),
          prompt <- build_freeform_prompt(trimmed, context, history),
          :ok <- maybe_call(opts, :on_message_created, History.message_payload(user_message)),
          {:ok, runner_result} <- run_freeform_turn(workspace, prompt, opts),
@@ -188,6 +190,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
          history <- thread_id |> History.list_messages_for_thread() |> Enum.map(&History.message_payload/1),
          {:ok, user_message} <-
            History.append_message(thread, %{role: "user", content: trimmed, metadata: stringify_map(context)}),
+         opts = Keyword.put(opts, :visible_user_message, trimmed),
          prompt <- build_project_explore_prompt(project_slug, trimmed, context, history),
          :ok <- maybe_call(opts, :on_message_created, History.message_payload(user_message)),
          :ok <- revalidate_session_workspace(thread, workspace),
@@ -232,6 +235,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
          history <- thread_id |> History.list_messages_for_thread() |> Enum.map(&History.message_payload/1),
          {:ok, user_message} <-
            History.append_message(thread, %{role: "user", content: trimmed, metadata: stringify_map(context)}),
+         opts = Keyword.put(opts, :visible_user_message, trimmed),
          prompt <- build_kb_prompt(project_slug, trimmed, context, history),
          :ok <- maybe_call(opts, :on_message_created, History.message_payload(user_message)),
          {:ok, runner_result} <- run_codex_turn(workspace, prompt, project_slug, opts),
@@ -295,6 +299,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
          history <- thread_id |> History.list_messages_for_thread() |> Enum.map(&History.message_payload/1),
          {:ok, user_message} <-
            History.append_message(thread, %{role: "user", content: trimmed, metadata: stringify_map(context)}),
+         opts = Keyword.put(opts, :visible_user_message, trimmed),
          prompt <- build_issue_prompt(thread, trimmed, context, history),
          :ok <- maybe_call(opts, :on_message_created, History.message_payload(user_message)),
          :ok <- revalidate_session_workspace(thread, workspace),
@@ -1378,8 +1383,10 @@ defmodule SymphonyElixir.Assistant.AgentSession do
 
   defp default_runner(workspace, prompt, issue, opts) do
     agent_kind = Keyword.get(opts, :agent_kind)
+    session_opts = maybe_put_codex_developer_instructions(opts, agent_kind, prompt)
+    turn_prompt = visible_turn_prompt(opts, agent_kind, prompt)
 
-    with {:ok, session} <- RootCodingAgent.start_session(workspace, agent_kind, opts) do
+    with {:ok, session} <- RootCodingAgent.start_session(workspace, agent_kind, session_opts) do
       {:ok, collector} = Agent.start_link(&TurnTimeline.new/0)
 
       try do
@@ -1393,7 +1400,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
           end
         end
 
-        case RootCodingAgent.run_turn(session, prompt, issue, Keyword.put(opts, :on_message, on_message)) do
+        case RootCodingAgent.run_turn(session, turn_prompt, issue, Keyword.put(session_opts, :on_message, on_message)) do
           {:ok, result} ->
             timeline = Agent.get(collector, & &1)
             collected_text = TurnTimeline.assistant_text(timeline)
@@ -1419,6 +1426,16 @@ defmodule SymphonyElixir.Assistant.AgentSession do
       end
     end
   end
+
+  defp maybe_put_codex_developer_instructions(opts, "codex", prompt),
+    do: Keyword.put(opts, :developer_instructions, prompt)
+
+  defp maybe_put_codex_developer_instructions(opts, _agent_kind, _prompt), do: opts
+
+  defp visible_turn_prompt(opts, "codex", prompt),
+    do: Keyword.get(opts, :visible_user_message, prompt)
+
+  defp visible_turn_prompt(_opts, _agent_kind, prompt), do: prompt
 
   # credo:disable-for-lines:120
   # credo:disable-for-next-line Credo.Check.Refactor.CyclomaticComplexity

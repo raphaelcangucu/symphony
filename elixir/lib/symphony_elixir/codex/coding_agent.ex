@@ -889,6 +889,7 @@ defmodule SymphonyElixir.Codex.CodingAgent do
         "dynamicTools" => Keyword.get(opts, :dynamic_tools, DynamicTool.coding_agent_tool_specs())
       }
       |> maybe_put_param("model", Keyword.get(opts, :model))
+      |> maybe_put_param("developerInstructions", Keyword.get(opts, :developer_instructions))
 
     send_message(port, %{
       "method" => "thread/start",
@@ -938,6 +939,7 @@ defmodule SymphonyElixir.Codex.CodingAgent do
         "sandbox" => thread_sandbox
       }
       |> maybe_put_param("model", Keyword.get(opts, :model))
+      |> maybe_put_param("developerInstructions", Keyword.get(opts, :developer_instructions))
 
     send_message(port, %{
       "method" => "thread/resume",
