@@ -1076,7 +1076,7 @@ git commit -m "feat(mobile): connect Orca files and previews to Symphony"
 - Modify: `mobile/scripts/mock-server-git-state.ts`
 - Modify: `mobile/scripts/mock-server-rpc-handlers.ts`
 
-- [ ] **Step 1: Write failing compatibility tests**
+- [x] **Step 1: Write failing compatibility tests**
 
 Cover:
 
@@ -1100,7 +1100,7 @@ Tests must prove repository/workspace scoping, staged/unstaged separation,
 commit idempotency, push/PR error normalization and no arbitrary command
 execution.
 
-- [ ] **Step 2: Run tests and confirm failure**
+- [x] **Step 2: Run tests and confirm failure**
 
 Run:
 
@@ -1111,14 +1111,14 @@ mix test test/symphony_elixir/mobile_rpc/methods/orca_git_test.exs
 
 Expected: FAIL for missing methods.
 
-- [ ] **Step 3: Add presenters over existing Git and PR services**
+- [x] **Step 3: Add presenters over existing Git and PR services**
 
 Return the shapes already consumed by Orca's Source Control and PR components.
 Keep upstream controls, drawers, staged/unstaged groups, history, review and
 failure recovery. Capability-gate only operations genuinely unavailable from
 the selected Symphony host.
 
-- [ ] **Step 4: Run focused mobile and server tests**
+- [x] **Step 4: Run focused mobile and server tests**
 
 Run:
 

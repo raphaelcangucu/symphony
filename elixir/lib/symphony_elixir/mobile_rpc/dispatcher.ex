@@ -7,6 +7,7 @@ defmodule SymphonyElixir.MobileRpc.Dispatcher do
     Git,
     Notifications,
     OrcaFiles,
+    OrcaGit,
     OrcaSessions,
     OrcaSystem,
     OrcaWorkspaces,
@@ -41,6 +42,7 @@ defmodule SymphonyElixir.MobileRpc.Dispatcher do
           OrcaWorkspaces.modules() ++
           OrcaSessions.modules() ++
           OrcaFiles.modules() ++
+          OrcaGit.modules() ++
           Projects.modules() ++
           Tasks.modules() ++
           Sessions.modules() ++

@@ -23,7 +23,11 @@ describe("Symphony mock RPC handlers", () => {
     const sent: RpcResponse[] = [];
     const send = (message: RpcResponse) => sent.push(message);
 
-    handleRequest({ type: "rpc", id: "health", method: "system.health", params: {} }, send, socket);
+    handleRequest(
+      { type: "rpc", id: "health", method: "system.health", params: {} },
+      send,
+      socket
+    );
     handleRequest(
       {
         type: "rpc",
@@ -37,7 +41,7 @@ describe("Symphony mock RPC handlers", () => {
         },
       },
       send,
-      socket,
+      socket
     );
 
     expect(sent[0]).toMatchObject({
@@ -68,7 +72,7 @@ describe("Symphony mock RPC handlers", () => {
         params: { thread_id: 101 },
       },
       (message) => sent.push(message),
-      socket,
+      socket
     );
     await vi.runOnlyPendingTimersAsync();
 
@@ -83,8 +87,8 @@ describe("Symphony mock RPC handlers", () => {
       { type: "event", sequence: 2, event: "terminal.output" },
     ]);
 
-    const subscriptionId = (sent[0] as { result: { subscription_id: string } }).result
-      .subscription_id;
+    const subscriptionId = (sent[0] as { result: { subscription_id: string } })
+      .result.subscription_id;
     expect(unsubscribe(socket, subscriptionId)).toBe(true);
   });
 
@@ -100,7 +104,7 @@ describe("Symphony mock RPC handlers", () => {
         params: { worktree: "id:101" },
       },
       send,
-      socket,
+      socket
     );
     handleRequest(
       {
@@ -110,7 +114,7 @@ describe("Symphony mock RPC handlers", () => {
         params: { worktree: "id:101" },
       },
       send,
-      socket,
+      socket
     );
     handleRequest(
       {
@@ -120,7 +124,7 @@ describe("Symphony mock RPC handlers", () => {
         params: { worktree: "id:101", tabId: "docs/mock-comparison.md" },
       },
       send,
-      socket,
+      socket
     );
 
     expect(sent[0]).toMatchObject({
@@ -171,7 +175,7 @@ describe("Symphony mock RPC handlers", () => {
         params: { worktree: "id:101" },
       },
       send,
-      socket,
+      socket
     );
     handleRequest(
       {
@@ -186,7 +190,7 @@ describe("Symphony mock RPC handlers", () => {
         },
       },
       send,
-      socket,
+      socket
     );
 
     await vi.runOnlyPendingTimersAsync();
@@ -232,7 +236,7 @@ describe("Symphony mock RPC handlers", () => {
         params: { worktree: "id:101", relativePath: "" },
       },
       send,
-      socket,
+      socket
     );
     handleRequest(
       {
@@ -242,7 +246,7 @@ describe("Symphony mock RPC handlers", () => {
         params: { worktree: "id:101", relativePath: "README.md" },
       },
       send,
-      socket,
+      socket
     );
     handleRequest(
       {
@@ -252,7 +256,7 @@ describe("Symphony mock RPC handlers", () => {
         params: { worktree: "id:101", relativePath: "assets/logo.png" },
       },
       send,
-      socket,
+      socket
     );
     handleRequest(
       {
@@ -262,10 +266,11 @@ describe("Symphony mock RPC handlers", () => {
         params: { expectedBase64Length: 8, connectionId: "mock-mobile" },
       },
       send,
-      socket,
+      socket
     );
 
-    const uploadId = (sent[3] as { result: { uploadId: string } }).result.uploadId;
+    const uploadId = (sent[3] as { result: { uploadId: string } }).result
+      .uploadId;
     handleRequest(
       {
         type: "rpc",
@@ -274,7 +279,7 @@ describe("Symphony mock RPC handlers", () => {
         params: { uploadId, offset: 0, contentBase64: "ZGV2MTB4" },
       },
       send,
-      socket,
+      socket
     );
     handleRequest(
       {
@@ -284,7 +289,7 @@ describe("Symphony mock RPC handlers", () => {
         params: { uploadId },
       },
       send,
-      socket,
+      socket
     );
 
     expect(sent[0]).toMatchObject({
@@ -323,6 +328,113 @@ describe("Symphony mock RPC handlers", () => {
     });
   });
 
+  it("serves Orca-compatible Git state and deterministic source-control mutations", () => {
+    const sent: RpcResponse[] = [];
+    const send = (message: RpcResponse) => sent.push(message);
+
+    handleRequest(
+      {
+        type: "rpc",
+        id: "git-status",
+        method: "git.status",
+        params: { worktree: "id:101" },
+      },
+      send,
+      socket
+    );
+    handleRequest(
+      {
+        type: "rpc",
+        id: "git-history",
+        method: "git.history",
+        params: { worktree: "id:101", limit: 20 },
+      },
+      send,
+      socket
+    );
+    handleRequest(
+      {
+        type: "rpc",
+        id: "git-compare",
+        method: "git.branchCompare",
+        params: { worktree: "id:101", baseRef: "main" },
+      },
+      send,
+      socket
+    );
+    handleRequest(
+      {
+        type: "rpc",
+        id: "git-generate-pr",
+        method: "git.generatePullRequestFields",
+        params: {
+          worktree: "id:101",
+          base: "main",
+          title: "",
+          body: "",
+          draft: false,
+        },
+      },
+      send,
+      socket
+    );
+
+    expect(sent[0]).toMatchObject({
+      id: "git-status",
+      ok: true,
+      result: {
+        branch: "refs/heads/feature/dev10x-mobile",
+        entries: [
+          { path: "mobile/src/app.tsx", status: "modified", area: "unstaged" },
+          {
+            path: "mobile/assets/dev10x.png",
+            status: "untracked",
+            area: "untracked",
+          },
+          { path: "README.md", status: "modified", area: "staged" },
+        ],
+        upstreamStatus: { hasUpstream: true, ahead: 1, behind: 0 },
+      },
+    });
+    expect(sent[1]).toMatchObject({
+      id: "git-history",
+      ok: true,
+      result: {
+        items: [
+          {
+            id: expect.any(String),
+            displayId: expect.any(String),
+            subject: expect.stringContaining("Dev10x"),
+          },
+        ],
+      },
+    });
+    expect(sent[2]).toMatchObject({
+      id: "git-compare",
+      ok: true,
+      result: {
+        summary: {
+          baseRef: "main",
+          status: "ready",
+          changedFiles: 3,
+        },
+      },
+    });
+    expect(sent[3]).toMatchObject({
+      id: "git-generate-pr",
+      ok: true,
+      result: {
+        success: true,
+        fields: {
+          base: "main",
+          title: expect.stringContaining("Dev10x"),
+          body: expect.stringContaining("Dev10x"),
+          draft: false,
+        },
+      },
+    });
+  });
+
   it("fails closed for unknown methods without reflecting params", () => {
     const sent: RpcResponse[] = [];
     handleRequest(
@@ -333,7 +445,7 @@ describe("Symphony mock RPC handlers", () => {
         params: { device_token: "never-reflect" },
       },
       (message) => sent.push(message),
-      socket,
+      socket
     );
 
     expect(sent[0]).toMatchObject({
@@ -359,12 +471,12 @@ describe("Symphony mock RPC handlers", () => {
         },
       },
       (message) => sent.push(message),
-      socket,
+      socket
     );
     handleRequest(
       { type: "rpc", id: "after-error", method: "system.health", params: {} },
       (message) => sent.push(message),
-      socket,
+      socket
     );
 
     expect(sent[0]).toMatchObject({
@@ -396,7 +508,7 @@ describe("Symphony mock RPC handlers", () => {
               if (response.ok) resolve(response.result);
               else reject(new Error(response.error?.message));
             },
-            socket,
+            socket
           );
         }),
       subscribe: vi.fn(),
@@ -415,12 +527,16 @@ describe("Symphony mock RPC handlers", () => {
     const files = await client.threadFiles(101);
     expect(files.available).toBe(true);
     expect(files.files).toEqual(
-      expect.arrayContaining([expect.objectContaining({ path: "mobile/scripts/mock-server.ts" })]),
+      expect.arrayContaining([
+        expect.objectContaining({ path: "mobile/scripts/mock-server.ts" }),
+      ])
     );
     await expect(client.threadDiffStats(101)).resolves.toMatchObject({
       stats: [{ repo: "symphony", filesChanged: 2 }],
     });
-    await expect(client.issuePullRequests("symphony", "SYM-101")).resolves.toMatchObject({
+    await expect(
+      client.issuePullRequests("symphony", "SYM-101")
+    ).resolves.toMatchObject({
       pullRequests: [{ number: 7, isDraft: true }],
       supported: true,
     });
@@ -433,7 +549,7 @@ describe("Symphony mock RPC handlers", () => {
     handleRequest(
       { type: "rpc", id: "slow-health", method: "system.health", params: {} },
       (message) => sent.push(message),
-      socket,
+      socket
     );
 
     expect(sent).toEqual([]);
@@ -448,9 +564,14 @@ describe("Symphony mock RPC handlers", () => {
     process.env.MOCK_RPC_DELAY_SYSTEM_HEALTH_MS = "1000";
     const sent: RpcResponse[] = [];
     handleRequest(
-      { type: "rpc", id: "closing-health", method: "system.health", params: {} },
+      {
+        type: "rpc",
+        id: "closing-health",
+        method: "system.health",
+        params: {},
+      },
       (message) => sent.push(message),
-      socket,
+      socket
     );
 
     cleanupConnection(socket);
