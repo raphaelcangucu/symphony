@@ -57,6 +57,33 @@ describe("standalone Symphony mock server", () => {
         meta: { host_id: "host_mock", protocol: 1 },
       });
 
+      const compatibilityCalls = [
+        ["status.get", {}],
+        ["repo.list", {}],
+        ["worktree.ps", { repo: "repo:dev10x" }],
+        ["session.tabs.list", { worktree: "id:101" }],
+        ["terminal.list", { worktree: "id:101" }],
+        ["files.readDir", { worktree: "id:101", relativePath: "" }],
+        ["git.status", { worktree: "id:101" }],
+      ] as const;
+      for (const [method, params] of compatibilityCalls) {
+        socket.send(
+          handshake.encryptRpcMessage(
+            JSON.stringify({
+              type: "rpc",
+              id: `compat:${method}`,
+              method,
+              params,
+            }),
+          ),
+        );
+        expect(decrypt(handshake, await inbox.read())).toMatchObject({
+          id: `compat:${method}`,
+          ok: true,
+          meta: { host_id: "host_mock", protocol: 1 },
+        });
+      }
+
       socket.send(
         handshake.encryptRpcMessage(
           JSON.stringify({

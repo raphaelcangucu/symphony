@@ -1324,7 +1324,7 @@ npx jest src/preferences/ViewModeProvider.test.tsx \
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add mobile/app/codex mobile/app/index.tsx \
@@ -1346,7 +1346,7 @@ git commit -m "feat(mobile): retain compact Codex interface as an option"
 - Modify: `mobile/src/rpc/mock-server-rpc-handlers.test.ts`
 - Modify: `mobile/e2e/mock-server-smoke.sh`
 
-- [ ] **Step 1: Write a failing compatibility smoke assertion**
+- [x] **Step 1: Write a failing compatibility smoke assertion**
 
 Extend `mock-server-interop.test.ts` to pair through the production Symphony
 handshake and call:
@@ -1366,7 +1366,7 @@ for (const method of [
 }
 ```
 
-- [ ] **Step 2: Run and confirm missing methods**
+- [x] **Step 2: Run and confirm missing methods**
 
 Run:
 
@@ -1378,14 +1378,14 @@ npx vitest run src/rpc/mock-server-interop.test.ts \
 
 Expected: FAIL for newly required Orca-compatible methods.
 
-- [ ] **Step 3: Copy Orca's server fixture boundaries**
+- [x] **Step 3: Copy Orca's server fixture boundaries**
 
 Retain the current Symphony handshake and frame encryption. Copy Orca's
 separate file-preview, Git-state and terminal-fixture modules and adapt their
 method outputs to the same presenters used by the copied frontend. Preserve
 latency, forced-method-error, disconnect and reconnect environment controls.
 
-- [ ] **Step 4: Prove the app has no mock-only branch**
+- [x] **Step 4: Prove the app has no mock-only branch**
 
 Run:
 

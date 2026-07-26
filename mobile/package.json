@@ -10,7 +10,7 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "build:android:debug": "expo prebuild --platform android && cd android && NODE_ENV=development ./gradlew assembleDebug -PreactNativeArchitectures=arm64-v8a",
-    "build:android:e2e": "EXPO_PUBLIC_E2E_FIXTURES=1 expo prebuild --platform android && cd android && NODE_ENV=production EXPO_PUBLIC_E2E_FIXTURES=1 ./gradlew assembleRelease -PreactNativeArchitectures=x86_64",
+    "build:android:e2e": "expo prebuild --platform android && cd android && NODE_ENV=production ./gradlew assembleRelease -PreactNativeArchitectures=x86_64",
     "build:android:release": "expo prebuild --platform android && cd android && NODE_ENV=production ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a",
     "export:web": "expo export --platform web",
     "test": "npm run test:unit && npm run test:ui",

@@ -3,6 +3,15 @@ import type { WebSocket } from "ws";
 import { handleMockFilePreviewRequest } from "./mock-server-file-preview-data";
 import { handleMockGitRequest } from "./mock-server-git-state";
 import { handleMockTaskRequest } from "./mock-server-task-state";
+import {
+  mockPrimaryTerminalTab,
+  mockRepos,
+  mockSessionSnapshot,
+  mockTerminalList,
+  mockTerminalScrollback,
+  mockWorktrees,
+  type MockTerminalTab,
+} from "./mock-server-terminal-fixtures";
 
 const HOST_ID = process.env.MOCK_HOST_ID || "host_mock";
 const DEFAULT_DELAY_MS = readDelay("MOCK_RPC_DELAY_MS", 0);
@@ -17,6 +26,11 @@ const METHODS = [
   "settings.get",
   "ui.get",
   "preflight.check",
+  "stats.summary",
+  "accounts.list",
+  "repo.list",
+  "worktree.ps",
+  "worktree.show",
   "devices.list",
   "devices.revoke",
   "devices.self_revoke",
@@ -156,7 +170,7 @@ let mockSessionSnapshotVersion = 1;
 let mockActiveTabId = "thread:101";
 let mockAutoRestoreFitMs: number | null = null;
 const mockDisplayModes = new Map<string, "auto" | "desktop">();
-let mockSessionTabs = [mockPrimaryTerminalTab()];
+let mockSessionTabs: MockTerminalTab[] = [mockPrimaryTerminalTab()];
 const mockClipboardUploads = new Map<
   string,
   { expected: number; received: number; chunks: string[] }
@@ -295,6 +309,47 @@ export function handleRequest(
           })
         );
         break;
+      case "stats.summary":
+        respond(
+          success(request.id, {
+            totalAgentsSpawned: 1,
+            totalPRsCreated: 0,
+            totalAgentTimeMs: 3_600_000,
+            firstEventAt: Date.parse("2026-07-25T18:00:00Z"),
+          })
+        );
+        break;
+      case "accounts.list":
+        respond(
+          success(request.id, {
+            claude: { accounts: [], activeAccountId: null },
+            codex: { accounts: [], activeAccountId: null },
+            rateLimits: {
+              claude: null,
+              codex: null,
+              inactiveClaudeAccounts: [],
+              inactiveCodexAccounts: [],
+            },
+          })
+        );
+        break;
+      case "repo.list":
+        respond(success(request.id, { repos: mockRepos() }));
+        break;
+      case "worktree.ps": {
+        const limit = positiveInteger(request.params.limit, 200);
+        respond(success(request.id, { worktrees: mockWorktrees().slice(0, limit) }));
+        break;
+      }
+      case "worktree.show": {
+        const requested = text(request.params.worktree).replace(/^(?:id|worktree):/, "");
+        const worktree = mockWorktrees().find(
+          (candidate) => String(candidate.worktreeId ?? candidate.id) === requested
+        );
+        if (worktree) respond(success(request.id, { worktree }));
+        else respond(error(request.id, "not_found", "Workspace was not found"));
+        break;
+      }
       case "devices.list":
         respond(
           success(request.id, {
@@ -524,62 +579,27 @@ export function cleanupConnection(ws: WebSocket): void {
   pendingResponses.delete(ws);
 }
 
-function mockPrimaryTerminalTab(): Record<string, unknown> {
-  return {
-    type: "terminal",
-    id: "thread:101",
-    title: "Dev10x mobile",
-    terminal: "thread:101",
-    launchAgent: "codex",
-    status: "ready",
-    isActive: true,
-  };
-}
-
 function copiedSessionSnapshot(
   params: Record<string, unknown>
 ): Record<string, unknown> {
   const threadId = worktreeId(params.worktree);
-  const primaryHandle = `thread:${threadId}`;
   const tabs =
     threadId === 101
       ? mockSessionTabs
-      : [
-          {
-            ...mockPrimaryTerminalTab(),
-            id: primaryHandle,
-            terminal: primaryHandle,
-          },
-        ];
-  const activeTabId = tabs.some((tab) => tab.id === mockActiveTabId)
-    ? mockActiveTabId
-    : primaryHandle;
-  return {
-    worktree: String(threadId),
-    publicationEpoch: `${HOST_ID}:${threadId}`,
+      : [mockPrimaryTerminalTab(threadId)];
+  return mockSessionSnapshot({
+    hostId: HOST_ID,
+    threadId,
+    tabs,
+    activeTabId: mockActiveTabId,
     snapshotVersion: mockSessionSnapshotVersion,
-    tabs: tabs.map((tab) => ({ ...tab, isActive: tab.id === activeTabId })),
-    activeTabId,
-    activeTabType: "terminal",
-  };
+  });
 }
 
 function copiedTerminalList(
   params: Record<string, unknown>
 ): Record<string, unknown> {
-  const snapshot = copiedSessionSnapshot(params);
-  const terminals = (snapshot.tabs as Record<string, unknown>[]).map((tab) => ({
-    handle: tab.terminal,
-    title: tab.title,
-    isActive: tab.isActive,
-    worktreeId: snapshot.worktree,
-    hasRunningProcess: tab.status === "ready",
-  }));
-  return {
-    terminals,
-    totalCount: terminals.length,
-    truncated: false,
-  };
+  return mockTerminalList(copiedSessionSnapshot(params));
 }
 
 function subscribeCopiedSessionTabs(
@@ -617,20 +637,15 @@ function subscribeCopiedTerminal(
   const rows = positiveInteger(viewport.rows, 24);
   send(success(request.id, { subscription_id: subscription.id }));
   schedule(subscription, () =>
-    emit(subscription, "terminal.scrollback", {
-      type: "scrollback",
-      serialized:
-        "$ dev10x mobile --mock\nDev10x mock host online\nSymphony RPC: encrypted\n",
-      lines: [
-        "$ dev10x mobile --mock",
-        "Dev10x mock host online",
-        "Symphony RPC: encrypted",
-      ],
-      truncated: false,
+    emit(
+      subscription,
+      "terminal.scrollback",
+      mockTerminalScrollback({
       cols,
       rows,
       displayMode: copiedDisplayMode(handle),
-    })
+      })
+    )
   );
 }
 
