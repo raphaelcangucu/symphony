@@ -47,7 +47,7 @@ export function createSymphonyOrcaRpcClient(
   state: OrcaConnectionStateSource,
 ): RpcClient {
   if (transport.hostId !== hostId) {
-    throw new Error("Orca client and Symphony transport identities differ");
+    throw new Error("Dev10x client and Symphony transport identities differ");
   }
 
   return {

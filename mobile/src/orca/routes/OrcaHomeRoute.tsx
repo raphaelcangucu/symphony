@@ -38,7 +38,7 @@ import { classifyConnection } from '../transport/connection-health'
 import { subscribeToDesktopNotifications } from '../notifications/mobile-notifications'
 import type { ConnectionState, HostProfile } from '../transport/types'
 import { triggerMediumImpact } from '../platform/haptics'
-import { OrcaLogo } from '../components/OrcaLogo'
+import { Dev10xLogo } from '../components/Dev10xLogo'
 import { StatusDot } from '../components/StatusDot'
 import { TaskProviderLogo } from '../components/TaskProviderLogo'
 import { TextInputModal } from '../components/TextInputModal'
@@ -742,7 +742,7 @@ export function OrcaHomeRoute() {
       <View style={styles.topBar}>
         <View style={styles.brandLockup}>
           <View style={styles.logoMark}>
-            <OrcaLogo size={18} />
+            <Dev10xLogo size={18} />
           </View>
           <Text style={styles.brandName}>Dev10x</Text>
         </View>
@@ -775,7 +775,7 @@ export function OrcaHomeRoute() {
             </Text>
             <Pressable style={styles.primaryButton} onPress={() => router.push('/pair-scan')}>
               <QrCode size={17} color={colors.bgBase} />
-              <Text style={styles.primaryButtonText}>Pair Desktop</Text>
+              <Text style={styles.primaryButtonText}>Pair Symphony Host</Text>
             </Pressable>
           </View>
 
@@ -955,7 +955,7 @@ export function OrcaHomeRoute() {
                   <View style={styles.quickActionIcon}>
                     <QrCode size={16} color={colors.textSecondary} />
                   </View>
-                  <Text style={styles.quickActionLabel}>Pair Desktop</Text>
+                  <Text style={styles.quickActionLabel}>Pair Symphony Host</Text>
                 </Pressable>
                 <Pressable
                   disabled={!primaryConnectedHost}

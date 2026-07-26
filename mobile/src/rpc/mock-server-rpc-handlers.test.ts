@@ -635,7 +635,7 @@ describe("Symphony mock RPC handlers", () => {
       { id: "1", slug: "symphony", name: "Symphony" },
     ]);
     await expect(client.issues("symphony")).resolves.toMatchObject([
-      { identifier: "SYM-101", title: "Compare Orca and Symphony mobile" },
+      { identifier: "SYM-101", title: "Exercise Dev10x and Symphony mobile" },
     ]);
     const files = await client.threadFiles(101);
     expect(files.available).toBe(true);

@@ -8,6 +8,7 @@ function Icon(props: IconProps) {
 }
 
 export const ChevronDown = Icon;
+export const ChevronLeft = Icon;
 export const ChevronRight = Icon;
 export const ArrowLeft = Icon;
 export const Folder = Icon;

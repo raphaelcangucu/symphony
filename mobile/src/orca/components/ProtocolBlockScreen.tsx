@@ -1,10 +1,9 @@
-import { Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native'
+import { Linking, Pressable, StyleSheet, Text, View } from 'react-native'
 import { router } from 'expo-router'
 import { colors, radii, spacing, typography } from '../theme/mobile-theme'
 import type { CompatVerdict } from '../transport/protocol-compat'
 
-const RELEASES_URL = 'https://github.com/stablyai/orca/releases'
-const IOS_APP_STORE_URL = 'itms-apps://apps.apple.com/app/orca-ide/id6766130217'
+const RELEASES_URL = 'https://github.com/raphaelcangucu/symphony/releases'
 
 type Props = {
   verdict: Extract<CompatVerdict, { kind: 'blocked' }>
@@ -12,20 +11,12 @@ type Props = {
 
 export function ProtocolBlockScreen({ verdict }: Props) {
   const isMobileTooOld = verdict.reason === 'mobile-too-old'
-  const mobileUpdateTarget =
-    Platform.OS === 'ios'
-      ? { label: 'Open App Store', url: IOS_APP_STORE_URL, storeName: 'the App Store' }
-      : { label: null, url: null, storeName: 'your mobile app store' }
-  const primaryAction = isMobileTooOld
-    ? mobileUpdateTarget.url && mobileUpdateTarget.label
-      ? { label: mobileUpdateTarget.label, url: mobileUpdateTarget.url }
-      : null
-    : { label: 'Open GitHub Releases', url: RELEASES_URL }
+  const primaryAction = { label: 'Open GitHub Releases', url: RELEASES_URL }
 
-  const title = isMobileTooOld ? 'Update Orca Mobile' : 'Update Orca on your computer'
+  const title = isMobileTooOld ? 'Update Dev10x Mobile' : 'Update the Symphony host'
   const body = isMobileTooOld
-    ? `This desktop needs a newer Orca Mobile app. Update Orca Mobile from ${mobileUpdateTarget.storeName}, then try this host again.`
-    : 'This paired desktop app is too old for your current Orca Mobile app. Update Orca on your computer, then try this host again.'
+    ? 'This Symphony host requires a newer Dev10x Mobile build. Install the latest release, then try this host again.'
+    : 'This paired Symphony host is too old for your current Dev10x Mobile build. Update Symphony on that machine, then try again.'
   const recoveryNote =
     'Already updated? Go back to Hosts and refresh the connection. If this message stays, remove this host and pair it again.'
 

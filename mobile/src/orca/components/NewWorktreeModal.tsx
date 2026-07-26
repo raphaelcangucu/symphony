@@ -834,7 +834,7 @@ function NewWorktreeModalContent({
                       {setupSource && (
                         <View style={styles.sourceBadge}>
                           <Text style={styles.sourceBadgeText}>
-                            {setupSource === 'orca.yaml' ? 'ORCA.YAML' : 'HOOKS'}
+                            {setupSource === 'orca.yaml' ? 'REPOSITORY SETUP' : 'HOOKS'}
                           </Text>
                         </View>
                       )}
@@ -943,8 +943,8 @@ function NewWorktreeModalContent({
                   : `Run setup from ${setupTrustPrompt.repoName}?`}
               </Text>
               <Text style={styles.subtitle}>
-                This repository's orca.yaml runs before the workspace starts. Only run it if you
-                trust this repository.
+                This repository setup runs before the workspace starts. Only run it if you trust
+                this repository.
               </Text>
             </View>
 

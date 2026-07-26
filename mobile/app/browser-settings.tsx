@@ -14,7 +14,7 @@ import { colors, radii, spacing, typography } from '../src/orca/theme/mobile-the
 const LINK_MODE_OPTIONS: PickerOption<MobileTerminalLinkOpenMode>[] = [
   {
     value: 'orca-browser',
-    label: 'Orca browser on desktop',
+    label: 'Browser on the Symphony host',
     subtitle: 'Open in the streamed browser from your paired desktop.'
   },
   {

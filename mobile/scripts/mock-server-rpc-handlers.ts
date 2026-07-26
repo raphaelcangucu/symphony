@@ -1041,7 +1041,7 @@ function subscribe(
           message(
             "mock-user",
             "user",
-            "Compare the Orca and Symphony mobile experience."
+            "Explore the complete Dev10x mobile experience."
           ),
           message(
             "mock-assistant",
@@ -1328,7 +1328,7 @@ function sessionResponse(params: Record<string, unknown>): unknown {
         {
           id: "thread:101",
           thread_id: 101,
-          title: "Compare Orca mobile",
+          title: "Dev10x mobile workspace",
           kind: "workspace_session",
           scope: "project_session",
           href: "/session/101",
@@ -1392,7 +1392,7 @@ function workspaceResponse(params: Record<string, unknown>): unknown {
       data: {
         path: path.split("/documents/")[1],
         content:
-          "# Mock comparison\n\nPort the proven Orca mock-server workflow.",
+          "# Mock comparison\n\nExercise the proven Dev10x mock-server workflow.",
       },
     };
   }
@@ -1443,7 +1443,7 @@ function workspaceResponse(params: Record<string, unknown>): unknown {
           id: "docs/mock-comparison.md",
           path: "docs/mock-comparison.md",
           name: "mock-comparison.md",
-          title: "Orca comparison",
+          title: "Dev10x comparison",
           kind: "markdown",
           size: 180,
           updated_at: now(),
@@ -1711,12 +1711,12 @@ function mockIssue(): Record<string, unknown> {
     identifier: "SYM-101",
     display_identifier: "SYM-101",
     project_slug: "symphony",
-    title: "Compare Orca and Symphony mobile",
+    title: "Exercise Dev10x and Symphony mobile",
     description: "Port the standalone encrypted mock-server workflow.",
     status: "In Progress",
     priority: 1,
     position: 1,
-    labels: ["mobile", "orca"],
+    labels: ["mobile", "dev10x"],
     assignee_id: "raphael",
     creator: "raphael",
     agent_kind: "codex",
@@ -1747,7 +1747,7 @@ function mockThread(): Record<string, unknown> {
     project_name: "Symphony",
     issue_identifier: "SYM-101",
     workspace_path: "/work/symphony",
-    title: "Compare Orca mobile",
+    title: "Dev10x mobile workspace",
     status: "active",
     preview: "Encrypted mock host is ready",
     updated_at: now(),

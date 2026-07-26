@@ -60,7 +60,7 @@ export function RpcClientProvider({ children }: { children: ReactNode }) {
 
 function useClientContext(): ClientContextValue {
   const value = useContext(ClientContext);
-  if (!value) throw new Error("Orca client hooks require RpcClientProvider");
+  if (!value) throw new Error("Dev10x client hooks require RpcClientProvider");
   return value;
 }
 

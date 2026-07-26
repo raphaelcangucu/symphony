@@ -198,22 +198,22 @@ recording_pid="active"
 trace_step "open redacted standalone-mock pairing deep link"
 
 wait_for_text "${MOCK_HOST_NAME}"
-wait_for_text "Compare Orca mobile"
+wait_for_text "Dev10x mobile workspace"
 trace_step "assert mock host identity and session library over production E2EE/RPC"
 
 wait_for_mock_connections 2
 wait_for_text "${MOCK_HOST_NAME}"
-wait_for_text "Compare Orca mobile"
+wait_for_text "Dev10x mobile workspace"
 trace_step "assert automatic reconnect after one intentional mock disconnect"
 
-tap_accessible "Open session Compare Orca mobile"
+tap_accessible "Open session Dev10x mobile workspace"
 wait_for_text "Mock host connected through the production encrypted RPC client."
 trace_step "assert encrypted session subscription and history"
 tap_accessible "Go back"
 
 tap_accessible "Open main menu"
 tap_accessible "Tasks"
-wait_for_text "Compare Orca and Symphony mobile"
+wait_for_text "Exercise Dev10x and Symphony mobile"
 tap_accessible "Open task SYM-101"
 wait_for_text "Port the standalone encrypted mock-server workflow."
 trace_step "assert task detail from standalone mock"

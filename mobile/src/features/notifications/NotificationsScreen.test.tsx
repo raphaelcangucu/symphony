@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react-native";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { ThemeProvider } from "@/theme/ThemeProvider";
 
@@ -17,26 +18,29 @@ function renderScreen(props: Partial<React.ComponentProps<typeof NotificationsSc
     state: "inactive",
   };
   return render(
-    <ThemeProvider colorScheme="dark">
-      <NotificationsScreen {...defaults} {...props} />
-    </ThemeProvider>,
+    <SafeAreaProvider
+      initialMetrics={{
+        frame: { x: 0, y: 0, width: 390, height: 844 },
+        insets: { top: 47, left: 0, right: 0, bottom: 34 },
+      }}
+    >
+      <ThemeProvider colorScheme="dark">
+        <NotificationsScreen {...defaults} {...props} />
+      </ThemeProvider>
+    </SafeAreaProvider>,
   );
 }
 
 describe("NotificationsScreen", () => {
-  it("registers, tests and disables device notifications", () => {
-    const onEnable = jest.fn();
+  it("tests and disables registered device notifications", () => {
     const onDisable = jest.fn();
     const onSendTest = jest.fn();
-    renderScreen({ onDisable, onEnable, onSendTest, state: "registered" });
+    renderScreen({ onDisable, onSendTest, state: "registered" });
 
-    expect(screen.getByText("Device notifications")).toBeTruthy();
-    expect(screen.getByText("Registered")).toBeTruthy();
-    fireEvent.press(screen.getByRole("button", { name: "Enable notifications" }));
+    expect(screen.getByText("Push Notifications")).toBeTruthy();
+    fireEvent(screen.getByLabelText("Push notifications"), "valueChange", false);
     fireEvent.press(screen.getByRole("button", { name: "Send test notification" }));
-    fireEvent.press(screen.getByRole("button", { name: "Disable notifications" }));
 
-    expect(onEnable).toHaveBeenCalledTimes(1);
     expect(onSendTest).toHaveBeenCalledTimes(1);
     expect(onDisable).toHaveBeenCalledTimes(1);
   });
@@ -50,9 +54,9 @@ describe("NotificationsScreen", () => {
       state: "denied",
     });
 
-    expect(screen.getByText("Permission denied")).toBeTruthy();
+    expect(screen.getByText("Notifications are disabled in system settings.")).toBeTruthy();
     expect(screen.getByText("Notifications are blocked by the device.")).toBeTruthy();
-    expect(screen.getByText("/issue/symphony/MOB-7")).toBeTruthy();
+    expect(screen.getByText("Last opened: /issue/symphony/MOB-7")).toBeTruthy();
     fireEvent.press(screen.getByRole("button", { name: "Open device settings" }));
     expect(onOpenSettings).toHaveBeenCalledTimes(1);
   });

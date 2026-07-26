@@ -6,7 +6,7 @@ type Props = {
   color?: string
 }
 
-export function OrcaLogo({ size = 24, color: _color = colors.textPrimary }: Props) {
+export function Dev10xLogo({ size = 24, color: _color = colors.textPrimary }: Props) {
   return (
     <Image
       source={require('../../../assets/dev10x-icon.png')}

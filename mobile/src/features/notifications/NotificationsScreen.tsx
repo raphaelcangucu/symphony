@@ -1,8 +1,8 @@
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { Pressable, StyleSheet, Switch, Text, View } from "react-native";
+import { ChevronLeft } from "lucide-react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { radii, spacing } from "@/theme/tokens";
-import { useAppTheme } from "@/theme/ThemeProvider";
+import { colors, spacing, typography } from "@/orca/theme/mobile-theme";
 
 export type NotificationState = "inactive" | "registered" | "denied" | "unsupported" | "error";
 
@@ -18,14 +18,6 @@ type NotificationsScreenProps = {
   onSendTest(): void;
 };
 
-const stateLabels: Record<NotificationState, string> = {
-  denied: "Permission denied",
-  error: "Needs attention",
-  inactive: "Not registered",
-  registered: "Registered",
-  unsupported: "Unavailable on this device",
-};
-
 export function NotificationsScreen({
   busy,
   lastRoute,
@@ -37,68 +29,53 @@ export function NotificationsScreen({
   onSendTest,
   state,
 }: NotificationsScreenProps) {
-  const { colors } = useAppTheme();
+  const insets = useSafeAreaInsets();
+  const enabled = state === "registered";
+  const blocked = state === "denied";
+  const unsupported = state === "unsupported";
+  const hint = blocked
+    ? "Notifications are disabled in system settings."
+    : unsupported
+      ? "Push notifications require a physical device."
+      : "Receive task, approval and session updates from the selected Symphony host.";
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.bgBase }]}>
-      <View style={styles.header}>
-        <Pressable
-          accessibilityLabel="Back"
-          accessibilityRole="button"
-          onPress={onBack}
-          style={styles.headerAction}
-        >
-          <Text style={[styles.back, { color: colors.textPrimary }]}>‹</Text>
+    <View style={[styles.container, { paddingTop: insets.top + spacing.sm }]}>
+      <View style={styles.topRow}>
+        <Pressable accessibilityLabel="Back" style={styles.backButton} onPress={onBack}>
+          <ChevronLeft size={22} color={colors.textSecondary} />
         </Pressable>
-        <Text accessibilityRole="header" style={[styles.title, { color: colors.textPrimary }]}>
-          Notifications
-        </Text>
-        <View style={styles.headerAction} />
+        <Text style={styles.heading}>Notifications</Text>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
-        <View
-          style={[
-            styles.card,
-            { backgroundColor: colors.bgPanel, borderColor: colors.borderSubtle },
-          ]}
-        >
-          <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>
-            Device notifications
-          </Text>
-          <Text style={[styles.status, { color: stateColor(state, colors) }]}>
-            {stateLabels[state]}
-          </Text>
-          <Text style={[styles.description, { color: colors.textSecondary }]}>
-            Receive actionable task and session updates for this connection.
-          </Text>
-          {message ? <Text style={{ color: colors.textSecondary }}>{message}</Text> : null}
-
-          <Action disabled={busy} label="Enable notifications" onPress={onEnable} primary />
-          {state === "registered" ? (
-            <>
-              <Action disabled={busy} label="Send test notification" onPress={onSendTest} />
-              <Action disabled={busy} label="Disable notifications" onPress={onDisable} />
-            </>
-          ) : null}
-          {state === "denied" ? (
-            <Action disabled={busy} label="Open device settings" onPress={onOpenSettings} />
-          ) : null}
+      <View style={styles.section}>
+        <View style={styles.row}>
+          <Text style={styles.rowLabel}>Push Notifications</Text>
+          <Switch
+            accessibilityLabel="Push notifications"
+            value={enabled}
+            disabled={busy || blocked || unsupported}
+            onValueChange={(value) => (value ? onEnable() : onDisable())}
+            trackColor={{ false: colors.bgRaised, true: colors.textSecondary }}
+            thumbColor={colors.textPrimary}
+          />
         </View>
+        <Text style={styles.hint}>{hint}</Text>
+        {message ? <Text style={styles.message}>{message}</Text> : null}
+        {blocked ? (
+          <Action label="Open device settings" onPress={onOpenSettings} disabled={busy} />
+        ) : null}
+        {enabled ? (
+          <Action label="Send test notification" onPress={onSendTest} disabled={busy} />
+        ) : null}
+      </View>
 
-        <View
-          style={[
-            styles.card,
-            { backgroundColor: colors.bgPanel, borderColor: colors.borderSubtle },
-          ]}
-        >
-          <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>Last opened link</Text>
-          <Text selectable style={{ color: colors.textSecondary }}>
-            {lastRoute ?? "No notification opened yet"}
-          </Text>
-        </View>
-      </ScrollView>
-    </SafeAreaView>
+      {lastRoute ? (
+        <Text style={styles.lastRoute} numberOfLines={1}>
+          Last opened: {lastRoute}
+        </Text>
+      ) : null}
+    </View>
   );
 }
 
@@ -106,79 +83,107 @@ function Action({
   disabled,
   label,
   onPress,
-  primary = false,
 }: {
   disabled: boolean;
   label: string;
   onPress(): void;
-  primary?: boolean;
 }) {
-  const { colors } = useAppTheme();
   return (
     <Pressable
       accessibilityLabel={label}
       accessibilityRole="button"
       accessibilityState={{ disabled }}
       disabled={disabled}
-      onPress={onPress}
       style={({ pressed }) => [
-        styles.action,
-        {
-          backgroundColor: primary ? colors.accent : pressed ? colors.bgPressed : colors.bgRaised,
-          borderColor: primary ? colors.accent : colors.borderStrong,
-          opacity: disabled ? 0.6 : 1,
-        },
+        styles.settingsButton,
+        pressed && styles.settingsButtonPressed,
+        disabled && styles.disabled,
       ]}
+      onPress={onPress}
     >
-      <Text style={{ color: primary ? colors.bgBase : colors.textPrimary, fontWeight: "700" }}>
-        {label}
-      </Text>
+      <Text style={styles.settingsButtonText}>{label}</Text>
     </Pressable>
   );
 }
 
-function stateColor(
-  state: NotificationState,
-  colors: ReturnType<typeof useAppTheme>["colors"],
-): string {
-  if (state === "registered") return colors.statusGreen;
-  if (state === "denied" || state === "error") return colors.statusAmber;
-  return colors.textMuted;
-}
-
 const styles = StyleSheet.create({
-  action: {
-    alignItems: "center",
-    borderRadius: radii.md,
-    borderWidth: 1,
-    justifyContent: "center",
-    minHeight: 44,
-    paddingHorizontal: spacing.md,
+  container: {
+    flex: 1,
+    backgroundColor: colors.bgBase,
+    padding: spacing.lg,
   },
-  back: { fontSize: 34, lineHeight: 36 },
-  card: {
-    borderRadius: radii.md,
-    borderWidth: 1,
-    gap: spacing.sm,
-    padding: spacing.md,
-  },
-  cardTitle: { fontSize: 17, fontWeight: "700" },
-  content: { gap: spacing.md, padding: spacing.md },
-  description: { lineHeight: 20 },
-  header: {
-    alignItems: "center",
+  topRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    minHeight: 56,
-    paddingHorizontal: spacing.sm,
+    alignItems: "center",
+    marginBottom: spacing.xl,
   },
-  headerAction: {
+  backButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
-    minHeight: 44,
-    minWidth: 44,
+    marginRight: spacing.sm,
   },
-  safeArea: { flex: 1 },
-  status: { fontSize: 14, fontWeight: "700" },
-  title: { fontSize: 20, fontWeight: "700" },
+  heading: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: colors.textPrimary,
+  },
+  section: {
+    backgroundColor: colors.bgPanel,
+    borderRadius: 12,
+    overflow: "hidden",
+  },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm + 2,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md + 2,
+  },
+  rowLabel: {
+    flex: 1,
+    fontSize: typography.bodySize,
+    fontWeight: "500",
+    color: colors.textPrimary,
+  },
+  hint: {
+    fontSize: typography.metaSize,
+    color: colors.textMuted,
+    lineHeight: 18,
+    paddingHorizontal: spacing.md + 2,
+    paddingBottom: spacing.md,
+  },
+  message: {
+    fontSize: typography.metaSize,
+    color: colors.textSecondary,
+    paddingHorizontal: spacing.md + 2,
+    paddingBottom: spacing.sm,
+  },
+  settingsButton: {
+    alignSelf: "flex-start",
+    marginHorizontal: spacing.md + 2,
+    marginBottom: spacing.md,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    borderRadius: 8,
+    backgroundColor: colors.bgRaised,
+  },
+  settingsButtonPressed: {
+    opacity: 0.6,
+  },
+  settingsButtonText: {
+    color: colors.textPrimary,
+    fontSize: typography.metaSize,
+    fontWeight: "600",
+  },
+  disabled: {
+    opacity: 0.45,
+  },
+  lastRoute: {
+    color: colors.textMuted,
+    fontSize: typography.metaSize,
+    marginTop: spacing.md,
+  },
 });

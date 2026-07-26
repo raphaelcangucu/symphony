@@ -3176,7 +3176,7 @@ export default function MobileTasksScreen() {
         setMergeMethodTaskItem(null)
         setMergeMethodProjectRow(null)
         resetWorkspaceCreateState()
-        setError('Update Orca desktop to use Tasks on mobile.')
+        setError('Update this Symphony host to use Tasks on mobile.')
         setTaskStateHydrated(false)
         return
       }
@@ -4065,7 +4065,7 @@ export default function MobileTasksScreen() {
           return
         }
         if (explicitView && explicitView.layout !== 'TABLE_LAYOUT') {
-          throw new Error("Orca doesn't support this GitHub Project layout yet.")
+          throw new Error("Dev10x doesn't support this GitHub Project layout yet.")
         }
         if (!explicitView && !rememberedView) {
           // Why: desktop asks which Project view to open the first time a project
@@ -5895,7 +5895,9 @@ export default function MobileTasksScreen() {
       const kind = projectRowType(row)
       const repo = findProjectRowRepo(row)
       if (!kind || !row.content.number || !row.content.url) {
-        setError('Add the project item repository to Orca before creating a workspace.')
+        setError(
+          'Add the project item repository to the Symphony host before creating a workspace.'
+        )
         return
       }
       if (!repo) {
@@ -9499,7 +9501,7 @@ export default function MobileTasksScreen() {
       {!tasksSupported ? (
         tasksUnsupported ? (
           <View style={styles.centered}>
-            <Text style={styles.emptyText}>Update Orca desktop</Text>
+            <Text style={styles.emptyText}>Update the Symphony host</Text>
             <Text style={styles.centeredHint}>
               This mobile Tasks view needs a newer desktop runtime.
             </Text>
@@ -10588,7 +10590,7 @@ export default function MobileTasksScreen() {
         onSelect={(viewId) => {
           const view = githubProjectViews.find((candidate) => candidate.id === viewId)
           if (view && view.layout !== 'TABLE_LAYOUT') {
-            setGithubProjectError("Orca doesn't support this GitHub Project layout yet.")
+            setGithubProjectError("Dev10x doesn't support this GitHub Project layout yet.")
             return
           }
           if (pendingGitHubProjectViewSelection) {
@@ -11768,8 +11770,8 @@ export default function MobileTasksScreen() {
                   : `Run setup from ${orcaYamlTrustPrompt.repoName}?`}
               </Text>
               <Text style={styles.sheetSubtitle}>
-                This repository's orca.yaml runs on your machine before the workspace starts. Only
-                run it if you trust this repository.
+                This repository setup runs on the selected Symphony host before the workspace
+                starts. Only run it if you trust this repository.
               </Text>
             </View>
 
@@ -11887,10 +11889,10 @@ export default function MobileTasksScreen() {
         {projectRepoNotInOrca ? (
           <View>
             <View style={styles.sheetHeader}>
-              <Text style={styles.sheetTitle}>Repository not in Orca</Text>
+              <Text style={styles.sheetTitle}>Repository not on this host</Text>
               <Text style={styles.sheetSubtitle}>
-                {projectRepoNotInOrca.owner}/{projectRepoNotInOrca.repo} is not added to Orca. Add
-                this repository from the desktop app, then refresh mobile Tasks.
+                {projectRepoNotInOrca.owner}/{projectRepoNotInOrca.repo} is not added to the
+                selected Symphony host. Add it there, then refresh mobile Tasks.
               </Text>
             </View>
 
@@ -12964,7 +12966,7 @@ export default function MobileTasksScreen() {
                   </Pressable>
                   {!projectRowHostedRepo ? (
                     <Text style={styles.emptyInlineText}>
-                      Merge requires this repository in Orca.
+                      Merge requires this repository on the selected Symphony host.
                     </Text>
                   ) : null}
                 </>

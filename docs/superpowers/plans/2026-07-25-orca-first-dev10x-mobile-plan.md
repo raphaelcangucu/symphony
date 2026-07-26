@@ -1428,7 +1428,7 @@ git commit -m "test(mobile): mirror Orca mock server coverage"
 - Modify: `mobile/app.config.ts`
 - Modify: `mobile/assets/**`
 
-- [ ] **Step 1: Write a visible-copy regression test**
+- [x] **Step 1: Write a visible-copy regression test**
 
 Scan route and component source while excluding provenance/license files:
 
@@ -1445,7 +1445,7 @@ const forbiddenVisibleCopy = [
 Assert `APP_BRAND === "Dev10x"`, Expo display name is Dev10x, pairing scheme is
 `symphony`, and permission messages begin with `Allow Dev10x`.
 
-- [ ] **Step 2: Run and confirm copied branding fails**
+- [x] **Step 2: Run and confirm copied branding fails**
 
 Run:
 
@@ -1456,13 +1456,13 @@ npx vitest run src/brand/visible-copy.test.ts
 
 Expected: FAIL listing copied user-visible Orca strings.
 
-- [ ] **Step 3: Replace branding without redesigning screens**
+- [x] **Step 3: Replace branding without redesigning screens**
 
 Replace logo components/assets and rewrite messages for Dev10x and Symphony
 host terminology. Keep layout, spacing, colors, animation, accessibility roles,
 confirmation order and recovery actions unchanged.
 
-- [ ] **Step 4: Compare representative copied files with upstream**
+- [x] **Step 4: Compare representative copied files with upstream**
 
 Run:
 
@@ -1478,7 +1478,7 @@ git diff --no-index \
 Expected: no differences except import roots, formatting forced by this repo,
 Dev10x/Symphony copy or capability injection.
 
-- [ ] **Step 5: Run focused brand and copied-component tests**
+- [x] **Step 5: Run focused brand and copied-component tests**
 
 Run:
 

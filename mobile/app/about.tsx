@@ -1,10 +1,10 @@
 import { View, Text, StyleSheet, Pressable, Linking, Platform } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
-import { ChevronLeft, Globe } from 'lucide-react-native'
+import { ChevronLeft, Globe, LifeBuoy } from 'lucide-react-native'
 import Svg, { Path } from 'react-native-svg'
 import Constants from 'expo-constants'
-import { OrcaLogo } from '../src/orca/components/OrcaLogo'
+import { Dev10xLogo } from '../src/orca/components/Dev10xLogo'
 import { colors, spacing, typography } from '../src/orca/theme/mobile-theme'
 
 // Why: read version + native build identifier from expo-constants at
@@ -28,14 +28,6 @@ function GithubIcon({ size = 16, color = colors.textSecondary }) {
   )
 }
 
-function XIcon({ size = 16, color = colors.textSecondary }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
-      <Path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-    </Svg>
-  )
-}
-
 export default function AboutScreen() {
   const router = useRouter()
   const insets = useSafeAreaInsets()
@@ -50,34 +42,36 @@ export default function AboutScreen() {
       </View>
 
       <View style={styles.brand}>
-        <OrcaLogo size={28} />
-        <Text style={styles.brandName}>Orca</Text>
-        <Text style={styles.brandSub}>Open-source agent IDE for 100x builders</Text>
+        <Dev10xLogo size={28} />
+        <Text style={styles.brandName}>Dev10x</Text>
+        <Text style={styles.brandSub}>Your development workspace, anywhere</Text>
       </View>
 
       <View style={styles.section}>
         <Pressable
           style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
-          onPress={() => void Linking.openURL('https://onOrca.dev')}
+          onPress={() => void Linking.openURL('https://github.com/raphaelcangucu/symphony')}
         >
           <Globe size={16} color={colors.textSecondary} />
-          <Text style={styles.rowValue}>onOrca.dev</Text>
+          <Text style={styles.rowValue}>Dev10x Symphony</Text>
         </Pressable>
         <View style={styles.separator} />
         <Pressable
           style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
-          onPress={() => void Linking.openURL('https://github.com/stablyai/orca')}
+          onPress={() => void Linking.openURL('https://github.com/raphaelcangucu/symphony')}
         >
           <GithubIcon />
-          <Text style={styles.rowValue}>stablyai/orca</Text>
+          <Text style={styles.rowValue}>raphaelcangucu/symphony</Text>
         </Pressable>
         <View style={styles.separator} />
         <Pressable
           style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
-          onPress={() => void Linking.openURL('https://x.com/orca_build')}
+          onPress={() =>
+            void Linking.openURL('https://github.com/raphaelcangucu/symphony/issues')
+          }
         >
-          <XIcon />
-          <Text style={styles.rowValue}>@orca_build</Text>
+          <LifeBuoy size={16} color={colors.textSecondary} />
+          <Text style={styles.rowValue}>Support and issues</Text>
         </Pressable>
       </View>
 
