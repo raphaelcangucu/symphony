@@ -38,7 +38,7 @@ export function SettingsRoute() {
       loading={availability.isPending || usage.isPending}
       onBack={() => router.back()}
       onChangeViewMode={(nextMode) => {
-        void setMode(nextMode).then(() => router.replace("/"));
+        void setMode(nextMode).then(() => router.replace(nextMode === "orca" ? "/" : "/codex"));
       }}
       onOpenDiagnostics={() => router.push("/diagnostics")}
       onOpenNotifications={() => router.push("/notifications")}

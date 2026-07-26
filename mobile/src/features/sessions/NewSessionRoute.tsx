@@ -76,7 +76,7 @@ export function NewSessionRoute() {
       loadCatalog={(projectSlug) => client.assistantCatalog(projectSlug)}
       onBack={() => router.back()}
       onCreated={(threadId, prompt) =>
-        router.replace(`/session/${threadId}?seed=${encodeURIComponent(prompt)}`)
+        router.replace(`/codex/session/${threadId}?seed=${encodeURIComponent(prompt)}`)
       }
       onDictate={() => dictate(resolvedLocale())}
       onDraftChange={persistDraft}

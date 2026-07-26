@@ -1247,7 +1247,7 @@ mix test test/symphony_elixir/mobile_rpc/methods/orca_tasks_test.exs
 Expected: PASS; unsupported provider controls are capability-disabled rather
 than backed by fixtures in production.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add mobile/app mobile/src/orca mobile/package.json mobile/package-lock.json \
@@ -1272,7 +1272,7 @@ git commit -m "feat(mobile): expose Symphony tasks in the Orca experience"
 - Modify: `mobile/app/index.tsx`
 - Test: `mobile/src/preferences/view-routing.test.ts`
 
-- [ ] **Step 1: Write the failing semantic route test**
+- [x] **Step 1: Write the failing semantic route test**
 
 ```ts
 it("maps the same session target into the active device view", () => {
@@ -1282,7 +1282,7 @@ it("maps the same session target into the active device view", () => {
 });
 ```
 
-- [ ] **Step 2: Run and confirm failure**
+- [x] **Step 2: Run and confirm failure**
 
 Run:
 
@@ -1293,14 +1293,14 @@ npx vitest run src/preferences/view-routing.test.ts
 
 Expected: FAIL because `routeForView` does not exist.
 
-- [ ] **Step 3: Move only route entry points, not shared data**
+- [x] **Step 3: Move only route entry points, not shared data**
 
 The new `/codex` routes import the existing `src/features/**` screens. They do
 not instantiate `ConnectionProvider`, `TrackerClientProvider` or a second
 query cache. Root notifications resolve a semantic target, then call
 `routeForView(currentMode, target)`.
 
-- [ ] **Step 4: Prove view changes preserve host state**
+- [x] **Step 4: Prove view changes preserve host state**
 
 Add a provider test:
 
@@ -1311,7 +1311,7 @@ expect(runtime.selectedHostId).toBe("host-a");
 expect(createTransport).toHaveBeenCalledTimes(1);
 ```
 
-- [ ] **Step 5: Run focused tests**
+- [x] **Step 5: Run focused tests**
 
 Run:
 

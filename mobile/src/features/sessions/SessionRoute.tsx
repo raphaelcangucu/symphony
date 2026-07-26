@@ -69,7 +69,7 @@ function ConnectedSessionRoute({
         `symphony.new-session.draft.${activeProfile.hostId ?? activeProfile.id}`,
       )
         .catch(() => undefined)
-        .then(() => router.replace(`/session/${threadId}`));
+        .then(() => router.replace(`/codex/session/${threadId}`));
     };
     if (activeProfile.transport === "rpc") {
       if (!hostTransport) return null;

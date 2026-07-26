@@ -41,7 +41,7 @@ function ConnectedIssueRoute({
 }) {
   const detail = useIssueDetail({ client, profileId, projectSlug, identifier });
   const threadRoute = (suffix = "") => {
-    if (detail.threadId) router.push(`/session/${detail.threadId}${suffix}`);
+    if (detail.threadId) router.push(`/codex/session/${detail.threadId}${suffix}`);
   };
   return (
     <IssueScreen
@@ -61,12 +61,12 @@ function ConnectedIssueRoute({
       onOpenPreview={() => threadRoute("/preview")}
       onOpenPullRequest={() =>
         router.push(
-          `/issue/${encodeURIComponent(projectSlug)}/${encodeURIComponent(identifier)}/pull-request`,
+          `/codex/issue/${encodeURIComponent(projectSlug)}/${encodeURIComponent(identifier)}/pull-request`,
         )
       }
       onOpenRelatedTask={(relatedIdentifier) =>
         router.push(
-          `/issue/${encodeURIComponent(projectSlug)}/${encodeURIComponent(relatedIdentifier)}`,
+          `/codex/issue/${encodeURIComponent(projectSlug)}/${encodeURIComponent(relatedIdentifier)}`,
         )
       }
       onOpenSession={() => threadRoute()}

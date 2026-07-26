@@ -81,8 +81,8 @@ describe("SessionLibraryRoute", () => {
     fireEvent.press(screen.getByRole("button", { name: "Start a new chat" }));
     fireEvent.press(screen.getByRole("button", { name: "Open session Mobile session library" }));
 
-    expect(push).toHaveBeenNthCalledWith(1, "/new-session");
-    expect(push).toHaveBeenNthCalledWith(2, "/session/42");
+    expect(push).toHaveBeenNthCalledWith(1, "/codex/new-session");
+    expect(push).toHaveBeenNthCalledWith(2, "/codex/session/42");
     await waitFor(() => expect(AsyncStorage.getItem).toHaveBeenCalledTimes(1));
   });
 

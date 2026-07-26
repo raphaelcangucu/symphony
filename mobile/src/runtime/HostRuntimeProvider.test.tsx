@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
-import { useState } from "react";
 import { Pressable, Text } from "react-native";
 
+import { useViewMode, ViewModeProvider } from "@/preferences/ViewModeProvider";
 import type { HostTransport } from "@/transport/HostTransport";
 
 import {
@@ -24,14 +24,15 @@ jest.mock("@/rpc/websocket-adapter", () => ({
 
 function RuntimeConsumers() {
   const runtime = useHostRuntime();
-  const [mode, setMode] = useState("workspace");
+  const { mode, setMode } = useViewMode();
   const transport = runtime.transport("host-a");
   return (
     <>
       <Text>{transport ? `orca:${transport.hostId}` : "orca:missing"}</Text>
       <Text>{transport ? `codex:${transport.hostId}` : "codex:missing"}</Text>
+      <Text>{`selected:${runtime.selectedHostId}`}</Text>
       <Text>{mode}</Text>
-      <Pressable accessibilityRole="button" onPress={() => setMode("compact")}>
+      <Pressable accessibilityRole="button" onPress={() => void setMode("codex")}>
         <Text>Change interface</Text>
       </Pressable>
     </>
@@ -49,23 +50,22 @@ describe("HostRuntimeProvider", () => {
       close: jest.fn(),
     };
     const createTransport = jest.fn(() => transport) as HostRuntimeTransportFactory;
+    const profile = {
+      id: "profile-a",
+      hostId: "host-a",
+      name: "Studio",
+      origin: "https://studio.test",
+      endpoint: "wss://studio.test/mobile/rpc",
+      transport: "rpc",
+      hostPublicKeyFingerprint: "fingerprint",
+      protocolVersion: 1,
+      createdAt: "2026-07-25T00:00:00Z",
+      lastConnectedAt: null,
+    };
     mockUseConnection.mockReturnValue({
       hydrated: true,
-      profiles: [
-        {
-          id: "profile-a",
-          hostId: "host-a",
-          name: "Studio",
-          origin: "https://studio.test",
-          endpoint: "wss://studio.test/mobile/rpc",
-          transport: "rpc",
-          hostPublicKeyFingerprint: "fingerprint",
-          protocolVersion: 1,
-          createdAt: "2026-07-25T00:00:00Z",
-          lastConnectedAt: null,
-        },
-      ],
-      activeProfile: { id: "profile-a", hostId: "host-a", transport: "rpc" },
+      profiles: [profile],
+      activeProfile: profile,
       loadHostCredential: jest.fn(async () => ({
         deviceId: "device-a",
         deviceToken: "secret",
@@ -75,17 +75,26 @@ describe("HostRuntimeProvider", () => {
     });
 
     render(
-      <HostRuntimeProvider createTransport={createTransport}>
-        <RuntimeConsumers />
-      </HostRuntimeProvider>,
+      <ViewModeProvider
+        storage={{
+          getItem: jest.fn(async () => null),
+          setItem: jest.fn(async () => undefined),
+        }}
+      >
+        <HostRuntimeProvider createTransport={createTransport}>
+          <RuntimeConsumers />
+        </HostRuntimeProvider>
+      </ViewModeProvider>,
     );
 
     await waitFor(() => expect(screen.getByText("orca:host-a")).toBeTruthy());
     expect(screen.getByText("codex:host-a")).toBeTruthy();
+    expect(screen.getByText("selected:host-a")).toBeTruthy();
     expect(createTransport).toHaveBeenCalledTimes(1);
 
     fireEvent.press(screen.getByRole("button", { name: "Change interface" }));
-    expect(screen.getByText("compact")).toBeTruthy();
+    await waitFor(() => expect(screen.getByText("codex")).toBeTruthy());
+    expect(screen.getByText("selected:host-a")).toBeTruthy();
     expect(createTransport).toHaveBeenCalledTimes(1);
   });
 });

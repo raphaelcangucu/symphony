@@ -3,7 +3,11 @@ import { useEffect, useState } from "react";
 
 import { useTrackerClient } from "@/api/TrackerClientProvider";
 import { useConnection } from "@/auth/ConnectionProvider";
-import { registerNativeNotifications, unregisterNativeNotifications } from "@/native/notifications";
+import {
+  notificationTargetRoute,
+  registerNativeNotifications,
+  unregisterNativeNotifications,
+} from "@/native/notifications";
 import { useAppRuntime } from "@/runtime/AppRuntime";
 
 import { NotificationsScreen, type NotificationState } from "./NotificationsScreen";
@@ -21,10 +25,10 @@ export function NotificationsRoute() {
   useEffect(() => {
     let active = true;
     void notifications.router.initialRoute().then((destination) => {
-      if (active && destination) setLastRoute(destination.route);
+      if (active && destination) setLastRoute(notificationTargetRoute(destination.target));
     });
     const subscription = notifications.router.subscribe((destination) =>
-      setLastRoute(destination.route),
+      setLastRoute(notificationTargetRoute(destination.target)),
     );
     return () => {
       active = false;

@@ -73,7 +73,7 @@ describe("IssueRoute", () => {
 
     fireEvent.press(screen.getByRole("button", { name: "Open session" }));
     fireEvent.press(screen.getByRole("button", { name: "Terminal" }));
-    expect(push).toHaveBeenNthCalledWith(1, "/session/42");
-    expect(push).toHaveBeenNthCalledWith(2, "/session/42/terminal");
+    expect(push).toHaveBeenNthCalledWith(1, "/codex/session/42");
+    expect(push).toHaveBeenNthCalledWith(2, "/codex/session/42/terminal");
   });
 });

@@ -65,9 +65,11 @@ function ConnectedTasksRoute({
       groups={tasks.groups}
       loading={tasks.loading || tasks.refreshing}
       onBack={() => router.back()}
-      onCreateTask={() => router.push("/tasks/new")}
+      onCreateTask={() => router.push("/codex/tasks/new")}
       onOpenTask={(projectSlug, identifier) =>
-        router.push(`/issue/${encodeURIComponent(projectSlug)}/${encodeURIComponent(identifier)}`)
+        router.push(
+          `/codex/issue/${encodeURIComponent(projectSlug)}/${encodeURIComponent(identifier)}`,
+        )
       }
       onQueryChange={setQuery}
       onRefresh={() => void tasks.refresh()}

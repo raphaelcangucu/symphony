@@ -99,7 +99,9 @@ describe("NewSessionRoute", () => {
     fireEvent.press(screen.getByRole("button", { name: "Send" }));
 
     await waitFor(() =>
-      expect(router.replace).toHaveBeenCalledWith("/session/42?seed=Build%20clean%20%26%20fast"),
+      expect(router.replace).toHaveBeenCalledWith(
+        "/codex/session/42?seed=Build%20clean%20%26%20fast",
+      ),
     );
     expect(AsyncStorage.removeItem).not.toHaveBeenCalled();
     view.queryClient.clear();

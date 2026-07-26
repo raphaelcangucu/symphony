@@ -1,3 +1,6 @@
+import type { MobileViewMode } from "@/preferences/view-mode";
+import { routeForView, type ViewTarget } from "@/preferences/view-routing";
+
 export type NotificationPermission = "granted" | "denied" | "undetermined";
 
 export type NotificationPort = {
@@ -26,9 +29,13 @@ export type NotificationRouter = {
 };
 
 export type NotificationDestination = {
-  route: string;
+  target: NotificationTarget;
   hostId: string | null;
 };
+
+export type NotificationTarget =
+  | Omit<Extract<ViewTarget, { kind: "session" }>, "hostId">
+  | Omit<Extract<ViewTarget, { kind: "issue" }>, "hostId">;
 
 type NotificationProfile = {
   id: string;
@@ -122,10 +129,10 @@ export function createNotificationRouter(port: NotificationResponsePort): Notifi
 export function notificationDestination(
   data: Record<string, unknown>,
 ): NotificationDestination | null {
-  const route = notificationRoute(data);
-  if (!route) return null;
+  const target = notificationTarget(data);
+  if (!target) return null;
   return {
-    route,
+    target,
     hostId: stringValue(data.host_id) ?? stringValue(data.profile_id),
   };
 }
@@ -135,20 +142,26 @@ export async function activateNotificationDestination({
   profiles,
   selectProfile,
   openRoute,
+  mode = "codex",
+  selectedHostId = null,
 }: {
   destination: NotificationDestination;
   profiles: NotificationProfile[];
   selectProfile(profileId: string): Promise<void>;
   openRoute(route: string): void;
+  mode?: MobileViewMode;
+  selectedHostId?: string | null;
 }): Promise<boolean> {
+  const hostId = destination.hostId ?? selectedHostId;
+  if (!hostId) return false;
   if (destination.hostId) {
     const profile = profiles.find(
-      (candidate) => candidate.hostId === destination.hostId || candidate.id === destination.hostId,
+      (candidate) => candidate.hostId === hostId || candidate.id === hostId,
     );
     if (!profile) return false;
     await selectProfile(profile.id);
   }
-  openRoute(destination.route);
+  openRoute(routeForView(mode, { ...destination.target, hostId } as ViewTarget));
   return true;
 }
 
@@ -165,19 +178,37 @@ export async function loadOrCreateDeviceId(
 }
 
 export function notificationRoute(data: Record<string, unknown>): string | null {
+  const target = notificationTarget(data);
+  return target ? notificationTargetRoute(target) : null;
+}
+
+export function notificationTargetRoute(target: NotificationTarget): string {
+  if (target.kind === "session") {
+    return `/session/${encodeURIComponent(target.id)}${target.surface ? `/${target.surface}` : ""}`;
+  }
+  return `/issue/${encodeURIComponent(target.projectSlug)}/${encodeURIComponent(target.identifier)}${
+    target.pullRequest ? "/pull-request" : ""
+  }`;
+}
+
+export function notificationTarget(data: Record<string, unknown>): NotificationTarget | null {
   const direct = stringValue(data.route);
-  if (direct) return safeDirectRoute(direct);
+  if (direct) {
+    const directTarget = targetFromDirectRoute(direct);
+    if (directTarget) return directTarget;
+    return null;
+  }
 
   if (data.type === "session") {
     const threadId = Number(data.thread_id);
-    return Number.isInteger(threadId) && threadId > 0 ? `/session/${threadId}` : null;
+    return Number.isInteger(threadId) && threadId > 0
+      ? { kind: "session", id: String(threadId) }
+      : null;
   }
   if (data.type === "issue") {
     const projectSlug = stringValue(data.project_slug);
     const identifier = stringValue(data.identifier);
-    return projectSlug && identifier
-      ? `/issue/${encodeURIComponent(projectSlug)}/${encodeURIComponent(identifier)}`
-      : null;
+    return projectSlug && identifier ? { kind: "issue", projectSlug, identifier } : null;
   }
 
   const legacyUrl = stringValue(data.url);
@@ -186,16 +217,41 @@ export function notificationRoute(data: Record<string, unknown>): string | null 
     /^\/tracker\/projects\/([^/]+)\/board\/issues\/([^/]+)(?:\/([^/]+))?$/,
   );
   if (issueMatch?.[1] && issueMatch[2]) {
-    const suffix = issueMatch[3] === "pull-request" ? "/pull-request" : "";
-    return `/issue/${encodeURIComponent(issueMatch[1])}/${encodeURIComponent(issueMatch[2])}${suffix}`;
+    return {
+      kind: "issue",
+      projectSlug: decodeURIComponent(issueMatch[1]),
+      identifier: decodeURIComponent(issueMatch[2]),
+      pullRequest: issueMatch[3] === "pull-request",
+    };
   }
   const sessionMatch = legacyUrl.match(/^\/tracker\/projects\/[^/]+\/workspaces\/([1-9]\d*)$/);
-  return sessionMatch?.[1] ? `/session/${sessionMatch[1]}` : null;
+  return sessionMatch?.[1] ? { kind: "session", id: sessionMatch[1] } : null;
 }
 
-function safeDirectRoute(route: string): string | null {
-  if (/^\/session\/[1-9]\d*$/.test(route)) return route;
-  if (/^\/issue\/[^/?#]+\/[^/?#]+(?:\/pull-request)?$/.test(route)) return route;
+function targetFromDirectRoute(route: string): NotificationTarget | null {
+  const sessionMatch = route.match(
+    /^\/(?:codex\/)?session\/([1-9]\d*)(?:\/(diff|files|preview|terminal))?$/,
+  );
+  if (sessionMatch?.[1]) {
+    return {
+      kind: "session",
+      id: sessionMatch[1],
+      ...(sessionMatch[2]
+        ? { surface: sessionMatch[2] as "diff" | "files" | "preview" | "terminal" }
+        : {}),
+    };
+  }
+  const issueMatch = route.match(
+    /^\/(?:codex\/)?issue\/([^/?#]+)\/([^/?#]+)(?:\/(pull-request))?$/,
+  );
+  if (issueMatch?.[1] && issueMatch[2]) {
+    return {
+      kind: "issue",
+      projectSlug: decodeURIComponent(issueMatch[1]),
+      identifier: decodeURIComponent(issueMatch[2]),
+      pullRequest: issueMatch[3] === "pull-request",
+    };
+  }
   return null;
 }
 

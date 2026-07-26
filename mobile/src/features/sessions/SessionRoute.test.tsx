@@ -73,7 +73,7 @@ describe("SessionRoute", () => {
     await waitFor(() =>
       expect(AsyncStorage.removeItem).toHaveBeenCalledWith("symphony.new-session.draft.remote-1"),
     );
-    expect(router.replace).toHaveBeenCalledWith("/session/42");
+    expect(router.replace).toHaveBeenCalledWith("/codex/session/42");
 
     view.unmount();
     expect(session.disconnect).toHaveBeenCalledTimes(1);
@@ -89,7 +89,7 @@ describe("SessionRoute", () => {
     const options = jest.mocked(createAssistantSession).mock.calls[0]?.[0];
     act(() => options?.onSeedAccepted?.());
 
-    await waitFor(() => expect(router.replace).toHaveBeenCalledWith("/session/42"));
+    await waitFor(() => expect(router.replace).toHaveBeenCalledWith("/codex/session/42"));
   });
 
   it("surfaces an explicit seed retry after a push failure", async () => {

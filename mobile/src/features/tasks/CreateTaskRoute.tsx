@@ -35,7 +35,7 @@ export function CreateTaskRoute() {
     onSuccess: async (issue) => {
       await queryClient.invalidateQueries({ queryKey: ["host", hostId, "tasks"] });
       router.replace(
-        `/issue/${encodeURIComponent(issue.projectSlug)}/${encodeURIComponent(issue.identifier)}`,
+        `/codex/issue/${encodeURIComponent(issue.projectSlug)}/${encodeURIComponent(issue.identifier)}`,
       );
     },
   });

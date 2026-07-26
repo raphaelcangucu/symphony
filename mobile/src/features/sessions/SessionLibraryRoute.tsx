@@ -26,13 +26,13 @@ export function SessionLibraryRoute() {
       collapsed={collapsed}
       connectionName={activeProfile.name}
       onCollapsedChange={setCollapsed}
-      onNewChat={() => router.push("/new-session")}
+      onNewChat={() => router.push("/codex/new-session")}
       onOpenConnections={() => router.push("/connections")}
       onOpenDiagnostics={() => router.push("/diagnostics")}
       onOpenNotifications={() => router.push("/notifications")}
-      onOpenSettings={() => router.push("/settings")}
-      onOpenTasks={() => router.push("/tasks")}
-      onOpenSession={(threadId) => router.push(`/session/${threadId}`)}
+      onOpenSettings={() => router.push("/codex/settings")}
+      onOpenTasks={() => router.push("/codex/tasks")}
+      onOpenSession={(threadId) => router.push(`/codex/session/${threadId}`)}
       onQueryChange={setQuery}
       profileId={hostId ?? activeProfile.id}
       query={query}

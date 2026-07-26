@@ -66,6 +66,6 @@ describe("TasksRoute", () => {
     );
 
     fireEvent.press(screen.getByRole("button", { name: "Open task MOB-7" }));
-    expect(push).toHaveBeenCalledWith("/issue/symphony/MOB-7");
+    expect(push).toHaveBeenCalledWith("/codex/issue/symphony/MOB-7");
   });
 });

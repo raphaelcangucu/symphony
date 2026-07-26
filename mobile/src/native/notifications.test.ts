@@ -113,8 +113,8 @@ describe("notification response routing", () => {
     const listener = vi.fn();
 
     await expect(router.initialRoute()).resolves.toEqual({
-      route: "/session/42",
       hostId: "host-a",
+      target: { kind: "session", id: "42" },
     });
     router.subscribe(listener);
     responseListener?.({ route: "/settings" });
@@ -127,8 +127,12 @@ describe("notification response routing", () => {
 
     expect(listener).toHaveBeenCalledTimes(1);
     expect(listener).toHaveBeenCalledWith({
-      route: "/issue/symphony/MOB-7",
       hostId: "host-b",
+      target: {
+        kind: "issue",
+        projectSlug: "symphony",
+        identifier: "MOB-7",
+      },
     });
   });
 
@@ -137,7 +141,11 @@ describe("notification response routing", () => {
 
     await expect(
       activateNotificationDestination({
-        destination: { hostId: "host-b", route: "/session/42" },
+        destination: {
+          hostId: "host-b",
+          target: { kind: "session", id: "42" },
+        },
+        mode: "orca",
         profiles: [
           { id: "profile-a", hostId: "host-a" },
           { id: "profile-b", hostId: "host-b" },
@@ -151,7 +159,7 @@ describe("notification response routing", () => {
       }),
     ).resolves.toBe(true);
 
-    expect(calls).toEqual(["select:profile-b", "open:/session/42"]);
+    expect(calls).toEqual(["select:profile-b", "open:/h/host-b/session/42"]);
   });
 });
 
