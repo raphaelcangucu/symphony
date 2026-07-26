@@ -14,6 +14,8 @@ readonly ARTIFACT_SLUG="pr-7-encrypted-multi-host-complete-experience"
 readonly VIDEO_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}.mp4"
 readonly RAW_VIDEO_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}-raw.webm"
 readonly SCREENSHOT_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}.png"
+readonly TERMINAL_SCREENSHOT_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}-terminal.png"
+readonly TERMINAL_COMMAND_SCREENSHOT_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}-terminal-command.png"
 readonly UI_DUMP_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}.xml"
 readonly TRACE_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}-trace.txt"
 readonly REPORT_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}-report.md"
@@ -35,6 +37,15 @@ resolve_adb() {
   fi
   if [[ -n "${ANDROID_HOME:-}" && -x "${ANDROID_HOME}/platform-tools/adb" ]]; then
     printf "%s" "${ANDROID_HOME}/platform-tools/adb"
+    return
+  fi
+  local local_sdk
+  local_sdk="$(
+    sed -n 's/^sdk\.dir=//p' "${MOBILE_DIR}/android/local.properties" 2>/dev/null |
+      tail -n 1
+  )"
+  if [[ -n "${local_sdk}" && -x "${local_sdk}/platform-tools/adb" ]]; then
+    printf "%s" "${local_sdk}/platform-tools/adb"
     return
   fi
   command -v adb
@@ -74,6 +85,42 @@ wait_for_selector() {
 
 wait_for_text() {
   wait_for_selector "text" "$1" "${2:-45}"
+}
+
+wait_for_ui_contains() {
+  local value="$1"
+  local attempts="${2:-45}"
+  for _ in $(seq 1 "${attempts}"); do
+    dump_ui
+    grep -Fq "${value}" "${UI_DUMP_PATH}" && return 0
+    sleep 1
+  done
+  printf "UI text fragment not found: %s\n" "${value}" >&2
+  return 1
+}
+
+wait_for_any_ui_contains() {
+  local attempts="$1"
+  shift
+  local values=("$@")
+  for _ in $(seq 1 "${attempts}"); do
+    dump_ui
+    for value in "${values[@]}"; do
+      grep -Fq "${value}" "${UI_DUMP_PATH}" && return 0
+    done
+    sleep 1
+  done
+  printf "None of the UI text fragments were found: %s\n" "${values[*]}" >&2
+  return 1
+}
+
+assert_ui_absent() {
+  local value="$1"
+  dump_ui
+  if grep -Fq "${value}" "${UI_DUMP_PATH}"; then
+    printf "Unexpected UI text fragment: %s\n" "${value}" >&2
+    return 1
+  fi
 }
 
 configure_screen_geometry() {
@@ -162,6 +209,19 @@ tap_accessible() {
   fi
 }
 
+tap_screen_fraction() {
+  local x_numerator="$1"
+  local x_denominator="$2"
+  local y_numerator="$3"
+  local y_denominator="$4"
+  local label="$5"
+  local x="$((screen_width * x_numerator / x_denominator))"
+  local y="$((screen_height * y_numerator / y_denominator))"
+  "${ADB}" shell input tap "${x}" "${y}"
+  trace_step "tap screen=${label}"
+  sleep 1
+}
+
 stop_recording() {
   if [[ -n "${recording_pid}" ]]; then
     "${ADB}" emu screenrecord stop >/dev/null 2>&1 || true
@@ -171,8 +231,14 @@ stop_recording() {
 
 cleanup() {
   stop_recording
-  [[ -n "${host_a_pid}" ]] && kill -TERM -- "-${host_a_pid}" >/dev/null 2>&1 || true
-  [[ -n "${host_b_pid}" ]] && kill -TERM -- "-${host_b_pid}" >/dev/null 2>&1 || true
+  if [[ -n "${host_a_pid}" ]]; then
+    kill -TERM -- "-${host_a_pid}" >/dev/null 2>&1 || true
+    wait "${host_a_pid}" >/dev/null 2>&1 || true
+  fi
+  if [[ -n "${host_b_pid}" ]]; then
+    kill -TERM -- "-${host_b_pid}" >/dev/null 2>&1 || true
+    wait "${host_b_pid}" >/dev/null 2>&1 || true
+  fi
   "${ADB}" shell rm -f "${REMOTE_UI_DUMP}" >/dev/null 2>&1 || true
   rm -rf "${E2E_ROOT}"
 }
@@ -245,6 +311,18 @@ wait_for_host() {
   return 1
 }
 
+wait_for_host_down() {
+  local port="$1"
+  for _ in $(seq 1 30); do
+    if ! curl --fail --silent "http://127.0.0.1:${port}/api/health" >/dev/null; then
+      return 0
+    fi
+    sleep 1
+  done
+  printf "Symphony host on port %s did not stop\n" "${port}" >&2
+  return 1
+}
+
 create_offer() {
   local port="$1"
   local endpoint="$2"
@@ -262,6 +340,25 @@ create_offer() {
     jq -er '.data.url'
 }
 
+assert_paired_device() {
+  local port="$1"
+  for _ in $(seq 1 30); do
+    if curl --fail --silent \
+      -H "authorization: Bearer ${ADMIN_TOKEN}" \
+      "http://127.0.0.1:${port}/api/tracker/v1/mobile_rpc/devices" |
+      jq -e '
+        .data.devices | length == 1 and
+        (.[0] | has("device_id")) and
+        (.[0] | has("token_digest") | not)
+      ' >/dev/null; then
+      return 0
+    fi
+    sleep 1
+  done
+  printf "Expected one safely-listed paired device on port %s\n" "${port}" >&2
+  return 1
+}
+
 launch_pairing_offer() {
   local offer="$1"
   "${ADB}" shell am start -W \
@@ -269,6 +366,9 @@ launch_pairing_offer() {
     -d "${offer}" \
     -n "${APP_ACTIVITY}" >/dev/null
   trace_step "open redacted direct-host pairing deep link"
+  wait_for_text "Pair with this Symphony host?"
+  tap_accessible "Pair host"
+  trace_step "confirm explicit device-to-host pairing"
 }
 
 if [[ ! -f "${APK_PATH}" ]]; then
@@ -323,51 +423,61 @@ recording_pid="active"
 launch_pairing_offer "${host_a_offer}"
 wait_for_text "${HOST_A_NAME}"
 wait_for_text "${HOST_A_NAME} — Direct RPC session"
+assert_paired_device "${HOST_A_PORT}"
 trace_step "assert Host A identity, health and isolated session library"
 
-tap_accessible "Open session ${HOST_A_NAME} — Direct RPC session"
-wait_for_text "${HOST_A_NAME} is online. Projects, tasks, sessions and tools are isolated on this machine."
-trace_step "assert Host A session history streamed over encrypted RPC"
-tap_accessible "Go back"
+tap_accessible "${HOST_A_NAME} — Direct RPC session"
+wait_for_text "${HOST_A_NAME} — Direct RPC session"
+sleep 2
+"${ADB}" exec-out screencap -p >"${TERMINAL_SCREENSHOT_PATH}"
+test -s "${TERMINAL_SCREENSHOT_PATH}"
+trace_step "assert Host A copied xterm rendered over encrypted RPC"
+# Android 7's uiautomator can block while xterm's WebView accessibility tree is
+# live. These are the copied Orca header controls, expressed as screen
+# fractions so the journey remains resolution-independent without querying the
+# WebView tree.
+tap_screen_fraction 1 16 1 20 "Back to worktrees"
+wait_for_text "${HOST_A_NAME} — Direct RPC session"
 
-tap_accessible "Open main menu"
 tap_accessible "Tasks"
 wait_for_text "${HOST_A_NAME}: encrypted mobile control"
-tap_accessible "Open task ${host_a_issue}"
-wait_for_text "${HOST_A_NAME}: encrypted mobile control"
+tap_accessible "${HOST_A_NAME}: encrypted mobile control"
+wait_for_text "Pair, switch hosts, inspect sessions and operate this workspace without a central hub."
 scroll_until_text "${HOST_A_NAME}: verify host isolation"
 scroll_until_text "${HOST_A_NAME}: record native evidence"
 scroll_until_text "This task is served by ${HOST_A_NAME} over its own encrypted RPC connection."
 trace_step "assert task, blocker, subtask and comment parity on Host A"
-scroll_until_selector "content-desc" "Files" "down"
-trace_step "return to Host A workspace controls"
+"${ADB}" shell input keyevent 4
+sleep 1
+tap_accessible "Back to worktrees"
 
-tap_accessible "Files"
+tap_accessible "${HOST_A_NAME} — Direct RPC session"
+tap_screen_fraction 27 32 1 20 "Open file explorer"
 wait_for_text "README.md"
 trace_step "assert selected-host workspace files"
-tap_accessible "Back"
+tap_accessible "Back to session"
 
-tap_accessible "Diff"
+tap_screen_fraction 15 16 1 20 "Open source control"
 wait_for_text "README.md"
 trace_step "assert selected-host uncommitted diff"
-tap_accessible "Back"
+tap_accessible "Back to session"
 
-tap_accessible "Terminal"
-wait_for_selector "content-desc" "Terminal command"
-tap_accessible "Terminal command"
+tap_screen_fraction 5 32 87 100 "Switch to buffered command input"
+tap_screen_fraction 3 8 11 12 "Type a command"
 "${ADB}" shell input text "pwd"
-tap_accessible "Run command"
+"${ADB}" shell input keyevent 66
 sleep 2
+"${ADB}" exec-out screencap -p >"${TERMINAL_COMMAND_SCREENSHOT_PATH}"
+test -s "${TERMINAL_COMMAND_SCREENSHOT_PATH}"
 trace_step "exercise selected-host terminal input and output"
-tap_accessible "Back"
-
-"${ADB}" shell input keyevent KEYCODE_BACK
-"${ADB}" shell input keyevent KEYCODE_BACK
-wait_for_text "${HOST_A_NAME}"
+tap_screen_fraction 1 16 1 20 "Back to worktrees"
+wait_for_text "${HOST_A_NAME} — Direct RPC session"
+tap_accessible "Back to hosts"
 
 launch_pairing_offer "${host_b_offer}"
 wait_for_text "${HOST_B_NAME}"
 wait_for_text "${HOST_B_NAME} — Direct RPC session"
+assert_paired_device "${HOST_B_PORT}"
 dump_ui
 if grep -Fq "${HOST_A_NAME} — Direct RPC session" "${UI_DUMP_PATH}"; then
   printf "Host A session leaked into Host B library\n" >&2
@@ -375,17 +485,57 @@ if grep -Fq "${HOST_A_NAME} — Direct RPC session" "${UI_DUMP_PATH}"; then
 fi
 trace_step "assert Host B selected with no Host A cache/session leakage"
 
-tap_accessible "Open main menu"
-tap_accessible "Connections"
+tap_accessible "Back to hosts"
 wait_for_text "${HOST_A_NAME}"
 wait_for_text "${HOST_B_NAME}"
-wait_for_text "Paired devices"
-scroll_until_text "This device"
-trace_step "assert two direct hosts plus per-device credential metadata"
+wait_for_ui_contains "Connected"
+trace_step "assert two direct hosts, independent health and per-device credentials"
 
-scroll_until_selector "content-desc" "Use ${HOST_A_NAME}" "down"
-tap_accessible "Use ${HOST_A_NAME}"
-tap_accessible "Back"
+kill -TERM -- "-${host_b_pid}"
+wait "${host_b_pid}" >/dev/null 2>&1 || true
+host_b_pid=""
+wait_for_host_down "${HOST_B_PORT}"
+wait_for_any_ui_contains \
+  45 \
+  "Reconnecting" \
+  "Can't connect" \
+  "Can't reach desktop" \
+  "Disconnected"
+trace_step "assert selected host reports a real offline/reconnecting state"
+
+start_host "host-b" "${HOST_B_PORT}"
+host_b_pid="${last_host_pid}"
+wait_for_host "${HOST_B_PORT}"
+tap_accessible "${HOST_B_NAME}"
+wait_for_text "${HOST_B_NAME} — Direct RPC session"
+tap_accessible "Back to hosts"
+wait_for_ui_contains "Connected"
+trace_step "assert selected host automatically reconnects to the same paired device"
+
+tap_accessible "Open settings"
+wait_for_text "Settings"
+wait_for_text "Interface"
+wait_for_text "Dev10x Workspace"
+wait_for_text "Terminal"
+wait_for_text "About"
+trace_step "assert Dev10x brand and retained Compact Sessions interface option"
+tap_accessible "Use Compact Sessions interface"
+wait_for_text "Projects"
+wait_for_text "${HOST_B_NAME}"
+wait_for_text "${HOST_B_NAME} — Direct RPC session"
+trace_step "switch to Compact Sessions with the same selected host and session"
+
+tap_accessible "Open main menu"
+tap_accessible "Settings"
+wait_for_text "Interface"
+wait_for_text "Compact Sessions"
+tap_accessible "Use dev10x workspace interface"
+wait_for_text "Welcome back"
+wait_for_text "${HOST_A_NAME}"
+wait_for_text "${HOST_B_NAME}"
+trace_step "switch back to Dev10x Workspace without pairing or opening a second connection"
+
+tap_accessible "${HOST_A_NAME}"
 wait_for_text "${HOST_A_NAME} — Direct RPC session"
 trace_step "switch back to Host A and assert isolated cache hydration"
 

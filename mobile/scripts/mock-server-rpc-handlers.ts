@@ -14,6 +14,8 @@ import {
 } from "./mock-server-terminal-fixtures";
 
 const HOST_ID = process.env.MOCK_HOST_ID || "host_mock";
+const ORCA_RUNTIME_PROTOCOL_VERSION = 3;
+const ORCA_MIN_COMPATIBLE_MOBILE_VERSION = 2;
 const DEFAULT_DELAY_MS = readDelay("MOCK_RPC_DELAY_MS", 0);
 const METHODS = [
   "system.identity",
@@ -143,12 +145,7 @@ export type RpcResponse = RpcResult | RpcEvent;
 type Send = (response: RpcResponse) => void;
 type Subscription = {
   id: string;
-  kind:
-    | "sessions"
-    | "terminal"
-    | "session-tabs"
-    | "orca-terminal"
-    | "notifications";
+  kind: "sessions" | "terminal" | "session-tabs" | "orca-terminal" | "notifications";
   threadId: number;
   terminalHandle?: string;
   sequence: number;
@@ -157,10 +154,7 @@ type Subscription = {
 };
 
 const subscriptions = new Map<WebSocket, Map<string, Subscription>>();
-const pendingResponses = new Map<
-  WebSocket,
-  Map<string, Set<ReturnType<typeof setTimeout>>>
->();
+const pendingResponses = new Map<WebSocket, Map<string, Set<ReturnType<typeof setTimeout>>>>();
 let nextSubscription = 0;
 let nextIssue = 102;
 let issue = mockIssue();
@@ -199,7 +193,7 @@ export function error(
   code: string,
   message: string,
   retryable = false,
-  data?: unknown
+  data?: unknown,
 ): RpcResult {
   return {
     type: "result",
@@ -215,11 +209,7 @@ export function error(
   };
 }
 
-export function handleRequest(
-  request: RpcRequest,
-  send: Send,
-  ws: WebSocket
-): void {
+export function handleRequest(request: RpcRequest, send: Send, ws: WebSocket): void {
   const respond: Send = (response) => {
     const delay = responseDelayFor(request.method);
     if (delay > 0) {
@@ -231,12 +221,7 @@ export function handleRequest(
 
   if (process.env.MOCK_ERROR_METHOD === request.method) {
     respond(
-      error(
-        request.id,
-        "mock_injected_error",
-        `Injected mock failure for ${request.method}`,
-        true
-      )
+      error(request.id, "mock_injected_error", `Injected mock failure for ${request.method}`, true),
     );
     return;
   }
@@ -257,7 +242,7 @@ export function handleRequest(
             host_id: HOST_ID,
             name: "Symphony Mock Host — NOT REAL",
             protocol: 1,
-          })
+          }),
         );
         break;
       case "system.health":
@@ -274,7 +259,7 @@ export function handleRequest(
           success(request.id, {
             connections: 1,
             subscriptions: countSubscriptions(ws),
-          })
+          }),
         );
         break;
       case "status.get":
@@ -283,8 +268,10 @@ export function handleRequest(
             runtimeId: HOST_ID,
             product: "Symphony",
             displayName: "Symphony Mock Host — NOT REAL",
+            protocolVersion: ORCA_RUNTIME_PROTOCOL_VERSION,
+            minCompatibleMobileVersion: ORCA_MIN_COMPATIBLE_MOBILE_VERSION,
             capabilities: ["mobile.tasks.v1", ...METHODS],
-          })
+          }),
         );
         break;
       case "settings.get":
@@ -294,7 +281,7 @@ export function handleRequest(
               defaultTaskSource: "dev10x",
               visibleTaskProviders: ["dev10x"],
             },
-          })
+          }),
         );
         break;
       case "ui.get":
@@ -306,7 +293,7 @@ export function handleRequest(
             git: { installed: true },
             gh: { installed: false },
             glab: { installed: false },
-          })
+          }),
         );
         break;
       case "stats.summary":
@@ -316,7 +303,7 @@ export function handleRequest(
             totalPRsCreated: 0,
             totalAgentTimeMs: 3_600_000,
             firstEventAt: Date.parse("2026-07-25T18:00:00Z"),
-          })
+          }),
         );
         break;
       case "accounts.list":
@@ -330,7 +317,7 @@ export function handleRequest(
               inactiveClaudeAccounts: [],
               inactiveCodexAccounts: [],
             },
-          })
+          }),
         );
         break;
       case "repo.list":
@@ -344,7 +331,7 @@ export function handleRequest(
       case "worktree.show": {
         const requested = text(request.params.worktree).replace(/^(?:id|worktree):/, "");
         const worktree = mockWorktrees().find(
-          (candidate) => String(candidate.worktreeId ?? candidate.id) === requested
+          (candidate) => String(candidate.worktreeId ?? candidate.id) === requested,
         );
         if (worktree) respond(success(request.id, { worktree }));
         else respond(error(request.id, "not_found", "Workspace was not found"));
@@ -362,7 +349,7 @@ export function handleRequest(
                 last_seen_at: now(),
               },
             ],
-          })
+          }),
         );
         break;
       case "devices.revoke":
@@ -442,7 +429,7 @@ export function handleRequest(
             terminal: text(request.params.terminal),
             ...record(request.params.viewport),
             displayMode: copiedDisplayMode(text(request.params.terminal)),
-          })
+          }),
         );
         break;
       case "terminal.focus":
@@ -461,7 +448,7 @@ export function handleRequest(
               handle: text(request.params.terminal),
               cleared: true,
             },
-          })
+          }),
         );
         break;
       case "terminal.setDisplayMode": {
@@ -483,12 +470,7 @@ export function handleRequest(
         break;
       case "markdown.saveTab":
         respond(
-          error(
-            request.id,
-            "read_only",
-            "Symphony markdown tabs are read-only on mobile",
-            false
-          )
+          error(request.id, "read_only", "Symphony markdown tabs are read-only on mobile", false),
         );
         break;
       case "clipboard.startImageUpload":
@@ -505,27 +487,20 @@ export function handleRequest(
         respond(success(request.id, { aborted: true }));
         break;
       case "clipboard.saveImageAsTempFile":
-        respond(
-          success(request.id, "/tmp/dev10x-mobile-clipboard/mock-image.png")
-        );
+        respond(success(request.id, "/tmp/dev10x-mobile-clipboard/mock-image.png"));
         break;
       case "files.writeTerminalArtifact":
         respond(
           success(request.id, {
             written: true,
             byteLength: rawText(request.params.content).length,
-          })
+          }),
         );
         break;
       default:
         if (!handleMockFilePreviewRequest(request, respond, success, error)) {
           respond(
-            error(
-              request.id,
-              "method_not_allowed",
-              "RPC method is not available to mobile",
-              false
-            )
+            error(request.id, "method_not_allowed", "RPC method is not available to mobile", false),
           );
         }
     }
@@ -535,8 +510,8 @@ export function handleRequest(
         request.id,
         "route_not_allowed",
         "Tracker route is not available over Symphony mobile RPC",
-        false
-      )
+        false,
+      ),
     );
   }
 }
@@ -579,14 +554,9 @@ export function cleanupConnection(ws: WebSocket): void {
   pendingResponses.delete(ws);
 }
 
-function copiedSessionSnapshot(
-  params: Record<string, unknown>
-): Record<string, unknown> {
+function copiedSessionSnapshot(params: Record<string, unknown>): Record<string, unknown> {
   const threadId = worktreeId(params.worktree);
-  const tabs =
-    threadId === 101
-      ? mockSessionTabs
-      : [mockPrimaryTerminalTab(threadId)];
+  const tabs = threadId === 101 ? mockSessionTabs : [mockPrimaryTerminalTab(threadId)];
   return mockSessionSnapshot({
     hostId: HOST_ID,
     threadId,
@@ -596,17 +566,11 @@ function copiedSessionSnapshot(
   });
 }
 
-function copiedTerminalList(
-  params: Record<string, unknown>
-): Record<string, unknown> {
+function copiedTerminalList(params: Record<string, unknown>): Record<string, unknown> {
   return mockTerminalList(copiedSessionSnapshot(params));
 }
 
-function subscribeCopiedSessionTabs(
-  request: RpcRequest,
-  send: Send,
-  ws: WebSocket
-): void {
+function subscribeCopiedSessionTabs(request: RpcRequest, send: Send, ws: WebSocket): void {
   const threadId = worktreeId(request.params.worktree);
   const subscription = registerSubscription("session-tabs", threadId, send, ws);
   send(success(request.id, { subscription_id: subscription.id }));
@@ -614,24 +578,14 @@ function subscribeCopiedSessionTabs(
     emit(subscription, "session.tabs.snapshot", {
       type: "snapshot",
       ...copiedSessionSnapshot({ worktree: `id:${threadId}` }),
-    })
+    }),
   );
 }
 
-function subscribeCopiedTerminal(
-  request: RpcRequest,
-  send: Send,
-  ws: WebSocket
-): void {
+function subscribeCopiedTerminal(request: RpcRequest, send: Send, ws: WebSocket): void {
   const handle = text(request.params.terminal) || "thread:101";
   const threadId = terminalThreadId(handle);
-  const subscription = registerSubscription(
-    "orca-terminal",
-    threadId,
-    send,
-    ws,
-    handle
-  );
+  const subscription = registerSubscription("orca-terminal", threadId, send, ws, handle);
   const viewport = record(request.params.viewport);
   const cols = positiveInteger(viewport.cols, 80);
   const rows = positiveInteger(viewport.rows, 24);
@@ -641,26 +595,22 @@ function subscribeCopiedTerminal(
       subscription,
       "terminal.scrollback",
       mockTerminalScrollback({
-      cols,
-      rows,
-      displayMode: copiedDisplayMode(handle),
-      })
-    )
+        cols,
+        rows,
+        displayMode: copiedDisplayMode(handle),
+      }),
+    ),
   );
 }
 
-function subscribeMockNotifications(
-  request: RpcRequest,
-  send: Send,
-  ws: WebSocket
-): void {
+function subscribeMockNotifications(request: RpcRequest, send: Send, ws: WebSocket): void {
   const subscription = registerSubscription("notifications", 0, send, ws);
   send(success(request.id, { subscription_id: subscription.id }));
   schedule(subscription, () =>
     emit(subscription, "notifications.ready", {
       type: "ready",
       subscriptionId: subscription.id,
-    })
+    }),
   );
   schedule(subscription, () =>
     emit(subscription, "notifications.notification", {
@@ -669,7 +619,7 @@ function subscribeMockNotifications(
       title: "Dev10x host",
       body: "DEV-101 needs your approval",
       notificationId: "DEV-101:approval",
-    })
+    }),
   );
 }
 
@@ -678,7 +628,7 @@ function registerSubscription(
   threadId: number,
   send: Send,
   ws: WebSocket,
-  terminalHandle?: string
+  terminalHandle?: string,
 ): Subscription {
   const id = `sub_mock_${++nextSubscription}`;
   const subscription: Subscription = {
@@ -696,11 +646,7 @@ function registerSubscription(
   return subscription;
 }
 
-function activateCopiedSessionTab(
-  request: RpcRequest,
-  send: Send,
-  ws: WebSocket
-): void {
+function activateCopiedSessionTab(request: RpcRequest, send: Send, ws: WebSocket): void {
   const threadId = worktreeId(request.params.worktree);
   const tabId = text(request.params.tabId);
   const exists = mockSessionTabs.some((tab) => tab.id === tabId);
@@ -715,11 +661,7 @@ function activateCopiedSessionTab(
   emitCopiedSessionUpdate(ws, threadId, snapshot);
 }
 
-function createCopiedTerminalTab(
-  request: RpcRequest,
-  send: Send,
-  ws: WebSocket
-): void {
+function createCopiedTerminalTab(request: RpcRequest, send: Send, ws: WebSocket): void {
   const threadId = worktreeId(request.params.worktree);
   const agent = text(request.params.launchAgent) || text(request.params.agent);
   const handle = `tab:${threadId}:c3ltcGhvbnk:mock-${mockSessionTabs.length}`;
@@ -738,30 +680,16 @@ function createCopiedTerminalTab(
   send(
     success(request.id, {
       tab: { ...tab, isActive: mockActiveTabId === handle },
-    })
+    }),
   );
-  emitCopiedSessionUpdate(
-    ws,
-    threadId,
-    copiedSessionSnapshot({ worktree: `id:${threadId}` })
-  );
+  emitCopiedSessionUpdate(ws, threadId, copiedSessionSnapshot({ worktree: `id:${threadId}` }));
 }
 
-function closeCopiedSessionTab(
-  request: RpcRequest,
-  send: Send,
-  ws: WebSocket
-): void {
+function closeCopiedSessionTab(request: RpcRequest, send: Send, ws: WebSocket): void {
   const threadId = worktreeId(request.params.worktree);
   const tabId = text(request.params.tabId);
   if (tabId === `thread:${threadId}`) {
-    send(
-      error(
-        request.id,
-        "protected_terminal",
-        "The primary Symphony terminal cannot be closed"
-      )
-    );
+    send(error(request.id, "protected_terminal", "The primary Symphony terminal cannot be closed"));
     return;
   }
   const before = mockSessionTabs.length;
@@ -777,19 +705,11 @@ function closeCopiedSessionTab(
   emitCopiedSessionUpdate(ws, threadId, snapshot);
 }
 
-function sendCopiedTerminalInput(
-  request: RpcRequest,
-  send: Send,
-  ws: WebSocket
-): void {
+function sendCopiedTerminalInput(request: RpcRequest, send: Send, ws: WebSocket): void {
   const handle = text(request.params.terminal);
   const raw = rawText(request.params.text);
   const suffix =
-    request.params.interrupt === true
-      ? "\u0003"
-      : request.params.enter === true
-      ? "\r"
-      : "";
+    request.params.interrupt === true ? "\u0003" : request.params.enter === true ? "\r" : "";
   const input = raw + suffix;
   send(
     success(request.id, {
@@ -798,27 +718,21 @@ function sendCopiedTerminalInput(
         accepted: true,
         bytesWritten: new TextEncoder().encode(input).byteLength,
       },
-    })
+    }),
   );
   for (const subscription of matchingTerminalSubscriptions(ws, handle)) {
     schedule(subscription, () =>
       emit(subscription, "terminal.data", {
         type: "data",
         chunk: `${raw}${suffix ? "\n" : ""}mock: command accepted\n`,
-      })
+      }),
     );
   }
 }
 
-function focusCopiedTerminal(
-  request: RpcRequest,
-  send: Send,
-  ws: WebSocket
-): void {
+function focusCopiedTerminal(request: RpcRequest, send: Send, ws: WebSocket): void {
   const handle = text(request.params.terminal);
-  const tab = mockSessionTabs.find(
-    (candidate) => candidate.terminal === handle
-  );
+  const tab = mockSessionTabs.find((candidate) => candidate.terminal === handle);
   if (!tab) {
     send(error(request.id, "not_found", "Terminal was not found"));
     return;
@@ -829,15 +743,11 @@ function focusCopiedTerminal(
   emitCopiedSessionUpdate(
     ws,
     terminalThreadId(handle),
-    copiedSessionSnapshot({ worktree: `id:${terminalThreadId(handle)}` })
+    copiedSessionSnapshot({ worktree: `id:${terminalThreadId(handle)}` }),
   );
 }
 
-function renameCopiedTerminal(
-  request: RpcRequest,
-  send: Send,
-  ws: WebSocket
-): void {
+function renameCopiedTerminal(request: RpcRequest, send: Send, ws: WebSocket): void {
   const handle = text(request.params.terminal);
   const title = text(request.params.title) || "Terminal";
   let found = false;
@@ -855,15 +765,11 @@ function renameCopiedTerminal(
   emitCopiedSessionUpdate(
     ws,
     terminalThreadId(handle),
-    copiedSessionSnapshot({ worktree: `id:${terminalThreadId(handle)}` })
+    copiedSessionSnapshot({ worktree: `id:${terminalThreadId(handle)}` }),
   );
 }
 
-function closeCopiedTerminal(
-  request: RpcRequest,
-  send: Send,
-  ws: WebSocket
-): void {
+function closeCopiedTerminal(request: RpcRequest, send: Send, ws: WebSocket): void {
   closeCopiedSessionTab(
     {
       ...request,
@@ -877,19 +783,17 @@ function closeCopiedTerminal(
         send(
           success(request.id, {
             close: { handle: text(request.params.terminal), closed: true },
-          })
+          }),
         );
       } else {
         send(response);
       }
     },
-    ws
+    ws,
   );
 }
 
-function copiedMarkdownTab(
-  params: Record<string, unknown>
-): Record<string, unknown> {
+function copiedMarkdownTab(params: Record<string, unknown>): Record<string, unknown> {
   const tabId = text(params.tabId) || "docs/mock-comparison.md";
   const content =
     "# Dev10x mobile\n\nThis read-only document comes from the Symphony mock RPC host.";
@@ -904,11 +808,7 @@ function copiedMarkdownTab(
 
 function startMockClipboardUpload(request: RpcRequest, send: Send): void {
   const expected = Number(request.params.expectedBase64Length);
-  if (
-    !Number.isInteger(expected) ||
-    expected < 0 ||
-    expected > 24 * 1024 * 1024
-  ) {
+  if (!Number.isInteger(expected) || expected < 0 || expected > 24 * 1024 * 1024) {
     send(error(request.id, "image_too_large", "Clipboard image is too large"));
     return;
   }
@@ -923,25 +823,12 @@ function appendMockClipboardChunk(request: RpcRequest, send: Send): void {
   const offset = Number(request.params.offset);
   const chunk = rawText(request.params.contentBase64);
   if (!upload) {
-    send(
-      error(
-        request.id,
-        "upload_not_found",
-        "Clipboard image upload was not found"
-      )
-    );
+    send(error(request.id, "upload_not_found", "Clipboard image upload was not found"));
     return;
   }
-  if (
-    offset !== upload.received ||
-    upload.received + chunk.length > upload.expected
-  ) {
+  if (offset !== upload.received || upload.received + chunk.length > upload.expected) {
     send(
-      error(
-        request.id,
-        "invalid_upload_offset",
-        "Clipboard image chunk offset is out of order"
-      )
+      error(request.id, "invalid_upload_offset", "Clipboard image chunk offset is out of order"),
     );
     return;
   }
@@ -955,13 +842,7 @@ function commitMockClipboardUpload(request: RpcRequest, send: Send): void {
   const upload = mockClipboardUploads.get(uploadId);
   mockClipboardUploads.delete(uploadId);
   if (!upload || upload.received !== upload.expected) {
-    send(
-      error(
-        request.id,
-        "incomplete_upload",
-        "Clipboard image upload is incomplete"
-      )
-    );
+    send(error(request.id, "incomplete_upload", "Clipboard image upload is incomplete"));
     return;
   }
   send(success(request.id, `/tmp/dev10x-mobile-clipboard/${uploadId}.png`));
@@ -970,30 +851,22 @@ function commitMockClipboardUpload(request: RpcRequest, send: Send): void {
 function emitCopiedSessionUpdate(
   ws: WebSocket,
   threadId: number,
-  snapshot: Record<string, unknown>
+  snapshot: Record<string, unknown>,
 ): void {
-  for (const subscription of matchingSubscriptions(
-    ws,
-    "session-tabs",
-    threadId
-  )) {
+  for (const subscription of matchingSubscriptions(ws, "session-tabs", threadId)) {
     schedule(subscription, () =>
       emit(subscription, "session.tabs.updated", {
         type: "updated",
         ...snapshot,
-      })
+      }),
     );
   }
 }
 
-function matchingTerminalSubscriptions(
-  ws: WebSocket,
-  handle: string
-): Subscription[] {
+function matchingTerminalSubscriptions(ws: WebSocket, handle: string): Subscription[] {
   return [...(subscriptions.get(ws)?.values() ?? [])].filter(
     (subscription) =>
-      subscription.kind === "orca-terminal" &&
-      subscription.terminalHandle === handle
+      subscription.kind === "orca-terminal" && subscription.terminalHandle === handle,
   );
 }
 
@@ -1019,16 +892,14 @@ function terminalThreadId(handle: string): number {
 }
 
 function titleCase(value: string): string {
-  return value
-    .replace(/[-_]+/g, " ")
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+  return value.replace(/[-_]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function subscribe(
   kind: Subscription["kind"],
   request: RpcRequest,
   send: Send,
-  ws: WebSocket
+  ws: WebSocket,
 ): void {
   const threadId = positiveInteger(request.params.thread_id, 101);
   const subscription = registerSubscription(kind, threadId, send, ws);
@@ -1038,18 +909,14 @@ function subscribe(
     schedule(subscription, () =>
       emit(subscription, "sessions.history_loaded", {
         messages: [
-          message(
-            "mock-user",
-            "user",
-            "Explore the complete Dev10x mobile experience."
-          ),
+          message("mock-user", "user", "Explore the complete Dev10x mobile experience."),
           message(
             "mock-assistant",
             "assistant",
-            "Mock host connected through the production encrypted RPC client."
+            "Mock host connected through the production encrypted RPC client.",
           ),
         ],
-      })
+      }),
     );
   } else {
     schedule(subscription, () =>
@@ -1058,21 +925,17 @@ function subscribe(
           output:
             "$ symphony mobile --mock\nEncrypted mock host online\nWorkspace: /work/symphony\n",
         },
-      })
+      }),
     );
     schedule(subscription, () =>
       emit(subscription, "terminal.output", {
         data: "$ git status --short\n M mobile/scripts/mock-server.ts\n",
-      })
+      }),
     );
   }
 }
 
-function handleSessionCommand(
-  request: RpcRequest,
-  send: Send,
-  ws: WebSocket
-): void {
+function handleSessionCommand(request: RpcRequest, send: Send, ws: WebSocket): void {
   const event = text(request.params.event);
   const payload = record(request.params.payload);
   const threadId = positiveInteger(request.params.thread_id, 101);
@@ -1085,27 +948,27 @@ function handleSessionCommand(
     const assistant = message(
       `assistant-${Date.now()}`,
       "assistant",
-      "Mock response received over encrypted Symphony RPC."
+      "Mock response received over encrypted Symphony RPC.",
     );
     for (const subscription of targets) {
       schedule(subscription, () =>
-        emit(subscription, "sessions.message_created", { message: userMessage })
+        emit(subscription, "sessions.message_created", { message: userMessage }),
       );
       schedule(subscription, () =>
         emit(subscription, "sessions.turn_status", {
           status: "running",
           can_resume: false,
-        })
+        }),
       );
       schedule(subscription, () =>
         emit(subscription, "sessions.assistant_delta", {
           delta: "Mock response received over encrypted Symphony RPC.",
-        })
+        }),
       );
       schedule(subscription, () =>
         emit(subscription, "sessions.assistant_completed", {
           message: assistant,
-        })
+        }),
       );
     }
   } else if (event === "sync_history") {
@@ -1116,10 +979,10 @@ function handleSessionCommand(
             message(
               "mock-assistant",
               "assistant",
-              "Mock host connected through the production encrypted RPC client."
+              "Mock host connected through the production encrypted RPC client.",
             ),
           ],
-        })
+        }),
       );
     }
   } else if (event === "submit_approval" || event === "submit_user_input") {
@@ -1128,17 +991,13 @@ function handleSessionCommand(
         emit(subscription, "sessions.turn_status", {
           status: "running",
           can_resume: false,
-        })
+        }),
       );
     }
   }
 }
 
-function handleTerminalCommand(
-  request: RpcRequest,
-  send: Send,
-  ws: WebSocket
-): void {
+function handleTerminalCommand(request: RpcRequest, send: Send, ws: WebSocket): void {
   const event = text(request.params.event);
   const payload = record(request.params.payload);
   const threadId = positiveInteger(request.params.thread_id, 101);
@@ -1149,10 +1008,8 @@ function handleTerminalCommand(
   for (const subscription of matchingSubscriptions(ws, "terminal", threadId)) {
     schedule(subscription, () =>
       emit(subscription, "terminal.output", {
-        data: `${data}${
-          data.endsWith("\n") ? "" : "\n"
-        }mock: command accepted\n`,
-      })
+        data: `${data}${data.endsWith("\n") ? "" : "\n"}mock: command accepted\n`,
+      }),
     );
   }
 }
@@ -1161,16 +1018,11 @@ function systemTrackerResponse(params: Record<string, unknown>): unknown {
   const { pathname: path, method } = parsedRequest(params);
   if (
     method !== "GET" ||
-    ![
-      "/viewer",
-      "/settings/agents/availability",
-      "/settings/agents/usage",
-    ].includes(path)
+    !["/viewer", "/settings/agents/availability", "/settings/agents/usage"].includes(path)
   ) {
     throw new Error("Mock tracker route is not available");
   }
-  if (path === "/viewer")
-    return { data: { id: "mock-user", name: "Raphael Mock" } };
+  if (path === "/viewer") return { data: { id: "mock-user", name: "Raphael Mock" } };
   if (path === "/settings/agents/availability") {
     return {
       data: {
@@ -1316,8 +1168,7 @@ function sessionResponse(params: Record<string, unknown>): unknown {
     !(
       (pathname === "/assistant/threads" && ["GET", "POST"].includes(method)) ||
       (/^\/projects\/[^/]+\/sessions$/.test(pathname) && method === "GET") ||
-      (/^\/projects\/[^/]+\/assistant\/config$/.test(pathname) &&
-        method === "GET")
+      (/^\/projects\/[^/]+\/assistant\/config$/.test(pathname) && method === "GET")
     )
   ) {
     throw new Error("Mock tracker route is not available");
@@ -1391,8 +1242,7 @@ function workspaceResponse(params: Record<string, unknown>): unknown {
     return {
       data: {
         path: path.split("/documents/")[1],
-        content:
-          "# Mock comparison\n\nExercise the proven Dev10x mock-server workflow.",
+        content: "# Mock comparison\n\nExercise the proven Dev10x mock-server workflow.",
       },
     };
   }
@@ -1413,8 +1263,7 @@ function workspaceResponse(params: Record<string, unknown>): unknown {
     };
   }
   if (path.includes("/files/")) {
-    const filePath =
-      path.split("/files/")[1] ?? "mobile/scripts/mock-server.ts";
+    const filePath = path.split("/files/")[1] ?? "mobile/scripts/mock-server.ts";
     return {
       data: {
         path: filePath,
@@ -1457,12 +1306,9 @@ function gitResponse(params: Record<string, unknown>): unknown {
   const { pathname, method, body } = parsedRequest(params);
   if (
     !(
-      (/^\/assistant\/threads\/[^/]+\/diff\/(?:stats|files|patch)$/.test(
-        pathname
-      ) &&
+      (/^\/assistant\/threads\/[^/]+\/diff\/(?:stats|files|patch)$/.test(pathname) &&
         method === "GET") ||
-      (/^\/assistant\/threads\/[^/]+\/diff\/(?:commit|push)$/.test(pathname) &&
-        method === "POST")
+      (/^\/assistant\/threads\/[^/]+\/diff\/(?:commit|push)$/.test(pathname) && method === "POST")
     )
   ) {
     throw new Error("Mock tracker route is not available");
@@ -1536,11 +1382,8 @@ function previewResponse(params: Record<string, unknown>): unknown {
   const { pathname, method } = parsedRequest(params);
   if (
     !(
-      (/^\/assistant\/threads\/[^/]+\/dev_servers$/.test(pathname) &&
-        method === "GET") ||
-      (/^\/assistant\/threads\/[^/]+\/dev_servers\/(?:start|restart)$/.test(
-        pathname
-      ) &&
+      (/^\/assistant\/threads\/[^/]+\/dev_servers$/.test(pathname) && method === "GET") ||
+      (/^\/assistant\/threads\/[^/]+\/dev_servers\/(?:start|restart)$/.test(pathname) &&
         method === "POST")
     )
   ) {
@@ -1585,8 +1428,7 @@ function pullRequestResponse(params: Record<string, unknown>): unknown {
   if (path.endsWith("/fix")) return { data: { moved_to: "In Progress" } };
   if (path.endsWith("/update_branch")) return { data: { updated: true } };
   if (path.endsWith("/rerun_failed")) return { data: { reruns: [] } };
-  if (path.endsWith("/merge"))
-    return { data: { merged: true, method: "squash" } };
+  if (path.endsWith("/merge")) return { data: { merged: true, method: "squash" } };
   if (path.endsWith("/link")) return { data: { linked: true } };
   return {
     data: [
@@ -1620,15 +1462,13 @@ function notificationResponse(params: Record<string, unknown>): unknown {
   const { pathname, method, body } = parsedRequest(params);
   if (
     !(
-      (pathname === "/mobile_push/subscriptions" &&
-        ["POST", "DELETE"].includes(method)) ||
+      (pathname === "/mobile_push/subscriptions" && ["POST", "DELETE"].includes(method)) ||
       (pathname === "/mobile_push/test" && method === "POST")
     )
   ) {
     throw new Error("Mock tracker route is not available");
   }
-  if (pathname.endsWith("/test"))
-    return { data: { sent: true, device_count: 1 } };
+  if (pathname.endsWith("/test")) return { data: { sent: true, device_count: 1 } };
   if (method === "DELETE") return { data: { deleted: true } };
   return {
     data: {
@@ -1639,11 +1479,7 @@ function notificationResponse(params: Record<string, unknown>): unknown {
   };
 }
 
-function emit(
-  subscription: Subscription,
-  event: string,
-  payload: unknown
-): void {
+function emit(subscription: Subscription, event: string, payload: unknown): void {
   subscription.sequence += 1;
   subscription.send({
     type: "event",
@@ -1665,11 +1501,10 @@ function schedule(subscription: Subscription, callback: () => void): void {
 function matchingSubscriptions(
   ws: WebSocket,
   kind: Subscription["kind"],
-  threadId: number
+  threadId: number,
 ): Subscription[] {
   return [...(subscriptions.get(ws)?.values() ?? [])].filter(
-    (subscription) =>
-      subscription.kind === kind && subscription.threadId === threadId
+    (subscription) => subscription.kind === kind && subscription.threadId === threadId,
   );
 }
 
@@ -1681,11 +1516,7 @@ function requestPath(params: Record<string, unknown>): string {
   return text(params.path) || "/";
 }
 
-function requireRequest(
-  params: Record<string, unknown>,
-  method: string,
-  path: string
-): void {
+function requireRequest(params: Record<string, unknown>, method: string, path: string): void {
   const request = parsedRequest(params);
   if (request.method !== method || request.pathname !== path) {
     throw new Error("Mock tracker route is not available");
@@ -1756,17 +1587,11 @@ function mockThread(): Record<string, unknown> {
   };
 }
 
-function message(
-  id: string,
-  role: string,
-  content: string
-): Record<string, unknown> {
+function message(id: string, role: string, content: string): Record<string, unknown> {
   return { id, role, content, tool_calls: [], inserted_at: now() };
 }
 
-function selectIssueFields(
-  body: Record<string, unknown>
-): Record<string, unknown> {
+function selectIssueFields(body: Record<string, unknown>): Record<string, unknown> {
   const result: Record<string, unknown> = {};
   for (const key of ["title", "description", "status", "priority"] as const) {
     if (body[key] !== undefined) result[key] = body[key];
@@ -1784,7 +1609,7 @@ function scheduleResponse(
   requestId: string,
   response: RpcResponse,
   delay: number,
-  send: Send
+  send: Send,
 ): void {
   const requests = pendingResponses.get(ws) ?? new Map();
   const timers = requests.get(requestId) ?? new Set();

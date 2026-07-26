@@ -27,10 +27,7 @@ function toGitStatusEntry(entry: FakeGitEntry): MobileGitStatusEntry {
   return statusEntry;
 }
 
-function stageFakeGitEntry(
-  entry: FakeGitEntry,
-  filePaths: Set<string>
-): FakeGitEntry {
+function stageFakeGitEntry(entry: FakeGitEntry, filePaths: Set<string>): FakeGitEntry {
   if (!filePaths.has(entry.path)) return entry;
   if (entry.area === "untracked") {
     return {
@@ -43,10 +40,7 @@ function stageFakeGitEntry(
   return { ...entry, area: "staged" };
 }
 
-function unstageFakeGitEntry(
-  entry: FakeGitEntry,
-  filePaths: Set<string>
-): FakeGitEntry {
+function unstageFakeGitEntry(entry: FakeGitEntry, filePaths: Set<string>): FakeGitEntry {
   if (!filePaths.has(entry.path)) return entry;
   if (entry.stagedFromUntracked) {
     return {
@@ -88,7 +82,7 @@ function compareEntries() {
 export function handleMockGitRequest<Response>(
   request: MockGitRequest,
   respond: (response: Response) => void,
-  success: (id: string, result: unknown) => Response
+  success: (id: string, result: unknown) => Response,
 ): boolean {
   switch (request.method) {
     case "git.status":
@@ -101,7 +95,7 @@ export function handleMockGitRequest<Response>(
           upstreamStatus: upstreamStatus(),
           didHitLimit: false,
           statusLength: fakeGitEntries.length,
-        })
+        }),
       );
       return true;
 
@@ -111,20 +105,14 @@ export function handleMockGitRequest<Response>(
 
     case "git.stage": {
       const filePath = String(request.params.filePath ?? "");
-      fakeGitEntries = fakeGitEntries.map((entry) =>
-        stageFakeGitEntry(entry, new Set([filePath]))
-      );
+      fakeGitEntries = fakeGitEntries.map((entry) => stageFakeGitEntry(entry, new Set([filePath])));
       respond(success(request.id, { staged: true, filePath }));
       return true;
     }
 
     case "git.bulkStage": {
-      const filePaths = new Set(
-        (request.params.filePaths as string[] | undefined) ?? []
-      );
-      fakeGitEntries = fakeGitEntries.map((entry) =>
-        stageFakeGitEntry(entry, filePaths)
-      );
+      const filePaths = new Set((request.params.filePaths as string[] | undefined) ?? []);
+      fakeGitEntries = fakeGitEntries.map((entry) => stageFakeGitEntry(entry, filePaths));
       respond(success(request.id, { staged: [...filePaths] }));
       return true;
     }
@@ -132,36 +120,28 @@ export function handleMockGitRequest<Response>(
     case "git.unstage": {
       const filePath = String(request.params.filePath ?? "");
       fakeGitEntries = fakeGitEntries.map((entry) =>
-        unstageFakeGitEntry(entry, new Set([filePath]))
+        unstageFakeGitEntry(entry, new Set([filePath])),
       );
       respond(success(request.id, { unstaged: true, filePath }));
       return true;
     }
 
     case "git.bulkUnstage": {
-      const filePaths = new Set(
-        (request.params.filePaths as string[] | undefined) ?? []
-      );
-      fakeGitEntries = fakeGitEntries.map((entry) =>
-        unstageFakeGitEntry(entry, filePaths)
-      );
+      const filePaths = new Set((request.params.filePaths as string[] | undefined) ?? []);
+      fakeGitEntries = fakeGitEntries.map((entry) => unstageFakeGitEntry(entry, filePaths));
       respond(success(request.id, { unstaged: [...filePaths] }));
       return true;
     }
 
     case "git.discard": {
       const filePath = String(request.params.filePath ?? "");
-      fakeGitEntries = fakeGitEntries.filter(
-        (entry) => entry.path !== filePath
-      );
+      fakeGitEntries = fakeGitEntries.filter((entry) => entry.path !== filePath);
       respond(success(request.id, { discarded: true, filePath }));
       return true;
     }
 
     case "git.commit":
-      fakeGitEntries = fakeGitEntries.filter(
-        (entry) => entry.area !== "staged"
-      );
+      fakeGitEntries = fakeGitEntries.filter((entry) => entry.area !== "staged");
       fakeAhead += 1;
       respond(
         success(request.id, {
@@ -169,7 +149,7 @@ export function handleMockGitRequest<Response>(
           committed: true,
           sha: MOCK_HEAD,
           message: String(request.params.message ?? ""),
-        })
+        }),
       );
       return true;
 
@@ -208,7 +188,7 @@ export function handleMockGitRequest<Response>(
             status: "ready",
           },
           entries,
-        })
+        }),
       );
       return true;
     }
@@ -225,7 +205,7 @@ export function handleMockGitRequest<Response>(
             status: "ready",
           },
           entries: [{ path: "README.md", status: "modified" }],
-        })
+        }),
       );
       return true;
 
@@ -248,7 +228,7 @@ export function handleMockGitRequest<Response>(
           hasOutgoingChanges: fakeAhead > 0,
           hasMore: false,
           limit: Number(request.params.limit ?? 50),
-        })
+        }),
       );
       return true;
 
@@ -257,7 +237,7 @@ export function handleMockGitRequest<Response>(
         success(request.id, {
           success: true,
           message: "feat: improve Dev10x mobile",
-        })
+        }),
       );
       return true;
 
@@ -271,16 +251,14 @@ export function handleMockGitRequest<Response>(
           success: true,
           fields: {
             base: String(request.params.base ?? "main"),
-            title: String(
-              request.params.title || "feat: Dev10x mobile workspace"
-            ),
+            title: String(request.params.title || "feat: Dev10x mobile workspace"),
             body: String(
               request.params.body ||
-                "## Summary\n\n- Connect the copied mobile experience to Dev10x hosts."
+                "## Summary\n\n- Connect the copied mobile experience to Dev10x hosts.",
             ),
             draft: request.params.draft === true,
           },
-        })
+        }),
       );
       return true;
 
@@ -296,7 +274,7 @@ export function handleMockGitRequest<Response>(
           head: String(request.params.branch ?? "feature/dev10x-mobile"),
           title: "Dev10x mobile workspace",
           body: "",
-        })
+        }),
       );
       return true;
 

@@ -121,6 +121,25 @@ wait_for_mock_connections() {
   return 1
 }
 
+wait_for_mock_rpc() {
+  local method="$1"
+  for _ in $(seq 1 45); do
+    grep -Fq "[mock] ${method} (id:" "${MOCK_LOG}" 2>/dev/null && return 0
+    sleep 1
+  done
+  printf "Expected mock RPC call: %s\n" "${method}" >&2
+  return 1
+}
+
+assert_ui_absent() {
+  local value="$1"
+  dump_ui
+  if grep -Fq "${value}" "${UI_DUMP_PATH}"; then
+    printf "Unexpected UI text fragment: %s\n" "${value}" >&2
+    return 1
+  fi
+}
+
 stop_recording() {
   if [[ -n "${recording_pid}" ]]; then
     "${ADB}" emu screenrecord stop >/dev/null 2>&1 || true
@@ -132,6 +151,7 @@ cleanup() {
   stop_recording
   if [[ -n "${mock_pid}" ]]; then
     kill -TERM -- "-${mock_pid}" >/dev/null 2>&1 || true
+    wait "${mock_pid}" >/dev/null 2>&1 || true
   fi
   "${ADB}" reverse --remove "tcp:${MOCK_PORT}" >/dev/null 2>&1 || true
   "${ADB}" shell rm -f "${REMOTE_UI_DUMP}" >/dev/null 2>&1 || true
@@ -171,6 +191,7 @@ for _ in $(seq 1 30); do
 done
 if [[ ! -s "${PAIRING_FILE}" ]]; then
   printf "Mock pairing offer was not created\n" >&2
+  sed -n "1,120p" "${MOCK_LOG}" >&2 || true
   exit 1
 fi
 if [[ "$(stat -c '%a' "${PAIRING_FILE}")" != "600" ]]; then
@@ -197,6 +218,10 @@ recording_pid="active"
   -n "${APP_ACTIVITY}" >/dev/null
 trace_step "open redacted standalone-mock pairing deep link"
 
+wait_for_text "Pair with this Symphony host?"
+tap_accessible "Pair host"
+trace_step "confirm explicit device-to-host pairing"
+
 wait_for_text "${MOCK_HOST_NAME}"
 wait_for_text "Dev10x mobile workspace"
 trace_step "assert mock host identity and session library over production E2EE/RPC"
@@ -206,37 +231,40 @@ wait_for_text "${MOCK_HOST_NAME}"
 wait_for_text "Dev10x mobile workspace"
 trace_step "assert automatic reconnect after one intentional mock disconnect"
 
-tap_accessible "Open session Dev10x mobile workspace"
-wait_for_text "Mock host connected through the production encrypted RPC client."
-trace_step "assert encrypted session subscription and history"
-tap_accessible "Go back"
+tap_accessible "Dev10x mobile workspace"
+wait_for_mock_rpc "terminal.subscribe"
+sleep 2
+assert_ui_absent "Terminal failed to load"
+trace_step "assert copied xterm subscription and render over encrypted RPC"
+tap_accessible "Back to worktrees"
 
-tap_accessible "Open main menu"
 tap_accessible "Tasks"
-wait_for_text "Exercise Dev10x and Symphony mobile"
-tap_accessible "Open task SYM-101"
-wait_for_text "Port the standalone encrypted mock-server workflow."
+wait_for_text "Connect the copied Dev10x mobile experience"
+tap_accessible "Connect the copied Dev10x mobile experience"
+wait_for_text "Use the Symphony RPC host without changing the copied mobile interaction model."
 trace_step "assert task detail from standalone mock"
+"${ADB}" shell input keyevent 4
+sleep 1
+tap_accessible "Back to worktrees"
 
-tap_accessible "Files"
-wait_for_text "mobile/scripts/mock-server.ts"
+tap_accessible "Dev10x mobile workspace"
+tap_accessible "Open file explorer"
+wait_for_text "README.md"
 trace_step "assert mock workspace file listing"
-tap_accessible "Back"
+tap_accessible "Back to session"
 
-tap_accessible "Diff"
-wait_for_text "mobile/scripts/mock-server.ts"
+tap_accessible "Open source control"
+wait_for_ui_contains "mobile/src/app.tsx"
 trace_step "assert mock Git diff"
-tap_accessible "Back"
+tap_accessible "Back to session"
 
-tap_accessible "Terminal"
-wait_for_selector "content-desc" "Connection status: Live"
-wait_for_ui_contains "mobile/scripts/mock-server.ts"
-tap_accessible "Terminal command"
+tap_accessible "Switch to buffered command input"
+tap_accessible "Type a command…"
 "${ADB}" shell input text "git%sstatus"
-tap_accessible "Run command"
-wait_for_ui_contains "mock: command accepted"
+tap_accessible "Send command"
+wait_for_mock_rpc "terminal.send"
 trace_step "assert bidirectional terminal stream"
-tap_accessible "Back"
+tap_accessible "Back to worktrees"
 
 "${ADB}" exec-out screencap -p >"${SCREENSHOT_PATH}"
 stop_recording

@@ -105,11 +105,7 @@ export function mockTerminalScrollback(input: {
   rows: number;
   displayMode: "auto" | "desktop";
 }): Record<string, unknown> {
-  const lines = [
-    "$ dev10x mobile --mock",
-    "Dev10x mock host online",
-    "Symphony RPC: encrypted",
-  ];
+  const lines = ["$ dev10x mobile --mock", "Dev10x mock host online", "Symphony RPC: encrypted"];
   return {
     type: "scrollback",
     serialized: `${lines.join("\n")}\n`,
