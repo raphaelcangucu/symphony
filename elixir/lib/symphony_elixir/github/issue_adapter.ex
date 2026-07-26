@@ -112,10 +112,46 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
 
   @impl true
   def create_issue(%Project{} = project, attrs) when is_map(attrs) do
+    with {:ok, _preferred} <- IssueCreateRepo.resolve(project, attrs) do
+      case IssueCreateRepo.candidates(project, attrs) do
+        [] ->
+          {:error,
+           map_error(
+             {:invalid_repository,
+              "repository is required — pass repository on create_issue or set tracker.config.repo"}
+           )}
+
+        repos ->
+          create_issue_across_repos(project, attrs, repos)
+      end
+    else
+      {:error, reason} -> {:error, map_error(reason)}
+    end
+  end
+
+  # Prefer the resolved repo; when GitHub rejects create because Issues are
+  # disabled on that repository, retry remaining linked candidates so local
+  # drafts still land on the project board.
+  defp create_issue_across_repos(project, attrs, [repo | rest]) do
+    case create_issue_in_repo(project, attrs, repo) do
+      {:ok, _} = ok ->
+        ok
+
+      {:error, reason} ->
+        mapped = map_error(reason)
+
+        if rest != [] and issues_disabled_error?(mapped) do
+          create_issue_across_repos(project, attrs, rest)
+        else
+          {:error, mapped}
+        end
+    end
+  end
+
+  defp create_issue_in_repo(%Project{} = project, attrs, repo) do
     cfg = config(project)
 
-    with {:ok, repo} <- IssueCreateRepo.resolve(project, attrs),
-         {:ok, {owner, name}} <- RepoSpec.split(repo),
+    with {:ok, {owner, name}} <- RepoSpec.split(repo),
          {:ok, title} <- require_title(attrs),
          {:ok, meta} <- fetch_repo_metadata(owner, name),
          label_ids = resolve_label_ids(meta.labels, attrs),
@@ -125,10 +161,20 @@ defmodule SymphonyElixir.GitHub.IssueAdapter do
          {:ok, item_id} <- add_to_project(cfg.project_id, issue["id"]),
          :ok <- apply_status_target(cfg, item_id, status_target) do
       {:ok, build_created_dto(issue, project, attrs, meta.labels, label_ids)}
-    else
-      {:error, reason} -> {:error, map_error(reason)}
     end
   end
+
+  defp issues_disabled_error?({:remote_validation, %{errors: errors}}) when is_list(errors) do
+    Enum.any?(errors, &issues_disabled_message?/1)
+  end
+
+  defp issues_disabled_error?(_reason), do: false
+
+  defp issues_disabled_message?(message) when is_binary(message) do
+    String.contains?(String.downcase(message), "issues has been disabled")
+  end
+
+  defp issues_disabled_message?(_message), do: false
 
   @impl true
   def update_issue(%Project{} = project, identifier, attrs) when is_map(attrs) do

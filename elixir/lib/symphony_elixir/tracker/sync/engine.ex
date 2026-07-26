@@ -177,6 +177,10 @@ defmodule SymphonyElixir.Tracker.Sync.Engine do
         {:error, :no_remote_adapter}
 
       adapter ->
+        # Retry sync should revive exhausted dependents (comments/updates/moves)
+        # that failed while the create was still blocked.
+        requeue_failed_dependents(project, identifier)
+
         case adapter.get_issue(project, identifier) do
           {:ok, dto} ->
             pull_single_remote_issue(project, adapter, identifier, dto, opts)
@@ -190,17 +194,10 @@ defmodule SymphonyElixir.Tracker.Sync.Engine do
     end
   end
 
-  defp pull_single_remote_issue(project, adapter, identifier, dto, opts) do
-    remote = Normalize.issue(dto, comments: remote_comments(adapter, project, identifier))
-    pr_driver = Keyword.get(opts, :pr_driver, default_driver_for(project))
-
-    case LocalStore.upsert_remote_issue(project, remote) do
-      {:ok, issue} ->
-        maybe_sync_pull_requests(project, issue, pr_driver)
-        {:ok, issue}
-
-      {:error, _reason} = error ->
-        error
+  defp requeue_failed_dependents(project, identifier) do
+    case Context.get_issue(project.slug, identifier) do
+      {:ok, %IssueRecord{id: issue_id}} -> Outbox.requeue_failed_for_issue(project.id, issue_id)
+      _ -> 0
     end
   end
 
@@ -218,6 +215,24 @@ defmodule SymphonyElixir.Tracker.Sync.Engine do
         %IssueRecord{} = still_local ->
           {:error, local_create_push_error(project, still_local)}
       end
+    end
+  end
+
+  defp pull_single_remote_issue(project, adapter, identifier, dto, opts) do
+    remote = Normalize.issue(dto, comments: remote_comments(adapter, project, identifier))
+    pr_driver = Keyword.get(opts, :pr_driver, default_driver_for(project))
+    driver = Keyword.get(opts, :driver, default_driver_for(project))
+    max_attempts = Keyword.get(opts, :max_attempts, @default_max_attempts)
+
+    case LocalStore.upsert_remote_issue(project, remote) do
+      {:ok, issue} ->
+        # Push revived dependents (Retry requeues failed comments/updates first).
+        _ = push_outbox(project, driver, max_attempts)
+        maybe_sync_pull_requests(project, issue, pr_driver)
+        {:ok, issue}
+
+      {:error, _reason} = error ->
+        error
     end
   end
 
@@ -245,7 +260,9 @@ defmodule SymphonyElixir.Tracker.Sync.Engine do
        do: :ok
 
   defp ensure_local_issue_create_queued(project, %IssueRecord{} = issue) do
-    Outbox.requeue_issue_creates(project.id, [issue.identifier])
+    # Include pending so Retry sync resets a spent attempt budget instead of
+    # immediately exhausting after a few prior background failures.
+    Outbox.requeue_issue_creates(project.id, [issue.identifier], ["failed", "in_flight", "pending"])
     dedup_key = "issue:create:#{project.id}:#{issue.identifier}"
     payload = issue_create_payload(issue)
 
@@ -641,8 +658,80 @@ defmodule SymphonyElixir.Tracker.Sync.Engine do
     entry = Repo.get(OutboxEntry, entry.id) || entry
 
     case safe_push(driver, project, entry) do
-      {:ok, remote_id} -> record_pushed(acc, entry, remote_id)
-      {:error, reason} -> record_failed(acc, entry, reason, max_attempts)
+      {:ok, remote_id} ->
+        record_pushed(acc, entry, remote_id)
+
+      {:error, reason} ->
+        if deferrable_pending_remote?(entry, project, reason) do
+          defer_pending(acc, entry)
+        else
+          record_failed(acc, entry, reason, max_attempts)
+        end
+    end
+  end
+
+  # Updates/comments/moves against a local-only draft 404 on the remote. That is
+  # not a hard sync failure — keep the entry pending without burning attempts or
+  # overwriting the create error that the operator needs to see / retry.
+  defp deferrable_pending_remote?(entry, project, reason)
+       when reason in [:issue_not_found, :pending_remote_id] do
+    depends_on_remote_issue?(entry) and local_issue_missing_remote?(project, entry)
+  end
+
+  defp deferrable_pending_remote?(_entry, _project, _reason), do: false
+
+  defp depends_on_remote_issue?(%{entity_type: "issue", operation: op})
+       when op in ["update", "archive", "restore", "delete"],
+       do: true
+
+  defp depends_on_remote_issue?(%{entity_type: type}) when type in ["comment", "state", "relation"],
+    do: true
+
+  defp depends_on_remote_issue?(_entry), do: false
+
+  defp local_issue_missing_remote?(project, entry) do
+    case outbox_issue_identifier(project, entry) do
+      {:ok, identifier} ->
+        case Context.get_issue(project.slug, identifier) do
+          {:ok, %{remote_id: remote_id}} when is_binary(remote_id) and remote_id != "" -> false
+          {:ok, _} -> true
+          _ -> false
+        end
+
+      :error ->
+        false
+    end
+  end
+
+  defp outbox_issue_identifier(_project, %{payload: %{"identifier" => identifier}})
+       when is_binary(identifier) and identifier != "",
+       do: {:ok, identifier}
+
+  defp outbox_issue_identifier(%{id: project_id}, %{issue_id: issue_id})
+       when is_integer(issue_id) do
+    case Repo.get_by(IssueRecord, id: issue_id, project_id: project_id) do
+      %IssueRecord{identifier: identifier} when is_binary(identifier) and identifier != "" ->
+        {:ok, identifier}
+
+      _ ->
+        :error
+    end
+  end
+
+  defp outbox_issue_identifier(_project, _entry), do: :error
+
+  defp defer_pending(acc, entry) do
+    case Outbox.mark_deferred(entry) do
+      {:ok, _updated} ->
+        acc
+
+      {:error, changeset} ->
+        Logger.warning(
+          "Tracker sync could not defer outbox entry_id=#{entry.id} " <>
+            "dedup_key=#{entry.dedup_key} errors=#{inspect(changeset.errors)}"
+        )
+
+        acc
     end
   end
 
@@ -756,7 +845,7 @@ defmodule SymphonyElixir.Tracker.Sync.Engine do
   # raising a `MatchError` that takes the entire sync task (and the project's sync
   # state) down with it.
   defp record_failed(acc, entry, reason, max_attempts) do
-    case Outbox.mark_failed(entry, inspect(reason), max_attempts) do
+    case Outbox.mark_failed(entry, format_sync_error(reason), max_attempts) do
       {:ok, %{status: "failed"} = updated} ->
         mark_push_exhausted(updated)
         %{acc | failed: acc.failed + 1}
@@ -777,6 +866,34 @@ defmodule SymphonyElixir.Tracker.Sync.Engine do
         acc
     end
   end
+
+  defp format_sync_error({:remote_validation, %{errors: errors}}) when is_list(errors) do
+    errors
+    |> Enum.filter(&is_binary/1)
+    |> case do
+      [] -> "Remote validation failed"
+      messages -> Enum.join(messages, "; ")
+    end
+  end
+
+  defp format_sync_error({:remote_validation, %{} = fields}) do
+    fields
+    |> Enum.flat_map(fn
+      {_key, messages} when is_list(messages) -> Enum.filter(messages, &is_binary/1)
+      {_key, message} when is_binary(message) -> [message]
+      _ -> []
+    end)
+    |> case do
+      [] -> "Remote validation failed"
+      messages -> Enum.join(messages, "; ")
+    end
+  end
+
+  defp format_sync_error(:issue_not_found), do: "Remote issue not found"
+  defp format_sync_error(:pending_remote_id), do: "Waiting for remote issue create"
+  defp format_sync_error(reason) when is_atom(reason), do: Atom.to_string(reason)
+  defp format_sync_error(reason) when is_binary(reason), do: reason
+  defp format_sync_error(reason), do: inspect(reason)
 
   defp mark_comment_synced(%{"comment_id" => comment_id}) when is_integer(comment_id) do
     LocalStore.mark_comment_sync_status(comment_id, "synced")

@@ -137,6 +137,65 @@ defmodule SymphonyElixir.Tracker.Sync.OutboxTest do
     refute Repo.get(OutboxEntry, in_flight.id)
   end
 
+  test "requeue_issue_creates resets attempts for pending creates" do
+    {:ok, project} = Context.ensure_project(%{name: "Retry", slug: "retry-creates"})
+
+    {:ok, entry} =
+      Outbox.enqueue(%{
+        project_id: project.id,
+        entity_type: "issue",
+        operation: "create",
+        payload: %{"title" => "Draft"},
+        dedup_key: "issue:create:#{project.id}:RT-1"
+      })
+
+    entry
+    |> OutboxEntry.changeset(%{attempts: 4, last_error: ":issue_not_found"})
+    |> Repo.update!()
+
+    assert Outbox.requeue_issue_creates(project.id, ["RT-1"], ["pending"]) == 1
+
+    revived = Repo.get!(OutboxEntry, entry.id)
+    assert revived.status == "pending"
+    assert revived.attempts == 0
+    assert is_nil(revived.last_error)
+  end
+
+  test "requeue_failed_for_issue revives exhausted dependents for one issue", %{project: project} do
+    {:ok, issue_a} = Context.create_issue(project.slug, %{title: "A"})
+    {:ok, issue_b} = Context.create_issue(project.slug, %{title: "B"})
+
+    {:ok, matching} =
+      Outbox.enqueue(%{
+        project_id: project.id,
+        issue_id: issue_a.id,
+        entity_type: "comment",
+        operation: "create",
+        payload: %{"identifier" => issue_a.identifier, "body" => "hi"},
+        dedup_key: "comment:create:#{project.id}:#{issue_a.id}"
+      })
+
+    {:ok, other} =
+      Outbox.enqueue(%{
+        project_id: project.id,
+        issue_id: issue_b.id,
+        entity_type: "comment",
+        operation: "create",
+        payload: %{"identifier" => issue_b.identifier, "body" => "bye"},
+        dedup_key: "comment:create:#{project.id}:#{issue_b.id}"
+      })
+
+    Outbox.claim_pending(project.id, 10)
+    |> Enum.each(fn entry ->
+      assert {:ok, _} = Outbox.mark_failed(entry, ":issue_not_found", 1)
+    end)
+
+    assert Outbox.requeue_failed_for_issue(project.id, issue_a.id) == 1
+
+    assert Repo.get!(OutboxEntry, matching.id).status == "pending"
+    assert Repo.get!(OutboxEntry, other.id).status == "failed"
+  end
+
   test "requeue_failed_issue_creates revives only matching failed creates", %{project: project} do
     {:ok, _matching} =
       Outbox.enqueue(%{

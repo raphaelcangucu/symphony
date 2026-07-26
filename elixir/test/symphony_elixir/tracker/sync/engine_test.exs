@@ -677,6 +677,133 @@ defmodule SymphonyElixir.Tracker.Sync.EngineTest do
     assert detail =~ "boom"
   end
 
+  test "sync_project soft-defers update pushes when the local issue has no remote id yet" do
+    prev_tracker = Application.get_env(:symphony_elixir, :tracker)
+    Application.put_env(:symphony_elixir, :tracker, sync_enabled: true)
+    on_exit(fn -> restore_env(:tracker, prev_tracker) end)
+
+    migrate_repo()
+    clean_repo()
+
+    {:ok, project} =
+      Context.ensure_project(%{
+        name: "Gamba",
+        slug: "gamba-soft-defer",
+        tracker_kind: "github",
+        tracker_config: %{"repo" => "clouapp/gamba", "project_id" => "PVT_1"}
+      })
+
+    {:ok, draft} = Context.create_issue(project.slug, %{title: "Draft title", description: "body"})
+
+    {:ok, _} =
+      Outbox.enqueue(%{
+        project_id: project.id,
+        issue_id: draft.id,
+        entity_type: "issue",
+        operation: "create",
+        payload: %{"title" => "Draft title"},
+        dedup_key: "issue:create:#{project.id}:#{draft.identifier}"
+      })
+
+    {:ok, update_entry} =
+      Outbox.enqueue(%{
+        project_id: project.id,
+        issue_id: draft.id,
+        entity_type: "issue",
+        operation: "update",
+        payload: %{"identifier" => draft.identifier, "title" => "Edited"},
+        dedup_key: "issue:update:#{project.id}:#{draft.identifier}"
+      })
+
+    defmodule SoftDeferDriver do
+      @behaviour SymphonyElixir.Tracker.Sync.Driver
+
+      @impl true
+      def push(_project, %OutboxEntry{operation: "create"}),
+        do: {:error, {:remote_validation, %{errors: ["Issues has been disabled in this repository."]}}}
+
+      def push(_project, %OutboxEntry{operation: "update"}), do: {:error, :issue_not_found}
+
+      @impl true
+      def pull(_project, _opts), do: {:ok, []}
+
+      @impl true
+      def pull_pull_requests(_project, _issue), do: {:ok, []}
+    end
+
+    assert {:ok, _summary} =
+             Engine.sync_project(project, driver: SoftDeferDriver, force: true, max_attempts: 5)
+
+    reloaded_update = Repo.get!(OutboxEntry, update_entry.id)
+    assert reloaded_update.status == "pending"
+    assert reloaded_update.attempts == 0
+
+    reloaded_issue = Repo.get!(IssueRecord, draft.id)
+    assert reloaded_issue.sync_status in ["pending", "error"]
+    assert is_binary(reloaded_issue.last_sync_error)
+    assert reloaded_issue.last_sync_error =~ "Issues has been disabled"
+    refute reloaded_issue.last_sync_error =~ "issue_not_found"
+  end
+
+  test "sync_issue resets pending create attempts so Retry sync gets a full budget" do
+    prev_adapters = Application.get_env(:symphony_elixir, :issue_adapters)
+    prev_tracker = Application.get_env(:symphony_elixir, :tracker)
+    Application.put_env(:symphony_elixir, :issue_adapters, %{"github" => MissingRemoteAdapter})
+    Application.put_env(:symphony_elixir, :tracker, sync_enabled: true)
+
+    on_exit(fn ->
+      restore_env(:issue_adapters, prev_adapters)
+      restore_env(:tracker, prev_tracker)
+    end)
+
+    migrate_repo()
+    clean_repo()
+
+    {:ok, project} =
+      Context.ensure_project(%{
+        name: "Gamba",
+        slug: "gamba-retry-budget",
+        tracker_kind: "github",
+        tracker_config: %{"repo" => "clouapp/gamba", "project_id" => "PVT_1"}
+      })
+
+    {:ok, draft} = Context.create_issue(project.slug, %{title: "Draft title"})
+
+    {:ok, create_entry} =
+      Outbox.enqueue(%{
+        project_id: project.id,
+        issue_id: draft.id,
+        entity_type: "issue",
+        operation: "create",
+        payload: %{"title" => "Draft title"},
+        dedup_key: "issue:create:#{project.id}:#{draft.identifier}"
+      })
+
+    create_entry
+    |> OutboxEntry.changeset(%{status: "pending", attempts: 4, last_error: ":issue_not_found"})
+    |> Repo.update!()
+
+    defmodule RetryBudgetDriver do
+      @behaviour SymphonyElixir.Tracker.Sync.Driver
+
+      @impl true
+      def push(_project, _entry), do: {:error, :temporary}
+
+      @impl true
+      def pull(_project, _opts), do: {:ok, []}
+
+      @impl true
+      def pull_pull_requests(_project, _issue), do: {:ok, []}
+    end
+
+    assert {:error, {:sync_push_failed, _}} =
+             Engine.sync_issue(project, draft.identifier, driver: RetryBudgetDriver, force: true, max_attempts: 5)
+
+    reloaded = Repo.get!(OutboxEntry, create_entry.id)
+    assert reloaded.status == "pending"
+    assert reloaded.attempts == 1
+  end
+
   test "sync_issue is not supported on local projects", %{project: project} do
     prev_tracker = Application.get_env(:symphony_elixir, :tracker)
     Application.put_env(:symphony_elixir, :tracker, sync_enabled: true)

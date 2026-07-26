@@ -3,11 +3,14 @@ defmodule SymphonyElixir.GitHub.IssueCreateRepo do
   Resolves which GitHub repository receives a newly created issue on multi-repo
   GitHub Project boards.
 
-  Resolution order:
+  Resolution order for `resolve/2` (first candidate):
 
   1. Explicit `repository` / `repo` in create attrs (assistant tools)
   2. Label inference (`area:backend` → linked repo whose name or role matches)
   3. `tracker.config.repo` fallback
+
+  `candidates/2` returns that preferred repo plus remaining linked fallbacks so
+  create can retry when the preferred repository has Issues disabled.
   """
 
   alias SymphonyElixir.LocalTracker.{Context, Project}
@@ -28,11 +31,41 @@ defmodule SymphonyElixir.GitHub.IssueCreateRepo do
       {:ok, repo}
     else
       false ->
-        {:error, {:invalid_repository, "repository is required — pass repository on create_issue or set tracker.config.repo"}}
+        {:error,
+         {:invalid_repository,
+          "repository is required — pass repository on create_issue or set tracker.config.repo"}}
 
       {:error, _} = error ->
         error
     end
+  end
+
+  @doc """
+  Ordered create targets: preferred repo first, then `tracker.config.repo`, then
+  other linked repositories (primary role first). Duplicates and unlinked repos
+  are removed.
+
+  An explicit repository that is not linked to the project is omitted; callers
+  should use `resolve/2` first when they need a hard validation error.
+  """
+  @spec candidates(Project.t(), map()) :: [String.t()]
+  def candidates(%Project{} = project, attrs) when is_map(attrs) do
+    allowed = allowed_repos(project)
+    linked = linked_repos(project)
+
+    preferred =
+      case resolve(project, attrs) do
+        {:ok, repo} -> repo
+        {:error, _} -> nil
+      end
+
+    fallback = tracker_repo(project)
+
+    [preferred, fallback | linked]
+    |> Enum.filter(&(is_binary(&1) and String.trim(&1) != ""))
+    |> Enum.map(&String.trim/1)
+    |> Enum.uniq()
+    |> Enum.filter(&allowed_repo?(&1, allowed))
   end
 
   @spec explicit_repo(map()) :: String.t() | nil
@@ -89,6 +122,15 @@ defmodule SymphonyElixir.GitHub.IssueCreateRepo do
 
   defp match_area_repo(_repo, _area), do: nil
 
+  defp linked_repos(%Project{slug: slug}) when is_binary(slug) do
+    slug
+    |> Context.list_repositories()
+    |> Enum.sort_by(fn repo -> if repo.role == "primary", do: 0, else: 1 end)
+    |> Enum.map(& &1.github_full_name)
+  end
+
+  defp linked_repos(_project), do: []
+
   defp allowed_repos(%Project{slug: slug}) do
     case Context.list_repositories(slug) do
       [] -> :any
@@ -105,6 +147,9 @@ defmodule SymphonyElixir.GitHub.IssueCreateRepo do
       {:error, {:invalid_repository, "repository #{repo} is not linked to this project"}}
     end
   end
+
+  defp allowed_repo?(_repo, :any), do: true
+  defp allowed_repo?(repo, %MapSet{} = allowed), do: MapSet.member?(allowed, repo)
 
   defp tracker_repo(%Project{tracker_config: %{"repo" => repo}}) when is_binary(repo) do
     case String.trim(repo) do
