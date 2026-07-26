@@ -560,13 +560,13 @@ sleep 2
 test -s "${TERMINAL_SCREENSHOT_PATH}"
 trace_step "assert terminal remains an explicit xterm tool over the same host RPC"
 
-tap_screen_fraction 27 32 1 20 "Open file explorer"
+tap_accessible "Open file explorer"
 tap_accessible "app"
 wait_for_text "README.md"
 trace_step "assert selected-host workspace files"
 tap_accessible "Back to session"
 
-tap_screen_fraction 15 16 1 20 "Open source control"
+tap_accessible "Open source control"
 wait_for_text "README.md"
 trace_step "assert selected-host uncommitted diff"
 tap_accessible "Back"
