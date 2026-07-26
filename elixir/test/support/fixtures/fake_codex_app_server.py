@@ -9,6 +9,11 @@ def write(payload):
 
 
 for line in sys.stdin:
+    trace_file = os.getenv("FAKE_CODEX_TRACE")
+    if trace_file:
+        with open(trace_file, "a", encoding="utf-8") as trace:
+            trace.write(line)
+
     try:
         message = json.loads(line)
     except json.JSONDecodeError:
