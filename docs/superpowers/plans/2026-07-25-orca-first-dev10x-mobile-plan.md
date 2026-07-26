@@ -1397,7 +1397,7 @@ rg -n "EXPO_PUBLIC_E2E_FIXTURES|fixtureMode|createFixtureRuntime" \
 Expected: no fixture-mode application runtime. The external mock is selected
 only by pairing its endpoint.
 
-- [ ] **Step 5: Run the focused smoke**
+- [x] **Step 5: Run the focused smoke**
 
 Run:
 
@@ -1410,7 +1410,7 @@ bash e2e/mock-server-smoke.sh
 
 Expected: PASS, labeled `backend: mock`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add mobile/scripts mobile/src/rpc mobile/e2e/mock-server-smoke.sh
@@ -1492,7 +1492,7 @@ npx vitest run src/brand/dev10x-brand.test.ts \
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add mobile/app.config.ts mobile/app mobile/assets \
@@ -1507,7 +1507,7 @@ git commit -m "fix(mobile): apply Dev10x brand across copied Orca flows"
 - Modify only files required by validation failures.
 - Produce ignored artifacts under `mobile/artifacts/e2e/`.
 
-- [ ] **Step 1: Run formatting, lint and type-check**
+- [x] **Step 1: Run formatting, lint and type-check**
 
 Run:
 
@@ -1520,14 +1520,14 @@ npm run typecheck
 
 Expected: PASS.
 
-- [ ] **Step 2: Run only the focused cross-layer tests used by this plan**
+- [x] **Step 2: Run only the focused cross-layer tests used by this plan**
 
 Run the exact Vitest/Jest/ExUnit files named in Tasks 2–13. Do not replace them
 with `npm test`, `mix test` without paths or `make-all`.
 
 Expected: all focused tests pass.
 
-- [ ] **Step 3: Build the local Android release APK**
+- [x] **Step 3: Build the local Android release APK**
 
 Run:
 
@@ -1541,7 +1541,7 @@ Expected: release APK for `arm64-v8a` and a recorded SHA-256. If emulator E2E
 requires x86_64, run the existing bounded E2E build script once; do not build
 all architectures.
 
-- [ ] **Step 4: Install and smoke the default brand**
+- [x] **Step 4: Install and smoke the default brand**
 
 Run:
 
@@ -1553,7 +1553,7 @@ adb shell monkey -p dev.dev10x.symphony 1
 Expected: launcher/splash/app identity is Dev10x and the first screen is the
 copied Orca onboarding/home experience.
 
-- [ ] **Step 5: Commit validation fixes**
+- [x] **Step 5: Commit validation fixes**
 
 Commit only source fixes; do not commit APKs, videos, traces or pairing
 secrets.
@@ -1564,14 +1564,14 @@ secrets.
 
 - Modify: `mobile/e2e/multi-host-smoke.sh`
 - Create ignored:
-  `mobile/artifacts/e2e/dev10x-orca-first-real-host-e2e.mp4`
+  `mobile/artifacts/e2e/dev10x-real-host-e2e.mp4`
 - Create ignored:
-  `mobile/artifacts/e2e/dev10x-orca-first-real-host-contact-sheet.png`
+  `mobile/artifacts/e2e/dev10x-real-host-contact-sheet.png`
 - Create ignored:
-  `mobile/artifacts/e2e/dev10x-orca-first-real-host-report.md`
+  `mobile/artifacts/e2e/dev10x-real-host-report.md`
 - Modify PR description through GitHub after local evidence passes.
 
-- [ ] **Step 1: Start two real local Symphony hosts**
+- [x] **Step 1: Start two real local Symphony hosts**
 
 Use separate ports, databases, host identities, projects and workspaces. Create
 distinct per-device pairing offers. Never print or persist pairing secrets in
@@ -1580,7 +1580,7 @@ the report, trace or video.
 Expected: both `/mobile/rpc` endpoints answer independently and advertise
 different `host_id` values.
 
-- [ ] **Step 2: Run the complete real-host Android journey**
+- [x] **Step 2: Run the complete real-host Android journey**
 
 The automated journey must show:
 
@@ -1596,15 +1596,15 @@ The automated journey must show:
 10. same selected host and session data;
 11. switch back to Dev10x Workspace without a second connection.
 
-- [ ] **Step 3: Validate the recording**
+- [x] **Step 3: Validate the recording**
 
 Run:
 
 ```bash
 ffprobe -v error -show_entries format=duration \
   -show_entries stream=codec_name,width,height \
-  -of json mobile/artifacts/e2e/dev10x-orca-first-real-host-e2e.mp4
-sha256sum mobile/artifacts/e2e/dev10x-orca-first-real-host-e2e.mp4
+  -of json mobile/artifacts/e2e/dev10x-real-host-e2e.mp4
+sha256sum mobile/artifacts/e2e/dev10x-real-host-e2e.mp4
 ```
 
 Expected: H.264 video, portrait dimensions, non-zero duration and a recorded
@@ -1638,19 +1638,19 @@ Expected: PR body validation passes and GitHub shows the new branch head.
 - Create: `mobile/docs/ios-real-host-e2e.md`
 - Modify: PR #7 description with the eventual iOS result.
 
-- [ ] **Step 1: Document exact Mac commands**
+- [x] **Step 1: Document exact Mac commands**
 
 Include Node/Xcode prerequisites, dependency install, CocoaPods/Expo prebuild,
 `npm run ios`, pairing with a reachable Symphony host, log redaction and the
 same semantic E2E checkpoints used on Android.
 
-- [ ] **Step 2: Add an iOS evidence checklist**
+- [x] **Step 2: Add an iOS evidence checklist**
 
 The checklist covers QR permission, SecureStore/Keychain, background/foreground
 reconnect, notification routing, terminal keyboard, file preview, Source
 Control, interface switching and tablet layout.
 
-- [ ] **Step 3: Run documentation checks and commit**
+- [x] **Step 3: Run documentation checks and commit**
 
 Run:
 
