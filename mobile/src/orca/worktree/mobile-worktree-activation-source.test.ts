@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
-const source = readFileSync(new URL('../../app/h/[hostId]/index.tsx', import.meta.url), 'utf8')
+const source = readFileSync(new URL('../../../app/h/[hostId]/index.tsx', import.meta.url), 'utf8')
 
 function sliceBetween(startPattern: string, endPattern: string): string {
   const start = source.indexOf(startPattern)

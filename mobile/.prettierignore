@@ -11,6 +11,7 @@ app/terminal-settings.tsx
 app/troubleshoot.tsx
 app/voice-settings.tsx
 src/orca/
+src/renderer/
 src/shared/
 
 # Vendored native module.

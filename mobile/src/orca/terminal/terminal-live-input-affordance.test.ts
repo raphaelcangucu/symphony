@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 const sessionRouteSource = readFileSync(
-  new URL('../../app/h/[hostId]/session/[worktreeId].tsx', import.meta.url),
+  new URL('../../../app/h/[hostId]/session/[worktreeId].tsx', import.meta.url),
   'utf8'
 )
 const liveInputStatusSource = readFileSync(
@@ -10,7 +10,7 @@ const liveInputStatusSource = readFileSync(
   'utf8'
 )
 const commandInputStylesSource = readFileSync(
-  new URL('../../app/h/[hostId]/session/mobile-session-command-input-styles.ts', import.meta.url),
+  new URL('../../../app/h/[hostId]/session/mobile-session-command-input-styles.ts', import.meta.url),
   'utf8'
 )
 

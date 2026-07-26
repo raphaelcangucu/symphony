@@ -10,7 +10,7 @@ import {
 } from './terminal-foreground-recovery'
 
 const sessionSource = readFileSync(
-  new URL('../../app/h/[hostId]/session/[worktreeId].tsx', import.meta.url),
+  new URL('../../../app/h/[hostId]/session/[worktreeId].tsx', import.meta.url),
   'utf8'
 )
 

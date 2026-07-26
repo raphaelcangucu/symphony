@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 const sessionRouteSource = readFileSync(
-  new URL('../../app/h/[hostId]/session/[worktreeId].tsx', import.meta.url),
+  new URL('../../../app/h/[hostId]/session/[worktreeId].tsx', import.meta.url),
   'utf8'
 )
 
