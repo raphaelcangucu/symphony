@@ -313,7 +313,7 @@ feat(benchmark): require official Dev10x identity
 - Modify: `benchmarks/landing-page-agent-comparison/src/capture-visuals.mjs`
 - Modify: `benchmarks/landing-page-agent-comparison/tests/capture-visuals.test.mjs`
 
-- [ ] **Step 1: Write failing visual-name and manifest tests**
+- [x] **Step 1: Write failing visual-name and manifest tests**
 
 Expect `visualScreenshotNames(runId)` to include:
 
@@ -331,13 +331,13 @@ Expect `visualScreenshotNames(runId)` to include:
 Expect the E2E manifest to list five site screenshots: hero, flow, site
 evidence, full desktop and full mobile.
 
-- [ ] **Step 2: Run capture tests and verify RED**
+- [x] **Step 2: Run capture tests and verify RED**
 
 Run: `node --test tests/capture-visuals.test.mjs`
 
 Expected: FAIL because section screenshots are absent.
 
-- [ ] **Step 3: Implement section capture**
+- [x] **Step 3: Implement section capture**
 
 After the first navigation:
 
@@ -354,18 +354,18 @@ Copy both files to the report screen directory, include them in the returned
 capture paths and canonical Evidence manifest, and render them inline in
 `renderVisualComparison`.
 
-- [ ] **Step 4: Strengthen Evidence-tab verification**
+- [x] **Step 4: Strengthen Evidence-tab verification**
 
 Raise the expected rendered screenshot count from two to five while preserving
 the two-video requirement. Update the test fixture and error messages.
 
-- [ ] **Step 5: Verify GREEN**
+- [x] **Step 5: Verify GREEN**
 
 Run: `node --test tests/capture-visuals.test.mjs`
 
 Expected: all capture, media and Evidence-tab tests pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 Commit subject:
 

@@ -137,6 +137,9 @@ test("visual captures use safe stable report names", () => {
     visualScreenshotNames("orchestrator-claude-opus5-high"),
     {
       hero: "orchestrator-claude-opus5-high-hero.png",
+      flow: "orchestrator-claude-opus5-high-flow.png",
+      siteEvidence:
+        "orchestrator-claude-opus5-high-site-evidence.png",
       full: "orchestrator-claude-opus5-high-full.png",
       mobileFull: "orchestrator-claude-opus5-high-mobile-full.png",
       evidenceTab:
@@ -158,6 +161,11 @@ test("visual report preserves captured and blocked cells", () => {
     { id: "session-cursor-composer2.5", status: "skipped-contract" },
   ]);
   assert.match(report, /screens\/session-codex-gpt5\.6\.sol-low-hero\.png/);
+  assert.match(report, /screens\/session-codex-gpt5\.6\.sol-low-flow\.png/);
+  assert.match(
+    report,
+    /screens\/session-codex-gpt5\.6\.sol-low-site-evidence\.png/,
+  );
   assert.match(
     report,
     /screens\/session-codex-gpt5\.6\.sol-low-mobile-full\.png/,
@@ -204,6 +212,9 @@ test("canonical manifest exposes desktop, mobile, WebM, MP4, trace, and real nav
   assert.deepEqual(
     e2e.screenshots.map((entry) => entry.path),
     [
+      "artifacts/screens/session-cursor-composer2.5-hero.png",
+      "artifacts/screens/session-cursor-composer2.5-flow.png",
+      "artifacts/screens/session-cursor-composer2.5-site-evidence.png",
       "artifacts/screens/session-cursor-composer2.5-full.png",
       "artifacts/screens/session-cursor-composer2.5-mobile-full.png",
     ],
@@ -232,7 +243,8 @@ test("Evidence-tab verification navigates the real UI and requires rendered medi
   const card = {
     waitFor: async (options) => calls.push(["waitFor", options]),
     locator: (selector) => ({
-      count: async () => (selector === "img" || selector === "video" ? 2 : 0),
+      count: async () =>
+        selector === "img" ? 5 : selector === "video" ? 2 : 0,
     }),
   };
   const page = {
@@ -256,7 +268,7 @@ test("Evidence-tab verification navigates the real UI and requires rendered medi
     result.route,
     "http://127.0.0.1:4010/tracker/projects/symphony%20benchmark/board/issues/SYM-2/evidence",
   );
-  assert.equal(result.screenshot_count, 2);
+  assert.equal(result.screenshot_count, 5);
   assert.equal(result.video_count, 2);
   assert.deepEqual(calls[0], [
     "goto",
@@ -276,7 +288,13 @@ test("Evidence-tab verification requires the persisted visual contract", () => {
         {
           kind: "e2e",
           status: "passed",
-          screenshots: [{ path: "desktop.png" }, { path: "mobile.png" }],
+          screenshots: [
+            { path: "hero.png" },
+            { path: "flow.png" },
+            { path: "site-evidence.png" },
+            { path: "desktop.png" },
+            { path: "mobile.png" },
+          ],
           videos: [{ path: "flow.webm" }, { path: "flow.mp4" }],
           trace: "trace.zip",
         },

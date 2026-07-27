@@ -40,6 +40,8 @@ export function visualScreenshotNames(runId) {
   const safeRunId = artifactSlug(runId);
   return {
     hero: `${safeRunId}-hero.png`,
+    flow: `${safeRunId}-flow.png`,
+    siteEvidence: `${safeRunId}-site-evidence.png`,
     full: `${safeRunId}-full.png`,
     mobileFull: `${safeRunId}-mobile-full.png`,
     evidenceTab: `${safeRunId}-evidence-tab.png`,
@@ -61,6 +63,10 @@ export function renderVisualComparison(captures) {
     if (capture.status === "captured") {
       lines.push(
         `![Hero de ${capture.id}](screens/${capture.id}-hero.png)`,
+        "",
+        `![Fluxo de ${capture.id}](screens/${capture.id}-flow.png)`,
+        "",
+        `![Seção de evidências de ${capture.id}](screens/${capture.id}-site-evidence.png)`,
         "",
         `![Página completa de ${capture.id}](screens/${capture.id}-full.png)`,
         "",
@@ -269,6 +275,9 @@ export function evidenceManifestForRun({
   const generatedE2e = validationStep(collected, "npm run test:e2e");
   const buildReport = "artifacts/reports/build.txt";
   const e2eReport = "artifacts/reports/e2e.txt";
+  const heroRelative = `artifacts/screens/${names.hero}`;
+  const flowRelative = `artifacts/screens/${names.flow}`;
+  const siteEvidenceRelative = `artifacts/screens/${names.siteEvidence}`;
   const desktopRelative = `artifacts/screens/${names.full}`;
   const mobileRelative = `artifacts/screens/${names.mobileFull}`;
   const webmRelative = `artifacts/videos/${names.video}`;
@@ -296,6 +305,13 @@ export function evidenceManifestForRun({
         status: generatedE2e?.status ?? "failed",
         report: e2eReport,
         screenshots: [
+          artifactRef(heroRelative, `${label} hero`, navigations),
+          artifactRef(flowRelative, `${label} flow`, navigations),
+          artifactRef(
+            siteEvidenceRelative,
+            `${label} evidence section`,
+            navigations,
+          ),
           artifactRef(
             desktopRelative,
             `${label} desktop full page`,
@@ -348,7 +364,7 @@ export function assertEvidenceTabRecord(records, { runId, threadId }) {
   );
   if (
     e2e.status !== "passed" ||
-    screenshots.length < 2 ||
+    screenshots.length < 5 ||
     !videoPaths.some((path) => /\.webm$/i.test(path ?? "")) ||
     !videoPaths.some((path) => /\.mp4$/i.test(path ?? "")) ||
     typeof e2e.trace !== "string" ||
@@ -382,7 +398,7 @@ export async function verifyEvidenceTabUi(
       const images = [...record.querySelectorAll("img")];
       const videos = [...record.querySelectorAll("video")];
       return (
-        images.length >= 2 &&
+        images.length >= 5 &&
         images.every((image) => image.complete && image.naturalWidth > 0) &&
         videos.length >= 2 &&
         videos.every((video) => video.readyState >= 1)
@@ -394,7 +410,7 @@ export async function verifyEvidenceTabUi(
 
   const screenshotCount = await card.locator("img").count();
   const videoCount = await card.locator("video").count();
-  if (screenshotCount < 2 || videoCount < 2) {
+  if (screenshotCount < 5 || videoCount < 2) {
     throw new Error(
       `Evidence UI run ${runId} rendered ${screenshotCount} screenshots and ${videoCount} videos`,
     );
@@ -517,6 +533,8 @@ async function captureRun({
   await mkdir(videosRoot, { recursive: true });
   await mkdir(tracesRoot, { recursive: true });
   const heroPath = join(screensRoot, names.hero);
+  const flowPath = join(screensRoot, names.flow);
+  const siteEvidencePath = join(screensRoot, names.siteEvidence);
   const desktopPath = join(screensRoot, names.full);
   const mobilePath = join(screensRoot, names.mobileFull);
   const evidenceTabPath = join(reportRoot, names.evidenceTab);
@@ -568,6 +586,17 @@ async function captureRun({
     await page.goto(url, { waitUntil: "networkidle" });
     const capturedNavigations = [page.url()];
     await page.screenshot({ path: heroPath });
+    const flow = page.locator("#fluxo");
+    await flow.waitFor({ state: "visible", timeout: 30_000 });
+    await flow.scrollIntoViewIfNeeded();
+    await flow.screenshot({ path: flowPath });
+    const siteEvidence = page.locator("#evidencias");
+    await siteEvidence.waitFor({ state: "visible", timeout: 30_000 });
+    await siteEvidence.scrollIntoViewIfNeeded();
+    await siteEvidence.screenshot({ path: siteEvidencePath });
+    await page.evaluate(() =>
+      window.scrollTo({ top: 0, behavior: "instant" }),
+    );
     await page.screenshot({
       path: desktopPath,
       fullPage: true,
@@ -604,6 +633,8 @@ async function captureRun({
     await transcodeGifPreview(mp4Path, gifPreviewPath);
     await Promise.all([
       copyFile(heroPath, join(reportRoot, names.hero)),
+      copyFile(flowPath, join(reportRoot, names.flow)),
+      copyFile(siteEvidencePath, join(reportRoot, names.siteEvidence)),
       copyFile(desktopPath, join(reportRoot, names.full)),
       copyFile(mobilePath, join(reportRoot, names.mobileFull)),
       copyFile(webmPath, join(reportVideoRoot, names.video)),
@@ -618,6 +649,8 @@ async function captureRun({
       names,
       paths: {
         hero: heroPath,
+        flow: flowPath,
+        site_evidence: siteEvidencePath,
         full: desktopPath,
         mobile_full: mobilePath,
         video: webmPath,
