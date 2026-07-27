@@ -638,7 +638,7 @@ Include:
 - inline GIF previews linked to all six MP4s;
 - Test Plan with commands actually run.
 
-- [ ] **Step 7: Monitor checks and audit the final PR**
+- [x] **Step 7: Monitor checks and audit the final PR**
 
 Require green applicable checks, a clean branch, remote SHA equality, a
 mergeable open PR, valid committed media links and no missing objective
