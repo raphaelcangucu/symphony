@@ -1,8 +1,9 @@
 import "react-native-reanimated";
 
 import { Stack, useRouter } from "expo-router";
+import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { QueryProvider } from "@/api/QueryProvider";
@@ -17,6 +18,8 @@ import { HostStoreProvider } from "@/dev10x/transport/HostStoreProvider";
 import { AppRuntimeProvider, productionRuntime, useAppRuntime } from "@/runtime/AppRuntime";
 import { HostRuntimeProvider } from "@/runtime/HostRuntimeProvider";
 import { ThemeProvider, useAppTheme } from "@/theme/ThemeProvider";
+
+void SplashScreen.preventAutoHideAsync().catch(() => undefined);
 
 export default function RootLayout() {
   return (
@@ -47,6 +50,13 @@ function ThemedStack() {
   const router = useRouter();
   const { notifications } = useAppRuntime();
   const { hydrated, activeProfile, profiles, selectProfile } = useConnection();
+  const splashHideStarted = useRef(false);
+
+  useEffect(() => {
+    if (!hydrated || splashHideStarted.current) return;
+    splashHideStarted.current = true;
+    void SplashScreen.hideAsync().catch(() => undefined);
+  }, [hydrated]);
 
   useEffect(() => {
     if (!hydrated) return;

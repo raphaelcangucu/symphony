@@ -8,19 +8,22 @@ const config: ExpoConfig = {
   slug: "symphony-mobile",
   version: "0.1.0",
   orientation: "default",
-  icon: "./assets/dev10x-icon.png",
+  icon: "./assets/dev10x-native/icon-android.png",
   scheme: "symphony",
   userInterfaceStyle: "dark",
   newArchEnabled: true,
   ios: {
     bundleIdentifier: "dev.dev10x.symphony",
+    icon: "./assets/dev10x-native/icon-ios.png",
     supportsTablet: true,
   },
   android: {
     package: "dev.dev10x.symphony",
+    icon: "./assets/dev10x-native/icon-android.png",
     adaptiveIcon: {
-      foregroundImage: "./assets/dev10x-icon.png",
-      backgroundColor: "#111111",
+      foregroundImage: "./assets/dev10x-native/adaptive-foreground.png",
+      monochromeImage: "./assets/dev10x-native/adaptive-monochrome.png",
+      backgroundColor: "#090A0F",
     },
   },
   web: {
@@ -33,6 +36,18 @@ const config: ExpoConfig = {
     "expo-secure-store",
     "expo-notifications",
     "expo-video",
+    [
+      "expo-splash-screen",
+      {
+        image: "./assets/dev10x-native/splash.png",
+        resizeMode: "cover",
+        backgroundColor: "#090A0F",
+        dark: {
+          image: "./assets/dev10x-native/splash.png",
+          backgroundColor: "#090A0F",
+        },
+      },
+    ],
     [
       "expo-camera",
       {
