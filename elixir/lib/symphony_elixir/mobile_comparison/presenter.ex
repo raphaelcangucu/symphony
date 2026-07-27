@@ -1,0 +1,74 @@
+defmodule SymphonyElixir.MobileComparison.Presenter do
+  @moduledoc "Builds the provider-neutral comparison snapshot consumed by mobile."
+
+  @terminal_statuses ~w(passed failed blocked saved completed error cancelled canceled)
+  @passed_statuses ~w(passed saved completed)
+  @failed_statuses ~w(failed blocked error cancelled canceled)
+
+  @spec snapshot(map(), [map()]) :: map()
+  def snapshot(parent, cells) when is_map(parent) and is_list(cells) do
+    terminal = Enum.count(cells, &(value(&1, :status) in @terminal_statuses))
+    passed = Enum.count(cells, &(value(&1, :status) in @passed_statuses))
+    failed = Enum.count(cells, &(value(&1, :status) in @failed_statuses))
+
+    %{
+      "project_slug" => value(parent, :project_slug),
+      "identifier" => value(parent, :identifier),
+      "title" => value(parent, :title),
+      "status" => if(terminal == length(cells), do: "completed", else: "running"),
+      "progress" => %{
+        "terminal" => terminal,
+        "passed" => passed,
+        "failed" => failed,
+        "total" => length(cells)
+      },
+      "cells" => cells,
+      "decision" => nil
+    }
+  end
+
+  @spec cell(map(), map(), map() | nil, map() | nil, [map()], [map()]) :: map()
+  def cell(contract, child, thread, execution, previews, evidence) do
+    %{
+      "id" => contract.id,
+      "path" => Atom.to_string(contract.path),
+      "provider" => contract.provider,
+      "requested_model" => contract.model,
+      "requested_effort" => contract.effort,
+      "effective_effort" => contract.effective_effort,
+      "resolved_model" => resolved_value(thread, execution, :resolved_model),
+      "resolved_effort" => resolved_value(thread, execution, :resolved_effort),
+      "status" => cell_status(contract.path, thread, execution),
+      "attempt" => attempt(execution),
+      "issue_identifier" => value(child, :identifier),
+      "thread_id" => value(thread, :id),
+      "execution_session_id" => value(execution, :execution_session_id),
+      "latest_message" => resolved_value(thread, execution, :latest_message),
+      "error" => resolved_value(thread, execution, :error),
+      "previews" => previews,
+      "evidence" => evidence
+    }
+  end
+
+  defp cell_status(:session, thread, _execution) do
+    case value(thread, :status) do
+      "active" -> "live"
+      "closed" -> "completed"
+      "error" -> "error"
+      nil -> "starting"
+      status -> status
+    end
+  end
+
+  defp cell_status(:orchestrator, _thread, execution),
+    do: value(execution, :status) || "starting"
+
+  defp attempt(nil), do: 1
+  defp attempt(execution), do: (value(execution, :retry_attempt) || 0) + 1
+
+  defp resolved_value(primary, secondary, key),
+    do: value(primary, key) || value(secondary, key)
+
+  defp value(nil, _key), do: nil
+  defp value(map, key), do: Map.get(map, key, Map.get(map, Atom.to_string(key)))
+end

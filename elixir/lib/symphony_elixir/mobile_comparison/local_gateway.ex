@@ -1,0 +1,297 @@
+defmodule SymphonyElixir.MobileComparison.LocalGateway do
+  @moduledoc """
+  Production comparison gateway backed by existing Symphony host services.
+
+  Task and session mutations pass through the same allowlisted tracker bridge
+  used by encrypted mobile RPC. Agent turns use the existing assistant channel
+  state machine, while snapshots reuse orchestrator, preview, and evidence
+  presenters.
+  """
+
+  @behaviour SymphonyElixir.MobileComparison.Gateway
+
+  alias SymphonyElixir.Assistant.History
+  alias SymphonyElixir.MobileComparison.{Contract, SessionStarter}
+  alias SymphonyElixir.MobileRpc.{EvidenceService, OrchestratorService, TrackerBridge}
+
+  @cell_marker ~r/^\[dev10x-comparison:([a-z0-9-]+)\]\s*/
+
+  @impl true
+  def get_parent(project_slug, identifier, context) do
+    request(context, :tasks, "GET", issue_path(project_slug, identifier))
+    |> unwrap_data()
+  end
+
+  @impl true
+  def list_children(project_slug, parent_identifier, context) do
+    with {:ok, children} <-
+           request(
+             context,
+             :tasks,
+             "GET",
+             issue_path(project_slug, parent_identifier) <> "/subtasks"
+           )
+           |> unwrap_data(),
+         true <- is_list(children) do
+      {:ok, Enum.map(children, &put_cell_identity/1)}
+    else
+      false -> {:error, :invalid_subtask_response}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @impl true
+  def create_child(project_slug, parent_identifier, cell, prompt, context) do
+    body = %{
+      "title" => "[dev10x-comparison:#{cell.id}] #{cell.title}",
+      "description" => prompt,
+      "status" => "Backlog",
+      "agent" => cell.provider,
+      "model" => cell.model,
+      "effort" => cell.effort,
+      "mode" => "yolo"
+    }
+
+    request(
+      context,
+      :tasks,
+      "POST",
+      issue_path(project_slug, parent_identifier) <> "/subtasks",
+      body,
+      idempotency_key(context, cell.id, "child")
+    )
+    |> unwrap_data()
+    |> map_ok(&put_cell_identity/1)
+  end
+
+  @impl true
+  def ensure_session(project_slug, child, cell, context) do
+    case get_session(project_slug, child, cell, context) do
+      {:ok, thread} ->
+        {:ok, thread}
+
+      {:error, :not_found} ->
+        create_session(project_slug, child, cell, context)
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  @impl true
+  def get_session(project_slug, child, cell, context) do
+    history = Map.get(context, :comparison_history, History)
+    identifier = value(child, :identifier)
+
+    thread =
+      [
+        scope: "issue_session",
+        project_slug: project_slug,
+        issue_identifier: identifier,
+        include_archived: true,
+        limit: 100
+      ]
+      |> history.list_threads()
+      |> Enum.filter(&(value(&1, :requested_model) == cell.model))
+      |> Enum.sort_by(&(value(&1, :id) || 0), :desc)
+      |> List.first()
+
+    case thread do
+      nil -> {:error, :not_found}
+      existing -> {:ok, maybe_mark_ready(existing, context)}
+    end
+  end
+
+  @impl true
+  def start_session(thread, prompt, context) do
+    context
+    |> Map.get(:comparison_session_starter, SessionStarter)
+    |> apply(:start, [thread, prompt, context])
+  end
+
+  @impl true
+  def dispatch_child(project_slug, child, context) do
+    identifier = value(child, :identifier)
+    cell_id = value(child, :comparison_cell_id)
+    settings = child_settings(child, cell_id)
+
+    body = %{
+      "action" => "continue_work",
+      "agent" => settings.provider,
+      "model" => settings.model,
+      "effort" => settings.effort,
+      "mode" => "yolo"
+    }
+
+    case request(
+           context,
+           :tasks,
+           "POST",
+           issue_path(project_slug, identifier) <> "/dispatch",
+           body,
+           idempotency_key(context, cell_id || identifier, "dispatch")
+         ) do
+      {:ok, _payload} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @impl true
+  def list_executions(context) do
+    service =
+      Map.get(
+        context,
+        :comparison_execution_service,
+        OrchestratorService
+      )
+
+    {:ok, service.list_executions()}
+  end
+
+  @impl true
+  def list_previews(thread, context) do
+    thread_id = value(thread, :id)
+
+    request(
+      context,
+      :previews,
+      "GET",
+      "/assistant/threads/#{thread_id}/dev_servers"
+    )
+    |> unwrap_data()
+  end
+
+  @impl true
+  def list_evidence(project_slug, identifier, context) do
+    service = Map.get(context, :mobile_evidence_service, EvidenceService)
+
+    case service.call(
+           "evidence.list",
+           %{"project_slug" => project_slug, "identifier" => identifier},
+           context
+         ) do
+      {:ok, %{"records" => records}} when is_list(records) -> {:ok, records}
+      {:ok, _payload} -> {:error, :invalid_evidence_response}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp request(context, domain, method, path, body \\ nil, idempotency_key \\ nil) do
+    bridge = Map.get(context, :comparison_tracker_bridge, TrackerBridge)
+
+    request =
+      %{
+        "method" => method,
+        "path" => path
+      }
+      |> maybe_put("body", body)
+      |> maybe_put("idempotency_key", idempotency_key)
+
+    bridge.request(domain, request, context)
+  end
+
+  defp unwrap_data({:ok, %{"data" => data}}), do: {:ok, data}
+  defp unwrap_data({:ok, _payload}), do: {:error, :invalid_tracker_response}
+  defp unwrap_data({:error, reason}), do: {:error, reason}
+
+  defp map_ok({:ok, value}, mapper), do: {:ok, mapper.(value)}
+  defp map_ok({:error, reason}, _mapper), do: {:error, reason}
+
+  defp maybe_mark_ready(thread, context) do
+    history = Map.get(context, :comparison_history, History)
+    thread_id = value(thread, :id)
+
+    if history.list_messages_for_thread(thread_id) == [] do
+      put_value(thread, :status, "ready")
+    else
+      thread
+    end
+  end
+
+  defp create_session(project_slug, child, cell, context) do
+    body = %{
+      "scope" => "issue_session",
+      "project_slug" => project_slug,
+      "issue_identifier" => value(child, :identifier),
+      "agent_kind" => cell.provider,
+      "model" => cell.model,
+      "effort" => cell.effort,
+      "execution_mode" => "yolo",
+      "isolated_workspace" => true
+    }
+
+    with {:ok, thread} <-
+           request(
+             context,
+             :sessions,
+             "POST",
+             "/assistant/threads",
+             body,
+             idempotency_key(context, cell.id, "thread")
+           )
+           |> unwrap_data() do
+      {:ok, maybe_mark_ready(thread, context)}
+    end
+  end
+
+  defp put_cell_identity(child) do
+    case cell_id_from_title(value(child, :title)) do
+      nil -> child
+      cell_id -> put_value(child, :comparison_cell_id, cell_id)
+    end
+  end
+
+  defp cell_id_from_title(title) when is_binary(title) do
+    case Regex.run(@cell_marker, title, capture: :all_but_first) do
+      [cell_id] ->
+        case Contract.fetch(cell_id) do
+          {:ok, _cell} -> cell_id
+          {:error, :unknown_cell} -> nil
+        end
+
+      _match ->
+        nil
+    end
+  end
+
+  defp cell_id_from_title(_title), do: nil
+
+  defp child_settings(child, cell_id) do
+    with nil <- value(child, :agent_kind),
+         {:ok, cell} <- Contract.fetch(cell_id || "") do
+      cell
+    else
+      provider ->
+        %{
+          provider: provider,
+          model: value(child, :requested_model),
+          effort: value(child, :requested_effort)
+        }
+    end
+  end
+
+  defp idempotency_key(context, cell_id, suffix) do
+    context
+    |> Map.fetch!(:comparison_request_key)
+    |> then(&"#{&1}:#{cell_id}:#{suffix}")
+  end
+
+  defp issue_path(project_slug, identifier),
+    do: "/projects/#{segment(project_slug)}/issues/#{segment(identifier)}"
+
+  defp segment(value), do: URI.encode(to_string(value), &URI.char_unreserved?/1)
+
+  defp maybe_put(map, _key, nil), do: map
+  defp maybe_put(map, key, value), do: Map.put(map, key, value)
+
+  defp value(nil, _key), do: nil
+  defp value(map, key), do: Map.get(map, key, Map.get(map, Atom.to_string(key)))
+
+  defp put_value(map, key, value) do
+    if Map.has_key?(map, key) do
+      Map.put(map, key, value)
+    else
+      Map.put(map, Atom.to_string(key), value)
+    end
+  end
+end
