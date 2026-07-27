@@ -124,6 +124,28 @@ defmodule SymphonyElixir.MobileComparison.LocalGatewayTest do
     end
   end
 
+  defmodule EmptyThenCollectedEvidence do
+    def call(
+          "evidence.list",
+          %{"project_slug" => "dev10x", "identifier" => "DEV-2"},
+          context
+        ) do
+      if Process.get({__MODULE__, context.test_pid}, false) do
+        {:ok, %{"records" => [%{"run_id" => "session-run-1"}]}}
+      else
+        Process.put({__MODULE__, context.test_pid}, true)
+        {:ok, %{"records" => []}}
+      end
+    end
+  end
+
+  defmodule FakeSessionEvidenceCollector do
+    def collect(project_slug, identifier, context) do
+      send(context.test_pid, {:collect_session_evidence, project_slug, identifier})
+      :ok
+    end
+  end
+
   setup do
     context = %{
       test_pid: self(),
@@ -317,5 +339,19 @@ defmodule SymphonyElixir.MobileComparison.LocalGatewayTest do
 
     assert {:ok, [%{"run_id" => "run-1"}]} =
              LocalGateway.list_evidence("dev10x", "DEV-2", context)
+  end
+
+  test "promotes completed session manifests before returning an empty evidence list", %{
+    context: context
+  } do
+    context =
+      context
+      |> Map.put(:mobile_evidence_service, EmptyThenCollectedEvidence)
+      |> Map.put(:comparison_session_evidence_collector, FakeSessionEvidenceCollector)
+
+    assert {:ok, [%{"run_id" => "session-run-1"}]} =
+             LocalGateway.list_evidence("dev10x", "DEV-2", context)
+
+    assert_receive {:collect_session_evidence, "dev10x", "DEV-2"}
   end
 end

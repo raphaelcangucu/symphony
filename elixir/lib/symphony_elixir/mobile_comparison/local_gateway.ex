@@ -11,7 +11,7 @@ defmodule SymphonyElixir.MobileComparison.LocalGateway do
   @behaviour SymphonyElixir.MobileComparison.Gateway
 
   alias SymphonyElixir.Assistant.History
-  alias SymphonyElixir.MobileComparison.{Contract, SessionStarter}
+  alias SymphonyElixir.MobileComparison.{Contract, SessionEvidenceCollector, SessionStarter}
   alias SymphonyElixir.MobileRpc.{EvidenceService, OrchestratorService, TrackerBridge}
 
   @cell_marker ~r/^\[dev10x-comparison:([a-z0-9-]+)\]\s*/
@@ -207,6 +207,28 @@ defmodule SymphonyElixir.MobileComparison.LocalGateway do
   def list_evidence(project_slug, identifier, context) do
     service = Map.get(context, :mobile_evidence_service, EvidenceService)
 
+    case evidence_records(service, project_slug, identifier, context) do
+      {:ok, []} ->
+        collector =
+          Map.get(
+            context,
+            :comparison_session_evidence_collector,
+            SessionEvidenceCollector
+          )
+
+        with :ok <- collector.collect(project_slug, identifier, context) do
+          evidence_records(service, project_slug, identifier, context)
+        end
+
+      {:ok, records} ->
+        {:ok, records}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp evidence_records(service, project_slug, identifier, context) do
     case service.call(
            "evidence.list",
            %{"project_slug" => project_slug, "identifier" => identifier},
