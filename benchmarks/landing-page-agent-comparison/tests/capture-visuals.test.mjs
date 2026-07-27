@@ -1,19 +1,33 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import {
+  access,
+  mkdir,
+  mkdtemp,
+  writeFile,
+} from "node:fs/promises";
 import { createServer } from "node:http";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import test from "node:test";
 
 import * as captureVisuals from "../src/capture-visuals.mjs";
 import {
   assertEvidenceTabRecord,
+  assertExistingCaptureSet,
+  captureCommandFailed,
   captureRunMatrix,
   evidenceManifestForRun,
+  mergeCaptures,
   previewArgs,
   renderVisualComparison,
+  selectCaptureRuns,
   stopProcessGroup,
   visualPort,
   visualScreenshotNames,
   waitForHttp,
+  waitForPortAvailable,
+  verifyRenderedBrand,
 } from "../src/capture-visuals.mjs";
 
 test("visual captures reserve a deterministic isolated port per matrix cell", () => {
@@ -33,6 +47,222 @@ test("visual preview refuses to move to a different occupied port", () => {
     "23004",
     "--strictPort",
   ]);
+});
+
+test("visual preview waits for its deterministic port to become available", async () => {
+  assert.equal(typeof waitForPortAvailable, "function");
+
+  const server = createServer();
+  await new Promise((resolvePromise) =>
+    server.listen(0, "127.0.0.1", resolvePromise),
+  );
+  const { port } = server.address();
+
+  const waiting = waitForPortAvailable(port, 2_000);
+  setTimeout(() => server.close(), 100);
+  await waiting;
+});
+
+test("targeted recapture preserves other cells in manifest order", () => {
+  assert.equal(typeof selectCaptureRuns, "function");
+  assert.equal(typeof mergeCaptures, "function");
+
+  const runs = [
+    { id: "session-codex-gpt5.5-medium" },
+    { id: "session-cursor-composer2.5" },
+  ];
+  assert.deepEqual(selectCaptureRuns(runs, ""), runs);
+  assert.deepEqual(
+    selectCaptureRuns(runs, "session-cursor-composer2.5"),
+    [runs[1]],
+  );
+  assert.throws(
+    () => selectCaptureRuns(runs, "missing"),
+    /unknown visual capture run/,
+  );
+
+  assert.deepEqual(
+    mergeCaptures(
+      runs,
+      [
+        { id: runs[0].id, status: "captured" },
+        { id: runs[1].id, status: "capture-failed" },
+      ],
+      [{ id: runs[1].id, status: "captured" }],
+    ),
+    [
+      { id: runs[0].id, status: "captured" },
+      { id: runs[1].id, status: "captured" },
+    ],
+  );
+});
+
+test("targeted recapture requires one existing record for every matrix cell", () => {
+  const runs = [{ id: "one" }, { id: "two" }];
+  const complete = [
+    { id: "one", status: "captured" },
+    { id: "two", status: "capture-failed" },
+  ];
+
+  assert.deepEqual(assertExistingCaptureSet(runs, complete), complete);
+  assert.throws(
+    () => assertExistingCaptureSet(runs, [complete[0]]),
+    /complete existing visual manifest/,
+  );
+  assert.throws(
+    () => assertExistingCaptureSet(runs, [...complete, complete[0]]),
+    /complete existing visual manifest/,
+  );
+  assert.throws(
+    () => assertExistingCaptureSet(runs, { one: complete[0] }),
+    /complete existing visual manifest/,
+  );
+});
+
+test("targeted recapture validates its manifest before creating capture side effects", async () => {
+  const runtime = await mkdtemp(join(tmpdir(), "symphony-recapture-preflight-"));
+  await mkdir(join(runtime, "report"), { recursive: true });
+  await writeFile(
+    join(runtime, "runs.json"),
+    JSON.stringify({
+      runtime_root: runtime,
+      project_slug: "project",
+      runs: [
+        { id: "one", path: "orchestrator", issue_identifier: "DEV-1" },
+        { id: "two", path: "orchestrator", issue_identifier: "DEV-2" },
+      ],
+    }),
+  );
+  await writeFile(join(runtime, "report", "visuals.json"), "{invalid");
+
+  await assert.rejects(
+    captureVisuals.captureVisuals({
+      SYMPHONY_BENCH_RUNTIME: runtime,
+      SYMPHONY_BENCH_RUN_ID: "one",
+      SYMPHONY_BENCH_URL: "http://127.0.0.1:4010",
+      SYMPHONY_BENCH_TOKEN: "test-token",
+    }),
+    /readable existing visual manifest/,
+  );
+  await assert.rejects(access(join(runtime, "report", "screens")), /ENOENT/);
+  await assert.rejects(access(join(runtime, "report", "videos")), /ENOENT/);
+});
+
+test("targeted recapture exit status only considers the requested cell", () => {
+  const captures = [
+    { id: "session-cursor-grok4.5-high-dev10x", status: "captured" },
+    { id: "orchestrator-codex-gpt5.6.sol-high-dev10x", status: "capture-failed" },
+  ];
+
+  assert.equal(captureCommandFailed(captures, ""), true);
+  assert.equal(
+    captureCommandFailed(captures, "session-cursor-grok4.5-high-dev10x"),
+    false,
+  );
+  assert.equal(
+    captureCommandFailed(
+      captures,
+      "orchestrator-codex-gpt5.6.sol-high-dev10x",
+    ),
+    true,
+  );
+});
+
+test("rendered brand proof requires the canonical logo and computed palette", async () => {
+  const page = {
+    locator: (selector) => {
+      assert.equal(
+        selector,
+        'img[src="/dev10x/dev10x_logo_color.png"]',
+      );
+      return {
+        first: () => ({
+          waitFor: async () => {},
+          evaluate: async () => ({
+            complete: true,
+            naturalWidth: 320,
+            naturalHeight: 96,
+            currentSrc:
+              "http://127.0.0.1:23000/dev10x/dev10x_logo_color.png",
+          }),
+        }),
+      };
+    },
+    evaluate: async () => ["ink", "blue"],
+  };
+  const brand = {
+    assets: { "dev10x_logo_color.png": "canonical-sha256" },
+    palette: { ink: "#0F172A", blue: "#2563EB" },
+  };
+
+  assert.deepEqual(await verifyRenderedBrand(page, brand), {
+    logo: {
+      path: "/dev10x/dev10x_logo_color.png",
+      loaded: true,
+      natural_width: 320,
+      natural_height: 96,
+      sha256: "canonical-sha256",
+    },
+    palette: {
+      expected: { ink: "#0F172A", blue: "#2563EB" },
+      observed: ["ink", "blue"],
+      missing: [],
+      coverage: "2/2",
+      complete: true,
+      passed: true,
+    },
+  });
+
+  await assert.rejects(
+    verifyRenderedBrand(
+      { ...page, evaluate: async () => ["ink"] },
+      brand,
+    ),
+    /canonical palette is not sufficiently rendered/,
+  );
+});
+
+test("rendered brand proof records an honest four-of-five palette coverage", async () => {
+  const page = {
+    locator: () => ({
+      first: () => ({
+        waitFor: async () => {},
+        evaluate: async () => ({
+          complete: true,
+          naturalWidth: 914,
+          naturalHeight: 220,
+          currentSrc:
+            "http://127.0.0.1:23001/dev10x/dev10x_logo_color.png",
+        }),
+      }),
+    }),
+    evaluate: async () => ["ink", "violet", "cyan", "white"],
+  };
+  const result = await verifyRenderedBrand(page, {
+    assets: { "dev10x_logo_color.png": "canonical-sha256" },
+    palette: {
+      ink: "#0F172A",
+      violet: "#7C3AED",
+      blue: "#2563EB",
+      cyan: "#38BDF8",
+      white: "#FFFFFF",
+    },
+  });
+
+  assert.deepEqual(result.palette, {
+    expected: {
+      ink: "#0F172A",
+      violet: "#7C3AED",
+      blue: "#2563EB",
+      cyan: "#38BDF8",
+      white: "#FFFFFF",
+    },
+    observed: ["ink", "violet", "cyan", "white"],
+    missing: ["blue"],
+    coverage: "4/5",
+    complete: false,
+    passed: true,
+  });
 });
 
 test("visual preview probe aborts an HTTP request that never answers", async () => {
@@ -137,6 +367,9 @@ test("visual captures use safe stable report names", () => {
     visualScreenshotNames("orchestrator-claude-opus5-high"),
     {
       hero: "orchestrator-claude-opus5-high-hero.png",
+      flow: "orchestrator-claude-opus5-high-flow.png",
+      siteEvidence:
+        "orchestrator-claude-opus5-high-site-evidence.png",
       full: "orchestrator-claude-opus5-high-full.png",
       mobileFull: "orchestrator-claude-opus5-high-mobile-full.png",
       evidenceTab:
@@ -158,6 +391,11 @@ test("visual report preserves captured and blocked cells", () => {
     { id: "session-cursor-composer2.5", status: "skipped-contract" },
   ]);
   assert.match(report, /screens\/session-codex-gpt5\.6\.sol-low-hero\.png/);
+  assert.match(report, /screens\/session-codex-gpt5\.6\.sol-low-flow\.png/);
+  assert.match(
+    report,
+    /screens\/session-codex-gpt5\.6\.sol-low-site-evidence\.png/,
+  );
   assert.match(
     report,
     /screens\/session-codex-gpt5\.6\.sol-low-mobile-full\.png/,
@@ -196,6 +434,10 @@ test("canonical manifest exposes desktop, mobile, WebM, MP4, trace, and real nav
         },
       ],
     },
+    renderedBrand: {
+      logo: { path: "/dev10x/dev10x_logo_color.png", loaded: true },
+      palette: { complete: true },
+    },
   });
 
   const e2e = manifest.runs.find((runEntry) => runEntry.kind === "e2e");
@@ -204,6 +446,9 @@ test("canonical manifest exposes desktop, mobile, WebM, MP4, trace, and real nav
   assert.deepEqual(
     e2e.screenshots.map((entry) => entry.path),
     [
+      "artifacts/screens/session-cursor-composer2.5-hero.png",
+      "artifacts/screens/session-cursor-composer2.5-flow.png",
+      "artifacts/screens/session-cursor-composer2.5-site-evidence.png",
       "artifacts/screens/session-cursor-composer2.5-full.png",
       "artifacts/screens/session-cursor-composer2.5-mobile-full.png",
     ],
@@ -223,6 +468,7 @@ test("canonical manifest exposes desktop, mobile, WebM, MP4, trace, and real nav
     "http://127.0.0.1:23001/observed-by-playwright",
   ]);
   assert.equal(e2e.proof.full_page, true);
+  assert.equal(e2e.proof.rendered_brand.logo.loaded, true);
 });
 
 test("Evidence-tab verification navigates the real UI and requires rendered media", async () => {
@@ -232,7 +478,8 @@ test("Evidence-tab verification navigates the real UI and requires rendered medi
   const card = {
     waitFor: async (options) => calls.push(["waitFor", options]),
     locator: (selector) => ({
-      count: async () => (selector === "img" || selector === "video" ? 2 : 0),
+      count: async () =>
+        selector === "img" ? 5 : selector === "video" ? 2 : 0,
     }),
   };
   const page = {
@@ -256,7 +503,7 @@ test("Evidence-tab verification navigates the real UI and requires rendered medi
     result.route,
     "http://127.0.0.1:4010/tracker/projects/symphony%20benchmark/board/issues/SYM-2/evidence",
   );
-  assert.equal(result.screenshot_count, 2);
+  assert.equal(result.screenshot_count, 5);
   assert.equal(result.video_count, 2);
   assert.deepEqual(calls[0], [
     "goto",
@@ -276,7 +523,13 @@ test("Evidence-tab verification requires the persisted visual contract", () => {
         {
           kind: "e2e",
           status: "passed",
-          screenshots: [{ path: "desktop.png" }, { path: "mobile.png" }],
+          screenshots: [
+            { path: "hero.png" },
+            { path: "flow.png" },
+            { path: "site-evidence.png" },
+            { path: "desktop.png" },
+            { path: "mobile.png" },
+          ],
           videos: [{ path: "flow.webm" }, { path: "flow.mp4" }],
           trace: "trace.zip",
         },

@@ -1,14 +1,44 @@
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 
 import { createApi } from "./api.mjs";
-import { RUN_MATRIX, promptSha256, readCanonicalPrompt } from "./contract.mjs";
+import {
+  DEFAULT_MATRIX,
+  RUN_MATRIX,
+  promptSha256,
+  readCanonicalPrompt,
+  runsForMatrix,
+} from "./contract.mjs";
 
 const execFileAsync = promisify(execFile);
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const repositoryRoot = resolve(packageRoot, "../..");
+
+const CANONICAL_BRAND_ASSETS = Object.freeze([
+  "dev10x_icon.png",
+  "dev10x_logo_black.png",
+  "dev10x_logo_color.png",
+  "dev10x_logo_white.png",
+  "favicon.png",
+  "favicon.svg",
+  "favicons/16x16.png",
+  "favicons/180x180.png",
+  "favicons/192x192.png",
+  "favicons/32x32.png",
+  "favicons/512x512.png",
+]);
+
+const DEV10X_PALETTE = Object.freeze({
+  ink: "#0F172A",
+  violet: "#7C3AED",
+  blue: "#2563EB",
+  cyan: "#38BDF8",
+  white: "#FFFFFF",
+});
 
 export const PROJECT_SLUG = "dev10x-landing-benchmark";
 
@@ -108,10 +138,10 @@ export function projectPayload({
   };
 }
 
-export function buildRunRecords(prompt) {
+export function buildRunRecords(prompt, runs = RUN_MATRIX) {
   const hash = promptSha256(prompt);
 
-  return RUN_MATRIX.map((run) => ({
+  return runs.map((run) => ({
     ...run,
     prompt_sha256: hash,
     execution_mode: "yolo",
@@ -120,6 +150,27 @@ export function buildRunRecords(prompt) {
     issue_identifier: null,
     workspace_path: null,
   }));
+}
+
+export async function stageCanonicalBrandAssets(seedRoot) {
+  const targetRoot = join(seedRoot, "public", "dev10x");
+  const assets = {};
+
+  for (const relativeName of CANONICAL_BRAND_ASSETS) {
+    const source = join(repositoryRoot, "tracker", "public", relativeName);
+    const target = join(targetRoot, relativeName);
+    await mkdir(dirname(target), { recursive: true });
+    await cp(source, target, { force: false, errorOnExist: true });
+    assets[relativeName] = createHash("sha256")
+      .update(await readFile(target))
+      .digest("hex");
+  }
+
+  return {
+    source: "tracker/public",
+    palette: { ...DEV10X_PALETTE },
+    assets,
+  };
 }
 
 async function git(args, cwd) {
@@ -135,6 +186,7 @@ async function createSeedRepository(runtimeRoot) {
     force: false,
     errorOnExist: true,
   });
+  const brand = await stageCanonicalBrandAssets(seedWorkingPath);
   await git(["init", "-b", "main"], seedWorkingPath);
   await git(["add", "."], seedWorkingPath);
   await git(
@@ -151,7 +203,7 @@ async function createSeedRepository(runtimeRoot) {
   );
   await git(["clone", "--bare", seedWorkingPath, seedBarePath], runtimeRoot);
 
-  return { seedWorkingPath, seedBarePath };
+  return { seedWorkingPath, seedBarePath, brand };
 }
 
 function requireEnvironment(env) {
@@ -265,7 +317,7 @@ export async function provision(env = process.env) {
   await mkdir(join(runtimeRoot, "results"), { recursive: true });
   await mkdir(join(runtimeRoot, "artifacts"), { recursive: true });
 
-  const { seedWorkingPath, seedBarePath } =
+  const { seedWorkingPath, seedBarePath, brand } =
     await createSeedRepository(runtimeRoot);
   const workspaceRoot = join(runtimeRoot, "workspaces");
   const api = createApi({ baseUrl, token });
@@ -281,12 +333,15 @@ export async function provision(env = process.env) {
   await saveDevEnvironment(api);
 
   const prompt = await readCanonicalPrompt();
-  const records = buildRunRecords(prompt);
+  const matrix = env.SYMPHONY_BENCH_MATRIX?.trim() || DEFAULT_MATRIX;
+  const records = buildRunRecords(prompt, runsForMatrix(matrix));
   await provisionIssues(api, records);
   await provisionSessions(api, records);
 
   const manifest = {
     project_slug: PROJECT_SLUG,
+    matrix,
+    brand,
     prompt_sha256: promptSha256(prompt),
     generated_at: new Date().toISOString(),
     base_url: baseUrl,

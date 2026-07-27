@@ -11,6 +11,7 @@
     "run:current-default": "SYMPHONY_BENCH_MATRIX=providers-current-default node src/run-matrix.mjs",
     "run:advanced": "SYMPHONY_BENCH_MATRIX=providers-advanced node src/run-matrix.mjs",
     "run:codex-5.6": "SYMPHONY_BENCH_MATRIX=codex-5.6-defaults node src/run-matrix.mjs",
+    "run:brand-high": "SYMPHONY_BENCH_MATRIX=dev10x-brand-high node src/run-matrix.mjs",
     "collect": "node src/collect.mjs",
     "capture:visuals": "node src/capture-visuals.mjs",
     "e2e": "playwright test e2e/symphony-flow.spec.mjs --workers=1"

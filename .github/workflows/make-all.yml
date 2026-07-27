@@ -35,17 +35,8 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-mix-
 
-      - name: Install Elixir dependencies
-        run: make setup
-
-      - name: Build Elixir application
-        run: make build
-
-      - name: Check formatting
-        run: make fmt-check
-
-      - name: Check public specs and warning-level lint
-        run: make lint
+      - name: Verify focused quality gates
+        run: make ci-fast
 
       - name: Run bounded mobile host validation
         run: |
@@ -59,3 +50,9 @@ jobs:
             test/symphony_elixir_web/mobile_rpc_socket_test.exs \
             test/symphony_elixir_web/controllers/tracker/mobile_rpc_controller_test.exs \
             test/symphony_elixir_web/controllers/tracker/mobile_push_controller_test.exs
+
+      - name: Install benchmark dependencies
+        run: npm ci --ignore-scripts --prefix ../benchmarks/landing-page-agent-comparison
+
+      - name: Verify benchmark harness
+        run: npm test --prefix ../benchmarks/landing-page-agent-comparison

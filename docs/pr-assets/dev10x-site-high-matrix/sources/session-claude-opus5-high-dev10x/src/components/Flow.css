@@ -1,0 +1,151 @@
+.flow {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+.flow::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: auto -15% -55% -15%;
+  height: 70%;
+  background: radial-gradient(
+    ellipse at 50% 0%,
+    rgba(124, 58, 237, 0.34) 0%,
+    rgba(37, 99, 235, 0.18) 42%,
+    transparent 70%
+  );
+}
+
+.flow__list {
+  --flow-gap: 26px;
+  position: relative;
+  display: grid;
+  gap: var(--flow-gap);
+}
+
+.flow__step {
+  position: relative;
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 0 18px;
+  align-items: start;
+  /* sem esticar as linhas: mantém nós e corpos alinhados entre colunas */
+  align-content: start;
+}
+
+/* trilho de execução: liga o nó atual ao próximo */
+.flow__step:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  top: 44px;
+  left: 21px;
+  width: 2px;
+  height: calc(100% + var(--flow-gap) - 44px);
+  background: var(--rail-on-ink-v);
+  background-size: 100% 220%;
+  opacity: 0.85;
+  animation: flow-stream 7s linear infinite;
+}
+
+.flow__node {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--ink);
+  box-shadow: 0 0 0 1px var(--on-ink-line);
+}
+
+.flow__node::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  padding: 1.5px;
+  background: var(--rail-on-ink);
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+}
+
+.flow__node-index {
+  color: var(--on-ink);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.flow__title {
+  font-size: 1.06rem;
+  letter-spacing: -0.014em;
+  padding-top: 10px;
+}
+
+.flow__body {
+  margin-top: 8px;
+  color: var(--on-ink-soft);
+  font-size: 0.95rem;
+}
+
+.flow__trace {
+  margin-top: clamp(40px, 5vw, 64px);
+  padding: 14px 18px;
+  border: 1px solid var(--on-ink-line);
+  border-radius: var(--r-sm);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--on-ink-faint);
+  overflow-wrap: anywhere;
+}
+
+@media (min-width: 1080px) {
+  .flow__list {
+    --flow-gap: 30px;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+
+  .flow__step {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+
+  /* no layout horizontal o trilho é uma única linha ligando todos os nós */
+  .flow__step:not(:last-child)::before {
+    content: none;
+  }
+
+  .flow__list::before {
+    content: "";
+    position: absolute;
+    top: 21px;
+    left: 22px;
+    right: calc((100% - 5 * var(--flow-gap)) / 6 - 22px);
+    height: 2px;
+    background: var(--rail-on-ink);
+    background-size: 220% 100%;
+    opacity: 0.8;
+    animation: flow-stream 7s linear infinite;
+  }
+
+  .flow__title {
+    padding-top: 20px;
+    /* mantém os corpos alinhados quando um título ocupa duas linhas */
+    min-height: 3em;
+  }
+
+  .flow__body {
+    font-size: 0.9rem;
+  }
+}
+
+@keyframes flow-stream {
+  from {
+    background-position: 0% 0%;
+  }
+  to {
+    background-position: 100% 100%;
+  }
+}

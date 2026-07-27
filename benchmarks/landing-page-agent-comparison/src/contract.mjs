@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 
 export const PROVIDERS = Object.freeze(["codex", "cursor", "claude"]);
 export const PATHS = Object.freeze(["session", "orchestrator"]);
+export const DEFAULT_MATRIX = "dev10x-brand-high";
 
 const PROVIDER_MATRICES = Object.freeze({
   "providers-default": Object.freeze({
@@ -27,6 +28,15 @@ const CURRENT_PROVIDER_DEFAULTS = Object.freeze({
   codex: Object.freeze({ model: "gpt-5.6-sol", effort: "low" }),
   cursor: Object.freeze({ model: "auto", effort: null }),
   claude: Object.freeze({ model: "claude-opus-5", effort: "xhigh" }),
+});
+
+const DEV10X_BRAND_HIGH = Object.freeze({
+  codex: Object.freeze({ model: "gpt-5.6-sol", effort: "high" }),
+  cursor: Object.freeze({
+    model: "cursor-grok-4.5-high",
+    effort: null,
+  }),
+  claude: Object.freeze({ model: "claude-opus-5", effort: "high" }),
 });
 
 const MODEL_FILE_NAMES = Object.freeze({
@@ -109,11 +119,39 @@ const currentDefaultRuns = PATHS.flatMap((path) =>
   }),
 );
 
+const dev10xBrandHighRuns = PATHS.flatMap((path) =>
+  PROVIDERS.map((provider) => {
+    const requested = DEV10X_BRAND_HIGH[provider];
+    return Object.freeze({
+      id: `${benchmarkRunId({
+        path,
+        provider,
+        model: requested.model,
+        effort: requested.effort,
+      })}-dev10x`,
+      matrix: DEFAULT_MATRIX,
+      path,
+      provider,
+      requested_model: requested.model,
+      requested_effort: requested.effort,
+    });
+  }),
+);
+
 export const RUN_MATRIX = Object.freeze([
   ...providerRuns,
   ...codexRuns,
   ...currentDefaultRuns,
+  ...dev10xBrandHighRuns,
 ]);
+
+export function runsForMatrix(matrix, runs = RUN_MATRIX) {
+  const selected = runs.filter((run) => run.matrix === matrix);
+  if (selected.length === 0) {
+    throw new Error(`benchmark matrix has no runs: ${matrix}`);
+  }
+  return selected;
+}
 
 export async function readCanonicalPrompt() {
   return readFile(new URL("../prompt.md", import.meta.url), "utf8");

@@ -3,7 +3,9 @@ import { resolve } from "node:path";
 
 import { PLAYWRIGHT_TEST_TIMEOUT_MS } from "./src/timeouts.mjs";
 
-const artifactRoot = resolve(process.env.SYMPHONY_BENCH_ARTIFACT_ROOT ?? "test-results/manual");
+const artifactRoot = resolve(
+  process.env.SYMPHONY_BENCH_ARTIFACT_ROOT ?? "test-results/manual",
+);
 
 export default defineConfig({
   testDir: "./e2e",

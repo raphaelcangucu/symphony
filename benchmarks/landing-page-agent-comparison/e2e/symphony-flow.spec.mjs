@@ -21,7 +21,10 @@ import {
   stopUnsettledOrchestrator,
   waitForIssueCompletion,
 } from "../src/orchestrator-settlement.mjs";
-import { AGENT_SETTLEMENT_TIMEOUT_MS, ORCHESTRATOR_CLEANUP_TIMEOUT_MS } from "../src/timeouts.mjs";
+import {
+  AGENT_SETTLEMENT_TIMEOUT_MS,
+  ORCHESTRATOR_CLEANUP_TIMEOUT_MS,
+} from "../src/timeouts.mjs";
 
 const runtimeRoot = resolve(process.env.SYMPHONY_BENCH_RUNTIME ?? "");
 const runId = process.env.SYMPHONY_BENCH_RUN_ID ?? "";
