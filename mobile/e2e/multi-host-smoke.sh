@@ -30,7 +30,13 @@ readonly HOST_A_NAME="Studio Alpha"
 readonly HOST_B_NAME="Studio Beta"
 readonly HOST_A_PROJECT="alpha"
 readonly HOST_B_PROJECT="beta"
+readonly REAL_AGENT_E2E="${DEV10X_E2E_REAL_AGENT:-1}"
 readonly E2E_ROOT="$(mktemp -d)"
+
+if [[ "${REAL_AGENT_E2E}" != "0" && "${REAL_AGENT_E2E}" != "1" ]]; then
+  printf "DEV10X_E2E_REAL_AGENT must be 0 or 1\n" >&2
+  exit 1
+fi
 
 resolve_adb() {
   if [[ -n "${ADB_BIN:-}" ]]; then
@@ -83,6 +89,48 @@ wait_for_selector() {
     sleep 1
   done
   printf "Selector not found: %s=%s\n" "${attribute}" "${value}" >&2
+  return 1
+}
+
+assistant_message_contains() {
+  local value="$1"
+  python3 - "${UI_DUMP_PATH}" "${value}" <<'PY'
+import sys
+import xml.etree.ElementTree as ET
+
+path, expected = sys.argv[1:3]
+
+try:
+    root = ET.parse(path).getroot()
+except (ET.ParseError, OSError):
+    raise SystemExit(1)
+
+for node in root.iter("node"):
+    if node.attrib.get("resource-id") != "chat-message-assistant":
+        continue
+    for descendant in node.iter("node"):
+        visible = " ".join(
+            (
+                descendant.attrib.get("text", ""),
+                descendant.attrib.get("content-desc", ""),
+            )
+        )
+        if expected in visible:
+            raise SystemExit(0)
+
+raise SystemExit(1)
+PY
+}
+
+wait_for_assistant_text() {
+  local value="$1"
+  local attempts="${2:-45}"
+  for _ in $(seq 1 "${attempts}"); do
+    dump_ui
+    assistant_message_contains "${value}" && return 0
+    sleep 1
+  done
+  printf "Assistant response not found: %s\n" "${value}" >&2
   return 1
 }
 
@@ -558,20 +606,26 @@ wait_for_ui_contains "${HOST_A_NAME} is online"
 wait_for_selector "content-desc" "Message"
 trace_step "assert rich chat opens by default with real persisted host history"
 
-tap_accessible "Message"
-input_text "Reply exactly VERIFIED42"
-wait_for_enabled_accessible "Send"
-"${ADB}" shell input keyevent 4
-tap_accessible "Send"
-wait_for_ui_contains "VERIFIED42" 180
-"${ADB}" exec-out screencap -p >"${CHAT_SCREENSHOT_PATH}"
-test -s "${CHAT_SCREENSHOT_PATH}"
-trace_step "assert real Codex response streamed into the unified chat"
+chat_history_anchor="${HOST_A_NAME} is online"
+if [[ "${REAL_AGENT_E2E}" == "1" ]]; then
+  tap_accessible "Message"
+  input_text "Reply exactly VERIFIED42"
+  wait_for_enabled_accessible "Send"
+  "${ADB}" shell input keyevent 4
+  tap_accessible "Send"
+  wait_for_assistant_text "VERIFIED42" 180
+  chat_history_anchor="VERIFIED42"
+  "${ADB}" exec-out screencap -p >"${CHAT_SCREENSHOT_PATH}"
+  test -s "${CHAT_SCREENSHOT_PATH}"
+  trace_step "assert real local agent turn is visible in the unified chat"
+else
+  trace_step "skip provider-authenticated chat turn; credentialless CI validates persisted host history"
+fi
 
 tap_accessible "Go back"
 wait_for_text "${HOST_A_NAME} — Direct RPC session"
 tap_accessible "${HOST_A_NAME} — Direct RPC session"
-wait_for_ui_contains "VERIFIED42" 45
+wait_for_ui_contains "${chat_history_anchor}" 45
 trace_step "assert chat history is restored after closing and reopening the session"
 
 tap_accessible "Open terminal"
@@ -600,7 +654,7 @@ sleep 2
 test -s "${TERMINAL_COMMAND_SCREENSHOT_PATH}"
 trace_step "exercise selected-host terminal input and output"
 tap_screen_fraction 1 16 1 20 "Back to worktrees"
-wait_for_ui_contains "VERIFIED42" 45
+wait_for_ui_contains "${chat_history_anchor}" 45
 tap_accessible "Go back"
 wait_for_text "${HOST_A_NAME} — Direct RPC session"
 
@@ -616,34 +670,38 @@ trace_step "assert task, blocker, subtask and comment parity on Host A"
 sleep 1
 tap_accessible "Back to worktrees"
 
-dispatch_orchestrator_run \
-  "${HOST_A_PORT}" \
-  "${HOST_A_PROJECT}" \
-  "${host_a_orchestrator_issue}"
-wait_for_orchestrator_run "${HOST_A_PORT}" "${host_a_orchestrator_issue}" "${HOST_A_PROJECT}"
-tap_accessible "Orchestrator runs"
-wait_for_text "Orchestrator runs"
-wait_for_text "${host_a_orchestrator_issue}"
-tap_accessible "Open ${host_a_orchestrator_issue} Codex execution"
-wait_for_ui_contains "#${orchestrator_session_id}"
-wait_for_selector "content-desc" "Message"
-wait_for_selector "content-desc" "Connection status: Live" 180
-trace_step "assert real orchestrator execution transcript opens in the same rich chat"
+if [[ "${REAL_AGENT_E2E}" == "1" ]]; then
+  dispatch_orchestrator_run \
+    "${HOST_A_PORT}" \
+    "${HOST_A_PROJECT}" \
+    "${host_a_orchestrator_issue}"
+  wait_for_orchestrator_run "${HOST_A_PORT}" "${host_a_orchestrator_issue}" "${HOST_A_PROJECT}"
+  tap_accessible "Orchestrator runs"
+  wait_for_text "Orchestrator runs"
+  wait_for_text "${host_a_orchestrator_issue}"
+  tap_accessible "Open ${host_a_orchestrator_issue} Codex execution"
+  wait_for_ui_contains "#${orchestrator_session_id}"
+  wait_for_selector "content-desc" "Message"
+  wait_for_selector "content-desc" "Connection status: Live" 180
+  trace_step "assert real orchestrator execution transcript opens in the same rich chat"
 
-tap_accessible "Message"
-input_text "Stop and reply exactly ACK73"
-wait_for_enabled_accessible "Send"
-"${ADB}" shell input keyevent 4
-tap_accessible "Send"
-wait_for_text "ACK73" 180
-"${ADB}" exec-out screencap -p >"${ORCHESTRATOR_SCREENSHOT_PATH}"
-test -s "${ORCHESTRATOR_SCREENSHOT_PATH}"
-trace_step "assert mobile steer was accepted and streamed back from the real orchestrator"
+  tap_accessible "Message"
+  input_text "Stop and reply exactly ACK73"
+  wait_for_enabled_accessible "Send"
+  "${ADB}" shell input keyevent 4
+  tap_accessible "Send"
+  wait_for_assistant_text "ACK73" 180
+  "${ADB}" exec-out screencap -p >"${ORCHESTRATOR_SCREENSHOT_PATH}"
+  test -s "${ORCHESTRATOR_SCREENSHOT_PATH}"
+  trace_step "assert mobile steer was accepted and streamed back from the real orchestrator"
 
-tap_accessible "Go back"
-wait_for_text "Orchestrator runs"
-tap_accessible "Go back"
-wait_for_text "${HOST_A_NAME} — Direct RPC session"
+  tap_accessible "Go back"
+  wait_for_text "Orchestrator runs"
+  tap_accessible "Go back"
+  wait_for_text "${HOST_A_NAME} — Direct RPC session"
+else
+  trace_step "skip provider-authenticated orchestrator turn in credentialless CI"
+fi
 tap_accessible "Back to hosts"
 
 launch_pairing_offer "${host_b_offer}"
@@ -747,19 +805,36 @@ apk_sha256="$(sha256sum "${APK_PATH}" | awk '{print $1}')"
 video_sha256="$(sha256sum "${VIDEO_PATH}" | awk '{print $1}')"
 generated_at="$(date --iso-8601=seconds)"
 
+if [[ "${REAL_AGENT_E2E}" == "1" ]]; then
+  scenario="Dev10x rich chat, real session history and orchestrator steer across independent Symphony hosts"
+  interactive_chat="real local agent turn over selected-host RPC"
+  orchestrator_chat="real execution transcript and steer over selected-host RPC"
+  journey="deep-link pairing, host identity/health, chat-first real local agent turn, history restore, tools, terminal, task/blocker/subtask/comment, files, diff, real orchestrator transcript and steer, second-host pairing, cache isolation, offline recovery and host switching"
+else
+  scenario="Dev10x credentialless CI contract across independent real Symphony hosts"
+  interactive_chat="persisted selected-host history; provider-authenticated turn reserved for local E2E"
+  orchestrator_chat="provider-authenticated run reserved for local E2E"
+  journey="deep-link pairing, host identity/health, persisted chat history, tools, terminal, task/blocker/subtask/comment, files, diff, second-host pairing, cache isolation, offline recovery and host switching"
+fi
+
 jq -n \
   --arg generated_at "${generated_at}" \
   --arg apk_sha256 "${apk_sha256}" \
   --arg video_sha256 "${video_sha256}" \
   --arg duration "${duration_seconds}" \
   --arg resolution "${resolution}" \
+  --arg scenario "${scenario}" \
+  --arg interactive_chat "${interactive_chat}" \
+  --arg orchestrator_chat "${orchestrator_chat}" \
+  --argjson real_agent "${REAL_AGENT_E2E}" \
   '{
     status:"passed",
-    scenario:"Dev10x rich chat, real session history and orchestrator steer across independent Symphony hosts",
+    scenario:$scenario,
     generated_at:$generated_at,
     hosts:2,
-    interactive_chat:"real Codex turn over selected-host RPC",
-    orchestrator_chat:"real execution transcript and steer over selected-host RPC",
+    real_agent_e2e:($real_agent == 1),
+    interactive_chat:$interactive_chat,
+    orchestrator_chat:$orchestrator_chat,
     transport:"X25519/HKDF/ChaCha20-Poly1305 WebSocket RPC",
     apk_sha256:$apk_sha256,
     video_sha256:$video_sha256,
@@ -776,7 +851,8 @@ cat >"${REPORT_PATH}" <<EOF
 - Generated: ${generated_at}
 - Hosts: ${HOST_A_NAME} and ${HOST_B_NAME}
 - Transport: direct host WebSocket RPC with application-layer E2EE
-- Journey: deep-link pairing, host identity/health, chat-first real Codex turn, streamed response, history restore, tools, terminal, task/blocker/subtask/comment, files, diff, real orchestrator transcript and steer, second-host pairing, cache isolation, offline recovery and host switching
+- Real local agent: ${REAL_AGENT_E2E}
+- Journey: ${journey}
 - Video: \`${ARTIFACT_SLUG}.mp4\`
 - Duration: ${duration_seconds}s
 - Resolution: ${resolution}

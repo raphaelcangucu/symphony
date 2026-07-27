@@ -199,6 +199,7 @@ defmodule SymphonyElixir.Orchestrator do
       running_entry ->
         {updated_running_entry, token_delta} = RunUpdate.integrate(running_entry, update)
         persist_execution_model_provenance(updated_running_entry, update)
+        persist_execution_provider_binding(updated_running_entry, update)
 
         state =
           state
@@ -670,6 +671,26 @@ defmodule SymphonyElixir.Orchestrator do
       :ok
   end
 
+  defp persist_execution_provider_binding(
+         %{execution_session_id: session_id},
+         %{provider: provider, conversation_id: conversation_id}
+       )
+       when is_integer(session_id) and is_binary(provider) and is_binary(conversation_id) do
+    case ExecutionSession.put_provider_binding(session_id, provider, conversation_id) do
+      {:ok, _thread} ->
+        :ok
+
+      {:error, reason} ->
+        Logger.warning("ExecutionSession provider binding update failed: #{inspect(reason)}")
+    end
+  rescue
+    error ->
+      Logger.warning("ExecutionSession provider binding update failed: #{Exception.message(error)}")
+      :ok
+  end
+
+  defp persist_execution_provider_binding(_running_entry, _update), do: :ok
+
   defp maybe_put_provenance(attrs, _key, value) when not is_binary(value), do: attrs
 
   defp maybe_put_provenance(attrs, key, value) do
@@ -923,6 +944,7 @@ defmodule SymphonyElixir.Orchestrator do
        ) do
     candidate_issue?(issue, active_states, terminal_states) and
       !issue_blocked_by_non_terminal?(issue, terminal_states) and
+      !provider_resume_blocked?(issue) and
       !MapSet.member?(claimed, issue.id) and
       !MapSet.member?(paused, issue.id) and
       !Map.has_key?(running, issue.id) and
@@ -1104,9 +1126,10 @@ defmodule SymphonyElixir.Orchestrator do
     issue = Tracker.enrich_issue(issue)
     agent_kind = AgentRunner.issue_agent_kind(issue)
     bundle_ctx = bundle_run_context(issue)
+    run_opts = agent_run_opts(issue, agent_kind, bundle_ctx.run_opts, attempt)
 
     case Task.Supervisor.start_child(SymphonyElixir.Orchestrator.TaskSupervisor, fn ->
-           AgentRunner.run(issue, recipient, [attempt: attempt] ++ bundle_ctx.run_opts)
+           AgentRunner.run(issue, recipient, run_opts)
          end) do
       {:ok, pid} ->
         ref = Process.monitor(pid)
@@ -1149,6 +1172,26 @@ defmodule SymphonyElixir.Orchestrator do
         })
     end
   end
+
+  defp agent_run_opts(%Issue{} = issue, agent_kind, bundle_run_opts, attempt)
+       when is_binary(agent_kind) and is_list(bundle_run_opts) do
+    opts = [attempt: attempt] ++ bundle_run_opts
+
+    with project_slug when is_binary(project_slug) <- issue.project_slug,
+         identifier when is_binary(identifier) <- issue.identifier,
+         {:ok, conversation_ref} <-
+           ExecutionSession.latest_conversation_ref(project_slug, identifier, agent_kind) do
+      Keyword.put(opts, :conversation_ref, conversation_ref)
+    else
+      _ -> opts
+    end
+  end
+
+  @doc false
+  @spec agent_run_opts_for_test(Issue.t(), String.t(), keyword(), non_neg_integer() | nil) ::
+          keyword()
+  def agent_run_opts_for_test(%Issue{} = issue, agent_kind, bundle_run_opts, attempt),
+    do: agent_run_opts(issue, agent_kind, bundle_run_opts, attempt)
 
   defp dispatch_running_entry(pid, ref, %Issue{} = issue, agent_kind, attempt, bundle_ctx) do
     agent_settings = AgentRunner.agent_settings_opts(issue)
@@ -1768,6 +1811,14 @@ defmodule SymphonyElixir.Orchestrator do
 
   defp apply_normal_completion(%State{} = state, running_entry, issue_id) do
     case Map.get(running_entry, :agent_outcome) do
+      {:error, {:resume_conversation_failed, conversation_id, :not_found} = reason}
+      when is_binary(conversation_id) ->
+        park_missing_provider_conversation(state, running_entry, issue_id, reason)
+
+      {:error, {:resume_session_not_found, conversation_id} = reason}
+      when is_binary(conversation_id) ->
+        park_missing_provider_conversation(state, running_entry, issue_id, reason)
+
       {:error, reason} ->
         Logger.warning("Agent run failed for issue_id=#{issue_id} issue_identifier=#{running_entry.identifier} reason=#{inspect(reason)}; scheduling retry")
 
@@ -1785,6 +1836,48 @@ defmodule SymphonyElixir.Orchestrator do
         apply_successful_completion(state, running_entry, issue_id)
     end
   end
+
+  defp park_missing_provider_conversation(state, running_entry, issue_id, reason) do
+    Logger.error(
+      "Agent provider conversation no longer exists for issue_id=#{issue_id} " <>
+        "issue_identifier=#{running_entry.identifier} reason=#{inspect(reason)}; " <>
+        "parking the run until an explicit hard reset"
+    )
+
+    record_session_run_failure(running_entry, reason)
+    persist_provider_resume_block(running_entry, reason)
+
+    state
+    |> complete_issue(issue_id)
+    |> release_issue_claim(issue_id)
+  end
+
+  defp persist_provider_resume_block(
+         %{execution_session_id: session_id, agent_kind: provider},
+         {:resume_conversation_failed, conversation_id, :not_found}
+       )
+       when is_integer(session_id) and is_binary(provider) and is_binary(conversation_id) do
+    case ExecutionSession.block_provider_resume(session_id, provider, conversation_id) do
+      {:ok, _thread} ->
+        :ok
+
+      {:error, reason} ->
+        Logger.error("Could not persist provider resume block session_id=#{session_id} reason=#{inspect(reason)}")
+    end
+  end
+
+  defp persist_provider_resume_block(
+         %{execution_session_id: session_id, agent_kind: provider},
+         {:resume_session_not_found, conversation_id}
+       )
+       when is_integer(session_id) and is_binary(provider) and is_binary(conversation_id) do
+    persist_provider_resume_block(
+      %{execution_session_id: session_id, agent_kind: provider},
+      {:resume_conversation_failed, conversation_id, :not_found}
+    )
+  end
+
+  defp persist_provider_resume_block(_running_entry, _reason), do: :ok
 
   defp apply_successful_completion(%State{} = state, running_entry, issue_id) do
     case Map.get(running_entry, :agent_outcome) do
@@ -3076,15 +3169,28 @@ defmodule SymphonyElixir.Orchestrator do
     sets = project_state_sets(issue)
 
     candidate_issue?(issue, dispatch_set(sets), terminal_set(sets)) and
-      !issue_blocked_by_non_terminal?(issue, terminal_set(sets))
+      !issue_blocked_by_non_terminal?(issue, terminal_set(sets)) and
+      !provider_resume_blocked?(issue)
   end
 
   defp manual_dispatch_candidate?(%Issue{} = issue) do
     sets = project_state_sets(issue)
 
     candidate_issue?(issue, active_set(sets), terminal_set(sets)) and
-      !issue_blocked_by_non_terminal?(issue, terminal_set(sets))
+      !issue_blocked_by_non_terminal?(issue, terminal_set(sets)) and
+      !provider_resume_blocked?(issue)
   end
+
+  defp provider_resume_blocked?(%Issue{project_slug: project_slug, identifier: identifier})
+       when is_binary(project_slug) and is_binary(identifier) do
+    ExecutionSession.provider_resume_blocked?(project_slug, identifier)
+  end
+
+  defp provider_resume_blocked?(_issue), do: false
+
+  @doc false
+  @spec provider_resume_blocked_for_test(Issue.t()) :: boolean()
+  def provider_resume_blocked_for_test(%Issue{} = issue), do: provider_resume_blocked?(issue)
 
   defp fetch_issue_by_identifier(identifier) when is_binary(identifier) do
     case Tracker.fetch_issue_states_by_ids([identifier]) do

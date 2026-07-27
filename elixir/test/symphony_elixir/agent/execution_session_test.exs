@@ -2,8 +2,11 @@ defmodule SymphonyElixir.Agent.ExecutionSessionTest do
   use ExUnit.Case, async: false
 
   alias Ecto.Adapters.SQL
+  alias SymphonyElixir.Agent.ConversationRef
   alias SymphonyElixir.Agent.ExecutionSession
   alias SymphonyElixir.Assistant.History
+  alias SymphonyElixir.Issue
+  alias SymphonyElixir.Orchestrator
   alias SymphonyElixir.Repo
 
   setup do
@@ -75,6 +78,94 @@ defmodule SymphonyElixir.Agent.ExecutionSessionTest do
     assert updated.resolved_effort == nil
     refute Map.has_key?(updated.metadata, "model")
     refute Map.has_key?(updated.metadata, "effort")
+  end
+
+  test "put_provider_binding/3 preserves the provider-confirmed conversation identity" do
+    {:ok, session} =
+      ExecutionSession.ensure("advising", "CDE-1183",
+        workspace_path: "/tmp/advising/CDE-1183",
+        agent_kind: "cursor"
+      )
+
+    assert session.provider_bindings == %{}
+
+    assert {:ok, updated} =
+             ExecutionSession.put_provider_binding(
+               session.id,
+               "cursor",
+               "auto-router-conversation-42"
+             )
+
+    assert updated.provider_bindings == %{"cursor" => "auto-router-conversation-42"}
+
+    assert {:ok,
+            %ConversationRef{
+              provider: "cursor",
+              conversation_id: "auto-router-conversation-42"
+            }} = ExecutionSession.latest_conversation_ref("advising", "CDE-1183", "cursor")
+
+    issue = %Issue{project_slug: "advising", identifier: "CDE-1183"}
+    retry_opts = Orchestrator.agent_run_opts_for_test(issue, "cursor", [worktree: false], 2)
+
+    assert %ConversationRef{
+             provider: "cursor",
+             conversation_id: "auto-router-conversation-42"
+           } = Keyword.fetch!(retry_opts, :conversation_ref)
+
+    assert Keyword.fetch!(retry_opts, :attempt) == 2
+
+    assert {:ok, _archived} = ExecutionSession.archive_latest("advising", "CDE-1183")
+    reset_opts = Orchestrator.agent_run_opts_for_test(issue, "cursor", [], 0)
+    refute Keyword.has_key?(reset_opts, :conversation_ref)
+  end
+
+  test "orchestrator persists the provider binding reported by the live runner" do
+    {:ok, session} =
+      ExecutionSession.ensure("advising", "CDE-1184",
+        workspace_path: "/tmp/advising/CDE-1184",
+        agent_kind: "claude"
+      )
+
+    orchestrator_name = Module.concat(__MODULE__, :ProviderBindingOrchestrator)
+    {:ok, pid} = Orchestrator.start_link(name: orchestrator_name)
+    on_exit(fn -> if Process.alive?(pid), do: Process.exit(pid, :normal) end)
+
+    issue = %Issue{
+      id: "provider-binding-run",
+      identifier: "CDE-1184",
+      project_slug: "advising",
+      state: "In Progress"
+    }
+
+    running_entry = %{
+      pid: self(),
+      ref: make_ref(),
+      identifier: issue.identifier,
+      issue: issue,
+      agent_kind: "claude",
+      session_id: nil,
+      execution_session_id: session.id,
+      turn_count: 0
+    }
+
+    :sys.replace_state(pid, fn state ->
+      %{state | running: %{issue.id => running_entry}}
+    end)
+
+    send(pid, {
+      :codex_worker_update,
+      issue.id,
+      %{
+        event: :provider_binding,
+        timestamp: DateTime.utc_now(),
+        provider: "claude",
+        conversation_id: "claude-native-session-8"
+      }
+    })
+
+    _state = :sys.get_state(pid)
+    assert {:ok, updated} = History.get_thread(session.id)
+    assert updated.provider_bindings == %{"claude" => "claude-native-session-8"}
   end
 
   test "Cursor execution sessions keep effort only in the native model slug" do
@@ -204,6 +295,35 @@ defmodule SymphonyElixir.Agent.ExecutionSessionTest do
 
     assert next.id != original.id
     assert next.status == "active"
+  end
+
+  test "missing provider conversation blocks redispatch durably until hard reset" do
+    {:ok, session} =
+      ExecutionSession.ensure("advising", "CDE-1185",
+        workspace_path: "/tmp/advising/CDE-1185",
+        agent_kind: "codex"
+      )
+
+    assert {:ok, blocked} =
+             ExecutionSession.block_provider_resume(
+               session.id,
+               "codex",
+               "thread-missing"
+             )
+
+    assert blocked.status == "error"
+    assert ExecutionSession.provider_resume_blocked?("advising", "CDE-1185")
+
+    issue = %Issue{
+      project_slug: "advising",
+      identifier: "CDE-1185"
+    }
+
+    assert Orchestrator.provider_resume_blocked_for_test(issue)
+
+    assert {:ok, _archived} = ExecutionSession.archive_latest("advising", "CDE-1185")
+    refute ExecutionSession.provider_resume_blocked?("advising", "CDE-1185")
+    refute Orchestrator.provider_resume_blocked_for_test(issue)
   end
 
   test "latest_agent_kind/2 returns the reusable execution thread agent_kind" do

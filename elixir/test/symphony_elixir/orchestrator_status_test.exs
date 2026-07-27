@@ -398,6 +398,67 @@ defmodule SymphonyElixir.OrchestratorStatusTest do
     refute Map.has_key?(state.running, issue_id)
   end
 
+  test "missing provider conversation is parked instead of retried forever" do
+    issue_id = "issue-stale-provider-conversation"
+
+    issue = %Issue{
+      id: issue_id,
+      identifier: "MT-702",
+      title: "Park a stale provider conversation",
+      description: "",
+      state: "In Progress",
+      project_slug: "project",
+      url: "https://example.org/issues/MT-702"
+    }
+
+    orchestrator_name = Module.concat(__MODULE__, :StaleProviderConversationOrchestrator)
+    {:ok, pid} = Orchestrator.start_link(name: orchestrator_name)
+
+    on_exit(fn -> if Process.alive?(pid), do: Process.exit(pid, :normal) end)
+
+    {:ok, execution_session} =
+      SymphonyElixir.Agent.ExecutionSession.ensure("project", issue.identifier,
+        workspace_path: "/tmp/project/#{issue.identifier}",
+        agent_kind: "cursor"
+      )
+
+    process_ref = make_ref()
+
+    running_entry = %{
+      pid: self(),
+      ref: process_ref,
+      identifier: issue.identifier,
+      issue: issue,
+      session_id: "cursor-session-missing",
+      execution_session_id: execution_session.id,
+      agent_kind: "cursor",
+      agent_outcome: {:error, {:resume_conversation_failed, "cursor-session-missing", :not_found}},
+      last_codex_message: nil,
+      last_codex_timestamp: nil,
+      last_codex_event: nil,
+      started_at: DateTime.utc_now()
+    }
+
+    :sys.replace_state(pid, fn state ->
+      state
+      |> Map.put(:running, %{issue_id => running_entry})
+      |> Map.put(:claimed, MapSet.put(state.claimed, issue_id))
+    end)
+
+    send(pid, {:DOWN, process_ref, :process, self(), :normal})
+
+    state = :sys.get_state(pid)
+    refute Map.has_key?(state.retry_attempts, issue_id)
+    refute Map.has_key?(state.running, issue_id)
+    refute MapSet.member?(state.claimed, issue_id)
+    assert MapSet.member?(state.completed, issue_id)
+
+    assert SymphonyElixir.Agent.ExecutionSession.provider_resume_blocked?(
+             "project",
+             issue.identifier
+           )
+  end
+
   test "orchestrator snapshot tracks turn completed usage when present" do
     issue_id = "issue-turn-completed-usage"
 

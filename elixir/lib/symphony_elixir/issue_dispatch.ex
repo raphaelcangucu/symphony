@@ -340,10 +340,11 @@ defmodule SymphonyElixir.IssueDispatch do
   defp execution_thread_agent_kind(_project_slug, _identifier), do: nil
 
   defp maybe_hard_reset(%Project{} = project, identifier, %IssueDTO{} = issue, :hard_reset) do
-    stop_active_run(identifier)
-    clear_agent_session(project, identifier, issue)
-    archive_execution_session(project, identifier)
-    :ok
+    with :ok <- stop_active_run(identifier),
+         :ok <- archive_execution_session(project, identifier),
+         :ok <- clear_agent_session(project, identifier, issue) do
+      :ok
+    end
   end
 
   defp maybe_hard_reset(_project, _identifier, _issue, _action), do: :ok
@@ -380,7 +381,7 @@ defmodule SymphonyElixir.IssueDispatch do
       {:error, reason} ->
         Logger.warning("Hard reset could not archive execution session identifier=#{identifier} reason=#{inspect(reason)}")
 
-        :ok
+        {:error, {:hard_reset_archive_failed, reason}}
     end
   end
 

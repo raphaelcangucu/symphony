@@ -339,7 +339,7 @@ defmodule SymphonyElixir.Codex.CodingAgentTest do
 
     test "returns a stable error when the explicit resume target no longer exists" do
       with_fake_resume_server(:missing, fn workspace, issue, trace_file ->
-        assert {:error, {:resume_conversation_failed, "thread-missing", _reason}} =
+        assert {:error, {:resume_conversation_failed, "thread-missing", :not_found}} =
                  AppServer.run(workspace, "Continue the chat", issue,
                    conversation_ref: %ConversationRef{
                      provider: "codex",

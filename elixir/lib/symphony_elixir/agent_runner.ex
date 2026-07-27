@@ -24,7 +24,7 @@ defmodule SymphonyElixir.AgentRunner do
     Workspace
   }
 
-  alias SymphonyElixir.Agent.ExecutionSession
+  alias SymphonyElixir.Agent.{ConversationRef, ExecutionSession}
 
   alias SymphonyElixir.Codex.DynamicTool
   alias SymphonyElixir.Evidence
@@ -421,6 +421,23 @@ defmodule SymphonyElixir.AgentRunner do
 
   defp normalized_setting(_value), do: nil
 
+  @doc false
+  @spec provider_binding_update(map()) :: map() | nil
+  def provider_binding_update(turn_session) when is_map(turn_session) do
+    provider = normalized_setting(Map.get(turn_session, :provider))
+    conversation_id = normalized_setting(Map.get(turn_session, :conversation_id))
+
+    if provider && conversation_id do
+      %{
+        event: :provider_binding,
+        timestamp: DateTime.utc_now(),
+        provider: provider,
+        conversation_id: conversation_id,
+        session_id: conversation_id
+      }
+    end
+  end
+
   defp agent_turn_opts(opts, agent_kind, codex_update_recipient, issue) do
     Keyword.merge(opts, agent_kind: agent_kind, on_message: codex_message_handler(codex_update_recipient, issue, agent_kind))
   end
@@ -439,6 +456,7 @@ defmodule SymphonyElixir.AgentRunner do
       |> maybe_put_codex_config(Keyword.get(opts, :project_config))
       |> maybe_put_claude_tools(agent_kind, issue)
       |> maybe_put_resume_thread_id(opts, agent_kind, issue)
+      |> put_conversation_ref(opts, agent_kind)
       |> maybe_put_goal_mode(opts, agent_kind)
       |> put_execution_mode(opts)
 
@@ -780,7 +798,11 @@ defmodule SymphonyElixir.AgentRunner do
         send_codex_update(codex_update_recipient, issue, provenance)
       end
 
-      Logger.info("Completed agent run for #{issue_context(issue)} session_id=#{turn_session[:session_id]} workspace=#{workspace} turn=#{turn_number}/#{max_turns}")
+      if binding = provider_binding_update(turn_session) do
+        send_codex_update(codex_update_recipient, issue, binding)
+      end
+
+      Logger.info("Completed agent run for #{issue_context(issue)} conversation_id=#{turn_session[:conversation_id]} workspace=#{workspace} turn=#{turn_number}/#{max_turns}")
 
       advanced_session = advance_session(app_session, turn_session)
 
@@ -1260,6 +1282,19 @@ defmodule SymphonyElixir.AgentRunner do
 
   defp maybe_put_resume_thread_id(session_opts, _opts, _agent_kind, _issue), do: session_opts
 
+  @doc false
+  @spec put_conversation_ref(keyword(), keyword(), String.t()) :: keyword()
+  def put_conversation_ref(session_opts, opts, agent_kind)
+      when is_list(session_opts) and is_list(opts) and is_binary(agent_kind) do
+    case Keyword.get(opts, :conversation_ref) do
+      %ConversationRef{provider: ^agent_kind} = ref ->
+        Keyword.put(session_opts, :conversation_ref, ref)
+
+      _ ->
+        session_opts
+    end
+  end
+
   # Propagate goal mode into the session so `CodingAgent` resumes the durable
   # Codex thread (via `resume_thread_id`/sidecar) instead of starting a fresh
   # one. Without this flag the session would ignore the resume pointer and lose
@@ -1370,19 +1405,19 @@ defmodule SymphonyElixir.AgentRunner do
   @spec advance_session(map(), term()) :: map()
   def advance_session(session, result) when is_map(session) and is_map(result) do
     session
-    |> maybe_put_cli_session_id(result)
+    |> maybe_put_conversation_id(result)
     |> maybe_put_usage_totals(result)
     |> maybe_put_resolved_provenance(result)
   end
 
   def advance_session(session, _result), do: session
 
-  defp maybe_put_cli_session_id(session, %{cli_session_id: cli_session_id})
-       when is_binary(cli_session_id) do
-    Map.put(session, :cli_session_id, cli_session_id)
+  defp maybe_put_conversation_id(session, %{conversation_id: conversation_id})
+       when is_binary(conversation_id) do
+    Map.put(session, :cli_session_id, conversation_id)
   end
 
-  defp maybe_put_cli_session_id(session, _result), do: session
+  defp maybe_put_conversation_id(session, _result), do: session
 
   defp maybe_put_usage_totals(session, %{usage_totals: totals}) when is_map(totals) do
     metadata = Map.get(session, :metadata) || %{}

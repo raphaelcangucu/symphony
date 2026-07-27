@@ -17,7 +17,7 @@ jobs:
     timeout-minutes: 55
 
     env:
-      EXPO_PUBLIC_E2E_FIXTURES: "1"
+      DEV10X_E2E_REAL_AGENT: "0"
       MIX_ENV: dev
 
     steps:
@@ -81,7 +81,7 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
-      - name: Record complete encrypted two-host journey
+      - name: Record credentialless encrypted two-host RPC journey
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 29

@@ -8,6 +8,7 @@ defmodule SymphonyElixir.SessionLog do
   - `"claude"` → `SymphonyElixir.Claude.SessionLog`
   - `"cursor"` → `SymphonyElixir.Cursor.SessionLog`
   - `"opencode"` → `SymphonyElixir.OpenCode.SessionLog`
+  - `"symphony"` → the exact per-session `SessionStore` transcript
 
   SUBAGENT helpers (`resolve_subagent/3`, `list_subagents/3`, `subagent_meta/2`)
   dispatch to `SymphonyElixir.SessionLogBackend` implementations. Unknown
@@ -157,6 +158,7 @@ defmodule SymphonyElixir.SessionLog do
   def tail("cursor", path, opts), do: tail_with_events(CursorLog.tail(path, opts), opts)
   def tail("opencode", path, opts), do: tail_with_events(OpenCodeLog.tail(path, opts), opts)
   def tail("codex", path, opts), do: tail_with_events(CodexLog.tail(path, opts), opts)
+  def tail("symphony", path, opts), do: tail_with_events(SessionStore.tail(path, opts), opts)
   def tail(_agent_kind, _path, _opts), do: {:error, :unsupported_agent_kind}
 
   @spec read_from(String.t(), Path.t(), non_neg_integer(), keyword()) ::
@@ -174,6 +176,9 @@ defmodule SymphonyElixir.SessionLog do
 
   def read_from("codex", path, offset, opts),
     do: read_from_with_events(CodexLog.read_from(path, offset), offset, opts)
+
+  def read_from("symphony", path, offset, _opts),
+    do: SessionStore.read_from(path, offset)
 
   def read_from(_agent_kind, _path, _offset, _opts), do: {:error, :unsupported_agent_kind}
 

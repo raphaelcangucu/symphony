@@ -16,6 +16,7 @@ defmodule SymphonyElixir.Agent.ExecutionSession do
 
   import Ecto.Query, only: [from: 2]
 
+  alias SymphonyElixir.Agent.ConversationRef
   alias SymphonyElixir.AgentExecution
   alias SymphonyElixir.Assistant.{History, SessionTitles, Thread}
   alias SymphonyElixir.LocalTracker.Context
@@ -24,6 +25,7 @@ defmodule SymphonyElixir.Agent.ExecutionSession do
 
   @statuses ~w(active completed aborted paused error closed archived)
   @recent_window_hours 24
+  @provider_resume_block_key "provider_resume_blocked"
 
   @spec ensure(String.t(), String.t(), keyword()) :: {:ok, Thread.t()} | {:error, term()}
   def ensure(project_slug, issue_identifier, opts)
@@ -74,6 +76,47 @@ defmodule SymphonyElixir.Agent.ExecutionSession do
         ])
       )
       |> Repo.update()
+    end
+  end
+
+  @spec put_provider_binding(integer(), String.t(), String.t()) ::
+          {:ok, Thread.t()} | {:error, term()}
+  def put_provider_binding(session_id, provider, conversation_id)
+      when is_integer(session_id) and is_binary(provider) and is_binary(conversation_id) do
+    with {:ok, thread} <- History.get_thread(session_id),
+         {:ok, ref} <- ConversationRef.new(provider, conversation_id) do
+      History.put_conversation_ref(thread, ref)
+    end
+  end
+
+  @doc """
+  Persists that a provider rejected its canonical conversation as missing.
+
+  This is a durable dispatch gate, not a hint to start another conversation.
+  Archiving the execution through an explicit hard reset is what clears it.
+  """
+  @spec block_provider_resume(integer(), String.t(), String.t()) ::
+          {:ok, Thread.t()} | {:error, term()}
+  def block_provider_resume(session_id, provider, conversation_id)
+      when is_integer(session_id) and is_binary(provider) and is_binary(conversation_id) do
+    with {:ok, thread} <- History.get_thread(session_id) do
+      metadata =
+        Map.put(thread.metadata || %{}, @provider_resume_block_key, %{
+          "provider" => provider,
+          "conversation_id" => conversation_id,
+          "blocked_at" => DateTime.utc_now() |> DateTime.truncate(:second) |> DateTime.to_iso8601()
+        })
+
+      case thread
+           |> Thread.changeset(%{status: "error", metadata: metadata})
+           |> Repo.update() do
+        {:ok, _updated} = result ->
+          notify_execution_change()
+          result
+
+        other ->
+          other
+      end
     end
   end
 
@@ -128,6 +171,27 @@ defmodule SymphonyElixir.Agent.ExecutionSession do
       _ -> nil
     end
   end
+
+  @spec latest_conversation_ref(String.t(), String.t(), String.t()) ::
+          {:ok, ConversationRef.t()} | :error
+  def latest_conversation_ref(project_slug, issue_identifier, provider)
+      when is_binary(project_slug) and is_binary(issue_identifier) and is_binary(provider) do
+    case latest_reusable_execution(project_slug, issue_identifier) do
+      %Thread{} = thread -> History.conversation_ref(thread, provider)
+      nil -> :error
+    end
+  end
+
+  @spec provider_resume_blocked?(String.t(), String.t()) :: boolean()
+  def provider_resume_blocked?(project_slug, issue_identifier)
+      when is_binary(project_slug) and is_binary(issue_identifier) do
+    case latest_reusable_execution(project_slug, issue_identifier) do
+      %Thread{metadata: %{@provider_resume_block_key => blocked}} when is_map(blocked) -> true
+      _ -> false
+    end
+  end
+
+  def provider_resume_blocked?(_project_slug, _issue_identifier), do: false
 
   defp latest_reusable_execution(project_slug, issue_identifier) do
     Repo.one(

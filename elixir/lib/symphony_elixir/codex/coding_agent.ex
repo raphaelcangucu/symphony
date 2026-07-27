@@ -959,10 +959,16 @@ defmodule SymphonyElixir.Codex.CodingAgent do
       {:ok, %{"thread" => thread_payload}} ->
         {:error, {:invalid_thread_payload, thread_payload}}
 
+      {:error, reason} ->
+        {:error, normalize_resume_failure(reason)}
+
       other ->
         other
     end
   end
+
+  defp normalize_resume_failure({:response_error, %{"code" => -32_004}}), do: :not_found
+  defp normalize_resume_failure(reason), do: reason
 
   defp normalize_native_string(value) when is_binary(value) do
     case String.trim(value) do
