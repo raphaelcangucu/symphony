@@ -40,7 +40,7 @@ defmodule SymphonyElixir.MobileComparison.Presenter do
       "effective_effort" => contract.effective_effort,
       "resolved_model" => resolved_value(thread, execution, :resolved_model),
       "resolved_effort" => resolved_value(thread, execution, :resolved_effort),
-      "status" => cell_status(contract.path, thread, execution),
+      "status" => cell_status(contract.path, thread, execution, evidence),
       "attempt" => attempt(execution),
       "issue_identifier" => value(child, :identifier),
       "thread_id" => value(thread, :id),
@@ -52,18 +52,39 @@ defmodule SymphonyElixir.MobileComparison.Presenter do
     }
   end
 
-  defp cell_status(:session, thread, _execution) do
-    case value(thread, :status) do
-      "active" -> "live"
-      "closed" -> "completed"
-      "error" -> "error"
-      nil -> "starting"
-      status -> status
+  defp cell_status(:session, thread, _execution, evidence) do
+    case evidence_status(evidence) do
+      nil ->
+        case value(thread, :status) do
+          "active" -> "live"
+          "closed" -> "completed"
+          "error" -> "error"
+          nil -> "starting"
+          status -> status
+        end
+
+      status ->
+        status
     end
   end
 
-  defp cell_status(:orchestrator, _thread, execution),
+  defp cell_status(:orchestrator, _thread, execution, _evidence),
     do: value(execution, :status) || "starting"
+
+  defp evidence_status(evidence) when is_list(evidence) do
+    statuses =
+      evidence
+      |> Enum.map(&value(&1, :status))
+      |> Enum.filter(&is_binary/1)
+
+    cond do
+      Enum.any?(statuses, &(&1 in @failed_statuses)) -> "failed"
+      Enum.any?(statuses, &(&1 in @passed_statuses)) -> "passed"
+      true -> nil
+    end
+  end
+
+  defp evidence_status(_evidence), do: nil
 
   defp attempt(nil), do: 1
   defp attempt(execution), do: (value(execution, :retry_attempt) || 0) + 1
