@@ -15,7 +15,7 @@
 - Modify: `benchmarks/landing-page-agent-comparison/tests/contract.test.mjs`
 - Modify: `benchmarks/landing-page-agent-comparison/package.json`
 
-- [ ] **Step 1: Write the failing six-cell matrix test**
+- [x] **Step 1: Write the failing six-cell matrix test**
 
 Add a test that selects `dev10x-brand-high` and expects exactly:
 
@@ -33,7 +33,7 @@ Add a test that selects `dev10x-brand-high` and expects exactly:
 Also assert that the six generated ids are unique and the historical matrices
 still exist in the full catalog.
 
-- [ ] **Step 2: Run the contract test and verify RED**
+- [x] **Step 2: Run the contract test and verify RED**
 
 Run:
 
@@ -44,7 +44,7 @@ node --test tests/contract.test.mjs
 
 Expected: FAIL because `dev10x-brand-high` is not defined.
 
-- [ ] **Step 3: Implement the new matrix and selector**
+- [x] **Step 3: Implement the new matrix and selector**
 
 Add:
 
@@ -75,13 +75,13 @@ Append six frozen run records to `RUN_MATRIX`. Add:
 "run:brand-high": "SYMPHONY_BENCH_MATRIX=dev10x-brand-high node src/run-matrix.mjs"
 ```
 
-- [ ] **Step 4: Run the contract test and verify GREEN**
+- [x] **Step 4: Run the contract test and verify GREEN**
 
 Run: `node --test tests/contract.test.mjs`
 
 Expected: the updated matrix tests pass with six `dev10x-brand-high` cells.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Commit subject:
 
@@ -95,7 +95,7 @@ test(benchmark): define Dev10x high-effort matrix
 - Modify: `benchmarks/landing-page-agent-comparison/src/provision.mjs`
 - Modify: `benchmarks/landing-page-agent-comparison/tests/provision.test.mjs`
 
-- [ ] **Step 1: Write failing brand staging tests**
+- [x] **Step 1: Write failing brand staging tests**
 
 Use a temporary seed root and assert:
 
@@ -127,13 +127,13 @@ assert.deepEqual(
 For every entry, read `public/dev10x/${relativeName}` and assert its SHA-256
 equals the manifest value.
 
-- [ ] **Step 2: Run the provision test and verify RED**
+- [x] **Step 2: Run the provision test and verify RED**
 
 Run: `node --test tests/provision.test.mjs`
 
 Expected: FAIL because `stageCanonicalBrandAssets` is missing.
 
-- [ ] **Step 3: Implement canonical copy and hashing**
+- [x] **Step 3: Implement canonical copy and hashing**
 
 In `provision.mjs`, define the repository root relative to `packageRoot`, then
 copy the six top-level brand assets plus `favicons/` from `tracker/public` to
@@ -161,7 +161,7 @@ Return and persist this shape in `runs.json`:
 
 Call the staging function after copying `seed/` and before the seed Git commit.
 
-- [ ] **Step 4: Make provisioning select only the requested matrix**
+- [x] **Step 4: Make provisioning select only the requested matrix**
 
 Change `buildRunRecords` to accept runs and make `provision` select:
 
@@ -172,7 +172,7 @@ const records = buildRunRecords(prompt, runsForMatrix(matrix));
 
 Persist `matrix` and the brand manifest at the top level of `runs.json`.
 
-- [ ] **Step 5: Verify GREEN**
+- [x] **Step 5: Verify GREEN**
 
 Run:
 
@@ -182,7 +182,7 @@ node --test tests/provision.test.mjs tests/contract.test.mjs
 
 Expected: all matrix and provisioning tests pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 Commit subject:
 
