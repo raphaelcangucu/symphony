@@ -294,11 +294,23 @@ defmodule SymphonyElixir.MobileComparison.LocalGateway do
     history = Map.get(context, :comparison_history, History)
     thread_id = value(thread, :id)
 
-    if history.list_messages_for_thread(thread_id) == [] do
-      put_value(thread, :status, "ready")
-    else
-      thread
+    case history.list_messages_for_thread(thread_id) do
+      [] ->
+        put_value(thread, :status, "ready")
+
+      messages ->
+        case latest_assistant_message(messages) do
+          nil -> thread
+          message -> put_value(thread, :latest_message, value(message, :content))
+        end
     end
+  end
+
+  defp latest_assistant_message(messages) do
+    messages
+    |> Enum.filter(&(value(&1, :role) == "assistant"))
+    |> Enum.sort_by(&(value(&1, :sequence) || 0), :desc)
+    |> List.first()
   end
 
   defp session_matches?(thread, cell) do

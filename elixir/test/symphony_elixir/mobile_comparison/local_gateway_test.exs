@@ -115,6 +115,32 @@ defmodule SymphonyElixir.MobileComparison.LocalGatewayTest do
     end
   end
 
+  defmodule CompletedWithoutTextHistory do
+    def list_messages_for_thread(44) do
+      [
+        %{sequence: 1, role: "user", content: "Build it"},
+        %{
+          sequence: 2,
+          role: "assistant",
+          content: "Cursor completed the turn without returning assistant text."
+        }
+      ]
+    end
+
+    def list_threads(_opts) do
+      [
+        %{
+          id: 44,
+          issue_identifier: "DEV-2",
+          agent_kind: "cursor",
+          status: "active",
+          requested_model: "cursor-grok-4.5-high",
+          requested_effort: nil
+        }
+      ]
+    end
+  end
+
   defmodule FakeSessionStarter do
     def start(thread, prompt, context) do
       send(context.test_pid, {:session_start, thread, prompt, context.comparison_request_key})
@@ -276,6 +302,26 @@ defmodule SymphonyElixir.MobileComparison.LocalGatewayTest do
     context = Map.put(context, :comparison_history, LegacyProvenanceHistory)
 
     assert {:ok, %{id: 43, status: "ready"}} =
+             LocalGateway.get_session(
+               "dev10x",
+               %{"identifier" => "DEV-2"},
+               cell,
+             context
+             )
+  end
+
+  test "exposes the latest completed assistant turn for comparison failure detection", %{
+    context: context
+  } do
+    assert {:ok, cell} = Contract.fetch("session-cursor")
+    context = Map.put(context, :comparison_history, CompletedWithoutTextHistory)
+
+    assert {:ok,
+            %{
+              "latest_message" => "Cursor completed the turn without returning assistant text.",
+              id: 44,
+              status: "active"
+            }} =
              LocalGateway.get_session(
                "dev10x",
                %{"identifier" => "DEV-2"},

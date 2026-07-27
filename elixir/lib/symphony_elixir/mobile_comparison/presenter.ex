@@ -55,12 +55,16 @@ defmodule SymphonyElixir.MobileComparison.Presenter do
   defp cell_status(:session, thread, _execution, evidence) do
     case evidence_status(evidence) do
       nil ->
-        case value(thread, :status) do
-          "active" -> "live"
-          "closed" -> "completed"
-          "error" -> "error"
-          nil -> "starting"
-          status -> status
+        if completed_without_output?(value(thread, :latest_message)) do
+          "failed"
+        else
+          case value(thread, :status) do
+            "active" -> "live"
+            "closed" -> "completed"
+            "error" -> "error"
+            nil -> "starting"
+            status -> status
+          end
         end
 
       status ->
@@ -85,6 +89,11 @@ defmodule SymphonyElixir.MobileComparison.Presenter do
   end
 
   defp evidence_status(_evidence), do: nil
+
+  defp completed_without_output?(message) when is_binary(message),
+    do: String.ends_with?(message, "completed the turn without returning assistant text.")
+
+  defp completed_without_output?(_message), do: false
 
   defp attempt(nil), do: 1
   defp attempt(execution), do: (value(execution, :retry_attempt) || 0) + 1
