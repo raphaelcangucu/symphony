@@ -620,12 +620,12 @@ Also verify every Markdown media link resolves to a committed file.
 Review matrix fidelity, asset hashing, failure behavior, evidence counts,
 sanitization and the evidence-backed ranking. Resolve all actionable findings.
 
-- [ ] **Step 5: Commit and push**
+- [x] **Step 5: Commit and push**
 
 Create intentional commits for reports/evidence, push
 `feat/dev10x-site-matrix-high`, and open a new PR against `main`.
 
-- [ ] **Step 6: Write the PR body in the PR #6 structure**
+- [x] **Step 6: Write the PR body in the PR #6 structure**
 
 Include:
 
