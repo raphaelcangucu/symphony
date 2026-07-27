@@ -196,7 +196,7 @@ feat(benchmark): seed canonical Dev10x brand assets
 - Modify: `benchmarks/landing-page-agent-comparison/src/collect.mjs`
 - Modify: `benchmarks/landing-page-agent-comparison/tests/collect.test.mjs`
 
-- [ ] **Step 1: Write failing hash-contract tests**
+- [x] **Step 1: Write failing hash-contract tests**
 
 Create a temporary workspace containing canonical and changed files. Assert:
 
@@ -215,13 +215,13 @@ assert.deepEqual(
 After modifying `dev10x_logo_color.png`, expect `passed: false` and that file in
 `mismatched`. After deleting `favicon.svg`, expect it in `missing`.
 
-- [ ] **Step 2: Run the collector test and verify RED**
+- [x] **Step 2: Run the collector test and verify RED**
 
 Run: `node --test tests/collect.test.mjs`
 
 Expected: FAIL because `inspectBrandAssets` does not exist.
 
-- [ ] **Step 3: Implement the hash contract**
+- [x] **Step 3: Implement the hash contract**
 
 Add `sha256File` and `inspectBrandAssets(workspacePath, brandManifest)`.
 `collect()` stores the result as `row.brand` and includes it in
@@ -236,13 +236,13 @@ const passed = baseContractPassed && brand.passed;
 Update `renderComparison` with a `Marca` column that renders `passed` or the
 first missing/mismatched asset. Never treat an absent brand manifest as passed.
 
-- [ ] **Step 4: Verify GREEN**
+- [x] **Step 4: Verify GREEN**
 
 Run: `node --test tests/collect.test.mjs`
 
 Expected: all collector tests pass, including missing and changed asset cases.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Commit subject:
 

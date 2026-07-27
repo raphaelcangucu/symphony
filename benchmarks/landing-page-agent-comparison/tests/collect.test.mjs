@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import test from "node:test";
 
-import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
+import * as collectModule from "../src/collect.mjs";
 import {
   executeValidation,
   formatDuration,
@@ -17,6 +19,10 @@ import {
   summarizeAttempts,
   validationPort,
 } from "../src/collect.mjs";
+
+function sha256(content) {
+  return createHash("sha256").update(content).digest("hex");
+}
 
 test("independent validation reserves one deterministic port per cell", () => {
   assert.equal(validationPort(0), 24_000);
@@ -105,6 +111,46 @@ test("inspectWorkspace rejects a direct Playwright script without the safe runne
   assert.equal(facts.contract.scripts.e2e_runner, false);
 });
 
+test("inspectBrandAssets rejects missing or changed canonical Dev10x files", async () => {
+  assert.equal(typeof collectModule.inspectBrandAssets, "function");
+
+  const workspace = await mkdtemp(join(tmpdir(), "symphony-brand-contract-"));
+  const brandRoot = join(workspace, "public", "dev10x");
+  await mkdir(brandRoot, { recursive: true });
+  await writeFile(join(brandRoot, "dev10x_logo_color.png"), "canonical-logo");
+  await writeFile(join(brandRoot, "favicon.svg"), "canonical-favicon");
+
+  const manifest = {
+    assets: {
+      "dev10x_logo_color.png": sha256("canonical-logo"),
+      "favicon.svg": sha256("canonical-favicon"),
+    },
+  };
+
+  assert.deepEqual(
+    await collectModule.inspectBrandAssets(workspace, manifest),
+    {
+      passed: true,
+      missing: [],
+      mismatched: [],
+      assets: manifest.assets,
+    },
+  );
+
+  await writeFile(join(brandRoot, "dev10x_logo_color.png"), "changed-logo");
+  assert.deepEqual(
+    (await collectModule.inspectBrandAssets(workspace, manifest)).mismatched,
+    ["dev10x_logo_color.png"],
+  );
+
+  await writeFile(join(brandRoot, "dev10x_logo_color.png"), "canonical-logo");
+  await rm(join(brandRoot, "favicon.svg"));
+  assert.deepEqual(
+    (await collectModule.inspectBrandAssets(workspace, manifest)).missing,
+    ["favicon.svg"],
+  );
+});
+
 test("renderComparison preserves blocked cells and the shared prompt hash", () => {
   const report = renderComparison({
     prompt_sha256: "abc123",
@@ -117,6 +163,7 @@ test("renderComparison preserves blocked cells and the shared prompt hash", () =
         duration_ms: 1234,
         workspace_path: "/tmp/codex",
         contract_passed: true,
+        brand: { passed: true, missing: [], mismatched: [] },
       },
       {
         id: "orchestrator-claude",
@@ -126,6 +173,11 @@ test("renderComparison preserves blocked cells and the shared prompt hash", () =
         duration_ms: 4321,
         workspace_path: "/tmp/claude",
         contract_passed: false,
+        brand: {
+          passed: false,
+          missing: ["favicon.svg"],
+          mismatched: [],
+        },
       },
     ],
   });
@@ -133,6 +185,9 @@ test("renderComparison preserves blocked cells and the shared prompt hash", () =
   assert.match(report, /Prompt SHA-256: `abc123`/);
   assert.match(report, /session-codex.*completed/);
   assert.match(report, /orchestrator-claude.*blocked/);
+  assert.match(report, /Marca/);
+  assert.match(report, /session-codex.*completed.*passed/);
+  assert.match(report, /orchestrator-claude.*missing: favicon\.svg/);
   assert.match(report, /1s/);
   assert.match(report, /Revisão visual humana/);
 });
