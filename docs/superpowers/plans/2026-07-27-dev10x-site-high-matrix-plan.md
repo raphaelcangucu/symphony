@@ -615,7 +615,7 @@ git ls-files | rg -i '(token|secret|credential)' docs/pr-assets/dev10x-site-high
 
 Also verify every Markdown media link resolves to a committed file.
 
-- [ ] **Step 4: Request independent code review**
+- [x] **Step 4: Request independent code review**
 
 Review matrix fidelity, asset hashing, failure behavior, evidence counts,
 sanitization and the evidence-backed ranking. Resolve all actionable findings.
