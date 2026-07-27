@@ -379,7 +379,7 @@ feat(benchmark): capture detailed Dev10x site evidence
 - Modify: `benchmarks/landing-page-agent-comparison/README.md`
 - Modify: `benchmarks/landing-page-agent-comparison/tests/contract.test.mjs`
 
-- [ ] **Step 1: Add a failing README contract assertion**
+- [x] **Step 1: Add a failing README contract assertion**
 
 Read the README in `contract.test.mjs` and require:
 
@@ -391,13 +391,13 @@ assert.match(readme, /claude-opus-5.*high/s);
 assert.match(readme, /6 células/);
 ```
 
-- [ ] **Step 2: Run the contract test and verify RED**
+- [x] **Step 2: Run the contract test and verify RED**
 
 Run: `node --test tests/contract.test.mjs`
 
 Expected: FAIL because the README describes only the historical matrices.
 
-- [ ] **Step 3: Update execution documentation**
+- [x] **Step 3: Update execution documentation**
 
 Document that `npm run provision` defaults to `dev10x-brand-high`, while
 historical reproduction can set another matrix explicitly. Add:
@@ -414,13 +414,13 @@ npm run capture:visuals
 Explain Cursor's encoded high effort and list the six screenshots, MP4/WebM and
 trace expected per cell.
 
-- [ ] **Step 4: Run all benchmark tests**
+- [x] **Step 4: Run all benchmark tests**
 
 Run: `npm test`
 
 Expected: all benchmark tests pass; no full Symphony suite is invoked.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Commit subject:
 

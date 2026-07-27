@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import * as benchmarkContract from "../src/contract.mjs";
@@ -153,4 +154,14 @@ test("the canonical prompt requires preview-compatible Playwright E2E", async ()
   assert.match(prompt, /id="evidencias"/);
   assert.doesNotMatch(prompt, /marca [“"]Symphony[”"]/);
   assert.equal(promptSha256(prompt).length, 64);
+});
+
+test("the README documents the focused six-cell Dev10x matrix", async () => {
+  const readme = await readFile(new URL("../README.md", import.meta.url), "utf8");
+
+  assert.match(readme, /dev10x-brand-high/);
+  assert.match(readme, /gpt-5\.6-sol.*high/s);
+  assert.match(readme, /cursor-grok-4\.5-high/);
+  assert.match(readme, /claude-opus-5.*high/s);
+  assert.match(readme, /6 células/);
 });
