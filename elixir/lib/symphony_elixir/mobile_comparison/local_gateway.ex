@@ -88,7 +88,7 @@ defmodule SymphonyElixir.MobileComparison.LocalGateway do
         scope: "issue_session",
         project_slug: project_slug,
         issue_identifier: identifier,
-        include_archived: true,
+        include_archived: false,
         limit: 100
       ]
       |> history.list_threads()
@@ -107,6 +107,19 @@ defmodule SymphonyElixir.MobileComparison.LocalGateway do
     context
     |> Map.get(:comparison_session_starter, SessionStarter)
     |> apply(:start, [thread, prompt, context])
+  end
+
+  @impl true
+  def retry_session(project_slug, child, cell, prompt, context) do
+    history = Map.get(context, :comparison_history, History)
+
+    with {:ok, thread} <- get_session(project_slug, child, cell, context),
+         {:ok, _archived} <- history.archive_thread(value(thread, :id)),
+         {:ok, replacement} <-
+           create_session(project_slug, child, cell, context, "thread-retry"),
+         :ok <- start_session(replacement, prompt, context) do
+      :ok
+    end
   end
 
   @impl true
@@ -130,6 +143,34 @@ defmodule SymphonyElixir.MobileComparison.LocalGateway do
            issue_path(project_slug, identifier) <> "/dispatch",
            body,
            idempotency_key(context, cell_id || identifier, "dispatch")
+         ) do
+      {:ok, _payload} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @impl true
+  def retry_child(project_slug, child, context) do
+    identifier = value(child, :identifier)
+    cell_id = value(child, :comparison_cell_id)
+    settings = child_settings(child, cell_id)
+
+    body = %{
+      "action" => "hard_reset",
+      "instructions" => "Retry this Dev10x comparison cell from the preserved workspace.",
+      "agent" => settings.provider,
+      "model" => settings.model,
+      "effort" => settings.effort,
+      "mode" => "yolo"
+    }
+
+    case request(
+           context,
+           :tasks,
+           "POST",
+           issue_path(project_slug, identifier) <> "/dispatch",
+           body,
+           idempotency_key(context, cell_id || identifier, "retry")
          ) do
       {:ok, _payload} -> :ok
       {:error, reason} -> {:error, reason}
@@ -208,7 +249,7 @@ defmodule SymphonyElixir.MobileComparison.LocalGateway do
     end
   end
 
-  defp create_session(project_slug, child, cell, context) do
+  defp create_session(project_slug, child, cell, context, idempotency_suffix \\ "thread") do
     body = %{
       "scope" => "issue_session",
       "project_slug" => project_slug,
@@ -227,7 +268,7 @@ defmodule SymphonyElixir.MobileComparison.LocalGateway do
              "POST",
              "/assistant/threads",
              body,
-             idempotency_key(context, cell.id, "thread")
+             idempotency_key(context, cell.id, idempotency_suffix)
            )
            |> unwrap_data() do
       {:ok, maybe_mark_ready(thread, context)}
@@ -257,16 +298,19 @@ defmodule SymphonyElixir.MobileComparison.LocalGateway do
   defp cell_id_from_title(_title), do: nil
 
   defp child_settings(child, cell_id) do
-    with nil <- value(child, :agent_kind),
-         {:ok, cell} <- Contract.fetch(cell_id || "") do
-      cell
-    else
-      provider ->
+    case value(child, :agent_kind) do
+      provider when is_binary(provider) and provider != "" ->
         %{
           provider: provider,
           model: value(child, :requested_model),
           effort: value(child, :requested_effort)
         }
+
+      _missing ->
+        case Contract.fetch(cell_id || "") do
+          {:ok, cell} -> cell
+          {:error, :unknown_cell} -> %{provider: nil, model: nil, effort: nil}
+        end
     end
   end
 

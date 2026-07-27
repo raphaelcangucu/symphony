@@ -20,7 +20,10 @@ defmodule SymphonyElixir.MobileComparison.Gateway do
   @callback get_session(String.t(), map(), Contract.cell(), map()) ::
               {:ok, map()} | {:error, :not_found | term()}
   @callback start_session(map(), String.t(), map()) :: :ok | {:error, term()}
+  @callback retry_session(String.t(), map(), Contract.cell(), String.t(), map()) ::
+              :ok | {:error, term()}
   @callback dispatch_child(String.t(), map(), map()) :: :ok | {:error, term()}
+  @callback retry_child(String.t(), map(), map()) :: :ok | {:error, term()}
   @callback list_executions(map()) :: {:ok, [map()]} | {:error, term()}
   @callback list_previews(map(), map()) :: {:ok, [map()]} | {:error, term()}
   @callback list_evidence(String.t(), String.t(), map()) ::

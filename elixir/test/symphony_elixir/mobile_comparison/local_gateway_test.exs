@@ -63,6 +63,7 @@ defmodule SymphonyElixir.MobileComparison.LocalGatewayTest do
   end
 
   defmodule FakeHistory do
+    def archive_thread(42), do: {:ok, %{id: 42, status: "archived"}}
     def list_messages_for_thread(42), do: []
     def turn_running?(_thread), do: false
 
@@ -218,6 +219,60 @@ defmodule SymphonyElixir.MobileComparison.LocalGatewayTest do
              )
 
     refute_receive {:tracker_request, :sessions, _request}
+  end
+
+  test "retries a failed session with a new thread scoped to the retry request", %{
+    context: context
+  } do
+    assert {:ok, cell} = Contract.fetch("session-codex")
+    context = Map.put(context, :comparison_history, FakeHistory)
+
+    assert :ok =
+             LocalGateway.retry_session(
+               "dev10x",
+               %{"identifier" => "DEV-2"},
+               cell,
+               "Build it",
+               context
+             )
+
+    assert_receive {:tracker_request, :sessions,
+                    %{
+                      "method" => "POST",
+                      "path" => "/assistant/threads",
+                      "idempotency_key" => "mobile-key-1:session-codex:thread-retry"
+                    }}
+
+    assert_receive {:session_start, %{"id" => 42}, "Build it", "mobile-key-1"}
+  end
+
+  test "hard-resets only the requested orchestrator child", %{context: context} do
+    assert :ok =
+             LocalGateway.retry_child(
+               "dev10x",
+               %{
+                 "identifier" => "DEV-2",
+                 "comparison_cell_id" => "orchestrator-codex",
+                 "agent_kind" => "codex",
+                 "requested_model" => "gpt-5.6-sol",
+                 "requested_effort" => "high"
+               },
+               context
+             )
+
+    assert_receive {:tracker_request, :tasks,
+                    %{
+                      "method" => "POST",
+                      "path" => "/projects/dev10x/issues/DEV-2/dispatch",
+                      "idempotency_key" => "mobile-key-1:orchestrator-codex:retry",
+                      "body" => %{
+                        "action" => "hard_reset",
+                        "agent" => "codex",
+                        "model" => "gpt-5.6-sol",
+                        "effort" => "high",
+                        "mode" => "yolo"
+                      }
+                    }}
   end
 
   test "dispatches autonomous work and reads executions, previews and evidence", %{

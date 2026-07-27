@@ -8,6 +8,8 @@ defmodule SymphonyElixir.MobileComparison.Service do
 
   alias SymphonyElixir.MobileComparison.{Contract, LocalGateway, Presenter}
 
+  @retryable_statuses ~w(failed blocked error cancelled canceled)
+
   @type result :: {:ok, map()} | {:error, term()}
 
   @spec start(map(), map()) :: result()
@@ -66,6 +68,51 @@ defmodule SymphonyElixir.MobileComparison.Service do
   end
 
   def get(_params, _context), do: {:error, :invalid_params}
+
+  @spec retry_cell(map(), map()) :: result()
+  def retry_cell(
+        %{
+          "project_slug" => project_slug,
+          "identifier" => identifier,
+          "request_key" => request_key,
+          "cell_id" => cell_id
+        },
+        context
+      )
+      when is_binary(project_slug) and is_binary(identifier) and
+             is_binary(request_key) and request_key != "" and is_binary(cell_id) and
+             is_map(context) do
+    request_context = Map.put(context, :comparison_request_key, request_key)
+    gateway = Map.get(request_context, :comparison_gateway, LocalGateway)
+
+    with {:ok, contract} <- Contract.fetch(cell_id),
+         {:ok, snapshot} <-
+           get(
+             %{"project_slug" => project_slug, "identifier" => identifier},
+             request_context
+           ),
+         {:ok, presented_cell} <- fetch_presented_cell(snapshot, cell_id),
+         :ok <- ensure_retryable(presented_cell),
+         {:ok, parent} <- gateway.get_parent(project_slug, identifier, request_context),
+         {:ok, children} <- gateway.list_children(project_slug, identifier, request_context),
+         {:ok, child} <- fetch_child(children, cell_id),
+         :ok <-
+           retry(
+             gateway,
+             project_slug,
+             child,
+             contract,
+             prompt(parent),
+             request_context
+           ) do
+      get(
+        %{"project_slug" => project_slug, "identifier" => identifier},
+        request_context
+      )
+    end
+  end
+
+  def retry_cell(_params, _context), do: {:error, :invalid_params}
 
   defp reconcile_cells(
          gateway,
@@ -241,6 +288,36 @@ defmodule SymphonyElixir.MobileComparison.Service do
 
   defp existing_evidence(gateway, project_slug, child, context),
     do: gateway.list_evidence(project_slug, value(child, :identifier), context)
+
+  defp fetch_presented_cell(%{"cells" => cells}, cell_id) when is_list(cells) do
+    case Enum.find(cells, &(value(&1, :id) == cell_id)) do
+      nil -> {:error, :comparison_cell_not_found}
+      cell -> {:ok, cell}
+    end
+  end
+
+  defp fetch_presented_cell(_snapshot, _cell_id), do: {:error, :comparison_cell_not_found}
+
+  defp fetch_child(children, cell_id) do
+    case Enum.find(children, &(value(&1, :comparison_cell_id) == cell_id)) do
+      nil -> {:error, :comparison_cell_not_found}
+      child -> {:ok, child}
+    end
+  end
+
+  defp ensure_retryable(cell) do
+    if value(cell, :status) in @retryable_statuses do
+      :ok
+    else
+      {:error, :cell_not_retryable}
+    end
+  end
+
+  defp retry(gateway, project_slug, child, %{path: :session} = contract, prompt, context),
+    do: gateway.retry_session(project_slug, child, contract, prompt, context)
+
+  defp retry(gateway, project_slug, child, %{path: :orchestrator}, _prompt, context),
+    do: gateway.retry_child(project_slug, child, context)
 
   defp prompt(parent) do
     case value(parent, :description) do

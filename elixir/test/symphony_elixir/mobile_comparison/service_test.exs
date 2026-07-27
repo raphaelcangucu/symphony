@@ -22,8 +22,11 @@ defmodule SymphonyElixir.MobileComparison.ServiceTest do
           sessions: %{},
           session_starts: MapSet.new(),
           session_start_calls: %{},
+          session_retries: MapSet.new(),
           dispatches: MapSet.new(),
           dispatch_calls: %{},
+          orchestrator_retries: MapSet.new(),
+          execution_failures: %{},
           failures: %{}
         }
       end)
@@ -150,11 +153,38 @@ defmodule SymphonyElixir.MobileComparison.ServiceTest do
     end
 
     @impl true
+    def retry_session("dev10x", child, cell, _prompt, context) do
+      Agent.update(context.comparison_gateway_state, fn state ->
+        retried =
+          state
+          |> Map.update!(:session_retries, &MapSet.put(&1, child.identifier))
+          |> put_in([:sessions, cell.id, :status], "active")
+          |> put_in([:sessions, cell.id, :error], nil)
+
+        retried
+      end)
+
+      :ok
+    end
+
+    @impl true
     def dispatch_child("dev10x", child, context) do
       Agent.update(context.comparison_gateway_state, fn state ->
         state
         |> Map.update!(:dispatches, &MapSet.put(&1, child.identifier))
         |> update_in([:dispatch_calls, child.identifier], &((&1 || 0) + 1))
+      end)
+
+      :ok
+    end
+
+    @impl true
+    def retry_child("dev10x", child, context) do
+      Agent.update(context.comparison_gateway_state, fn state ->
+        state
+        |> Map.update!(:orchestrator_retries, &MapSet.put(&1, child.identifier))
+        |> Map.update!(:dispatches, &MapSet.put(&1, child.identifier))
+        |> update_in([:execution_failures], &Map.delete(&1, child.identifier))
       end)
 
       :ok
@@ -167,12 +197,16 @@ defmodule SymphonyElixir.MobileComparison.ServiceTest do
          Enum.map(state.dispatches, fn identifier ->
            %{
              issue_identifier: identifier,
-             status: "live",
+             status: Map.get(state.execution_failures, identifier, "live"),
              execution_session_id: nil,
              resolved_model: nil,
              resolved_effort: nil,
              latest_message: nil,
-             error: nil,
+             error:
+               if(Map.has_key?(state.execution_failures, identifier),
+                 do: "provider disconnected",
+                 else: nil
+               ),
              retry_attempt: 0
            }
          end)
@@ -194,8 +228,24 @@ defmodule SymphonyElixir.MobileComparison.ServiceTest do
           session_starts: MapSet.size(current.session_starts),
           session_start_calls: current.session_start_calls |> Map.values() |> Enum.sum(),
           dispatches: MapSet.size(current.dispatches),
-          dispatch_calls: current.dispatch_calls |> Map.values() |> Enum.sum()
+          dispatch_calls: current.dispatch_calls |> Map.values() |> Enum.sum(),
+          session_retries: MapSet.size(current.session_retries),
+          orchestrator_retries: MapSet.size(current.orchestrator_retries)
         }
+      end)
+    end
+
+    @spec fail_cell(pid(), String.t(), String.t()) :: :ok
+    def fail_cell(state, cell_id, error) do
+      Agent.update(state, fn current ->
+        if String.starts_with?(cell_id, "session-") do
+          current
+          |> put_in([:sessions, cell_id, :status], "error")
+          |> put_in([:sessions, cell_id, :error], error)
+        else
+          identifier = Map.fetch!(current.children, cell_id).identifier
+          put_in(current, [:execution_failures, identifier], "failed")
+        end
       end)
     end
 
@@ -245,7 +295,9 @@ defmodule SymphonyElixir.MobileComparison.ServiceTest do
              session_starts: 3,
              session_start_calls: 3,
              dispatches: 3,
-             dispatch_calls: 3
+             dispatch_calls: 3,
+             session_retries: 0,
+             orchestrator_retries: 0
            }
   end
 
@@ -269,7 +321,9 @@ defmodule SymphonyElixir.MobileComparison.ServiceTest do
              session_starts: 3,
              session_start_calls: 3,
              dispatches: 3,
-             dispatch_calls: 3
+             dispatch_calls: 3,
+             session_retries: 0,
+             orchestrator_retries: 0
            }
   end
 
@@ -294,7 +348,9 @@ defmodule SymphonyElixir.MobileComparison.ServiceTest do
              session_starts: 1,
              session_start_calls: 2,
              dispatches: 0,
-             dispatch_calls: 0
+             dispatch_calls: 0,
+             session_retries: 0,
+             orchestrator_retries: 0
            }
 
     assert {:ok, snapshot} = Service.start(params, context)
@@ -306,7 +362,9 @@ defmodule SymphonyElixir.MobileComparison.ServiceTest do
              session_starts: 3,
              session_start_calls: 4,
              dispatches: 3,
-             dispatch_calls: 3
+             dispatch_calls: 3,
+             session_retries: 0,
+             orchestrator_retries: 0
            }
   end
 
@@ -334,5 +392,73 @@ defmodule SymphonyElixir.MobileComparison.ServiceTest do
 
     assert length(snapshot["cells"]) == 6
     assert FakeGateway.counts(state) == before
+  end
+
+  test "retries only a failed canonical cell and preserves the other five", %{
+    context: context,
+    state: state
+  } do
+    start_params = %{
+      "project_slug" => "dev10x",
+      "identifier" => "DEV-1",
+      "request_key" => "mobile-e2e-retry"
+    }
+
+    assert {:ok, _snapshot} = Service.start(start_params, context)
+    FakeGateway.fail_cell(state, "session-codex", "provider disconnected")
+
+    assert {:ok, retried} =
+             Service.retry_cell(
+               Map.put(start_params, "cell_id", "session-codex"),
+               context
+             )
+
+    assert Enum.find(retried["cells"], &(&1["id"] == "session-codex"))["status"] == "live"
+
+    assert FakeGateway.counts(state) == %{
+             children: 6,
+             sessions: 3,
+             session_starts: 3,
+             session_start_calls: 3,
+             dispatches: 3,
+             dispatch_calls: 3,
+             session_retries: 1,
+             orchestrator_retries: 0
+           }
+
+    FakeGateway.fail_cell(state, "orchestrator-claude", "provider disconnected")
+
+    assert {:ok, retried} =
+             Service.retry_cell(
+               Map.put(start_params, "cell_id", "orchestrator-claude"),
+               context
+             )
+
+    assert Enum.find(retried["cells"], &(&1["id"] == "orchestrator-claude"))[
+             "status"
+           ] == "live"
+
+    assert FakeGateway.counts(state) == %{
+             children: 6,
+             sessions: 3,
+             session_starts: 3,
+             session_start_calls: 3,
+             dispatches: 3,
+             dispatch_calls: 3,
+             session_retries: 1,
+             orchestrator_retries: 1
+           }
+
+    assert {:error, :cell_not_retryable} =
+             Service.retry_cell(
+               Map.put(start_params, "cell_id", "session-cursor"),
+               context
+             )
+
+    assert {:error, :unknown_cell} =
+             Service.retry_cell(
+               Map.put(start_params, "cell_id", "session-nope"),
+               context
+             )
   end
 end
