@@ -13,11 +13,9 @@ import { useArchiveChat } from "@/hooks/useArchiveChat";
 import { useIssueSessions } from "@/hooks/useIssueSessions";
 import { cn, formatDateTime, SCROLLBAR_THIN } from "@/lib/utils";
 import {
-  issuePath,
   projectAuthoringSessionPath,
   projectExecutionSessionPath,
   projectSessionPath,
-  type WorkspaceView,
 } from "@/lib/workspaceRoutes";
 import type { AgentExecution } from "@/types/agent-execution";
 import type { AssistantThread } from "@/types/assistant-thread";
@@ -28,15 +26,14 @@ interface IssueSessionsTabProps {
   issue: Issue;
   projectSlug: string;
   execution?: AgentExecution;
-  view: WorkspaceView;
 }
 
-export function IssueSessionsTab({ issue, projectSlug, execution, view }: IssueSessionsTabProps) {
+export function IssueSessionsTab({ issue, projectSlug, execution }: IssueSessionsTabProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [createOpen, setCreateOpen] = useState(false);
   const {
-    executionSession,
+    executionSessions,
     chatSessions,
     isLoading,
     error,
@@ -46,17 +43,12 @@ export function IssueSessionsTab({ issue, projectSlug, execution, view }: IssueS
   } = useIssueSessions(projectSlug, issue, execution);
   const { archiving, archiveChat } = useArchiveChat(() => void refetch());
 
-  const openExecutionSession = useCallback(() => {
-    const threadId =
-      execution?.executionSessionId ?? executionSession?.execution.executionSessionId ?? null;
-    navigate(projectExecutionSessionPath(projectSlug, issue.identifier, threadId));
-  }, [
-    execution?.executionSessionId,
-    executionSession?.execution.executionSessionId,
-    issue.identifier,
-    navigate,
-    projectSlug,
-  ]);
+  const openExecutionSession = useCallback(
+    (threadId: number | null) => {
+      navigate(projectExecutionSessionPath(projectSlug, issue.identifier, threadId));
+    },
+    [issue.identifier, navigate, projectSlug],
+  );
 
   const openChatSession = useCallback(
     (thread: AssistantThread) => {
@@ -99,22 +91,24 @@ export function IssueSessionsTab({ issue, projectSlug, execution, view }: IssueS
           </div>
         ) : null}
 
-        {!isLoading && !executionSession && chatSessions.length === 0 ? (
+        {!isLoading && executionSessions.length === 0 && chatSessions.length === 0 ? (
           <div className="rounded-lg border border-dashed bg-background/70 px-5 py-10 text-center text-sm text-muted-foreground">
             {t("issue.sessions.empty")}
           </div>
         ) : null}
 
         <ul className="grid gap-2">
-          {executionSession ? (
+          {executionSessions.map((session) => (
             <SessionListItem
-              session={executionSession}
-              issueHref={issuePath(projectSlug, view, issue.identifier, "sessions")}
+              key={session.execution.executionSessionId ?? session.issueIdentifier}
+              session={session}
               resumePending={resumePending}
-              onOpen={() => openExecutionSession()}
+              onOpen={() =>
+                openExecutionSession(session.execution.executionSessionId ?? null)
+              }
               onResume={() => void resumeExecution()}
             />
-          ) : null}
+          ))}
           {chatSessions.map((thread) => (
             <IssueChatSessionCard
               key={thread.id}

@@ -115,8 +115,27 @@ vi.mock("@/hooks/useIssueSessions", () => ({
       goalObjective: null,
       execution: {
         status: "live",
+        executionSessionId: 42,
       },
     },
+    executionSessions: [
+      {
+        issueIdentifier: "MAC-1",
+        title: "Split agent detail tab",
+        agentKind: "codex",
+        status: "live",
+        bucket: "active",
+        lastEventAt: "2026-05-31T00:02:00Z",
+        turnCount: 1,
+        runtimeSeconds: 42,
+        startedAt: "2026-05-31T00:01:00Z",
+        goalObjective: null,
+        execution: {
+          status: "live",
+          executionSessionId: 42,
+        },
+      },
+    ],
     chatSessions: [
       {
         id: 7,
@@ -212,7 +231,7 @@ describe("IssueDrawer sessions tab", () => {
 
     expect(screen.getByRole("tab", { name: /sessions/i })).toBeInTheDocument();
     expect(screen.getByText("Build pass 1")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /open execution session MAC-1/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Open autonomous run MAC-1/i })).toBeInTheDocument();
   });
 
   it("shows a pursuing goal indicator in the issue header", () => {

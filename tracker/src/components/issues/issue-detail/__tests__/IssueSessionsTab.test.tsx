@@ -34,6 +34,21 @@ vi.mock("@/hooks/useIssueSessions", () => ({
       goalObjective: null,
       execution: { status: "paused", executionSessionId: 99 },
     },
+    executionSessions: [
+      {
+        issueIdentifier: "MAC-510",
+        title: "Shared order book",
+        agentKind: "codex",
+        status: "paused",
+        bucket: "active",
+        lastEventAt: "2026-07-04T00:00:00Z",
+        turnCount: 3,
+        runtimeSeconds: 120,
+        startedAt: "2026-07-04T00:00:00Z",
+        goalObjective: null,
+        execution: { status: "paused", executionSessionId: 99 },
+      },
+    ],
     chatSessions: [
       {
         id: 12,
@@ -88,7 +103,7 @@ describe("IssueSessionsTab", () => {
 
     render(
       <MemoryRouter>
-        <IssueSessionsTab issue={issue as never} projectSlug="macro-markets" view="board" />
+        <IssueSessionsTab issue={issue as never} projectSlug="macro-markets" />
       </MemoryRouter>,
     );
 

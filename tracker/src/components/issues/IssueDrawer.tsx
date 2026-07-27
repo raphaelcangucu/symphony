@@ -510,7 +510,6 @@ export function IssueDrawer({
                     issue={issue}
                     projectSlug={projectSlug}
                     execution={execution}
-                    view={view}
                   />
                 </TabsContent>
                 <TabsContent value="preview">
