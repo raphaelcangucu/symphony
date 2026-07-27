@@ -1,4 +1,4 @@
-.PHONY: help all setup deps ensure-deps build fmt fmt-check lint test coverage ci dialyzer repo-ci \
+.PHONY: help all setup deps ensure-deps build fmt fmt-check lint test smoke coverage ci ci-fast dialyzer repo-ci \
 	check-tools env-setup install-code-server configure-code-server db-create db-migrate migrate migration new-migration rollback \
 	backup backup-list backup-stats backup-cleanup serve update stop tracker-setup tracker-deps tracker-build tracker-lint tracker-test tracker-ci \
 	tracker-api tracker-api-escript tracker-dev project-import project-export
@@ -21,9 +21,17 @@ TRACKER_DIR ?= ../tracker
 TRACKER_PORT ?= 4000
 TRACKER_PREVIEW_PORT ?= 4001
 TRACKER_VITE_PORT ?= 5174
+SMOKE_TEST_FILES := \
+	test/mix/tasks/pr_body_check_test.exs \
+	test/symphony_elixir/config_agent_kind_test.exs \
+	test/symphony_elixir/codex/model_catalog_test.exs \
+	test/symphony_elixir/claude/model_catalog_test.exs \
+	test/symphony_elixir/cursor/model_catalog_test.exs \
+	test/symphony_elixir/github/issue_create_repo_test.exs \
+	test/symphony_elixir_web/tracker_errors_test.exs
 
 help:
-	@echo "Quality:  setup, deps, build, fmt, fmt-check, lint, test, coverage, dialyzer, ci, all"
+	@echo "Quality:  setup, deps, build, fmt, fmt-check, lint, test, smoke, coverage, dialyzer, ci-fast, ci, all"
 	@echo "Database: migrate (create+migrate), migration (alias), new-migration name=<desc>, rollback, db-create"
 	@echo "Backup:   backup (create SQLite snapshot), backup-list, backup-stats, backup-cleanup"
 	@echo "Run:      serve (boot daemon), update (restart web by default; ARGS=--orchestrator/--code-server/--all), stop, check-tools, env-setup"
@@ -69,9 +77,19 @@ coverage:
 test:
 	@set -a; [ -f $(ENV_TESTING) ] && . ./$(ENV_TESTING); set +a; $(MIX) test $(ARGS)
 
+smoke:
+	@set -a; [ -f $(ENV_TESTING) ] && . ./$(ENV_TESTING); set +a; $(MIX) test $(SMOKE_TEST_FILES) $(ARGS)
+
 dialyzer:
 	$(MIX) deps.get
 	$(MIX) dialyzer --format short
+
+ci-fast:
+	$(MAKE) setup
+	$(MAKE) build
+	$(MAKE) fmt-check
+	$(MAKE) lint
+	$(MAKE) smoke
 
 ci:
 	$(MAKE) setup
