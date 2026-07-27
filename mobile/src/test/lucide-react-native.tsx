@@ -18,6 +18,7 @@ export const Info = Icon;
 export const MoreHorizontal = Icon;
 export const Mic = Icon;
 export const Search = Icon;
+export const RotateCw = Icon;
 export const SendHorizontal = Icon;
 export const SlidersHorizontal = Icon;
 export const Square = Icon;

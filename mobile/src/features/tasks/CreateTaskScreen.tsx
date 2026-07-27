@@ -3,6 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import type { AgentKind, CreateIssueInput, ProjectSummary } from "@/api/contracts";
+import { COMPARISON_CELLS } from "@/features/comparisons/comparison-contract";
 import { radii, spacing } from "@/theme/tokens";
 import { useAppTheme } from "@/theme/ThemeProvider";
 
@@ -16,7 +17,11 @@ type CreateTaskScreenProps = {
   error: string | null;
   onBack(): void;
   onProjectChange(projectSlug: string): void;
-  onSubmit(input: CreateIssueInput): void;
+  onSubmit(input: CreateTaskSubmission): void;
+};
+
+export type CreateTaskSubmission = CreateIssueInput & {
+  taskKind: "standard" | "comparison";
 };
 
 export function CreateTaskScreen({
@@ -36,6 +41,7 @@ export function CreateTaskScreen({
   const [description, setDescription] = useState("");
   const [goal, setGoal] = useState("");
   const [status, setStatus] = useState(statuses[0] ?? "");
+  const [taskKind, setTaskKind] = useState<CreateTaskSubmission["taskKind"]>("standard");
 
   useEffect(() => {
     if (!statuses.includes(status)) setStatus(statuses[0] ?? "");
@@ -60,6 +66,42 @@ export function CreateTaskScreen({
       </View>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         {error ? <Text style={{ color: colors.statusRed }}>{error}</Text> : null}
+        <Text style={[styles.label, { color: colors.textMuted }]}>Task type</Text>
+        <View style={styles.chips}>
+          <Choice
+            accessibilityLabel="Standard task"
+            label="Standard task"
+            onPress={() => setTaskKind("standard")}
+            selected={taskKind === "standard"}
+          />
+          <Choice
+            accessibilityLabel="Dev10x comparison"
+            label="Dev10x comparison"
+            onPress={() => setTaskKind("comparison")}
+            selected={taskKind === "comparison"}
+          />
+        </View>
+        {taskKind === "comparison" ? (
+          <View
+            style={[
+              styles.matrix,
+              { backgroundColor: colors.bgPanel, borderColor: colors.borderSubtle },
+            ]}
+          >
+            <Text style={[styles.matrixTitle, { color: colors.textPrimary }]}>
+              Official high matrix
+            </Text>
+            {COMPARISON_CELLS.map((cell) => (
+              <Text key={cell.id} style={[styles.matrixRow, { color: colors.textSecondary }]}>
+                {comparisonCellLabel(cell)}
+              </Text>
+            ))}
+            <Text style={[styles.matrixHint, { color: colors.textMuted }]}>
+              This creates one parent task. The six real runs start only after your explicit
+              dispatch.
+            </Text>
+          </View>
+        ) : null}
         <Text style={[styles.label, { color: colors.textMuted }]}>Project</Text>
         <View style={styles.chips}>
           {projects.map((project) => (
@@ -104,26 +146,29 @@ export function CreateTaskScreen({
             />
           ))}
         </View>
-        <TextInput
-          accessibilityLabel="Agent goal"
-          multiline
-          onChangeText={setGoal}
-          placeholder="Optional agent goal"
-          placeholderTextColor={colors.textMuted}
-          style={[styles.input, { borderColor: colors.borderSubtle, color: colors.textPrimary }]}
-          value={goal}
-        />
+        {taskKind === "standard" ? (
+          <TextInput
+            accessibilityLabel="Agent goal"
+            multiline
+            onChangeText={setGoal}
+            placeholder="Optional agent goal"
+            placeholderTextColor={colors.textMuted}
+            style={[styles.input, { borderColor: colors.borderSubtle, color: colors.textPrimary }]}
+            value={goal}
+          />
+        ) : null}
         <Pressable
-          accessibilityLabel="Create task"
+          accessibilityLabel={taskKind === "comparison" ? "Create comparison task" : "Create task"}
           accessibilityRole="button"
           disabled={!valid || submitting || loading}
           onPress={() =>
             onSubmit({
+              taskKind,
               title: title.trim(),
               description: description.trim() || null,
               status,
               agent: initialAgent,
-              goal: goal.trim() || null,
+              goal: taskKind === "standard" ? goal.trim() || null : null,
             })
           }
           style={[
@@ -135,12 +180,23 @@ export function CreateTaskScreen({
           ]}
         >
           <Text style={{ color: colors.bgBase, fontWeight: "700" }}>
-            {submitting ? "Creating…" : "Create task"}
+            {submitting
+              ? "Creating…"
+              : taskKind === "comparison"
+                ? "Create comparison task"
+                : "Create task"}
           </Text>
         </Pressable>
       </ScrollView>
     </SafeAreaView>
   );
+}
+
+function comparisonCellLabel(cell: (typeof COMPARISON_CELLS)[number]): string {
+  const path = cell.path === "session" ? "Session" : "Orchestrator";
+  const model =
+    cell.provider === "codex" ? "GPT-5.6 Sol" : cell.provider === "cursor" ? "Grok 4.5" : "Opus 5";
+  return `${path} · ${model} · High`;
 }
 
 function Choice({
@@ -200,6 +256,15 @@ const styles = StyleSheet.create({
     padding: spacing.md,
   },
   label: { fontSize: 12, fontWeight: "700", textTransform: "uppercase" },
+  matrix: {
+    borderRadius: radii.md,
+    borderWidth: 1,
+    gap: spacing.xs,
+    padding: spacing.md,
+  },
+  matrixHint: { fontSize: 12, lineHeight: 17, marginTop: spacing.xs },
+  matrixRow: { fontSize: 14, lineHeight: 20 },
+  matrixTitle: { fontSize: 16, fontWeight: "700", marginBottom: spacing.xs },
   multiline: { minHeight: 120, textAlignVertical: "top" },
   safeArea: { flex: 1 },
   submit: {

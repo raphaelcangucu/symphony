@@ -200,6 +200,7 @@ defmodule SymphonyElixir.MobileComparison.LocalGateway do
       "/assistant/threads/#{thread_id}/dev_servers"
     )
     |> unwrap_data()
+    |> extract_preview_servers()
   end
 
   @impl true
@@ -237,6 +238,12 @@ defmodule SymphonyElixir.MobileComparison.LocalGateway do
 
   defp map_ok({:ok, value}, mapper), do: {:ok, mapper.(value)}
   defp map_ok({:error, reason}, _mapper), do: {:error, reason}
+
+  defp extract_preview_servers({:ok, %{"servers" => servers}}) when is_list(servers),
+    do: {:ok, servers}
+
+  defp extract_preview_servers({:ok, _payload}), do: {:error, :invalid_preview_response}
+  defp extract_preview_servers({:error, reason}), do: {:error, reason}
 
   defp maybe_mark_ready(thread, context) do
     history = Map.get(context, :comparison_history, History)

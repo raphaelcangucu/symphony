@@ -11,6 +11,12 @@ import type {
   IssueSummary,
 } from "@/api/contracts";
 import { StateView } from "@/components/StateView";
+import {
+  comparisonDescription,
+  humanComparisonDescription,
+  isComparisonChildTitle,
+  isComparisonTask,
+} from "@/features/comparisons/comparison-task";
 import { radii, spacing } from "@/theme/tokens";
 import { useAppTheme } from "@/theme/ThemeProvider";
 
@@ -28,6 +34,7 @@ type IssueScreenProps = {
   onDispatch(action: IssueDispatchInput["action"]): void;
   onGoalAction(action: GoalControlInput["action"]): void;
   onCreateSubtask(title: string): void;
+  onOpenComparison(): void;
   onOpenDiff(): void;
   onOpenFiles(): void;
   onOpenPreview(): void;
@@ -53,6 +60,7 @@ export function IssueScreen({
   onDispatch,
   onGoalAction,
   onCreateSubtask,
+  onOpenComparison,
   onOpenDiff,
   onOpenFiles,
   onOpenPreview,
@@ -65,13 +73,13 @@ export function IssueScreen({
 }: IssueScreenProps) {
   const { colors } = useAppTheme();
   const [title, setTitle] = useState(issue?.title ?? "");
-  const [description, setDescription] = useState(issue?.description ?? "");
+  const [description, setDescription] = useState(humanComparisonDescription(issue?.description));
   const [comment, setComment] = useState("");
   const [subtaskTitle, setSubtaskTitle] = useState("");
 
   useEffect(() => {
     setTitle(issue?.title ?? "");
-    setDescription(issue?.description ?? "");
+    setDescription(humanComparisonDescription(issue?.description));
   }, [issue?.description, issue?.title]);
 
   if (loading && !issue) {
@@ -102,6 +110,8 @@ export function IssueScreen({
     ["Diff", onOpenDiff],
     ["Pull request", onOpenPullRequest],
   ] as const;
+  const comparisonTask = isComparisonTask(issue.description);
+  const comparisonStarted = subtasks.some((subtask) => isComparisonChildTitle(subtask.title));
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.bgBase }]}>
@@ -124,7 +134,12 @@ export function IssueScreen({
           accessibilityLabel="Save task"
           accessibilityRole="button"
           disabled={saving}
-          onPress={() => onSave({ title, description })}
+          onPress={() =>
+            onSave({
+              title,
+              description: comparisonTask ? comparisonDescription(description) : description,
+            })
+          }
           style={styles.saveButton}
         >
           <Text style={{ color: colors.accent }}>{saving ? "Saving" : "Save"}</Text>
@@ -162,6 +177,22 @@ export function IssueScreen({
           {issue.branchName ? <Meta label="Branch" value={issue.branchName} /> : null}
           {issue.agentKind ? <Meta label="Agent" value={issue.agentKind} /> : null}
         </View>
+
+        {comparisonTask ? (
+          <>
+            <SectionTitle>Dev10x comparison</SectionTitle>
+            <Text style={[styles.goal, { color: colors.textSecondary }]}>
+              Six real high-effort runs on the selected Symphony host. Dispatch and evidence stay
+              inside the app.
+            </Text>
+            <View style={styles.actions}>
+              <Action
+                label={comparisonStarted ? "Open comparison" : "Run comparison"}
+                onPress={onOpenComparison}
+              />
+            </View>
+          </>
+        ) : null}
 
         <SectionTitle>Agent</SectionTitle>
         {issue.agentGoal ? (

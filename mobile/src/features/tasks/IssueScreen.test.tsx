@@ -3,6 +3,7 @@ import { fireEvent, render, screen } from "@testing-library/react-native";
 import type { IssueComment, IssueSummary } from "@/api/contracts";
 import { ThemeProvider } from "@/theme/ThemeProvider";
 
+import { comparisonDescription } from "../comparisons/comparison-task";
 import { IssueScreen } from "./IssueScreen";
 
 const issue: IssueSummary = {
@@ -10,12 +11,12 @@ const issue: IssueSummary = {
   identifier: "MOB-7",
   displayIdentifier: "MOB-7",
   projectSlug: "symphony",
-  title: "Bring Orca workflows",
+  title: "Bring Dev10x workflows",
   description: "Complete the operational mobile experience.",
   status: "In Progress",
   priority: 1,
   position: 1,
-  labels: ["mobile", "orca"],
+  labels: ["mobile", "dev10x"],
   assignee: "Raphael",
   creator: "Raphael",
   agentKind: "codex",
@@ -52,6 +53,7 @@ function renderScreen(props: Partial<React.ComponentProps<typeof IssueScreen>> =
     onGoalAction: jest.fn(),
     onCreateSubtask: jest.fn(),
     onOpenDiff: jest.fn(),
+    onOpenComparison: jest.fn(),
     onOpenFiles: jest.fn(),
     onOpenPreview: jest.fn(),
     onOpenPullRequest: jest.fn(),
@@ -73,7 +75,7 @@ describe("IssueScreen", () => {
     renderScreen();
 
     expect(screen.getByText("MOB-7")).toBeTruthy();
-    expect(screen.getByDisplayValue("Bring Orca workflows")).toBeTruthy();
+    expect(screen.getByDisplayValue("Bring Dev10x workflows")).toBeTruthy();
     expect(screen.getByText("Ship mobile parity")).toBeTruthy();
     expect(screen.getByText("Continue from the task screen.")).toBeTruthy();
     for (const tool of ["Terminal", "Preview", "Files", "Diff", "Pull request"]) {
@@ -88,9 +90,11 @@ describe("IssueScreen", () => {
     const onGoalAction = jest.fn();
     renderScreen({ onSave, onAddComment, onDispatch, onGoalAction });
 
-    fireEvent.changeText(screen.getByLabelText("Task title"), "Complete Orca parity");
+    fireEvent.changeText(screen.getByLabelText("Task title"), "Complete Dev10x parity");
     fireEvent.press(screen.getByRole("button", { name: "Save task" }));
-    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ title: "Complete Orca parity" }));
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ title: "Complete Dev10x parity" }),
+    );
 
     fireEvent.changeText(screen.getByLabelText("New comment"), "Ready for review");
     fireEvent.press(screen.getByRole("button", { name: "Add comment" }));
@@ -127,5 +131,34 @@ describe("IssueScreen", () => {
     fireEvent.changeText(screen.getByLabelText("New subtask title"), "Handle questions");
     fireEvent.press(screen.getByRole("button", { name: "Create subtask" }));
     expect(onCreateSubtask).toHaveBeenCalledWith("Handle questions");
+  });
+
+  it("opens comparison setup before dispatch and the live comparison after children exist", () => {
+    const onOpenComparison = jest.fn();
+    const comparisonIssue = {
+      ...issue,
+      description: comparisonDescription("Create the best Dev10x landing."),
+    };
+    const first = renderScreen({ issue: comparisonIssue, onOpenComparison });
+
+    fireEvent.press(screen.getByRole("button", { name: "Run comparison" }));
+    expect(onOpenComparison).toHaveBeenCalledTimes(1);
+
+    first.unmount();
+    renderScreen({
+      issue: comparisonIssue,
+      subtasks: [
+        {
+          ...issue,
+          id: "2",
+          identifier: "MOB-8",
+          title: "[dev10x-comparison:session-codex] Session · GPT-5.6 Sol · High",
+        },
+      ],
+      onOpenComparison,
+    });
+
+    fireEvent.press(screen.getByRole("button", { name: "Open comparison" }));
+    expect(onOpenComparison).toHaveBeenCalledTimes(2);
   });
 });

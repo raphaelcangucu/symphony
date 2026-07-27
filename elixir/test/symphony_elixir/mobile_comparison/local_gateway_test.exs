@@ -57,7 +57,13 @@ defmodule SymphonyElixir.MobileComparison.LocalGatewayTest do
           {:ok, %{"data" => %{"accepted" => true}}}
 
         {:previews, "GET", "/assistant/threads/42/dev_servers"} ->
-          {:ok, %{"data" => [%{"id" => "preview-1", "status" => "running"}]}}
+          {:ok,
+           %{
+             "data" => %{
+               "available" => true,
+               "servers" => [%{"id" => "preview-1", "status" => "running"}]
+             }
+           }}
       end
     end
   end

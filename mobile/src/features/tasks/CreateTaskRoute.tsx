@@ -4,8 +4,9 @@ import { useEffect, useState } from "react";
 
 import { useTrackerClient } from "@/api/TrackerClientProvider";
 import { useConnection } from "@/auth/ConnectionProvider";
+import { comparisonDescription } from "@/features/comparisons/comparison-task";
 
-import { CreateTaskScreen } from "./CreateTaskScreen";
+import { CreateTaskScreen, type CreateTaskSubmission } from "./CreateTaskScreen";
 
 export function CreateTaskRoute() {
   const router = useRouter();
@@ -28,9 +29,13 @@ export function CreateTaskRoute() {
     queryFn: ({ signal }) => client!.issueFormOptions(projectSlug!, signal),
   });
   const createMutation = useMutation({
-    mutationFn: async (input: Parameters<NonNullable<typeof client>["createIssue"]>[1]) => {
+    mutationFn: async ({ taskKind, ...input }: CreateTaskSubmission) => {
       if (!client || !projectSlug) throw new Error("Select a project");
-      return client.createIssue(projectSlug, input);
+      return client.createIssue(projectSlug, {
+        ...input,
+        description:
+          taskKind === "comparison" ? comparisonDescription(input.description) : input.description,
+      });
     },
     onSuccess: async (issue) => {
       await queryClient.invalidateQueries({ queryKey: ["host", hostId, "tasks"] });

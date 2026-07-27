@@ -57,6 +57,11 @@ function ConnectedIssueRoute({
       onGoalAction={detail.goalAction}
       onCreateSubtask={detail.createSubtask}
       onOpenDiff={() => threadRoute("/diff")}
+      onOpenComparison={() =>
+        router.push(
+          `/codex/issue/${encodeURIComponent(projectSlug)}/${encodeURIComponent(identifier)}/comparison`,
+        )
+      }
       onOpenFiles={() => threadRoute("/files")}
       onOpenPreview={() => threadRoute("/preview")}
       onOpenPullRequest={() =>

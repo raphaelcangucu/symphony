@@ -194,9 +194,11 @@ defmodule SymphonyElixir.MobileComparison.Service do
              executions,
              context
            ),
+         {:ok, previews} <-
+           existing_previews(gateway, execution_preview_source(execution), context),
          {:ok, evidence} <-
            gateway.list_evidence(project_slug, value(child, :identifier), context) do
-      {:ok, Presenter.cell(contract, child, nil, execution, [], evidence)}
+      {:ok, Presenter.cell(contract, child, nil, execution, previews, evidence)}
     end
   end
 
@@ -257,10 +259,12 @@ defmodule SymphonyElixir.MobileComparison.Service do
       Enum.find(children, &(value(&1, :comparison_cell_id) == contract.id)) ||
         %{"identifier" => nil}
 
+    execution = find_execution(executions, value(child, :identifier))
+
     with {:ok, thread} <- existing_thread(gateway, project_slug, child, contract, context),
-         {:ok, previews} <- existing_previews(gateway, thread, context),
+         {:ok, previews} <-
+           existing_previews(gateway, thread || execution_preview_source(execution), context),
          {:ok, evidence} <- existing_evidence(gateway, project_slug, child, context) do
-      execution = find_execution(executions, value(child, :identifier))
       {:ok, Presenter.cell(contract, child, thread, execution, previews, evidence)}
     end
   end
@@ -282,6 +286,16 @@ defmodule SymphonyElixir.MobileComparison.Service do
 
   defp existing_previews(_gateway, nil, _context), do: {:ok, []}
   defp existing_previews(gateway, thread, context), do: gateway.list_previews(thread, context)
+
+  defp execution_preview_source(nil), do: nil
+
+  defp execution_preview_source(execution) do
+    case value(execution, :execution_session_id) do
+      session_id when is_binary(session_id) and session_id != "" -> %{"id" => session_id}
+      session_id when is_integer(session_id) -> %{"id" => session_id}
+      _other -> nil
+    end
+  end
 
   defp existing_evidence(_gateway, _project_slug, %{"identifier" => nil}, _context),
     do: {:ok, []}

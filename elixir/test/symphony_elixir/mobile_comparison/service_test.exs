@@ -198,7 +198,7 @@ defmodule SymphonyElixir.MobileComparison.ServiceTest do
            %{
              issue_identifier: identifier,
              status: Map.get(state.execution_failures, identifier, "live"),
-             execution_session_id: nil,
+             execution_session_id: "execution-#{identifier}",
              resolved_model: nil,
              resolved_effort: nil,
              latest_message: nil,
@@ -214,7 +214,15 @@ defmodule SymphonyElixir.MobileComparison.ServiceTest do
     end
 
     @impl true
-    def list_previews(_thread, _context), do: {:ok, []}
+    def list_previews(thread, _context) do
+      {:ok,
+       [
+         %{
+           "id" => "preview-#{Map.get(thread, :id, Map.get(thread, "id"))}",
+           "status" => "ready"
+         }
+       ]}
+    end
 
     @impl true
     def list_evidence(_project_slug, _identifier, _context), do: {:ok, []}
@@ -392,6 +400,30 @@ defmodule SymphonyElixir.MobileComparison.ServiceTest do
 
     assert length(snapshot["cells"]) == 6
     assert FakeGateway.counts(state) == before
+  end
+
+  test "loads previews from orchestrator execution sessions on start and refresh", %{
+    context: context
+  } do
+    params = %{
+      "project_slug" => "dev10x",
+      "identifier" => "DEV-1",
+      "request_key" => "mobile-e2e-preview"
+    }
+
+    assert {:ok, started} = Service.start(params, context)
+
+    assert Enum.find(started["cells"], &(&1["id"] == "orchestrator-codex"))["previews"] ==
+             [%{"id" => "preview-execution-DEV-5", "status" => "ready"}]
+
+    assert {:ok, refreshed} =
+             Service.get(
+               %{"project_slug" => "dev10x", "identifier" => "DEV-1"},
+               context
+             )
+
+    assert Enum.find(refreshed["cells"], &(&1["id"] == "orchestrator-codex"))["previews"] ==
+             [%{"id" => "preview-execution-DEV-5", "status" => "ready"}]
   end
 
   test "retries only a failed canonical cell and preserves the other five", %{
