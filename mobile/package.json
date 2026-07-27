@@ -63,6 +63,7 @@
     "expo-splash-screen": "^55.0.20",
     "expo-status-bar": "^55.0.6",
     "expo-system-ui": "~55.0.20",
+    "expo-video": "~55.0.19",
     "lowlight": "^3.3.0",
     "lucide-react-native": "^1.25.0",
     "phoenix": "^1.8.9",

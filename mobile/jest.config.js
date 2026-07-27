@@ -10,6 +10,7 @@ module.exports = {
     "^@react-native-async-storage/async-storage$":
       "@react-native-async-storage/async-storage/jest/async-storage-mock",
     "^expo-speech-recognition$": "<rootDir>/src/test/expo-speech-recognition.ts",
+    "^expo-video$": "<rootDir>/src/test/expo-video.tsx",
     "^lucide-react-native$": "<rootDir>/src/test/lucide-react-native.tsx",
   },
   testMatch: ["<rootDir>/src/**/*.test.tsx"],

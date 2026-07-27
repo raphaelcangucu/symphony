@@ -32,6 +32,7 @@ const config: ExpoConfig = {
     "expo-build-properties",
     "expo-secure-store",
     "expo-notifications",
+    "expo-video",
     [
       "expo-camera",
       {
