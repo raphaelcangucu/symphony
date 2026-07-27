@@ -1,13 +1,15 @@
 import { defineConfig } from "@playwright/test";
 import { resolve } from "node:path";
 
+import { PLAYWRIGHT_TEST_TIMEOUT_MS } from "./src/timeouts.mjs";
+
 const artifactRoot = resolve(
   process.env.SYMPHONY_BENCH_ARTIFACT_ROOT ?? "test-results/manual",
 );
 
 export default defineConfig({
   testDir: "./e2e",
-  timeout: 45 * 60 * 1000,
+  timeout: PLAYWRIGHT_TEST_TIMEOUT_MS,
   expect: { timeout: 30_000 },
   fullyParallel: false,
   workers: 1,

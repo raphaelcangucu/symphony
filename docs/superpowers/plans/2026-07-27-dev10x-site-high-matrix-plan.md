@@ -437,7 +437,7 @@ docs(benchmark): describe Dev10x high matrix
 - Results: `$SYMPHONY_BENCH_RUNTIME/results/`
 - Artifacts: `$SYMPHONY_BENCH_RUNTIME/artifacts/`
 
-- [ ] **Step 1: Verify provider CLIs and model catalogs**
+- [x] **Step 1: Verify provider CLIs and model catalogs**
 
 Run only read-only version/catalog probes. Confirm:
 
@@ -449,13 +449,13 @@ Run only read-only version/catalog probes. Confirm:
 Record CLI versions in
 `$SYMPHONY_BENCH_RUNTIME/report/provider-versions.json`.
 
-- [ ] **Step 2: Prepare a dedicated database and server**
+- [x] **Step 2: Prepare a dedicated database and server**
 
 Set benchmark-specific `DATABASE_PATH`, `PORT=4010`, token and workspace
 environment variables. Run focused migrations and start the Phoenix endpoint in
 a persistent PTY. Do not run `make all`.
 
-- [ ] **Step 3: Verify the real endpoint**
+- [x] **Step 3: Verify the real endpoint**
 
 Run:
 
@@ -465,7 +465,7 @@ curl -fsS http://127.0.0.1:4010/api/health
 
 Expected: HTTP 200 from the dedicated Symphony process.
 
-- [ ] **Step 4: Provision exactly six cells**
+- [x] **Step 4: Provision exactly six cells**
 
 Run:
 
@@ -508,6 +508,11 @@ For a real terminal failure, preserve its immutable attempt, correct the
 runtime/harness defect with a focused regression test when applicable, and
 rerun only that `SYMPHONY_BENCH_RUN_ID`. A missing provider conversation
 requires explicit reset; it must not silently create a new one.
+
+The shared timeout contract is 70 minutes for both execution paths, with five
+minutes of cleanup headroom at the Playwright, cell-process and matrix-process
+boundaries. This replaces the stale 25-minute session-only literal that could
+abandon a still-running Claude provider.
 
 - [ ] **Step 4: Prove six canonical completions**
 

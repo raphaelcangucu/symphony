@@ -3,10 +3,10 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { executeProcess } from "./process.mjs";
+import { MATRIX_CELL_TIMEOUT_MS } from "./timeouts.mjs";
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const runCellPath = join(packageRoot, "src", "run-cell.mjs");
-const CELL_TIMEOUT_MS = 60 * 60 * 1000;
 
 export function selectMatrixRuns(manifest, matrix) {
   const runs = (manifest?.runs ?? []).filter((run) => run.matrix === matrix);
@@ -86,7 +86,7 @@ export async function runMatrix(env = process.env) {
         ...env,
         SYMPHONY_BENCH_RUN_ID: run.id,
       },
-      timeout: CELL_TIMEOUT_MS,
+      timeout: MATRIX_CELL_TIMEOUT_MS,
       onStdout: (text) => process.stdout.write(text),
       onStderr: (text) => process.stderr.write(text),
     });

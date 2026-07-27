@@ -5,9 +5,9 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { RUN_MATRIX } from "./contract.mjs";
 import { executeProcess } from "./process.mjs";
+import { PLAYWRIGHT_PROCESS_TIMEOUT_MS } from "./timeouts.mjs";
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const PLAYWRIGHT_TIMEOUT_MS = 50 * 60 * 1000;
 
 export function selectRun(manifest, runId) {
   const matches = manifest?.runs?.filter((run) => run.id === runId) ?? [];
@@ -266,7 +266,7 @@ function executePlaywright(env) {
     {
       cwd: packageRoot,
       env,
-      timeout: PLAYWRIGHT_TIMEOUT_MS,
+      timeout: PLAYWRIGHT_PROCESS_TIMEOUT_MS,
       maxOutput: 16 * 1024 * 1024,
       onStdout: (text) => process.stdout.write(text),
       onStderr: (text) => process.stderr.write(text),
@@ -311,7 +311,7 @@ export async function runCell(env = process.env) {
         finished_at: new Date().toISOString(),
         error:
           execution.status === "timed_out"
-            ? `Playwright timed out after ${PLAYWRIGHT_TIMEOUT_MS} ms`
+            ? `Playwright timed out after ${PLAYWRIGHT_PROCESS_TIMEOUT_MS} ms`
             : `Playwright exited with code ${execution.exit_code} before writing a result`,
         artifact_root: artifactRoot,
       },

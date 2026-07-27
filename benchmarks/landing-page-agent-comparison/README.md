@@ -80,6 +80,12 @@ Para repetir apenas uma célula, use
 O runner limita a concorrência a seis células e, se houver falhas, aguarda as
 demais células do lote e apresenta um resumo agregado.
 
+Sessão e orquestrador compartilham um orçamento de settlement de 70 minutos,
+dimensionado acima da execução Claude mais longa já observada. Playwright, o
+processo da célula e o runner da matriz adicionam cinco minutos de folga por
+camada para persistir o resultado e encerrar grupos de processos. Assim uma
+espera de UI não abandona um provedor ainda ativo.
+
 Após executar as células, colete build/E2E e gere as capturas visuais
 padronizadas:
 

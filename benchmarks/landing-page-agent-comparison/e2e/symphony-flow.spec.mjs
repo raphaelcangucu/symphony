@@ -24,6 +24,7 @@ import {
   sessionProviderError,
   shouldDispatchIssue,
 } from "../src/run-cell.mjs";
+import { AGENT_SETTLEMENT_TIMEOUT_MS } from "../src/timeouts.mjs";
 
 const runtimeRoot = resolve(process.env.SYMPHONY_BENCH_RUNTIME ?? "");
 const runId = process.env.SYMPHONY_BENCH_RUN_ID ?? "";
@@ -155,7 +156,7 @@ test("executes one provider cell through the real Symphony tracker", async ({
         .waitFor({ state: "visible", timeout: 10_000 })
         .catch(() => {});
       await expect(page.getByRole("status")).toHaveCount(0, {
-        timeout: 25 * 60 * 1000,
+        timeout: AGENT_SETTLEMENT_TIMEOUT_MS,
       });
       const thread = await api
         .request(`/assistant/threads/${run.thread_id}`)
@@ -227,7 +228,7 @@ test("executes one provider cell through the real Symphony tracker", async ({
         api,
         manifest.project_slug,
         run.issue_identifier,
-        40 * 60 * 1000,
+        AGENT_SETTLEMENT_TIMEOUT_MS,
       );
       await page.reload({ waitUntil: "domcontentloaded" });
       const executionThread = settlement.executionThread;
