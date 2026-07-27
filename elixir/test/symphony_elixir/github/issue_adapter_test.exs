@@ -917,8 +917,7 @@ defmodule SymphonyElixir.GitHub.IssueAdapterTest do
         String.contains?(query, "SymphonyUiCreateIssue") and vars["input"]["repositoryId"] == "REPO_GambaLabs_goapi" ->
           send(self(), {:create_input, vars["input"]})
 
-          {:error,
-           {:github_graphql_errors, [%{"message" => "Issues has been disabled in this repository."}]}}
+          {:error, {:github_graphql_errors, [%{"message" => "Issues has been disabled in this repository."}]}}
 
         true ->
           MultiRepoCreateClientStub.graphql(query, vars, opts)
