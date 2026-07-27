@@ -1,4 +1,5 @@
 import { ArrowLeft, ChevronRight, RotateCw } from "lucide-react-native";
+import { useEffect, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -11,6 +12,7 @@ import {
   canRetryComparisonCell,
   type ComparisonCell,
   type ComparisonCellId,
+  type ComparisonDecisionInput,
   type ComparisonPreview,
   type ComparisonSnapshot,
 } from "./comparison-contract";
@@ -23,6 +25,7 @@ type ComparisonScreenProps = {
   error: string | null;
   starting: boolean;
   retryingCellId: ComparisonCellId | null;
+  savingDecision: boolean;
   onBack(): void;
   onStart(): void;
   onRetry(): void;
@@ -30,6 +33,7 @@ type ComparisonScreenProps = {
   onOpenLog(cell: ComparisonCell): void;
   onOpenPreview(cell: ComparisonCell, preview: ComparisonPreview): void;
   onOpenEvidence(cell: ComparisonCell, evidence: EvidenceRecord): void;
+  onSaveDecision(decision: ComparisonDecisionInput): void;
 };
 
 export function ComparisonScreen({
@@ -39,6 +43,7 @@ export function ComparisonScreen({
   error,
   starting,
   retryingCellId,
+  savingDecision,
   onBack,
   onStart,
   onRetry,
@@ -46,6 +51,7 @@ export function ComparisonScreen({
   onOpenLog,
   onOpenPreview,
   onOpenEvidence,
+  onSaveDecision,
 }: ComparisonScreenProps) {
   const { colors } = useAppTheme();
   const cells = snapshot?.cells ?? [];
@@ -156,7 +162,11 @@ export function ComparisonScreen({
         </Section>
 
         <Section title="Decision">
-          <DecisionView snapshot={snapshot} />
+          <DecisionView
+            onSaveDecision={onSaveDecision}
+            saving={savingDecision}
+            snapshot={snapshot}
+          />
         </Section>
       </ScrollView>
     </SafeAreaView>
@@ -226,13 +236,101 @@ function CellCard({
   );
 }
 
-function DecisionView({ snapshot }: { snapshot: ComparisonSnapshot | null }) {
+function DecisionView({
+  snapshot,
+  saving,
+  onSaveDecision,
+}: {
+  snapshot: ComparisonSnapshot | null;
+  saving: boolean;
+  onSaveDecision(decision: ComparisonDecisionInput): void;
+}) {
   const { colors } = useAppTheme();
   const decision = snapshot?.decision;
   const ranking = decision && Array.isArray(decision.ranking) ? decision.ranking : [];
   const summary = decision && typeof decision.summary === "string" ? decision.summary : null;
+  const canonicalOrder = snapshot?.cells.map((cell) => cell.id) ?? [];
+  const [order, setOrder] = useState<ComparisonCellId[]>(canonicalOrder);
+
+  useEffect(() => {
+    setOrder(canonicalOrder);
+  }, [canonicalOrder.join(":")]);
 
   if (!decision || ranking.length === 0) {
+    const ready =
+      snapshot?.progress.terminal === 6 &&
+      snapshot.cells.length === 6 &&
+      snapshot.cells.every((cell) => cell.evidence.length > 0);
+
+    if (ready) {
+      const move = (cellId: ComparisonCellId, delta: -1 | 1) => {
+        setOrder((current) => {
+          const index = current.indexOf(cellId);
+          const target = index + delta;
+          if (index < 0 || target < 0 || target >= current.length) return current;
+          const next = [...current];
+          [next[index], next[target]] = [next[target]!, next[index]!];
+          return next;
+        });
+      };
+
+      return (
+        <View style={[styles.decision, { borderColor: colors.statusPurple }]}>
+          <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>Operator ranking</Text>
+          <Text style={[styles.message, { color: colors.textMuted }]}>
+            Reorder only after reviewing every preview and durable evidence record in the app.
+          </Text>
+          {order.map((cellId, index) => {
+            const cell = snapshot.cells.find((candidate) => candidate.id === cellId);
+            if (!cell) return null;
+            return (
+              <View key={cellId} style={styles.rankEditorRow}>
+                <Text style={[styles.rankEditorLabel, { color: colors.textPrimary }]}>
+                  {index + 1}. {cellLabel(cell)} · {99 - index}
+                </Text>
+                <View style={styles.rankEditorActions}>
+                  <Pressable
+                    accessibilityLabel={`Move ${cellId} up`}
+                    accessibilityRole="button"
+                    disabled={index === 0}
+                    onPress={() => move(cellId, -1)}
+                    style={[styles.rankButton, { borderColor: colors.borderStrong }]}
+                  >
+                    <Text style={{ color: colors.textPrimary }}>↑</Text>
+                  </Pressable>
+                  <Pressable
+                    accessibilityLabel={`Move ${cellId} down`}
+                    accessibilityRole="button"
+                    disabled={index === order.length - 1}
+                    onPress={() => move(cellId, 1)}
+                    style={[styles.rankButton, { borderColor: colors.borderStrong }]}
+                  >
+                    <Text style={{ color: colors.textPrimary }}>↓</Text>
+                  </Pressable>
+                </View>
+              </View>
+            );
+          })}
+          <PrimaryAction
+            accessibilityLabel="Publish decision"
+            disabled={saving}
+            label={saving ? "Publishing decision…" : "Publish decision"}
+            onPress={() =>
+              onSaveDecision({
+                ranking: order.map((cellId, index) => ({
+                  rank: index + 1,
+                  cell_id: cellId,
+                  score: 99 - index,
+                })),
+                summary:
+                  "Operator-reviewed in the Dev10x mobile app after opening the six previews and durable evidence records.",
+              })
+            }
+          />
+        </View>
+      );
+    }
+
     return (
       <View style={[styles.decision, { borderColor: colors.borderSubtle }]}>
         <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>Decision pending</Text>
@@ -315,10 +413,12 @@ function ListAction({
 }
 
 function PrimaryAction({
+  accessibilityLabel = "Run comparison",
   disabled,
   label,
   onPress,
 }: {
+  accessibilityLabel?: string;
   disabled: boolean;
   label: string;
   onPress(): void;
@@ -326,7 +426,7 @@ function PrimaryAction({
   const { colors } = useAppTheme();
   return (
     <Pressable
-      accessibilityLabel="Run comparison"
+      accessibilityLabel={accessibilityLabel}
       accessibilityRole="button"
       disabled={disabled}
       onPress={onPress}
@@ -455,6 +555,23 @@ const styles = StyleSheet.create({
   },
   progress: { fontSize: 28, fontWeight: "800" },
   provenance: { fontSize: 12, lineHeight: 17 },
+  rankButton: {
+    alignItems: "center",
+    borderRadius: radii.sm,
+    borderWidth: 1,
+    height: 36,
+    justifyContent: "center",
+    width: 36,
+  },
+  rankEditorActions: { flexDirection: "row", gap: spacing.xxs },
+  rankEditorLabel: { flex: 1, fontSize: 13, fontWeight: "700" },
+  rankEditorRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: spacing.sm,
+    justifyContent: "space-between",
+    minHeight: 44,
+  },
   ranking: { fontSize: 15, fontWeight: "800" },
   safeArea: { flex: 1 },
   secondary: {

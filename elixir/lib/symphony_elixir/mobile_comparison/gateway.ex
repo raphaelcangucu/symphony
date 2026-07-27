@@ -28,4 +28,6 @@ defmodule SymphonyElixir.MobileComparison.Gateway do
   @callback list_previews(map(), map()) :: {:ok, [map()]} | {:error, term()}
   @callback list_evidence(String.t(), String.t(), map()) ::
               {:ok, [map()]} | {:error, term()}
+  @callback save_decision(String.t(), String.t(), map(), map()) ::
+              :ok | {:error, term()}
 end

@@ -26,6 +26,7 @@ defmodule SymphonyElixir.MobileComparison.ServiceTest do
           dispatches: MapSet.new(),
           dispatch_calls: %{},
           orchestrator_retries: MapSet.new(),
+          decision: nil,
           execution_failures: %{},
           failures: %{}
         }
@@ -226,6 +227,23 @@ defmodule SymphonyElixir.MobileComparison.ServiceTest do
 
     @impl true
     def list_evidence(_project_slug, _identifier, _context), do: {:ok, []}
+
+    @impl true
+    def save_decision("dev10x", "DEV-1", decision, context) do
+      Agent.update(context.comparison_gateway_state, fn state ->
+        description =
+          SymphonyElixir.MobileComparison.Decision.put(
+            state.parent.description,
+            decision
+          )
+
+        state
+        |> Map.put(:decision, decision)
+        |> put_in([:parent, :description], description)
+      end)
+
+      :ok
+    end
 
     @spec counts(pid()) :: map()
     def counts(state) do
@@ -492,5 +510,39 @@ defmodule SymphonyElixir.MobileComparison.ServiceTest do
                Map.put(start_params, "cell_id", "session-nope"),
                context
              )
+  end
+
+  test "persists an operator-reviewed ranking and returns it in later snapshots", %{
+    context: context,
+    state: state
+  } do
+    ranking =
+      Contract.cells()
+      |> Enum.with_index(1)
+      |> Enum.map(fn {cell, rank} ->
+        %{"rank" => rank, "cell_id" => cell.id, "score" => 99 - rank}
+      end)
+
+    assert {:ok, saved} =
+             Service.save_decision(
+               %{
+                 "project_slug" => "dev10x",
+                 "identifier" => "DEV-1",
+                 "ranking" => ranking,
+                 "summary" => "Reviewed previews and durable evidence in the mobile app."
+               },
+               context
+             )
+
+    assert saved["decision"]["winner_cell_id"] == "session-codex"
+    assert Agent.get(state, & &1.decision) == saved["decision"]
+
+    assert {:ok, refreshed} =
+             Service.get(
+               %{"project_slug" => "dev10x", "identifier" => "DEV-1"},
+               context
+             )
+
+    assert refreshed["decision"] == saved["decision"]
   end
 end

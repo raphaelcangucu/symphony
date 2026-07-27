@@ -1,6 +1,8 @@
 defmodule SymphonyElixir.MobileComparison.Presenter do
   @moduledoc "Builds the provider-neutral comparison snapshot consumed by mobile."
 
+  alias SymphonyElixir.MobileComparison.Decision
+
   @terminal_statuses ~w(passed failed blocked saved completed error cancelled canceled)
   @passed_statuses ~w(passed saved completed)
   @failed_statuses ~w(failed blocked error cancelled canceled)
@@ -23,7 +25,7 @@ defmodule SymphonyElixir.MobileComparison.Presenter do
         "total" => length(cells)
       },
       "cells" => cells,
-      "decision" => nil
+      "decision" => Decision.get(parent)
     }
   end
 

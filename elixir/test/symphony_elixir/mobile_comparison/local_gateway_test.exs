@@ -56,6 +56,9 @@ defmodule SymphonyElixir.MobileComparison.LocalGatewayTest do
         {:tasks, "POST", "/projects/dev10x/issues/DEV-2/dispatch"} ->
           {:ok, %{"data" => %{"accepted" => true}}}
 
+        {:tasks, "PATCH", "/projects/dev10x/issues/DEV-1"} ->
+          {:ok, %{"data" => Map.put(request["body"], "identifier", "DEV-1")}}
+
         {:previews, "GET", "/assistant/threads/42/dev_servers"} ->
           {:ok,
            %{
@@ -93,6 +96,23 @@ defmodule SymphonyElixir.MobileComparison.LocalGatewayTest do
   defmodule EmptyHistory do
     def list_messages_for_thread(42), do: []
     def list_threads(_opts), do: []
+  end
+
+  defmodule LegacyProvenanceHistory do
+    def list_messages_for_thread(43), do: []
+
+    def list_threads(_opts) do
+      [
+        %{
+          id: 43,
+          issue_identifier: "DEV-2",
+          agent_kind: "codex",
+          status: "active",
+          requested_model: nil,
+          requested_effort: nil
+        }
+      ]
+    end
   end
 
   defmodule FakeSessionStarter do
@@ -249,6 +269,21 @@ defmodule SymphonyElixir.MobileComparison.LocalGatewayTest do
     refute_receive {:tracker_request, :sessions, _request}
   end
 
+  test "recovers an issue-scoped provider thread created without model provenance", %{
+    context: context
+  } do
+    assert {:ok, cell} = Contract.fetch("session-codex")
+    context = Map.put(context, :comparison_history, LegacyProvenanceHistory)
+
+    assert {:ok, %{id: 43, status: "ready"}} =
+             LocalGateway.get_session(
+               "dev10x",
+               %{"identifier" => "DEV-2"},
+               cell,
+               context
+             )
+  end
+
   test "retries a failed session with a new thread scoped to the retry request", %{
     context: context
   } do
@@ -353,5 +388,37 @@ defmodule SymphonyElixir.MobileComparison.LocalGatewayTest do
              LocalGateway.list_evidence("dev10x", "DEV-2", context)
 
     assert_receive {:collect_session_evidence, "dev10x", "DEV-2"}
+  end
+
+  test "persists the operator decision in the parent without requiring a global request key", %{
+    context: context
+  } do
+    ranking =
+      Contract.cells()
+      |> Enum.with_index(1)
+      |> Enum.map(fn {cell, rank} ->
+        %{"rank" => rank, "cell_id" => cell.id, "score" => 100 - rank}
+      end)
+
+    assert :ok =
+             LocalGateway.save_decision(
+               "dev10x",
+               "DEV-1",
+               %{
+                 "ranking" => ranking,
+                 "summary" => "Operator reviewed the durable mobile evidence."
+               },
+               Map.delete(context, :comparison_request_key)
+             )
+
+    assert_receive {:tracker_request, :tasks,
+                    %{
+                      "method" => "PATCH",
+                      "path" => "/projects/dev10x/issues/DEV-1",
+                      "body" => %{"description" => description}
+                    }}
+
+    assert description =~ "```dev10x-decision"
+    refute description =~ "idempotency_key"
   end
 end

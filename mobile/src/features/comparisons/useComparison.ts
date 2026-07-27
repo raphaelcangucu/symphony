@@ -3,7 +3,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { HostTransport } from "@/transport/HostTransport";
 
-import type { ComparisonCellId, ComparisonSnapshot } from "./comparison-contract";
+import type {
+  ComparisonCellId,
+  ComparisonDecisionInput,
+  ComparisonSnapshot,
+} from "./comparison-contract";
 import { createRpcComparison, type ComparisonConnectionState } from "./rpc-comparison";
 
 export function comparisonQueryKey(hostId: string, projectSlug: string, identifier: string) {
@@ -78,6 +82,13 @@ export function useComparison({
     },
     [client],
   );
+  const saveDecision = useCallback(
+    async (decision: ComparisonDecisionInput, signal?: AbortSignal) => {
+      if (!client) throw new Error("Symphony host is offline");
+      return client.saveDecision(decision, signal);
+    },
+    [client],
+  );
   const effectiveConnectionState = transport ? connectionState : ("offline" as const);
 
   return {
@@ -86,6 +97,7 @@ export function useComparison({
     error,
     start,
     retryCell,
+    saveDecision,
     reconnect: () => client?.reconnect(),
     cached: effectiveConnectionState === "offline" && snapshot !== null,
   };

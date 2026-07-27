@@ -12,6 +12,7 @@ function renderScreen(props: Partial<React.ComponentProps<typeof ComparisonScree
     cached: false,
     error: null,
     starting: false,
+    savingDecision: false,
     retryingCellId: null,
     onBack: jest.fn(),
     onStart: jest.fn(),
@@ -20,6 +21,7 @@ function renderScreen(props: Partial<React.ComponentProps<typeof ComparisonScree
     onOpenLog: jest.fn(),
     onOpenPreview: jest.fn(),
     onOpenEvidence: jest.fn(),
+    onSaveDecision: jest.fn(),
   };
   return render(
     <ThemeProvider colorScheme="dark">
@@ -96,6 +98,38 @@ describe("ComparisonScreen", () => {
     expect(
       screen.getByText("Session Codex produced the strongest verified Dev10x experience."),
     ).toBeTruthy();
+  });
+
+  it("lets the operator reorder all terminal runs and publish the audited decision", () => {
+    const snapshot = comparisonSnapshot();
+    snapshot.status = "completed";
+    snapshot.progress = { terminal: 6, passed: 6, failed: 0, total: 6 };
+    const durableEvidence = snapshot.cells[0]!.evidence;
+    snapshot.cells = snapshot.cells.map((cell) => ({
+      ...cell,
+      status: "passed",
+      evidence: durableEvidence,
+    }));
+    const onSaveDecision = jest.fn();
+
+    renderScreen({ snapshot, onSaveDecision });
+
+    expect(screen.getByText("Operator ranking")).toBeTruthy();
+    fireEvent.press(screen.getByRole("button", { name: "Move session-cursor up" }));
+    fireEvent.press(screen.getByRole("button", { name: "Publish decision" }));
+
+    expect(onSaveDecision).toHaveBeenCalledWith({
+      ranking: [
+        { rank: 1, cell_id: "session-cursor", score: 99 },
+        { rank: 2, cell_id: "session-codex", score: 98 },
+        { rank: 3, cell_id: "session-claude", score: 97 },
+        { rank: 4, cell_id: "orchestrator-codex", score: 96 },
+        { rank: 5, cell_id: "orchestrator-cursor", score: 95 },
+        { rank: 6, cell_id: "orchestrator-claude", score: 94 },
+      ],
+      summary:
+        "Operator-reviewed in the Dev10x mobile app after opening the six previews and durable evidence records.",
+    });
   });
 });
 

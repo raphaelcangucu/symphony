@@ -1,12 +1,18 @@
 defmodule SymphonyElixir.MobileRpc.Methods.Comparisons do
   @moduledoc "Allowlisted Dev10x comparison lifecycle over encrypted mobile RPC."
 
-  alias SymphonyElixir.MobileComparison.{Contract, Subscription}
+  alias SymphonyElixir.MobileComparison.{Contract, Decision, Subscription}
   alias SymphonyElixir.MobileRpc.{ComparisonService, MobileMethod}
 
   @spec modules() :: [module()]
   def modules do
-    [__MODULE__.Start, __MODULE__.Get, __MODULE__.Subscribe, __MODULE__.RetryCell]
+    [
+      __MODULE__.Start,
+      __MODULE__.Get,
+      __MODULE__.Subscribe,
+      __MODULE__.RetryCell,
+      __MODULE__.SaveDecision
+    ]
   end
 
   defmodule Start do
@@ -50,6 +56,42 @@ defmodule SymphonyElixir.MobileRpc.Methods.Comparisons do
                ~w(project_slug identifier request_key cell_id)
              ),
            {:ok, _cell} <- Contract.fetch(validated["cell_id"]) do
+        {:ok, validated}
+      else
+        _reason -> {:error, :invalid_params}
+      end
+    end
+
+    @impl true
+    def call(params, context) do
+      context
+      |> Map.get(:mobile_comparison_service, ComparisonService)
+      |> apply(:call, [name(), params, context])
+    end
+  end
+
+  defmodule SaveDecision do
+    @behaviour SymphonyElixir.MobileRpc.Method
+
+    @impl true
+    def name, do: "comparisons.save_decision"
+
+    @impl true
+    def scope, do: :mobile
+
+    @impl true
+    def timeout_ms, do: 10_000
+
+    @impl true
+    def validate(params) do
+      with {:ok, validated} <-
+             MobileMethod.validate_params(
+               params,
+               ~w(project_slug identifier ranking summary),
+               ~w(project_slug identifier ranking summary)
+             ),
+           {:ok, _decision} <-
+             Decision.validate(Map.take(validated, ["ranking", "summary"])) do
         {:ok, validated}
       else
         _reason -> {:error, :invalid_params}

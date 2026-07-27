@@ -67,6 +67,26 @@ defmodule SymphonyElixir.MobileRpc.Methods.ComparisonsTest do
              Comparisons.RetryCell.call(retry, context)
 
     assert_receive {:comparison_call, "comparisons.retry_cell", ^retry, "device-a"}
+
+    ranking =
+      SymphonyElixir.MobileComparison.Contract.cells()
+      |> Enum.with_index(1)
+      |> Enum.map(fn {cell, rank} ->
+        %{"rank" => rank, "cell_id" => cell.id, "score" => 100 - rank}
+      end)
+
+    decision =
+      Map.merge(get, %{
+        "ranking" => ranking,
+        "summary" => "Operator reviewed every durable result in the mobile app."
+      })
+
+    assert {:ok, ^decision} = Comparisons.SaveDecision.validate(decision)
+
+    assert {:ok, %{"method" => "comparisons.save_decision"}} =
+             Comparisons.SaveDecision.call(decision, context)
+
+    assert_receive {:comparison_call, "comparisons.save_decision", ^decision, "device-a"}
   end
 
   test "rejects missing request keys, unknown cells and extra parameters" do
@@ -123,6 +143,7 @@ defmodule SymphonyElixir.MobileRpc.Methods.ComparisonsTest do
                comparisons.get
                comparisons.subscribe
                comparisons.retry_cell
+               comparisons.save_decision
              )),
              MapSet.new(Map.keys(dispatcher.methods))
            )

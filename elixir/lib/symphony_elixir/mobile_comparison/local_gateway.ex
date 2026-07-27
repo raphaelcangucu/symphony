@@ -11,7 +11,14 @@ defmodule SymphonyElixir.MobileComparison.LocalGateway do
   @behaviour SymphonyElixir.MobileComparison.Gateway
 
   alias SymphonyElixir.Assistant.History
-  alias SymphonyElixir.MobileComparison.{Contract, SessionEvidenceCollector, SessionStarter}
+
+  alias SymphonyElixir.MobileComparison.{
+    Contract,
+    Decision,
+    SessionEvidenceCollector,
+    SessionStarter
+  }
+
   alias SymphonyElixir.MobileRpc.{EvidenceService, OrchestratorService, TrackerBridge}
 
   @cell_marker ~r/^\[dev10x-comparison:([a-z0-9-]+)\]\s*/
@@ -92,7 +99,7 @@ defmodule SymphonyElixir.MobileComparison.LocalGateway do
         limit: 100
       ]
       |> history.list_threads()
-      |> Enum.filter(&(value(&1, :requested_model) == cell.model))
+      |> Enum.filter(&session_matches?(&1, cell))
       |> Enum.sort_by(&(value(&1, :id) || 0), :desc)
       |> List.first()
 
@@ -228,6 +235,22 @@ defmodule SymphonyElixir.MobileComparison.LocalGateway do
     end
   end
 
+  @impl true
+  def save_decision(project_slug, identifier, decision, context) do
+    with {:ok, parent} <- get_parent(project_slug, identifier, context),
+         description <- Decision.put(value(parent, :description), decision),
+         {:ok, _response} <-
+           request(
+             context,
+             :tasks,
+             "PATCH",
+             issue_path(project_slug, identifier),
+             %{"description" => description}
+           ) do
+      :ok
+    end
+  end
+
   defp evidence_records(service, project_slug, identifier, context) do
     case service.call(
            "evidence.list",
@@ -276,6 +299,16 @@ defmodule SymphonyElixir.MobileComparison.LocalGateway do
     else
       thread
     end
+  end
+
+  defp session_matches?(thread, cell) do
+    provider_matches? =
+      value(thread, :agent_kind) in [nil, cell.provider]
+
+    model_matches? =
+      value(thread, :requested_model) in [nil, cell.model]
+
+    provider_matches? and model_matches?
   end
 
   defp create_session(project_slug, child, cell, context, idempotency_suffix \\ "thread") do

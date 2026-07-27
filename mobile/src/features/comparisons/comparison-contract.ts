@@ -96,6 +96,15 @@ export type ComparisonSnapshot = {
   decision: Record<string, unknown> | null;
 };
 
+export type ComparisonDecisionInput = {
+  ranking: Array<{
+    rank: number;
+    cell_id: ComparisonCellId;
+    score: number;
+  }>;
+  summary: string;
+};
+
 const terminalStatuses = new Set([
   "passed",
   "failed",

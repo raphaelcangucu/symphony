@@ -11,6 +11,7 @@ describe("comparison RPC lifecycle", () => {
       if (method === "comparisons.get") return snapshot("starting");
       if (method === "comparisons.start") return snapshot("live");
       if (method === "comparisons.retry_cell") return snapshot("retrying");
+      if (method === "comparisons.save_decision") return snapshot("passed");
       return {};
     });
     const onSnapshot = vi.fn();
@@ -58,6 +59,24 @@ describe("comparison RPC lifecycle", () => {
       identifier: "DEV-1",
       request_key: "mobile-retry-1",
       cell_id: "session-codex",
+    });
+
+    const decision = {
+      ranking: [
+        { rank: 1, cell_id: "session-codex" as const, score: 99 },
+        { rank: 2, cell_id: "session-cursor" as const, score: 98 },
+        { rank: 3, cell_id: "session-claude" as const, score: 97 },
+        { rank: 4, cell_id: "orchestrator-codex" as const, score: 96 },
+        { rank: 5, cell_id: "orchestrator-cursor" as const, score: 95 },
+        { rank: 6, cell_id: "orchestrator-claude" as const, score: 94 },
+      ],
+      summary: "Reviewed in the mobile app.",
+    };
+    await comparison.saveDecision(decision);
+    expect(transport.call).toHaveBeenCalledWith("comparisons.save_decision", {
+      project_slug: "dev10x",
+      identifier: "DEV-1",
+      ...decision,
     });
   });
 

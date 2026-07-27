@@ -3,6 +3,7 @@ import type { HostTransport } from "@/transport/HostTransport";
 import {
   normalizeComparisonSnapshot,
   type ComparisonCellId,
+  type ComparisonDecisionInput,
   type ComparisonSnapshot,
 } from "./comparison-contract";
 
@@ -102,8 +103,15 @@ export function createRpcComparison({
     );
   }
 
+  async function saveDecision(
+    decision: ComparisonDecisionInput,
+    signal?: AbortSignal,
+  ): Promise<ComparisonSnapshot> {
+    return mutate("comparisons.save_decision", { ...params, ...decision }, signal);
+  }
+
   async function mutate(
-    method: "comparisons.start" | "comparisons.retry_cell",
+    method: "comparisons.start" | "comparisons.retry_cell" | "comparisons.save_decision",
     request: Record<string, unknown>,
     signal?: AbortSignal,
   ): Promise<ComparisonSnapshot> {
@@ -125,7 +133,7 @@ export function createRpcComparison({
     return active && candidate === generation;
   }
 
-  return { connect, disconnect, reconnect, start, retryCell };
+  return { connect, disconnect, reconnect, start, retryCell, saveDecision };
 }
 
 function errorMessage(error: unknown): string {

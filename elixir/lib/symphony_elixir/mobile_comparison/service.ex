@@ -6,7 +6,7 @@ defmodule SymphonyElixir.MobileComparison.Service do
   coordinator only owns the fixed cell contract, ordering, and aggregate view.
   """
 
-  alias SymphonyElixir.MobileComparison.{Contract, LocalGateway, Presenter}
+  alias SymphonyElixir.MobileComparison.{Contract, Decision, LocalGateway, Presenter}
 
   @retryable_statuses ~w(failed blocked error cancelled canceled)
 
@@ -113,6 +113,30 @@ defmodule SymphonyElixir.MobileComparison.Service do
   end
 
   def retry_cell(_params, _context), do: {:error, :invalid_params}
+
+  @spec save_decision(map(), map()) :: result()
+  def save_decision(
+        %{
+          "project_slug" => project_slug,
+          "identifier" => identifier,
+          "ranking" => ranking,
+          "summary" => summary
+        },
+        context
+      )
+      when is_binary(project_slug) and is_binary(identifier) and
+             is_list(ranking) and is_binary(summary) and is_map(context) do
+    gateway = Map.get(context, :comparison_gateway, LocalGateway)
+
+    with {:ok, decision} <-
+           Decision.validate(%{"ranking" => ranking, "summary" => summary}),
+         {:ok, _parent} <- gateway.get_parent(project_slug, identifier, context),
+         :ok <- gateway.save_decision(project_slug, identifier, decision, context) do
+      get(%{"project_slug" => project_slug, "identifier" => identifier}, context)
+    end
+  end
+
+  def save_decision(_params, _context), do: {:error, :invalid_params}
 
   defp reconcile_cells(
          gateway,
@@ -335,7 +359,7 @@ defmodule SymphonyElixir.MobileComparison.Service do
 
   defp prompt(parent) do
     case value(parent, :description) do
-      description when is_binary(description) and description != "" -> description
+      description when is_binary(description) and description != "" -> Decision.prompt(description)
       _other -> value(parent, :title) || ""
     end
   end

@@ -6,7 +6,12 @@ import { useConnection } from "@/auth/ConnectionProvider";
 import { orchestratorRunRoute } from "@/features/orchestrator/orchestrator-executions";
 import { hostChatRoute } from "@/features/sessions/session-navigation";
 
-import type { ComparisonCell, ComparisonCellId, ComparisonPreview } from "./comparison-contract";
+import type {
+  ComparisonCell,
+  ComparisonCellId,
+  ComparisonDecisionInput,
+  ComparisonPreview,
+} from "./comparison-contract";
 import { ComparisonScreen } from "./ComparisonScreen";
 import { useComparison } from "./useComparison";
 
@@ -22,6 +27,7 @@ export function ComparisonRoute() {
   const identifier = routeParam(params.identifier);
   const [starting, setStarting] = useState(false);
   const [retryingCellId, setRetryingCellId] = useState<ComparisonCellId | null>(null);
+  const [savingDecision, setSavingDecision] = useState(false);
 
   if (!projectSlug || !identifier) return null;
 
@@ -34,6 +40,8 @@ export function ComparisonRoute() {
       router={router}
       setRetryingCellId={setRetryingCellId}
       setStarting={setStarting}
+      savingDecision={savingDecision}
+      setSavingDecision={setSavingDecision}
       starting={starting}
       transport={transport}
     />
@@ -48,6 +56,8 @@ function ConnectedComparisonRoute({
   router,
   setRetryingCellId,
   setStarting,
+  savingDecision,
+  setSavingDecision,
   starting,
   transport,
 }: {
@@ -58,6 +68,8 @@ function ConnectedComparisonRoute({
   router: ReturnType<typeof useRouter>;
   setRetryingCellId(value: ComparisonCellId | null): void;
   setStarting(value: boolean): void;
+  savingDecision: boolean;
+  setSavingDecision(value: boolean): void;
   starting: boolean;
   transport: NonNullable<ReturnType<typeof useHostTransport>> | null;
 }) {
@@ -82,6 +94,15 @@ function ConnectedComparisonRoute({
     }
   };
 
+  const saveDecision = async (decision: ComparisonDecisionInput) => {
+    setSavingDecision(true);
+    try {
+      await comparison.saveDecision(decision);
+    } finally {
+      setSavingDecision(false);
+    }
+  };
+
   return (
     <ComparisonScreen
       cached={comparison.cached}
@@ -100,9 +121,11 @@ function ConnectedComparisonRoute({
       onRetry={comparison.reconnect}
       onRetryCell={(cellId) => void retryCell(cellId)}
       onStart={() => void start()}
+      onSaveDecision={(decision) => void saveDecision(decision)}
       retryingCellId={retryingCellId}
       snapshot={comparison.snapshot}
       starting={starting}
+      savingDecision={savingDecision}
     />
   );
 }

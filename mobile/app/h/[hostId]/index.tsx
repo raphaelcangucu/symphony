@@ -1011,7 +1011,7 @@ export function HostScreen({
                   styles.embeddedToolbarIconButton,
                   connState !== 'connected' && styles.toolbarIconDisabled
                 ]}
-                onPress={() => navigateFromHostList(`/h/${hostId}/tasks`)}
+                onPress={() => navigateFromHostList('/codex/tasks')}
                 disabled={connState !== 'connected'}
                 accessibilityRole="button"
                 accessibilityLabel="Tasks"
@@ -1121,7 +1121,7 @@ export function HostScreen({
 
             <Pressable
               style={styles.searchToggle}
-              onPress={() => navigateFromHostList(`/h/${hostId}/tasks`)}
+              onPress={() => navigateFromHostList('/codex/tasks')}
               disabled={connState !== 'connected'}
               accessibilityRole="button"
               accessibilityLabel="Tasks"
