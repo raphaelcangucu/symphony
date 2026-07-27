@@ -929,6 +929,22 @@ export async function captureVisuals(env = process.env) {
   const manifest = JSON.parse(
     await readFile(join(runtimeRoot, "runs.json"), "utf8"),
   );
+  const requestedRunId = env.SYMPHONY_BENCH_RUN_ID?.trim() ?? "";
+  const selectedRuns = selectCaptureRuns(manifest.runs, requestedRunId);
+  let existing = [];
+  if (requestedRunId) {
+    try {
+      existing = JSON.parse(
+        await readFile(join(runtimeRoot, "report", "visuals.json"), "utf8"),
+      );
+    } catch (error) {
+      throw new Error(
+        `targeted recapture requires a readable existing visual manifest: ${error.message}`,
+      );
+    }
+    assertExistingCaptureSet(manifest.runs, existing);
+  }
+
   const reportRoot = join(runtimeRoot, "report", "screens");
   const reportVideoRoot = join(runtimeRoot, "report", "videos");
   await mkdir(reportRoot, { recursive: true });
@@ -938,8 +954,6 @@ export async function captureVisuals(env = process.env) {
     token: env.SYMPHONY_BENCH_TOKEN,
   });
 
-  const requestedRunId = env.SYMPHONY_BENCH_RUN_ID?.trim() ?? "";
-  const selectedRuns = selectCaptureRuns(manifest.runs, requestedRunId);
   const updates = await captureRunMatrix(
     selectedRuns,
     (run) =>
@@ -954,19 +968,6 @@ export async function captureVisuals(env = process.env) {
         trackerToken: env.SYMPHONY_BENCH_TOKEN,
       }),
   );
-  let existing = [];
-  if (requestedRunId) {
-    try {
-      existing = JSON.parse(
-        await readFile(join(runtimeRoot, "report", "visuals.json"), "utf8"),
-      );
-    } catch (error) {
-      throw new Error(
-        `targeted recapture requires a readable existing visual manifest: ${error.message}`,
-      );
-    }
-    assertExistingCaptureSet(manifest.runs, existing);
-  }
   const captures = requestedRunId
     ? mergeCaptures(manifest.runs, existing, updates)
     : updates;

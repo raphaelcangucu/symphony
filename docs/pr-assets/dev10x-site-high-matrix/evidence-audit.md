@@ -37,7 +37,7 @@ sessão Grok renderizou 4/5, registrada sem esconder a dedução no ranking.
 - 6 MP4 H.264, `yuv420p`, 1280 × 720 e `faststart`;
 - 6 prévias GIF para renderização inline no GitHub;
 - MP4 e WebM integralmente decodificados com ffmpeg;
-- duração entre 3,92s e 4,20s;
+- duração entre 3,80s e 4,16s;
 - hashes preservados em [`media-sha256.txt`](media-sha256.txt).
 
 O manifesto usa caminhos relativos ao diretório deste relatório e passa
@@ -53,7 +53,7 @@ incluindo o
 
 ## Validação do harness
 
-- benchmark Node: 71/71 testes aprovados;
+- benchmark Node: 72/72 testes aprovados;
 - `git diff --check`: aprovado;
 - 6/6 contratos de conteúdo e marca;
 - 18/18 etapas independentes de validação;

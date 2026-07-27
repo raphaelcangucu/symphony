@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import {
+  access,
+  mkdir,
+  mkdtemp,
+  writeFile,
+} from "node:fs/promises";
 import { createServer } from "node:http";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import test from "node:test";
 
 import * as captureVisuals from "../src/capture-visuals.mjs";
@@ -109,6 +117,35 @@ test("targeted recapture requires one existing record for every matrix cell", ()
     () => assertExistingCaptureSet(runs, { one: complete[0] }),
     /complete existing visual manifest/,
   );
+});
+
+test("targeted recapture validates its manifest before creating capture side effects", async () => {
+  const runtime = await mkdtemp(join(tmpdir(), "symphony-recapture-preflight-"));
+  await mkdir(join(runtime, "report"), { recursive: true });
+  await writeFile(
+    join(runtime, "runs.json"),
+    JSON.stringify({
+      runtime_root: runtime,
+      project_slug: "project",
+      runs: [
+        { id: "one", path: "orchestrator", issue_identifier: "DEV-1" },
+        { id: "two", path: "orchestrator", issue_identifier: "DEV-2" },
+      ],
+    }),
+  );
+  await writeFile(join(runtime, "report", "visuals.json"), "{invalid");
+
+  await assert.rejects(
+    captureVisuals.captureVisuals({
+      SYMPHONY_BENCH_RUNTIME: runtime,
+      SYMPHONY_BENCH_RUN_ID: "one",
+      SYMPHONY_BENCH_URL: "http://127.0.0.1:4010",
+      SYMPHONY_BENCH_TOKEN: "test-token",
+    }),
+    /readable existing visual manifest/,
+  );
+  await assert.rejects(access(join(runtime, "report", "screens")), /ENOENT/);
+  await assert.rejects(access(join(runtime, "report", "videos")), /ENOENT/);
 });
 
 test("targeted recapture exit status only considers the requested cell", () => {
