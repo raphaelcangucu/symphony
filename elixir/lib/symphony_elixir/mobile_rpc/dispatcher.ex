@@ -4,6 +4,7 @@ defmodule SymphonyElixir.MobileRpc.Dispatcher do
   alias SymphonyElixir.MobileRpc.{Envelope, Subscriptions}
 
   alias SymphonyElixir.MobileRpc.Methods.{
+    Evidence,
     Git,
     Notifications,
     Orchestrator,
@@ -46,6 +47,7 @@ defmodule SymphonyElixir.MobileRpc.Dispatcher do
           MobileFiles.modules() ++
           MobileGit.modules() ++
           MobileTasks.modules() ++
+          Evidence.modules() ++
           Projects.modules() ++
           Tasks.modules() ++
           Sessions.modules() ++
