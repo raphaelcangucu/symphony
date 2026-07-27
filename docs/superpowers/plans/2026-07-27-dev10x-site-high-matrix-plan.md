@@ -256,12 +256,12 @@ feat(benchmark): verify generated Dev10x branding
 - Modify: `benchmarks/landing-page-agent-comparison/prompt.md`
 - Modify: `benchmarks/landing-page-agent-comparison/tests/contract.test.mjs`
 
-- [ ] **Step 1: Extend the prompt contract test**
+- [x] **Step 1: Extend the prompt contract test**
 
 Assert the prompt contains:
 
 ```js
-assert.match(prompt, /public\\/dev10x\\/dev10x_logo_color\\.png/);
+assert.match(prompt, /public\/dev10x\/dev10x_logo_color\.png/);
 assert.match(prompt, /#0F172A/);
 assert.match(prompt, /#7C3AED/);
 assert.match(prompt, /#2563EB/);
@@ -271,13 +271,13 @@ assert.match(prompt, /id="fluxo"/);
 assert.match(prompt, /id="evidencias"/);
 ```
 
-- [ ] **Step 2: Run the contract test and verify RED**
+- [x] **Step 2: Run the contract test and verify RED**
 
 Run: `node --test tests/contract.test.mjs`
 
 Expected: FAIL on the new logo/palette requirements.
 
-- [ ] **Step 3: Update the prompt**
+- [x] **Step 3: Update the prompt**
 
 Require the visible navigation or hero to use:
 
@@ -293,13 +293,13 @@ Allow the black/white variants for contrast, require
 forbid redrawing, replacing or recoloring the supplied logos. Require stable
 `id="visao"`, `id="fluxo"`, `id="agentes"` and `id="evidencias"` sections.
 
-- [ ] **Step 4: Verify GREEN**
+- [x] **Step 4: Verify GREEN**
 
 Run: `node --test tests/contract.test.mjs`
 
 Expected: prompt contract passes with a new shared SHA-256.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Commit subject:
 

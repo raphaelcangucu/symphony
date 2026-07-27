@@ -139,6 +139,18 @@ test("the canonical prompt requires preview-compatible Playwright E2E", async ()
   assert.match(prompt, /Não configure `webServer`/);
   assert.match(prompt, /Codex, Cursor e Claude/);
   assert.match(prompt, /Dev10x/);
+  assert.match(prompt, /public\/dev10x\/dev10x_logo_color\.png/);
+  assert.match(prompt, /src="\/dev10x\/dev10x_logo_color\.png"/);
+  assert.match(prompt, /#0F172A/);
+  assert.match(prompt, /#7C3AED/);
+  assert.match(prompt, /#2563EB/);
+  assert.match(prompt, /#38BDF8/);
+  assert.match(prompt, /#FFFFFF/);
+  assert.match(prompt, /não redesenhe/i);
+  assert.match(prompt, /id="visao"/);
+  assert.match(prompt, /id="fluxo"/);
+  assert.match(prompt, /id="agentes"/);
+  assert.match(prompt, /id="evidencias"/);
   assert.doesNotMatch(prompt, /marca [“"]Symphony[”"]/);
   assert.equal(promptSha256(prompt).length, 64);
 });
