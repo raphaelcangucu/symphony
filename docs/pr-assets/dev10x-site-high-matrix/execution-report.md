@@ -58,6 +58,19 @@ estavam em liberação. O capturador agora:
 As três células afetadas foram apenas recapturadas; nenhum agente foi
 redispatchado e nenhum resultado de execução mudou.
 
+### Hardening após revisão independente
+
+O gate de revisão encontrou que a presença dos assets não provava o uso
+renderizado, que `collect` podia retornar zero com linhas reprovadas e que um
+recapture seletivo sem manifesto completo podia degradar o relatório. Foram
+adicionados testes de regressão e os contratos agora:
+
+- exigem logo oficial visível/carregada e uso computado da paleta;
+- fazem `collect` retornar erro para qualquer célula incompleta;
+- recusam recapture seletivo sem seis registros anteriores válidos;
+- publicam mídia, WebMs e traces com manifests relativos verificáveis;
+- versionam os fontes gerados usados na avaliação de acessibilidade.
+
 ## Proteção do WSL
 
 Não foi executada uma suíte completa pesada do Symphony. A validação ficou

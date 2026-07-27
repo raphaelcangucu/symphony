@@ -62,6 +62,26 @@ export function mergeCaptures(runs, existing, updates) {
   );
 }
 
+export function assertExistingCaptureSet(runs, existing) {
+  if (!Array.isArray(runs) || !Array.isArray(existing)) {
+    throw new Error("targeted recapture requires a complete existing visual manifest");
+  }
+  const expectedIds = runs.map((run) => run.id);
+  const observedIds = existing.map((capture) => capture?.id);
+  const observedCounts = new Map();
+  for (const id of observedIds) {
+    observedCounts.set(id, (observedCounts.get(id) ?? 0) + 1);
+  }
+  const complete =
+    existing.length === runs.length &&
+    expectedIds.every((id) => observedCounts.get(id) === 1) &&
+    observedIds.every((id) => expectedIds.includes(id));
+  if (!complete) {
+    throw new Error("targeted recapture requires a complete existing visual manifest");
+  }
+  return existing;
+}
+
 export function captureCommandFailed(captures, requestedRunId = "") {
   const inspected = requestedRunId
     ? captures.filter((capture) => capture.id === requestedRunId)
@@ -237,6 +257,121 @@ export async function waitForPortAvailable(port, timeoutMs = 30_000) {
   throw new Error(`visual capture port ${port} did not become available`);
 }
 
+export async function verifyRenderedBrand(page, brandManifest) {
+  const logoPath = "/dev10x/dev10x_logo_color.png";
+  const expectedPalette = brandManifest?.palette;
+  const logoSha256 =
+    brandManifest?.assets?.["dev10x_logo_color.png"] ?? null;
+  if (
+    !expectedPalette ||
+    typeof expectedPalette !== "object" ||
+    Array.isArray(expectedPalette) ||
+    Object.keys(expectedPalette).length === 0 ||
+    !logoSha256
+  ) {
+    throw new Error("rendered brand proof requires the canonical brand manifest");
+  }
+
+  const logo = page.locator(`img[src="${logoPath}"]`).first();
+  await logo.waitFor({ state: "visible", timeout: 30_000 });
+  const logoState = await logo.evaluate((image) => ({
+    complete: image.complete,
+    naturalWidth: image.naturalWidth,
+    naturalHeight: image.naturalHeight,
+    currentSrc: image.currentSrc,
+  }));
+  let renderedLogoPath = "";
+  try {
+    renderedLogoPath = new URL(logoState.currentSrc).pathname;
+  } catch {
+    renderedLogoPath = "";
+  }
+  if (
+    logoState.complete !== true ||
+    logoState.naturalWidth <= 0 ||
+    logoState.naturalHeight <= 0 ||
+    renderedLogoPath !== logoPath
+  ) {
+    throw new Error("canonical Dev10x logo is not visibly loaded");
+  }
+
+  const expectedColors = Object.entries(expectedPalette).map(
+    ([name, hex]) => {
+      const value = String(hex).replace(/^#/, "");
+      const rgb = [
+        Number.parseInt(value.slice(0, 2), 16),
+        Number.parseInt(value.slice(2, 4), 16),
+        Number.parseInt(value.slice(4, 6), 16),
+      ];
+      return { name, rgb: `rgb(${rgb.join(",")})`.toLowerCase() };
+    },
+  );
+  const observed = await page.evaluate(({ expected }) => {
+    const normalizeColor = (value) =>
+      String(value ?? "").replace(/\s+/g, "").toLowerCase();
+    const observedNames = new Set();
+    for (const element of document.querySelectorAll("*")) {
+      const style = getComputedStyle(element);
+      const values = [
+        style.color,
+        style.backgroundColor,
+        style.backgroundImage,
+        style.borderTopColor,
+        style.borderRightColor,
+        style.borderBottomColor,
+        style.borderLeftColor,
+        style.outlineColor,
+        style.textDecorationColor,
+        style.fill,
+        style.stroke,
+      ].map(normalizeColor);
+      for (const color of expected) {
+        if (values.some((value) => value.includes(color.rgb))) {
+          observedNames.add(color.name);
+        }
+      }
+    }
+    return [...observedNames];
+  }, { expected: expectedColors });
+  const observedSet = new Set(observed);
+  const missing = Object.keys(expectedPalette).filter(
+    (name) => !observedSet.has(name),
+  );
+  const expectedNames = Object.keys(expectedPalette);
+  const minimumObserved = Math.ceil(expectedNames.length * 0.8);
+  const requiredFoundation = ["ink", "white"].filter((name) =>
+    expectedNames.includes(name),
+  );
+  const palettePassed =
+    observedSet.size >= minimumObserved &&
+    requiredFoundation.every((name) => observedSet.has(name));
+  if (!palettePassed) {
+    throw new Error(
+      `canonical palette is not sufficiently rendered: missing ${missing.join(", ")}`,
+    );
+  }
+
+  return {
+    logo: {
+      path: logoPath,
+      loaded: true,
+      natural_width: logoState.naturalWidth,
+      natural_height: logoState.naturalHeight,
+      sha256: logoSha256,
+    },
+    palette: {
+      expected: expectedPalette,
+      observed: Object.keys(expectedPalette).filter((name) =>
+        observedSet.has(name),
+      ),
+      missing,
+      coverage: `${observedSet.size}/${expectedNames.length}`,
+      complete: missing.length === 0,
+      passed: true,
+    },
+  };
+}
+
 export async function captureRunMatrix(runs, capture) {
   const captures = [];
 
@@ -312,6 +447,7 @@ export function evidenceManifestForRun({
   collected,
   navigations,
   names,
+  renderedBrand,
 }) {
   if (
     !Array.isArray(navigations) ||
@@ -387,6 +523,7 @@ export function evidenceManifestForRun({
           desktop_viewport: "1280x720",
           mobile_viewport: "390x844",
           full_page: true,
+          rendered_brand: renderedBrand,
         },
       },
     ],
@@ -527,6 +664,7 @@ async function writeEvidenceManifest({
   navigations,
   names,
   paths,
+  renderedBrand,
 }) {
   const reportsRoot = join(evidenceRoot, "artifacts", "reports");
   await mkdir(reportsRoot, { recursive: true });
@@ -545,6 +683,7 @@ async function writeEvidenceManifest({
     collected,
     navigations,
     names,
+    renderedBrand,
   });
   await writeFile(
     join(evidenceRoot, "manifest.json"),
@@ -645,6 +784,7 @@ async function captureRun({
     const video = page.video();
     await page.goto(url, { waitUntil: "networkidle" });
     const capturedNavigations = [page.url()];
+    const renderedBrand = await verifyRenderedBrand(page, manifest.brand);
     await page.screenshot({ path: heroPath });
     const flow = page.locator("#fluxo");
     await flow.waitFor({ state: "visible", timeout: 30_000 });
@@ -717,6 +857,7 @@ async function captureRun({
         mp4: mp4Path,
         trace: tracePath,
       },
+      renderedBrand,
     });
     const threadId =
       run.thread_id ?? collected.identity?.assistant_thread_id ?? null;
@@ -768,6 +909,7 @@ async function captureRun({
       evidence_tab_screenshot: evidenceTabPath,
       evidence_rendered_screenshots: evidenceUi.screenshot_count,
       evidence_rendered_videos: evidenceUi.video_count,
+      rendered_brand: renderedBrand,
     };
   } finally {
     try {
@@ -818,9 +960,12 @@ export async function captureVisuals(env = process.env) {
       existing = JSON.parse(
         await readFile(join(runtimeRoot, "report", "visuals.json"), "utf8"),
       );
-    } catch {
-      existing = [];
+    } catch (error) {
+      throw new Error(
+        `targeted recapture requires a readable existing visual manifest: ${error.message}`,
+      );
     }
+    assertExistingCaptureSet(manifest.runs, existing);
   }
   const captures = requestedRunId
     ? mergeCaptures(manifest.runs, existing, updates)

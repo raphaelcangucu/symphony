@@ -30,6 +30,10 @@ propõe combinar automaticamente seis bases de código geradas.
 - escolha por velocidade isolada. O tempo canônico de uma retomada não é
   comparável a uma execução nova, então duração não participou da nota visual.
 
+As notas e deduções estão justificadas critério por critério em
+[`evaluation.md`](evaluation.md). A diferença de um ponto para o Opus pode ser
+recalculada usando os snapshots de fonte, o dataset e as imagens versionadas.
+
 ## Próximo passo recomendado
 
 Usar a direção vencedora como baseline de design e portar para ela os testes de

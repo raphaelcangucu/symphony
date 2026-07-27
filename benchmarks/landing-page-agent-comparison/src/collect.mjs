@@ -333,6 +333,22 @@ function contractPassed(contract) {
   );
 }
 
+export function comparisonHasFailures(comparison) {
+  const rows = comparison?.rows;
+  if (!Array.isArray(rows) || rows.length === 0) return true;
+
+  return rows.some(
+    (row) =>
+      row.status !== "completed" ||
+      row.contract_passed !== true ||
+      row.brand?.passed !== true ||
+      row.identity?.provider_matches !== true ||
+      !Array.isArray(row.validation) ||
+      row.validation.length === 0 ||
+      row.validation.some((step) => step.status !== "passed"),
+  );
+}
+
 export async function executeValidation(command, args, cwd, timeout) {
   return executeProcess(command, args, { cwd, timeout });
 }
@@ -597,6 +613,9 @@ if (invokedPath === import.meta.url) {
           2,
         )}\n`,
       );
+      if (comparisonHasFailures(comparison)) {
+        process.exitCode = 1;
+      }
     })
     .catch((error) => {
       process.stderr.write(`${error.stack ?? error.message}\n`);

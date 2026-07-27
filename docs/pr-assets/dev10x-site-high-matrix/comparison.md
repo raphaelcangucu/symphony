@@ -25,6 +25,11 @@ Prompt SHA-256:
 - WebM do Playwright, MP4 H.264, GIF de prévia e trace;
 - persistência e reabertura na aba Evidências do Symphony.
 
+A captura no navegador confirmou as seis logos oficiais visíveis e carregadas.
+Cinco células usaram 5/5 cores canônicas como estilos computados; a sessão
+Cursor usou 4/5 e recebeu a dedução correspondente no ranking. A prova está no
+[`visuals.json`](visuals.json).
+
 O dataset detalhado, incluindo hashes de marca, comandos, saídas, IDs de
 tentativa e confirmação nativa dos providers, está em
 [`comparison.json`](comparison.json).

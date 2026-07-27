@@ -6,6 +6,7 @@ import test from "node:test";
 import * as captureVisuals from "../src/capture-visuals.mjs";
 import {
   assertEvidenceTabRecord,
+  assertExistingCaptureSet,
   captureCommandFailed,
   captureRunMatrix,
   evidenceManifestForRun,
@@ -18,6 +19,7 @@ import {
   visualScreenshotNames,
   waitForHttp,
   waitForPortAvailable,
+  verifyRenderedBrand,
 } from "../src/capture-visuals.mjs";
 
 test("visual captures reserve a deterministic isolated port per matrix cell", () => {
@@ -87,6 +89,28 @@ test("targeted recapture preserves other cells in manifest order", () => {
   );
 });
 
+test("targeted recapture requires one existing record for every matrix cell", () => {
+  const runs = [{ id: "one" }, { id: "two" }];
+  const complete = [
+    { id: "one", status: "captured" },
+    { id: "two", status: "capture-failed" },
+  ];
+
+  assert.deepEqual(assertExistingCaptureSet(runs, complete), complete);
+  assert.throws(
+    () => assertExistingCaptureSet(runs, [complete[0]]),
+    /complete existing visual manifest/,
+  );
+  assert.throws(
+    () => assertExistingCaptureSet(runs, [...complete, complete[0]]),
+    /complete existing visual manifest/,
+  );
+  assert.throws(
+    () => assertExistingCaptureSet(runs, { one: complete[0] }),
+    /complete existing visual manifest/,
+  );
+});
+
 test("targeted recapture exit status only considers the requested cell", () => {
   const captures = [
     { id: "session-cursor-grok4.5-high-dev10x", status: "captured" },
@@ -105,6 +129,103 @@ test("targeted recapture exit status only considers the requested cell", () => {
     ),
     true,
   );
+});
+
+test("rendered brand proof requires the canonical logo and computed palette", async () => {
+  const page = {
+    locator: (selector) => {
+      assert.equal(
+        selector,
+        'img[src="/dev10x/dev10x_logo_color.png"]',
+      );
+      return {
+        first: () => ({
+          waitFor: async () => {},
+          evaluate: async () => ({
+            complete: true,
+            naturalWidth: 320,
+            naturalHeight: 96,
+            currentSrc:
+              "http://127.0.0.1:23000/dev10x/dev10x_logo_color.png",
+          }),
+        }),
+      };
+    },
+    evaluate: async () => ["ink", "blue"],
+  };
+  const brand = {
+    assets: { "dev10x_logo_color.png": "canonical-sha256" },
+    palette: { ink: "#0F172A", blue: "#2563EB" },
+  };
+
+  assert.deepEqual(await verifyRenderedBrand(page, brand), {
+    logo: {
+      path: "/dev10x/dev10x_logo_color.png",
+      loaded: true,
+      natural_width: 320,
+      natural_height: 96,
+      sha256: "canonical-sha256",
+    },
+    palette: {
+      expected: { ink: "#0F172A", blue: "#2563EB" },
+      observed: ["ink", "blue"],
+      missing: [],
+      coverage: "2/2",
+      complete: true,
+      passed: true,
+    },
+  });
+
+  await assert.rejects(
+    verifyRenderedBrand(
+      { ...page, evaluate: async () => ["ink"] },
+      brand,
+    ),
+    /canonical palette is not sufficiently rendered/,
+  );
+});
+
+test("rendered brand proof records an honest four-of-five palette coverage", async () => {
+  const page = {
+    locator: () => ({
+      first: () => ({
+        waitFor: async () => {},
+        evaluate: async () => ({
+          complete: true,
+          naturalWidth: 914,
+          naturalHeight: 220,
+          currentSrc:
+            "http://127.0.0.1:23001/dev10x/dev10x_logo_color.png",
+        }),
+      }),
+    }),
+    evaluate: async () => ["ink", "violet", "cyan", "white"],
+  };
+  const result = await verifyRenderedBrand(page, {
+    assets: { "dev10x_logo_color.png": "canonical-sha256" },
+    palette: {
+      ink: "#0F172A",
+      violet: "#7C3AED",
+      blue: "#2563EB",
+      cyan: "#38BDF8",
+      white: "#FFFFFF",
+    },
+  });
+
+  assert.deepEqual(result.palette, {
+    expected: {
+      ink: "#0F172A",
+      violet: "#7C3AED",
+      blue: "#2563EB",
+      cyan: "#38BDF8",
+      white: "#FFFFFF",
+    },
+    observed: ["ink", "violet", "cyan", "white"],
+    missing: ["blue"],
+    coverage: "4/5",
+    complete: false,
+    passed: true,
+  });
 });
 
 test("visual preview probe aborts an HTTP request that never answers", async () => {
@@ -276,6 +397,10 @@ test("canonical manifest exposes desktop, mobile, WebM, MP4, trace, and real nav
         },
       ],
     },
+    renderedBrand: {
+      logo: { path: "/dev10x/dev10x_logo_color.png", loaded: true },
+      palette: { complete: true },
+    },
   });
 
   const e2e = manifest.runs.find((runEntry) => runEntry.kind === "e2e");
@@ -306,6 +431,7 @@ test("canonical manifest exposes desktop, mobile, WebM, MP4, trace, and real nav
     "http://127.0.0.1:23001/observed-by-playwright",
   ]);
   assert.equal(e2e.proof.full_page, true);
+  assert.equal(e2e.proof.rendered_brand.logo.loaded, true);
 });
 
 test("Evidence-tab verification navigates the real UI and requires rendered media", async () => {

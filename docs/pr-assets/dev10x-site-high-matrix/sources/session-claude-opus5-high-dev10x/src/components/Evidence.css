@@ -1,0 +1,136 @@
+.evidence {
+  background: var(--paper);
+}
+
+.evidence__grid {
+  display: grid;
+  gap: clamp(18px, 2.2vw, 24px);
+}
+
+.evidence__card {
+  padding: 24px 22px 26px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--paper-raised);
+  transition: transform 0.24s var(--ease), box-shadow 0.24s var(--ease),
+    border-color 0.24s var(--ease);
+}
+
+.evidence__card:hover {
+  transform: translateY(-3px);
+  border-color: var(--line-strong);
+  box-shadow: var(--shadow-card);
+}
+
+.evidence__glyph {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: var(--r-sm);
+  background: var(--ink);
+  color: var(--cyan);
+}
+
+.evidence__glyph svg {
+  width: 22px;
+  height: 22px;
+}
+
+.evidence__name {
+  margin-top: 18px;
+  font-size: var(--fs-h3);
+}
+
+.evidence__file {
+  margin-top: 7px;
+  color: var(--blue);
+  overflow-wrap: anywhere;
+}
+
+.evidence__body {
+  margin-top: 12px;
+  color: var(--text-soft);
+  font-size: 0.95rem;
+}
+
+/* ---------- painel do manifesto ---------- */
+
+.evidence__manifest {
+  position: relative;
+  margin-top: clamp(28px, 3.4vw, 40px);
+  padding: 26px 22px 24px;
+  border-radius: var(--r-lg);
+  background: var(--ink);
+  color: var(--on-ink-soft);
+  overflow: hidden;
+}
+
+.evidence__manifest::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--rail-on-ink-v);
+}
+
+.evidence__manifest-path {
+  color: var(--cyan);
+  letter-spacing: 0.02em;
+  overflow-wrap: anywhere;
+}
+
+.evidence__manifest-rows {
+  display: grid;
+  gap: 12px;
+  margin: 18px 0 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--on-ink-line);
+}
+
+.evidence__manifest-row {
+  display: grid;
+  gap: 3px;
+}
+
+.evidence__manifest-row dt {
+  color: var(--on-ink);
+  font-weight: 600;
+}
+
+.evidence__manifest-row dd {
+  margin: 0;
+  color: var(--on-ink-faint);
+  overflow-wrap: anywhere;
+}
+
+.evidence__manifest-note {
+  max-width: 62ch;
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--on-ink-line);
+  color: var(--on-ink-soft);
+  font-size: 0.95rem;
+}
+
+@media (min-width: 560px) {
+  .evidence__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .evidence__manifest-row {
+    grid-template-columns: 148px minmax(0, 1fr);
+    gap: 14px;
+    align-items: baseline;
+  }
+}
+
+@media (min-width: 1040px) {
+  .evidence__grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .evidence__manifest {
+    padding: 32px 34px;
+  }
+}

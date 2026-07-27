@@ -5,7 +5,7 @@
     "url": "http://127.0.0.1:23000/",
     "manifest": {
       "issue": "DEV-1",
-      "generated_at": "2026-07-27T17:26:49.319Z",
+      "generated_at": "2026-07-27T17:58:13.229Z",
       "ui_change": true,
       "runs": [
         {
@@ -83,7 +83,36 @@
             "title": "session-codex-gpt5.6.sol-high-dev10x landing page walkthrough",
             "desktop_viewport": "1280x720",
             "mobile_viewport": "390x844",
-            "full_page": true
+            "full_page": true,
+            "rendered_brand": {
+              "logo": {
+                "path": "/dev10x/dev10x_logo_color.png",
+                "loaded": true,
+                "natural_width": 914,
+                "natural_height": 220,
+                "sha256": "5dcd0a5baafec855f5d18f1b125fe2ac739fd2c81ac49c523e657dbe0e51b489"
+              },
+              "palette": {
+                "expected": {
+                  "ink": "#0F172A",
+                  "violet": "#7C3AED",
+                  "blue": "#2563EB",
+                  "cyan": "#38BDF8",
+                  "white": "#FFFFFF"
+                },
+                "observed": [
+                  "ink",
+                  "violet",
+                  "blue",
+                  "cyan",
+                  "white"
+                ],
+                "missing": [],
+                "coverage": "5/5",
+                "complete": true,
+                "passed": true
+              }
+            }
           }
         }
       ]
@@ -96,13 +125,42 @@
     "video": "$SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-1__p1/.symphony/evidence/artifacts/videos/session-codex-gpt5.6.sol-high-dev10x-e2e.webm",
     "mp4": "$SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-1__p1/.symphony/evidence/artifacts/videos/session-codex-gpt5.6.sol-high-dev10x-e2e.mp4",
     "trace": "$SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-1__p1/.symphony/evidence/artifacts/traces/session-codex-gpt5.6.sol-high-dev10x-e2e.zip",
-    "evidence_run_id": "20260727172649-342211",
+    "evidence_run_id": "20260727175813-242180",
     "evidence_issue_identifier": "DEV-1",
     "evidence_tab_verified": true,
     "evidence_tab_route": "http://127.0.0.1:4010/tracker/projects/dev10x-landing-benchmark/board/issues/DEV-1/evidence",
     "evidence_tab_screenshot": "$SYMPHONY_BENCH_RUNTIME/report/screens/session-codex-gpt5.6.sol-high-dev10x-evidence-tab.png",
     "evidence_rendered_screenshots": 5,
-    "evidence_rendered_videos": 2
+    "evidence_rendered_videos": 2,
+    "rendered_brand": {
+      "logo": {
+        "path": "/dev10x/dev10x_logo_color.png",
+        "loaded": true,
+        "natural_width": 914,
+        "natural_height": 220,
+        "sha256": "5dcd0a5baafec855f5d18f1b125fe2ac739fd2c81ac49c523e657dbe0e51b489"
+      },
+      "palette": {
+        "expected": {
+          "ink": "#0F172A",
+          "violet": "#7C3AED",
+          "blue": "#2563EB",
+          "cyan": "#38BDF8",
+          "white": "#FFFFFF"
+        },
+        "observed": [
+          "ink",
+          "violet",
+          "blue",
+          "cyan",
+          "white"
+        ],
+        "missing": [],
+        "coverage": "5/5",
+        "complete": true,
+        "passed": true
+      }
+    }
   },
   {
     "id": "session-cursor-grok4.5-high-dev10x",
@@ -110,7 +168,7 @@
     "url": "http://127.0.0.1:23001/",
     "manifest": {
       "issue": "DEV-2",
-      "generated_at": "2026-07-27T17:31:13.780Z",
+      "generated_at": "2026-07-27T17:58:19.697Z",
       "ui_change": true,
       "runs": [
         {
@@ -188,7 +246,37 @@
             "title": "session-cursor-grok4.5-high-dev10x landing page walkthrough",
             "desktop_viewport": "1280x720",
             "mobile_viewport": "390x844",
-            "full_page": true
+            "full_page": true,
+            "rendered_brand": {
+              "logo": {
+                "path": "/dev10x/dev10x_logo_color.png",
+                "loaded": true,
+                "natural_width": 914,
+                "natural_height": 220,
+                "sha256": "5dcd0a5baafec855f5d18f1b125fe2ac739fd2c81ac49c523e657dbe0e51b489"
+              },
+              "palette": {
+                "expected": {
+                  "ink": "#0F172A",
+                  "violet": "#7C3AED",
+                  "blue": "#2563EB",
+                  "cyan": "#38BDF8",
+                  "white": "#FFFFFF"
+                },
+                "observed": [
+                  "ink",
+                  "violet",
+                  "cyan",
+                  "white"
+                ],
+                "missing": [
+                  "blue"
+                ],
+                "coverage": "4/5",
+                "complete": false,
+                "passed": true
+              }
+            }
           }
         }
       ]
@@ -201,13 +289,43 @@
     "video": "$SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-2__p1/.symphony/evidence/artifacts/videos/session-cursor-grok4.5-high-dev10x-e2e.webm",
     "mp4": "$SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-2__p1/.symphony/evidence/artifacts/videos/session-cursor-grok4.5-high-dev10x-e2e.mp4",
     "trace": "$SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-2__p1/.symphony/evidence/artifacts/traces/session-cursor-grok4.5-high-dev10x-e2e.zip",
-    "evidence_run_id": "20260727173113-911106",
+    "evidence_run_id": "20260727175819-408067",
     "evidence_issue_identifier": "DEV-2",
     "evidence_tab_verified": true,
     "evidence_tab_route": "http://127.0.0.1:4010/tracker/projects/dev10x-landing-benchmark/board/issues/DEV-2/evidence",
     "evidence_tab_screenshot": "$SYMPHONY_BENCH_RUNTIME/report/screens/session-cursor-grok4.5-high-dev10x-evidence-tab.png",
     "evidence_rendered_screenshots": 5,
-    "evidence_rendered_videos": 2
+    "evidence_rendered_videos": 2,
+    "rendered_brand": {
+      "logo": {
+        "path": "/dev10x/dev10x_logo_color.png",
+        "loaded": true,
+        "natural_width": 914,
+        "natural_height": 220,
+        "sha256": "5dcd0a5baafec855f5d18f1b125fe2ac739fd2c81ac49c523e657dbe0e51b489"
+      },
+      "palette": {
+        "expected": {
+          "ink": "#0F172A",
+          "violet": "#7C3AED",
+          "blue": "#2563EB",
+          "cyan": "#38BDF8",
+          "white": "#FFFFFF"
+        },
+        "observed": [
+          "ink",
+          "violet",
+          "cyan",
+          "white"
+        ],
+        "missing": [
+          "blue"
+        ],
+        "coverage": "4/5",
+        "complete": false,
+        "passed": true
+      }
+    }
   },
   {
     "id": "session-claude-opus5-high-dev10x",
@@ -215,7 +333,7 @@
     "url": "http://127.0.0.1:23002/",
     "manifest": {
       "issue": "DEV-3",
-      "generated_at": "2026-07-27T17:26:57.064Z",
+      "generated_at": "2026-07-27T17:58:27.737Z",
       "ui_change": true,
       "runs": [
         {
@@ -293,7 +411,36 @@
             "title": "session-claude-opus5-high-dev10x landing page walkthrough",
             "desktop_viewport": "1280x720",
             "mobile_viewport": "390x844",
-            "full_page": true
+            "full_page": true,
+            "rendered_brand": {
+              "logo": {
+                "path": "/dev10x/dev10x_logo_color.png",
+                "loaded": true,
+                "natural_width": 914,
+                "natural_height": 220,
+                "sha256": "5dcd0a5baafec855f5d18f1b125fe2ac739fd2c81ac49c523e657dbe0e51b489"
+              },
+              "palette": {
+                "expected": {
+                  "ink": "#0F172A",
+                  "violet": "#7C3AED",
+                  "blue": "#2563EB",
+                  "cyan": "#38BDF8",
+                  "white": "#FFFFFF"
+                },
+                "observed": [
+                  "ink",
+                  "violet",
+                  "blue",
+                  "cyan",
+                  "white"
+                ],
+                "missing": [],
+                "coverage": "5/5",
+                "complete": true,
+                "passed": true
+              }
+            }
           }
         }
       ]
@@ -306,13 +453,42 @@
     "video": "$SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-3__p1/.symphony/evidence/artifacts/videos/session-claude-opus5-high-dev10x-e2e.webm",
     "mp4": "$SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-3__p1/.symphony/evidence/artifacts/videos/session-claude-opus5-high-dev10x-e2e.mp4",
     "trace": "$SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-3__p1/.symphony/evidence/artifacts/traces/session-claude-opus5-high-dev10x-e2e.zip",
-    "evidence_run_id": "20260727172657-897858",
+    "evidence_run_id": "20260727175827-255940",
     "evidence_issue_identifier": "DEV-3",
     "evidence_tab_verified": true,
     "evidence_tab_route": "http://127.0.0.1:4010/tracker/projects/dev10x-landing-benchmark/board/issues/DEV-3/evidence",
     "evidence_tab_screenshot": "$SYMPHONY_BENCH_RUNTIME/report/screens/session-claude-opus5-high-dev10x-evidence-tab.png",
     "evidence_rendered_screenshots": 5,
-    "evidence_rendered_videos": 2
+    "evidence_rendered_videos": 2,
+    "rendered_brand": {
+      "logo": {
+        "path": "/dev10x/dev10x_logo_color.png",
+        "loaded": true,
+        "natural_width": 914,
+        "natural_height": 220,
+        "sha256": "5dcd0a5baafec855f5d18f1b125fe2ac739fd2c81ac49c523e657dbe0e51b489"
+      },
+      "palette": {
+        "expected": {
+          "ink": "#0F172A",
+          "violet": "#7C3AED",
+          "blue": "#2563EB",
+          "cyan": "#38BDF8",
+          "white": "#FFFFFF"
+        },
+        "observed": [
+          "ink",
+          "violet",
+          "blue",
+          "cyan",
+          "white"
+        ],
+        "missing": [],
+        "coverage": "5/5",
+        "complete": true,
+        "passed": true
+      }
+    }
   },
   {
     "id": "orchestrator-codex-gpt5.6.sol-high-dev10x",
@@ -320,7 +496,7 @@
     "url": "http://127.0.0.1:23003/",
     "manifest": {
       "issue": "DEV-4",
-      "generated_at": "2026-07-27T17:33:21.306Z",
+      "generated_at": "2026-07-27T17:58:38.331Z",
       "ui_change": true,
       "runs": [
         {
@@ -398,7 +574,36 @@
             "title": "orchestrator-codex-gpt5.6.sol-high-dev10x landing page walkthrough",
             "desktop_viewport": "1280x720",
             "mobile_viewport": "390x844",
-            "full_page": true
+            "full_page": true,
+            "rendered_brand": {
+              "logo": {
+                "path": "/dev10x/dev10x_logo_color.png",
+                "loaded": true,
+                "natural_width": 914,
+                "natural_height": 220,
+                "sha256": "5dcd0a5baafec855f5d18f1b125fe2ac739fd2c81ac49c523e657dbe0e51b489"
+              },
+              "palette": {
+                "expected": {
+                  "ink": "#0F172A",
+                  "violet": "#7C3AED",
+                  "blue": "#2563EB",
+                  "cyan": "#38BDF8",
+                  "white": "#FFFFFF"
+                },
+                "observed": [
+                  "ink",
+                  "violet",
+                  "blue",
+                  "cyan",
+                  "white"
+                ],
+                "missing": [],
+                "coverage": "5/5",
+                "complete": true,
+                "passed": true
+              }
+            }
           }
         }
       ]
@@ -411,13 +616,42 @@
     "video": "$SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-4/.symphony/evidence/artifacts/videos/orchestrator-codex-gpt5.6.sol-high-dev10x-e2e.webm",
     "mp4": "$SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-4/.symphony/evidence/artifacts/videos/orchestrator-codex-gpt5.6.sol-high-dev10x-e2e.mp4",
     "trace": "$SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-4/.symphony/evidence/artifacts/traces/orchestrator-codex-gpt5.6.sol-high-dev10x-e2e.zip",
-    "evidence_run_id": "20260727173321-916866",
+    "evidence_run_id": "20260727175838-260548",
     "evidence_issue_identifier": "DEV-4",
     "evidence_tab_verified": true,
     "evidence_tab_route": "http://127.0.0.1:4010/tracker/projects/dev10x-landing-benchmark/board/issues/DEV-4/evidence",
     "evidence_tab_screenshot": "$SYMPHONY_BENCH_RUNTIME/report/screens/orchestrator-codex-gpt5.6.sol-high-dev10x-evidence-tab.png",
     "evidence_rendered_screenshots": 5,
-    "evidence_rendered_videos": 2
+    "evidence_rendered_videos": 2,
+    "rendered_brand": {
+      "logo": {
+        "path": "/dev10x/dev10x_logo_color.png",
+        "loaded": true,
+        "natural_width": 914,
+        "natural_height": 220,
+        "sha256": "5dcd0a5baafec855f5d18f1b125fe2ac739fd2c81ac49c523e657dbe0e51b489"
+      },
+      "palette": {
+        "expected": {
+          "ink": "#0F172A",
+          "violet": "#7C3AED",
+          "blue": "#2563EB",
+          "cyan": "#38BDF8",
+          "white": "#FFFFFF"
+        },
+        "observed": [
+          "ink",
+          "violet",
+          "blue",
+          "cyan",
+          "white"
+        ],
+        "missing": [],
+        "coverage": "5/5",
+        "complete": true,
+        "passed": true
+      }
+    }
   },
   {
     "id": "orchestrator-cursor-grok4.5-high-dev10x",
@@ -425,7 +659,7 @@
     "url": "http://127.0.0.1:23004/",
     "manifest": {
       "issue": "DEV-5",
-      "generated_at": "2026-07-27T17:27:04.735Z",
+      "generated_at": "2026-07-27T17:58:45.855Z",
       "ui_change": true,
       "runs": [
         {
@@ -503,7 +737,36 @@
             "title": "orchestrator-cursor-grok4.5-high-dev10x landing page walkthrough",
             "desktop_viewport": "1280x720",
             "mobile_viewport": "390x844",
-            "full_page": true
+            "full_page": true,
+            "rendered_brand": {
+              "logo": {
+                "path": "/dev10x/dev10x_logo_color.png",
+                "loaded": true,
+                "natural_width": 914,
+                "natural_height": 220,
+                "sha256": "5dcd0a5baafec855f5d18f1b125fe2ac739fd2c81ac49c523e657dbe0e51b489"
+              },
+              "palette": {
+                "expected": {
+                  "ink": "#0F172A",
+                  "violet": "#7C3AED",
+                  "blue": "#2563EB",
+                  "cyan": "#38BDF8",
+                  "white": "#FFFFFF"
+                },
+                "observed": [
+                  "ink",
+                  "violet",
+                  "blue",
+                  "cyan",
+                  "white"
+                ],
+                "missing": [],
+                "coverage": "5/5",
+                "complete": true,
+                "passed": true
+              }
+            }
           }
         }
       ]
@@ -516,13 +779,42 @@
     "video": "$SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-5/.symphony/evidence/artifacts/videos/orchestrator-cursor-grok4.5-high-dev10x-e2e.webm",
     "mp4": "$SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-5/.symphony/evidence/artifacts/videos/orchestrator-cursor-grok4.5-high-dev10x-e2e.mp4",
     "trace": "$SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-5/.symphony/evidence/artifacts/traces/orchestrator-cursor-grok4.5-high-dev10x-e2e.zip",
-    "evidence_run_id": "20260727172704-351747",
+    "evidence_run_id": "20260727175845-267268",
     "evidence_issue_identifier": "DEV-5",
     "evidence_tab_verified": true,
     "evidence_tab_route": "http://127.0.0.1:4010/tracker/projects/dev10x-landing-benchmark/board/issues/DEV-5/evidence",
     "evidence_tab_screenshot": "$SYMPHONY_BENCH_RUNTIME/report/screens/orchestrator-cursor-grok4.5-high-dev10x-evidence-tab.png",
     "evidence_rendered_screenshots": 5,
-    "evidence_rendered_videos": 2
+    "evidence_rendered_videos": 2,
+    "rendered_brand": {
+      "logo": {
+        "path": "/dev10x/dev10x_logo_color.png",
+        "loaded": true,
+        "natural_width": 914,
+        "natural_height": 220,
+        "sha256": "5dcd0a5baafec855f5d18f1b125fe2ac739fd2c81ac49c523e657dbe0e51b489"
+      },
+      "palette": {
+        "expected": {
+          "ink": "#0F172A",
+          "violet": "#7C3AED",
+          "blue": "#2563EB",
+          "cyan": "#38BDF8",
+          "white": "#FFFFFF"
+        },
+        "observed": [
+          "ink",
+          "violet",
+          "blue",
+          "cyan",
+          "white"
+        ],
+        "missing": [],
+        "coverage": "5/5",
+        "complete": true,
+        "passed": true
+      }
+    }
   },
   {
     "id": "orchestrator-claude-opus5-high-dev10x",
@@ -530,7 +822,7 @@
     "url": "http://127.0.0.1:23005/",
     "manifest": {
       "issue": "DEV-6",
-      "generated_at": "2026-07-27T17:33:33.090Z",
+      "generated_at": "2026-07-27T17:58:53.861Z",
       "ui_change": true,
       "runs": [
         {
@@ -608,7 +900,36 @@
             "title": "orchestrator-claude-opus5-high-dev10x landing page walkthrough",
             "desktop_viewport": "1280x720",
             "mobile_viewport": "390x844",
-            "full_page": true
+            "full_page": true,
+            "rendered_brand": {
+              "logo": {
+                "path": "/dev10x/dev10x_logo_color.png",
+                "loaded": true,
+                "natural_width": 914,
+                "natural_height": 220,
+                "sha256": "5dcd0a5baafec855f5d18f1b125fe2ac739fd2c81ac49c523e657dbe0e51b489"
+              },
+              "palette": {
+                "expected": {
+                  "ink": "#0F172A",
+                  "violet": "#7C3AED",
+                  "blue": "#2563EB",
+                  "cyan": "#38BDF8",
+                  "white": "#FFFFFF"
+                },
+                "observed": [
+                  "ink",
+                  "violet",
+                  "blue",
+                  "cyan",
+                  "white"
+                ],
+                "missing": [],
+                "coverage": "5/5",
+                "complete": true,
+                "passed": true
+              }
+            }
           }
         }
       ]
@@ -621,12 +942,41 @@
     "video": "$SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-6/.symphony/evidence/artifacts/videos/orchestrator-claude-opus5-high-dev10x-e2e.webm",
     "mp4": "$SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-6/.symphony/evidence/artifacts/videos/orchestrator-claude-opus5-high-dev10x-e2e.mp4",
     "trace": "$SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-6/.symphony/evidence/artifacts/traces/orchestrator-claude-opus5-high-dev10x-e2e.zip",
-    "evidence_run_id": "20260727173333-925314",
+    "evidence_run_id": "20260727175853-273348",
     "evidence_issue_identifier": "DEV-6",
     "evidence_tab_verified": true,
     "evidence_tab_route": "http://127.0.0.1:4010/tracker/projects/dev10x-landing-benchmark/board/issues/DEV-6/evidence",
     "evidence_tab_screenshot": "$SYMPHONY_BENCH_RUNTIME/report/screens/orchestrator-claude-opus5-high-dev10x-evidence-tab.png",
     "evidence_rendered_screenshots": 5,
-    "evidence_rendered_videos": 2
+    "evidence_rendered_videos": 2,
+    "rendered_brand": {
+      "logo": {
+        "path": "/dev10x/dev10x_logo_color.png",
+        "loaded": true,
+        "natural_width": 914,
+        "natural_height": 220,
+        "sha256": "5dcd0a5baafec855f5d18f1b125fe2ac739fd2c81ac49c523e657dbe0e51b489"
+      },
+      "palette": {
+        "expected": {
+          "ink": "#0F172A",
+          "violet": "#7C3AED",
+          "blue": "#2563EB",
+          "cyan": "#38BDF8",
+          "white": "#FFFFFF"
+        },
+        "observed": [
+          "ink",
+          "violet",
+          "blue",
+          "cyan",
+          "white"
+        ],
+        "missing": [],
+        "coverage": "5/5",
+        "complete": true,
+        "passed": true
+      }
+    }
   }
 ]

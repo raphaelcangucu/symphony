@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import test from "node:test";
 
@@ -8,6 +9,7 @@ import { tmpdir } from "node:os";
 
 import * as collectModule from "../src/collect.mjs";
 import {
+  comparisonHasFailures,
   executeValidation,
   formatDuration,
   gitFacts,
@@ -190,6 +192,77 @@ test("renderComparison preserves blocked cells and the shared prompt hash", () =
   assert.match(report, /orchestrator-claude.*missing: favicon\.svg/);
   assert.match(report, /1s/);
   assert.match(report, /Revisão visual humana/);
+});
+
+test("collection CLI fails when any canonical contract is incomplete", () => {
+  const passed = {
+    status: "completed",
+    contract_passed: true,
+    brand: { passed: true },
+    identity: { provider_matches: true },
+    validation: [
+      { status: "passed" },
+      { status: "passed" },
+      { status: "passed" },
+    ],
+  };
+
+  assert.equal(comparisonHasFailures({ rows: [passed] }), false);
+  assert.equal(
+    comparisonHasFailures({
+      rows: [{ ...passed, status: "blocked" }],
+    }),
+    true,
+  );
+  assert.equal(
+    comparisonHasFailures({
+      rows: [{ ...passed, brand: { passed: false } }],
+    }),
+    true,
+  );
+  assert.equal(
+    comparisonHasFailures({
+      rows: [{ ...passed, validation: [{ status: "failed" }] }],
+    }),
+    true,
+  );
+  assert.equal(comparisonHasFailures({ rows: [] }), true);
+});
+
+test("collection process exits nonzero for an incomplete canonical row", async () => {
+  const runtime = await mkdtemp(join(tmpdir(), "symphony-collect-cli-"));
+  const workspace = join(runtime, "workspaces", "project", "DEV-1", "site");
+  await mkdir(join(runtime, "results"), { recursive: true });
+  await mkdir(workspace, { recursive: true });
+  await writeFile(
+    join(runtime, "runs.json"),
+    JSON.stringify({
+      runtime_root: runtime,
+      project_slug: "project",
+      prompt_sha256: "prompt",
+      brand: { assets: {} },
+      runs: [
+        {
+          id: "orchestrator-codex-test",
+          matrix: "test",
+          path: "orchestrator",
+          provider: "codex",
+          issue_identifier: "DEV-1",
+          requested_model: "gpt-test",
+          requested_effort: "high",
+        },
+      ],
+    }),
+  );
+
+  const result = spawnSync(process.execPath, ["src/collect.mjs"], {
+    cwd: process.cwd(),
+    env: { ...process.env, SYMPHONY_BENCH_RUNTIME: runtime },
+    encoding: "utf8",
+  });
+
+  assert.equal(result.status, 1, result.stderr);
+  assert.match(result.stdout, /"contract_passed": false/);
 });
 
 test("formatDuration renders benchmark timings for humans", () => {

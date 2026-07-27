@@ -20,6 +20,8 @@ clicar.
 [![Vídeo E2E](videos/session-codex-gpt5.6.sol-high-dev10x-e2e-preview.gif)](videos/session-codex-gpt5.6.sol-high-dev10x-e2e.mp4)
 
 [Abrir MP4](videos/session-codex-gpt5.6.sol-high-dev10x-e2e.mp4)
+[WebM original](videos/session-codex-gpt5.6.sol-high-dev10x-e2e.webm) ·
+[Trace](traces/session-codex-gpt5.6.sol-high-dev10x-e2e.zip)
 
 ## session-cursor-grok4.5-high-dev10x
 
@@ -33,6 +35,8 @@ clicar.
 [![Vídeo E2E](videos/session-cursor-grok4.5-high-dev10x-e2e-preview.gif)](videos/session-cursor-grok4.5-high-dev10x-e2e.mp4)
 
 [Abrir MP4](videos/session-cursor-grok4.5-high-dev10x-e2e.mp4)
+[WebM original](videos/session-cursor-grok4.5-high-dev10x-e2e.webm) ·
+[Trace](traces/session-cursor-grok4.5-high-dev10x-e2e.zip)
 
 ## session-claude-opus5-high-dev10x
 
@@ -46,6 +50,8 @@ clicar.
 [![Vídeo E2E](videos/session-claude-opus5-high-dev10x-e2e-preview.gif)](videos/session-claude-opus5-high-dev10x-e2e.mp4)
 
 [Abrir MP4](videos/session-claude-opus5-high-dev10x-e2e.mp4)
+[WebM original](videos/session-claude-opus5-high-dev10x-e2e.webm) ·
+[Trace](traces/session-claude-opus5-high-dev10x-e2e.zip)
 
 ## orchestrator-codex-gpt5.6.sol-high-dev10x
 
@@ -59,6 +65,8 @@ clicar.
 [![Vídeo E2E](videos/orchestrator-codex-gpt5.6.sol-high-dev10x-e2e-preview.gif)](videos/orchestrator-codex-gpt5.6.sol-high-dev10x-e2e.mp4)
 
 [Abrir MP4](videos/orchestrator-codex-gpt5.6.sol-high-dev10x-e2e.mp4)
+[WebM original](videos/orchestrator-codex-gpt5.6.sol-high-dev10x-e2e.webm) ·
+[Trace](traces/orchestrator-codex-gpt5.6.sol-high-dev10x-e2e.zip)
 
 ## orchestrator-cursor-grok4.5-high-dev10x
 
@@ -72,6 +80,8 @@ clicar.
 [![Vídeo E2E](videos/orchestrator-cursor-grok4.5-high-dev10x-e2e-preview.gif)](videos/orchestrator-cursor-grok4.5-high-dev10x-e2e.mp4)
 
 [Abrir MP4](videos/orchestrator-cursor-grok4.5-high-dev10x-e2e.mp4)
+[WebM original](videos/orchestrator-cursor-grok4.5-high-dev10x-e2e.webm) ·
+[Trace](traces/orchestrator-cursor-grok4.5-high-dev10x-e2e.zip)
 
 ## orchestrator-claude-opus5-high-dev10x
 
@@ -85,3 +95,5 @@ clicar.
 [![Vídeo E2E](videos/orchestrator-claude-opus5-high-dev10x-e2e-preview.gif)](videos/orchestrator-claude-opus5-high-dev10x-e2e.mp4)
 
 [Abrir MP4](videos/orchestrator-claude-opus5-high-dev10x-e2e.mp4)
+[WebM original](videos/orchestrator-claude-opus5-high-dev10x-e2e.webm) ·
+[Trace](traces/orchestrator-claude-opus5-high-dev10x-e2e.zip)

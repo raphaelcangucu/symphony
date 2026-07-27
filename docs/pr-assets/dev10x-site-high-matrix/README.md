@@ -15,8 +15,11 @@ substituição de modelo na evidência oficial.
 - 18/18 etapas independentes de instalação, build e E2E aprovadas;
 - 36 screenshots PNG;
 - 6 vídeos WebM canônicos, 6 MP4 H.264 e 6 prévias GIF;
-- 6 traces Playwright íntegros;
+- 6 traces Playwright íntegros e versionados;
 - 6/6 runs reabertos e renderizados na aba Evidências real do Symphony.
+- 6 logos oficiais carregados no DOM com o SHA canônico;
+- 29/30 usos da paleta observados em estilos computados;
+- 6 snapshots de código-fonte para reproduzir a auditoria técnica.
 
 O vencedor foi
 **`session-codex-gpt5.6.sol-high-dev10x` (97/100)** pelo melhor equilíbrio
@@ -36,6 +39,8 @@ qualidade técnica.
 - [Versões e contratos dos providers](provider-versions.json)
 - [Hashes da mídia canônica](media-sha256.txt)
 - [Hashes dos traces canônicos](trace-sha256.txt)
+- [Hashes dos snapshots de fonte](source-sha256.txt)
+- [Fontes gerados e metodologia de auditoria](sources/README.md)
 
 ## Matriz
 

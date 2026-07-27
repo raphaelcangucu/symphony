@@ -602,7 +602,7 @@ Score each cell out of 100:
 Document evidence for every score, rank all six sites, identify the strongest
 session and orchestrator outputs, and choose the final winner only now.
 
-- [ ] **Step 3: Run final focused verification**
+- [x] **Step 3: Run final focused verification**
 
 Run:
 
