@@ -37,5 +37,8 @@ jobs:
       - name: Verify focused quality gates
         run: make ci-fast
 
+      - name: Install benchmark dependencies
+        run: npm ci --ignore-scripts --prefix ../benchmarks/landing-page-agent-comparison
+
       - name: Verify benchmark harness
         run: npm test --prefix ../benchmarks/landing-page-agent-comparison
