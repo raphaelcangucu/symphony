@@ -1,0 +1,6 @@
+8aa043a224a9df6f38139ed52cde5a99b121dc9f0ea671a9bd514e646eab2d42  $SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-1__p1/.symphony/evidence/artifacts/traces/session-codex-gpt5.6.sol-high-dev10x-e2e.zip
+82231ea30cd7532b3fb3636887f4140395f3d7d45b6dc7bbf6220dd79717fbcd  $SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-2__p1/.symphony/evidence/artifacts/traces/session-cursor-grok4.5-high-dev10x-e2e.zip
+60dc068c31d14e087ee5cace9817183515bb446bb0e5801603bd8ef27f887c79  $SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-3__p1/.symphony/evidence/artifacts/traces/session-claude-opus5-high-dev10x-e2e.zip
+8fce44fbe2154e1c947053a130819db5cee240b298e00aa0cf3966c029de198f  $SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-4/.symphony/evidence/artifacts/traces/orchestrator-codex-gpt5.6.sol-high-dev10x-e2e.zip
+8d21b61f850d4ca192c0678e8cc79e9f21d1757e5e27fe19754186b0db9dbe92  $SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-5/.symphony/evidence/artifacts/traces/orchestrator-cursor-grok4.5-high-dev10x-e2e.zip
+2278ee89ba9766d658c532f040c8c10e5e535b2014f98ad4124c16aef5cec7eb  $SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-6/.symphony/evidence/artifacts/traces/orchestrator-claude-opus5-high-dev10x-e2e.zip

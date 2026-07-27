@@ -1,0 +1,632 @@
+[
+  {
+    "id": "session-codex-gpt5.6.sol-high-dev10x",
+    "status": "captured",
+    "url": "http://127.0.0.1:23000/",
+    "manifest": {
+      "issue": "DEV-1",
+      "generated_at": "2026-07-27T17:26:49.319Z",
+      "ui_change": true,
+      "runs": [
+        {
+          "kind": "unit",
+          "repo": "site",
+          "command": "npm run build",
+          "status": "passed",
+          "report": "artifacts/reports/build.txt",
+          "duration_ms": 2190
+        },
+        {
+          "kind": "e2e",
+          "repo": "site",
+          "command": "npm run test:e2e",
+          "status": "passed",
+          "report": "artifacts/reports/e2e.txt",
+          "screenshots": [
+            {
+              "path": "artifacts/screens/session-codex-gpt5.6.sol-high-dev10x-hero.png",
+              "label": "session-codex-gpt5.6.sol-high-dev10x landing page walkthrough hero",
+              "navigations": [
+                "http://127.0.0.1:23000/"
+              ]
+            },
+            {
+              "path": "artifacts/screens/session-codex-gpt5.6.sol-high-dev10x-flow.png",
+              "label": "session-codex-gpt5.6.sol-high-dev10x landing page walkthrough flow",
+              "navigations": [
+                "http://127.0.0.1:23000/"
+              ]
+            },
+            {
+              "path": "artifacts/screens/session-codex-gpt5.6.sol-high-dev10x-site-evidence.png",
+              "label": "session-codex-gpt5.6.sol-high-dev10x landing page walkthrough evidence section",
+              "navigations": [
+                "http://127.0.0.1:23000/"
+              ]
+            },
+            {
+              "path": "artifacts/screens/session-codex-gpt5.6.sol-high-dev10x-full.png",
+              "label": "session-codex-gpt5.6.sol-high-dev10x landing page walkthrough desktop full page",
+              "navigations": [
+                "http://127.0.0.1:23000/"
+              ]
+            },
+            {
+              "path": "artifacts/screens/session-codex-gpt5.6.sol-high-dev10x-mobile-full.png",
+              "label": "session-codex-gpt5.6.sol-high-dev10x landing page walkthrough mobile full page",
+              "navigations": [
+                "http://127.0.0.1:23000/"
+              ]
+            }
+          ],
+          "videos": [
+            {
+              "path": "artifacts/videos/session-codex-gpt5.6.sol-high-dev10x-e2e.webm",
+              "label": "session-codex-gpt5.6.sol-high-dev10x landing page walkthrough WebM source",
+              "navigations": [
+                "http://127.0.0.1:23000/"
+              ]
+            },
+            {
+              "path": "artifacts/videos/session-codex-gpt5.6.sol-high-dev10x-e2e.mp4",
+              "label": "session-codex-gpt5.6.sol-high-dev10x landing page walkthrough MP4 H.264",
+              "navigations": [
+                "http://127.0.0.1:23000/"
+              ]
+            }
+          ],
+          "trace": "artifacts/traces/session-codex-gpt5.6.sol-high-dev10x-e2e.zip",
+          "navigations": [
+            "http://127.0.0.1:23000/"
+          ],
+          "proof": {
+            "title": "session-codex-gpt5.6.sol-high-dev10x landing page walkthrough",
+            "desktop_viewport": "1280x720",
+            "mobile_viewport": "390x844",
+            "full_page": true
+          }
+        }
+      ]
+    },
+    "hero": "$SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-1__p1/.symphony/evidence/artifacts/screens/session-codex-gpt5.6.sol-high-dev10x-hero.png",
+    "flow": "$SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-1__p1/.symphony/evidence/artifacts/screens/session-codex-gpt5.6.sol-high-dev10x-flow.png",
+    "site_evidence": "$SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-1__p1/.symphony/evidence/artifacts/screens/session-codex-gpt5.6.sol-high-dev10x-site-evidence.png",
+    "full": "$SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-1__p1/.symphony/evidence/artifacts/screens/session-codex-gpt5.6.sol-high-dev10x-full.png",
+    "mobile_full": "$SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-1__p1/.symphony/evidence/artifacts/screens/session-codex-gpt5.6.sol-high-dev10x-mobile-full.png",
+    "video": "$SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-1__p1/.symphony/evidence/artifacts/videos/session-codex-gpt5.6.sol-high-dev10x-e2e.webm",
+    "mp4": "$SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-1__p1/.symphony/evidence/artifacts/videos/session-codex-gpt5.6.sol-high-dev10x-e2e.mp4",
+    "trace": "$SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-1__p1/.symphony/evidence/artifacts/traces/session-codex-gpt5.6.sol-high-dev10x-e2e.zip",
+    "evidence_run_id": "20260727172649-342211",
+    "evidence_issue_identifier": "DEV-1",
+    "evidence_tab_verified": true,
+    "evidence_tab_route": "http://127.0.0.1:4010/tracker/projects/dev10x-landing-benchmark/board/issues/DEV-1/evidence",
+    "evidence_tab_screenshot": "$SYMPHONY_BENCH_RUNTIME/report/screens/session-codex-gpt5.6.sol-high-dev10x-evidence-tab.png",
+    "evidence_rendered_screenshots": 5,
+    "evidence_rendered_videos": 2
+  },
+  {
+    "id": "session-cursor-grok4.5-high-dev10x",
+    "status": "captured",
+    "url": "http://127.0.0.1:23001/",
+    "manifest": {
+      "issue": "DEV-2",
+      "generated_at": "2026-07-27T17:31:13.780Z",
+      "ui_change": true,
+      "runs": [
+        {
+          "kind": "unit",
+          "repo": "site",
+          "command": "npm run build",
+          "status": "passed",
+          "report": "artifacts/reports/build.txt",
+          "duration_ms": 2030
+        },
+        {
+          "kind": "e2e",
+          "repo": "site",
+          "command": "npm run test:e2e",
+          "status": "passed",
+          "report": "artifacts/reports/e2e.txt",
+          "screenshots": [
+            {
+              "path": "artifacts/screens/session-cursor-grok4.5-high-dev10x-hero.png",
+              "label": "session-cursor-grok4.5-high-dev10x landing page walkthrough hero",
+              "navigations": [
+                "http://127.0.0.1:23001/"
+              ]
+            },
+            {
+              "path": "artifacts/screens/session-cursor-grok4.5-high-dev10x-flow.png",
+              "label": "session-cursor-grok4.5-high-dev10x landing page walkthrough flow",
+              "navigations": [
+                "http://127.0.0.1:23001/"
+              ]
+            },
+            {
+              "path": "artifacts/screens/session-cursor-grok4.5-high-dev10x-site-evidence.png",
+              "label": "session-cursor-grok4.5-high-dev10x landing page walkthrough evidence section",
+              "navigations": [
+                "http://127.0.0.1:23001/"
+              ]
+            },
+            {
+              "path": "artifacts/screens/session-cursor-grok4.5-high-dev10x-full.png",
+              "label": "session-cursor-grok4.5-high-dev10x landing page walkthrough desktop full page",
+              "navigations": [
+                "http://127.0.0.1:23001/"
+              ]
+            },
+            {
+              "path": "artifacts/screens/session-cursor-grok4.5-high-dev10x-mobile-full.png",
+              "label": "session-cursor-grok4.5-high-dev10x landing page walkthrough mobile full page",
+              "navigations": [
+                "http://127.0.0.1:23001/"
+              ]
+            }
+          ],
+          "videos": [
+            {
+              "path": "artifacts/videos/session-cursor-grok4.5-high-dev10x-e2e.webm",
+              "label": "session-cursor-grok4.5-high-dev10x landing page walkthrough WebM source",
+              "navigations": [
+                "http://127.0.0.1:23001/"
+              ]
+            },
+            {
+              "path": "artifacts/videos/session-cursor-grok4.5-high-dev10x-e2e.mp4",
+              "label": "session-cursor-grok4.5-high-dev10x landing page walkthrough MP4 H.264",
+              "navigations": [
+                "http://127.0.0.1:23001/"
+              ]
+            }
+          ],
+          "trace": "artifacts/traces/session-cursor-grok4.5-high-dev10x-e2e.zip",
+          "navigations": [
+            "http://127.0.0.1:23001/"
+          ],
+          "proof": {
+            "title": "session-cursor-grok4.5-high-dev10x landing page walkthrough",
+            "desktop_viewport": "1280x720",
+            "mobile_viewport": "390x844",
+            "full_page": true
+          }
+        }
+      ]
+    },
+    "hero": "$SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-2__p1/.symphony/evidence/artifacts/screens/session-cursor-grok4.5-high-dev10x-hero.png",
+    "flow": "$SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-2__p1/.symphony/evidence/artifacts/screens/session-cursor-grok4.5-high-dev10x-flow.png",
+    "site_evidence": "$SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-2__p1/.symphony/evidence/artifacts/screens/session-cursor-grok4.5-high-dev10x-site-evidence.png",
+    "full": "$SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-2__p1/.symphony/evidence/artifacts/screens/session-cursor-grok4.5-high-dev10x-full.png",
+    "mobile_full": "$SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-2__p1/.symphony/evidence/artifacts/screens/session-cursor-grok4.5-high-dev10x-mobile-full.png",
+    "video": "$SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-2__p1/.symphony/evidence/artifacts/videos/session-cursor-grok4.5-high-dev10x-e2e.webm",
+    "mp4": "$SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-2__p1/.symphony/evidence/artifacts/videos/session-cursor-grok4.5-high-dev10x-e2e.mp4",
+    "trace": "$SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-2__p1/.symphony/evidence/artifacts/traces/session-cursor-grok4.5-high-dev10x-e2e.zip",
+    "evidence_run_id": "20260727173113-911106",
+    "evidence_issue_identifier": "DEV-2",
+    "evidence_tab_verified": true,
+    "evidence_tab_route": "http://127.0.0.1:4010/tracker/projects/dev10x-landing-benchmark/board/issues/DEV-2/evidence",
+    "evidence_tab_screenshot": "$SYMPHONY_BENCH_RUNTIME/report/screens/session-cursor-grok4.5-high-dev10x-evidence-tab.png",
+    "evidence_rendered_screenshots": 5,
+    "evidence_rendered_videos": 2
+  },
+  {
+    "id": "session-claude-opus5-high-dev10x",
+    "status": "captured",
+    "url": "http://127.0.0.1:23002/",
+    "manifest": {
+      "issue": "DEV-3",
+      "generated_at": "2026-07-27T17:26:57.064Z",
+      "ui_change": true,
+      "runs": [
+        {
+          "kind": "unit",
+          "repo": "site",
+          "command": "npm run build",
+          "status": "passed",
+          "report": "artifacts/reports/build.txt",
+          "duration_ms": 1561
+        },
+        {
+          "kind": "e2e",
+          "repo": "site",
+          "command": "npm run test:e2e",
+          "status": "passed",
+          "report": "artifacts/reports/e2e.txt",
+          "screenshots": [
+            {
+              "path": "artifacts/screens/session-claude-opus5-high-dev10x-hero.png",
+              "label": "session-claude-opus5-high-dev10x landing page walkthrough hero",
+              "navigations": [
+                "http://127.0.0.1:23002/"
+              ]
+            },
+            {
+              "path": "artifacts/screens/session-claude-opus5-high-dev10x-flow.png",
+              "label": "session-claude-opus5-high-dev10x landing page walkthrough flow",
+              "navigations": [
+                "http://127.0.0.1:23002/"
+              ]
+            },
+            {
+              "path": "artifacts/screens/session-claude-opus5-high-dev10x-site-evidence.png",
+              "label": "session-claude-opus5-high-dev10x landing page walkthrough evidence section",
+              "navigations": [
+                "http://127.0.0.1:23002/"
+              ]
+            },
+            {
+              "path": "artifacts/screens/session-claude-opus5-high-dev10x-full.png",
+              "label": "session-claude-opus5-high-dev10x landing page walkthrough desktop full page",
+              "navigations": [
+                "http://127.0.0.1:23002/"
+              ]
+            },
+            {
+              "path": "artifacts/screens/session-claude-opus5-high-dev10x-mobile-full.png",
+              "label": "session-claude-opus5-high-dev10x landing page walkthrough mobile full page",
+              "navigations": [
+                "http://127.0.0.1:23002/"
+              ]
+            }
+          ],
+          "videos": [
+            {
+              "path": "artifacts/videos/session-claude-opus5-high-dev10x-e2e.webm",
+              "label": "session-claude-opus5-high-dev10x landing page walkthrough WebM source",
+              "navigations": [
+                "http://127.0.0.1:23002/"
+              ]
+            },
+            {
+              "path": "artifacts/videos/session-claude-opus5-high-dev10x-e2e.mp4",
+              "label": "session-claude-opus5-high-dev10x landing page walkthrough MP4 H.264",
+              "navigations": [
+                "http://127.0.0.1:23002/"
+              ]
+            }
+          ],
+          "trace": "artifacts/traces/session-claude-opus5-high-dev10x-e2e.zip",
+          "navigations": [
+            "http://127.0.0.1:23002/"
+          ],
+          "proof": {
+            "title": "session-claude-opus5-high-dev10x landing page walkthrough",
+            "desktop_viewport": "1280x720",
+            "mobile_viewport": "390x844",
+            "full_page": true
+          }
+        }
+      ]
+    },
+    "hero": "$SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-3__p1/.symphony/evidence/artifacts/screens/session-claude-opus5-high-dev10x-hero.png",
+    "flow": "$SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-3__p1/.symphony/evidence/artifacts/screens/session-claude-opus5-high-dev10x-flow.png",
+    "site_evidence": "$SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-3__p1/.symphony/evidence/artifacts/screens/session-claude-opus5-high-dev10x-site-evidence.png",
+    "full": "$SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-3__p1/.symphony/evidence/artifacts/screens/session-claude-opus5-high-dev10x-full.png",
+    "mobile_full": "$SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-3__p1/.symphony/evidence/artifacts/screens/session-claude-opus5-high-dev10x-mobile-full.png",
+    "video": "$SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-3__p1/.symphony/evidence/artifacts/videos/session-claude-opus5-high-dev10x-e2e.webm",
+    "mp4": "$SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-3__p1/.symphony/evidence/artifacts/videos/session-claude-opus5-high-dev10x-e2e.mp4",
+    "trace": "$SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-3__p1/.symphony/evidence/artifacts/traces/session-claude-opus5-high-dev10x-e2e.zip",
+    "evidence_run_id": "20260727172657-897858",
+    "evidence_issue_identifier": "DEV-3",
+    "evidence_tab_verified": true,
+    "evidence_tab_route": "http://127.0.0.1:4010/tracker/projects/dev10x-landing-benchmark/board/issues/DEV-3/evidence",
+    "evidence_tab_screenshot": "$SYMPHONY_BENCH_RUNTIME/report/screens/session-claude-opus5-high-dev10x-evidence-tab.png",
+    "evidence_rendered_screenshots": 5,
+    "evidence_rendered_videos": 2
+  },
+  {
+    "id": "orchestrator-codex-gpt5.6.sol-high-dev10x",
+    "status": "captured",
+    "url": "http://127.0.0.1:23003/",
+    "manifest": {
+      "issue": "DEV-4",
+      "generated_at": "2026-07-27T17:33:21.306Z",
+      "ui_change": true,
+      "runs": [
+        {
+          "kind": "unit",
+          "repo": "site",
+          "command": "npm run build",
+          "status": "passed",
+          "report": "artifacts/reports/build.txt",
+          "duration_ms": 1930
+        },
+        {
+          "kind": "e2e",
+          "repo": "site",
+          "command": "npm run test:e2e",
+          "status": "passed",
+          "report": "artifacts/reports/e2e.txt",
+          "screenshots": [
+            {
+              "path": "artifacts/screens/orchestrator-codex-gpt5.6.sol-high-dev10x-hero.png",
+              "label": "orchestrator-codex-gpt5.6.sol-high-dev10x landing page walkthrough hero",
+              "navigations": [
+                "http://127.0.0.1:23003/"
+              ]
+            },
+            {
+              "path": "artifacts/screens/orchestrator-codex-gpt5.6.sol-high-dev10x-flow.png",
+              "label": "orchestrator-codex-gpt5.6.sol-high-dev10x landing page walkthrough flow",
+              "navigations": [
+                "http://127.0.0.1:23003/"
+              ]
+            },
+            {
+              "path": "artifacts/screens/orchestrator-codex-gpt5.6.sol-high-dev10x-site-evidence.png",
+              "label": "orchestrator-codex-gpt5.6.sol-high-dev10x landing page walkthrough evidence section",
+              "navigations": [
+                "http://127.0.0.1:23003/"
+              ]
+            },
+            {
+              "path": "artifacts/screens/orchestrator-codex-gpt5.6.sol-high-dev10x-full.png",
+              "label": "orchestrator-codex-gpt5.6.sol-high-dev10x landing page walkthrough desktop full page",
+              "navigations": [
+                "http://127.0.0.1:23003/"
+              ]
+            },
+            {
+              "path": "artifacts/screens/orchestrator-codex-gpt5.6.sol-high-dev10x-mobile-full.png",
+              "label": "orchestrator-codex-gpt5.6.sol-high-dev10x landing page walkthrough mobile full page",
+              "navigations": [
+                "http://127.0.0.1:23003/"
+              ]
+            }
+          ],
+          "videos": [
+            {
+              "path": "artifacts/videos/orchestrator-codex-gpt5.6.sol-high-dev10x-e2e.webm",
+              "label": "orchestrator-codex-gpt5.6.sol-high-dev10x landing page walkthrough WebM source",
+              "navigations": [
+                "http://127.0.0.1:23003/"
+              ]
+            },
+            {
+              "path": "artifacts/videos/orchestrator-codex-gpt5.6.sol-high-dev10x-e2e.mp4",
+              "label": "orchestrator-codex-gpt5.6.sol-high-dev10x landing page walkthrough MP4 H.264",
+              "navigations": [
+                "http://127.0.0.1:23003/"
+              ]
+            }
+          ],
+          "trace": "artifacts/traces/orchestrator-codex-gpt5.6.sol-high-dev10x-e2e.zip",
+          "navigations": [
+            "http://127.0.0.1:23003/"
+          ],
+          "proof": {
+            "title": "orchestrator-codex-gpt5.6.sol-high-dev10x landing page walkthrough",
+            "desktop_viewport": "1280x720",
+            "mobile_viewport": "390x844",
+            "full_page": true
+          }
+        }
+      ]
+    },
+    "hero": "$SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-4/.symphony/evidence/artifacts/screens/orchestrator-codex-gpt5.6.sol-high-dev10x-hero.png",
+    "flow": "$SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-4/.symphony/evidence/artifacts/screens/orchestrator-codex-gpt5.6.sol-high-dev10x-flow.png",
+    "site_evidence": "$SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-4/.symphony/evidence/artifacts/screens/orchestrator-codex-gpt5.6.sol-high-dev10x-site-evidence.png",
+    "full": "$SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-4/.symphony/evidence/artifacts/screens/orchestrator-codex-gpt5.6.sol-high-dev10x-full.png",
+    "mobile_full": "$SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-4/.symphony/evidence/artifacts/screens/orchestrator-codex-gpt5.6.sol-high-dev10x-mobile-full.png",
+    "video": "$SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-4/.symphony/evidence/artifacts/videos/orchestrator-codex-gpt5.6.sol-high-dev10x-e2e.webm",
+    "mp4": "$SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-4/.symphony/evidence/artifacts/videos/orchestrator-codex-gpt5.6.sol-high-dev10x-e2e.mp4",
+    "trace": "$SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-4/.symphony/evidence/artifacts/traces/orchestrator-codex-gpt5.6.sol-high-dev10x-e2e.zip",
+    "evidence_run_id": "20260727173321-916866",
+    "evidence_issue_identifier": "DEV-4",
+    "evidence_tab_verified": true,
+    "evidence_tab_route": "http://127.0.0.1:4010/tracker/projects/dev10x-landing-benchmark/board/issues/DEV-4/evidence",
+    "evidence_tab_screenshot": "$SYMPHONY_BENCH_RUNTIME/report/screens/orchestrator-codex-gpt5.6.sol-high-dev10x-evidence-tab.png",
+    "evidence_rendered_screenshots": 5,
+    "evidence_rendered_videos": 2
+  },
+  {
+    "id": "orchestrator-cursor-grok4.5-high-dev10x",
+    "status": "captured",
+    "url": "http://127.0.0.1:23004/",
+    "manifest": {
+      "issue": "DEV-5",
+      "generated_at": "2026-07-27T17:27:04.735Z",
+      "ui_change": true,
+      "runs": [
+        {
+          "kind": "unit",
+          "repo": "site",
+          "command": "npm run build",
+          "status": "passed",
+          "report": "artifacts/reports/build.txt",
+          "duration_ms": 1739
+        },
+        {
+          "kind": "e2e",
+          "repo": "site",
+          "command": "npm run test:e2e",
+          "status": "passed",
+          "report": "artifacts/reports/e2e.txt",
+          "screenshots": [
+            {
+              "path": "artifacts/screens/orchestrator-cursor-grok4.5-high-dev10x-hero.png",
+              "label": "orchestrator-cursor-grok4.5-high-dev10x landing page walkthrough hero",
+              "navigations": [
+                "http://127.0.0.1:23004/"
+              ]
+            },
+            {
+              "path": "artifacts/screens/orchestrator-cursor-grok4.5-high-dev10x-flow.png",
+              "label": "orchestrator-cursor-grok4.5-high-dev10x landing page walkthrough flow",
+              "navigations": [
+                "http://127.0.0.1:23004/"
+              ]
+            },
+            {
+              "path": "artifacts/screens/orchestrator-cursor-grok4.5-high-dev10x-site-evidence.png",
+              "label": "orchestrator-cursor-grok4.5-high-dev10x landing page walkthrough evidence section",
+              "navigations": [
+                "http://127.0.0.1:23004/"
+              ]
+            },
+            {
+              "path": "artifacts/screens/orchestrator-cursor-grok4.5-high-dev10x-full.png",
+              "label": "orchestrator-cursor-grok4.5-high-dev10x landing page walkthrough desktop full page",
+              "navigations": [
+                "http://127.0.0.1:23004/"
+              ]
+            },
+            {
+              "path": "artifacts/screens/orchestrator-cursor-grok4.5-high-dev10x-mobile-full.png",
+              "label": "orchestrator-cursor-grok4.5-high-dev10x landing page walkthrough mobile full page",
+              "navigations": [
+                "http://127.0.0.1:23004/"
+              ]
+            }
+          ],
+          "videos": [
+            {
+              "path": "artifacts/videos/orchestrator-cursor-grok4.5-high-dev10x-e2e.webm",
+              "label": "orchestrator-cursor-grok4.5-high-dev10x landing page walkthrough WebM source",
+              "navigations": [
+                "http://127.0.0.1:23004/"
+              ]
+            },
+            {
+              "path": "artifacts/videos/orchestrator-cursor-grok4.5-high-dev10x-e2e.mp4",
+              "label": "orchestrator-cursor-grok4.5-high-dev10x landing page walkthrough MP4 H.264",
+              "navigations": [
+                "http://127.0.0.1:23004/"
+              ]
+            }
+          ],
+          "trace": "artifacts/traces/orchestrator-cursor-grok4.5-high-dev10x-e2e.zip",
+          "navigations": [
+            "http://127.0.0.1:23004/"
+          ],
+          "proof": {
+            "title": "orchestrator-cursor-grok4.5-high-dev10x landing page walkthrough",
+            "desktop_viewport": "1280x720",
+            "mobile_viewport": "390x844",
+            "full_page": true
+          }
+        }
+      ]
+    },
+    "hero": "$SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-5/.symphony/evidence/artifacts/screens/orchestrator-cursor-grok4.5-high-dev10x-hero.png",
+    "flow": "$SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-5/.symphony/evidence/artifacts/screens/orchestrator-cursor-grok4.5-high-dev10x-flow.png",
+    "site_evidence": "$SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-5/.symphony/evidence/artifacts/screens/orchestrator-cursor-grok4.5-high-dev10x-site-evidence.png",
+    "full": "$SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-5/.symphony/evidence/artifacts/screens/orchestrator-cursor-grok4.5-high-dev10x-full.png",
+    "mobile_full": "$SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-5/.symphony/evidence/artifacts/screens/orchestrator-cursor-grok4.5-high-dev10x-mobile-full.png",
+    "video": "$SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-5/.symphony/evidence/artifacts/videos/orchestrator-cursor-grok4.5-high-dev10x-e2e.webm",
+    "mp4": "$SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-5/.symphony/evidence/artifacts/videos/orchestrator-cursor-grok4.5-high-dev10x-e2e.mp4",
+    "trace": "$SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-5/.symphony/evidence/artifacts/traces/orchestrator-cursor-grok4.5-high-dev10x-e2e.zip",
+    "evidence_run_id": "20260727172704-351747",
+    "evidence_issue_identifier": "DEV-5",
+    "evidence_tab_verified": true,
+    "evidence_tab_route": "http://127.0.0.1:4010/tracker/projects/dev10x-landing-benchmark/board/issues/DEV-5/evidence",
+    "evidence_tab_screenshot": "$SYMPHONY_BENCH_RUNTIME/report/screens/orchestrator-cursor-grok4.5-high-dev10x-evidence-tab.png",
+    "evidence_rendered_screenshots": 5,
+    "evidence_rendered_videos": 2
+  },
+  {
+    "id": "orchestrator-claude-opus5-high-dev10x",
+    "status": "captured",
+    "url": "http://127.0.0.1:23005/",
+    "manifest": {
+      "issue": "DEV-6",
+      "generated_at": "2026-07-27T17:33:33.090Z",
+      "ui_change": true,
+      "runs": [
+        {
+          "kind": "unit",
+          "repo": "site",
+          "command": "npm run build",
+          "status": "passed",
+          "report": "artifacts/reports/build.txt",
+          "duration_ms": 4239
+        },
+        {
+          "kind": "e2e",
+          "repo": "site",
+          "command": "npm run test:e2e",
+          "status": "passed",
+          "report": "artifacts/reports/e2e.txt",
+          "screenshots": [
+            {
+              "path": "artifacts/screens/orchestrator-claude-opus5-high-dev10x-hero.png",
+              "label": "orchestrator-claude-opus5-high-dev10x landing page walkthrough hero",
+              "navigations": [
+                "http://127.0.0.1:23005/"
+              ]
+            },
+            {
+              "path": "artifacts/screens/orchestrator-claude-opus5-high-dev10x-flow.png",
+              "label": "orchestrator-claude-opus5-high-dev10x landing page walkthrough flow",
+              "navigations": [
+                "http://127.0.0.1:23005/"
+              ]
+            },
+            {
+              "path": "artifacts/screens/orchestrator-claude-opus5-high-dev10x-site-evidence.png",
+              "label": "orchestrator-claude-opus5-high-dev10x landing page walkthrough evidence section",
+              "navigations": [
+                "http://127.0.0.1:23005/"
+              ]
+            },
+            {
+              "path": "artifacts/screens/orchestrator-claude-opus5-high-dev10x-full.png",
+              "label": "orchestrator-claude-opus5-high-dev10x landing page walkthrough desktop full page",
+              "navigations": [
+                "http://127.0.0.1:23005/"
+              ]
+            },
+            {
+              "path": "artifacts/screens/orchestrator-claude-opus5-high-dev10x-mobile-full.png",
+              "label": "orchestrator-claude-opus5-high-dev10x landing page walkthrough mobile full page",
+              "navigations": [
+                "http://127.0.0.1:23005/"
+              ]
+            }
+          ],
+          "videos": [
+            {
+              "path": "artifacts/videos/orchestrator-claude-opus5-high-dev10x-e2e.webm",
+              "label": "orchestrator-claude-opus5-high-dev10x landing page walkthrough WebM source",
+              "navigations": [
+                "http://127.0.0.1:23005/"
+              ]
+            },
+            {
+              "path": "artifacts/videos/orchestrator-claude-opus5-high-dev10x-e2e.mp4",
+              "label": "orchestrator-claude-opus5-high-dev10x landing page walkthrough MP4 H.264",
+              "navigations": [
+                "http://127.0.0.1:23005/"
+              ]
+            }
+          ],
+          "trace": "artifacts/traces/orchestrator-claude-opus5-high-dev10x-e2e.zip",
+          "navigations": [
+            "http://127.0.0.1:23005/"
+          ],
+          "proof": {
+            "title": "orchestrator-claude-opus5-high-dev10x landing page walkthrough",
+            "desktop_viewport": "1280x720",
+            "mobile_viewport": "390x844",
+            "full_page": true
+          }
+        }
+      ]
+    },
+    "hero": "$SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-6/.symphony/evidence/artifacts/screens/orchestrator-claude-opus5-high-dev10x-hero.png",
+    "flow": "$SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-6/.symphony/evidence/artifacts/screens/orchestrator-claude-opus5-high-dev10x-flow.png",
+    "site_evidence": "$SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-6/.symphony/evidence/artifacts/screens/orchestrator-claude-opus5-high-dev10x-site-evidence.png",
+    "full": "$SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-6/.symphony/evidence/artifacts/screens/orchestrator-claude-opus5-high-dev10x-full.png",
+    "mobile_full": "$SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-6/.symphony/evidence/artifacts/screens/orchestrator-claude-opus5-high-dev10x-mobile-full.png",
+    "video": "$SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-6/.symphony/evidence/artifacts/videos/orchestrator-claude-opus5-high-dev10x-e2e.webm",
+    "mp4": "$SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-6/.symphony/evidence/artifacts/videos/orchestrator-claude-opus5-high-dev10x-e2e.mp4",
+    "trace": "$SYMPHONY_BENCH_RUNTIME/workspaces/dev10x-landing-benchmark/DEV-6/.symphony/evidence/artifacts/traces/orchestrator-claude-opus5-high-dev10x-e2e.zip",
+    "evidence_run_id": "20260727173333-925314",
+    "evidence_issue_identifier": "DEV-6",
+    "evidence_tab_verified": true,
+    "evidence_tab_route": "http://127.0.0.1:4010/tracker/projects/dev10x-landing-benchmark/board/issues/DEV-6/evidence",
+    "evidence_tab_screenshot": "$SYMPHONY_BENCH_RUNTIME/report/screens/orchestrator-claude-opus5-high-dev10x-evidence-tab.png",
+    "evidence_rendered_screenshots": 5,
+    "evidence_rendered_videos": 2
+  }
+]

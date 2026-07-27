@@ -535,14 +535,14 @@ Expected result:
 - `$SYMPHONY_BENCH_RUNTIME/report/videos/*`
 - `$GENERATED_WORKSPACE/.symphony/evidence/manifest.json`
 
-- [ ] **Step 1: Run independent build and E2E collection**
+- [x] **Step 1: Run independent build and E2E collection**
 
 Run: `npm run collect`
 
 Expected: 18 passing validation commands — install, build and focused E2E for
 each of six cells — plus six passing brand hash contracts.
 
-- [ ] **Step 2: Capture all visual evidence**
+- [x] **Step 2: Capture all visual evidence**
 
 Run: `npm run capture:visuals`
 
@@ -555,13 +555,13 @@ Expected:
 - six trace ZIP files;
 - six real Evidence-tab records rendering at least five images and two videos.
 
-- [ ] **Step 3: Audit media mechanically**
+- [x] **Step 3: Audit media mechanically**
 
 Use `file`, `ffprobe`, `unzip -t`, `sha256sum` and a broken-link scanner. Verify
 dimensions, codecs, `faststart`, non-empty traces, byte-identical brand assets,
 no symlinks and no paths escaping evidence roots.
 
-- [ ] **Step 4: Inspect screenshots visually**
+- [x] **Step 4: Inspect screenshots visually**
 
 Open every full desktop/mobile image and the section-level captures. Record
 layout clipping, overflow, broken assets, copy problems and brand deviations in
@@ -582,12 +582,12 @@ the audit; a visually broken site cannot remain passed.
 - Create: `docs/pr-assets/dev10x-site-high-matrix/videos/*-preview.gif`
 - Modify: `docs/superpowers/plans/2026-07-27-dev10x-site-high-matrix-plan.md`
 
-- [ ] **Step 1: Copy only sanitized canonical outputs**
+- [x] **Step 1: Copy only sanitized canonical outputs**
 
 Copy the six-cell comparison, audited PNGs, MP4s and GIF previews. Do not commit
 tokens, raw tracker traces, local absolute paths or generated node modules.
 
-- [ ] **Step 2: Score the sites with the fixed rubric**
+- [x] **Step 2: Score the sites with the fixed rubric**
 
 Score each cell out of 100:
 
