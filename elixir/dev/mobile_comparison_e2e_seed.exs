@@ -100,6 +100,7 @@ agent:
   kind: codex
   max_concurrent_agents: 6
   max_turns: 12
+  turn_timeout_ms: 2400000
   completion_transitions:
     Ready: Human Review
     In Progress: Human Review
