@@ -1,17 +1,19 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import {
+import * as benchmarkContract from "../src/contract.mjs";
+
+const {
   PATHS,
   PROVIDERS,
   RUN_MATRIX,
   promptSha256,
   readCanonicalPrompt,
-} from "../src/contract.mjs";
+} = benchmarkContract;
 
-test("defines 18 unique model-pinned benchmark runs", () => {
-  assert.equal(RUN_MATRIX.length, 18);
-  assert.equal(new Set(RUN_MATRIX.map((run) => run.id)).size, 18);
+test("keeps the 18 historical runs and adds 6 focused high-effort runs", () => {
+  assert.equal(RUN_MATRIX.length, 24);
+  assert.equal(new Set(RUN_MATRIX.map((run) => run.id)).size, 24);
   assert.deepEqual(
     new Set(RUN_MATRIX.map((run) => run.provider)),
     new Set(PROVIDERS),
@@ -55,6 +57,12 @@ test("defines 18 unique model-pinned benchmark runs", () => {
       "orchestrator-codex-gpt5.6.terra-medium",
       "session-codex-gpt5.6.luna-medium",
       "orchestrator-codex-gpt5.6.luna-medium",
+      "session-codex-gpt5.6.sol-high-dev10x",
+      "session-cursor-grok4.5-high-dev10x",
+      "session-claude-opus5-high-dev10x",
+      "orchestrator-codex-gpt5.6.sol-high-dev10x",
+      "orchestrator-cursor-grok4.5-high-dev10x",
+      "orchestrator-claude-opus5-high-dev10x",
     ],
   );
 
@@ -88,6 +96,35 @@ test("defines 18 unique model-pinned benchmark runs", () => {
       ["orchestrator", "gpt-5.6-terra", "medium"],
       ["session", "gpt-5.6-luna", "medium"],
       ["orchestrator", "gpt-5.6-luna", "medium"],
+    ],
+  );
+});
+
+test("defines one reproducible Dev10x brand matrix with all providers at high", () => {
+  assert.equal(benchmarkContract.DEFAULT_MATRIX, "dev10x-brand-high");
+  assert.equal(typeof benchmarkContract.runsForMatrix, "function");
+
+  const selected =
+    typeof benchmarkContract.runsForMatrix === "function"
+      ? benchmarkContract.runsForMatrix("dev10x-brand-high")
+      : [];
+
+  assert.deepEqual(
+    selected.map(
+      ({ path, provider, requested_model, requested_effort }) => [
+        path,
+        provider,
+        requested_model,
+        requested_effort,
+      ],
+    ),
+    [
+      ["session", "codex", "gpt-5.6-sol", "high"],
+      ["session", "cursor", "cursor-grok-4.5-high", null],
+      ["session", "claude", "claude-opus-5", "high"],
+      ["orchestrator", "codex", "gpt-5.6-sol", "high"],
+      ["orchestrator", "cursor", "cursor-grok-4.5-high", null],
+      ["orchestrator", "claude", "claude-opus-5", "high"],
     ],
   );
 });
