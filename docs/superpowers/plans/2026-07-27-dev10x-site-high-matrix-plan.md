@@ -485,7 +485,7 @@ Expected: six runs sharing one prompt hash and one brand manifest.
 - `$SYMPHONY_BENCH_RUNTIME/results/attempts/$RUN_ID/*.json`
 - `$SYMPHONY_BENCH_RUNTIME/artifacts/$RUN_ID/attempts/*`
 
-- [ ] **Step 1: Run the matrix with bounded concurrency**
+- [x] **Step 1: Run the matrix with bounded concurrency**
 
 Run:
 
@@ -496,13 +496,13 @@ SYMPHONY_BENCH_CONCURRENCY=3 npm run run:brand-high
 Expected: all six cells settle terminally; the command reports every failure
 instead of stopping after the first.
 
-- [ ] **Step 2: Inspect every result before retrying**
+- [x] **Step 2: Inspect every result before retrying**
 
 Use `jq` to list status, provider, requested/resolved model, requested/resolved
 effort, assistant thread id, attempt id and error. Do not retry a pending run or
 replace a provider/model.
 
-- [ ] **Step 3: Recover only confirmed failures**
+- [x] **Step 3: Recover only confirmed failures**
 
 For a real terminal failure, preserve its immutable attempt, correct the
 runtime/harness defect with a focused regression test when applicable, and
@@ -514,7 +514,7 @@ minutes of cleanup headroom at the Playwright, cell-process and matrix-process
 boundaries. This replaces the stale 25-minute session-only literal that could
 abandon a still-running Claude provider.
 
-- [ ] **Step 4: Prove six canonical completions**
+- [x] **Step 4: Prove six canonical completions**
 
 Expected result:
 

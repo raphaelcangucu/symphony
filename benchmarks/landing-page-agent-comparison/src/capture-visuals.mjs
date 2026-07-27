@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { createServer as createTcpServer } from "node:net";
 import {
   access,
   copyFile,
@@ -34,6 +35,38 @@ export function previewArgs(port) {
     String(port),
     "--strictPort",
   ];
+}
+
+export function selectCaptureRuns(runs, runId) {
+  if (!runId?.trim()) return runs;
+  const matches = runs.filter((run) => run.id === runId.trim());
+  if (matches.length !== 1) {
+    throw new Error(`unknown visual capture run: ${runId}`);
+  }
+  return matches;
+}
+
+export function mergeCaptures(runs, existing, updates) {
+  const byId = new Map(
+    [...(existing ?? []), ...(updates ?? [])].map((capture) => [
+      capture.id,
+      capture,
+    ]),
+  );
+  return runs.map(
+    (run) =>
+      byId.get(run.id) ?? {
+        id: run.id,
+        status: "not-captured",
+      },
+  );
+}
+
+export function captureCommandFailed(captures, requestedRunId = "") {
+  const inspected = requestedRunId
+    ? captures.filter((capture) => capture.id === requestedRunId)
+    : captures;
+  return inspected.some((capture) => capture.status !== "captured");
 }
 
 export function visualScreenshotNames(runId) {
@@ -182,6 +215,26 @@ export async function waitForHttp(
     await new Promise((resolvePromise) => setTimeout(resolvePromise, 250));
   }
   throw new Error(`preview did not become ready at ${url}: ${lastError}`);
+}
+
+async function portAvailable(port) {
+  return new Promise((resolvePromise) => {
+    const server = createTcpServer();
+    server.unref();
+    server.once("error", () => resolvePromise(false));
+    server.listen(port, "127.0.0.1", () => {
+      server.close(() => resolvePromise(true));
+    });
+  });
+}
+
+export async function waitForPortAvailable(port, timeoutMs = 30_000) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    if (await portAvailable(port)) return;
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, 250));
+  }
+  throw new Error(`visual capture port ${port} did not become available`);
 }
 
 export async function captureRunMatrix(runs, capture) {
@@ -542,6 +595,7 @@ async function captureRun({
   const mp4Path = join(videosRoot, names.mp4);
   const gifPreviewPath = join(videosRoot, names.previewGif);
   const tracePath = join(tracesRoot, `${run.id}-e2e.zip`);
+  await waitForPortAvailable(port);
   const child = spawn(
     "npm",
     previewArgs(port),
@@ -549,15 +603,21 @@ async function captureRun({
       cwd: workspacePath,
       detached: true,
       env: sanitizedChildEnv(process.env),
-      stdio: "ignore",
+      stdio: ["ignore", "pipe", "pipe"],
     },
   );
+  let previewOutput = "";
+  const appendPreviewOutput = (chunk) => {
+    previewOutput = `${previewOutput}${chunk}`.slice(-64 * 1024);
+  };
+  child.stdout.on("data", appendPreviewOutput);
+  child.stderr.on("data", appendPreviewOutput);
   const previewFailed = new Promise((_, reject) => {
     child.once("error", reject);
     child.once("exit", (exitCode, signal) => {
       reject(
         new Error(
-          `preview exited before capture (code=${exitCode ?? "none"}, signal=${signal ?? "none"})`,
+          `preview exited before capture (code=${exitCode ?? "none"}, signal=${signal ?? "none"}): ${previewOutput.trim() || "no output"}`,
         ),
       );
     });
@@ -736,13 +796,15 @@ export async function captureVisuals(env = process.env) {
     token: env.SYMPHONY_BENCH_TOKEN,
   });
 
-  const captures = await captureRunMatrix(
-    manifest.runs,
-    (run, index) =>
+  const requestedRunId = env.SYMPHONY_BENCH_RUN_ID?.trim() ?? "";
+  const selectedRuns = selectCaptureRuns(manifest.runs, requestedRunId);
+  const updates = await captureRunMatrix(
+    selectedRuns,
+    (run) =>
       captureRun({
         manifest,
         run,
-        index,
+        index: manifest.runs.findIndex((candidate) => candidate.id === run.id),
         reportRoot,
         reportVideoRoot,
         api,
@@ -750,6 +812,19 @@ export async function captureVisuals(env = process.env) {
         trackerToken: env.SYMPHONY_BENCH_TOKEN,
       }),
   );
+  let existing = [];
+  if (requestedRunId) {
+    try {
+      existing = JSON.parse(
+        await readFile(join(runtimeRoot, "report", "visuals.json"), "utf8"),
+      );
+    } catch {
+      existing = [];
+    }
+  }
+  const captures = requestedRunId
+    ? mergeCaptures(manifest.runs, existing, updates)
+    : updates;
   await writeFile(
     join(runtimeRoot, "report", "visuals.json"),
     `${JSON.stringify(captures, null, 2)}\n`,
@@ -769,7 +844,12 @@ if (invokedPath === import.meta.url) {
   captureVisuals()
     .then((captures) => {
       process.stdout.write(`${JSON.stringify(captures, null, 2)}\n`);
-      if (captures.some((capture) => capture.status !== "captured")) {
+      if (
+        captureCommandFailed(
+          captures,
+          process.env.SYMPHONY_BENCH_RUN_ID ?? "",
+        )
+      ) {
         process.exitCode = 1;
       }
     })

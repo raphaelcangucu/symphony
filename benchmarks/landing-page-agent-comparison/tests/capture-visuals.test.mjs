@@ -6,14 +6,18 @@ import test from "node:test";
 import * as captureVisuals from "../src/capture-visuals.mjs";
 import {
   assertEvidenceTabRecord,
+  captureCommandFailed,
   captureRunMatrix,
   evidenceManifestForRun,
+  mergeCaptures,
   previewArgs,
   renderVisualComparison,
+  selectCaptureRuns,
   stopProcessGroup,
   visualPort,
   visualScreenshotNames,
   waitForHttp,
+  waitForPortAvailable,
 } from "../src/capture-visuals.mjs";
 
 test("visual captures reserve a deterministic isolated port per matrix cell", () => {
@@ -33,6 +37,74 @@ test("visual preview refuses to move to a different occupied port", () => {
     "23004",
     "--strictPort",
   ]);
+});
+
+test("visual preview waits for its deterministic port to become available", async () => {
+  assert.equal(typeof waitForPortAvailable, "function");
+
+  const server = createServer();
+  await new Promise((resolvePromise) =>
+    server.listen(0, "127.0.0.1", resolvePromise),
+  );
+  const { port } = server.address();
+
+  const waiting = waitForPortAvailable(port, 2_000);
+  setTimeout(() => server.close(), 100);
+  await waiting;
+});
+
+test("targeted recapture preserves other cells in manifest order", () => {
+  assert.equal(typeof selectCaptureRuns, "function");
+  assert.equal(typeof mergeCaptures, "function");
+
+  const runs = [
+    { id: "session-codex-gpt5.5-medium" },
+    { id: "session-cursor-composer2.5" },
+  ];
+  assert.deepEqual(selectCaptureRuns(runs, ""), runs);
+  assert.deepEqual(
+    selectCaptureRuns(runs, "session-cursor-composer2.5"),
+    [runs[1]],
+  );
+  assert.throws(
+    () => selectCaptureRuns(runs, "missing"),
+    /unknown visual capture run/,
+  );
+
+  assert.deepEqual(
+    mergeCaptures(
+      runs,
+      [
+        { id: runs[0].id, status: "captured" },
+        { id: runs[1].id, status: "capture-failed" },
+      ],
+      [{ id: runs[1].id, status: "captured" }],
+    ),
+    [
+      { id: runs[0].id, status: "captured" },
+      { id: runs[1].id, status: "captured" },
+    ],
+  );
+});
+
+test("targeted recapture exit status only considers the requested cell", () => {
+  const captures = [
+    { id: "session-cursor-grok4.5-high-dev10x", status: "captured" },
+    { id: "orchestrator-codex-gpt5.6.sol-high-dev10x", status: "capture-failed" },
+  ];
+
+  assert.equal(captureCommandFailed(captures, ""), true);
+  assert.equal(
+    captureCommandFailed(captures, "session-cursor-grok4.5-high-dev10x"),
+    false,
+  );
+  assert.equal(
+    captureCommandFailed(
+      captures,
+      "orchestrator-codex-gpt5.6.sol-high-dev10x",
+    ),
+    true,
+  );
 });
 
 test("visual preview probe aborts an HTTP request that never answers", async () => {
