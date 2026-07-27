@@ -4,6 +4,8 @@ import type { HostTransport } from "@/transport/HostTransport";
 import { payloadSessionLogEntries, type SessionLogEntry } from "./orchestrator-session-adapter";
 
 const STEER_STREAM_REFRESH_MS = 2_500;
+const SUBSCRIBE_RETRY_MS = 1_000;
+const MAX_SUBSCRIBE_RETRY_MS = 10_000;
 
 export type RpcOrchestratorSession = {
   connect(): void;
@@ -32,6 +34,8 @@ export function createRpcOrchestratorSession({
   let generation = 0;
   let transcriptRevision = 0;
   let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+  let retryTimer: ReturnType<typeof setTimeout> | null = null;
+  let retryAttempts = 0;
 
   function connect(): void {
     if (active) return;
@@ -73,14 +77,29 @@ export function createRpcOrchestratorSession({
         }
         unsubscribe = cleanup;
         connected = true;
+        retryAttempts = 0;
         onConnection("live");
+        onError(null);
       })
       .catch((error: unknown) => {
         if (!active || currentGeneration !== generation) return;
         connected = false;
         onConnection("offline");
         onError(errorMessage(error));
+        scheduleSubscriptionRetry(currentGeneration);
       });
+  }
+
+  function scheduleSubscriptionRetry(failedGeneration: number): void {
+    clearRetryTimer();
+    const retryDelayMs = Math.min(SUBSCRIBE_RETRY_MS * 2 ** retryAttempts, MAX_SUBSCRIBE_RETRY_MS);
+    retryAttempts += 1;
+    retryTimer = setTimeout(() => {
+      retryTimer = null;
+      if (!active || failedGeneration !== generation) return;
+      onConnection("connecting");
+      subscribe();
+    }, retryDelayMs);
   }
 
   function noteTranscriptUpdate(): void {
@@ -91,7 +110,9 @@ export function createRpcOrchestratorSession({
   function refreshTranscript(): void {
     if (!active) return;
     connected = false;
+    retryAttempts = 0;
     generation += 1;
+    clearRetryTimer();
     unsubscribe?.();
     unsubscribe = null;
     onConnection("connecting");
@@ -104,12 +125,19 @@ export function createRpcOrchestratorSession({
     refreshTimer = null;
   }
 
+  function clearRetryTimer(): void {
+    if (!retryTimer) return;
+    clearTimeout(retryTimer);
+    retryTimer = null;
+  }
+
   function disconnect(): void {
     if (!active) return;
     active = false;
     connected = false;
     generation += 1;
     clearRefreshTimer();
+    clearRetryTimer();
     unsubscribe?.();
     unsubscribe = null;
     onConnection("offline");

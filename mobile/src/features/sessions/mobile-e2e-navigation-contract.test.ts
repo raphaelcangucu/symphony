@@ -14,5 +14,8 @@ describe("real-host mobile E2E navigation", () => {
     expect(realHostJourney).toContain('tap_terminal_header_tool "source-control"');
     expect(realHostJourney).toMatch(/files\)\s+tap_screen_fraction 51 64 1 20/);
     expect(realHostJourney).toMatch(/source-control\)\s+tap_screen_fraction 59 64 1 20/);
+    expect(realHostJourney).toContain(
+      'wait_for_selector "content-desc" "Connection status: Live" 180',
+    );
   });
 });

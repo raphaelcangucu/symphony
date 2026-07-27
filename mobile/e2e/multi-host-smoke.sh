@@ -627,6 +627,7 @@ wait_for_text "${host_a_orchestrator_issue}"
 tap_accessible "Open ${host_a_orchestrator_issue} Codex execution"
 wait_for_ui_contains "#${orchestrator_session_id}"
 wait_for_selector "content-desc" "Message"
+wait_for_selector "content-desc" "Connection status: Live" 180
 trace_step "assert real orchestrator execution transcript opens in the same rich chat"
 
 tap_accessible "Message"

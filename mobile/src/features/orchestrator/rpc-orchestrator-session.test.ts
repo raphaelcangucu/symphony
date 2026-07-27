@@ -60,6 +60,37 @@ describe("orchestrator RPC session", () => {
     await expect(session.steer("   ")).rejects.toThrow("Message is required");
   });
 
+  it("retries a transient subscription failure until the execution transcript is ready", async () => {
+    vi.useFakeTimers();
+    const transport = fakeTransport();
+    const onConnection = vi.fn();
+    const onError = vi.fn();
+    vi.mocked(transport.subscribe)
+      .mockRejectedValueOnce(new Error("RPC method failed"))
+      .mockResolvedValueOnce(vi.fn());
+    const session = createRpcOrchestratorSession({
+      executionSessionId: 77,
+      transport,
+      onSnapshot: vi.fn(),
+      onEntries: vi.fn(),
+      onConnection,
+      onError,
+    });
+
+    session.connect();
+    await vi.waitFor(() => expect(onConnection).toHaveBeenLastCalledWith("offline"));
+    expect(onError).toHaveBeenLastCalledWith("RPC method failed");
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    await vi.waitFor(() => expect(onConnection).toHaveBeenLastCalledWith("live"));
+
+    expect(transport.subscribe).toHaveBeenCalledTimes(2);
+    expect(onError).toHaveBeenLastCalledWith(null);
+
+    session.disconnect();
+    vi.useRealTimers();
+  });
+
   it("refreshes only the selected transcript when its stream stays silent after steer", async () => {
     vi.useFakeTimers();
     const transport = fakeTransport();
