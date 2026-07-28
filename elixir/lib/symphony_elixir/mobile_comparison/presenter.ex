@@ -83,15 +83,15 @@ defmodule SymphonyElixir.MobileComparison.Presenter do
     do: value(execution, :status) || "starting"
 
   defp evidence_status(evidence) when is_list(evidence) do
-    statuses =
-      evidence
-      |> Enum.map(&value(&1, :status))
-      |> Enum.filter(&is_binary/1)
-
-    cond do
-      Enum.any?(statuses, &(&1 in @failed_statuses)) -> "failed"
-      Enum.any?(statuses, &(&1 in @passed_statuses)) -> "passed"
-      true -> nil
+    case Enum.find_value(evidence, fn record ->
+           case value(record, :status) do
+             status when is_binary(status) -> status
+             _other -> nil
+           end
+         end) do
+      status when status in @failed_statuses -> "failed"
+      status when status in @passed_statuses -> "passed"
+      _other -> nil
     end
   end
 

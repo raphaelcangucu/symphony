@@ -40,6 +40,31 @@ defmodule SymphonyElixir.MobileComparison.PresenterTest do
     assert cell["status"] == "failed"
   end
 
+  test "the newest durable snapshot supersedes a partial failure from the same session" do
+    cell =
+      Presenter.cell(
+        @session,
+        %{identifier: "DEV-2"},
+        %{id: 42, status: "closed"},
+        nil,
+        [],
+        [
+          %{
+            "run_id" => "run-final",
+            "session_id" => "assistant-thread:42",
+            "status" => "passed"
+          },
+          %{
+            "run_id" => "run-partial",
+            "session_id" => "assistant-thread:42",
+            "status" => "failed"
+          }
+        ]
+      )
+
+    assert cell["status"] == "passed"
+  end
+
   test "a persistent direct-session thread remains live until evidence exists" do
     cell =
       Presenter.cell(
