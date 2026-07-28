@@ -88,7 +88,7 @@ defmodule SymphonyElixir.MobileComparison.PresenterTest do
            ]
   end
 
-  test "only evidence for the current direct-session attempt decides its status" do
+  test "passed artifacts do not hide an interrupted direct-session turn" do
     cell =
       Presenter.cell(
         @session,
@@ -115,9 +115,9 @@ defmodule SymphonyElixir.MobileComparison.PresenterTest do
         ]
       )
 
-    assert cell["status"] == "passed"
+    assert cell["status"] == "error"
     assert cell["attempt"] == 2
-    assert cell["error"] == nil
+    assert cell["error"] == "serve_restart"
   end
 
   test "a provider turn that completed without assistant output is retryable" do
