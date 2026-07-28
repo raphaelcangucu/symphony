@@ -252,7 +252,11 @@ defmodule SymphonyElixir.MobileComparison.LocalGateway do
   defp evidence_collection_required?(records, context) do
     case Map.get(context, :comparison_session_id) do
       thread_id when is_integer(thread_id) and thread_id > 0 ->
-        if terminal_session?(Map.get(context, :comparison_session_status)) do
+        session_state =
+          Map.get(context, :comparison_session_turn_status) ||
+            Map.get(context, :comparison_session_status)
+
+        if terminal_session?(session_state) do
           expected_session_id = "assistant-thread:#{thread_id}"
 
           records
@@ -270,7 +274,8 @@ defmodule SymphonyElixir.MobileComparison.LocalGateway do
     end
   end
 
-  defp terminal_session?(status), do: status in ["closed", "error", "archived"]
+  defp terminal_session?(status),
+    do: status in ["completed", "failed", "error", "cancelled", "canceled", "closed", "archived"]
 
   defp partial_evidence?(record) do
     case value(record, :manifest) do

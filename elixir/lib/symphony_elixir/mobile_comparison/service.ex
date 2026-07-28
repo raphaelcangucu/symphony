@@ -345,9 +345,22 @@ defmodule SymphonyElixir.MobileComparison.Service do
         context
         |> Map.put(:comparison_session_id, thread_id)
         |> Map.put(:comparison_session_status, value(thread, :status))
+        |> Map.put(:comparison_session_turn_status, current_turn_status(thread))
 
       _other ->
         context
+    end
+  end
+
+  defp current_turn_status(thread) do
+    case value(thread, :metadata) do
+      metadata when is_map(metadata) ->
+        metadata
+        |> value(:current_turn)
+        |> value(:status)
+
+      _other ->
+        nil
     end
   end
 

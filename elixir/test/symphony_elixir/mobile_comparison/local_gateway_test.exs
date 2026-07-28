@@ -665,6 +665,22 @@ defmodule SymphonyElixir.MobileComparison.LocalGatewayTest do
     refute_receive {:collect_session_evidence, "dev10x", "DEV-2"}
   end
 
+  test "persists a completed turn while its reusable session thread remains active", %{
+    context: context
+  } do
+    context =
+      context
+      |> Map.put(:comparison_session_id, 43)
+      |> Map.put(:comparison_session_status, "active")
+      |> Map.put(:comparison_session_turn_status, "completed")
+      |> Map.put(:mobile_evidence_service, PriorThenCurrentEvidence)
+      |> Map.put(:comparison_session_evidence_collector, CurrentAttemptEvidenceCollector)
+
+    assert {:ok, records} = LocalGateway.list_evidence("dev10x", "DEV-2", context)
+    assert Enum.any?(records, &(&1["session_id"] == "assistant-thread:43"))
+    assert_receive {:collect_current_attempt_evidence, "dev10x", "DEV-2"}
+  end
+
   test "replaces a partial current-session snapshot after the thread becomes terminal", %{
     context: context
   } do
