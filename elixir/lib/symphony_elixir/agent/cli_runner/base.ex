@@ -72,8 +72,8 @@ defmodule SymphonyElixir.Agent.CliRunner.Base do
   becomes a process-group leader `kill_port/1` can kill as a group; plain
   `bash -lc ...` otherwise.
   """
-  @spec open_cli_port(String.t(), String.t(), Path.t(), Path.t()) :: port()
-  def open_cli_port(command, cli_args, prompt_path, workspace) do
+  @spec open_cli_port(String.t(), String.t(), Path.t(), Path.t(), map()) :: port()
+  def open_cli_port(command, cli_args, prompt_path, workspace, environment \\ %{}) do
     shell_line = "#{command} #{cli_args} < #{shell_escape(prompt_path)}"
 
     {executable, port_args} =
@@ -93,9 +93,16 @@ defmodule SymphonyElixir.Agent.CliRunner.Base do
         :stderr_to_stdout,
         args: port_args,
         cd: String.to_charlist(workspace),
+        env: port_environment(environment),
         line: @port_line_bytes
       ]
     )
+  end
+
+  defp port_environment(environment) when is_map(environment) do
+    Enum.map(environment, fn {name, value} ->
+      {String.to_charlist(to_string(name)), String.to_charlist(to_string(value))}
+    end)
   end
 
   @doc """

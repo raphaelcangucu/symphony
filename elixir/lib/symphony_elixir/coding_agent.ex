@@ -3,6 +3,8 @@ defmodule SymphonyElixir.CodingAgent do
   Adapter boundary for coding agent backends.
   """
 
+  alias SymphonyElixir.AgentLaunch
+  alias SymphonyElixir.AgentLifecycle.RuntimeRegistry
   alias SymphonyElixir.Config
 
   @callback start_session(Path.t(), keyword()) :: {:ok, map()} | {:error, term()}
@@ -26,21 +28,73 @@ defmodule SymphonyElixir.CodingAgent do
   end
 
   @spec start_session(Path.t(), String.t() | nil, keyword()) :: {:ok, map()} | {:error, term()}
-  def start_session(workspace, agent_kind \\ nil, opts \\ []),
-    do: adapter_for(agent_kind).start_session(workspace, opts)
+  def start_session(workspace, agent_kind \\ nil, opts \\ []) do
+    kind = resolved_agent_kind(agent_kind)
+    launch_resolver = Keyword.get(opts, :agent_launch_resolver, &resolve_launch/3)
+
+    with {:ok, launch} <-
+           launch_resolver.(
+             kind,
+             Keyword.get(opts, :project_account_id),
+             Keyword.get(opts, :account_id)
+           ),
+         {:ok, lease, pinned_resolution} <-
+           RuntimeRegistry.acquire(kind, launch.resolution) do
+      pinned_launch = AgentLaunch.with_resolution(launch, pinned_resolution)
+      adapter_opts = AgentLaunch.inject_options(pinned_launch, opts)
+
+      case adapter_for(kind).start_session(workspace, adapter_opts) do
+        {:ok, session} ->
+          {:ok,
+           session
+           |> Map.put(:agent_launch, pinned_launch)
+           |> Map.put(:runtime_lease, lease)}
+
+        {:error, reason} ->
+          RuntimeRegistry.release(lease)
+          {:error, reason}
+      end
+    end
+  end
 
   @spec run_turn(map(), String.t(), map(), keyword()) :: {:ok, map()} | {:error, term()}
   def run_turn(session, prompt, issue, opts \\ []) do
-    agent_kind = Keyword.get(opts, :agent_kind, Map.get(issue, :agent_kind))
+    agent_kind =
+      Keyword.get(opts, :agent_kind) ||
+        get_in(session, [:agent_launch, Access.key(:agent_kind)]) ||
+        Map.get(issue, :agent_kind)
+
     adapter_for(agent_kind).run_turn(session, prompt, issue, opts)
   end
 
   @spec stop_session(map(), String.t() | nil) :: :ok
-  def stop_session(session, agent_kind \\ nil), do: adapter_for(agent_kind).stop_session(session)
+  def stop_session(session, agent_kind \\ nil) do
+    kind =
+      get_in(session, [:agent_launch, Access.key(:agent_kind)]) ||
+        resolved_agent_kind(agent_kind)
+
+    try do
+      adapter_for(kind).stop_session(session)
+    after
+      case Map.get(session, :runtime_lease) do
+        lease when is_reference(lease) -> RuntimeRegistry.release(lease)
+        _ -> :ok
+      end
+    end
+
+    :ok
+  end
 
   @spec normalize_event(map(), String.t() | nil) :: map()
   def normalize_event(event, agent_kind \\ nil), do: adapter_for(agent_kind).normalize_event(event)
 
   @spec capabilities(String.t() | nil) :: SymphonyElixir.Agent.BackendCapabilities.t()
   def capabilities(agent_kind \\ nil), do: adapter_for(agent_kind).capabilities()
+
+  defp resolve_launch(agent_kind, project_account_id, request_account_id) do
+    AgentLaunch.resolve(agent_kind, project_account_id, request_account_id)
+  end
+
+  defp resolved_agent_kind(nil), do: Config.agent_kind() || Config.default_agent_kind()
+  defp resolved_agent_kind(agent_kind), do: agent_kind
 end

@@ -62,7 +62,16 @@ defmodule SymphonyElixir.Claude.AppServer.CliRunner do
     workspace = Path.expand(workspace)
 
     prompt_path = Base.write_prompt_file(workspace, "claude", session_uuid, prompt)
-    port = Base.open_cli_port(command, build_args(args), prompt_path, workspace)
+
+    port =
+      Base.open_cli_port(
+        command,
+        build_args(args),
+        prompt_path,
+        workspace,
+        Map.get(args, :agent_env, %{})
+      )
+
     Base.notify_spawn(port, Map.get(args, :on_spawn))
 
     bridged_on_event = fn notification ->

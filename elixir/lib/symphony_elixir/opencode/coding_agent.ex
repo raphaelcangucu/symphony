@@ -45,6 +45,7 @@ defmodule SymphonyElixir.OpenCode.CodingAgent do
          command: resolve_command(opts),
          cli_session_id: conversation_id(opts, "opencode"),
          model: Keyword.get(opts, :model),
+         agent_env: Keyword.get(opts, :agent_env, %{}),
          gateway_token: Map.get(gateway, :token),
          mcp_config_path: Map.get(gateway, :path),
          mcp_config_backup: Map.get(gateway, :backup),
@@ -135,6 +136,7 @@ defmodule SymphonyElixir.OpenCode.CodingAgent do
       cli_session_id: session.cli_session_id,
       model: Keyword.get(opts, :model, session.model),
       execution_mode: Keyword.get(opts, :execution_mode),
+      agent_env: Map.get(session, :agent_env, %{}),
       timeout_ms: Config.agent_turn_timeout_ms()
     }
   end

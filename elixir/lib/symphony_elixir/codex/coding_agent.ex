@@ -68,7 +68,7 @@ defmodule SymphonyElixir.Codex.CodingAgent do
 
     with :ok <- validate_goal_request(opts, goals_section),
          :ok <- validate_workspace_cwd(workspace, opts),
-         {:ok, port} <- start_port(workspace, codex_section) do
+         {:ok, port} <- start_port(workspace, codex_section, Keyword.get(opts, :agent_env, %{})) do
       metadata = port_metadata(port)
       expanded_workspace = Path.expand(workspace)
 
@@ -617,7 +617,7 @@ defmodule SymphonyElixir.Codex.CodingAgent do
     end
   end
 
-  defp start_port(workspace, codex_section) do
+  defp start_port(workspace, codex_section, environment \\ %{}) do
     case System.find_executable("bash") do
       nil ->
         {:error, :bash_not_found}
@@ -634,12 +634,19 @@ defmodule SymphonyElixir.Codex.CodingAgent do
               :stderr_to_stdout,
               args: [~c"-lc", String.to_charlist(command)],
               cd: String.to_charlist(workspace),
+              env: port_environment(environment),
               line: @port_line_bytes
             ]
           )
 
         {:ok, port}
     end
+  end
+
+  defp port_environment(environment) do
+    Enum.map(environment, fn {name, value} ->
+      {String.to_charlist(to_string(name)), String.to_charlist(to_string(value))}
+    end)
   end
 
   defp port_metadata(port) when is_port(port) do

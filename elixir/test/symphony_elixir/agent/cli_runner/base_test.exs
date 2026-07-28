@@ -50,6 +50,26 @@ defmodule SymphonyElixir.Agent.CliRunner.BaseTest do
     assert {:ok, {:error, :interrupted}} = Task.yield(task, @assertion_timeout_ms)
   end
 
+  test "open_cli_port projects only the supplied account environment" do
+    tmp_dir = make_tmp_dir!()
+    prompt_path = Path.join(tmp_dir, "prompt")
+    File.write!(prompt_path, "")
+    on_exit(fn -> File.rm_rf(tmp_dir) end)
+
+    port =
+      Base.open_cli_port(
+        ~s(printf '%s\\n' "$SYMPHONY_TEST_ACCOUNT_HOME"),
+        "",
+        prompt_path,
+        tmp_dir,
+        %{"SYMPHONY_TEST_ACCOUNT_HOME" => "/isolated/account-a"}
+      )
+
+    assert_receive {^port, {:data, {:eol, output}}}, 1_000
+    assert to_string(output) == "/isolated/account-a"
+    assert_receive {^port, {:exit_status, 0}}, 1_000
+  end
+
   defp start_receive_loop(port) do
     parent = self()
 

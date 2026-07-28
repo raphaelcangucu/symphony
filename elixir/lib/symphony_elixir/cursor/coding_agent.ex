@@ -59,6 +59,7 @@ defmodule SymphonyElixir.Cursor.CodingAgent do
          command: resolve_command(opts),
          cli_session_id: conversation_id(opts, "cursor"),
          model: Keyword.get(opts, :model),
+         agent_env: Keyword.get(opts, :agent_env, %{}),
          gateway_token: Map.get(gateway, :token),
          mcp_config_path: Map.get(gateway, :path),
          mcp_config_backup: Map.get(gateway, :backup),
@@ -299,6 +300,7 @@ defmodule SymphonyElixir.Cursor.CodingAgent do
       model: Keyword.get(opts, :model, session.model),
       mcp_config_path: session.mcp_config_path,
       execution_mode: Keyword.get(opts, :execution_mode),
+      agent_env: Map.get(session, :agent_env, %{}),
       timeout_ms: Config.agent_turn_timeout_ms()
     }
   end
