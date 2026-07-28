@@ -1,51 +1,58 @@
-import { Check, Copy, Download } from "lucide-react";
+import { Download, RefreshCw } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import { copyTextToClipboard } from "@/lib/clipboard";
+import { runAgentLifecycle } from "@/services/settings";
+import type { AgentKind } from "@/types/issue";
 
 interface InstallActionButtonProps {
+  agent: AgentKind;
   installed: boolean;
-  command: string | null;
+  onComplete?: () => void;
 }
 
-export function InstallActionButton({ installed, command }: InstallActionButtonProps) {
-  const { t } = useTranslation();
-  const [copied, setCopied] = useState(false);
+function errorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error && error.message ? error.message : fallback;
+}
 
-  if (installed) {
-    return (
-      <Button type="button" variant="outline" size="sm" disabled>
-        <Check className="mr-1.5 h-3.5 w-3.5" />
-        {t("settings.agentTool.install.installed")}
-      </Button>
-    );
-  }
+export function InstallActionButton({ agent, installed, onComplete }: InstallActionButtonProps) {
+  const { t } = useTranslation();
+  const [running, setRunning] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function handleClick() {
-    if (!command) return;
-    const ok = await copyTextToClipboard(command);
-    if (ok) {
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
-      toast.success(t("settings.agentTool.install.copied"));
-    } else {
-      toast.error(t("settings.agentTool.install.copyFailed"));
+    setRunning(true);
+    setError(null);
+    try {
+      await runAgentLifecycle(agent, installed ? "update" : "install");
+      onComplete?.();
+    } catch (reason) {
+      setError(errorMessage(reason, t("settings.agentTool.install.failed")));
+    } finally {
+      setRunning(false);
     }
   }
 
   return (
-    <Button
-      type="button"
-      size="sm"
-      disabled={!command}
-      onClick={() => void handleClick()}
-      title={command ?? undefined}
-    >
-      {copied ? <Check className="mr-1.5 h-3.5 w-3.5" /> : command ? <Copy className="mr-1.5 h-3.5 w-3.5" /> : <Download className="mr-1.5 h-3.5 w-3.5" />}
-      {t("settings.agentTool.install.action")}
-    </Button>
+    <div className="flex flex-col items-end gap-1">
+      <Button type="button" size="sm" disabled={running} onClick={() => void handleClick()}>
+        {installed ? (
+          <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+        ) : (
+          <Download className="mr-1.5 h-3.5 w-3.5" />
+        )}
+        {running
+          ? t("settings.agentTool.install.running")
+          : installed
+            ? t("settings.agentTool.install.update")
+            : t("settings.agentTool.install.action")}
+      </Button>
+      {error ? (
+        <p role="alert" className="max-w-sm text-right text-xs text-destructive">
+          {error}
+        </p>
+      ) : null}
+    </div>
   );
 }

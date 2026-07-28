@@ -2,12 +2,13 @@ import { useTranslation } from "react-i18next";
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import type { AgentToolSource, AgentToolStatus } from "@/services/settings";
+import type { AgentToolInstall, AgentToolSource, AgentToolStatus } from "@/services/settings";
 
 interface ToolStatusCardProps {
   label: string;
   status: AgentToolStatus;
   source: AgentToolSource;
+  install?: AgentToolInstall;
 }
 
 function statusValue(status: AgentToolStatus, t: ReturnType<typeof useTranslation>["t"]): string {
@@ -16,6 +17,14 @@ function statusValue(status: AgentToolStatus, t: ReturnType<typeof useTranslatio
 }
 
 function sourceValue(source: AgentToolSource, t: ReturnType<typeof useTranslation>["t"]): string {
+  if (source.preferred === "managed" && source.value === "path") {
+    return t("settings.agentTool.source.fallbackPath");
+  }
+  if (source.value === "managed") {
+    return source.detail
+      ? t("settings.agentTool.source.managedDetail", { path: source.detail })
+      : t("settings.agentTool.source.managed");
+  }
   if (source.value === "path") {
     return source.detail
       ? t("settings.agentTool.source.pathDetail", { path: source.detail })
@@ -24,7 +33,7 @@ function sourceValue(source: AgentToolSource, t: ReturnType<typeof useTranslatio
   return t("settings.agentTool.source.none");
 }
 
-export function ToolStatusCard({ label, status, source }: ToolStatusCardProps) {
+export function ToolStatusCard({ label, status, source, install }: ToolStatusCardProps) {
   const { t } = useTranslation();
 
   return (
@@ -47,6 +56,15 @@ export function ToolStatusCard({ label, status, source }: ToolStatusCardProps) {
             <span className="text-sm text-muted-foreground">{statusValue(status, t)}</span>
           </div>
         </div>
+
+        {install?.pending_version ? (
+          <div className="flex items-center justify-between border-b pb-4">
+            <p className="text-sm font-medium">{t("settings.agentTool.install.pendingTitle")}</p>
+            <Badge variant="outline">
+              {t("settings.agentTool.install.pending", { version: install.pending_version })}
+            </Badge>
+          </div>
+        ) : null}
 
         <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-0.5">

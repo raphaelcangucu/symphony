@@ -5,6 +5,7 @@ defmodule SymphonyElixirWeb.Tracker.SettingsControllerTest do
   import Plug.Conn
 
   alias SymphonyElixir.AgentUsage
+  alias SymphonyElixir.AgentLifecycle.Paths
   alias SymphonyElixir.Repo
   alias SymphonyElixir.Settings.Setting
 
@@ -16,13 +17,24 @@ defmodule SymphonyElixirWeb.Tracker.SettingsControllerTest do
     AgentUsage.reset()
     Repo.delete_all(Setting)
     previous = System.get_env(@token_env)
+    previous_root = Application.get_env(:symphony_elixir, :agent_data_dir)
+    root = Path.join(System.tmp_dir!(), "agent-tools-#{System.unique_integer([:positive])}")
+    Application.put_env(:symphony_elixir, :agent_data_dir, root)
     System.put_env(@token_env, "test-token")
-    on_exit(fn -> restore_env(previous) end)
+
+    on_exit(fn ->
+      File.rm_rf(root)
+      restore_app_env(:agent_data_dir, previous_root)
+      restore_env(previous)
+    end)
+
     :ok
   end
 
   defp restore_env(nil), do: System.delete_env(@token_env)
   defp restore_env(value), do: System.put_env(@token_env, value)
+  defp restore_app_env(key, nil), do: Application.delete_env(:symphony_elixir, key)
+  defp restore_app_env(key, value), do: Application.put_env(:symphony_elixir, key, value)
 
   defp authed_conn do
     build_conn() |> put_req_header("authorization", "Bearer test-token")
@@ -143,6 +155,18 @@ defmodule SymphonyElixirWeb.Tracker.SettingsControllerTest do
     assert is_list(codex["model"]["options"])
     assert Map.has_key?(codex["model"], "selected")
     assert Map.has_key?(codex["install"], "available")
+  end
+
+  test "GET /api/tracker/v1/settings/agents/tools exposes a deferred update" do
+    pending = Paths.pending_manifest("codex")
+    File.mkdir_p!(Path.dirname(pending))
+    File.write!(pending, Jason.encode!(%{"version" => "0.143.0"}))
+
+    conn = get(authed_conn(), "/api/tracker/v1/settings/agents/tools")
+
+    assert %{"data" => %{"tools" => tools}} = json_response(conn, 200)
+    codex = Enum.find(tools, &(&1["id"] == "codex"))
+    assert codex["install"]["pending_version"] == "0.143.0"
   end
 
   test "PUT /api/tracker/v1/settings/agent_models persists a catalog model" do

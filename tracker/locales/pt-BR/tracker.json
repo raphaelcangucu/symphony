@@ -346,23 +346,58 @@
       },
       "status": {
         "title": "Status",
-        "description": "Se a CLI é descoberta no PATH do sistema.",
+        "description": "A CLI e a versão que o Symphony usará em novas sessões.",
         "installed": "Instalado",
         "notInstalled": "Não instalado",
-        "notFound": "Não encontrado no PATH"
+        "notFound": "Não encontrado"
       },
       "source": {
         "title": "Origem",
         "description": "De onde o Symphony resolve esta CLI.",
+        "managed": "Isolada gerenciada",
+        "managedDetail": "Isolada gerenciada ({{path}})",
         "path": "PATH do sistema",
         "pathDetail": "PATH do sistema ({{path}})",
+        "fallbackPath": "Gerenciada preferida; usando o PATH do sistema",
         "none": "Não instalado"
       },
       "install": {
         "action": "Instalar",
-        "installed": "Instalado",
-        "copied": "Comando de instalação copiado — execute no seu terminal.",
-        "copyFailed": "Não foi possível copiar o comando de instalação."
+        "update": "Atualizar CLI",
+        "running": "Executando…",
+        "failed": "A ação de manutenção da CLI falhou.",
+        "pendingTitle": "Ativação",
+        "pending": "Atualização {{version}} pendente"
+      },
+      "lifecycle": {
+        "title": "Manutenção da CLI",
+        "sourceTitle": "Origem da CLI",
+        "sourceDescription": "A instalação isolada é o padrão; o PATH do sistema continua disponível como fallback.",
+        "failoverTitle": "Failover automático de conta",
+        "failoverDescription": "Desativado por padrão. Quando habilitado, troca somente entre sessões.",
+        "repair": "Reparar",
+        "saveFailed": "Não foi possível salvar a configuração da CLI."
+      },
+      "accounts": {
+        "title": "Contas isoladas",
+        "empty": "Nenhuma conta configurada.",
+        "default": "Padrão",
+        "stale": "Consumo desatualizado",
+        "used": "{{percent}}% usado",
+        "useDefault": "Tornar padrão",
+        "useDefaultLabel": "Usar {{name}} como padrão",
+        "deleteLabel": "Excluir {{name}}",
+        "id": "ID da conta",
+        "label": "Nome de exibição",
+        "add": "Adicionar conta",
+        "credentialsHelp": "As credenciais ficam no home isolado desta conta e nunca são retornadas pela API.",
+        "actionFailed": "A ação da conta falhou.",
+        "status": {
+          "authenticated": "Autenticada",
+          "unauthenticated": "Não autenticada",
+          "expired": "Expirada",
+          "error": "Erro"
+        }
       },
       "model": {
         "title": "Modelo",

@@ -10,7 +10,7 @@ defmodule SymphonyElixir.Settings.AgentTools do
   - `AgentLifecycle.Catalog` for provider lifecycle metadata.
   """
 
-  alias SymphonyElixir.AgentLifecycle.{Catalog, Resolver}
+  alias SymphonyElixir.AgentLifecycle.{Catalog, Installer, Resolver}
   alias SymphonyElixir.Settings.AgentModels
 
   @spec list() :: [map()]
@@ -29,7 +29,8 @@ defmodule SymphonyElixir.Settings.AgentTools do
       source: source(resolution),
       install: %{
         available: managed_install_available?(resolution),
-        strategy: Atom.to_string(catalog.release.type)
+        strategy: Atom.to_string(catalog.release.type),
+        pending_version: pending_version(agent)
       },
       model: %{
         options: AgentModels.options(agent),
@@ -79,4 +80,11 @@ defmodule SymphonyElixir.Settings.AgentTools do
 
   defp managed_install_available?({:ok, %{effective_source: :managed}}), do: false
   defp managed_install_available?(_resolution), do: true
+
+  defp pending_version(agent) do
+    case Installer.pending(agent) do
+      {:ok, %{"version" => version}} -> version
+      _ -> nil
+    end
+  end
 end

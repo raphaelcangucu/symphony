@@ -2,21 +2,30 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 
+import { AgentAccountsCard } from "@/components/settings/agent/AgentAccountsCard";
+import { AgentLifecycleCard } from "@/components/settings/agent/AgentLifecycleCard";
 import { AgentModelCard } from "@/components/settings/agent/AgentModelCard";
 import { InstallActionButton } from "@/components/settings/agent/InstallActionButton";
 import { ToolStatusCard } from "@/components/settings/agent/ToolStatusCard";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { findAgentDescriptor } from "@/lib/settingsAgents";
-import { fetchAgentTools, type AgentTool } from "@/services/settings";
+import {
+  fetchAgentAccounts,
+  fetchAgentTools,
+  fetchSettings,
+  type AgentAccount,
+  type AgentCliPreference,
+  type AgentTool,
+} from "@/services/settings";
 
 function unsupportedTool(slug: string): AgentTool {
   return {
     id: slug,
     kind: "codex",
     status: { installed: false, version: null, path: null, command: slug },
-    source: { value: "none", managed: false, detail: null },
-    install: { available: false, command: null },
+    source: { value: "none", preferred: "managed", managed: false, detail: null },
+    install: { available: false, strategy: "none" },
     model: { options: [], selected: null },
   };
 }
@@ -27,8 +36,11 @@ export function AgentToolSettingsPage() {
   const descriptor = useMemo(() => findAgentDescriptor(slug), [slug]);
 
   const [tool, setTool] = useState<AgentTool | null>(null);
+  const [accounts, setAccounts] = useState<AgentAccount[]>([]);
+  const [preference, setPreference] = useState<AgentCliPreference | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState(false);
+  const [refreshGeneration, setRefreshGeneration] = useState(0);
 
   const kind = descriptor?.kind ?? null;
 
@@ -43,11 +55,19 @@ export function AgentToolSettingsPage() {
     let cancelled = false;
     setLoading(true);
     setLoadError(false);
-    void fetchAgentTools()
-      .then((tools) => {
+    void Promise.all([fetchAgentTools(), fetchAgentAccounts(kind), fetchSettings()])
+      .then(([tools, loadedAccounts, settings]) => {
         if (cancelled) return;
         const match = tools.find((entry) => entry.kind === kind) ?? null;
         setTool(match);
+        setAccounts(loadedAccounts);
+        setPreference(
+          settings.agent_cli?.[kind] ?? {
+            preferred_source: match?.source.preferred ?? "managed",
+            auto_update: true,
+            failover_enabled: false,
+          },
+        );
       })
       .catch(() => {
         if (!cancelled) setLoadError(true);
@@ -59,7 +79,7 @@ export function AgentToolSettingsPage() {
     return () => {
       cancelled = true;
     };
-  }, [kind]);
+  }, [kind, refreshGeneration]);
 
   if (!descriptor) {
     return (
@@ -84,10 +104,13 @@ export function AgentToolSettingsPage() {
             {t("settings.agentTool.cliTag")}
           </span>
         </div>
-        <InstallActionButton
-          installed={effectiveTool?.status.installed ?? false}
-          command={effectiveTool?.install.command ?? null}
-        />
+        {descriptor.supported && kind ? (
+          <InstallActionButton
+            agent={kind}
+            installed={effectiveTool?.status.installed ?? false}
+            onComplete={() => setRefreshGeneration((value) => value + 1)}
+          />
+        ) : null}
       </div>
 
       {!descriptor.supported ? (
@@ -99,7 +122,12 @@ export function AgentToolSettingsPage() {
               </p>
             </CardContent>
           </Card>
-          <ToolStatusCard label={label} status={effectiveTool!.status} source={effectiveTool!.source} />
+          <ToolStatusCard
+            label={label}
+            status={effectiveTool!.status}
+            source={effectiveTool!.source}
+            install={effectiveTool!.install}
+          />
         </>
       ) : loadError ? (
         <p className="text-xs text-muted-foreground">{t("settings.agentTool.loadFailed")}</p>
@@ -107,7 +135,20 @@ export function AgentToolSettingsPage() {
         <p className="text-xs text-muted-foreground">{t("common.loading")}</p>
       ) : (
         <>
-          <ToolStatusCard label={label} status={tool.status} source={tool.source} />
+          <ToolStatusCard
+            label={label}
+            status={tool.status}
+            source={tool.source}
+            install={tool.install}
+          />
+          {kind && preference ? (
+            <AgentLifecycleCard
+              agent={kind}
+              initial={preference}
+              onLifecycleComplete={() => setRefreshGeneration((value) => value + 1)}
+            />
+          ) : null}
+          {kind ? <AgentAccountsCard agent={kind} initialAccounts={accounts} /> : null}
           {kind ? <AgentModelCard agent={kind} label={label} model={tool.model} /> : null}
         </>
       )}

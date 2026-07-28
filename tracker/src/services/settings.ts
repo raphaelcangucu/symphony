@@ -28,6 +28,7 @@ export type AgentEffortSettings = Partial<Record<AgentKind, string | null>>;
 
 export interface AllSettings {
   agents: AgentSettings;
+  agent_cli?: Partial<Record<AgentKind, AgentCliPreference>>;
   agent_models?: AgentModelSettings;
   agent_efforts?: AgentEffortSettings;
   gateways?: GatewaySettings;
@@ -36,7 +37,14 @@ export interface AllSettings {
   ui: UiSettings;
 }
 
-export type AgentToolSourceValue = "path" | "none";
+export type AgentToolSourceValue = "managed" | "path" | "none";
+export type AgentPreferredSource = "managed" | "path";
+
+export interface AgentCliPreference {
+  preferred_source: AgentPreferredSource;
+  auto_update: boolean;
+  failover_enabled: boolean;
+}
 
 export interface AgentToolStatus {
   installed: boolean;
@@ -47,13 +55,16 @@ export interface AgentToolStatus {
 
 export interface AgentToolSource {
   value: AgentToolSourceValue;
+  preferred: AgentPreferredSource;
   managed: boolean;
   detail: string | null;
+  fallback_reason?: unknown;
 }
 
 export interface AgentToolInstall {
   available: boolean;
-  command: string | null;
+  strategy: string;
+  pending_version?: string | null;
 }
 
 export interface AgentToolModel {
@@ -68,6 +79,49 @@ export interface AgentTool {
   source: AgentToolSource;
   install: AgentToolInstall;
   model: AgentToolModel;
+}
+
+export type AgentAuthenticationStatus =
+  | "authenticated"
+  | "unauthenticated"
+  | "expired"
+  | "error";
+
+export interface AgentUsageWindow {
+  kind: string;
+  used_percent: number | null;
+  resets_at: string | null;
+  window_minutes: number | null;
+}
+
+export interface AgentAccountUsage {
+  account_id: string;
+  plan: string | null;
+  credits_remaining: number | null;
+  fetched_at: string;
+  state: "fresh" | "refreshing" | "stale";
+  stale: boolean;
+  stale_reason: unknown;
+  next_refresh_at: string | null;
+  windows: AgentUsageWindow[];
+}
+
+export interface AgentAccount {
+  id: string;
+  label: string;
+  agent_kind: AgentKind;
+  authentication_status: AgentAuthenticationStatus;
+  default: boolean;
+  created_at: string | number;
+  updated_at: string | number;
+  usage: AgentAccountUsage | null;
+}
+
+export interface AgentLifecycleResult {
+  operation: "install" | "update" | "repair";
+  status: string;
+  version: string;
+  executable_path: string;
 }
 
 export interface AgentAvailabilityEntry {
@@ -103,6 +157,76 @@ export async function fetchAgentAvailability(): Promise<AgentAvailability> {
 export async function fetchAgentTools(): Promise<AgentTool[]> {
   const response = await http.get(trackerPath("/settings/agents/tools"));
   return unwrapData<{ tools: AgentTool[] }>(response).tools;
+}
+
+export async function updateAgentSource(
+  agent: AgentKind,
+  source: AgentPreferredSource,
+): Promise<AgentCliPreference> {
+  const response = await http.put(trackerPath(`/settings/agents/${agent}/source`), { source });
+  return unwrapData<AgentCliPreference>(response);
+}
+
+export async function runAgentLifecycle(
+  agent: AgentKind,
+  operation: AgentLifecycleResult["operation"],
+): Promise<AgentLifecycleResult> {
+  const response = await http.post(trackerPath(`/settings/agents/${agent}/${operation}`));
+  return unwrapData<AgentLifecycleResult>(response);
+}
+
+export async function fetchAgentAccounts(agent: AgentKind): Promise<AgentAccount[]> {
+  const response = await http.get(trackerPath(`/settings/agents/${agent}/accounts`));
+  return unwrapData<{ accounts: AgentAccount[] }>(response).accounts;
+}
+
+export async function createAgentAccount(
+  agent: AgentKind,
+  input: {
+    id: string;
+    label: string;
+    authentication_status?: AgentAuthenticationStatus;
+  },
+): Promise<AgentAccount> {
+  const response = await http.post(trackerPath(`/settings/agents/${agent}/accounts`), input);
+  return unwrapData<AgentAccount>(response);
+}
+
+export async function updateAgentAccount(
+  agent: AgentKind,
+  id: string,
+  input: {
+    label?: string;
+    authentication_status?: AgentAuthenticationStatus;
+  },
+): Promise<AgentAccount> {
+  const response = await http.put(
+    trackerPath(`/settings/agents/${agent}/accounts/${encodeURIComponent(id)}`),
+    input,
+  );
+  return unwrapData<AgentAccount>(response);
+}
+
+export async function deleteAgentAccount(agent: AgentKind, id: string): Promise<void> {
+  await http.delete(trackerPath(`/settings/agents/${agent}/accounts/${encodeURIComponent(id)}`));
+}
+
+export async function setDefaultAgentAccount(
+  agent: AgentKind,
+  id: string,
+): Promise<AgentAccount> {
+  const response = await http.put(
+    trackerPath(`/settings/agents/${agent}/accounts/${encodeURIComponent(id)}/default`),
+  );
+  return unwrapData<AgentAccount>(response);
+}
+
+export async function updateAgentFailover(
+  agent: AgentKind,
+  enabled: boolean,
+): Promise<AgentCliPreference> {
+  const response = await http.put(trackerPath(`/settings/agents/${agent}/failover`), { enabled });
+  return unwrapData<AgentCliPreference>(response);
 }
 
 export async function updateAgentModel(

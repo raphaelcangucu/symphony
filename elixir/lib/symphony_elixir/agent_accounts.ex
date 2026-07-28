@@ -88,6 +88,53 @@ defmodule SymphonyElixir.AgentAccounts do
     end)
   end
 
+  @spec update(String.t(), String.t(), map()) :: {:ok, map()} | {:error, term()}
+  def update(agent, id, attrs)
+      when is_binary(agent) and is_binary(id) and is_map(attrs) do
+    transaction(agent, fn ->
+      with {:ok, accounts} <- list(agent),
+           %{} = selected <- Enum.find(accounts, &(&1.id == id)),
+           {:ok, label} <- optional_label(attrs, selected.label),
+           {:ok, status} <-
+             optional_authentication_status(attrs, selected.authentication_status) do
+        updated_account = %{
+          selected
+          | label: label,
+            authentication_status: status,
+            updated_at: System.system_time(:millisecond)
+        }
+
+        updated =
+          Enum.map(accounts, fn
+            %{id: ^id} -> updated_account
+            account -> account
+          end)
+
+        with :ok <- persist(agent, updated), do: {:ok, updated_account}
+      else
+        nil -> {:error, {:account_not_found, id}}
+        {:error, _reason} = error -> error
+      end
+    end)
+  end
+
+  @spec delete(String.t(), String.t()) :: :ok | {:error, term()}
+  def delete(agent, id) when is_binary(agent) and is_binary(id) do
+    transaction(agent, fn ->
+      with {:ok, accounts} <- list(agent),
+           %{} <- Enum.find(accounts, &(&1.id == id)),
+           :ok <- persist(agent, Enum.reject(accounts, &(&1.id == id))) do
+        case File.rm_rf(Paths.account_home(agent, id)) do
+          {:ok, _removed} -> :ok
+          {:error, reason, _path} -> {:error, reason}
+        end
+      else
+        nil -> {:error, {:account_not_found, id}}
+        {:error, _reason} = error -> error
+      end
+    end)
+  end
+
   @doc """
   Resolves request, project, global default, then first authenticated account.
   """
@@ -187,6 +234,22 @@ defmodule SymphonyElixir.AgentAccounts do
 
   defp authentication_status(attrs) do
     case value(attrs, :authentication_status) do
+      status when status in @statuses -> {:ok, status}
+      _ -> {:error, {:invalid_account, :authentication_status}}
+    end
+  end
+
+  defp optional_label(attrs, fallback) do
+    case value(attrs, :label) do
+      nil -> {:ok, fallback}
+      label when is_binary(label) and label != "" -> {:ok, label}
+      _ -> {:error, {:invalid_account, :label}}
+    end
+  end
+
+  defp optional_authentication_status(attrs, fallback) do
+    case value(attrs, :authentication_status) do
+      nil -> {:ok, fallback}
       status when status in @statuses -> {:ok, status}
       _ -> {:error, {:invalid_account, :authentication_status}}
     end

@@ -346,23 +346,58 @@
       },
       "status": {
         "title": "Status",
-        "description": "Whether the CLI is discovered from your system PATH.",
+        "description": "The CLI and version Symphony will use for new sessions.",
         "installed": "Installed",
         "notInstalled": "Not installed",
-        "notFound": "Not found in PATH"
+        "notFound": "Not found"
       },
       "source": {
         "title": "Source",
         "description": "Where Symphony resolves this CLI from.",
+        "managed": "Managed isolated",
+        "managedDetail": "Managed isolated ({{path}})",
         "path": "System PATH",
         "pathDetail": "System PATH ({{path}})",
+        "fallbackPath": "Managed preferred; using System PATH",
         "none": "Not installed"
       },
       "install": {
         "action": "Install",
-        "installed": "Installed",
-        "copied": "Install command copied — run it in your terminal.",
-        "copyFailed": "Could not copy the install command."
+        "update": "Update CLI",
+        "running": "Working…",
+        "failed": "CLI lifecycle action failed.",
+        "pendingTitle": "Activation",
+        "pending": "Update {{version}} pending"
+      },
+      "lifecycle": {
+        "title": "CLI lifecycle",
+        "sourceTitle": "CLI source",
+        "sourceDescription": "Managed isolated is the default; System PATH remains available as fallback.",
+        "failoverTitle": "Automatic account failover",
+        "failoverDescription": "Disabled by default. If enabled, switches only between sessions.",
+        "repair": "Repair",
+        "saveFailed": "Could not save the CLI setting."
+      },
+      "accounts": {
+        "title": "Isolated accounts",
+        "empty": "No accounts configured.",
+        "default": "Default",
+        "stale": "Stale usage",
+        "used": "{{percent}}% used",
+        "useDefault": "Make default",
+        "useDefaultLabel": "Use {{name}} by default",
+        "deleteLabel": "Delete {{name}}",
+        "id": "Account ID",
+        "label": "Display name",
+        "add": "Add account",
+        "credentialsHelp": "Credentials stay in this account's isolated provider home and are never returned by the API.",
+        "actionFailed": "Account action failed.",
+        "status": {
+          "authenticated": "Authenticated",
+          "unauthenticated": "Not authenticated",
+          "expired": "Expired",
+          "error": "Error"
+        }
       },
       "model": {
         "title": "Model",
