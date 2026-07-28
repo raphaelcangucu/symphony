@@ -8,6 +8,7 @@ defmodule SymphonyElixir.MobileRpc.EvidenceService do
 
   alias SymphonyElixir.Assistant.History
   alias SymphonyElixir.Evidence.{Record, SessionCollector, Store}
+  alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.MobileRpc.OrchestratorService
 
   @type result :: {:ok, map()} | {:error, term()}
@@ -30,10 +31,11 @@ defmodule SymphonyElixir.MobileRpc.EvidenceService do
         |> apply(:list_executions, [])
 
       history = Map.get(context, :mobile_evidence_history, History)
+      issue = task_source(context, project_slug, identifier)
 
       {:ok,
        %{
-         "records" => Enum.map(records, &present_record(&1, identifier, executions, history))
+         "records" => Enum.map(records, &present_record(&1, identifier, executions, history, issue))
        }}
     end
   end
@@ -88,7 +90,7 @@ defmodule SymphonyElixir.MobileRpc.EvidenceService do
   def call(_method, _params, _context),
     do: rpc_error("method_not_allowed", "Evidence RPC method is unavailable")
 
-  defp present_record(%Record{} = record, identifier, executions, history) do
+  defp present_record(%Record{} = record, identifier, executions, history, issue) do
     %{
       "id" => record.id,
       "run_id" => record.run_id,
@@ -97,20 +99,26 @@ defmodule SymphonyElixir.MobileRpc.EvidenceService do
       "ui_change" => record.ui_change,
       "manifest" => record.manifest,
       "inserted_at" => record.inserted_at,
-      "provenance" => provenance(record, identifier, executions, history)
+      "provenance" => provenance(record, identifier, executions, history, issue)
     }
   end
 
-  defp provenance(%Record{session_id: "assistant-thread:" <> raw_id}, _identifier, _executions, history) do
+  defp provenance(
+         %Record{session_id: "assistant-thread:" <> raw_id},
+         _identifier,
+         _executions,
+         history,
+         issue
+       ) do
     with {thread_id, ""} <- Integer.parse(raw_id),
          {:ok, thread} <- history.get_thread(thread_id) do
-      present_provenance("session", thread, thread_id, nil)
+      present_provenance("session", thread, issue, thread_id, nil)
     else
       _reason -> nil
     end
   end
 
-  defp provenance(%Record{} = record, identifier, executions, _history) do
+  defp provenance(%Record{} = record, identifier, executions, _history, issue) do
     execution =
       Enum.find(executions, fn candidate ->
         value(candidate, :issue_identifier) == identifier and
@@ -122,23 +130,35 @@ defmodule SymphonyElixir.MobileRpc.EvidenceService do
       present_provenance(
         "orchestrator",
         execution,
+        issue,
         nil,
         value(execution, :execution_session_id)
       )
     end
   end
 
-  defp present_provenance(path, source, thread_id, execution_session_id) do
+  defp present_provenance(path, source, issue, thread_id, execution_session_id) do
     %{
       "execution_path" => path,
-      "agent_kind" => value(source, :agent_kind),
+      "agent_kind" => value(source, :agent_kind) || value(issue, :agent_kind) || value(issue, :agent),
       "thread_id" => thread_id,
       "execution_session_id" => execution_session_id,
-      "requested_model" => value(source, :requested_model),
-      "requested_effort" => value(source, :requested_effort),
+      "requested_model" => value(source, :requested_model) || value(issue, :model),
+      "requested_effort" => value(source, :requested_effort) || value(issue, :effort),
       "resolved_model" => value(source, :resolved_model),
       "resolved_effort" => value(source, :resolved_effort)
     }
+  end
+
+  defp task_source(context, project_slug, identifier) do
+    issue_service = Map.get(context, :mobile_evidence_issue_service, Context)
+
+    case issue_service.get_issue(project_slug, identifier) do
+      {:ok, issue} -> issue
+      _error -> nil
+    end
+  rescue
+    _error -> nil
   end
 
   defp find_record(records, run_id) do
@@ -177,5 +197,6 @@ defmodule SymphonyElixir.MobileRpc.EvidenceService do
   defp rpc_error(code, message),
     do: {:error, {:rpc_error, code, message, false, nil}}
 
-  defp value(map, key), do: Map.get(map, key, Map.get(map, Atom.to_string(key)))
+  defp value(map, key) when is_map(map), do: Map.get(map, key, Map.get(map, Atom.to_string(key)))
+  defp value(_map, _key), do: nil
 end

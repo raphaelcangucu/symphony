@@ -62,6 +62,33 @@ defmodule SymphonyElixir.MobileRpc.Methods.EvidenceTest do
     end
   end
 
+  defmodule FakeEvidenceHistory do
+    def list_threads(_opts), do: []
+
+    def get_thread(77) do
+      {:ok,
+       %{
+         id: 77,
+         agent_kind: "claude",
+         requested_model: nil,
+         requested_effort: nil,
+         resolved_model: "claude-opus-5",
+         resolved_effort: "high"
+       }}
+    end
+  end
+
+  defmodule FakeEvidenceIssueService do
+    def get_issue("gam", "GAM-1") do
+      {:ok,
+       %{
+         agent_kind: "claude",
+         model: "claude-opus-5",
+         effort: "high"
+       }}
+    end
+  end
+
   setup %{tmp_dir: tmp_dir} do
     migrate_repo()
     SymphonyElixir.TestSupport.truncate_tracker!(Repo)
@@ -226,6 +253,41 @@ defmodule SymphonyElixir.MobileRpc.Methods.EvidenceTest do
              "requested_model" => "gpt-5.6-sol",
              "requested_effort" => "high",
              "resolved_model" => "gpt-5.6-sol",
+             "resolved_effort" => "high"
+           }
+  end
+
+  test "inherits requested provenance from the task when a direct thread resolved it at runtime",
+       %{record: record, tmp_dir: tmp_dir} do
+    assert {:ok, 1} = Store.delete_all("gam", "GAM-1")
+    workspace = Path.join(tmp_dir, "workspace")
+
+    assert {:ok, _record} =
+             Store.persist("gam", "GAM-1", workspace, record.manifest,
+               evidence_root: Path.join(tmp_dir, "durable-session"),
+               evidence_dir: Path.join(workspace, ".symphony/evidence"),
+               run_id: "session-run",
+               session_id: "assistant-thread:77"
+             )
+
+    assert {:ok, %{"records" => [evidence]}} =
+             EvidenceService.call(
+               "evidence.list",
+               %{"project_slug" => "gam", "identifier" => "GAM-1"},
+               %{
+                 mobile_evidence_history: FakeEvidenceHistory,
+                 mobile_evidence_issue_service: FakeEvidenceIssueService
+               }
+             )
+
+    assert evidence["provenance"] == %{
+             "execution_path" => "session",
+             "agent_kind" => "claude",
+             "thread_id" => 77,
+             "execution_session_id" => nil,
+             "requested_model" => "claude-opus-5",
+             "requested_effort" => "high",
+             "resolved_model" => "claude-opus-5",
              "resolved_effort" => "high"
            }
   end
