@@ -25,7 +25,7 @@ defmodule SymphonyElixir.AgentLifecycle.Catalog do
       account_home_env: "CLAUDE_CONFIG_DIR",
       release: %{
         type: :anthropic,
-        base_url: "https://storage.googleapis.com/claude-code-dist-86c565f3-f756-42ad-8dfa-d59b1c096ae3/claude-code-releases"
+        base_url: "https://storage.googleapis.com/claude-code-dist-86c565f3-f756-42ad-8dfa-d59b1c096819/claude-code-releases"
       }
     },
     "cursor" => %{

@@ -32,6 +32,9 @@ defmodule SymphonyElixir.AgentLifecycle.Paths do
   @spec current_manifest(String.t()) :: Path.t()
   def current_manifest(agent), do: Path.join(agent_root(agent), "current.json")
 
+  @spec pending_manifest(String.t()) :: Path.t()
+  def pending_manifest(agent), do: Path.join(agent_root(agent), "pending.json")
+
   @spec accounts_manifest(String.t()) :: Path.t()
   def accounts_manifest(agent), do: Path.join(agent_root(agent), "accounts.json")
 

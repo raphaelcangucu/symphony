@@ -27,4 +27,9 @@ defmodule SymphonyElixir.AgentLifecycle.CatalogTest do
   test "unknown agents are rejected without creating atoms" do
     assert :error = Catalog.fetch("not-real")
   end
+
+  test "Claude uses the working Anthropic distribution bucket from Jean" do
+    assert Catalog.fetch!("claude").release.base_url ==
+             "https://storage.googleapis.com/claude-code-dist-86c565f3-f756-42ad-8dfa-d59b1c096819/claude-code-releases"
+  end
 end

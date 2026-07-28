@@ -138,7 +138,8 @@ defmodule SymphonyElixirWeb.Tracker.SettingsControllerTest do
     assert is_boolean(codex["status"]["installed"])
     assert Map.has_key?(codex["status"], "version")
     assert Map.has_key?(codex["status"], "path")
-    assert codex["source"]["value"] in ["path", "none"]
+    assert codex["source"]["value"] in ["managed", "path", "none"]
+    assert codex["source"]["preferred"] in ["managed", "path"]
     assert is_list(codex["model"]["options"])
     assert Map.has_key?(codex["model"], "selected")
     assert Map.has_key?(codex["install"], "available")
