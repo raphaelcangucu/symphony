@@ -9,6 +9,7 @@ defmodule SymphonyElixir.MobileRpc.MobilePresenterExecutionTest do
     executions = [
       %{
         execution_session_id: 42,
+        session_id: "42",
         issue_identifier: "DEV-42",
         status: "aborted",
         agent_kind: "codex",
