@@ -290,6 +290,33 @@ defmodule SymphonyElixir.MobileComparison.LocalGatewayTest do
     end
   end
 
+  defmodule PartialThenFinalEvidence do
+    def call(
+          "evidence.list",
+          %{"project_slug" => "dev10x", "identifier" => "DEV-2"},
+          context
+        ) do
+      record =
+        if Process.get({__MODULE__, context.test_pid}, false) do
+          %{
+            "run_id" => "attempt-final",
+            "session_id" => "assistant-thread:43",
+            "status" => "passed",
+            "manifest" => %{"runs" => [%{"status" => "passed"}]}
+          }
+        else
+          %{
+            "run_id" => "attempt-partial",
+            "session_id" => "assistant-thread:43",
+            "status" => "failed",
+            "manifest" => %{"runs" => []}
+          }
+        end
+
+      {:ok, %{"records" => [record]}}
+    end
+  end
+
   defmodule FakeSessionEvidenceCollector do
     def collect(project_slug, identifier, context) do
       send(context.test_pid, {:collect_session_evidence, project_slug, identifier})
@@ -301,6 +328,14 @@ defmodule SymphonyElixir.MobileComparison.LocalGatewayTest do
     def collect(project_slug, identifier, context) do
       send(context.test_pid, {:collect_current_attempt_evidence, project_slug, identifier})
       Process.put({PriorThenCurrentEvidence, context.test_pid}, true)
+      :ok
+    end
+  end
+
+  defmodule FinalAttemptEvidenceCollector do
+    def collect(project_slug, identifier, context) do
+      send(context.test_pid, {:collect_final_attempt_evidence, project_slug, identifier})
+      Process.put({PartialThenFinalEvidence, context.test_pid}, true)
       :ok
     end
   end
@@ -604,6 +639,7 @@ defmodule SymphonyElixir.MobileComparison.LocalGatewayTest do
     context =
       context
       |> Map.put(:comparison_session_id, 43)
+      |> Map.put(:comparison_session_status, "closed")
       |> Map.put(:mobile_evidence_service, PriorThenCurrentEvidence)
       |> Map.put(:comparison_session_evidence_collector, CurrentAttemptEvidenceCollector)
 
@@ -615,6 +651,34 @@ defmodule SymphonyElixir.MobileComparison.LocalGatewayTest do
            ]
 
     assert_receive {:collect_current_attempt_evidence, "dev10x", "DEV-2"}
+  end
+
+  test "does not persist an in-progress session manifest", %{context: context} do
+    context =
+      context
+      |> Map.put(:comparison_session_id, 43)
+      |> Map.put(:comparison_session_status, "active")
+      |> Map.put(:mobile_evidence_service, EmptyThenCollectedEvidence)
+      |> Map.put(:comparison_session_evidence_collector, FakeSessionEvidenceCollector)
+
+    assert {:ok, []} = LocalGateway.list_evidence("dev10x", "DEV-2", context)
+    refute_receive {:collect_session_evidence, "dev10x", "DEV-2"}
+  end
+
+  test "replaces a partial current-session snapshot after the thread becomes terminal", %{
+    context: context
+  } do
+    context =
+      context
+      |> Map.put(:comparison_session_id, 43)
+      |> Map.put(:comparison_session_status, "closed")
+      |> Map.put(:mobile_evidence_service, PartialThenFinalEvidence)
+      |> Map.put(:comparison_session_evidence_collector, FinalAttemptEvidenceCollector)
+
+    assert {:ok, [%{"run_id" => "attempt-final", "status" => "passed"}]} =
+             LocalGateway.list_evidence("dev10x", "DEV-2", context)
+
+    assert_receive {:collect_final_attempt_evidence, "dev10x", "DEV-2"}
   end
 
   test "persists the operator decision in the parent without requiring a global request key", %{

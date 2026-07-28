@@ -63,4 +63,50 @@ defmodule SymphonyElixir.MobileComparison.SessionEvidenceCollectorTest do
     assert opts[:idempotent] == true
     assert opts[:session_id] == "assistant-thread:12"
   end
+
+  test "targets the requested terminal thread instead of a newer active thread", %{
+    tmp_dir: tmp_dir
+  } do
+    terminal = Path.join(tmp_dir, "terminal")
+    active = Path.join(tmp_dir, "active")
+
+    for workspace <- [terminal, active] do
+      evidence_dir = Path.join(workspace, ".symphony/evidence")
+      File.mkdir_p!(evidence_dir)
+
+      File.write!(
+        Path.join(evidence_dir, "manifest.json"),
+        Jason.encode!(%{
+          "issue" => "DEV-2",
+          "runs" => [
+            %{
+              "kind" => "unit",
+              "repo" => "site",
+              "command" => "node --test",
+              "status" => "passed",
+              "workspace" => workspace
+            }
+          ]
+        })
+      )
+    end
+
+    Process.put({FakeHistory, :threads}, [
+      %{id: 12, status: "closed", workspace_path: terminal},
+      %{id: 13, status: "active", workspace_path: active}
+    ])
+
+    Process.put({FakeStore, :test_pid}, self())
+
+    assert :ok =
+             SessionEvidenceCollector.collect("dev10x", "DEV-2", %{
+               comparison_history: FakeHistory,
+               comparison_evidence_store: FakeStore,
+               comparison_session_id: 12
+             })
+
+    assert_receive {:persist, "dev10x", "DEV-2", ^terminal, _manifest, opts}
+    assert opts[:session_id] == "assistant-thread:12"
+    refute_receive {:persist, "dev10x", "DEV-2", ^active, _manifest, _opts}
+  end
 end

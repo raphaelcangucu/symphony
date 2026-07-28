@@ -249,16 +249,33 @@ defmodule SymphonyElixir.MobileComparison.LocalGateway do
     end
   end
 
-  defp evidence_collection_required?([], _context), do: true
-
   defp evidence_collection_required?(records, context) do
     case Map.get(context, :comparison_session_id) do
       thread_id when is_integer(thread_id) and thread_id > 0 ->
-        expected_session_id = "assistant-thread:#{thread_id}"
-        not Enum.any?(records, &(value(&1, :session_id) == expected_session_id))
+        if terminal_session?(Map.get(context, :comparison_session_status)) do
+          expected_session_id = "assistant-thread:#{thread_id}"
+
+          records
+          |> Enum.filter(&(value(&1, :session_id) == expected_session_id))
+          |> case do
+            [] -> true
+            current_records -> Enum.all?(current_records, &partial_evidence?/1)
+          end
+        else
+          false
+        end
 
       _other ->
-        false
+        records == []
+    end
+  end
+
+  defp terminal_session?(status), do: status in ["closed", "error", "archived"]
+
+  defp partial_evidence?(record) do
+    case value(record, :manifest) do
+      manifest when is_map(manifest) -> value(manifest, :runs) in [nil, []]
+      _other -> false
     end
   end
 

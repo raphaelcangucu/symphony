@@ -342,7 +342,9 @@ defmodule SymphonyElixir.MobileComparison.Service do
   defp session_evidence_context(context, thread) do
     case value(thread, :id) do
       thread_id when is_integer(thread_id) and thread_id > 0 ->
-        Map.put(context, :comparison_session_id, thread_id)
+        context
+        |> Map.put(:comparison_session_id, thread_id)
+        |> Map.put(:comparison_session_status, value(thread, :status))
 
       _other ->
         context

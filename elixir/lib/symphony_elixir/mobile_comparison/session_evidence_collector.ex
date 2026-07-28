@@ -18,6 +18,7 @@ defmodule SymphonyElixir.MobileComparison.SessionEvidenceCollector do
 
     [scope: "issue_session", project_slug: project_slug, issue_identifier: identifier]
     |> history.list_threads()
+    |> target_threads(context)
     |> Enum.sort_by(&(value(&1, :id) || 0), :desc)
     |> Enum.reduce_while(:ok, fn thread, _result ->
       case collect_thread(store, project_slug, identifier, thread) do
@@ -29,6 +30,16 @@ defmodule SymphonyElixir.MobileComparison.SessionEvidenceCollector do
   end
 
   def collect(_project_slug, _identifier, _context), do: {:error, :invalid_params}
+
+  defp target_threads(threads, context) do
+    case Map.get(context, :comparison_session_id) do
+      thread_id when is_integer(thread_id) and thread_id > 0 ->
+        Enum.filter(threads, &(value(&1, :id) == thread_id))
+
+      _other ->
+        threads
+    end
+  end
 
   defp collect_thread(store, project_slug, identifier, thread) do
     workspace = value(thread, :workspace_path)
