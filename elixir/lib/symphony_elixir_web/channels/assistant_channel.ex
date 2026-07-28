@@ -2895,6 +2895,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
       []
       |> maybe_put_runner()
       |> Keyword.merge(Payload.model_opts(context))
+      |> put_persisted_model_opts(thread)
       |> Keyword.put(:on_message_created, fn message -> push_stream.("message_created", %{message: message}) end)
       |> Keyword.put(:on_assistant_delta, fn delta -> push_stream.("assistant_delta", %{delta: delta}) end)
       |> Keyword.put(:on_tool_call_started, fn tool_call ->
@@ -2933,6 +2934,21 @@ defmodule SymphonyElixirWeb.AssistantChannel do
       end)
     else
       opts
+    end
+  end
+
+  defp put_persisted_model_opts(opts, thread) when is_list(opts) and is_map(thread) do
+    opts
+    |> put_persisted_model_opt(:model, History.requested_model(thread))
+    |> put_persisted_model_opt(:effort, History.requested_effort(thread))
+  end
+
+  defp put_persisted_model_opt(opts, _key, nil), do: opts
+
+  defp put_persisted_model_opt(opts, key, value) when is_binary(value) do
+    case Keyword.get(opts, key) do
+      current when current in [nil, ""] -> Keyword.put(opts, key, value)
+      _explicit -> opts
     end
   end
 

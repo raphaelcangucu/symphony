@@ -188,6 +188,52 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
     refute Map.has_key?(payload, :effort)
   end
 
+  test "send_message routes persisted model provenance when the payload omits it" do
+    [thread] =
+      History.list_threads(
+        scope: "issue",
+        project_slug: "macro-markets",
+        issue_identifier: "MAC-1"
+      )
+
+    {:ok, _thread} =
+      History.put_model_provenance(thread, %{
+        requested_model: "gpt-5.6-sol",
+        requested_effort: "high"
+      })
+
+    test_pid = self()
+
+    Application.put_env(:symphony_elixir, :assistant_runner, fn _workspace, _prompt, _issue, opts ->
+      send(test_pid, {:persisted_runner_opts, opts})
+
+      {:ok,
+       %{
+         assistant_message: "done",
+         conversation_id: "persisted-model-thread",
+         run_id: "persisted-model-turn",
+         resolved_model: "gpt-5.6-sol",
+         resolved_effort: "high",
+         tool_calls: []
+       }}
+    end)
+
+    {:ok, _join, socket} =
+      socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
+      |> subscribe_and_join(
+        SymphonyElixirWeb.AssistantChannel,
+        "assistant:issue:macro-markets:MAC-1"
+      )
+
+    assert_push("history_loaded", %{})
+
+    ref = push(socket, "send_message", %{"message" => "run persisted model", "context" => %{}})
+    assert_reply(ref, :ok, %{})
+    assert_receive {:persisted_runner_opts, opts}, 2_000
+    assert opts[:model] == "gpt-5.6-sol"
+    assert opts[:effort] == "high"
+  end
+
   test "joining a thread recovers durable pending turns", %{socket: socket} do
     {:ok, thread} =
       History.ensure_thread("macro-markets", %{
