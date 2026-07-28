@@ -90,18 +90,22 @@ defmodule SymphonyElixir.MobileComparison.LocalGateway do
     history = Map.get(context, :comparison_history, History)
     identifier = value(child, :identifier)
 
-    thread =
+    matching_threads =
       [
         scope: "issue_session",
         project_slug: project_slug,
         issue_identifier: identifier,
-        include_archived: false,
+        include_archived: true,
         limit: 100
       ]
       |> history.list_threads()
       |> Enum.filter(&session_matches?(&1, cell))
       |> Enum.sort_by(&(value(&1, :id) || 0), :desc)
-      |> List.first()
+
+    thread =
+      matching_threads
+      |> Enum.find(&(value(&1, :status) != "archived"))
+      |> put_retry_attempt(length(matching_threads))
 
     case thread do
       nil ->
@@ -299,17 +303,38 @@ defmodule SymphonyElixir.MobileComparison.LocalGateway do
     history = Map.get(context, :comparison_history, History)
     thread_id = value(thread, :id)
 
-    case history.list_messages_for_thread(thread_id) do
-      [] ->
-        put_value(thread, :status, "ready")
+    if running_turn?(thread) do
+      put_value(thread, :status, "active")
+    else
+      case history.list_messages_for_thread(thread_id) do
+        [] ->
+          put_value(thread, :status, "ready")
 
-      messages ->
-        case latest_assistant_message(messages) do
-          nil -> thread
-          message -> put_value(thread, :latest_message, value(message, :content))
-        end
+        messages ->
+          case latest_assistant_message(messages) do
+            nil -> thread
+            message -> put_value(thread, :latest_message, value(message, :content))
+          end
+      end
     end
   end
+
+  defp running_turn?(thread) do
+    case value(thread, :metadata) do
+      %{} = metadata ->
+        metadata
+        |> value(:current_turn)
+        |> value(:status) == "running"
+
+      _other ->
+        false
+    end
+  end
+
+  defp put_retry_attempt(nil, _thread_count), do: nil
+
+  defp put_retry_attempt(thread, thread_count),
+    do: put_value(thread, :retry_attempt, max(thread_count - 1, 0))
 
   defp latest_assistant_message(messages) do
     messages

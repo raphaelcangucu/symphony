@@ -41,7 +41,7 @@ defmodule SymphonyElixir.MobileComparison.Presenter do
       "resolved_model" => resolved_value(thread, execution, :resolved_model),
       "resolved_effort" => resolved_value(thread, execution, :resolved_effort),
       "status" => cell_status(contract.path, thread, execution, evidence),
-      "attempt" => attempt(execution),
+      "attempt" => attempt(thread, execution),
       "issue_identifier" => value(child, :identifier),
       "thread_id" => value(thread, :id),
       "execution_session_id" => value(execution, :execution_session_id),
@@ -53,7 +53,7 @@ defmodule SymphonyElixir.MobileComparison.Presenter do
   end
 
   defp cell_status(:session, thread, _execution, evidence) do
-    case evidence_status(evidence) do
+    case evidence |> evidence_for_thread(thread) |> evidence_status() do
       nil ->
         if completed_without_output?(value(thread, :latest_message)) do
           "failed"
@@ -90,13 +90,32 @@ defmodule SymphonyElixir.MobileComparison.Presenter do
 
   defp evidence_status(_evidence), do: nil
 
+  defp evidence_for_thread(evidence, thread) when is_list(evidence) do
+    expected_session_id =
+      case value(thread, :id) do
+        id when is_integer(id) -> "assistant-thread:#{id}"
+        id when is_binary(id) and id != "" -> "assistant-thread:#{id}"
+        _other -> nil
+      end
+
+    if is_binary(expected_session_id) do
+      Enum.filter(evidence, fn record ->
+        value(record, :session_id) in [nil, expected_session_id]
+      end)
+    else
+      evidence
+    end
+  end
+
+  defp evidence_for_thread(evidence, _thread), do: evidence
+
   defp completed_without_output?(message) when is_binary(message),
     do: String.ends_with?(message, "completed the turn without returning assistant text.")
 
   defp completed_without_output?(_message), do: false
 
-  defp attempt(nil), do: 1
-  defp attempt(execution), do: (value(execution, :retry_attempt) || 0) + 1
+  defp attempt(thread, nil), do: (value(thread, :retry_attempt) || 0) + 1
+  defp attempt(_thread, execution), do: (value(execution, :retry_attempt) || 0) + 1
 
   defp resolved_value(primary, secondary, key),
     do: value(primary, key) || value(secondary, key)

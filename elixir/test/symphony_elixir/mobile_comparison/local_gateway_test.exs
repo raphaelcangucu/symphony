@@ -158,6 +158,33 @@ defmodule SymphonyElixir.MobileComparison.LocalGatewayTest do
     end
   end
 
+  defmodule RetriedRunningHistory do
+    def list_messages_for_thread(43), do: []
+
+    def list_threads(_opts) do
+      [
+        %{
+          id: 43,
+          issue_identifier: "DEV-2",
+          agent_kind: "codex",
+          status: "active",
+          requested_model: "gpt-5.6-sol",
+          requested_effort: "high",
+          metadata: %{"current_turn" => %{"status" => "running"}}
+        },
+        %{
+          id: 42,
+          issue_identifier: "DEV-2",
+          agent_kind: "codex",
+          status: "archived",
+          requested_model: "gpt-5.6-sol",
+          requested_effort: "high",
+          metadata: %{"current_turn" => %{"status" => "interrupted"}}
+        }
+      ]
+    end
+  end
+
   defmodule FakeSessionStarter do
     def start(thread, prompt, context) do
       send(context.test_pid, {:session_start, thread, prompt, context.comparison_request_key})
@@ -345,6 +372,26 @@ defmodule SymphonyElixir.MobileComparison.LocalGatewayTest do
             %{
               "latest_message" => "Cursor completed the turn without returning assistant text.",
               id: 44,
+              status: "active"
+            }} =
+             LocalGateway.get_session(
+               "dev10x",
+               %{"identifier" => "DEV-2"},
+               cell,
+               context
+             )
+  end
+
+  test "selects the active retry, preserves its running state, and exposes its attempt", %{
+    context: context
+  } do
+    assert {:ok, cell} = Contract.fetch("session-codex")
+    context = Map.put(context, :comparison_history, RetriedRunningHistory)
+
+    assert {:ok,
+            %{
+              "retry_attempt" => 1,
+              id: 43,
               status: "active"
             }} =
              LocalGateway.get_session(
