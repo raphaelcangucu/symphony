@@ -68,9 +68,9 @@ defmodule SymphonyElixir.MobileRpc.OrchestratorService do
       runtime_seconds: 0,
       started_at: nil,
       retry_attempt: 0,
-      error: nil,
+      error: history_only_error(thread.status),
       goal: nil,
-      long_running: thread.status == "active",
+      long_running: false,
       long_running_kind: nil,
       long_running_label: nil,
       parent_identifier: nil,
@@ -82,7 +82,12 @@ defmodule SymphonyElixir.MobileRpc.OrchestratorService do
     }
   end
 
-  defp thread_status("active"), do: "live"
+  defp thread_status("active"), do: "error"
   defp thread_status("closed"), do: "saved"
   defp thread_status("error"), do: "error"
+
+  defp history_only_error("active"),
+    do: "Execution is not active on this host. Retry to recover."
+
+  defp history_only_error(_status), do: nil
 end

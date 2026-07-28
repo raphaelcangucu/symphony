@@ -5,7 +5,7 @@ defmodule SymphonyElixir.MobileRpc.MobilePresenterExecutionTest do
   alias SymphonyElixir.MobileRpc.{MobilePresenter, OrchestratorService}
   alias SymphonyElixir.Repo
 
-  test "marks issue execution worktrees so mobile opens the orchestrator chat transport" do
+  test "marks history-only active executions as recoverable instead of falsely live" do
     suffix = System.unique_integer([:positive])
 
     {:ok, thread} =
@@ -38,8 +38,10 @@ defmodule SymphonyElixir.MobileRpc.MobilePresenterExecutionTest do
     assert %{
              execution_session_id: execution_session_id,
              issue_identifier: issue_identifier,
-             status: "live",
-             agent_kind: "claude"
+             status: "error",
+             agent_kind: "claude",
+             error: "Execution is not active on this host. Retry to recover.",
+             long_running: false
            } =
              OrchestratorService.list_executions()
              |> Enum.find(&(&1.execution_session_id == thread.id))
