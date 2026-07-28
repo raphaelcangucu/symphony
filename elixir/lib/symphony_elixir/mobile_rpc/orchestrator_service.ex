@@ -41,6 +41,10 @@ defmodule SymphonyElixir.MobileRpc.OrchestratorService do
           |> Map.put(:execution_session_id, thread.id)
           |> Map.update(:agent_kind, thread.agent_kind, &(&1 || thread.agent_kind))
           |> Map.update(:model, thread.resolved_model, &(&1 || thread.resolved_model))
+          |> Map.put(:requested_model, thread.requested_model)
+          |> Map.put(:requested_effort, thread.requested_effort)
+          |> Map.put(:resolved_model, thread.resolved_model)
+          |> Map.put(:resolved_effort, thread.resolved_effort)
         end)
 
       nil ->
@@ -59,6 +63,10 @@ defmodule SymphonyElixir.MobileRpc.OrchestratorService do
       status: thread_status(thread.status),
       agent_kind: thread.agent_kind,
       model: thread.resolved_model,
+      requested_model: thread.requested_model,
+      requested_effort: thread.requested_effort,
+      resolved_model: thread.resolved_model,
+      resolved_effort: thread.resolved_effort,
       session_id: nil,
       execution_session_id: thread.id,
       last_event: nil,

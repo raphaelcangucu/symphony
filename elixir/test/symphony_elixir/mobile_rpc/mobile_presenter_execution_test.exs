@@ -16,6 +16,10 @@ defmodule SymphonyElixir.MobileRpc.MobilePresenterExecutionTest do
         issue_identifier: "DEV-#{suffix}",
         workspace_path: System.tmp_dir!(),
         agent_kind: "claude",
+        requested_model: "claude-opus-5",
+        requested_effort: "high",
+        resolved_model: "claude-opus-5",
+        resolved_effort: "high",
         status: "active",
         title: "Mobile execution"
       })
@@ -40,6 +44,10 @@ defmodule SymphonyElixir.MobileRpc.MobilePresenterExecutionTest do
              issue_identifier: issue_identifier,
              status: "error",
              agent_kind: "claude",
+             requested_model: "claude-opus-5",
+             requested_effort: "high",
+             resolved_model: "claude-opus-5",
+             resolved_effort: "high",
              error: "Execution is not active on this host. Retry to recover.",
              long_running: false
            } =
