@@ -5,6 +5,47 @@ defmodule SymphonyElixir.MobileRpc.MobilePresenterExecutionTest do
   alias SymphonyElixir.MobileRpc.{MobilePresenter, OrchestratorService}
   alias SymphonyElixir.Repo
 
+  test "merges persisted provenance when the live execution already owns the thread id" do
+    executions = [
+      %{
+        execution_session_id: 42,
+        issue_identifier: "DEV-42",
+        status: "aborted",
+        agent_kind: "codex",
+        model: nil,
+        requested_model: nil,
+        requested_effort: nil,
+        resolved_model: nil,
+        resolved_effort: nil
+      }
+    ]
+
+    threads = [
+      %{
+        id: 42,
+        issue_identifier: "DEV-42",
+        status: "error",
+        agent_kind: "codex",
+        requested_model: "gpt-5.6-sol",
+        requested_effort: "high",
+        resolved_model: "gpt-5.6-sol",
+        resolved_effort: "high"
+      }
+    ]
+
+    assert [
+             %{
+               execution_session_id: 42,
+               status: "aborted",
+               model: "gpt-5.6-sol",
+               requested_model: "gpt-5.6-sol",
+               requested_effort: "high",
+               resolved_model: "gpt-5.6-sol",
+               resolved_effort: "high"
+             }
+           ] = OrchestratorService.reconcile_execution_threads(executions, threads)
+  end
+
   test "marks history-only active executions as recoverable instead of falsely live" do
     suffix = System.unique_integer([:positive])
 

@@ -11,10 +11,19 @@ defmodule SymphonyElixir.MobileRpc.OrchestratorService do
       AgentExecution.list()
       |> Enum.map(&TrackerPresenter.agent_execution/1)
 
-    History.list_threads(scope: "issue_execution", include_archived: true, limit: 10_000)
-    |> Enum.filter(&(&1.status in ["active", "closed", "error"]))
-    |> Enum.uniq_by(& &1.issue_identifier)
-    |> Enum.reduce(executions, &attach_execution_thread/2)
+    threads =
+      History.list_threads(scope: "issue_execution", include_archived: true, limit: 10_000)
+      |> Enum.filter(&(&1.status in ["active", "closed", "error"]))
+      |> Enum.uniq_by(& &1.issue_identifier)
+
+    reconcile_execution_threads(executions, threads)
+  end
+
+  @doc false
+  @spec reconcile_execution_threads([map()], [map()]) :: [map()]
+  def reconcile_execution_threads(executions, threads)
+      when is_list(executions) and is_list(threads) do
+    Enum.reduce(threads, executions, &attach_execution_thread/2)
   end
 
   @spec session_context(pos_integer()) ::
@@ -31,29 +40,36 @@ defmodule SymphonyElixir.MobileRpc.OrchestratorService do
   end
 
   defp attach_execution_thread(thread, executions) do
-    case Enum.find_index(executions, fn execution ->
-           execution.issue_identifier == thread.issue_identifier and
-             is_nil(execution.execution_session_id)
-         end) do
+    case Enum.find_index(executions, &(&1.execution_session_id == thread.id)) do
       index when is_integer(index) ->
-        List.update_at(executions, index, fn execution ->
-          execution
-          |> Map.put(:execution_session_id, thread.id)
-          |> Map.update(:agent_kind, thread.agent_kind, &(&1 || thread.agent_kind))
-          |> Map.update(:model, thread.resolved_model, &(&1 || thread.resolved_model))
-          |> Map.put(:requested_model, thread.requested_model)
-          |> Map.put(:requested_effort, thread.requested_effort)
-          |> Map.put(:resolved_model, thread.resolved_model)
-          |> Map.put(:resolved_effort, thread.resolved_effort)
-        end)
+        List.update_at(executions, index, &merge_thread_provenance(&1, thread))
 
       nil ->
-        if Enum.any?(executions, &(&1.execution_session_id == thread.id)) do
-          executions
-        else
-          [thread_execution(thread) | executions]
+        case Enum.find_index(executions, fn execution ->
+               execution.issue_identifier == thread.issue_identifier and
+                 is_nil(execution.execution_session_id)
+             end) do
+          index when is_integer(index) ->
+            List.update_at(executions, index, fn execution ->
+              execution
+              |> Map.put(:execution_session_id, thread.id)
+              |> merge_thread_provenance(thread)
+            end)
+
+          nil ->
+            [thread_execution(thread) | executions]
         end
     end
+  end
+
+  defp merge_thread_provenance(execution, thread) do
+    execution
+    |> Map.update(:agent_kind, thread.agent_kind, &(&1 || thread.agent_kind))
+    |> Map.update(:model, thread.resolved_model, &(&1 || thread.resolved_model))
+    |> Map.put(:requested_model, thread.requested_model)
+    |> Map.put(:requested_effort, thread.requested_effort)
+    |> Map.put(:resolved_model, thread.resolved_model)
+    |> Map.put(:resolved_effort, thread.resolved_effort)
   end
 
   defp thread_execution(thread) do
