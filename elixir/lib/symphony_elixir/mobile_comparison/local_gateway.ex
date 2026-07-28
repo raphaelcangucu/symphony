@@ -263,7 +263,8 @@ defmodule SymphonyElixir.MobileComparison.LocalGateway do
           |> Enum.filter(&(value(&1, :session_id) == expected_session_id))
           |> case do
             [] -> true
-            current_records -> Enum.all?(current_records, &partial_evidence?/1)
+            current_records ->
+              not Enum.any?(current_records, &(value(&1, :status) == "passed"))
           end
         else
           false
@@ -276,13 +277,6 @@ defmodule SymphonyElixir.MobileComparison.LocalGateway do
 
   defp terminal_session?(status),
     do: status in ["completed", "failed", "error", "cancelled", "canceled", "closed", "archived"]
-
-  defp partial_evidence?(record) do
-    case value(record, :manifest) do
-      manifest when is_map(manifest) -> value(manifest, :runs) in [nil, []]
-      _other -> false
-    end
-  end
 
   @impl true
   def save_decision(project_slug, identifier, decision, context) do

@@ -55,26 +55,25 @@ defmodule SymphonyElixir.MobileComparison.Presenter do
   end
 
   defp cell_status(:session, thread, _execution, evidence) do
+    durable_status = evidence |> evidence_for_thread(thread) |> evidence_status()
+
     cond do
       value(thread, :status) in @failed_statuses ->
         value(thread, :status)
+
+      is_binary(durable_status) ->
+        durable_status
 
       completed_without_output?(value(thread, :latest_message)) ->
         "failed"
 
       true ->
-        case evidence |> evidence_for_thread(thread) |> evidence_status() do
-          nil ->
-            case value(thread, :status) do
-              "active" -> "live"
-              "closed" -> "completed"
-              "error" -> "error"
-              nil -> "starting"
-              status -> status
-            end
-
-          status ->
-            status
+        case value(thread, :status) do
+          "active" -> "live"
+          "closed" -> "completed"
+          "error" -> "error"
+          nil -> "starting"
+          status -> status
         end
     end
   end

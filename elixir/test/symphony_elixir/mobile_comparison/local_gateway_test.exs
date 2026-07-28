@@ -309,7 +309,7 @@ defmodule SymphonyElixir.MobileComparison.LocalGatewayTest do
             "run_id" => "attempt-partial",
             "session_id" => "assistant-thread:43",
             "status" => "failed",
-            "manifest" => %{"runs" => []}
+            "manifest" => %{"runs" => [%{"status" => "failed"}]}
           }
         end
 
@@ -681,7 +681,7 @@ defmodule SymphonyElixir.MobileComparison.LocalGatewayTest do
     assert_receive {:collect_current_attempt_evidence, "dev10x", "DEV-2"}
   end
 
-  test "replaces a partial current-session snapshot after the thread becomes terminal", %{
+  test "replaces a failed current-session snapshot after the thread becomes terminal", %{
     context: context
   } do
     context =

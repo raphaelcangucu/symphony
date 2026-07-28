@@ -162,4 +162,28 @@ defmodule SymphonyElixir.MobileComparison.PresenterTest do
 
     assert cell["status"] == "failed"
   end
+
+  test "durable passed evidence overrides a provider's missing-text sentinel" do
+    cell =
+      Presenter.cell(
+        @session,
+        %{identifier: "DEV-2"},
+        %{
+          id: 42,
+          status: "active",
+          latest_message: "Cursor completed the turn without returning assistant text."
+        },
+        nil,
+        [],
+        [
+          %{
+            "run_id" => "run-final",
+            "session_id" => "assistant-thread:42",
+            "status" => "passed"
+          }
+        ]
+      )
+
+    assert cell["status"] == "passed"
+  end
 end
