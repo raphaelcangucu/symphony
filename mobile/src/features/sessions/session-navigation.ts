@@ -7,7 +7,8 @@ export function hostTerminalRoute(
   threadId: string | number,
   name?: string,
 ): string {
-  return hostSessionRoute("session", hostId, threadId, name);
+  const route = hostSessionRoute("session", hostId, threadId, name);
+  return `${route}${route.includes("?") ? "&" : "?"}view=terminal`;
 }
 
 export function assistantThreadDiffRoute(worktreeId: string): string | null {

@@ -810,15 +810,18 @@ export default function SessionScreen() {
     hostId,
     worktreeId,
     name: routeWorktreeName,
+    view: routeView,
     created,
     warning: createdWarning
   } = useLocalSearchParams<{
     hostId: string
     worktreeId: string
     name?: string
+    view?: string
     created?: string
     warning?: string
   }>()
+  const isFocusedTerminal = routeView === 'terminal'
   const isFolderWorkspaceRoute = worktreeId.startsWith('folder:')
   const router = useRouter()
   const insets = useSafeAreaInsets()
@@ -4439,7 +4442,7 @@ export default function SessionScreen() {
               style={({ pressed }) => [styles.backButton, pressed && styles.backButtonPressed]}
               onPress={requestLeaveSession}
               hitSlop={8}
-              accessibilityLabel="Back to worktrees"
+              accessibilityLabel={isFocusedTerminal ? 'Back to chat' : 'Back to worktrees'}
             >
               <ChevronLeft size={22} color={colors.textSecondary} strokeWidth={2.2} />
             </Pressable>
@@ -4461,53 +4464,74 @@ export default function SessionScreen() {
               >
                 <StatusDot state={connState} />
                 <Text style={styles.sessionMetaText} numberOfLines={1}>
-                  {terminalSummary}
+                  {isFocusedTerminal ? `Terminal · ${terminalSummary}` : terminalSummary}
                 </Text>
               </Pressable>
             </View>
-            <Pressable
-              style={({ pressed }) => [
-                styles.filesButton,
-                pressed && styles.filesButtonPressed,
-                activePanel === 'files' && styles.filesButtonActive
-              ]}
-              onPress={() => handlePanelTap('files')}
-              hitSlop={8}
-              accessibilityLabel="Open file explorer"
-            >
-              <Folder size={18} color={colors.textSecondary} strokeWidth={2.1} />
-            </Pressable>
-            {!isFolderWorkspaceRoute && (
+            {isFocusedTerminal ? (
               <Pressable
                 style={({ pressed }) => [
                   styles.filesButton,
                   pressed && styles.filesButtonPressed,
-                  activePanel === 'sourceControl' && styles.filesButtonActive
+                  (creating || connState !== 'connected') && styles.newTerminalButtonDisabled
                 ]}
-                onPress={() => handlePanelTap('sourceControl')}
+                disabled={creating || connState !== 'connected'}
+                onPress={() => {
+                  setCreateError('')
+                  setShowCreateTabDrawer(true)
+                }}
                 hitSlop={8}
-                accessibilityLabel="Open source control"
+                accessibilityLabel="New terminal tab"
               >
-                <GitBranch size={18} color={colors.textSecondary} strokeWidth={2.1} />
+                <Plus size={18} color={colors.textSecondary} strokeWidth={2.2} />
               </Pressable>
+            ) : (
+              <>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.filesButton,
+                    pressed && styles.filesButtonPressed,
+                    activePanel === 'files' && styles.filesButtonActive
+                  ]}
+                  onPress={() => handlePanelTap('files')}
+                  hitSlop={8}
+                  accessibilityLabel="Open file explorer"
+                >
+                  <Folder size={18} color={colors.textSecondary} strokeWidth={2.1} />
+                </Pressable>
+                {!isFolderWorkspaceRoute && (
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.filesButton,
+                      pressed && styles.filesButtonPressed,
+                      activePanel === 'sourceControl' && styles.filesButtonActive
+                    ]}
+                    onPress={() => handlePanelTap('sourceControl')}
+                    hitSlop={8}
+                    accessibilityLabel="Open source control"
+                  >
+                    <GitBranch size={18} color={colors.textSecondary} strokeWidth={2.1} />
+                  </Pressable>
+                )}
+                {prRepoContextLoaded && prIsGithubRepo ? (
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.filesButton,
+                      pressed && styles.filesButtonPressed,
+                      activePanel === 'pr' && styles.filesButtonActive
+                    ]}
+                    onPress={() => handlePanelTap('pr')}
+                    hitSlop={8}
+                    accessibilityLabel="Open pull request"
+                  >
+                    <ListChecks size={18} color={colors.textSecondary} strokeWidth={2.1} />
+                  </Pressable>
+                ) : null}
+              </>
             )}
-            {prRepoContextLoaded && prIsGithubRepo ? (
-              <Pressable
-                style={({ pressed }) => [
-                  styles.filesButton,
-                  pressed && styles.filesButtonPressed,
-                  activePanel === 'pr' && styles.filesButtonActive
-                ]}
-                onPress={() => handlePanelTap('pr')}
-                hitSlop={8}
-                accessibilityLabel="Open pull request"
-              >
-                <ListChecks size={18} color={colors.textSecondary} strokeWidth={2.1} />
-              </Pressable>
-            ) : null}
           </View>
 
-          {visibleTabs.length > 0 && (
+          {visibleTabs.length > 1 && (
             <View style={styles.tabBar}>
               {/* Why: tab taps must register on the first press while the live
                   keyboard is open instead of being eaten by keyboard dismissal
@@ -4975,21 +4999,23 @@ export default function SessionScreen() {
                         isAttaching={isAttaching}
                       />
                     </Pressable>
-                    <MobileTerminalInputActions
-                      canSend={canSend}
-                      isAttaching={isAttaching}
-                      dictation={dictation}
-                      dictationMode={dictationMode}
-                      buttonStyle={styles.dictationButton}
-                      activeButtonStyle={styles.dictationButtonActive}
-                      disabledButtonStyle={styles.sendButtonDisabled}
-                      onAttachImage={() => void attachImage('library')}
-                      onAttachFile={() => void attachImage('files')}
-                      onDictationToggle={handleDictationToggle}
-                      onDictationPressIn={handleDictationPressIn}
-                      onDictationPressOut={handleDictationPressOut}
-                      onDictationCancel={cancelDictation}
-                    />
+                    {!isFocusedTerminal && (
+                      <MobileTerminalInputActions
+                        canSend={canSend}
+                        isAttaching={isAttaching}
+                        dictation={dictation}
+                        dictationMode={dictationMode}
+                        buttonStyle={styles.dictationButton}
+                        activeButtonStyle={styles.dictationButtonActive}
+                        disabledButtonStyle={styles.sendButtonDisabled}
+                        onAttachImage={() => void attachImage('library')}
+                        onAttachFile={() => void attachImage('files')}
+                        onDictationToggle={handleDictationToggle}
+                        onDictationPressIn={handleDictationPressIn}
+                        onDictationPressOut={handleDictationPressOut}
+                        onDictationCancel={cancelDictation}
+                      />
+                    )}
                     <TextInput
                       ref={liveInputRef}
                       style={styles.liveInputCapture}
@@ -5047,21 +5073,23 @@ export default function SessionScreen() {
                       editable={canSend}
                       onSubmitEditing={() => void handleSend()}
                     />
-                    <MobileTerminalInputActions
-                      canSend={canSend}
-                      isAttaching={isAttaching}
-                      dictation={dictation}
-                      dictationMode={dictationMode}
-                      buttonStyle={styles.dictationButton}
-                      activeButtonStyle={styles.dictationButtonActive}
-                      disabledButtonStyle={styles.sendButtonDisabled}
-                      onAttachImage={() => void attachImage('library')}
-                      onAttachFile={() => void attachImage('files')}
-                      onDictationToggle={handleDictationToggle}
-                      onDictationPressIn={handleDictationPressIn}
-                      onDictationPressOut={handleDictationPressOut}
-                      onDictationCancel={cancelDictation}
-                    />
+                    {!isFocusedTerminal && (
+                      <MobileTerminalInputActions
+                        canSend={canSend}
+                        isAttaching={isAttaching}
+                        dictation={dictation}
+                        dictationMode={dictationMode}
+                        buttonStyle={styles.dictationButton}
+                        activeButtonStyle={styles.dictationButtonActive}
+                        disabledButtonStyle={styles.sendButtonDisabled}
+                        onAttachImage={() => void attachImage('library')}
+                        onAttachFile={() => void attachImage('files')}
+                        onDictationToggle={handleDictationToggle}
+                        onDictationPressIn={handleDictationPressIn}
+                        onDictationPressOut={handleDictationPressOut}
+                        onDictationCancel={cancelDictation}
+                      />
+                    )}
                     <Pressable
                       style={[styles.sendButton, !canSend && styles.sendButtonDisabled]}
                       disabled={!canSend}

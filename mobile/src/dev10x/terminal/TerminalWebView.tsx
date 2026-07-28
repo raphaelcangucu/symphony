@@ -333,6 +333,9 @@ export const TerminalWebView = forwardRef<TerminalWebViewHandle, Props>(function
       resetZoom() {
         postMessage({ type: 'reset-zoom' })
       },
+      redraw() {
+        postMessage({ type: 'redraw' })
+      },
       cancelSelect() {
         postMessage({ type: 'cancel-select' })
       },

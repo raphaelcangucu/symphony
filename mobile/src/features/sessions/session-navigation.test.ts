@@ -17,7 +17,7 @@ describe("unified Dev10x session navigation", () => {
 
   it("keeps terminal as an explicit tool on the same host and thread", () => {
     expect(hostTerminalRoute("host alpha", "42", "Studio Alpha")).toBe(
-      "/h/host%20alpha/session/42?name=Studio%20Alpha",
+      "/h/host%20alpha/session/42?name=Studio%20Alpha&view=terminal",
     );
   });
 

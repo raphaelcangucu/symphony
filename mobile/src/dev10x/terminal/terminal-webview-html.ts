@@ -231,6 +231,7 @@ window.onerror = function(msg, source, line, column, err) {
   var afterDrainCallbacks = [];
   var termObserverDisposables = [];
   var ready = false;
+  var initialViewportProbe = null;
   // Why: init() flips ready false on every re-init (live width reflow included)
   // while the old surface stays visible; a document-scoped latch drives the
   // fatal/non-fatal decision so a transient reflow cannot blank a live terminal.
@@ -460,8 +461,18 @@ window.onerror = function(msg, source, line, column, err) {
   // so a backgrounded WebView never spins forever.
   var FIT_RETRY_MAX_FRAMES = 60;
   var fitRetryToken = 0;
-  function applyFitScale(reason) {
-    if (!term || !term.element) return;
+  var fitCommitCallbacks = [];
+  function flushFitCommitCallbacks() {
+    var callbacks = fitCommitCallbacks;
+    fitCommitCallbacks = [];
+    for (var i = 0; i < callbacks.length; i++) callbacks[i]();
+  }
+  function applyFitScale(reason, onCommitted) {
+    if (typeof onCommitted === 'function') fitCommitCallbacks.push(onCommitted);
+    if (!term || !term.element) {
+      flushFitCommitCallbacks();
+      return;
+    }
     var token = ++fitRetryToken;
     var attempts = 0;
     var lastScrollWidth = -1;
@@ -532,6 +543,7 @@ window.onerror = function(msg, source, line, column, err) {
       });
     }
     repositionOverlay();
+    flushFitCommitCallbacks();
   }
 
   function isAltScreenActive(data) {
@@ -646,6 +658,13 @@ window.onerror = function(msg, source, line, column, err) {
     }
   }
 
+  function disposeInitialViewportProbe() {
+    if (!initialViewportProbe) return;
+    try { initialViewportProbe.term.dispose(); } catch (e) {}
+    try { initialViewportProbe.surface.remove(); } catch (e) {}
+    initialViewportProbe = null;
+  }
+
   function extractMouseModeScanTail(input) {
     var start = Math.max(input.lastIndexOf(ESC), input.lastIndexOf(C1_CSI));
     if (start === -1) return '';
@@ -688,6 +707,7 @@ window.onerror = function(msg, source, line, column, err) {
   }
 
   function init(cols, rows, initialData, nextTheme, nextFontScale, preserveScroll, nextOscLinks) {
+    disposeInitialViewportProbe();
     if (typeof nextFontScale === 'number' && nextFontScale > 0) currentTextScale = nextFontScale;
     // Why: a width-reflow re-stream rewraps the same content at new cols.
     // Distance-from-bottom (rows) is the only stable anchor across reflow,
@@ -738,6 +758,10 @@ window.onerror = function(msg, source, line, column, err) {
       surface = nextSurface;
       attachSurfaceEventHandlers(surface);
       oldSurface.removeAttribute('id');
+    } else {
+      // Why: the first desktop-sized frame must never flash before the phone
+      // viewport subscription arrives. Reveal only after replay + fit commit.
+      surface.style.visibility = 'hidden';
     }
 
     applyTerminalTheme(nextTheme);
@@ -777,14 +801,6 @@ window.onerror = function(msg, source, line, column, err) {
       everReady = true;
       afterWritesDrained(function() {
         if (gen !== terminalGeneration) return;
-        if (nextSurface && oldSurface) {
-          nextSurface.style.visibility = 'visible';
-          nextSurface.style.position = '';
-          nextSurface.style.left = '';
-          nextSurface.style.top = '';
-          oldSurface.remove();
-          if (oldTerm) oldTerm.dispose();
-        }
         // Why: restore the reader's place after the rewrapped buffer replays.
         // Replay lands at bottom, so only act when they were scrolled up (rows>0).
         if (scrollAnchorRows > 0 && term && term.buffer && term.buffer.active) {
@@ -793,8 +809,21 @@ window.onerror = function(msg, source, line, column, err) {
         captureInitialOscLinkTexts();
         initialOscLinkRowOffset = 0;
         initialOscLinkEvictionReady = true;
-        applyFitScale('init-replay');
-        notify({ type: 'ready', cols: cols, rows: rows });
+        applyFitScale('init-replay', function() {
+          if (gen !== terminalGeneration) return;
+          // Why: surface swaps are atomic. The old fitted frame remains visible
+          // during a reflow; a cold start remains background-only until the first
+          // correctly fitted canvas is ready.
+          surface.style.visibility = 'visible';
+          if (nextSurface && oldSurface) {
+            nextSurface.style.position = '';
+            nextSurface.style.left = '';
+            nextSurface.style.top = '';
+            oldSurface.remove();
+            if (oldTerm) oldTerm.dispose();
+          }
+          notify({ type: 'ready', cols: cols, rows: rows });
+        });
       });
     });
   }
@@ -877,8 +906,82 @@ window.onerror = function(msg, source, line, column, err) {
     reportEngineError('terminal runtime error', err || msg);
   };
 
+  function notifyMeasuredViewport(cellWidth, cellHeight, containerHeightPx) {
+    var vpWidth = window.innerWidth;
+    var vpHeight = (typeof containerHeightPx === 'number' && containerHeightPx > 0)
+      ? containerHeightPx
+      : window.innerHeight;
+    var cols = Math.floor(vpWidth / cellWidth);
+    if (cols < MIN_FIT_COLS) {
+      flog('measure-skip-small-width', {
+        vpWidth: vpWidth,
+        cellWidth: cellWidth,
+        cols: cols
+      });
+      notify({ type: 'measure-result', cols: null, rows: null });
+      return;
+    }
+    var rows = Math.max(8, Math.floor(vpHeight / cellHeight));
+    notify({ type: 'measure-result', cols: cols, rows: rows });
+  }
+
+  function measureInitialViewport(containerHeightPx, retriesLeft) {
+    if (!initialViewportProbe) {
+      var probeSurface = document.createElement('div');
+      probeSurface.setAttribute('aria-hidden', 'true');
+      probeSurface.style.position = 'absolute';
+      probeSurface.style.left = '0';
+      probeSurface.style.top = '0';
+      probeSurface.style.width = '100%';
+      probeSurface.style.height = '100%';
+      probeSurface.style.visibility = 'hidden';
+      probeSurface.style.pointerEvents = 'none';
+      document.getElementById('terminal-container').appendChild(probeSurface);
+      var probeTerm = new Terminal({
+        cols: 80,
+        rows: 24,
+        theme: terminalTheme,
+        fontFamily: terminalFontFamily,
+        fontSize: fontPxForScale(currentTextScale),
+        fontWeight: '300',
+        fontWeightBold: '500',
+        scrollback: 0,
+        disableStdin: true,
+        cursorBlink: false,
+        allowProposedApi: true
+      });
+      probeTerm.open(probeSurface);
+      initialViewportProbe = { term: probeTerm, surface: probeSurface };
+    }
+    var probeCore = initialViewportProbe.term._core;
+    var probeDimensions =
+      probeCore && probeCore._renderService && probeCore._renderService.dimensions;
+    var probeCellWidth = probeDimensions ? probeDimensions.css.cell.width : 0;
+    var probeCellHeight = probeDimensions ? probeDimensions.css.cell.height : 0;
+    if (probeCellWidth <= 0 || probeCellHeight <= 0) {
+      if (retriesLeft > 0) {
+        requestAnimationFrame(function() {
+          measureInitialViewport(containerHeightPx, retriesLeft - 1);
+        });
+        return;
+      }
+      disposeInitialViewportProbe();
+      notify({ type: 'measure-result', cols: null, rows: null });
+      return;
+    }
+    notifyMeasuredViewport(probeCellWidth, probeCellHeight, containerHeightPx);
+    disposeInitialViewportProbe();
+  }
+
   function measureFitDimensions(containerHeightPx, retriesLeft) {
     if (typeof retriesLeft !== 'number') retriesLeft = 30;
+    // Why: on web-ready there is no xterm instance yet. Probe the bundled
+    // renderer offscreen so the first subscribe already carries phone columns
+    // and the server serializes scrollback at the correct width.
+    if (!term) {
+      measureInitialViewport(containerHeightPx, retriesLeft);
+      return;
+    }
     // Why: init and measure are posted back-to-back from React, but
     // init has an async rAF chain. A measure that runs synchronously
     // after init can find term null, disposed, lacking element, or
@@ -909,25 +1012,6 @@ window.onerror = function(msg, source, line, column, err) {
       notify({ type: 'measure-result', cols: null, rows: null });
       return;
     }
-    var vpWidth = window.innerWidth;
-    // Why: prefer the container height passed from React Native over
-    // window.innerHeight. The RN layout system knows the exact pixel
-    // height of the terminal frame after the accessory/input bars are
-    // subtracted, whereas innerHeight can overstate the visible area
-    // due to layout timing or safe-area insets.
-    var vpHeight = (typeof containerHeightPx === 'number' && containerHeightPx > 0)
-      ? containerHeightPx
-      : window.innerHeight;
-    var cols = Math.floor(vpWidth / cellWidth);
-    if (cols < MIN_FIT_COLS) {
-      flog('measure-skip-small-width', {
-        vpWidth: vpWidth,
-        cellWidth: cellWidth,
-        cols: cols
-      });
-      notify({ type: 'measure-result', cols: null, rows: null });
-      return;
-    }
     // Why: the rows we report become the PTY's actual row count after the
     // server fits to viewport, and xterm renders exactly that many lines
     // anchored top-left of the WebView. Subtracting rows here would leave
@@ -936,8 +1020,7 @@ window.onerror = function(msg, source, line, column, err) {
     // safety margin between the prompt and the accessory bar must come
     // from RN layout (terminalFrame's flex bounds), not from undersizing
     // the PTY.
-    var rows = Math.max(8, Math.floor(vpHeight / cellHeight));
-    notify({ type: 'measure-result', cols: cols, rows: rows });
+    notifyMeasuredViewport(cellWidth, cellHeight, containerHeightPx);
   }
 
   function handleMsg(msg) {
@@ -986,6 +1069,16 @@ window.onerror = function(msg, source, line, column, err) {
       measureFitDimensions(msg.containerHeight);
     } else if (msg.type === 'reset-zoom') {
       applyFitScale('reset-zoom-msg');
+    } else if (msg.type === 'redraw') {
+      // Why: Android WebView can preserve the xterm/WebGL context but lose its
+      // last composited frame while the native keyboard appears or disappears.
+      // Refresh after the native layout has settled instead of reconnecting or
+      // replaying scrollback.
+      requestAnimationFrame(function() {
+        if (!term) return;
+        try { term.refresh(0, term.rows - 1); } catch (e) {}
+        applyFitScale('redraw-msg');
+      });
     } else if (msg.type === 'set-theme') {
       applyTerminalTheme(msg.terminalTheme);
     } else if (msg.type === 'cancel-select') {

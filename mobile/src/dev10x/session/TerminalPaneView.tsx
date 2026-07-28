@@ -1,5 +1,5 @@
-import { useCallback } from 'react'
-import { StyleSheet, View } from 'react-native'
+import { useCallback, useEffect, useRef } from 'react'
+import { Platform, StyleSheet, View } from 'react-native'
 import {
   TerminalWebView,
   type MobileTerminalTheme,
@@ -49,12 +49,22 @@ export function TerminalPaneView({
   onOpenUrl,
   onTextScaleChange
 }: TerminalPaneViewProps) {
+  const terminalRef = useRef<TerminalWebViewHandle | null>(null)
   const setRef = useCallback(
     (ref: TerminalWebViewHandle | null) => {
+      terminalRef.current = ref
       onRef(handle, ref)
     },
     [handle, onRef]
   )
+
+  useEffect(() => {
+    // Why: native keyboard composition can leave a preserved WebGL canvas
+    // visually blank. Redraw in the next frame; the RPC subscription and xterm
+    // buffer stay intact, so no reconnect or scrollback replay is necessary.
+    const frame = requestAnimationFrame(() => terminalRef.current?.redraw())
+    return () => cancelAnimationFrame(frame)
+  }, [keyboardLift])
 
   return (
     <View
@@ -63,7 +73,8 @@ export function TerminalPaneView({
       pointerEvents={active ? 'auto' : 'none'}
       style={[
         styles.terminalPane,
-        keyboardLift > 0 && { transform: [{ translateY: -keyboardLift }] },
+        Platform.OS === 'ios' &&
+          keyboardLift > 0 && { transform: [{ translateY: -keyboardLift }] },
         !active && styles.terminalPaneHidden
       ]}
     >
