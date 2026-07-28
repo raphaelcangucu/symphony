@@ -106,10 +106,10 @@ export function AgentLifecycleCard({
 
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="p-4 sm:p-6">
         <CardTitle>{t("settings.agentTool.lifecycle.title")}</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-4 p-4 pt-0 sm:p-6 sm:pt-0">
         <div className="flex flex-col gap-2 border-b pb-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <p className="text-sm font-medium">
@@ -136,7 +136,7 @@ export function AgentLifecycleCard({
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2">
-          <label className="flex items-start gap-2 text-sm">
+          <label className="flex items-start gap-2 rounded-lg border bg-muted/20 p-3 text-sm">
             <input
               className="mt-1"
               type="checkbox"
@@ -154,7 +154,7 @@ export function AgentLifecycleCard({
               </span>
             </span>
           </label>
-          <label className="flex items-start gap-2 text-sm">
+          <label className="flex items-start gap-2 rounded-lg border bg-muted/20 p-3 text-sm">
             <input
               className="mt-1"
               type="checkbox"
@@ -179,6 +179,7 @@ export function AgentLifecycleCard({
             type="button"
             variant="outline"
             size="sm"
+            className="w-full sm:w-auto"
             disabled={saving}
             onClick={() => void repair()}
           >

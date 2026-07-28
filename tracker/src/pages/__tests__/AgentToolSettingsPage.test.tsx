@@ -167,6 +167,19 @@ describe("AgentToolSettingsPage", () => {
     renderAgentPage("/settings/agents/codex");
 
     expect(await screen.findByText(/codex-cli 0\.142\.3/)).toBeTruthy();
+    expect(screen.getByTestId("agent-tool-settings")).toHaveClass(
+      "space-y-4",
+      "sm:space-y-6",
+    );
+    expect(screen.getByTestId("agent-tool-header")).toHaveClass(
+      "rounded-xl",
+      "border",
+      "sm:border-0",
+    );
+    expect(screen.getByRole("button", { name: "Update CLI" })).toHaveClass(
+      "w-full",
+      "sm:w-auto",
+    );
     expect(screen.getAllByText("Installed").length).toBeGreaterThan(0);
 
     const select = screen.getByRole("combobox", {

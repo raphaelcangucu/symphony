@@ -23,7 +23,10 @@ function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error && error.message ? error.message : fallback;
 }
 
-export function AgentAccountsCard({ agent, initialAccounts }: AgentAccountsCardProps) {
+export function AgentAccountsCard({
+  agent,
+  initialAccounts,
+}: AgentAccountsCardProps) {
   const { t } = useTranslation();
   const [accounts, setAccounts] = useState(initialAccounts);
   const [id, setId] = useState("");
@@ -38,10 +41,15 @@ export function AgentAccountsCard({ agent, initialAccounts }: AgentAccountsCardP
     try {
       await setDefaultAgentAccount(agent, account.id);
       setAccounts((current) =>
-        current.map((entry) => ({ ...entry, default: entry.id === account.id })),
+        current.map((entry) => ({
+          ...entry,
+          default: entry.id === account.id,
+        })),
       );
     } catch (reason) {
-      setError(errorMessage(reason, t("settings.agentTool.accounts.actionFailed")));
+      setError(
+        errorMessage(reason, t("settings.agentTool.accounts.actionFailed")),
+      );
     } finally {
       setSaving(false);
     }
@@ -61,7 +69,9 @@ export function AgentAccountsCard({ agent, initialAccounts }: AgentAccountsCardP
       setId("");
       setLabel("");
     } catch (reason) {
-      setError(errorMessage(reason, t("settings.agentTool.accounts.actionFailed")));
+      setError(
+        errorMessage(reason, t("settings.agentTool.accounts.actionFailed")),
+      );
     } finally {
       setSaving(false);
     }
@@ -73,20 +83,24 @@ export function AgentAccountsCard({ agent, initialAccounts }: AgentAccountsCardP
     setError(null);
     try {
       await deleteAgentAccount(agent, account.id);
-      setAccounts((current) => current.filter((entry) => entry.id !== account.id));
+      setAccounts((current) =>
+        current.filter((entry) => entry.id !== account.id),
+      );
     } catch (reason) {
-      setError(errorMessage(reason, t("settings.agentTool.accounts.actionFailed")));
+      setError(
+        errorMessage(reason, t("settings.agentTool.accounts.actionFailed")),
+      );
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <Card>
-      <CardHeader>
+    <Card data-testid="agent-accounts-card">
+      <CardHeader className="p-4 sm:p-6">
         <CardTitle>{t("settings.agentTool.accounts.title")}</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-4 p-4 pt-0 sm:p-6 sm:pt-0">
         {accounts.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             {t("settings.agentTool.accounts.empty")}
@@ -102,15 +116,21 @@ export function AgentAccountsCard({ agent, initialAccounts }: AgentAccountsCardP
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-medium">{account.label}</span>
                     {account.default ? (
-                      <Badge variant="secondary">{t("settings.agentTool.accounts.default")}</Badge>
+                      <Badge variant="secondary">
+                        {t("settings.agentTool.accounts.default")}
+                      </Badge>
                     ) : null}
                     <Badge variant="outline">
-                      {t(`settings.agentTool.accounts.status.${account.authentication_status}`)}
+                      {t(
+                        `settings.agentTool.accounts.status.${account.authentication_status}`,
+                      )}
                     </Badge>
                   </div>
                   <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                     <span>{account.id}</span>
-                    {account.usage?.plan ? <span>{account.usage.plan}</span> : null}
+                    {account.usage?.plan ? (
+                      <span>{account.usage.plan}</span>
+                    ) : null}
                     {account.usage?.stale ? (
                       <span className="font-medium text-amber-600 dark:text-amber-400">
                         {t("settings.agentTool.accounts.stale")}
@@ -125,16 +145,23 @@ export function AgentAccountsCard({ agent, initialAccounts }: AgentAccountsCardP
                     ) : null}
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center justify-end gap-2">
                   {!account.default ? (
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
-                      disabled={saving || account.authentication_status !== "authenticated"}
-                      aria-label={t("settings.agentTool.accounts.useDefaultLabel", {
-                        name: account.label,
-                      })}
+                      className="flex-1 sm:flex-none"
+                      disabled={
+                        saving ||
+                        account.authentication_status !== "authenticated"
+                      }
+                      aria-label={t(
+                        "settings.agentTool.accounts.useDefaultLabel",
+                        {
+                          name: account.label,
+                        },
+                      )}
                       onClick={() => void makeDefault(account)}
                     >
                       {t("settings.agentTool.accounts.useDefault")}
@@ -176,7 +203,7 @@ export function AgentAccountsCard({ agent, initialAccounts }: AgentAccountsCardP
           <Button
             type="button"
             size="sm"
-            className="h-10"
+            className="h-10 w-full"
             disabled={saving || !id.trim() || !label.trim()}
             onClick={() => void addAccount()}
           >

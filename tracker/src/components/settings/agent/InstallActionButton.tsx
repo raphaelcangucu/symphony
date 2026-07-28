@@ -16,7 +16,11 @@ function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error && error.message ? error.message : fallback;
 }
 
-export function InstallActionButton({ agent, installed, onComplete }: InstallActionButtonProps) {
+export function InstallActionButton({
+  agent,
+  installed,
+  onComplete,
+}: InstallActionButtonProps) {
   const { t } = useTranslation();
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -35,8 +39,14 @@ export function InstallActionButton({ agent, installed, onComplete }: InstallAct
   }
 
   return (
-    <div className="flex flex-col items-end gap-1">
-      <Button type="button" size="sm" disabled={running} onClick={() => void handleClick()}>
+    <div className="flex w-full flex-col items-stretch gap-1 sm:w-auto sm:items-end">
+      <Button
+        type="button"
+        size="sm"
+        className="w-full sm:w-auto"
+        disabled={running}
+        onClick={() => void handleClick()}
+      >
         {installed ? (
           <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
         ) : (
@@ -49,7 +59,10 @@ export function InstallActionButton({ agent, installed, onComplete }: InstallAct
             : t("settings.agentTool.install.action")}
       </Button>
       {error ? (
-        <p role="alert" className="max-w-sm text-right text-xs text-destructive">
+        <p
+          role="alert"
+          className="max-w-sm text-right text-xs text-destructive"
+        >
           {error}
         </p>
       ) : null}

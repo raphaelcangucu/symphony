@@ -1,4 +1,11 @@
-import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  readFile,
+  readdir,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 
@@ -30,10 +37,30 @@ async function filesBelow(directory) {
 
 await mkdir(evidenceRoot, { recursive: true });
 const existing = await filesBelow(evidenceRoot);
-const video = existing.find((file) => file.endsWith(".webm"));
+await rm(path.join(evidenceRoot, "agent-cli-lifecycle.mp4"), { force: true });
 
-if (video) {
-  const mp4 = path.join(evidenceRoot, "agent-cli-lifecycle.mp4");
+const resultVideos = existing.filter(
+  (file) =>
+    path.basename(file) === "video.webm" &&
+    file.startsWith(path.join(evidenceRoot, "results")),
+);
+
+for (const video of resultVideos) {
+  const resultDirectory = path.dirname(video);
+  const mobileScreenshot = existing.find(
+    (file) =>
+      path.dirname(file) === resultDirectory &&
+      /agent-lifecycle-(claude|codex|cursor|opencode)-mobile\.png$/.test(file),
+  );
+  const provider = mobileScreenshot?.match(
+    /agent-lifecycle-(claude|codex|cursor|opencode)-mobile\.png$/,
+  )?.[1];
+
+  if (!provider) {
+    throw new Error(`cannot identify provider for ${video}`);
+  }
+
+  const mp4 = path.join(evidenceRoot, `agent-lifecycle-${provider}.mp4`);
   const converted = spawnSync(
     "ffmpeg",
     [
@@ -90,7 +117,7 @@ const manifest = {
     {
       command:
         "cd tracker && npx playwright test --config playwright.agent-lifecycle.config.ts",
-      result: "1 passed; retries disabled",
+      result: "4 passed; retries disabled",
     },
   ],
   invariants: {
@@ -98,15 +125,17 @@ const manifest = {
     secret_sentinel_absent_from_all_artifacts: true,
     real_provider_smoke: "optional and not run",
     release_registry: "deterministic local fixtures",
+    providers_exercised: ["claude", "codex", "cursor", "opencode"],
   },
   matrix: [
-    "four managed installs and executable isolation",
-    "explicit PATH selection, managed fallback/recovery, and both-sources failure",
-    "active-session update deferral and post-session activation",
-    "download, checksum, extraction, and probe rollback",
-    "default, project, and request account precedence with process-visible isolated home",
-    "independent account usage, stale generation rejection, stale/backoff classifications",
-    "disabled/enabled failover, all-ineligible redaction, no mid-session identity switch",
+    "for each provider: managed install and executable isolation",
+    "for each provider: explicit PATH, managed fallback/recovery, and both-sources failure",
+    "for each provider: active-session update deferral and post-session activation",
+    "for each provider: download, checksum, extraction, and probe rollback",
+    "for each provider: default, project, and request account precedence with process-visible isolated home",
+    "for each provider: independent account usage, stale generation rejection, stale/backoff classifications",
+    "for each provider: disabled/enabled failover, all-ineligible redaction, no mid-session identity switch",
+    "for each provider: responsive mobile top/accounts captures without horizontal overflow",
   ],
   artifacts,
 };

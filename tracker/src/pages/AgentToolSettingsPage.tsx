@@ -24,7 +24,12 @@ function unsupportedTool(slug: string): AgentTool {
     id: slug,
     kind: "codex",
     status: { installed: false, version: null, path: null, command: slug },
-    source: { value: "none", preferred: "managed", managed: false, detail: null },
+    source: {
+      value: "none",
+      preferred: "managed",
+      managed: false,
+      detail: null,
+    },
     install: { available: false, strategy: "none" },
     model: { options: [], selected: null },
   };
@@ -55,7 +60,11 @@ export function AgentToolSettingsPage() {
     let cancelled = false;
     setLoading(true);
     setLoadError(false);
-    void Promise.all([fetchAgentTools(), fetchAgentAccounts(kind), fetchSettings()])
+    void Promise.all([
+      fetchAgentTools(),
+      fetchAgentAccounts(kind),
+      fetchSettings(),
+    ])
       .then(([tools, loadedAccounts, settings]) => {
         if (cancelled) return;
         const match = tools.find((entry) => entry.kind === kind) ?? null;
@@ -83,9 +92,13 @@ export function AgentToolSettingsPage() {
 
   if (!descriptor) {
     return (
-      <div className="space-y-6" data-testid="agent-tool-settings">
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t("settings.agentTool.unknown.title")}</h1>
-        <p className="text-sm text-muted-foreground">{t("settings.agentTool.unknown.description")}</p>
+      <div className="space-y-4 sm:space-y-6" data-testid="agent-tool-settings">
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+          {t("settings.agentTool.unknown.title")}
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          {t("settings.agentTool.unknown.description")}
+        </p>
       </div>
     );
   }
@@ -94,12 +107,22 @@ export function AgentToolSettingsPage() {
   const effectiveTool = descriptor.supported ? tool : unsupportedTool(slug);
 
   return (
-    <div className="space-y-6" data-testid="agent-tool-settings">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-2">
-          <descriptor.icon className="h-5 w-5 text-muted-foreground" aria-hidden />
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{label}</h1>
-          {descriptor.beta ? <Badge variant="muted">{t("settings.agentTool.betaBadge")}</Badge> : null}
+    <div className="space-y-4 sm:space-y-6" data-testid="agent-tool-settings">
+      <div
+        className="flex flex-col gap-4 rounded-xl border bg-card p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:border-0 sm:bg-transparent sm:p-0 sm:shadow-none"
+        data-testid="agent-tool-header"
+      >
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <descriptor.icon
+            className="h-5 w-5 text-muted-foreground"
+            aria-hidden
+          />
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+            {label}
+          </h1>
+          {descriptor.beta ? (
+            <Badge variant="muted">{t("settings.agentTool.betaBadge")}</Badge>
+          ) : null}
           <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
             {t("settings.agentTool.cliTag")}
           </span>
@@ -130,7 +153,9 @@ export function AgentToolSettingsPage() {
           />
         </>
       ) : loadError ? (
-        <p className="text-xs text-muted-foreground">{t("settings.agentTool.loadFailed")}</p>
+        <p className="text-xs text-muted-foreground">
+          {t("settings.agentTool.loadFailed")}
+        </p>
       ) : loading || !tool ? (
         <p className="text-xs text-muted-foreground">{t("common.loading")}</p>
       ) : (
@@ -145,11 +170,17 @@ export function AgentToolSettingsPage() {
             <AgentLifecycleCard
               agent={kind}
               initial={preference}
-              onLifecycleComplete={() => setRefreshGeneration((value) => value + 1)}
+              onLifecycleComplete={() =>
+                setRefreshGeneration((value) => value + 1)
+              }
             />
           ) : null}
-          {kind ? <AgentAccountsCard agent={kind} initialAccounts={accounts} /> : null}
-          {kind ? <AgentModelCard agent={kind} label={label} model={tool.model} /> : null}
+          {kind ? (
+            <AgentAccountsCard agent={kind} initialAccounts={accounts} />
+          ) : null}
+          {kind ? (
+            <AgentModelCard agent={kind} label={label} model={tool.model} />
+          ) : null}
         </>
       )}
     </div>

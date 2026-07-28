@@ -781,10 +781,11 @@ scripts/test-agent-lifecycle-e2e.sh
 ```
 
 It boots a real Phoenix server and built tracker against disposable HOME/XDG directories and local
-release fixtures, then verifies all four installs, PATH fallback and repair, download/checksum/
-extraction/probe rollback, deferred updates, account precedence and isolation, per-account usage
-staleness/backoff, session-boundary failover, credential preservation, and artifact-wide secret
-redaction.
+release fixtures. The same complete matrix runs independently for Claude, Codex, Cursor, and
+OpenCode: managed installation, PATH fallback and repair, download/checksum/extraction/probe
+rollback, deferred updates, account precedence and isolation, per-account usage staleness/backoff,
+session-boundary failover, responsive mobile layout, credential preservation, and artifact-wide
+secret redaction.
 
 #### Cursor Agent backend
 
