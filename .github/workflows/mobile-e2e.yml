@@ -46,9 +46,12 @@ jobs:
           cache: true
           working_directory: elixir
 
-      - name: Install native test tools
+      - name: Install mobile image test tool
+        run: sudo apt-get update && sudo apt-get install -y imagemagick
+
+      - name: Install native E2E tools
         if: github.event_name == 'workflow_dispatch'
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg imagemagick jq tmux
+        run: sudo apt-get install -y ffmpeg jq tmux
 
       - name: Install mobile dependencies
         working-directory: mobile
