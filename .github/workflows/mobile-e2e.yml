@@ -32,12 +32,14 @@ jobs:
           cache-dependency-path: mobile/package-lock.json
 
       - name: Set up Java
+        if: github.event_name == 'workflow_dispatch'
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
 
       - name: Set up Elixir and OTP
+        if: github.event_name == 'workflow_dispatch'
         uses: jdx/mise-action@v3
         with:
           install: true
@@ -45,6 +47,7 @@ jobs:
           working_directory: elixir
 
       - name: Install native test tools
+        if: github.event_name == 'workflow_dispatch'
         run: sudo apt-get update && sudo apt-get install -y ffmpeg imagemagick jq tmux
 
       - name: Install mobile dependencies
@@ -60,6 +63,7 @@ jobs:
           npm run test
 
       - name: Prepare Symphony host runtime
+        if: github.event_name == 'workflow_dispatch'
         working-directory: elixir
         run: |
           mix deps.get
@@ -71,10 +75,12 @@ jobs:
             test/symphony_elixir/push_notifications/native_sender_test.exs
 
       - name: Build Android E2E APK
+        if: github.event_name == 'workflow_dispatch'
         working-directory: mobile
         run: npm run build:android:e2e
 
       - name: Enable KVM for Android emulator
+        if: github.event_name == 'workflow_dispatch'
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' |
             sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -82,6 +88,7 @@ jobs:
           sudo udevadm trigger --name-match=kvm
 
       - name: Record credentialless encrypted two-host RPC journey
+        if: github.event_name == 'workflow_dispatch'
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 29
@@ -91,7 +98,7 @@ jobs:
           script: mobile/e2e/multi-host-smoke.sh mobile/android/app/build/outputs/apk/release/app-release.apk
 
       - name: Upload MP4 and reports
-        if: always()
+        if: always() && github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
           name: encrypted-multi-host-mobile-e2e
