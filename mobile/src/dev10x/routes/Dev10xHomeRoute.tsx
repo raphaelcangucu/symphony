@@ -25,7 +25,8 @@ import {
   UsageBar
 } from '../components/AccountUsage'
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import { loadHosts, removeHost, renameHost } from '../transport/host-store'
+import { removeHost, renameHost } from '../transport/host-store'
+import { usePersistedHosts } from '../transport/use-persisted-hosts'
 import { pickResumeWorktree } from '../worktree/resume-worktree'
 import type { RpcClient } from '../transport/rpc-client'
 import {
@@ -314,7 +315,7 @@ export function Dev10xHomeRoute() {
   // Why: cap and center content on wide/tablet canvases so cards don't stretch
   // edge-to-edge on iPad; on phones isWideLayout is false and layout is unchanged.
   const { isWideLayout, contentMaxWidth } = useResponsiveLayout()
-  const [hosts, setHosts] = useState<HostProfile[]>([])
+  const { hosts, refreshHosts } = usePersistedHosts()
   const [actionTarget, setActionTarget] = useState<HostProfile | null>(null)
   const [renameTarget, setRenameTarget] = useState<HostProfile | null>(null)
   const [confirmRemove, setConfirmRemove] = useState<HostProfile | null>(null)
@@ -403,11 +404,6 @@ export function Dev10xHomeRoute() {
   useFocusEffect(
     useCallback(() => {
       let stale = false
-      void loadHosts().then((h) => {
-        if (!stale) {
-          setHosts(h)
-        }
-      })
       void AsyncStorage.getItem('orca:last-visited-worktree').then((raw) => {
         if (stale || !raw) {
           return
@@ -718,7 +714,7 @@ export function Dev10xHomeRoute() {
     try {
       await renameHost(renameTarget.id, newName)
       setRenameTarget(null)
-      setHosts(await loadHosts())
+      await refreshHosts()
     } catch {
       setRenameTarget(null)
     }
@@ -734,7 +730,7 @@ export function Dev10xHomeRoute() {
       closeHostClient(confirmRemove.id)
       await removeHost(confirmRemove.id)
       setConfirmRemove(null)
-      setHosts(await loadHosts())
+      await refreshHosts()
     } catch {
       setConfirmRemove(null)
     }
