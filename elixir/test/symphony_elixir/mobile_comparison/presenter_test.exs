@@ -93,7 +93,12 @@ defmodule SymphonyElixir.MobileComparison.PresenterTest do
       Presenter.cell(
         @session,
         %{identifier: "DEV-2"},
-        %{id: 43, status: "active", retry_attempt: 1},
+        %{
+          id: 43,
+          status: "error",
+          retry_attempt: 1,
+          error: "serve_restart"
+        },
         nil,
         [],
         [
@@ -112,6 +117,7 @@ defmodule SymphonyElixir.MobileComparison.PresenterTest do
 
     assert cell["status"] == "passed"
     assert cell["attempt"] == 2
+    assert cell["error"] == nil
   end
 
   test "a provider turn that completed without assistant output is retryable" do

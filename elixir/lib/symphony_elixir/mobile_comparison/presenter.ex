@@ -31,6 +31,8 @@ defmodule SymphonyElixir.MobileComparison.Presenter do
 
   @spec cell(map(), map(), map() | nil, map() | nil, [map()], [map()]) :: map()
   def cell(contract, child, thread, execution, previews, evidence) do
+    status = cell_status(contract.path, thread, execution, evidence)
+
     %{
       "id" => contract.id,
       "path" => Atom.to_string(contract.path),
@@ -40,13 +42,13 @@ defmodule SymphonyElixir.MobileComparison.Presenter do
       "effective_effort" => contract.effective_effort,
       "resolved_model" => resolved_value(thread, execution, :resolved_model),
       "resolved_effort" => resolved_value(thread, execution, :resolved_effort),
-      "status" => cell_status(contract.path, thread, execution, evidence),
+      "status" => status,
       "attempt" => attempt(thread, execution),
       "issue_identifier" => value(child, :identifier),
       "thread_id" => value(thread, :id),
       "execution_session_id" => value(execution, :execution_session_id),
       "latest_message" => resolved_value(thread, execution, :latest_message),
-      "error" => resolved_value(thread, execution, :error),
+      "error" => presented_error(status, thread, execution),
       "previews" => previews,
       "evidence" => evidence
     }
@@ -113,6 +115,11 @@ defmodule SymphonyElixir.MobileComparison.Presenter do
     do: String.ends_with?(message, "completed the turn without returning assistant text.")
 
   defp completed_without_output?(_message), do: false
+
+  defp presented_error(status, thread, execution) when status in @failed_statuses,
+    do: resolved_value(thread, execution, :error)
+
+  defp presented_error(_status, _thread, _execution), do: nil
 
   defp attempt(thread, nil), do: (value(thread, :retry_attempt) || 0) + 1
   defp attempt(_thread, execution), do: (value(execution, :retry_attempt) || 0) + 1
