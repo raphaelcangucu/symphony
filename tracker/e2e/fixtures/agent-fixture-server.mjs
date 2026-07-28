@@ -5,9 +5,15 @@ import { appendFile, readFile } from "node:fs/promises";
 import http from "node:http";
 
 const host = "127.0.0.1";
-const port = Number.parseInt(process.env.SYMPHONY_AGENT_FIXTURE_PORT ?? "4218", 10);
+const port = Number.parseInt(
+  process.env.SYMPHONY_AGENT_FIXTURE_PORT ?? "4218",
+  10,
+);
 const logFile = process.env.SYMPHONY_AGENT_FIXTURE_LOG;
-const template = await readFile(new URL("./fake-agent-cli.sh", import.meta.url), "utf8");
+const template = await readFile(
+  new URL("./fake-agent-cli.sh", import.meta.url),
+  "utf8",
+);
 const supported = new Set(["claude", "codex", "cursor", "opencode"]);
 const state = { version: "1.0.0", mode: "ok" };
 
@@ -20,7 +26,10 @@ function script(agent, version, mode = "ok") {
 
 async function log(method, pathname, status) {
   if (!logFile) return;
-  await appendFile(logFile, `${new Date().toISOString()} ${method} ${pathname} ${status}\n`);
+  await appendFile(
+    logFile,
+    `${new Date().toISOString()} ${method} ${pathname} ${status}\n`,
+  );
 }
 
 async function body(request) {
@@ -51,7 +60,10 @@ const server = http.createServer(async (request, response) => {
 
       if (request.method === "GET" && manifest && supported.has(manifest[1])) {
         const agent = manifest[1];
-        const contents = script(agent, state.version, state.mode);
+        const contents =
+          state.mode === "extraction_failure"
+            ? "this is not a zip archive"
+            : script(agent, state.version, state.mode);
         const checksum = createHash("sha256").update(contents).digest("hex");
         status = 200;
         response.writeHead(status, { "content-type": "application/json" });
@@ -59,13 +71,25 @@ const server = http.createServer(async (request, response) => {
           JSON.stringify({
             version: state.version,
             url: `http://${host}:${port}/binary/${agent}/${state.version}`,
-            checksum: state.mode === "checksum_mismatch" ? "0".repeat(64) : checksum,
+            checksum:
+              state.mode === "checksum_mismatch" ? "0".repeat(64) : checksum,
+            format: state.mode === "extraction_failure" ? "zip" : "raw",
           }),
         );
-      } else if (request.method === "GET" && binary && supported.has(binary[1])) {
-        status = 200;
-        response.writeHead(status, { "content-type": "application/octet-stream" });
-        response.end(script(binary[1], binary[2], state.mode));
+      } else if (
+        request.method === "GET" &&
+        binary &&
+        supported.has(binary[1])
+      ) {
+        status = state.mode === "download_failure" ? 503 : 200;
+        response.writeHead(status, {
+          "content-type": "application/octet-stream",
+        });
+        response.end(
+          state.mode === "extraction_failure"
+            ? "this is not a zip archive"
+            : script(binary[1], binary[2], state.mode),
+        );
       } else {
         response.writeHead(status, { "content-type": "application/json" });
         response.end('{"error":"not_found"}');

@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
 import {
   chmod,
   cp,
@@ -28,6 +29,10 @@ const serverPort = Number.parseInt(
 );
 const fixturePort = Number.parseInt(
   process.env.SYMPHONY_AGENT_FIXTURE_PORT ?? "4218",
+  10,
+);
+const controlPort = Number.parseInt(
+  process.env.SYMPHONY_AGENT_E2E_CONTROL_PORT ?? "4219",
   10,
 );
 const token = "agent-e2e-token";
@@ -69,6 +74,23 @@ async function protectedManifest(home: string): Promise<ProtectedEntry[]> {
 
 function cleanEnvironment(root: string, pathBin: string): NodeJS.ProcessEnv {
   const environment: NodeJS.ProcessEnv = { ...process.env };
+  const providerExecutables = [
+    "codex",
+    "claude",
+    "cursor-agent",
+    "agent",
+    "opencode",
+  ];
+  const ambientPath = (process.env.PATH ?? "")
+    .split(path.delimiter)
+    .filter(
+      (directory) =>
+        directory !== "" &&
+        !providerExecutables.some((executable) =>
+          existsSync(path.join(directory, executable)),
+        ),
+    )
+    .join(path.delimiter);
 
   for (const key of Object.keys(environment)) {
     if (/^(CODEX|CLAUDE|CURSOR|OPENCODE|ANTHROPIC|OPENAI)(_|$)/i.test(key)) {
@@ -82,10 +104,11 @@ function cleanEnvironment(root: string, pathBin: string): NodeJS.ProcessEnv {
     XDG_CONFIG_HOME: path.join(root, "home/.config"),
     XDG_DATA_HOME: path.join(root, "xdg-data"),
     XDG_CACHE_HOME: path.join(root, "cache"),
-    PATH: `${pathBin}${path.delimiter}${process.env.PATH ?? ""}`,
+    PATH: `${pathBin}${path.delimiter}${ambientPath}`,
     SYMPHONY_AGENT_E2E_ROOT: root,
     SYMPHONY_AGENT_E2E_FIXTURE_URL: `http://127.0.0.1:${fixturePort}`,
     SYMPHONY_AGENT_FIXTURE_PORT: String(fixturePort),
+    SYMPHONY_AGENT_E2E_CONTROL_PORT: String(controlPort),
     SYMPHONY_AGENT_FIXTURE_LOG: path.join(root, "logs/fixture.log"),
     SYMPHONY_LOCAL_TRACKER_DATABASE: path.join(root, "tracker.sqlite3"),
     SYMPHONY_TRACKER_HOST: "127.0.0.1",
@@ -231,6 +254,8 @@ export default async function globalSetup() {
   process.env.SYMPHONY_AGENT_E2E_DATA_ROOT = path.join(root, "data");
   process.env.SYMPHONY_AGENT_E2E_FIXTURE_URL =
     environment.SYMPHONY_AGENT_E2E_FIXTURE_URL;
+  process.env.SYMPHONY_AGENT_E2E_CONTROL_URL = `http://127.0.0.1:${controlPort}`;
+  process.env.SYMPHONY_AGENT_E2E_PATH_BIN = pathBin;
 
   const fixtureOutput = await writeFile(
     path.join(root, "logs/fixture-process.log"),
@@ -246,6 +271,10 @@ export default async function globalSetup() {
     createWriteStream(path.join(root, "logs/phoenix-process.log"), {
       flags: "a",
     }),
+  );
+  fixtureLog.write(`agent E2E requested fixture=${fixturePort}\n`);
+  phoenixLog.write(
+    `agent E2E requested tracker=${serverPort} control=${controlPort}\n`,
   );
 
   const fixture = spawn(
@@ -295,6 +324,11 @@ export default async function globalSetup() {
       `http://127.0.0.1:${serverPort}/tracker`,
       phoenix,
       "Phoenix tracker",
+    );
+    await waitFor(
+      `http://127.0.0.1:${controlPort}/health`,
+      phoenix,
+      "agent runtime control",
     );
   } catch (error) {
     await Promise.all([stop(phoenix), stop(fixture)]);

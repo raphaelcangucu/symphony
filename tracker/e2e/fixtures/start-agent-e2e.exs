@@ -1,4 +1,5 @@
 Code.require_file(Path.join(__DIR__, "e2e_installer.exs"))
+Code.require_file(Path.join(__DIR__, "agent-e2e-control.exs"))
 
 root = System.fetch_env!("SYMPHONY_AGENT_E2E_ROOT")
 database = System.fetch_env!("SYMPHONY_LOCAL_TRACKER_DATABASE")
@@ -17,4 +18,8 @@ Application.put_env(:symphony_elixir, :claude_usage_probe_enabled, false)
 Application.put_env(:symphony_elixir, :agent_maintenance_enabled, false)
 
 {:ok, _applications} = Application.ensure_all_started(:symphony_elixir)
+IO.puts("agent E2E application listening on #{System.fetch_env!("SYMPHONY_TRACKER_PORT")}")
+control_port = String.to_integer(System.fetch_env!("SYMPHONY_AGENT_E2E_CONTROL_PORT"))
+{:ok, _control} = SymphonyElixir.AgentLifecycle.E2EControl.start_link(control_port)
+IO.puts("agent E2E control listening on #{control_port}")
 Process.sleep(:infinity)

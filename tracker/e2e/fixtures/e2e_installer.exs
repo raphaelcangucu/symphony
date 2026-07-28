@@ -12,11 +12,14 @@ defmodule SymphonyElixir.AgentLifecycle.E2EInstaller do
         version: body["version"],
         url: body["url"],
         checksum: body["checksum"],
-        format: :raw
+        format: format(body["format"])
       })
     else
       {:ok, %Req.Response{status: status}} -> {:error, {:fixture_status, status}}
       {:error, reason} -> {:error, {:fixture_request, reason}}
     end
   end
+
+  defp format("zip"), do: :zip
+  defp format(_format), do: :raw
 end

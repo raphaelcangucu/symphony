@@ -7,6 +7,7 @@ const evidenceRoot = path.join(
   repositoryRoot,
   ".symphony/evidence/agent-cli-lifecycle",
 );
+const sentinel = ["agent", "e2e", "secret", "must", "never", "leak"].join("-");
 
 async function filesBelow(directory) {
   const files = [];
@@ -55,6 +56,21 @@ if (video) {
   }
 }
 
+for (const file of await filesBelow(evidenceRoot)) {
+  const contents =
+    path.extname(file) === ".zip"
+      ? spawnSync("unzip", ["-p", file], {
+          maxBuffer: 50 * 1024 * 1024,
+        }).stdout
+      : await readFile(file);
+
+  if (contents.includes(Buffer.from(sentinel))) {
+    throw new Error(
+      `secret sentinel leaked into ${path.relative(repositoryRoot, file)}`,
+    );
+  }
+}
+
 const protectedHomePath = path.join(
   evidenceRoot,
   "artifacts/protected-home.json",
@@ -79,9 +95,19 @@ const manifest = {
   ],
   invariants: {
     operator_provider_files_unchanged: protectedHome.unchanged,
+    secret_sentinel_absent_from_all_artifacts: true,
     real_provider_smoke: "optional and not run",
     release_registry: "deterministic local fixtures",
   },
+  matrix: [
+    "four managed installs and executable isolation",
+    "explicit PATH selection, managed fallback/recovery, and both-sources failure",
+    "active-session update deferral and post-session activation",
+    "download, checksum, extraction, and probe rollback",
+    "default, project, and request account precedence with process-visible isolated home",
+    "independent account usage, stale generation rejection, stale/backoff classifications",
+    "disabled/enabled failover, all-ineligible redaction, no mid-session identity switch",
+  ],
   artifacts,
 };
 

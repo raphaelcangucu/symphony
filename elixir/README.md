@@ -781,8 +781,10 @@ scripts/test-agent-lifecycle-e2e.sh
 ```
 
 It boots a real Phoenix server and built tracker against disposable HOME/XDG directories and local
-release fixtures, then verifies all four installs, fallback and repair, checksum rollback, updates,
-isolated accounts/defaults, failover settings, credential preservation, and secret redaction.
+release fixtures, then verifies all four installs, PATH fallback and repair, download/checksum/
+extraction/probe rollback, deferred updates, account precedence and isolation, per-account usage
+staleness/backoff, session-boundary failover, credential preservation, and artifact-wide secret
+redaction.
 
 #### Cursor Agent backend
 
