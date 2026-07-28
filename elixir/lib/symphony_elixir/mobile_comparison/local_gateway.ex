@@ -104,8 +104,13 @@ defmodule SymphonyElixir.MobileComparison.LocalGateway do
       |> List.first()
 
     case thread do
-      nil -> {:error, :not_found}
-      existing -> {:ok, maybe_mark_ready(existing, context)}
+      nil ->
+        {:error, :not_found}
+
+      existing ->
+        with {:ok, persisted} <- ensure_session_provenance(existing, cell, context) do
+          {:ok, maybe_mark_ready(persisted, context)}
+        end
     end
   end
 
@@ -344,10 +349,42 @@ defmodule SymphonyElixir.MobileComparison.LocalGateway do
              body,
              idempotency_key(context, cell.id, idempotency_suffix)
            )
-           |> unwrap_data() do
-      {:ok, maybe_mark_ready(thread, context)}
+           |> unwrap_data(),
+         {:ok, persisted} <- ensure_session_provenance(thread, cell, context) do
+      {:ok, maybe_mark_ready(persisted, context)}
     end
   end
+
+  defp ensure_session_provenance(thread, cell, context) do
+    expected = %{
+      requested_model: cell.model,
+      requested_effort: canonical_requested_effort(cell)
+    }
+
+    if session_provenance_matches?(thread, expected) do
+      {:ok, thread}
+    else
+      history = Map.get(context, :comparison_history, History)
+
+      with {:ok, persisted_thread} <- history.get_thread(value(thread, :id)),
+           {:ok, updated} <- history.put_model_provenance(persisted_thread, expected),
+           true <- session_provenance_matches?(updated, expected) do
+        {:ok, updated}
+      else
+        false -> {:error, :session_provenance_not_persisted}
+        {:error, reason} -> {:error, reason}
+        _unexpected -> {:error, :session_provenance_not_persisted}
+      end
+    end
+  end
+
+  defp session_provenance_matches?(thread, expected) do
+    value(thread, :requested_model) == expected.requested_model and
+      value(thread, :requested_effort) == expected.requested_effort
+  end
+
+  defp canonical_requested_effort(%{provider: "cursor"}), do: nil
+  defp canonical_requested_effort(cell), do: cell.effort
 
   defp put_cell_identity(child) do
     case cell_id_from_title(value(child, :title)) do

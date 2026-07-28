@@ -101,6 +101,23 @@ defmodule SymphonyElixir.MobileComparison.LocalGatewayTest do
   defmodule LegacyProvenanceHistory do
     def list_messages_for_thread(43), do: []
 
+    def get_thread(43) do
+      {:ok,
+       %{
+         id: 43,
+         issue_identifier: "DEV-2",
+         agent_kind: "codex",
+         status: "active",
+         requested_model: nil,
+         requested_effort: nil
+       }}
+    end
+
+    def put_model_provenance(thread, attrs) do
+      send(self(), {:persisted_model_provenance, thread.id, attrs})
+      {:ok, Map.merge(thread, attrs)}
+    end
+
     def list_threads(_opts) do
       [
         %{
@@ -295,19 +312,27 @@ defmodule SymphonyElixir.MobileComparison.LocalGatewayTest do
     refute_receive {:tracker_request, :sessions, _request}
   end
 
-  test "recovers an issue-scoped provider thread created without model provenance", %{
+  test "repairs an issue-scoped provider thread created without model provenance before reuse", %{
     context: context
   } do
     assert {:ok, cell} = Contract.fetch("session-codex")
     context = Map.put(context, :comparison_history, LegacyProvenanceHistory)
 
-    assert {:ok, %{id: 43, status: "ready"}} =
+    assert {:ok,
+            %{
+              id: 43,
+              status: "ready",
+              requested_model: "gpt-5.6-sol",
+              requested_effort: "high"
+            }} =
              LocalGateway.get_session(
                "dev10x",
                %{"identifier" => "DEV-2"},
                cell,
-             context
+               context
              )
+
+    assert_receive {:persisted_model_provenance, 43, %{requested_model: "gpt-5.6-sol", requested_effort: "high"}}
   end
 
   test "exposes the latest completed assistant turn for comparison failure detection", %{

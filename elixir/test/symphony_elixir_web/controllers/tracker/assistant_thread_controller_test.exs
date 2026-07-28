@@ -888,6 +888,34 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadControllerTest do
     assert Enum.all?(rows, &(&1["scope"] == "issue_session"))
   end
 
+  test "POST persists requested model provenance on an issue session" do
+    {:ok, _project} = Context.ensure_project(%{name: "Dev10x Mobile", slug: "dev10x-mobile"})
+
+    conn =
+      authorize()
+      |> post("/api/tracker/v1/assistant/threads", %{
+        scope: "issue_session",
+        project_slug: "dev10x-mobile",
+        issue_identifier: "DEV-2",
+        agent_kind: "claude",
+        model: "claude-opus-5",
+        effort: "high",
+        execution_mode: "yolo"
+      })
+
+    assert %{
+             "data" => %{
+               "id" => id,
+               "requested_model" => "claude-opus-5",
+               "requested_effort" => "high"
+             }
+           } = json_response(conn, 201)
+
+    assert {:ok, persisted} = History.get_thread(id)
+    assert persisted.requested_model == "claude-opus-5"
+    assert persisted.requested_effort == "high"
+  end
+
   defp authorize do
     build_conn()
     |> put_req_header("authorization", "Bearer secret")
