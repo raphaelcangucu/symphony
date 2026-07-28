@@ -15,12 +15,13 @@ defmodule SymphonyElixir.Settings.AgentTools do
 
   # Keep atom keys explicit so we never call String.to_atom/1 on user input and
   # the availability lookup stays a compile-time literal.
-  @agents [{:codex, "codex"}, {:claude, "claude"}, {:cursor, "cursor"}]
+  @agents [{:codex, "codex"}, {:claude, "claude"}, {:cursor, "cursor"}, {:opencode, "opencode"}]
 
   @install_commands %{
     "codex" => "npm install -g @openai/codex",
     "claude" => "npm install -g @anthropic-ai/claude-code",
-    "cursor" => "curl https://cursor.com/install -fsSL | bash"
+    "cursor" => "curl https://cursor.com/install -fsSL | bash",
+    "opencode" => "curl -fsSL https://opencode.ai/install | bash"
   }
 
   @spec list() :: [map()]

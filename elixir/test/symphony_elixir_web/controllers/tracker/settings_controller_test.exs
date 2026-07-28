@@ -129,10 +129,10 @@ defmodule SymphonyElixirWeb.Tracker.SettingsControllerTest do
     conn = get(authed_conn(), "/api/tracker/v1/settings/agents/tools")
 
     assert %{"data" => %{"tools" => tools}} = json_response(conn, 200)
-    assert length(tools) == 3
+    assert length(tools) == 4
 
     ids = tools |> Enum.map(& &1["id"]) |> Enum.sort()
-    assert ids == ["claude", "codex", "cursor"]
+    assert ids == ["claude", "codex", "cursor", "opencode"]
 
     codex = Enum.find(tools, &(&1["id"] == "codex"))
     assert is_boolean(codex["status"]["installed"])
