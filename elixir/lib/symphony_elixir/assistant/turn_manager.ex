@@ -1089,7 +1089,19 @@ defmodule SymphonyElixir.Assistant.TurnManager do
     dispatcher =
       Application.get_env(:symphony_elixir, :push_dispatcher, SymphonyElixir.PushNotifications.Dispatcher)
 
-    dispatcher.assistant_turn_completed(thread, status)
+    try do
+      dispatcher.assistant_turn_completed(thread, status)
+    rescue
+      error ->
+        Logger.warning("assistant turns: push delivery failed thread_id=#{thread.id} reason=#{Exception.message(error)}")
+
+        :ok
+    catch
+      kind, reason ->
+        Logger.warning("assistant turns: push delivery failed thread_id=#{thread.id} reason=#{inspect({kind, reason})}")
+
+        :ok
+    end
   end
 
   defp maybe_push_turn_completed(_thread, _status), do: :ok

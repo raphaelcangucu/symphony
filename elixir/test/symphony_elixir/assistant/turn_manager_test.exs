@@ -6,6 +6,10 @@ defmodule SymphonyElixir.Assistant.TurnManagerTest do
   alias SymphonyElixir.LocalTracker.Context
   alias SymphonyElixir.Repo
 
+  defmodule CrashingPushDispatcher do
+    def assistant_turn_completed(_thread, _status), do: raise("push delivery crashed")
+  end
+
   setup do
     migrate_repo()
     clean_repo()
@@ -43,6 +47,52 @@ defmodule SymphonyElixir.Assistant.TurnManagerTest do
     assert History.current_turn(done)["status"] == "completed"
     assert History.current_turn(done)["conversation_id"] == "ct"
     assert History.current_turn(done)["run_id"] == "tn"
+  end
+
+  test "a push delivery crash cannot restart the manager or orphan sibling turns", %{
+    thread: thread
+  } do
+    original_dispatcher =
+      Application.get_env(:symphony_elixir, :push_dispatcher)
+
+    Application.put_env(
+      :symphony_elixir,
+      :push_dispatcher,
+      CrashingPushDispatcher
+    )
+
+    on_exit(fn ->
+      if original_dispatcher do
+        Application.put_env(:symphony_elixir, :push_dispatcher, original_dispatcher)
+      else
+        Application.delete_env(:symphony_elixir, :push_dispatcher)
+      end
+    end)
+
+    manager = Process.whereis(TurnManager)
+    test_pid = self()
+
+    run = fn ->
+      send(test_pid, {:push_worker, self()})
+      receive do: (:finish -> :ok)
+      {:ok, %{assistant_message: "done"}}
+    end
+
+    assert {:ok, %{pid: worker}} =
+             TurnManager.start_turn(thread.id, "finish safely",
+               run: run,
+               reply_to: self(),
+               trigger: "user"
+             )
+
+    assert_receive {:push_worker, ^worker}
+    send(worker, :finish)
+
+    assert_receive {:assistant_turn_finished, _execution_id, {:ok, _}}, 1_000
+    assert manager == Process.whereis(TurnManager)
+
+    assert {:ok, completed} = History.get_thread(thread.id)
+    assert History.current_turn(completed)["status"] == "completed"
   end
 
   test "a manager restart adopts the live worker instead of orphaning its turn", %{
