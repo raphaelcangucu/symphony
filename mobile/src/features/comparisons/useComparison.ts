@@ -1,4 +1,4 @@
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { HostTransport } from "@/transport/HostTransport";
@@ -11,7 +11,7 @@ import type {
 import { createRpcComparison, type ComparisonConnectionState } from "./rpc-comparison";
 
 export function comparisonQueryKey(hostId: string, projectSlug: string, identifier: string) {
-  return ["comparison", hostId, projectSlug, identifier] as const;
+  return ["host", hostId, "comparison", projectSlug, identifier] as const;
 }
 
 export function useComparison({
@@ -29,15 +29,17 @@ export function useComparison({
     () => comparisonQueryKey(hostId, projectSlug, identifier),
     [hostId, identifier, projectSlug],
   );
-  const [snapshot, setSnapshot] = useState<ComparisonSnapshot | null>(
-    () => queryClient.getQueryData<ComparisonSnapshot>(queryKey) ?? null,
-  );
+  const cachedSnapshot = useQuery<ComparisonSnapshot>({
+    queryKey,
+    queryFn: () => Promise.reject(new Error("Comparison snapshots are populated over RPC")),
+    enabled: false,
+  });
+  const snapshot = cachedSnapshot.data ?? null;
   const [connectionState, setConnectionState] = useState<ComparisonConnectionState>("connecting");
   const [error, setError] = useState<string | null>(null);
 
   const onSnapshot = useCallback(
     (next: ComparisonSnapshot) => {
-      setSnapshot(next);
       queryClient.setQueryData(queryKey, next);
     },
     [queryClient, queryKey],
@@ -57,10 +59,6 @@ export function useComparison({
         : null,
     [identifier, onSnapshot, projectSlug, transport],
   );
-
-  useEffect(() => {
-    setSnapshot(queryClient.getQueryData<ComparisonSnapshot>(queryKey) ?? null);
-  }, [queryClient, queryKey]);
 
   useEffect(() => {
     client?.connect();
