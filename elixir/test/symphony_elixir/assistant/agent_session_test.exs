@@ -794,7 +794,11 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
       end
 
       assert {:ok, result} =
-               AgentSession.send_message_to_issue_thread(session_thread, "oi", %{}, runner: runner)
+               AgentSession.send_message_to_issue_thread(session_thread, "oi", %{},
+                 runner: runner,
+                 model: nil,
+                 effort: nil
+               )
 
       assert result.assistant_message == "ack"
       assert_receive {:session_workspace, ^thread_workspace, opts}

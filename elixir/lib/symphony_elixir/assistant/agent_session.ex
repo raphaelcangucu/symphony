@@ -1978,7 +1978,10 @@ defmodule SymphonyElixir.Assistant.AgentSession do
   defp maybe_put_requested_model_opt(opts, _key, nil), do: opts
 
   defp maybe_put_requested_model_opt(opts, key, value) when is_binary(value) do
-    Keyword.put_new(opts, key, value)
+    case Keyword.get(opts, key) do
+      current when current in [nil, ""] -> Keyword.put(opts, key, value)
+      _explicit -> opts
+    end
   end
 
   defp turn_identity_fields(runner_result) do
