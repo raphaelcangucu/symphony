@@ -162,6 +162,40 @@ describe("HostConnectionManager reconnection", () => {
     vi.useRealTimers();
   });
 
+  it("abandons a heartbeat that hangs on a half-open socket and reconnects", async () => {
+    vi.useFakeTimers();
+    const current = fakeHost("host_a");
+    vi.mocked(current.transport.call).mockImplementation(
+      (_method, _params, signal) =>
+        new Promise((_resolve, reject) => {
+          signal?.addEventListener("abort", () => reject(new Error("heartbeat timeout")), {
+            once: true,
+          });
+        }),
+    );
+    const manager = new HostConnectionManager({
+      heartbeatIntervalMs: 1_000,
+      heartbeatTimeoutMs: 100,
+      baseReconnectDelayMs: 100,
+      jitter: () => 0,
+    });
+    manager.register(current.host);
+    manager.select("host_a");
+    manager.startHeartbeat();
+
+    await vi.advanceTimersByTimeAsync(2_300);
+
+    expect(manager.state("host_a")).toMatchObject({
+      status: "reconnecting",
+      missedHeartbeats: 2,
+      failureCode: "heartbeat_missed",
+    });
+    expect(current.transport.reconnect).toHaveBeenCalled();
+
+    manager.close();
+    vi.useRealTimers();
+  });
+
   it("exports only redacted reachability diagnostics", () => {
     const current = fakeHost("host_a");
     const manager = new HostConnectionManager();

@@ -28,6 +28,7 @@ export type HostState = {
 
 type HostConnectionManagerOptions = {
   heartbeatIntervalMs?: number;
+  heartbeatTimeoutMs?: number;
   baseReconnectDelayMs?: number;
   maxReconnectDelayMs?: number;
   jitter?: () => number;
@@ -46,15 +47,18 @@ export class HostConnectionManager {
   private readonly cleanups = new Map<string, Set<() => void>>();
   private readonly listeners = new Map<string, Set<() => void>>();
   private readonly heartbeatIntervalMs: number;
+  private readonly heartbeatTimeoutMs: number;
   private readonly baseReconnectDelayMs: number;
   private readonly maxReconnectDelayMs: number;
   private readonly jitter: () => number;
   private readonly now: () => number;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  private heartbeatAbortController: AbortController | null = null;
   private selectedHostId: string | null = null;
 
   constructor(options: HostConnectionManagerOptions = {}) {
     this.heartbeatIntervalMs = options.heartbeatIntervalMs ?? 15_000;
+    this.heartbeatTimeoutMs = options.heartbeatTimeoutMs ?? 5_000;
     this.baseReconnectDelayMs = options.baseReconnectDelayMs ?? 500;
     this.maxReconnectDelayMs = options.maxReconnectDelayMs ?? 30_000;
     this.jitter = options.jitter ?? Math.random;
@@ -200,6 +204,8 @@ export class HostConnectionManager {
   close(): void {
     if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
     this.heartbeatTimer = null;
+    this.heartbeatAbortController?.abort();
+    this.heartbeatAbortController = null;
     for (const hostId of this.hosts.keys()) {
       this.cleanupSubscriptions(hostId);
       this.clearReconnect(hostId);
@@ -210,14 +216,22 @@ export class HostConnectionManager {
 
   private async heartbeat(): Promise<void> {
     if (!this.selectedHostId) return;
+    if (this.heartbeatAbortController) return;
     const hostId = this.selectedHostId;
     const state = this.requireState(hostId);
     if (terminalStates.has(state.status)) return;
+    const controller = new AbortController();
+    this.heartbeatAbortController = controller;
+    const timeout = setTimeout(() => controller.abort(), this.heartbeatTimeoutMs);
 
     try {
-      await this.requireHost(hostId).transport.call("system.heartbeat", {
-        nonce: "heartbeat",
-      });
+      await this.requireHost(hostId).transport.call(
+        "system.heartbeat",
+        {
+          nonce: "heartbeat",
+        },
+        controller.signal,
+      );
       state.status = "online";
       state.missedHeartbeats = 0;
       state.lastHeartbeatAt = this.now();
@@ -233,6 +247,11 @@ export class HostConnectionManager {
         this.scheduleReconnect(hostId);
       }
       this.notifyState(hostId);
+    } finally {
+      clearTimeout(timeout);
+      if (this.heartbeatAbortController === controller) {
+        this.heartbeatAbortController = null;
+      }
     }
   }
 
