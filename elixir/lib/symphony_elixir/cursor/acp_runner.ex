@@ -12,6 +12,7 @@ defmodule SymphonyElixir.Cursor.AcpRunner do
   alias SymphonyElixir.Cursor.AcpBridge
   alias SymphonyElixir.Cursor.AcpClient
   alias SymphonyElixir.Cursor.CreatePlanBroker
+  alias SymphonyElixir.ExecutionMode
 
   @default_timeout_ms 300_000
   @approval_timeout_ms 300_000
@@ -133,6 +134,15 @@ defmodule SymphonyElixir.Cursor.AcpRunner do
   end
 
   defp await_permission(request, args, _parent) do
+    if ExecutionMode.normalize(Map.get(args, :execution_mode)) == "yolo" do
+      request.respond.(:approve)
+      :ok
+    else
+      await_interactive_permission(request, args)
+    end
+  end
+
+  defp await_interactive_permission(request, args) do
     request_id = Map.fetch!(request, :request_id)
     on_approval = Map.get(args, :on_approval_required)
 
