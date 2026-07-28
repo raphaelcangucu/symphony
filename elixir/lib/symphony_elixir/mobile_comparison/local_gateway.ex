@@ -257,15 +257,11 @@ defmodule SymphonyElixir.MobileComparison.LocalGateway do
             Map.get(context, :comparison_session_status)
 
         if terminal_session?(session_state) do
-          expected_session_id = "assistant-thread:#{thread_id}"
-
-          records
-          |> Enum.filter(&(value(&1, :session_id) == expected_session_id))
-          |> case do
-            [] -> true
-            current_records ->
-              not Enum.any?(current_records, &(value(&1, :status) == "passed"))
-          end
+          # A session may publish a small valid manifest before its final
+          # verification pass appends more runs and artifacts. Re-read every
+          # terminal snapshot: Store.persist/5 is idempotent for the exact same
+          # manifest, while an evolved manifest becomes a new durable record.
+          true
         else
           false
         end

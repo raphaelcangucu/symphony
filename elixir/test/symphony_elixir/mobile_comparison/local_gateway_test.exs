@@ -317,6 +317,38 @@ defmodule SymphonyElixir.MobileComparison.LocalGatewayTest do
     end
   end
 
+  defmodule PassedThenUpdatedEvidence do
+    def call(
+          "evidence.list",
+          %{"project_slug" => "dev10x", "identifier" => "DEV-2"},
+          context
+        ) do
+      initial = %{
+        "run_id" => "attempt-initial-passed",
+        "session_id" => "assistant-thread:43",
+        "status" => "passed",
+        "manifest" => %{"runs" => [%{"status" => "passed", "summary" => %{"total" => 1}}]}
+      }
+
+      records =
+        if Process.get({__MODULE__, context.test_pid}, false) do
+          [
+            initial,
+            %{
+              "run_id" => "attempt-final-passed",
+              "session_id" => "assistant-thread:43",
+              "status" => "passed",
+              "manifest" => %{"runs" => [%{"status" => "passed", "summary" => %{"total" => 74}}]}
+            }
+          ]
+        else
+          [initial]
+        end
+
+      {:ok, %{"records" => records}}
+    end
+  end
+
   defmodule FakeSessionEvidenceCollector do
     def collect(project_slug, identifier, context) do
       send(context.test_pid, {:collect_session_evidence, project_slug, identifier})
@@ -336,6 +368,14 @@ defmodule SymphonyElixir.MobileComparison.LocalGatewayTest do
     def collect(project_slug, identifier, context) do
       send(context.test_pid, {:collect_final_attempt_evidence, project_slug, identifier})
       Process.put({PartialThenFinalEvidence, context.test_pid}, true)
+      :ok
+    end
+  end
+
+  defmodule UpdatedPassedEvidenceCollector do
+    def collect(project_slug, identifier, context) do
+      send(context.test_pid, {:collect_updated_passed_evidence, project_slug, identifier})
+      Process.put({PassedThenUpdatedEvidence, context.test_pid}, true)
       :ok
     end
   end
@@ -695,6 +735,22 @@ defmodule SymphonyElixir.MobileComparison.LocalGatewayTest do
              LocalGateway.list_evidence("dev10x", "DEV-2", context)
 
     assert_receive {:collect_final_attempt_evidence, "dev10x", "DEV-2"}
+  end
+
+  test "promotes an evolved final manifest after an earlier passed snapshot", %{
+    context: context
+  } do
+    context =
+      context
+      |> Map.put(:comparison_session_id, 43)
+      |> Map.put(:comparison_session_turn_status, "completed")
+      |> Map.put(:mobile_evidence_service, PassedThenUpdatedEvidence)
+      |> Map.put(:comparison_session_evidence_collector, UpdatedPassedEvidenceCollector)
+
+    assert {:ok, records} = LocalGateway.list_evidence("dev10x", "DEV-2", context)
+
+    assert Enum.any?(records, &(&1["run_id"] == "attempt-final-passed"))
+    assert_receive {:collect_updated_passed_evidence, "dev10x", "DEV-2"}
   end
 
   test "persists the operator decision in the parent without requiring a global request key", %{
