@@ -9,6 +9,7 @@ defmodule SymphonyElixirWeb.Tracker.AgentLifecycleController do
   alias SymphonyElixir.Settings
   alias SymphonyElixir.Settings.AgentCli
 
+  @spec source(Plug.Conn.t(), map()) :: Plug.Conn.t()
   def source(conn, %{"agent" => agent, "source" => source})
       when source in ["managed", "path"] do
     with :ok <- known_agent(agent),
@@ -27,10 +28,16 @@ defmodule SymphonyElixirWeb.Tracker.AgentLifecycleController do
     end
   end
 
+  @spec install(Plug.Conn.t(), map()) :: Plug.Conn.t()
   def install(conn, params), do: run_install(conn, params, "install")
+
+  @spec update(Plug.Conn.t(), map()) :: Plug.Conn.t()
   def update(conn, params), do: run_install(conn, params, "update")
+
+  @spec repair(Plug.Conn.t(), map()) :: Plug.Conn.t()
   def repair(conn, params), do: run_install(conn, params, "repair")
 
+  @spec accounts(Plug.Conn.t(), map()) :: Plug.Conn.t()
   def accounts(conn, %{"agent" => agent}) do
     with :ok <- known_agent(agent),
          {:ok, accounts} <- AgentAccounts.list(agent) do
@@ -40,6 +47,7 @@ defmodule SymphonyElixirWeb.Tracker.AgentLifecycleController do
     end
   end
 
+  @spec create_account(Plug.Conn.t(), map()) :: Plug.Conn.t()
   def create_account(conn, %{"agent" => agent} = params) do
     attrs =
       params
@@ -56,6 +64,7 @@ defmodule SymphonyElixirWeb.Tracker.AgentLifecycleController do
     end
   end
 
+  @spec update_account(Plug.Conn.t(), map()) :: Plug.Conn.t()
   def update_account(conn, %{"agent" => agent, "id" => id} = params) do
     attrs = Map.take(params, ["label", "authentication_status"])
 
@@ -67,6 +76,7 @@ defmodule SymphonyElixirWeb.Tracker.AgentLifecycleController do
     end
   end
 
+  @spec delete_account(Plug.Conn.t(), map()) :: Plug.Conn.t()
   def delete_account(conn, %{"agent" => agent, "id" => id}) do
     with :ok <- known_agent(agent),
          :ok <- AgentAccounts.delete(agent, id) do
@@ -76,6 +86,7 @@ defmodule SymphonyElixirWeb.Tracker.AgentLifecycleController do
     end
   end
 
+  @spec default_account(Plug.Conn.t(), map()) :: Plug.Conn.t()
   def default_account(conn, %{"agent" => agent, "id" => id}) do
     with :ok <- known_agent(agent),
          {:ok, account} <- AgentAccounts.set_default(agent, id) do
@@ -85,6 +96,7 @@ defmodule SymphonyElixirWeb.Tracker.AgentLifecycleController do
     end
   end
 
+  @spec failover(Plug.Conn.t(), map()) :: Plug.Conn.t()
   def failover(conn, %{"agent" => agent, "enabled" => enabled})
       when is_boolean(enabled) do
     with :ok <- known_agent(agent),
@@ -96,6 +108,25 @@ defmodule SymphonyElixirWeb.Tracker.AgentLifecycleController do
   end
 
   def failover(conn, %{"agent" => agent}) do
+    with :ok <- known_agent(agent) do
+      validation_error(conn, "enabled must be a boolean")
+    else
+      error -> render_error(conn, error)
+    end
+  end
+
+  @spec auto_update(Plug.Conn.t(), map()) :: Plug.Conn.t()
+  def auto_update(conn, %{"agent" => agent, "enabled" => enabled})
+      when is_boolean(enabled) do
+    with :ok <- known_agent(agent),
+         {:ok, settings} <- update_cli(agent, "auto_update", enabled) do
+      json(conn, %{data: settings})
+    else
+      error -> render_error(conn, error)
+    end
+  end
+
+  def auto_update(conn, %{"agent" => agent}) do
     with :ok <- known_agent(agent) do
       validation_error(conn, "enabled must be a boolean")
     else

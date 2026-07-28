@@ -20,6 +20,7 @@ defmodule SymphonyElixir.SupervisionTreeTest do
 
   test "orchestrator subtree pairs the Orchestrator and its Codex TaskSupervisor" do
     assert SymphonyElixir.Orchestrator.RunnerSupervisor in ids(OrchestratorSupervisor.child_specs())
+    assert SymphonyElixir.AgentLifecycle.Maintenance in ids(OrchestratorSupervisor.child_specs())
 
     runner_specs = SymphonyElixir.Orchestrator.RunnerSupervisor.child_specs()
     assert SymphonyElixir.Orchestrator in ids(runner_specs)

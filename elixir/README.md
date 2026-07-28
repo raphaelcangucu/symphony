@@ -19,7 +19,7 @@ based on [`SPEC.md`](../SPEC.md) at the repository root.
    outbox writes and pulls remote changes on a coalesced schedule
 2. Polls active projects for candidate work (each project carries its own tracker config and prompt)
 3. Creates an isolated workspace per issue under `<workspace.root>/<project_slug>/<issue>`
-4. Launches the configured coding agent (Codex or Claude) inside the workspace
+4. Launches the configured coding agent (Codex, Claude, Cursor, or OpenCode) inside the workspace
 5. Sends the project's workflow prompt to the agent
 6. Keeps the agent working on the issue until the work is done
 
@@ -124,9 +124,8 @@ you enable the matching feature.
 | [mise](https://mise.jdx.dev/) | recommended | Pins Elixir `1.19` / OTP `28` from `.mise.toml` |
 | [GitHub CLI](https://cli.github.com/) (`gh`) | **yes** | `make env-setup` → `GITHUB_TOKEN` |
 | Git | **yes** | cloning, workspaces |
-| [Codex CLI](https://github.com/openai/codex) | **yes** (default agent) | `codex app-server` on `PATH` |
+| Agent CLI | when using that agent | Install an isolated managed copy from **Settings → Coding agents**, or provide the executable on `PATH` |
 | Node.js 20+ | frontend dev only | `make tracker-build` — skip if using committed `priv/static/tracker` |
-| [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) | if using Claude | local `claude` on `PATH` (run `claude` once to log in); the Claude backend is built in |
 | [code-server](https://github.com/coder/code-server) | if using browser editor | `SYMPHONY_EDITOR_ENABLED=true` → `make install-code-server` |
 | [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/) | if using public tunnel | `public_tunnel.enabled: true` + `make tunnel` |
 
@@ -722,9 +721,11 @@ comment is pushed:
 Symphony resolves which coding agent runs an issue through a four-level chain, from most
 specific to least:
 
-1. **Task label** — an issue labeled `symphony:codex`, `symphony:claude`, or `symphony:cursor`
+1. **Task label** — an issue labeled `symphony:codex`, `symphony:claude`, `symphony:cursor`, or
+   `symphony:opencode`
    overrides everything.
-2. **Project `agent.kind`** — the WORKFLOW front matter `agent.kind: codex|claude|cursor` sets the
+2. **Project `agent.kind`** — the WORKFLOW front matter
+   `agent.kind: codex|claude|cursor|opencode` sets the
    project default.
 3. **User default** — the operator default configured in **Settings** (tracker sidebar →
    Settings → Coding agent), shown with availability indicators (green dot = CLI found,
@@ -733,19 +734,55 @@ specific to least:
 
 Where to configure each level:
 
-- **Settings page** (tracker sidebar → Settings → Coding agent): set the instance-wide default
-  agent and see whether the `codex`, `claude`, and `cursor-agent` CLIs are available on the
-  server's `PATH`.
+- **Settings page** (tracker sidebar → Settings → Coding agent): set the instance-wide default,
+  install or update a managed CLI, choose managed/PATH resolution, and configure isolated accounts.
 - **Project picker** (Project settings → Workflow tab): set `agent.kind` for a single project
   without editing the WORKFLOW file directly.
 - **Per-issue chips**: the issue create dialog and the issue's Agent tab let you add or remove
-  `symphony:codex` / `symphony:claude` / `symphony:cursor` labels to pin a specific agent to
+  `symphony:codex` / `symphony:claude` / `symphony:cursor` / `symphony:opencode` labels to pin a
+  specific agent to
   that issue.
 - **Assistant composer**: the agent menu in the composer lets you choose which agent runs the
   next `dispatch_coding_agent` call (also exposed as `dispatch_codex` for back-compat).
 
 The Claude and Cursor model catalogs are static. Effort levels (`codex.approval_policy`, sandbox
-policy) are Codex-only and have no equivalent in the Claude/Cursor backends.
+policy) are Codex-only and have no equivalent in the other backends.
+
+### Managed agent CLIs and isolated accounts
+
+Symphony manages Codex, Claude, Cursor, and OpenCode with the same lifecycle contract:
+
+- **Isolated by default** — versioned executables live below Symphony's data root
+  (`$XDG_DATA_HOME/symphony/agents` by default), outside the global package manager and `PATH`.
+- **PATH fallback** — if the selected managed executable is absent or damaged, a valid system
+  executable is used for the next session. Operators may also explicitly prefer `PATH`.
+- **Safe updates** — downloads are checksummed when the publisher exposes a digest, staged,
+  probed, and atomically activated. Automatic checks run every six hours only for already-installed
+  managed CLIs and can be disabled per provider.
+- **Session pinning** — a running session keeps its resolved executable and version. An update
+  arriving during that session remains pending and activates after the final lease closes.
+- **Repair** — the Settings action reruns the same verified install pipeline; a failed checksum or
+  probe leaves the current version untouched.
+
+Each provider can have multiple named accounts. Its CLI home/config is rooted at
+`<agent-data>/<provider>/accounts/<account-id>/home`, so credentials and configuration never share
+the host's global agent home. Account resolution is request override → project override → provider
+default. Usage snapshots are keyed by provider and account, retain the last known value when stale,
+and redact credentials from API responses and logs.
+
+Automatic account failover is disabled by default. When explicitly enabled it selects another
+eligible account only at a session boundary for quota, authentication, or runtime exhaustion; it
+never changes identity in the middle of a session.
+
+The deterministic full-stack validation is intentionally local, not part of CI:
+
+```bash
+scripts/test-agent-lifecycle-e2e.sh
+```
+
+It boots a real Phoenix server and built tracker against disposable HOME/XDG directories and local
+release fixtures, then verifies all four installs, fallback and repair, checksum rollback, updates,
+isolated accounts/defaults, failover settings, credential preservation, and secret redaction.
 
 #### Cursor Agent backend
 
@@ -1115,7 +1152,8 @@ agent CLI's own usage view.
   shows "plan X% used" when nothing is running; entries past the TTL are returned but flagged `stale`.
 - **Probe (active, Claude)**: Claude has no usable rate-limit signal on the stream (the CLI emits a
   `rate_limit` event, but the adapter does not surface it). So, mirroring the Jean desktop app,
-  `SymphonyElixir.Claude.Usage` reads the Claude CLI OAuth token from `~/.claude/.credentials.json`
+  `SymphonyElixir.Claude.Usage` reads the OAuth token from the selected account's isolated
+  `.claude/.credentials.json`
   and calls Anthropic's OAuth usage API (`GET https://api.anthropic.com/api/oauth/usage`, header
   `anthropic-beta: oauth-2025-04-20`), mapping `five_hour → :session`, `seven_day → :weekly`,
   `seven_day_sonnet → :sonnet_weekly` and `extra_usage` into credits. The usage endpoint triggers it
@@ -1123,8 +1161,8 @@ agent CLI's own usage view.
   or hammers. It is off under `:test` (`config :claude_usage_probe_enabled`) and fails soft on a
   missing/expired token. Token refresh is a deliberate follow-up (an expired token surfaces as
   `:token_expired` → re-auth via `claude`).
-- **Cursor**: no plan-usage source exists (the Jean reference has none either), so Cursor shows
-  "Usage unavailable" until one appears.
+- **Cursor/OpenCode**: no plan-usage source exists in the references, so those accounts show
+  "Usage unavailable" until a provider signal appears.
 - **Endpoint** (bearer auth): `GET /api/tracker/v1/settings/agents/usage` returns
   `{ codex, claude, cursor }`, each either `null` (no data / unavailable for that agent) or
   `{ plan, credits_remaining, credits_unlimited, fetched_at, stale, windows: [{ kind, used_percent,

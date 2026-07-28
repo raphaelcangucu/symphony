@@ -1,7 +1,7 @@
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import path from "node:path";
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
 
 export default defineConfig({
   base: "/tracker/",
@@ -24,7 +24,8 @@ export default defineConfig({
         changeOrigin: true,
       },
       "/socket": {
-        target: process.env.TRACKER_SOCKET_PROXY_TARGET ?? "ws://127.0.0.1:4000",
+        target:
+          process.env.TRACKER_SOCKET_PROXY_TARGET ?? "ws://127.0.0.1:4000",
         ws: true,
       },
     },
@@ -34,5 +35,6 @@ export default defineConfig({
     globals: true,
     setupFiles: ["./vitest.setup.ts"],
     pool: "forks",
+    exclude: [...configDefaults.exclude, "e2e/**"],
   },
 });

@@ -17,6 +17,7 @@ vi.mock("@/services/settings", () => ({
   runAgentLifecycle: vi.fn(),
   setDefaultAgentAccount: vi.fn(),
   updateAgentFailover: vi.fn(),
+  updateAgentAutoUpdate: vi.fn(),
   updateAgentModel: vi.fn(),
   updateAgentSource: vi.fn(),
 }));
@@ -25,7 +26,12 @@ function codexTool(overrides: Partial<AgentTool> = {}): AgentTool {
   return {
     id: "codex",
     kind: "codex",
-    status: { installed: true, version: "codex-cli 0.142.3", path: "/usr/local/bin/codex", command: "codex" },
+    status: {
+      installed: true,
+      version: "codex-cli 0.142.3",
+      path: "/usr/local/bin/codex",
+      command: "codex",
+    },
     source: {
       value: "path",
       preferred: "managed",
@@ -57,7 +63,14 @@ function account(overrides: Partial<AgentAccount> = {}): AgentAccount {
       stale: false,
       stale_reason: null,
       next_refresh_at: null,
-      windows: [{ kind: "five_hour", used_percent: 20, resets_at: null, window_minutes: 300 }],
+      windows: [
+        {
+          kind: "five_hour",
+          used_percent: 20,
+          resets_at: null,
+          window_minutes: 300,
+        },
+      ],
     },
     ...overrides,
   };
@@ -90,7 +103,10 @@ function renderAgentPage(path: string) {
     <I18nextProvider i18n={i18n}>
       <MemoryRouter initialEntries={[path]}>
         <Routes>
-          <Route path="/settings/agents/:agent" element={<AgentToolSettingsPage />} />
+          <Route
+            path="/settings/agents/:agent"
+            element={<AgentToolSettingsPage />}
+          />
         </Routes>
       </MemoryRouter>
     </I18nextProvider>,
@@ -137,6 +153,11 @@ describe("AgentToolSettingsPage", () => {
       auto_update: true,
       failover_enabled: false,
     });
+    vi.mocked(settingsService.updateAgentAutoUpdate).mockResolvedValue({
+      preferred_source: "managed",
+      auto_update: false,
+      failover_enabled: false,
+    });
     vi.mocked(settingsService.setDefaultAgentAccount).mockResolvedValue(
       account({ id: "work", label: "Work", default: true }),
     );
@@ -148,19 +169,29 @@ describe("AgentToolSettingsPage", () => {
     expect(await screen.findByText(/codex-cli 0\.142\.3/)).toBeTruthy();
     expect(screen.getAllByText("Installed").length).toBeGreaterThan(0);
 
-    const select = screen.getByRole("combobox", { name: "Model" }) as HTMLSelectElement;
+    const select = screen.getByRole("combobox", {
+      name: "Model",
+    }) as HTMLSelectElement;
     expect(select.value).toBe("gpt-5");
   });
 
   it("explains when managed resolution falls back to the system PATH", async () => {
     renderAgentPage("/settings/agents/codex");
 
-    expect(await screen.findByText(/Managed preferred; using System PATH/)).toBeTruthy();
+    expect(
+      await screen.findByText(/Managed preferred; using System PATH/),
+    ).toBeTruthy();
   });
 
   it("shows a pending managed update", async () => {
     vi.mocked(settingsService.fetchAgentTools).mockResolvedValue([
-      codexTool({ install: { available: true, strategy: "github_release", pending_version: "0.143.0" } }),
+      codexTool({
+        install: {
+          available: true,
+          strategy: "github_release",
+          pending_version: "0.143.0",
+        },
+      }),
     ]);
     renderAgentPage("/settings/agents/codex");
 
@@ -170,18 +201,42 @@ describe("AgentToolSettingsPage", () => {
   it("lets the operator select a default account", async () => {
     renderAgentPage("/settings/agents/codex");
 
-    fireEvent.click(await screen.findByRole("button", { name: /Use Work by default/ }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: /Use Work by default/ }),
+    );
 
     await waitFor(() =>
-      expect(settingsService.setDefaultAgentAccount).toHaveBeenCalledWith("codex", "work"),
+      expect(settingsService.setDefaultAgentAccount).toHaveBeenCalledWith(
+        "codex",
+        "work",
+      ),
     );
   });
 
   it("keeps automatic failover disabled by default", async () => {
     renderAgentPage("/settings/agents/codex");
 
-    const checkbox = await screen.findByRole("checkbox", { name: "Automatic account failover" });
+    const checkbox = await screen.findByRole("checkbox", {
+      name: "Automatic account failover",
+    });
     expect((checkbox as HTMLInputElement).checked).toBe(false);
+  });
+
+  it("keeps managed CLI updates enabled by default and persists an opt-out", async () => {
+    renderAgentPage("/settings/agents/codex");
+
+    const checkbox = await screen.findByRole("checkbox", {
+      name: "Automatic CLI updates",
+    });
+    expect((checkbox as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(checkbox);
+
+    await waitFor(() =>
+      expect(settingsService.updateAgentAutoUpdate).toHaveBeenCalledWith(
+        "codex",
+        false,
+      ),
+    );
   });
 
   it("marks account usage as stale without hiding the last snapshot", async () => {
@@ -192,34 +247,50 @@ describe("AgentToolSettingsPage", () => {
   });
 
   it("surfaces lifecycle action errors", async () => {
-    vi.mocked(settingsService.runAgentLifecycle).mockRejectedValue(new Error("download failed"));
+    vi.mocked(settingsService.runAgentLifecycle).mockRejectedValue(
+      new Error("download failed"),
+    );
     renderAgentPage("/settings/agents/codex");
 
     fireEvent.click(await screen.findByRole("button", { name: "Update CLI" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("download failed");
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "download failed",
+    );
   });
 
   it("persists a model change via updateAgentModel", async () => {
-    vi.mocked(settingsService.updateAgentModel).mockResolvedValue({ codex: "gpt-5-codex" });
+    vi.mocked(settingsService.updateAgentModel).mockResolvedValue({
+      codex: "gpt-5-codex",
+    });
     renderAgentPage("/settings/agents/codex");
 
     const select = await screen.findByRole("combobox", { name: "Model" });
     fireEvent.change(select, { target: { value: "gpt-5-codex" } });
 
     await waitFor(() =>
-      expect(settingsService.updateAgentModel).toHaveBeenCalledWith("codex", "gpt-5-codex"),
+      expect(settingsService.updateAgentModel).toHaveBeenCalledWith(
+        "codex",
+        "gpt-5-codex",
+      ),
     );
   });
 
   it("clearing the model sends null (CLI default)", async () => {
-    vi.mocked(settingsService.updateAgentModel).mockResolvedValue({ codex: null });
+    vi.mocked(settingsService.updateAgentModel).mockResolvedValue({
+      codex: null,
+    });
     renderAgentPage("/settings/agents/codex");
 
     const select = await screen.findByRole("combobox", { name: "Model" });
     fireEvent.change(select, { target: { value: "" } });
 
-    await waitFor(() => expect(settingsService.updateAgentModel).toHaveBeenCalledWith("codex", null));
+    await waitFor(() =>
+      expect(settingsService.updateAgentModel).toHaveBeenCalledWith(
+        "codex",
+        null,
+      ),
+    );
   });
 
   it("shows an unsupported notice for agents Symphony cannot run", async () => {

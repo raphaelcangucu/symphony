@@ -128,6 +128,13 @@ defmodule SymphonyElixirWeb.Tracker.AgentLifecycleControllerTest do
     assert %{"data" => %{"failover_enabled" => true}} = json_response(conn, 200)
   end
 
+  test "toggles automatic updates independently and defaults to enabled" do
+    conn =
+      put(authed_conn(), "/api/tracker/v1/settings/agents/cursor/auto-update", %{"enabled" => false})
+
+    assert %{"data" => %{"auto_update" => false}} = json_response(conn, 200)
+  end
+
   test "rejects unknown providers and invalid source values" do
     conn = put(authed_conn(), "/api/tracker/v1/settings/agents/nope/source", %{"source" => "path"})
     assert json_response(conn, 404)["error"]["code"] == "agent_not_found"

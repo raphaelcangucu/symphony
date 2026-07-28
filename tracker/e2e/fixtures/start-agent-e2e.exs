@@ -14,6 +14,7 @@ Application.put_env(:symphony_elixir, :kb_promote_enabled, false)
 Application.put_env(:symphony_elixir, :viewer_persist_enabled, false)
 Application.put_env(:symphony_elixir, :tracker_seed_on_empty, false)
 Application.put_env(:symphony_elixir, :claude_usage_probe_enabled, false)
+Application.put_env(:symphony_elixir, :agent_maintenance_enabled, false)
 
 {:ok, _applications} = Application.ensure_all_started(:symphony_elixir)
 Process.sleep(:infinity)

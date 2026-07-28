@@ -18,9 +18,18 @@ const trackerRoot = path.resolve(import.meta.dirname, "../..");
 const repositoryRoot = path.resolve(trackerRoot, "..");
 const elixirRoot = path.join(repositoryRoot, "elixir");
 const fixtureRoot = path.join(trackerRoot, "e2e/fixtures");
-const artifactRoot = path.join(trackerRoot, "test-results/agent-lifecycle-artifacts");
-const serverPort = Number.parseInt(process.env.SYMPHONY_AGENT_E2E_PORT ?? "4217", 10);
-const fixturePort = Number.parseInt(process.env.SYMPHONY_AGENT_FIXTURE_PORT ?? "4218", 10);
+const artifactRoot = path.join(
+  repositoryRoot,
+  ".symphony/evidence/agent-cli-lifecycle/artifacts",
+);
+const serverPort = Number.parseInt(
+  process.env.SYMPHONY_AGENT_E2E_PORT ?? "4217",
+  10,
+);
+const fixturePort = Number.parseInt(
+  process.env.SYMPHONY_AGENT_FIXTURE_PORT ?? "4218",
+  10,
+);
 const token = "agent-e2e-token";
 const sentinel = "agent-e2e-secret-must-never-leak";
 
@@ -88,7 +97,10 @@ function cleanEnvironment(root: string, pathBin: string): NodeJS.ProcessEnv {
 }
 
 async function createPathFixtures(pathBin: string) {
-  const template = await readFile(path.join(fixtureRoot, "fake-agent-cli.sh"), "utf8");
+  const template = await readFile(
+    path.join(fixtureRoot, "fake-agent-cli.sh"),
+    "utf8",
+  );
   const executables = {
     claude: "claude",
     codex: "codex",
@@ -115,7 +127,9 @@ async function waitFor(url: string, process: ChildProcess, label: string) {
 
   while (Date.now() < deadline) {
     if (process.exitCode != null) {
-      throw new Error(`${label} exited before becoming ready (code ${process.exitCode})`);
+      throw new Error(
+        `${label} exited before becoming ready (code ${process.exitCode})`,
+      );
     }
 
     try {
@@ -147,7 +161,12 @@ async function stop(child: ChildProcess) {
 }
 
 async function filesystemManifest(root: string) {
-  const entries: Array<{ path: string; type: string; size?: number; mode?: string }> = [];
+  const entries: Array<{
+    path: string;
+    type: string;
+    size?: number;
+    mode?: string;
+  }> = [];
 
   async function visit(directory: string) {
     for (const name of await readdir(directory)) {
@@ -210,25 +229,41 @@ export default async function globalSetup() {
 
   process.env.SYMPHONY_AGENT_E2E_ROOT = root;
   process.env.SYMPHONY_AGENT_E2E_DATA_ROOT = path.join(root, "data");
-  process.env.SYMPHONY_AGENT_E2E_FIXTURE_URL = environment.SYMPHONY_AGENT_E2E_FIXTURE_URL;
+  process.env.SYMPHONY_AGENT_E2E_FIXTURE_URL =
+    environment.SYMPHONY_AGENT_E2E_FIXTURE_URL;
 
-  const fixtureOutput = await writeFile(path.join(root, "logs/fixture-process.log"), "");
+  const fixtureOutput = await writeFile(
+    path.join(root, "logs/fixture-process.log"),
+    "",
+  );
   void fixtureOutput;
   const fixtureLog = await import("node:fs").then(({ createWriteStream }) =>
-    createWriteStream(path.join(root, "logs/fixture-process.log"), { flags: "a" }),
+    createWriteStream(path.join(root, "logs/fixture-process.log"), {
+      flags: "a",
+    }),
   );
   const phoenixLog = await import("node:fs").then(({ createWriteStream }) =>
-    createWriteStream(path.join(root, "logs/phoenix-process.log"), { flags: "a" }),
+    createWriteStream(path.join(root, "logs/phoenix-process.log"), {
+      flags: "a",
+    }),
   );
 
-  const fixture = spawn(process.execPath, [path.join(fixtureRoot, "agent-fixture-server.mjs")], {
-    cwd: trackerRoot,
-    env: environment,
-    stdio: ["ignore", "pipe", "pipe"],
-  });
+  const fixture = spawn(
+    process.execPath,
+    [path.join(fixtureRoot, "agent-fixture-server.mjs")],
+    {
+      cwd: trackerRoot,
+      env: environment,
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
   fixture.stdout?.pipe(fixtureLog);
   fixture.stderr?.pipe(fixtureLog);
-  await waitFor(`http://127.0.0.1:${fixturePort}/health`, fixture, "fixture registry");
+  await waitFor(
+    `http://127.0.0.1:${fixturePort}/health`,
+    fixture,
+    "fixture registry",
+  );
 
   const prepare = spawnSync(
     "mix",
@@ -238,7 +273,9 @@ export default async function globalSetup() {
 
   if (prepare.status !== 0) {
     await stop(fixture);
-    throw new Error(`database preparation failed:\n${prepare.stdout}\n${prepare.stderr}`);
+    throw new Error(
+      `database preparation failed:\n${prepare.stdout}\n${prepare.stderr}`,
+    );
   }
 
   const phoenix = spawn(
@@ -254,7 +291,11 @@ export default async function globalSetup() {
   phoenix.stderr?.pipe(phoenixLog);
 
   try {
-    await waitFor(`http://127.0.0.1:${serverPort}/tracker`, phoenix, "Phoenix tracker");
+    await waitFor(
+      `http://127.0.0.1:${serverPort}/tracker`,
+      phoenix,
+      "Phoenix tracker",
+    );
   } catch (error) {
     await Promise.all([stop(phoenix), stop(fixture)]);
     throw error;
@@ -268,10 +309,20 @@ export default async function globalSetup() {
     const after = await protectedManifest(realHome);
     await rm(artifactRoot, { recursive: true, force: true });
     await mkdir(artifactRoot, { recursive: true });
-    await cp(path.join(root, "logs"), path.join(artifactRoot, "logs"), { recursive: true });
+    await cp(path.join(root, "logs"), path.join(artifactRoot, "logs"), {
+      recursive: true,
+    });
     await writeFile(
       path.join(artifactRoot, "protected-home.json"),
-      JSON.stringify({ unchanged: JSON.stringify(before) === JSON.stringify(after), before, after }, null, 2),
+      JSON.stringify(
+        {
+          unchanged: JSON.stringify(before) === JSON.stringify(after),
+          before,
+          after,
+        },
+        null,
+        2,
+      ),
     );
     await writeFile(
       path.join(artifactRoot, "filesystem-manifest.json"),
@@ -283,7 +334,9 @@ export default async function globalSetup() {
     await rm(root, { recursive: true, force: true });
 
     if (JSON.stringify(before) !== JSON.stringify(after)) {
-      throw new Error("agent E2E changed a protected provider file in the operator's real HOME");
+      throw new Error(
+        "agent E2E changed a protected provider file in the operator's real HOME",
+      );
     }
   };
 }

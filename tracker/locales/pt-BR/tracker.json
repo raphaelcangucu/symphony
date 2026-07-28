@@ -373,6 +373,8 @@
         "title": "Manutenção da CLI",
         "sourceTitle": "Origem da CLI",
         "sourceDescription": "A instalação isolada é o padrão; o PATH do sistema continua disponível como fallback.",
+        "autoUpdateTitle": "Atualizações automáticas da CLI",
+        "autoUpdateDescription": "Verifica CLIs gerenciadas instaladas a cada seis horas. Sessões ativas mantêm a versão atual.",
         "failoverTitle": "Failover automático de conta",
         "failoverDescription": "Desativado por padrão. Quando habilitado, troca somente entre sessões.",
         "repair": "Reparar",

@@ -83,6 +83,7 @@ defmodule SymphonyElixir.AgentLifecycle.RuntimeRegistry do
   end
 
   @doc false
+  @spec reset() :: :ok
   def reset do
     case :ets.whereis(@table) do
       :undefined -> :ok

@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { NativeSelect } from "@/components/ui/native-select";
 import {
   runAgentLifecycle,
+  updateAgentAutoUpdate,
   updateAgentFailover,
   updateAgentSource,
   type AgentCliPreference,
@@ -45,7 +46,9 @@ export function AgentLifecycleCard({
       onLifecycleComplete?.();
     } catch (reason) {
       setPreference(previous);
-      setError(errorMessage(reason, t("settings.agentTool.lifecycle.saveFailed")));
+      setError(
+        errorMessage(reason, t("settings.agentTool.lifecycle.saveFailed")),
+      );
     } finally {
       setSaving(false);
     }
@@ -61,7 +64,27 @@ export function AgentLifecycleCard({
       setPreference(await updateAgentFailover(agent, enabled));
     } catch (reason) {
       setPreference(previous);
-      setError(errorMessage(reason, t("settings.agentTool.lifecycle.saveFailed")));
+      setError(
+        errorMessage(reason, t("settings.agentTool.lifecycle.saveFailed")),
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function changeAutoUpdate(enabled: boolean) {
+    if (saving) return;
+    const previous = preference;
+    setPreference({ ...preference, auto_update: enabled });
+    setSaving(true);
+    setError(null);
+    try {
+      setPreference(await updateAgentAutoUpdate(agent, enabled));
+    } catch (reason) {
+      setPreference(previous);
+      setError(
+        errorMessage(reason, t("settings.agentTool.lifecycle.saveFailed")),
+      );
     } finally {
       setSaving(false);
     }
@@ -89,7 +112,9 @@ export function AgentLifecycleCard({
       <CardContent className="space-y-4">
         <div className="flex flex-col gap-2 border-b pb-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <p className="text-sm font-medium">{t("settings.agentTool.lifecycle.sourceTitle")}</p>
+            <p className="text-sm font-medium">
+              {t("settings.agentTool.lifecycle.sourceTitle")}
+            </p>
             <p className="text-xs text-muted-foreground">
               {t("settings.agentTool.lifecycle.sourceDescription")}
             </p>
@@ -99,14 +124,36 @@ export function AgentLifecycleCard({
             aria-label={t("settings.agentTool.lifecycle.sourceTitle")}
             value={preference.preferred_source}
             disabled={saving}
-            onChange={(event) => void changeSource(event.target.value as AgentPreferredSource)}
+            onChange={(event) =>
+              void changeSource(event.target.value as AgentPreferredSource)
+            }
           >
-            <option value="managed">{t("settings.agentTool.source.managed")}</option>
+            <option value="managed">
+              {t("settings.agentTool.source.managed")}
+            </option>
             <option value="path">{t("settings.agentTool.source.path")}</option>
           </NativeSelect>
         </div>
 
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              className="mt-1"
+              type="checkbox"
+              aria-label={t("settings.agentTool.lifecycle.autoUpdateTitle")}
+              checked={preference.auto_update}
+              disabled={saving}
+              onChange={(event) => void changeAutoUpdate(event.target.checked)}
+            />
+            <span>
+              <span className="block font-medium">
+                {t("settings.agentTool.lifecycle.autoUpdateTitle")}
+              </span>
+              <span className="block text-xs text-muted-foreground">
+                {t("settings.agentTool.lifecycle.autoUpdateDescription")}
+              </span>
+            </span>
+          </label>
           <label className="flex items-start gap-2 text-sm">
             <input
               className="mt-1"
@@ -125,7 +172,16 @@ export function AgentLifecycleCard({
               </span>
             </span>
           </label>
-          <Button type="button" variant="outline" size="sm" disabled={saving} onClick={() => void repair()}>
+        </div>
+
+        <div className="flex justify-end">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={saving}
+            onClick={() => void repair()}
+          >
             <Wrench className="mr-1.5 h-3.5 w-3.5" />
             {t("settings.agentTool.lifecycle.repair")}
           </Button>

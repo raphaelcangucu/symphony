@@ -50,6 +50,13 @@ config :symphony_elixir, :tracker_seed_on_empty, Mix.env() != :test
 # on a developer machine that happens to be logged into Claude.
 config :symphony_elixir, :claude_usage_probe_enabled, Mix.env() != :test
 
+# Managed agent CLI maintenance is opt-out per provider. The worker only checks
+# providers with an existing managed installation and never replaces the
+# executable held by an active session.
+config :symphony_elixir, :agent_maintenance_enabled, Mix.env() != :test
+config :symphony_elixir, :agent_maintenance_interval_ms, 21_600_000
+config :symphony_elixir, :agent_maintenance_initial_delay_ms, 30_000
+
 # Repo-root `skills/` directory for vendored, agent-agnostic skill definitions
 # loaded by `SymphonyElixir.Skills`. `__DIR__` here is `.../symphony/elixir/config`,
 # so `../../skills` resolves to the repo-root `skills/` dir.

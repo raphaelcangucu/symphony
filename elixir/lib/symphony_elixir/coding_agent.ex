@@ -4,7 +4,7 @@ defmodule SymphonyElixir.CodingAgent do
   """
 
   alias SymphonyElixir.AgentLaunch
-  alias SymphonyElixir.AgentLifecycle.RuntimeRegistry
+  alias SymphonyElixir.AgentLifecycle.{Installer, RuntimeRegistry}
   alias SymphonyElixir.AgentUsage
   alias SymphonyElixir.Config
 
@@ -80,8 +80,14 @@ defmodule SymphonyElixir.CodingAgent do
       adapter_for(kind).stop_session(session)
     after
       case Map.get(session, :runtime_lease) do
-        lease when is_reference(lease) -> RuntimeRegistry.release(lease)
-        _ -> :ok
+        lease when is_reference(lease) ->
+          case RuntimeRegistry.release(lease) do
+            :ok -> activate_pending(kind)
+            {:error, :unknown_lease} -> :ok
+          end
+
+        _ ->
+          :ok
       end
     end
 
@@ -100,6 +106,13 @@ defmodule SymphonyElixir.CodingAgent do
 
   defp resolved_agent_kind(nil), do: Config.agent_kind() || Config.default_agent_kind()
   defp resolved_agent_kind(agent_kind), do: agent_kind
+
+  defp activate_pending(agent_kind) do
+    case Installer.activate_pending(agent_kind) do
+      {:ok, _result} -> :ok
+      {:error, _reason} -> :ok
+    end
+  end
 
   defp capture_account_usage(opts, session, agent_kind, adapter) do
     case get_in(session, [:agent_launch, Access.key(:account_id)]) do

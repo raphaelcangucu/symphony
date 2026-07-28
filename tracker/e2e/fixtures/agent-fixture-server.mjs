@@ -1,3 +1,5 @@
+/* global Buffer, URL, process */
+
 import { createHash } from "node:crypto";
 import { appendFile, readFile } from "node:fs/promises";
 import http from "node:http";

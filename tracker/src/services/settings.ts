@@ -82,10 +82,7 @@ export interface AgentTool {
 }
 
 export type AgentAuthenticationStatus =
-  | "authenticated"
-  | "unauthenticated"
-  | "expired"
-  | "error";
+  "authenticated" | "unauthenticated" | "expired" | "error";
 
 export interface AgentUsageWindow {
   kind: string;
@@ -144,7 +141,9 @@ export async function fetchSettings(): Promise<AllSettings> {
   return unwrapData<AllSettings>(response);
 }
 
-export async function updateAgentSettings(input: Partial<AgentSettings>): Promise<AgentSettings> {
+export async function updateAgentSettings(
+  input: Partial<AgentSettings>,
+): Promise<AgentSettings> {
   const response = await http.put(trackerPath("/settings/agents"), input);
   return unwrapData<AgentSettings>(response);
 }
@@ -163,7 +162,10 @@ export async function updateAgentSource(
   agent: AgentKind,
   source: AgentPreferredSource,
 ): Promise<AgentCliPreference> {
-  const response = await http.put(trackerPath(`/settings/agents/${agent}/source`), { source });
+  const response = await http.put(
+    trackerPath(`/settings/agents/${agent}/source`),
+    { source },
+  );
   return unwrapData<AgentCliPreference>(response);
 }
 
@@ -171,12 +173,18 @@ export async function runAgentLifecycle(
   agent: AgentKind,
   operation: AgentLifecycleResult["operation"],
 ): Promise<AgentLifecycleResult> {
-  const response = await http.post(trackerPath(`/settings/agents/${agent}/${operation}`));
+  const response = await http.post(
+    trackerPath(`/settings/agents/${agent}/${operation}`),
+  );
   return unwrapData<AgentLifecycleResult>(response);
 }
 
-export async function fetchAgentAccounts(agent: AgentKind): Promise<AgentAccount[]> {
-  const response = await http.get(trackerPath(`/settings/agents/${agent}/accounts`));
+export async function fetchAgentAccounts(
+  agent: AgentKind,
+): Promise<AgentAccount[]> {
+  const response = await http.get(
+    trackerPath(`/settings/agents/${agent}/accounts`),
+  );
   return unwrapData<{ accounts: AgentAccount[] }>(response).accounts;
 }
 
@@ -188,7 +196,10 @@ export async function createAgentAccount(
     authentication_status?: AgentAuthenticationStatus;
   },
 ): Promise<AgentAccount> {
-  const response = await http.post(trackerPath(`/settings/agents/${agent}/accounts`), input);
+  const response = await http.post(
+    trackerPath(`/settings/agents/${agent}/accounts`),
+    input,
+  );
   return unwrapData<AgentAccount>(response);
 }
 
@@ -207,8 +218,13 @@ export async function updateAgentAccount(
   return unwrapData<AgentAccount>(response);
 }
 
-export async function deleteAgentAccount(agent: AgentKind, id: string): Promise<void> {
-  await http.delete(trackerPath(`/settings/agents/${agent}/accounts/${encodeURIComponent(id)}`));
+export async function deleteAgentAccount(
+  agent: AgentKind,
+  id: string,
+): Promise<void> {
+  await http.delete(
+    trackerPath(`/settings/agents/${agent}/accounts/${encodeURIComponent(id)}`),
+  );
 }
 
 export async function setDefaultAgentAccount(
@@ -216,7 +232,9 @@ export async function setDefaultAgentAccount(
   id: string,
 ): Promise<AgentAccount> {
   const response = await http.put(
-    trackerPath(`/settings/agents/${agent}/accounts/${encodeURIComponent(id)}/default`),
+    trackerPath(
+      `/settings/agents/${agent}/accounts/${encodeURIComponent(id)}/default`,
+    ),
   );
   return unwrapData<AgentAccount>(response);
 }
@@ -225,7 +243,21 @@ export async function updateAgentFailover(
   agent: AgentKind,
   enabled: boolean,
 ): Promise<AgentCliPreference> {
-  const response = await http.put(trackerPath(`/settings/agents/${agent}/failover`), { enabled });
+  const response = await http.put(
+    trackerPath(`/settings/agents/${agent}/failover`),
+    { enabled },
+  );
+  return unwrapData<AgentCliPreference>(response);
+}
+
+export async function updateAgentAutoUpdate(
+  agent: AgentKind,
+  enabled: boolean,
+): Promise<AgentCliPreference> {
+  const response = await http.put(
+    trackerPath(`/settings/agents/${agent}/auto-update`),
+    { enabled },
+  );
   return unwrapData<AgentCliPreference>(response);
 }
 
@@ -233,7 +265,9 @@ export async function updateAgentModel(
   agent: AgentKind,
   model: string | null,
 ): Promise<AgentModelSettings> {
-  const response = await http.put(trackerPath("/settings/agent_models"), { [agent]: model });
+  const response = await http.put(trackerPath("/settings/agent_models"), {
+    [agent]: model,
+  });
   return unwrapData<AgentModelSettings>(response);
 }
 
@@ -241,7 +275,9 @@ export async function updateAgentEffort(
   agent: AgentKind,
   effort: string | null,
 ): Promise<AgentEffortSettings> {
-  const response = await http.put(trackerPath("/settings/agent_efforts"), { [agent]: effort });
+  const response = await http.put(trackerPath("/settings/agent_efforts"), {
+    [agent]: effort,
+  });
   return unwrapData<AgentEffortSettings>(response);
 }
 
@@ -252,12 +288,16 @@ export async function updateOrchestratorSettings(
   return unwrapData<OrchestratorSettings>(response);
 }
 
-export async function updateLabSettings(input: Partial<LabSettings>): Promise<LabSettings> {
+export async function updateLabSettings(
+  input: Partial<LabSettings>,
+): Promise<LabSettings> {
   const response = await http.put(trackerPath("/settings/lab"), input);
   return unwrapData<LabSettings>(response);
 }
 
-export async function updateUiSettings(input: Partial<UiSettings>): Promise<UiSettings> {
+export async function updateUiSettings(
+  input: Partial<UiSettings>,
+): Promise<UiSettings> {
   const response = await http.put(trackerPath("/settings/ui"), input);
   return unwrapData<UiSettings>(response);
 }
@@ -315,11 +355,20 @@ export async function updateCredential(
   key: string,
   value: string,
 ): Promise<CredentialProvider> {
-  const response = await http.put(trackerPath("/settings/credentials"), { provider, key, value });
+  const response = await http.put(trackerPath("/settings/credentials"), {
+    provider,
+    key,
+    value,
+  });
   return unwrapData<CredentialProvider>(response);
 }
 
-export async function clearCredential(provider: string, key: string): Promise<CredentialProvider> {
-  const response = await http.delete(trackerPath(`/settings/credentials/${provider}/${key}`));
+export async function clearCredential(
+  provider: string,
+  key: string,
+): Promise<CredentialProvider> {
+  const response = await http.delete(
+    trackerPath(`/settings/credentials/${provider}/${key}`),
+  );
   return unwrapData<CredentialProvider>(response);
 }

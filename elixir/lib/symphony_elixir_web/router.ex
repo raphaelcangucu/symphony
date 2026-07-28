@@ -90,6 +90,7 @@ defmodule SymphonyElixirWeb.Router do
     delete("/settings/agents/:agent/accounts/:id", AgentLifecycleController, :delete_account)
     put("/settings/agents/:agent/accounts/:id/default", AgentLifecycleController, :default_account)
     put("/settings/agents/:agent/failover", AgentLifecycleController, :failover)
+    put("/settings/agents/:agent/auto-update", AgentLifecycleController, :auto_update)
     get("/settings/identities", SettingsController, :identities)
     get("/settings/credentials", CredentialsController, :index)
     put("/settings/credentials", CredentialsController, :update)

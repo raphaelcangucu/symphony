@@ -83,7 +83,7 @@ export function AgentToolSettingsPage() {
 
   if (!descriptor) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-6" data-testid="agent-tool-settings">
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t("settings.agentTool.unknown.title")}</h1>
         <p className="text-sm text-muted-foreground">{t("settings.agentTool.unknown.description")}</p>
       </div>
@@ -94,7 +94,7 @@ export function AgentToolSettingsPage() {
   const effectiveTool = descriptor.supported ? tool : unsupportedTool(slug);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-testid="agent-tool-settings">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2">
           <descriptor.icon className="h-5 w-5 text-muted-foreground" aria-hidden />

@@ -373,6 +373,8 @@
         "title": "CLI lifecycle",
         "sourceTitle": "CLI source",
         "sourceDescription": "Managed isolated is the default; System PATH remains available as fallback.",
+        "autoUpdateTitle": "Automatic CLI updates",
+        "autoUpdateDescription": "Checks installed managed CLIs every six hours. Active sessions keep their current version.",
         "failoverTitle": "Automatic account failover",
         "failoverDescription": "Disabled by default. If enabled, switches only between sessions.",
         "repair": "Repair",
