@@ -778,15 +778,18 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
         History.create_issue_session_thread("macro", "MAC-1", %{
           title: "Build pass",
           execution_mode: "yolo",
-          workspace_path: thread_workspace
+          workspace_path: thread_workspace,
+          agent_kind: "claude",
+          model: "claude-opus-5",
+          effort: "high"
         })
 
       assert session_thread.scope == "issue_session"
 
       test_pid = self()
 
-      runner = fn workspace, _prompt, _issue, _opts ->
-        send(test_pid, {:session_workspace, workspace})
+      runner = fn workspace, _prompt, _issue, opts ->
+        send(test_pid, {:session_workspace, workspace, opts})
         {:ok, %{assistant_message: "ack", tool_calls: [], conversation_id: "ct", run_id: "t1"}}
       end
 
@@ -794,7 +797,9 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
                AgentSession.send_message_to_issue_thread(session_thread, "oi", %{}, runner: runner)
 
       assert result.assistant_message == "ack"
-      assert_receive {:session_workspace, ^thread_workspace}
+      assert_receive {:session_workspace, ^thread_workspace, opts}
+      assert opts[:model] == "claude-opus-5"
+      assert opts[:effort] == "high"
     end
 
     test "revalidates an explicit issue session before every runner invocation", %{

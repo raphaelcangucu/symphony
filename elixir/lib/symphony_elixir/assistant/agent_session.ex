@@ -100,6 +100,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
            |> put_conversation_opts(thread, agent_kind)
            |> maybe_put_codex_thread_name(thread, agent_kind)
            |> Keyword.put(:assistant_thread_id, thread.id)
+           |> put_requested_model_opts(thread)
            |> maybe_put_authoring_goal(thread, agent_kind),
          history_before_turn <- thread_id |> History.list_messages_for_thread() |> Enum.map(&History.message_payload/1),
          {:ok, user_message} <-
@@ -140,6 +141,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
            |> put_conversation_opts(thread, agent_kind)
            |> maybe_put_codex_thread_name(thread, agent_kind)
            |> Keyword.put(:assistant_thread_id, thread.id)
+           |> put_requested_model_opts(thread)
            |> maybe_put_authoring_goal(thread, agent_kind),
          {:ok, trimmed} <- normalize_message(message),
          {:ok, workspace} <- persisted_thread_workspace(thread),
@@ -184,6 +186,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
            |> put_conversation_opts(thread, agent_kind)
            |> maybe_put_codex_thread_name(thread, agent_kind)
            |> Keyword.put(:assistant_thread_id, thread.id)
+           |> put_requested_model_opts(thread)
            |> maybe_put_authoring_goal(thread, agent_kind),
          {:ok, trimmed} <- normalize_message(message),
          {:ok, workspace} <- ensure_project_explore_workspace(project_slug, thread, opts),
@@ -228,6 +231,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
            |> put_conversation_opts(thread, agent_kind)
            |> maybe_put_codex_thread_name(thread, agent_kind)
            |> Keyword.put(:assistant_thread_id, thread.id)
+           |> put_requested_model_opts(thread)
            |> maybe_put_authoring_goal(thread, agent_kind),
          {:ok, trimmed} <- normalize_message(message),
          workspace <- kb_thread_workspace(thread),
@@ -292,6 +296,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
            |> put_conversation_opts(thread, agent_kind)
            |> maybe_put_codex_thread_name(thread, agent_kind)
            |> Keyword.put(:assistant_thread_id, thread.id)
+           |> put_requested_model_opts(thread)
            |> maybe_put_authoring_goal(thread, agent_kind),
          {:ok, trimmed} <- normalize_message(message),
          {:ok, workspace} <- ensure_issue_workspace(thread),
@@ -340,6 +345,7 @@ defmodule SymphonyElixir.Assistant.AgentSession do
            |> put_conversation_opts(thread, agent_kind)
            |> maybe_put_codex_thread_name(thread, agent_kind)
            |> Keyword.put(:assistant_thread_id, thread.id)
+           |> put_requested_model_opts(thread)
            |> maybe_put_authoring_goal(thread, agent_kind) do
       continue_goal_turn(thread, context, opts, agent_kind)
     end
@@ -1961,6 +1967,18 @@ defmodule SymphonyElixir.Assistant.AgentSession do
     else
       {:ok, thread}
     end
+  end
+
+  defp put_requested_model_opts(opts, thread) when is_list(opts) and is_map(thread) do
+    opts
+    |> maybe_put_requested_model_opt(:model, Map.get(thread, :requested_model))
+    |> maybe_put_requested_model_opt(:effort, Map.get(thread, :requested_effort))
+  end
+
+  defp maybe_put_requested_model_opt(opts, _key, nil), do: opts
+
+  defp maybe_put_requested_model_opt(opts, key, value) when is_binary(value) do
+    Keyword.put_new(opts, key, value)
   end
 
   defp turn_identity_fields(runner_result) do
