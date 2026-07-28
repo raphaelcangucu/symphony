@@ -3,7 +3,7 @@ defmodule SymphonyElixir.AgentLaunch do
   Immutable executable/account provenance captured once at session admission.
   """
 
-  alias SymphonyElixir.AgentAccounts
+  alias SymphonyElixir.AgentFailover
   alias SymphonyElixir.AgentLifecycle.{Catalog, Resolver}
 
   @enforce_keys [
@@ -16,7 +16,8 @@ defmodule SymphonyElixir.AgentLaunch do
     :probed_at,
     :environment,
     :command,
-    :resolution
+    :resolution,
+    :failover
   ]
   defstruct [
     :agent_kind,
@@ -30,7 +31,8 @@ defmodule SymphonyElixir.AgentLaunch do
     :probed_at,
     :environment,
     :command,
-    :resolution
+    :resolution,
+    :failover
   ]
 
   @type t :: %__MODULE__{}
@@ -39,10 +41,20 @@ defmodule SymphonyElixir.AgentLaunch do
           {:ok, t()} | {:error, term()}
   def resolve(agent, project_override \\ nil, request_override \\ nil, options \\ []) do
     resolver = Keyword.get(options, :resolver, &Resolver.resolve/1)
-    account_resolver = Keyword.get(options, :account_resolver, &AgentAccounts.resolve/3)
+
+    account_resolver =
+      Keyword.get(options, :account_resolver, fn kind, project, request ->
+        AgentFailover.resolve(
+          kind,
+          project,
+          request,
+          Keyword.get(options, :failover_options, [])
+        )
+      end)
 
     with {:ok, resolution} <- resolver.(agent),
-         {:ok, account} <- account_resolver.(agent, project_override, request_override) do
+         {:ok, account, failover} <-
+           resolve_account(account_resolver, agent, project_override, request_override) do
       {:ok,
        new!(
          agent_kind: agent,
@@ -54,7 +66,8 @@ defmodule SymphonyElixir.AgentLaunch do
          executable_version: resolution.version,
          fallback_reason: resolution.fallback_reason,
          probed_at: resolution.probed_at,
-         resolution: resolution
+         resolution: resolution,
+         failover: failover
        )}
     end
   end
@@ -88,7 +101,8 @@ defmodule SymphonyElixir.AgentLaunch do
       probed_at: Keyword.fetch!(attributes, :probed_at),
       environment: %{catalog.account_home_env => account_home},
       command: Catalog.launch_command(agent, executable_path),
-      resolution: resolution
+      resolution: resolution,
+      failover: Keyword.get(attributes, :failover)
     )
   end
 
@@ -112,8 +126,17 @@ defmodule SymphonyElixir.AgentLaunch do
       executable_version: resolution.version,
       fallback_reason: resolution.fallback_reason,
       probed_at: resolution.probed_at,
-      resolution: resolution
+      resolution: resolution,
+      failover: launch.failover
     )
+  end
+
+  defp resolve_account(resolver, agent, project, request) do
+    case resolver.(agent, project, request) do
+      {:ok, account, failover} -> {:ok, account, failover}
+      {:ok, account} -> {:ok, account, nil}
+      {:error, _reason} = error -> error
+    end
   end
 
   defp put_command(options, %{agent_kind: "codex"} = launch) do
