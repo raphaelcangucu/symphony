@@ -74,16 +74,14 @@ defmodule SymphonyElixir.MobileComparison.SubscriptionTest do
 
     assert :ok = Subscription.activate(pid)
 
-    assert_receive {:mobile_rpc_event, "comparison:DEV-1:1", "comparisons.snapshot",
-                    %{"status" => "running"}}
+    assert_receive {:mobile_rpc_event, "comparison:DEV-1:1", "comparisons.snapshot", %{"status" => "running"}}
 
     Agent.update(state, &%{&1 | status: "completed"})
     send(pid, {:tracker_event, "issue_updated", %{}})
     send(pid, {:agent_execution_event, "snapshot", %{}})
     send(pid, {:mobile_notification, "evidence", %{}})
 
-    assert_receive {:mobile_rpc_event, "comparison:DEV-1:1", "comparisons.snapshot",
-                    %{"status" => "completed"}},
+    assert_receive {:mobile_rpc_event, "comparison:DEV-1:1", "comparisons.snapshot", %{"status" => "completed"}},
                    200
 
     refute_receive {:mobile_rpc_event, "comparison:DEV-1:1", "comparisons.snapshot", _}, 30

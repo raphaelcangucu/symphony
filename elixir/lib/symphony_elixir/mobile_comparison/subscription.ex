@@ -105,8 +105,7 @@ defmodule SymphonyElixir.MobileComparison.Subscription do
             emit(subscribed, snapshot)
           end
 
-          {:noreply,
-           %{subscribed | snapshot: snapshot, digest: next_digest}}
+          {:noreply, %{subscribed | snapshot: snapshot, digest: next_digest}}
         else
           {:error, _reason} -> {:noreply, next}
         end
