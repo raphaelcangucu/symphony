@@ -185,6 +185,37 @@ defmodule SymphonyElixir.MobileComparison.LocalGatewayTest do
     end
   end
 
+  defmodule RetriedInterruptedHistory do
+    def list_messages_for_thread(43), do: []
+
+    def list_threads(_opts) do
+      [
+        %{
+          id: 43,
+          issue_identifier: "DEV-2",
+          agent_kind: "codex",
+          status: "active",
+          requested_model: "gpt-5.6-sol",
+          requested_effort: "high",
+          metadata: %{
+            "current_turn" => %{
+              "status" => "interrupted",
+              "interrupted_reason" => "serve_restart"
+            }
+          }
+        },
+        %{
+          id: 42,
+          issue_identifier: "DEV-2",
+          agent_kind: "codex",
+          status: "archived",
+          requested_model: "gpt-5.6-sol",
+          requested_effort: "high"
+        }
+      ]
+    end
+  end
+
   defmodule FakeSessionStarter do
     def start(thread, prompt, context) do
       send(context.test_pid, {:session_start, thread, prompt, context.comparison_request_key})
@@ -393,6 +424,27 @@ defmodule SymphonyElixir.MobileComparison.LocalGatewayTest do
               "retry_attempt" => 1,
               id: 43,
               status: "active"
+            }} =
+             LocalGateway.get_session(
+               "dev10x",
+               %{"identifier" => "DEV-2"},
+               cell,
+               context
+             )
+  end
+
+  test "an interrupted retry remains retryable after reconnect instead of becoming ready", %{
+    context: context
+  } do
+    assert {:ok, cell} = Contract.fetch("session-codex")
+    context = Map.put(context, :comparison_history, RetriedInterruptedHistory)
+
+    assert {:ok,
+            %{
+              "error" => "serve_restart",
+              "retry_attempt" => 1,
+              id: 43,
+              status: "error"
             }} =
              LocalGateway.get_session(
                "dev10x",

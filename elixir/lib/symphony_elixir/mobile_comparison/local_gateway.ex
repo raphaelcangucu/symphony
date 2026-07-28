@@ -303,31 +303,41 @@ defmodule SymphonyElixir.MobileComparison.LocalGateway do
     history = Map.get(context, :comparison_history, History)
     thread_id = value(thread, :id)
 
-    if running_turn?(thread) do
-      put_value(thread, :status, "active")
-    else
-      case history.list_messages_for_thread(thread_id) do
-        [] ->
-          put_value(thread, :status, "ready")
+    turn = current_turn(thread)
 
-        messages ->
-          case latest_assistant_message(messages) do
-            nil -> thread
-            message -> put_value(thread, :latest_message, value(message, :content))
-          end
-      end
+    case value(turn, :status) do
+      "running" ->
+        put_value(thread, :status, "active")
+
+      status when status in ["interrupted", "failed"] ->
+        thread
+        |> put_value(:status, "error")
+        |> put_value(:error, value(turn, :interrupted_reason) || value(turn, :error))
+
+      _other ->
+        mark_from_messages(thread, history.list_messages_for_thread(thread_id))
     end
   end
 
-  defp running_turn?(thread) do
+  defp mark_from_messages(thread, []), do: put_value(thread, :status, "ready")
+
+  defp mark_from_messages(thread, messages) do
+    case latest_assistant_message(messages) do
+      nil -> thread
+      message -> put_value(thread, :latest_message, value(message, :content))
+    end
+  end
+
+  defp current_turn(thread) do
     case value(thread, :metadata) do
       %{} = metadata ->
-        metadata
-        |> value(:current_turn)
-        |> value(:status) == "running"
+        case value(metadata, :current_turn) do
+          %{} = turn -> turn
+          _other -> nil
+        end
 
       _other ->
-        false
+        nil
     end
   end
 
