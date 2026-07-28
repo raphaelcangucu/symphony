@@ -196,7 +196,11 @@ defmodule SymphonyElixir.MobileComparison.Service do
          {:ok, active_thread} <- ensure_session_started(gateway, thread, prompt, context),
          {:ok, previews} <- gateway.list_previews(active_thread, context),
          {:ok, evidence} <-
-           gateway.list_evidence(project_slug, value(child, :identifier), context) do
+           gateway.list_evidence(
+             project_slug,
+             value(child, :identifier),
+             session_evidence_context(context, active_thread)
+           ) do
       {:ok, Presenter.cell(contract, child, active_thread, nil, previews, evidence)}
     end
   end
@@ -288,7 +292,8 @@ defmodule SymphonyElixir.MobileComparison.Service do
     with {:ok, thread} <- existing_thread(gateway, project_slug, child, contract, context),
          {:ok, previews} <-
            existing_previews(gateway, thread || execution_preview_source(execution), context),
-         {:ok, evidence} <- existing_evidence(gateway, project_slug, child, context) do
+         {:ok, evidence} <-
+           existing_evidence(gateway, project_slug, child, thread, context) do
       {:ok, Presenter.cell(contract, child, thread, execution, previews, evidence)}
     end
   end
@@ -321,11 +326,28 @@ defmodule SymphonyElixir.MobileComparison.Service do
     end
   end
 
-  defp existing_evidence(_gateway, _project_slug, %{"identifier" => nil}, _context),
+  defp existing_evidence(_gateway, _project_slug, %{"identifier" => nil}, _thread, _context),
     do: {:ok, []}
 
-  defp existing_evidence(gateway, project_slug, child, context),
-    do: gateway.list_evidence(project_slug, value(child, :identifier), context)
+  defp existing_evidence(gateway, project_slug, child, thread, context) do
+    gateway.list_evidence(
+      project_slug,
+      value(child, :identifier),
+      session_evidence_context(context, thread)
+    )
+  end
+
+  defp session_evidence_context(context, nil), do: context
+
+  defp session_evidence_context(context, thread) do
+    case value(thread, :id) do
+      thread_id when is_integer(thread_id) and thread_id > 0 ->
+        Map.put(context, :comparison_session_id, thread_id)
+
+      _other ->
+        context
+    end
+  end
 
   defp fetch_presented_cell(%{"cells" => cells}, cell_id) when is_list(cells) do
     case Enum.find(cells, &(value(&1, :id) == cell_id)) do

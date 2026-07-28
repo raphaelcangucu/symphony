@@ -224,23 +224,41 @@ defmodule SymphonyElixir.MobileComparison.LocalGateway do
     service = Map.get(context, :mobile_evidence_service, EvidenceService)
 
     case evidence_records(service, project_slug, identifier, context) do
-      {:ok, []} ->
-        collector =
-          Map.get(
-            context,
-            :comparison_session_evidence_collector,
-            SessionEvidenceCollector
-          )
-
-        with :ok <- collector.collect(project_slug, identifier, context) do
-          evidence_records(service, project_slug, identifier, context)
-        end
-
       {:ok, records} ->
-        {:ok, records}
+        if evidence_collection_required?(records, context) do
+          collect_session_evidence(service, project_slug, identifier, context)
+        else
+          {:ok, records}
+        end
 
       {:error, reason} ->
         {:error, reason}
+    end
+  end
+
+  defp collect_session_evidence(service, project_slug, identifier, context) do
+    collector =
+      Map.get(
+        context,
+        :comparison_session_evidence_collector,
+        SessionEvidenceCollector
+      )
+
+    with :ok <- collector.collect(project_slug, identifier, context) do
+      evidence_records(service, project_slug, identifier, context)
+    end
+  end
+
+  defp evidence_collection_required?([], _context), do: true
+
+  defp evidence_collection_required?(records, context) do
+    case Map.get(context, :comparison_session_id) do
+      thread_id when is_integer(thread_id) and thread_id > 0 ->
+        expected_session_id = "assistant-thread:#{thread_id}"
+        not Enum.any?(records, &(value(&1, :session_id) == expected_session_id))
+
+      _other ->
+        false
     end
   end
 

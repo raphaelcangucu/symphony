@@ -260,9 +260,47 @@ defmodule SymphonyElixir.MobileComparison.LocalGatewayTest do
     end
   end
 
+  defmodule PriorThenCurrentEvidence do
+    def call(
+          "evidence.list",
+          %{"project_slug" => "dev10x", "identifier" => "DEV-2"},
+          context
+        ) do
+      prior = %{
+        "run_id" => "attempt-1",
+        "session_id" => "assistant-thread:42",
+        "status" => "failed"
+      }
+
+      records =
+        if Process.get({__MODULE__, context.test_pid}, false) do
+          [
+            prior,
+            %{
+              "run_id" => "attempt-2",
+              "session_id" => "assistant-thread:43",
+              "status" => "passed"
+            }
+          ]
+        else
+          [prior]
+        end
+
+      {:ok, %{"records" => records}}
+    end
+  end
+
   defmodule FakeSessionEvidenceCollector do
     def collect(project_slug, identifier, context) do
       send(context.test_pid, {:collect_session_evidence, project_slug, identifier})
+      :ok
+    end
+  end
+
+  defmodule CurrentAttemptEvidenceCollector do
+    def collect(project_slug, identifier, context) do
+      send(context.test_pid, {:collect_current_attempt_evidence, project_slug, identifier})
+      Process.put({PriorThenCurrentEvidence, context.test_pid}, true)
       :ok
     end
   end
@@ -558,6 +596,25 @@ defmodule SymphonyElixir.MobileComparison.LocalGatewayTest do
              LocalGateway.list_evidence("dev10x", "DEV-2", context)
 
     assert_receive {:collect_session_evidence, "dev10x", "DEV-2"}
+  end
+
+  test "promotes the current retry even when a prior attempt already has evidence", %{
+    context: context
+  } do
+    context =
+      context
+      |> Map.put(:comparison_session_id, 43)
+      |> Map.put(:mobile_evidence_service, PriorThenCurrentEvidence)
+      |> Map.put(:comparison_session_evidence_collector, CurrentAttemptEvidenceCollector)
+
+    assert {:ok, records} = LocalGateway.list_evidence("dev10x", "DEV-2", context)
+
+    assert Enum.map(records, & &1["session_id"]) == [
+             "assistant-thread:42",
+             "assistant-thread:43"
+           ]
+
+    assert_receive {:collect_current_attempt_evidence, "dev10x", "DEV-2"}
   end
 
   test "persists the operator decision in the parent without requiring a global request key", %{
