@@ -208,7 +208,7 @@ defmodule SymphonyElixir.AgentLifecycle.Installer do
   end
 
   defp download_with_req(url) do
-    case Req.get(url, headers: [{"user-agent", "symphony"}], into: :binary) do
+    case Req.get(url, headers: [{"user-agent", "symphony"}]) do
       {:ok, %Req.Response{status: status, body: body}} when status in 200..299 and is_binary(body) ->
         {:ok, body}
 

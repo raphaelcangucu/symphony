@@ -1,6 +1,7 @@
 import Config
 
 config :phoenix, :json_library, Jason
+config :phoenix, :filter_parameters, ~w(password secret token access_token refresh_token authorization credentials)
 
 config :symphony_elixir, SymphonyElixirWeb.Gettext,
   locales: ~w(en pt_BR),
