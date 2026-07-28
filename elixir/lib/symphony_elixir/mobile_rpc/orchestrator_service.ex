@@ -66,6 +66,7 @@ defmodule SymphonyElixir.MobileRpc.OrchestratorService do
     execution
     |> Map.update(:agent_kind, thread.agent_kind, &(&1 || thread.agent_kind))
     |> Map.update(:model, thread.resolved_model, &(&1 || thread.resolved_model))
+    |> Map.update(:session_id, native_session_id(thread), &(&1 || native_session_id(thread)))
     |> Map.put(:requested_model, thread.requested_model)
     |> Map.put(:requested_effort, thread.requested_effort)
     |> Map.put(:resolved_model, thread.resolved_model)
@@ -83,7 +84,7 @@ defmodule SymphonyElixir.MobileRpc.OrchestratorService do
       requested_effort: thread.requested_effort,
       resolved_model: thread.resolved_model,
       resolved_effort: thread.resolved_effort,
-      session_id: nil,
+      session_id: native_session_id(thread),
       execution_session_id: thread.id,
       last_event: nil,
       last_message: nil,
@@ -114,4 +115,19 @@ defmodule SymphonyElixir.MobileRpc.OrchestratorService do
     do: "Execution is not active on this host. Retry to recover."
 
   defp history_only_error(_status), do: nil
+
+  defp native_session_id(thread) do
+    bindings = Map.get(thread, :provider_bindings, %{})
+    agent_kind = Map.get(thread, :agent_kind)
+
+    case Map.get(bindings, agent_kind) do
+      session_id when is_binary(session_id) and session_id != "" ->
+        session_id
+
+      _other ->
+        bindings
+        |> Map.values()
+        |> Enum.find(&(is_binary(&1) and &1 != ""))
+    end
+  end
 end

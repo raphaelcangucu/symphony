@@ -78,8 +78,16 @@ defmodule SymphonyElixir.MobileComparison.Presenter do
     end
   end
 
-  defp cell_status(:orchestrator, _thread, execution, _evidence),
-    do: value(execution, :status) || "starting"
+  defp cell_status(:orchestrator, _thread, execution, evidence) do
+    execution_status = value(execution, :status)
+    durable_status = evidence |> evidence_for_execution(execution) |> evidence_status()
+
+    cond do
+      execution_status in ~w(live idle retrying waiting) -> execution_status
+      is_binary(durable_status) -> durable_status
+      true -> execution_status || "starting"
+    end
+  end
 
   defp evidence_status(evidence) when is_list(evidence) do
     case Enum.find_value(evidence, fn record ->
@@ -114,6 +122,18 @@ defmodule SymphonyElixir.MobileComparison.Presenter do
   end
 
   defp evidence_for_thread(evidence, _thread), do: evidence
+
+  defp evidence_for_execution(evidence, execution) when is_list(evidence) do
+    case value(execution, :session_id) do
+      expected_session_id when is_binary(expected_session_id) and expected_session_id != "" ->
+        Enum.filter(evidence, &(value(&1, :session_id) == expected_session_id))
+
+      _other ->
+        []
+    end
+  end
+
+  defp evidence_for_execution(_evidence, _execution), do: []
 
   defp completed_without_output?(message) when is_binary(message),
     do: String.ends_with?(message, "completed the turn without returning assistant text.")

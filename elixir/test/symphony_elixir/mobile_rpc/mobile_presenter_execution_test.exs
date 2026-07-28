@@ -26,6 +26,7 @@ defmodule SymphonyElixir.MobileRpc.MobilePresenterExecutionTest do
         issue_identifier: "DEV-42",
         status: "error",
         agent_kind: "codex",
+        provider_bindings: %{"codex" => "native-run-42"},
         requested_model: "gpt-5.6-sol",
         requested_effort: "high",
         resolved_model: "gpt-5.6-sol",
@@ -36,6 +37,7 @@ defmodule SymphonyElixir.MobileRpc.MobilePresenterExecutionTest do
     assert [
              %{
                execution_session_id: 42,
+               session_id: "native-run-42",
                status: "aborted",
                model: "gpt-5.6-sol",
                requested_model: "gpt-5.6-sol",

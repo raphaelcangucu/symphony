@@ -12,6 +12,15 @@ defmodule SymphonyElixir.MobileComparison.PresenterTest do
     effective_effort: "high"
   }
 
+  @orchestrator %{
+    id: "orchestrator-codex",
+    path: :orchestrator,
+    provider: "codex",
+    model: "gpt-5.6-sol",
+    effort: "high",
+    effective_effort: "high"
+  }
+
   test "durable passed evidence completes a persistent direct-session thread" do
     cell =
       Presenter.cell(
@@ -185,5 +194,45 @@ defmodule SymphonyElixir.MobileComparison.PresenterTest do
       )
 
     assert cell["status"] == "passed"
+  end
+
+  test "matching durable evidence completes an orchestrator run that ended after saving proof" do
+    cell =
+      Presenter.cell(
+        @orchestrator,
+        %{identifier: "DEV-5"},
+        nil,
+        %{status: "aborted", session_id: "native-run-5"},
+        [],
+        [
+          %{
+            "run_id" => "run-final",
+            "session_id" => "native-run-5",
+            "status" => "passed"
+          }
+        ]
+      )
+
+    assert cell["status"] == "passed"
+  end
+
+  test "stale orchestrator evidence cannot hide the current failed execution" do
+    cell =
+      Presenter.cell(
+        @orchestrator,
+        %{identifier: "DEV-5"},
+        nil,
+        %{status: "aborted", session_id: "native-run-6"},
+        [],
+        [
+          %{
+            "run_id" => "prior-run",
+            "session_id" => "native-run-5",
+            "status" => "passed"
+          }
+        ]
+      )
+
+    assert cell["status"] == "aborted"
   end
 end
