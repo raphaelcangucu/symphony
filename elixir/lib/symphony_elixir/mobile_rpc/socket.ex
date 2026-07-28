@@ -3,6 +3,8 @@ defmodule SymphonyElixir.MobileRpc.Socket do
 
   @behaviour WebSock
 
+  require Logger
+
   alias SymphonyElixir.MobileRpc.{AuthLimiter, Dispatcher, Handshake, HostIdentity}
 
   @registry SymphonyElixir.MobileRpc.ConnectionRegistry
@@ -114,17 +116,22 @@ defmodule SymphonyElixir.MobileRpc.Socket do
   def handle_info(_message, state), do: {:ok, state}
 
   @impl WebSock
-  def terminate(_reason, %{dispatcher: %Dispatcher{} = dispatcher, timeout_ref: timeout_ref}) do
+  def terminate(reason, %{dispatcher: %Dispatcher{} = dispatcher, timeout_ref: timeout_ref} = state) do
+    log_termination(reason, state)
     cancel_timeout(timeout_ref)
     Dispatcher.close(dispatcher)
   end
 
-  def terminate(_reason, %{timeout_ref: timeout_ref}) do
+  def terminate(reason, %{timeout_ref: timeout_ref} = state) do
+    log_termination(reason, state)
     cancel_timeout(timeout_ref)
     :ok
   end
 
-  def terminate(_reason, _state), do: :ok
+  def terminate(reason, state) do
+    log_termination(reason, state)
+    :ok
+  end
 
   @spec disconnect_device(String.t()) :: :ok
   def disconnect_device(device_id) when is_binary(device_id) do
@@ -157,6 +164,13 @@ defmodule SymphonyElixir.MobileRpc.Socket do
   defp cancel_timeout(timeout_ref) do
     Process.cancel_timer(timeout_ref)
     :ok
+  end
+
+  defp log_termination(reason, state) do
+    Logger.warning(
+      "Mobile RPC socket terminated phase=#{inspect(Map.get(state, :phase))} " <>
+        "device_id=#{inspect(Map.get(state, :device_id))} reason=#{inspect(reason)}"
+    )
   end
 
   defp push_rpc_response(response, state) do

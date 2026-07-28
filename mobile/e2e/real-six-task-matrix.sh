@@ -23,8 +23,10 @@ readonly TRACE_PATH="${OUTPUT_DIR}/trace.txt"
 readonly SERVER_LOG_PATH="${OUTPUT_DIR}/symphony-server.log"
 readonly UI_DUMP_PATH="${OUTPUT_DIR}/window.xml"
 readonly REMOTE_UI_DUMP="/data/local/tmp/dev10x-six-task-window.xml"
-readonly E2E_ROOT="$(mktemp -d)"
+readonly E2E_ROOT="${DEV10X_SIX_TASK_RESUME_ROOT:-$(mktemp -d)}"
+readonly RESUME_E2E="${DEV10X_SIX_TASK_RESUME:-0}"
 readonly TASK_TIMEOUT_ATTEMPTS="${DEV10X_SIX_TASK_TIMEOUT_ATTEMPTS:-360}"
+readonly STALL_TIMEOUT_MS="${DEV10X_SIX_TASK_STALL_TIMEOUT_MS:-2400000}"
 
 resolve_adb() {
   if [[ -n "${ADB_BIN:-}" ]]; then
@@ -48,6 +50,7 @@ host_pid=""
 recording=""
 screen_width=""
 screen_height=""
+run_succeeded=0
 
 trace_step() {
   printf "%s %s\n" "$(date --iso-8601=seconds)" "$*" >>"${TRACE_PATH}"
@@ -238,6 +241,7 @@ host_env() {
     SYMPHONY_TRACKER_TOKEN="${ADMIN_TOKEN}" \
     SYMPHONY_EDITOR_ENABLED="false" \
     SYMPHONY_OBSERVABILITY_ENABLED="false" \
+    SYMPHONY_STALL_TIMEOUT_MS="${STALL_TIMEOUT_MS}" \
     SYMPHONY_SERVE_LOCK_PATH="${E2E_ROOT}/serve.lock" \
     "$@"
 }
@@ -263,6 +267,7 @@ start_host() {
       SYMPHONY_TRACKER_TOKEN="${ADMIN_TOKEN}" \
       SYMPHONY_EDITOR_ENABLED="false" \
       SYMPHONY_OBSERVABILITY_ENABLED="false" \
+      SYMPHONY_STALL_TIMEOUT_MS="${STALL_TIMEOUT_MS}" \
       SYMPHONY_SERVE_LOCK_PATH="${E2E_ROOT}/serve.lock" \
       mix run --no-halt
   ) >"${SERVER_LOG_PATH}" 2>&1 &
@@ -404,13 +409,25 @@ wait_for_manifest() {
         jq -r '.data.workspace_path // empty'
     )"
     if [[ -n "${workspace}" && -s "${workspace}/.symphony/evidence/manifest.json" ]]; then
-      jq -e --arg issue "${identifier}" '
-        (.issue == $issue) and
-        (.runs | type == "array" and length > 0) and
-        ([.runs[].artifacts[]?] | length > 0)
-      ' "${workspace}/.symphony/evidence/manifest.json" >/dev/null
-      trace_step "durable manifest observed for ${identifier} thread=${thread_id}"
-      return 0
+      if jq -e --arg issue "${identifier}" '
+          (.issue == $issue) and
+          (.runs | type == "array" and length > 0) and
+          ([.runs[].status] | all(. == "passed")) and
+          ([
+            .runs[] as $run |
+            (
+              $run.artifacts[]?,
+              $run.screenshots[]?,
+              $run.videos[]?,
+              $run.report?,
+              $run.trace?
+            )
+            | select(type == "string" or type == "object")
+          ] | length > 0)
+        ' "${workspace}/.symphony/evidence/manifest.json" >/dev/null; then
+        trace_step "durable manifest observed for ${identifier} thread=${thread_id}"
+        return 0
+      fi
     fi
     if ((attempt % 12 == 0)); then
       printf "Waiting for %s evidence (%s minutes)\n" "${identifier}" "$((attempt / 6))"
@@ -419,21 +436,6 @@ wait_for_manifest() {
   done
   printf "Durable manifest not produced for %s\n" "${identifier}" >&2
   return 1
-}
-
-persist_thread_evidence() {
-  local identifier="$1"
-  local thread_id="$2"
-  api_post "/assistant/threads/${thread_id}/evidence" >/dev/null
-  local count
-  count="$(
-    api_get "/projects/${PROJECT_SLUG}/issues/${identifier}/evidence" |
-      jq '.data | length'
-  )"
-  if [[ "${count}" -lt 1 ]]; then
-    printf "Evidence was not persisted for %s\n" "${identifier}" >&2
-    return 1
-  fi
 }
 
 capture_task_evidence() {
@@ -456,7 +458,11 @@ capture_task_evidence() {
   artifact_label="$(
     api_get "/projects/${PROJECT_SLUG}/issues/${identifier}/evidence" |
       jq -r '
-        [.data[].manifest.runs[].artifacts[]? | .label]
+        [
+          .data[].manifest.runs[] as $run |
+          ($run.artifacts[]?, $run.screenshots[]?, $run.videos[]?) |
+          .label?
+        ]
         | map(select(type == "string" and length > 0))
         | first // empty
       '
@@ -550,8 +556,22 @@ build_report() {
         status:($evidence[0].status // $issue.status),
         log:{kind:$execution_path,id:$log_id},
         evidence:[
-          $evidence[].manifest.runs[].artifacts[]?
-          | {kind:(.kind // "artifact"),path:.path}
+          $evidence[].manifest.runs[] as $run |
+          ($run.artifacts[]? | {kind:(.kind // "artifact"),path:.path}),
+          ($run.screenshots[]? | {kind:"screenshot",path:.path}),
+          ($run.videos[]? | {kind:"video",path:.path}),
+          (
+            if ($run.report? | type) == "string"
+            then {kind:"report",path:$run.report}
+            else empty
+            end
+          ),
+          (
+            if ($run.trace? | type) == "string"
+            then {kind:"trace",path:$run.trace}
+            else empty
+            end
+          )
         ]
       }' >>"${records}"
   done <"${TASKS_PATH}"
@@ -586,12 +606,16 @@ capture_failure() {
 
 cleanup() {
   stop_recording
-  if [[ -n "${host_pid}" ]]; then
-    kill -TERM -- "-${host_pid}" >/dev/null 2>&1 || true
-    wait "${host_pid}" >/dev/null 2>&1 || true
+  if [[ "${run_succeeded}" == "1" ]]; then
+    if [[ -n "${host_pid}" ]]; then
+      kill -TERM -- "-${host_pid}" >/dev/null 2>&1 || true
+      wait "${host_pid}" >/dev/null 2>&1 || true
+    fi
+    rm -rf "${E2E_ROOT}"
+  else
+    printf "Preserved failed E2E root: %s (host pid: %s)\n" "${E2E_ROOT}" "${host_pid}" >&2
   fi
   "${ADB}" shell rm -f "${REMOTE_UI_DUMP}" >/dev/null 2>&1 || true
-  rm -rf "${E2E_ROOT}"
 }
 
 trap capture_failure ERR
@@ -603,80 +627,99 @@ if [[ ! -f "${APK_PATH}" ]]; then
 fi
 
 mkdir -p "${OUTPUT_DIR}"
-: >"${TRACE_PATH}"
-: >"${TASKS_PATH}"
-prepare_host
-trace_step "prepared isolated real Symphony host database and workspace"
-start_host
-wait_for_host
-trace_step "real Symphony host is healthy"
+if [[ "${RESUME_E2E}" == "1" ]]; then
+  [[ -s "${TASKS_PATH}" ]]
+  host_pid="${DEV10X_SIX_TASK_HOST_PID:?resume requires DEV10X_SIX_TASK_HOST_PID}"
+  wait_for_host
+  "${ADB}" wait-for-device
+  configure_screen_geometry
+  "${ADB}" shell am force-stop "${APP_PACKAGE}"
+  "${ADB}" shell monkey -p "${APP_PACKAGE}" -c android.intent.category.LAUNCHER 1 >/dev/null
+  sleep 5
+  deep_link "/codex/tasks"
+  wait_for_text "Tasks"
+  trace_step "resumed preserved six-task host, workspaces, sessions and orchestrator runs"
+else
+  : >"${TRACE_PATH}"
+  : >"${TASKS_PATH}"
+  prepare_host
+  trace_step "prepared isolated real Symphony host database and workspace"
+  start_host
+  wait_for_host
+  trace_step "real Symphony host is healthy"
 
-catalog="$(api_get "/projects/${PROJECT_SLUG}/assistant/config")"
-trace_step "loaded live assistant catalog"
-codex_model="$(catalog_model "${catalog}" "codex" "gpt-5.6-sol")"
-trace_step "resolved Codex GPT 5.6 Sol"
-claude_model="$(catalog_model "${catalog}" "claude" "claude-opus-5")"
-trace_step "resolved Claude Opus 5"
-cursor_model="$(catalog_model "${catalog}" "cursor" "cursor-grok-4.5-high")"
-trace_step "resolved Cursor Grok 4.5 High"
-codex_agent_label="$(jq -r '.data.agents[] | select(.agent == "codex") | .agent_label' <<<"${catalog}")"
-claude_agent_label="$(jq -r '.data.agents[] | select(.agent == "claude") | .agent_label' <<<"${catalog}")"
-cursor_agent_label="$(jq -r '.data.agents[] | select(.agent == "cursor") | .agent_label' <<<"${catalog}")"
-codex_model_label="$(jq -r '.label' <<<"${codex_model}")"
-claude_model_label="$(jq -r '.label' <<<"${claude_model}")"
-cursor_model_label="$(jq -r '.label' <<<"${cursor_model}")"
+  catalog="$(api_get "/projects/${PROJECT_SLUG}/assistant/config")"
+  trace_step "loaded live assistant catalog"
+  codex_model="$(catalog_model "${catalog}" "codex" "gpt-5.6-sol")"
+  trace_step "resolved Codex GPT 5.6 Sol"
+  claude_model="$(catalog_model "${catalog}" "claude" "claude-opus-5")"
+  trace_step "resolved Claude Opus 5"
+  cursor_model="$(catalog_model "${catalog}" "cursor" "cursor-grok-4.5-high")"
+  trace_step "resolved Cursor Grok 4.5 High"
+  codex_agent_label="$(
+    jq -r '.data.agents[] | select(.agent == "codex") | .agent_label' <<<"${catalog}"
+  )"
+  claude_agent_label="$(
+    jq -r '.data.agents[] | select(.agent == "claude") | .agent_label' <<<"${catalog}"
+  )"
+  cursor_agent_label="$(
+    jq -r '.data.agents[] | select(.agent == "cursor") | .agent_label' <<<"${catalog}"
+  )"
+  codex_model_label="$(jq -r '.label' <<<"${codex_model}")"
+  claude_model_label="$(jq -r '.label' <<<"${claude_model}")"
+  cursor_model_label="$(jq -r '.label' <<<"${cursor_model}")"
 
-pairing_offer="$(create_offer)"
-trace_step "created redacted one-time pairing offer"
-"${ADB}" wait-for-device
-configure_screen_geometry
-"${ADB}" install --no-streaming -r "${APK_PATH}" >/dev/null
-"${ADB}" shell pm clear "${APP_PACKAGE}" >/dev/null
-"${ADB}" shell input keyevent 224
-"${ADB}" shell wm dismiss-keyguard
-"${ADB}" shell settings put global window_animation_scale 0
-"${ADB}" shell settings put global transition_animation_scale 0
-"${ADB}" shell settings put global animator_duration_scale 0
+  pairing_offer="$(create_offer)"
+  trace_step "created redacted one-time pairing offer"
+  "${ADB}" wait-for-device
+  configure_screen_geometry
+  "${ADB}" install --no-streaming -r "${APK_PATH}" >/dev/null
+  "${ADB}" shell pm clear "${APP_PACKAGE}" >/dev/null
+  "${ADB}" shell input keyevent 224
+  "${ADB}" shell wm dismiss-keyguard
+  "${ADB}" shell settings put global window_animation_scale 0
+  "${ADB}" shell settings put global transition_animation_scale 0
+  "${ADB}" shell settings put global animator_duration_scale 0
 
-start_recording "${CREATION_VIDEO_PATH}"
-"${ADB}" shell monkey -p "${APP_PACKAGE}" -c android.intent.category.LAUNCHER 1 >/dev/null
-sleep 3
-"${ADB}" shell am start -W \
-  -a android.intent.action.VIEW \
-  -d "${pairing_offer}" \
-  -n "${APP_ACTIVITY}" >/dev/null
-wait_for_text "Pair with this Symphony host?"
-tap_accessible "Pair host"
-wait_for_text "${HOST_NAME}"
-trace_step "pair direct local Symphony host with per-device E2EE credential"
+  start_recording "${CREATION_VIDEO_PATH}"
+  "${ADB}" shell monkey -p "${APP_PACKAGE}" -c android.intent.category.LAUNCHER 1 >/dev/null
+  sleep 3
+  "${ADB}" shell am start -W \
+    -a android.intent.action.VIEW \
+    -d "${pairing_offer}" \
+    -n "${APP_ACTIVITY}" >/dev/null
+  wait_for_text "Pair with this Symphony host?"
+  tap_accessible "Pair host"
+  wait_for_text "${HOST_NAME}"
+  trace_step "pair direct local Symphony host with per-device E2EE credential"
 
-create_task \
-  "session" "codex" "${codex_agent_label}" "gpt-5.6-sol" "${codex_model_label}" "High" \
-  "Session Codex GPT 5 6 High Dev10x site"
-create_task \
-  "session" "claude" "${claude_agent_label}" "claude-opus-5" "${claude_model_label}" "High" \
-  "Session Claude Opus 5 High Dev10x site"
-create_task \
-  "session" "cursor" "${cursor_agent_label}" "cursor-grok-4.5-high" "${cursor_model_label}" "" \
-  "Session Cursor Grok 4 5 High Dev10x site"
-create_task \
-  "orchestrator" "codex" "${codex_agent_label}" "gpt-5.6-sol" "${codex_model_label}" "High" \
-  "Orchestrator Codex GPT 5 6 High Dev10x site"
-create_task \
-  "orchestrator" "claude" "${claude_agent_label}" "claude-opus-5" "${claude_model_label}" "High" \
-  "Orchestrator Claude Opus 5 High Dev10x site"
-create_task \
-  "orchestrator" "cursor" "${cursor_agent_label}" "cursor-grok-4.5-high" "${cursor_model_label}" "" \
-  "Orchestrator Cursor Grok 4 5 High Dev10x site"
+  create_task \
+    "session" "codex" "${codex_agent_label}" "gpt-5.6-sol" "${codex_model_label}" "High" \
+    "Session Codex GPT 5 6 High Dev10x site"
+  create_task \
+    "session" "claude" "${claude_agent_label}" "claude-opus-5" "${claude_model_label}" "High" \
+    "Session Claude Opus 5 High Dev10x site"
+  create_task \
+    "session" "cursor" "${cursor_agent_label}" "cursor-grok-4.5-high" "${cursor_model_label}" "" \
+    "Session Cursor Grok 4 5 High Dev10x site"
+  create_task \
+    "orchestrator" "codex" "${codex_agent_label}" "gpt-5.6-sol" "${codex_model_label}" "High" \
+    "Orchestrator Codex GPT 5 6 High Dev10x site"
+  create_task \
+    "orchestrator" "claude" "${claude_agent_label}" "claude-opus-5" "${claude_model_label}" "High" \
+    "Orchestrator Claude Opus 5 High Dev10x site"
+  create_task \
+    "orchestrator" "cursor" "${cursor_agent_label}" "cursor-grok-4.5-high" "${cursor_model_label}" "" \
+    "Orchestrator Cursor Grok 4 5 High Dev10x site"
 
-deep_link "/codex/tasks"
-wait_for_text "Tasks"
-"${ADB}" exec-out screencap -p >"${OUTPUT_DIR}/six-independent-tasks.png"
-stop_recording
+  deep_link "/codex/tasks"
+  wait_for_text "Tasks"
+  "${ADB}" exec-out screencap -p >"${OUTPUT_DIR}/six-independent-tasks.png"
+  stop_recording
+fi
 
 while IFS=$'\t' read -r _path _agent _model _effort identifier thread_id _title; do
   wait_for_manifest "${identifier}" "${thread_id}"
-  persist_thread_evidence "${identifier}" "${thread_id}"
 done <"${TASKS_PATH}"
 
 start_recording "${EVIDENCE_VIDEO_PATH}"
@@ -694,4 +737,5 @@ build_report
 encode_video
 sha256sum "${APK_PATH}" "${APP_VIDEO_PATH}" >"${OUTPUT_DIR}/sha256.txt"
 trace_step "PASS six independent real tasks with task-scoped app evidence"
+run_succeeded=1
 printf "Video: %s\nReport: %s\n" "${APP_VIDEO_PATH}" "${REPORT_PATH}"
