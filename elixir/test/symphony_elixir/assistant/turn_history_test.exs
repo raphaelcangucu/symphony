@@ -202,6 +202,24 @@ defmodule SymphonyElixir.Assistant.TurnHistoryTest do
     assert is_binary(History.current_turn(updated)["last_activity_at"])
   end
 
+  test "late activity from an orphan worker cannot mutate an interrupted turn", %{
+    thread: thread
+  } do
+    assert {:ok, running} =
+             History.start_turn_state(thread, %{trigger: "user", prompt: "go", provider: "claude"})
+
+    assert {:ok, interrupted} = History.interrupt_turn_state(running, "serve_restart")
+    interrupted_turn = History.current_turn(interrupted)
+
+    assert {:ok, unchanged} = History.touch_turn_activity(running)
+    assert History.current_turn(unchanged) == interrupted_turn
+
+    assert {:ok, unchanged} =
+             History.upsert_active_tool(running, %{"id" => "late-tool", "name" => "Bash"})
+
+    assert History.current_turn(unchanged) == interrupted_turn
+  end
+
   test "terminal turn states clear active_tools", %{thread: thread} do
     assert {:ok, thread} =
              History.start_turn_state(thread, %{trigger: "user", prompt: "go", provider: "claude"})

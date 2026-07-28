@@ -167,7 +167,7 @@ defmodule SymphonyElixir.Assistant.TurnManager do
 
   @doc "True when a live worker is registered for the thread."
   @spec running?(integer()) :: boolean()
-  def running?(thread_id) when is_integer(thread_id), do: lookup(thread_id) != nil
+  def running?(thread_id) when is_integer(thread_id), do: lookup_worker(thread_id) != nil
 
   @spec goal_mutation(integer(), boolean(), (-> term()), keyword()) :: term()
   def goal_mutation(thread_id, allow_running, operation, opts \\ [])
@@ -246,7 +246,10 @@ defmodule SymphonyElixir.Assistant.TurnManager do
 
   @impl true
   def handle_continue(:reconcile, state) do
-    case safe_reconcile() do
+    state = adopt_live_workers(state)
+    live_thread_ids = live_worker_thread_ids()
+
+    case safe_reconcile(live_thread_ids) do
       {:ok, n} when n > 0 ->
         Logger.info("assistant turns: reconciled #{n} orphaned turn(s) to interrupted")
 
@@ -303,7 +306,8 @@ defmodule SymphonyElixir.Assistant.TurnManager do
       duplicate_running_client_message?(state, thread_id, opts) ->
         {:reply, {:ok, :duplicate}, state}
 
-      running?(thread_id) or Map.has_key?(state, {:goal_mutation, thread_id}) ->
+      running?(thread_id) or Map.has_key?(state, {:turn, thread_id}) or
+          Map.has_key?(state, {:goal_mutation, thread_id}) ->
         {:reply, {:error, :turn_in_progress}, state}
 
       true ->
@@ -371,7 +375,6 @@ defmodule SymphonyElixir.Assistant.TurnManager do
         case persist_finish(thread_id, execution_id, result) do
           :ok ->
             Process.demonitor(ref, [:flush])
-            unregister(thread_id)
             broadcast_finish(thread_id, result)
             state = Map.delete(state, {:turn, thread_id})
             {:reply, {:accepted, result}, maybe_drain_after_turn(thread_id, state)}
@@ -429,8 +432,6 @@ defmodule SymphonyElixir.Assistant.TurnManager do
   def handle_cast({:note_run, thread_id, provider, conversation_id, run_id}, state) do
     case lookup(thread_id) do
       {pid, _old} when is_pid(pid) ->
-        update_registry(thread_id, {pid, run_id})
-
         with {:ok, thread} <- History.get_thread(thread_id) do
           History.note_run_identity(thread, %{
             provider: provider,
@@ -517,7 +518,6 @@ defmodule SymphonyElixir.Assistant.TurnManager do
     case find_turn_by_ref(state, ref) do
       {thread_id, entry} ->
         interrupt_result = maybe_interrupt_running(thread_id, entry.execution_id, reason)
-        unregister(thread_id)
         result = {:error, {:turn_crashed, reason}}
 
         if match?({:ok, _updated_thread}, interrupt_result) do
@@ -675,9 +675,15 @@ defmodule SymphonyElixir.Assistant.TurnManager do
     if is_function(run, 0) do
       with {:ok, thread} <- History.get_thread(thread_id),
            {:ok, _updated} <- History.start_turn_state(thread, start_attrs(prompt, opts, execution_id)),
-           {:ok, pid} <- spawn_worker(thread_id, execution_id, run, Keyword.get(opts, :reply_to)) do
+           {:ok, pid} <-
+             spawn_worker(
+               thread_id,
+               execution_id,
+               run,
+               Keyword.get(opts, :reply_to),
+               Keyword.get(opts, :client_message_id)
+             ) do
         ref = Process.monitor(pid)
-        register(thread_id, {pid, nil})
 
         {:ok, refreshed} = History.get_thread(thread_id)
         broadcast_from(self(), thread_id, {:turn_status, :running, History.turn_payload(refreshed)})
@@ -741,19 +747,54 @@ defmodule SymphonyElixir.Assistant.TurnManager do
     }
   end
 
-  defp spawn_worker(thread_id, execution_id, run, reply_to) do
-    Task.Supervisor.start_child(SymphonyElixir.TaskSupervisor, fn ->
-      result = run.()
+  defp spawn_worker(thread_id, execution_id, run, reply_to, client_message_id) do
+    manager = self()
 
-      case __MODULE__.finish_turn(thread_id, execution_id, result) do
-        {:accepted, accepted_result} ->
-          if is_pid(reply_to),
-            do: send(reply_to, {:assistant_turn_finished, execution_id, accepted_result})
+    case Task.Supervisor.start_child(SymphonyElixir.TaskSupervisor, fn ->
+           registration =
+             Registry.register(@registry, thread_id, %{
+               execution_id: execution_id,
+               reply_to: reply_to,
+               client_message_id: client_message_id,
+               phase: :awaiting_begin
+             })
 
-        _ ->
-          :ok
-      end
-    end)
+           send(manager, {:assistant_worker_registered, self(), registration})
+
+           receive do
+             :assistant_worker_begin ->
+               Registry.update_value(@registry, thread_id, &Map.put(&1, :phase, :running))
+               result = run.()
+               Registry.unregister(@registry, thread_id)
+
+               case __MODULE__.finish_turn(thread_id, execution_id, result) do
+                 {:accepted, accepted_result} ->
+                   if is_pid(reply_to),
+                     do: send(reply_to, {:assistant_turn_finished, execution_id, accepted_result})
+
+                 _ ->
+                   :ok
+               end
+           end
+         end) do
+      {:ok, pid} ->
+        receive do
+          {:assistant_worker_registered, ^pid, {:ok, _owner}} ->
+            send(pid, :assistant_worker_begin)
+            {:ok, pid}
+
+          {:assistant_worker_registered, ^pid, {:error, reason}} ->
+            Process.exit(pid, :kill)
+            {:error, {:worker_registration_failed, reason}}
+        after
+          5_000 ->
+            Process.exit(pid, :kill)
+            {:error, :worker_registration_timeout}
+        end
+
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
 
   defp persist_finish(thread_id, execution_id, result) do
@@ -888,11 +929,9 @@ defmodule SymphonyElixir.Assistant.TurnManager do
     case Map.pop(state, {:turn, thread_id}) do
       {%{monitor_ref: ref}, rest} ->
         Process.demonitor(ref, [:flush])
-        unregister(thread_id)
         maybe_delete_turn_queue(rest, thread_id, preserve_queue?)
 
       {_entry, rest} ->
-        unregister(thread_id)
         maybe_delete_turn_queue(rest, thread_id, preserve_queue?)
     end
   end
@@ -1061,18 +1100,16 @@ defmodule SymphonyElixir.Assistant.TurnManager do
   defp finish_status(_payload, {:ok, _}), do: :finished
   defp finish_status(_payload, _result), do: :failed
 
-  defp register(thread_id, value),
-    do: safe_registry(fn -> Registry.register(@registry, thread_id, value) end)
-
-  defp update_registry(thread_id, value) do
-    safe_registry(fn -> Registry.update_value(@registry, thread_id, fn _ -> value end) end)
+  defp lookup(thread_id) do
+    case lookup_worker(thread_id) do
+      {worker_pid, _worker_meta} -> {worker_pid, current_run_id(thread_id)}
+      _ -> nil
+    end
   end
 
-  defp unregister(thread_id), do: safe_registry(fn -> Registry.unregister(@registry, thread_id) end)
-
-  defp lookup(thread_id) do
+  defp lookup_worker(thread_id) do
     case safe_registry(fn -> Registry.lookup(@registry, thread_id) end) do
-      [{_owner, value} | _] -> value
+      [{worker_pid, worker_meta} | _] -> {worker_pid, worker_meta}
       _ -> nil
     end
   end
@@ -1083,12 +1120,60 @@ defmodule SymphonyElixir.Assistant.TurnManager do
     ArgumentError -> nil
   end
 
-  defp safe_reconcile do
-    History.reconcile_orphaned_turns()
+  defp safe_reconcile(live_thread_ids) do
+    History.reconcile_orphaned_turns(except_thread_ids: live_thread_ids)
   rescue
     error ->
       Logger.warning("assistant turns: boot reconcile failed: #{inspect(error)}")
       :error
+  end
+
+  defp adopt_live_workers(state) do
+    Enum.reduce(live_workers(), state, fn {thread_id, worker_pid, worker_meta}, acc ->
+      with true <- is_integer(thread_id),
+           true <- is_pid(worker_pid),
+           %{execution_id: execution_id} when is_binary(execution_id) <- worker_meta,
+           {:ok, thread} <- History.get_thread(thread_id),
+           %{"status" => "running", "execution_id" => ^execution_id} <-
+             History.current_turn(thread) do
+        if Map.get(worker_meta, :phase) == :awaiting_begin,
+          do: send(worker_pid, :assistant_worker_begin)
+
+        Map.put(acc, {:turn, thread_id}, %{
+          monitor_ref: Process.monitor(worker_pid),
+          pid: worker_pid,
+          reply_to: Map.get(worker_meta, :reply_to),
+          execution_id: execution_id,
+          client_message_id: Map.get(worker_meta, :client_message_id)
+        })
+      else
+        _ -> acc
+      end
+    end)
+  end
+
+  defp live_worker_thread_ids do
+    live_workers()
+    |> Enum.map(fn {thread_id, _pid, _meta} -> thread_id end)
+    |> Enum.filter(&is_integer/1)
+    |> Enum.uniq()
+  end
+
+  defp live_workers do
+    safe_registry(fn ->
+      Registry.select(@registry, [
+        {{:"$1", :"$2", :"$3"}, [], [{{:"$1", :"$2", :"$3"}}]}
+      ])
+    end) || []
+  end
+
+  defp current_run_id(thread_id) do
+    with {:ok, thread} <- History.get_thread(thread_id),
+         %{} = turn <- History.current_turn(thread) do
+      turn["run_id"]
+    else
+      _ -> nil
+    end
   end
 
   defp notify_reply_to(%{reply_to: reply_to, execution_id: execution_id}, result) when is_pid(reply_to) do

@@ -556,7 +556,7 @@ defmodule SymphonyElixir.Assistant.History do
     id = active_tool_id!(tool)
     tool = Map.put(tool, "id", id)
 
-    patch_current_turn(thread, fn turn ->
+    patch_running_turn(thread, fn turn ->
       tools =
         turn
         |> active_tools()
@@ -575,7 +575,7 @@ defmodule SymphonyElixir.Assistant.History do
   def remove_active_tool(%Thread{} = thread, tool_id) when is_binary(tool_id) do
     tool_id = active_tool_id!(%{"id" => tool_id})
 
-    patch_current_turn(thread, fn turn ->
+    patch_running_turn(thread, fn turn ->
       tools = Enum.reject(active_tools(turn), &(&1["id"] == tool_id))
 
       turn
@@ -589,7 +589,7 @@ defmodule SymphonyElixir.Assistant.History do
   @doc "Bumps the current turn activity timestamp."
   @spec touch_turn_activity(Thread.t()) :: {:ok, Thread.t()} | {:error, Ecto.Changeset.t()}
   def touch_turn_activity(%Thread{} = thread) do
-    patch_current_turn(thread, &Map.put(&1, "last_activity_at", now_iso()))
+    patch_running_turn(thread, &Map.put(&1, "last_activity_at", now_iso()))
   end
 
   @doc "Transition the current turn to completed."
@@ -816,13 +816,25 @@ defmodule SymphonyElixir.Assistant.History do
     }
   end
 
-  @doc "On boot: flip every thread whose current turn is still `running` to interrupted(serve_restart)."
-  @spec reconcile_orphaned_turns() :: {:ok, non_neg_integer()}
-  def reconcile_orphaned_turns do
+  @doc """
+  On boot, flip running turns without a live worker in `except_thread_ids` to
+  `interrupted(serve_restart)`.
+  """
+  @spec reconcile_orphaned_turns(keyword()) :: {:ok, non_neg_integer()}
+  def reconcile_orphaned_turns(opts \\ []) when is_list(opts) do
+    live_thread_ids =
+      opts
+      |> Keyword.get(:except_thread_ids, [])
+      |> MapSet.new()
+
     count =
       Thread
       |> Repo.all()
-      |> Enum.reduce(0, fn thread, acc -> acc + reconcile_orphaned_turn(thread) end)
+      |> Enum.reduce(0, fn thread, acc ->
+        if MapSet.member?(live_thread_ids, thread.id),
+          do: acc,
+          else: acc + reconcile_orphaned_turn(thread)
+      end)
 
     {:ok, count}
   end
@@ -1509,6 +1521,34 @@ defmodule SymphonyElixir.Assistant.History do
       end
     end)
     |> without_mutation_value()
+  end
+
+  defp patch_running_turn(%Thread{} = thread, fun) do
+    case current_turn(thread) do
+      %{"status" => "running"} = expected_turn ->
+        expected_identity = turn_identity(expected_turn)
+
+        mutate_metadata(thread, fn current ->
+          case current_turn(current) do
+            %{"status" => "running"} = turn ->
+              if turn_identity(turn) == expected_identity do
+                metadata =
+                  Map.put(current.metadata || %{}, @current_turn_key, fun.(turn))
+
+                {:update, metadata, nil}
+              else
+                {:noop, nil}
+              end
+
+            _ ->
+              {:noop, nil}
+          end
+        end)
+        |> without_mutation_value()
+
+      _ ->
+        {:ok, thread}
+    end
   end
 
   defp mutate_metadata(thread, mutation, retries_left \\ @cas_retries)

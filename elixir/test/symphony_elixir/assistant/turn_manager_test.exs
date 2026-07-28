@@ -45,6 +45,49 @@ defmodule SymphonyElixir.Assistant.TurnManagerTest do
     assert History.current_turn(done)["run_id"] == "tn"
   end
 
+  test "a manager restart adopts the live worker instead of orphaning its turn", %{
+    thread: thread
+  } do
+    test_pid = self()
+
+    run = fn ->
+      send(test_pid, {:restart_worker, self()})
+      receive do: (:finish_after_restart -> :ok)
+      {:ok, %{assistant_message: "survived"}}
+    end
+
+    assert {:ok, %{pid: worker, execution_id: execution_id}} =
+             TurnManager.start_turn(thread.id, "keep working", run: run, reply_to: self())
+
+    assert_receive {:restart_worker, ^worker}
+    old_manager = Process.whereis(TurnManager)
+    Process.exit(old_manager, :kill)
+
+    wait_until(fn ->
+      manager = Process.whereis(TurnManager)
+      is_pid(manager) and manager != old_manager
+    end)
+
+    assert TurnManager.running?(thread.id)
+    assert {:ok, running} = History.get_thread(thread.id)
+    assert History.current_turn(running)["status"] == "running"
+
+    send(worker, :finish_after_restart)
+
+    wait_until(fn ->
+      with {:ok, completed} <- History.get_thread(thread.id) do
+        History.current_turn(completed)["status"] == "completed"
+      else
+        _ -> false
+      end
+    end)
+
+    refute TurnManager.running?(thread.id)
+    assert {:ok, completed} = History.get_thread(thread.id)
+    assert History.current_turn(completed)["execution_id"] == execution_id
+    assert History.current_turn(completed)["status"] == "completed"
+  end
+
   test "slow goal mutation on one thread does not block another thread", %{thread: thread_a} do
     {:ok, thread_b} =
       History.create_project_session_thread("mgr", %{workspace_path: "/tmp/assistant/mgr-b"})
