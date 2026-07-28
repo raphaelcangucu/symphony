@@ -1,6 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useQuery } from "@tanstack/react-query";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 
 import { useTrackerClient } from "@/api/TrackerClientProvider";
@@ -15,6 +15,20 @@ const DRAFT_KEY_PREFIX = "symphony.new-session.draft";
 
 export function NewSessionRoute() {
   const router = useRouter();
+  const params = useLocalSearchParams<{
+    projectSlug?: string | string[];
+    issueIdentifier?: string | string[];
+    agentKind?: string | string[];
+    model?: string | string[];
+    effort?: string | string[];
+  }>();
+  const taskPrefill = {
+    projectSlug: routeParam(params.projectSlug),
+    issueIdentifier: routeParam(params.issueIdentifier),
+    agentKind: routeParam(params.agentKind),
+    model: routeParam(params.model),
+    effort: routeParam(params.effort),
+  };
   const client = useTrackerClient();
   const { dictate } = useAppRuntime();
   const { activeProfile } = useConnection();
@@ -38,12 +52,19 @@ export function NewSessionRoute() {
       };
     }
     void AsyncStorage.getItem(draftStorageKey(profileId)).then((value) => {
-      if (!cancelled) setDraft(parseDraft(value));
+      if (!cancelled) setDraft(prefillTask(parseDraft(value), taskPrefill));
     });
     return () => {
       cancelled = true;
     };
-  }, [profileId]);
+  }, [
+    profileId,
+    taskPrefill.agentKind,
+    taskPrefill.effort,
+    taskPrefill.issueIdentifier,
+    taskPrefill.model,
+    taskPrefill.projectSlug,
+  ]);
 
   const persistDraft = useCallback(
     (state: NewSessionState) => {
@@ -117,6 +138,31 @@ function parseDraft(value: string | null): NewSessionState {
   }
 }
 
+function prefillTask(
+  draft: NewSessionState,
+  params: {
+    projectSlug: string | null;
+    issueIdentifier: string | null;
+    agentKind: string | null;
+    model: string | null;
+    effort: string | null;
+  },
+): NewSessionState {
+  const { projectSlug, issueIdentifier } = params;
+  if (!projectSlug || !issueIdentifier) return draft;
+  const { agentKind } = params;
+  return {
+    ...draft,
+    scope: "project",
+    projectSlug,
+    issueIdentifier,
+    workspaceMode: "isolated",
+    agentKind: isAgentKind(agentKind) ? agentKind : draft.agentKind,
+    model: params.model,
+    effort: params.effort,
+  };
+}
+
 function optionalString(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value : null;
 }
@@ -131,6 +177,11 @@ function isAgentKind(value: unknown): value is NewSessionState["agentKind"] {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function routeParam(value: string | string[] | undefined): string | null {
+  const resolved = Array.isArray(value) ? value[0] : value;
+  return resolved?.trim() || null;
 }
 
 function errorMessage(error: unknown): string {

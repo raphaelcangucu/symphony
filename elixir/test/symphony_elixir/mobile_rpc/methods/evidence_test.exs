@@ -38,6 +38,30 @@ defmodule SymphonyElixir.MobileRpc.Methods.EvidenceTest do
     end
   end
 
+  defmodule FakeSessionEvidenceCollector do
+    def collect(project_slug, identifier, context) do
+      send(context.test_pid, {:collected_session_evidence, project_slug, identifier})
+      :ok
+    end
+  end
+
+  defmodule FakeOrchestratorService do
+    def list_executions do
+      [
+        %{
+          issue_identifier: "GAM-1",
+          session_id: "native-run-1",
+          execution_session_id: 91,
+          agent_kind: "codex",
+          requested_model: "gpt-5.6-sol",
+          requested_effort: "high",
+          resolved_model: "gpt-5.6-sol",
+          resolved_effort: "high"
+        }
+      ]
+    end
+  end
+
   setup %{tmp_dir: tmp_dir} do
     migrate_repo()
     SymphonyElixir.TestSupport.truncate_tracker!(Repo)
@@ -66,7 +90,8 @@ defmodule SymphonyElixir.MobileRpc.Methods.EvidenceTest do
       Store.persist("gam", "GAM-1", workspace, manifest,
         evidence_root: Path.join(tmp_dir, "durable"),
         evidence_dir: evidence_dir,
-        run_id: "run-1"
+        run_id: "run-1",
+        session_id: "native-run-1"
       )
 
     %{record: record, tmp_dir: tmp_dir}
@@ -177,6 +202,32 @@ defmodule SymphonyElixir.MobileRpc.Methods.EvidenceTest do
              )
 
     assert Base.decode64!(rest) == "rest"
+  end
+
+  test "collects direct-session evidence and presents task-scoped execution provenance" do
+    assert {:ok, %{"records" => [record]}} =
+             EvidenceService.call(
+               "evidence.list",
+               %{"project_slug" => "gam", "identifier" => "GAM-1"},
+               %{
+                 test_pid: self(),
+                 mobile_session_evidence_collector: FakeSessionEvidenceCollector,
+                 mobile_orchestrator_service: FakeOrchestratorService
+               }
+             )
+
+    assert_receive {:collected_session_evidence, "gam", "GAM-1"}
+
+    assert record["provenance"] == %{
+             "execution_path" => "orchestrator",
+             "agent_kind" => "codex",
+             "thread_id" => nil,
+             "execution_session_id" => 91,
+             "requested_model" => "gpt-5.6-sol",
+             "requested_effort" => "high",
+             "resolved_model" => "gpt-5.6-sol",
+             "resolved_effort" => "high"
+           }
   end
 
   test "rejects traversal, symlinks, unknown runs and offsets beyond EOF", %{record: record} do

@@ -28,6 +28,17 @@ export type EvidenceManifest = {
   runs: EvidenceRun[];
 };
 
+export type EvidenceProvenance = {
+  executionPath: "session" | "orchestrator" | null;
+  agentKind: string | null;
+  threadId: number | null;
+  executionSessionId: number | null;
+  requestedModel: string | null;
+  requestedEffort: string | null;
+  resolvedModel: string | null;
+  resolvedEffort: string | null;
+};
+
 export type EvidenceRecord = {
   id: number | null;
   runId: string;
@@ -35,6 +46,7 @@ export type EvidenceRecord = {
   status: string;
   uiChange: boolean;
   insertedAt: string | null;
+  provenance: EvidenceProvenance | null;
   manifest: EvidenceManifest;
 };
 
@@ -72,6 +84,7 @@ function normalizeEvidenceRecord(value: unknown): EvidenceRecord | null {
     status,
     uiChange: value.ui_change === true,
     insertedAt: nonEmptyString(value.inserted_at),
+    provenance: normalizeProvenance(value.provenance),
     manifest: {
       issue: nonEmptyString(manifest.issue),
       generatedAt: nonEmptyString(manifest.generated_at),
@@ -79,6 +92,25 @@ function normalizeEvidenceRecord(value: unknown): EvidenceRecord | null {
       runs,
     },
   };
+}
+
+function normalizeProvenance(value: unknown): EvidenceProvenance | null {
+  if (!isRecord(value)) return null;
+  const executionPath: EvidenceProvenance["executionPath"] =
+    value.execution_path === "session" || value.execution_path === "orchestrator"
+      ? value.execution_path
+      : null;
+  const provenance = {
+    executionPath,
+    agentKind: nonEmptyString(value.agent_kind),
+    threadId: positiveInteger(value.thread_id),
+    executionSessionId: positiveInteger(value.execution_session_id),
+    requestedModel: nonEmptyString(value.requested_model),
+    requestedEffort: nonEmptyString(value.requested_effort),
+    resolvedModel: nonEmptyString(value.resolved_model),
+    resolvedEffort: nonEmptyString(value.resolved_effort),
+  };
+  return Object.values(provenance).some((item) => item !== null) ? provenance : null;
 }
 
 function normalizeRun(value: unknown): EvidenceRun | null {

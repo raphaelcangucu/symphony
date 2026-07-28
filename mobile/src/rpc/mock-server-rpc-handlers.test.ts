@@ -218,6 +218,38 @@ describe("Symphony mock RPC handlers", () => {
     );
   });
 
+  it("serves generic task-scoped evidence without a comparison aggregate", () => {
+    const sent: RpcResponse[] = [];
+    const send = (message: RpcResponse) => sent.push(message);
+
+    handleRequest(
+      {
+        type: "rpc",
+        id: "evidence",
+        method: "evidence.list",
+        params: { project_slug: "symphony", identifier: "SYM-101" },
+      },
+      send,
+      socket,
+    );
+
+    expect(sent[0]).toMatchObject({
+      ok: true,
+      result: {
+        records: [
+          {
+            run_id: "mock-run-1",
+            provenance: {
+              execution_path: "session",
+              thread_id: 101,
+            },
+          },
+        ],
+      },
+    });
+    expect(JSON.stringify(sent[0])).not.toContain("parent_identifier");
+  });
+
   it("serves the copied Dev10x session and terminal DTOs", () => {
     const sent: RpcResponse[] = [];
     const send = (message: RpcResponse) => sent.push(message);
@@ -247,7 +279,7 @@ describe("Symphony mock RPC handlers", () => {
         type: "rpc",
         id: "markdown",
         method: "markdown.readTab",
-        params: { worktree: "id:101", tabId: "docs/mock-comparison.md" },
+        params: { worktree: "id:101", tabId: "docs/mock-evidence.md" },
       },
       send,
       socket,
@@ -281,7 +313,7 @@ describe("Symphony mock RPC handlers", () => {
     expect(sent[2]).toMatchObject({
       ok: true,
       result: {
-        tabId: "docs/mock-comparison.md",
+        tabId: "docs/mock-evidence.md",
         content: expect.stringContaining("Dev10x"),
         editable: false,
       },

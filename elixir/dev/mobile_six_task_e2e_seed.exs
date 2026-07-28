@@ -6,7 +6,7 @@ alias SymphonyElixir.LocalTracker.Context
       [host_label, project_slug, Path.expand(workspace_path)]
 
     _ ->
-      raise "usage: mix run dev/mobile_comparison_e2e_seed.exs HOST_LABEL PROJECT_SLUG WORKSPACE_PATH"
+      raise "usage: mix run dev/mobile_six_task_e2e_seed.exs HOST_LABEL PROJECT_SLUG WORKSPACE_PATH"
   end
 
 repo_root = Path.expand("../..", __DIR__)
@@ -32,7 +32,7 @@ end
 File.write!(
   Path.join(workspace_path, "README.md"),
   """
-  # Dev10x comparison source
+  # Dev10x E2E source
 
   Build the requested Dev10x site in this repository. Canonical logos, icon and
   favicon are already available under `public/`; reuse them without redrawing
@@ -113,9 +113,9 @@ codex:
 
 {:ok, _project} =
   Context.create_workspace_project(%{
-    name: "#{host_label} Dev10x Comparison",
+    name: "#{host_label} Dev10x E2E",
     slug: project_slug,
-    description: "Real local six-cell Dev10x mobile comparison",
+    description: "Real local six-task Dev10x mobile validation",
     tracker: %{kind: "local", config: %{}},
     workflow_statuses: [
       %{name: "Backlog", category: "backlog", position: 0, is_terminal: false},
@@ -139,7 +139,7 @@ codex:
     setup: %{
       workflow_markdown: workflow_markdown,
       validation_commands: [],
-      scan_summary: %{"purpose" => "dev10x-mobile-real-comparison"}
+      scan_summary: %{"purpose" => "dev10x-mobile-real-six-task-e2e"}
     }
   })
 

@@ -1,10 +1,11 @@
-defmodule SymphonyElixir.MobileComparison.SessionEvidenceCollector do
+defmodule SymphonyElixir.Evidence.SessionCollector do
   @moduledoc """
-  Promotes evidence written by direct assistant sessions into durable storage.
+  Promotes evidence written by ordinary direct issue sessions into durable
+  task evidence.
 
-  Orchestrator runs already persist evidence during their completion pipeline.
-  Issue sessions use the assistant channel directly, so their workspace
-  manifests are collected lazily when a comparison snapshot requests them.
+  Orchestrator runs persist evidence in their completion pipeline. Direct
+  assistant sessions use the assistant runtime, so their workspace manifests
+  are reconciled when task evidence is requested.
   """
 
   alias SymphonyElixir.Assistant.History
@@ -13,33 +14,22 @@ defmodule SymphonyElixir.MobileComparison.SessionEvidenceCollector do
   @spec collect(String.t(), String.t(), map()) :: :ok | {:error, term()}
   def collect(project_slug, identifier, context)
       when is_binary(project_slug) and is_binary(identifier) and is_map(context) do
-    history = Map.get(context, :comparison_history, History)
-    store = Map.get(context, :comparison_evidence_store, Store)
+    history = Map.get(context, :mobile_evidence_history, History)
+    store = Map.get(context, :mobile_evidence_store, Store)
 
     [scope: "issue_session", project_slug: project_slug, issue_identifier: identifier]
     |> history.list_threads()
-    |> target_threads(context)
     |> Enum.sort_by(&(value(&1, :id) || 0), :desc)
-    |> Enum.reduce_while(:ok, fn thread, _result ->
+    |> Enum.reduce_while(:ok, fn thread, :ok ->
       case collect_thread(store, project_slug, identifier, thread) do
+        :ok -> {:cont, :ok}
         :manifest_missing -> {:cont, :ok}
-        :ok -> {:halt, :ok}
         {:error, reason} -> {:halt, {:error, reason}}
       end
     end)
   end
 
   def collect(_project_slug, _identifier, _context), do: {:error, :invalid_params}
-
-  defp target_threads(threads, context) do
-    case Map.get(context, :comparison_session_id) do
-      thread_id when is_integer(thread_id) and thread_id > 0 ->
-        Enum.filter(threads, &(value(&1, :id) == thread_id))
-
-      _other ->
-        threads
-    end
-  end
 
   defp collect_thread(store, project_slug, identifier, thread) do
     workspace = value(thread, :workspace_path)

@@ -1,7 +1,9 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 
 import { useTrackerClient } from "@/api/TrackerClientProvider";
+import { useHostTransport } from "@/api/HostTransportContext";
 import { useConnection } from "@/auth/ConnectionProvider";
+import { useTaskEvidence } from "@/features/evidence/useTaskEvidence";
 
 import { IssueScreen } from "./IssueScreen";
 import { useIssueDetail } from "./useIssueDetail";
@@ -40,8 +42,25 @@ function ConnectedIssueRoute({
   router: ReturnType<typeof useRouter>;
 }) {
   const detail = useIssueDetail({ client, profileId, projectSlug, identifier });
+  const transport = useHostTransport();
+  const evidence = useTaskEvidence({ transport, projectSlug, identifier });
   const threadRoute = (suffix = "") => {
-    if (detail.threadId) router.push(`/codex/session/${detail.threadId}${suffix}`);
+    if (detail.threadId) {
+      router.push(`/codex/session/${detail.threadId}${suffix}`);
+      return;
+    }
+    if (!suffix) {
+      router.push({
+        pathname: "/codex/new-session",
+        params: {
+          projectSlug,
+          issueIdentifier: identifier,
+          agentKind: detail.issue?.agentKind ?? undefined,
+          model: detail.issue?.model ?? undefined,
+          effort: detail.issue?.effort ?? undefined,
+        },
+      });
+    }
   };
   return (
     <IssueScreen
@@ -49,6 +68,7 @@ function ConnectedIssueRoute({
       comments={detail.comments}
       dispatching={detail.dispatching}
       error={detail.error}
+      evidenceCount={evidence.records.length}
       issue={detail.issue}
       loading={detail.loading}
       onAddComment={detail.addComment}
@@ -57,9 +77,9 @@ function ConnectedIssueRoute({
       onGoalAction={detail.goalAction}
       onCreateSubtask={detail.createSubtask}
       onOpenDiff={() => threadRoute("/diff")}
-      onOpenComparison={() =>
+      onOpenEvidence={() =>
         router.push(
-          `/codex/issue/${encodeURIComponent(projectSlug)}/${encodeURIComponent(identifier)}/comparison`,
+          `/codex/issue/${encodeURIComponent(projectSlug)}/${encodeURIComponent(identifier)}/evidence`,
         )
       }
       onOpenFiles={() => threadRoute("/files")}

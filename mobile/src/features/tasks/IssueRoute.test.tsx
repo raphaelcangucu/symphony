@@ -3,6 +3,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 
 import { useTrackerClient } from "@/api/TrackerClientProvider";
 import { useConnection } from "@/auth/ConnectionProvider";
+import { useTaskEvidence } from "@/features/evidence/useTaskEvidence";
 import { ThemeProvider } from "@/theme/ThemeProvider";
 
 import { IssueRoute } from "./IssueRoute";
@@ -14,6 +15,7 @@ jest.mock("expo-router", () => ({
 }));
 jest.mock("@/api/TrackerClientProvider", () => ({ useTrackerClient: jest.fn() }));
 jest.mock("@/auth/ConnectionProvider", () => ({ useConnection: jest.fn() }));
+jest.mock("@/features/evidence/useTaskEvidence", () => ({ useTaskEvidence: jest.fn() }));
 jest.mock("./useIssueDetail", () => ({ useIssueDetail: jest.fn() }));
 
 const push = jest.fn();
@@ -29,6 +31,13 @@ describe("IssueRoute", () => {
     jest.mocked(useConnection).mockReturnValue({
       activeProfile: { id: "remote-1" },
     } as ReturnType<typeof useConnection>);
+    jest.mocked(useTaskEvidence).mockReturnValue({
+      records: [],
+      loading: false,
+      error: null,
+      refresh: jest.fn(),
+      cached: false,
+    } as ReturnType<typeof useTaskEvidence>);
     jest.mocked(useIssueDetail).mockReturnValue({
       issue: {
         id: "1",

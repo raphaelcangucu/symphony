@@ -62,6 +62,8 @@ export type IssueSummary = {
   assignee: string | null;
   creator: string | null;
   agentKind: AgentKind | null;
+  model?: string | null;
+  effort?: string | null;
   agentGoal: string | null;
   branchName: string | null;
   parentIdentifier?: string | null;

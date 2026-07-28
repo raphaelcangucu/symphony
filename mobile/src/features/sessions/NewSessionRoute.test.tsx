@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 
 import type { TrackerClient } from "@/api/contracts";
 import { useTrackerClient } from "@/api/TrackerClientProvider";
@@ -10,7 +10,7 @@ import { ThemeProvider } from "@/theme/ThemeProvider";
 
 import { NewSessionRoute } from "./NewSessionRoute";
 
-jest.mock("expo-router", () => ({ useRouter: jest.fn() }));
+jest.mock("expo-router", () => ({ useLocalSearchParams: jest.fn(), useRouter: jest.fn() }));
 jest.mock("@/api/TrackerClientProvider", () => ({ useTrackerClient: jest.fn() }));
 jest.mock("@/auth/ConnectionProvider", () => ({ useConnection: jest.fn() }));
 jest.mock("@react-native-async-storage/async-storage", () => ({
@@ -70,6 +70,7 @@ function renderRoute() {
 describe("NewSessionRoute", () => {
   beforeEach(() => {
     jest.mocked(useRouter).mockReturnValue(router as never);
+    jest.mocked(useLocalSearchParams).mockReturnValue({});
     jest.mocked(useConnection).mockReturnValue({
       activeProfile: {
         id: "remote-1",
@@ -104,6 +105,55 @@ describe("NewSessionRoute", () => {
       ),
     );
     expect(AsyncStorage.removeItem).not.toHaveBeenCalled();
+    view.queryClient.clear();
+  });
+
+  it("prefills an ordinary task issue session with its persisted agent settings", async () => {
+    const client = createClient();
+    client.assistantCatalog.mockResolvedValue({
+      defaultAgent: "codex",
+      agents: [
+        {
+          agent: "claude",
+          agentLabel: "Claude",
+          defaultModel: "claude-opus-5",
+          models: [
+            {
+              model: "claude-opus-5",
+              label: "Opus 5",
+              efforts: [{ effort: "high", label: "High" }],
+            },
+          ],
+        },
+      ],
+    });
+    jest.mocked(useTrackerClient).mockReturnValue(client);
+    jest.mocked(useLocalSearchParams).mockReturnValue({
+      projectSlug: "symphony",
+      issueIdentifier: "MOB-7",
+      agentKind: "claude",
+      model: "claude-opus-5",
+      effort: "high",
+    });
+
+    const view = renderRoute();
+    await screen.findByLabelText("Message");
+    fireEvent.changeText(screen.getByLabelText("Message"), "Build the site");
+    fireEvent.press(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() =>
+      expect(client.createThread).toHaveBeenCalledWith(
+        expect.objectContaining({
+          scope: "issue_session",
+          projectSlug: "symphony",
+          issueIdentifier: "MOB-7",
+          isolatedWorkspace: true,
+          agentKind: "claude",
+          model: "claude-opus-5",
+          effort: "high",
+        }),
+      ),
+    );
     view.queryClient.clear();
   });
 });

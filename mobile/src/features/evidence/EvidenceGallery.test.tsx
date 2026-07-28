@@ -13,7 +13,7 @@ describe("EvidenceGallery", () => {
     render(
       <ThemeProvider colorScheme="dark">
         <EvidenceGallery
-          groups={[{ cellLabel: "Session · Codex", record }]}
+          groups={[{ label: "Session · Codex", record }]}
           onOpenArtifact={onOpenArtifact}
         />
       </ThemeProvider>,
@@ -61,6 +61,7 @@ export function evidenceRecord(): EvidenceRecord {
     status: "passed",
     uiChange: true,
     insertedAt: "2026-07-27T10:00:00Z",
+    provenance: null,
     manifest: {
       issue: "DEV-2",
       generatedAt: "2026-07-27T10:00:00Z",

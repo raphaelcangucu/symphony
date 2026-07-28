@@ -189,6 +189,30 @@ defmodule SymphonyElixir.MobileRpc.DispatcherTest do
     end
   end
 
+  test "does not advertise or dispatch comparison product methods" do
+    dispatcher =
+      Dispatcher.new(%{
+        host_id: "host_01",
+        host_name: "Mac Studio",
+        protocol: 1,
+        device_id: "device_01"
+      })
+
+    capabilities = dispatcher.context.capabilities
+    refute Enum.any?(capabilities, &String.starts_with?(&1, "comparisons."))
+
+    assert {:error, response, ^dispatcher} =
+             Dispatcher.handle_frame(
+               rpc("comparison", "comparisons.get", %{
+                 "project_slug" => "symphony",
+                 "identifier" => "MOB-7"
+               }),
+               dispatcher
+             )
+
+    assert Jason.decode!(response)["error"]["code"] == "method_not_allowed"
+  end
+
   test "cleans each registered subscription exactly once" do
     parent = self()
 

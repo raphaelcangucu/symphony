@@ -939,6 +939,8 @@ function mapIssue(payload: unknown): IssueSummary {
     assignee: optionalText(record.assignee_id),
     creator: optionalText(record.creator),
     agentKind: readAgentKind(record.agent_kind),
+    model: optionalText(record.model),
+    effort: optionalText(record.effort),
     agentGoal: optionalText(record.agent_goal),
     branchName: optionalText(record.branch_name),
     parentIdentifier: optionalText(record.parent_identifier),

@@ -3,7 +3,6 @@ import { fireEvent, render, screen } from "@testing-library/react-native";
 import type { IssueComment, IssueSummary } from "@/api/contracts";
 import { ThemeProvider } from "@/theme/ThemeProvider";
 
-import { comparisonDescription } from "../comparisons/comparison-task";
 import { IssueScreen } from "./IssueScreen";
 
 const issue: IssueSummary = {
@@ -20,6 +19,8 @@ const issue: IssueSummary = {
   assignee: "Raphael",
   creator: "Raphael",
   agentKind: "codex",
+  model: "gpt-5.6-sol",
+  effort: "high",
   agentGoal: "Ship mobile parity",
   branchName: "agent/mobile",
   createdAt: "",
@@ -45,6 +46,7 @@ function renderScreen(props: Partial<React.ComponentProps<typeof IssueScreen>> =
     subtasks: [],
     loading: false,
     error: null,
+    evidenceCount: 0,
     saving: false,
     dispatching: false,
     onBack: jest.fn(),
@@ -53,7 +55,7 @@ function renderScreen(props: Partial<React.ComponentProps<typeof IssueScreen>> =
     onGoalAction: jest.fn(),
     onCreateSubtask: jest.fn(),
     onOpenDiff: jest.fn(),
-    onOpenComparison: jest.fn(),
+    onOpenEvidence: jest.fn(),
     onOpenFiles: jest.fn(),
     onOpenPreview: jest.fn(),
     onOpenPullRequest: jest.fn(),
@@ -72,15 +74,21 @@ function renderScreen(props: Partial<React.ComponentProps<typeof IssueScreen>> =
 
 describe("IssueScreen", () => {
   it("renders issue context, comments, and workspace tools", () => {
-    renderScreen();
+    const onOpenEvidence = jest.fn();
+    renderScreen({ evidenceCount: 2, onOpenEvidence });
 
     expect(screen.getByText("MOB-7")).toBeTruthy();
     expect(screen.getByDisplayValue("Bring Dev10x workflows")).toBeTruthy();
     expect(screen.getByText("Ship mobile parity")).toBeTruthy();
+    expect(screen.getByText("gpt-5.6-sol")).toBeTruthy();
+    expect(screen.getByText("high")).toBeTruthy();
     expect(screen.getByText("Continue from the task screen.")).toBeTruthy();
     for (const tool of ["Terminal", "Preview", "Files", "Diff", "Pull request"]) {
       expect(screen.getByRole("button", { name: tool })).toBeTruthy();
     }
+    expect(screen.getByText("2 durable runs")).toBeTruthy();
+    fireEvent.press(screen.getByRole("button", { name: "Open evidence" }));
+    expect(onOpenEvidence).toHaveBeenCalledTimes(1);
   });
 
   it("edits, comments, dispatches, and controls the goal", () => {
@@ -133,32 +141,16 @@ describe("IssueScreen", () => {
     expect(onCreateSubtask).toHaveBeenCalledWith("Handle questions");
   });
 
-  it("opens comparison setup before dispatch and the live comparison after children exist", () => {
-    const onOpenComparison = jest.fn();
-    const comparisonIssue = {
-      ...issue,
-      description: comparisonDescription("Create the best Dev10x landing."),
-    };
-    const first = renderScreen({ issue: comparisonIssue, onOpenComparison });
-
-    fireEvent.press(screen.getByRole("button", { name: "Run comparison" }));
-    expect(onOpenComparison).toHaveBeenCalledTimes(1);
-
-    first.unmount();
+  it("does not infer comparison actions from task text or subtasks", () => {
     renderScreen({
-      issue: comparisonIssue,
-      subtasks: [
-        {
-          ...issue,
-          id: "2",
-          identifier: "MOB-8",
-          title: "[dev10x-comparison:session-codex] Session · GPT-5.6 Sol · High",
-        },
-      ],
-      onOpenComparison,
+      issue: {
+        ...issue,
+        description: "Create six independent validation tasks.",
+      },
+      subtasks: [{ ...issue, id: "2", identifier: "MOB-8", title: "Session validation" }],
     });
 
-    fireEvent.press(screen.getByRole("button", { name: "Open comparison" }));
-    expect(onOpenComparison).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole("button", { name: "Run comparison" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Open comparison" })).toBeNull();
   });
 });

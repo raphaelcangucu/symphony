@@ -45,6 +45,8 @@ const METHODS = [
   "orchestrator.executions.subscribe",
   "orchestrator.session.subscribe",
   "orchestrator.session.command",
+  "evidence.list",
+  "evidence.artifact.read",
   "workspace.request",
   "git.request",
   "previews.request",
@@ -422,6 +424,12 @@ export function handleRequest(request: RpcRequest, send: Send, ws: WebSocket): v
       case "orchestrator.session.command":
         handleMockOrchestratorCommand(request, respond, ws);
         break;
+      case "evidence.list":
+        respond(success(request.id, mockTaskEvidence()));
+        break;
+      case "evidence.artifact.read":
+        respond(success(request.id, mockEvidenceArtifact(request.params)));
+        break;
       case "terminal.command":
         handleTerminalCommand(request, respond, ws);
         break;
@@ -537,6 +545,69 @@ export function handleRequest(request: RpcRequest, send: Send, ws: WebSocket): v
       ),
     );
   }
+}
+
+function mockTaskEvidence(): Record<string, unknown> {
+  return {
+    records: [
+      {
+        id: 1,
+        run_id: "mock-run-1",
+        session_id: "assistant-thread:101",
+        status: "passed",
+        ui_change: true,
+        inserted_at: now(),
+        provenance: {
+          execution_path: "session",
+          agent_kind: "codex",
+          thread_id: 101,
+          execution_session_id: null,
+          requested_model: "gpt-5.6-sol",
+          requested_effort: "high",
+          resolved_model: "gpt-5.6-sol",
+          resolved_effort: "high",
+        },
+        manifest: {
+          issue: "SYM-101",
+          generated_at: now(),
+          ui_change: true,
+          runs: [
+            {
+              kind: "e2e",
+              repo: "symphony",
+              command: "npm run test:e2e:android",
+              status: "passed",
+              duration_ms: 4200,
+              report: {
+                path: "artifacts/mock-report.md",
+                label: "Focused test report",
+              },
+              proof: { assertions: "development fixture" },
+            },
+          ],
+        },
+      },
+    ],
+  };
+}
+
+function mockEvidenceArtifact(params: Record<string, unknown>): Record<string, unknown> {
+  const content = Buffer.from(
+    "# Dev10x mock evidence\n\nDevelopment-only task evidence fixture.\n",
+    "utf8",
+  );
+  const offset = Math.max(0, Number(params.offset) || 0);
+  const length = Math.max(1, Number(params.length) || content.length);
+  const chunk = content.subarray(offset, Math.min(offset + length, content.length));
+  const nextOffset = offset + chunk.length;
+  return {
+    content: chunk.toString("base64"),
+    content_type: "text/markdown",
+    size: content.length,
+    offset,
+    next_offset: nextOffset,
+    eof: nextOffset >= content.length,
+  };
 }
 
 export function unsubscribe(ws: WebSocket, subscriptionId: string): boolean {
@@ -817,7 +888,7 @@ function closeCopiedTerminal(request: RpcRequest, send: Send, ws: WebSocket): vo
 }
 
 function copiedMarkdownTab(params: Record<string, unknown>): Record<string, unknown> {
-  const tabId = text(params.tabId) || "docs/mock-comparison.md";
+  const tabId = text(params.tabId) || "docs/mock-evidence.md";
   const content =
     "# Dev10x mobile\n\nThis read-only document comes from the Symphony mock RPC host.";
   return {
@@ -1388,7 +1459,7 @@ function workspaceResponse(params: Record<string, unknown>): unknown {
     return {
       data: {
         path: path.split("/documents/")[1],
-        content: "# Mock comparison\n\nExercise the proven Dev10x mock-server workflow.",
+        content: "# Mock evidence\n\nExercise the proven Dev10x mock-server workflow.",
       },
     };
   }
@@ -1399,9 +1470,9 @@ function workspaceResponse(params: Record<string, unknown>): unknown {
         reason: null,
         documents: [
           {
-            id: "docs/mock-comparison.md",
-            path: "docs/mock-comparison.md",
-            title: "Mock comparison",
+            id: "docs/mock-evidence.md",
+            path: "docs/mock-evidence.md",
+            title: "Mock evidence",
             updated_at: now(),
           },
         ],
@@ -1435,10 +1506,10 @@ function workspaceResponse(params: Record<string, unknown>): unknown {
           updated_at: now(),
         },
         {
-          id: "docs/mock-comparison.md",
-          path: "docs/mock-comparison.md",
-          name: "mock-comparison.md",
-          title: "Dev10x comparison",
+          id: "docs/mock-evidence.md",
+          path: "docs/mock-evidence.md",
+          name: "mock-evidence.md",
+          title: "Dev10x evidence",
           kind: "markdown",
           size: 180,
           updated_at: now(),

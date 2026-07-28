@@ -13,6 +13,15 @@ describe("evidence contract", () => {
           status: "passed",
           ui_change: true,
           inserted_at: "2026-07-27T10:00:00Z",
+          provenance: {
+            execution_path: "session",
+            agent_kind: "codex",
+            thread_id: 42,
+            requested_model: "gpt-5.6-sol",
+            requested_effort: "high",
+            resolved_model: "gpt-5.6-sol",
+            resolved_effort: "high",
+          },
           manifest: {
             issue: "DEV-2",
             generated_at: "2026-07-27T09:59:00Z",
@@ -49,6 +58,16 @@ describe("evidence contract", () => {
       sessionId: "session-1",
       status: "passed",
       uiChange: true,
+      provenance: {
+        executionPath: "session",
+        agentKind: "codex",
+        threadId: 42,
+        executionSessionId: null,
+        requestedModel: "gpt-5.6-sol",
+        requestedEffort: "high",
+        resolvedModel: "gpt-5.6-sol",
+        resolvedEffort: "high",
+      },
     });
     expect(records[0].manifest.runs[0].artifacts).toEqual([
       {
@@ -78,7 +97,7 @@ describe("evidence contract", () => {
     ]);
   });
 
-  it("accepts the evidence array already embedded in a comparison cell", () => {
+  it("accepts a direct array returned by a task-scoped cache", () => {
     expect(
       normalizeEvidenceRecords([
         {

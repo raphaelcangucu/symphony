@@ -34,16 +34,17 @@ describe("CreateTaskScreen", () => {
     fireEvent.press(screen.getByRole("button", { name: "Create task" }));
 
     expect(onSubmit).toHaveBeenCalledWith({
-      taskKind: "standard",
       title: "Complete Dev10x mobile",
       description: "Finish operational tools",
       status: "In Progress",
       agent: "codex",
+      model: null,
+      effort: null,
       goal: "Ship the complete mobile app",
     });
   });
 
-  it("shows the fixed high matrix and creates only a Dev10x comparison parent", () => {
+  it("offers no comparison product mode and creates one ordinary top-level task", () => {
     const onSubmit = jest.fn();
     render(
       <ThemeProvider colorScheme="dark">
@@ -62,30 +63,84 @@ describe("CreateTaskScreen", () => {
       </ThemeProvider>,
     );
 
-    fireEvent.press(screen.getByRole("button", { name: "Dev10x comparison" }));
-
-    for (const label of [
-      "Session · GPT-5.6 Sol · High",
-      "Session · Grok 4.5 · High",
-      "Session · Opus 5 · High",
-      "Orchestrator · GPT-5.6 Sol · High",
-      "Orchestrator · Grok 4.5 · High",
-      "Orchestrator · Opus 5 · High",
-    ]) {
-      expect(screen.getByText(label)).toBeTruthy();
-    }
+    expect(screen.queryByRole("button", { name: "Dev10x comparison" })).toBeNull();
+    expect(screen.queryByText("Official high matrix")).toBeNull();
 
     fireEvent.changeText(screen.getByLabelText("Task title"), "Build the Dev10x landing");
-    fireEvent.changeText(screen.getByLabelText("Task description"), "Create and compare the site.");
-    fireEvent.press(screen.getByRole("button", { name: "Create comparison task" }));
+    fireEvent.changeText(screen.getByLabelText("Task description"), "Create the site.");
+    fireEvent.press(screen.getByRole("button", { name: "Create task" }));
 
     expect(onSubmit).toHaveBeenCalledWith({
-      taskKind: "comparison",
       title: "Build the Dev10x landing",
-      description: "Create and compare the site.",
+      description: "Create the site.",
       status: "Backlog",
       agent: "codex",
+      model: null,
+      effort: null,
       goal: null,
     });
+  });
+
+  it("persists the selected ordinary task agent, model, and effort", () => {
+    const onSubmit = jest.fn();
+    render(
+      <ThemeProvider colorScheme="dark">
+        <CreateTaskScreen
+          catalog={{
+            defaultAgent: "codex",
+            agents: [
+              {
+                agent: "codex",
+                agentLabel: "Codex",
+                defaultModel: "gpt-5.6-sol",
+                models: [
+                  {
+                    model: "gpt-5.6-sol",
+                    label: "GPT-5.6 Sol",
+                    efforts: [{ effort: "high", label: "High" }],
+                  },
+                ],
+              },
+              {
+                agent: "claude",
+                agentLabel: "Claude",
+                defaultModel: "claude-opus-5",
+                models: [
+                  {
+                    model: "claude-opus-5",
+                    label: "Opus 5",
+                    efforts: [{ effort: "high", label: "High" }],
+                  },
+                ],
+              },
+            ],
+          }}
+          error={null}
+          initialAgent="codex"
+          loading={false}
+          onBack={jest.fn()}
+          onProjectChange={jest.fn()}
+          onSubmit={onSubmit}
+          projectSlug="dev10x"
+          projects={[{ id: "1", slug: "dev10x", name: "Dev10x" }]}
+          statuses={["Backlog"]}
+          submitting={false}
+        />
+      </ThemeProvider>,
+    );
+
+    fireEvent.changeText(screen.getByLabelText("Task title"), "Claude session task");
+    fireEvent.press(screen.getByRole("button", { name: "Select agent Claude" }));
+    fireEvent.press(screen.getByRole("button", { name: "Select model Opus 5" }));
+    fireEvent.press(screen.getByRole("button", { name: "Select effort High" }));
+    fireEvent.press(screen.getByRole("button", { name: "Create task" }));
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agent: "claude",
+        model: "claude-opus-5",
+        effort: "high",
+      }),
+    );
   });
 });

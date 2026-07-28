@@ -6,16 +6,18 @@ import { useAppTheme } from "@/theme/ThemeProvider";
 import type { EvidenceArtifact, EvidenceRecord, EvidenceRun } from "./evidence-contract";
 
 export type EvidenceGalleryGroup = {
-  cellLabel: string;
+  label: string;
   record: EvidenceRecord;
 };
 
 export function EvidenceGallery({
   groups,
   onOpenArtifact,
+  onOpenLog,
 }: {
   groups: EvidenceGalleryGroup[];
   onOpenArtifact(artifact: EvidenceArtifact, record: EvidenceRecord): void;
+  onOpenLog?(record: EvidenceRecord): void;
 }) {
   const { colors } = useAppTheme();
 
@@ -29,18 +31,48 @@ export function EvidenceGallery({
 
   return (
     <View style={styles.groups}>
-      {groups.map(({ cellLabel, record }) => (
+      {groups.map(({ label, record }) => (
         <View
-          key={`${cellLabel}:${record.runId}`}
+          key={`${label}:${record.runId}`}
           style={[
             styles.group,
             { backgroundColor: colors.bgPanel, borderColor: colors.borderSubtle },
           ]}
         >
-          <Text style={[styles.cell, { color: colors.textPrimary }]}>{cellLabel}</Text>
+          <Text style={[styles.cell, { color: colors.textPrimary }]}>{label}</Text>
           <Text style={[styles.run, { color: colors.statusGreen }]}>
             {record.runId} · {record.status}
           </Text>
+          {record.provenance ? (
+            <View style={styles.provenance}>
+              <Text style={[styles.proof, { color: colors.textSecondary }]}>
+                Requested{" "}
+                {modelEffort(record.provenance.requestedModel, record.provenance.requestedEffort)}
+              </Text>
+              <Text style={[styles.proof, { color: colors.textMuted }]}>
+                Resolved{" "}
+                {modelEffort(record.provenance.resolvedModel, record.provenance.resolvedEffort)}
+              </Text>
+            </View>
+          ) : null}
+          {onOpenLog && record.provenance?.executionPath ? (
+            <Pressable
+              accessibilityLabel={
+                record.provenance.executionPath === "session"
+                  ? "Open session log"
+                  : "Open orchestrator log"
+              }
+              accessibilityRole="button"
+              onPress={() => onOpenLog(record)}
+              style={[styles.logAction, { borderColor: colors.borderStrong }]}
+            >
+              <Text style={{ color: colors.accent, fontSize: 13, fontWeight: "800" }}>
+                {record.provenance.executionPath === "session"
+                  ? "Open session log"
+                  : "Open orchestrator log"}
+              </Text>
+            </Pressable>
+          ) : null}
           {record.manifest.runs.map((run, index) => (
             <RunEvidence
               key={`${record.runId}:${run.taskId ?? run.kind}:${index}`}
@@ -122,6 +154,11 @@ function durationLabel(durationMs: number | null): string {
   return `${(durationMs / 1000).toFixed(1)}s`;
 }
 
+function modelEffort(model: string | null, effort: string | null): string {
+  if (!model) return "unavailable";
+  return effort ? `${model} · ${effort}` : model;
+}
+
 function kindLabel(kind: string): string {
   return kind.charAt(0).toUpperCase() + kind.slice(1);
 }
@@ -149,6 +186,16 @@ const styles = StyleSheet.create({
   empty: { fontSize: 14, lineHeight: 20, padding: spacing.md },
   group: { borderRadius: radii.md, borderWidth: 1, gap: spacing.sm, padding: spacing.md },
   groups: { gap: spacing.sm },
+  logAction: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    minHeight: 38,
+    justifyContent: "center",
+    paddingHorizontal: spacing.md,
+  },
   proof: { fontSize: 12, lineHeight: 17 },
+  provenance: { gap: 2 },
   run: { fontSize: 12, fontWeight: "800" },
 });

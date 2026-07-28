@@ -2,8 +2,12 @@ import { useEffect, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import type { AgentKind, CreateIssueInput, ProjectSummary } from "@/api/contracts";
-import { COMPARISON_CELLS } from "@/features/comparisons/comparison-contract";
+import type {
+  AgentKind,
+  AssistantCatalog,
+  CreateIssueInput,
+  ProjectSummary,
+} from "@/api/contracts";
 import { radii, spacing } from "@/theme/tokens";
 import { useAppTheme } from "@/theme/ThemeProvider";
 
@@ -11,6 +15,7 @@ type CreateTaskScreenProps = {
   projects: ProjectSummary[];
   projectSlug: string | null;
   statuses: string[];
+  catalog?: AssistantCatalog | null;
   initialAgent: AgentKind;
   loading: boolean;
   submitting: boolean;
@@ -20,14 +25,13 @@ type CreateTaskScreenProps = {
   onSubmit(input: CreateTaskSubmission): void;
 };
 
-export type CreateTaskSubmission = CreateIssueInput & {
-  taskKind: "standard" | "comparison";
-};
+export type CreateTaskSubmission = CreateIssueInput;
 
 export function CreateTaskScreen({
   projects,
   projectSlug,
   statuses,
+  catalog = null,
   initialAgent,
   loading,
   submitting,
@@ -41,13 +45,24 @@ export function CreateTaskScreen({
   const [description, setDescription] = useState("");
   const [goal, setGoal] = useState("");
   const [status, setStatus] = useState(statuses[0] ?? "");
-  const [taskKind, setTaskKind] = useState<CreateTaskSubmission["taskKind"]>("standard");
+  const [agent, setAgent] = useState<AgentKind>(initialAgent);
+  const [model, setModel] = useState<string | null>(null);
+  const [effort, setEffort] = useState<string | null>(null);
 
   useEffect(() => {
     if (!statuses.includes(status)) setStatus(statuses[0] ?? "");
   }, [status, statuses]);
+  useEffect(() => {
+    if (!catalog?.agents.some((item) => item.agent === agent)) {
+      setAgent(initialAgent);
+      setModel(null);
+      setEffort(null);
+    }
+  }, [agent, catalog, initialAgent]);
 
   const valid = Boolean(projectSlug && title.trim() && status);
+  const selectedAgent = catalog?.agents.find((item) => item.agent === agent) ?? null;
+  const selectedModel = selectedAgent?.models.find((item) => item.model === model) ?? null;
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.bgBase }]}>
       <View style={styles.header}>
@@ -66,42 +81,6 @@ export function CreateTaskScreen({
       </View>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         {error ? <Text style={{ color: colors.statusRed }}>{error}</Text> : null}
-        <Text style={[styles.label, { color: colors.textMuted }]}>Task type</Text>
-        <View style={styles.chips}>
-          <Choice
-            accessibilityLabel="Standard task"
-            label="Standard task"
-            onPress={() => setTaskKind("standard")}
-            selected={taskKind === "standard"}
-          />
-          <Choice
-            accessibilityLabel="Dev10x comparison"
-            label="Dev10x comparison"
-            onPress={() => setTaskKind("comparison")}
-            selected={taskKind === "comparison"}
-          />
-        </View>
-        {taskKind === "comparison" ? (
-          <View
-            style={[
-              styles.matrix,
-              { backgroundColor: colors.bgPanel, borderColor: colors.borderSubtle },
-            ]}
-          >
-            <Text style={[styles.matrixTitle, { color: colors.textPrimary }]}>
-              Official high matrix
-            </Text>
-            {COMPARISON_CELLS.map((cell) => (
-              <Text key={cell.id} style={[styles.matrixRow, { color: colors.textSecondary }]}>
-                {comparisonCellLabel(cell)}
-              </Text>
-            ))}
-            <Text style={[styles.matrixHint, { color: colors.textMuted }]}>
-              This creates one parent task. The six real runs start only after your explicit
-              dispatch.
-            </Text>
-          </View>
-        ) : null}
         <Text style={[styles.label, { color: colors.textMuted }]}>Project</Text>
         <View style={styles.chips}>
           {projects.map((project) => (
@@ -146,29 +125,79 @@ export function CreateTaskScreen({
             />
           ))}
         </View>
-        {taskKind === "standard" ? (
-          <TextInput
-            accessibilityLabel="Agent goal"
-            multiline
-            onChangeText={setGoal}
-            placeholder="Optional agent goal"
-            placeholderTextColor={colors.textMuted}
-            style={[styles.input, { borderColor: colors.borderSubtle, color: colors.textPrimary }]}
-            value={goal}
-          />
+        {catalog ? (
+          <>
+            <Text style={[styles.label, { color: colors.textMuted }]}>Agent</Text>
+            <View style={styles.chips}>
+              {catalog.agents.map((item) => (
+                <Choice
+                  accessibilityLabel={`Select agent ${item.agentLabel}`}
+                  key={item.agent}
+                  label={item.agentLabel}
+                  onPress={() => {
+                    setAgent(item.agent);
+                    setModel(null);
+                    setEffort(null);
+                  }}
+                  selected={item.agent === agent}
+                />
+              ))}
+            </View>
+            <Text style={[styles.label, { color: colors.textMuted }]}>Model</Text>
+            <View style={styles.chips}>
+              {selectedAgent?.models.map((item) => (
+                <Choice
+                  accessibilityLabel={`Select model ${item.label}`}
+                  key={item.model}
+                  label={item.label}
+                  onPress={() => {
+                    setModel(item.model);
+                    setEffort(item.efforts[0]?.effort ?? null);
+                  }}
+                  selected={item.model === model}
+                />
+              ))}
+            </View>
+            {selectedModel?.efforts.length ? (
+              <>
+                <Text style={[styles.label, { color: colors.textMuted }]}>Effort</Text>
+                <View style={styles.chips}>
+                  {selectedModel.efforts.map((item) => (
+                    <Choice
+                      accessibilityLabel={`Select effort ${item.label}`}
+                      key={item.effort}
+                      label={item.label}
+                      onPress={() => setEffort(item.effort)}
+                      selected={item.effort === effort}
+                    />
+                  ))}
+                </View>
+              </>
+            ) : null}
+          </>
         ) : null}
+        <TextInput
+          accessibilityLabel="Agent goal"
+          multiline
+          onChangeText={setGoal}
+          placeholder="Optional agent goal"
+          placeholderTextColor={colors.textMuted}
+          style={[styles.input, { borderColor: colors.borderSubtle, color: colors.textPrimary }]}
+          value={goal}
+        />
         <Pressable
-          accessibilityLabel={taskKind === "comparison" ? "Create comparison task" : "Create task"}
+          accessibilityLabel="Create task"
           accessibilityRole="button"
           disabled={!valid || submitting || loading}
           onPress={() =>
             onSubmit({
-              taskKind,
               title: title.trim(),
               description: description.trim() || null,
               status,
-              agent: initialAgent,
-              goal: taskKind === "standard" ? goal.trim() || null : null,
+              agent,
+              model,
+              effort,
+              goal: goal.trim() || null,
             })
           }
           style={[
@@ -180,23 +209,12 @@ export function CreateTaskScreen({
           ]}
         >
           <Text style={{ color: colors.bgBase, fontWeight: "700" }}>
-            {submitting
-              ? "Creating…"
-              : taskKind === "comparison"
-                ? "Create comparison task"
-                : "Create task"}
+            {submitting ? "Creating…" : "Create task"}
           </Text>
         </Pressable>
       </ScrollView>
     </SafeAreaView>
   );
-}
-
-function comparisonCellLabel(cell: (typeof COMPARISON_CELLS)[number]): string {
-  const path = cell.path === "session" ? "Session" : "Orchestrator";
-  const model =
-    cell.provider === "codex" ? "GPT-5.6 Sol" : cell.provider === "cursor" ? "Grok 4.5" : "Opus 5";
-  return `${path} · ${model} · High`;
 }
 
 function Choice({
@@ -256,15 +274,6 @@ const styles = StyleSheet.create({
     padding: spacing.md,
   },
   label: { fontSize: 12, fontWeight: "700", textTransform: "uppercase" },
-  matrix: {
-    borderRadius: radii.md,
-    borderWidth: 1,
-    gap: spacing.xs,
-    padding: spacing.md,
-  },
-  matrixHint: { fontSize: 12, lineHeight: 17, marginTop: spacing.xs },
-  matrixRow: { fontSize: 14, lineHeight: 20 },
-  matrixTitle: { fontSize: 16, fontWeight: "700", marginBottom: spacing.xs },
   multiline: { minHeight: 120, textAlignVertical: "top" },
   safeArea: { flex: 1 },
   submit: {

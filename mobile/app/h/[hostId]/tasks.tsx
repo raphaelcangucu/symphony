@@ -60,7 +60,6 @@ import {
   resolveMobileSyntaxLanguage
 } from '../../../src/dev10x/session/mobile-file-syntax'
 import { buildGitHubCheckSummary } from '../../../src/dev10x/tasks/github-check-summary'
-import { dev10xComparisonAction } from '../../../src/dev10x/tasks/dev10x-comparison-navigation'
 import { buildTaskWorkspaceCreateParams } from '../../../src/dev10x/tasks/workspace-create-params'
 import {
   filterWorkspaceAgents,
@@ -8956,19 +8955,6 @@ export default function MobileTasksScreen() {
     reconnectAttempts,
     lastConnectedAt
   })
-  const comparisonAction =
-    actionItem?.provider === 'dev10x'
-      ? dev10xComparisonAction({
-          description: actionItem.source.description,
-          detailDescription:
-            detailPayload?.provider === 'dev10x' ? detailPayload.description : undefined,
-          projectSlug: actionItem.source.projectSlug,
-          identifier: actionItem.source.identifier,
-          subtaskCount: actionItem.source.subtaskCount,
-          detailSubtaskCount:
-            detailPayload?.provider === 'dev10x' ? detailPayload.subtasks.length : undefined
-        })
-      : null
   const emptyLabel =
     connState !== 'connected'
       ? 'Connect to a host to load tasks'
@@ -13782,23 +13768,6 @@ export default function MobileTasksScreen() {
             </View>
 
             <View style={styles.actionGroup}>
-              {comparisonAction ? (
-                <>
-                  <Pressable
-                    style={styles.actionRow}
-                    accessibilityRole="button"
-                    accessibilityLabel={comparisonAction.label}
-                    onPress={() => {
-                      setActionItem(null)
-                      router.push(comparisonAction.route as never)
-                    }}
-                  >
-                    <ChevronRight size={16} color={colors.textPrimary} />
-                    <Text style={styles.actionText}>{comparisonAction.label}</Text>
-                  </Pressable>
-                  <View style={styles.actionSeparator} />
-                </>
-              ) : null}
               <Pressable
                 style={styles.actionRow}
                 disabled={creatingKey === actionItem.key}
