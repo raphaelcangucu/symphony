@@ -5,6 +5,7 @@ defmodule SymphonyElixir.CodingAgent do
 
   alias SymphonyElixir.AgentLaunch
   alias SymphonyElixir.AgentLifecycle.RuntimeRegistry
+  alias SymphonyElixir.AgentUsage
   alias SymphonyElixir.Config
 
   @callback start_session(Path.t(), keyword()) :: {:ok, map()} | {:error, term()}
@@ -64,7 +65,9 @@ defmodule SymphonyElixir.CodingAgent do
         get_in(session, [:agent_launch, Access.key(:agent_kind)]) ||
         Map.get(issue, :agent_kind)
 
-    adapter_for(agent_kind).run_turn(session, prompt, issue, opts)
+    adapter = adapter_for(agent_kind)
+    run_opts = capture_account_usage(opts, session, agent_kind, adapter)
+    adapter.run_turn(session, prompt, issue, run_opts)
   end
 
   @spec stop_session(map(), String.t() | nil) :: :ok
@@ -97,4 +100,22 @@ defmodule SymphonyElixir.CodingAgent do
 
   defp resolved_agent_kind(nil), do: Config.agent_kind() || Config.default_agent_kind()
   defp resolved_agent_kind(agent_kind), do: agent_kind
+
+  defp capture_account_usage(opts, session, agent_kind, adapter) do
+    case get_in(session, [:agent_launch, Access.key(:account_id)]) do
+      account_id when is_binary(account_id) ->
+        original = Keyword.get(opts, :on_message, fn _message -> :ok end)
+
+        Keyword.put(opts, :on_message, fn message ->
+          message
+          |> adapter.normalize_event()
+          |> then(&AgentUsage.capture_event(agent_kind, account_id, &1))
+
+          original.(message)
+        end)
+
+      _ ->
+        opts
+    end
+  end
 end

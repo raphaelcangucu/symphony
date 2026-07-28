@@ -18,6 +18,7 @@ defmodule SymphonyElixir.Claude.Usage do
   """
 
   alias SymphonyElixir.AgentUsage
+  alias SymphonyElixir.AgentUsage.Refresh
   alias SymphonyElixir.AgentUsage.Snapshot
   alias SymphonyElixir.AgentUsage.Window
 
@@ -32,8 +33,7 @@ defmodule SymphonyElixir.Claude.Usage do
   @beta_header {"anthropic-beta", "oauth-2025-04-20"}
   @request_timeout_ms 5_000
   @refresh_buffer_ms 300_000
-  @backoff_ms 60_000
-  @backoff_key {__MODULE__, :last_attempt_ms}
+  @default_account_id "default"
 
   @type credentials :: %{
           access_token: String.t(),
@@ -55,11 +55,17 @@ defmodule SymphonyElixir.Claude.Usage do
   """
   @spec refresh_into_store(keyword()) :: :ok | :skip | {:error, term()}
   def refresh_into_store(opts \\ []) do
-    cond do
-      not enabled?() -> :skip
-      fresh_in_store?() -> :skip
-      not due?() -> :skip
-      true -> attempt_refresh(opts)
+    account_id = Keyword.get(opts, :account_id, @default_account_id)
+
+    if enabled?() and (Keyword.get(opts, :force, false) or not fresh_in_store?(account_id)) do
+      Refresh.run(
+        @agent_kind,
+        account_id,
+        fn -> safe_fetch(opts) end,
+        refresh_options(opts)
+      )
+    else
+      :skip
     end
   end
 
@@ -126,25 +132,10 @@ defmodule SymphonyElixir.Claude.Usage do
   @doc false
   @spec reset_backoff() :: :ok
   def reset_backoff do
-    :persistent_term.erase(@backoff_key)
     :ok
   end
 
   # ── Refresh-into-store helpers ──────────────────────────────────────────────
-
-  defp attempt_refresh(opts) do
-    mark_attempt()
-
-    case safe_fetch(opts) do
-      {:ok, %Snapshot{} = snapshot} ->
-        AgentUsage.put(@agent_kind, snapshot)
-        :ok
-
-      {:error, reason} ->
-        Logger.debug("Claude usage probe failed: #{inspect(reason)}")
-        {:error, reason}
-    end
-  end
 
   defp safe_fetch(opts) do
     fetch(opts)
@@ -158,17 +149,22 @@ defmodule SymphonyElixir.Claude.Usage do
     Application.get_env(:symphony_elixir, :claude_usage_probe_enabled, true) == true
   end
 
-  defp fresh_in_store? do
-    not is_nil(AgentUsage.get(@agent_kind)) and not AgentUsage.stale?(@agent_kind)
+  defp fresh_in_store?(account_id) do
+    not is_nil(AgentUsage.get(@agent_kind, account_id)) and
+      not AgentUsage.stale?(
+        @agent_kind,
+        account_id,
+        System.monotonic_time(:millisecond)
+      )
   end
 
-  defp due? do
-    last = :persistent_term.get(@backoff_key, nil)
-    is_nil(last) or System.monotonic_time(:millisecond) - last >= @backoff_ms
-  end
-
-  defp mark_attempt do
-    :persistent_term.put(@backoff_key, System.monotonic_time(:millisecond))
+  defp refresh_options(opts) do
+    [
+      now_ms: Keyword.get(opts, :refresh_now_ms, System.monotonic_time(:millisecond)),
+      force: Keyword.get(opts, :force, false),
+      base_backoff_ms: Keyword.get(opts, :base_backoff_ms, 60_000),
+      auth_backoff_ms: Keyword.get(opts, :auth_backoff_ms, 300_000)
+    ]
   end
 
   # ── Token freshness / refresh ───────────────────────────────────────────────
@@ -300,6 +296,9 @@ defmodule SymphonyElixir.Claude.Usage do
       {:ok, %{status: status}} when status in [401, 403] ->
         {:error, :token_expired}
 
+      {:ok, %{status: 429} = response} ->
+        {:error, {:rate_limited, retry_after_ms(Map.get(response, :headers))}}
+
       {:ok, %{status: status}} ->
         {:error, {:http_status, status}}
 
@@ -310,8 +309,11 @@ defmodule SymphonyElixir.Claude.Usage do
 
   defp default_http(url, headers) do
     case Req.get(url, headers: headers, receive_timeout: @request_timeout_ms, retry: false) do
-      {:ok, %Req.Response{status: status, body: body}} -> {:ok, %{status: status, body: body}}
-      {:error, reason} -> {:error, reason}
+      {:ok, %Req.Response{status: status, body: body, headers: headers}} ->
+        {:ok, %{status: status, body: body, headers: headers}}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
@@ -399,7 +401,39 @@ defmodule SymphonyElixir.Claude.Usage do
     end
   end
 
-  defp credentials_path(opts), do: Keyword.get(opts, :credentials_path, default_credentials_path())
+  defp credentials_path(opts) do
+    case Keyword.get(opts, :credentials_path) do
+      path when is_binary(path) ->
+        path
+
+      nil ->
+        case Keyword.get(opts, :account_home) do
+          home when is_binary(home) -> Path.join(home, ".credentials.json")
+          _ -> default_credentials_path()
+        end
+    end
+  end
+
+  defp retry_after_ms(nil), do: 60_000
+
+  defp retry_after_ms(headers) do
+    value =
+      Enum.find_value(headers, fn
+        {name, value} ->
+          if String.downcase(to_string(name)) == "retry-after", do: header_value(value)
+
+        _ ->
+          nil
+      end)
+
+    case Integer.parse(to_string(value || "")) do
+      {seconds, ""} when seconds >= 0 -> seconds * 1000
+      _ -> 60_000
+    end
+  end
+
+  defp header_value([value | _]), do: value
+  defp header_value(value), do: value
 
   # ── Coercion helpers ────────────────────────────────────────────────────────
 

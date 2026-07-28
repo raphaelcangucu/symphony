@@ -165,6 +165,63 @@ defmodule SymphonyElixir.Claude.UsageTest do
       assert %Snapshot{agent_kind: "claude", plan: "max"} = AgentUsage.get("claude")
     end
 
+    test "reads credentials from an isolated account home and stores by account" do
+      home = Path.join(System.tmp_dir!(), "claude-account-#{System.unique_integer([:positive])}")
+      File.mkdir_p!(home)
+      credentials = Path.join(home, ".credentials.json")
+
+      File.write!(
+        credentials,
+        Jason.encode!(%{
+          "claudeAiOauth" => %{
+            "accessToken" => "isolated",
+            "subscriptionType" => "team",
+            "expiresAt" => future_ms()
+          }
+        })
+      )
+
+      on_exit(fn -> File.rm_rf(home) end)
+
+      http = fn _url, headers ->
+        assert {"authorization", "Bearer isolated"} in downcase_headers(headers)
+        {:ok, %{status: 200, body: @api_body}}
+      end
+
+      assert :ok =
+               Usage.refresh_into_store(
+                 account_id: "work",
+                 account_home: home,
+                 http: http
+               )
+
+      assert %Snapshot{account_id: "work", plan: "team"} =
+               AgentUsage.get("claude", "work")
+
+      assert AgentUsage.get("claude") == nil
+    end
+
+    test "retains stale account usage and honors Retry-After on 429" do
+      path = write_creds(%{"accessToken" => "tok", "expiresAt" => future_ms()})
+      AgentUsage.put("claude", "work", %Snapshot{agent_kind: "claude", plan: "team"})
+
+      http = fn _url, _headers ->
+        {:ok, %{status: 429, body: %{}, headers: [{"retry-after", "12"}]}}
+      end
+
+      assert {:error, :rate_limited} =
+               Usage.refresh_into_store(
+                 account_id: "work",
+                 credentials_path: path,
+                 http: http,
+                 force: true,
+                 refresh_now_ms: 1_000
+               )
+
+      assert %{snapshot: %Snapshot{plan: "team"}, stale_reason: :rate_limited, next_refresh_at: 13_000} =
+               AgentUsage.entry("claude", "work")
+    end
+
     test "skips when a fresh snapshot already exists" do
       AgentUsage.put("claude", %Snapshot{agent_kind: "claude"})
       http = fn _url, _headers -> flunk("must not fetch when store is fresh") end
