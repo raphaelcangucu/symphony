@@ -6,6 +6,23 @@ import { ComposerPermissionMenu } from "@/components/assistant/ComposerPermissio
 import { renderWithI18n } from "@/i18n/testUtils";
 
 describe("ComposerPermissionMenu", () => {
+  it("uses a compact non-shrinking trigger on mobile", () => {
+    renderWithI18n(
+      <ComposerPermissionMenu
+        value="full_access"
+        options={[{ id: "full_access", available: true }]}
+        onChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId("execution-mode-menu")).toHaveClass(
+      "max-w-[5.75rem]",
+      "shrink-0",
+      "sm:max-w-none",
+    );
+    expect(screen.getByText("Full access")).toHaveClass("truncate");
+  });
+
   it("keeps unsupported levels visible and disabled with an explanation", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();

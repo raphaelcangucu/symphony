@@ -1087,8 +1087,11 @@ export function AssistantComposer({
           )}
         />
 
-        <div className="flex flex-wrap items-center justify-between gap-2 px-3 pb-3">
-          <div className="flex min-w-0 flex-wrap items-center gap-1">
+        <div
+          data-testid="assistant-composer-toolbar"
+          className="flex flex-nowrap items-center justify-between gap-1 overflow-hidden px-2 pb-3 sm:gap-2 sm:overflow-visible sm:px-3"
+        >
+          <div className="flex shrink-0 flex-nowrap items-center gap-1">
             <input
               ref={fileInputRef}
               type="file"
@@ -1119,78 +1122,85 @@ export function AssistantComposer({
             ) : null}
           </div>
 
-          <div className="flex flex-wrap items-center justify-end gap-1">
-            {toolbarBeforeAgent}
-            <ComposerToolbar
-              bundle={bundle}
-              catalog={catalog}
-              agent={composerState.agent}
-              settings={settings}
-              disabled={disabled}
-              composerDisabled={composerDisabled}
-              agentMenuDisabled={agentMenuDisabled}
-              compact={!isLgUp}
-              onAgentChange={updateAgent}
-              onModelChange={updateModel}
-              onEffortChange={updateEffort}
-            />
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className={cn(
-                "relative h-8 w-8 overflow-visible rounded-full",
-                recording &&
-                  "bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-700 dark:bg-red-950/30 dark:text-red-400 dark:hover:bg-red-950/50",
-              )}
-              disabled={disabled || composerDisabled}
-              aria-label={
-                recording
-                  ? t("assistant.composer.stopRecording")
-                  : t("assistant.composer.recordAudio")
-              }
-              onClick={() => void toggleRecording()}
-            >
-              {recording ? (
-                <>
-                  <span
-                    aria-hidden="true"
-                    className="absolute inset-0 rounded-full bg-red-500/20 motion-safe:animate-ping"
-                  />
-                  <span
-                    aria-hidden="true"
-                    className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-red-500 shadow-[0_0_0_3px_rgba(239,68,68,0.18)] motion-safe:animate-pulse"
-                  />
-                  <Square className="relative h-3.5 w-3.5 fill-current" />
-                </>
-              ) : (
-                <Mic
-                  className={cn("h-4 w-4", speechListening && "animate-pulse")}
-                />
-              )}
-            </Button>
-            {recording ? (
-              <span
-                className="inline-flex items-center gap-1 px-1 text-xs text-muted-foreground"
-                aria-live="polite"
-              >
-                <AudioLines className="h-3.5 w-3.5 animate-pulse text-primary" />
-                {t("assistant.composer.recording")}
-              </span>
-            ) : null}
-            {submitActions ?? (
+          <div className="flex min-w-0 flex-1 flex-nowrap items-center justify-end gap-1">
+            <div className="flex min-w-0 flex-1 flex-nowrap items-center justify-start gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:justify-end sm:overflow-visible">
+              {toolbarBeforeAgent}
+              <ComposerToolbar
+                bundle={bundle}
+                catalog={catalog}
+                agent={composerState.agent}
+                settings={settings}
+                disabled={disabled}
+                composerDisabled={composerDisabled}
+                agentMenuDisabled={agentMenuDisabled}
+                compact={!isLgUp}
+                onAgentChange={updateAgent}
+                onModelChange={updateModel}
+                onEffortChange={updateEffort}
+              />
               <Button
-                type="submit"
-                variant="default"
+                type="button"
+                variant="ghost"
                 size="icon"
-                className="h-8 w-8 rounded-full"
-                disabled={!canSend}
-                aria-label={t("assistant.composer.sendMessage")}
-                title={t("assistant.composer.sendMessage")}
+                className={cn(
+                  "relative h-8 w-8 shrink-0 overflow-visible rounded-full",
+                  recording &&
+                    "bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-700 dark:bg-red-950/30 dark:text-red-400 dark:hover:bg-red-950/50",
+                )}
+                disabled={disabled || composerDisabled}
+                aria-label={
+                  recording
+                    ? t("assistant.composer.stopRecording")
+                    : t("assistant.composer.recordAudio")
+                }
+                onClick={() => void toggleRecording()}
               >
-                <Send className="h-4 w-4" />
+                {recording ? (
+                  <>
+                    <span
+                      aria-hidden="true"
+                      className="absolute inset-0 rounded-full bg-red-500/20 motion-safe:animate-ping"
+                    />
+                    <span
+                      aria-hidden="true"
+                      className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-red-500 shadow-[0_0_0_3px_rgba(239,68,68,0.18)] motion-safe:animate-pulse"
+                    />
+                    <Square className="relative h-3.5 w-3.5 fill-current" />
+                  </>
+                ) : (
+                  <Mic
+                    className={cn(
+                      "h-4 w-4",
+                      speechListening && "animate-pulse",
+                    )}
+                  />
+                )}
               </Button>
-            )}
+              {recording ? (
+                <span
+                  className="inline-flex shrink-0 items-center gap-1 px-1 text-xs text-muted-foreground"
+                  aria-live="polite"
+                >
+                  <AudioLines className="h-3.5 w-3.5 animate-pulse text-primary" />
+                  {t("assistant.composer.recording")}
+                </span>
+              ) : null}
+            </div>
+            <div className="flex shrink-0">
+              {submitActions ?? (
+                <Button
+                  type="submit"
+                  variant="default"
+                  size="icon"
+                  className="h-8 w-8 rounded-full"
+                  disabled={!canSend}
+                  aria-label={t("assistant.composer.sendMessage")}
+                  title={t("assistant.composer.sendMessage")}
+                >
+                  <Send className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
           </div>
         </div>
       </div>

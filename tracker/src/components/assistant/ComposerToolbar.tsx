@@ -1,5 +1,20 @@
-import { Bot, Brain, ChevronDown, Ellipsis, Feather, Flame, Sparkles } from "lucide-react";
-import { type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import {
+  Bot,
+  Brain,
+  ChevronDown,
+  Ellipsis,
+  Feather,
+  Flame,
+  Sparkles,
+} from "lucide-react";
+import {
+  type ReactNode,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 
@@ -130,7 +145,10 @@ interface MoreMenuPosition {
 }
 
 /** Collapses secondary composer tools into a portaled More menu (avoids card overflow clipping). */
-export function ComposerMoreMenu({ children, disabled = false }: ComposerMoreMenuProps) {
+export function ComposerMoreMenu({
+  children,
+  disabled = false,
+}: ComposerMoreMenuProps) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState<MoreMenuPosition | null>(null);
@@ -158,11 +176,20 @@ export function ComposerMoreMenu({ children, disabled = false }: ComposerMoreMen
       const spaceAbove = rect.top;
       const spaceBelow = window.innerHeight - rect.bottom;
       // Prefer below the trigger so the menu does not cover the textarea.
-      const openUpward = spaceBelow < panelHeight + gap && spaceAbove > spaceBelow;
-      const rawTop = openUpward ? rect.top - gap - panelHeight : rect.bottom + gap;
+      const openUpward =
+        spaceBelow < panelHeight + gap && spaceAbove > spaceBelow;
+      const rawTop = openUpward
+        ? rect.top - gap - panelHeight
+        : rect.bottom + gap;
       const rawLeft = rect.left;
-      const top = Math.max(8, Math.min(rawTop, window.innerHeight - panelHeight - 8));
-      const left = Math.max(8, Math.min(rawLeft, window.innerWidth - panelWidth - 8));
+      const top = Math.max(
+        8,
+        Math.min(rawTop, window.innerHeight - panelHeight - 8),
+      );
+      const left = Math.max(
+        8,
+        Math.min(rawLeft, window.innerWidth - panelWidth - 8),
+      );
       setPosition((current) => {
         if (
           current &&
@@ -196,7 +223,11 @@ export function ComposerMoreMenu({ children, disabled = false }: ComposerMoreMen
       if (triggerRef.current?.contains(target)) return;
       if (panelRef.current?.contains(target)) return;
       // Nested Radix menus portal outside our panel — keep More open while they are used.
-      if (target instanceof Element && target.closest("[data-radix-popper-content-wrapper]")) return;
+      if (
+        target instanceof Element &&
+        target.closest("[data-radix-popper-content-wrapper]")
+      )
+        return;
       setOpen(false);
     };
 
@@ -239,7 +270,8 @@ export function ComposerMoreMenu({ children, disabled = false }: ComposerMoreMen
               if (!(target instanceof Element)) return;
               if (target.closest("[data-radix-popper-content-wrapper]")) return;
               const button = target.closest("button");
-              if (!button || button.getAttribute("aria-haspopup") === "menu") return;
+              if (!button || button.getAttribute("aria-haspopup") === "menu")
+                return;
               window.setTimeout(() => setOpen(false), 0);
             }}
           >
@@ -305,7 +337,9 @@ function CompactModelChip({
   const settingsDisabled = disabled || composerDisabled;
   const modelName = modelLabel(catalog, settings.model);
   const effortName =
-    effortOptions.length > 0 ? effortLabel(catalog, settings.model, settings.effort, t) : null;
+    effortOptions.length > 0
+      ? effortLabel(catalog, settings.model, settings.effort, t)
+      : null;
 
   return (
     <DropdownMenu>
@@ -314,10 +348,12 @@ function CompactModelChip({
           type="button"
           variant="ghost"
           size="sm"
-          className="h-8 max-w-[11rem] gap-1 px-2 text-xs"
+          className="h-8 min-w-0 max-w-[8rem] gap-1 px-2 text-xs sm:max-w-[11rem]"
           disabled={disabled}
           aria-label={t("assistant.composer.modelChipAria")}
-          title={[agentKindLabel(agent, t), modelName, effortName].filter(Boolean).join(" · ")}
+          title={[agentKindLabel(agent, t), modelName, effortName]
+            .filter(Boolean)
+            .join(" · ")}
         >
           <Bot className="h-3.5 w-3.5 shrink-0 text-emerald-500" />
           <span className="truncate">{modelName}</span>
@@ -325,7 +361,9 @@ function CompactModelChip({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-64 p-1">
-        <DropdownMenuLabel>{t("assistant.composer.compactModelMenu")}</DropdownMenuLabel>
+        <DropdownMenuLabel>
+          {t("assistant.composer.compactModelMenu")}
+        </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
           {t("assistant.composer.agentMenu")}
@@ -338,7 +376,11 @@ function CompactModelChip({
           }}
         >
           {bundle.agents.map((entry) => (
-            <DropdownMenuRadioItem key={entry.agent} value={entry.agent} disabled={agentDisabled}>
+            <DropdownMenuRadioItem
+              key={entry.agent}
+              value={entry.agent}
+              disabled={agentDisabled}
+            >
               {agentKindLabel(entry.agent, t)}
             </DropdownMenuRadioItem>
           ))}
@@ -347,7 +389,10 @@ function CompactModelChip({
         <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
           {t("assistant.modelMenu.modelSuffix")}
         </DropdownMenuLabel>
-        <ScrollArea className="max-h-48" onWheel={(event) => event.stopPropagation()}>
+        <ScrollArea
+          className="max-h-48"
+          onWheel={(event) => event.stopPropagation()}
+        >
           <DropdownMenuRadioGroup
             value={settings.model}
             onValueChange={(value) => {
@@ -387,7 +432,10 @@ function CompactModelChip({
                   disabled={settingsDisabled}
                   className="gap-2"
                 >
-                  {effortIconElement(option.id, `compact-effort-icon-${option.id}`)}
+                  {effortIconElement(
+                    option.id,
+                    `compact-effort-icon-${option.id}`,
+                  )}
                   {option.label}
                 </DropdownMenuRadioItem>
               ))}
@@ -420,21 +468,36 @@ export function AgentMenu({
   const fallbackAgent = agent ?? bundle.defaultAgent;
   const current = catalogFor(bundle, fallbackAgent);
   const resolvedInheritLabel =
-    inheritLabel ?? t("issue.create.inherit", { agent: agentKindLabel(current.agent, t) });
-  const triggerLabel = agent == null && allowInherit ? resolvedInheritLabel : agentKindLabel(current.agent, t);
-  const radioValue = agent == null && allowInherit ? AGENT_INHERIT_VALUE : (agent ?? fallbackAgent);
+    inheritLabel ??
+    t("issue.create.inherit", { agent: agentKindLabel(current.agent, t) });
+  const triggerLabel =
+    agent == null && allowInherit
+      ? resolvedInheritLabel
+      : agentKindLabel(current.agent, t);
+  const radioValue =
+    agent == null && allowInherit
+      ? AGENT_INHERIT_VALUE
+      : (agent ?? fallbackAgent);
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button type="button" variant="ghost" size="sm" className="h-8 gap-1 px-2 text-xs" disabled={disabled}>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-8 gap-1 px-2 text-xs"
+          disabled={disabled}
+        >
           <Bot className="h-3.5 w-3.5 shrink-0 text-emerald-500" />
           {triggerLabel}
           <ChevronDown className="h-3 w-3 opacity-60" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuLabel>{t("assistant.composer.agentMenu")}</DropdownMenuLabel>
+        <DropdownMenuLabel>
+          {t("assistant.composer.agentMenu")}
+        </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuRadioGroup
           value={radioValue}
@@ -447,7 +510,9 @@ export function AgentMenu({
           }}
         >
           {allowInherit ? (
-            <DropdownMenuRadioItem value={AGENT_INHERIT_VALUE}>{resolvedInheritLabel}</DropdownMenuRadioItem>
+            <DropdownMenuRadioItem value={AGENT_INHERIT_VALUE}>
+              {resolvedInheritLabel}
+            </DropdownMenuRadioItem>
           ) : null}
           {bundle.agents.map((catalog) => (
             <DropdownMenuRadioItem key={catalog.agent} value={catalog.agent}>
@@ -468,12 +533,25 @@ export function AgentMenu({
 function effortIconElement(effortId: string, testId: string): ReactNode {
   const id = effortId.toLowerCase();
   const className = "h-3.5 w-3.5 shrink-0";
-  if (id === "low" || id === "minimal") return <Feather className={`${className} text-sky-500`} data-testid={testId} />;
-  if (id === "high") return <Flame className={`${className} text-orange-500`} data-testid={testId} />;
+  if (id === "low" || id === "minimal")
+    return (
+      <Feather className={`${className} text-sky-500`} data-testid={testId} />
+    );
+  if (id === "high")
+    return (
+      <Flame className={`${className} text-orange-500`} data-testid={testId} />
+    );
   if (id === "xhigh" || id === "max" || id === "ultra" || id === "ultracode") {
-    return <Sparkles className={`${className} text-fuchsia-500`} data-testid={testId} />;
+    return (
+      <Sparkles
+        className={`${className} text-fuchsia-500`}
+        data-testid={testId}
+      />
+    );
   }
-  return <Brain className={`${className} text-violet-500`} data-testid={testId} />;
+  return (
+    <Brain className={`${className} text-violet-500`} data-testid={testId} />
+  );
 }
 
 const DERIVED_VARIANT_TOKENS = new Set([
@@ -488,7 +566,15 @@ const DERIVED_VARIANT_TOKENS = new Set([
   "fast",
 ]);
 
-const DERIVED_EFFORT_ORDER = ["none", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
+const DERIVED_EFFORT_ORDER = [
+  "none",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+] as const;
 
 interface DerivedThinkingOption {
   key: string;
@@ -518,22 +604,43 @@ export function DerivedThinkingMenu({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button type="button" variant="ghost" size="sm" className="h-8 gap-1 px-2 text-xs" disabled={disabled}>
-          {effortIconElement(current.effort || "medium", "derived-effort-trigger-icon")}
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-8 gap-1 px-2 text-xs"
+          disabled={disabled}
+        >
+          {effortIconElement(
+            current.effort || "medium",
+            "derived-effort-trigger-icon",
+          )}
           {current.label}
           <ChevronDown className="h-3 w-3 opacity-60" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuLabel>{t("assistant.composer.reasoningEffort")}</DropdownMenuLabel>
+        <DropdownMenuLabel>
+          {t("assistant.composer.reasoningEffort")}
+        </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuRadioGroup value={current.key} onValueChange={(key) => {
-          const option = options.find((entry) => entry.key === key);
-          if (option) onModelChange(option.model);
-        }}>
+        <DropdownMenuRadioGroup
+          value={current.key}
+          onValueChange={(key) => {
+            const option = options.find((entry) => entry.key === key);
+            if (option) onModelChange(option.model);
+          }}
+        >
           {options.map((option) => (
-            <DropdownMenuRadioItem key={option.key} value={option.key} className="gap-2">
-              {effortIconElement(option.effort || "medium", `derived-effort-icon-${option.key}`)}
+            <DropdownMenuRadioItem
+              key={option.key}
+              value={option.key}
+              className="gap-2"
+            >
+              {effortIconElement(
+                option.effort || "medium",
+                `derived-effort-icon-${option.key}`,
+              )}
               {option.label}
             </DropdownMenuRadioItem>
           ))}
@@ -556,19 +663,32 @@ function derivedThinkingOptions(
   const seen = new Set<string>();
   const modelOptions = catalog.models
     .map((entry) => ({ entry, variant: derivedModelVariant(entry) }))
-    .filter(({ variant }) => variant && variant.baseKey === target.baseKey && variant.fast === target.fast)
+    .filter(
+      ({ variant }) =>
+        variant &&
+        variant.baseKey === target.baseKey &&
+        variant.fast === target.fast,
+    )
     .flatMap(({ entry, variant }) => {
       if (!variant) return [];
       const key = `${variant.thinking ? "thinking" : "standard"}:${variant.effort}`;
       if (seen.has(key)) return [];
       seen.add(key);
-      return [{
-        key,
-        model: entry.model,
-        effort: variant.effort,
-        thinking: variant.thinking,
-        label: derivedThinkingLabel(catalog, entry.model, variant.effort, variant.thinking, t),
-      }];
+      return [
+        {
+          key,
+          model: entry.model,
+          effort: variant.effort,
+          thinking: variant.thinking,
+          label: derivedThinkingLabel(
+            catalog,
+            entry.model,
+            variant.effort,
+            variant.thinking,
+            t,
+          ),
+        },
+      ];
     })
     .sort((a, b) => derivedOptionSort(a) - derivedOptionSort(b));
 
@@ -595,26 +715,39 @@ function derivedThinkingLabel(
   thinking: boolean,
   t: ReturnType<typeof useTranslation>["t"],
 ): string {
-  const base = effort ? effortLabel(catalog, modelId, effort, t) : t("assistant.composer.autoThinking");
-  return thinking ? t("assistant.composer.thinkingEffort", { effort: base }) : base;
+  const base = effort
+    ? effortLabel(catalog, modelId, effort, t)
+    : t("assistant.composer.autoThinking");
+  return thinking
+    ? t("assistant.composer.thinkingEffort", { effort: base })
+    : base;
 }
 
 function derivedOptionSort(option: DerivedThinkingOption): number {
-  const effortIndex = DERIVED_EFFORT_ORDER.indexOf(option.effort as (typeof DERIVED_EFFORT_ORDER)[number]);
-  const normalizedEffortIndex = effortIndex === -1 ? DERIVED_EFFORT_ORDER.length : effortIndex;
+  const effortIndex = DERIVED_EFFORT_ORDER.indexOf(
+    option.effort as (typeof DERIVED_EFFORT_ORDER)[number],
+  );
+  const normalizedEffortIndex =
+    effortIndex === -1 ? DERIVED_EFFORT_ORDER.length : effortIndex;
   return (option.thinking ? 100 : 0) + normalizedEffortIndex;
 }
 
-function derivedModelVariant(model: AssistantModelOption):
-  | { baseKey: string; effort: string; thinking: boolean; fast: boolean }
-  | null {
+function derivedModelVariant(model: AssistantModelOption): {
+  baseKey: string;
+  effort: string;
+  thinking: boolean;
+  fast: boolean;
+} | null {
   const tokens = model.model.toLowerCase().split("-").filter(Boolean);
   if (tokens.length === 0 || model.model === "auto") return null;
 
   const fast = tokens.includes("fast");
-  const thinking = tokens.includes("thinking") || /\bthinking\b/i.test(model.label);
+  const thinking =
+    tokens.includes("thinking") || /\bthinking\b/i.test(model.label);
   const effort = explicitEffort(tokens, model.label);
-  const baseTokens = tokens.filter((token) => !DERIVED_VARIANT_TOKENS.has(token));
+  const baseTokens = tokens.filter(
+    (token) => !DERIVED_VARIANT_TOKENS.has(token),
+  );
 
   return {
     baseKey: baseTokens.join("-"),
@@ -624,9 +757,12 @@ function derivedModelVariant(model: AssistantModelOption):
   };
 }
 
-function firstDerivedModelVariant(catalog: AssistantAgentCatalog):
-  | { baseKey: string; effort: string; thinking: boolean; fast: boolean }
-  | null {
+function firstDerivedModelVariant(catalog: AssistantAgentCatalog): {
+  baseKey: string;
+  effort: string;
+  thinking: boolean;
+  fast: boolean;
+} | null {
   for (const model of catalog.models) {
     const variant = derivedModelVariant(model);
     if (variant) return variant;
@@ -635,7 +771,15 @@ function firstDerivedModelVariant(catalog: AssistantAgentCatalog):
 }
 
 function explicitEffort(tokens: string[], label: string): string | null {
-  for (const effort of ["none", "minimal", "low", "medium", "high", "xhigh", "max"]) {
+  for (const effort of [
+    "none",
+    "minimal",
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+    "max",
+  ]) {
     if (tokens.includes(effort)) return effort;
   }
   const lower = label.toLowerCase();
@@ -648,8 +792,13 @@ function explicitEffort(tokens: string[], label: string): string | null {
   return null;
 }
 
-function findCatalogModel(catalog: AssistantAgentCatalog, modelId: string): AssistantModelOption | undefined {
-  return catalog.models.find((entry) => entry.model === modelId || entry.id === modelId);
+function findCatalogModel(
+  catalog: AssistantAgentCatalog,
+  modelId: string,
+): AssistantModelOption | undefined {
+  return catalog.models.find(
+    (entry) => entry.model === modelId || entry.id === modelId,
+  );
 }
 
 const EFFORT_INHERIT_VALUE = "__inherit__";
@@ -674,23 +823,35 @@ export function EffortMenu({
   onChange: (effort: AssistantEffort | null) => void;
 }) {
   const { t } = useTranslation();
-  const fallbackEffort = effort ?? (options[0]?.id as AssistantEffort | undefined) ?? "medium";
+  const fallbackEffort =
+    effort ?? (options[0]?.id as AssistantEffort | undefined) ?? "medium";
   const triggerEffort = effort ?? fallbackEffort;
   const triggerLabel =
-    effort == null && allowInherit ? inheritLabel : effortLabel(catalog, model, triggerEffort, t);
-  const radioValue = effort == null && allowInherit ? EFFORT_INHERIT_VALUE : triggerEffort;
+    effort == null && allowInherit
+      ? inheritLabel
+      : effortLabel(catalog, model, triggerEffort, t);
+  const radioValue =
+    effort == null && allowInherit ? EFFORT_INHERIT_VALUE : triggerEffort;
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button type="button" variant="ghost" size="sm" className="h-8 gap-1 px-2 text-xs" disabled={disabled}>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-8 gap-1 px-2 text-xs"
+          disabled={disabled}
+        >
           {effortIconElement(triggerEffort, "effort-trigger-icon")}
           {triggerLabel}
           <ChevronDown className="h-3 w-3 opacity-60" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuLabel>{t("assistant.composer.reasoningEffort")}</DropdownMenuLabel>
+        <DropdownMenuLabel>
+          {t("assistant.composer.reasoningEffort")}
+        </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuRadioGroup
           value={radioValue}
@@ -703,10 +864,16 @@ export function EffortMenu({
           }}
         >
           {allowInherit ? (
-            <DropdownMenuRadioItem value={EFFORT_INHERIT_VALUE}>{inheritLabel}</DropdownMenuRadioItem>
+            <DropdownMenuRadioItem value={EFFORT_INHERIT_VALUE}>
+              {inheritLabel}
+            </DropdownMenuRadioItem>
           ) : null}
           {options.map((option) => (
-            <DropdownMenuRadioItem key={option.id} value={option.id} className="gap-2">
+            <DropdownMenuRadioItem
+              key={option.id}
+              value={option.id}
+              className="gap-2"
+            >
               {effortIconElement(option.id, `effort-icon-${option.id}`)}
               {option.label}
             </DropdownMenuRadioItem>

@@ -47,12 +47,12 @@ export function ComposerPermissionMenu({
           type="button"
           variant="ghost"
           size="sm"
-          className="h-8 gap-1 rounded-full px-2 text-xs"
+          className="h-8 max-w-[5.75rem] shrink-0 gap-1 rounded-full px-2 text-xs sm:max-w-none"
           disabled={disabled}
           data-testid="execution-mode-menu"
         >
           <ShieldAlert className="h-3.5 w-3.5" />
-          {t(current.labelKey)}
+          <span className="truncate">{t(current.labelKey)}</span>
           <span className="sr-only">{LEGACY_MODE_LABEL[value]}</span>
           <ChevronDown className="h-3 w-3 opacity-60" />
         </Button>
@@ -64,9 +64,7 @@ export function ComposerPermissionMenu({
         <DropdownMenuSeparator />
         <DropdownMenuRadioGroup
           value={value}
-          onValueChange={(next) =>
-            onChange(next as ComposerPermissionLevel)
-          }
+          onValueChange={(next) => onChange(next as ComposerPermissionLevel)}
         >
           {options.map((option) => {
             const meta = executionModeMeta(

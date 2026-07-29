@@ -1,4 +1,12 @@
-import { AlertTriangle, BookOpen, History, LayoutDashboard, List, RefreshCw, TerminalSquare } from "lucide-react";
+import {
+  AlertTriangle,
+  BookOpen,
+  History,
+  LayoutDashboard,
+  List,
+  RefreshCw,
+  TerminalSquare,
+} from "lucide-react";
 import type { TFunction } from "i18next";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
@@ -13,7 +21,12 @@ import { copyTextToClipboard } from "@/lib/clipboard";
 import { parseTimestamp } from "@/lib/timeFormat";
 import { cn } from "@/lib/utils";
 import { kbProjectPath } from "@/lib/kbRoutes";
-import { isBoardPath, projectSessionsPath, projectTerminalPath, workspaceBasePath } from "@/lib/workspaceRoutes";
+import {
+  isBoardPath,
+  projectSessionsPath,
+  projectTerminalPath,
+  workspaceBasePath,
+} from "@/lib/workspaceRoutes";
 import type { Issue } from "@/types/issue";
 import type { ProjectSyncState, TrackerKind } from "@/types/project";
 
@@ -35,7 +48,8 @@ function formatTimeAgo(iso: string | null, t: TFunction): string | null {
   if (timestamp === null) return null;
   const minutes = Math.max(0, Math.round((Date.now() - timestamp) / 60_000));
   if (minutes < 1) return t("layout.projectHeader.lessThanMinute");
-  if (minutes < 60) return t("layout.projectHeader.minutesAgo", { count: minutes });
+  if (minutes < 60)
+    return t("layout.projectHeader.minutesAgo", { count: minutes });
   const hours = Math.round(minutes / 60);
   if (hours < 24) return t("layout.projectHeader.hoursAgo", { count: hours });
   return new Date(timestamp).toLocaleString();
@@ -43,7 +57,10 @@ function formatTimeAgo(iso: string | null, t: TFunction): string | null {
 
 function syncErrorTitle(syncState: ProjectSyncState, t: TFunction): string {
   const lines = [t("layout.projectHeader.syncErrorTitle")];
-  if (syncState.lastError) lines.push(t("layout.projectHeader.lastError", { error: syncState.lastError }));
+  if (syncState.lastError)
+    lines.push(
+      t("layout.projectHeader.lastError", { error: syncState.lastError }),
+    );
   const lastOk = formatTimeAgo(syncState.lastPullAt, t);
   if (lastOk) lines.push(t("layout.projectHeader.lastSync", { when: lastOk }));
   return lines.join("\n");
@@ -57,17 +74,22 @@ function buildSyncErrorReport(
   trackerKind: TrackerKind | undefined,
 ): string {
   const lines = ["Symphony sync error"];
-  lines.push(`Project: ${projectSlug}${trackerKind ? ` (${trackerKind})` : ""}`);
+  lines.push(
+    `Project: ${projectSlug}${trackerKind ? ` (${trackerKind})` : ""}`,
+  );
   lines.push(`Status: ${syncState.status}`);
   if (syncState.lastError) lines.push(`Last error: ${syncState.lastError}`);
   if (syncState.lastPullAt) lines.push(`Last pull: ${syncState.lastPullAt}`);
   if (syncState.lastPushAt) lines.push(`Last push: ${syncState.lastPushAt}`);
-  if (syncState.lastFullSyncAt) lines.push(`Last full sync: ${syncState.lastFullSyncAt}`);
+  if (syncState.lastFullSyncAt)
+    lines.push(`Last full sync: ${syncState.lastFullSyncAt}`);
   return lines.join("\n");
 }
 
 function HeaderDivider() {
-  return <div aria-hidden="true" className="mx-0.5 h-5 w-px shrink-0 bg-border" />;
+  return (
+    <div aria-hidden="true" className="mx-0.5 h-5 w-px shrink-0 bg-border" />
+  );
 }
 
 export function ProjectHeader({
@@ -92,7 +114,9 @@ export function ProjectHeader({
   const syncFailing = remoteTracker && syncState?.status === "error";
   const syncErrorLabel = t("layout.projectHeader.syncError");
   const normalizedSessionsCount =
-    typeof sessionsCount === "number" && Number.isFinite(sessionsCount) && sessionsCount > 0
+    typeof sessionsCount === "number" &&
+    Number.isFinite(sessionsCount) &&
+    sessionsCount > 0
       ? Math.floor(sessionsCount)
       : null;
 
@@ -108,11 +132,14 @@ export function ProjectHeader({
   }
 
   return (
-    <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b bg-background/95 px-6 backdrop-blur">
-      <div className="flex min-w-0 items-center gap-2">
+    <header className="sticky top-0 z-20 flex h-14 w-full min-w-0 flex-nowrap items-center justify-start gap-2 overflow-x-auto border-b bg-background/95 px-2 backdrop-blur [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:h-16 md:justify-between md:gap-0 md:overflow-x-visible md:px-6">
+      <div className="flex shrink-0 items-center gap-2 md:min-w-0 md:shrink">
         <ProjectSwitcher projectSlug={projectSlug} title={title} />
         {refreshing ? (
-          <span className="flex items-center gap-1.5 text-xs text-muted-foreground" aria-live="polite">
+          <span
+            className="flex items-center gap-1.5 text-xs text-muted-foreground"
+            aria-live="polite"
+          >
             <RefreshCw className="h-3.5 w-3.5 animate-spin" />
             {t("layout.projectHeader.refreshing")}
           </span>
@@ -139,7 +166,10 @@ export function ProjectHeader({
                 role="status"
                 aria-label={pollingLabel}
                 title={pollingLabel}
-                className={cn("h-2 w-2 rounded-full", pollingActive ? "bg-green-500" : "bg-muted-foreground")}
+                className={cn(
+                  "h-2 w-2 rounded-full",
+                  pollingActive ? "bg-green-500" : "bg-muted-foreground",
+                )}
               />
               {t(`layout.projectHeader.trackers.${trackerKind}`)}
             </Badge>
@@ -151,13 +181,15 @@ export function ProjectHeader({
               aria-label={t("layout.projectHeader.refreshBoard")}
               disabled={refreshing}
             >
-              <RefreshCw className={cn("h-4 w-4", refreshing && "animate-spin")} />
+              <RefreshCw
+                className={cn("h-4 w-4", refreshing && "animate-spin")}
+              />
             </Button>
           </div>
         ) : null}
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex shrink-0 items-center gap-3">
         {rightSlot ? (
           <>
             <div className="flex items-center gap-0.5">{rightSlot}</div>
@@ -165,7 +197,10 @@ export function ProjectHeader({
           </>
         ) : null}
 
-        <nav className="flex items-center gap-0.5" aria-label={t("layout.projectHeader.viewsNav")}>
+        <nav
+          className="flex items-center gap-0.5"
+          aria-label={t("layout.projectHeader.viewsNav")}
+        >
           {onBoard ? (
             <Button variant="ghost" size="sm" asChild>
               <NavLink to={workspaceBasePath(projectSlug, "list")}>
@@ -177,7 +212,9 @@ export function ProjectHeader({
             <Button variant="ghost" size="sm" asChild>
               <NavLink
                 to={workspaceBasePath(projectSlug, "board")}
-                className={({ isActive }) => cn(isActive && "bg-accent text-foreground")}
+                className={({ isActive }) =>
+                  cn(isActive && "bg-accent text-foreground")
+                }
               >
                 <LayoutDashboard className="h-4 w-4" />
                 {t("layout.projectHeader.board")}
@@ -187,7 +224,9 @@ export function ProjectHeader({
           <Button variant="ghost" size="sm" asChild>
             <NavLink
               to={projectSessionsPath(projectSlug)}
-              className={({ isActive }) => cn(isActive && "bg-accent text-foreground")}
+              className={({ isActive }) =>
+                cn(isActive && "bg-accent text-foreground")
+              }
             >
               <History className="h-4 w-4" />
               {t("layout.projectHeader.workspaces")}
@@ -201,7 +240,9 @@ export function ProjectHeader({
           <Button variant="ghost" size="sm" asChild>
             <NavLink
               to={projectTerminalPath(projectSlug)}
-              className={({ isActive }) => cn(isActive && "bg-accent text-foreground")}
+              className={({ isActive }) =>
+                cn(isActive && "bg-accent text-foreground")
+              }
             >
               <TerminalSquare className="h-4 w-4" />
               {t("layout.projectHeader.terminal")}
@@ -210,7 +251,9 @@ export function ProjectHeader({
           <Button variant="ghost" size="sm" asChild>
             <NavLink
               to={kbProjectPath(projectSlug)}
-              className={({ isActive }) => cn(isActive && "bg-accent text-foreground")}
+              className={({ isActive }) =>
+                cn(isActive && "bg-accent text-foreground")
+              }
             >
               <BookOpen className="h-4 w-4" />
               {t("layout.projectHeader.docs")}
@@ -220,7 +263,11 @@ export function ProjectHeader({
 
         <HeaderDivider />
 
-        <NewIssueMenu projectSlug={projectSlug} size="sm" onCreated={onIssueCreated} />
+        <NewIssueMenu
+          projectSlug={projectSlug}
+          size="sm"
+          onCreated={onIssueCreated}
+        />
       </div>
     </header>
   );

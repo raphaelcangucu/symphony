@@ -144,6 +144,38 @@ describe("AssistantComposer", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("keeps every mobile composer control in one horizontal row", () => {
+    render(
+      <AssistantComposer
+        projectSlug="macro-markets"
+        bundle={mockBundle}
+        addMenu={() => <button type="button">Unified add</button>}
+        toolbarBeforeAgent={<button type="button">Full access</button>}
+        submitActions={<button type="button">Stop</button>}
+        onSubmit={vi.fn()}
+      />,
+    );
+
+    const toolbar = screen.getByTestId("assistant-composer-toolbar");
+    expect(toolbar).toHaveClass("flex-nowrap", "overflow-hidden");
+    expect(screen.getByText("Unified add").parentElement).toHaveClass(
+      "shrink-0",
+      "flex-nowrap",
+    );
+    expect(screen.getByText("Full access").parentElement).toHaveClass(
+      "flex-nowrap",
+      "overflow-x-auto",
+      "justify-start",
+      "sm:justify-end",
+    );
+    expect(screen.getByText("Stop").parentElement).toHaveClass("shrink-0");
+    expect(
+      screen.getByRole("button", {
+        name: i18n.t("assistant.composer.modelChipAria"),
+      }),
+    ).toHaveClass("min-w-0", "max-w-[8rem]", "sm:max-w-[11rem]");
+  });
+
   it("sends on Enter and exposes model and effort controls", () => {
     const onSubmit = vi.fn();
 
