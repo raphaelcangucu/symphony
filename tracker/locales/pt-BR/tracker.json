@@ -2494,6 +2494,7 @@
       "modelChipAria": "Agente, modelo e raciocínio",
       "compactModelMenu": "Configurações do modelo",
       "add": "Adicionar",
+      "stopExecution": "Parar execução",
       "permissionTitle": "Como as ações devem ser aprovadas?",
       "permissionSaveFailed": "Falha ao salvar a permissão da conversa.",
       "actions": {

@@ -1052,6 +1052,7 @@ describe("ProjectAssistantPanel", () => {
   });
 
   it("moves a queued message back into the composer when edit is clicked", async () => {
+    const user = userEvent.setup();
     render(
       <ProjectAssistantPanel
         projectSlug="macro-markets"
@@ -1076,13 +1077,14 @@ describe("ProjectAssistantPanel", () => {
     expect(await screen.findByText("edit me in queue")).toBeTruthy();
 
     fireEvent.change(textarea, { target: { value: "composer draft" } });
-    fireEvent.click(
-      screen.getByRole("button", { name: /edit queued message/i }),
+    await user.click(screen.getByRole("button", { name: /more options/i }));
+    await user.click(
+      await screen.findByRole("menuitem", { name: /edit message/i }),
     );
 
     await waitFor(() =>
       expect(
-        screen.queryByRole("button", { name: /edit queued message/i }),
+        screen.queryByRole("button", { name: /more options/i }),
       ).toBeNull(),
     );
     expect(textarea).toHaveValue("edit me in queue");
@@ -1107,7 +1109,7 @@ describe("ProjectAssistantPanel", () => {
     fireEvent.keyDown(textarea, { key: "Enter", code: "Enter" });
 
     const removeButton = await screen.findByRole("button", {
-      name: /remove queued message/i,
+      name: /remove queued guidance/i,
     });
     fireEvent.click(removeButton);
 
@@ -1133,7 +1135,7 @@ describe("ProjectAssistantPanel", () => {
     fireEvent.keyDown(textarea, { key: "Enter", code: "Enter" });
 
     const sendNow = await screen.findByRole("button", {
-      name: /send queued message now/i,
+      name: /steer now/i,
     });
     fireEvent.click(sendNow);
 
@@ -1184,7 +1186,7 @@ describe("ProjectAssistantPanel", () => {
     );
 
     fireEvent.click(
-      await screen.findByRole("button", { name: /send queued message now/i }),
+      await screen.findByRole("button", { name: /steer now/i }),
     );
 
     await waitFor(() =>
@@ -1198,7 +1200,7 @@ describe("ProjectAssistantPanel", () => {
     );
   });
 
-  it("steers a running turn when /infer is submitted, and falls back to queue on steer_failed", async () => {
+  it("queues /infer during a run and lets the operator promote it to steer", async () => {
     render(
       <ProjectAssistantPanel
         projectSlug="macro-markets"
@@ -1222,18 +1224,21 @@ describe("ProjectAssistantPanel", () => {
       target: { value: "/infer prefer the simpler fix" },
     });
     fireEvent.keyDown(textarea, { key: "Enter", code: "Enter" });
+    expect(await screen.findByText("prefer the simpler fix")).toBeTruthy();
+    expect(push).not.toHaveBeenCalledWith(
+      "steer_turn",
+      expect.objectContaining({ message: "prefer the simpler fix" }),
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /steer now/i }),
+    );
     await waitFor(() =>
       expect(push).toHaveBeenCalledWith(
         "steer_turn",
         expect.objectContaining({ message: "prefer the simpler fix" }),
       ),
     );
-
-    channelHandlers["steer_failed"]({
-      code: "active_turn_not_steerable",
-      prompt: "prefer the simpler fix",
-    });
-    expect(await screen.findByText("prefer the simpler fix")).toBeTruthy();
   });
 
   it("runs an authoring goal in the chat and shows its banner when /goal is submitted", async () => {
@@ -1530,7 +1535,7 @@ describe("ProjectAssistantPanel", () => {
       ).not.toBeInTheDocument();
     });
     expect(
-      await screen.findByRole("button", { name: /stop/i }),
+      await screen.findByRole("button", { name: /stop execution/i }),
     ).toBeInTheDocument();
   });
 

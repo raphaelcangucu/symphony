@@ -1,4 +1,5 @@
 import { Square } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import {
   AssistantComposer,
@@ -53,6 +54,7 @@ export function UnifiedComposer({
   onStop,
   ...composerProps
 }: UnifiedComposerProps) {
+  const { t } = useTranslation();
   const state = deriveUnifiedComposerState({
     runActive,
     pending,
@@ -101,7 +103,7 @@ export function UnifiedComposer({
             size="icon"
             className="h-8 w-8 rounded-full"
             disabled={disabled || pending}
-            aria-label="Stop execution"
+            aria-label={t("assistant.composer.stopExecution")}
             onClick={onStop}
           >
             <Square className="h-3.5 w-3.5 fill-current" />

@@ -2494,6 +2494,7 @@
       "modelChipAria": "Agent, model, and reasoning",
       "compactModelMenu": "Model settings",
       "add": "Add",
+      "stopExecution": "Stop execution",
       "permissionTitle": "How should actions be approved?",
       "permissionSaveFailed": "Failed to save the conversation permission.",
       "actions": {
