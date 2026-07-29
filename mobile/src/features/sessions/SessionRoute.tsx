@@ -10,10 +10,15 @@ import { createRpcAssistantSession } from "@/realtime/rpc-assistant-session";
 import { useAppRuntime } from "@/runtime/AppRuntime";
 import { useHostRuntime } from "@/runtime/HostRuntimeProvider";
 import type { HostTransport } from "@/transport/HostTransport";
+import { useThreadSourceChanges } from "@/features/source-control/use-thread-source-changes";
 
 import { createSessionTimelineState, sessionTimelineReducer } from "./session-reducer";
 import { AssistantChatScreen } from "./AssistantChatScreen";
-import { hostChatRoute, hostTerminalRoute } from "./session-navigation";
+import {
+  assistantThreadDiffRoute,
+  hostChatRoute,
+  hostTerminalRoute,
+} from "./session-navigation";
 
 export function SessionRoute() {
   const router = useRouter();
@@ -152,6 +157,8 @@ function ConnectedSessionRoute({
     createSessionTimelineState,
   );
   const catalogHostId = activeProfile.transport === "rpc" ? activeProfile.hostId : null;
+  const sourceChanges = useThreadSourceChanges(threadId);
+  const changesRoute = assistantThreadDiffRoute(threadId);
   const catalogState = catalogHostId
     ? hostRuntime.assistantCatalog(catalogHostId)
     : { catalog: null, error: null, status: "unavailable" as const };
@@ -217,6 +224,7 @@ function ConnectedSessionRoute({
             : `/session/${threadId}/terminal`) as never,
         )
       }
+      onOpenChanges={() => changesRoute && router.push(changesRoute as never)}
       onClearGoal={() => session.clearGoal()}
       onKillTool={(toolCallId) => session.killTool(toolCallId)}
       onPauseGoal={() => session.pauseGoal()}
@@ -231,6 +239,7 @@ function ConnectedSessionRoute({
       onSubmitUserInput={(requestId, answers) => session.submitUserInput(requestId, answers)}
       title={title ?? `Session ${threadId}`}
       threadId={threadId}
+      sourceChanges={sourceChanges}
       timeline={timeline}
     />
   );

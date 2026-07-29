@@ -15,8 +15,8 @@ export function hostTerminalRoute(
   return `${route}${route.includes("?") ? "&" : "?"}view=terminal`;
 }
 
-export function assistantThreadDiffRoute(worktreeId: string): string | null {
-  const threadId = Number(worktreeId);
+export function assistantThreadDiffRoute(threadIdInput: string | number): string | null {
+  const threadId = Number(threadIdInput);
   return Number.isInteger(threadId) && threadId > 0
     ? `/session/${threadId}/diff`
     : null;

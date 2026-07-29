@@ -17,6 +17,7 @@ import {
   ChevronRight,
   Clock3,
   Compass,
+  Files,
   Hammer,
   Info,
   ListChecks,
@@ -55,6 +56,7 @@ import { radii, spacing } from "@/theme/tokens";
 import { useAppTheme } from "@/theme/ThemeProvider";
 import type { AssistantCatalog, PromptTemplate } from "@/api/contracts";
 import type { HostAssistantCatalogStatus } from "@/runtime/host-assistant-catalog-cache";
+import type { SourceChangeSummary } from "@/features/source-control/source-change-summary";
 
 import { buildAssistantUiMessages, submitAssistantUiMessage } from "./assistant-ui-session-adapter";
 import { followLatestMessage } from "./chat-scroll";
@@ -80,10 +82,11 @@ export type AssistantChatScreenProps = {
   timeline: SessionTimelineState;
   onBack(): void;
   onOpenTerminal(): void;
+  onOpenChanges?: (() => void) | undefined;
+  sourceChanges?: SourceChangeSummary | null | undefined;
   taskLinks?:
     | {
         identifier: string;
-        onOpenDiff(): void;
         onOpenEvidence(): void;
         onOpenPullRequest(): void;
         onOpenTask(): void;
@@ -159,6 +162,8 @@ function AssistantChatContent({
   onDictate,
   onStartDictation,
   onOpenTerminal,
+  onOpenChanges,
+  sourceChanges,
   taskLinks,
   onKillTool,
   onSetTurnPreferences,
@@ -229,6 +234,19 @@ function AssistantChatContent({
           >
             <SquareTerminal color={colors.textPrimary} size={21} />
           </Pressable>
+          {sourceChanges && onOpenChanges ? (
+            <Pressable
+              accessibilityLabel={`Open Changes: ${sourceChanges.filesChanged} files, ${sourceChanges.additions} additions, ${sourceChanges.deletions} deletions`}
+              accessibilityRole="button"
+              onPress={onOpenChanges}
+              style={[styles.iconButton, { backgroundColor: colors.bgPressed }]}
+            >
+              <Files color={colors.textPrimary} size={20} />
+              <Text style={[styles.changeCount, { color: colors.accent }]}>
+                {sourceChanges.filesChanged}
+              </Text>
+            </Pressable>
+          ) : null}
           {taskLinks ? (
             <Pressable
               accessibilityLabel={`Open ${taskLinks.identifier} task`}
@@ -1838,6 +1856,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     width: 44,
   },
+  changeCount: { fontSize: 11, fontWeight: "700", position: "absolute", right: 6, top: 5 },
   titleBlock: { alignItems: "center", flex: 1, minWidth: 0 },
   title: { fontSize: 15, fontWeight: "700", maxWidth: "100%" },
   titleMeta: { alignItems: "center", flexDirection: "row", gap: spacing.xs },

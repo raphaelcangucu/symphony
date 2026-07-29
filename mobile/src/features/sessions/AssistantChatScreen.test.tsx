@@ -359,7 +359,6 @@ describe("AssistantChatScreen", () => {
         onOpenTask,
         onOpenEvidence: jest.fn(),
         onOpenPullRequest: jest.fn(),
-        onOpenDiff: jest.fn(),
       },
     });
 
@@ -368,7 +367,23 @@ describe("AssistantChatScreen", () => {
     expect(onOpenTask).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("button", { name: "Open task Evidence" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Open task PRs" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Open task Diff" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Open Changes/ })).toBeNull();
+  });
+
+  it("opens Changes only when the Host reports source mutations", () => {
+    const onOpenChanges = jest.fn();
+    renderScreen({
+      onOpenChanges,
+      sourceChanges: { filesChanged: 3, additions: 137, deletions: 106 },
+    });
+
+    fireEvent.press(
+      screen.getByRole("button", {
+        name: "Open Changes: 3 files, 137 additions, 106 deletions",
+      }),
+    );
+
+    expect(onOpenChanges).toHaveBeenCalledTimes(1);
   });
 
   it("keeps an active goal compact while showing its elapsed duration", () => {

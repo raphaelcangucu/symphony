@@ -15,6 +15,7 @@ export const Bot = Icon;
 export const Brain = Icon;
 export const Clock3 = Icon;
 export const Compass = Icon;
+export const Files = Icon;
 export const Folder = Icon;
 export const Hammer = Icon;
 export const Info = Icon;

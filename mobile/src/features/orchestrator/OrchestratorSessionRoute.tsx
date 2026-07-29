@@ -4,10 +4,14 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { StateView } from "@/components/StateView";
 import { useTrackerClient } from "@/api/TrackerClientProvider";
 import { AssistantChatScreen } from "@/features/sessions/AssistantChatScreen";
-import { hostTerminalRoute } from "@/features/sessions/session-navigation";
+import {
+  assistantThreadDiffRoute,
+  hostTerminalRoute,
+} from "@/features/sessions/session-navigation";
 import type { SessionTimelineState } from "@/features/sessions/session-reducer";
 import { useAppRuntime } from "@/runtime/AppRuntime";
 import { useHostRuntime } from "@/runtime/HostRuntimeProvider";
+import { useThreadSourceChanges } from "@/features/source-control/use-thread-source-changes";
 
 import {
   appendSessionLogEntries,
@@ -42,6 +46,8 @@ export function OrchestratorSessionRoute() {
   const project = firstParam(params.projectSlug) ?? firstParam(params.project);
   const agent = firstParam(params.agent);
   const transport = hostId ? hostRuntime.transport(hostId) : null;
+  const sourceChanges = useThreadSourceChanges(executionSessionId);
+  const changesRoute = assistantThreadDiffRoute(executionSessionId ?? "");
   const [entries, setEntries] = useState<SessionLogEntry[]>([]);
   const [connectionState, setConnectionState] =
     useState<SessionTimelineState["connectionState"]>("connecting");
@@ -183,7 +189,6 @@ export function OrchestratorSessionRoute() {
             router.push(
               `/codex/issue/${encodeURIComponent(taskProjectSlug)}/${encodeURIComponent(taskIdentifier)}/pull-request` as never,
             ),
-          onOpenDiff: () => router.push(`/codex/session/${executionSessionId}/diff` as never),
         }
       : undefined;
 
@@ -204,6 +209,9 @@ export function OrchestratorSessionRoute() {
             identifier ?? `Run ${executionSessionId}`,
           ) as never,
         )
+      }
+      onOpenChanges={() =>
+        changesRoute && router.push(changesRoute as never)
       }
       onPauseGoal={async () => undefined}
       onLoadMagic={loadMagic}
@@ -231,6 +239,7 @@ export function OrchestratorSessionRoute() {
       onSubmitUserInput={async () => undefined}
       taskLinks={taskLinks}
       threadId={executionSessionId}
+      sourceChanges={sourceChanges}
       timeline={timeline}
       title={title}
     />
