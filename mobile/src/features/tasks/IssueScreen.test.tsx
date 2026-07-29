@@ -73,6 +73,22 @@ function renderScreen(props: Partial<React.ComponentProps<typeof IssueScreen>> =
 }
 
 describe("IssueScreen", () => {
+  it("switches among the five focused task tabs while keeping task identity visible", () => {
+    renderScreen();
+
+    for (const tab of ["Summary", "PR", "Comments", "Evidence", "Sessions"]) {
+      expect(screen.getByRole("tab", { name: tab })).toBeTruthy();
+    }
+    expect(screen.getByText("MOB-7")).toBeTruthy();
+    expect(screen.getByText("Task summary")).toBeTruthy();
+
+    fireEvent.press(screen.getByRole("tab", { name: "Comments" }));
+
+    expect(screen.getByText("MOB-7")).toBeTruthy();
+    expect(screen.getByText("Task comments")).toBeTruthy();
+    expect(screen.queryByText("Task summary")).toBeNull();
+  });
+
   it("renders issue context, comments, and workspace tools", () => {
     const onOpenEvidence = jest.fn();
     renderScreen({ evidenceCount: 2, onOpenEvidence });

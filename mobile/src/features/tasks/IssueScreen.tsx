@@ -14,6 +14,8 @@ import { StateView } from "@/components/StateView";
 import { radii, spacing } from "@/theme/tokens";
 import { useAppTheme } from "@/theme/ThemeProvider";
 
+import { ISSUE_TABS, type IssueTabId } from "./issue-tabs";
+
 type IssueScreenProps = {
   issue: IssueSummary | null;
   comments: IssueComment[];
@@ -72,6 +74,7 @@ export function IssueScreen({
   const [description, setDescription] = useState(issue?.description ?? "");
   const [comment, setComment] = useState("");
   const [subtaskTitle, setSubtaskTitle] = useState("");
+  const [activeTab, setActiveTab] = useState<IssueTabId>("summary");
 
   useEffect(() => {
     setTitle(issue?.title ?? "");
@@ -139,7 +142,37 @@ export function IssueScreen({
         </Pressable>
       </View>
 
+      <ScrollView
+        contentContainerStyle={styles.tabs}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+      >
+        {ISSUE_TABS.map((tab) => {
+          const selected = activeTab === tab.id;
+          return (
+            <Pressable
+              accessibilityRole="tab"
+              accessibilityState={{ selected }}
+              key={tab.id}
+              onPress={() => setActiveTab(tab.id)}
+              style={[
+                styles.tab,
+                {
+                  borderBottomColor: selected ? colors.textPrimary : "transparent",
+                },
+              ]}
+            >
+              <Text style={{ color: selected ? colors.textPrimary : colors.textMuted }}>
+                {tab.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+
+      {activeTab === "summary" ? (
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        <Text style={styles.srOnly}>Task summary</Text>
         {error ? <Text style={{ color: colors.statusRed }}>{error}</Text> : null}
         <TextInput
           accessibilityLabel="Task title"
@@ -297,6 +330,55 @@ export function IssueScreen({
           }}
         />
       </ScrollView>
+      ) : activeTab === "comments" ? (
+        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+          <Text style={styles.srOnly}>Task comments</Text>
+          {comments.map((item) => (
+            <View
+              key={item.id}
+              style={[
+                styles.comment,
+                { backgroundColor: colors.bgPanel, borderColor: colors.borderSubtle },
+              ]}
+            >
+              <Text style={{ color: colors.textMuted }}>{item.author ?? "Unknown"}</Text>
+              <Text style={{ color: colors.textPrimary }}>{item.body}</Text>
+            </View>
+          ))}
+          <TextInput
+            accessibilityLabel="New comment"
+            multiline
+            onChangeText={setComment}
+            placeholder="Add a comment"
+            placeholderTextColor={colors.textMuted}
+            style={[
+              styles.commentInput,
+              {
+                backgroundColor: colors.bgPanel,
+                borderColor: colors.borderSubtle,
+                color: colors.textPrimary,
+              },
+            ]}
+            value={comment}
+          />
+          <Action
+            disabled={!comment.trim()}
+            label="Add comment"
+            onPress={() => {
+              const body = comment.trim();
+              if (!body) return;
+              onAddComment(body);
+              setComment("");
+            }}
+          />
+        </ScrollView>
+      ) : (
+        <ScrollView contentContainerStyle={styles.content}>
+          <Text style={[styles.placeholderTitle, { color: colors.textPrimary }]}>
+            {ISSUE_TABS.find((tab) => tab.id === activeTab)?.label}
+          </Text>
+        </ScrollView>
+      )}
     </SafeAreaView>
   );
 }
@@ -433,6 +515,15 @@ const styles = StyleSheet.create({
   saveButton: { alignItems: "center", justifyContent: "center", minHeight: 44, minWidth: 64 },
   sectionTitle: { fontSize: 17, fontWeight: "700", marginTop: spacing.sm },
   status: { fontSize: 12 },
+  srOnly: { height: 1, opacity: 0, position: "absolute", width: 1 },
+  tab: {
+    borderBottomWidth: 2,
+    justifyContent: "center",
+    minHeight: 44,
+    paddingHorizontal: spacing.md,
+  },
+  tabs: { borderBottomWidth: StyleSheet.hairlineWidth, paddingHorizontal: spacing.xs },
+  placeholderTitle: { fontSize: 20, fontWeight: "700" },
   title: { fontSize: 24, fontWeight: "700", minHeight: 44 },
   tools: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs },
 });
