@@ -32,7 +32,18 @@ describe("IssueRoute", () => {
       activeProfile: { id: "remote-1" },
     } as ReturnType<typeof useConnection>);
     jest.mocked(useTaskEvidence).mockReturnValue({
-      records: [],
+      records: [
+        {
+          id: 1,
+          runId: "run-mobile-1",
+          sessionId: "42",
+          status: "passed",
+          uiChange: true,
+          insertedAt: null,
+          provenance: null,
+          manifest: { issue: "MOB-7", generatedAt: null, uiChange: true, runs: [] },
+        },
+      ],
       loading: false,
       error: null,
       refresh: jest.fn(),
@@ -117,5 +128,17 @@ describe("IssueRoute", () => {
     fireEvent.press(screen.getByRole("tab", { name: "PR" }));
 
     expect(screen.getByText("PR #418")).toBeTruthy();
+  });
+
+  it("passes durable evidence into the task Evidence tab", () => {
+    render(
+      <ThemeProvider colorScheme="dark">
+        <IssueRoute />
+      </ThemeProvider>,
+    );
+
+    fireEvent.press(screen.getByRole("tab", { name: "Evidence" }));
+
+    expect(screen.getByText("run-mobile-1")).toBeTruthy();
   });
 });

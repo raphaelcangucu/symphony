@@ -12,10 +12,12 @@ import type {
   PullRequest,
 } from "@/api/contracts";
 import { StateView } from "@/components/StateView";
+import type { EvidenceRecord } from "@/features/evidence/evidence-contract";
 import { radii, spacing } from "@/theme/tokens";
 import { useAppTheme } from "@/theme/ThemeProvider";
 
 import { ISSUE_TABS, type IssueTabId } from "./issue-tabs";
+import { IssueEvidenceTab } from "./IssueEvidenceTab";
 import { IssuePullRequestTab } from "./IssuePullRequestTab";
 
 type IssueScreenProps = {
@@ -24,6 +26,9 @@ type IssueScreenProps = {
   blockers: IssueBlocker[];
   subtasks: IssueSummary[];
   evidenceCount: number;
+  evidenceError?: string | null;
+  evidenceLoading?: boolean;
+  evidenceRecords?: EvidenceRecord[];
   loading: boolean;
   error: string | null;
   saving: boolean;
@@ -53,6 +58,9 @@ export function IssueScreen({
   blockers,
   subtasks = [],
   evidenceCount,
+  evidenceError = null,
+  evidenceLoading = false,
+  evidenceRecords = [],
   loading,
   error,
   saving,
@@ -343,6 +351,13 @@ export function IssueScreen({
           onOpen={() => onOpenPullRequest()}
           onRefresh={() => onRefresh()}
           pullRequests={pullRequests}
+        />
+      ) : activeTab === "evidence" ? (
+        <IssueEvidenceTab
+          error={evidenceError}
+          loading={evidenceLoading}
+          onOpen={onOpenEvidence}
+          records={evidenceRecords}
         />
       ) : activeTab === "comments" ? (
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">

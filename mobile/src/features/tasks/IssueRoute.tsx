@@ -69,6 +69,9 @@ function ConnectedIssueRoute({
       dispatching={detail.dispatching}
       error={detail.error}
       evidenceCount={evidence.records.length}
+      evidenceError={evidence.error}
+      evidenceLoading={evidence.loading}
+      evidenceRecords={evidence.records}
       issue={detail.issue}
       loading={detail.loading}
       pullRequestError={detail.pullRequestError}
