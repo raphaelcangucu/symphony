@@ -81,6 +81,18 @@ function ConnectedIssueRoute({
       onDispatch={detail.dispatch}
       onGoalAction={detail.goalAction}
       onCreateSubtask={detail.createSubtask}
+      onCreateSession={() =>
+        router.push({
+          pathname: "/codex/new-session",
+          params: {
+            projectSlug,
+            issueIdentifier: identifier,
+            agentKind: detail.issue?.agentKind ?? undefined,
+            model: detail.issue?.model ?? undefined,
+            effort: detail.issue?.effort ?? undefined,
+          },
+        })
+      }
       onOpenDiff={() => threadRoute("/diff")}
       onOpenEvidence={() =>
         router.push(
@@ -99,12 +111,15 @@ function ConnectedIssueRoute({
           `/codex/issue/${encodeURIComponent(projectSlug)}/${encodeURIComponent(relatedIdentifier)}`,
         )
       }
-      onOpenSession={() => threadRoute()}
+      onOpenSession={(thread) =>
+        thread ? router.push(`/codex/session/${thread.id}`) : threadRoute()
+      }
       onOpenTerminal={() => threadRoute("/terminal")}
       onRefresh={() => void detail.refresh()}
       onSave={detail.save}
       saving={detail.saving}
       subtasks={detail.subtasks}
+      threads={detail.threads}
     />
   );
 }

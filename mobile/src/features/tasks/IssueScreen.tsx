@@ -3,6 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import type {
+  AssistantThread,
   GoalControlInput,
   IssueBlocker,
   IssueComment,
@@ -19,6 +20,7 @@ import { useAppTheme } from "@/theme/ThemeProvider";
 import { ISSUE_TABS, type IssueTabId } from "./issue-tabs";
 import { IssueEvidenceTab } from "./IssueEvidenceTab";
 import { IssuePullRequestTab } from "./IssuePullRequestTab";
+import { IssueSessionsTab } from "./IssueSessionsTab";
 
 type IssueScreenProps = {
   issue: IssueSummary | null;
@@ -35,18 +37,20 @@ type IssueScreenProps = {
   dispatching: boolean;
   pullRequestError?: string | null;
   pullRequests?: PullRequest[];
+  threads?: AssistantThread[];
   onBack(): void;
   onAddComment(body: string): void;
   onDispatch(action: IssueDispatchInput["action"]): void;
   onGoalAction(action: GoalControlInput["action"]): void;
   onCreateSubtask(title: string): void;
+  onCreateSession(): void;
   onOpenDiff(): void;
   onOpenEvidence(): void;
   onOpenFiles(): void;
   onOpenPreview(): void;
   onOpenPullRequest(): void;
   onOpenRelatedTask(identifier: string): void;
-  onOpenSession(): void;
+  onOpenSession(thread?: AssistantThread): void;
   onOpenTerminal(): void;
   onRefresh(): void;
   onSave(input: IssueMutationInput): void;
@@ -67,11 +71,13 @@ export function IssueScreen({
   dispatching,
   pullRequestError = null,
   pullRequests = [],
+  threads = [],
   onBack,
   onAddComment,
   onDispatch,
   onGoalAction,
   onCreateSubtask,
+  onCreateSession,
   onOpenDiff,
   onOpenEvidence,
   onOpenFiles,
@@ -358,6 +364,13 @@ export function IssueScreen({
           loading={evidenceLoading}
           onOpen={onOpenEvidence}
           records={evidenceRecords}
+        />
+      ) : activeTab === "sessions" ? (
+        <IssueSessionsTab
+          loading={loading}
+          onCreate={onCreateSession}
+          onOpen={onOpenSession}
+          threads={threads}
         />
       ) : activeTab === "comments" ? (
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">

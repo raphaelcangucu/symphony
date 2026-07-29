@@ -71,6 +71,22 @@ describe("IssueRoute", () => {
       },
       comments: [],
       blockers: [],
+      threads: [
+        {
+          id: 43,
+          scope: "issue_session",
+          projectSlug: "symphony",
+          projectName: "Symphony",
+          issueIdentifier: "MOB-7",
+          workspacePath: null,
+          title: "Review evidence",
+          status: "active",
+          preview: null,
+          updatedAt: "2026-07-29T16:35:00Z",
+          agentKind: "codex",
+          needsReview: false,
+        },
+      ],
       pullRequests: [
         {
           number: 418,
@@ -140,5 +156,18 @@ describe("IssueRoute", () => {
     fireEvent.press(screen.getByRole("tab", { name: "Evidence" }));
 
     expect(screen.getByText("run-mobile-1")).toBeTruthy();
+  });
+
+  it("opens an associated chat from the Sessions tab", () => {
+    render(
+      <ThemeProvider colorScheme="dark">
+        <IssueRoute />
+      </ThemeProvider>,
+    );
+
+    fireEvent.press(screen.getByRole("tab", { name: "Sessions" }));
+    fireEvent.press(screen.getByRole("button", { name: "Open session 43" }));
+
+    expect(push).toHaveBeenCalledWith("/codex/session/43");
   });
 });

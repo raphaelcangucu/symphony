@@ -43,6 +43,7 @@ export function useIssueDetail({
         blockers,
         subtasks,
         threadId: threads[0]?.id ?? null,
+        threads,
         pullRequests: pullRequestState.result.pullRequests,
         pullRequestError: pullRequestState.error,
       };
@@ -96,6 +97,7 @@ export function useIssueDetail({
     pullRequests: query.data?.pullRequests ?? [],
     pullRequestError: query.data?.pullRequestError ?? null,
     threadId: query.data?.threadId ?? null,
+    threads: query.data?.threads ?? [],
     loading: query.isLoading,
     error:
       (mutationError instanceof Error ? mutationError.message : null) ??
