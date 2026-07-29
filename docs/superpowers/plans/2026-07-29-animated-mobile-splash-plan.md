@@ -223,7 +223,7 @@ Install the resulting APK on `emulator-5554`, clear app data, record from the
 home screen through the pairing screen, then inspect a 10 fps contact sheet for
 the three bolts and the large mark.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add mobile/src/dev10x/components/AnimatedSplash.tsx \
