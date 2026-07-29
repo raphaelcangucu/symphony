@@ -1,9 +1,11 @@
 import { fireEvent, render, screen } from "@testing-library/react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
+import { createRpcTrackerClient } from "@/api/rpc-tracker-client";
 import { useTrackerClient } from "@/api/TrackerClientProvider";
 import { useConnection } from "@/auth/ConnectionProvider";
 import { useTaskEvidence } from "@/features/evidence/useTaskEvidence";
+import { useHostRuntime } from "@/runtime/HostRuntimeProvider";
 import { ThemeProvider } from "@/theme/ThemeProvider";
 
 import { IssueRoute } from "./IssueRoute";
@@ -14,8 +16,10 @@ jest.mock("expo-router", () => ({
   useRouter: jest.fn(),
 }));
 jest.mock("@/api/TrackerClientProvider", () => ({ useTrackerClient: jest.fn() }));
+jest.mock("@/api/rpc-tracker-client", () => ({ createRpcTrackerClient: jest.fn() }));
 jest.mock("@/auth/ConnectionProvider", () => ({ useConnection: jest.fn() }));
 jest.mock("@/features/evidence/useTaskEvidence", () => ({ useTaskEvidence: jest.fn() }));
+jest.mock("@/runtime/HostRuntimeProvider", () => ({ useHostRuntime: jest.fn() }));
 jest.mock("./useIssueDetail", () => ({ useIssueDetail: jest.fn() }));
 
 const push = jest.fn();
@@ -28,6 +32,9 @@ describe("IssueRoute", () => {
       .mocked(useLocalSearchParams)
       .mockReturnValue({ projectSlug: "symphony", identifier: "MOB-7" });
     jest.mocked(useTrackerClient).mockReturnValue({} as ReturnType<typeof useTrackerClient>);
+    jest.mocked(useHostRuntime).mockReturnValue({
+      transport: jest.fn().mockReturnValue(null),
+    } as unknown as ReturnType<typeof useHostRuntime>);
     jest.mocked(useConnection).mockReturnValue({
       activeProfile: { id: "remote-1" },
     } as ReturnType<typeof useConnection>);
@@ -129,6 +136,7 @@ describe("IssueRoute", () => {
     );
 
     fireEvent.press(screen.getByRole("button", { name: "Open session" }));
+    fireEvent.press(screen.getByRole("button", { name: "More task actions" }));
     fireEvent.press(screen.getByRole("button", { name: "Terminal" }));
     expect(push).toHaveBeenNthCalledWith(1, "/codex/session/42");
     expect(push).toHaveBeenNthCalledWith(2, "/codex/session/42/terminal");
@@ -169,5 +177,35 @@ describe("IssueRoute", () => {
     fireEvent.press(screen.getByRole("button", { name: "Open session 43" }));
 
     expect(push).toHaveBeenCalledWith("/codex/session/43");
+  });
+
+  it("binds a host-scoped task to the transport named by the route", () => {
+    const transport = { hostId: "host-alpha" };
+    const hostClient = { issue: jest.fn() };
+    jest.mocked(useLocalSearchParams).mockReturnValue({
+      hostId: "host-alpha",
+      projectSlug: "alpha",
+      identifier: "ALP-1",
+    });
+    jest.mocked(useHostRuntime).mockReturnValue({
+      transport: jest.fn().mockReturnValue(transport),
+    } as unknown as ReturnType<typeof useHostRuntime>);
+    jest.mocked(createRpcTrackerClient).mockReturnValue(hostClient as never);
+
+    render(
+      <ThemeProvider colorScheme="dark">
+        <IssueRoute />
+      </ThemeProvider>,
+    );
+
+    expect(createRpcTrackerClient).toHaveBeenCalledWith(transport);
+    expect(useIssueDetail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        client: hostClient,
+        profileId: "host-alpha",
+        projectSlug: "alpha",
+        identifier: "ALP-1",
+      }),
+    );
   });
 });

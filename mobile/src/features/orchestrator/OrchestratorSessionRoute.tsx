@@ -16,15 +16,11 @@ import { useThreadSourceChanges } from "@/features/source-control/use-thread-sou
 import {
   appendSessionLogEntries,
   buildOrchestratorTimeline,
+  payloadOrchestratorSessionProvenance,
+  type OrchestratorSessionProvenance,
   type SessionLogEntry,
 } from "./orchestrator-session-adapter";
 import { createRpcOrchestratorSession } from "./rpc-orchestrator-session";
-
-type OrchestratorTaskContext = {
-  projectSlug: string;
-  identifier: string | null;
-  agentKind: string | null;
-};
 
 export function OrchestratorSessionRoute() {
   const router = useRouter();
@@ -40,7 +36,9 @@ export function OrchestratorSessionRoute() {
   const { dictate, startDictation } = useAppRuntime();
   const hostRuntime = useHostRuntime();
   const hostId = firstParam(params.hostId);
-  const executionSessionId = positiveInteger(firstParam(params.executionSessionId));
+  const executionSessionId = positiveInteger(
+    firstParam(params.executionSessionId),
+  );
   const identifier = firstParam(params.identifier);
   const project = firstParam(params.projectSlug) ?? firstParam(params.project);
   const agent = firstParam(params.agent);
@@ -53,16 +51,30 @@ export function OrchestratorSessionRoute() {
     client: trackerClient,
     hostId,
   });
-  const changesRoute = assistantThreadDiffRoute(executionSessionId ?? "", hostId);
+  const changesRoute = assistantThreadDiffRoute(
+    executionSessionId ?? "",
+    hostId,
+  );
   const [entries, setEntries] = useState<SessionLogEntry[]>([]);
   const [connectionState, setConnectionState] =
     useState<SessionTimelineState["connectionState"]>("connecting");
   const [error, setError] = useState<string | null>(null);
-  const [taskContext, setTaskContext] = useState<OrchestratorTaskContext | null>(null);
-  const onSnapshot = useCallback((next: SessionLogEntry[]) => setEntries(next), []);
+  const [taskContext, setTaskContext] =
+    useState<OrchestratorSessionProvenance | null>(null);
+  const onSnapshot = useCallback(
+    (next: SessionLogEntry[]) => setEntries(next),
+    [],
+  );
   const onEntries = useCallback(
     (next: SessionLogEntry[]) =>
-      setEntries((current) => appendSessionLogEntries(current, { entries: next })),
+      setEntries((current) =>
+        appendSessionLogEntries(current, { entries: next }),
+      ),
+    [],
+  );
+  const onContext = useCallback(
+    (payload: unknown) =>
+      setTaskContext(payloadOrchestratorSessionProvenance(payload)),
     [],
   );
 
@@ -74,36 +86,18 @@ export function OrchestratorSessionRoute() {
             transport,
             onSnapshot,
             onEntries,
+            onContext,
             onConnection: setConnectionState,
             onError: setError,
           })
         : null,
-    [executionSessionId, onEntries, onSnapshot, transport],
+    [executionSessionId, onContext, onEntries, onSnapshot, transport],
   );
 
   useEffect(() => {
     session?.connect();
     return () => session?.disconnect();
   }, [session]);
-
-  useEffect(() => {
-    if (!transport || !executionSessionId) return;
-    let cancelled = false;
-    void transport
-      .call("orchestrator.session.context", {
-        execution_session_id: executionSessionId,
-      })
-      .then((payload) => {
-        const context = taskContextFromPayload(payload);
-        if (!cancelled) setTaskContext(context);
-      })
-      .catch(() => {
-        if (!cancelled) setTaskContext(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [executionSessionId, transport]);
 
   const taskProjectSlug = taskContext?.projectSlug ?? project;
   const taskIdentifier = taskContext?.identifier ?? identifier;
@@ -120,7 +114,9 @@ export function OrchestratorSessionRoute() {
       const [issues, files, pullRequests] = await Promise.all([
         trackerClient.issues(taskProjectSlug, { query }).catch(() => []),
         taskIdentifier && query.trim()
-          ? trackerClient.issueFiles(taskProjectSlug, taskIdentifier, query).catch(() => [])
+          ? trackerClient
+              .issueFiles(taskProjectSlug, taskIdentifier, query)
+              .catch(() => [])
           : Promise.resolve([]),
         taskIdentifier
           ? trackerClient
@@ -137,7 +133,9 @@ export function OrchestratorSessionRoute() {
           label: issue.title,
           detail: issue.status,
         })),
-        ...files.slice(0, 8).map((path) => ({ type: "file" as const, id: path })),
+        ...files
+          .slice(0, 8)
+          .map((path) => ({ type: "file" as const, id: path })),
         ...pullRequests
           .filter(
             (pullRequest) =>
@@ -178,6 +176,7 @@ export function OrchestratorSessionRoute() {
     connectionState,
     error,
     taskContext?.agentKind ?? agent,
+    taskContext,
   );
   const taskLinks =
     taskProjectSlug && taskIdentifier
@@ -185,7 +184,7 @@ export function OrchestratorSessionRoute() {
           identifier: taskIdentifier,
           onOpenTask: () =>
             router.push(
-              `/codex/issue/${encodeURIComponent(taskProjectSlug)}/${encodeURIComponent(taskIdentifier)}` as never,
+              `/h/${encodeURIComponent(hostId)}/issue/${encodeURIComponent(taskProjectSlug)}/${encodeURIComponent(taskIdentifier)}` as never,
             ),
           onOpenEvidence: () =>
             router.push(
@@ -205,7 +204,9 @@ export function OrchestratorSessionRoute() {
       onBack={() => router.back()}
       onClearGoal={async () => undefined}
       onDictate={() => dictate(resolvedLocale())}
-      onStartDictation={startDictation ? () => startDictation(resolvedLocale()) : undefined}
+      onStartDictation={
+        startDictation ? () => startDictation(resolvedLocale()) : undefined
+      }
       onKillTool={async () => undefined}
       onOpenTerminal={() =>
         router.push(
@@ -216,20 +217,21 @@ export function OrchestratorSessionRoute() {
           ) as never,
         )
       }
-      onOpenChanges={() =>
-        changesRoute && router.push(changesRoute as never)
-      }
+      onOpenChanges={() => changesRoute && router.push(changesRoute as never)}
       onPauseGoal={async () => undefined}
       onLoadMagic={loadMagic}
       onRunMagic={async (template) => {
         if (!trackerClient || !taskProjectSlug || !taskIdentifier) return;
         await trackerClient.runPromptTemplate(taskProjectSlug, taskIdentifier, {
           slug: template.slug,
-          agent: template.agentKind as "codex" | "claude" | "cursor" | "opencode" | null,
+          agent: template.agentKind as
+            "codex" | "claude" | "cursor" | "opencode" | null,
           model: template.model,
           effort: template.effort,
           mode:
-            template.mode === "plan" || template.mode === "build" || template.mode === "yolo"
+            template.mode === "plan" ||
+            template.mode === "build" ||
+            template.mode === "yolo"
               ? template.mode
               : null,
         });
@@ -250,22 +252,6 @@ export function OrchestratorSessionRoute() {
       title={title}
     />
   );
-}
-
-function taskContextFromPayload(payload: unknown): OrchestratorTaskContext | null {
-  if (typeof payload !== "object" || payload === null || Array.isArray(payload)) return null;
-  const record = payload as Record<string, unknown>;
-  const projectSlug = typeof record.project_slug === "string" ? record.project_slug.trim() : "";
-  const identifier =
-    typeof record.issue_identifier === "string" ? record.issue_identifier.trim() : "";
-  const agentKind = typeof record.agent_kind === "string" ? record.agent_kind.trim() : "";
-  return projectSlug
-    ? {
-        projectSlug,
-        identifier: identifier || null,
-        agentKind: agentKind || null,
-      }
-    : null;
 }
 
 function positiveInteger(value: string | null): number | null {

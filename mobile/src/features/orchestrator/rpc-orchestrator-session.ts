@@ -1,7 +1,10 @@
 import type { SessionTimelineState } from "@/features/sessions/session-reducer";
 import type { HostTransport } from "@/transport/HostTransport";
 
-import { payloadSessionLogEntries, type SessionLogEntry } from "./orchestrator-session-adapter";
+import {
+  payloadSessionLogEntries,
+  type SessionLogEntry,
+} from "./orchestrator-session-adapter";
 
 const STEER_STREAM_REFRESH_MS = 2_500;
 const SUBSCRIBE_RETRY_MS = 1_000;
@@ -21,6 +24,7 @@ export function createRpcOrchestratorSession({
   transport,
   onSnapshot,
   onEntries,
+  onContext,
   onConnection,
   onError,
 }: {
@@ -28,6 +32,7 @@ export function createRpcOrchestratorSession({
   transport: HostTransport;
   onSnapshot(entries: SessionLogEntry[]): void;
   onEntries(entries: SessionLogEntry[]): void;
+  onContext?(payload: unknown): void;
   onConnection(state: SessionTimelineState["connectionState"]): void;
   onError(message: string | null): void;
 }): RpcOrchestratorSession {
@@ -60,6 +65,9 @@ export function createRpcOrchestratorSession({
           if (!active || currentGeneration !== generation || !eventName) return;
           if (eventName === "orchestrator.session.joined") {
             noteTranscriptUpdate();
+            if (isRecord(payload) && "context" in payload) {
+              onContext?.(payload.context);
+            }
             onSnapshot(payloadSessionLogEntries(payload));
           } else if (eventName === "orchestrator.session.entries") {
             noteTranscriptUpdate();
@@ -84,18 +92,24 @@ export function createRpcOrchestratorSession({
         onConnection("live");
         onError(null);
       })
-      .catch((error: unknown) => {
+      .catch(() => {
         if (!active || currentGeneration !== generation) return;
         connected = false;
-        onConnection("offline");
-        onError(errorMessage(error));
+        // The previous screen may still be releasing this execution channel.
+        // Present the automatic retry as reconnecting instead of flashing a
+        // terminal-looking RPC failure that normally disappears one second later.
+        onConnection("reconnecting");
+        onError(null);
         scheduleSubscriptionRetry(currentGeneration);
       });
   }
 
   function scheduleSubscriptionRetry(failedGeneration: number): void {
     clearRetryTimer();
-    const retryDelayMs = Math.min(SUBSCRIBE_RETRY_MS * 2 ** retryAttempts, MAX_SUBSCRIBE_RETRY_MS);
+    const retryDelayMs = Math.min(
+      SUBSCRIBE_RETRY_MS * 2 ** retryAttempts,
+      MAX_SUBSCRIBE_RETRY_MS,
+    );
     retryAttempts += 1;
     retryTimer = setTimeout(() => {
       retryTimer = null;
@@ -152,17 +166,23 @@ export function createRpcOrchestratorSession({
   ): Promise<void> {
     const normalized = message.trim();
     if (!normalized) throw new Error("Message is required");
-    if (!connected && active) throw new Error("Execution session is not connected");
+    if (!connected && active)
+      throw new Error("Execution session is not connected");
     const revisionBeforeSteer = transcriptRevision;
     await transport.call("orchestrator.session.command", {
       execution_session_id: executionSessionId,
       event: "steer",
-      payload: { message: normalized, attachments: [], context_refs: contextRefs },
+      payload: {
+        message: normalized,
+        attachments: [],
+        context_refs: contextRefs,
+      },
     });
     clearRefreshTimer();
     refreshTimer = setTimeout(() => {
       refreshTimer = null;
-      if (active && transcriptRevision === revisionBeforeSteer) refreshTranscript();
+      if (active && transcriptRevision === revisionBeforeSteer)
+        refreshTranscript();
     }, STEER_STREAM_REFRESH_MS);
   }
 
@@ -170,11 +190,9 @@ export function createRpcOrchestratorSession({
 }
 
 function payloadReason(payload: unknown, fallback: string): string {
-  return isRecord(payload) && typeof payload.reason === "string" ? payload.reason : fallback;
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : "Unable to follow this execution";
+  return isRecord(payload) && typeof payload.reason === "string"
+    ? payload.reason
+    : fallback;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

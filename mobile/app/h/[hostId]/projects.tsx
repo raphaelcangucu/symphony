@@ -27,7 +27,7 @@ export default function HostProjectsPage() {
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    if (!tracker) return;
+    if (!tracker || state !== "connected") return;
     setLoading(true);
     setError(null);
     try {
@@ -37,7 +37,7 @@ export default function HostProjectsPage() {
     } finally {
       setLoading(false);
     }
-  }, [tracker]);
+  }, [state, tracker]);
 
   useEffect(() => {
     void load();
@@ -48,7 +48,7 @@ export default function HostProjectsPage() {
       <View style={styles.header}>
         <Pressable
           style={styles.iconButton}
-          onPress={() => router.back()}
+          onPress={() => router.replace("/")}
           accessibilityLabel="Voltar"
         >
           <ChevronLeft size={21} color={colors.textPrimary} />
@@ -104,6 +104,7 @@ export default function HostProjectsPage() {
           <Pressable
             style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
             onPress={() => router.push(`/h/${hostId}/projects/${encodeURIComponent(item.slug)}`)}
+            accessibilityLabel={`Abrir projeto ${item.name}`}
           >
             <View style={styles.rowIcon}>
               <FolderGit2 size={20} color={colors.textSecondary} />

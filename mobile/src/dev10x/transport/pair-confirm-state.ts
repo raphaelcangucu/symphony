@@ -17,3 +17,7 @@ export function resolvePairConfirmRouteState(code: string | undefined): PairConf
 
   return { kind: 'ready', offer, errorMessage: '' }
 }
+
+export function pairedHostLandingRoute(hostId: string): string {
+  return `/h/${encodeURIComponent(hostId)}/projects`
+}

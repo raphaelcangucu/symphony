@@ -1,5 +1,5 @@
-import { Dev10xHomeRoute } from "@/dev10x/routes/Dev10xHomeRoute";
+import { HomeRoute } from "@/dev10x/routes/HomeRoute";
 
 export default function IndexRoute() {
-  return <Dev10xHomeRoute />;
+  return <HomeRoute />;
 }

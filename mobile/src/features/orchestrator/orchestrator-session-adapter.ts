@@ -1,4 +1,5 @@
 import type {
+  AssistantExecutionMode,
   AssistantMessage,
   AssistantToolCall,
   SessionTimelineState,
@@ -27,6 +28,18 @@ export type SessionLogEntry = {
   steerState: "queued" | "accepted" | "failed" | null;
 };
 
+export type OrchestratorSessionProvenance = {
+  projectSlug: string;
+  identifier: string | null;
+  agentKind: string | null;
+  executionMode: AssistantExecutionMode | null;
+  skillProfile: string | null;
+  requestedModel: string | null;
+  requestedEffort: string | null;
+  resolvedModel: string | null;
+  resolvedEffort: string | null;
+};
+
 export function payloadSessionLogEntries(payload: unknown): SessionLogEntry[] {
   if (!isRecord(payload)) return [];
   const entries = payload.entries ?? payload.lines;
@@ -38,6 +51,39 @@ export function payloadSessionLogEntries(payload: unknown): SessionLogEntry[] {
         : normalizeSessionLogEntry(entry),
     )
     .filter((entry): entry is SessionLogEntry => entry !== null);
+}
+
+export function payloadOrchestratorSessionProvenance(
+  payload: unknown,
+): OrchestratorSessionProvenance | null {
+  if (!isRecord(payload)) return null;
+  const projectSlug =
+    typeof payload.project_slug === "string" ? payload.project_slug.trim() : "";
+  const identifier =
+    typeof payload.issue_identifier === "string"
+      ? payload.issue_identifier.trim()
+      : "";
+  const agentKind =
+    typeof payload.agent_kind === "string" ? payload.agent_kind.trim() : "";
+  const executionMode =
+    payload.execution_mode === "plan" ||
+    payload.execution_mode === "build" ||
+    payload.execution_mode === "yolo"
+      ? payload.execution_mode
+      : null;
+  return projectSlug
+    ? {
+        projectSlug,
+        identifier: identifier || null,
+        agentKind: agentKind || null,
+        executionMode,
+        skillProfile: nonEmptyString(payload.skill_profile),
+        requestedModel: nonEmptyString(payload.requested_model),
+        requestedEffort: nonEmptyString(payload.requested_effort),
+        resolvedModel: nonEmptyString(payload.resolved_model),
+        resolvedEffort: nonEmptyString(payload.resolved_effort),
+      }
+    : null;
 }
 
 export function appendSessionLogEntries(
@@ -59,8 +105,10 @@ export function buildOrchestratorTimeline(
   connectionState: SessionTimelineState["connectionState"],
   error: string | null = null,
   agentKind: string | null = null,
+  provenance: OrchestratorSessionProvenance | null = null,
 ): SessionTimelineState {
-  const queuedMessages = queuedSteerMessages(entries, agentKind);
+  const effectiveAgentKind = provenance?.agentKind ?? agentKind;
+  const queuedMessages = queuedSteerMessages(entries, effectiveAgentKind);
   return {
     messages: messagesFromEntries(entries),
     streamingText: "",
@@ -73,18 +121,18 @@ export function buildOrchestratorTimeline(
         ? { status: "queued", canResume: false, queuedMessages }
         : null,
     turnPreferences: {
-      executionMode: null,
-      skillProfile: null,
-      model: null,
-      effort: null,
+      executionMode: provenance?.executionMode ?? null,
+      skillProfile: provenance?.skillProfile ?? null,
+      model: provenance?.requestedModel ?? null,
+      effort: provenance?.requestedEffort ?? null,
     },
     metadata: {
-      projectSlug: null,
-      agentKind: null,
-      requestedModel: null,
-      requestedEffort: null,
-      resolvedModel: null,
-      resolvedEffort: null,
+      projectSlug: provenance?.projectSlug ?? null,
+      agentKind: effectiveAgentKind,
+      requestedModel: provenance?.requestedModel ?? null,
+      requestedEffort: provenance?.requestedEffort ?? null,
+      resolvedModel: provenance?.resolvedModel ?? null,
+      resolvedEffort: provenance?.resolvedEffort ?? null,
     },
     goal: null,
     error,
@@ -220,6 +268,10 @@ function normalizeSessionLogEntry(value: unknown): SessionLogEntry | null {
         ? value.steer_state
         : null,
   };
+}
+
+function nonEmptyString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 function legacyEntry(line: string): SessionLogEntry | null {

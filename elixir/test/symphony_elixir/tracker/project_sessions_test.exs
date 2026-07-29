@@ -24,6 +24,7 @@ defmodule SymphonyElixir.Tracker.ProjectSessionsTest do
              ProjectSessions.list("sessions", limit: 1)
 
     assert row.id == "thread:#{newer.id}"
+    assert row.thread_id == newer.id
     assert row.title == "Newer title"
     assert row.href == "/projects/sessions/workspaces/#{newer.id}"
     assert is_binary(row.updated_at)

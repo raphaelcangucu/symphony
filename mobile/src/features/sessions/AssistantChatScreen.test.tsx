@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
+import { Keyboard } from "react-native";
 
 import { ThemeProvider } from "@/theme/ThemeProvider";
 import type { AssistantCatalog } from "@/api/contracts";
@@ -314,11 +315,15 @@ describe("AssistantChatScreen", () => {
     fireEvent.press(screen.getByRole("button", { name: "Magic" }));
 
     expect(await screen.findByText("Review changes")).toBeTruthy();
+    expect(screen.getByLabelText("Search magic")).toBeTruthy();
+    expect(screen.getByText("Quality")).toBeTruthy();
+    expect(screen.getByText("Codex · Plan")).toBeTruthy();
     fireEvent.press(screen.getByRole("button", { name: "Run Review changes" }));
     await waitFor(() => expect(onRunMagic).toHaveBeenCalledWith(template));
   });
 
   it("adds a typed context reference without replacing the draft", async () => {
+    const dismissKeyboard = jest.spyOn(Keyboard, "dismiss").mockImplementation(() => undefined);
     const onSearchContext = jest.fn().mockResolvedValue([
       { type: "issue", id: "VIN-3", label: "Mobile task details" },
       { type: "file", id: "mobile/app.tsx" },
@@ -333,9 +338,13 @@ describe("AssistantChatScreen", () => {
     fireEvent.changeText(screen.getByLabelText("Search context"), "VIN");
 
     expect(await screen.findByText("Mobile task details")).toBeTruthy();
+    expect(screen.getByText("Issues")).toBeTruthy();
+    expect(screen.getByText("Files")).toBeTruthy();
+    expect(screen.getByText("Pull requests")).toBeTruthy();
     fireEvent.press(screen.getByRole("button", { name: "Add issue VIN-3" }));
     expect(screen.getByLabelText("Message").props.value).toBe("Review");
-    expect(screen.getByRole("button", { name: "Remove issue VIN-3" })).toBeTruthy();
+    expect(dismissKeyboard).toHaveBeenCalledTimes(1);
+    expect(await screen.findByRole("button", { name: "Remove issue VIN-3" })).toBeTruthy();
 
     fireEvent.press(screen.getByRole("button", { name: "Send" }));
     await waitFor(() =>

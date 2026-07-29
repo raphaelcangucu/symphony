@@ -31,7 +31,13 @@ defmodule SymphonyElixir.MobileRpc.OrchestratorService do
            %{
              project_slug: String.t(),
              issue_identifier: String.t() | nil,
-             agent_kind: String.t() | nil
+             agent_kind: String.t() | nil,
+             execution_mode: String.t() | nil,
+             skill_profile: String.t() | nil,
+             requested_model: String.t() | nil,
+             requested_effort: String.t() | nil,
+             resolved_model: String.t() | nil,
+             resolved_effort: String.t() | nil
            }}
           | {:error, :not_found}
   def session_context(execution_session_id)
@@ -43,7 +49,13 @@ defmodule SymphonyElixir.MobileRpc.OrchestratorService do
        %{
          project_slug: project_slug,
          issue_identifier: thread.issue_identifier,
-         agent_kind: thread.agent_kind
+         agent_kind: thread.agent_kind,
+         execution_mode: History.thread_execution_mode(thread),
+         skill_profile: History.thread_skill_profile(thread),
+         requested_model: History.requested_model(thread),
+         requested_effort: History.requested_effort(thread),
+         resolved_model: History.resolved_model(thread),
+         resolved_effort: History.resolved_effort(thread)
        }}
     else
       _reason -> {:error, :not_found}

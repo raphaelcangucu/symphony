@@ -10,21 +10,34 @@ describe("orchestrator RPC session", () => {
     const onSnapshot = vi.fn();
     const onEntries = vi.fn();
     const onConnection = vi.fn();
+    const onContext = vi.fn();
     const session = createRpcOrchestratorSession({
       executionSessionId: 77,
       transport,
       onSnapshot,
       onEntries,
+      onContext,
       onConnection,
       onError: vi.fn(),
     });
 
     session.connect();
-    await vi.waitFor(() => expect(onConnection).toHaveBeenLastCalledWith("live"));
+    await vi.waitFor(() =>
+      expect(onConnection).toHaveBeenLastCalledWith("live"),
+    );
 
     const handler = vi.mocked(transport.subscribe).mock.calls[0]?.[2];
+    const context = {
+      project_slug: "dev10x",
+      issue_identifier: "DEV-10",
+      requested_model: "gpt-5.6-sol",
+      requested_effort: "high",
+    };
     handler?.(
-      { entries: [{ kind: "assistant", title: "Codex", body: "Restored" }] },
+      {
+        context,
+        entries: [{ kind: "assistant", title: "Codex", body: "Restored" }],
+      },
       "orchestrator.session.joined",
     );
     handler?.(
@@ -35,16 +48,24 @@ describe("orchestrator RPC session", () => {
     expect(onSnapshot).toHaveBeenCalledWith(
       expect.arrayContaining([expect.objectContaining({ body: "Restored" })]),
     );
+    expect(onContext).toHaveBeenCalledWith(context);
     expect(onEntries).toHaveBeenCalledWith(
       expect.arrayContaining([expect.objectContaining({ body: "Streaming" })]),
     );
 
     await session.steer("Focus on the host RPC");
-    expect(transport.call).toHaveBeenCalledWith("orchestrator.session.command", {
-      execution_session_id: 77,
-      event: "steer",
-      payload: { message: "Focus on the host RPC", attachments: [], context_refs: [] },
-    });
+    expect(transport.call).toHaveBeenCalledWith(
+      "orchestrator.session.command",
+      {
+        execution_session_id: 77,
+        event: "steer",
+        payload: {
+          message: "Focus on the host RPC",
+          attachments: [],
+          context_refs: [],
+        },
+      },
+    );
   });
 
   it("preserves structured context refs when steering", async () => {
@@ -58,17 +79,22 @@ describe("orchestrator RPC session", () => {
       onError: vi.fn(),
     });
 
-    await session.steer("Review this context", [{ type: "issue", id: "VIN-3" }]);
+    await session.steer("Review this context", [
+      { type: "issue", id: "VIN-3" },
+    ]);
 
-    expect(transport.call).toHaveBeenCalledWith("orchestrator.session.command", {
-      execution_session_id: 77,
-      event: "steer",
-      payload: {
-        message: "Review this context",
-        attachments: [],
-        context_refs: [{ type: "issue", id: "VIN-3" }],
+    expect(transport.call).toHaveBeenCalledWith(
+      "orchestrator.session.command",
+      {
+        execution_session_id: 77,
+        event: "steer",
+        payload: {
+          message: "Review this context",
+          attachments: [],
+          context_refs: [{ type: "issue", id: "VIN-3" }],
+        },
       },
-    });
+    );
   });
 
   it("rejects empty steer messages before they reach the host", async () => {
@@ -102,11 +128,15 @@ describe("orchestrator RPC session", () => {
     });
 
     session.connect();
-    await vi.waitFor(() => expect(onConnection).toHaveBeenLastCalledWith("offline"));
-    expect(onError).toHaveBeenLastCalledWith("RPC method failed");
+    await vi.waitFor(() =>
+      expect(onConnection).toHaveBeenLastCalledWith("reconnecting"),
+    );
+    expect(onError).toHaveBeenLastCalledWith(null);
 
     await vi.advanceTimersByTimeAsync(1_000);
-    await vi.waitFor(() => expect(onConnection).toHaveBeenLastCalledWith("live"));
+    await vi.waitFor(() =>
+      expect(onConnection).toHaveBeenLastCalledWith("live"),
+    );
 
     expect(transport.subscribe).toHaveBeenCalledTimes(2);
     expect(onError).toHaveBeenLastCalledWith(null);
@@ -133,7 +163,9 @@ describe("orchestrator RPC session", () => {
     });
 
     session.connect();
-    await vi.waitFor(() => expect(transport.subscribe).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() =>
+      expect(transport.subscribe).toHaveBeenCalledTimes(1),
+    );
     await session.steer("Show the latest result");
     await vi.advanceTimersByTimeAsync(3_000);
 
@@ -158,11 +190,17 @@ describe("orchestrator RPC session", () => {
     });
 
     session.connect();
-    await vi.waitFor(() => expect(transport.subscribe).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() =>
+      expect(transport.subscribe).toHaveBeenCalledTimes(1),
+    );
     await session.steer("Show the latest result");
     const handler = vi.mocked(transport.subscribe).mock.calls[0]?.[2];
     handler?.(
-      { entries: [{ kind: "user", title: "You", body: "Show the latest result" }] },
+      {
+        entries: [
+          { kind: "user", title: "You", body: "Show the latest result" },
+        ],
+      },
       "orchestrator.session.entries",
     );
     await vi.advanceTimersByTimeAsync(3_000);

@@ -20,6 +20,7 @@ defmodule SymphonyElixir.Tracker.ProjectSessions do
 
   @type row :: %{
           id: String.t(),
+          thread_id: pos_integer(),
           title: String.t() | nil,
           kind: String.t(),
           href: String.t(),
@@ -143,6 +144,7 @@ defmodule SymphonyElixir.Tracker.ProjectSessions do
       [
         %{
           id: "thread:#{session_id}",
+          thread_id: session_id,
           title: issue.title || identifier,
           kind: "execution",
           scope: "issue_execution",
@@ -335,6 +337,7 @@ defmodule SymphonyElixir.Tracker.ProjectSessions do
 
     %{
       id: "thread:#{thread.id}",
+      thread_id: thread.id,
       title: thread.title,
       kind: thread_kind(thread.scope),
       scope: thread.scope,

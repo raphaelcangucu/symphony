@@ -1,6 +1,10 @@
 alias SymphonyElixir.Assistant.{History, Thread}
+alias SymphonyElixir.Agent.ExecutionSession
+alias SymphonyElixir.Agent.SessionStore
 alias SymphonyElixir.LocalTracker.Context
+alias SymphonyElixir.PromptTemplates
 alias SymphonyElixir.Repo
+alias SymphonyElixir.Tracker.Sync.LocalStore
 alias SymphonyElixir.Workspace
 
 single_cell? = System.get_env("DEV10X_SINGLE_CELL_E2E") == "1"
@@ -90,7 +94,7 @@ codex:
 {{ issue.description }}
 """
 
-{:ok, _project} =
+{:ok, project} =
   Context.create_workspace_project(%{
     name: "#{host_label} Project",
     slug: project_slug,
@@ -169,6 +173,45 @@ end
     "This task is served by #{host_label} over its own encrypted RPC connection.",
     %{author: "Symphony E2E"}
   )
+
+{:ok, _workpad} =
+  Context.add_comment(
+    project_slug,
+    primary.identifier,
+    """
+    ## Codex Workpad
+
+    Validate the complete native task journey without mocks.
+
+    - [x] Pair directly with the encrypted host
+    - [x] Open the task-associated execution
+    - [ ] Review the mobile task detail
+    - [ ] Validate Plan, Magic and structured context
+    """,
+    %{author: "Codex", kind: "workpad"}
+  )
+
+{:ok, _template} =
+  PromptTemplates.create(%{
+    slug: "mobile-e2e-review",
+    name: "E2E review",
+    description: "Review the task from the real mobile Magic sheet.",
+    category: "Quality",
+    body: "Review {{ issue.identifier }} and report the most important risk.",
+    agent_kind: "codex",
+    mode: "plan",
+    scope: project_slug,
+    position: -100
+  })
+
+{:ok, _pull_request} =
+  LocalStore.link_manual_pull_request(project.id, primary.identifier, %{
+    url: "https://github.com/dev10x/symphony/pull/418",
+    number: 418,
+    repo: "dev10x/symphony",
+    title: "feat(mobile): task session navigation",
+    state: "open"
+  })
 
 orchestrator_issue =
   if single_cell? do
@@ -255,12 +298,45 @@ File.write!(
     content: "#{host_label} is online. Projects, tasks, sessions and tools are isolated on this machine."
   })
 
+{:ok, execution_thread} =
+  ExecutionSession.ensure(project_slug, primary.identifier,
+    force_new: true,
+    workspace_path: session_workspace_path,
+    agent_kind: "codex",
+    requested_model: "gpt-5.6-sol",
+    requested_effort: "high",
+    title: "#{host_label} — Task execution"
+  )
+
+:ok =
+  SessionStore.append(session_workspace_path, execution_thread.id, %{
+    "kind" => "system",
+    "title" => "Execution connected",
+    "body" => "Encrypted mobile RPC stream established with #{host_label}.",
+    "language" => "text",
+    "status" => "completed",
+    "collapsed" => true
+  })
+
+:ok =
+  SessionStore.append(session_workspace_path, execution_thread.id, %{
+    "kind" => "assistant",
+    "title" => "Agent message",
+    "body" => "The native task journey is ready for review. Open the linked task to inspect its summary, pull request, comments, evidence and sessions.",
+    "language" => "markdown",
+    "status" => "completed",
+    "collapsed" => false
+  })
+
+{:ok, _execution_thread} = ExecutionSession.finish(execution_thread.id, "completed")
+
 IO.puts(
   Jason.encode!(%{
     host: host_label,
     project_slug: project_slug,
     issue_identifier: primary.identifier,
     orchestrator_issue_identifier: orchestrator_issue.identifier,
-    thread_id: thread.id
+    thread_id: thread.id,
+    execution_session_id: execution_thread.id
   })
 )

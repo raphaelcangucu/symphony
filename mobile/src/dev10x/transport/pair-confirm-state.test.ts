@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import { encodePairingOffer, type PairingOfferV1 } from "@/auth/pairing-offer";
 
-import { resolvePairConfirmRouteState } from "./pair-confirm-state";
+import {
+  pairedHostLandingRoute,
+  resolvePairConfirmRouteState,
+} from "./pair-confirm-state";
 
 const offer: PairingOfferV1 = {
   v: 1,
@@ -33,5 +36,9 @@ describe("pair confirmation state", () => {
       offer: null,
       errorMessage: "Not a valid Symphony pairing code",
     });
+  });
+
+  it("lands a newly paired machine on its project list", () => {
+    expect(pairedHostLandingRoute("host alpha")).toBe("/h/host%20alpha/projects");
   });
 });

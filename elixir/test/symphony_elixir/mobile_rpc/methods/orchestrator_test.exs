@@ -15,7 +15,21 @@ defmodule SymphonyElixir.MobileRpc.Methods.OrchestratorTest do
       ]
     end
 
-    def session_context(77), do: {:ok, %{project_slug: "dev10x"}}
+    def session_context(77) do
+      {:ok,
+       %{
+         project_slug: "dev10x",
+         issue_identifier: "DEV-10",
+         agent_kind: "codex",
+         execution_mode: "build",
+         skill_profile: nil,
+         requested_model: "gpt-5.6-sol",
+         requested_effort: "high",
+         resolved_model: "gpt-5.6-sol",
+         resolved_effort: "high"
+       }}
+    end
+
     def session_context(_id), do: {:error, :not_found}
   end
 
@@ -68,7 +82,7 @@ defmodule SymphonyElixir.MobileRpc.Methods.OrchestratorTest do
   end
 
   test "returns the task context for a real execution session" do
-    assert {:ok, %{project_slug: "dev10x"}} =
+    assert {:ok, %{project_slug: "dev10x", requested_model: "gpt-5.6-sol"}} =
              Orchestrator.SessionContext.call(%{"execution_session_id" => 77}, context())
 
     assert {:error, :orchestrator_session_not_found} =
@@ -105,6 +119,16 @@ defmodule SymphonyElixir.MobileRpc.Methods.OrchestratorTest do
     assert opts[:join_payload] == %{"project_slug" => "dev10x"}
     assert opts[:event_prefix] == "orchestrator.session"
     assert opts[:emit_joined] == true
+
+    assert {"joined",
+            %{
+              "context" => %{
+                project_slug: "dev10x",
+                requested_model: "gpt-5.6-sol",
+                requested_effort: "high"
+              },
+              "entries" => []
+            }, nil} = opts[:event_mapper].("joined", %{"entries" => []}, nil)
 
     activate.()
     assert_receive :bridge_activated

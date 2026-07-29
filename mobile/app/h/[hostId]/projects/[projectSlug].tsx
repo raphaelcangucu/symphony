@@ -27,6 +27,8 @@ import {
   createInitialNewSessionState,
   type WorkspaceMode,
 } from "../../../../src/features/sessions/new-session-state";
+import { hostWorktreeRoute } from "../../../../src/features/sessions/session-navigation";
+import { selectProjectWorkspaces } from "../../../../src/features/projects/project-workspaces";
 import { BottomDrawer } from "../../../../src/dev10x/components/BottomDrawer";
 import { PickerModal, type PickerOption } from "../../../../src/dev10x/components/PickerModal";
 import { createHostTrackerClient } from "../../../../src/dev10x/transport/host-tracker-client";
@@ -72,7 +74,7 @@ export default function HostProjectPage() {
   const [createError, setCreateError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    if (!tracker) return;
+    if (!tracker || state !== "connected") return;
     setLoading(true);
     setError(null);
     try {
@@ -106,7 +108,7 @@ export default function HostProjectPage() {
     } finally {
       setLoading(false);
     }
-  }, [client, projectSlug, tracker]);
+  }, [client, projectSlug, state, tracker]);
 
   useEffect(() => {
     void load();
@@ -236,6 +238,10 @@ export default function HostProjectPage() {
           : selectedTask
             ? "Workspace da task"
             : "Workspace compartilhado";
+  const projectWorkspaces = useMemo(
+    () => selectProjectWorkspaces(sessions, workspaces),
+    [sessions, workspaces],
+  );
   const workspaceOptions: PickerOption[] = [
     {
       value: "default",
@@ -382,6 +388,49 @@ export default function HostProjectPage() {
           </View>
         ) : (
           <>
+            <Section title="Workspaces" empty="Nenhum workspace ativo neste projeto.">
+              {projectWorkspaces.map((workspace) => (
+                <Pressable
+                  key={workspace.key}
+                  style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+                  onPress={() =>
+                    router.push(
+                      hostWorktreeRoute({
+                        hostId,
+                        threadId: workspace.threadId,
+                        name: workspace.title,
+                        scope: workspace.scope,
+                        issueIdentifier: workspace.issueIdentifier,
+                        projectSlug,
+                        agentKind: workspace.agentKind,
+                        status: workspace.status ?? undefined,
+                      }) as never,
+                    )
+                  }
+                  accessibilityLabel={`Abrir workspace ${workspace.title}`}
+                >
+                  <View style={styles.rowIcon}>
+                    <GitBranch size={18} color={colors.textSecondary} />
+                  </View>
+                  <View style={styles.rowMain}>
+                    <Text style={styles.rowTitle} numberOfLines={1}>
+                      {workspace.title}
+                    </Text>
+                    <Text style={styles.rowSub} numberOfLines={1}>
+                      {workspace.subtitle}
+                    </Text>
+                  </View>
+                  <View
+                    style={[
+                      styles.workspaceStatus,
+                      { backgroundColor: workspaceStatusColor(workspace.status) },
+                    ]}
+                  />
+                  <ChevronRight size={16} color={colors.textMuted} />
+                </Pressable>
+              ))}
+            </Section>
+
             <Section title="Sessões recentes" empty="Nenhuma sessão neste projeto ainda.">
               {sessions.slice(0, 4).map((session) => (
                 <Pressable
@@ -389,10 +438,22 @@ export default function HostProjectPage() {
                   style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
                   onPress={() => {
                     if (session.threadId) {
-                      router.push(`/h/${hostId}/chat/${session.threadId}`);
+                      router.push(
+                        hostWorktreeRoute({
+                          hostId,
+                          threadId: session.threadId,
+                          name: session.title,
+                          scope: session.scope,
+                          issueIdentifier: session.issueIdentifier,
+                          projectSlug,
+                          agentKind: session.agentKind,
+                          status: session.aggregateStatus ?? undefined,
+                        }) as never,
+                      );
                     }
                   }}
                   disabled={!session.threadId}
+                  accessibilityLabel={`Abrir sessão ${session.title}`}
                 >
                   <View style={styles.rowIcon}>
                     <MessageSquare size={18} color={colors.textSecondary} />
@@ -413,7 +474,18 @@ export default function HostProjectPage() {
 
             <Section title="Tasks" empty="Nenhuma task neste projeto ainda.">
               {tasks.slice(0, 5).map((task) => (
-                <View key={task.id} style={styles.row}>
+                <Pressable
+                  key={task.id}
+                  style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+                  onPress={() =>
+                    router.push(
+                      `/h/${encodeURIComponent(hostId)}/issue/${encodeURIComponent(
+                        projectSlug,
+                      )}/${encodeURIComponent(task.identifier)}` as never,
+                    )
+                  }
+                  accessibilityLabel={`Abrir task ${task.displayIdentifier}`}
+                >
                   <View style={styles.rowIcon}>
                     <ListTodo size={18} color={colors.textSecondary} />
                   </View>
@@ -425,24 +497,10 @@ export default function HostProjectPage() {
                       {task.displayIdentifier} · {task.status}
                     </Text>
                   </View>
-                </View>
+                  <ChevronRight size={16} color={colors.textMuted} />
+                </Pressable>
               ))}
             </Section>
-
-            <Text style={styles.sectionTitle}>Workspace padrão</Text>
-            <Pressable
-              style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
-              onPress={() => router.replace(`/h/${hostId}`)}
-            >
-              <View style={styles.rowIcon}>
-                <GitBranch size={18} color={colors.textSecondary} />
-              </View>
-              <View style={styles.rowMain}>
-                <Text style={styles.rowTitle}>Workspaces da máquina</Text>
-                <Text style={styles.rowSub}>Abrir ou criar um workspace avançado</Text>
-              </View>
-              <ChevronRight size={16} color={colors.textMuted} />
-            </Pressable>
           </>
         )}
       </ScrollView>
@@ -642,6 +700,19 @@ function ContextRow({ icon, value }: { icon: React.ReactNode; value: string }) {
   );
 }
 
+function workspaceStatusColor(status: string | null): string {
+  if (status === "working" || status === "active" || status === "live") {
+    return colors.statusGreen;
+  }
+  if (status === "permission" || status === "waiting" || status === "retrying") {
+    return colors.statusAmber;
+  }
+  if (status === "error" || status === "aborted") {
+    return colors.statusRed;
+  }
+  return colors.textMuted;
+}
+
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bgBase },
   header: {
@@ -708,6 +779,12 @@ const styles = StyleSheet.create({
   rowMain: { flex: 1, minWidth: 0 },
   rowTitle: { color: colors.textPrimary, fontSize: typography.bodySize, fontWeight: "600" },
   rowSub: { color: colors.textMuted, fontSize: typography.metaSize, marginTop: 2 },
+  workspaceStatus: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    marginHorizontal: spacing.sm,
+  },
   stateCard: { paddingTop: spacing.xl * 3, alignItems: "center" },
   errorText: { color: colors.statusRed, fontSize: typography.metaSize, marginTop: spacing.sm },
   retry: { marginTop: spacing.md, padding: spacing.sm },

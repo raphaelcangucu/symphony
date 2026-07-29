@@ -1,29 +1,47 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { useMemo } from "react";
 
-import { useTrackerClient } from "@/api/TrackerClientProvider";
 import { useHostTransport } from "@/api/HostTransportContext";
+import { createRpcTrackerClient } from "@/api/rpc-tracker-client";
+import { useTrackerClient } from "@/api/TrackerClientProvider";
 import { useConnection } from "@/auth/ConnectionProvider";
 import { useTaskEvidence } from "@/features/evidence/useTaskEvidence";
+import { useHostRuntime } from "@/runtime/HostRuntimeProvider";
+import type { HostTransport } from "@/transport/HostTransport";
 
 import { IssueScreen } from "./IssueScreen";
 import { useIssueDetail } from "./useIssueDetail";
 
 export function IssueRoute() {
-  const params = useLocalSearchParams<{ projectSlug?: string; identifier?: string }>();
+  const params = useLocalSearchParams<{
+    hostId?: string;
+    projectSlug?: string;
+    identifier?: string;
+  }>();
   const router = useRouter();
-  const client = useTrackerClient();
+  const selectedClient = useTrackerClient();
+  const hostRuntime = useHostRuntime();
+  const hostId = routeParam(params.hostId);
+  const hostTransport = hostId ? hostRuntime.transport(hostId) : null;
+  const hostClient = useMemo(
+    () => (hostTransport ? createRpcTrackerClient(hostTransport) : null),
+    [hostTransport],
+  );
+  const client = hostClient ?? selectedClient;
   const { activeProfile } = useConnection();
   const projectSlug = routeParam(params.projectSlug);
   const identifier = routeParam(params.identifier);
+  const profileId = hostId ?? activeProfile?.hostId ?? activeProfile?.id;
 
-  if (!client || !activeProfile || !projectSlug || !identifier) return null;
+  if (!client || !profileId || !projectSlug || !identifier) return null;
   return (
     <ConnectedIssueRoute
       client={client}
       identifier={identifier}
-      profileId={activeProfile.hostId ?? activeProfile.id}
+      profileId={profileId}
       projectSlug={projectSlug}
       router={router}
+      transport={hostTransport}
     />
   );
 }
@@ -34,15 +52,18 @@ function ConnectedIssueRoute({
   profileId,
   projectSlug,
   router,
+  transport: routeTransport,
 }: {
   client: NonNullable<ReturnType<typeof useTrackerClient>>;
   identifier: string;
   profileId: string;
   projectSlug: string;
   router: ReturnType<typeof useRouter>;
+  transport: HostTransport | null;
 }) {
   const detail = useIssueDetail({ client, profileId, projectSlug, identifier });
-  const transport = useHostTransport();
+  const selectedTransport = useHostTransport();
+  const transport = routeTransport ?? selectedTransport;
   const evidence = useTaskEvidence({ transport, projectSlug, identifier });
   const threadRoute = (suffix = "") => {
     if (detail.threadId) {

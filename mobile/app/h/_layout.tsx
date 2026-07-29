@@ -48,6 +48,10 @@ function HostStack({ animation }: { animation: 'none' | 'default' }) {
         name="[hostId]/run/[executionSessionId]"
         options={{ title: 'Orchestrator session' }}
       />
+      <Stack.Screen
+        name="[hostId]/issue/[projectSlug]/[identifier]"
+        options={{ title: 'Task' }}
+      />
       <Stack.Screen name="[hostId]/chat/[threadId]" options={{ title: 'Chat' }} />
       <Stack.Screen name="[hostId]/session/[worktreeId]" options={{ title: 'Terminal' }} />
       <Stack.Screen

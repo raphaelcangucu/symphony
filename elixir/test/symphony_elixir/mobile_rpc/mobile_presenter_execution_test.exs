@@ -101,7 +101,15 @@ defmodule SymphonyElixir.MobileRpc.MobilePresenterExecutionTest do
     assert execution_session_id == thread.id
     assert issue_identifier == thread.issue_identifier
 
-    assert {:ok, %{project_slug: project_slug}} =
+    assert {:ok,
+            %{
+              project_slug: project_slug,
+              agent_kind: "claude",
+              requested_model: "claude-opus-5",
+              requested_effort: "high",
+              resolved_model: "claude-opus-5",
+              resolved_effort: "high"
+            }} =
              OrchestratorService.session_context(thread.id)
 
     assert project_slug == thread.project_slug

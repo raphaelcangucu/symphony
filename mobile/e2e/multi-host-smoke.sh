@@ -11,6 +11,7 @@ readonly ELIXIR_DIR="${REPO_DIR}/elixir"
 readonly APK_PATH="${1:-${MOBILE_DIR}/android/app/build/outputs/apk/release/app-release.apk}"
 readonly OUTPUT_DIR="${E2E_OUTPUT_DIR:-${MOBILE_DIR}/artifacts/e2e}"
 readonly SINGLE_CELL_E2E="${DEV10X_SINGLE_CELL_E2E:-0}"
+readonly TASK_ACTIONS_ONLY="${DEV10X_TASK_ACTIONS_E2E:-0}"
 readonly ARTIFACT_SLUG="$(
   if [[ "${SINGLE_CELL_E2E}" == "1" ]]; then
     printf "pr-7-dev10x-single-cell-real-host-review"
@@ -27,11 +28,17 @@ readonly ORCHESTRATOR_SCREENSHOT_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}-orchestrat
 readonly TERMINAL_SCREENSHOT_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}-terminal.png"
 readonly TERMINAL_COMMAND_SCREENSHOT_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}-terminal-command.png"
 readonly TASK_EVIDENCE_SCREENSHOT_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}-task-evidence.png"
+readonly TASK_SESSION_SETTINGS_SCREENSHOT_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}-task-session-model-effort.png"
+readonly TASK_SUMMARY_SCREENSHOT_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}-task-summary.png"
+readonly TASK_PR_SCREENSHOT_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}-task-pr.png"
+readonly TASK_MAGIC_SCREENSHOT_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}-task-magic.png"
+readonly TASK_ACTIONS_SCREENSHOT_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}-task-actions.png"
+readonly PROJECT_FLOW_SCREENSHOT_PATH="${OUTPUT_DIR}/project-flow.png"
 readonly UI_DUMP_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}.xml"
 readonly TRACE_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}-trace.txt"
 readonly REPORT_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}-report.md"
 readonly REPORT_JSON_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}.json"
-readonly REMOTE_UI_DUMP="/data/local/tmp/symphony-mobile-window.xml"
+readonly REMOTE_UI_DUMP="/sdcard/symphony-mobile-window.xml"
 readonly ADMIN_TOKEN="mobile-e2e-admin-token"
 readonly HOST_A_PORT=4101
 readonly HOST_B_PORT=4102
@@ -48,6 +55,10 @@ if [[ "${REAL_AGENT_E2E}" != "0" && "${REAL_AGENT_E2E}" != "1" ]]; then
 fi
 if [[ "${SINGLE_CELL_E2E}" != "0" && "${SINGLE_CELL_E2E}" != "1" ]]; then
   printf "DEV10X_SINGLE_CELL_E2E must be 0 or 1\n" >&2
+  exit 1
+fi
+if [[ "${TASK_ACTIONS_ONLY}" != "0" && "${TASK_ACTIONS_ONLY}" != "1" ]]; then
+  printf "DEV10X_TASK_ACTIONS_E2E must be 0 or 1\n" >&2
   exit 1
 fi
 
@@ -85,18 +96,25 @@ last_host_pid=""
 host_a_id=""
 host_a_thread_id=""
 orchestrator_session_id=""
+seeded_execution_session_id=""
 screen_width=""
 screen_height=""
+ui_dump_sequence=0
 
 trace_step() {
   printf "%s %s\n" "$(date -Iseconds)" "$*" >>"${TRACE_PATH}"
 }
 
 dump_ui() {
+  ui_dump_sequence="$((ui_dump_sequence + 1))"
+  local remote_dump="${REMOTE_UI_DUMP}.${ui_dump_sequence}"
   : >"${UI_DUMP_PATH}"
-  "${ADB}" shell rm -f "${REMOTE_UI_DUMP}" >/dev/null 2>&1 || true
-  "${ADB}" shell uiautomator dump "${REMOTE_UI_DUMP}" >/dev/null 2>&1 || true
-  "${ADB}" exec-out cat "${REMOTE_UI_DUMP}" >"${UI_DUMP_PATH}" 2>/dev/null || true
+  "${ADB}" shell rm -f "${remote_dump}" >/dev/null 2>&1 || true
+  if "${ADB}" shell uiautomator dump "${remote_dump}" >/dev/null 2>&1; then
+    "${ADB}" exec-out cat "${remote_dump}" >"${UI_DUMP_PATH}" 2>/dev/null || true
+  fi
+  "${ADB}" shell rm -f "${remote_dump}" >/dev/null 2>&1 || true
+  sleep 0.2
 }
 
 wait_for_selector() {
@@ -216,6 +234,13 @@ assert_ui_absent() {
     printf "Unexpected UI text fragment: %s\n" "${value}" >&2
     return 1
   fi
+}
+
+assert_task_session_healthy() {
+  wait_for_selector "content-desc" "Connection status: Completed" 45
+  assert_ui_absent "RPC method failed"
+  assert_ui_absent "Offline"
+  trace_step "assert task execution remains connected without transient RPC errors"
 }
 
 configure_screen_geometry() {
@@ -400,12 +425,22 @@ cleanup() {
 }
 
 capture_failure_evidence() {
-  trace_step "FAIL: native journey aborted before completion"
+  local exit_code="$1"
+  local line_number="$2"
+  local command="$3"
+  trace_step "FAIL: exit=${exit_code} line=${line_number} command=${command}"
+  printf "E2E failed: exit=%s line=%s command=%s\n" \
+    "${exit_code}" "${line_number}" "${command}" >&2
   dump_ui
   "${ADB}" exec-out screencap -p >"${SCREENSHOT_PATH}" 2>/dev/null || true
+  for diagnostic in host-a-seed.log host-a-server.log; do
+    if [[ -f "${E2E_ROOT}/${diagnostic}" ]]; then
+      cp "${E2E_ROOT}/${diagnostic}" "${OUTPUT_DIR}/${ARTIFACT_SLUG}-${diagnostic}"
+    fi
+  done
 }
 
-trap capture_failure_evidence ERR
+trap 'capture_failure_evidence "$?" "${LINENO}" "${BASH_COMMAND}"' ERR
 trap cleanup EXIT
 
 host_env() {
@@ -607,13 +642,142 @@ launch_pairing_offer() {
   trace_step "confirm explicit device-to-host pairing"
 }
 
+assert_canonical_project_flow() {
+  wait_for_text "Projetos"
+  wait_for_text "${HOST_A_NAME} Project"
+  tap_accessible "Voltar"
+  wait_for_text "MÁQUINAS"
+  tap_accessible "Abrir máquina ${HOST_A_NAME}"
+  wait_for_text "Projetos"
+  tap_accessible "Abrir projeto ${HOST_A_NAME} Project"
+  wait_for_text "WORKSPACES"
+  wait_for_text "SESSÕES RECENTES"
+  wait_for_text "TASKS"
+  wait_for_selector "content-desc" "Criar"
+  "${ADB}" exec-out screencap -p >"${PROJECT_FLOW_SCREENSHOT_PATH}"
+  test -s "${PROJECT_FLOW_SCREENSHOT_PATH}"
+  trace_step "assert canonical machine, project, workspace, session and task hierarchy"
+
+  tap_accessible "Abrir workspace ${HOST_A_NAME} — Direct RPC session"
+  wait_for_text "${HOST_A_NAME} — Direct RPC session"
+  wait_for_selector "content-desc" "Message"
+  tap_accessible "Go back"
+  wait_for_text "WORKSPACES"
+  trace_step "open a visible project workspace and return to its project"
+
+  tap_accessible "Abrir sessão ${HOST_A_NAME} — Task execution"
+  wait_for_ui_contains "#${seeded_execution_session_id}"
+  wait_for_ui_contains "5.6 Sol Alto"
+  tap_accessible "Go back"
+  wait_for_text "SESSÕES RECENTES"
+  trace_step "open a visible task execution with its persisted model and effort"
+
+  tap_accessible "Abrir task ${host_a_issue}"
+  wait_for_ui_contains "${HOST_A_NAME}: encrypted mobile control"
+  tap_accessible "Back"
+  wait_for_text "TASKS"
+  trace_step "open a visible project task and return to its project"
+
+  tap_accessible "Criar"
+  wait_for_text "Criar no projeto"
+  wait_for_text "Nova sessão"
+  wait_for_text "Nova task"
+  tap_accessible "Nova sessão"
+  wait_for_text "O projeto já está selecionado."
+  wait_for_text "Selecionar task"
+  wait_for_ui_contains "Workspace"
+  "${ADB}" shell input keyevent 4
+  sleep 1
+  trace_step "assert project-scoped new session and task actions"
+}
+
 launch_session_panel() {
-  local route="symphony://h/${host_a_id}/session/${host_a_thread_id}?name=Studio%20Alpha%20%E2%80%94%20Direct%20RPC%20session"
+  local route="symphony://h/${host_a_id}/chat/${host_a_thread_id}?name=Studio%20Alpha%20%E2%80%94%20Direct%20RPC%20session"
   "${ADB}" shell am start -W \
     -a android.intent.action.VIEW \
     -d "${route}" \
     -n "${APP_ACTIVITY}" >/dev/null
   trace_step "open selected-host workspace session panel"
+}
+
+launch_task_execution() {
+  local route="symphony://h/${host_a_id}/run/${seeded_execution_session_id}?identifier=${host_a_issue}&projectSlug=${HOST_A_PROJECT}&agent=codex&status=completed"
+  # adb joins shell arguments into a remote shell command, so unescaped query
+  # separators would background `am start` and execute the remaining flags.
+  route="${route//&/\\&}"
+  "${ADB}" shell am start -W \
+    -a android.intent.action.VIEW \
+    -d "${route}" \
+    -n "${APP_ACTIVITY}" >/dev/null
+  trace_step "open seeded task-associated execution ${seeded_execution_session_id}"
+}
+
+assert_task_session_evidence() {
+  launch_task_execution
+  wait_for_ui_contains "#${seeded_execution_session_id}"
+  wait_for_ui_contains "5.6 Sol Alto"
+  "${ADB}" exec-out screencap -p >"${TASK_SESSION_SETTINGS_SCREENSHOT_PATH}"
+  test -s "${TASK_SESSION_SETTINGS_SCREENSHOT_PATH}"
+  trace_step "assert persisted model and effort survive execution restoration"
+  assert_task_session_healthy
+  wait_for_selector "content-desc" "Open ${host_a_issue} task"
+  tap_accessible "Open ${host_a_issue} task"
+  wait_for_ui_contains "${host_a_issue}"
+  assert_ui_absent "Project not found"
+
+  tap_accessible "Summary"
+  wait_for_ui_contains "${HOST_A_NAME}: encrypted mobile control"
+  wait_for_ui_contains "WORKPAD PROGRESS"
+  wait_for_ui_contains "Open session"
+  "${ADB}" exec-out screencap -p >"${TASK_SUMMARY_SCREENSHOT_PATH}"
+  test -s "${TASK_SUMMARY_SCREENSHOT_PATH}"
+  trace_step "assert associated task opens with focused Summary"
+
+  tap_accessible "PR"
+  wait_for_ui_contains "PR #418"
+  wait_for_ui_contains "Passed"
+  "${ADB}" exec-out screencap -p >"${TASK_PR_SCREENSHOT_PATH}"
+  test -s "${TASK_PR_SCREENSHOT_PATH}"
+  trace_step "assert PR tab exposes labeled semantic health"
+
+  tap_accessible "Comments"
+  wait_for_selector "content-desc" "New comment"
+  tap_accessible "Evidence"
+  wait_for_ui_contains "No evidence has been recorded."
+  tap_accessible "Sessions"
+  wait_for_selector "content-desc" "New task session"
+  wait_for_ui_contains "Execution"
+  trace_step "assert all five focused task tabs"
+
+  tap_accessible "Back"
+  wait_for_selector "content-desc" "Open composer actions"
+  assert_task_session_healthy
+  tap_accessible "Open composer actions"
+  tap_accessible "Plan mode"
+  trace_step "assert Plan mode is selected from the composer action sheet"
+
+  tap_accessible "Open composer actions"
+  tap_accessible "Magic"
+  wait_for_ui_contains "E2E review"
+  "${ADB}" exec-out screencap -p >"${TASK_MAGIC_SCREENSHOT_PATH}"
+  test -s "${TASK_MAGIC_SCREENSHOT_PATH}"
+  tap_accessible "Run E2E review"
+  wait_for_selector "content-desc" "Open composer actions"
+  assert_ui_absent "RPC method failed"
+  assert_ui_absent "Offline"
+  trace_step "assert a canonical Magic template runs from mobile"
+
+  tap_accessible "Open composer actions"
+  tap_accessible "Add context"
+  tap_accessible "Search context"
+  input_text "${host_a_issue}"
+  wait_for_selector "content-desc" "Add issue ${host_a_issue}"
+  tap_accessible "Add issue ${host_a_issue}"
+  wait_for_selector "content-desc" "Remove issue ${host_a_issue}"
+  "${ADB}" exec-out screencap -p >"${TASK_ACTIONS_SCREENSHOT_PATH}"
+  test -s "${TASK_ACTIONS_SCREENSHOT_PATH}"
+  tap_accessible "Remove issue ${host_a_issue}"
+  trace_step "assert structured issue context is added and removed"
 }
 
 launch_source_control_panel() {
@@ -665,6 +829,11 @@ host_a_thread_id="$(
     tail -n 1 |
     jq -er '.thread_id'
 )"
+seeded_execution_session_id="$(
+  grep '"execution_session_id"' "${E2E_ROOT}/host-a-seed.log" |
+    tail -n 1 |
+    jq -er '.execution_session_id'
+)"
 start_host "host-a" "${HOST_A_PORT}"
 host_a_pid="${last_host_pid}"
 wait_for_host "${HOST_A_PORT}"
@@ -715,16 +884,21 @@ configure_screen_geometry
 start_recording
 
 launch_pairing_offer "${host_a_offer}"
-wait_for_text "${HOST_A_NAME}"
-wait_for_text "${HOST_A_NAME} — Direct RPC session"
 assert_paired_device "${HOST_A_PORT}"
-trace_step "assert Host A identity, health and isolated session library"
-
-tap_accessible "${HOST_A_NAME} — Direct RPC session"
+trace_step "assert Host A accepted the paired Android device"
+assert_canonical_project_flow
+launch_session_panel
 wait_for_text "${HOST_A_NAME} — Direct RPC session"
 wait_for_ui_contains "${HOST_A_NAME} is online"
 wait_for_selector "content-desc" "Message"
 trace_step "assert rich chat opens by default with real persisted host history"
+
+assert_task_session_evidence
+if [[ "${TASK_ACTIONS_ONLY}" == "0" ]]; then
+tap_accessible "Go back"
+wait_for_text "${HOST_A_NAME} — Direct RPC session"
+tap_accessible "${HOST_A_NAME} — Direct RPC session"
+wait_for_ui_contains "${HOST_A_NAME} is online"
 
 chat_history_anchor="${HOST_A_NAME} is online"
 if [[ "${REAL_AGENT_E2E}" == "1" ]]; then
@@ -762,14 +936,12 @@ sleep 2
 test -s "${TERMINAL_COMMAND_SCREENSHOT_PATH}"
 trace_step "exercise selected-host terminal input and output"
 
-launch_session_panel
-wait_for_selector "content-desc" "Open file explorer"
-tap_accessible "Open file explorer"
+tap_terminal_header_tool "files"
 wait_for_text "README.md"
 trace_step "assert selected-host workspace files"
 tap_accessible "Back to session"
 
-launch_source_control_panel
+tap_terminal_header_tool "source-control"
 wait_for_text "README.md"
 trace_step "assert selected-host uncommitted diff"
 launch_host_tasks_list
@@ -833,6 +1005,9 @@ tap_accessible "Back to hosts"
 if [[ "${SINGLE_CELL_E2E}" == "0" ]]; then
   launch_pairing_offer "${host_b_offer}"
   wait_for_text "${HOST_B_NAME}"
+  wait_for_text "Projetos"
+  wait_for_text "${HOST_B_NAME} Project"
+  tap_accessible "Abrir workspaces"
   wait_for_text "${HOST_B_NAME} — Direct RPC session"
   assert_paired_device "${HOST_B_PORT}"
   dump_ui
@@ -885,6 +1060,8 @@ else
 fi
 wait_for_host "${offline_port}"
 tap_accessible "${reconnect_host}"
+wait_for_text "Projetos"
+tap_accessible "Abrir workspaces"
 wait_for_text "${reconnect_host} — Direct RPC session"
 tap_accessible "Back to hosts"
 wait_for_ui_contains "Connected"
@@ -904,8 +1081,11 @@ if [[ "${SINGLE_CELL_E2E}" == "0" ]]; then
 fi
 
 tap_accessible "${HOST_A_NAME}"
+wait_for_text "Projetos"
+tap_accessible "Abrir workspaces"
 wait_for_text "${HOST_A_NAME} — Direct RPC session"
 trace_step "switch back to Host A and assert isolated cache hydration"
+fi
 
 "${ADB}" exec-out screencap -p >"${SCREENSHOT_PATH}"
 stop_recording
@@ -960,7 +1140,12 @@ apk_sha256="$(sha256sum "${APK_PATH}" | awk '{print $1}')"
 video_sha256="$(sha256sum "${VIDEO_PATH}" | awk '{print $1}')"
 generated_at="$(date -Iseconds)"
 
-if [[ "${REAL_AGENT_E2E}" == "1" ]]; then
+if [[ "${TASK_ACTIONS_ONLY}" == "1" ]]; then
+  scenario="Symphony canonical project flow, task detail and composer actions against a real host"
+  interactive_chat="persisted task-associated execution over selected-host RPC"
+  orchestrator_chat="not exercised by this focused journey"
+  journey="deep-link pairing, Home/Machines, Projects, visible project Workspace/Task execution/Task navigation, project-scoped New session, associated task Summary/PR/Comments/Evidence/Sessions, Plan mode, Magic template, and structured issue context"
+elif [[ "${REAL_AGENT_E2E}" == "1" ]]; then
   scenario="Dev10x rich chat, real session history and orchestrator follow-up against real Symphony host"
   interactive_chat="real local agent turn over selected-host RPC"
   orchestrator_chat="real execution transcript and follow-up over selected-host RPC"
@@ -991,6 +1176,7 @@ jq -n \
   --arg orchestrator_chat "${orchestrator_chat}" \
   --argjson host_count "${host_count}" \
   --argjson single_cell "${SINGLE_CELL_E2E}" \
+  --argjson task_actions_only "${TASK_ACTIONS_ONLY}" \
   --argjson real_agent "${REAL_AGENT_E2E}" \
   '{
     status:"passed",
@@ -998,6 +1184,7 @@ jq -n \
     generated_at:$generated_at,
     hosts:$host_count,
     single_cell:($single_cell == 1),
+    task_actions_only:($task_actions_only == 1),
     real_agent_e2e:($real_agent == 1),
     interactive_chat:$interactive_chat,
     orchestrator_chat:$orchestrator_chat,

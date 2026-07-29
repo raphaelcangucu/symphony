@@ -33,12 +33,12 @@ const comments: IssueComment[] = [
     body: "Continue from the task screen.",
     author: "Raphael",
     kind: "comment",
-    createdAt: "",
-    updatedAt: "",
+    createdAt: "2026-07-29T12:05:00Z",
+    updatedAt: "2026-07-29T12:05:00Z",
   },
   {
     id: "workpad-1",
-    body: "## Codex Workpad\n\nImplementation is in progress.",
+    body: "## Codex Workpad\n\n- [x] Navigation\n- [x] PR health\n- [ ] Visual review\n\nImplementation is in progress.",
     author: "Codex",
     kind: "workpad",
     createdAt: "2026-07-29T11:00:00Z",
@@ -128,46 +128,47 @@ describe("IssueScreen", () => {
     expect(screen.getByText("feat(mobile): task navigation")).toBeTruthy();
   });
 
-  it("renders focused issue context, Workpad, and workspace tools", () => {
+  it("renders the task as a calm read-oriented summary with focused actions", () => {
     const onOpenEvidence = jest.fn();
     renderScreen({ evidenceCount: 2, onOpenEvidence });
 
     expect(screen.getByText("MOB-7")).toBeTruthy();
-    expect(screen.getByDisplayValue("Bring Dev10x workflows")).toBeTruthy();
+    expect(screen.getByText("Bring Dev10x workflows")).toBeTruthy();
+    expect(screen.queryByLabelText("Task title")).toBeNull();
+    expect(screen.queryByLabelText("Task description")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Save task" })).toBeNull();
     expect(screen.getByText("Ship mobile parity")).toBeTruthy();
-    expect(screen.getByText("gpt-5.6-sol")).toBeTruthy();
-    expect(screen.getByText("high")).toBeTruthy();
-    expect(screen.getByText("Priority")).toBeTruthy();
+    expect(screen.getByText(/gpt-5\.6-sol/)).toBeTruthy();
+    expect(screen.getByText(/high/)).toBeTruthy();
+    expect(screen.getByText("Urgent")).toBeTruthy();
     expect(screen.getByText("mobile · dev10x")).toBeTruthy();
     expect(screen.getByText(/Implementation is in progress/)).toBeTruthy();
+    expect(screen.getByText("2 of 3 complete")).toBeTruthy();
     expect(screen.queryByText("Continue from the task screen.")).toBeNull();
-    for (const tool of ["Terminal", "Preview", "Files", "Diff", "Pull request"]) {
-      expect(screen.getByRole("button", { name: tool })).toBeTruthy();
-    }
+    expect(screen.getByRole("button", { name: "Open session" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Open workspace" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "More task actions" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Terminal" })).toBeNull();
     expect(screen.getByText("2 durable runs")).toBeTruthy();
     fireEvent.press(screen.getByRole("button", { name: "Open evidence" }));
     expect(onOpenEvidence).toHaveBeenCalledTimes(1);
   });
 
-  it("edits, comments, dispatches, and controls the goal", () => {
-    const onSave = jest.fn();
+  it("keeps operational controls secondary and gives comments clear authorship", () => {
     const onAddComment = jest.fn();
     const onDispatch = jest.fn();
     const onGoalAction = jest.fn();
-    renderScreen({ onSave, onAddComment, onDispatch, onGoalAction });
+    renderScreen({ onAddComment, onDispatch, onGoalAction });
 
-    fireEvent.changeText(screen.getByLabelText("Task title"), "Complete Dev10x parity");
-    fireEvent.press(screen.getByRole("button", { name: "Save task" }));
-    expect(onSave).toHaveBeenCalledWith(
-      expect.objectContaining({ title: "Complete Dev10x parity" }),
-    );
-
+    fireEvent.press(screen.getByRole("button", { name: "More task actions" }));
     fireEvent.press(screen.getByRole("button", { name: "Continue agent" }));
     fireEvent.press(screen.getByRole("button", { name: "Pause goal" }));
     expect(onDispatch).toHaveBeenCalledWith("continue_work");
     expect(onGoalAction).toHaveBeenCalledWith("pause");
 
     fireEvent.press(screen.getByRole("tab", { name: "Comments" }));
+    expect(screen.getByText("Raphael")).toBeTruthy();
+    expect(screen.getByText("Jul 29, 12:05")).toBeTruthy();
     fireEvent.changeText(screen.getByLabelText("New comment"), "Ready for review");
     fireEvent.press(screen.getByRole("button", { name: "Add comment" }));
     expect(onAddComment).toHaveBeenCalledWith("Ready for review");

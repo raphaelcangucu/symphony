@@ -173,7 +173,8 @@ defmodule SymphonyElixir.MobileRpc.Methods.Orchestrator do
       channel_module = Map.get(context, :session_log_channel, SymphonyElixirWeb.SessionLogChannel)
 
       with connection_pid when is_pid(connection_pid) <- Map.get(context, :connection_pid),
-           {:ok, %{project_slug: project_slug}} <- service.session_context(id),
+           {:ok, %{project_slug: project_slug} = session_context} <-
+             service.session_context(id),
            {:ok, bridge_pid} <-
              bridge_module.subscribe_channel(
                connection_pid,
@@ -184,7 +185,8 @@ defmodule SymphonyElixir.MobileRpc.Methods.Orchestrator do
                topic: "session_log:#{id}",
                join_payload: %{"project_slug" => project_slug},
                emit_joined: true,
-               event_prefix: "orchestrator.session"
+               event_prefix: "orchestrator.session",
+               event_mapper: session_event_mapper(session_context)
              ) do
         cleanup = fn ->
           if Process.alive?(bridge_pid), do: GenServer.stop(bridge_pid, :normal)
@@ -201,6 +203,16 @@ defmodule SymphonyElixir.MobileRpc.Methods.Orchestrator do
 
     defp bridge(context),
       do: Map.get(context, :session_bridge, SymphonyElixir.MobileRpc.SessionBridge)
+
+    defp session_event_mapper(session_context) do
+      fn
+        "joined", payload, state when is_map(payload) ->
+          {"joined", Map.put(payload, "context", session_context), state}
+
+        event, payload, state ->
+          {event, payload, state}
+      end
+    end
 
     defp service(context) do
       Map.get(

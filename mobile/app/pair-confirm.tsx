@@ -6,7 +6,10 @@ import { ChevronLeft } from 'lucide-react-native'
 import { useConnection } from '../src/auth/ConnectionProvider'
 import { redactPairingSecrets } from '../src/auth/pairing-offer'
 import { pairHostOffer } from '../src/features/connect/pair-host'
-import { resolvePairConfirmRouteState } from '../src/dev10x/transport/pair-confirm-state'
+import {
+  pairedHostLandingRoute,
+  resolvePairConfirmRouteState
+} from '../src/dev10x/transport/pair-confirm-state'
 import type { ConnectionLogEntry } from '../src/dev10x/transport/types'
 import { colors, spacing, radii, typography } from '../src/dev10x/theme/mobile-theme'
 import { ConnectionLog } from '../src/dev10x/components/ConnectionLog'
@@ -98,7 +101,7 @@ export default function PairConfirmScreen() {
         }
       ]
       setLogs(logsRef.current)
-      router.replace(`/h/${offer.hostId}`)
+      router.replace(pairedHostLandingRoute(offer.hostId) as never)
     } catch (err) {
       if (!mountedRef.current) {
         return
@@ -127,7 +130,7 @@ export default function PairConfirmScreen() {
         {offer && resolvedStatus === 'awaiting-confirm' && (
           <>
             <Text style={styles.title}>Pair with this Symphony host?</Text>
-            <Text style={styles.subtitle}>Dev10x will connect directly to this machine.</Text>
+            <Text style={styles.subtitle}>Symphony will connect directly to this machine.</Text>
             <View style={styles.actionStack}>
               <Pressable style={styles.primaryButton} onPress={() => void confirm()}>
                 <Text style={styles.primaryButtonText}>Pair host</Text>

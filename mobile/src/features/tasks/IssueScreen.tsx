@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { useState } from "react";
+import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import type {
@@ -17,10 +17,12 @@ import type { EvidenceRecord } from "@/features/evidence/evidence-contract";
 import { radii, spacing } from "@/theme/tokens";
 import { useAppTheme } from "@/theme/ThemeProvider";
 
-import { ISSUE_TABS, type IssueTabId } from "./issue-tabs";
+import { IssueCommentsTab } from "./IssueCommentsTab";
 import { IssueEvidenceTab } from "./IssueEvidenceTab";
 import { IssuePullRequestTab } from "./IssuePullRequestTab";
 import { IssueSessionsTab } from "./IssueSessionsTab";
+import { IssueSummaryTab } from "./IssueSummaryTab";
+import { ISSUE_TABS, type IssueTabId } from "./issue-tabs";
 
 type IssueScreenProps = {
   issue: IssueSummary | null;
@@ -67,7 +69,6 @@ export function IssueScreen({
   evidenceRecords = [],
   loading,
   error,
-  saving,
   dispatching,
   pullRequestError = null,
   pullRequests = [],
@@ -87,19 +88,11 @@ export function IssueScreen({
   onOpenSession,
   onOpenTerminal,
   onRefresh,
-  onSave,
 }: IssueScreenProps) {
   const { colors } = useAppTheme();
-  const [title, setTitle] = useState(issue?.title ?? "");
-  const [description, setDescription] = useState(issue?.description ?? "");
-  const [comment, setComment] = useState("");
   const [subtaskTitle, setSubtaskTitle] = useState("");
   const [activeTab, setActiveTab] = useState<IssueTabId>("summary");
-
-  useEffect(() => {
-    setTitle(issue?.title ?? "");
-    setDescription(issue?.description ?? "");
-  }, [issue?.description, issue?.title]);
+  const [actionsOpen, setActionsOpen] = useState(false);
 
   if (loading && !issue) {
     return (
@@ -122,52 +115,45 @@ export function IssueScreen({
     );
   }
 
-  const toolActions = [
-    ["Terminal", onOpenTerminal],
-    ["Preview", onOpenPreview],
-    ["Files", onOpenFiles],
-    ["Diff", onOpenDiff],
-    ["Pull request", onOpenPullRequest],
-  ] as const;
-  const workpad = [...comments].reverse().find((item) => item.kind === "workpad");
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.bgBase }]}>
-      <View style={styles.header}>
+      <View style={[styles.header, { borderBottomColor: colors.borderSubtle }]}>
         <Pressable
           accessibilityLabel="Back"
           accessibilityRole="button"
           onPress={onBack}
-          style={styles.iconButton}
+          style={({ pressed }) => [
+            styles.iconButton,
+            { backgroundColor: pressed ? colors.bgPressed : colors.bgPanel },
+          ]}
         >
           <Text style={[styles.back, { color: colors.textPrimary }]}>‹</Text>
         </Pressable>
         <View style={styles.headerText}>
-          <Text style={[styles.identifier, { color: colors.textMuted }]}>
+          <Text style={[styles.identifier, { color: colors.textPrimary }]}>
             {issue.displayIdentifier}
           </Text>
-          <Text style={[styles.status, { color: colors.statusGreen }]}>{issue.status}</Text>
+          <View style={styles.statusRow}>
+            <View style={[styles.statusDot, { backgroundColor: colors.statusGreen }]} />
+            <Text numberOfLines={1} style={[styles.status, { color: colors.textSecondary }]}>
+              {issue.status}
+            </Text>
+          </View>
         </View>
         <Pressable
-          accessibilityLabel="Save task"
+          accessibilityLabel="More task actions"
           accessibilityRole="button"
-          disabled={saving}
-          onPress={() =>
-            onSave({
-              title,
-              description,
-            })
-          }
-          style={styles.saveButton}
+          onPress={() => setActionsOpen(true)}
+          style={({ pressed }) => [
+            styles.iconButton,
+            { backgroundColor: pressed ? colors.bgPressed : colors.bgPanel },
+          ]}
         >
-          <Text style={{ color: colors.accent }}>{saving ? "Saving" : "Save"}</Text>
+          <Text style={[styles.more, { color: colors.textPrimary }]}>•••</Text>
         </Pressable>
       </View>
 
-      <ScrollView
-        contentContainerStyle={styles.tabs}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-      >
+      <View style={[styles.tabs, { borderBottomColor: colors.borderSubtle }]}>
         {ISSUE_TABS.map((tab) => {
           const selected = activeTab === tab.id;
           return (
@@ -176,170 +162,56 @@ export function IssueScreen({
               accessibilityState={{ selected }}
               key={tab.id}
               onPress={() => setActiveTab(tab.id)}
-              style={[
-                styles.tab,
-                {
-                  borderBottomColor: selected ? colors.textPrimary : "transparent",
-                },
-              ]}
+              style={[styles.tab, { borderBottomColor: selected ? colors.accent : "transparent" }]}
             >
-              <Text style={{ color: selected ? colors.textPrimary : colors.textMuted }}>
+              <Text
+                numberOfLines={1}
+                style={[
+                  styles.tabLabel,
+                  {
+                    color: selected ? colors.textPrimary : colors.textMuted,
+                    fontWeight: selected ? "700" : "500",
+                  },
+                ]}
+              >
                 {tab.label}
               </Text>
             </Pressable>
           );
         })}
-      </ScrollView>
+      </View>
 
       {activeTab === "summary" ? (
-        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-          <Text style={styles.srOnly}>Task summary</Text>
-          {error ? <Text style={{ color: colors.statusRed }}>{error}</Text> : null}
-          <TextInput
-            accessibilityLabel="Task title"
-            multiline
-            onChangeText={setTitle}
-            style={[styles.title, { color: colors.textPrimary }]}
-            value={title}
-          />
-          <TextInput
-            accessibilityLabel="Task description"
-            multiline
-            onChangeText={setDescription}
-            placeholder="Add a description"
-            placeholderTextColor={colors.textMuted}
-            style={[
-              styles.description,
-              {
-                backgroundColor: colors.bgPanel,
-                borderColor: colors.borderSubtle,
-                color: colors.textSecondary,
-              },
-            ]}
-            value={description}
-          />
-
-          <View style={styles.metadata}>
-            {issue.priority !== null ? (
-              <Meta label="Priority" value={priorityLabel(issue.priority)} />
-            ) : null}
-            {issue.assignee ? <Meta label="Assignee" value={issue.assignee} /> : null}
-            {issue.branchName ? <Meta label="Branch" value={issue.branchName} /> : null}
-            {issue.agentKind ? <Meta label="Agent" value={issue.agentKind} /> : null}
-            {issue.model ? <Meta label="Model" value={issue.model} /> : null}
-            {issue.effort ? <Meta label="Effort" value={issue.effort} /> : null}
-            {issue.labels.length > 0 ? (
-              <Meta label="Labels" value={issue.labels.join(" · ")} />
-            ) : null}
-            {issue.updatedAt ? <Meta label="Updated" value={issue.updatedAt} /> : null}
-          </View>
-
-          {workpad ? (
-            <>
-              <SectionTitle>Workpad</SectionTitle>
-              <View
-                style={[
-                  styles.comment,
-                  { backgroundColor: colors.bgPanel, borderColor: colors.borderSubtle },
-                ]}
-              >
-                <Text style={{ color: colors.textPrimary }}>{workpad.body}</Text>
-              </View>
-            </>
-          ) : null}
-
-          <SectionTitle>Agent</SectionTitle>
-          {issue.agentGoal ? (
-            <Text style={[styles.goal, { color: colors.textSecondary }]}>{issue.agentGoal}</Text>
-          ) : null}
-          <View style={styles.actions}>
-            <Action
-              disabled={dispatching}
-              label="Continue agent"
-              onPress={() => onDispatch("continue_work")}
-            />
-            <Action disabled={dispatching} label="Stop agent" onPress={() => onDispatch("stop")} />
-            <Action label="Pause goal" onPress={() => onGoalAction("pause")} />
-            <Action label="Resume goal" onPress={() => onGoalAction("resume")} />
-            <Action label="Open session" onPress={onOpenSession} />
-          </View>
-
-          <SectionTitle>Workspace</SectionTitle>
-          <View style={styles.tools}>
-            {toolActions.map(([label, action]) => (
-              <Action key={label} label={label} onPress={action} />
-            ))}
-          </View>
-
-          <SectionTitle>Evidence</SectionTitle>
-          <Text style={[styles.goal, { color: colors.textSecondary }]}>
-            {evidenceCount === 1 ? "1 durable run" : `${evidenceCount} durable runs`}
-          </Text>
-          <View style={styles.actions}>
-            <Action label="Open evidence" onPress={onOpenEvidence} />
-          </View>
-
-          {blockers.length > 0 ? (
-            <>
-              <SectionTitle>Blocked by</SectionTitle>
-              {blockers.map((blocker) => (
-                <RelatedTask
-                  accessibilityLabel={`Open blocker ${blocker.identifier}`}
-                  identifier={blocker.identifier}
-                  key={blocker.identifier}
-                  onPress={() => onOpenRelatedTask(blocker.identifier)}
-                  status={blocker.status}
-                  title={blocker.title}
-                />
-              ))}
-            </>
-          ) : null}
-
-          <SectionTitle>Subtasks</SectionTitle>
-          {subtasks.map((subtask) => (
-            <RelatedTask
-              accessibilityLabel={`Open subtask ${subtask.identifier}`}
-              identifier={subtask.identifier}
-              key={subtask.id}
-              onPress={() => onOpenRelatedTask(subtask.identifier)}
-              status={subtask.status}
-              title={subtask.title}
-            />
-          ))}
-          <TextInput
-            accessibilityLabel="New subtask title"
-            onChangeText={setSubtaskTitle}
-            placeholder="Add a subtask"
-            placeholderTextColor={colors.textMuted}
-            style={[
-              styles.input,
-              {
-                backgroundColor: colors.bgPanel,
-                borderColor: colors.borderSubtle,
-                color: colors.textPrimary,
-              },
-            ]}
-            value={subtaskTitle}
-          />
-          <Action
-            disabled={!subtaskTitle.trim()}
-            label="Create subtask"
-            onPress={() => {
-              const title = subtaskTitle.trim();
-              if (!title) return;
-              onCreateSubtask(title);
-              setSubtaskTitle("");
-            }}
-          />
-        </ScrollView>
+        <IssueSummaryTab
+          blockers={blockers}
+          comments={comments}
+          evidenceCount={evidenceCount}
+          issue={issue}
+          onCreateSubtask={() => {
+            const title = subtaskTitle.trim();
+            if (!title) return;
+            onCreateSubtask(title);
+            setSubtaskTitle("");
+          }}
+          onOpenEvidence={onOpenEvidence}
+          onOpenRelatedTask={onOpenRelatedTask}
+          onOpenSession={() => onOpenSession()}
+          onOpenWorkspace={onOpenFiles}
+          onSubtaskTitleChange={setSubtaskTitle}
+          pullRequests={pullRequests}
+          subtasks={subtasks}
+          subtaskTitle={subtaskTitle}
+        />
       ) : activeTab === "pr" ? (
         <IssuePullRequestTab
           error={pullRequestError}
           loading={false}
           onOpen={() => onOpenPullRequest()}
-          onRefresh={() => onRefresh()}
+          onRefresh={onRefresh}
           pullRequests={pullRequests}
         />
+      ) : activeTab === "comments" ? (
+        <IssueCommentsTab comments={comments} onAddComment={onAddComment} />
       ) : activeTab === "evidence" ? (
         <IssueEvidenceTab
           error={evidenceError}
@@ -347,117 +219,73 @@ export function IssueScreen({
           onOpen={onOpenEvidence}
           records={evidenceRecords}
         />
-      ) : activeTab === "sessions" ? (
+      ) : (
         <IssueSessionsTab
           loading={loading}
           onCreate={onCreateSession}
           onOpen={onOpenSession}
           threads={threads}
         />
-      ) : activeTab === "comments" ? (
-        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-          <Text style={styles.srOnly}>Task comments</Text>
-          {comments.map((item) => (
-            <View
-              key={item.id}
-              style={[
-                styles.comment,
-                { backgroundColor: colors.bgPanel, borderColor: colors.borderSubtle },
-              ]}
-            >
-              <Text style={{ color: colors.textMuted }}>{item.author ?? "Unknown"}</Text>
-              <Text style={{ color: colors.textPrimary }}>{item.body}</Text>
-            </View>
-          ))}
-          <TextInput
-            accessibilityLabel="New comment"
-            multiline
-            onChangeText={setComment}
-            placeholder="Add a comment"
-            placeholderTextColor={colors.textMuted}
-            style={[
-              styles.commentInput,
-              {
-                backgroundColor: colors.bgPanel,
-                borderColor: colors.borderSubtle,
-                color: colors.textPrimary,
-              },
-            ]}
-            value={comment}
-          />
-          <Action
-            disabled={!comment.trim()}
-            label="Add comment"
-            onPress={() => {
-              const body = comment.trim();
-              if (!body) return;
-              onAddComment(body);
-              setComment("");
-            }}
-          />
-        </ScrollView>
-      ) : (
-        <ScrollView contentContainerStyle={styles.content}>
-          <Text style={[styles.placeholderTitle, { color: colors.textPrimary }]}>
-            {ISSUE_TABS.find((tab) => tab.id === activeTab)?.label}
-          </Text>
-        </ScrollView>
       )}
+
+      <Modal
+        animationType="slide"
+        onRequestClose={() => setActionsOpen(false)}
+        transparent
+        visible={actionsOpen}
+      >
+        <View style={styles.modalRoot}>
+          <Pressable
+            accessibilityLabel="Close task actions"
+            onPress={() => setActionsOpen(false)}
+            style={styles.backdrop}
+          />
+          <View
+            style={[
+              styles.sheet,
+              { backgroundColor: colors.bgRaised, borderColor: colors.borderSubtle },
+            ]}
+          >
+            <View style={[styles.handle, { backgroundColor: colors.borderStrong }]} />
+            <Text style={[styles.sheetTitle, { color: colors.textPrimary }]}>Task actions</Text>
+            <Text style={{ color: colors.textMuted }}>Agent controls and workspace tools</Text>
+            <View style={styles.sheetGrid}>
+              <SheetAction
+                disabled={dispatching}
+                label="Continue agent"
+                onPress={() => onDispatch("continue_work")}
+              />
+              <SheetAction
+                disabled={dispatching}
+                label="Stop agent"
+                onPress={() => onDispatch("stop")}
+              />
+              <SheetAction label="Pause goal" onPress={() => onGoalAction("pause")} />
+              <SheetAction label="Resume goal" onPress={() => onGoalAction("resume")} />
+            </View>
+            <View style={[styles.divider, { backgroundColor: colors.borderSubtle }]} />
+            <View style={styles.sheetGrid}>
+              <SheetAction label="Terminal" onPress={onOpenTerminal} />
+              <SheetAction label="Preview" onPress={onOpenPreview} />
+              <SheetAction label="Files" onPress={onOpenFiles} />
+              <SheetAction label="Diff" onPress={onOpenDiff} />
+              <SheetAction label="Pull request" onPress={onOpenPullRequest} />
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => setActionsOpen(false)}
+              style={[styles.done, { backgroundColor: colors.textPrimary }]}
+            >
+              <Text style={{ color: colors.bgBase, fontWeight: "700" }}>Done</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
 
-function RelatedTask({
-  accessibilityLabel,
-  identifier,
-  onPress,
-  status,
-  title,
-}: {
-  accessibilityLabel: string;
-  identifier: string;
-  onPress(): void;
-  status: string | null;
-  title: string;
-}) {
-  const { colors } = useAppTheme();
-  return (
-    <Pressable
-      accessibilityLabel={accessibilityLabel}
-      accessibilityRole="button"
-      onPress={onPress}
-      style={[styles.relatedTask, { backgroundColor: colors.bgPanel }]}
-    >
-      <View style={styles.grow}>
-        <Text style={{ color: colors.textPrimary, fontWeight: "700" }}>{identifier}</Text>
-        <Text style={{ color: colors.textSecondary }}>{title}</Text>
-      </View>
-      {status ? <Text style={{ color: colors.textMuted }}>{status}</Text> : null}
-      <Text style={{ color: colors.textMuted }}>›</Text>
-    </Pressable>
-  );
-}
-
-function priorityLabel(priority: NonNullable<IssueSummary["priority"]>): string {
-  return ["No priority", "Urgent", "High", "Medium", "Low"][priority] ?? String(priority);
-}
-
-function SectionTitle({ children }: { children: string }) {
-  const { colors } = useAppTheme();
-  return <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>{children}</Text>;
-}
-
-function Meta({ label, value }: { label: string; value: string }) {
-  const { colors } = useAppTheme();
-  return (
-    <View>
-      <Text style={[styles.metaLabel, { color: colors.textMuted }]}>{label}</Text>
-      <Text style={{ color: colors.textSecondary }}>{value}</Text>
-    </View>
-  );
-}
-
-function Action({
+function SheetAction({
   disabled = false,
   label,
   onPress,
@@ -473,85 +301,91 @@ function Action({
       disabled={disabled}
       onPress={onPress}
       style={({ pressed }) => [
-        styles.action,
+        styles.sheetAction,
         {
-          backgroundColor: colors.bgRaised,
-          borderColor: colors.borderStrong,
-          opacity: disabled ? 0.45 : pressed ? 0.7 : 1,
+          backgroundColor: colors.bgPanel,
+          borderColor: colors.borderSubtle,
+          opacity: disabled ? 0.4 : pressed ? 0.7 : 1,
         },
       ]}
     >
       <Text style={{ color: colors.textPrimary }}>{label}</Text>
+      <Text style={{ color: colors.textMuted }}>›</Text>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  action: {
-    borderRadius: radii.sm,
-    borderWidth: 1,
+  backdrop: { flex: 1 },
+  back: { fontSize: 34, lineHeight: 35, marginTop: -3 },
+  divider: { height: StyleSheet.hairlineWidth, marginVertical: spacing.xs },
+  done: {
+    alignItems: "center",
+    borderRadius: radii.md,
     justifyContent: "center",
-    minHeight: 44,
-    paddingHorizontal: spacing.sm,
+    marginTop: spacing.xs,
+    minHeight: 48,
   },
-  actions: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs },
-  back: { fontSize: 34, lineHeight: 36 },
-  comment: { borderRadius: radii.md, borderWidth: 1, gap: spacing.xs, padding: spacing.md },
-  commentInput: {
-    borderRadius: radii.md,
-    borderWidth: 1,
-    minHeight: 88,
-    padding: spacing.md,
-    textAlignVertical: "top",
+  handle: {
+    alignSelf: "center",
+    borderRadius: radii.pill,
+    height: 4,
+    marginBottom: spacing.xs,
+    width: 38,
   },
-  content: { gap: spacing.sm, padding: spacing.md, paddingBottom: spacing.xxl },
-  description: {
-    borderRadius: radii.md,
-    borderWidth: 1,
-    minHeight: 120,
-    padding: spacing.md,
-    textAlignVertical: "top",
-  },
-  goal: { fontSize: 14, lineHeight: 20 },
   header: {
     alignItems: "center",
+    borderBottomWidth: StyleSheet.hairlineWidth,
     flexDirection: "row",
-    minHeight: 56,
+    minHeight: 66,
     paddingHorizontal: spacing.sm,
   },
-  headerText: { flex: 1 },
-  grow: { flex: 1 },
-  iconButton: { alignItems: "center", justifyContent: "center", minHeight: 44, minWidth: 44 },
-  identifier: { fontSize: 13, fontWeight: "700" },
-  input: {
-    borderRadius: radii.md,
-    borderWidth: 1,
-    minHeight: 48,
-    paddingHorizontal: spacing.md,
-  },
-  metaLabel: { fontSize: 11, textTransform: "uppercase" },
-  metadata: { flexDirection: "row", flexWrap: "wrap", gap: spacing.lg },
-  safeArea: { flex: 1 },
-  relatedTask: {
+  headerText: { alignItems: "center", flex: 1, gap: 3 },
+  iconButton: {
     alignItems: "center",
-    borderRadius: radii.md,
-    flexDirection: "row",
-    gap: spacing.sm,
-    minHeight: 56,
-    padding: spacing.sm,
-  },
-  saveButton: { alignItems: "center", justifyContent: "center", minHeight: 44, minWidth: 64 },
-  sectionTitle: { fontSize: 17, fontWeight: "700", marginTop: spacing.sm },
-  status: { fontSize: 12 },
-  srOnly: { height: 1, opacity: 0, position: "absolute", width: 1 },
-  tab: {
-    borderBottomWidth: 2,
+    borderRadius: radii.pill,
+    height: 46,
     justifyContent: "center",
-    minHeight: 44,
-    paddingHorizontal: spacing.md,
+    width: 46,
   },
-  tabs: { borderBottomWidth: StyleSheet.hairlineWidth, paddingHorizontal: spacing.xs },
-  placeholderTitle: { fontSize: 20, fontWeight: "700" },
-  title: { fontSize: 24, fontWeight: "700", minHeight: 44 },
-  tools: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs },
+  identifier: { fontSize: 17, fontWeight: "800" },
+  modalRoot: { flex: 1, justifyContent: "flex-end" },
+  more: { fontSize: 17, fontWeight: "800", letterSpacing: 1 },
+  safeArea: { flex: 1 },
+  sheet: {
+    borderTopLeftRadius: radii.lg,
+    borderTopRightRadius: radii.lg,
+    borderWidth: 1,
+    gap: spacing.xs,
+    padding: spacing.md,
+    paddingBottom: spacing.xl,
+  },
+  sheetAction: {
+    alignItems: "center",
+    borderRadius: radii.sm,
+    borderWidth: 1,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    minHeight: 48,
+    paddingHorizontal: spacing.sm,
+  },
+  sheetGrid: { gap: spacing.xs },
+  sheetTitle: { fontSize: 20, fontWeight: "800" },
+  status: { fontSize: 12 },
+  statusDot: { borderRadius: radii.pill, height: 7, width: 7 },
+  statusRow: { alignItems: "center", flexDirection: "row", gap: 6, maxWidth: "90%" },
+  tab: {
+    alignItems: "center",
+    borderBottomWidth: 2,
+    flex: 1,
+    justifyContent: "center",
+    minHeight: 46,
+    paddingHorizontal: 2,
+  },
+  tabLabel: { fontSize: 11 },
+  tabs: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    flexDirection: "row",
+    paddingHorizontal: spacing.xs,
+  },
 });

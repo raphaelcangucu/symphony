@@ -309,7 +309,7 @@ function repoColor(name: string): string {
   return REPO_COLORS[Math.abs(hash) % REPO_COLORS.length]
 }
 
-export function Dev10xHomeRoute() {
+export function HomeRoute() {
   const router = useRouter()
   const insets = useSafeAreaInsets()
   // Why: cap and center content on wide/tablet canvases so cards don't stretch
@@ -861,6 +861,7 @@ export function Dev10xHomeRoute() {
               <Pressable
                 style={({ pressed }) => [styles.hostCard, pressed && styles.hostCardPressed]}
                 onPress={() => router.push(`/h/${item.id}/projects` as never)}
+                accessibilityLabel={`Abrir máquina ${item.name}`}
                 onLongPress={() => {
                   triggerMediumImpact()
                   setActionTarget(item)
@@ -974,14 +975,14 @@ export function Dev10xHomeRoute() {
                   ]}
                   onPress={() => {
                     if (primaryConnectedHost) {
-                      router.push(`/h/${primaryConnectedHost.id}?action=newWorktree`)
+                      router.push(`/h/${primaryConnectedHost.id}/projects`)
                     }
                   }}
                 >
                   <View style={styles.quickActionIcon}>
                     <Plus size={16} color={colors.textSecondary} />
                   </View>
-                  <Text style={styles.quickActionLabel}>New Workspace</Text>
+                  <Text style={styles.quickActionLabel}>Novo workspace</Text>
                 </Pressable>
               </View>
 

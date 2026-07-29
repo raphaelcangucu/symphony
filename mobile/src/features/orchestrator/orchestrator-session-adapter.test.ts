@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   appendSessionLogEntries,
   buildOrchestratorTimeline,
+  payloadOrchestratorSessionProvenance,
   payloadSessionLogEntries,
 } from "./orchestrator-session-adapter";
 
@@ -224,5 +225,43 @@ describe("orchestrator transcript adapter", () => {
         body: "Restored transcript",
       }),
     ]);
+  });
+
+  it("restores the requested model and effort from persisted execution provenance", () => {
+    const provenance = payloadOrchestratorSessionProvenance({
+      project_slug: "dev10x",
+      issue_identifier: "DEV-10",
+      agent_kind: "codex",
+      execution_mode: "build",
+      skill_profile: null,
+      requested_model: "gpt-5.6-sol",
+      requested_effort: "high",
+      resolved_model: null,
+      resolved_effort: null,
+    });
+    const timeline = buildOrchestratorTimeline(
+      [],
+      "live",
+      null,
+      "codex",
+      provenance,
+    );
+
+    expect(provenance).toMatchObject({
+      projectSlug: "dev10x",
+      identifier: "DEV-10",
+      requestedModel: "gpt-5.6-sol",
+      requestedEffort: "high",
+    });
+    expect(timeline.turnPreferences).toMatchObject({
+      executionMode: "build",
+      model: "gpt-5.6-sol",
+      effort: "high",
+    });
+    expect(timeline.metadata).toMatchObject({
+      agentKind: "codex",
+      requestedModel: "gpt-5.6-sol",
+      requestedEffort: "high",
+    });
   });
 });
