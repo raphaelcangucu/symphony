@@ -27,7 +27,7 @@ changes must remain unstaged.
 - Modify: `tracker/src/services/assistantThreads.ts`
 - Modify: `tracker/src/services/__tests__/assistantThreads.test.ts`
 
-- [ ] **Step 1: Write failing controller and service tests**
+- [x] **Step 1: Write failing controller and service tests**
 
 Add an ExUnit case that updates and reloads a thread permission:
 
@@ -73,7 +73,7 @@ expect(http.patch).toHaveBeenCalledWith(
 );
 ```
 
-- [ ] **Step 2: Run the focused tests and verify failure**
+- [x] **Step 2: Run the focused tests and verify failure**
 
 Run:
 
@@ -85,7 +85,7 @@ cd tracker && npm test -- src/services/__tests__/assistantThreads.test.ts
 Expected: ExUnit fails because `permission_level` is not accepted/presented;
 Vitest fails because the DTO and update input do not contain the field.
 
-- [ ] **Step 3: Add the metadata contract**
+- [x] **Step 3: Add the metadata contract**
 
 Add to `History`:
 
@@ -140,13 +140,13 @@ Add `permission_level` to `BackendAssistantThreadDto`,
 `permissionLevel` to `UpdateAssistantThreadInput`, and normalize only the three
 stable values.
 
-- [ ] **Step 4: Run focused backend/frontend tests**
+- [x] **Step 4: Run focused backend/frontend tests**
 
 Run the two commands from Step 2.
 
 Expected: both suites pass.
 
-- [ ] **Step 5: Commit the thread contract**
+- [x] **Step 5: Commit the thread contract**
 
 ```bash
 git add elixir/lib/symphony_elixir/assistant/history.ex \

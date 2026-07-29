@@ -321,6 +321,54 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadControllerTest do
     assert reloaded.agent_kind == "codex"
   end
 
+  test "PATCH persists permission_level in thread metadata" do
+    {:ok, thread} =
+      History.create_freeform_thread(%{
+        title: "Permission",
+        workspace_path: System.tmp_dir!(),
+        agent_kind: "codex"
+      })
+
+    conn =
+      authorize()
+      |> patch("/api/tracker/v1/assistant/threads/#{thread.id}", %{
+        permission_level: "full_access"
+      })
+
+    assert %{
+             "data" => %{
+               "id" => id,
+               "permission_level" => "full_access"
+             }
+           } = json_response(conn, 200)
+
+    assert id == thread.id
+    assert {:ok, persisted} = History.get_thread(thread.id)
+    assert History.thread_permission_level(persisted) == "full_access"
+  end
+
+  test "PATCH rejects an invalid permission_level" do
+    {:ok, thread} =
+      History.create_freeform_thread(%{
+        title: "Permission",
+        workspace_path: System.tmp_dir!(),
+        agent_kind: "codex"
+      })
+
+    conn =
+      authorize()
+      |> patch("/api/tracker/v1/assistant/threads/#{thread.id}", %{
+        permission_level: "unsafe"
+      })
+
+    assert %{"error" => %{"code" => "validation_failed", "message" => message}} =
+             json_response(conn, 422)
+
+    assert message =~ "permission_level"
+    assert {:ok, persisted} = History.get_thread(thread.id)
+    assert History.thread_permission_level(persisted) == nil
+  end
+
   test "GET with include_archived=true includes archived threads" do
     {:ok, thread} = History.create_freeform_thread(%{title: "Archived", workspace_path: System.tmp_dir!()})
     {:ok, _archived} = History.archive_thread(thread.id)

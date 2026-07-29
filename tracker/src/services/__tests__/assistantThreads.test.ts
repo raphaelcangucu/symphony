@@ -39,6 +39,7 @@ describe("normalizeAssistantThread", () => {
       requested_effort: null,
       resolved_model: "composer-2.5",
       resolved_effort: null,
+      permission_level: "approve_for_me",
     });
     expect(t).toMatchObject({
       id: 3,
@@ -57,6 +58,7 @@ describe("normalizeAssistantThread", () => {
       requestedEffort: null,
       resolvedModel: "composer-2.5",
       resolvedEffort: null,
+      permissionLevel: "approve_for_me",
     });
   });
 
@@ -426,6 +428,41 @@ describe("updateAssistantThread", () => {
       },
     );
     expect(thread).toMatchObject({ id: 9, agentKind: "cursor" });
+  });
+
+  it("patches and normalizes permissionLevel", async () => {
+    vi.mocked(http.patch).mockResolvedValue({
+      data: {
+        data: {
+          id: 10,
+          scope: "issue_execution",
+          permission_level: "full_access",
+          status: "active",
+        },
+      },
+    });
+
+    const thread = await updateAssistantThread(10, {
+      permissionLevel: "full_access",
+    });
+
+    expect(http.patch).toHaveBeenCalledWith(
+      "/api/tracker/v1/assistant/threads/10",
+      {
+        permission_level: "full_access",
+      },
+    );
+    expect(thread).toMatchObject({
+      id: 10,
+      permissionLevel: "full_access",
+    });
+  });
+
+  it("rejects invalid permissionLevel values", async () => {
+    await expect(
+      updateAssistantThread(1, { permissionLevel: "unsafe" as never }),
+    ).rejects.toThrow(/permissionLevel/);
+    expect(http.patch).not.toHaveBeenCalled();
   });
 
   it("rejects invalid agentKind values", async () => {

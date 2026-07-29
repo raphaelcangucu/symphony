@@ -232,8 +232,10 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
 
     with {:ok, id} <- parse_thread_id(raw_id),
          {:ok, agent_kind} <- parse_optional_agent_kind(params),
+         {:ok, permission_level} <- parse_optional_permission_level(params),
          {:ok, thread} <- History.update_thread_sidebar_metadata(id, attrs),
          {:ok, thread} <- maybe_set_thread_agent(thread, agent_kind),
+         {:ok, thread} <- maybe_set_thread_permission_level(thread, permission_level),
          thread <- maybe_sync_native_title(thread, attrs) do
       json(conn, %{data: TrackerPresenter.assistant_thread(with_preview(thread))})
     else
@@ -247,6 +249,12 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
         TrackerErrors.validation_msg(
           conn,
           "agent_kind must be one of: #{Enum.join(@agent_kinds, ", ")}"
+        )
+
+      {:error, :invalid_permission_level} ->
+        TrackerErrors.validation_msg(
+          conn,
+          "permission_level must be one of: ask_for_approval, approve_for_me, full_access"
         )
 
       {:error, :invalid_title} ->
@@ -458,6 +466,23 @@ defmodule SymphonyElixirWeb.Tracker.AssistantThreadController do
 
   defp maybe_set_thread_agent(thread, agent_kind) when is_binary(agent_kind) do
     History.set_thread_agent(thread, agent_kind)
+  end
+
+  defp parse_optional_permission_level(params) when is_map(params) do
+    if Map.has_key?(params, "permission_level") do
+      case params["permission_level"] do
+        level when level in ~w(ask_for_approval approve_for_me full_access) -> {:ok, level}
+        _ -> {:error, :invalid_permission_level}
+      end
+    else
+      {:ok, :unchanged}
+    end
+  end
+
+  defp maybe_set_thread_permission_level(thread, :unchanged), do: {:ok, thread}
+
+  defp maybe_set_thread_permission_level(thread, permission_level) when is_binary(permission_level) do
+    History.set_thread_permission_level(thread, permission_level)
   end
 
   defp issue_session_attrs(params) do

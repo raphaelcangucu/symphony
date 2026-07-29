@@ -295,6 +295,28 @@ defmodule SymphonyElixir.Assistant.History do
 
   def thread_execution_mode(_thread), do: nil
 
+  @permission_levels ~w(ask_for_approval approve_for_me full_access)
+
+  @spec thread_permission_level(Thread.t()) :: String.t() | nil
+  def thread_permission_level(%Thread{metadata: %{"permission_level" => level}})
+      when level in @permission_levels,
+      do: level
+
+  def thread_permission_level(_thread), do: nil
+
+  @spec set_thread_permission_level(Thread.t(), String.t()) ::
+          {:ok, Thread.t()} | {:error, :invalid_permission_level | term()}
+  def set_thread_permission_level(%Thread{} = thread, level)
+      when level in @permission_levels do
+    mutate_metadata(thread, fn current ->
+      {:update, Map.put(current.metadata || %{}, "permission_level", level), nil}
+    end)
+    |> without_mutation_value()
+  end
+
+  def set_thread_permission_level(%Thread{}, _level),
+    do: {:error, :invalid_permission_level}
+
   @spec thread_model(Thread.t()) :: String.t() | nil
   def thread_model(%Thread{resolved_model: model}) when is_binary(model), do: model
   def thread_model(%Thread{}), do: nil
