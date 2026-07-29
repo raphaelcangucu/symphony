@@ -284,8 +284,6 @@ function AssistantChatContent({
           </View>
         ) : null}
 
-        {taskLinks ? <TaskAccessDock taskLinks={taskLinks} /> : null}
-
         <QueuedMessageDock queue={timeline.turnStatus?.queuedMessages ?? []} />
 
         <GoalDock
@@ -353,57 +351,6 @@ function QueuedMessageDock({
         </Text>
       ) : null}
     </View>
-  );
-}
-
-function TaskAccessDock({
-  taskLinks,
-}: {
-  taskLinks: NonNullable<AssistantChatScreenProps["taskLinks"]>;
-}) {
-  const { colors } = useAppTheme();
-  return (
-    <View
-      style={[
-        styles.taskAccessDock,
-        { backgroundColor: colors.bgRaised, borderColor: colors.borderSubtle },
-      ]}
-    >
-      <Pressable
-        accessibilityLabel={`Open ${taskLinks.identifier} task`}
-        onPress={taskLinks.onOpenTask}
-      >
-        <Text style={[styles.taskAccessTitle, { color: colors.textPrimary }]}>
-          {taskLinks.identifier}
-        </Text>
-      </Pressable>
-      <View style={styles.taskAccessActions}>
-        <TaskAccessButton label="Evidence" onPress={taskLinks.onOpenEvidence} />
-        <TaskAccessButton label="PRs" onPress={taskLinks.onOpenPullRequest} />
-        <TaskAccessButton label="Diff" onPress={taskLinks.onOpenDiff} />
-      </View>
-    </View>
-  );
-}
-
-function TaskAccessButton({
-  label,
-  onPress,
-}: {
-  label: string;
-  onPress(): void;
-}) {
-  const { colors } = useAppTheme();
-  return (
-    <Pressable
-      accessibilityLabel={`Open task ${label}`}
-      accessibilityRole="button"
-      onPress={onPress}
-    >
-      <Text style={[styles.taskAccessAction, { color: colors.accent }]}>
-        {label}
-      </Text>
-    </Pressable>
   );
 }
 
@@ -2073,20 +2020,6 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
     padding: spacing.md,
   },
-  taskAccessDock: {
-    alignItems: "center",
-    borderRadius: radii.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginHorizontal: spacing.md,
-    marginTop: spacing.xs,
-    minHeight: 38,
-    paddingHorizontal: spacing.sm,
-  },
-  taskAccessTitle: { fontSize: 12, fontWeight: "800" },
-  taskAccessActions: { flexDirection: "row", gap: spacing.sm },
-  taskAccessAction: { fontSize: 12, fontWeight: "700" },
   queuedDock: {
     alignItems: "center",
     borderRadius: radii.md,

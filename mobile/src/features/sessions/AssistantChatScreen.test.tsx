@@ -281,30 +281,24 @@ describe("AssistantChatScreen", () => {
     expect(onOpenTerminal).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps the linked task and its evidence, PRs and diff one tap away", () => {
+  it("keeps an associated task in the header without duplicating a task dock", () => {
     const onOpenTask = jest.fn();
-    const onOpenEvidence = jest.fn();
-    const onOpenPullRequest = jest.fn();
-    const onOpenDiff = jest.fn();
     renderScreen({
       taskLinks: {
         identifier: "VIN-2",
         onOpenTask,
-        onOpenEvidence,
-        onOpenPullRequest,
-        onOpenDiff,
+        onOpenEvidence: jest.fn(),
+        onOpenPullRequest: jest.fn(),
+        onOpenDiff: jest.fn(),
       },
     });
 
-    fireEvent.press(screen.getByRole("button", { name: "Open task Evidence" }));
-    fireEvent.press(screen.getByRole("button", { name: "Open task PRs" }));
-    fireEvent.press(screen.getByRole("button", { name: "Open task Diff" }));
     fireEvent.press(screen.getByRole("button", { name: "Open VIN-2 task" }));
 
-    expect(onOpenEvidence).toHaveBeenCalledTimes(1);
-    expect(onOpenPullRequest).toHaveBeenCalledTimes(1);
-    expect(onOpenDiff).toHaveBeenCalledTimes(1);
     expect(onOpenTask).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: "Open task Evidence" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Open task PRs" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Open task Diff" })).toBeNull();
   });
 
   it("keeps an active goal compact while showing its elapsed duration", () => {
