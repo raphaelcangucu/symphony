@@ -47,6 +47,13 @@ describe("RPC assistant session", () => {
       payload: { message: "Continue" },
     });
 
+    await session.sendMessage("Review", [{ type: "pr", id: "42" }]);
+    expect(transport.call).toHaveBeenCalledWith("sessions.command", {
+      thread_id: 42,
+      event: "send_message",
+      payload: { message: "Review", context_refs: [{ type: "pr", id: "42" }] },
+    });
+
     session.disconnect();
     await expect(vi.mocked(transport.subscribe).mock.results[0]?.value).resolves.toBeTypeOf(
       "function",
@@ -103,11 +110,20 @@ describe("RPC assistant session", () => {
     const commands = vi.mocked(transport.call).mock.calls.map(([, input]) => input);
     expect(commands).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ event: "set_turn_preferences", payload: { execution_mode: "build" } }),
-        expect.objectContaining({ event: "set_goal_mode", payload: { goal_mode: true, objective: "Ship the health page" } }),
+        expect.objectContaining({
+          event: "set_turn_preferences",
+          payload: { execution_mode: "build" },
+        }),
+        expect.objectContaining({
+          event: "set_goal_mode",
+          payload: { goal_mode: true, objective: "Ship the health page" },
+        }),
         expect.objectContaining({ event: "goal_pause" }),
         expect.objectContaining({ event: "goal_resume" }),
-        expect.objectContaining({ event: "goal_set_objective", payload: { objective: "Record E2E evidence" } }),
+        expect.objectContaining({
+          event: "goal_set_objective",
+          payload: { objective: "Record E2E evidence" },
+        }),
         expect.objectContaining({ event: "goal_clear" }),
         expect.objectContaining({ event: "kill_tool", payload: { tool_call_id: "tool-9" } }),
       ]),

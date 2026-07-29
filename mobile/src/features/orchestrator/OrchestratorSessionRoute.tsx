@@ -223,7 +223,7 @@ export function OrchestratorSessionRoute() {
       onSearchContext={searchContext}
       onResumeTurn={async () => undefined}
       onResumeGoal={async () => undefined}
-      onSend={(message) => session.steer(message)}
+      onSend={(message, contextRefs) => session.steer(message, contextRefs)}
       onSetGoalMode={async () => undefined}
       onSetGoalObjective={async () => undefined}
       onSetTurnPreferences={async () => undefined}

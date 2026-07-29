@@ -51,7 +51,10 @@ export type CreateAssistantSessionOptions = {
 export type AssistantSession = {
   connect(): void;
   disconnect(): void;
-  sendMessage(message: string): Promise<void>;
+  sendMessage(
+    message: string,
+    contextRefs?: Array<{ type: "issue" | "file" | "pr"; id: string }>,
+  ): Promise<void>;
   retrySeed(): Promise<void>;
   submitApproval(requestId: string | number, action: "approve" | "cancel"): Promise<void>;
   submitUserInput(requestId: string | number, answers: Record<string, string>): Promise<void>;
@@ -189,13 +192,16 @@ export function createAssistantSession({
     socket = null;
   }
 
-  function sendMessage(message: string): Promise<void> {
+  function sendMessage(
+    message: string,
+    contextRefs: Array<{ type: "issue" | "file" | "pr"; id: string }> = [],
+  ): Promise<void> {
     const normalized = message.trim();
     if (!normalized) return Promise.reject(new Error("Message is required"));
     if (!channel || !joined) {
       return Promise.reject(new Error("Session is not connected"));
     }
-    return pushMessage(channel, normalized);
+    return pushMessage(channel, normalized, undefined, contextRefs);
   }
 
   function retrySeed(): Promise<void> {
@@ -450,11 +456,13 @@ function pushMessage(
   channel: AssistantChannelLike,
   message: string,
   clientMessageId?: string,
+  contextRefs: Array<{ type: "issue" | "file" | "pr"; id: string }> = [],
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     channel
       .push("send_message", {
         message,
+        ...(contextRefs.length > 0 ? { context_refs: contextRefs } : {}),
         ...(clientMessageId ? { client_message_id: clientMessageId } : {}),
       })
       .receive("ok", () => resolve())
@@ -600,7 +608,9 @@ function readGoalStatus(payload: unknown): AssistantGoalStatus | null {
   };
 }
 
-function turnPreferencesPayload(preferences: Partial<AssistantTurnPreferences>): Record<string, unknown> {
+function turnPreferencesPayload(
+  preferences: Partial<AssistantTurnPreferences>,
+): Record<string, unknown> {
   const payload: Record<string, unknown> = {};
   if (preferences.executionMode) payload.execution_mode = preferences.executionMode;
   if (preferences.skillProfile !== undefined) payload.skill_profile = preferences.skillProfile;

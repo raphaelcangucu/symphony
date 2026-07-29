@@ -307,6 +307,18 @@ describe("assistant session adapter", () => {
     });
     push?.push.trigger("ok");
     await expect(sent).resolves.toBeUndefined();
+
+    const contextual = session.sendMessage("Review", [{ type: "file", id: "src/app.tsx" }]);
+    const contextualPush = socket.channelInstance.pushes.at(-1);
+    expect(contextualPush).toMatchObject({
+      event: "send_message",
+      payload: {
+        message: "Review",
+        context_refs: [{ type: "file", id: "src/app.tsx" }],
+      },
+    });
+    contextualPush?.push.trigger("ok");
+    await expect(contextual).resolves.toBeUndefined();
   });
 
   it("normalizes approvals, questions, and turn status and submits responses", async () => {

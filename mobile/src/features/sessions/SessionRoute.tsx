@@ -223,7 +223,7 @@ function ConnectedSessionRoute({
       onResumeTurn={() => session.resumeTurn()}
       onResumeGoal={() => session.resumeGoal()}
       onRetrySeed={seed ? () => session.retrySeed() : undefined}
-      onSend={(message) => session.sendMessage(message)}
+      onSend={(message, contextRefs) => session.sendMessage(message, contextRefs)}
       onSetGoalMode={(enabled, objective) => session.setGoalMode(enabled, objective)}
       onSetGoalObjective={(objective) => session.setGoalObjective(objective)}
       onSetTurnPreferences={(preferences) => session.setTurnPreferences(preferences)}

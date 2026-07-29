@@ -275,7 +275,7 @@ describe("AssistantChatScreen", () => {
     );
     fireEvent.press(screen.getByRole("button", { name: "Send" }));
 
-    await waitFor(() => expect(onSend).toHaveBeenCalledWith("Steer this session"));
+    await waitFor(() => expect(onSend).toHaveBeenCalledWith("Steer this session", []));
   });
 
   it("opens quick actions from plus and enables Plan mode without changing the draft", async () => {
@@ -324,7 +324,8 @@ describe("AssistantChatScreen", () => {
       { type: "file", id: "mobile/app.tsx" },
       { type: "pr", id: "42", label: "Improve mobile task flow" },
     ]);
-    renderScreen({ onSearchContext });
+    const onSend = jest.fn().mockResolvedValue(undefined);
+    renderScreen({ onSearchContext, onSend });
 
     fireEvent.changeText(screen.getByLabelText("Message"), "Review");
     fireEvent.press(screen.getByRole("button", { name: "Open composer actions" }));
@@ -333,8 +334,12 @@ describe("AssistantChatScreen", () => {
 
     expect(await screen.findByText("Mobile task details")).toBeTruthy();
     fireEvent.press(screen.getByRole("button", { name: "Add issue VIN-3" }));
+    expect(screen.getByLabelText("Message").props.value).toBe("Review");
+    expect(screen.getByRole("button", { name: "Remove issue VIN-3" })).toBeTruthy();
+
+    fireEvent.press(screen.getByRole("button", { name: "Send" }));
     await waitFor(() =>
-      expect(screen.getByLabelText("Message").props.value).toBe("Review @issue:VIN-3"),
+      expect(onSend).toHaveBeenCalledWith("Review", [{ type: "issue", id: "VIN-3" }]),
     );
   });
 

@@ -47,6 +47,30 @@ describe("orchestrator RPC session", () => {
     });
   });
 
+  it("preserves structured context refs when steering", async () => {
+    const transport = fakeTransport();
+    const session = createRpcOrchestratorSession({
+      executionSessionId: 77,
+      transport,
+      onSnapshot: vi.fn(),
+      onEntries: vi.fn(),
+      onConnection: vi.fn(),
+      onError: vi.fn(),
+    });
+
+    await session.steer("Review this context", [{ type: "issue", id: "VIN-3" }]);
+
+    expect(transport.call).toHaveBeenCalledWith("orchestrator.session.command", {
+      execution_session_id: 77,
+      event: "steer",
+      payload: {
+        message: "Review this context",
+        attachments: [],
+        context_refs: [{ type: "issue", id: "VIN-3" }],
+      },
+    });
+  });
+
   it("rejects empty steer messages before they reach the host", async () => {
     const session = createRpcOrchestratorSession({
       executionSessionId: 77,

@@ -10,7 +10,10 @@ const MAX_SUBSCRIBE_RETRY_MS = 10_000;
 export type RpcOrchestratorSession = {
   connect(): void;
   disconnect(): void;
-  steer(message: string): Promise<void>;
+  steer(
+    message: string,
+    contextRefs?: Array<{ type: "issue" | "file" | "pr"; id: string }>,
+  ): Promise<void>;
 };
 
 export function createRpcOrchestratorSession({
@@ -143,7 +146,10 @@ export function createRpcOrchestratorSession({
     onConnection("offline");
   }
 
-  async function steer(message: string): Promise<void> {
+  async function steer(
+    message: string,
+    contextRefs: Array<{ type: "issue" | "file" | "pr"; id: string }> = [],
+  ): Promise<void> {
     const normalized = message.trim();
     if (!normalized) throw new Error("Message is required");
     if (!connected && active) throw new Error("Execution session is not connected");
@@ -151,7 +157,7 @@ export function createRpcOrchestratorSession({
     await transport.call("orchestrator.session.command", {
       execution_session_id: executionSessionId,
       event: "steer",
-      payload: { message: normalized, attachments: [], context_refs: [] },
+      payload: { message: normalized, attachments: [], context_refs: contextRefs },
     });
     clearRefreshTimer();
     refreshTimer = setTimeout(() => {

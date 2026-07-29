@@ -88,10 +88,16 @@ export function createRpcAssistantSession({
     onAction({ type: "connection_changed", state: "offline" });
   }
 
-  function sendMessage(message: string): Promise<void> {
+  function sendMessage(
+    message: string,
+    contextRefs: Array<{ type: "issue" | "file" | "pr"; id: string }> = [],
+  ): Promise<void> {
     const normalized = message.trim();
     if (!normalized) return Promise.reject(new Error("Message is required"));
-    return command("send_message", { message: normalized });
+    return command("send_message", {
+      message: normalized,
+      ...(contextRefs.length > 0 ? { context_refs: contextRefs } : {}),
+    });
   }
 
   function retrySeed(): Promise<void> {

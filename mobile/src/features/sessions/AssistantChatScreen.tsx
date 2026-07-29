@@ -103,7 +103,7 @@ export type AssistantChatScreenProps = {
   onResumeGoal(): Promise<void>;
   onClearGoal(): Promise<void>;
   onSetGoalObjective(objective: string): Promise<void>;
-  onSend(message: string): Promise<void>;
+  onSend(message: string, contextRefs?: MobileContextRef[]): Promise<void>;
   onStopTurn(): Promise<void>;
   onSubmitUserInput(requestId: string | number, answers: Record<string, string>): Promise<void>;
   onRetrySeed?: (() => Promise<void>) | undefined;
@@ -116,7 +116,10 @@ export type MobileContextOption = {
   detail?: string;
 };
 
+export type MobileContextRef = Pick<MobileContextOption, "type" | "id">;
+
 export function AssistantChatScreen(props: AssistantChatScreenProps) {
+  const [contextRefs, setContextRefs] = useState<MobileContextRef[]>([]);
   const messages = useMemo(() => buildAssistantUiMessages(props.timeline), [props.timeline]);
   const runtime = useExternalStoreRuntime<ThreadMessageLike>({
     messages,
@@ -125,7 +128,10 @@ export function AssistantChatScreen(props: AssistantChatScreenProps) {
     // provider steer (or a durable queued follow-up). Keep the composer live.
     isRunning: false,
     isSendDisabled: props.timeline.connectionState !== "live",
-    onNew: (message) => submitAssistantUiMessage(message, props.onSend),
+    onNew: (message) =>
+      submitAssistantUiMessage(message, (text) =>
+        props.onSend(text, contextRefs).then(() => setContextRefs([])),
+      ),
     onCancel: props.onStopTurn,
     onResume: async () => props.onResumeTurn(),
     unstable_capabilities: { copy: true },
@@ -133,7 +139,11 @@ export function AssistantChatScreen(props: AssistantChatScreenProps) {
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
-      <AssistantChatContent {...props} />
+      <AssistantChatContent
+        {...props}
+        contextRefs={contextRefs}
+        onChangeContextRefs={setContextRefs}
+      />
     </AssistantRuntimeProvider>
   );
 }
@@ -164,7 +174,12 @@ function AssistantChatContent({
   onRetrySeed,
   onStopTurn,
   onSubmitUserInput,
-}: AssistantChatScreenProps) {
+  contextRefs,
+  onChangeContextRefs,
+}: AssistantChatScreenProps & {
+  contextRefs: MobileContextRef[];
+  onChangeContextRefs(refs: MobileContextRef[]): void;
+}) {
   const { colors } = useAppTheme();
   const messageList = useRef<FlatList<ThreadMessage>>(null);
   const [goalEditRequest, setGoalEditRequest] = useState(0);
@@ -283,6 +298,8 @@ function AssistantChatContent({
           onLoadMagic={onLoadMagic}
           onRunMagic={onRunMagic}
           onSearchContext={onSearchContext}
+          contextRefs={contextRefs}
+          onChangeContextRefs={onChangeContextRefs}
           preferences={timeline.turnPreferences}
           provider={timeline.metadata.agentKind}
           resolvedEffort={timeline.metadata.resolvedEffort}
@@ -781,6 +798,8 @@ function ChatComposer({
   provider,
   resolvedEffort,
   resolvedModel,
+  contextRefs,
+  onChangeContextRefs,
 }: {
   catalog: AssistantCatalog | null;
   catalogStatus: HostAssistantCatalogStatus;
@@ -795,6 +814,8 @@ function ChatComposer({
   provider: string | null;
   resolvedEffort: string | null;
   resolvedModel: string | null;
+  contextRefs: MobileContextRef[];
+  onChangeContextRefs(refs: MobileContextRef[]): void;
 }) {
   const { colors } = useAppTheme();
   const [dictating, setDictating] = useState(false);
@@ -993,10 +1014,11 @@ function ChatComposer({
                     accessibilityRole="button"
                     key={`${option.type}:${option.id}`}
                     onPress={() => {
-                      const token = `@${option.type}:${option.id}`;
-                      aui
-                        .composer()
-                        .setText([composerText.trim(), token].filter(Boolean).join(" "));
+                      if (
+                        !contextRefs.some((ref) => ref.type === option.type && ref.id === option.id)
+                      ) {
+                        onChangeContextRefs([...contextRefs, { type: option.type, id: option.id }]);
+                      }
                       setActionsOpen(false);
                       setActionView("menu");
                     }}
@@ -1039,6 +1061,33 @@ function ChatComposer({
         >
           {dictationError}
         </Text>
+      ) : null}
+      {contextRefs.length > 0 ? (
+        <View accessibilityLabel="Selected context" style={styles.contextChips}>
+          {contextRefs.map((ref) => (
+            <Pressable
+              accessibilityLabel={`Remove ${ref.type} ${ref.id}`}
+              accessibilityRole="button"
+              key={`${ref.type}:${ref.id}`}
+              onPress={() =>
+                onChangeContextRefs(
+                  contextRefs.filter(
+                    (candidate) => candidate.type !== ref.type || candidate.id !== ref.id,
+                  ),
+                )
+              }
+              style={[styles.contextChip, { backgroundColor: colors.bgPressed }]}
+            >
+              <Text style={{ color: colors.accent, fontWeight: "700" }}>
+                {ref.type.toUpperCase()}
+              </Text>
+              <Text numberOfLines={1} style={{ color: colors.textPrimary }}>
+                {ref.id}
+              </Text>
+              <Text style={{ color: colors.textMuted }}>×</Text>
+            </Pressable>
+          ))}
+        </View>
       ) : null}
       <View
         style={[
@@ -1756,6 +1805,22 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
+  },
+  contextChips: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.xs,
+  },
+  contextChip: {
+    alignItems: "center",
+    borderRadius: radii.pill,
+    flexDirection: "row",
+    gap: spacing.xs,
+    maxWidth: "90%",
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
   },
   safeArea: { flex: 1 },
   thread: { flex: 1 },
