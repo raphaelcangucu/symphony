@@ -638,3 +638,34 @@ Expected: only intentional changes; no whitespace errors or generated junk.
 git add docs/superpowers/plans/2026-07-29-mobile-task-session-navigation-plan.md
 git commit -m "docs(mobile): record task navigation validation"
 ```
+
+## Implementation audit — 2026-07-29
+
+- Associated task navigation: `AssistantChatScreen.tsx` keeps one task shortcut
+  beside Terminal; `OrchestratorSessionRoute.tsx` pushes the canonical issue
+  route. Covered by `AssistantChatScreen.test.tsx`.
+- Five focused tabs: Summary, PR, Comments, Evidence, and Sessions are fixed by
+  `issue-tabs.ts` and rendered by `IssueScreen.tsx`. Summary now contains the
+  operational metadata and Workpad while comments live only in Comments.
+- PR health: `IssuePullRequestTab.tsx` and `issue-pr-state.ts` pair green,
+  amber, and red accents with Passed, Pending, and Failed text and a blocking
+  problem panel.
+- Evidence and sessions: focused tabs use the existing canonical evidence and
+  thread records without duplicate workspace fetches.
+- Composer actions: the focused menu contains Plan mode, Magic, Add context,
+  and Goal. Magic uses canonical prompt-template endpoints over REST or mobile
+  RPC. Context searches issue/file/PR sources independently.
+- Structured context: selected refs remain removable chips and are sent as
+  `context_refs` through regular and orchestrator session transports; labels
+  and hidden URLs are not interpolated into the message.
+- Focused validation: 31 task/composer Jest tests and 47 contract Vitest tests
+  passed; the mobile RPC bridge ExUnit suite passed 8/8; oxlint and
+  `git diff --check` passed for the changed surfaces.
+- Global-gate baseline: `npm test` reached 1428 passing tests and 7 unrelated
+  failures (missing ImageMagick `convert`, an old E2E shell-contract mismatch,
+  and `__DEV__` absent in terminal tests). Typecheck reports only five existing
+  typed-route errors outside changed files. Full ExUnit exposed many unrelated
+  workspace/backup/agent failures and was stopped after the relevant bridge
+  suite had passed.
+- Visual capture: no ADB device was connected in this environment, so no new
+  Android/iOS runtime screenshots were claimed.
