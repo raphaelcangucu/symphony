@@ -1,0 +1,12 @@
+
+> symphony-tracker@0.3.0 test
+> vitest run --run src/components/layout/__tests__/ProjectHeader.test.tsx src/components/layout/__tests__/ProjectSwitcher.test.tsx src/components/assistant/__tests__/AssistantComposer.test.tsx src/components/assistant/__tests__/ComposerPermissionMenu.test.tsx src/components/assistant/__tests__/UnifiedComposer.test.tsx
+
+
+ RUN  v4.1.7 /Users/raphaelcangucu/projects/dev10x/symphony/tracker
+
+
+ Test Files  5 passed (5)
+      Tests  54 passed (54)
+   Start at  17:26:51
+   Duration  2.29s (transform 1.23s, setup 1.82s, import 1.92s, tests 1.60s, environment 4.28s)
