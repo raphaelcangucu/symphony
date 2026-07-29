@@ -52,7 +52,7 @@ function ThemedStack() {
   const { notifications } = useAppRuntime();
   const { hydrated, activeProfile, profiles, selectProfile } = useConnection();
   const splashHideStarted = useRef(false);
-  const [showAnimatedSplash, setShowAnimatedSplash] = useState(false);
+  const [showAnimatedSplash, setShowAnimatedSplash] = useState(true);
   const [animatedSplashFinished, setAnimatedSplashFinished] = useState(false);
 
   const hideNativeSplash = useCallback(() => {
@@ -91,10 +91,12 @@ function ThemedStack() {
     };
   }, [activeProfile, hydrated, notifications, profiles, router, selectProfile]);
 
+  const splashVisible = showAnimatedSplash && (!animatedSplashFinished || !hydrated);
+
   return (
     <>
       <StatusBar style={theme.name === "dark" ? "light" : "dark"} />
-      {(!showAnimatedSplash || animatedSplashFinished) && (
+      {!splashVisible && (
         <Stack
           screenOptions={{
             contentStyle: { backgroundColor: theme.colors.bgBase },
@@ -102,7 +104,7 @@ function ThemedStack() {
           }}
         />
       )}
-      {showAnimatedSplash && !animatedSplashFinished && (
+      {splashVisible && (
         <AnimatedSplash
           onFinished={() => setAnimatedSplashFinished(true)}
           onReady={hideNativeSplash}

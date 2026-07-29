@@ -176,7 +176,7 @@ git commit -m "feat(mobile): animate splash logo reveal"
 - The full native-asset test cannot run in this environment because the required
   ImageMagick `convert` executable is not installed.
 
-### Task 5: Replace the arc with a lightning-driven mark reveal
+### Task 5: Replace the arc with a mark-trace signal pulse
 
 **Files:**
 - Modify: `mobile/src/dev10x/components/AnimatedSplash.tsx`
@@ -184,13 +184,14 @@ git commit -m "feat(mobile): animate splash logo reveal"
 
 - [x] **Step 1: Write the failing visual-contract test**
 
-Add a test that waits for normal-motion startup and requires exactly three
-lightning paths plus the large Dev10x icon. It must assert that no wordmark is
-rendered before the animation finishes:
+Add a test that waits for normal-motion startup and requires the large Dev10x
+icon plus a pulse layer sourced from the same mark. It must assert that no
+external lightning paths or wordmark are rendered:
 
 ```tsx
-expect(screen.getAllByTestId("animated-splash-lightning")).toHaveLength(3);
 expect(screen.getByTestId("animated-splash-mark")).toBeTruthy();
+expect(screen.getByTestId("animated-splash-pulse-mark")).toBeTruthy();
+expect(screen.queryByTestId("animated-splash-lightning")).toBeNull();
 expect(screen.queryByLabelText("Dev10x wordmark")).toBeNull();
 ```
 
@@ -200,17 +201,16 @@ expect(screen.queryByLabelText("Dev10x wordmark")).toBeNull();
 cd mobile && npx jest src/dev10x/components/AnimatedSplash.test.tsx --runInBand
 ```
 
-Expected: FAIL because the current component renders one curved energy path and
-the Dev10x wordmark.
+Expected: FAIL because the current component renders external energy paths
+instead of a pulse clipped to the mark.
 
-- [x] **Step 3: Implement three converging lightning bolts and the mark**
+- [x] **Step 3: Implement the approved signal pulse and the mark**
 
-Replace the curved SVG path with three short, jagged paths tagged
-`animated-splash-lightning`. Animate each with a staggered stroke-dash draw,
-using cyan, violet, and pink gradients. Replace `dev10x-logo-white.png` with
-the bundled `dev10x-icon.png`, scale it to 148 px, and expose it as
-`animated-splash-mark`. Retain the 900 ms one-shot handoff and the
-reduced-motion shortcut.
+Replace the external SVG paths with the bundled `dev10x-icon.png`, preserving
+the source mark's proportions by cropping its transparent bounds. Keep the
+full mark visible and animate a narrow cyan-tinted copy of that same image
+across its traces. Retain the 900 ms one-shot handoff and the reduced-motion
+shortcut.
 
 - [x] **Step 4: Run focused unit, build, and emulator evidence**
 
@@ -220,8 +220,9 @@ cd mobile && ANDROID_HOME=/Users/raphaelcangucu/Library/Android/sdk npm run buil
 ```
 
 Install the resulting APK on `emulator-5554`, clear app data, record from the
-home screen through the pairing screen, then inspect a 10 fps contact sheet for
-the three bolts and the large mark.
+home screen through the pairing screen, then inspect a contact sheet for the
+full-proportion mark and the signal pulse. Confirm that the native splash is a
+blank background so no preliminary logo appears.
 
 - [x] **Step 5: Commit**
 
@@ -232,12 +233,13 @@ git add mobile/src/dev10x/components/AnimatedSplash.tsx \
 git commit -m "feat(mobile): reveal splash mark with lightning"
 ```
 
-## Lightning-reveal validation record
+## Signal-pulse validation record
 
 - The focused `AnimatedSplash` Jest suite passed (4 tests), including the
-  three-bolt/no-wordmark contract and reduced-motion behavior.
+  mark-only pulse/no-wordmark contract and reduced-motion behavior.
 - `npm run lint` passed.
 - The Android release APK built successfully and was installed on
   `emulator-5554` after clearing application data.
-- Emulator captures at 250 ms show the large Dev10x mark with cyan, violet,
-  and pink lightning; captures after the handoff show the pairing screen.
+- Emulator captures show a blank native background followed by the full,
+  correctly proportioned Dev10x mark and its cyan signal pulse; captures after
+  the handoff show the pairing screen.

@@ -10,7 +10,7 @@ const mobileRoot = resolve(import.meta.dirname, "..");
 const repoRoot = resolve(mobileRoot, "..");
 
 describe("native Dev10x brand assets", () => {
-  it("generates deterministic native-safe icons and a centered splash from canonical sources", () => {
+  it("generates deterministic native-safe icons and a blank native splash", () => {
     expect(sha256(resolve(repoRoot, "tracker/public/dev10x_icon.png"))).toBe(
       "59731a4e0d08e514075af55efdf7c3f94084a583132a59efd72b67a42119af8a",
     );
@@ -59,9 +59,7 @@ describe("native Dev10x brand assets", () => {
     expect(foreground.x + foreground.width).toBeLessThanOrEqual(850);
     expect(foreground.y + foreground.height).toBeLessThanOrEqual(850);
 
-    const splash = nonBackgroundBounds(resolve(output, "splash.png"));
-    expect(Math.abs(splash.x + splash.width / 2 - 642)).toBeLessThanOrEqual(2);
-    expect(Math.abs(splash.y + splash.height / 2 - 1389)).toBeLessThanOrEqual(2);
+    expect(uniqueColors(resolve(output, "splash.png"))).toBe(1);
   });
 
   it("configures every native icon and holds the splash until storage hydration", () => {
@@ -111,27 +109,8 @@ function visibleBounds(path: string) {
   );
 }
 
-function nonBackgroundBounds(path: string) {
-  return geometry(
-    execFileSync(
-      "convert",
-      [
-        path,
-        "-fuzz",
-        "3%",
-        "-transparent",
-        "#090A0F",
-        "-alpha",
-        "extract",
-        "-threshold",
-        "0",
-        "-format",
-        "%@",
-        "info:",
-      ],
-      { encoding: "utf8" },
-    ),
-  );
+function uniqueColors(path: string) {
+  return Number(execFileSync("identify", ["-format", "%k", path], { encoding: "utf8" }).trim());
 }
 
 function geometry(value: string) {

@@ -1,16 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AccessibilityInfo, Image, StyleSheet, View } from "react-native";
-import Animated, {
-  useAnimatedProps,
-  useSharedValue,
-  withDelay,
-  withTiming,
-} from "react-native-reanimated";
-import Svg, { Defs, LinearGradient, Path, Stop } from "react-native-svg";
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 
 const REVEAL_DURATION_MS = 900;
-const LIGHTNING_LENGTH = 250;
-const AnimatedPath = Animated.createAnimatedComponent(Path);
+const MARK_SOURCE_SIZE = 240;
+const MARK_WIDTH = 240;
+const MARK_HEIGHT = 150;
+const MARK_SOURCE_TOP = -45;
+const PULSE_DISTANCE = 180;
 
 type Props = {
   onFinished: () => void;
@@ -21,9 +18,7 @@ export function AnimatedSplash({ onFinished, onReady }: Props) {
   const completed = useRef(false);
   const [reduceMotion, setReduceMotion] = useState<boolean | null>(null);
   const [markScale, setMarkScale] = useState(0);
-  const leftLightningProgress = useSharedValue(0);
-  const topLightningProgress = useSharedValue(0);
-  const rightLightningProgress = useSharedValue(0);
+  const pulseProgress = useSharedValue(-1);
 
   const finish = useCallback(() => {
     if (completed.current) return;
@@ -48,43 +43,28 @@ export function AnimatedSplash({ onFinished, onReady }: Props) {
   }, []);
 
   useEffect(() => {
-    if (reduceMotion !== null) onReady?.();
-  }, [onReady, reduceMotion]);
+    onReady?.();
+  }, [onReady]);
 
   useEffect(() => {
     if (reduceMotion === null) return;
     if (reduceMotion) {
       setMarkScale(1);
+      pulseProgress.value = 1;
       finish();
       return;
     }
 
-    leftLightningProgress.value = withTiming(1, { duration: 330 });
-    topLightningProgress.value = withDelay(110, withTiming(1, { duration: 330 }));
-    rightLightningProgress.value = withDelay(220, withTiming(1, { duration: 330 }));
-    const revealMark = setTimeout(() => setMarkScale(1.13), 410);
-    const settleMark = setTimeout(() => setMarkScale(1), 560);
+    setMarkScale(1);
+    pulseProgress.value = withTiming(1, { duration: 650 });
     const fallback = setTimeout(finish, REVEAL_DURATION_MS);
     return () => {
       clearTimeout(fallback);
-      clearTimeout(revealMark);
-      clearTimeout(settleMark);
     };
-  }, [finish, leftLightningProgress, reduceMotion, rightLightningProgress, topLightningProgress]);
+  }, [finish, pulseProgress, reduceMotion]);
 
-  const leftLightningProps = useAnimatedProps(() => ({
-    strokeDashoffset: LIGHTNING_LENGTH * (1 - leftLightningProgress.value),
-    opacity: 0.25 + leftLightningProgress.value * 0.75,
-  }));
-
-  const topLightningProps = useAnimatedProps(() => ({
-    strokeDashoffset: LIGHTNING_LENGTH * (1 - topLightningProgress.value),
-    opacity: 0.25 + topLightningProgress.value * 0.75,
-  }));
-
-  const rightLightningProps = useAnimatedProps(() => ({
-    strokeDashoffset: LIGHTNING_LENGTH * (1 - rightLightningProgress.value),
-    opacity: 0.25 + rightLightningProgress.value * 0.75,
+  const pulseStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: pulseProgress.value * PULSE_DISTANCE }],
   }));
 
   return (
@@ -94,60 +74,6 @@ export function AnimatedSplash({ onFinished, onReady }: Props) {
       style={styles.container}
       testID="animated-splash"
     >
-      {reduceMotion === false && (
-        <Svg
-          accessibilityElementsHidden
-          height={360}
-          style={styles.energyCanvas}
-          viewBox="0 0 360 360"
-          width={360}
-        >
-          <Defs>
-            <LinearGradient id="lightning-cyan" x1="0" x2="1" y1="0" y2="1">
-              <Stop offset="0" stopColor="#67E8F9" />
-              <Stop offset="1" stopColor="#38BDF8" />
-            </LinearGradient>
-            <LinearGradient id="lightning-violet" x1="0" x2="1" y1="0" y2="1">
-              <Stop offset="0" stopColor="#C4B5FD" />
-              <Stop offset="1" stopColor="#8B5CF6" />
-            </LinearGradient>
-            <LinearGradient id="lightning-pink" x1="0" x2="1" y1="0" y2="1">
-              <Stop offset="0" stopColor="#F9A8D4" />
-              <Stop offset="1" stopColor="#EC4899" />
-            </LinearGradient>
-          </Defs>
-          <AnimatedPath
-            animatedProps={leftLightningProps}
-            d="M12 188 L94 152 L78 184 L174 178"
-            fill="none"
-            stroke="url(#lightning-cyan)"
-            strokeDasharray={LIGHTNING_LENGTH}
-            strokeLinejoin="round"
-            strokeWidth={8}
-            testID="animated-splash-lightning"
-          />
-          <AnimatedPath
-            animatedProps={topLightningProps}
-            d="M182 12 L154 102 L194 82 L180 178"
-            fill="none"
-            stroke="url(#lightning-violet)"
-            strokeDasharray={LIGHTNING_LENGTH}
-            strokeLinejoin="round"
-            strokeWidth={8}
-            testID="animated-splash-lightning"
-          />
-          <AnimatedPath
-            animatedProps={rightLightningProps}
-            d="M348 206 L264 164 L280 196 L188 180"
-            fill="none"
-            stroke="url(#lightning-pink)"
-            strokeDasharray={LIGHTNING_LENGTH}
-            strokeLinejoin="round"
-            strokeWidth={8}
-            testID="animated-splash-lightning"
-          />
-        </Svg>
-      )}
       <View
         style={[
           styles.logoWrap,
@@ -159,8 +85,18 @@ export function AnimatedSplash({ onFinished, onReady }: Props) {
           accessibilityLabel="Dev10x mark"
           resizeMode="contain"
           source={require("../../../assets/dev10x-icon.png")}
-          style={styles.mark}
+          style={styles.markSource}
         />
+        {reduceMotion === false && (
+          <Animated.View style={[styles.pulse, pulseStyle]} testID="animated-splash-pulse">
+            <Image
+              source={require("../../../assets/dev10x-icon.png")}
+              style={styles.pulseMark}
+              tintColor="#67E8F9"
+              testID="animated-splash-pulse-mark"
+            />
+          </Animated.View>
+        )}
       </View>
     </View>
   );
@@ -173,15 +109,32 @@ const styles = StyleSheet.create({
     backgroundColor: "#090A0F",
     justifyContent: "center",
   },
-  energyCanvas: {
-    position: "absolute",
-  },
-  mark: {
-    height: 148,
-    width: 148,
-  },
   logoWrap: {
-    alignItems: "center",
-    justifyContent: "center",
+    height: MARK_HEIGHT,
+    overflow: "hidden",
+    position: "relative",
+    width: MARK_WIDTH,
+  },
+  markSource: {
+    height: MARK_SOURCE_SIZE,
+    left: 0,
+    position: "absolute",
+    top: MARK_SOURCE_TOP,
+    width: MARK_SOURCE_SIZE,
+  },
+  pulse: {
+    height: MARK_HEIGHT,
+    left: MARK_WIDTH / 2 - 18,
+    overflow: "hidden",
+    position: "absolute",
+    top: 0,
+    width: 36,
+  },
+  pulseMark: {
+    height: MARK_SOURCE_SIZE,
+    left: -(MARK_WIDTH / 2 - 18),
+    position: "absolute",
+    top: MARK_SOURCE_TOP,
+    width: MARK_SOURCE_SIZE,
   },
 });

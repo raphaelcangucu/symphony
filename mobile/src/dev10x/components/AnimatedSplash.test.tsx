@@ -42,11 +42,9 @@ describe("AnimatedSplash", () => {
     expect(screen.getByLabelText("Dev10x is starting")).toBeTruthy();
   });
 
-  it("reveals the logo after motion preference is resolved", async () => {
+  it("reveals the logo and signal pulse after motion preference is resolved", async () => {
     const onReady = jest.fn();
     render(<AnimatedSplash onFinished={jest.fn()} onReady={onReady} />);
-
-    expect(onReady).not.toHaveBeenCalled();
 
     await act(async () => {
       await Promise.resolve();
@@ -54,25 +52,23 @@ describe("AnimatedSplash", () => {
 
     expect(screen.getByTestId("animated-splash-mark")).toHaveStyle({ opacity: 1 });
     expect(onReady).toHaveBeenCalledTimes(1);
-
-    act(() => jest.advanceTimersByTime(410));
     expect(screen.getByTestId("animated-splash-mark")).toHaveStyle({
-      transform: [{ scale: 1.13 }],
+      transform: [{ scale: 1 }],
     });
+    expect(screen.getByTestId("animated-splash-pulse")).toBeTruthy();
   });
 
-  it("draws three lightning bolts into the large mark without a wordmark", async () => {
+  it("uses only the mark traces for the signal pulse", async () => {
     render(<AnimatedSplash onFinished={jest.fn()} />);
 
     await act(async () => {
       await Promise.resolve();
     });
 
-    const lightningPaths = screen
-      .UNSAFE_getAllByProps({ testID: "animated-splash-lightning" })
-      .filter((node) => node.type === "RNSVGPath");
-    expect(lightningPaths).toHaveLength(3);
     expect(screen.getByTestId("animated-splash-mark")).toBeTruthy();
+    expect(screen.getByTestId("animated-splash-pulse")).toBeTruthy();
+    expect(screen.getByTestId("animated-splash-pulse-mark")).toBeTruthy();
+    expect(screen.queryByTestId("animated-splash-lightning")).toBeNull();
     expect(screen.queryByLabelText("Dev10x wordmark")).toBeNull();
   });
 
