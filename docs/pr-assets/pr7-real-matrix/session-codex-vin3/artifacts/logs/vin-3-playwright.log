@@ -1,0 +1,17 @@
+
+> dev10x-website@1.0.0 test:e2e
+> node scripts/run-e2e.mjs tests/e2e/landing.spec.ts
+
+
+> dev10x-website@1.0.0 dev
+> vite --host 127.0.0.1 --port 4173 --strictPort
+
+error when starting dev server:
+Error: listen EPERM: operation not permitted 127.0.0.1:4173
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at node:net:2206:7
+    at process.processTicksAndRejections (node:internal/process/task_queues:89:21)
+Error: preview exited before it was ready (code=1, signal=none)
+    at waitForHttp (file:///Users/raphaelcangucu/code/workspaces/vinext-health/VIN-3/website/scripts/run-e2e.mjs:43:13)
+    at async runE2e (file:///Users/raphaelcangucu/code/workspaces/vinext-health/VIN-3/website/scripts/run-e2e.mjs:114:5)

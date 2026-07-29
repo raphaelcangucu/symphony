@@ -1,0 +1,64 @@
+{
+  "issue": "VIN-3",
+  "status": "passed",
+  "ui_change": true,
+  "generated_at": "2026-07-29T03:05:32-03:00",
+  "provider": {
+    "kind": "codex",
+    "requested_model": null,
+    "requested_effort": null,
+    "resolved_model": "gpt-5.6-sol",
+    "resolved_effort": "low",
+    "assistant_thread_id": 6,
+    "conversation_id": "019fac76-cf2a-7e21-aa6b-fda5976f86ba",
+    "run_id": "019fac76-cffc-78c0-b55b-e336be5df4a4"
+  },
+  "source": {
+    "repository": "dev10x-ai/website",
+    "branch": "vin-3-codex-session-matrix",
+    "commit": "1fe2e23"
+  },
+  "runs": [
+    {
+      "kind": "build",
+      "repo": "website",
+      "command": "npm run build",
+      "status": "passed",
+      "report": "artifacts/logs/vin-3-mac-e2e.log"
+    },
+    {
+      "kind": "e2e",
+      "repo": "website",
+      "command": "PLAYWRIGHT_PORT=4274 npm run test:e2e -- tests/e2e/landing.spec.ts",
+      "status": "passed",
+      "attempts": 2,
+      "summary": { "total": 2, "passed": 2, "failed": 0 },
+      "screenshots": [
+        "artifacts/screens/vin-3-desktop.png",
+        "artifacts/screens/vin-3-mobile.png"
+      ],
+      "videos": [
+        "artifacts/videos/vin-3-desktop.webm",
+        "artifacts/videos/vin-3-mobile.webm"
+      ],
+      "traces": [
+        "artifacts/traces/vin-3-desktop-trace.zip",
+        "artifacts/traces/vin-3-mobile-trace.zip"
+      ],
+      "trace": "artifacts/traces/vin-3-desktop-trace.zip",
+      "report": "artifacts/playwright-report/index.html"
+    }
+  ],
+  "app_e2e": {
+    "screenshot": "artifacts/app/vin-3-session-completed.png",
+    "video": "artifacts/app/vin-3-session-completed.mp4",
+    "state": "task VIN-3 linked to issue_session thread #6 on the real paired host"
+  },
+  "logs": [
+    "artifacts/logs/vin-3-mac-e2e.log",
+    "artifacts/logs/vin-3-build.log",
+    "artifacts/logs/vin-3-playwright.log"
+  ],
+  "provenance": "provenance.json",
+  "hashes": "sha256sums.txt"
+}

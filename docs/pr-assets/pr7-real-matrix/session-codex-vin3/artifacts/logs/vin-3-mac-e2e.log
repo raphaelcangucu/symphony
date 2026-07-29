@@ -1,0 +1,18 @@
+VIN-3 Session / Codex — Mac E2E
+
+Workspace: /Users/raphaelcangucu/code/workspaces/vinext-health/VIN-3/website
+Source commit: 1fe2e23
+Provider resolved by the real host: Codex / gpt-5.6-sol / low
+
+$ npm run build
+vite v7.3.6 building client environment for production...
+✓ 29 modules transformed.
+✓ built in 329ms
+
+$ PLAYWRIGHT_PORT=4274 npm run test:e2e -- tests/e2e/landing.spec.ts
+VITE v7.3.6 ready at http://127.0.0.1:4274/
+Running 2 tests using 1 worker
+  2 passed (1.8s)
+
+The agent-sandbox attempt could not bind localhost and is retained separately
+as vin-3-playwright.log. This Mac-host rerun is the canonical E2E result.
