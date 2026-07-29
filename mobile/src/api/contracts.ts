@@ -146,6 +146,34 @@ export type GoalControlInput = {
   tokenBudget?: number;
 };
 
+export type PromptTemplate = {
+  id: string;
+  slug: string;
+  name: string;
+  description: string | null;
+  category: string | null;
+  body: string;
+  agentKind: string | null;
+  model: string | null;
+  effort: string | null;
+  mode: string | null;
+};
+
+export type RunPromptTemplateInput = {
+  slug: string;
+  agent?: AgentKind | null;
+  model?: string | null;
+  effort?: string | null;
+  mode?: "plan" | "build" | "yolo" | null;
+};
+
+export type RunPromptTemplateResult = {
+  ok: boolean;
+  action: IssueDispatchResult["action"];
+  message: string;
+  issue: IssueSummary;
+};
+
 export type ThreadDocument = {
   id: string;
   kind: "draft";
@@ -560,6 +588,19 @@ export type TrackerClient = {
     input: GoalControlInput,
     signal?: AbortSignal,
   ): Promise<Record<string, unknown>>;
+  promptTemplates(projectSlug?: string, signal?: AbortSignal): Promise<PromptTemplate[]>;
+  runPromptTemplate(
+    projectSlug: string,
+    identifier: string,
+    input: RunPromptTemplateInput,
+    signal?: AbortSignal,
+  ): Promise<RunPromptTemplateResult>;
+  issueFiles(
+    projectSlug: string,
+    identifier: string,
+    query: string,
+    signal?: AbortSignal,
+  ): Promise<string[]>;
   threadDocuments(threadId: number, signal?: AbortSignal): Promise<ThreadDocumentList>;
   threadDocument(
     threadId: number,

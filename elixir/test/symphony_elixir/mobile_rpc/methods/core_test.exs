@@ -93,6 +93,25 @@ defmodule SymphonyElixir.MobileRpc.Methods.CoreTest do
     assert route.params["name"] == "mobile-html"
   end
 
+  test "routes Magic templates and issue file context through tasks" do
+    for {method, path, controller, action} <- [
+          {"GET", "/projects/symphony/prompt-templates", SymphonyElixirWeb.Tracker.PromptTemplateController, :project_index},
+          {"POST", "/projects/symphony/issues/SYM-7/run-prompt-template", SymphonyElixirWeb.Tracker.RunPromptTemplateController, :create},
+          {"GET", "/projects/symphony/issues/SYM-7/files?q=app", SymphonyElixirWeb.Tracker.WorkspaceFileController, :index}
+        ] do
+      assert {:ok, route} =
+               TrackerBridge.resolve(:tasks, %{
+                 "path" => path,
+                 "method" => method,
+                 "body" => %{},
+                 "idempotency_key" => nil
+               })
+
+      assert route.controller == controller
+      assert route.action == action
+    end
+  end
+
   test "routes the machine-wide assistant catalogue through the sessions domain" do
     assert {:ok, route} =
              TrackerBridge.resolve(:sessions, %{

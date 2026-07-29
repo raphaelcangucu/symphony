@@ -18,6 +18,74 @@ function jsonResponse(body: unknown, init: ResponseInit = {}): Response {
 }
 
 describe("createTrackerClient", () => {
+  it("loads and runs project prompt templates and searches issue files", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          data: [
+            {
+              id: 7,
+              slug: "review",
+              name: "Review",
+              description: "Review the changes",
+              body: "Review this task",
+              agent_kind: "codex",
+              mode: "plan",
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          data: {
+            ok: true,
+            action: "resume",
+            message: "Started",
+            issue: {
+              id: "issue-7",
+              identifier: "MOB-7",
+              display_identifier: "MOB-7",
+              project_slug: "mobile app",
+              title: "Bring Orca workflows",
+              status: { name: "In Progress" },
+              labels: [],
+            },
+          },
+        }),
+      )
+      .mockResolvedValueOnce(jsonResponse({ data: ["src/app.tsx"] }));
+    const client = createTrackerClient({
+      origin: "https://demo.test",
+      token: "secret",
+      locale: "en",
+      fetchImpl,
+    });
+
+    await expect(client.promptTemplates("mobile app")).resolves.toEqual([
+      expect.objectContaining({ id: "7", slug: "review", agentKind: "codex", mode: "plan" }),
+    ]);
+    await expect(
+      client.runPromptTemplate("mobile app", "MOB/7", { slug: "review", mode: "plan" }),
+    ).resolves.toEqual(expect.objectContaining({ ok: true, action: "resume", message: "Started" }));
+    await expect(client.issueFiles("mobile app", "MOB/7", "app")).resolves.toEqual(["src/app.tsx"]);
+
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      1,
+      "https://demo.test/api/tracker/v1/projects/mobile%20app/prompt-templates",
+      expect.anything(),
+    );
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      2,
+      "https://demo.test/api/tracker/v1/projects/mobile%20app/issues/MOB%2F7/run-prompt-template",
+      expect.objectContaining({ body: JSON.stringify({ slug: "review", mode: "plan" }) }),
+    );
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      3,
+      "https://demo.test/api/tracker/v1/projects/mobile%20app/issues/MOB%2F7/files?q=app",
+      expect.anything(),
+    );
+  });
   it("binds tracker authentication and locale to requests", async () => {
     const fetchImpl = vi
       .fn<typeof fetch>()

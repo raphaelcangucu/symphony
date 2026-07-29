@@ -53,7 +53,7 @@ import { StatusDot } from "@/components/StatusDot";
 import type { DictationSession } from "@/native/dictation";
 import { radii, spacing } from "@/theme/tokens";
 import { useAppTheme } from "@/theme/ThemeProvider";
-import type { AssistantCatalog } from "@/api/contracts";
+import type { AssistantCatalog, PromptTemplate } from "@/api/contracts";
 import type { HostAssistantCatalogStatus } from "@/runtime/host-assistant-catalog-cache";
 
 import { buildAssistantUiMessages, submitAssistantUiMessage } from "./assistant-ui-session-adapter";
@@ -95,6 +95,9 @@ export type AssistantChatScreenProps = {
   onResumeTurn(): Promise<void>;
   onKillTool(toolCallId: string): Promise<void>;
   onSetTurnPreferences(preferences: Partial<AssistantTurnPreferences>): Promise<void>;
+  onLoadMagic?: (() => Promise<PromptTemplate[]>) | undefined;
+  onRunMagic?: ((template: PromptTemplate) => Promise<void>) | undefined;
+  onSearchContext?: ((query: string) => Promise<MobileContextOption[]>) | undefined;
   onSetGoalMode(enabled: boolean, objective?: string): Promise<void>;
   onPauseGoal(): Promise<void>;
   onResumeGoal(): Promise<void>;
@@ -104,6 +107,13 @@ export type AssistantChatScreenProps = {
   onStopTurn(): Promise<void>;
   onSubmitUserInput(requestId: string | number, answers: Record<string, string>): Promise<void>;
   onRetrySeed?: (() => Promise<void>) | undefined;
+};
+
+export type MobileContextOption = {
+  type: "issue" | "file" | "pr";
+  id: string;
+  label?: string;
+  detail?: string;
 };
 
 export function AssistantChatScreen(props: AssistantChatScreenProps) {
@@ -142,6 +152,9 @@ function AssistantChatContent({
   taskLinks,
   onKillTool,
   onSetTurnPreferences,
+  onLoadMagic,
+  onRunMagic,
+  onSearchContext,
   onSetGoalMode,
   onPauseGoal,
   onResumeGoal,
@@ -267,6 +280,9 @@ function AssistantChatContent({
           onStartDictation={onStartDictation}
           onOpenGoal={() => setGoalEditRequest((current) => current + 1)}
           onSetTurnPreferences={onSetTurnPreferences}
+          onLoadMagic={onLoadMagic}
+          onRunMagic={onRunMagic}
+          onSearchContext={onSearchContext}
           preferences={timeline.turnPreferences}
           provider={timeline.metadata.agentKind}
           resolvedEffort={timeline.metadata.resolvedEffort}
@@ -622,9 +638,7 @@ function ToolTimelineDetail({
   );
 }
 
-function isToolCallPart(
-  part: unknown,
-): part is {
+function isToolCallPart(part: unknown): part is {
   type: "tool-call";
   toolCallId: string;
   toolName: string;
@@ -760,6 +774,9 @@ function ChatComposer({
   onStartDictation,
   onOpenGoal,
   onSetTurnPreferences,
+  onLoadMagic,
+  onRunMagic,
+  onSearchContext,
   preferences,
   provider,
   resolvedEffort,
@@ -771,6 +788,9 @@ function ChatComposer({
   onStartDictation?: (() => Promise<DictationSession>) | undefined;
   onOpenGoal(): void;
   onSetTurnPreferences(preferences: Partial<AssistantTurnPreferences>): Promise<void>;
+  onLoadMagic?: (() => Promise<PromptTemplate[]>) | undefined;
+  onRunMagic?: ((template: PromptTemplate) => Promise<void>) | undefined;
+  onSearchContext?: ((query: string) => Promise<MobileContextOption[]>) | undefined;
   preferences: AssistantTurnPreferences;
   provider: string | null;
   resolvedEffort: string | null;
@@ -782,6 +802,11 @@ function ChatComposer({
   const activeDictation = useRef<DictationSession | null>(null);
   const [settings, setSettings] = useState<"none" | "permission" | "model">("none");
   const [actionsOpen, setActionsOpen] = useState(false);
+  const [actionView, setActionView] = useState<"menu" | "magic" | "context">("menu");
+  const [actionQuery, setActionQuery] = useState("");
+  const [magicTemplates, setMagicTemplates] = useState<PromptTemplate[]>([]);
+  const [contextOptions, setContextOptions] = useState<MobileContextOption[]>([]);
+  const [actionLoading, setActionLoading] = useState(false);
   const aui = useAui();
   const composerText = useAuiState((state) => state.composer.text);
   const selectedAgent =
@@ -845,6 +870,20 @@ function ChatComposer({
       void onSetTurnPreferences({ executionMode: "plan" }).then(() => setActionsOpen(false));
       return;
     }
+    if (action === "magic" && onLoadMagic) {
+      setActionView("magic");
+      setActionLoading(true);
+      void onLoadMagic()
+        .then(setMagicTemplates)
+        .finally(() => setActionLoading(false));
+      return;
+    }
+    if (action === "context" && onSearchContext) {
+      setActionView("context");
+      setActionQuery("");
+      setContextOptions([]);
+      return;
+    }
     setActionsOpen(false);
     if (action === "goal") onOpenGoal();
   };
@@ -873,26 +912,110 @@ function ChatComposer({
             ]}
           >
             <Text style={[styles.actionSheetTitle, { color: colors.textPrimary }]}>
-              Add to session
+              {actionView === "menu"
+                ? "Add to session"
+                : actionView === "magic"
+                  ? "Magic"
+                  : "Add context"}
             </Text>
-            {MOBILE_COMPOSER_ACTIONS.map((action) => (
-              <Pressable
-                accessibilityRole="button"
-                key={action.id}
-                onPress={() => runComposerAction(action.id)}
-                style={({ pressed }) => [
-                  styles.actionSheetRow,
-                  { backgroundColor: pressed ? colors.bgPressed : "transparent" },
+            {actionView === "context" ? (
+              <TextInput
+                accessibilityLabel="Search context"
+                autoFocus
+                onChangeText={(query) => {
+                  setActionQuery(query);
+                  setActionLoading(true);
+                  void onSearchContext?.(query)
+                    .then(setContextOptions)
+                    .finally(() => setActionLoading(false));
+                }}
+                placeholder="Search issues, files, and PRs"
+                placeholderTextColor={colors.textMuted}
+                style={[
+                  styles.actionSearch,
+                  { borderColor: colors.borderStrong, color: colors.textPrimary },
                 ]}
-              >
-                <View style={styles.actionSheetCopy}>
-                  <Text style={{ color: colors.textPrimary, fontWeight: "700" }}>
-                    {action.label}
-                  </Text>
-                  <Text style={{ color: colors.textMuted }}>{action.description}</Text>
-                </View>
-              </Pressable>
-            ))}
+                value={actionQuery}
+              />
+            ) : null}
+            {actionLoading ? <ActivityIndicator color={colors.accent} /> : null}
+            {actionView === "menu"
+              ? MOBILE_COMPOSER_ACTIONS.map((action) => (
+                  <Pressable
+                    accessibilityRole="button"
+                    key={action.id}
+                    onPress={() => runComposerAction(action.id)}
+                    style={({ pressed }) => [
+                      styles.actionSheetRow,
+                      { backgroundColor: pressed ? colors.bgPressed : "transparent" },
+                    ]}
+                  >
+                    <View style={styles.actionSheetCopy}>
+                      <Text style={{ color: colors.textPrimary, fontWeight: "700" }}>
+                        {action.label}
+                      </Text>
+                      <Text style={{ color: colors.textMuted }}>{action.description}</Text>
+                    </View>
+                  </Pressable>
+                ))
+              : null}
+            {actionView === "magic"
+              ? magicTemplates.map((template) => (
+                  <Pressable
+                    accessibilityLabel={`Run ${template.name}`}
+                    accessibilityRole="button"
+                    key={template.id}
+                    onPress={() => {
+                      setActionLoading(true);
+                      void onRunMagic?.(template).finally(() => {
+                        setActionLoading(false);
+                        setActionsOpen(false);
+                        setActionView("menu");
+                      });
+                    }}
+                    style={styles.actionSheetRow}
+                  >
+                    <View style={styles.actionSheetCopy}>
+                      <Text style={{ color: colors.textPrimary, fontWeight: "700" }}>
+                        {template.name}
+                      </Text>
+                      {template.description ? (
+                        <Text style={{ color: colors.textMuted }}>{template.description}</Text>
+                      ) : null}
+                    </View>
+                  </Pressable>
+                ))
+              : null}
+            {actionView === "context"
+              ? contextOptions.map((option) => (
+                  <Pressable
+                    accessibilityLabel={`Add ${option.type} ${option.id}`}
+                    accessibilityRole="button"
+                    key={`${option.type}:${option.id}`}
+                    onPress={() => {
+                      const token = `@${option.type}:${option.id}`;
+                      aui
+                        .composer()
+                        .setText([composerText.trim(), token].filter(Boolean).join(" "));
+                      setActionsOpen(false);
+                      setActionView("menu");
+                    }}
+                    style={styles.actionSheetRow}
+                  >
+                    <Text style={{ color: colors.accent, fontWeight: "700", width: 54 }}>
+                      {option.type.toUpperCase()}
+                    </Text>
+                    <View style={styles.actionSheetCopy}>
+                      <Text style={{ color: colors.textPrimary, fontWeight: "700" }}>
+                        {option.id}
+                      </Text>
+                      {option.label ? (
+                        <Text style={{ color: colors.textMuted }}>{option.label}</Text>
+                      ) : null}
+                    </View>
+                  </Pressable>
+                ))
+              : null}
           </Pressable>
         </Pressable>
       </Modal>
@@ -1626,6 +1749,14 @@ const styles = StyleSheet.create({
     padding: spacing.sm,
   },
   actionSheetTitle: { fontSize: 17, fontWeight: "700", padding: spacing.sm },
+  actionSearch: {
+    borderRadius: radii.md,
+    borderWidth: 1,
+    fontSize: 16,
+    marginBottom: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
   safeArea: { flex: 1 },
   thread: { flex: 1 },
   header: {

@@ -293,6 +293,51 @@ describe("AssistantChatScreen", () => {
     expect(screen.queryByText("Add to session")).toBeNull();
   });
 
+  it("loads and runs a real Magic template", async () => {
+    const template = {
+      id: "7",
+      slug: "review",
+      name: "Review changes",
+      description: "Find regressions and risks",
+      category: "Quality",
+      body: "Review",
+      agentKind: "codex",
+      model: null,
+      effort: null,
+      mode: "plan",
+    };
+    const onLoadMagic = jest.fn().mockResolvedValue([template]);
+    const onRunMagic = jest.fn().mockResolvedValue(undefined);
+    renderScreen({ onLoadMagic, onRunMagic });
+
+    fireEvent.press(screen.getByRole("button", { name: "Open composer actions" }));
+    fireEvent.press(screen.getByRole("button", { name: "Magic" }));
+
+    expect(await screen.findByText("Review changes")).toBeTruthy();
+    fireEvent.press(screen.getByRole("button", { name: "Run Review changes" }));
+    await waitFor(() => expect(onRunMagic).toHaveBeenCalledWith(template));
+  });
+
+  it("adds a typed context reference without replacing the draft", async () => {
+    const onSearchContext = jest.fn().mockResolvedValue([
+      { type: "issue", id: "VIN-3", label: "Mobile task details" },
+      { type: "file", id: "mobile/app.tsx" },
+      { type: "pr", id: "42", label: "Improve mobile task flow" },
+    ]);
+    renderScreen({ onSearchContext });
+
+    fireEvent.changeText(screen.getByLabelText("Message"), "Review");
+    fireEvent.press(screen.getByRole("button", { name: "Open composer actions" }));
+    fireEvent.press(screen.getByRole("button", { name: "Add context" }));
+    fireEvent.changeText(screen.getByLabelText("Search context"), "VIN");
+
+    expect(await screen.findByText("Mobile task details")).toBeTruthy();
+    fireEvent.press(screen.getByRole("button", { name: "Add issue VIN-3" }));
+    await waitFor(() =>
+      expect(screen.getByLabelText("Message").props.value).toBe("Review @issue:VIN-3"),
+    );
+  });
+
   it("opens the terminal for the same host session", () => {
     const onOpenTerminal = jest.fn();
     renderScreen({ onOpenTerminal });

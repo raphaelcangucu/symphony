@@ -41,6 +41,7 @@ import type {
   MobilePushRegistrationInput,
   ProjectSessionRow,
   ProjectSummary,
+  PromptTemplate,
   PullRequest,
   PullRequestFixResult,
   PullRequestGroup,
@@ -49,6 +50,7 @@ import type {
   PullRequestResult,
   PullRequestRerunResult,
   PullRequestState,
+  RunPromptTemplateResult,
   ThreadDocumentList,
   ThreadFileContent,
   ThreadFileKind,
@@ -394,6 +396,51 @@ export function createTrackerClientFromRequest(request: TrackerRequest): Tracker
         ),
         "goal",
       );
+    },
+    async promptTemplates(projectSlug, signal) {
+      const path = projectSlug
+        ? `/projects/${segment(projectSlug)}/prompt-templates`
+        : "/prompt-templates";
+      return readArray(unwrapData(await request(path, { signal })), "prompt templates").map(
+        mapPromptTemplate,
+      );
+    },
+    async runPromptTemplate(projectSlug, identifier, input, signal) {
+      const body = compactRecord({
+        slug: requireText(input.slug, "prompt template slug"),
+        agent: input.agent,
+        model: input.model,
+        effort: input.effort,
+        mode: input.mode,
+      });
+      const payload = asRecord(
+        unwrapData(
+          await request(`${issuePath(projectSlug)}/${segment(identifier)}/run-prompt-template`, {
+            method: "POST",
+            body,
+            signal,
+          }),
+        ),
+        "prompt template result",
+      );
+      return {
+        ok: payload.ok !== false,
+        action: mapDispatchAction(payload.action),
+        message: optionalText(payload.message) ?? "",
+        issue: mapIssue(payload.issue),
+      };
+    },
+    async issueFiles(projectSlug, identifier, query, signal) {
+      const search = new URLSearchParams({ q: requireText(query, "file query") });
+      return readArray(
+        unwrapData(
+          await request(
+            `${issuePath(projectSlug)}/${segment(identifier)}/files?${search.toString()}`,
+            { signal },
+          ),
+        ),
+        "issue files",
+      ).map((path, index) => requireText(path, `issue files[${index}]`));
     },
     async threadDocuments(threadId, signal) {
       return mapThreadDocumentList(
@@ -951,6 +998,32 @@ function mapIssue(payload: unknown): IssueSummary {
     createdAt: optionalText(record.inserted_at) ?? "",
     updatedAt: optionalText(record.updated_at) ?? "",
   };
+}
+
+function mapPromptTemplate(payload: unknown): PromptTemplate {
+  const record = asRecord(payload, "prompt template");
+  return {
+    id: requireIdentifier(record.id, "prompt template id"),
+    slug: requireText(record.slug, "prompt template slug"),
+    name: requireText(record.name, "prompt template name"),
+    description: optionalText(record.description),
+    category: optionalText(record.category),
+    body: requireText(record.body, "prompt template body"),
+    agentKind: optionalText(record.agent_kind ?? record.agentKind),
+    model: optionalText(record.model),
+    effort: optionalText(record.effort),
+    mode: optionalText(record.mode),
+  };
+}
+
+function mapDispatchAction(value: unknown): RunPromptTemplateResult["action"] {
+  return value === "hard_reset" || value === "stop" || value === "continue_work" ? value : "resume";
+}
+
+function compactRecord(record: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(record).filter(([, value]) => value !== undefined && value !== null),
+  );
 }
 
 function mapComment(payload: unknown): IssueComment {

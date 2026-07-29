@@ -2,6 +2,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { StateView } from "@/components/StateView";
+import { useTrackerClient } from "@/api/TrackerClientProvider";
 import { AssistantChatScreen } from "@/features/sessions/AssistantChatScreen";
 import { hostTerminalRoute } from "@/features/sessions/session-navigation";
 import type { SessionTimelineState } from "@/features/sessions/session-reducer";
@@ -34,10 +35,9 @@ export function OrchestratorSessionRoute() {
   }>();
   const { dictate, startDictation } = useAppRuntime();
   const hostRuntime = useHostRuntime();
+  const trackerClient = useTrackerClient();
   const hostId = firstParam(params.hostId);
-  const executionSessionId = positiveInteger(
-    firstParam(params.executionSessionId),
-  );
+  const executionSessionId = positiveInteger(firstParam(params.executionSessionId));
   const identifier = firstParam(params.identifier);
   const project = firstParam(params.projectSlug) ?? firstParam(params.project);
   const agent = firstParam(params.agent);
@@ -46,17 +46,11 @@ export function OrchestratorSessionRoute() {
   const [connectionState, setConnectionState] =
     useState<SessionTimelineState["connectionState"]>("connecting");
   const [error, setError] = useState<string | null>(null);
-  const [taskContext, setTaskContext] =
-    useState<OrchestratorTaskContext | null>(null);
-  const onSnapshot = useCallback(
-    (next: SessionLogEntry[]) => setEntries(next),
-    [],
-  );
+  const [taskContext, setTaskContext] = useState<OrchestratorTaskContext | null>(null);
+  const onSnapshot = useCallback((next: SessionLogEntry[]) => setEntries(next), []);
   const onEntries = useCallback(
     (next: SessionLogEntry[]) =>
-      setEntries((current) =>
-        appendSessionLogEntries(current, { entries: next }),
-      ),
+      setEntries((current) => appendSessionLogEntries(current, { entries: next })),
     [],
   );
 
@@ -99,6 +93,57 @@ export function OrchestratorSessionRoute() {
     };
   }, [executionSessionId, transport]);
 
+  const taskProjectSlug = taskContext?.projectSlug ?? project;
+  const taskIdentifier = taskContext?.identifier ?? identifier;
+  const loadMagic = useCallback(
+    () =>
+      trackerClient && taskProjectSlug
+        ? trackerClient.promptTemplates(taskProjectSlug)
+        : Promise.resolve([]),
+    [taskProjectSlug, trackerClient],
+  );
+  const searchContext = useCallback(
+    async (query: string) => {
+      if (!trackerClient || !taskProjectSlug) return [];
+      const [issues, files, pullRequests] = await Promise.all([
+        trackerClient.issues(taskProjectSlug, { query }).catch(() => []),
+        taskIdentifier && query.trim()
+          ? trackerClient.issueFiles(taskProjectSlug, taskIdentifier, query).catch(() => [])
+          : Promise.resolve([]),
+        taskIdentifier
+          ? trackerClient
+              .issuePullRequests(taskProjectSlug, taskIdentifier)
+              .then((result) => result.pullRequests)
+              .catch(() => [])
+          : Promise.resolve([]),
+      ]);
+      const normalizedQuery = query.trim().toLowerCase();
+      return [
+        ...issues.slice(0, 8).map((issue) => ({
+          type: "issue" as const,
+          id: issue.identifier,
+          label: issue.title,
+          detail: issue.status,
+        })),
+        ...files.slice(0, 8).map((path) => ({ type: "file" as const, id: path })),
+        ...pullRequests
+          .filter(
+            (pullRequest) =>
+              !normalizedQuery ||
+              String(pullRequest.number).includes(normalizedQuery) ||
+              (pullRequest.title ?? "").toLowerCase().includes(normalizedQuery),
+          )
+          .slice(0, 8)
+          .map((pullRequest) => ({
+            type: "pr" as const,
+            id: String(pullRequest.number),
+            label: pullRequest.title ?? undefined,
+          })),
+      ];
+    },
+    [taskIdentifier, taskProjectSlug, trackerClient],
+  );
+
   if (!hostId || !executionSessionId) {
     return (
       <StateView
@@ -122,8 +167,6 @@ export function OrchestratorSessionRoute() {
     error,
     taskContext?.agentKind ?? agent,
   );
-  const taskProjectSlug = taskContext?.projectSlug ?? project;
-  const taskIdentifier = taskContext?.identifier ?? identifier;
   const taskLinks =
     taskProjectSlug && taskIdentifier
       ? {
@@ -140,8 +183,7 @@ export function OrchestratorSessionRoute() {
             router.push(
               `/codex/issue/${encodeURIComponent(taskProjectSlug)}/${encodeURIComponent(taskIdentifier)}/pull-request` as never,
             ),
-          onOpenDiff: () =>
-            router.push(`/codex/session/${executionSessionId}/diff` as never),
+          onOpenDiff: () => router.push(`/codex/session/${executionSessionId}/diff` as never),
         }
       : undefined;
 
@@ -152,9 +194,7 @@ export function OrchestratorSessionRoute() {
       onBack={() => router.back()}
       onClearGoal={async () => undefined}
       onDictate={() => dictate(resolvedLocale())}
-      onStartDictation={
-        startDictation ? () => startDictation(resolvedLocale()) : undefined
-      }
+      onStartDictation={startDictation ? () => startDictation(resolvedLocale()) : undefined}
       onKillTool={async () => undefined}
       onOpenTerminal={() =>
         router.push(
@@ -166,6 +206,21 @@ export function OrchestratorSessionRoute() {
         )
       }
       onPauseGoal={async () => undefined}
+      onLoadMagic={loadMagic}
+      onRunMagic={async (template) => {
+        if (!trackerClient || !taskProjectSlug || !taskIdentifier) return;
+        await trackerClient.runPromptTemplate(taskProjectSlug, taskIdentifier, {
+          slug: template.slug,
+          agent: template.agentKind as "codex" | "claude" | "cursor" | "opencode" | null,
+          model: template.model,
+          effort: template.effort,
+          mode:
+            template.mode === "plan" || template.mode === "build" || template.mode === "yolo"
+              ? template.mode
+              : null,
+        });
+      }}
+      onSearchContext={searchContext}
       onResumeTurn={async () => undefined}
       onResumeGoal={async () => undefined}
       onSend={(message) => session.steer(message)}
@@ -182,20 +237,13 @@ export function OrchestratorSessionRoute() {
   );
 }
 
-function taskContextFromPayload(
-  payload: unknown,
-): OrchestratorTaskContext | null {
-  if (typeof payload !== "object" || payload === null || Array.isArray(payload))
-    return null;
+function taskContextFromPayload(payload: unknown): OrchestratorTaskContext | null {
+  if (typeof payload !== "object" || payload === null || Array.isArray(payload)) return null;
   const record = payload as Record<string, unknown>;
-  const projectSlug =
-    typeof record.project_slug === "string" ? record.project_slug.trim() : "";
+  const projectSlug = typeof record.project_slug === "string" ? record.project_slug.trim() : "";
   const identifier =
-    typeof record.issue_identifier === "string"
-      ? record.issue_identifier.trim()
-      : "";
-  const agentKind =
-    typeof record.agent_kind === "string" ? record.agent_kind.trim() : "";
+    typeof record.issue_identifier === "string" ? record.issue_identifier.trim() : "";
+  const agentKind = typeof record.agent_kind === "string" ? record.agent_kind.trim() : "";
   return projectSlug
     ? {
         projectSlug,

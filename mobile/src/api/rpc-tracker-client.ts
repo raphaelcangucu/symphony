@@ -54,6 +54,7 @@ function methodForPath(path: string): string {
   if (/^\/projects\/[^/]+\/issues\/[^/]+\/pull_requests(?:\/|$)/.test(pathname)) {
     return "pull_requests.request";
   }
+  if (/^\/projects\/[^/]+\/prompt-templates$/.test(pathname)) return "tasks.request";
   if (/^\/projects\/[^/]+\/issues(?:\/|$)/.test(pathname)) return "tasks.request";
 
   throw new Error(`Tracker route is not available over Symphony mobile RPC: ${pathname}`);

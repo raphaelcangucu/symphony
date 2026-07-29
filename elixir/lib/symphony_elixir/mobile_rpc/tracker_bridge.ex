@@ -26,10 +26,13 @@ defmodule SymphonyElixir.MobileRpc.TrackerBridge do
     PullRequestFixController,
     PullRequestMergeController,
     PullRequestRerunController,
+    PromptTemplateController,
+    RunPromptTemplateController,
     SettingsController,
     ViewerController,
     WorktreeInventoryController,
-    WorkspaceDiffController
+    WorkspaceDiffController,
+    WorkspaceFileController
   }
 
   @domains [
@@ -163,6 +166,21 @@ defmodule SymphonyElixir.MobileRpc.TrackerBridge do
 
   defp route(:tasks, "GET", ["projects", project_slug, "issues"]),
     do: {:ok, IssueController, :index, %{"project_slug" => project_slug}}
+
+  defp route(:tasks, "GET", ["projects", project_slug, "prompt-templates"]),
+    do: {:ok, PromptTemplateController, :project_index, %{"project_slug" => project_slug}}
+
+  defp route(:tasks, "POST", [
+         "projects",
+         project_slug,
+         "issues",
+         identifier,
+         "run-prompt-template"
+       ]),
+       do: {:ok, RunPromptTemplateController, :create, %{"project_slug" => project_slug, "identifier" => identifier}}
+
+  defp route(:tasks, "GET", ["projects", project_slug, "issues", identifier, "files"]),
+    do: {:ok, WorkspaceFileController, :index, %{"project_slug" => project_slug, "identifier" => identifier}}
 
   defp route(:tasks, "POST", ["projects", project_slug, "issues"]),
     do: {:ok, IssueController, :create, %{"project_slug" => project_slug}}

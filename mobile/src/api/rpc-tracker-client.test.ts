@@ -103,6 +103,21 @@ describe("createRpcTrackerClient", () => {
       "notifications.request",
     ]);
   });
+
+  it("routes mobile Magic and issue context through their canonical domains", async () => {
+    const transport = fakeTransport();
+    const client = createRpcTrackerClient(transport);
+
+    await client.promptTemplates("symphony");
+    await client.runPromptTemplate("symphony", "SYM-7", { slug: "review" });
+    await client.issueFiles("symphony", "SYM-7", "app");
+
+    expect(vi.mocked(transport.call).mock.calls.map(([method]) => method)).toEqual([
+      "tasks.request",
+      "tasks.request",
+      "tasks.request",
+    ]);
+  });
 });
 
 function fakeTransport(): HostTransport {
@@ -114,6 +129,25 @@ function fakeTransport(): HostTransport {
         return { data: [{ id: "project-1", slug: "symphony", name: "Symphony" }] };
       }
       if (method === "tasks.request") {
+        if (request?.path?.endsWith("/prompt-templates")) return { data: [] };
+        if (request?.path?.includes("/run-prompt-template")) {
+          return {
+            data: {
+              ok: true,
+              action: "resume",
+              message: "Started",
+              issue: {
+                id: "issue-7",
+                identifier: "SYM-7",
+                project_slug: "symphony",
+                title: "Review",
+                status: { name: "In Progress" },
+                labels: [],
+              },
+            },
+          };
+        }
+        if (request?.path?.includes("/files?")) return { data: [] };
         return {
           data: [
             {
