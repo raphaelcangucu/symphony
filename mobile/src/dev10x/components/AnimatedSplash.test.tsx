@@ -52,8 +52,28 @@ describe("AnimatedSplash", () => {
       await Promise.resolve();
     });
 
-    expect(screen.getByTestId("animated-splash-logo")).toHaveStyle({ opacity: 1 });
+    expect(screen.getByTestId("animated-splash-mark")).toHaveStyle({ opacity: 1 });
     expect(onReady).toHaveBeenCalledTimes(1);
+
+    act(() => jest.advanceTimersByTime(410));
+    expect(screen.getByTestId("animated-splash-mark")).toHaveStyle({
+      transform: [{ scale: 1.13 }],
+    });
+  });
+
+  it("draws three lightning bolts into the large mark without a wordmark", async () => {
+    render(<AnimatedSplash onFinished={jest.fn()} />);
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const lightningPaths = screen
+      .UNSAFE_getAllByProps({ testID: "animated-splash-lightning" })
+      .filter((node) => node.type === "RNSVGPath");
+    expect(lightningPaths).toHaveLength(3);
+    expect(screen.getByTestId("animated-splash-mark")).toBeTruthy();
+    expect(screen.queryByLabelText("Dev10x wordmark")).toBeNull();
   });
 
   it("skips the energy-line animation when reduced motion is enabled", async () => {

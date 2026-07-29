@@ -175,3 +175,69 @@ git commit -m "feat(mobile): animate splash logo reveal"
   `src/dev10x/routes/HomeRoute.tsx`; it reported none in the splash files.
 - The full native-asset test cannot run in this environment because the required
   ImageMagick `convert` executable is not installed.
+
+### Task 5: Replace the arc with a lightning-driven mark reveal
+
+**Files:**
+- Modify: `mobile/src/dev10x/components/AnimatedSplash.tsx`
+- Modify: `mobile/src/dev10x/components/AnimatedSplash.test.tsx`
+
+- [x] **Step 1: Write the failing visual-contract test**
+
+Add a test that waits for normal-motion startup and requires exactly three
+lightning paths plus the large Dev10x icon. It must assert that no wordmark is
+rendered before the animation finishes:
+
+```tsx
+expect(screen.getAllByTestId("animated-splash-lightning")).toHaveLength(3);
+expect(screen.getByTestId("animated-splash-mark")).toBeTruthy();
+expect(screen.queryByLabelText("Dev10x wordmark")).toBeNull();
+```
+
+- [x] **Step 2: Run the focused test and verify RED**
+
+```bash
+cd mobile && npx jest src/dev10x/components/AnimatedSplash.test.tsx --runInBand
+```
+
+Expected: FAIL because the current component renders one curved energy path and
+the Dev10x wordmark.
+
+- [x] **Step 3: Implement three converging lightning bolts and the mark**
+
+Replace the curved SVG path with three short, jagged paths tagged
+`animated-splash-lightning`. Animate each with a staggered stroke-dash draw,
+using cyan, violet, and pink gradients. Replace `dev10x-logo-white.png` with
+the bundled `dev10x-icon.png`, scale it to 148 px, and expose it as
+`animated-splash-mark`. Retain the 900 ms one-shot handoff and the
+reduced-motion shortcut.
+
+- [x] **Step 4: Run focused unit, build, and emulator evidence**
+
+```bash
+cd mobile && npx jest src/dev10x/components/AnimatedSplash.test.tsx --runInBand
+cd mobile && ANDROID_HOME=/Users/raphaelcangucu/Library/Android/sdk npm run build:android:release
+```
+
+Install the resulting APK on `emulator-5554`, clear app data, record from the
+home screen through the pairing screen, then inspect a 10 fps contact sheet for
+the three bolts and the large mark.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add mobile/src/dev10x/components/AnimatedSplash.tsx \
+  mobile/src/dev10x/components/AnimatedSplash.test.tsx \
+  docs/superpowers/plans/2026-07-29-animated-mobile-splash-plan.md
+git commit -m "feat(mobile): reveal splash mark with lightning"
+```
+
+## Lightning-reveal validation record
+
+- The focused `AnimatedSplash` Jest suite passed (4 tests), including the
+  three-bolt/no-wordmark contract and reduced-motion behavior.
+- `npm run lint` passed.
+- The Android release APK built successfully and was installed on
+  `emulator-5554` after clearing application data.
+- Emulator captures at 250 ms show the large Dev10x mark with cyan, violet,
+  and pink lightning; captures after the handoff show the pairing screen.
