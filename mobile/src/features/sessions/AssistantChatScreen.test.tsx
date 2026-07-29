@@ -164,6 +164,44 @@ describe("AssistantChatScreen", () => {
     expect(screen.getByText("command output")).toBeTruthy();
   });
 
+  it("keeps a recovered tool failure visible without marking the completed turn as failed", () => {
+    renderScreen({
+      timeline: {
+        ...timeline,
+        activeTools: [],
+        streamingText: "",
+        turnStatus: { status: "completed", canResume: false, queuedMessages: [] },
+        messages: [
+          {
+            id: "recovered-tools",
+            role: "assistant",
+            content: "Completed after retrying a command.",
+            toolCalls: [
+              {
+                id: "failed-command",
+                name: "shell",
+                status: "error",
+                output: "temporary command failure",
+              },
+              {
+                id: "successful-command",
+                name: "shell",
+                status: "complete",
+                output: "command succeeded",
+              },
+            ],
+            insertedAt: null,
+          },
+        ],
+      },
+    });
+
+    expect(screen.getByText("2 comandos · 1 falha recuperada")).toBeTruthy();
+    expect(screen.getByText("Done")).toBeTruthy();
+    fireEvent.press(screen.getByRole("button", { name: "Show 2 activity details" }));
+    expect(screen.getByText("Failed")).toBeTruthy();
+  });
+
   it("marks a completed turn as completed instead of leaving the session Live", () => {
     renderScreen({
       timeline: {

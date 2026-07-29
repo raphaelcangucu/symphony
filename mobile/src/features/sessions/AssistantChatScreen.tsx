@@ -814,8 +814,12 @@ function toolGroupStatus(tools: ToolTimelineEntry[]): {
 } {
   if (tools.some((tool) => tool.running))
     return { label: "Running", tone: "accent" };
-  if (tools.some((tool) => tool.failed))
-    return { label: "Failed", tone: "danger" };
+
+  // A durable assistant message exists only after the Host has completed the
+  // turn. Individual commands can still have failed while the provider
+  // recovered (for example an expected red test before the implementation).
+  // Keep those failures visible inside the disclosure, but do not turn a
+  // successful final response into a red, misleading session-level failure.
   return { label: "Done", tone: "success" };
 }
 
@@ -842,9 +846,18 @@ function toolGroupSummary(tools: ToolTimelineEntry[]): string {
       ? `${counts.other} ${counts.other === 1 ? "atividade" : "atividades"}`
       : null,
   ].filter((value): value is string => Boolean(value));
+  const recoveredFailures = tools.filter((tool) => tool.failed).length;
+  const recovery = recoveredFailures
+    ? `${recoveredFailures} ${recoveredFailures === 1 ? "falha recuperada" : "falhas recuperadas"}`
+    : null;
   return fragments.length === 1
-    ? fragments[0]!
-    : `${tools.length} atividades · ${fragments.slice(0, 2).join(" · ")}`;
+    ? [fragments[0]!, recovery].filter(Boolean).join(" · ")
+    : [
+        `${tools.length} atividades · ${fragments.slice(0, 2).join(" · ")}`,
+        recovery,
+      ]
+        .filter(Boolean)
+        .join(" · ");
 }
 
 function toolCategory(name: string): "commands" | "edits" | "reads" | "other" {

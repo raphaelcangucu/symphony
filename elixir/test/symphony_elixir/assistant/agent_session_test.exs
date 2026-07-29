@@ -806,6 +806,43 @@ defmodule SymphonyElixir.Assistant.AgentSessionTest do
       assert opts[:effort] == "high"
     end
 
+    test "keeps a session's selected model when the first mobile message has null preferences" do
+      thread_workspace = Workspace.path_for_issue("MAC-1")
+      File.mkdir_p!(thread_workspace)
+
+      {:ok, session_thread} =
+        History.create_issue_session_thread("macro", "MAC-1", %{
+          title: "Pinned mobile session",
+          workspace_path: thread_workspace,
+          agent_kind: "codex",
+          model: "gpt-5.6-terra",
+          effort: "high"
+        })
+
+      test_pid = self()
+
+      runner = fn _workspace, _prompt, _issue, opts ->
+        send(test_pid, {:pinned_mobile_session_opts, opts})
+        {:ok, %{assistant_message: "ack", tool_calls: [], conversation_id: "ct", run_id: "t1"}}
+      end
+
+      assert {:ok, _result} =
+               AgentSession.send_message_to_issue_thread(
+                 session_thread,
+                 "start",
+                 %{"model" => nil, "effort" => nil},
+                 runner: runner
+               )
+
+      assert_receive {:pinned_mobile_session_opts, opts}
+      assert opts[:model] == "gpt-5.6-terra"
+      assert opts[:effort] == "high"
+
+      persisted = Repo.get!(Thread, session_thread.id)
+      assert persisted.requested_model == "gpt-5.6-terra"
+      assert persisted.requested_effort == "high"
+    end
+
     test "revalidates an explicit issue session before every runner invocation", %{
       workspace_root: workspace_root
     } do

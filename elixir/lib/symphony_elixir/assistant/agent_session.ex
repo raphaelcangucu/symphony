@@ -1950,22 +1950,35 @@ defmodule SymphonyElixir.Assistant.AgentSession do
 
   defp persist_requested_model_provenance(thread, context, agent_kind)
        when is_map(thread) and is_map(context) and is_binary(agent_kind) do
-    model_present? = Map.has_key?(context, "model") or Map.has_key?(context, :model)
-    effort_present? = Map.has_key?(context, "effort") or Map.has_key?(context, :effort)
+    requested_model = Map.get(context, "model") || Map.get(context, :model)
+    requested_effort = Map.get(context, "effort") || Map.get(context, :effort)
 
-    if model_present? or effort_present? do
-      History.put_model_provenance(thread, %{
-        requested_model: Map.get(context, "model") || Map.get(context, :model),
-        requested_effort:
-          if(agent_kind == "cursor",
-            do: nil,
-            else: Map.get(context, "effort") || Map.get(context, :effort)
-          ),
-        resolved_model: nil,
-        resolved_effort: nil
-      })
+    provenance =
+      %{}
+      |> maybe_put_requested_provenance(:requested_model, requested_model)
+      |> maybe_put_requested_provenance(
+        :requested_effort,
+        if(agent_kind == "cursor", do: nil, else: requested_effort)
+      )
+
+    if map_size(provenance) > 0 do
+      History.put_model_provenance(thread, Map.merge(provenance, %{resolved_model: nil, resolved_effort: nil}))
     else
       {:ok, thread}
+    end
+  end
+
+  # A session creation already persists the selected model on its thread. Mobile
+  # transports may still include nullable preference keys on the first message;
+  # those placeholders must never erase that durable selection.
+  defp maybe_put_requested_provenance(provenance, _key, value)
+       when not is_binary(value),
+       do: provenance
+
+  defp maybe_put_requested_provenance(provenance, key, value) do
+    case String.trim(value) do
+      "" -> provenance
+      selected -> Map.put(provenance, key, selected)
     end
   end
 
