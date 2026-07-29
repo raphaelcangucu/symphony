@@ -1,7 +1,8 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AssistantMessageList, type LoadOlderControl } from "@/components/assistant/AssistantMessageList";
+import { initTestI18n } from "@/i18n/testUtils";
 import type { AssistantChatMessage } from "@/services/assistant";
 
 function renderList(loadOlder: LoadOlderControl | null) {
@@ -23,6 +24,10 @@ function renderList(loadOlder: LoadOlderControl | null) {
 }
 
 describe("AssistantMessageList load-older control", () => {
+  beforeEach(async () => {
+    await initTestI18n("en");
+  });
+
   it("renders no control when none is provided", () => {
     renderList(null);
     expect(screen.queryByRole("button")).toBeNull();
@@ -47,5 +52,63 @@ describe("AssistantMessageList load-older control", () => {
 
     fireEvent.click(button);
     expect(onLoad).not.toHaveBeenCalled();
+  });
+});
+
+describe("AssistantMessageList running activity", () => {
+  beforeEach(async () => {
+    await initTestI18n("en");
+  });
+
+  const runningMessage: AssistantChatMessage = {
+    id: "assistant-1",
+    role: "assistant",
+    content: "",
+    toolCalls: [
+      {
+        id: "tool-1",
+        name: "shell",
+        status: "running",
+        arguments: { command: "/bin/zsh -lc 'sleep 10'" },
+        result: {},
+      },
+    ],
+    metadata: {},
+  };
+
+  function renderRunning(messages: AssistantChatMessage[]) {
+    return render(
+      <AssistantMessageList
+        messages={messages}
+        taskSnapshot={null}
+        isRunning
+        runningStartedAt={Date.now()}
+        activeToolDetail={{
+          id: "tool-1",
+          name: "shell",
+          argumentsSummary: "/bin/zsh -lc 'sleep 10'",
+        }}
+        connectionError={null}
+        channelReady
+        planApprovalMessageId={null}
+        onInsertContext={vi.fn()}
+        onApprovePlan={vi.fn()}
+      />,
+    );
+  }
+
+  it("does not repeat a running tool already represented in the transcript", () => {
+    renderRunning([runningMessage]);
+
+    expect(screen.getAllByText("Running")).toHaveLength(1);
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it("keeps the global fallback until the active tool reaches the transcript", () => {
+    renderRunning([]);
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      /Running shell.*sleep 10/i,
+    );
   });
 });

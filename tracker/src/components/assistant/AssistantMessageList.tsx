@@ -84,6 +84,15 @@ export function AssistantMessageList({
   onFetchToolOutput,
 }: AssistantMessageListProps) {
   const useFeed = Array.isArray(feedItems);
+  const renderedMessages = useFeed
+    ? feedItems
+        .filter((item) => item.type === "message")
+        .map((item) => item.message)
+    : messages;
+  const activeToolRepresented = containsActiveTool(
+    renderedMessages,
+    activeToolDetail,
+  );
 
   return (
     <>
@@ -148,7 +157,7 @@ export function AssistantMessageList({
             />
           ))}
       {connectionError ? <p className="text-sm text-destructive">{connectionError}</p> : null}
-      {isRunning && runningStartedAt != null ? (
+      {isRunning && runningStartedAt != null && !activeToolRepresented ? (
         <WorkingIndicator
           startedAt={runningStartedAt}
           activeToolDetail={activeToolDetail}
@@ -158,5 +167,20 @@ export function AssistantMessageList({
         />
       ) : null}
     </>
+  );
+}
+
+function containsActiveTool(
+  messages: readonly AssistantChatMessage[],
+  active: WorkingActiveToolDetail | null,
+): boolean {
+  if (!active) return false;
+
+  return messages.some((message) =>
+    message.toolCalls.some(
+      (call) =>
+        call.status === "running" &&
+        (call.id ? call.id === active.id : call.name === active.name),
+    ),
   );
 }
