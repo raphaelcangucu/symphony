@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { useTrackerClient } from "@/api/TrackerClientProvider";
+import type { TrackerClient } from "@/api/contracts";
 import { useConnection } from "@/auth/ConnectionProvider";
 
 import {
@@ -10,10 +11,12 @@ import {
 
 export function useThreadSourceChanges(
   threadId: number | null,
+  options: { client?: TrackerClient | null; hostId?: string | null } = {},
 ): SourceChangeSummary | null {
-  const client = useTrackerClient();
+  const defaultClient = useTrackerClient();
   const { activeProfile } = useConnection();
-  const hostId = activeProfile?.hostId ?? activeProfile?.id ?? null;
+  const client = options.client ?? defaultClient;
+  const hostId = options.hostId ?? activeProfile?.hostId ?? activeProfile?.id ?? null;
   const query = useQuery({
     queryKey: ["host", hostId, "thread-diff-stats", threadId, "uncommitted"],
     enabled: Boolean(client && threadId),

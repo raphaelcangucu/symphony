@@ -2,7 +2,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tansta
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useMemo, useState } from "react";
 
-import type { GitDiffFileEntry } from "@/api/contracts";
+import type { GitDiffFileEntry, TrackerClient } from "@/api/contracts";
 import { useTrackerClient } from "@/api/TrackerClientProvider";
 import { useConnection } from "@/auth/ConnectionProvider";
 
@@ -13,16 +13,27 @@ type ActionNotice = {
   message: string;
 };
 
-export function DiffRoute() {
+type DiffRouteProps = {
+  client?: TrackerClient | null;
+  hostId?: string | null;
+  threadId?: number | null;
+};
+
+export function DiffRoute({
+  client: clientOverride,
+  hostId: hostIdOverride,
+  threadId: threadIdOverride,
+}: DiffRouteProps = {}) {
   const params = useLocalSearchParams<{ threadId?: string | string[] }>();
   const router = useRouter();
-  const client = useTrackerClient();
+  const defaultClient = useTrackerClient();
   const { activeProfile } = useConnection();
   const queryClient = useQueryClient();
-  const threadId = parseThreadId(firstParam(params.threadId));
+  const client = clientOverride ?? defaultClient;
+  const threadId = threadIdOverride ?? parseThreadId(firstParam(params.threadId));
   const [selectedFile, setSelectedFile] = useState<GitDiffFileEntry | null>(null);
   const [notice, setNotice] = useState<ActionNotice | null>(null);
-  const hostId = activeProfile?.hostId ?? activeProfile?.id;
+  const hostId = hostIdOverride ?? activeProfile?.hostId ?? activeProfile?.id;
   const statsKey = ["host", hostId, "thread-diff-stats", threadId, "uncommitted"] as const;
   const filesKey = ["host", hostId, "thread-diff-files", threadId, "uncommitted"] as const;
 

@@ -3,6 +3,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useReducer } from "react";
 
 import { useHostTransport } from "@/api/HostTransportContext";
+import { createRpcTrackerClient } from "@/api/rpc-tracker-client";
 import { useConnection } from "@/auth/ConnectionProvider";
 import type { ConnectionProfile } from "@/auth/connection-profile";
 import { StateView } from "@/components/StateView";
@@ -151,14 +152,24 @@ function ConnectedSessionRoute({
   const hostRuntime = useHostRuntime();
   const activeHostTransport = useHostTransport();
   const hostTransport = hostTransportOverride ?? activeHostTransport;
+  const scopedTrackerClient = useMemo(
+    () =>
+      activeProfile.transport === "rpc" && hostTransport
+        ? createRpcTrackerClient(hostTransport)
+        : null,
+    [activeProfile.transport, hostTransport],
+  );
   const [timeline, dispatch] = useReducer(
     sessionTimelineReducer,
     undefined,
     createSessionTimelineState,
   );
   const catalogHostId = activeProfile.transport === "rpc" ? activeProfile.hostId : null;
-  const sourceChanges = useThreadSourceChanges(threadId);
-  const changesRoute = assistantThreadDiffRoute(threadId);
+  const sourceChanges = useThreadSourceChanges(threadId, {
+    client: scopedTrackerClient,
+    hostId: hostId ?? activeProfile.hostId ?? activeProfile.id,
+  });
+  const changesRoute = assistantThreadDiffRoute(threadId, hostId);
   const catalogState = catalogHostId
     ? hostRuntime.assistantCatalog(catalogHostId)
     : { catalog: null, error: null, status: "unavailable" as const };

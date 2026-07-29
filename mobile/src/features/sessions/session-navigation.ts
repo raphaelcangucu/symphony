@@ -15,11 +15,15 @@ export function hostTerminalRoute(
   return `${route}${route.includes("?") ? "&" : "?"}view=terminal`;
 }
 
-export function assistantThreadDiffRoute(threadIdInput: string | number): string | null {
+export function assistantThreadDiffRoute(
+  threadIdInput: string | number,
+  hostId?: string | null,
+): string | null {
   const threadId = Number(threadIdInput);
-  return Number.isInteger(threadId) && threadId > 0
-    ? `/session/${threadId}/diff`
-    : null;
+  if (!Number.isInteger(threadId) || threadId <= 0) return null;
+  return hostId
+    ? `/session/${threadId}/diff?hostId=${encodeURIComponent(hostId)}`
+    : `/session/${threadId}/diff`;
 }
 
 export function sessionNotificationRoute(

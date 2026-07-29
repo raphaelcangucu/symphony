@@ -2,7 +2,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { StateView } from "@/components/StateView";
-import { useTrackerClient } from "@/api/TrackerClientProvider";
+import { createRpcTrackerClient } from "@/api/rpc-tracker-client";
 import { AssistantChatScreen } from "@/features/sessions/AssistantChatScreen";
 import {
   assistantThreadDiffRoute,
@@ -39,15 +39,21 @@ export function OrchestratorSessionRoute() {
   }>();
   const { dictate, startDictation } = useAppRuntime();
   const hostRuntime = useHostRuntime();
-  const trackerClient = useTrackerClient();
   const hostId = firstParam(params.hostId);
   const executionSessionId = positiveInteger(firstParam(params.executionSessionId));
   const identifier = firstParam(params.identifier);
   const project = firstParam(params.projectSlug) ?? firstParam(params.project);
   const agent = firstParam(params.agent);
   const transport = hostId ? hostRuntime.transport(hostId) : null;
-  const sourceChanges = useThreadSourceChanges(executionSessionId);
-  const changesRoute = assistantThreadDiffRoute(executionSessionId ?? "");
+  const trackerClient = useMemo(
+    () => (transport ? createRpcTrackerClient(transport) : null),
+    [transport],
+  );
+  const sourceChanges = useThreadSourceChanges(executionSessionId, {
+    client: trackerClient,
+    hostId,
+  });
+  const changesRoute = assistantThreadDiffRoute(executionSessionId ?? "", hostId);
   const [entries, setEntries] = useState<SessionLogEntry[]>([]);
   const [connectionState, setConnectionState] =
     useState<SessionTimelineState["connectionState"]>("connecting");
