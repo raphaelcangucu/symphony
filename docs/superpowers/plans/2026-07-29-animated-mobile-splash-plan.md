@@ -151,7 +151,7 @@ Confirm the existing native splash remains configured, the new overlay uses
 only bundled assets, completion is one-shot, and reduced-motion avoids the
 travelling energy line.
 
-- [ ] **Step 3: Commit the completed implementation**
+- [x] **Step 3: Commit the completed implementation**
 
 ```bash
 git add mobile/app/_layout.tsx \
