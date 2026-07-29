@@ -39,7 +39,9 @@ Native branding and proof:
 - Create dedicated assets under `mobile/assets/dev10x-native/`.
 - Modify `mobile/app.config.ts` and `mobile/app/_layout.tsx`.
 - Extend `mobile/e2e/android-smoke.sh` with the official app-driven comparison flow.
-- Store final proof under `docs/pr-assets/dev10x-mobile-comparison/`.
+- Store final proof in the external evidence archive referenced by
+  [`docs/pr-assets/README.md`](../../pr-assets/README.md); generated media must
+  not be committed to this repository.
 
 ### Task 1: Canonical six-cell contract
 
@@ -663,8 +665,8 @@ Commit subject: `fix(mobile): stabilize comparison E2E path`
 
 **Files:**
 - Modify: `mobile/e2e/android-smoke.sh`
-- Create: `docs/pr-assets/dev10x-mobile-comparison/README.md`
-- Create generated proof files under `docs/pr-assets/dev10x-mobile-comparison/`
+- Update: `docs/pr-assets/README.md` with the external evidence archive.
+- Publish generated proof files externally; do not commit them under `docs/`.
 
 - [ ] **Step 1: Add an E2E preflight that cannot use mocks**
 

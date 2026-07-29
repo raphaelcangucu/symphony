@@ -570,16 +570,10 @@ the audit; a visually broken site cannot remain passed.
 ### Task 10: Publish reports, decision and PR
 
 **Files:**
-- Create: `docs/pr-assets/dev10x-site-high-matrix/README.md`
-- Create: `docs/pr-assets/dev10x-site-high-matrix/comparison.json`
-- Create: `docs/pr-assets/dev10x-site-high-matrix/comparison.md`
-- Create: `docs/pr-assets/dev10x-site-high-matrix/execution-report.md`
-- Create: `docs/pr-assets/dev10x-site-high-matrix/evidence-audit.md`
-- Create: `docs/pr-assets/dev10x-site-high-matrix/evaluation.md`
-- Create: `docs/pr-assets/dev10x-site-high-matrix/visual-comparison.md`
-- Create: `docs/pr-assets/dev10x-site-high-matrix/screens/*.png`
-- Create: `docs/pr-assets/dev10x-site-high-matrix/videos/*.mp4`
-- Create: `docs/pr-assets/dev10x-site-high-matrix/videos/*-preview.gif`
+- Update: [`docs/pr-assets/README.md`](../../pr-assets/README.md) with the
+  external archive reference.
+- Publish reports, screenshots, videos, traces, manifests and hashes to the
+  external evidence archive; do not commit generated artifacts to this repo.
 - Modify: `docs/superpowers/plans/2026-07-27-dev10x-site-high-matrix-plan.md`
 
 - [x] **Step 1: Copy only sanitized canonical outputs**
@@ -610,10 +604,11 @@ Run:
 cd benchmarks/landing-page-agent-comparison
 npm test
 git diff --check
-git ls-files | rg -i '(token|secret|credential)' docs/pr-assets/dev10x-site-high-matrix
+git ls-files docs/pr-assets
 ```
 
-Also verify every Markdown media link resolves to a committed file.
+Also verify `docs/pr-assets` contains only the Markdown pointer to the external
+archive and that no generated media is committed.
 
 - [x] **Step 4: Request independent code review**
 

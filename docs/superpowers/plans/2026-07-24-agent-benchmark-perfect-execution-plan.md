@@ -15,6 +15,7 @@
    reproducible product or harness failures with focused tests.
 9. Build and run the focused generated E2E for each page, then capture and
    persist canonical evidence.
-10. Verify all Evidence API records and artifacts, copy reports/PNG/MP4 files
-    into `docs/pr-assets/agent-session-benchmark/`, request code review, commit,
-    push, and update PR #6 with immutable links and final results.
+10. Verify all Evidence API records and artifacts, publish reports/PNG/MP4 files
+    to the external archive referenced by `docs/pr-assets/README.md`, request
+    code review, commit, push, and update PR #6 with immutable links and final
+    results.
