@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 
 import { ThemeProvider } from "@/theme/ThemeProvider";
+import type { AssistantCatalog } from "@/api/contracts";
 
 import { AssistantChatScreen } from "./AssistantChatScreen";
 import type { SessionTimelineState } from "./session-reducer";
@@ -185,6 +186,54 @@ describe("AssistantChatScreen", () => {
     expect(screen.getByText("5.6 Sol Baixo")).toBeTruthy();
     expect(screen.queryByText("Model")).toBeNull();
     expect(screen.queryByText("Full access")).toBeNull();
+  });
+
+  it("chooses the effort after choosing a model that supports it", async () => {
+    const onSetTurnPreferences = jest.fn().mockResolvedValue(undefined);
+    const catalog: AssistantCatalog = {
+      defaultAgent: "codex",
+      agents: [
+        {
+          agent: "codex",
+          agentLabel: "Codex CLI",
+          defaultModel: "gpt-5.6-sol",
+          models: [
+            {
+              model: "gpt-5.6-sol",
+              label: "GPT-5.6-Sol",
+              efforts: [
+                { effort: "low", label: "Low" },
+                { effort: "high", label: "High" },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    renderScreen({
+      catalog,
+      catalogStatus: "ready",
+      onSetTurnPreferences,
+      timeline: {
+        ...timeline,
+        metadata: { ...timeline.metadata, agentKind: "codex" },
+      },
+    });
+
+    fireEvent.press(screen.getByRole("button", { name: "Choose model" }));
+    fireEvent.press(screen.getByRole("button", { name: "Use GPT-5.6-Sol" }));
+    expect(screen.getByText("GPT-5.6-Sol effort")).toBeTruthy();
+    fireEvent.press(
+      screen.getByRole("button", { name: "Use GPT-5.6-Sol with High effort" }),
+    );
+
+    await waitFor(() =>
+      expect(onSetTurnPreferences).toHaveBeenCalledWith({
+        model: "gpt-5.6-sol",
+        effort: "high",
+      }),
+    );
   });
 
   it("uses the web reasoning disclosure for orchestrator reasoning entries", () => {

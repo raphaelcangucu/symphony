@@ -13,6 +13,7 @@ import {
   ArrowLeft,
   Brain,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   Clock3,
   Compass,
@@ -1121,6 +1122,9 @@ function ComposerSettings({
   provider: string | null;
 }) {
   const { colors } = useAppTheme();
+  const [modelForEffort, setModelForEffort] = useState<
+    AssistantCatalog["agents"][number]["models"][number] | null
+  >(null);
   const agent =
     catalog?.agents.find((candidate) => candidate.agent === provider) ?? null;
   if (mode === "permission") {
@@ -1176,6 +1180,50 @@ function ComposerSettings({
       </View>
     );
   }
+
+  if (modelForEffort) {
+    const activeEffort =
+      preferences.model === modelForEffort.model ? preferences.effort : null;
+
+    return (
+      <View
+        style={[
+          styles.settingsPanel,
+          { backgroundColor: colors.bgRaised, borderColor: colors.borderStrong },
+        ]}
+      >
+        <SettingsHeader
+          label={`${modelForEffort.label} effort`}
+          onBack={() => setModelForEffort(null)}
+          onClose={onClose}
+        />
+        {modelForEffort.efforts.map((effort) => (
+          <Pressable
+            key={effort.effort}
+            accessibilityLabel={`Use ${modelForEffort.label} with ${effort.label} effort`}
+            accessibilityRole="button"
+            onPress={() => {
+              void onSetTurnPreferences({
+                model: modelForEffort.model,
+                effort: effort.effort,
+              }).finally(onClose);
+            }}
+            style={styles.settingsOption}
+          >
+            <Brain color={colors.textSecondary} size={16} />
+            <View style={styles.settingsCopy}>
+              <Text style={{ color: colors.textPrimary }}>{effort.label}</Text>
+              <Text style={[styles.settingsDescription, { color: colors.textMuted }]}>
+                Reasoning effort for the next turn
+              </Text>
+            </View>
+            <StatusDot tone={activeEffort === effort.effort ? "accent" : "muted"} />
+          </Pressable>
+        ))}
+      </View>
+    );
+  }
+
   return (
     <View
       style={[
@@ -1194,13 +1242,12 @@ function ComposerSettings({
             accessibilityLabel={`Use ${model.label}`}
             accessibilityRole="button"
             onPress={() => {
-              void onSetTurnPreferences({
-                model: model.model,
-                effort:
-                  preferences.model === model.model
-                    ? preferences.effort
-                    : (model.efforts[0]?.effort ?? null),
-              }).finally(onClose);
+              if (model.efforts.length > 0) {
+                setModelForEffort(model);
+                return;
+              }
+
+              void onSetTurnPreferences({ model: model.model, effort: null }).finally(onClose);
             }}
             style={styles.settingsOption}
           >
@@ -1223,6 +1270,9 @@ function ComposerSettings({
             <StatusDot
               tone={preferences.model === model.model ? "accent" : "muted"}
             />
+            {model.efforts.length > 0 ? (
+              <ChevronRight color={colors.textMuted} size={16} />
+            ) : null}
           </Pressable>
         ))
       ) : (
@@ -1240,17 +1290,31 @@ function ComposerSettings({
 
 function SettingsHeader({
   label,
+  onBack,
   onClose,
 }: {
   label: string;
+  onBack?: (() => void) | undefined;
   onClose(): void;
 }) {
   const { colors } = useAppTheme();
   return (
     <View style={styles.settingsHeader}>
-      <Text style={[styles.settingsTitle, { color: colors.textPrimary }]}>
-        {label}
-      </Text>
+      <View style={styles.settingsHeading}>
+        {onBack ? (
+          <Pressable
+            accessibilityLabel="Back to model list"
+            accessibilityRole="button"
+            hitSlop={8}
+            onPress={onBack}
+          >
+            <ChevronLeft color={colors.textSecondary} size={20} />
+          </Pressable>
+        ) : null}
+        <Text style={[styles.settingsTitle, { color: colors.textPrimary }]}>
+          {label}
+        </Text>
+      </View>
       <Pressable
         accessibilityLabel="Close settings"
         accessibilityRole="button"
@@ -1965,6 +2029,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     minHeight: 28,
   },
+  settingsHeading: { alignItems: "center", flexDirection: "row", gap: spacing.xs, minWidth: 0 },
   settingsTitle: { fontSize: 13, fontWeight: "700" },
   settingsOption: {
     alignItems: "center",
