@@ -13,7 +13,8 @@ defmodule SymphonyElixir.Assistant.CatalogBundleTest do
              )
 
     assert Enum.map(bundle.agents, & &1.agent) == ["codex"]
-    assert bundle.unavailable_agents == %{cursor: :cli_unavailable}
+    assert bundle.unavailable_agents == %{cursor: ":cli_unavailable"}
+    assert {:ok, _json} = Jason.encode(bundle)
   end
 
   test "returns an explicit error when every provider catalog is unavailable" do

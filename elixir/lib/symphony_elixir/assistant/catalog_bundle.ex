@@ -13,7 +13,8 @@ defmodule SymphonyElixir.Assistant.CatalogBundle do
   @ttl_ms 30_000
   @fetch_timeout_ms 8_000
 
-  @spec fetch(keyword()) :: {:ok, map()}
+  @spec fetch(keyword()) ::
+          {:ok, map()}
           | {:error, {:assistant_catalog_unavailable, map()}}
   def fetch(opts \\ []) do
     fetchers = Keyword.get(opts, :fetchers, default_fetchers())
@@ -83,7 +84,18 @@ defmodule SymphonyElixir.Assistant.CatalogBundle do
   end
 
   defp maybe_put_failures(bundle, failures) when map_size(failures) == 0, do: bundle
-  defp maybe_put_failures(bundle, failures), do: Map.put(bundle, :unavailable_agents, failures)
+
+  # This bundle crosses the HTTP/RPC boundary. Provider discovery errors often
+  # include tuples, which Jason cannot encode; retain their diagnostic value as
+  # strings so one unavailable optional CLI never hides the other catalogs.
+  defp maybe_put_failures(bundle, failures) do
+    unavailable_agents =
+      Map.new(failures, fn {agent, reason} ->
+        {agent, inspect(reason)}
+      end)
+
+    Map.put(bundle, :unavailable_agents, unavailable_agents)
+  end
 
   defp default_fetchers do
     [
