@@ -42,6 +42,20 @@ describe("AnimatedSplash", () => {
     expect(screen.getByLabelText("Dev10x is starting")).toBeTruthy();
   });
 
+  it("reveals the logo after motion preference is resolved", async () => {
+    const onReady = jest.fn();
+    render(<AnimatedSplash onFinished={jest.fn()} onReady={onReady} />);
+
+    expect(onReady).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(screen.getByTestId("animated-splash-logo")).toHaveStyle({ opacity: 1 });
+    expect(onReady).toHaveBeenCalledTimes(1);
+  });
+
   it("skips the energy-line animation when reduced motion is enabled", async () => {
     jest.spyOn(AccessibilityInfo, "isReduceMotionEnabled").mockResolvedValue(true);
     const onFinished = jest.fn();

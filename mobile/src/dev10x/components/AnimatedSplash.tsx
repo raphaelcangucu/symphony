@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AccessibilityInfo, Image, StyleSheet, View, type LayoutChangeEvent } from "react-native";
+import { AccessibilityInfo, Image, StyleSheet, View } from "react-native";
 import Animated, {
   runOnJS,
   useAnimatedProps,
@@ -49,6 +49,10 @@ export function AnimatedSplash({ onFinished, onReady }: Props) {
   }, []);
 
   useEffect(() => {
+    if (reduceMotion !== null) onReady?.();
+  }, [onReady, reduceMotion]);
+
+  useEffect(() => {
     if (reduceMotion === null) return;
     if (reduceMotion) {
       finish();
@@ -75,16 +79,14 @@ export function AnimatedSplash({ onFinished, onReady }: Props) {
     opacity: 0.35 + energyProgress.value * 0.65,
   }));
 
-  const logoStyle = useAnimatedStyle(() => ({
-    opacity: reduceMotion === null ? 0 : 1,
-    transform: [{ scale: reduceMotion ? 1 : logoScale.value }],
+  const logoTransformStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: logoScale.value }],
   }));
 
   return (
     <View
       accessibilityLabel="Dev10x is starting"
       accessibilityRole="progressbar"
-      onLayout={onReady ? (_event: LayoutChangeEvent) => onReady() : undefined}
       style={styles.container}
       testID="animated-splash"
     >
@@ -114,7 +116,10 @@ export function AnimatedSplash({ onFinished, onReady }: Props) {
           />
         </Svg>
       )}
-      <Animated.View style={[styles.logoWrap, logoStyle]}>
+      <Animated.View
+        style={[styles.logoWrap, { opacity: reduceMotion === null ? 0 : 1 }, logoTransformStyle]}
+        testID="animated-splash-logo"
+      >
         <Image
           accessibilityLabel="Dev10x"
           resizeMode="contain"
