@@ -994,107 +994,109 @@ function ChatComposer({
           {dictationError}
         </Text>
       ) : null}
-      <ComposerPrimitive.Root
+      <View
         style={[
-          styles.composer,
+          styles.composerSurface,
           { backgroundColor: colors.bgPanel, borderColor: colors.borderStrong },
         ]}
       >
-        <ComposerPrimitive.Input
-          accessibilityLabel="Message"
-          multiline
-          placeholder="Trabalhar nesta Máquina…"
-          placeholderTextColor={colors.textMuted}
-          selectionColor={colors.accent}
-          style={[styles.input, { color: colors.textPrimary }]}
-          submitMode="none"
-        />
-        <View style={styles.composerActions}>
-          <Pressable
-            accessibilityLabel="Set or edit goal"
-            accessibilityRole="button"
-            onPress={onOpenGoal}
-            style={styles.addContextButton}
-          >
-            <Plus color={colors.textPrimary} size={28} />
-          </Pressable>
-          <Pressable
-            accessibilityLabel={`Choose permissions: ${executionModeLabel(preferences.executionMode)}`}
-            accessibilityRole="button"
-            onPress={() =>
-              setSettings((current) =>
-                current === "permission" ? "none" : "permission",
-              )
-            }
-            style={styles.permissionButton}
-          >
-            <ShieldAlert
-              color={
-                preferences.executionMode === "yolo"
-                  ? colors.statusAmber
-                  : colors.accent
-              }
-              size={24}
-            />
-          </Pressable>
-          <Pressable
-            accessibilityLabel="Choose model"
-            accessibilityRole="button"
-            onPress={() =>
-              setSettings((current) => (current === "model" ? "none" : "model"))
-            }
-            style={styles.modelChip}
-          >
-            <Zap
-              color={colors.textPrimary}
-              fill={colors.textPrimary}
-              size={17}
-            />
-            <Text
-              numberOfLines={1}
-              style={[styles.modelLabel, { color: colors.textPrimary }]}
-            >
-              {modelLabel}
-            </Text>
-            <ChevronDown color={colors.textMuted} size={15} />
-          </Pressable>
-          <View style={styles.composerSendActions}>
-            {onDictate || onStartDictation ? (
-              <Pressable
-                accessibilityLabel={
-                  dictating ? "Stop dictation" : "Dictate message"
-                }
-                accessibilityRole="button"
-                onPress={beginDictation}
-                style={styles.micButton}
-              >
-                {dictating ? (
-                  <Text
-                    style={[
-                      styles.stopDictationLabel,
-                      { color: colors.statusRed },
-                    ]}
-                  >
-                    Stop
-                  </Text>
-                ) : (
-                  <Mic color={colors.textPrimary} size={21} />
-                )}
-              </Pressable>
-            ) : null}
-            <ComposerPrimitive.Send
-              accessibilityLabel="Send"
+        <ComposerPrimitive.Root style={styles.composer}>
+          <ComposerPrimitive.Input
+            accessibilityLabel="Message"
+            multiline
+            placeholder="Trabalhar nesta Máquina…"
+            placeholderTextColor={colors.textMuted}
+            selectionColor={colors.accent}
+            style={[styles.input, { color: colors.textPrimary }]}
+            submitMode="none"
+          />
+          <View style={styles.composerActions}>
+            <Pressable
+              accessibilityLabel="Set or edit goal"
               accessibilityRole="button"
-              style={[
-                styles.composerButton,
-                { backgroundColor: colors.textPrimary },
-              ]}
+              onPress={onOpenGoal}
+              style={styles.addContextButton}
             >
-              <SendHorizontal color={colors.bgBase} size={20} />
-            </ComposerPrimitive.Send>
+              <Plus color={colors.textPrimary} size={28} />
+            </Pressable>
+            <Pressable
+              accessibilityLabel={`Choose permissions: ${executionModeLabel(preferences.executionMode)}`}
+              accessibilityRole="button"
+              onPress={() =>
+                setSettings((current) =>
+                  current === "permission" ? "none" : "permission",
+                )
+              }
+              style={styles.permissionButton}
+            >
+              <ShieldAlert
+                color={
+                  preferences.executionMode === "yolo"
+                    ? colors.statusAmber
+                    : colors.accent
+                }
+                size={24}
+              />
+            </Pressable>
+            <Pressable
+              accessibilityLabel="Choose model"
+              accessibilityRole="button"
+              onPress={() =>
+                setSettings((current) => (current === "model" ? "none" : "model"))
+              }
+              style={styles.modelChip}
+            >
+              <Zap
+                color={colors.textPrimary}
+                fill={colors.textPrimary}
+                size={17}
+              />
+              <Text
+                numberOfLines={1}
+                style={[styles.modelLabel, { color: colors.textPrimary }]}
+              >
+                {modelLabel}
+              </Text>
+              <ChevronDown color={colors.textMuted} size={15} />
+            </Pressable>
+            <View style={styles.composerSendActions}>
+              {onDictate || onStartDictation ? (
+                <Pressable
+                  accessibilityLabel={
+                    dictating ? "Stop dictation" : "Dictate message"
+                  }
+                  accessibilityRole="button"
+                  onPress={beginDictation}
+                  style={styles.micButton}
+                >
+                  {dictating ? (
+                    <Text
+                      style={[
+                        styles.stopDictationLabel,
+                        { color: colors.statusRed },
+                      ]}
+                    >
+                      Stop
+                    </Text>
+                  ) : (
+                    <Mic color={colors.textPrimary} size={21} />
+                  )}
+                </Pressable>
+              ) : null}
+              <ComposerPrimitive.Send
+                accessibilityLabel="Send"
+                accessibilityRole="button"
+                style={[
+                  styles.composerButton,
+                  { backgroundColor: colors.textPrimary },
+                ]}
+              >
+                <SendHorizontal color={colors.bgBase} size={20} />
+              </ComposerPrimitive.Send>
+            </View>
           </View>
-        </View>
-      </ComposerPrimitive.Root>
+        </ComposerPrimitive.Root>
+      </View>
     </View>
   );
 }
@@ -1879,7 +1881,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
   },
   killToolText: { fontSize: 12, fontWeight: "700" },
-  composerShell: { margin: spacing.md, position: "relative" },
+  composerShell: { marginHorizontal: spacing.md, marginTop: spacing.sm, position: "relative" },
   dictationError: {
     fontSize: 12,
     marginBottom: spacing.xs,
@@ -1887,10 +1889,13 @@ const styles = StyleSheet.create({
   },
   composer: {
     alignItems: "stretch",
+  },
+  composerSurface: {
     borderRadius: 30,
     borderWidth: StyleSheet.hairlineWidth,
-    gap: spacing.xxs,
-    padding: spacing.sm,
+    overflow: "hidden",
+    paddingHorizontal: spacing.sm,
+    paddingTop: spacing.xxs,
   },
   permissionButton: {
     alignItems: "center",
@@ -1913,11 +1918,13 @@ const styles = StyleSheet.create({
     minWidth: 0,
     paddingHorizontal: spacing.xs,
   },
-  modelLabel: { flexShrink: 1, fontSize: 16, fontWeight: "700" },
+  modelLabel: { flexShrink: 0, fontSize: 16, fontWeight: "700" },
   composerActions: {
     alignItems: "center",
     flexDirection: "row",
-    minHeight: 52,
+    minHeight: 48,
+    paddingHorizontal: spacing.xxs,
+    paddingTop: spacing.xxs,
   },
   composerSendActions: {
     alignItems: "center",
@@ -1968,13 +1975,14 @@ const styles = StyleSheet.create({
   settingsCopy: { flex: 1, minWidth: 0 },
   settingsDescription: { fontSize: 11, lineHeight: 15 },
   input: {
-    flex: 1,
+    flexGrow: 0,
+    flexShrink: 1,
     fontSize: 16,
     lineHeight: 22,
-    maxHeight: 120,
-    minHeight: 72,
+    maxHeight: 112,
+    minHeight: 56,
     paddingHorizontal: spacing.md,
-    paddingTop: spacing.md,
+    paddingTop: spacing.sm,
     paddingVertical: spacing.xs,
   },
   composerButton: {
