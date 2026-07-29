@@ -74,7 +74,7 @@ function commandView(call: AssistantToolCall, status: FileActivityView["status"]
   const command = stringOrNull(args.command) ?? "";
   return {
     kind: "command",
-    title: description ?? (command || "command"),
+    title: description ?? (command ? commandDisplayTitle(command) : "command"),
     path: null,
     lineRange: null,
     additions: null,
@@ -82,6 +82,11 @@ function commandView(call: AssistantToolCall, status: FileActivityView["status"]
     status,
     body: call.output ? { value: call.output, language: "bash" } : null,
   };
+}
+
+function commandDisplayTitle(command: string): string {
+  const wrapped = command.match(/^\/bin\/zsh -lc '([\s\S]*)'$/);
+  return wrapped?.[1] ?? command;
 }
 
 function lineRange(start: number | null, end: number | null): string | null {

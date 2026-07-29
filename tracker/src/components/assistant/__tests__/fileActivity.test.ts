@@ -66,6 +66,29 @@ describe("fileActivityFromToolCall", () => {
     expect(view?.body).toEqual({ value: "1 passed", language: "bash" });
   });
 
+  it("removes the standard zsh launcher from a command title", () => {
+    const view = fileActivityFromToolCall(
+      call({
+        name: "shell",
+        status: "running",
+        arguments: { command: "/bin/zsh -lc 'sleep 10'" },
+      }),
+    );
+
+    expect(view?.title).toBe("sleep 10");
+  });
+
+  it("preserves command shapes that are not the standard zsh launcher", () => {
+    const view = fileActivityFromToolCall(
+      call({
+        name: "shell",
+        arguments: { command: "bash -lc \"mix test\"" },
+      }),
+    );
+
+    expect(view?.title).toBe('bash -lc "mix test"');
+  });
+
   it("maps running and error statuses", () => {
     expect(fileActivityFromToolCall(call({ status: "running" }))?.status).toBe("running");
     expect(fileActivityFromToolCall(call({ name: "apply_patch", status: "error" }))?.status).toBe("error");

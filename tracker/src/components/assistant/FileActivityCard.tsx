@@ -25,10 +25,12 @@ export function FileActivityCard({
       ? t("issue.toolCall.fileActivity.read")
       : view.kind === "edit"
         ? t("issue.toolCall.fileActivity.edited")
-        : t("issue.toolCall.fileActivity.command");
+        : running
+          ? t("issue.toolCall.fileActivity.commandRunning")
+          : t("issue.toolCall.fileActivity.commandComplete");
   const statusLabel = failed
     ? t("issue.toolCall.status.failed")
-    : running
+    : running && view.kind !== "command"
       ? t("issue.toolCall.status.running")
       : undefined;
 

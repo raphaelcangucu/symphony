@@ -769,6 +769,8 @@
         "read": "Leu",
         "edited": "Editou",
         "command": "Rodou",
+        "commandRunning": "Executando",
+        "commandComplete": "Executou",
         "files_one": "{{count}} arquivo",
         "files_other": "{{count}} arquivos",
         "running": "Trabalhando…",

@@ -70,6 +70,36 @@ describe("FileActivityCard", () => {
     expect(screen.queryByText("partial output")).not.toBeInTheDocument();
   });
 
+  it("uses a single progressive verb for a running command", () => {
+    renderWithI18n(
+      <FileActivityCard
+        view={view({
+          kind: "command",
+          title: "sleep 10",
+          status: "running",
+        })}
+      />,
+    );
+
+    expect(screen.getAllByText("Running")).toHaveLength(1);
+    expect(screen.queryByText("Ran")).not.toBeInTheDocument();
+  });
+
+  it("uses a completed verb for a settled command", () => {
+    renderWithI18n(
+      <FileActivityCard
+        view={view({
+          kind: "command",
+          title: "sleep 10",
+          status: "complete",
+        })}
+      />,
+    );
+
+    expect(screen.getByText("Ran")).toBeInTheDocument();
+    expect(screen.queryByText("Running")).not.toBeInTheDocument();
+  });
+
   it("keeps failed output closed and makes failure obvious", () => {
     renderWithI18n(
       <FileActivityCard
