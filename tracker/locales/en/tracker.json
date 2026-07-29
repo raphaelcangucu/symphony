@@ -509,21 +509,21 @@
       "dispatchStop": "Stopping agent…",
       "dispatchFailed": "Dispatch failed",
       "executionMode": {
-        "title": "Mode",
+        "title": "Permission",
         "plan": {
-          "label": "Plan",
-          "desc": "Read-only — analyze and plan, no edits",
-          "permission": "Read-only"
+          "label": "Ask for approval",
+          "desc": "Ask before editing files, running commands, or using the internet",
+          "permission": "Approval required"
         },
         "build": {
-          "label": "Build",
-          "desc": "Edit the workspace — asks for approval before commands and mutating tools",
-          "permission": "Edits + approvals"
+          "label": "Approve for me",
+          "desc": "Ask only for actions detected as potentially unsafe",
+          "permission": "Unsafe actions only"
         },
         "yolo": {
-          "label": "Yolo",
-          "desc": "Full access, approvals bypassed",
-          "permission": "Full access"
+          "label": "Full access",
+          "desc": "Unrestricted access to the internet and files on this computer",
+          "permission": "No approvals"
         }
       },
       "mentions": {

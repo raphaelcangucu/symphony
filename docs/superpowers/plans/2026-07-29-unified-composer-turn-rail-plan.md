@@ -167,7 +167,7 @@ git commit -m "feat(composer): persist conversation permission"
 - Modify: `tracker/src/lib/agentModes.ts`
 - Modify: `tracker/src/lib/__tests__/executionMode.test.ts`
 
-- [ ] **Step 1: Write failing capability tests**
+- [x] **Step 1: Write failing capability tests**
 
 ```ts
 import {
@@ -201,7 +201,7 @@ it("maps legacy execution modes without leaking yolo copy", () => {
 });
 ```
 
-- [ ] **Step 2: Run the test and verify failure**
+- [x] **Step 2: Run the test and verify failure**
 
 Run:
 
@@ -211,7 +211,7 @@ cd tracker && npm test -- src/lib/__tests__/composerCapabilities.test.ts
 
 Expected: FAIL because the module does not exist.
 
-- [ ] **Step 3: Implement the pure domain module**
+- [x] **Step 3: Implement the pure domain module**
 
 ```ts
 import type { ComposerPermissionLevel } from "@/types/assistant-thread";
@@ -272,7 +272,7 @@ Update operator-facing metadata in `agentModes.ts` so labels resolve to the
 neutral permission copy while transport IDs remain `plan`, `build`, and
 `yolo`.
 
-- [ ] **Step 4: Run capability and execution-mode tests**
+- [x] **Step 4: Run capability and execution-mode tests**
 
 ```bash
 cd tracker && npm test -- \
@@ -282,7 +282,7 @@ cd tracker && npm test -- \
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit capability normalization**
+- [x] **Step 5: Commit capability normalization**
 
 ```bash
 git add tracker/src/lib/composerCapabilities.ts \
