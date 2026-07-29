@@ -2495,6 +2495,7 @@
       "compactModelMenu": "Model settings",
       "add": "Add",
       "permissionTitle": "How should actions be approved?",
+      "permissionSaveFailed": "Failed to save the conversation permission.",
       "actions": {
         "files": "Files and folders",
         "context": "Context",
@@ -2503,6 +2504,16 @@
         "magic": "Magic",
         "goal": "Goal",
         "commands": "Commands and skills"
+      },
+      "queue": {
+        "steerNow": "Steer now",
+        "sendAgain": "Send again",
+        "remove": "Remove queued guidance",
+        "more": "More options for queued guidance",
+        "edit": "Edit message",
+        "sideChat": "Open in side chat",
+        "disable": "Turn off queueing",
+        "enable": "Turn on queueing"
       }
     },
     "goalDock": {

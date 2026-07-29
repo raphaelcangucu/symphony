@@ -2495,6 +2495,7 @@
       "compactModelMenu": "Configurações do modelo",
       "add": "Adicionar",
       "permissionTitle": "Como as ações devem ser aprovadas?",
+      "permissionSaveFailed": "Falha ao salvar a permissão da conversa.",
       "actions": {
         "files": "Arquivos e pastas",
         "context": "Contexto",
@@ -2503,6 +2504,16 @@
         "magic": "Magic",
         "goal": "Objetivo",
         "commands": "Comandos e skills"
+      },
+      "queue": {
+        "steerNow": "Fazer steer agora",
+        "sendAgain": "Enviar novamente",
+        "remove": "Remover orientação da fila",
+        "more": "Mais opções para a orientação enfileirada",
+        "edit": "Editar mensagem",
+        "sideChat": "Abrir em chat lateral",
+        "disable": "Desativar fila",
+        "enable": "Ativar fila"
       }
     },
     "goalDock": {

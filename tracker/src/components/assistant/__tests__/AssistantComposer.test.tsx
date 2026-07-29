@@ -126,6 +126,24 @@ describe("AssistantComposer", () => {
     });
   });
 
+  it("uses the unified add menu in the primary toolbar", () => {
+    render(
+      <AssistantComposer
+        projectSlug="macro-markets"
+        bundle={mockBundle}
+        addMenu={() => <button type="button">Unified add</button>}
+        onSubmit={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Unified add" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /attach file/i }),
+    ).not.toBeInTheDocument();
+  });
+
   it("sends on Enter and exposes model and effort controls", () => {
     const onSubmit = vi.fn();
 

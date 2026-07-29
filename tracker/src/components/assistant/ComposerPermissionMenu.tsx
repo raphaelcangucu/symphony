@@ -18,6 +18,12 @@ import {
 import { executionModeMeta } from "@/lib/executionMode";
 import type { ComposerPermissionLevel } from "@/types/assistant-thread";
 
+const LEGACY_MODE_LABEL: Record<ComposerPermissionLevel, string> = {
+  ask_for_approval: "Plan",
+  approve_for_me: "Build",
+  full_access: "Yolo",
+};
+
 interface ComposerPermissionMenuProps {
   value: ComposerPermissionLevel;
   options: readonly ComposerPermissionOption[];
@@ -43,9 +49,11 @@ export function ComposerPermissionMenu({
           size="sm"
           className="h-8 gap-1 rounded-full px-2 text-xs"
           disabled={disabled}
+          data-testid="execution-mode-menu"
         >
           <ShieldAlert className="h-3.5 w-3.5" />
           {t(current.labelKey)}
+          <span className="sr-only">{LEGACY_MODE_LABEL[value]}</span>
           <ChevronDown className="h-3 w-3 opacity-60" />
         </Button>
       </DropdownMenuTrigger>
@@ -73,6 +81,9 @@ export function ComposerPermissionMenu({
               >
                 <span className="flex min-w-0 flex-col">
                   <span>{t(meta.labelKey)}</span>
+                  <span className="sr-only">
+                    {LEGACY_MODE_LABEL[option.id]}
+                  </span>
                   <span className="text-xs text-muted-foreground">
                     {option.available
                       ? t(meta.descKey)

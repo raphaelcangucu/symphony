@@ -27,11 +27,13 @@ import { useTranslation } from "react-i18next";
 import { useLocation } from "react-router-dom";
 
 import {
-  AssistantComposer,
   type AssistantComposerSubmit,
   type ComposerContextInsertRequest,
   type ComposerDraftSeed,
 } from "@/components/assistant/AssistantComposer";
+import { UnifiedComposer } from "@/components/assistant/UnifiedComposer";
+import { TurnNavigationRail } from "@/components/assistant/TurnNavigationRail";
+import { buildTurnNavigationItems } from "@/components/assistant/turnNavigation";
 import type { AssistantChatPlanApprovalAction } from "@/components/assistant/AssistantChatMessageBubble";
 import {
   AssistantMessageList,
@@ -52,7 +54,7 @@ import {
   CHAT_READING_COLUMN_WIDE_CLASS,
 } from "@/components/assistant/chatTypography";
 import { CommandApprovalCard } from "@/components/assistant/CommandApprovalCard";
-import { QueuedMessageChips } from "@/components/assistant/QueuedMessageChips";
+import { QueuedGuidanceList } from "@/components/assistant/QueuedGuidanceList";
 import {
   queuedMessagesStorageKey,
   readQueuedMessages,
@@ -63,6 +65,11 @@ import { type ComposerContextChipRef } from "@/components/assistant/contextMenti
 import { useComposerMentions } from "@/hooks/useComposerMentions";
 import { useContextMentionData } from "@/components/assistant/useContextMentionData";
 import { defaultSkillCommands } from "@/components/assistant/slashCommands";
+import {
+  composerCapabilitiesFor,
+  executionModeForPermission,
+  permissionLevelForMode,
+} from "@/lib/composerCapabilities";
 import {
   STREAMING_ASSISTANT_ID,
   appendAssistantDelta,
@@ -164,6 +171,10 @@ import {
   type AssistantChatMessage,
   type UserQuestionsRequest,
 } from "@/services/assistant";
+import {
+  getAssistantThread,
+  updateAssistantThread,
+} from "@/services/assistantThreads";
 import { isCanceledError } from "@/services/http";
 import { getIssueRepoTree, getRepoTree } from "@/services/knowledgeBase";
 import { WorkspaceDiffStatsChip } from "@/components/sessions/WorkspaceDiffStatsChip";
@@ -605,6 +616,7 @@ function InteractiveProjectAssistantPanel({
   const [queued, setQueued] = useState<QueuedMessage[]>(() =>
     readQueuedMessages(queueStorageKey),
   );
+  const [queueingEnabled, setQueueingEnabled] = useState(true);
   const hydratedQueueKeyRef = useRef(queueStorageKey);
   const [composerDraftSeed, setComposerDraftSeed] =
     useState<ComposerDraftSeed | null>(null);
@@ -864,6 +876,21 @@ function InteractiveProjectAssistantPanel({
     }),
   );
   const executionModeRef = useRef<ExecutionMode>(executionMode);
+  useEffect(() => {
+    if (threadId == null) return;
+    let cancelled = false;
+    void getAssistantThread(threadId)
+      .then((thread) => {
+        if (cancelled || thread.permissionLevel == null) return;
+        const nextMode = executionModeForPermission(thread.permissionLevel);
+        setExecutionMode(nextMode);
+        executionModeRef.current = nextMode;
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [threadId]);
   const [skillProfileSelection, setSkillProfileSelection] =
     useState<SkillProfileId>("auto");
   const skillProfileSelectionRef = useRef<SkillProfileId>("auto");
@@ -2517,8 +2544,11 @@ function InteractiveProjectAssistantPanel({
     setDiffFocusPathRequestId((current) => current + 1);
   }, []);
 
+  const turnNavigationItems = buildTurnNavigationItems(renderedMessages);
   const messageItems = (
-    <AssistantSessionErrorBoundary
+    <div className="flex min-w-0 items-start gap-1">
+      <TurnNavigationRail items={turnNavigationItems} />
+      <AssistantSessionErrorBoundary
       title={t("assistant.panel.renderErrorTitle")}
       description={t("assistant.panel.renderErrorDescription")}
       retryLabel={t("assistant.panel.renderErrorRetry")}
@@ -2526,8 +2556,9 @@ function InteractiveProjectAssistantPanel({
         const channel = channelRef.current;
         if (channel) requestHistorySync(channel);
       }}
-    >
-      <AssistantMessageList
+      >
+        <div className="min-w-0 flex-1">
+          <AssistantMessageList
         messages={renderedMessages}
         loadOlder={loadOlderControl}
         taskSnapshot={taskSnapshot}
@@ -2549,8 +2580,10 @@ function InteractiveProjectAssistantPanel({
         onStop={handleStopTurn}
         onKillTool={handleKillTool}
         onFetchToolOutput={handleFetchToolOutput}
-      />
-    </AssistantSessionErrorBoundary>
+          />
+        </div>
+      </AssistantSessionErrorBoundary>
+    </div>
   );
 
   const removeQueued = useCallback(
@@ -2578,16 +2611,23 @@ function InteractiveProjectAssistantPanel({
     [queued],
   );
 
+  const composerCapabilities = composerCapabilitiesFor(composerAgent);
   const queuedChips =
     queued.length > 0 ? (
-      <QueuedMessageChips
+      <QueuedGuidanceList
         items={queued.map((item) => ({
           id: item.id,
           message: item.payload.message.trim(),
+          error: null,
         }))}
-        onSendNow={forceSendQueued}
+        canSteer={composerCapabilities.steer}
+        queueingEnabled={queueingEnabled}
+        onPromote={forceSendQueued}
+        onResend={forceSendQueued}
         onEdit={editQueued}
         onRemove={removeQueued}
+        onOpenSideChat={() => undefined}
+        onQueueingEnabledChange={setQueueingEnabled}
       />
     ) : null;
 
@@ -2638,6 +2678,13 @@ function InteractiveProjectAssistantPanel({
       setExecutionMode(mode);
       executionModeRef.current = mode;
       persistTurnPreferences({ mode });
+      if (threadId != null) {
+        void updateAssistantThread(threadId, {
+          permissionLevel: permissionLevelForMode(mode),
+        }).catch(() =>
+          toast.error(t("assistant.composer.permissionSaveFailed")),
+        );
+      }
       if (mode !== "yolo") return;
       if (pendingApproval)
         submitCommandApproval(pendingApproval.requestId, "approve");
@@ -2647,6 +2694,8 @@ function InteractiveProjectAssistantPanel({
       pendingApproval,
       persistTurnPreferences,
       submitCommandApproval,
+      t,
+      threadId,
     ],
   );
 
@@ -2877,7 +2926,7 @@ function InteractiveProjectAssistantPanel({
   }, [catalogLoading, openKnowledgeBaseShortcut, projectSlug]);
 
   const composerNode = bundle ? (
-    <AssistantComposer
+    <UnifiedComposer
       key={
         settingsSeed
           ? `${threadId ?? "new"}:${settingsSeed.agent}:${settingsSeed.model}:${settingsSeed.effort}`
@@ -2885,6 +2934,28 @@ function InteractiveProjectAssistantPanel({
       }
       projectSlug={projectSlug ?? ""}
       bundle={bundle}
+      runActive={turnRunning}
+      pending={false}
+      queueingEnabled={queueingEnabled}
+      canSteer={composerCapabilities.steer}
+      permission={permissionLevelForMode(executionMode)}
+      permissionOptions={composerCapabilities.permissions}
+      onPermissionChange={(permission) =>
+        handleExecutionModeChange(executionModeForPermission(permission))
+      }
+      actionContext={{
+        hasWorkspace: Boolean(issueIdentifier || threadId),
+        supportsGoal: composerCapabilities.nativeGoal,
+      }}
+      actionHandlers={{
+        files: () => undefined,
+        context: () => panelRef.current?.querySelector("textarea")?.focus(),
+        diff: () => setComposerDiffRequestId((current) => current + 1),
+        kb: openKnowledgeBaseShortcut,
+        magic: () => setMagicPaletteRequestId((current) => current + 1),
+        goal: () => panelRef.current?.querySelector("textarea")?.focus(),
+        commands: () => setMagicPaletteRequestId((current) => current + 1),
+      }}
       agentMenuDisabled={
         authoringGoal.enabled ||
         turnRunning ||
@@ -2942,17 +3013,6 @@ function InteractiveProjectAssistantPanel({
             </span>
           </Button>
         ) : undefined
-      }
-      toolbarBeforeAgent={
-        hasExecutableContext || isExploreMode ? (
-          <ExecutionModeMenu
-            agent={composerAgent}
-            mode={executionMode}
-            disabled={catalogLoading}
-            locked={modeLocked}
-            onChange={handleExecutionModeChange}
-          />
-        ) : null
       }
       toolbarMore={
         projectSlug || issueIdentifier || threadId ? (
@@ -3053,7 +3113,15 @@ function InteractiveProjectAssistantPanel({
         ) : undefined
       }
       onForceQueued={forceSendOldestQueued}
-      onSubmit={sendMessage}
+      onSend={sendMessage}
+      onQueue={(submit) =>
+        setQueued((current) => [
+          ...current,
+          { id: crypto.randomUUID(), payload: submit },
+        ])
+      }
+      onSteer={steerTurn}
+      onStop={handleStopTurn}
       onAgentChange={handleComposerAgentChange}
       dropTargetRef={panelRef}
     />

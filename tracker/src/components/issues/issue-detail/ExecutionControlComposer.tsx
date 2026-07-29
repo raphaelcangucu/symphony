@@ -1,13 +1,14 @@
-import { Eraser, Play, Send, Sparkles, Square, X } from "lucide-react";
+import { Eraser, Sparkles } from "lucide-react";
 import { type KeyboardEvent as ReactKeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import {
-  AssistantComposer,
   type AssistantComposerSubmit,
   type ComposerSnapshot,
 } from "@/components/assistant/AssistantComposer";
+import { QueuedGuidanceList } from "@/components/assistant/QueuedGuidanceList";
+import { UnifiedComposer } from "@/components/assistant/UnifiedComposer";
 import { assistantCommandsToSlashDefs } from "@/components/assistant/assistantCommandDefs";
 import type { AssistantOutgoingAttachment } from "@/components/assistant/assistantAttachments";
 import { useComposerMentions } from "@/hooks/useComposerMentions";
@@ -42,11 +43,17 @@ import { updateIssue } from "@/services/issues";
 import type { RunPromptTemplateResult } from "@/services/magicCommands";
 import { controlIssueGoal } from "@/services/goalControl";
 import { availableModesFor, cycleMode, DEFAULT_EXECUTION_MODE } from "@/lib/executionMode";
+import {
+  composerCapabilitiesFor,
+  executionModeForPermission,
+  permissionLevelForMode,
+} from "@/lib/composerCapabilities";
 import type { AgentSteerPayload } from "@/hooks/useSessionLogChannel";
 import type { AgentExecution } from "@/types/agent-execution";
 import type { AgentKind, ExecutionMode, Issue } from "@/types/issue";
 
 interface QueuedGuidanceItem {
+  id: string;
   text: string;
   attachments: AssistantOutgoingAttachment[];
   fileTexts: Record<string, string>;
@@ -79,6 +86,7 @@ export function ExecutionControlComposer({
 }: ExecutionControlComposerProps) {
   const { t } = useTranslation();
   const [queued, setQueued] = useState<QueuedGuidanceItem[]>([]);
+  const [queueingEnabled, setQueueingEnabled] = useState(true);
   const [bundle, setBundle] = useState<AssistantCatalogBundle | null>(null);
   const [agent, setAgent] = useState<AgentKind>(issue.agentKind ?? "codex");
   const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -92,6 +100,7 @@ export function ExecutionControlComposer({
   const [hardResetOpen, setHardResetOpen] = useState(false);
   const [newThreadInstructions, setNewThreadInstructions] = useState<string | null>(null);
   const [magicOpen, setMagicOpen] = useState(false);
+  const [diffOpenRequestId, setDiffOpenRequestId] = useState(0);
   const [goalDismissed, setGoalDismissed] = useState(false);
   const [composerResetToken, setComposerResetToken] = useState(0);
   const sectionRef = useRef<HTMLElement>(null);
@@ -282,8 +291,8 @@ export function ExecutionControlComposer({
     return parts.join("\n\n");
   }, [guidanceFromQueued, guidanceFromSnapshot, queuedGuidance]);
 
-  function removeQueued(index: number) {
-    setQueued((current) => current.filter((_, i) => i !== index));
+  function removeQueued(id: string) {
+    setQueued((current) => current.filter((entry) => entry.id !== id));
   }
 
   const runDispatch = useCallback(
@@ -366,6 +375,7 @@ export function ExecutionControlComposer({
         setQueued((current) => [
           ...current,
           {
+            id: crypto.randomUUID(),
             text: framedInstructions,
             attachments: [],
             fileTexts: {},
@@ -435,6 +445,7 @@ export function ExecutionControlComposer({
         setQueued((current) => [
           ...current,
           {
+            id: crypto.randomUUID(),
             text: expanded,
             attachments: submit.attachments,
             fileTexts: {},
@@ -631,49 +642,82 @@ export function ExecutionControlComposer({
         onFocusComposer={focusComposer}
         onMagicOpen={toggleMagicPalette}
       />
+      <GitDiffLauncher
+        projectSlug={projectSlug}
+        identifier={issue.identifier}
+        disabled={controlsDisabled}
+        openRequestId={diffOpenRequestId}
+        showTrigger={false}
+        onSendReview={(review) =>
+          void runDispatch("resume", { instructions: review })
+        }
+      />
       {queuedGuidance.length > 0 ? (
-        <div className="mb-2 rounded-lg border border-border/60 bg-muted/30 px-3 py-2">
-          <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-            {t("issue.agent.queuedGuidance")}
-          </div>
-          <ul className="mt-2 flex flex-col gap-1.5">
-            {queuedGuidance.map((entry, index) => (
-              <li
-                key={`${index}-${entry.text}`}
-                className="flex items-start justify-between gap-2 rounded-md bg-background/70 px-2 py-1.5 text-xs"
-              >
-                <div className="min-w-0 space-y-1">
-                  {entry.text ? (
-                    <span className="block whitespace-pre-wrap break-words text-foreground/90">{entry.text}</span>
-                  ) : null}
-                  {entry.attachments.length > 0 ? (
-                    <span className="block text-muted-foreground">
-                      {t("issue.agent.queuedAttachments", { count: entry.attachments.length })}
-                    </span>
-                  ) : null}
-                </div>
-                <button
-                  type="button"
-                  aria-label={t("issue.agent.removeQueuedAria")}
-                  title={t("issue.agent.remove")}
-                  disabled={controlsDisabled}
-                  onClick={() => removeQueued(index)}
-                  className="mt-0.5 shrink-0 text-muted-foreground transition-colors hover:text-foreground"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
+        <QueuedGuidanceList
+          items={queuedGuidance.map((entry) => ({
+            id: entry.id,
+            message: entry.text,
+            error: null,
+          }))}
+          canSteer={canSteer}
+          queueingEnabled={queueingEnabled}
+          disabled={controlsDisabled}
+          onPromote={(id) => {
+            const entry = queued.find((item) => item.id === id);
+            if (!entry) return;
+            onSteer({ message: entry.text, attachments: entry.attachments });
+            removeQueued(id);
+          }}
+          onResend={(id) => {
+            const entry = queued.find((item) => item.id === id);
+            if (!entry) return;
+            void runDispatch("resume", {
+              instructions: guidanceFromQueued(entry),
+            });
+          }}
+          onEdit={(id) => removeQueued(id)}
+          onRemove={removeQueued}
+          onOpenSideChat={() => undefined}
+          onQueueingEnabledChange={setQueueingEnabled}
+        />
       ) : null}
 
       <div>
         {bundle ? (
-          <AssistantComposer
+          <UnifiedComposer
           key={composerSeed.remountKey}
           projectSlug={projectSlug}
           bundle={bundle}
+          runActive={agentRunActive}
+          pending={dispatchPending !== null || steerPending}
+          queueingEnabled={queueingEnabled}
+          canSteer={canSteer}
+          permission={permissionLevelForMode(mode)}
+          permissionOptions={composerCapabilitiesFor(agent).permissions}
+          onPermissionChange={(permission) => {
+            setMode(executionModeForPermission(permission));
+            const threadId = execution?.executionSessionId;
+            if (threadId != null && threadId > 0) {
+              void updateAssistantThread(threadId, {
+                permissionLevel: permission,
+              }).catch(() =>
+                toast.error(t("assistant.composer.permissionSaveFailed")),
+              );
+            }
+          }}
+          actionContext={{
+            hasWorkspace: true,
+            supportsGoal: composerCapabilitiesFor(agent).nativeGoal,
+          }}
+          actionHandlers={{
+            files: () => undefined,
+            context: focusComposer,
+            diff: () => setDiffOpenRequestId((current) => current + 1),
+            kb: () => undefined,
+            magic: toggleMagicPalette,
+            goal: focusComposer,
+            commands: toggleMagicPalette,
+          }}
           floating
           slashContext="execution"
           slashCommandExtras={slashCommandExtras}
@@ -698,93 +742,26 @@ export function ExecutionControlComposer({
             composerSnapshotRef.current = snapshot;
           }}
           onEmptySubmit={handleEmptySubmit}
-          onSubmit={handleComposerSubmit}
+          onSend={handleComposerSubmit}
+          onQueue={(submit) => {
+            const text = expandMentions(submit.message.trim());
+            setQueued((current) => [
+              ...current,
+              {
+                id: crypto.randomUUID(),
+                text,
+                attachments: submit.attachments,
+                fileTexts: {},
+              },
+            ]);
+          }}
+          onSteer={handleComposerSubmit}
+          onStop={() => void runDispatch("stop")}
           onAgentChange={handleAgentChange}
           onSettingsChange={handleSettingsChange}
           agentSeed={composerSeed.agent}
           settingsSeed={settingsSeed}
           persistLocalComposerState={false}
-          toolbarAfterAttach={
-            <>
-              <GitDiffLauncher
-                projectSlug={projectSlug}
-                identifier={issue.identifier}
-                disabled={controlsDisabled}
-                onSendReview={(review) => void runDispatch("resume", { instructions: review })}
-              />
-              <ExecutionModeMenu
-                agent={agent}
-                mode={mode}
-                disabled={controlsDisabled}
-                onChange={setMode}
-              />
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-8 gap-1 px-2 text-xs"
-                disabled={controlsDisabled}
-                title={t("commands.magic.open")}
-                onClick={toggleMagicPalette}
-              >
-                <Sparkles className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">{t("commands.magic.button")}</span>
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-8 gap-1 px-2 text-xs text-destructive hover:text-destructive"
-                disabled={controlsDisabled}
-                title={t("issue.agent.newThreadTitle")}
-                onClick={() => {
-                  setNewThreadInstructions(null);
-                  setHardResetOpen(true);
-                }}
-              >
-                <Eraser className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">
-                  {dispatchPending === "hard_reset" ? t("issue.agent.resetting") : t("issue.agent.newThread")}
-                </span>
-              </Button>
-            </>
-          }
-          submitActions={
-            <>
-              <span className="hidden text-xs text-muted-foreground lg:inline">
-                {steerPending ? t("issue.agent.sendingSteer") : agentEnterHintLabel(enterIntent, t)}
-              </span>
-              {agentRunActive ? (
-                <Button type="submit" size="sm" variant="default" disabled={sendDisabled} className="h-8 gap-1">
-                  <Send className="h-3.5 w-3.5" />
-                  {canSteer ? t("issue.agent.steer") : t("issue.agent.queue")}
-                </Button>
-              ) : null}
-              {agentRunActive ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="h-8 gap-1"
-                  disabled={controlsDisabled}
-                  title={t("issue.agent.stopTitle")}
-                  onClick={() => void runDispatch("stop")}
-                >
-                  <Square className="h-3.5 w-3.5" />
-                  {dispatchPending === "stop" ? t("issue.agent.dispatchStop") : t("issue.agent.primaryStop")}
-                </Button>
-              ) : (
-                <Button type="submit" size="sm" variant="secondary" className="h-8 gap-1" disabled={primaryDisabled}>
-                  <Play className="h-3.5 w-3.5" />
-                  {dispatchPending === "resume"
-                    ? control.primaryAction === "start"
-                      ? t("issue.agent.starting")
-                      : t("issue.agent.resuming")
-                    : primaryLabel}
-                </Button>
-              )}
-            </>
-          }
           footer={
             <div className="mt-2 space-y-1">
               {dispatchError ? <p className="text-xs text-destructive">{dispatchError}</p> : null}

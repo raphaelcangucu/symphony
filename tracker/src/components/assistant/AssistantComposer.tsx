@@ -207,6 +207,8 @@ export interface ComposerSlotProps {
    * with the message box instead of a detached banner.
    */
   header?: ReactNode;
+  /** Replaces the default attachment button while retaining its file picker callback. */
+  addMenu?: (openFilePicker: () => void) => ReactNode;
   toolbarAfterAttach?: ReactNode;
   /**
    * Secondary tools collapsed into a More menu below `lg` (Diff, KB, Magic, etc.).
@@ -223,7 +225,7 @@ export interface ComposerSlotProps {
   footer?: ReactNode;
 }
 
-interface AssistantComposerProps
+export interface AssistantComposerProps
   extends
     ComposerMentionProps,
     ComposerMagicProps,
@@ -290,6 +292,7 @@ export function AssistantComposer({
   onMentionQueryChange,
   onMentionSelect,
   header,
+  addMenu,
   toolbarAfterAttach,
   toolbarMore,
   toolbarBeforeAgent,
@@ -1093,17 +1096,21 @@ export function AssistantComposer({
               className="hidden"
               onChange={(event) => void handleFilePick(event)}
             />
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 rounded-full"
-              disabled={disabled || composerDisabled || uploadingImage}
-              aria-label={t("assistant.composer.attachFile")}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <Plus className="h-4 w-4" />
-            </Button>
+            {addMenu ? (
+              addMenu(() => fileInputRef.current?.click())
+            ) : (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 rounded-full"
+                disabled={disabled || composerDisabled || uploadingImage}
+                aria-label={t("assistant.composer.attachFile")}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
+            )}
             {toolbarAfterAttach}
             {toolbarMore ? (
               <ComposerMoreMenu disabled={disabled || composerDisabled}>

@@ -101,6 +101,7 @@ function AssistantChatMessageBubbleComponent({
 
   return (
     <div
+      id={isUser ? `message-${message.id}` : undefined}
       className={cn("flex w-full", isUser ? "justify-end" : "justify-start")}
       data-testid="assistant-chat-message"
       data-role={isUser ? "user" : "assistant"}
