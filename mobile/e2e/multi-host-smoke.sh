@@ -10,14 +10,23 @@ readonly REPO_DIR="$(cd "${MOBILE_DIR}/.." && pwd)"
 readonly ELIXIR_DIR="${REPO_DIR}/elixir"
 readonly APK_PATH="${1:-${MOBILE_DIR}/android/app/build/outputs/apk/release/app-release.apk}"
 readonly OUTPUT_DIR="${E2E_OUTPUT_DIR:-${MOBILE_DIR}/artifacts/e2e}"
-readonly ARTIFACT_SLUG="pr-7-dev10x-rich-chat-real-host-experience"
+readonly SINGLE_CELL_E2E="${DEV10X_SINGLE_CELL_E2E:-0}"
+readonly ARTIFACT_SLUG="$(
+  if [[ "${SINGLE_CELL_E2E}" == "1" ]]; then
+    printf "pr-7-dev10x-single-cell-real-host-review"
+  else
+    printf "pr-7-dev10x-rich-chat-real-host-experience"
+  fi
+)"
 readonly VIDEO_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}.mp4"
 readonly RAW_VIDEO_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}-raw.webm"
+readonly RAW_VIDEO_SEGMENT_PREFIX="${OUTPUT_DIR}/${ARTIFACT_SLUG}-raw-part"
 readonly SCREENSHOT_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}.png"
 readonly CHAT_SCREENSHOT_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}-chat.png"
 readonly ORCHESTRATOR_SCREENSHOT_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}-orchestrator.png"
 readonly TERMINAL_SCREENSHOT_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}-terminal.png"
 readonly TERMINAL_COMMAND_SCREENSHOT_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}-terminal-command.png"
+readonly TASK_EVIDENCE_SCREENSHOT_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}-task-evidence.png"
 readonly UI_DUMP_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}.xml"
 readonly TRACE_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}-trace.txt"
 readonly REPORT_PATH="${OUTPUT_DIR}/${ARTIFACT_SLUG}-report.md"
@@ -35,6 +44,10 @@ readonly E2E_ROOT="$(mktemp -d)"
 
 if [[ "${REAL_AGENT_E2E}" != "0" && "${REAL_AGENT_E2E}" != "1" ]]; then
   printf "DEV10X_E2E_REAL_AGENT must be 0 or 1\n" >&2
+  exit 1
+fi
+if [[ "${SINGLE_CELL_E2E}" != "0" && "${SINGLE_CELL_E2E}" != "1" ]]; then
+  printf "DEV10X_SINGLE_CELL_E2E must be 0 or 1\n" >&2
   exit 1
 fi
 
@@ -60,23 +73,30 @@ resolve_adb() {
 }
 
 readonly ADB="$(resolve_adb)"
+if command -v mise >/dev/null 2>&1; then
+  readonly MIX_RUNNER="mise"
+else
+  readonly MIX_RUNNER="mix"
+fi
 recording_pid=""
 host_a_pid=""
 host_b_pid=""
 last_host_pid=""
+host_a_id=""
+host_a_thread_id=""
 orchestrator_session_id=""
 screen_width=""
 screen_height=""
 
 trace_step() {
-  printf "%s %s\n" "$(date --iso-8601=seconds)" "$*" >>"${TRACE_PATH}"
+  printf "%s %s\n" "$(date -Iseconds)" "$*" >>"${TRACE_PATH}"
 }
 
 dump_ui() {
   : >"${UI_DUMP_PATH}"
   "${ADB}" shell rm -f "${REMOTE_UI_DUMP}" >/dev/null 2>&1 || true
-  timeout 15s "${ADB}" shell uiautomator dump "${REMOTE_UI_DUMP}" >/dev/null 2>&1 || true
-  timeout 15s "${ADB}" exec-out cat "${REMOTE_UI_DUMP}" >"${UI_DUMP_PATH}" 2>/dev/null || true
+  "${ADB}" shell uiautomator dump "${REMOTE_UI_DUMP}" >/dev/null 2>&1 || true
+  "${ADB}" exec-out cat "${REMOTE_UI_DUMP}" >"${UI_DUMP_PATH}" 2>/dev/null || true
 }
 
 wait_for_selector() {
@@ -105,14 +125,18 @@ try:
 except (ET.ParseError, OSError):
     raise SystemExit(1)
 
-for node in root.iter("node"):
+nodes = list(root.iter("node"))
+for index, node in enumerate(nodes):
     if node.attrib.get("resource-id") != "chat-message-assistant":
         continue
-    for descendant in node.iter("node"):
+    for candidate in nodes[index + 1 :]:
+        resource_id = candidate.attrib.get("resource-id", "")
+        if resource_id in {"chat-message-assistant", "chat-message-user"}:
+            break
         visible = " ".join(
             (
-                descendant.attrib.get("text", ""),
-                descendant.attrib.get("content-desc", ""),
+                candidate.attrib.get("text", ""),
+                candidate.attrib.get("content-desc", ""),
             )
         )
         if expected in visible:
@@ -328,21 +352,47 @@ tap_terminal_header_tool() {
   esac
 }
 
+start_recording() {
+  rm -f "${RAW_VIDEO_PATH}" "${RAW_VIDEO_SEGMENT_PREFIX}-"*.webm
+  "${ADB}" emu screenrecord start \
+    "${RAW_VIDEO_SEGMENT_PREFIX}-000.webm" >"${E2E_ROOT}/screenrecord.log" 2>&1
+  (
+    local index=1
+    while sleep 140; do
+      "${ADB}" emu screenrecord stop >/dev/null 2>&1 || true
+      "${ADB}" emu screenrecord start \
+        "$(printf "%s-%03d.webm" "${RAW_VIDEO_SEGMENT_PREFIX}" "${index}")" \
+        >>"${E2E_ROOT}/screenrecord.log" 2>&1
+      index="$((index + 1))"
+    done
+  ) &
+  recording_pid="$!"
+}
+
 stop_recording() {
   if [[ -n "${recording_pid}" ]]; then
+    kill "${recording_pid}" >/dev/null 2>&1 || true
+    wait "${recording_pid}" >/dev/null 2>&1 || true
     "${ADB}" emu screenrecord stop >/dev/null 2>&1 || true
     recording_pid=""
+  fi
+}
+
+terminate_host() {
+  local pid="$1"
+  if ! kill -TERM -- "-${pid}" >/dev/null 2>&1; then
+    kill -TERM "${pid}" >/dev/null 2>&1 || true
   fi
 }
 
 cleanup() {
   stop_recording
   if [[ -n "${host_a_pid}" ]]; then
-    kill -TERM -- "-${host_a_pid}" >/dev/null 2>&1 || true
+    terminate_host "${host_a_pid}"
     wait "${host_a_pid}" >/dev/null 2>&1 || true
   fi
   if [[ -n "${host_b_pid}" ]]; then
-    kill -TERM -- "-${host_b_pid}" >/dev/null 2>&1 || true
+    terminate_host "${host_b_pid}"
     wait "${host_b_pid}" >/dev/null 2>&1 || true
   fi
   "${ADB}" shell rm -f "${REMOTE_UI_DUMP}" >/dev/null 2>&1 || true
@@ -370,6 +420,7 @@ host_env() {
     SYMPHONY_EDITOR_ENABLED="false" \
     SYMPHONY_OBSERVABILITY_ENABLED="false" \
     SYMPHONY_SERVE_LOCK_PATH="${E2E_ROOT}/${host_key}.lock" \
+    DEV10X_SINGLE_CELL_E2E="${SINGLE_CELL_E2E}" \
     "$@"
 }
 
@@ -382,10 +433,17 @@ prepare_host() {
 
   (
     cd "${ELIXIR_DIR}"
-    host_env "${host_key}" "${port}" mix ecto.create --quiet
-    host_env "${host_key}" "${port}" mix ecto.migrate --quiet
-    host_env "${host_key}" "${port}" \
-      mix run dev/mobile_e2e_seed.exs "${host_name}" "${project_slug}" "${workspace}"
+    if [[ "${MIX_RUNNER}" == "mise" ]]; then
+      host_env "${host_key}" "${port}" mise exec -- mix ecto.create --quiet
+      host_env "${host_key}" "${port}" mise exec -- mix ecto.migrate --quiet
+      host_env "${host_key}" "${port}" \
+        mise exec -- mix run dev/mobile_e2e_seed.exs "${host_name}" "${project_slug}" "${workspace}"
+    else
+      host_env "${host_key}" "${port}" mix ecto.create --quiet
+      host_env "${host_key}" "${port}" mix ecto.migrate --quiet
+      host_env "${host_key}" "${port}" \
+        mix run dev/mobile_e2e_seed.exs "${host_name}" "${project_slug}" "${workspace}"
+    fi
   ) >"${E2E_ROOT}/${host_key}-seed.log"
 }
 
@@ -394,15 +452,26 @@ start_host() {
   local port="$2"
   (
     cd "${ELIXIR_DIR}"
-    exec setsid env \
-      SYMPHONY_LOCAL_TRACKER_DATABASE="${E2E_ROOT}/${host_key}.sqlite3" \
-      SYMPHONY_TRACKER_HOST="0.0.0.0" \
-      SYMPHONY_TRACKER_PORT="${port}" \
-      SYMPHONY_TRACKER_TOKEN="${ADMIN_TOKEN}" \
-      SYMPHONY_EDITOR_ENABLED="false" \
-      SYMPHONY_OBSERVABILITY_ENABLED="false" \
-      SYMPHONY_SERVE_LOCK_PATH="${E2E_ROOT}/${host_key}.lock" \
-      mix run --no-halt
+    host_command=(
+      env
+      "SYMPHONY_LOCAL_TRACKER_DATABASE=${E2E_ROOT}/${host_key}.sqlite3"
+      "SYMPHONY_TRACKER_HOST=0.0.0.0"
+      "SYMPHONY_TRACKER_PORT=${port}"
+      "SYMPHONY_TRACKER_TOKEN=${ADMIN_TOKEN}"
+      "SYMPHONY_EDITOR_ENABLED=false"
+      "SYMPHONY_OBSERVABILITY_ENABLED=false"
+      "SYMPHONY_SERVE_LOCK_PATH=${E2E_ROOT}/${host_key}.lock"
+    )
+    if [[ "${MIX_RUNNER}" == "mise" ]]; then
+      host_command+=(mise exec -- mix run --no-halt)
+    else
+      host_command+=(mix run --no-halt)
+    fi
+    if command -v setsid >/dev/null 2>&1; then
+      exec setsid "${host_command[@]}"
+    else
+      exec "${host_command[@]}"
+    fi
   ) >"${E2E_ROOT}/${host_key}-server.log" 2>&1 &
   last_host_pid="$!"
 }
@@ -538,6 +607,37 @@ launch_pairing_offer() {
   trace_step "confirm explicit device-to-host pairing"
 }
 
+launch_session_panel() {
+  local route="symphony://h/${host_a_id}/session/${host_a_thread_id}?name=Studio%20Alpha%20%E2%80%94%20Direct%20RPC%20session"
+  "${ADB}" shell am start -W \
+    -a android.intent.action.VIEW \
+    -d "${route}" \
+    -n "${APP_ACTIVITY}" >/dev/null
+  trace_step "open selected-host workspace session panel"
+}
+
+launch_source_control_panel() {
+  local route="symphony://h/${host_a_id}/source-control/${host_a_thread_id}?name=Studio%20Alpha%20%E2%80%94%20Direct%20RPC%20session"
+  "${ADB}" shell am force-stop "${APP_PACKAGE}"
+  sleep 2
+  "${ADB}" shell am start -W \
+    -a android.intent.action.VIEW \
+    -d "${route}" \
+    -n "${APP_ACTIVITY}" >/dev/null
+  trace_step "cold-start selected-host source control panel with persisted pairing"
+}
+
+launch_host_tasks_list() {
+  local route="symphony://h/${host_a_id}/tasks"
+  "${ADB}" shell am force-stop "${APP_PACKAGE}"
+  sleep 2
+  "${ADB}" shell am start -W \
+    -a android.intent.action.VIEW \
+    -d "${route}" \
+    -n "${APP_ACTIVITY}" >/dev/null
+  trace_step "cold-start selected-host task list with persisted pairing"
+}
+
 if [[ ! -f "${APK_PATH}" ]]; then
   printf "APK not found: %s\n" "${APK_PATH}" >&2
   exit 1
@@ -547,7 +647,9 @@ mkdir -p "${OUTPUT_DIR}"
 : >"${TRACE_PATH}"
 
 prepare_host "host-a" "${HOST_A_PORT}" "${HOST_A_NAME}" "${HOST_A_PROJECT}"
-prepare_host "host-b" "${HOST_B_PORT}" "${HOST_B_NAME}" "${HOST_B_PROJECT}"
+if [[ "${SINGLE_CELL_E2E}" == "0" ]]; then
+  prepare_host "host-b" "${HOST_B_PORT}" "${HOST_B_NAME}" "${HOST_B_PROJECT}"
+fi
 host_a_issue="$(
   grep '"issue_identifier"' "${E2E_ROOT}/host-a-seed.log" |
     tail -n 1 |
@@ -558,12 +660,19 @@ host_a_orchestrator_issue="$(
     tail -n 1 |
     jq -er '.orchestrator_issue_identifier'
 )"
+host_a_thread_id="$(
+  grep '"thread_id"' "${E2E_ROOT}/host-a-seed.log" |
+    tail -n 1 |
+    jq -er '.thread_id'
+)"
 start_host "host-a" "${HOST_A_PORT}"
 host_a_pid="${last_host_pid}"
-start_host "host-b" "${HOST_B_PORT}"
-host_b_pid="${last_host_pid}"
 wait_for_host "${HOST_A_PORT}"
-wait_for_host "${HOST_B_PORT}"
+if [[ "${SINGLE_CELL_E2E}" == "0" ]]; then
+  start_host "host-b" "${HOST_B_PORT}"
+  host_b_pid="${last_host_pid}"
+  wait_for_host "${HOST_B_PORT}"
+fi
 
 host_a_offer="$(
   create_offer \
@@ -572,13 +681,27 @@ host_a_offer="$(
     "${HOST_A_NAME}" \
     "Android E2E Alpha"
 )"
-host_b_offer="$(
-  create_offer \
-    "${HOST_B_PORT}" \
-    "ws://10.0.2.2:${HOST_B_PORT}/mobile/rpc" \
-    "${HOST_B_NAME}" \
-    "Android E2E Beta"
+host_a_id="$(
+  python3 - "${host_a_offer}" <<'PY'
+import base64
+import json
+import sys
+from urllib.parse import parse_qs, urlparse
+
+code = parse_qs(urlparse(sys.argv[1]).query)["code"][0]
+padding = "=" * (-len(code) % 4)
+print(json.loads(base64.urlsafe_b64decode(code + padding))["host_id"])
+PY
 )"
+if [[ "${SINGLE_CELL_E2E}" == "0" ]]; then
+  host_b_offer="$(
+    create_offer \
+      "${HOST_B_PORT}" \
+      "ws://10.0.2.2:${HOST_B_PORT}/mobile/rpc" \
+      "${HOST_B_NAME}" \
+      "Android E2E Beta"
+  )"
+fi
 
 "${ADB}" wait-for-device
 configure_screen_geometry
@@ -589,10 +712,7 @@ configure_screen_geometry
 "${ADB}" shell settings put global window_animation_scale 0
 "${ADB}" shell settings put global transition_animation_scale 0
 "${ADB}" shell settings put global animator_duration_scale 0
-rm -f "${RAW_VIDEO_PATH}"
-
-"${ADB}" emu screenrecord start "${RAW_VIDEO_PATH}" >"${E2E_ROOT}/screenrecord.log" 2>&1
-recording_pid="active"
+start_recording
 
 launch_pairing_offer "${host_a_offer}"
 wait_for_text "${HOST_A_NAME}"
@@ -611,7 +731,6 @@ if [[ "${REAL_AGENT_E2E}" == "1" ]]; then
   tap_accessible "Message"
   input_text "Reply exactly VERIFIED42"
   wait_for_enabled_accessible "Send"
-  "${ADB}" shell input keyevent 4
   tap_accessible "Send"
   wait_for_assistant_text "VERIFIED42" 180
   chat_history_anchor="VERIFIED42"
@@ -634,17 +753,6 @@ sleep 2
 test -s "${TERMINAL_SCREENSHOT_PATH}"
 trace_step "assert terminal remains an explicit xterm tool over the same host RPC"
 
-tap_terminal_header_tool "files"
-tap_accessible "app"
-wait_for_text "README.md"
-trace_step "assert selected-host workspace files"
-tap_accessible "Back to session"
-
-tap_terminal_header_tool "source-control"
-wait_for_text "README.md"
-trace_step "assert selected-host uncommitted diff"
-tap_accessible "Back"
-
 tap_screen_fraction 5 32 87 100 "Switch to buffered command input"
 tap_screen_fraction 3 8 11 12 "Type a command"
 input_text "pwd"
@@ -653,22 +761,41 @@ sleep 2
 "${ADB}" exec-out screencap -p >"${TERMINAL_COMMAND_SCREENSHOT_PATH}"
 test -s "${TERMINAL_COMMAND_SCREENSHOT_PATH}"
 trace_step "exercise selected-host terminal input and output"
-tap_screen_fraction 1 16 1 20 "Back to worktrees"
-wait_for_ui_contains "${chat_history_anchor}" 45
-tap_accessible "Go back"
-wait_for_text "${HOST_A_NAME} — Direct RPC session"
 
-tap_accessible "Tasks"
+launch_session_panel
+wait_for_selector "content-desc" "Open file explorer"
+tap_accessible "Open file explorer"
+wait_for_text "README.md"
+trace_step "assert selected-host workspace files"
+tap_accessible "Back to session"
+
+launch_source_control_panel
+wait_for_text "README.md"
+trace_step "assert selected-host uncommitted diff"
+launch_host_tasks_list
 wait_for_text "${HOST_A_NAME}: encrypted mobile control"
 tap_accessible "${HOST_A_NAME}: encrypted mobile control"
-wait_for_text "Pair, switch hosts, inspect sessions and operate this workspace without a central hub."
-scroll_until_text "${HOST_A_NAME}: verify host isolation"
-scroll_until_text "${HOST_A_NAME}: record native evidence"
+if [[ "${SINGLE_CELL_E2E}" == "1" ]]; then
+  wait_for_ui_contains "Validate the complete Dev10x Mobile journey"
+  assert_ui_absent "${HOST_A_NAME}: verify host isolation"
+  assert_ui_absent "${HOST_A_NAME}: record native evidence"
+else
+  wait_for_text "Pair, switch hosts, inspect sessions and operate this workspace without a central hub."
+  scroll_until_text "${HOST_A_NAME}: verify host isolation"
+  scroll_until_text "${HOST_A_NAME}: record native evidence"
+fi
 scroll_until_text "This task is served by ${HOST_A_NAME} over its own encrypted RPC connection."
-trace_step "assert task, blocker, subtask and comment parity on Host A"
-"${ADB}" shell input keyevent 4
-sleep 1
+trace_step "assert standalone task detail and comment parity on Host A"
+scroll_until_text "Open evidence"
+tap_accessible "Open evidence"
+wait_for_text "${host_a_issue} evidence"
+"${ADB}" exec-out screencap -p >"${TASK_EVIDENCE_SCREENSHOT_PATH}"
+test -s "${TASK_EVIDENCE_SCREENSHOT_PATH}"
+trace_step "assert task evidence screen is available from the mobile task detail"
+tap_accessible "Back"
+wait_for_ui_contains "${host_a_issue}"
 tap_accessible "Back to worktrees"
+wait_for_text "${HOST_A_NAME} — Direct RPC session"
 
 if [[ "${REAL_AGENT_E2E}" == "1" ]]; then
   dispatch_orchestrator_run \
@@ -686,14 +813,13 @@ if [[ "${REAL_AGENT_E2E}" == "1" ]]; then
   trace_step "assert real orchestrator execution transcript opens in the same rich chat"
 
   tap_accessible "Message"
-  input_text "Stop and reply exactly ACK73"
+  input_text "Reply exactly ACK73"
   wait_for_enabled_accessible "Send"
-  "${ADB}" shell input keyevent 4
   tap_accessible "Send"
   wait_for_assistant_text "ACK73" 180
   "${ADB}" exec-out screencap -p >"${ORCHESTRATOR_SCREENSHOT_PATH}"
   test -s "${ORCHESTRATOR_SCREENSHOT_PATH}"
-  trace_step "assert mobile steer was accepted and streamed back from the real orchestrator"
+  trace_step "assert mobile follow-up was accepted and streamed back from the real orchestrator"
 
   tap_accessible "Go back"
   wait_for_text "Orchestrator runs"
@@ -704,33 +830,43 @@ else
 fi
 tap_accessible "Back to hosts"
 
-launch_pairing_offer "${host_b_offer}"
-wait_for_text "${HOST_B_NAME}"
-wait_for_text "${HOST_B_NAME} — Direct RPC session"
-assert_paired_device "${HOST_B_PORT}"
-dump_ui
-if grep -Fq "${HOST_A_NAME} — Direct RPC session" "${UI_DUMP_PATH}"; then
-  printf "Host A session leaked into Host B library\n" >&2
-  exit 1
+if [[ "${SINGLE_CELL_E2E}" == "0" ]]; then
+  launch_pairing_offer "${host_b_offer}"
+  wait_for_text "${HOST_B_NAME}"
+  wait_for_text "${HOST_B_NAME} — Direct RPC session"
+  assert_paired_device "${HOST_B_PORT}"
+  dump_ui
+  if grep -Fq "${HOST_A_NAME} — Direct RPC session" "${UI_DUMP_PATH}"; then
+    printf "Host A session leaked into Host B library\n" >&2
+    exit 1
+  fi
+  trace_step "assert Host B selected with no Host A cache/session leakage"
+
+  tap_accessible "${HOST_B_NAME} — Direct RPC session"
+  wait_for_ui_contains "${HOST_B_NAME} is online"
+  wait_for_selector "content-desc" "Message"
+  trace_step "assert Host B opens its own isolated chat history"
+  tap_accessible "Go back"
+  wait_for_text "${HOST_B_NAME} — Direct RPC session"
+  tap_accessible "Back to hosts"
+  wait_for_text "${HOST_A_NAME}"
+  wait_for_text "${HOST_B_NAME}"
+  wait_for_ui_contains "Connected"
+  trace_step "assert two direct hosts, independent health and per-device credentials"
+
+  terminate_host "${host_b_pid}"
+  wait "${host_b_pid}" >/dev/null 2>&1 || true
+  host_b_pid=""
+  offline_port="${HOST_B_PORT}"
+  offline_host_key="host-b"
+else
+  terminate_host "${host_a_pid}"
+  wait "${host_a_pid}" >/dev/null 2>&1 || true
+  host_a_pid=""
+  offline_port="${HOST_A_PORT}"
+  offline_host_key="host-a"
 fi
-trace_step "assert Host B selected with no Host A cache/session leakage"
-
-tap_accessible "${HOST_B_NAME} — Direct RPC session"
-wait_for_ui_contains "${HOST_B_NAME} is online"
-wait_for_selector "content-desc" "Message"
-trace_step "assert Host B opens its own isolated chat history"
-tap_accessible "Go back"
-wait_for_text "${HOST_B_NAME} — Direct RPC session"
-tap_accessible "Back to hosts"
-wait_for_text "${HOST_A_NAME}"
-wait_for_text "${HOST_B_NAME}"
-wait_for_ui_contains "Connected"
-trace_step "assert two direct hosts, independent health and per-device credentials"
-
-kill -TERM -- "-${host_b_pid}"
-wait "${host_b_pid}" >/dev/null 2>&1 || true
-host_b_pid=""
-wait_for_host_down "${HOST_B_PORT}"
+wait_for_host_down "${offline_port}"
 wait_for_any_ui_contains \
   45 \
   "Reconnecting" \
@@ -739,11 +875,17 @@ wait_for_any_ui_contains \
   "Disconnected"
 trace_step "assert selected host reports a real offline/reconnecting state"
 
-start_host "host-b" "${HOST_B_PORT}"
-host_b_pid="${last_host_pid}"
-wait_for_host "${HOST_B_PORT}"
-tap_accessible "${HOST_B_NAME}"
-wait_for_text "${HOST_B_NAME} — Direct RPC session"
+start_host "${offline_host_key}" "${offline_port}"
+if [[ "${SINGLE_CELL_E2E}" == "1" ]]; then
+  host_a_pid="${last_host_pid}"
+  reconnect_host="${HOST_A_NAME}"
+else
+  host_b_pid="${last_host_pid}"
+  reconnect_host="${HOST_B_NAME}"
+fi
+wait_for_host "${offline_port}"
+tap_accessible "${reconnect_host}"
+wait_for_text "${reconnect_host} — Direct RPC session"
 tap_accessible "Back to hosts"
 wait_for_ui_contains "Connected"
 trace_step "assert selected host automatically reconnects to the same paired device"
@@ -757,7 +899,9 @@ wait_for_text "About"
 trace_step "assert the single Dev10x interface and native device settings"
 tap_accessible "Back"
 wait_for_text "${HOST_A_NAME}"
-wait_for_text "${HOST_B_NAME}"
+if [[ "${SINGLE_CELL_E2E}" == "0" ]]; then
+  wait_for_text "${HOST_B_NAME}"
+fi
 
 tap_accessible "${HOST_A_NAME}"
 wait_for_text "${HOST_A_NAME} — Direct RPC session"
@@ -765,6 +909,17 @@ trace_step "switch back to Host A and assert isolated cache hydration"
 
 "${ADB}" exec-out screencap -p >"${SCREENSHOT_PATH}"
 stop_recording
+
+concat_manifest="${E2E_ROOT}/screenrecord-concat.txt"
+: >"${concat_manifest}"
+for segment in "${RAW_VIDEO_SEGMENT_PREFIX}-"*.webm; do
+  test -s "${segment}"
+  printf "file '%s'\n" "${segment}" >>"${concat_manifest}"
+done
+ffmpeg -y -v error \
+  -f concat -safe 0 -i "${concat_manifest}" \
+  -c copy \
+  "${RAW_VIDEO_PATH}"
 
 ffmpeg -y -v error \
   -i "${RAW_VIDEO_PATH}" \
@@ -803,18 +958,26 @@ fi
 
 apk_sha256="$(sha256sum "${APK_PATH}" | awk '{print $1}')"
 video_sha256="$(sha256sum "${VIDEO_PATH}" | awk '{print $1}')"
-generated_at="$(date --iso-8601=seconds)"
+generated_at="$(date -Iseconds)"
 
 if [[ "${REAL_AGENT_E2E}" == "1" ]]; then
-  scenario="Dev10x rich chat, real session history and orchestrator steer across independent Symphony hosts"
+  scenario="Dev10x rich chat, real session history and orchestrator follow-up against real Symphony host"
   interactive_chat="real local agent turn over selected-host RPC"
-  orchestrator_chat="real execution transcript and steer over selected-host RPC"
-  journey="deep-link pairing, host identity/health, chat-first real local agent turn, history restore, tools, terminal, task/blocker/subtask/comment, files, diff, real orchestrator transcript and steer, second-host pairing, cache isolation, offline recovery and host switching"
+  orchestrator_chat="real execution transcript and follow-up over selected-host RPC"
+  journey="deep-link pairing, host identity/health, chat-first real local agent turn, history restore, tools, terminal, standalone task/comment and evidence, files, diff, real orchestrator transcript and follow-up, offline recovery and settings"
 else
-  scenario="Dev10x credentialless CI contract across independent real Symphony hosts"
+  scenario="Dev10x credentialless CI contract against real Symphony host"
   interactive_chat="persisted selected-host history; provider-authenticated turn reserved for local E2E"
   orchestrator_chat="provider-authenticated run reserved for local E2E"
-  journey="deep-link pairing, host identity/health, persisted chat history, tools, terminal, task/blocker/subtask/comment, files, diff, second-host pairing, cache isolation, offline recovery and host switching"
+  journey="deep-link pairing, host identity/health, persisted chat history, tools, terminal, standalone task/comment, files, diff, offline recovery and settings"
+fi
+
+if [[ "${SINGLE_CELL_E2E}" == "1" ]]; then
+  host_count=1
+  host_report="${HOST_A_NAME}"
+else
+  host_count=2
+  host_report="${HOST_A_NAME} and ${HOST_B_NAME}"
 fi
 
 jq -n \
@@ -826,12 +989,15 @@ jq -n \
   --arg scenario "${scenario}" \
   --arg interactive_chat "${interactive_chat}" \
   --arg orchestrator_chat "${orchestrator_chat}" \
+  --argjson host_count "${host_count}" \
+  --argjson single_cell "${SINGLE_CELL_E2E}" \
   --argjson real_agent "${REAL_AGENT_E2E}" \
   '{
     status:"passed",
     scenario:$scenario,
     generated_at:$generated_at,
-    hosts:2,
+    hosts:$host_count,
+    single_cell:($single_cell == 1),
     real_agent_e2e:($real_agent == 1),
     interactive_chat:$interactive_chat,
     orchestrator_chat:$orchestrator_chat,
@@ -849,7 +1015,8 @@ cat >"${REPORT_PATH}" <<EOF
 
 - Status: passed
 - Generated: ${generated_at}
-- Hosts: ${HOST_A_NAME} and ${HOST_B_NAME}
+- Hosts: ${host_report}
+- Single cell: ${SINGLE_CELL_E2E}
 - Transport: direct host WebSocket RPC with application-layer E2EE
 - Real local agent: ${REAL_AGENT_E2E}
 - Journey: ${journey}
@@ -863,6 +1030,6 @@ cat >"${REPORT_PATH}" <<EOF
 Pairing offers and device credentials were redacted from the recording, trace and report.
 EOF
 
-printf "PASS: Dev10x rich-chat two-host mobile E2E\n"
+printf "PASS: Dev10x rich-chat real-host mobile E2E\n"
 printf "Video: %s\n" "${VIDEO_PATH}"
 printf "Report: %s\n" "${REPORT_PATH}"

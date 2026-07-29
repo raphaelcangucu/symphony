@@ -377,6 +377,9 @@ export const TerminalWebView = forwardRef<TerminalWebViewHandle, Props>(function
         style={TERMINAL_WEBVIEW_FRAME_STYLES.webview}
         originWhitelist={['*']}
         javaScriptEnabled
+        // Why: Development Builds must expose the embedded xterm document to
+        // Chrome DevTools so renderer/layout regressions can be inspected on-device.
+        webviewDebuggingEnabled={__DEV__}
         scrollEnabled={false}
         // Why: Android parent gesture containers can intercept vertical drags
         // before the injected xterm scroll router sees them.

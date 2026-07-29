@@ -139,12 +139,12 @@ describe("session timeline reducer", () => {
     });
     state = sessionTimelineReducer(state, {
       type: "turn_status",
-      status: { status: "interrupted", canResume: true },
+      status: { status: "interrupted", canResume: true, queuedMessages: [] },
     });
 
     expect(state.pendingApproval?.requestId).toBe("approval-1");
     expect(state.pendingUserInput?.questions[0]?.id).toBe("target");
-    expect(state.turnStatus).toEqual({ status: "interrupted", canResume: true });
+    expect(state.turnStatus).toEqual({ status: "interrupted", canResume: true, queuedMessages: [] });
 
     state = sessionTimelineReducer(state, { type: "approval_resolved", requestId: "approval-1" });
     state = sessionTimelineReducer(state, {
@@ -153,5 +153,21 @@ describe("session timeline reducer", () => {
     });
     expect(state.pendingApproval).toBeNull();
     expect(state.pendingUserInput).toBeNull();
+  });
+
+  it("settles an active tool when a provider ends the turn without a completion event", () => {
+    let state = sessionTimelineReducer(createSessionTimelineState(), {
+      type: "tool_call_started",
+      toolCall: { id: "tool-1", name: "apply_patch", status: "running", output: null },
+    });
+
+    state = sessionTimelineReducer(state, {
+      type: "turn_status",
+      status: { status: "completed", canResume: false, queuedMessages: [] },
+    });
+
+    expect(state.activeTools).toEqual([
+      { id: "tool-1", name: "apply_patch", status: "complete", output: "" },
+    ]);
   });
 });

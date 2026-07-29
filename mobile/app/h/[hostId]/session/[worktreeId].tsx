@@ -1422,8 +1422,6 @@ export default function SessionScreen() {
             updateTerminalCwdFromStreamEvent(handle, data, terminalCwdRef.current)
             const cols = (data.cols as number) || 80
             const rows = (data.rows as number) || 24
-            const scrollbackCols = cols
-            const scrollbackRows = rows
             const initialData =
               typeof data.serialized === 'string' && data.serialized.length > 0
                 ? data.serialized
@@ -1461,15 +1459,12 @@ export default function SessionScreen() {
             // WebView hasn't loaded yet, so viewportRef is null and the server
             // can't auto-fit. After the first init we can measure, then
             // resubscribe so the server gets the viewport and phone-fits.
-            // If viewport was measured by a parallel path BUT the scrollback
-            // we just received came back at desktop dims, our subscribe
-            // beat the measure; the server still has a null viewport for
-            // this subscriber record — resubscribe so it gets stored.
-            const needsResubscribe =
-              !viewportMeasuredRef.current ||
-              (viewportRef.current != null &&
-                (scrollbackCols !== viewportRef.current.cols ||
-                  scrollbackRows !== viewportRef.current.rows))
+            // Resubscribe only to deliver the first measured viewport. A host
+            // may intentionally keep desktop dimensions (or report legacy
+            // 80x24 metadata) while the mobile view scales that grid. Treating
+            // every dimension mismatch as a missed subscribe creates an
+            // unbounded init → measure → resubscribe loop and visible flashing.
+            const needsResubscribe = !viewportMeasuredRef.current
             if (needsResubscribe) {
               void (async () => {
                 // Why: wait for the WebView's init() rAF chain to fully
@@ -2531,7 +2526,7 @@ export default function SessionScreen() {
   // Why: viewport refits for layout changes outside the subscribe path
   // (tab strip toggling, fold/unfold, rotation) live in a dedicated hook —
   // see terminal-viewport-refit.ts for the full rationale.
-  useTerminalViewportRefit({
+  const { notifyTerminalFrameHeight, notifyKeyboardVisibility } = useTerminalViewportRefit({
     activeHandleRef,
     terminalRefs,
     terminalFrameHeightRef,
@@ -2549,9 +2544,11 @@ export default function SessionScreen() {
 
   useEffect(() => {
     const onShow = (e: KeyboardEvent) => {
+      notifyKeyboardVisibility(true)
       setKeyboardHeight(e.endCoordinates?.height ?? 0)
     }
     const onHide = () => {
+      notifyKeyboardVisibility(false)
       setKeyboardHeight(0)
     }
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow'
@@ -2562,7 +2559,7 @@ export default function SessionScreen() {
       showSub.remove()
       hideSub.remove()
     }
-  }, [])
+  }, [notifyKeyboardVisibility])
 
   const scrollActiveTabIntoView = useCallback((tabId: string | null, animated: boolean) => {
     if (!tabId) {
@@ -4758,10 +4755,12 @@ export default function SessionScreen() {
                 style={styles.terminalFrame}
                 onLayout={(e) => {
                   terminalFrameHeightRef.current = e.nativeEvent.layout.height
-                  // Trigger a refit only when the width actually changes (sidebar
-                  // resize, fold, rotation) — avoids churn on height-only changes.
+                  // Ported from Orca #8707: the command dock can settle after
+                  // the first fit, so notify height without rerendering this screen.
                   const nextWidth = Math.round(e.nativeEvent.layout.width)
+                  const nextHeight = Math.round(e.nativeEvent.layout.height)
                   setTerminalFrameWidth((prev) => (prev === nextWidth ? prev : nextWidth))
+                  notifyTerminalFrameHeight(nextHeight)
                 }}
               >
                 {terminals.map((terminal) => (

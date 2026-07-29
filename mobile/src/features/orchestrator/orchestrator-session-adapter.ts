@@ -23,6 +23,8 @@ export type SessionLogEntry = {
   status: "running" | "completed" | "failed" | null;
   collapsed: boolean;
   callId: string | null;
+  steerId: string | null;
+  steerState: "queued" | "accepted" | "failed" | null;
 };
 
 export function payloadSessionLogEntries(payload: unknown): SessionLogEntry[] {
@@ -31,7 +33,9 @@ export function payloadSessionLogEntries(payload: unknown): SessionLogEntry[] {
   if (!Array.isArray(entries)) return [];
   return entries
     .map((entry) =>
-      typeof entry === "string" ? legacyEntry(entry) : normalizeSessionLogEntry(entry),
+      typeof entry === "string"
+        ? legacyEntry(entry)
+        : normalizeSessionLogEntry(entry),
     )
     .filter((entry): entry is SessionLogEntry => entry !== null);
 }
@@ -54,7 +58,9 @@ export function buildOrchestratorTimeline(
   entries: SessionLogEntry[],
   connectionState: SessionTimelineState["connectionState"],
   error: string | null = null,
+  agentKind: string | null = null,
 ): SessionTimelineState {
+  const queuedMessages = queuedSteerMessages(entries, agentKind);
   return {
     messages: messagesFromEntries(entries),
     streamingText: "",
@@ -62,7 +68,25 @@ export function buildOrchestratorTimeline(
     connectionState,
     pendingApproval: null,
     pendingUserInput: null,
-    turnStatus: null,
+    turnStatus:
+      queuedMessages.length > 0
+        ? { status: "queued", canResume: false, queuedMessages }
+        : null,
+    turnPreferences: {
+      executionMode: null,
+      skillProfile: null,
+      model: null,
+      effort: null,
+    },
+    metadata: {
+      projectSlug: null,
+      agentKind: null,
+      requestedModel: null,
+      requestedEffort: null,
+      resolvedModel: null,
+      resolvedEffort: null,
+    },
+    goal: null,
     error,
   };
 }
@@ -92,7 +116,9 @@ function messagesFromEntries(entries: SessionLogEntry[]): AssistantMessage[] {
 
     if (entry.kind === "tool_result") {
       const tool = toolCall(entry);
-      messages.push(message(`tool-result:${tool.id}:${index}`, "assistant", "", [tool]));
+      messages.push(
+        message(`tool-result:${tool.id}:${index}`, "assistant", "", [tool]),
+      );
       return;
     }
 
@@ -101,13 +127,17 @@ function messagesFromEntries(entries: SessionLogEntry[]): AssistantMessage[] {
         const body = [entry.title, entry.body].filter(Boolean).join("\n\n");
         messages.push(message(`entry:${index}`, "system", body));
       } else {
-        messages.push(message(`entry:${index}`, "user", entry.body ?? entry.title));
+        messages.push(
+          message(`entry:${index}`, "user", entry.body ?? entry.title),
+        );
       }
       return;
     }
 
     if (entry.kind === "assistant" || entry.kind === "message") {
-      messages.push(message(`entry:${index}`, "assistant", entry.body ?? entry.title));
+      messages.push(
+        message(`entry:${index}`, "assistant", entry.body ?? entry.title),
+      );
       return;
     }
 
@@ -129,12 +159,19 @@ function messagesFromEntries(entries: SessionLogEntry[]): AssistantMessage[] {
   return messages;
 }
 
-function toolCall(call: SessionLogEntry, result?: SessionLogEntry): AssistantToolCall {
+function toolCall(
+  call: SessionLogEntry,
+  result?: SessionLogEntry,
+): AssistantToolCall {
   const failed = result?.status === "failed" || call.status === "failed";
   return {
     id: call.callId ?? `session-log-tool:${call.title}`,
     name: call.title || "tool",
-    status: failed ? "error" : result || call.status === "completed" ? "complete" : "running",
+    status: failed
+      ? "error"
+      : result || call.status === "completed"
+        ? "complete"
+        : "running",
     output: result?.body ?? (call.kind === "tool_result" ? call.body : null),
   };
 }
@@ -145,11 +182,21 @@ function message(
   content: string,
   toolCalls: AssistantToolCall[] = [],
 ): AssistantMessage {
-  return { id: `orchestrator:${id}`, role, content, toolCalls, insertedAt: null };
+  return {
+    id: `orchestrator:${id}`,
+    role,
+    content,
+    toolCalls,
+    insertedAt: null,
+  };
 }
 
 function normalizeSessionLogEntry(value: unknown): SessionLogEntry | null {
-  if (!isRecord(value) || typeof value.kind !== "string" || typeof value.title !== "string") {
+  if (
+    !isRecord(value) ||
+    typeof value.kind !== "string" ||
+    typeof value.title !== "string"
+  ) {
     return null;
   }
   return {
@@ -165,6 +212,13 @@ function normalizeSessionLogEntry(value: unknown): SessionLogEntry | null {
         : typeof value.callId === "string"
           ? value.callId
           : null,
+    steerId: typeof value.steer_id === "string" ? value.steer_id : null,
+    steerState:
+      value.steer_state === "queued" ||
+      value.steer_state === "accepted" ||
+      value.steer_state === "failed"
+        ? value.steer_state
+        : null,
   };
 }
 
@@ -180,7 +234,65 @@ function legacyEntry(line: string): SessionLogEntry | null {
     status: null,
     collapsed: false,
     callId: null,
+    steerId: null,
+    steerState: null,
   };
+}
+
+function queuedSteerMessages(
+  entries: SessionLogEntry[],
+  agentKind: string | null,
+): NonNullable<SessionTimelineState["turnStatus"]>["queuedMessages"] {
+  const queued = new Map<
+    string,
+    { id: string; message: string; provider: string | null; index: number }
+  >();
+
+  entries.forEach((entry, index) => {
+    if (entry.steerState === "failed" && entry.steerId) {
+      queued.delete(entry.steerId);
+      return;
+    }
+
+    if (
+      entry.kind === "user" &&
+      entry.steerState === "queued" &&
+      entry.steerId &&
+      entry.body
+    ) {
+      queued.set(entry.steerId, {
+        id: entry.steerId,
+        message: entry.body,
+        provider: supportedProvider(agentKind),
+        index,
+      });
+      return;
+    }
+
+    if (
+      (entry.kind === "assistant" || entry.kind === "message") &&
+      queued.size > 0
+    ) {
+      for (const [id, queuedEntry] of queued) {
+        if (queuedEntry.index < index) queued.delete(id);
+      }
+    }
+  });
+
+  return [...queued.values()].map(({ id, message, provider }) => ({
+    id,
+    message,
+    provider,
+  }));
+}
+
+function supportedProvider(value: string | null): string | null {
+  return value === "codex" ||
+    value === "claude" ||
+    value === "cursor" ||
+    value === "opencode"
+    ? value
+    : null;
 }
 
 function normalizeLanguage(value: unknown): SessionLogEntry["language"] {
@@ -194,7 +306,9 @@ function normalizeLanguage(value: unknown): SessionLogEntry["language"] {
 }
 
 function normalizeStatus(value: unknown): SessionLogEntry["status"] {
-  return value === "running" || value === "completed" || value === "failed" ? value : null;
+  return value === "running" || value === "completed" || value === "failed"
+    ? value
+    : null;
 }
 
 function entryKey(entry: SessionLogEntry): string {

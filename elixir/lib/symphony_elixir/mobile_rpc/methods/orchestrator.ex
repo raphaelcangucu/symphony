@@ -6,9 +6,44 @@ defmodule SymphonyElixir.MobileRpc.Methods.Orchestrator do
     [
       __MODULE__.ExecutionsList,
       __MODULE__.ExecutionsSubscribe,
+      __MODULE__.SessionContext,
       __MODULE__.SessionSubscribe,
       __MODULE__.SessionCommand
     ]
+  end
+
+  defmodule SessionContext do
+    @behaviour SymphonyElixir.MobileRpc.Method
+
+    @impl true
+    def name, do: "orchestrator.session.context"
+    @impl true
+    def scope, do: :mobile
+    @impl true
+    def timeout_ms, do: 5_000
+
+    @impl true
+    def validate(%{"execution_session_id" => id} = params)
+        when is_integer(id) and id > 0 and map_size(params) == 1,
+        do: {:ok, params}
+
+    def validate(_params), do: {:error, :invalid_params}
+
+    @impl true
+    def call(%{"execution_session_id" => id}, context) do
+      case service(context).session_context(id) do
+        {:ok, session_context} -> {:ok, session_context}
+        {:error, :not_found} -> {:error, :orchestrator_session_not_found}
+      end
+    end
+
+    defp service(context) do
+      Map.get(
+        context,
+        :orchestrator_mobile_service,
+        SymphonyElixir.MobileRpc.OrchestratorService
+      )
+    end
   end
 
   defmodule ExecutionsList do

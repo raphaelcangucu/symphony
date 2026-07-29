@@ -24,6 +24,11 @@ import { HandshakeWebSocketAdapter } from "@/rpc/websocket-adapter";
 import type { HostTransport } from "@/transport/HostTransport";
 import { RpcHostTransport } from "@/transport/RpcHostTransport";
 
+import {
+  HostAssistantCatalogCache,
+  type HostAssistantCatalogState,
+} from "./host-assistant-catalog-cache";
+
 export type HostRuntimeState = Readonly<
   HostState & {
     hostId: string;
@@ -46,6 +51,8 @@ export type HostRuntimeContextValue = {
   selectHost(hostId: string): Promise<void>;
   transport(hostId: string): HostTransport | null;
   state(hostId: string): HostRuntimeState;
+  assistantCatalog(hostId: string): HostAssistantCatalogState;
+  prefetchAssistantCatalog(hostId: string): void;
   subscribe(hostId: string, listener: () => void): () => void;
 };
 
@@ -65,6 +72,9 @@ export function HostRuntimeProvider({
   const errorsRef = useRef(new Map<string, string | null>());
   const [revision, setRevision] = useState(0);
   const refresh = useCallback(() => setRevision((value) => value + 1), []);
+  const catalogCacheRef = useRef<HostAssistantCatalogCache | null>(null);
+  if (!catalogCacheRef.current) catalogCacheRef.current = new HostAssistantCatalogCache(refresh);
+  const catalogCache = catalogCacheRef.current;
 
   useEffect(() => {
     if (!hydrated) return;
@@ -79,7 +89,13 @@ export function HostRuntimeProvider({
         const transport = createTransport(profile, credential, {
           onStatus: (status, error) => {
             errorsRef.current.set(profile.hostId, error ?? null);
-            if (status === "online") manager.markOnline(profile.hostId);
+            if (status === "online") {
+              manager.markOnline(profile.hostId);
+              // The encrypted RPC client becomes usable in the transport's
+              // onOnline callback. Queue the warm-up after that callback has
+              // completed instead of making every chat wait for it.
+              setTimeout(() => catalogCache.warm(profile.hostId, transport, { retry: true }), 0);
+            }
             else if (status !== "connecting") manager.markFailure(profile.hostId, status);
             refresh();
           },
@@ -100,7 +116,10 @@ export function HostRuntimeProvider({
       if (cancelled) return;
       const retainedIds = new Set(rpcProfiles.map((profile) => profile.hostId));
       for (const hostId of manager.registeredHostIds()) {
-        if (!retainedIds.has(hostId)) manager.unregister(hostId);
+        if (!retainedIds.has(hostId)) {
+          manager.unregister(hostId);
+          catalogCache.remove(hostId);
+        }
       }
       const selected =
         activeProfile && isRpcHostProfile(activeProfile) ? activeProfile.hostId : null;
@@ -115,7 +134,7 @@ export function HostRuntimeProvider({
     return () => {
       cancelled = true;
     };
-  }, [activeProfile, createTransport, hydrated, loadHostCredential, manager, profiles, refresh]);
+  }, [activeProfile, catalogCache, createTransport, hydrated, loadHostCredential, manager, profiles, refresh]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (state) => {
@@ -170,6 +189,18 @@ export function HostRuntimeProvider({
     },
     [manager, resolveHostId],
   );
+  const assistantCatalog = useCallback(
+    (hostId: string) => catalogCache.state(resolveHostId(hostId)),
+    [catalogCache, resolveHostId],
+  );
+  const prefetchAssistantCatalog = useCallback(
+    (hostId: string) => {
+      const resolvedHostId = resolveHostId(hostId);
+      const hostTransport = manager.transport(resolvedHostId);
+      if (hostTransport) catalogCache.warm(resolvedHostId, hostTransport);
+    },
+    [catalogCache, manager, resolveHostId],
+  );
   const subscribe = useCallback(
     (hostId: string, listener: () => void) =>
       manager.subscribeState(resolveHostId(hostId), listener),
@@ -179,8 +210,25 @@ export function HostRuntimeProvider({
     manager.activeHostId ??
     (activeProfile && isRpcHostProfile(activeProfile) ? activeProfile.hostId : null);
   const value = useMemo<HostRuntimeContextValue>(
-    () => ({ selectedHostId, selectHost, state, subscribe, transport }),
-    [revision, selectHost, selectedHostId, state, subscribe, transport],
+    () => ({
+      assistantCatalog,
+      prefetchAssistantCatalog,
+      selectedHostId,
+      selectHost,
+      state,
+      subscribe,
+      transport,
+    }),
+    [
+      assistantCatalog,
+      prefetchAssistantCatalog,
+      revision,
+      selectHost,
+      selectedHostId,
+      state,
+      subscribe,
+      transport,
+    ],
   );
 
   return <HostRuntimeContext.Provider value={value}>{children}</HostRuntimeContext.Provider>;

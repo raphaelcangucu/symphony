@@ -34,7 +34,9 @@ const timeline: SessionTimelineState = {
   connectionState: "live",
   pendingApproval: null,
   pendingUserInput: null,
-  turnStatus: { status: "running", canResume: false },
+  turnStatus: { status: "running", canResume: false, queuedMessages: [] },
+  turnPreferences: { executionMode: null, skillProfile: null, model: null, effort: null },
+  metadata: { projectSlug: null, agentKind: null, requestedModel: null, requestedEffort: null, resolvedModel: null, resolvedEffort: null },
   error: null,
 };
 
@@ -63,13 +65,14 @@ function renderScreen(overrides: Partial<React.ComponentProps<typeof AssistantCh
 }
 
 describe("AssistantChatScreen", () => {
-  it("renders restored history, real-time streaming, consolidated tools and terminal action", () => {
+  it("renders restored history, real-time streaming, grouped tools and terminal action", () => {
     renderScreen();
 
     expect(screen.getByText("Studio Alpha")).toBeTruthy();
     expect(screen.getByText("History restored")).toBeTruthy();
     expect(screen.getByText("Live response")).toBeTruthy();
-    expect(screen.getByText("exec_command")).toBeTruthy();
+    expect(screen.getByText("1 comando")).toBeTruthy();
+    expect(screen.queryByText("exec_command")).toBeNull();
     expect(screen.getByRole("button", { name: "Open terminal" })).toBeTruthy();
     expect(screen.getByText("Live")).toBeTruthy();
   });
@@ -147,8 +150,41 @@ describe("AssistantChatScreen", () => {
     expect(screen.getByText("Workspace /tmp/dev10x")).toBeTruthy();
 
     expect(screen.queryByText("command output")).toBeNull();
+    fireEvent.press(screen.getByRole("button", { name: "Show 1 activity details" }));
     fireEvent.press(screen.getByRole("button", { name: "Show exec_command details" }));
     expect(screen.getByText("command output")).toBeTruthy();
+  });
+
+  it("marks a completed turn as completed instead of leaving the session Live", () => {
+    renderScreen({
+      timeline: {
+        ...timeline,
+        streamingText: "",
+        activeTools: [],
+        turnStatus: { status: "completed", canResume: false, queuedMessages: [] },
+      },
+    });
+
+    expect(screen.getByText("Completed")).toBeTruthy();
+    expect(screen.queryByText("Live")).toBeNull();
+  });
+
+  it("shows the Host-resolved model and effort in the compact composer", () => {
+    renderScreen({
+      timeline: {
+        ...timeline,
+        metadata: {
+          ...timeline.metadata,
+          agentKind: "codex",
+          resolvedModel: "gpt-5.6-sol",
+          resolvedEffort: "low",
+        },
+      },
+    });
+
+    expect(screen.getByText("5.6 Sol Baixo")).toBeTruthy();
+    expect(screen.queryByText("Model")).toBeNull();
+    expect(screen.queryByText("Full access")).toBeNull();
   });
 
   it("uses the web reasoning disclosure for orchestrator reasoning entries", () => {
@@ -196,11 +232,82 @@ describe("AssistantChatScreen", () => {
     expect(onOpenTerminal).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps the linked task and its evidence, PRs and diff one tap away", () => {
+    const onOpenTask = jest.fn();
+    const onOpenEvidence = jest.fn();
+    const onOpenPullRequest = jest.fn();
+    const onOpenDiff = jest.fn();
+    renderScreen({
+      taskLinks: {
+        identifier: "VIN-2",
+        onOpenTask,
+        onOpenEvidence,
+        onOpenPullRequest,
+        onOpenDiff,
+      },
+    });
+
+    fireEvent.press(screen.getByRole("button", { name: "Open task Evidence" }));
+    fireEvent.press(screen.getByRole("button", { name: "Open task PRs" }));
+    fireEvent.press(screen.getByRole("button", { name: "Open task Diff" }));
+    fireEvent.press(screen.getByRole("button", { name: "Open VIN-2 task" }));
+
+    expect(onOpenEvidence).toHaveBeenCalledTimes(1);
+    expect(onOpenPullRequest).toHaveBeenCalledTimes(1);
+    expect(onOpenDiff).toHaveBeenCalledTimes(1);
+    expect(onOpenTask).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps an active goal compact while showing its elapsed duration", () => {
+    renderScreen({
+      timeline: {
+        ...timeline,
+        goal: {
+          enabled: true,
+          available: true,
+          status: "running",
+          objective: "Ship the mobile evidence flow",
+          source: "native",
+          provider: "codex",
+          capabilities: ["edit", "pause", "clear"],
+          timeUsedSeconds: 1_463,
+          running: true,
+          resumable: false,
+        },
+      },
+    });
+
+    expect(screen.getByText("Pursuing goal")).toBeTruthy();
+    expect(screen.getByText("Ship the mobile evidence flow")).toBeTruthy();
+    expect(screen.getByText("24m 23s")).toBeTruthy();
+  });
+
+  it("shows the durable queued message directly above the goal and composer", () => {
+    renderScreen({
+      timeline: {
+        ...timeline,
+        turnStatus: {
+          status: "running",
+          canResume: false,
+          queuedMessages: [
+            { id: "queued-1", message: "After this, capture the E2E evidence", provider: "codex" },
+            { id: "queued-2", message: "Then summarize the diff", provider: "codex" },
+          ],
+        },
+      },
+    });
+
+    expect(screen.getByLabelText("Queued messages")).toBeTruthy();
+    expect(screen.getByText("Queued message")).toBeTruthy();
+    expect(screen.getByText("After this, capture the E2E evidence")).toBeTruthy();
+    expect(screen.getByText("+1")).toBeTruthy();
+  });
+
   it("does not show an idle stop control inside the composer", () => {
     renderScreen({
       timeline: {
         ...timeline,
-        turnStatus: { status: "idle", canResume: false },
+        turnStatus: { status: "idle", canResume: false, queuedMessages: [] },
       },
     });
 
@@ -218,5 +325,29 @@ describe("AssistantChatScreen", () => {
     await waitFor(() =>
       expect(screen.getByLabelText("Message").props.value).toBe("Continue with the RPC"),
     );
+  });
+
+  it("keeps chat dictation open until the user explicitly stops it", async () => {
+    let finish: (value: string) => void = () => undefined;
+    const result = new Promise<string>((resolve) => {
+      finish = resolve;
+    });
+    const stop = jest.fn(() => finish("A complete spoken message"));
+    renderScreen({
+      onStartDictation: jest.fn().mockResolvedValue({
+        result,
+        stop,
+        cancel: jest.fn(),
+      }),
+    });
+
+    fireEvent.press(screen.getByRole("button", { name: "Dictate message" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Stop dictation" })).toBeTruthy());
+    fireEvent.press(screen.getByRole("button", { name: "Stop dictation" }));
+
+    await waitFor(() => {
+      expect(stop).toHaveBeenCalledTimes(1);
+      expect(screen.getByLabelText("Message").props.value).toBe("A complete spoken message");
+    });
   });
 });

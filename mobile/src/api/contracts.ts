@@ -508,6 +508,11 @@ export type TrackerClient = {
     options?: ProjectSessionListOptions,
     signal?: AbortSignal,
   ): Promise<ProjectSessionsPage>;
+  /**
+   * Machine-wide provider/model catalogue. Unlike the project-scoped alias
+   * below, this does not depend on a session having joined first.
+   */
+  assistantCatalogForHost(signal?: AbortSignal): Promise<AssistantCatalog>;
   assistantCatalog(projectSlug: string, signal?: AbortSignal): Promise<AssistantCatalog>;
   createThread(input: CreateThreadInput, signal?: AbortSignal): Promise<AssistantThread>;
   issues(

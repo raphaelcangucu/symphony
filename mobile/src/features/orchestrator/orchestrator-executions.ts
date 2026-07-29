@@ -10,6 +10,7 @@ export type OrchestratorExecutionStatus =
 
 export type OrchestratorExecution = {
   issueIdentifier: string;
+  projectSlug: string | null;
   executionSessionId: number;
   status: OrchestratorExecutionStatus;
   agentKind: "codex" | "claude" | "cursor" | "opencode" | null;
@@ -35,11 +36,13 @@ export function orchestratorRunRoute(
   issueIdentifier: string,
   agentKind: string | null,
   status: string,
+  projectSlug: string | null = null,
 ): string {
   return hostWorktreeRoute({
     agentKind,
     hostId,
     issueIdentifier,
+    projectSlug,
     scope: "issue_execution",
     status,
     threadId: executionSessionId,
@@ -61,6 +64,7 @@ function normalizeExecution(value: unknown): OrchestratorExecution | null {
   }
   return {
     issueIdentifier: issueIdentifier.trim(),
+    projectSlug: nonEmptyString(value.project_slug),
     executionSessionId,
     status: normalizeStatus(value.status),
     agentKind: normalizeAgent(value.agent_kind),

@@ -6,6 +6,7 @@ import { OrchestratorExecutionsScreen } from "./OrchestratorExecutionsScreen";
 
 const execution = {
   issueIdentifier: "DEV-10",
+  projectSlug: "dev10x",
   executionSessionId: 77,
   status: "live" as const,
   agentKind: "codex" as const,

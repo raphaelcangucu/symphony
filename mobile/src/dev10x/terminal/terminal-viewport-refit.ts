@@ -5,7 +5,10 @@ import type { TerminalWebViewHandle } from './TerminalWebView'
 import {
   isTerminalUpdateViewportApplied,
   isTerminalUpdateViewportUpdated,
-  isTerminalViewportRefitTargetCurrent
+  isTerminalViewportRefitTargetCurrent,
+  reduceTerminalFrameHeightRefit,
+  type TerminalFrameHeightRefitEvent,
+  type TerminalFrameHeightRefitState
 } from './terminal-viewport-refit-state'
 
 export type TerminalViewportDims = { cols: number; rows: number }
@@ -39,7 +42,14 @@ type TerminalViewportRefitOptions = {
 // split-screen). Without the resize trigger, a PTY fitted on the folded
 // cover screen stays at cover-screen cols after unfolding and the terminal
 // renders in only part of the display (#4579's "cut in half" symptom).
-export function useTerminalViewportRefit(options: TerminalViewportRefitOptions): void {
+type TerminalViewportRefitNotifications = {
+  notifyTerminalFrameHeight: (height: number) => void
+  notifyKeyboardVisibility: (visible: boolean) => void
+}
+
+export function useTerminalViewportRefit(
+  options: TerminalViewportRefitOptions
+): TerminalViewportRefitNotifications {
   const {
     activeHandleRef,
     terminalRefs,
@@ -59,12 +69,29 @@ export function useTerminalViewportRefit(options: TerminalViewportRefitOptions):
   const refitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const refitRunSeqRef = useRef(0)
   const disposedRef = useRef(false)
-  const scheduleViewportRefit = useCallback(() => {
+  const frameHeightRefitStateRef = useRef<TerminalFrameHeightRefitState>({
+    frameHeight: 0,
+    keyboardVisible: false,
+    pending: false
+  })
+  const heightOriginatedRefitRef = useRef(false)
+  const scheduleViewportRefit = useCallback((scheduleOptions?: { heightOriginated?: boolean }) => {
     if (refitTimerRef.current) {
       clearTimeout(refitTimerRef.current)
     }
+    heightOriginatedRefitRef.current = scheduleOptions?.heightOriginated ?? false
     refitTimerRef.current = setTimeout(() => {
       refitTimerRef.current = null
+      if (heightOriginatedRefitRef.current) {
+        heightOriginatedRefitRef.current = false
+        const decision = reduceTerminalFrameHeightRefit(frameHeightRefitStateRef.current, {
+          type: 'refit-committed'
+        })
+        frameHeightRefitStateRef.current = decision.state
+        if (!decision.shouldRefit) {
+          return
+        }
+      }
       const runSeq = refitRunSeqRef.current + 1
       refitRunSeqRef.current = runSeq
       const handle = activeHandleRef.current
@@ -153,6 +180,33 @@ export function useTerminalViewportRefit(options: TerminalViewportRefitOptions):
     subscribeToTerminal
   ])
 
+  const notifyFrameHeightRefitEvent = useCallback(
+    (event: TerminalFrameHeightRefitEvent) => {
+      const decision = reduceTerminalFrameHeightRefit(frameHeightRefitStateRef.current, event)
+      frameHeightRefitStateRef.current = decision.state
+      if (!decision.shouldRefit) {
+        return
+      }
+      viewportMeasuredRef.current = false
+      scheduleViewportRefit({ heightOriginated: true })
+    },
+    [scheduleViewportRefit, viewportMeasuredRef]
+  )
+
+  const notifyTerminalFrameHeight = useCallback(
+    (height: number) => {
+      notifyFrameHeightRefitEvent({ type: 'frame-height', height })
+    },
+    [notifyFrameHeightRefitEvent]
+  )
+
+  const notifyKeyboardVisibility = useCallback(
+    (visible: boolean) => {
+      notifyFrameHeightRefitEvent({ type: 'keyboard-visibility', visible })
+    },
+    [notifyFrameHeightRefitEvent]
+  )
+
   // Why: the tab strip is hidden when only one terminal exists and shown
   // once a second is created. Crossing the 1↔2 boundary changes the
   // visible terminal area by ~40px, so the cached viewport dims in
@@ -225,4 +279,6 @@ export function useTerminalViewportRefit(options: TerminalViewportRefitOptions):
       }
     }
   }, [])
+
+  return { notifyTerminalFrameHeight, notifyKeyboardVisibility }
 }

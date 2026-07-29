@@ -10,6 +10,8 @@ export function buildAssistantUiMessages(timeline: SessionTimelineState): Thread
   const history = timeline.messages.map(historyMessage);
   if (!timeline.streamingText && timeline.activeTools.length === 0) return history;
 
+  const turnIsRunning = isTurnRunning(timeline.turnStatus?.status);
+
   return [
     ...history,
     {
@@ -19,10 +21,12 @@ export function buildAssistantUiMessages(timeline: SessionTimelineState): Thread
         ...(timeline.streamingText
           ? [{ type: "text" as const, text: timeline.streamingText }]
           : []),
-        ...timeline.activeTools.map(toolPart),
+        ...timeline.activeTools.map((tool) => toolPart(tool)),
       ],
       createdAt: new Date(),
-      status: { type: "running" },
+      status: turnIsRunning
+        ? { type: "running" }
+        : { type: "complete", reason: "stop" },
       metadata: { custom: { source: "symphony-rpc" } },
     },
   ];
@@ -50,7 +54,9 @@ function historyMessage(message: AssistantMessage): ThreadMessageLike {
   const role = message.role === "user" || message.role === "system" ? message.role : "assistant";
   const content = [
     ...(message.content ? [{ type: "text" as const, text: message.content }] : []),
-    ...message.toolCalls.map(toolPart),
+    // History is durable. A provider can legitimately omit command output for
+    // a successful call, which must still render as Done rather than Running.
+    ...message.toolCalls.map((tool) => toolPart(tool, true)),
   ];
   const base = {
     id: message.id,
@@ -63,15 +69,23 @@ function historyMessage(message: AssistantMessage): ThreadMessageLike {
   return role === "assistant" ? { ...base, status: { type: "complete", reason: "stop" } } : base;
 }
 
-function toolPart(tool: AssistantToolCall) {
+function toolPart(tool: AssistantToolCall, durable = false) {
+  const terminal = durable || tool.status !== "running";
   return {
     type: "tool-call" as const,
     toolCallId: tool.id,
     toolName: tool.name,
     args: {},
-    ...(tool.output !== null ? { result: tool.output } : {}),
+    // assistant-ui uses the presence of `result` to distinguish a running
+    // tool from a completed one. Preserve that distinction even when the host
+    // has no printable output for the completed call.
+    ...(terminal ? { result: tool.output ?? "" } : {}),
     ...(tool.status === "error" ? { isError: true } : {}),
   };
+}
+
+function isTurnRunning(status: string | undefined): boolean {
+  return status === undefined || status === "running" || status === "queued";
 }
 
 function parsedDate(value: string | null): Date {

@@ -210,7 +210,13 @@ defmodule SymphonyElixirWeb.SessionLogChannel do
              project_slug: socket.assigns.project_slug
            ) do
         :ok ->
-          {:reply, :ok, assign(socket, :last_steer_text, trimmed)}
+          {steer_id, socket} = record_queued_steer(socket, trimmed)
+
+          {:reply,
+           :ok,
+           socket
+           |> assign(:last_steer_text, trimmed)
+           |> assign(:last_steer_id, steer_id)}
 
         {:error, reason} ->
           push(socket, "steer_failed", %{
@@ -241,9 +247,14 @@ defmodule SymphonyElixirWeb.SessionLogChannel do
   defp inject_context_refs(_socket, message, _context_refs), do: message
 
   @impl true
-  def handle_info({:steer_ok, _result}, socket), do: {:noreply, push(socket, "steer_ok", %{})}
+  def handle_info({:steer_ok, _result}, socket) do
+    record_steer_result(socket, :accepted, nil)
+    {:noreply, push(socket, "steer_ok", %{})}
+  end
 
   def handle_info({:steer_error, error}, socket) do
+    record_steer_result(socket, :failed, steer_error_reason(error))
+
     push(socket, "steer_failed", %{
       reason: steer_error_reason(error),
       message: socket.assigns[:last_steer_text] || ""
@@ -298,6 +309,23 @@ defmodule SymphonyElixirWeb.SessionLogChannel do
   end
 
   defp poll_symphony_events(socket, _assigns), do: socket
+
+  defp record_queued_steer(%{assigns: %{workspace: workspace}} = socket, message)
+       when is_binary(workspace) do
+    case SessionEvents.append_steer_request(workspace, message) do
+      {:ok, steer_id} -> {steer_id, socket}
+      {:error, _reason} -> {nil, socket}
+    end
+  end
+
+  defp record_queued_steer(socket, _message), do: {nil, socket}
+
+  defp record_steer_result(%{assigns: %{workspace: workspace, last_steer_id: steer_id}}, result, detail)
+       when is_binary(workspace) and is_binary(steer_id) do
+    SessionEvents.append_steer_result(workspace, steer_id, result, detail)
+  end
+
+  defp record_steer_result(_socket, _result, _detail), do: :ok
 
   # The client tells us which agent the operator is actually viewing (the
   # selected/running agent in the UI). Honor it so the session log shows that

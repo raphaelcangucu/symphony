@@ -1,4 +1,8 @@
-import type { AssistantMessage, SessionTimelineAction } from "@/features/sessions/session-reducer";
+import type {
+  AssistantMessage,
+  AssistantTurnPreferences,
+  SessionTimelineAction,
+} from "@/features/sessions/session-reducer";
 import type { HostTransport } from "@/transport/HostTransport";
 
 import { handleAssistantEvent, type AssistantSession } from "./assistant-session";
@@ -117,6 +121,44 @@ export function createRpcAssistantSession({
     return command("resume_turn", {});
   }
 
+  function killTool(toolCallId: string): Promise<void> {
+    return command("kill_tool", { tool_call_id: toolCallId });
+  }
+
+  function setTurnPreferences(preferences: Partial<AssistantTurnPreferences>): Promise<void> {
+    const payload: Record<string, unknown> = {};
+    if (preferences.executionMode) payload.execution_mode = preferences.executionMode;
+    if (preferences.skillProfile !== undefined) payload.skill_profile = preferences.skillProfile;
+    if (preferences.model !== undefined) payload.model = preferences.model;
+    if (preferences.effort !== undefined) payload.effort = preferences.effort;
+    return command("set_turn_preferences", payload);
+  }
+
+  function setGoalMode(enabled: boolean, objective?: string): Promise<void> {
+    return command("set_goal_mode", {
+      goal_mode: enabled,
+      ...(enabled && objective?.trim() ? { objective: objective.trim() } : {}),
+    });
+  }
+
+  function pauseGoal(): Promise<void> {
+    return command("goal_pause", {});
+  }
+
+  function resumeGoal(): Promise<void> {
+    return command("goal_resume", {});
+  }
+
+  function clearGoal(): Promise<void> {
+    return command("goal_clear", {});
+  }
+
+  function setGoalObjective(objective: string): Promise<void> {
+    const normalized = objective.trim();
+    if (!normalized) return Promise.reject(new Error("Goal objective is required"));
+    return command("goal_set_objective", { objective: normalized });
+  }
+
   function command(event: string, payload: Record<string, unknown>): Promise<void> {
     if (!connected) return Promise.reject(new Error("Session is not connected"));
     return transport
@@ -163,6 +205,13 @@ export function createRpcAssistantSession({
     disconnect,
     retrySeed,
     resumeTurn,
+    killTool,
+    setTurnPreferences,
+    setGoalMode,
+    pauseGoal,
+    resumeGoal,
+    clearGoal,
+    setGoalObjective,
     sendMessage,
     stopTurn,
     submitApproval,

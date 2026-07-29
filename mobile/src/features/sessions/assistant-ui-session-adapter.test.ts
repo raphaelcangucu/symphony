@@ -43,7 +43,9 @@ const timeline: SessionTimelineState = {
   connectionState: "live",
   pendingApproval: null,
   pendingUserInput: null,
-  turnStatus: { status: "running", canResume: false },
+  turnStatus: { status: "running", canResume: false, queuedMessages: [] },
+  turnPreferences: { executionMode: null, skillProfile: null, model: null, effort: null },
+  metadata: { projectSlug: null, agentKind: null, requestedModel: null, requestedEffort: null, resolvedModel: null, resolvedEffort: null },
   error: null,
 };
 
@@ -83,6 +85,32 @@ describe("assistant-ui Symphony adapter", () => {
         },
       ],
       status: { type: "running" },
+    });
+  });
+
+  it("keeps a completed tool terminal even when the host has no printable output", () => {
+    const messages = buildAssistantUiMessages({
+      ...timeline,
+      streamingText: "",
+      activeTools: [],
+      messages: [
+        {
+          id: "assistant-empty-tool",
+          role: "assistant",
+          content: "Finished",
+          toolCalls: [
+            { id: "silent-tool", name: "apply_patch", status: "complete", output: null },
+          ],
+          insertedAt: "2026-07-26T01:00:02Z",
+        },
+      ],
+    });
+
+    expect(messages[0]).toMatchObject({
+      content: [
+        { type: "text", text: "Finished" },
+        { type: "tool-call", toolCallId: "silent-tool", toolName: "apply_patch", result: "" },
+      ],
     });
   });
 

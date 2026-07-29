@@ -3,6 +3,8 @@ alias SymphonyElixir.LocalTracker.Context
 alias SymphonyElixir.Repo
 alias SymphonyElixir.Workspace
 
+single_cell? = System.get_env("DEV10X_SINGLE_CELL_E2E") == "1"
+
 [host_label, project_slug, requested_workspace_path] =
   case System.argv() do
     [host_label, project_slug, workspace_path] ->
@@ -123,31 +125,42 @@ codex:
 {:ok, primary} =
   Context.create_issue(project_slug, %{
     title: "#{host_label}: encrypted mobile control",
-    description: "Pair, switch hosts, inspect sessions and operate this workspace without a central hub.",
-    status: "In Progress",
+    description:
+      if(single_cell?,
+        do: """
+        Validate the complete Dev10x Mobile journey against this real encrypted
+        Symphony host. Exercise the task, session, terminal, files, diff and
+        evidence surfaces. When dispatched, reply exactly `READY73`, finish the
+        initial turn, then accept the operator follow-up in the same transcript.
+        """,
+        else: "Pair, switch hosts, inspect sessions and operate this workspace without a central hub."
+      ),
+    status: if(single_cell?, do: "Ready", else: "In Progress"),
     priority: 1,
     agent_goal: "Validate the complete Dev10x Mobile workflow",
     branch_name: "agent/mobile-multi-host-e2e"
   })
 
-{:ok, blocker} =
-  Context.create_issue(project_slug, %{
-    title: "#{host_label}: verify host isolation",
-    description: "The same local identifiers may exist on both hosts.",
-    status: "Backlog",
-    priority: 2
-  })
+unless single_cell? do
+  {:ok, blocker} =
+    Context.create_issue(project_slug, %{
+      title: "#{host_label}: verify host isolation",
+      description: "The same local identifiers may exist on both hosts.",
+      status: "Backlog",
+      priority: 2
+    })
 
-{:ok, subtask} =
-  Context.create_issue(project_slug, %{
-    title: "#{host_label}: record native evidence",
-    description: "Capture the encrypted direct-host journey.",
-    status: "Backlog",
-    priority: 2
-  })
+  {:ok, subtask} =
+    Context.create_issue(project_slug, %{
+      title: "#{host_label}: record native evidence",
+      description: "Capture the encrypted direct-host journey.",
+      status: "Backlog",
+      priority: 2
+    })
 
-{:ok, _relation} = Context.add_blocker(project_slug, primary.identifier, blocker.identifier)
-{:ok, _subtask} = Context.set_issue_parent(project_slug, subtask.identifier, primary.identifier)
+  {:ok, _relation} = Context.add_blocker(project_slug, primary.identifier, blocker.identifier)
+  {:ok, _subtask} = Context.set_issue_parent(project_slug, subtask.identifier, primary.identifier)
+end
 
 {:ok, _comment} =
   Context.add_comment(
@@ -157,18 +170,25 @@ codex:
     %{author: "Symphony E2E"}
   )
 
-{:ok, orchestrator_issue} =
-  Context.create_issue(project_slug, %{
-    title: "#{host_label}: live orchestrator steer",
-    description: """
-    Validate a real Dev10x Mobile orchestrator stream. Start by running
-    `sleep 120`, remain available for an operator steer, then follow the
-    operator's updated direction and report it clearly.
-    """,
-    status: "Backlog",
-    priority: 1,
-    agent: "codex"
-  })
+orchestrator_issue =
+  if single_cell? do
+    primary
+  else
+    {:ok, issue} =
+      Context.create_issue(project_slug, %{
+        title: "#{host_label}: live orchestrator steer",
+        description: """
+        Validate a real Dev10x Mobile orchestrator stream. Start by running
+        `sleep 120`, remain available for an operator steer, then follow the
+        operator's updated direction and report it clearly.
+        """,
+        status: "Backlog",
+        priority: 1,
+        agent: "codex"
+      })
+
+    issue
+  end
 
 {:ok, session_workspace_path} =
   Workspace.create_for_issue(%{
@@ -176,6 +196,38 @@ codex:
     identifier: primary.identifier,
     project_slug: project_slug
   })
+
+unless File.dir?(Path.join(session_workspace_path, ".git")) do
+  File.write!(Path.join(session_workspace_path, ".gitignore"), ".symphony/\napp/\n")
+  File.write!(Path.join(session_workspace_path, "README.md"), "# #{host_label} workspace\n")
+
+  {_output, 0} =
+    System.cmd("git", ["init", "-b", "main"],
+      cd: session_workspace_path,
+      stderr_to_stdout: true
+    )
+
+  {_output, 0} =
+    System.cmd("git", ["config", "user.email", "e2e@symphony.test"], cd: session_workspace_path)
+
+  {_output, 0} =
+    System.cmd("git", ["config", "user.name", "Symphony E2E"], cd: session_workspace_path)
+
+  {_output, 0} =
+    System.cmd("git", ["add", ".gitignore", "README.md"], cd: session_workspace_path)
+
+  {_output, 0} =
+    System.cmd("git", ["commit", "-m", "Seed Symphony workspace shell"],
+      cd: session_workspace_path,
+      stderr_to_stdout: true
+    )
+
+  File.write!(
+    Path.join(session_workspace_path, "README.md"),
+    "\nUncommitted workspace change visible in the mobile diff.\n",
+    [:append]
+  )
+end
 
 File.write!(
   Path.join([session_workspace_path, "app", "README.md"]),

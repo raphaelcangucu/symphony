@@ -14,12 +14,24 @@ import {
   Brain,
   ChevronDown,
   ChevronRight,
+  Clock3,
+  Compass,
+  Hammer,
   Info,
+  ListChecks,
   Mic,
+  Pause,
+  Pencil,
+  Play,
+  Plus,
   SendHorizontal,
+  ShieldAlert,
   SquareTerminal,
+  Target,
+  Trash2,
+  Zap,
 } from "lucide-react-native";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -34,36 +46,82 @@ import {
 import Markdown from "react-native-markdown-display";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { ConnectionBadge, type ConnectionState } from "@/components/ConnectionBadge";
+import {
+  ConnectionBadge,
+  type ConnectionState,
+} from "@/components/ConnectionBadge";
 import { StatusDot } from "@/components/StatusDot";
+import type { DictationSession } from "@/native/dictation";
 import { radii, spacing } from "@/theme/tokens";
 import { useAppTheme } from "@/theme/ThemeProvider";
+import type { AssistantCatalog } from "@/api/contracts";
+import type { HostAssistantCatalogStatus } from "@/runtime/host-assistant-catalog-cache";
 
-import { buildAssistantUiMessages, submitAssistantUiMessage } from "./assistant-ui-session-adapter";
+import {
+  buildAssistantUiMessages,
+  submitAssistantUiMessage,
+} from "./assistant-ui-session-adapter";
 import { followLatestMessage } from "./chat-scroll";
+import {
+  taskCreationActivity,
+  type TaskCreationActivity as TaskCreationDetails,
+} from "./task-creation-activity";
 import type {
   AssistantApprovalRequest,
+  AssistantExecutionMode,
+  AssistantGoalStatus,
+  AssistantTurnPreferences,
   AssistantUserInputRequest,
   SessionTimelineState,
 } from "./session-reducer";
 
 export type AssistantChatScreenProps = {
+  catalog: AssistantCatalog | null;
+  catalogStatus?: HostAssistantCatalogStatus;
   title: string;
   threadId: number;
   timeline: SessionTimelineState;
   onBack(): void;
   onOpenTerminal(): void;
+  taskLinks?:
+    | {
+        identifier: string;
+        onOpenDiff(): void;
+        onOpenEvidence(): void;
+        onOpenPullRequest(): void;
+        onOpenTask(): void;
+      }
+    | undefined;
   onDictate?: (() => Promise<string>) | undefined;
-  onApproval(requestId: string | number, action: "approve" | "cancel"): Promise<void>;
+  onStartDictation?: (() => Promise<DictationSession>) | undefined;
+  onApproval(
+    requestId: string | number,
+    action: "approve" | "cancel",
+  ): Promise<void>;
   onResumeTurn(): Promise<void>;
+  onKillTool(toolCallId: string): Promise<void>;
+  onSetTurnPreferences(
+    preferences: Partial<AssistantTurnPreferences>,
+  ): Promise<void>;
+  onSetGoalMode(enabled: boolean, objective?: string): Promise<void>;
+  onPauseGoal(): Promise<void>;
+  onResumeGoal(): Promise<void>;
+  onClearGoal(): Promise<void>;
+  onSetGoalObjective(objective: string): Promise<void>;
   onSend(message: string): Promise<void>;
   onStopTurn(): Promise<void>;
-  onSubmitUserInput(requestId: string | number, answers: Record<string, string>): Promise<void>;
+  onSubmitUserInput(
+    requestId: string | number,
+    answers: Record<string, string>,
+  ): Promise<void>;
   onRetrySeed?: (() => Promise<void>) | undefined;
 };
 
 export function AssistantChatScreen(props: AssistantChatScreenProps) {
-  const messages = useMemo(() => buildAssistantUiMessages(props.timeline), [props.timeline]);
+  const messages = useMemo(
+    () => buildAssistantUiMessages(props.timeline),
+    [props.timeline],
+  );
   const runtime = useExternalStoreRuntime<ThreadMessageLike>({
     messages,
     convertMessage: (message) => message,
@@ -88,10 +146,21 @@ function AssistantChatContent({
   title,
   threadId,
   timeline,
+  catalog,
+  catalogStatus = "idle",
   onApproval,
   onBack,
   onDictate,
+  onStartDictation,
   onOpenTerminal,
+  taskLinks,
+  onKillTool,
+  onSetTurnPreferences,
+  onSetGoalMode,
+  onPauseGoal,
+  onResumeGoal,
+  onClearGoal,
+  onSetGoalObjective,
   onResumeTurn,
   onRetrySeed,
   onStopTurn,
@@ -99,6 +168,7 @@ function AssistantChatContent({
 }: AssistantChatScreenProps) {
   const { colors } = useAppTheme();
   const messageList = useRef<FlatList<ThreadMessage>>(null);
+  const [goalEditRequest, setGoalEditRequest] = useState(0);
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.bgBase }]}>
@@ -109,24 +179,34 @@ function AssistantChatContent({
         <View
           style={[
             styles.header,
-            { backgroundColor: colors.bgPanel, borderColor: colors.borderSubtle },
+            {
+              backgroundColor: colors.bgPanel,
+              borderColor: colors.borderSubtle,
+            },
           ]}
         >
           <Pressable
             accessibilityLabel="Go back"
             accessibilityRole="button"
             onPress={onBack}
-            style={styles.iconButton}
+            style={[styles.iconButton, { backgroundColor: colors.bgPressed }]}
           >
             <ArrowLeft color={colors.textPrimary} size={22} />
           </Pressable>
           <View style={styles.titleBlock}>
-            <Text numberOfLines={1} style={[styles.title, { color: colors.textPrimary }]}>
+            <Text
+              numberOfLines={1}
+              style={[styles.title, { color: colors.textPrimary }]}
+            >
               {title || `Session ${threadId}`}
             </Text>
             <View style={styles.titleMeta}>
-              <Text style={[styles.sessionId, { color: colors.textMuted }]}>#{threadId}</Text>
-              <ConnectionBadge state={connectionState(timeline.connectionState)} />
+              <Text style={[styles.sessionId, { color: colors.textMuted }]}>
+                #{threadId}
+              </Text>
+              <ConnectionBadge
+                state={sessionHeaderState(timeline)}
+              />
             </View>
           </View>
           <TurnControl
@@ -138,10 +218,20 @@ function AssistantChatContent({
             accessibilityLabel="Open terminal"
             accessibilityRole="button"
             onPress={onOpenTerminal}
-            style={styles.iconButton}
+            style={[styles.iconButton, { backgroundColor: colors.bgPressed }]}
           >
             <SquareTerminal color={colors.textPrimary} size={21} />
           </Pressable>
+          {taskLinks ? (
+            <Pressable
+              accessibilityLabel={`Open ${taskLinks.identifier} task`}
+              accessibilityRole="button"
+              onPress={taskLinks.onOpenTask}
+              style={[styles.iconButton, { backgroundColor: colors.bgPressed }]}
+            >
+              <ListChecks color={colors.textPrimary} size={20} />
+            </Pressable>
+          ) : null}
         </View>
 
         <ThreadPrimitive.Root style={styles.thread}>
@@ -152,20 +242,31 @@ function AssistantChatContent({
             ref={messageList}
             testID="session-message-list"
           >
-            {({ message }) => <ChatMessage role={message.role} />}
+            {({ message }) => (
+              <ChatMessage onKillTool={onKillTool} role={message.role} />
+            )}
           </ThreadPrimitive.Messages>
         </ThreadPrimitive.Root>
 
         {timeline.pendingApproval ? (
-          <ApprovalCard onApproval={onApproval} request={timeline.pendingApproval} />
+          <ApprovalCard
+            onApproval={onApproval}
+            request={timeline.pendingApproval}
+          />
         ) : null}
         {timeline.pendingUserInput ? (
-          <UserInputCard onSubmit={onSubmitUserInput} request={timeline.pendingUserInput} />
+          <UserInputCard
+            onSubmit={onSubmitUserInput}
+            request={timeline.pendingUserInput}
+          />
         ) : null}
 
         {timeline.error ? (
           <View style={styles.errorRow}>
-            <Text accessibilityRole="alert" style={[styles.error, { color: colors.statusRed }]}>
+            <Text
+              accessibilityRole="alert"
+              style={[styles.error, { color: colors.statusRed }]}
+            >
               {timeline.error}
             </Text>
             {onRetrySeed ? (
@@ -174,19 +275,144 @@ function AssistantChatContent({
                 accessibilityRole="button"
                 onPress={() => void onRetrySeed()}
               >
-                <Text style={[styles.retry, { color: colors.accent }]}>Retry</Text>
+                <Text style={[styles.retry, { color: colors.accent }]}>
+                  Retry
+                </Text>
               </Pressable>
             ) : null}
           </View>
         ) : null}
 
-        <ChatComposer onDictate={onDictate} />
+        {taskLinks ? <TaskAccessDock taskLinks={taskLinks} /> : null}
+
+        <QueuedMessageDock queue={timeline.turnStatus?.queuedMessages ?? []} />
+
+        <GoalDock
+          editRequest={goalEditRequest}
+          goal={timeline.goal}
+          onClear={onClearGoal}
+          onPause={onPauseGoal}
+          onResume={onResumeGoal}
+          onSetGoalMode={onSetGoalMode}
+          onSetObjective={onSetGoalObjective}
+        />
+        <ChatComposer
+          catalog={catalog}
+          catalogStatus={catalogStatus}
+          onDictate={onDictate}
+          onStartDictation={onStartDictation}
+          onOpenGoal={() => setGoalEditRequest((current) => current + 1)}
+          onSetTurnPreferences={onSetTurnPreferences}
+          preferences={timeline.turnPreferences}
+          provider={timeline.metadata.agentKind}
+          resolvedEffort={timeline.metadata.resolvedEffort}
+          resolvedModel={timeline.metadata.resolvedModel}
+        />
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
-function ChatMessage({ role }: { role: "assistant" | "user" | "system" }) {
+function QueuedMessageDock({
+  queue,
+}: {
+  queue: NonNullable<SessionTimelineState["turnStatus"]>["queuedMessages"];
+}) {
+  const { colors } = useAppTheme();
+  if (queue.length === 0) return null;
+  const [first, ...rest] = queue;
+  return (
+    <View
+      accessibilityLabel="Queued messages"
+      style={[
+        styles.queuedDock,
+        { backgroundColor: colors.bgRaised, borderColor: colors.borderSubtle },
+      ]}
+    >
+      <Clock3 color={colors.textMuted} size={15} />
+      <View style={styles.queuedCopy}>
+        <Text style={[styles.queuedLabel, { color: colors.textSecondary }]}>
+          Queued message
+        </Text>
+        <Text
+          numberOfLines={1}
+          style={[styles.queuedText, { color: colors.textMuted }]}
+        >
+          {first.message}
+        </Text>
+      </View>
+      {first.provider ? (
+        <Text style={[styles.queuedProvider, { color: colors.accent }]}>
+          {first.provider}
+        </Text>
+      ) : null}
+      {rest.length > 0 ? (
+        <Text style={[styles.queuedCount, { color: colors.textMuted }]}>
+          +{rest.length}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
+function TaskAccessDock({
+  taskLinks,
+}: {
+  taskLinks: NonNullable<AssistantChatScreenProps["taskLinks"]>;
+}) {
+  const { colors } = useAppTheme();
+  return (
+    <View
+      style={[
+        styles.taskAccessDock,
+        { backgroundColor: colors.bgRaised, borderColor: colors.borderSubtle },
+      ]}
+    >
+      <Pressable
+        accessibilityLabel={`Open ${taskLinks.identifier} task`}
+        onPress={taskLinks.onOpenTask}
+      >
+        <Text style={[styles.taskAccessTitle, { color: colors.textPrimary }]}>
+          {taskLinks.identifier}
+        </Text>
+      </Pressable>
+      <View style={styles.taskAccessActions}>
+        <TaskAccessButton label="Evidence" onPress={taskLinks.onOpenEvidence} />
+        <TaskAccessButton label="PRs" onPress={taskLinks.onOpenPullRequest} />
+        <TaskAccessButton label="Diff" onPress={taskLinks.onOpenDiff} />
+      </View>
+    </View>
+  );
+}
+
+function TaskAccessButton({
+  label,
+  onPress,
+}: {
+  label: string;
+  onPress(): void;
+}) {
+  const { colors } = useAppTheme();
+  return (
+    <Pressable
+      accessibilityLabel={`Open task ${label}`}
+      accessibilityRole="button"
+      onPress={onPress}
+    >
+      <Text style={[styles.taskAccessAction, { color: colors.accent }]}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+function ChatMessage({
+  onKillTool,
+  role,
+}: {
+  onKillTool(toolCallId: string): Promise<void>;
+  role: "assistant" | "user" | "system";
+}) {
   const { colors } = useAppTheme();
   const user = role === "user";
   const system = role === "system";
@@ -195,7 +421,11 @@ function ChatMessage({ role }: { role: "assistant" | "user" | "system" }) {
       testID={`chat-message-${role}`}
       style={[
         styles.message,
-        user ? styles.userMessage : system ? styles.activityMessage : styles.assistantMessage,
+        user
+          ? styles.userMessage
+          : system
+            ? styles.activityMessage
+            : styles.assistantMessage,
         {
           alignSelf: user ? "flex-end" : "stretch",
           backgroundColor: user ? colors.accentSoft : "transparent",
@@ -203,20 +433,32 @@ function ChatMessage({ role }: { role: "assistant" | "user" | "system" }) {
         },
       ]}
     >
-      <MessagePrimitive.Content
-        renderReasoning={({ part }) => (
-          <ActivityDisclosure icon="reasoning" text={`Thinking\n\n${part.text}`} />
-        )}
-        renderText={({ part }) =>
-          user ? (
-            <Text style={[styles.messageText, { color: colors.textPrimary }]}>{part.text}</Text>
-          ) : system ? (
-            <ActivityDisclosure icon={activityIcon(part.text)} text={part.text} />
-          ) : (
-            <Markdown style={markdownStyles(colors)}>{part.text}</Markdown>
-          )
-        }
-        renderToolCall={({ part }) => <ToolActivity part={part} />}
+      <MessagePrimitive.Parts
+        components={{
+          Reasoning: ({ text }: { text: string }) => (
+            <ActivityDisclosure icon="reasoning" text={`Thinking\n\n${text}`} />
+          ),
+          Text: ({ text }: { text: string }) =>
+            user ? (
+              <Text style={[styles.messageText, { color: colors.textPrimary }]}>
+                {text}
+              </Text>
+            ) : system ? (
+              <ActivityDisclosure icon={activityIcon(text)} text={text} />
+            ) : (
+              <Markdown style={markdownStyles(colors)}>{text}</Markdown>
+            ),
+          tools: {
+            Fallback: (part) => <ToolActivity onKillTool={onKillTool} part={part} />,
+          },
+          ToolGroup: ({ startIndex, endIndex }) => (
+            <ToolActivityGroup
+              endIndex={endIndex}
+              onKillTool={onKillTool}
+              startIndex={startIndex}
+            />
+          ),
+        }}
       />
     </MessagePrimitive.Root>
   );
@@ -230,10 +472,19 @@ function activityIcon(text: string): "reasoning" | "system" {
   return title === "reasoning" || title === "thinking" ? "reasoning" : "system";
 }
 
-function ActivityDisclosure({ icon, text }: { icon: "reasoning" | "system"; text: string }) {
+function ActivityDisclosure({
+  icon,
+  text,
+}: {
+  icon: "reasoning" | "system";
+  text: string;
+}) {
   const { colors } = useAppTheme();
   const [expanded, setExpanded] = useState(false);
-  const { title, body } = disclosureText(text, icon === "reasoning" ? "Thinking" : "System");
+  const { title, body } = disclosureText(
+    text,
+    icon === "reasoning" ? "Thinking" : "System",
+  );
   const Icon = icon === "reasoning" ? Brain : Info;
   const canExpand = body.length > 0;
 
@@ -247,7 +498,10 @@ function ActivityDisclosure({ icon, text }: { icon: "reasoning" | "system"; text
         style={styles.activityHeader}
       >
         <Icon color={colors.textMuted} size={15} />
-        <Text numberOfLines={1} style={[styles.activityTitle, { color: colors.textSecondary }]}>
+        <Text
+          numberOfLines={1}
+          style={[styles.activityTitle, { color: colors.textSecondary }]}
+        >
           {title}
         </Text>
         <Text style={[styles.activityMeta, { color: colors.textMuted }]}>
@@ -262,7 +516,9 @@ function ActivityDisclosure({ icon, text }: { icon: "reasoning" | "system"; text
         ) : null}
       </Pressable>
       {expanded && body ? (
-        <View style={[styles.activityBody, { borderColor: colors.borderSubtle }]}>
+        <View
+          style={[styles.activityBody, { borderColor: colors.borderSubtle }]}
+        >
           <Markdown style={activityMarkdownStyles(colors)}>{body}</Markdown>
         </View>
       ) : null}
@@ -271,17 +527,27 @@ function ActivityDisclosure({ icon, text }: { icon: "reasoning" | "system"; text
 }
 
 function ToolActivity({
+  onKillTool,
   part,
 }: {
+  onKillTool(toolCallId: string): Promise<void>;
   part: {
+    toolCallId?: string;
     toolName: string;
     result?: unknown;
+    isError?: boolean;
   };
 }) {
   const { colors } = useAppTheme();
   const [expanded, setExpanded] = useState(false);
   const output = part.result === undefined ? "" : String(part.result).trim();
   const running = part.result === undefined;
+  const failed = part.isError === true;
+  const createdTask = taskCreationActivity(part.toolName, output);
+
+  if (createdTask) {
+    return <TaskCreationActivity details={createdTask} running={running} />;
+  }
 
   return (
     <View
@@ -297,12 +563,15 @@ function ToolActivity({
         onPress={() => setExpanded((current) => !current)}
         style={styles.toolHeader}
       >
-        <StatusDot tone={running ? "accent" : "success"} />
-        <Text numberOfLines={1} style={[styles.toolName, { color: colors.textSecondary }]}>
+        <StatusDot tone={running ? "accent" : failed ? "danger" : "success"} />
+        <Text
+          numberOfLines={1}
+          style={[styles.toolName, { color: colors.textSecondary }]}
+        >
           {part.toolName}
         </Text>
         <Text style={[styles.toolStatus, { color: colors.textMuted }]}>
-          {running ? "Running" : "Done"}
+          {running ? "Running" : failed ? "Failed" : "Done"}
         </Text>
         {output ? (
           expanded ? (
@@ -323,11 +592,274 @@ function ToolActivity({
           {output}
         </Text>
       ) : null}
+      {running && part.toolCallId ? (
+        <Pressable
+          accessibilityLabel={`Stop ${part.toolName}`}
+          accessibilityRole="button"
+          onPress={() => void onKillTool(part.toolCallId!)}
+          style={styles.killTool}
+        >
+          <Text style={[styles.killToolText, { color: colors.statusRed }]}>
+            Stop
+          </Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
 
-function disclosureText(text: string, fallbackTitle: string): { title: string; body: string } {
+type ToolTimelineEntry = {
+  id: string;
+  name: string;
+  output: string | null;
+  running: boolean;
+  failed: boolean;
+};
+
+function ToolActivityGroup({
+  endIndex,
+  onKillTool,
+  startIndex,
+}: {
+  endIndex: number;
+  onKillTool(toolCallId: string): Promise<void>;
+  startIndex: number;
+}) {
+  const content = useAuiState((state) => state.message.content);
+  const tools = useMemo(
+    () =>
+      content
+        .slice(startIndex, endIndex + 1)
+        .flatMap((part) => (isToolCallPart(part) ? [toToolTimelineEntry(part)] : [])),
+    [content, endIndex, startIndex],
+  );
+  return <ToolTimelineGroup onKillTool={onKillTool} tools={tools} />;
+}
+
+function ToolTimelineGroup({
+  onKillTool,
+  tools,
+}: {
+  onKillTool(toolCallId: string): Promise<void>;
+  tools: ToolTimelineEntry[];
+}) {
+  const { colors } = useAppTheme();
+  const [expanded, setExpanded] = useState(false);
+  const status = toolGroupStatus(tools);
+  const summary = toolGroupSummary(tools);
+  const detailsLabel = `${expanded ? "Hide" : "Show"} ${tools.length} activity details`;
+
+  return (
+    <View
+      accessibilityLabel={summary}
+      style={[
+        styles.toolGroup,
+        { backgroundColor: colors.bgRaised, borderColor: colors.borderSubtle },
+      ]}
+    >
+      <Pressable
+        accessibilityLabel={detailsLabel}
+        accessibilityRole="button"
+        onPress={() => setExpanded((current) => !current)}
+        style={styles.toolGroupHeader}
+      >
+        <StatusDot tone={status.tone} />
+        <Text numberOfLines={1} style={[styles.toolGroupTitle, { color: colors.textSecondary }]}>
+          {summary}
+        </Text>
+        <Text style={[styles.toolStatus, { color: colors.textMuted }]}>{status.label}</Text>
+        {expanded ? (
+          <ChevronDown color={colors.textMuted} size={15} />
+        ) : (
+          <ChevronRight color={colors.textMuted} size={15} />
+        )}
+      </Pressable>
+      {expanded ? (
+        <View style={[styles.toolGroupDetails, { borderColor: colors.borderSubtle }]}>
+          {tools.map((tool) => (
+            <ToolTimelineDetail key={tool.id} onKillTool={onKillTool} tool={tool} />
+          ))}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function ToolTimelineDetail({
+  onKillTool,
+  tool,
+}: {
+  onKillTool(toolCallId: string): Promise<void>;
+  tool: ToolTimelineEntry;
+}) {
+  const { colors } = useAppTheme();
+  const [expanded, setExpanded] = useState(false);
+  const canExpand = Boolean(tool.output);
+  const label = tool.running ? "Running" : tool.failed ? "Failed" : "Done";
+  return (
+    <View style={styles.toolDetail}>
+      <Pressable
+        accessibilityLabel={`${expanded ? "Hide" : "Show"} ${tool.name} details`}
+        accessibilityRole="button"
+        disabled={!canExpand}
+        onPress={() => setExpanded((current) => !current)}
+        style={styles.toolDetailHeader}
+      >
+        <StatusDot tone={tool.running ? "accent" : tool.failed ? "danger" : "success"} size={6} />
+        <Text numberOfLines={1} style={[styles.toolDetailName, { color: colors.textSecondary }]}>
+          {tool.name}
+        </Text>
+        <Text style={[styles.toolStatus, { color: colors.textMuted }]}>{label}</Text>
+        {canExpand ? (
+          expanded ? (
+            <ChevronDown color={colors.textMuted} size={14} />
+          ) : (
+            <ChevronRight color={colors.textMuted} size={14} />
+          )
+        ) : null}
+      </Pressable>
+      {expanded && tool.output ? (
+        <Text
+          selectable
+          style={[styles.toolOutput, { borderColor: colors.borderSubtle, color: colors.textSecondary }]}
+        >
+          {tool.output}
+        </Text>
+      ) : null}
+      {tool.running ? (
+        <Pressable
+          accessibilityLabel={`Stop ${tool.name}`}
+          accessibilityRole="button"
+          onPress={() => void onKillTool(tool.id)}
+          style={styles.killTool}
+        >
+          <Text style={[styles.killToolText, { color: colors.statusRed }]}>Stop</Text>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
+function isToolCallPart(
+  part: unknown,
+): part is { type: "tool-call"; toolCallId: string; toolName: string; result?: unknown; isError?: boolean } {
+  return (
+    typeof part === "object" &&
+    part !== null &&
+    "type" in part &&
+    (part as { type?: unknown }).type === "tool-call" &&
+    typeof (part as { toolCallId?: unknown }).toolCallId === "string" &&
+    typeof (part as { toolName?: unknown }).toolName === "string"
+  );
+}
+
+function toToolTimelineEntry(part: {
+  toolCallId: string;
+  toolName: string;
+  result?: unknown;
+  isError?: boolean;
+}): ToolTimelineEntry {
+  return {
+    id: part.toolCallId,
+    name: part.toolName,
+    output: part.result === undefined ? null : String(part.result).trim(),
+    running: part.result === undefined,
+    failed: part.isError === true,
+  };
+}
+
+function toolGroupStatus(tools: ToolTimelineEntry[]): {
+  label: "Running" | "Failed" | "Done";
+  tone: "accent" | "danger" | "success";
+} {
+  if (tools.some((tool) => tool.running)) return { label: "Running", tone: "accent" };
+  if (tools.some((tool) => tool.failed)) return { label: "Failed", tone: "danger" };
+  return { label: "Done", tone: "success" };
+}
+
+function toolGroupSummary(tools: ToolTimelineEntry[]): string {
+  const counts = tools.reduce(
+    (summary, tool) => {
+      const category = toolCategory(tool.name);
+      summary[category] += 1;
+      return summary;
+    },
+    { commands: 0, edits: 0, reads: 0, other: 0 },
+  );
+  const fragments = [
+    counts.edits ? `${counts.edits} ${counts.edits === 1 ? "alteração" : "alterações"}` : null,
+    counts.commands ? `${counts.commands} ${counts.commands === 1 ? "comando" : "comandos"}` : null,
+    counts.reads ? `${counts.reads} ${counts.reads === 1 ? "leitura" : "leituras"}` : null,
+    counts.other ? `${counts.other} ${counts.other === 1 ? "atividade" : "atividades"}` : null,
+  ].filter((value): value is string => Boolean(value));
+  return fragments.length === 1
+    ? fragments[0]!
+    : `${tools.length} atividades · ${fragments.slice(0, 2).join(" · ")}`;
+}
+
+function toolCategory(name: string): "commands" | "edits" | "reads" | "other" {
+  const normalized = name.toLowerCase();
+  if (/(apply_patch|write|edit|create_file|replace)/.test(normalized)) return "edits";
+  if (/(shell|exec|command|terminal|run)/.test(normalized)) return "commands";
+  if (/(read|search|find|list|workflow)/.test(normalized)) return "reads";
+  return "other";
+}
+
+function TaskCreationActivity({
+  details,
+  running,
+}: {
+  details: TaskCreationDetails;
+  running: boolean;
+}) {
+  const { colors } = useAppTheme();
+  const label = running
+    ? "Creating task"
+    : details.kind === "draft"
+      ? "Draft created"
+      : details.kind === "subtask"
+        ? "Subtask created"
+        : "Task created";
+  const description = running
+    ? "Creating a tracker task…"
+    : (details.title ??
+      (details.parentIdentifier
+        ? `${details.unitType ?? "child"} of ${details.parentIdentifier}`
+        : "Added to this project"));
+  return (
+    <View
+      style={[
+        styles.taskCreationCard,
+        { backgroundColor: colors.bgRaised, borderColor: colors.borderSubtle },
+      ]}
+    >
+      <ListChecks color={colors.accent} size={18} />
+      <View style={styles.taskCreationCopy}>
+        <Text style={[styles.taskCreationLabel, { color: colors.textPrimary }]}>
+          {label}
+        </Text>
+        <Text
+          numberOfLines={2}
+          style={[styles.taskCreationDescription, { color: colors.textMuted }]}
+        >
+          {description}
+        </Text>
+      </View>
+      {details.identifier ? (
+        <Text style={[styles.taskCreationIdentifier, { color: colors.accent }]}>
+          {details.identifier}
+        </Text>
+      ) : (
+        <ActivityIndicator color={colors.accent} size="small" />
+      )}
+    </View>
+  );
+}
+
+function disclosureText(
+  text: string,
+  fallbackTitle: string,
+): { title: string; body: string } {
   const trimmed = text.trim();
   if (!trimmed) return { title: fallbackTitle, body: "" };
   const divider = trimmed.search(/\n\s*\n/);
@@ -338,60 +870,608 @@ function disclosureText(text: string, fallbackTitle: string): { title: string; b
   };
 }
 
-function ChatComposer({ onDictate }: { onDictate?: (() => Promise<string>) | undefined }) {
+function ChatComposer({
+  catalog,
+  catalogStatus,
+  onDictate,
+  onStartDictation,
+  onOpenGoal,
+  onSetTurnPreferences,
+  preferences,
+  provider,
+  resolvedEffort,
+  resolvedModel,
+}: {
+  catalog: AssistantCatalog | null;
+  catalogStatus: HostAssistantCatalogStatus;
+  onDictate?: (() => Promise<string>) | undefined;
+  onStartDictation?: (() => Promise<DictationSession>) | undefined;
+  onOpenGoal(): void;
+  onSetTurnPreferences(
+    preferences: Partial<AssistantTurnPreferences>,
+  ): Promise<void>;
+  preferences: AssistantTurnPreferences;
+  provider: string | null;
+  resolvedEffort: string | null;
+  resolvedModel: string | null;
+}) {
   const { colors } = useAppTheme();
   const [dictating, setDictating] = useState(false);
+  const [dictationError, setDictationError] = useState<string | null>(null);
+  const activeDictation = useRef<DictationSession | null>(null);
+  const [settings, setSettings] = useState<"none" | "permission" | "model">(
+    "none",
+  );
   const aui = useAui();
   const composerText = useAuiState((state) => state.composer.text);
+  const selectedAgent =
+    catalog?.agents.find(
+      (agent) => agent.agent.toLowerCase() === provider?.toLowerCase(),
+    ) ??
+    catalog?.agents.find((agent) => agent.agent === catalog.defaultAgent) ??
+    null;
+  const activeModel =
+    preferences.model ?? resolvedModel ?? selectedAgent?.defaultModel ?? null;
+  const selectedModel =
+    selectedAgent?.models.find((model) => model.model === activeModel) ?? null;
+  const modelLabel = composerModelLabel(
+    selectedModel?.label ?? activeModel,
+    preferences.effort ?? resolvedEffort,
+  );
+
+  useEffect(() => {
+    return () => {
+      activeDictation.current?.cancel();
+      activeDictation.current = null;
+    };
+  }, []);
+
+  const appendDictation = (transcript: string) => {
+    const nextText = [composerText.trim(), transcript.trim()]
+      .filter(Boolean)
+      .join(" ");
+    if (nextText) aui.composer().setText(nextText);
+  };
+
+  const beginDictation = () => {
+    if (activeDictation.current) {
+      activeDictation.current.stop();
+      return;
+    }
+    if (!onStartDictation && !onDictate) return;
+    setDictating(true);
+    setDictationError(null);
+    if (!onStartDictation) {
+      void onDictate!()
+        .then(appendDictation)
+        .catch((cause) =>
+          setDictationError(
+            cause instanceof Error
+              ? cause.message
+              : "Could not recognize speech",
+          ),
+        )
+        .finally(() => setDictating(false));
+      return;
+    }
+    void onStartDictation()
+      .then((session) => {
+        activeDictation.current = session;
+        return session.result;
+      })
+      .then(appendDictation)
+      .catch((cause) => {
+        const message =
+          cause instanceof Error ? cause.message : "Could not recognize speech";
+        if (message !== "Dictation cancelled") setDictationError(message);
+      })
+      .finally(() => {
+        activeDictation.current = null;
+        setDictating(false);
+      });
+  };
 
   return (
-    <ComposerPrimitive.Root
+    <View style={styles.composerShell}>
+      {settings !== "none" ? (
+        <View style={styles.settingsOverlay}>
+          <ComposerSettings
+            catalog={catalog}
+            catalogStatus={catalogStatus}
+            mode={settings}
+            onClose={() => setSettings("none")}
+            onSetTurnPreferences={onSetTurnPreferences}
+            preferences={preferences}
+            provider={provider}
+          />
+        </View>
+      ) : null}
+      {dictationError ? (
+        <Text
+          accessibilityRole="alert"
+          style={[styles.dictationError, { color: colors.statusRed }]}
+        >
+          {dictationError}
+        </Text>
+      ) : null}
+      <ComposerPrimitive.Root
+        style={[
+          styles.composer,
+          { backgroundColor: colors.bgPanel, borderColor: colors.borderStrong },
+        ]}
+      >
+        <ComposerPrimitive.Input
+          accessibilityLabel="Message"
+          multiline
+          placeholder="Trabalhar nesta Máquina…"
+          placeholderTextColor={colors.textMuted}
+          selectionColor={colors.accent}
+          style={[styles.input, { color: colors.textPrimary }]}
+          submitMode="none"
+        />
+        <View style={styles.composerActions}>
+          <Pressable
+            accessibilityLabel="Set or edit goal"
+            accessibilityRole="button"
+            onPress={onOpenGoal}
+            style={styles.addContextButton}
+          >
+            <Plus color={colors.textPrimary} size={28} />
+          </Pressable>
+          <Pressable
+            accessibilityLabel={`Choose permissions: ${executionModeLabel(preferences.executionMode)}`}
+            accessibilityRole="button"
+            onPress={() =>
+              setSettings((current) =>
+                current === "permission" ? "none" : "permission",
+              )
+            }
+            style={styles.permissionButton}
+          >
+            <ShieldAlert
+              color={
+                preferences.executionMode === "yolo"
+                  ? colors.statusAmber
+                  : colors.accent
+              }
+              size={24}
+            />
+          </Pressable>
+          <Pressable
+            accessibilityLabel="Choose model"
+            accessibilityRole="button"
+            onPress={() =>
+              setSettings((current) => (current === "model" ? "none" : "model"))
+            }
+            style={styles.modelChip}
+          >
+            <Zap
+              color={colors.textPrimary}
+              fill={colors.textPrimary}
+              size={17}
+            />
+            <Text
+              numberOfLines={1}
+              style={[styles.modelLabel, { color: colors.textPrimary }]}
+            >
+              {modelLabel}
+            </Text>
+            <ChevronDown color={colors.textMuted} size={15} />
+          </Pressable>
+          <View style={styles.composerSendActions}>
+            {onDictate || onStartDictation ? (
+              <Pressable
+                accessibilityLabel={
+                  dictating ? "Stop dictation" : "Dictate message"
+                }
+                accessibilityRole="button"
+                onPress={beginDictation}
+                style={styles.micButton}
+              >
+                {dictating ? (
+                  <Text
+                    style={[
+                      styles.stopDictationLabel,
+                      { color: colors.statusRed },
+                    ]}
+                  >
+                    Stop
+                  </Text>
+                ) : (
+                  <Mic color={colors.textPrimary} size={21} />
+                )}
+              </Pressable>
+            ) : null}
+            <ComposerPrimitive.Send
+              accessibilityLabel="Send"
+              accessibilityRole="button"
+              style={[
+                styles.composerButton,
+                { backgroundColor: colors.textPrimary },
+              ]}
+            >
+              <SendHorizontal color={colors.bgBase} size={20} />
+            </ComposerPrimitive.Send>
+          </View>
+        </View>
+      </ComposerPrimitive.Root>
+    </View>
+  );
+}
+
+function ComposerSettings({
+  catalog,
+  catalogStatus,
+  mode,
+  onClose,
+  onSetTurnPreferences,
+  preferences,
+  provider,
+}: {
+  catalog: AssistantCatalog | null;
+  catalogStatus: HostAssistantCatalogStatus;
+  mode: "permission" | "model";
+  onClose(): void;
+  onSetTurnPreferences(
+    preferences: Partial<AssistantTurnPreferences>,
+  ): Promise<void>;
+  preferences: AssistantTurnPreferences;
+  provider: string | null;
+}) {
+  const { colors } = useAppTheme();
+  const agent =
+    catalog?.agents.find((candidate) => candidate.agent === provider) ?? null;
+  if (mode === "permission") {
+    return (
+      <View
+        style={[
+          styles.settingsPanel,
+          {
+            backgroundColor: colors.bgRaised,
+            borderColor: colors.borderStrong,
+          },
+        ]}
+      >
+        <SettingsHeader label="Permissions for next turn" onClose={onClose} />
+        {(["plan", "build", "yolo"] as AssistantExecutionMode[]).map(
+          (executionMode) => (
+            <Pressable
+              key={executionMode}
+              accessibilityLabel={`Use ${executionModeLabel(executionMode)}`}
+              accessibilityRole="button"
+              onPress={() => {
+                void onSetTurnPreferences({ executionMode }).finally(onClose);
+              }}
+              style={styles.settingsOption}
+            >
+              <ExecutionModeIcon
+                color={colors.textSecondary}
+                mode={executionMode}
+              />
+              <View style={styles.settingsCopy}>
+                <Text style={{ color: colors.textPrimary }}>
+                  {executionModeLabel(executionMode)}
+                </Text>
+                <Text
+                  style={[
+                    styles.settingsDescription,
+                    { color: colors.textMuted },
+                  ]}
+                >
+                  {executionModeDescription(executionMode)}
+                </Text>
+              </View>
+              <StatusDot
+                tone={
+                  preferences.executionMode === executionMode
+                    ? "accent"
+                    : "muted"
+                }
+              />
+            </Pressable>
+          ),
+        )}
+      </View>
+    );
+  }
+  return (
+    <View
       style={[
-        styles.composer,
-        { backgroundColor: colors.bgPanel, borderColor: colors.borderStrong },
+        styles.settingsPanel,
+        { backgroundColor: colors.bgRaised, borderColor: colors.borderStrong },
       ]}
     >
-      <ComposerPrimitive.Input
-        accessibilityLabel="Message"
-        multiline
-        placeholder="Message or steer this run…"
-        placeholderTextColor={colors.textMuted}
-        selectionColor={colors.accent}
-        style={[styles.input, { color: colors.textPrimary }]}
-        submitMode="none"
+      <SettingsHeader
+        label={agent ? `${agent.agentLabel} model` : "Model"}
+        onClose={onClose}
       />
-      {onDictate ? (
-        <Pressable
-          accessibilityLabel={dictating ? "Listening" : "Dictate message"}
-          accessibilityRole="button"
-          disabled={dictating}
-          onPress={() => {
-            setDictating(true);
-            void onDictate()
-              .then((transcript) => {
-                const nextText = [composerText.trim(), transcript.trim()].filter(Boolean).join(" ");
-                if (nextText) aui.composer().setText(nextText);
-              })
-              .finally(() => setDictating(false));
-          }}
-          style={[styles.composerButton, { backgroundColor: colors.bgPressed }]}
-        >
-          {dictating ? (
-            <ActivityIndicator color={colors.accent} size="small" />
-          ) : (
-            <Mic color={colors.textSecondary} size={20} />
-          )}
-        </Pressable>
-      ) : null}
-      <ComposerPrimitive.Send
-        accessibilityLabel="Send"
-        accessibilityRole="button"
-        style={[styles.composerButton, { backgroundColor: colors.textPrimary }]}
-      >
-        <SendHorizontal color={colors.bgBase} size={20} />
-      </ComposerPrimitive.Send>
-    </ComposerPrimitive.Root>
+      {agent?.models.length ? (
+        agent.models.map((model) => (
+          <Pressable
+            key={model.model}
+            accessibilityLabel={`Use ${model.label}`}
+            accessibilityRole="button"
+            onPress={() => {
+              void onSetTurnPreferences({
+                model: model.model,
+                effort:
+                  preferences.model === model.model
+                    ? preferences.effort
+                    : (model.efforts[0]?.effort ?? null),
+              }).finally(onClose);
+            }}
+            style={styles.settingsOption}
+          >
+            <Target color={colors.textSecondary} size={16} />
+            <View style={styles.settingsCopy}>
+              <Text style={{ color: colors.textPrimary }}>{model.label}</Text>
+              <Text
+                style={[
+                  styles.settingsDescription,
+                  { color: colors.textMuted },
+                ]}
+              >
+                {model.efforts.find(
+                  (entry) => entry.effort === preferences.effort,
+                )?.label ??
+                  model.efforts[0]?.label ??
+                  "Default effort"}
+              </Text>
+            </View>
+            <StatusDot
+              tone={preferences.model === model.model ? "accent" : "muted"}
+            />
+          </Pressable>
+        ))
+      ) : (
+        <Text style={[styles.settingsDescription, { color: colors.textMuted }]}>
+          {catalogStatus === "loading" || catalogStatus === "idle"
+            ? "Preparing model options for this machine…"
+            : catalogStatus === "unavailable"
+              ? "Model options are unavailable on this machine. Reconnect it to retry."
+              : "This provider has no model choices on this machine."}
+        </Text>
+      )}
+    </View>
   );
+}
+
+function SettingsHeader({
+  label,
+  onClose,
+}: {
+  label: string;
+  onClose(): void;
+}) {
+  const { colors } = useAppTheme();
+  return (
+    <View style={styles.settingsHeader}>
+      <Text style={[styles.settingsTitle, { color: colors.textPrimary }]}>
+        {label}
+      </Text>
+      <Pressable
+        accessibilityLabel="Close settings"
+        accessibilityRole="button"
+        onPress={onClose}
+      >
+        <Text style={{ color: colors.accent }}>Done</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+function GoalDock({
+  editRequest,
+  goal,
+  onClear,
+  onPause,
+  onResume,
+  onSetGoalMode,
+  onSetObjective,
+}: {
+  editRequest: number;
+  goal: AssistantGoalStatus | null;
+  onClear(): Promise<void>;
+  onPause(): Promise<void>;
+  onResume(): Promise<void>;
+  onSetGoalMode(enabled: boolean, objective?: string): Promise<void>;
+  onSetObjective(objective: string): Promise<void>;
+}) {
+  const { colors } = useAppTheme();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(goal?.objective ?? "");
+  const enabled = goal?.enabled === true;
+  const capabilities = goal?.capabilities ?? [];
+  const canEdit =
+    !goal ||
+    capabilities.includes("edit") ||
+    capabilities.includes("set_objective");
+  const canClear = enabled && capabilities.includes("clear");
+  const canPause = enabled && goal?.running && capabilities.includes("pause");
+  const canResume =
+    enabled &&
+    !goal?.running &&
+    goal?.resumable &&
+    capabilities.includes("resume");
+  useEffect(() => {
+    if (editRequest > 0 && canEdit) {
+      setDraft(goal?.objective ?? "");
+      setEditing(true);
+    }
+  }, [canEdit, editRequest, goal?.objective]);
+  const save = () => {
+    const objective = draft.trim();
+    if (!objective) return;
+    const action = enabled
+      ? onSetObjective(objective)
+      : onSetGoalMode(true, objective);
+    void action.then(() => setEditing(false));
+  };
+  if (!goal || !goal.available || capabilities.length === 0) return null;
+  return (
+    <View
+      style={[
+        styles.goalDock,
+        { backgroundColor: colors.bgRaised, borderColor: colors.borderSubtle },
+      ]}
+    >
+      <Target color={colors.accent} size={16} />
+      <View style={styles.goalCopy}>
+        <Text
+          numberOfLines={1}
+          style={[styles.goalTitle, { color: colors.textPrimary }]}
+        >
+          {enabled ? "Pursuing goal" : "Set a goal"}
+        </Text>
+        {!editing ? (
+          <View style={styles.goalSummary}>
+            <Text
+              numberOfLines={1}
+              style={[styles.goalObjective, { color: colors.textMuted }]}
+            >
+              {goal?.objective ?? "Keep this session focused across turns"}
+            </Text>
+            {enabled && goal.timeUsedSeconds !== null ? (
+              <Text style={[styles.goalDuration, { color: colors.textMuted }]}>
+                {formatDuration(goal.timeUsedSeconds)}
+              </Text>
+            ) : null}
+          </View>
+        ) : null}
+      </View>
+      {!editing ? (
+        <View style={styles.goalButtons}>
+          {canEdit ? (
+            <GoalButton
+              icon={<Pencil color={colors.textSecondary} size={16} />}
+              label="Edit goal"
+              onPress={() => {
+                setDraft(goal?.objective ?? "");
+                setEditing(true);
+              }}
+            />
+          ) : null}
+          {canPause ? (
+            <GoalButton
+              icon={<Pause color={colors.textSecondary} size={16} />}
+              label="Pause goal"
+              onPress={() => void onPause()}
+            />
+          ) : null}
+          {canResume ? (
+            <GoalButton
+              icon={<Play color={colors.textSecondary} size={16} />}
+              label="Resume goal"
+              onPress={() => void onResume()}
+            />
+          ) : null}
+          {canClear ? (
+            <GoalButton
+              icon={<Trash2 color={colors.statusRed} size={16} />}
+              label="Remove goal"
+              onPress={() => void onClear()}
+            />
+          ) : null}
+        </View>
+      ) : null}
+      {editing ? (
+        <View style={styles.goalEditor}>
+          <TextInput
+            accessibilityLabel="Goal objective"
+            multiline
+            onChangeText={setDraft}
+            placeholder="Describe the outcome"
+            placeholderTextColor={colors.textMuted}
+            style={[
+              styles.goalInput,
+              { borderColor: colors.borderStrong, color: colors.textPrimary },
+            ]}
+            value={draft}
+          />
+          <RequestButton label="Save goal" onPress={save} tone="primary" />
+          <RequestButton
+            label="Cancel goal edit"
+            onPress={() => setEditing(false)}
+            tone="secondary"
+          />
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function GoalButton({
+  icon,
+  label,
+  onPress,
+}: {
+  icon: ReactNode;
+  label: string;
+  onPress(): void;
+}) {
+  return (
+    <Pressable
+      accessibilityLabel={label}
+      accessibilityRole="button"
+      onPress={onPress}
+      style={styles.goalButton}
+    >
+      {icon}
+    </Pressable>
+  );
+}
+
+function ExecutionModeIcon({
+  color,
+  mode,
+}: {
+  color: string;
+  mode: AssistantExecutionMode;
+}) {
+  if (mode === "plan") return <Compass color={color} size={16} />;
+  if (mode === "build") return <Hammer color={color} size={16} />;
+  return <Zap color={color} size={16} />;
+}
+
+function executionModeLabel(mode: AssistantExecutionMode | null): string {
+  if (mode === "plan") return "Read only";
+  if (mode === "build") return "Ask approval";
+  if (mode === "yolo") return "Full access";
+  return "Permissions";
+}
+
+function composerModelLabel(model: string | null, effort: string | null): string {
+  const compactModel = model
+    ?.replace(/^gpt-/i, "")
+    .replace(/-/g, " ")
+    .replace(/\bsol\b/i, "Sol")
+    .trim();
+  const effortLabel =
+    effort === "high"
+      ? "Alto"
+      : effort === "medium"
+        ? "Médio"
+        : effort === "low"
+          ? "Baixo"
+          : effort;
+  return [compactModel, effortLabel].filter(Boolean).join(" ") || "Selecionar modelo";
+}
+
+function executionModeDescription(mode: AssistantExecutionMode): string {
+  if (mode === "plan") return "Explore and plan without editing files.";
+  if (mode === "build")
+    return "Edit the workspace and ask before sensitive actions.";
+  return "No prompts; access to machine files and network.";
+}
+
+function formatDuration(totalSeconds: number): string {
+  const safeSeconds = Math.max(0, Math.floor(totalSeconds));
+  const hours = Math.floor(safeSeconds / 3_600);
+  const minutes = Math.floor((safeSeconds % 3_600) / 60);
+  const seconds = safeSeconds % 60;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  if (minutes > 0) return `${minutes}m ${seconds}s`;
+  return `${seconds}s`;
 }
 
 function TurnControl({
@@ -416,11 +1496,15 @@ function TurnControl({
       disabled={busy}
       onPress={() => {
         setBusy(true);
-        void (canResume ? onResumeTurn() : onStopTurn()).finally(() => setBusy(false));
+        void (canResume ? onResumeTurn() : onStopTurn()).finally(() =>
+          setBusy(false),
+        );
       }}
       style={styles.turnControl}
     >
-      <Text style={{ color: canResume ? colors.statusGreen : colors.statusRed }}>
+      <Text
+        style={{ color: canResume ? colors.statusGreen : colors.statusRed }}
+      >
         {busy ? "…" : canResume ? "Resume" : "Stop"}
       </Text>
     </Pressable>
@@ -431,7 +1515,10 @@ function ApprovalCard({
   onApproval,
   request,
 }: {
-  onApproval(requestId: string | number, action: "approve" | "cancel"): Promise<void>;
+  onApproval(
+    requestId: string | number,
+    action: "approve" | "cancel",
+  ): Promise<void>;
   request: AssistantApprovalRequest;
 }) {
   const { colors } = useAppTheme();
@@ -452,12 +1539,16 @@ function ApprovalCard({
         { backgroundColor: colors.bgRaised, borderColor: colors.statusAmber },
       ]}
     >
-      <Text style={[styles.requestTitle, { color: colors.statusAmber }]}>Approval required</Text>
+      <Text style={[styles.requestTitle, { color: colors.statusAmber }]}>
+        Approval required
+      </Text>
       {request.reason ? (
         <Text style={{ color: colors.textSecondary }}>{request.reason}</Text>
       ) : null}
       {request.command ? (
-        <Text style={[styles.command, { color: colors.textPrimary }]}>{request.command}</Text>
+        <Text style={[styles.command, { color: colors.textPrimary }]}>
+          {request.command}
+        </Text>
       ) : null}
       <View style={styles.requestActions}>
         <RequestButton
@@ -481,18 +1572,28 @@ function UserInputCard({
   onSubmit,
   request,
 }: {
-  onSubmit(requestId: string | number, answers: Record<string, string>): Promise<void>;
+  onSubmit(
+    requestId: string | number,
+    answers: Record<string, string>,
+  ): Promise<void>;
   request: AssistantUserInputRequest;
 }) {
   const { colors } = useAppTheme();
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
-  const complete = request.questions.every((question) => Boolean(answers[question.id]?.trim()));
+  const complete = request.questions.every((question) =>
+    Boolean(answers[question.id]?.trim()),
+  );
   return (
     <View
-      style={[styles.requestCard, { backgroundColor: colors.bgRaised, borderColor: colors.accent }]}
+      style={[
+        styles.requestCard,
+        { backgroundColor: colors.bgRaised, borderColor: colors.accent },
+      ]}
     >
-      <Text style={[styles.requestTitle, { color: colors.accent }]}>Assistant question</Text>
+      <Text style={[styles.requestTitle, { color: colors.accent }]}>
+        Assistant question
+      </Text>
       {request.questions.map((question) => (
         <View key={question.id} style={styles.question}>
           <Text style={{ color: colors.textPrimary }}>{question.question}</Text>
@@ -503,7 +1604,10 @@ function UserInputCard({
                   key={option.label}
                   label={`Select ${option.label}`}
                   onPress={() =>
-                    setAnswers((current) => ({ ...current, [question.id]: option.label }))
+                    setAnswers((current) => ({
+                      ...current,
+                      [question.id]: option.label,
+                    }))
                   }
                   selected={answers[question.id] === option.label}
                   tone="secondary"
@@ -531,7 +1635,9 @@ function UserInputCard({
         label="Submit answers"
         onPress={() => {
           setBusy(true);
-          void onSubmit(request.requestId, answers).finally(() => setBusy(false));
+          void onSubmit(request.requestId, answers).finally(() =>
+            setBusy(false),
+          );
         }}
         tone="primary"
       />
@@ -562,7 +1668,10 @@ function RequestButton({
       style={[
         styles.requestButton,
         {
-          backgroundColor: tone === "primary" || selected ? colors.textPrimary : colors.bgPanel,
+          backgroundColor:
+            tone === "primary" || selected
+              ? colors.textPrimary
+              : colors.bgPanel,
           borderColor: selected ? colors.accent : colors.borderStrong,
           opacity: disabled ? 0.45 : 1,
         },
@@ -570,7 +1679,8 @@ function RequestButton({
     >
       <Text
         style={{
-          color: tone === "primary" || selected ? colors.bgBase : colors.textPrimary,
+          color:
+            tone === "primary" || selected ? colors.bgBase : colors.textPrimary,
           fontWeight: "700",
         }}
       >
@@ -580,13 +1690,23 @@ function RequestButton({
   );
 }
 
-function connectionState(state: SessionTimelineState["connectionState"]): ConnectionState {
-  return state === "reconnecting" ? "connecting" : state;
+function sessionHeaderState(timeline: SessionTimelineState): ConnectionState {
+  if (timeline.connectionState === "reconnecting") return "connecting";
+  if (timeline.connectionState !== "live") return timeline.connectionState;
+  const status = timeline.turnStatus?.status;
+  if (status === "running" || status === "queued") return "live";
+  if (["failed", "error", "cancelled", "canceled"].includes(status ?? "")) return "failed";
+  return "complete";
 }
 
 function markdownStyles(colors: ReturnType<typeof useAppTheme>["colors"]) {
   return {
-    body: { color: colors.textPrimary, fontSize: 15.5, lineHeight: 23, margin: 0 },
+    body: {
+      color: colors.textPrimary,
+      fontSize: 15.5,
+      lineHeight: 23,
+      margin: 0,
+    },
     code_inline: {
       backgroundColor: colors.bgRaised,
       color: colors.textPrimary,
@@ -608,11 +1728,18 @@ function markdownStyles(colors: ReturnType<typeof useAppTheme>["colors"]) {
   };
 }
 
-function activityMarkdownStyles(colors: ReturnType<typeof useAppTheme>["colors"]) {
+function activityMarkdownStyles(
+  colors: ReturnType<typeof useAppTheme>["colors"],
+) {
   const base = markdownStyles(colors);
   return {
     ...base,
-    body: { ...base.body, color: colors.textSecondary, fontSize: 13, lineHeight: 19 },
+    body: {
+      ...base.body,
+      color: colors.textSecondary,
+      fontSize: 13,
+      lineHeight: 19,
+    },
   };
 }
 
@@ -628,12 +1755,13 @@ const styles = StyleSheet.create({
   },
   iconButton: {
     alignItems: "center",
+    borderRadius: radii.pill,
     height: 44,
     justifyContent: "center",
     width: 44,
   },
   titleBlock: { alignItems: "center", flex: 1, minWidth: 0 },
-  title: { fontSize: 16, fontWeight: "700", maxWidth: "100%" },
+  title: { fontSize: 15, fontWeight: "700", maxWidth: "100%" },
   titleMeta: { alignItems: "center", flexDirection: "row", gap: spacing.xs },
   sessionId: { fontSize: 11 },
   turnControl: {
@@ -644,8 +1772,11 @@ const styles = StyleSheet.create({
   },
   messageListContent: {
     flexGrow: 1,
-    gap: spacing.md,
-    justifyContent: "flex-end",
+    // Activity rows are intentionally dense: a long orchestrator transcript must
+    // behave like the compact Codex activity stream, not distribute system events
+    // through the empty viewport.
+    gap: spacing.xs,
+    justifyContent: "flex-start",
     padding: spacing.md,
   },
   message: {
@@ -695,6 +1826,31 @@ const styles = StyleSheet.create({
   },
   toolName: { flex: 1, fontSize: 13, fontWeight: "700" },
   toolStatus: { fontSize: 11 },
+  toolGroup: {
+    borderRadius: radii.md,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  toolGroupHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: spacing.xs,
+    minHeight: 42,
+    paddingHorizontal: spacing.sm,
+  },
+  toolGroupTitle: { flex: 1, fontSize: 13, fontWeight: "700" },
+  toolGroupDetails: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
+  toolDetail: { paddingVertical: spacing.xxs },
+  toolDetailHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: spacing.xs,
+    minHeight: 30,
+  },
+  toolDetailName: { flex: 1, fontSize: 12, fontWeight: "600" },
   toolOutput: {
     borderTopWidth: StyleSheet.hairlineWidth,
     fontFamily: Platform.select({ ios: "Menlo", default: "monospace" }),
@@ -703,30 +1859,130 @@ const styles = StyleSheet.create({
     maxHeight: 220,
     padding: spacing.sm,
   },
-  composer: {
-    alignItems: "flex-end",
-    borderRadius: radii.lg,
+  taskCreationCard: {
+    alignItems: "center",
+    borderRadius: radii.md,
     borderWidth: StyleSheet.hairlineWidth,
     flexDirection: "row",
-    gap: spacing.xs,
-    margin: spacing.md,
-    padding: spacing.xs,
+    gap: spacing.sm,
+    minHeight: 62,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
   },
+  taskCreationCopy: { flex: 1, minWidth: 0 },
+  taskCreationLabel: { fontSize: 13, fontWeight: "700" },
+  taskCreationDescription: { fontSize: 12, lineHeight: 17, marginTop: 2 },
+  taskCreationIdentifier: { fontSize: 12, fontWeight: "800" },
+  killTool: {
+    alignItems: "flex-end",
+    paddingBottom: spacing.xs,
+    paddingHorizontal: spacing.sm,
+  },
+  killToolText: { fontSize: 12, fontWeight: "700" },
+  composerShell: { margin: spacing.md, position: "relative" },
+  dictationError: {
+    fontSize: 12,
+    marginBottom: spacing.xs,
+    paddingHorizontal: spacing.xs,
+  },
+  composer: {
+    alignItems: "stretch",
+    borderRadius: 30,
+    borderWidth: StyleSheet.hairlineWidth,
+    gap: spacing.xxs,
+    padding: spacing.sm,
+  },
+  permissionButton: {
+    alignItems: "center",
+    height: 48,
+    justifyContent: "center",
+    width: 48,
+  },
+  addContextButton: {
+    alignItems: "center",
+    height: 48,
+    justifyContent: "center",
+    width: 48,
+  },
+  modelChip: {
+    alignItems: "center",
+    flex: 1,
+    flexDirection: "row",
+    gap: 6,
+    justifyContent: "center",
+    minWidth: 0,
+    paddingHorizontal: spacing.xs,
+  },
+  modelLabel: { flexShrink: 1, fontSize: 16, fontWeight: "700" },
+  composerActions: {
+    alignItems: "center",
+    flexDirection: "row",
+    minHeight: 52,
+  },
+  composerSendActions: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: spacing.xxs,
+    marginLeft: spacing.xs,
+  },
+  micButton: {
+    alignItems: "center",
+    height: 48,
+    justifyContent: "center",
+    width: 44,
+  },
+  stopDictationLabel: { fontSize: 11, fontWeight: "800" },
+  settingsOverlay: {
+    bottom: "100%",
+    left: 0,
+    marginBottom: spacing.sm,
+    position: "absolute",
+    right: 0,
+    zIndex: 20,
+  },
+  settingsPanel: {
+    borderRadius: radii.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    gap: spacing.xs,
+    shadowColor: "#000",
+    shadowOffset: { height: 12, width: 0 },
+    shadowOpacity: 0.28,
+    shadowRadius: 24,
+    elevation: 10,
+    padding: spacing.sm,
+    width: "100%",
+  },
+  settingsHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    minHeight: 28,
+  },
+  settingsTitle: { fontSize: 13, fontWeight: "700" },
+  settingsOption: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: spacing.sm,
+    minHeight: 47,
+  },
+  settingsCopy: { flex: 1, minWidth: 0 },
+  settingsDescription: { fontSize: 11, lineHeight: 15 },
   input: {
     flex: 1,
     fontSize: 16,
     lineHeight: 22,
-    maxHeight: 130,
-    minHeight: 44,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.sm,
+    maxHeight: 120,
+    minHeight: 72,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.md,
+    paddingVertical: spacing.xs,
   },
   composerButton: {
     alignItems: "center",
     borderRadius: radii.pill,
-    height: 44,
+    height: 48,
     justifyContent: "center",
-    width: 44,
+    width: 48,
   },
   error: { flex: 1, fontSize: 13 },
   errorRow: {
@@ -743,6 +1999,77 @@ const styles = StyleSheet.create({
     marginHorizontal: spacing.md,
     marginTop: spacing.xs,
     padding: spacing.md,
+  },
+  taskAccessDock: {
+    alignItems: "center",
+    borderRadius: radii.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginHorizontal: spacing.md,
+    marginTop: spacing.xs,
+    minHeight: 38,
+    paddingHorizontal: spacing.sm,
+  },
+  taskAccessTitle: { fontSize: 12, fontWeight: "800" },
+  taskAccessActions: { flexDirection: "row", gap: spacing.sm },
+  taskAccessAction: { fontSize: 12, fontWeight: "700" },
+  queuedDock: {
+    alignItems: "center",
+    borderRadius: radii.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    flexDirection: "row",
+    gap: spacing.xs,
+    marginHorizontal: spacing.md,
+    marginTop: spacing.xs,
+    minHeight: 44,
+    paddingHorizontal: spacing.sm,
+  },
+  queuedCopy: { flex: 1, minWidth: 0 },
+  queuedLabel: { fontSize: 11, fontWeight: "800" },
+  queuedText: { fontSize: 12, marginTop: 1 },
+  queuedProvider: {
+    fontSize: 11,
+    fontWeight: "700",
+    textTransform: "capitalize",
+  },
+  queuedCount: { fontSize: 11, fontWeight: "700" },
+  goalDock: {
+    alignItems: "center",
+    borderRadius: radii.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs,
+    marginHorizontal: spacing.md,
+    marginTop: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
+  },
+  goalCopy: { flex: 1, minWidth: 0 },
+  goalTitle: { fontSize: 12, fontWeight: "700" },
+  goalSummary: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: spacing.xs,
+    marginTop: 1,
+  },
+  goalObjective: { fontSize: 11, marginTop: 1 },
+  goalDuration: { fontSize: 11, fontVariant: ["tabular-nums"] },
+  goalButtons: { flexDirection: "row", gap: spacing.xxs },
+  goalButton: {
+    alignItems: "center",
+    height: 32,
+    justifyContent: "center",
+    width: 28,
+  },
+  goalEditor: { gap: spacing.xs, paddingTop: spacing.xs, width: "100%" },
+  goalInput: {
+    borderRadius: radii.sm,
+    borderWidth: 1,
+    fontSize: 13,
+    minHeight: 62,
+    padding: spacing.sm,
   },
   requestTitle: { fontSize: 14, fontWeight: "700" },
   requestActions: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs },

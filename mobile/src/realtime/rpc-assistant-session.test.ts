@@ -85,6 +85,34 @@ describe("RPC assistant session", () => {
     );
     expect(JSON.stringify(vi.mocked(transport.call).mock.calls)).not.toMatch(/token|Bearer/i);
   });
+
+  it("forwards provider-neutral permission and goal controls over the encrypted session", async () => {
+    const transport = fakeTransport();
+    const session = createRpcAssistantSession({ threadId: 42, transport, onAction: vi.fn() });
+    session.connect();
+    await vi.waitFor(() => expect(transport.subscribe).toHaveBeenCalled());
+
+    await session.setTurnPreferences({ executionMode: "build" });
+    await session.setGoalMode(true, "Ship the health page");
+    await session.pauseGoal();
+    await session.resumeGoal();
+    await session.setGoalObjective("Record E2E evidence");
+    await session.clearGoal();
+    await session.killTool("tool-9");
+
+    const commands = vi.mocked(transport.call).mock.calls.map(([, input]) => input);
+    expect(commands).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ event: "set_turn_preferences", payload: { execution_mode: "build" } }),
+        expect.objectContaining({ event: "set_goal_mode", payload: { goal_mode: true, objective: "Ship the health page" } }),
+        expect.objectContaining({ event: "goal_pause" }),
+        expect.objectContaining({ event: "goal_resume" }),
+        expect.objectContaining({ event: "goal_set_objective", payload: { objective: "Record E2E evidence" } }),
+        expect.objectContaining({ event: "goal_clear" }),
+        expect.objectContaining({ event: "kill_tool", payload: { tool_call_id: "tool-9" } }),
+      ]),
+    );
+  });
 });
 
 function fakeTransport(): HostTransport {

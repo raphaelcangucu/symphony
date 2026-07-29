@@ -43,7 +43,10 @@ describe("orchestrator transcript adapter", () => {
 
     expect(timeline.messages).toEqual([
       expect.objectContaining({ role: "user", content: "Implement the RPC" }),
-      expect.objectContaining({ role: "assistant", content: "I am working on it." }),
+      expect.objectContaining({
+        role: "assistant",
+        content: "I am working on it.",
+      }),
       expect.objectContaining({
         role: "assistant",
         toolCalls: [
@@ -144,12 +147,77 @@ describe("orchestrator transcript adapter", () => {
 
     expect(timeline.messages[0]).toMatchObject({
       role: "system",
-      content: "Reasoning\n\nThe model worked through the next step internally.",
+      content:
+        "Reasoning\n\nThe model worked through the next step internally.",
     });
   });
 
+  it("derives a queued Steer message from the durable execution transcript", () => {
+    const timeline = buildOrchestratorTimeline(
+      payloadSessionLogEntries({
+        entries: [
+          {
+            kind: "user",
+            title: "Queued message",
+            body: "Capture the E2E proof before replying",
+            steer_id: "steer:42",
+            steer_state: "queued",
+          },
+          {
+            kind: "event",
+            title: "Steer accepted",
+            steer_id: "steer:42",
+            steer_state: "accepted",
+            collapsed: true,
+          },
+        ],
+      }),
+      "live",
+      null,
+      "claude",
+    );
+
+    expect(timeline.turnStatus).toEqual({
+      status: "queued",
+      canResume: false,
+      queuedMessages: [
+        {
+          id: "steer:42",
+          message: "Capture the E2E proof before replying",
+          provider: "claude",
+        },
+      ],
+    });
+  });
+
+  it("clears a queued Steer message when the execution advances with assistant output", () => {
+    const timeline = buildOrchestratorTimeline(
+      payloadSessionLogEntries({
+        entries: [
+          {
+            kind: "user",
+            title: "Queued message",
+            body: "Use the real host",
+            steer_id: "steer:43",
+            steer_state: "queued",
+          },
+          {
+            kind: "assistant",
+            title: "Codex",
+            body: "I will use the real host.",
+          },
+        ],
+      }),
+      "live",
+    );
+
+    expect(timeline.turnStatus).toBeNull();
+  });
+
   it("accepts legacy string lines emitted by older Symphony hosts", () => {
-    expect(payloadSessionLogEntries({ lines: ["assistant: Restored transcript"] })).toEqual([
+    expect(
+      payloadSessionLogEntries({ lines: ["assistant: Restored transcript"] }),
+    ).toEqual([
       expect.objectContaining({
         kind: "event",
         title: "assistant",

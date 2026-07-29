@@ -67,6 +67,17 @@ defmodule SymphonyElixir.MobileRpc.Methods.OrchestratorTest do
     assert {:error, :invalid_params} = Orchestrator.ExecutionsList.validate(%{"extra" => true})
   end
 
+  test "returns the task context for a real execution session" do
+    assert {:ok, %{project_slug: "dev10x"}} =
+             Orchestrator.SessionContext.call(%{"execution_session_id" => 77}, context())
+
+    assert {:error, :orchestrator_session_not_found} =
+             Orchestrator.SessionContext.call(%{"execution_session_id" => 99}, context())
+
+    assert {:error, :invalid_params} =
+             Orchestrator.SessionContext.validate(%{"execution_session_id" => "77"})
+  end
+
   test "subscribes to the host execution stream" do
     assert {:ok, {:subscription, subscription_id, _, _cleanup, activate}} =
              Orchestrator.ExecutionsSubscribe.call(%{}, context())

@@ -5,6 +5,9 @@ import type {
   AssistantMessageRole,
   AssistantApprovalRequest,
   AssistantQuestion,
+  AssistantGoalStatus,
+  AssistantSessionMetadata,
+  AssistantTurnPreferences,
   AssistantTurnStatus,
   AssistantUserInputRequest,
   AssistantToolCall,
@@ -54,6 +57,13 @@ export type AssistantSession = {
   submitUserInput(requestId: string | number, answers: Record<string, string>): Promise<void>;
   stopTurn(): Promise<void>;
   resumeTurn(): Promise<void>;
+  killTool(toolCallId: string): Promise<void>;
+  setTurnPreferences(preferences: Partial<AssistantTurnPreferences>): Promise<void>;
+  setGoalMode(enabled: boolean, objective?: string): Promise<void>;
+  pauseGoal(): Promise<void>;
+  resumeGoal(): Promise<void>;
+  clearGoal(): Promise<void>;
+  setGoalObjective(objective: string): Promise<void>;
 };
 
 export function assistantThreadTopic(threadId: number): string {
@@ -235,6 +245,39 @@ export function createAssistantSession({
     return pushCommand("resume_turn", {});
   }
 
+  function killTool(toolCallId: string): Promise<void> {
+    return pushCommand("kill_tool", { tool_call_id: toolCallId });
+  }
+
+  function setTurnPreferences(preferences: Partial<AssistantTurnPreferences>): Promise<void> {
+    return pushCommand("set_turn_preferences", turnPreferencesPayload(preferences));
+  }
+
+  function setGoalMode(enabled: boolean, objective?: string): Promise<void> {
+    return pushCommand("set_goal_mode", {
+      goal_mode: enabled,
+      ...(enabled && objective?.trim() ? { objective: objective.trim() } : {}),
+    });
+  }
+
+  function pauseGoal(): Promise<void> {
+    return pushCommand("goal_pause", {});
+  }
+
+  function resumeGoal(): Promise<void> {
+    return pushCommand("goal_resume", {});
+  }
+
+  function clearGoal(): Promise<void> {
+    return pushCommand("goal_clear", {});
+  }
+
+  function setGoalObjective(objective: string): Promise<void> {
+    const normalized = objective.trim();
+    if (!normalized) return Promise.reject(new Error("Goal objective is required"));
+    return pushCommand("goal_set_objective", { objective: normalized });
+  }
+
   function reconcileSeed(): Promise<void> {
     if (!channel || !joined) return Promise.reject(new Error("Session is not connected"));
     return new Promise((resolve, reject) => {
@@ -271,6 +314,13 @@ export function createAssistantSession({
     disconnect,
     retrySeed,
     resumeTurn,
+    killTool,
+    setTurnPreferences,
+    setGoalMode,
+    pauseGoal,
+    resumeGoal,
+    clearGoal,
+    setGoalObjective,
     sendMessage,
     stopTurn,
     submitApproval,
@@ -300,6 +350,10 @@ const assistantEvents = [
   "approval_required",
   "user_input_required",
   "turn_status",
+  "turn_preferences_changed",
+  "goal_status",
+  "authoring_goal_changed",
+  "joined",
 ] as const;
 
 export function handleAssistantEvent(
@@ -310,6 +364,17 @@ export function handleAssistantEvent(
 ): void {
   const event = rawEvent.replace(/^sessions\./, "");
   switch (event) {
+    case "joined": {
+      const metadata = readSessionMetadata(payload);
+      if (metadata) {
+        onAction({
+          type: "session_metadata",
+          metadata,
+          preferences: readTurnPreferences(payload) ?? undefined,
+        });
+      }
+      break;
+    }
     case "history_loaded":
     case "history_synced": {
       const messages = readMessages(payload);
@@ -357,6 +422,17 @@ export function handleAssistantEvent(
     case "turn_status": {
       const status = readTurnStatus(payload);
       if (status) onAction({ type: "turn_status", status });
+      break;
+    }
+    case "turn_preferences_changed": {
+      const preferences = readTurnPreferences(payload);
+      if (preferences) onAction({ type: "turn_preferences_changed", preferences });
+      break;
+    }
+    case "goal_status":
+    case "authoring_goal_changed": {
+      const goal = readGoalStatus(payload);
+      if (goal) onAction({ type: "goal_status", goal });
       break;
     }
   }
@@ -460,7 +536,87 @@ function readTurnStatus(payload: unknown): AssistantTurnStatus | null {
   return {
     status: nullableString(payload.status) ?? "unknown",
     canResume: payload.can_resume === true,
+    queuedMessages: queuedMessages(payload.queued_messages),
   };
+}
+
+function queuedMessages(value: unknown): AssistantTurnStatus["queuedMessages"] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    if (!isRecord(entry)) return [];
+    const id = nullableString(entry.id);
+    const message = nullableString(entry.message);
+    if (!id || !message) return [];
+    return [{ id, message, provider: nullableString(entry.provider) }];
+  });
+}
+
+function readTurnPreferences(payload: unknown): AssistantTurnPreferences | null {
+  if (!isRecord(payload)) return null;
+  const mode = nullableString(payload.execution_mode);
+  return {
+    executionMode: mode === "plan" || mode === "build" || mode === "yolo" ? mode : null,
+    skillProfile: nullableString(payload.skill_profile),
+    model: nullableString(payload.requested_model),
+    effort: nullableString(payload.requested_effort),
+  };
+}
+
+function readSessionMetadata(payload: unknown): Partial<AssistantSessionMetadata> | null {
+  if (!isRecord(payload)) return null;
+  return {
+    projectSlug: nullableString(payload.project_slug),
+    agentKind: nullableString(payload.effective_agent),
+    requestedModel: nullableString(payload.requested_model),
+    requestedEffort: nullableString(payload.requested_effort),
+    resolvedModel: nullableString(payload.resolved_model),
+    resolvedEffort: nullableString(payload.resolved_effort),
+  };
+}
+
+function readGoalStatus(payload: unknown): AssistantGoalStatus | null {
+  if (!isRecord(payload)) return null;
+  const source = nullableString(payload.source);
+  const goal = isRecord(payload.goal) ? payload.goal : null;
+  const capabilities = stringArray(payload.capabilities ?? goal?.capabilities);
+  return {
+    enabled: payload.enabled === true || payload.goal_mode === true,
+    available:
+      payload.available !== false &&
+      payload.supported !== false &&
+      source !== "unsupported" &&
+      capabilities.length > 0,
+    status: nullableString(payload.status) ?? "inactive",
+    objective: nullableString(payload.objective) ?? nullableString(payload.goal_objective),
+    source:
+      source === "native" || source === "claude" || source === "prompt" || source === "unsupported"
+        ? source
+        : null,
+    provider: nullableString(payload.provider),
+    capabilities,
+    timeUsedSeconds: finiteNumber(payload.time_used_seconds ?? goal?.timeUsedSeconds),
+    running: payload.running === true || payload.process_running === true,
+    resumable: payload.resumable === true,
+  };
+}
+
+function turnPreferencesPayload(preferences: Partial<AssistantTurnPreferences>): Record<string, unknown> {
+  const payload: Record<string, unknown> = {};
+  if (preferences.executionMode) payload.execution_mode = preferences.executionMode;
+  if (preferences.skillProfile !== undefined) payload.skill_profile = preferences.skillProfile;
+  if (preferences.model !== undefined) payload.model = preferences.model;
+  if (preferences.effort !== undefined) payload.effort = preferences.effort;
+  return payload;
+}
+
+function finiteNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+    : [];
 }
 
 function nullableString(value: unknown): string | null {

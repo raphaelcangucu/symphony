@@ -68,6 +68,7 @@ export function OrchestratorExecutionsRoute() {
             execution.issueIdentifier,
             execution.agentKind,
             execution.status,
+            execution.projectSlug,
           ) as never,
         )
       }

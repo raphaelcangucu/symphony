@@ -1,4 +1,8 @@
-export function hostChatRoute(hostId: string, threadId: string | number, name?: string): string {
+export function hostChatRoute(
+  hostId: string,
+  threadId: string | number,
+  name?: string,
+): string {
   return hostSessionRoute("chat", hostId, threadId, name);
 }
 
@@ -13,10 +17,15 @@ export function hostTerminalRoute(
 
 export function assistantThreadDiffRoute(worktreeId: string): string | null {
   const threadId = Number(worktreeId);
-  return Number.isInteger(threadId) && threadId > 0 ? `/session/${threadId}/diff` : null;
+  return Number.isInteger(threadId) && threadId > 0
+    ? `/session/${threadId}/diff`
+    : null;
 }
 
-export function sessionNotificationRoute(hostId: string, threadId: string | number): string {
+export function sessionNotificationRoute(
+  hostId: string,
+  threadId: string | number,
+): string {
   return hostChatRoute(hostId, threadId);
 }
 
@@ -26,6 +35,7 @@ export function hostWorktreeRoute(input: {
   name?: string;
   scope?: string;
   issueIdentifier?: string | null;
+  projectSlug?: string | null;
   agentKind?: string | null;
   status?: string;
 }): string {
@@ -35,8 +45,16 @@ export function hostWorktreeRoute(input: {
 
   const query = new URLSearchParams({
     identifier:
-      input.issueIdentifier?.trim() || input.name?.trim() || `Run ${String(input.threadId)}`,
+      input.issueIdentifier?.trim() ||
+      input.name?.trim() ||
+      `Run ${String(input.threadId)}`,
     ...(input.agentKind ? { agent: input.agentKind } : {}),
+    // Keep the task context in the execution deep link. `project` is also used
+    // by some router integrations, so use a specific query key and keep the
+    // route independent from the best-effort session-context RPC.
+    ...(input.projectSlug?.trim()
+      ? { projectSlug: input.projectSlug.trim() }
+      : {}),
     status: orchestratorStatus(input.status),
   });
   return `/h/${encodeURIComponent(input.hostId)}/run/${encodeURIComponent(
@@ -57,7 +75,8 @@ function hostSessionRoute(
 }
 
 function orchestratorStatus(status: string | undefined): string {
-  if (status === "working" || status === "active" || status === "permission") return "live";
+  if (status === "working" || status === "active" || status === "permission")
+    return "live";
   if (status === "done") return "saved";
   if (
     status === "live" ||

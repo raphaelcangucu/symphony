@@ -1,7 +1,10 @@
 import type { SessionTimelineState } from "@/features/sessions/session-reducer";
 import type { HostTransport } from "@/transport/HostTransport";
 
-import { normalizeExecutionPayload, type OrchestratorExecution } from "./orchestrator-executions";
+import {
+  normalizeExecutionPayload,
+  type OrchestratorExecution,
+} from "./orchestrator-executions";
 
 export function createRpcOrchestratorExecutions({
   transport,
@@ -38,22 +41,28 @@ export function createRpcOrchestratorExecutions({
         }
       },
     );
-    const initial = transport
-      .call<Record<string, unknown>>("orchestrator.executions.list", {})
-      .then((payload) => {
-        if (active && currentGeneration === generation) {
-          onSnapshot(normalizeExecutionPayload(payload));
-        }
-      });
-
-    void Promise.all([subscription, initial])
-      .then(([cleanup]) => {
+    void subscription
+      .then((cleanup) => {
         if (!active || currentGeneration !== generation) {
           cleanup();
           return;
         }
         unsubscribe = cleanup;
         onConnection("live");
+        // A logical subscription waits through the encrypted handshake. Only
+        // ask for the initial snapshot after it is bound; otherwise a cold app
+        // reports a spurious "connection offline" before E2EE is established.
+        void transport
+          .call<Record<string, unknown>>("orchestrator.executions.list", {})
+          .then((payload) => {
+            if (active && currentGeneration === generation) {
+              onSnapshot(normalizeExecutionPayload(payload));
+            }
+          })
+          .catch((error: unknown) => {
+            if (active && currentGeneration === generation)
+              onError(errorMessage(error));
+          });
       })
       .catch((error: unknown) => {
         if (!active || currentGeneration !== generation) return;
@@ -75,5 +84,7 @@ export function createRpcOrchestratorExecutions({
 }
 
 function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : "Unable to load orchestrator executions";
+  return error instanceof Error
+    ? error.message
+    : "Unable to load orchestrator executions";
 }

@@ -27,13 +27,24 @@ defmodule SymphonyElixir.MobileRpc.OrchestratorService do
   end
 
   @spec session_context(pos_integer()) ::
-          {:ok, %{project_slug: String.t()}} | {:error, :not_found}
+          {:ok,
+           %{
+             project_slug: String.t(),
+             issue_identifier: String.t() | nil,
+             agent_kind: String.t() | nil
+           }}
+          | {:error, :not_found}
   def session_context(execution_session_id)
       when is_integer(execution_session_id) and execution_session_id > 0 do
     with {:ok, thread} <- History.get_thread(execution_session_id),
          "issue_execution" <- thread.scope,
          project_slug when is_binary(project_slug) and project_slug != "" <- thread.project_slug do
-      {:ok, %{project_slug: project_slug}}
+      {:ok,
+       %{
+         project_slug: project_slug,
+         issue_identifier: thread.issue_identifier,
+         agent_kind: thread.agent_kind
+       }}
     else
       _reason -> {:error, :not_found}
     end
@@ -77,6 +88,7 @@ defmodule SymphonyElixir.MobileRpc.OrchestratorService do
     %{
       issue_id: nil,
       issue_identifier: thread.issue_identifier,
+      project_slug: thread.project_slug,
       status: thread_status(thread.status),
       agent_kind: thread.agent_kind,
       model: thread.resolved_model,

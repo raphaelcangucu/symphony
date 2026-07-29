@@ -770,14 +770,14 @@ export function Dev10xHomeRoute() {
           ]}
         >
           <View style={styles.emptyHero}>
-            <Text style={styles.emptyTitle}>Connect your desktop</Text>
+            <Text style={styles.emptyTitle}>Conectar uma máquina</Text>
             <Text style={styles.emptyBody}>
-              Pair with a Symphony host to check on your agents, jump into any terminal, and drive
-              work from your phone.
+              Conecte uma máquina Symphony para acompanhar seus agentes, abrir sessões e trabalhar
+              pelo celular.
             </Text>
             <Pressable style={styles.primaryButton} onPress={() => router.push('/pair-scan')}>
               <QrCode size={17} color={colors.bgBase} />
-              <Text style={styles.primaryButtonText}>Pair Symphony Host</Text>
+              <Text style={styles.primaryButtonText}>Conectar máquina Symphony</Text>
             </Pressable>
           </View>
 
@@ -838,7 +838,7 @@ export function Dev10xHomeRoute() {
                 </View>
               )}
 
-              <Text style={styles.sectionHeading}>Desktops</Text>
+              <Text style={styles.sectionHeading}>Máquinas</Text>
             </View>
           }
           ItemSeparatorComponent={CardGap}
@@ -860,7 +860,7 @@ export function Dev10xHomeRoute() {
             return (
               <Pressable
                 style={({ pressed }) => [styles.hostCard, pressed && styles.hostCardPressed]}
-                onPress={() => router.push(`/h/${item.id}`)}
+                onPress={() => router.push(`/h/${item.id}/projects` as never)}
                 onLongPress={() => {
                   triggerMediumImpact()
                   setActionTarget(item)
@@ -963,7 +963,7 @@ export function Dev10xHomeRoute() {
                   <View style={styles.quickActionIcon}>
                     <QrCode size={16} color={colors.textSecondary} />
                   </View>
-                  <Text style={styles.quickActionLabel}>Pair Symphony Host</Text>
+                  <Text style={styles.quickActionLabel}>Conectar máquina Symphony</Text>
                 </Pressable>
                 <Pressable
                   disabled={!primaryConnectedHost}

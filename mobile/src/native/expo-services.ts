@@ -6,7 +6,7 @@ import * as Notifications from "expo-notifications";
 import { ExpoSpeechRecognitionModule } from "expo-speech-recognition";
 import { Platform } from "react-native";
 
-import { captureDictation, type DictationPort } from "./dictation";
+import { captureDictation, startDictation, type DictationPort, type DictationSession } from "./dictation";
 import {
   createNotificationRouter,
   loadOrCreateDeviceId,
@@ -23,11 +23,16 @@ const dictationPort: DictationPort = {
   addListener: (event, listener) =>
     ExpoSpeechRecognitionModule.addListener(event, listener as never),
   start: (options) => ExpoSpeechRecognitionModule.start(options),
+  stop: () => ExpoSpeechRecognitionModule.stop(),
   abort: () => ExpoSpeechRecognitionModule.abort(),
 };
 
 export function dictateWithExpo(lang: string): Promise<string> {
   return captureDictation(dictationPort, lang);
+}
+
+export function startDictationWithExpo(lang: string): Promise<DictationSession> {
+  return startDictation(dictationPort, lang);
 }
 
 const responsePort = {

@@ -28,6 +28,7 @@ defmodule SymphonyElixir.MobileRpc.TrackerBridge do
     PullRequestRerunController,
     SettingsController,
     ViewerController,
+    WorktreeInventoryController,
     WorkspaceDiffController
   }
 
@@ -142,11 +143,17 @@ defmodule SymphonyElixir.MobileRpc.TrackerBridge do
   defp route(:projects, "GET", ["projects"]),
     do: {:ok, ProjectController, :index, %{}}
 
+  defp route(:projects, "POST", ["projects", project_slug, "workspaces"]),
+    do: {:ok, WorktreeInventoryController, :create_workspace, %{"project_slug" => project_slug}}
+
   defp route(:sessions, "GET", ["assistant", "threads"]),
     do: {:ok, AssistantThreadController, :index, %{}}
 
   defp route(:sessions, "POST", ["assistant", "threads"]),
     do: {:ok, AssistantThreadController, :create, %{}}
+
+  defp route(:sessions, "GET", ["assistant", "config"]),
+    do: {:ok, AssistantController, :config, %{}}
 
   defp route(:sessions, "GET", ["projects", project_slug, "sessions"]),
     do: {:ok, ProjectSessionController, :index, %{"project_slug" => project_slug}}

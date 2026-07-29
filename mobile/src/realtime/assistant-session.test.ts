@@ -346,6 +346,9 @@ describe("assistant session adapter", () => {
     socket.channelInstance.trigger("turn_status", {
       status: "interrupted",
       can_resume: true,
+      queued_messages: [
+        { id: "queue-1", message: "Run the focused tests next", provider: "codex" },
+      ],
     });
 
     expect(onAction).toHaveBeenCalledWith({
@@ -361,7 +364,13 @@ describe("assistant session adapter", () => {
     });
     expect(onAction).toHaveBeenCalledWith({
       type: "turn_status",
-      status: { status: "interrupted", canResume: true },
+      status: {
+        status: "interrupted",
+        canResume: true,
+        queuedMessages: [
+          { id: "queue-1", message: "Run the focused tests next", provider: "codex" },
+        ],
+      },
     });
 
     const approval = session.submitApproval("approval-1", "approve");
@@ -392,5 +401,74 @@ describe("assistant session adapter", () => {
       "stop_turn",
       "resume_turn",
     ]);
+  });
+
+  it("normalizes joined metadata, preferences, and provider-neutral goal status", () => {
+    const socket = new FakeSocket();
+    const onAction = vi.fn();
+    const session = createAssistantSession({
+      threadId: 42,
+      origin: "https://demo.test",
+      token: "secret",
+      socketFactory: () => socket,
+      onAction,
+    });
+    session.connect();
+    socket.channelInstance.joinPush.trigger("ok");
+    socket.channelInstance.trigger("joined", {
+      project_slug: "vinext-health",
+      effective_agent: "claude",
+      requested_model: "claude-opus-5",
+      requested_effort: "high",
+      execution_mode: "build",
+      skill_profile: "implementation",
+    });
+    socket.channelInstance.trigger("goal_status", {
+      enabled: true,
+      available: true,
+      status: "running",
+      objective: "Ship /health",
+      source: "claude",
+      provider: "claude",
+      capabilities: ["pause", "resume", "clear", "set_objective"],
+      time_used_seconds: 18,
+      running: true,
+      resumable: false,
+    });
+
+    expect(onAction).toHaveBeenCalledWith({
+      type: "session_metadata",
+      metadata: expect.objectContaining({ projectSlug: "vinext-health", agentKind: "claude" }),
+      preferences: expect.objectContaining({ executionMode: "build", model: "claude-opus-5" }),
+    });
+    expect(onAction).toHaveBeenCalledWith({
+      type: "goal_status",
+      goal: expect.objectContaining({ objective: "Ship /health", source: "claude", running: true }),
+    });
+  });
+
+  it("does not advertise Goal controls for an unsupported provider", () => {
+    const socket = new FakeSocket();
+    const onAction = vi.fn();
+    const session = createAssistantSession({
+      threadId: 42,
+      origin: "https://demo.test",
+      token: "secret",
+      socketFactory: () => socket,
+      onAction,
+    });
+    session.connect();
+    socket.channelInstance.joinPush.trigger("ok");
+    socket.channelInstance.trigger("goal_status", {
+      enabled: false,
+      source: "unsupported",
+      provider: "cursor",
+      capabilities: [],
+    });
+
+    expect(onAction).toHaveBeenCalledWith({
+      type: "goal_status",
+      goal: expect.objectContaining({ available: false, provider: "cursor" }),
+    });
   });
 });

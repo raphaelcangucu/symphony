@@ -46,7 +46,9 @@ function methodForPath(path: string): string {
   if (/^\/assistant\/threads\/[^/]+\/dev_servers(?:\/|$)/.test(pathname)) {
     return "previews.request";
   }
-  if (pathname.startsWith("/assistant/threads")) return "sessions.request";
+  if (pathname === "/assistant/config" || pathname.startsWith("/assistant/threads")) {
+    return "sessions.request";
+  }
   if (/^\/projects\/[^/]+\/sessions$/.test(pathname)) return "sessions.request";
   if (/^\/projects\/[^/]+\/assistant\/config$/.test(pathname)) return "sessions.request";
   if (/^\/projects\/[^/]+\/issues\/[^/]+\/pull_requests(?:\/|$)/.test(pathname)) {

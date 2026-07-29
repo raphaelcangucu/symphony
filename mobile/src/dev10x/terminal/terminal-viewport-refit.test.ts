@@ -4,7 +4,10 @@ import type { RpcResponse } from '../transport/types'
 import {
   isTerminalUpdateViewportApplied,
   isTerminalUpdateViewportUpdated,
-  isTerminalViewportRefitTargetCurrent
+  isTerminalViewportRefitTargetCurrent,
+  reduceTerminalFrameHeightRefit,
+  type TerminalFrameHeightRefitEvent,
+  type TerminalFrameHeightRefitState
 } from './terminal-viewport-refit-state'
 
 const hookSource = readFileSync(new URL('./terminal-viewport-refit.ts', import.meta.url), 'utf8')
@@ -14,6 +17,30 @@ const sessionSource = readFileSync(
 )
 
 describe('terminal viewport refit', () => {
+  it('coalesces frame-height changes while the keyboard is visible', () => {
+    let state: TerminalFrameHeightRefitState = {
+      frameHeight: 600,
+      keyboardVisible: false,
+      pending: false
+    }
+    let refitCount = 0
+    const dispatch = (event: TerminalFrameHeightRefitEvent) => {
+      const transition = reduceTerminalFrameHeightRefit(state, event)
+      state = transition.state
+      refitCount += Number(transition.shouldRefit)
+    }
+
+    dispatch({ type: 'keyboard-visibility', visible: true })
+    dispatch({ type: 'frame-height', height: 540 })
+    dispatch({ type: 'frame-height', height: 520 })
+    expect(refitCount).toBe(0)
+    expect(state.pending).toBe(true)
+
+    dispatch({ type: 'keyboard-visibility', visible: false })
+    expect(refitCount).toBe(1)
+    expect(state.pending).toBe(false)
+  })
+
   it('refits when the window dimensions change (fold/unfold, rotation)', () => {
     // Why: a PTY fitted on the folded cover screen must be re-measured when
     // the window grows, or the terminal renders in a fraction of the display.

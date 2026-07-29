@@ -55,23 +55,103 @@ defmodule Mix.Tasks.Symphony.Ctl do
   defp boot_detached(node, cookie) do
     elixir = System.find_executable("elixir") || Mix.raise("`elixir` not found on PATH")
     File.mkdir_p!(".symphony")
+    log_path = Path.expand(".symphony/serve.log")
 
-    # The detached daemon does not inherit a parent shell's `source .env`; load
-    # elixir/.env here so SYMPHONY_TRACKER_TOKEN and other secrets are always
-    # present regardless of how `mix symphony.ctl serve` was invoked.
+    # The daemon must outlive this Mix invocation. `setsid` is Linux-specific
+    # and absent from macOS by default, so use it only when it exists; `nohup`
+    # is the portable POSIX fallback. Windows uses `cmd /c start /b` instead of
+    # assuming a Unix shell exists. Each path receives .env explicitly.
+    case :os.type() do
+      {:win32, _} -> boot_windows(elixir, node, cookie, log_path)
+      _ -> boot_posix(elixir, node, cookie, log_path)
+    end
+  end
+
+  defp boot_posix(elixir, node, cookie, log_path) do
+    launcher =
+      case detached_launch_mode(
+             :os.type(),
+             System.find_executable("setsid"),
+             System.find_executable("nohup")
+           ) do
+        {:setsid, path} -> shell_escape(path)
+        {:nohup, path} -> shell_escape(path)
+        :shell_background -> ""
+      end
+
     command =
-      env_prefix() <>
-        "setsid #{shell_escape(elixir)} --name #{node} --cookie #{cookie} " <>
-        "-S mix run --no-start dev/serve.exs " <>
-        "> .symphony/serve.log 2>&1 < /dev/null &"
+      [launcher, shell_escape(elixir), "--name", shell_escape(node), "--cookie", shell_escape(cookie), "-S", "mix", "run", "--no-start", "dev/serve.exs"]
+      |> Enum.reject(&(&1 == ""))
+      |> Enum.join(" ")
+      |> then(&"trap '' HUP; #{&1} > #{shell_escape(log_path)} 2>&1 < /dev/null &")
 
-    {_out, 0} = System.cmd("sh", ["-c", command])
-    :ok
+    run_detached("sh", ["-c", command])
   end
 
-  defp env_prefix do
-    if File.exists?(".env"), do: "set -a && . ./.env && set +a && ", else: ""
+  @doc false
+  @spec detached_launch_mode({atom(), atom()}, String.t() | nil, String.t() | nil) ::
+          {:setsid, String.t()} | {:nohup, String.t()} | :shell_background | :windows_start
+  def detached_launch_mode({:win32, _}, _setsid, _nohup), do: :windows_start
+  def detached_launch_mode(_os_type, setsid, _nohup) when is_binary(setsid), do: {:setsid, setsid}
+  def detached_launch_mode(_os_type, _setsid, nohup) when is_binary(nohup), do: {:nohup, nohup}
+  def detached_launch_mode(_os_type, _setsid, _nohup), do: :shell_background
+
+  defp boot_windows(elixir, node, cookie, log_path) do
+    command =
+      "start \"\" /b #{windows_escape(elixir)} --name #{windows_escape(node)} " <>
+        "--cookie #{windows_escape(cookie)} -S mix run --no-start dev/serve.exs " <>
+        "> #{windows_escape(log_path)} 2>&1"
+
+    run_detached(System.find_executable("cmd") || "cmd.exe", ["/d", "/s", "/c", command])
   end
+
+  defp run_detached(program, args) do
+    case System.cmd(program, args, env: daemon_env(), stderr_to_stdout: true) do
+      {_out, 0} -> :ok
+      {output, status} -> Mix.raise("Could not start Symphony daemon (exit #{status}): #{output}")
+    end
+  rescue
+    error in ErlangError -> Mix.raise("Could not start Symphony daemon: #{Exception.message(error)}")
+  end
+
+  # Accept the portable KEY=value subset that the daemon needs. We deliberately
+  # do not shell-evaluate .env: that is unavailable on Windows and evaluating
+  # a project configuration as shell code is unnecessary here.
+  defp daemon_env do
+    case File.read(".env") do
+      {:ok, contents} ->
+        contents
+        |> String.split(~r/\r?\n/, trim: true)
+        |> Enum.reduce([], fn line, env ->
+          line = line |> String.trim() |> String.replace_prefix("export ", "")
+
+          case String.split(line, "=", parts: 2) do
+            [key, value] ->
+              if valid_env_key?(key), do: [{key, dotenv_value(value)} | env], else: env
+
+            _ ->
+              env
+          end
+        end)
+
+      {:error, _} ->
+        []
+    end
+  end
+
+  defp dotenv_value(value) do
+    value = String.trim(value)
+
+    case value do
+      <<quote, rest::binary>> when quote in [?', ?\"] and byte_size(rest) > 0 ->
+        if String.ends_with?(rest, <<quote>>), do: String.slice(rest, 0, byte_size(rest) - 1), else: value
+
+      _ ->
+        value
+    end
+  end
+
+  defp valid_env_key?(key) when is_binary(key), do: Regex.match?(~r/^[A-Za-z_][A-Za-z0-9_]*$/, key)
 
   defp rpc_restart(targets) do
     on_daemon(fn node ->
@@ -142,9 +222,19 @@ defmodule Mix.Tasks.Symphony.Ctl do
   defp lock_path, do: SymphonyElixir.DevServeGuard.default_lock_path()
 
   defp os_alive?(pid) do
-    match?({_, 0}, System.cmd("kill", ["-0", pid], stderr_to_stdout: true))
+    case :os.type() do
+      {:win32, _} -> windows_pid_alive?(pid)
+      _ -> match?({_, 0}, System.cmd("kill", ["-0", pid], stderr_to_stdout: true))
+    end
   rescue
     _ -> false
+  end
+
+  defp windows_pid_alive?(pid) do
+    case System.cmd("tasklist", ["/FI", "PID eq #{pid}", "/FO", "CSV", "/NH"], stderr_to_stdout: true) do
+      {output, 0} -> String.contains?(output, ~s(,"#{pid}",))
+      _ -> false
+    end
   end
 
   defp wait_until_ready(attempts \\ 60)
@@ -164,6 +254,8 @@ defmodule Mix.Tasks.Symphony.Ctl do
   defp status_line, do: "Logs: .symphony/serve.log"
 
   defp shell_escape(value), do: "'" <> String.replace(value, "'", "'\\''") <> "'"
+
+  defp windows_escape(value), do: "\"" <> String.replace(value, "\"", "\\\"") <> "\""
 
   @doc false
   @spec parse([String.t()]) :: {:serve, :all} | {:update, [atom()]} | {:stop, [atom()] | :all}

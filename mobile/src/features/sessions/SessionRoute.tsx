@@ -142,7 +142,8 @@ function ConnectedSessionRoute({
   title: string | null;
   threadId: number;
 }) {
-  const { createAssistantSession, dictate } = useAppRuntime();
+  const { createAssistantSession, dictate, startDictation } = useAppRuntime();
+  const hostRuntime = useHostRuntime();
   const activeHostTransport = useHostTransport();
   const hostTransport = hostTransportOverride ?? activeHostTransport;
   const [timeline, dispatch] = useReducer(
@@ -150,6 +151,10 @@ function ConnectedSessionRoute({
     undefined,
     createSessionTimelineState,
   );
+  const catalogHostId = activeProfile.transport === "rpc" ? activeProfile.hostId : null;
+  const catalogState = catalogHostId
+    ? hostRuntime.assistantCatalog(catalogHostId)
+    : { catalog: null, error: null, status: "unavailable" as const };
   const session = useMemo(() => {
     const onSeedAccepted = () => {
       void AsyncStorage.removeItem(
@@ -191,13 +196,20 @@ function ConnectedSessionRoute({
     return () => session?.disconnect();
   }, [session]);
 
+  useEffect(() => {
+    if (catalogHostId) hostRuntime.prefetchAssistantCatalog(catalogHostId);
+  }, [catalogHostId, hostRuntime]);
+
   if (!session) return null;
 
   return (
     <AssistantChatScreen
+      catalog={catalogState.catalog}
+      catalogStatus={catalogState.status}
       onApproval={(requestId, action) => session.submitApproval(requestId, action)}
       onBack={() => router.back()}
       onDictate={() => dictate(resolvedLocale())}
+      onStartDictation={startDictation ? () => startDictation(resolvedLocale()) : undefined}
       onOpenTerminal={() =>
         router.push(
           (hostId
@@ -205,9 +217,16 @@ function ConnectedSessionRoute({
             : `/session/${threadId}/terminal`) as never,
         )
       }
+      onClearGoal={() => session.clearGoal()}
+      onKillTool={(toolCallId) => session.killTool(toolCallId)}
+      onPauseGoal={() => session.pauseGoal()}
       onResumeTurn={() => session.resumeTurn()}
+      onResumeGoal={() => session.resumeGoal()}
       onRetrySeed={seed ? () => session.retrySeed() : undefined}
       onSend={(message) => session.sendMessage(message)}
+      onSetGoalMode={(enabled, objective) => session.setGoalMode(enabled, objective)}
+      onSetGoalObjective={(objective) => session.setGoalObjective(objective)}
+      onSetTurnPreferences={(preferences) => session.setTurnPreferences(preferences)}
       onStopTurn={() => session.stopTurn()}
       onSubmitUserInput={(requestId, answers) => session.submitUserInput(requestId, answers)}
       title={title ?? `Session ${threadId}`}

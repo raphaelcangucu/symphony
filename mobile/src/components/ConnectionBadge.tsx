@@ -4,13 +4,15 @@ import { StatusDot, type StatusTone } from "@/components/StatusDot";
 import { radii, spacing } from "@/theme/tokens";
 import { useAppTheme } from "@/theme/ThemeProvider";
 
-export type ConnectionState = "live" | "connecting" | "cached" | "offline";
+export type ConnectionState = "live" | "connecting" | "cached" | "offline" | "complete" | "failed";
 
 const connectionPresentation: Record<ConnectionState, { label: string; tone: StatusTone }> = {
   live: { label: "Live", tone: "success" },
   connecting: { label: "Connecting", tone: "warning" },
   cached: { label: "Cached", tone: "accent" },
   offline: { label: "Offline", tone: "danger" },
+  complete: { label: "Completed", tone: "success" },
+  failed: { label: "Failed", tone: "danger" },
 };
 
 type ConnectionBadgeProps = {

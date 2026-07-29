@@ -15,6 +15,12 @@ import {
 } from "./orchestrator-session-adapter";
 import { createRpcOrchestratorSession } from "./rpc-orchestrator-session";
 
+type OrchestratorTaskContext = {
+  projectSlug: string;
+  identifier: string | null;
+  agentKind: string | null;
+};
+
 export function OrchestratorSessionRoute() {
   const router = useRouter();
   const params = useLocalSearchParams<{
@@ -22,23 +28,35 @@ export function OrchestratorSessionRoute() {
     executionSessionId?: string | string[];
     hostId?: string | string[];
     identifier?: string | string[];
+    project?: string | string[];
+    projectSlug?: string | string[];
     status?: string | string[];
   }>();
-  const { dictate } = useAppRuntime();
+  const { dictate, startDictation } = useAppRuntime();
   const hostRuntime = useHostRuntime();
   const hostId = firstParam(params.hostId);
-  const executionSessionId = positiveInteger(firstParam(params.executionSessionId));
+  const executionSessionId = positiveInteger(
+    firstParam(params.executionSessionId),
+  );
   const identifier = firstParam(params.identifier);
+  const project = firstParam(params.projectSlug) ?? firstParam(params.project);
   const agent = firstParam(params.agent);
   const transport = hostId ? hostRuntime.transport(hostId) : null;
   const [entries, setEntries] = useState<SessionLogEntry[]>([]);
   const [connectionState, setConnectionState] =
     useState<SessionTimelineState["connectionState"]>("connecting");
   const [error, setError] = useState<string | null>(null);
-  const onSnapshot = useCallback((next: SessionLogEntry[]) => setEntries(next), []);
+  const [taskContext, setTaskContext] =
+    useState<OrchestratorTaskContext | null>(null);
+  const onSnapshot = useCallback(
+    (next: SessionLogEntry[]) => setEntries(next),
+    [],
+  );
   const onEntries = useCallback(
     (next: SessionLogEntry[]) =>
-      setEntries((current) => appendSessionLogEntries(current, { entries: next })),
+      setEntries((current) =>
+        appendSessionLogEntries(current, { entries: next }),
+      ),
     [],
   );
 
@@ -62,6 +80,25 @@ export function OrchestratorSessionRoute() {
     return () => session?.disconnect();
   }, [session]);
 
+  useEffect(() => {
+    if (!transport || !executionSessionId) return;
+    let cancelled = false;
+    void transport
+      .call("orchestrator.session.context", {
+        execution_session_id: executionSessionId,
+      })
+      .then((payload) => {
+        const context = taskContextFromPayload(payload);
+        if (!cancelled) setTaskContext(context);
+      })
+      .catch(() => {
+        if (!cancelled) setTaskContext(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [executionSessionId, transport]);
+
   if (!hostId || !executionSessionId) {
     return (
       <StateView
@@ -79,13 +116,46 @@ export function OrchestratorSessionRoute() {
   const title = [identifier || `Run ${executionSessionId}`, agentLabel(agent)]
     .filter(Boolean)
     .join(" · ");
-  const timeline = buildOrchestratorTimeline(entries, connectionState, error);
+  const timeline = buildOrchestratorTimeline(
+    entries,
+    connectionState,
+    error,
+    taskContext?.agentKind ?? agent,
+  );
+  const taskProjectSlug = taskContext?.projectSlug ?? project;
+  const taskIdentifier = taskContext?.identifier ?? identifier;
+  const taskLinks =
+    taskProjectSlug && taskIdentifier
+      ? {
+          identifier: taskIdentifier,
+          onOpenTask: () =>
+            router.push(
+              `/codex/issue/${encodeURIComponent(taskProjectSlug)}/${encodeURIComponent(taskIdentifier)}` as never,
+            ),
+          onOpenEvidence: () =>
+            router.push(
+              `/codex/issue/${encodeURIComponent(taskProjectSlug)}/${encodeURIComponent(taskIdentifier)}/evidence` as never,
+            ),
+          onOpenPullRequest: () =>
+            router.push(
+              `/codex/issue/${encodeURIComponent(taskProjectSlug)}/${encodeURIComponent(taskIdentifier)}/pull-request` as never,
+            ),
+          onOpenDiff: () =>
+            router.push(`/codex/session/${executionSessionId}/diff` as never),
+        }
+      : undefined;
 
   return (
     <AssistantChatScreen
+      catalog={null}
       onApproval={async () => undefined}
       onBack={() => router.back()}
+      onClearGoal={async () => undefined}
       onDictate={() => dictate(resolvedLocale())}
+      onStartDictation={
+        startDictation ? () => startDictation(resolvedLocale()) : undefined
+      }
+      onKillTool={async () => undefined}
       onOpenTerminal={() =>
         router.push(
           hostTerminalRoute(
@@ -95,15 +165,44 @@ export function OrchestratorSessionRoute() {
           ) as never,
         )
       }
+      onPauseGoal={async () => undefined}
       onResumeTurn={async () => undefined}
+      onResumeGoal={async () => undefined}
       onSend={(message) => session.steer(message)}
+      onSetGoalMode={async () => undefined}
+      onSetGoalObjective={async () => undefined}
+      onSetTurnPreferences={async () => undefined}
       onStopTurn={async () => undefined}
       onSubmitUserInput={async () => undefined}
+      taskLinks={taskLinks}
       threadId={executionSessionId}
       timeline={timeline}
       title={title}
     />
   );
+}
+
+function taskContextFromPayload(
+  payload: unknown,
+): OrchestratorTaskContext | null {
+  if (typeof payload !== "object" || payload === null || Array.isArray(payload))
+    return null;
+  const record = payload as Record<string, unknown>;
+  const projectSlug =
+    typeof record.project_slug === "string" ? record.project_slug.trim() : "";
+  const identifier =
+    typeof record.issue_identifier === "string"
+      ? record.issue_identifier.trim()
+      : "";
+  const agentKind =
+    typeof record.agent_kind === "string" ? record.agent_kind.trim() : "";
+  return projectSlug
+    ? {
+        projectSlug,
+        identifier: identifier || null,
+        agentKind: agentKind || null,
+      }
+    : null;
 }
 
 function positiveInteger(value: string | null): number | null {

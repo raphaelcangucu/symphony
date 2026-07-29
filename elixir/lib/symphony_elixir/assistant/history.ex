@@ -253,7 +253,7 @@ defmodule SymphonyElixir.Assistant.History do
   end
 
   @doc """
-  Persists agent mode + skill toolkit selection on the thread metadata.
+  Persists agent mode, model, effort and skill toolkit selection on the thread metadata.
 
   Used by the interactive session composer so the next join rehydrates the operator's
   Plan/Build/Yolo mode and Auto/Custom toolkit without requiring a migration.
@@ -270,6 +270,14 @@ defmodule SymphonyElixir.Assistant.History do
         |> maybe_put_meta_string(
           "skill_profile",
           Map.get(attrs, :skill_profile) || Map.get(attrs, "skill_profile")
+        )
+        |> maybe_put_meta_string(
+          "requested_model",
+          Map.get(attrs, :model) || Map.get(attrs, "model")
+        )
+        |> maybe_put_meta_string(
+          "requested_effort",
+          Map.get(attrs, :effort) || Map.get(attrs, "effort")
         )
 
       {:update, next, nil}
@@ -296,10 +304,14 @@ defmodule SymphonyElixir.Assistant.History do
   def thread_effort(%Thread{}), do: nil
 
   @spec requested_model(Thread.t()) :: String.t() | nil
-  def requested_model(%Thread{requested_model: model}), do: model
+  def requested_model(%Thread{requested_model: model}) when is_binary(model) and model != "", do: model
+  def requested_model(%Thread{metadata: %{"requested_model" => model}}) when is_binary(model), do: model
+  def requested_model(%Thread{}), do: nil
 
   @spec requested_effort(Thread.t()) :: String.t() | nil
-  def requested_effort(%Thread{requested_effort: effort}), do: effort
+  def requested_effort(%Thread{requested_effort: effort}) when is_binary(effort) and effort != "", do: effort
+  def requested_effort(%Thread{metadata: %{"requested_effort" => effort}}) when is_binary(effort), do: effort
+  def requested_effort(%Thread{}), do: nil
 
   @spec resolved_model(Thread.t()) :: String.t() | nil
   def resolved_model(%Thread{resolved_model: model}), do: model
@@ -789,12 +801,24 @@ defmodule SymphonyElixir.Assistant.History do
   def turn_payload(nil), do: nil
 
   def turn_payload(%Thread{} = thread) do
-    queued_count = length(pending_turns(thread))
+    queued_messages = queued_message_payloads(thread)
+    queued_count = length(queued_messages)
 
     case turn_payload(current_turn(thread)) do
       nil when queued_count == 0 -> nil
-      nil -> %{status: "queued", can_resume: false, active_tools: [], queued_count: queued_count}
-      payload -> Map.put(payload, :queued_count, queued_count)
+      nil ->
+        %{
+          status: "queued",
+          can_resume: false,
+          active_tools: [],
+          queued_count: queued_count,
+          queued_messages: queued_messages
+        }
+
+      payload ->
+        payload
+        |> Map.put(:queued_count, queued_count)
+        |> Map.put(:queued_messages, queued_messages)
     end
   end
 
@@ -812,8 +836,21 @@ defmodule SymphonyElixir.Assistant.History do
       active_tools: active_tools(turn),
       last_activity_at: turn["last_activity_at"],
       queued_count: 0,
+      queued_messages: [],
       error: public_error_payload(turn["error_detail"])
     }
+  end
+
+  defp queued_message_payloads(%Thread{} = thread) do
+    thread
+    |> pending_turns()
+    |> Enum.map(fn entry ->
+      %{
+        id: entry["id"],
+        message: entry["prompt"],
+        provider: entry["provider"]
+      }
+    end)
   end
 
   @doc """

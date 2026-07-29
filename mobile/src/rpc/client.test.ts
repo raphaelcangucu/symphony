@@ -137,6 +137,37 @@ describe("RpcClient", () => {
     expect(client.subscriptionCount).toBe(0);
   });
 
+  it("delivers the initial event when it arrives before the subscribe result is registered", () => {
+    const transport = new FakeTransport();
+    const client = new RpcClient(transport, { createId: () => "rpc_subscribe" });
+    const events: Array<{ event: string; payload: unknown }> = [];
+
+    // The Host is allowed to activate a subscription immediately after it
+    // accepts it, which can put this frame ahead of the result on the client.
+    transport.receive({
+      type: "event",
+      subscription_id: "session:1:1",
+      sequence: 1,
+      event: "sessions.joined",
+      payload: { project_slug: "symphony-mobile-review" },
+    });
+    transport.receive({
+      type: "event",
+      subscription_id: "session:1:1",
+      sequence: 2,
+      event: "sessions.history_loaded",
+      payload: { messages: [] },
+    });
+
+    client.trackSubscription("session:1:1", (payload, event) => events.push({ event, payload }));
+
+    expect(events).toEqual([
+      { event: "sessions.joined", payload: { project_slug: "symphony-mobile-review" } },
+      { event: "sessions.history_loaded", payload: { messages: [] } },
+    ]);
+    client.close();
+  });
+
   it("rejects pending calls and clears remote subscriptions when the wire disconnects", async () => {
     const transport = new FakeTransport();
     let nextId = 0;

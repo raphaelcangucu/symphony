@@ -67,6 +67,19 @@ describe("createRpcTrackerClient", () => {
     expect(JSON.stringify(vi.mocked(transport.call).mock.calls)).not.toContain("Bearer");
   });
 
+  it("loads the machine catalogue without waiting for a project session", async () => {
+    const transport = fakeTransport();
+    const client = createRpcTrackerClient(transport);
+
+    await client.assistantCatalogForHost();
+
+    expect(transport.call).toHaveBeenCalledWith(
+      "sessions.request",
+      expect.objectContaining({ method: "GET", path: "/assistant/config" }),
+      undefined,
+    );
+  });
+
   it("routes workspace, git, preview, PR and notification operations by domain", async () => {
     const transport = fakeTransport();
     const client = createRpcTrackerClient(transport);
@@ -95,7 +108,7 @@ describe("createRpcTrackerClient", () => {
 function fakeTransport(): HostTransport {
   return {
     hostId: "host-1",
-    call: vi.fn(async (method: string) => {
+    call: vi.fn(async (method: string, request?: { path?: string }) => {
       if (method === "system.health") return { status: "healthy" };
       if (method === "projects.request") {
         return { data: [{ id: "project-1", slug: "symphony", name: "Symphony" }] };
@@ -126,6 +139,21 @@ function fakeTransport(): HostTransport {
         };
       }
       if (method === "sessions.request") {
+        if (request?.path === "/assistant/config") {
+          return {
+            data: {
+              default_agent: "codex",
+              agents: [
+                {
+                  agent: "codex",
+                  agent_label: "Codex",
+                  default_model: "gpt-5.6",
+                  models: [],
+                },
+              ],
+            },
+          };
+        }
         return {
           data: {
             id: 42,

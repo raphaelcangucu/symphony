@@ -27,7 +27,9 @@ describe("unified Dev10x session navigation", () => {
   });
 
   it("routes session notifications into the unified chat", () => {
-    expect(sessionNotificationRoute("host alpha", "42")).toBe("/h/host%20alpha/chat/42");
+    expect(sessionNotificationRoute("host alpha", "42")).toBe(
+      "/h/host%20alpha/chat/42",
+    );
   });
 
   it("opens orchestrator execution worktrees in the same rich chat backed by the run stream", () => {
@@ -36,12 +38,15 @@ describe("unified Dev10x session navigation", () => {
         agentKind: "claude",
         hostId: "profile alpha",
         issueIdentifier: "DEV-42",
+        projectSlug: "dev10x",
         name: "Improve mobile",
         scope: "issue_execution",
         status: "working",
         threadId: "73",
       }),
-    ).toBe("/h/profile%20alpha/run/73?identifier=DEV-42&agent=claude&status=live");
+    ).toBe(
+      "/h/profile%20alpha/run/73?identifier=DEV-42&agent=claude&projectSlug=dev10x&status=live",
+    );
   });
 
   it("keeps regular project sessions on the interactive chat transport", () => {

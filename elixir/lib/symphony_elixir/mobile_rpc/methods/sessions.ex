@@ -47,7 +47,13 @@ defmodule SymphonyElixir.MobileRpc.Methods.Sessions do
 
       with connection_pid when is_pid(connection_pid) <- Map.get(context, :connection_pid),
            {:ok, bridge} <-
-             SessionBridge.subscribe(connection_pid, thread_id, subscription_id) do
+             SessionBridge.subscribe_channel(
+               connection_pid,
+               {:session, thread_id},
+               subscription_id,
+               thread_id: thread_id,
+               emit_joined: true
+             ) do
         cleanup = fn ->
           if Process.alive?(bridge), do: GenServer.stop(bridge, :normal)
         end
@@ -72,6 +78,14 @@ defmodule SymphonyElixir.MobileRpc.Methods.Sessions do
       submit_user_input
       stop_turn
       resume_turn
+      kill_tool
+      set_turn_preferences
+      set_goal_mode
+      goal_status
+      goal_pause
+      goal_resume
+      goal_clear
+      goal_set_objective
     )
 
     @impl true

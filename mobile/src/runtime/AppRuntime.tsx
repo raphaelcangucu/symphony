@@ -2,7 +2,8 @@ import { createContext, useContext, type ReactNode } from "react";
 
 import { createTrackerClient } from "@/api/client";
 import type { ConnectionStorage } from "@/auth/connection-storage";
-import { dictateWithExpo, expoNotificationService } from "@/native/expo-services";
+import { dictateWithExpo, expoNotificationService, startDictationWithExpo } from "@/native/expo-services";
+import type { DictationSession } from "@/native/dictation";
 import type { NativeNotificationService } from "@/native/notifications";
 import { createAssistantSession } from "@/realtime/assistant-session";
 import { createTerminalSession } from "@/realtime/terminal-session";
@@ -13,6 +14,7 @@ export type AppRuntime = {
   createAssistantSession: typeof createAssistantSession;
   createTerminalSession: typeof createTerminalSession;
   dictate: (lang: string) => Promise<string>;
+  startDictation?: (lang: string) => Promise<DictationSession>;
   notifications: NativeNotificationService;
 };
 
@@ -21,6 +23,7 @@ export const productionRuntime: AppRuntime = {
   createAssistantSession,
   createTerminalSession,
   dictate: dictateWithExpo,
+  startDictation: startDictationWithExpo,
   notifications: expoNotificationService,
 };
 

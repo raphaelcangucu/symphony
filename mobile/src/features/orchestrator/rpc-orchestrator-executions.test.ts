@@ -29,10 +29,15 @@ describe("orchestrator execution RPC stream", () => {
     stream.connect();
     await vi.waitFor(() =>
       expect(onSnapshot).toHaveBeenCalledWith([
-        expect.objectContaining({ issueIdentifier: "DEV-10", executionSessionId: 77 }),
+        expect.objectContaining({
+          issueIdentifier: "DEV-10",
+          executionSessionId: 77,
+        }),
       ]),
     );
-    await vi.waitFor(() => expect(onConnection).toHaveBeenLastCalledWith("live"));
+    await vi.waitFor(() =>
+      expect(onConnection).toHaveBeenLastCalledWith("live"),
+    );
 
     const handler = vi.mocked(transport.subscribe).mock.calls[0]?.[2];
     handler?.(
@@ -49,9 +54,41 @@ describe("orchestrator execution RPC stream", () => {
       "orchestrator.executions.snapshot",
     );
     expect(onSnapshot).toHaveBeenLastCalledWith([
-      expect.objectContaining({ issueIdentifier: "DEV-11", executionSessionId: 78 }),
+      expect.objectContaining({
+        issueIdentifier: "DEV-11",
+        executionSessionId: 78,
+      }),
     ]);
 
+    stream.disconnect();
+  });
+
+  it("waits for the encrypted subscription before requesting the initial snapshot", async () => {
+    let bind!: (cleanup: () => void) => void;
+    const transport = fakeTransport();
+    vi.mocked(transport.subscribe).mockImplementation(
+      () =>
+        new Promise<(cleanup: () => void) => void>(
+          (resolve) => (bind = resolve),
+        ),
+    );
+    const stream = createRpcOrchestratorExecutions({
+      transport,
+      onSnapshot: vi.fn(),
+      onConnection: vi.fn(),
+      onError: vi.fn(),
+    });
+
+    stream.connect();
+    expect(transport.call).not.toHaveBeenCalled();
+
+    bind(vi.fn());
+    await vi.waitFor(() =>
+      expect(transport.call).toHaveBeenCalledWith(
+        "orchestrator.executions.list",
+        {},
+      ),
+    );
     stream.disconnect();
   });
 });

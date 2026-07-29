@@ -8972,7 +8972,7 @@ export default function MobileTasksScreen() {
         <View style={styles.statusBar}>
           <Pressable
             style={styles.backButton}
-            onPress={() => router.back()}
+            onPress={() => router.replace(`/h/${encodeURIComponent(hostId)}`)}
             accessibilityRole="button"
             accessibilityLabel="Back to worktrees"
           >
@@ -13160,6 +13160,21 @@ export default function MobileTasksScreen() {
                             .join(', ')}
                         </Text>
                       ) : null}
+                      <Pressable
+                        accessibilityLabel="Open evidence"
+                        accessibilityRole="button"
+                        style={styles.inlineSaveButton}
+                        onPress={() => {
+                          setActionItem(null)
+                          router.push(
+                            `/codex/issue/${encodeURIComponent(
+                              actionItem.source.projectSlug
+                            )}/${encodeURIComponent(actionItem.source.identifier)}/evidence`
+                          )
+                        }}
+                      >
+                        <Text style={styles.inlineSaveText}>Open evidence</Text>
+                      </Pressable>
                     </View>
                   ) : null}
 

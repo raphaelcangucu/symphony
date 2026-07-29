@@ -13,8 +13,7 @@ defmodule SymphonyElixir.Assistant.CatalogBundle do
   @ttl_ms 30_000
   @fetch_timeout_ms 8_000
 
-  @spec fetch(keyword()) ::
-          {:ok, %{agents: [map()], default_agent: String.t()}}
+  @spec fetch(keyword()) :: {:ok, map()}
           | {:error, {:assistant_catalog_unavailable, map()}}
   def fetch(opts \\ []) do
     fetchers = Keyword.get(opts, :fetchers, default_fetchers())
@@ -71,16 +70,20 @@ defmodule SymphonyElixir.Assistant.CatalogBundle do
           {agents, Map.put(failures, agent, {:invalid_catalog_result, result})}
       end)
 
-    if map_size(failures) == 0 do
+    # Provider discovery is independent. A missing local Cursor/OpenCode
+    # executable must not prevent the Codex/Claude options already discovered
+    # on this Machine from reaching the mobile composer.
+    if agents != [] do
       {:ok,
-       %{
-         agents: Enum.reverse(agents),
-         default_agent: Settings.Agents.default_agent_kind()
-       }}
+       %{agents: Enum.reverse(agents), default_agent: Settings.Agents.default_agent_kind()}
+       |> maybe_put_failures(failures)}
     else
       {:error, {:assistant_catalog_unavailable, failures}}
     end
   end
+
+  defp maybe_put_failures(bundle, failures) when map_size(failures) == 0, do: bundle
+  defp maybe_put_failures(bundle, failures), do: Map.put(bundle, :unavailable_agents, failures)
 
   defp default_fetchers do
     [

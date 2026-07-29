@@ -352,7 +352,9 @@ defmodule SymphonyElixirWeb.AssistantChannel do
       {:ok, thread} ->
         attrs = %{
           execution_mode: Map.get(payload, "execution_mode"),
-          skill_profile: Map.get(payload, "skill_profile")
+          skill_profile: Map.get(payload, "skill_profile"),
+          model: Map.get(payload, "model"),
+          effort: Map.get(payload, "effort")
         }
 
         case History.set_turn_preferences(thread, attrs) do
@@ -361,7 +363,9 @@ defmodule SymphonyElixirWeb.AssistantChannel do
 
             reply = %{
               execution_mode: History.thread_execution_mode(updated),
-              skill_profile: History.thread_skill_profile(updated)
+              skill_profile: History.thread_skill_profile(updated),
+              requested_model: History.requested_model(updated),
+              requested_effort: History.requested_effort(updated)
             }
 
             push(socket, "turn_preferences_changed", reply)
@@ -2310,7 +2314,8 @@ defmodule SymphonyElixirWeb.AssistantChannel do
       resolved_model: History.resolved_model(thread),
       resolved_effort: History.resolved_effort(thread),
       skill_profile: History.thread_skill_profile(thread),
-      scope: thread.scope
+      scope: thread.scope,
+      project_slug: thread.project_slug
     }
   end
 

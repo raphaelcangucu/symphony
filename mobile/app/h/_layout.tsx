@@ -39,6 +39,8 @@ function HostStack({ animation }: { animation: 'none' | 'default' }) {
       }}
     >
       <Stack.Screen name="[hostId]/index" options={{ title: 'Host' }} />
+      <Stack.Screen name="[hostId]/projects" options={{ title: 'Projects' }} />
+      <Stack.Screen name="[hostId]/projects/[projectSlug]" options={{ title: 'Project' }} />
       <Stack.Screen name="[hostId]/accounts" options={{ title: 'Accounts' }} />
       <Stack.Screen name="[hostId]/tasks" options={{ title: 'Tasks' }} />
       <Stack.Screen name="[hostId]/runs" options={{ title: 'Orchestrator runs' }} />

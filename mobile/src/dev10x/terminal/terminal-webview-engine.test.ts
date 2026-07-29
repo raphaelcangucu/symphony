@@ -18,6 +18,37 @@ describe('terminal WebView bundled engine', () => {
     expect(XTERM_HTML).not.toContain('rel="stylesheet" href=')
   })
 
+  it('keeps a steady visible cursor without appending control codes to host output', () => {
+    expect(terminalHtmlSource).not.toContain("ESC + '[?12l'")
+    expect(terminalHtmlSource).not.toContain("ESC + '[6 q'")
+    expect(terminalHtmlSource).toContain('cursorBlink: false')
+    expect(terminalHtmlSource).toContain("cursorInactiveStyle: 'bar'")
+  })
+
+  it('renders tmux capture-pane line feeds from column zero', () => {
+    expect(terminalHtmlSource).toContain('convertEol: true')
+  })
+
+  it('uses the stable built-in renderer inside Android WebView', () => {
+    expect(terminalHtmlSource).toContain(
+      "var isAndroidWebView = /Android/i.test(navigator.userAgent || '');"
+    )
+    expect(terminalHtmlSource).toContain(
+      'if (!isAndroidWebView && window.WebglAddon && window.WebglAddon.WebglAddon)'
+    )
+  })
+
+  it('anchors the terminal canvas at the viewport top-left', () => {
+    expect(terminalHtmlSource).toContain('.terminal-surface {')
+    expect(terminalHtmlSource).toContain('position: absolute;')
+    expect(terminalHtmlSource).toContain('transform-origin: top left;')
+    expect(terminalHtmlSource).toContain('text-align: left;')
+    expect(terminalHtmlSource).toContain('.xterm .xterm-screen {')
+    // The old surface temporarily loses its unique id during an atomic swap;
+    // its class must retain the top-left transform origin while it stays visible.
+    expect(terminalHtmlSource).toContain("nextSurface.className = 'terminal-surface'")
+  })
+
   it('parses the bundled engine at the Android 7 Chrome 52 syntax floor', () => {
     expect(() => parse(XTERM_ENGINE_JS, { ecmaVersion: 2016 })).not.toThrow()
     // The stock API 24 WebView identifies as Chrome 52 but rejects arrow

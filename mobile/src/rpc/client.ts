@@ -27,6 +27,15 @@ type Subscription = {
   onEvent: (payload: unknown, event: string) => void;
 };
 
+type BufferedStreamEvent = {
+  event: string;
+  payload: unknown;
+  sequence: number;
+};
+
+const MAX_BUFFERED_SUBSCRIPTIONS = 32;
+const MAX_BUFFERED_EVENTS_PER_SUBSCRIPTION = 32;
+
 export class RpcError extends Error {
   readonly code: string;
   readonly retryable: boolean;
@@ -47,6 +56,8 @@ export class RpcClient {
   private readonly pending = new Map<string, PendingRequest>();
   private readonly usedIds = new Set<string>();
   private readonly subscriptions = new Map<string, Subscription>();
+  /** Events can precede their subscribe RPC response on an ordered socket. */
+  private readonly bufferedSubscriptionEvents = new Map<string, BufferedStreamEvent[]>();
   private readonly stopListening: () => void;
   private closed = false;
 
@@ -120,10 +131,13 @@ export class RpcClient {
     if (!subscriptionId.trim() || this.subscriptions.has(subscriptionId)) {
       throw new Error("Invalid or duplicate RPC subscription id");
     }
-    this.subscriptions.set(subscriptionId, { sequence: 0, onEvent });
+    const subscription = { sequence: 0, onEvent } satisfies Subscription;
+    this.subscriptions.set(subscriptionId, subscription);
+    this.flushBufferedSubscriptionEvents(subscriptionId, subscription);
 
     return () => {
       if (!this.subscriptions.delete(subscriptionId)) return;
+      this.bufferedSubscriptionEvents.delete(subscriptionId);
       try {
         this.transport.send(
           JSON.stringify({ type: "unsubscribe", subscription_id: subscriptionId }),
@@ -143,6 +157,7 @@ export class RpcClient {
       );
     }
     this.subscriptions.clear();
+    this.bufferedSubscriptionEvents.clear();
   }
 
   close(): void {
@@ -157,6 +172,7 @@ export class RpcClient {
       );
     }
     this.subscriptions.clear();
+    this.bufferedSubscriptionEvents.clear();
   }
 
   private handleMessage(raw: string): void {
@@ -189,10 +205,47 @@ export class RpcClient {
 
     if (isStreamEvent(message)) {
       const subscription = this.subscriptions.get(message.subscription_id);
-      if (!subscription || message.sequence !== subscription.sequence + 1) return;
-      subscription.sequence = message.sequence;
-      subscription.onEvent(message.payload, message.event);
+      if (!subscription) {
+        this.bufferSubscriptionEvent(message);
+        return;
+      }
+      this.deliverSubscriptionEvent(subscription, message);
     }
+  }
+
+  private bufferSubscriptionEvent(event: StreamEvent): void {
+    const id = event.subscription_id;
+    let events = this.bufferedSubscriptionEvents.get(id);
+    if (!events) {
+      if (this.bufferedSubscriptionEvents.size >= MAX_BUFFERED_SUBSCRIPTIONS) {
+        const oldestId = this.bufferedSubscriptionEvents.keys().next().value;
+        if (oldestId) this.bufferedSubscriptionEvents.delete(oldestId);
+      }
+      events = [];
+      this.bufferedSubscriptionEvents.set(id, events);
+    }
+    if (events.length < MAX_BUFFERED_EVENTS_PER_SUBSCRIPTION) {
+      events.push({ event: event.event, payload: event.payload, sequence: event.sequence });
+    }
+  }
+
+  private flushBufferedSubscriptionEvents(subscriptionId: string, subscription: Subscription): void {
+    const events = this.bufferedSubscriptionEvents.get(subscriptionId);
+    if (!events) return;
+    this.bufferedSubscriptionEvents.delete(subscriptionId);
+
+    for (const event of events.sort((left, right) => left.sequence - right.sequence)) {
+      this.deliverSubscriptionEvent(subscription, event);
+    }
+  }
+
+  private deliverSubscriptionEvent(
+    subscription: Subscription,
+    event: Pick<StreamEvent, "event" | "payload" | "sequence">,
+  ): void {
+    if (event.sequence !== subscription.sequence + 1) return;
+    subscription.sequence = event.sequence;
+    subscription.onEvent(event.payload, event.event);
   }
 
   private cancel(id: string, error: RpcError): void {

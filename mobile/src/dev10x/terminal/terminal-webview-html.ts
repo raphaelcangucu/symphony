@@ -78,12 +78,30 @@ window.onerror = function(msg, source, line, column, err) {
     position: relative;
     width: 100%;
     height: 100%;
+    text-align: left;
   }
-  #terminal-surface {
+  .terminal-surface {
+    position: absolute;
+    top: 0;
+    left: 0;
     transform-origin: top left;
     display: inline-block;
+    margin: 0;
+    vertical-align: top;
   }
-  .xterm { -webkit-user-select: none; user-select: none; font-variant-emoji: text; }
+  .xterm {
+    top: 0;
+    left: 0;
+    margin: 0;
+    -webkit-user-select: none;
+    user-select: none;
+    font-variant-emoji: text;
+  }
+  .xterm .xterm-screen {
+    top: 0;
+    left: 0;
+    margin: 0;
+  }
   .xterm .xterm-viewport {
     overflow-y: hidden !important;
     scrollbar-width: none !important;
@@ -198,7 +216,7 @@ window.onerror = function(msg, source, line, column, err) {
 </head>
 <body>
 <div id="terminal-container">
-  <div id="terminal-surface"></div>
+  <div id="terminal-surface" class="terminal-surface"></div>
 </div>
 <div id="scroll-indicator"><div id="scroll-thumb"></div></div>
 <div id="selection-overlay">
@@ -750,6 +768,7 @@ window.onerror = function(msg, source, line, column, err) {
     if (oldTerm) {
       nextSurface = document.createElement('div');
       nextSurface.id = 'terminal-surface';
+      nextSurface.className = 'terminal-surface';
       nextSurface.style.visibility = 'hidden';
       nextSurface.style.position = 'absolute';
       nextSurface.style.left = '0';
@@ -777,12 +796,20 @@ window.onerror = function(msg, source, line, column, err) {
       disableStdin: true,
       cursorBlink: false,
       cursorStyle: 'bar',
-      cursorInactiveStyle: 'none',
-      convertEol: false,
+      // Native TextInput owns focus, so xterm is normally inactive. Keep its
+      // caret visible without mutating every host output chunk with ANSI codes.
+      cursorInactiveStyle: 'bar',
+      // Symphony's terminal channel streams tmux capture-pane snapshots. Those
+      // snapshots contain LF line separators rather than raw PTY CRLF pairs.
+      convertEol: true,
       allowProposedApi: true
     });
     term.open(surface);
-    if (window.WebglAddon && window.WebglAddon.WebglAddon) {
+    // Android WebView repeatedly reports invalid WebGL enums and can exceed its
+    // tile-memory budget while xterm surfaces are replaced during viewport
+    // refits. Its built-in DOM renderer is stable and avoids partial frames.
+    var isAndroidWebView = /Android/i.test(navigator.userAgent || '');
+    if (!isAndroidWebView && window.WebglAddon && window.WebglAddon.WebglAddon) {
       try { var webglAddon = new window.WebglAddon.WebglAddon(); term.loadAddon(webglAddon); if (webglAddon.onContextLoss) webglAddon.onContextLoss(function() { try { webglAddon && webglAddon.dispose && webglAddon.dispose(); } catch (e) {} }); } catch (e) {}
     }
     if (window.Unicode11Addon && window.Unicode11Addon.Unicode11Addon) try { term.loadAddon(new window.Unicode11Addon.Unicode11Addon()); term.unicode.activeVersion = '11'; } catch (e) {}

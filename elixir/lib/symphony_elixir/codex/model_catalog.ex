@@ -325,7 +325,7 @@ defmodule SymphonyElixir.Codex.ModelCatalog do
   defp await_response(port, request_id, timeout_ms, pending_line \\ "") do
     receive do
       {^port, {:data, {:eol, chunk}}} ->
-        await_response(port, request_id, timeout_ms, pending_line <> to_string(chunk))
+        handle_response_line(port, request_id, timeout_ms, pending_line <> to_string(chunk))
 
       {^port, {:data, {:noeol, chunk}}} ->
         await_response(port, request_id, timeout_ms, pending_line <> to_string(chunk))
@@ -335,13 +335,6 @@ defmodule SymphonyElixir.Codex.ModelCatalog do
     after
       timeout_ms ->
         {:error, :response_timeout}
-    end
-    |> case do
-      {:error, _} = error ->
-        error
-
-      line when is_binary(line) ->
-        handle_response_line(port, request_id, timeout_ms, line)
     end
   end
 

@@ -265,6 +265,10 @@ export function createTrackerClientFromRequest(request: TrackerRequest): Tracker
       );
       return mapAssistantCatalog(payload);
     },
+    async assistantCatalogForHost(signal) {
+      const payload = unwrapData(await request("/assistant/config", { signal }));
+      return mapAssistantCatalog(payload);
+    },
     async createThread(input, signal) {
       const payload = createThreadPayload(input);
       return mapThread(

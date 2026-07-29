@@ -93,23 +93,53 @@ defmodule SymphonyElixir.Workspace.Provision do
   defmodule AtomicMover do
     @moduledoc false
 
+    @darwin_rename_exclusive_flag 4
+    @darwin_rename_script """
+    import ctypes
+    import os
+    import sys
+
+    libc = ctypes.CDLL(None, use_errno=True)
+    result = libc.renamex_np(
+        os.fsencode(sys.argv[1]),
+        os.fsencode(sys.argv[2]),
+        int(sys.argv[3]),
+    )
+    error = ctypes.get_errno()
+    if result != 0:
+        print(f"renamex_np errno={error}", file=sys.stderr)
+        raise SystemExit(error or 1)
+    """
     @move_arguments ["--no-clobber", "--no-target-directory"]
 
     @spec ensure_supported(SymphonyElixir.Workspace.Provision.publish_runner()) ::
             :ok | {:error, term()}
     def ensure_supported(runner) when is_function(runner, 3) do
+      case mover_backend(runner) do
+        {:ok, _backend} -> :ok
+        {:error, _reason} = error -> error
+      end
+    end
+
+    defp mover_backend(runner) do
       case runner.("mv", ["--version"], stderr_to_stdout: true) do
         {output, 0} ->
           trimmed_output = String.trim(output)
 
           if String.contains?(trimmed_output, "GNU coreutils") do
-            :ok
+            {:ok, :gnu}
           else
             {:error, {:atomic_move_unsupported, "mv", trimmed_output}}
           end
 
         {output, _status} ->
-          {:error, {:atomic_move_unsupported, "mv", String.trim(output)}}
+          trimmed_output = String.trim(output)
+
+          if darwin_mv?(trimmed_output) do
+            darwin_backend()
+          else
+            {:error, {:atomic_move_unsupported, "mv", trimmed_output}}
+          end
 
         result ->
           {:error, {:atomic_move_unsupported, "mv", inspect(result)}}
@@ -126,14 +156,50 @@ defmodule SymphonyElixir.Workspace.Provision do
           ) :: :ok | {:error, term()}
     def move(source, destination, runner)
         when is_binary(source) and is_binary(destination) and is_function(runner, 3) do
-      with :ok <- ensure_supported(runner) do
-        arguments = @move_arguments ++ [source, destination]
+      with {:ok, backend} <- mover_backend(runner) do
+        move_with_backend(backend, source, destination, runner)
+      end
+    end
 
-        case runner.("mv", arguments, stderr_to_stdout: true) do
-          {output, 0} -> verify_move_result(source, destination, output)
-          {output, status} -> {:error, {:move_command_failed, status, String.trim_trailing(output)}}
-          result -> {:error, {:unexpected_move_result, result}}
-        end
+    defp move_with_backend(:gnu, source, destination, runner) do
+      arguments = @move_arguments ++ [source, destination]
+
+      case runner.("mv", arguments, stderr_to_stdout: true) do
+        {output, 0} -> verify_move_result(source, destination, output)
+        {output, status} -> {:error, {:move_command_failed, status, String.trim_trailing(output)}}
+        result -> {:error, {:unexpected_move_result, result}}
+      end
+    end
+
+    defp move_with_backend({:darwin, python}, source, destination, _runner) do
+      arguments = [
+        "-c",
+        @darwin_rename_script,
+        source,
+        destination,
+        Integer.to_string(@darwin_rename_exclusive_flag)
+      ]
+
+      case System.cmd(python, arguments, stderr_to_stdout: true) do
+        {output, 0} -> verify_move_result(source, destination, output)
+        {output, status} -> {:error, {:move_command_failed, status, String.trim_trailing(output)}}
+        result -> {:error, {:unexpected_move_result, result}}
+      end
+    end
+
+    defp darwin_mv?(output) do
+      match?({:unix, :darwin}, :os.type()) and
+        String.contains?(output, "illegal option") and
+        String.contains?(output, "usage: mv")
+    end
+
+    defp darwin_backend do
+      case System.find_executable("python3") do
+        nil ->
+          {:error, {:atomic_move_unsupported, "renamex_np", "python3 not found"}}
+
+        python ->
+          {:ok, {:darwin, python}}
       end
     end
 

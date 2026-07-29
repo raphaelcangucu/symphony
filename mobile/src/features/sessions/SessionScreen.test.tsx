@@ -34,7 +34,9 @@ const timeline: SessionTimelineState = {
   connectionState: "live",
   pendingApproval: null,
   pendingUserInput: null,
-  turnStatus: { status: "running", canResume: false },
+  turnStatus: { status: "running", canResume: false, queuedMessages: [] },
+  turnPreferences: { executionMode: null, skillProfile: null, model: null, effort: null },
+  metadata: { projectSlug: null, agentKind: null, requestedModel: null, requestedEffort: null, resolvedModel: null, resolvedEffort: null },
   error: null,
 };
 
@@ -176,7 +178,7 @@ describe("SessionScreen", () => {
           threadId={42}
           timeline={{
             ...timeline,
-            turnStatus: { status: "interrupted", canResume: true },
+            turnStatus: { status: "interrupted", canResume: true, queuedMessages: [] },
           }}
         />
       </ThemeProvider>,

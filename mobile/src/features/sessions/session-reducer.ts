@@ -42,6 +42,47 @@ export type AssistantUserInputRequest = {
 export type AssistantTurnStatus = {
   status: string;
   canResume: boolean;
+  queuedMessages: Array<{
+    id: string;
+    message: string;
+    provider: string | null;
+  }>;
+};
+
+/** Provider-neutral interactive ceiling advertised by the Symphony host. */
+export type AssistantExecutionMode = "plan" | "build" | "yolo";
+
+export type AssistantTurnPreferences = {
+  executionMode: AssistantExecutionMode | null;
+  skillProfile: string | null;
+  model: string | null;
+  effort: string | null;
+};
+
+export type AssistantSessionMetadata = {
+  projectSlug: string | null;
+  agentKind: string | null;
+  requestedModel: string | null;
+  requestedEffort: string | null;
+  resolvedModel: string | null;
+  resolvedEffort: string | null;
+};
+
+/**
+ * Native Codex and Claude goals expose richer capabilities; Cursor/OpenCode
+ * can truthfully report an unavailable/unsupported goal instead of a fake one.
+ */
+export type AssistantGoalStatus = {
+  enabled: boolean;
+  available: boolean;
+  status: string;
+  objective: string | null;
+  source: "native" | "claude" | "prompt" | "unsupported" | null;
+  provider: string | null;
+  capabilities: string[];
+  timeUsedSeconds: number | null;
+  running: boolean;
+  resumable: boolean;
 };
 
 export type SessionTimelineState = {
@@ -52,6 +93,9 @@ export type SessionTimelineState = {
   pendingApproval: AssistantApprovalRequest | null;
   pendingUserInput: AssistantUserInputRequest | null;
   turnStatus: AssistantTurnStatus | null;
+  turnPreferences: AssistantTurnPreferences;
+  metadata: AssistantSessionMetadata;
+  goal: AssistantGoalStatus | null;
   error: string | null;
 };
 
@@ -68,6 +112,9 @@ export type SessionTimelineAction =
   | { type: "user_input_required"; request: AssistantUserInputRequest }
   | { type: "user_input_resolved"; requestId: string | number }
   | { type: "turn_status"; status: AssistantTurnStatus }
+  | { type: "turn_preferences_changed"; preferences: AssistantTurnPreferences }
+  | { type: "session_metadata"; metadata: Partial<AssistantSessionMetadata>; preferences?: AssistantTurnPreferences }
+  | { type: "goal_status"; goal: AssistantGoalStatus }
   | { type: "connection_changed"; state: SessionTimelineState["connectionState"] }
   | { type: "error"; message: string };
 
@@ -80,6 +127,16 @@ export function createSessionTimelineState(): SessionTimelineState {
     pendingApproval: null,
     pendingUserInput: null,
     turnStatus: null,
+    turnPreferences: { executionMode: null, skillProfile: null, model: null, effort: null },
+    metadata: {
+      projectSlug: null,
+      agentKind: null,
+      requestedModel: null,
+      requestedEffort: null,
+      resolvedModel: null,
+      resolvedEffort: null,
+    },
+    goal: null,
     error: null,
   };
 }
@@ -144,7 +201,26 @@ export function sessionTimelineReducer(
         error: null,
       };
     case "turn_status":
-      return { ...state, turnStatus: action.status };
+      return {
+        ...state,
+        turnStatus: action.status,
+        // A terminal turn-status event is the last event some providers emit.
+        // Do not leave a stale stream looking active while waiting for a
+        // best-effort history reconciliation or assistant_completed event.
+        activeTools: isTerminalTurnStatus(action.status.status)
+          ? settleActiveTools(state.activeTools, action.status.status)
+          : state.activeTools,
+      };
+    case "turn_preferences_changed":
+      return { ...state, turnPreferences: action.preferences };
+    case "session_metadata":
+      return {
+        ...state,
+        metadata: { ...state.metadata, ...action.metadata },
+        turnPreferences: action.preferences ?? state.turnPreferences,
+      };
+    case "goal_status":
+      return { ...state, goal: action.goal };
     case "connection_changed":
       return { ...state, connectionState: action.state };
     case "error":
@@ -169,4 +245,22 @@ function upsertTool(tools: AssistantToolCall[], toolCall: AssistantToolCall): As
   const index = tools.findIndex((item) => item.id === toolCall.id);
   if (index < 0) return [...tools, toolCall];
   return tools.map((item, itemIndex) => (itemIndex === index ? toolCall : item));
+}
+
+function isTerminalTurnStatus(status: string): boolean {
+  return !["running", "queued", "waiting", "awaiting_approval", "awaiting_input"].includes(
+    status,
+  );
+}
+
+function settleActiveTools(
+  tools: AssistantToolCall[],
+  turnStatus: string,
+): AssistantToolCall[] {
+  const failed = ["failed", "error", "cancelled", "canceled"].includes(turnStatus);
+  return tools.map((tool) =>
+    tool.status === "running"
+      ? { ...tool, status: failed ? "error" : "complete", output: tool.output ?? "" }
+      : tool,
+  );
 }

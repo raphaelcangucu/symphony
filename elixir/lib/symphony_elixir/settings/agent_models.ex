@@ -17,7 +17,10 @@ defmodule SymphonyElixir.Settings.AgentModels do
   @agents ~w(codex claude cursor)
 
   @catalog %{
-    "codex" => ["gpt-5-codex", "gpt-5"],
+    # Keep the current Codex family available while the machine-level catalog
+    # is warming. The live catalog is still the source of truth for account-
+    # specific options and reasoning efforts.
+    "codex" => ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.3-codex-spark"],
     "claude" => ["claude-fable-5", "claude-opus-4-8", "claude-sonnet-5"],
     "cursor" => ["auto"]
   }

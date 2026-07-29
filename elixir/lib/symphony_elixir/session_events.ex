@@ -114,6 +114,55 @@ defmodule SymphonyElixir.SessionEvents do
     })
   end
 
+  @doc """
+  Records an operator steering message in the execution transcript.
+
+  The returned identifier pairs the durable queued entry with its provider
+  acknowledgement, so mobile clients can render a real queued-message affordance
+  instead of relying on an ephemeral socket state.
+  """
+  @spec append_steer_request(Path.t(), String.t()) :: {:ok, String.t()} | {:error, term()}
+  def append_steer_request(workspace, message) when is_binary(workspace) and is_binary(message) do
+    trimmed = String.trim(message)
+
+    if trimmed == "" do
+      {:error, :empty_message}
+    else
+      steer_id = "steer:" <> Integer.to_string(System.unique_integer([:positive, :monotonic]))
+
+      append_entry(workspace, %{
+        "kind" => "user",
+        "title" => "Queued message",
+        "body" => trimmed,
+        "status" => "running",
+        "collapsed" => false,
+        "source" => "symphony",
+        "steer_id" => steer_id,
+        "steer_state" => "queued"
+      })
+
+      {:ok, steer_id}
+    end
+  rescue
+    error -> {:error, error}
+  end
+
+  @doc "Records whether a previously queued steering message reached its provider."
+  @spec append_steer_result(Path.t(), String.t(), :accepted | :failed, String.t() | nil) :: :ok
+  def append_steer_result(workspace, steer_id, result, detail \\ nil)
+      when is_binary(workspace) and is_binary(steer_id) and result in [:accepted, :failed] do
+    append_entry(workspace, %{
+      "kind" => "event",
+      "title" => if(result == :accepted, do: "Steer accepted", else: "Steer failed"),
+      "body" => detail,
+      "status" => if(result == :accepted, do: "running", else: "failed"),
+      "collapsed" => result == :accepted,
+      "source" => "symphony",
+      "steer_id" => steer_id,
+      "steer_state" => Atom.to_string(result)
+    })
+  end
+
   @spec tail(Path.t(), keyword()) :: {:ok, [map()], non_neg_integer()}
   def tail(workspace, opts \\ []) when is_binary(workspace) do
     path = events_path(workspace)

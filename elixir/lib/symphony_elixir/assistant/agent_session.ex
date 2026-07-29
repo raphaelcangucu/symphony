@@ -1971,8 +1971,8 @@ defmodule SymphonyElixir.Assistant.AgentSession do
 
   defp put_requested_model_opts(opts, thread) when is_list(opts) and is_map(thread) do
     opts
-    |> maybe_put_requested_model_opt(:model, Map.get(thread, :requested_model))
-    |> maybe_put_requested_model_opt(:effort, Map.get(thread, :requested_effort))
+    |> maybe_put_requested_model_opt(:model, History.requested_model(thread))
+    |> maybe_put_requested_model_opt(:effort, History.requested_effort(thread))
   end
 
   defp maybe_put_requested_model_opt(opts, _key, nil), do: opts

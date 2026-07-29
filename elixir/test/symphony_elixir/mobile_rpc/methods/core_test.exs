@@ -78,6 +78,34 @@ defmodule SymphonyElixir.MobileRpc.Methods.CoreTest do
     end
   end
 
+  test "routes multi-repo workspace creation through the projects domain" do
+    assert {:ok, route} =
+             TrackerBridge.resolve(:projects, %{
+               "path" => "/projects/symphony/workspaces",
+               "method" => "POST",
+               "body" => %{"name" => "mobile-html"},
+               "idempotency_key" => "mobile-workspace-1"
+             })
+
+    assert route.controller == SymphonyElixirWeb.Tracker.WorktreeInventoryController
+    assert route.action == :create_workspace
+    assert route.params["project_slug"] == "symphony"
+    assert route.params["name"] == "mobile-html"
+  end
+
+  test "routes the machine-wide assistant catalogue through the sessions domain" do
+    assert {:ok, route} =
+             TrackerBridge.resolve(:sessions, %{
+               "path" => "/assistant/config",
+               "method" => "GET",
+               "body" => %{},
+               "idempotency_key" => nil
+             })
+
+    assert route.controller == SymphonyElixirWeb.Tracker.AssistantController
+    assert route.action == :config
+  end
+
   test "core methods validate requests and delegate to the selected host bridge" do
     context = %{
       tracker_bridge: FakeBridge,
@@ -99,6 +127,26 @@ defmodule SymphonyElixir.MobileRpc.Methods.CoreTest do
              System.Tracker.call(request("/viewer"), context)
 
     assert_receive {:bridge_context, "host_01", "paired_device_01"}
+  end
+
+  test "encrypted session commands allow provider-neutral turn and goal controls" do
+    for {event, payload} <- [
+          {"set_turn_preferences", %{"execution_mode" => "build"}},
+          {"set_goal_mode", %{"goal_mode" => true, "objective" => "Ship the health route"}},
+          {"goal_status", %{}},
+          {"goal_pause", %{}},
+          {"goal_resume", %{}},
+          {"goal_clear", %{}},
+          {"goal_set_objective", %{"objective" => "Capture E2E evidence"}},
+          {"kill_tool", %{"tool_call_id" => "call_01"}}
+        ] do
+      assert {:ok, _params} =
+               Sessions.Command.validate(%{
+                 "thread_id" => 42,
+                 "event" => event,
+                 "payload" => payload
+               })
+    end
   end
 
   defp request(path) do
