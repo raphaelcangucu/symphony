@@ -8,7 +8,15 @@ import { initTestI18n, renderWithI18n } from "@/i18n/testUtils";
 import type { AssistantToolCall } from "@/services/assistant";
 
 function call(overrides: Partial<AssistantToolCall>): AssistantToolCall {
-  return { id: null, name: "read_file", status: "complete", arguments: { path: "a.ex" }, output: "x", result: {}, ...overrides };
+  return {
+    id: null,
+    name: "read_file",
+    status: "complete",
+    arguments: { path: "a.ex" },
+    output: "x",
+    result: {},
+    ...overrides,
+  };
 }
 
 describe("ToolActivityTimeline", () => {
@@ -17,9 +25,33 @@ describe("ToolActivityTimeline", () => {
   });
 
   it("renders a single call without a group header", () => {
-    renderWithI18n(<ToolActivityTimeline toolCalls={[call({ id: "1", arguments: { path: "only.ex" } })]} />);
+    renderWithI18n(
+      <ToolActivityTimeline
+        toolCalls={[call({ id: "1", arguments: { path: "only.ex" } })]}
+      />,
+    );
     expect(screen.queryByTestId("tool-activity-group")).not.toBeInTheDocument();
     expect(screen.getByText("only.ex")).toBeInTheDocument();
+  });
+
+  it("passes timing to the matching command row", () => {
+    renderWithI18n(
+      <ToolActivityTimeline
+        toolCalls={[
+          call({
+            id: "command-1",
+            name: "shell",
+            status: "complete",
+            arguments: { command: "sleep 10" },
+          }),
+        ]}
+        toolTimings={{
+          "command-1": { startedAt: Date.now() - 10_000, durationMs: 10_000 },
+        }}
+      />,
+    );
+
+    expect(screen.getByText("· 10s")).toBeInTheDocument();
   });
 
   it("groups 3 consecutive reads into one group header", () => {
@@ -58,7 +90,12 @@ describe("ToolActivityTimeline", () => {
         taskSnapshot={{
           source: "plan",
           tasks: [
-            { id: "plan-0", text: "Write tests", status: "completed", source: "plan" },
+            {
+              id: "plan-0",
+              text: "Write tests",
+              status: "completed",
+              source: "plan",
+            },
             { id: "plan-1", text: "Ship", status: "pending", source: "plan" },
           ],
         }}
@@ -91,10 +128,10 @@ describe("ToolActivityTimeline", () => {
         <ToolActivityTimeline toolCalls={toolCalls} />
       </I18nextProvider>
     );
-    const { container, rerender } = render(
-      renderTimeline(initialCalls),
-    );
-    const commandGroup = screen.getByRole("button", { name: /Ran 2 commands/i });
+    const { container, rerender } = render(renderTimeline(initialCalls));
+    const commandGroup = screen.getByRole("button", {
+      name: /Ran 2 commands/i,
+    });
     fireEvent.click(commandGroup);
 
     expect(commandGroup).toHaveAttribute("aria-expanded", "true");
@@ -104,8 +141,16 @@ describe("ToolActivityTimeline", () => {
       renderTimeline([
         initialCalls[0],
         initialCalls[1],
-        call({ id: "action-1", name: "move_issue", arguments: { identifier: "SYM-1" } }),
-        call({ id: "action-2", name: "move_issue", arguments: { identifier: "SYM-2" } }),
+        call({
+          id: "action-1",
+          name: "move_issue",
+          arguments: { identifier: "SYM-1" },
+        }),
+        call({
+          id: "action-2",
+          name: "move_issue",
+          arguments: { identifier: "SYM-2" },
+        }),
         initialCalls[2],
         initialCalls[3],
       ]),
@@ -173,7 +218,9 @@ describe("ToolActivityTimeline", () => {
       </I18nextProvider>
     );
     const { container, rerender } = render(renderTimeline([idlessRead]));
-    const singletonSummary = screen.getByRole("button", { name: /legacy\.ex/i });
+    const singletonSummary = screen.getByRole("button", {
+      name: /legacy\.ex/i,
+    });
     fireEvent.click(singletonSummary);
     const stableEntry = container.firstElementChild?.firstElementChild;
 
@@ -197,7 +244,9 @@ describe("ToolActivityTimeline", () => {
   });
 
   it("preserves distinct idless calls with the same name, output, and order", () => {
-    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
     const firstCall = call({
       id: null,
       name: "shell",
@@ -230,7 +279,9 @@ describe("ToolActivityTimeline", () => {
       fireEvent.click(secondSummary);
       expect(screen.getByText("first output")).toBeInTheDocument();
       expect(screen.getByText("second output")).toBeInTheDocument();
-      expect(consoleError.mock.calls.flat().join(" ")).not.toContain("same key");
+      expect(consoleError.mock.calls.flat().join(" ")).not.toContain(
+        "same key",
+      );
     } finally {
       consoleError.mockRestore();
     }
@@ -272,7 +323,9 @@ describe("ToolActivityTimeline", () => {
       ]),
     );
 
-    const updatedSummary = screen.getByRole("button", { name: /echo changed/i });
+    const updatedSummary = screen.getByRole("button", {
+      name: /echo changed/i,
+    });
     expect(screen.getByTestId("tool-activity-group")).toBe(groupSummary);
     expect(updatedSummary).toBe(firstSummary);
     expect(updatedSummary).toHaveAttribute("aria-expanded", "true");
@@ -319,7 +372,9 @@ describe("ToolActivityTimeline", () => {
     expect(screen.getByTestId("tool-activity-group")).toBe(groupSummary);
     expect(screen.getByText("Ran 3 commands")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /pwd/i })).toBe(firstSummary);
-    expect(screen.getByRole("button", { name: /git status/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /git status/i }),
+    ).toBeInTheDocument();
   });
 
   it("renders duplicate provider snapshots once using the latest status", () => {
@@ -348,7 +403,9 @@ describe("ToolActivityTimeline", () => {
   });
 
   it("canonicalizes duplicate snapshots before rendering grouped row keys", () => {
-    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
 
     try {
       renderWithI18n(
@@ -376,7 +433,9 @@ describe("ToolActivityTimeline", () => {
       expect(screen.queryByText("stale.ex")).not.toBeInTheDocument();
       expect(screen.getByText("latest.ex")).toBeInTheDocument();
       expect(screen.getByText("other.ex")).toBeInTheDocument();
-      expect(consoleError.mock.calls.flat().join(" ")).not.toContain("same key");
+      expect(consoleError.mock.calls.flat().join(" ")).not.toContain(
+        "same key",
+      );
     } finally {
       consoleError.mockRestore();
     }

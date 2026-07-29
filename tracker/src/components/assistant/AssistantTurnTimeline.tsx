@@ -3,8 +3,12 @@ import { memo } from "react";
 import { AssistantMarkdown } from "@/components/assistant/AssistantMarkdown";
 import { ToolActivityTimeline } from "@/components/assistant/ToolActivityTimeline";
 import { buildAssistantTimelineItems } from "@/components/assistant/assistantTimelineItems";
+import type { ToolActivityTimings } from "@/components/assistant/toolActivityTiming";
 import type { OpenKbPathHandler } from "@/lib/openKbPath";
-import type { AssistantContentBlock, AssistantToolCall } from "@/services/assistant";
+import type {
+  AssistantContentBlock,
+  AssistantToolCall,
+} from "@/services/assistant";
 import type { AgentTaskSnapshot } from "@/types/agentTasks";
 
 interface AssistantTurnTimelineProps {
@@ -15,6 +19,7 @@ interface AssistantTurnTimelineProps {
   taskSnapshot?: AgentTaskSnapshot | null;
   onKillTool?: (toolCallId: string) => void;
   onLoadFullOutput?: (toolCallId: string) => Promise<string>;
+  toolTimings?: ToolActivityTimings;
 }
 
 function AssistantTurnTimelineComponent({
@@ -25,6 +30,7 @@ function AssistantTurnTimelineComponent({
   taskSnapshot = null,
   onKillTool,
   onLoadFullOutput,
+  toolTimings = {},
 }: AssistantTurnTimelineProps) {
   const timelineItems = buildAssistantTimelineItems(contentBlocks, toolCalls);
 
@@ -42,7 +48,11 @@ function AssistantTurnTimelineComponent({
       {timelineItems.map((item) => {
         if (item.type === "text") {
           return (
-            <div key={item.key} className="min-w-0" data-testid="assistant-timeline-text">
+            <div
+              key={item.key}
+              className="min-w-0"
+              data-testid="assistant-timeline-text"
+            >
               <AssistantMarkdown
                 content={item.text}
                 onOpenDocumentPath={onOpenDocumentPath}
@@ -63,6 +73,7 @@ function AssistantTurnTimelineComponent({
               onKillTool={onKillTool}
               onLoadFullOutput={onLoadFullOutput}
               onOpenKbPath={onOpenDocumentPath}
+              toolTimings={toolTimings}
             />
           </div>
         );

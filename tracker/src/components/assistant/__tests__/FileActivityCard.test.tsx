@@ -1,5 +1,5 @@
-import { fireEvent, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it } from "vitest";
+import { act, fireEvent, screen } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { FileActivityCard } from "@/components/assistant/FileActivityCard";
 import type { FileActivityView } from "@/components/assistant/fileActivity";
@@ -32,14 +32,27 @@ describe("FileActivityCard", () => {
 
   it("renders edit add/remove counts", () => {
     renderWithI18n(
-      <FileActivityCard view={view({ kind: "edit", title: "lib/foo.ex", path: "lib/foo.ex", lineRange: null, additions: 12, deletions: 3 })} />,
+      <FileActivityCard
+        view={view({
+          kind: "edit",
+          title: "lib/foo.ex",
+          path: "lib/foo.ex",
+          lineRange: null,
+          additions: 12,
+          deletions: 3,
+        })}
+      />,
     );
     expect(screen.getByText("+12")).toBeInTheDocument();
     expect(screen.getByText("−3")).toBeInTheDocument();
   });
 
   it("is collapsed by default and expands the body on click", () => {
-    renderWithI18n(<FileActivityCard view={view({ body: { value: "hello body", language: "text" } })} />);
+    renderWithI18n(
+      <FileActivityCard
+        view={view({ body: { value: "hello body", language: "text" } })}
+      />,
+    );
     expect(screen.queryByText("hello body")).not.toBeInTheDocument();
     const summary = screen.getByRole("button");
     expect(summary).toHaveAttribute("aria-expanded", "false");
@@ -51,7 +64,9 @@ describe("FileActivityCard", () => {
     renderWithI18n(<FileActivityCard view={view({ body: null })} />);
 
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
-    expect(screen.getByText("front/README.md").closest("[aria-expanded]")).toBeNull();
+    expect(
+      screen.getByText("front/README.md").closest("[aria-expanded]"),
+    ).toBeNull();
   });
 
   it("keeps running output closed and exposes busy status", () => {
@@ -98,6 +113,42 @@ describe("FileActivityCard", () => {
 
     expect(screen.getByText("Ran")).toBeInTheDocument();
     expect(screen.queryByText("Running")).not.toBeInTheDocument();
+  });
+
+  it("shows a ticking elapsed time for a running command", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-29T12:00:00.000Z"));
+
+    renderWithI18n(
+      <FileActivityCard
+        view={view({
+          kind: "command",
+          title: "sleep 10",
+          status: "running",
+        })}
+        startedAt={Date.now()}
+      />,
+    );
+
+    expect(screen.getByText("· 0:00")).toBeInTheDocument();
+    act(() => vi.advanceTimersByTime(3_000));
+    expect(screen.getByText("· 0:03")).toBeInTheDocument();
+    vi.useRealTimers();
+  });
+
+  it("shows a settled duration for a completed command", () => {
+    renderWithI18n(
+      <FileActivityCard
+        view={view({
+          kind: "command",
+          title: "sleep 10",
+          status: "complete",
+        })}
+        durationMs={10_000}
+      />,
+    );
+
+    expect(screen.getByText("· 10s")).toBeInTheDocument();
   });
 
   it("keeps failed output closed and makes failure obvious", () => {

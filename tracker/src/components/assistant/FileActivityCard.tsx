@@ -6,14 +6,23 @@ import {
   type ActivityDisclosureStateProps,
 } from "@/components/agent-activity/ActivityDisclosure";
 import type { FileActivityView } from "@/components/assistant/fileActivity";
+import { Button } from "@/components/ui/button";
+import { useNowTick } from "@/hooks/useNowTick";
+import { formatClockElapsed, formatDurationSeconds } from "@/lib/timeFormat";
 import { cn } from "@/lib/utils";
 
 interface FileActivityCardProps extends ActivityDisclosureStateProps {
   view: FileActivityView;
+  startedAt?: number | null;
+  durationMs?: number | null;
+  onKill?: () => void;
 }
 
 export function FileActivityCard({
   view,
+  startedAt = null,
+  durationMs = null,
+  onKill,
   expanded,
   onExpandedChange,
 }: FileActivityCardProps) {
@@ -33,12 +42,23 @@ export function FileActivityCard({
     : running && view.kind !== "command"
       ? t("issue.toolCall.status.running")
       : undefined;
+  const nowMs = useNowTick(1000, {
+    enabled: view.kind === "command" && running && startedAt != null,
+  });
+  const elapsed =
+    view.kind !== "command"
+      ? null
+      : running && startedAt != null
+        ? formatClockElapsed(nowMs - startedAt)
+        : durationMs != null
+          ? formatDurationSeconds(durationMs / 1000)
+          : null;
 
   return (
     <ActivityDisclosure
       icon={
         running ? (
-          <Loader2 className="size-3.5 animate-spin" />
+          <Loader2 className="size-3.5 animate-spin motion-reduce:animate-none" />
         ) : (
           <ActivityIcon kind={view.kind} />
         )
@@ -48,7 +68,10 @@ export function FileActivityCard({
           <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
             {verb}
           </span>
-          <span className="min-w-0 truncate font-mono font-normal" title={view.title}>
+          <span
+            className="min-w-0 truncate font-mono font-normal"
+            title={view.title}
+          >
             {view.title}
           </span>
         </span>
@@ -57,15 +80,33 @@ export function FileActivityCard({
         <span className="flex items-center gap-1.5 font-mono">
           {view.lineRange ? <span>{view.lineRange}</span> : null}
           {view.additions != null && view.additions > 0 ? (
-            <span className="font-semibold text-emerald-500">+{view.additions}</span>
+            <span className="font-semibold text-emerald-500">
+              +{view.additions}
+            </span>
           ) : null}
           {view.deletions != null && view.deletions > 0 ? (
-            <span className="font-semibold text-rose-500">−{view.deletions}</span>
+            <span className="font-semibold text-rose-500">
+              −{view.deletions}
+            </span>
           ) : null}
+          {elapsed ? <span className="tabular-nums">· {elapsed}</span> : null}
         </span>
       }
       status={failed ? "failed" : running ? "running" : null}
-      statusLabel={statusLabel}
+      statusLabel={running && view.kind === "command" ? "" : statusLabel}
+      trailingAction={
+        running && view.kind === "command" && onKill ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs"
+            onClick={onKill}
+          >
+            {t("assistant.working.kill")}
+          </Button>
+        ) : null
+      }
       details={
         view.body ? (
           view.body.language === "diff" ? (
@@ -103,7 +144,9 @@ function DiffBody({ value }: { value: string }) {
           key={index}
           className={cn(
             "whitespace-pre-wrap break-words",
-            line.startsWith("+") && !line.startsWith("+++") && "text-emerald-300",
+            line.startsWith("+") &&
+              !line.startsWith("+++") &&
+              "text-emerald-300",
             line.startsWith("-") && !line.startsWith("---") && "text-rose-300",
             line.startsWith("@@") && "text-sky-300",
             !/^[+\-@]/.test(line) && "text-slate-300",

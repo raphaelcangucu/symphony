@@ -26,6 +26,7 @@ export interface WorkingActiveToolDetail {
   id: string;
   name: string;
   argumentsSummary: string | null;
+  startedAt?: number | null;
 }
 
 interface WorkingIndicatorProps {
@@ -39,7 +40,8 @@ interface WorkingIndicatorProps {
 }
 
 function prefersReducedMotion(): boolean {
-  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false;
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function")
+    return false;
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
@@ -74,11 +76,16 @@ export function WorkingIndicator({
 
   const detail = activeToolDetail;
   const toolName = detail?.name ?? activeTool;
-  const summary = detail?.argumentsSummary ? truncateSummary(detail.argumentsSummary) : null;
+  const summary = detail?.argumentsSummary
+    ? truncateSummary(detail.argumentsSummary)
+    : null;
 
   const label = toolName
     ? summary
-      ? t("assistant.working.runningToolWithCommand", { tool: toolName, command: summary })
+      ? t("assistant.working.runningToolWithCommand", {
+          tool: toolName,
+          command: summary,
+        })
       : t("assistant.working.runningTool", { tool: toolName })
     : t(WORKING_VERB_KEYS[verbIndex]);
 
@@ -90,15 +97,22 @@ export function WorkingIndicator({
     >
       <Loader2
         aria-hidden="true"
-        className={cn("h-3.5 w-3.5", reducedMotion.current ? "opacity-70" : "animate-spin")}
+        className={cn(
+          "h-3.5 w-3.5",
+          reducedMotion.current ? "opacity-70" : "animate-spin",
+        )}
       />
       <span className="min-w-0 break-all">
         {label}…
         {stale ? (
-          <span className="ml-1 text-xs opacity-80">{t("assistant.working.staleHint")}</span>
+          <span className="ml-1 text-xs opacity-80">
+            {t("assistant.working.staleHint")}
+          </span>
         ) : null}
       </span>
-      <span className="tabular-nums text-xs opacity-70">· {formatClockElapsed(elapsedMs)}</span>
+      <span className="tabular-nums text-xs opacity-70">
+        · {formatClockElapsed(elapsedMs)}
+      </span>
       {onStop || (onKill && detail?.id) ? (
         <span className="ml-auto flex items-center gap-1">
           {onKill && detail?.id ? (
@@ -113,7 +127,13 @@ export function WorkingIndicator({
             </Button>
           ) : null}
           {onStop ? (
-            <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={onStop}>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-xs"
+              onClick={onStop}
+            >
               {t("assistant.working.stop")}
             </Button>
           ) : null}

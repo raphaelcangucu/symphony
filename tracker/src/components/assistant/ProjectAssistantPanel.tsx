@@ -82,8 +82,13 @@ import {
   type AssistantDeltaBuffer,
 } from "@/components/assistant/assistantDeltaBuffer";
 import type { WorkingActiveToolDetail } from "@/components/assistant/WorkingIndicator";
+import {
+  reconcileToolActivityTimings,
+  type ToolActivityTimings,
+} from "@/components/assistant/toolActivityTiming";
 import { useNowTick } from "@/hooks/useNowTick";
 import { useStableValue } from "@/hooks/useStableValue";
+import { parseTimestamp } from "@/lib/timeFormat";
 import { toast } from "sonner";
 import { BtwOverlay, type BtwStatus } from "@/components/assistant/BtwOverlay";
 import {
@@ -408,13 +413,16 @@ function activeToolDetailFromMessages(
         : running.arguments
           ? JSON.stringify(running.arguments)
           : null;
+    const id =
+      typeof running.id === "string" && running.id.trim() !== ""
+        ? running.id
+        : running.name;
+    const snapshot = turn?.activeTools.find((tool) => tool.id === id);
     return {
-      id:
-        typeof running.id === "string" && running.id.trim() !== ""
-          ? running.id
-          : running.name,
+      id,
       name: running.name,
       argumentsSummary: summary,
+      startedAt: parseTimestamp(snapshot?.startedAt),
     };
   }
 
@@ -424,6 +432,7 @@ function activeToolDetailFromMessages(
     id: snapshot.id,
     name: snapshot.name,
     argumentsSummary: snapshot.argumentsSummary,
+    startedAt: parseTimestamp(snapshot.startedAt),
   };
 }
 
@@ -629,6 +638,7 @@ function InteractiveProjectAssistantPanel({
   const [messages, setMessages] = useState<AssistantChatMessage[]>(
     () => readThreadCache(threadId)?.messages ?? [],
   );
+  const [toolTimings, setToolTimings] = useState<ToolActivityTimings>({});
   const messagesRef = useRef<AssistantChatMessage[]>([]);
   // Coalesces streaming deltas to one render per frame so a fast turn cannot
   // flood the main thread and freeze navigation/composer. Any non-delta event
@@ -1064,6 +1074,7 @@ function InteractiveProjectAssistantPanel({
     stickToBottomRef.current = true;
     pinnedScrollTopRef.current = null;
     setIsAtBottom(true);
+    setToolTimings({});
   }, [issueIdentifier, threadId]);
 
   useEffect(() => {
@@ -2432,6 +2443,26 @@ function InteractiveProjectAssistantPanel({
   );
 
   const activeToolDetail = activeToolDetailFromMessages(messages, lastTurn);
+  useEffect(() => {
+    setToolTimings((current) =>
+      reconcileToolActivityTimings(current, {
+        activeTool: activeToolDetail
+          ? {
+              id: activeToolDetail.id,
+              startedAt: activeToolDetail.startedAt ?? null,
+            }
+          : null,
+        messages,
+        turnStartedAt: runningStartedAt,
+        nowMs: Date.now(),
+      }),
+    );
+  }, [
+    activeToolDetail?.id,
+    activeToolDetail?.startedAt,
+    messages,
+    runningStartedAt,
+  ]);
   const nowMs = useNowTick(1000, { enabled: turnRunning });
   const stale =
     turnRunning &&
@@ -2568,6 +2599,7 @@ function InteractiveProjectAssistantPanel({
             isRunning={turnRunning}
             runningStartedAt={runningStartedAt}
             activeToolDetail={activeToolDetail}
+            toolTimings={toolTimings}
             stale={stale}
             connectionError={
               workspaceProvisioningError ? null : connectionError

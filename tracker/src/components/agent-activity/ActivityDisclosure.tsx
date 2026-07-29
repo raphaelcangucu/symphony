@@ -14,6 +14,7 @@ export interface ActivityDisclosureProps extends ActivityDisclosureStateProps {
   metadata?: ReactNode;
   status?: "running" | "completed" | "failed" | null;
   statusLabel?: string;
+  trailingAction?: ReactNode;
   details?: ReactNode;
   defaultExpanded?: boolean;
   testId?: string;
@@ -25,13 +26,15 @@ export function ActivityDisclosure({
   metadata,
   status = null,
   statusLabel,
+  trailingAction,
   details,
   defaultExpanded = false,
   expanded,
   onExpandedChange,
   testId,
 }: ActivityDisclosureProps) {
-  const [uncontrolledExpanded, setUncontrolledExpanded] = useState(defaultExpanded);
+  const [uncontrolledExpanded, setUncontrolledExpanded] =
+    useState(defaultExpanded);
   const controlled = expanded !== undefined;
   const open = controlled ? expanded : uncontrolledExpanded;
   const detailsId = useId();
@@ -86,29 +89,37 @@ export function ActivityDisclosure({
     if (!controlled) setUncontrolledExpanded(nextExpanded);
     onExpandedChange?.(nextExpanded);
   };
+  const summaryControl = hasDetails ? (
+    <button
+      type="button"
+      className={summaryClassName}
+      onClick={toggleExpanded}
+      aria-expanded={open}
+      aria-controls={detailsId}
+      aria-busy={status === "running" || undefined}
+      data-testid={testId}
+    >
+      {summary}
+    </button>
+  ) : (
+    <div
+      className={summaryClassName}
+      aria-busy={status === "running" || undefined}
+      data-testid={testId}
+    >
+      {summary}
+    </div>
+  );
 
   return (
     <div className="min-w-0" data-status={status ?? undefined}>
-      {hasDetails ? (
-        <button
-          type="button"
-          className={summaryClassName}
-          onClick={toggleExpanded}
-          aria-expanded={open}
-          aria-controls={detailsId}
-          aria-busy={status === "running" || undefined}
-          data-testid={testId}
-        >
-          {summary}
-        </button>
-      ) : (
-        <div
-          className={summaryClassName}
-          aria-busy={status === "running" || undefined}
-          data-testid={testId}
-        >
-          {summary}
+      {trailingAction ? (
+        <div className="flex min-w-0 items-center gap-1">
+          <div className="min-w-0 flex-1">{summaryControl}</div>
+          <div className="shrink-0 pr-1">{trailingAction}</div>
         </div>
+      ) : (
+        summaryControl
       )}
       {hasDetails && open ? (
         <div

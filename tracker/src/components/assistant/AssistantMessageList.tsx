@@ -14,6 +14,7 @@ import {
 } from "@/components/assistant/WorkingIndicator";
 import type { OpenWorkspaceDiffRequest } from "@/components/assistant/EditedFilesSummary";
 import type { ComposerContextChipRef } from "@/components/assistant/contextMentions";
+import type { ToolActivityTimings } from "@/components/assistant/toolActivityTiming";
 import type { OpenKbPathHandler } from "@/lib/openKbPath";
 import type { SessionLogFeedItem } from "@/lib/sessionLogFeed";
 import type { AssistantChatMessage } from "@/services/assistant";
@@ -46,6 +47,7 @@ interface AssistantMessageListProps {
   isRunning: boolean;
   runningStartedAt: number | null;
   activeToolDetail: WorkingActiveToolDetail | null;
+  toolTimings?: ToolActivityTimings;
   stale?: boolean;
   connectionError: string | null;
   channelReady: boolean;
@@ -56,7 +58,10 @@ interface AssistantMessageListProps {
   onApprovePlan: AssistantChatPlanApprovalAction["onApprove"];
   onStop?: () => void;
   onKillTool?: (toolCallId: string) => void;
-  onFetchToolOutput?: (messageId: string, toolCallId: string) => Promise<string>;
+  onFetchToolOutput?: (
+    messageId: string,
+    toolCallId: string,
+  ) => Promise<string>;
 }
 
 export function AssistantMessageList({
@@ -71,6 +76,7 @@ export function AssistantMessageList({
   isRunning,
   runningStartedAt,
   activeToolDetail,
+  toolTimings = {},
   stale = false,
   connectionError,
   channelReady,
@@ -96,7 +102,9 @@ export function AssistantMessageList({
 
   return (
     <>
-      {hidePinnedPanel ? null : <AgentTaskPinnedPanel snapshot={taskSnapshot} />}
+      {hidePinnedPanel ? null : (
+        <AgentTaskPinnedPanel snapshot={taskSnapshot} />
+      )}
       {loadOlder ? (
         <div className="flex justify-center pb-1">
           <button
@@ -118,7 +126,12 @@ export function AssistantMessageList({
               return <SessionLogFeedEventGroup key={item.id} item={item} />;
             }
             if (item.type === "subagent_notification") {
-              return <SubagentNotificationCard key={item.id} notification={item.notification} />;
+              return (
+                <SubagentNotificationCard
+                  key={item.id}
+                  notification={item.notification}
+                />
+              );
             }
             return (
               <AssistantChatMessageBubble
@@ -133,6 +146,7 @@ export function AssistantMessageList({
                 taskSnapshot={taskSnapshot}
                 onKillTool={onKillTool}
                 onFetchToolOutput={onFetchToolOutput}
+                toolTimings={toolTimings}
               />
             );
           })
@@ -149,14 +163,23 @@ export function AssistantMessageList({
               taskSnapshot={taskSnapshot}
               onKillTool={onKillTool}
               onFetchToolOutput={onFetchToolOutput}
+              toolTimings={toolTimings}
               planApprovalAction={
-                issueIdentifier && !isRunning && message.id === planApprovalMessageId
-                  ? { messageId: message.id, disabled: !channelReady, onApprove: onApprovePlan }
+                issueIdentifier &&
+                !isRunning &&
+                message.id === planApprovalMessageId
+                  ? {
+                      messageId: message.id,
+                      disabled: !channelReady,
+                      onApprove: onApprovePlan,
+                    }
                   : undefined
               }
             />
           ))}
-      {connectionError ? <p className="text-sm text-destructive">{connectionError}</p> : null}
+      {connectionError ? (
+        <p className="text-sm text-destructive">{connectionError}</p>
+      ) : null}
       {isRunning && runningStartedAt != null && !activeToolRepresented ? (
         <WorkingIndicator
           startedAt={runningStartedAt}
