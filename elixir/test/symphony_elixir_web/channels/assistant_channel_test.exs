@@ -202,6 +202,8 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
         requested_effort: "high"
       })
 
+    {:ok, _thread} = History.set_turn_preferences(thread, %{execution_mode: "yolo"})
+
     test_pid = self()
 
     Application.put_env(:symphony_elixir, :assistant_runner, fn _workspace, _prompt, _issue, opts ->
@@ -232,6 +234,7 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
     assert_receive {:persisted_runner_opts, opts}, 2_000
     assert opts[:model] == "gpt-5.6-sol"
     assert opts[:effort] == "high"
+    assert opts[:execution_mode] == "yolo"
   end
 
   test "joining a thread recovers durable pending turns", %{socket: socket} do

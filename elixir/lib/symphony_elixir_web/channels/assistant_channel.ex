@@ -2901,6 +2901,7 @@ defmodule SymphonyElixirWeb.AssistantChannel do
       |> maybe_put_runner()
       |> Keyword.merge(Payload.model_opts(context))
       |> put_persisted_model_opts(thread)
+      |> put_execution_mode_opt(thread, context)
       |> Keyword.put(:on_message_created, fn message -> push_stream.("message_created", %{message: message}) end)
       |> Keyword.put(:on_assistant_delta, fn delta -> push_stream.("assistant_delta", %{delta: delta}) end)
       |> Keyword.put(:on_tool_call_started, fn tool_call ->
@@ -2947,6 +2948,25 @@ defmodule SymphonyElixirWeb.AssistantChannel do
     |> put_persisted_model_opt(:model, History.requested_model(thread))
     |> put_persisted_model_opt(:effort, History.requested_effort(thread))
   end
+
+  # The composer persists the chosen mode on the thread, while a just-submitted
+  # message may also carry a newer selection. The coding adapter must receive it:
+  # without this hand-off, a visible "Full access" choice silently falls back to
+  # Codex's workspace-write sandbox and cannot run local preview/E2E servers.
+  defp put_execution_mode_opt(opts, thread, context)
+       when is_list(opts) and is_map(context) do
+    mode =
+      Map.get(context, "execution_mode") ||
+        Map.get(context, :execution_mode) ||
+        if(is_map(thread), do: History.thread_execution_mode(thread))
+
+    case mode do
+      value when is_binary(value) and value != "" -> Keyword.put(opts, :execution_mode, value)
+      _ -> opts
+    end
+  end
+
+  defp put_execution_mode_opt(opts, _thread, _context), do: opts
 
   defp put_persisted_model_opt(opts, _key, nil), do: opts
 
