@@ -37,7 +37,14 @@ const timeline: SessionTimelineState = {
   pendingUserInput: null,
   turnStatus: { status: "running", canResume: false, queuedMessages: [] },
   turnPreferences: { executionMode: null, skillProfile: null, model: null, effort: null },
-  metadata: { projectSlug: null, agentKind: null, requestedModel: null, requestedEffort: null, resolvedModel: null, resolvedEffort: null },
+  metadata: {
+    projectSlug: null,
+    agentKind: null,
+    requestedModel: null,
+    requestedEffort: null,
+    resolvedModel: null,
+    resolvedEffort: null,
+  },
   error: null,
 };
 
@@ -224,9 +231,7 @@ describe("AssistantChatScreen", () => {
     fireEvent.press(screen.getByRole("button", { name: "Choose model" }));
     fireEvent.press(screen.getByRole("button", { name: "Use GPT-5.6-Sol" }));
     expect(screen.getByText("GPT-5.6-Sol effort")).toBeTruthy();
-    fireEvent.press(
-      screen.getByRole("button", { name: "Use GPT-5.6-Sol with High effort" }),
-    );
+    fireEvent.press(screen.getByRole("button", { name: "Use GPT-5.6-Sol with High effort" }));
 
     await waitFor(() =>
       expect(onSetTurnPreferences).toHaveBeenCalledWith({
@@ -271,6 +276,21 @@ describe("AssistantChatScreen", () => {
     fireEvent.press(screen.getByRole("button", { name: "Send" }));
 
     await waitFor(() => expect(onSend).toHaveBeenCalledWith("Steer this session"));
+  });
+
+  it("opens quick actions from plus and enables Plan mode without changing the draft", async () => {
+    const onSetTurnPreferences = jest.fn().mockResolvedValue(undefined);
+    renderScreen({ onSetTurnPreferences });
+
+    fireEvent.changeText(screen.getByLabelText("Message"), "Keep this draft");
+    fireEvent.press(screen.getByRole("button", { name: "Open composer actions" }));
+    fireEvent.press(screen.getByRole("button", { name: "Plan mode" }));
+
+    await waitFor(() =>
+      expect(onSetTurnPreferences).toHaveBeenCalledWith({ executionMode: "plan" }),
+    );
+    expect(screen.getByLabelText("Message").props.value).toBe("Keep this draft");
+    expect(screen.queryByText("Add to session")).toBeNull();
   });
 
   it("opens the terminal for the same host session", () => {
@@ -385,7 +405,9 @@ describe("AssistantChatScreen", () => {
     });
 
     fireEvent.press(screen.getByRole("button", { name: "Dictate message" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "Stop dictation" })).toBeTruthy());
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Stop dictation" })).toBeTruthy(),
+    );
     fireEvent.press(screen.getByRole("button", { name: "Stop dictation" }));
 
     await waitFor(() => {

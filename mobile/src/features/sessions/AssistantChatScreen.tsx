@@ -37,6 +37,7 @@ import {
   ActivityIndicator,
   FlatList,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   StyleSheet,
@@ -47,10 +48,7 @@ import {
 import Markdown from "react-native-markdown-display";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import {
-  ConnectionBadge,
-  type ConnectionState,
-} from "@/components/ConnectionBadge";
+import { ConnectionBadge, type ConnectionState } from "@/components/ConnectionBadge";
 import { StatusDot } from "@/components/StatusDot";
 import type { DictationSession } from "@/native/dictation";
 import { radii, spacing } from "@/theme/tokens";
@@ -58,11 +56,9 @@ import { useAppTheme } from "@/theme/ThemeProvider";
 import type { AssistantCatalog } from "@/api/contracts";
 import type { HostAssistantCatalogStatus } from "@/runtime/host-assistant-catalog-cache";
 
-import {
-  buildAssistantUiMessages,
-  submitAssistantUiMessage,
-} from "./assistant-ui-session-adapter";
+import { buildAssistantUiMessages, submitAssistantUiMessage } from "./assistant-ui-session-adapter";
 import { followLatestMessage } from "./chat-scroll";
+import { MOBILE_COMPOSER_ACTIONS, type MobileComposerActionId } from "./mobile-composer-actions";
 import {
   taskCreationActivity,
   type TaskCreationActivity as TaskCreationDetails,
@@ -95,15 +91,10 @@ export type AssistantChatScreenProps = {
     | undefined;
   onDictate?: (() => Promise<string>) | undefined;
   onStartDictation?: (() => Promise<DictationSession>) | undefined;
-  onApproval(
-    requestId: string | number,
-    action: "approve" | "cancel",
-  ): Promise<void>;
+  onApproval(requestId: string | number, action: "approve" | "cancel"): Promise<void>;
   onResumeTurn(): Promise<void>;
   onKillTool(toolCallId: string): Promise<void>;
-  onSetTurnPreferences(
-    preferences: Partial<AssistantTurnPreferences>,
-  ): Promise<void>;
+  onSetTurnPreferences(preferences: Partial<AssistantTurnPreferences>): Promise<void>;
   onSetGoalMode(enabled: boolean, objective?: string): Promise<void>;
   onPauseGoal(): Promise<void>;
   onResumeGoal(): Promise<void>;
@@ -111,18 +102,12 @@ export type AssistantChatScreenProps = {
   onSetGoalObjective(objective: string): Promise<void>;
   onSend(message: string): Promise<void>;
   onStopTurn(): Promise<void>;
-  onSubmitUserInput(
-    requestId: string | number,
-    answers: Record<string, string>,
-  ): Promise<void>;
+  onSubmitUserInput(requestId: string | number, answers: Record<string, string>): Promise<void>;
   onRetrySeed?: (() => Promise<void>) | undefined;
 };
 
 export function AssistantChatScreen(props: AssistantChatScreenProps) {
-  const messages = useMemo(
-    () => buildAssistantUiMessages(props.timeline),
-    [props.timeline],
-  );
+  const messages = useMemo(() => buildAssistantUiMessages(props.timeline), [props.timeline]);
   const runtime = useExternalStoreRuntime<ThreadMessageLike>({
     messages,
     convertMessage: (message) => message,
@@ -195,19 +180,12 @@ function AssistantChatContent({
             <ArrowLeft color={colors.textPrimary} size={22} />
           </Pressable>
           <View style={styles.titleBlock}>
-            <Text
-              numberOfLines={1}
-              style={[styles.title, { color: colors.textPrimary }]}
-            >
+            <Text numberOfLines={1} style={[styles.title, { color: colors.textPrimary }]}>
               {title || `Session ${threadId}`}
             </Text>
             <View style={styles.titleMeta}>
-              <Text style={[styles.sessionId, { color: colors.textMuted }]}>
-                #{threadId}
-              </Text>
-              <ConnectionBadge
-                state={sessionHeaderState(timeline)}
-              />
+              <Text style={[styles.sessionId, { color: colors.textMuted }]}>#{threadId}</Text>
+              <ConnectionBadge state={sessionHeaderState(timeline)} />
             </View>
           </View>
           <TurnControl
@@ -243,31 +221,20 @@ function AssistantChatContent({
             ref={messageList}
             testID="session-message-list"
           >
-            {({ message }) => (
-              <ChatMessage onKillTool={onKillTool} role={message.role} />
-            )}
+            {({ message }) => <ChatMessage onKillTool={onKillTool} role={message.role} />}
           </ThreadPrimitive.Messages>
         </ThreadPrimitive.Root>
 
         {timeline.pendingApproval ? (
-          <ApprovalCard
-            onApproval={onApproval}
-            request={timeline.pendingApproval}
-          />
+          <ApprovalCard onApproval={onApproval} request={timeline.pendingApproval} />
         ) : null}
         {timeline.pendingUserInput ? (
-          <UserInputCard
-            onSubmit={onSubmitUserInput}
-            request={timeline.pendingUserInput}
-          />
+          <UserInputCard onSubmit={onSubmitUserInput} request={timeline.pendingUserInput} />
         ) : null}
 
         {timeline.error ? (
           <View style={styles.errorRow}>
-            <Text
-              accessibilityRole="alert"
-              style={[styles.error, { color: colors.statusRed }]}
-            >
+            <Text accessibilityRole="alert" style={[styles.error, { color: colors.statusRed }]}>
               {timeline.error}
             </Text>
             {onRetrySeed ? (
@@ -276,9 +243,7 @@ function AssistantChatContent({
                 accessibilityRole="button"
                 onPress={() => void onRetrySeed()}
               >
-                <Text style={[styles.retry, { color: colors.accent }]}>
-                  Retry
-                </Text>
+                <Text style={[styles.retry, { color: colors.accent }]}>Retry</Text>
               </Pressable>
             ) : null}
           </View>
@@ -330,25 +295,16 @@ function QueuedMessageDock({
     >
       <Clock3 color={colors.textMuted} size={15} />
       <View style={styles.queuedCopy}>
-        <Text style={[styles.queuedLabel, { color: colors.textSecondary }]}>
-          Queued message
-        </Text>
-        <Text
-          numberOfLines={1}
-          style={[styles.queuedText, { color: colors.textMuted }]}
-        >
+        <Text style={[styles.queuedLabel, { color: colors.textSecondary }]}>Queued message</Text>
+        <Text numberOfLines={1} style={[styles.queuedText, { color: colors.textMuted }]}>
           {first.message}
         </Text>
       </View>
       {first.provider ? (
-        <Text style={[styles.queuedProvider, { color: colors.accent }]}>
-          {first.provider}
-        </Text>
+        <Text style={[styles.queuedProvider, { color: colors.accent }]}>{first.provider}</Text>
       ) : null}
       {rest.length > 0 ? (
-        <Text style={[styles.queuedCount, { color: colors.textMuted }]}>
-          +{rest.length}
-        </Text>
+        <Text style={[styles.queuedCount, { color: colors.textMuted }]}>+{rest.length}</Text>
       ) : null}
     </View>
   );
@@ -369,11 +325,7 @@ function ChatMessage({
       testID={`chat-message-${role}`}
       style={[
         styles.message,
-        user
-          ? styles.userMessage
-          : system
-            ? styles.activityMessage
-            : styles.assistantMessage,
+        user ? styles.userMessage : system ? styles.activityMessage : styles.assistantMessage,
         {
           alignSelf: user ? "flex-end" : "stretch",
           backgroundColor: user ? colors.accentSoft : "transparent",
@@ -388,9 +340,7 @@ function ChatMessage({
           ),
           Text: ({ text }: { text: string }) =>
             user ? (
-              <Text style={[styles.messageText, { color: colors.textPrimary }]}>
-                {text}
-              </Text>
+              <Text style={[styles.messageText, { color: colors.textPrimary }]}>{text}</Text>
             ) : system ? (
               <ActivityDisclosure icon={activityIcon(text)} text={text} />
             ) : (
@@ -420,19 +370,10 @@ function activityIcon(text: string): "reasoning" | "system" {
   return title === "reasoning" || title === "thinking" ? "reasoning" : "system";
 }
 
-function ActivityDisclosure({
-  icon,
-  text,
-}: {
-  icon: "reasoning" | "system";
-  text: string;
-}) {
+function ActivityDisclosure({ icon, text }: { icon: "reasoning" | "system"; text: string }) {
   const { colors } = useAppTheme();
   const [expanded, setExpanded] = useState(false);
-  const { title, body } = disclosureText(
-    text,
-    icon === "reasoning" ? "Thinking" : "System",
-  );
+  const { title, body } = disclosureText(text, icon === "reasoning" ? "Thinking" : "System");
   const Icon = icon === "reasoning" ? Brain : Info;
   const canExpand = body.length > 0;
 
@@ -446,10 +387,7 @@ function ActivityDisclosure({
         style={styles.activityHeader}
       >
         <Icon color={colors.textMuted} size={15} />
-        <Text
-          numberOfLines={1}
-          style={[styles.activityTitle, { color: colors.textSecondary }]}
-        >
+        <Text numberOfLines={1} style={[styles.activityTitle, { color: colors.textSecondary }]}>
           {title}
         </Text>
         <Text style={[styles.activityMeta, { color: colors.textMuted }]}>
@@ -464,9 +402,7 @@ function ActivityDisclosure({
         ) : null}
       </Pressable>
       {expanded && body ? (
-        <View
-          style={[styles.activityBody, { borderColor: colors.borderSubtle }]}
-        >
+        <View style={[styles.activityBody, { borderColor: colors.borderSubtle }]}>
           <Markdown style={activityMarkdownStyles(colors)}>{body}</Markdown>
         </View>
       ) : null}
@@ -512,10 +448,7 @@ function ToolActivity({
         style={styles.toolHeader}
       >
         <StatusDot tone={running ? "accent" : failed ? "danger" : "success"} />
-        <Text
-          numberOfLines={1}
-          style={[styles.toolName, { color: colors.textSecondary }]}
-        >
+        <Text numberOfLines={1} style={[styles.toolName, { color: colors.textSecondary }]}>
           {part.toolName}
         </Text>
         <Text style={[styles.toolStatus, { color: colors.textMuted }]}>
@@ -547,9 +480,7 @@ function ToolActivity({
           onPress={() => void onKillTool(part.toolCallId!)}
           style={styles.killTool}
         >
-          <Text style={[styles.killToolText, { color: colors.statusRed }]}>
-            Stop
-          </Text>
+          <Text style={[styles.killToolText, { color: colors.statusRed }]}>Stop</Text>
         </Pressable>
       ) : null}
     </View>
@@ -669,7 +600,10 @@ function ToolTimelineDetail({
       {expanded && tool.output ? (
         <Text
           selectable
-          style={[styles.toolOutput, { borderColor: colors.borderSubtle, color: colors.textSecondary }]}
+          style={[
+            styles.toolOutput,
+            { borderColor: colors.borderSubtle, color: colors.textSecondary },
+          ]}
         >
           {tool.output}
         </Text>
@@ -690,7 +624,13 @@ function ToolTimelineDetail({
 
 function isToolCallPart(
   part: unknown,
-): part is { type: "tool-call"; toolCallId: string; toolName: string; result?: unknown; isError?: boolean } {
+): part is {
+  type: "tool-call";
+  toolCallId: string;
+  toolName: string;
+  result?: unknown;
+  isError?: boolean;
+} {
   return (
     typeof part === "object" &&
     part !== null &&
@@ -783,9 +723,7 @@ function TaskCreationActivity({
     >
       <ListChecks color={colors.accent} size={18} />
       <View style={styles.taskCreationCopy}>
-        <Text style={[styles.taskCreationLabel, { color: colors.textPrimary }]}>
-          {label}
-        </Text>
+        <Text style={[styles.taskCreationLabel, { color: colors.textPrimary }]}>{label}</Text>
         <Text
           numberOfLines={2}
           style={[styles.taskCreationDescription, { color: colors.textMuted }]}
@@ -804,10 +742,7 @@ function TaskCreationActivity({
   );
 }
 
-function disclosureText(
-  text: string,
-  fallbackTitle: string,
-): { title: string; body: string } {
+function disclosureText(text: string, fallbackTitle: string): { title: string; body: string } {
   const trimmed = text.trim();
   if (!trimmed) return { title: fallbackTitle, body: "" };
   const divider = trimmed.search(/\n\s*\n/);
@@ -835,9 +770,7 @@ function ChatComposer({
   onDictate?: (() => Promise<string>) | undefined;
   onStartDictation?: (() => Promise<DictationSession>) | undefined;
   onOpenGoal(): void;
-  onSetTurnPreferences(
-    preferences: Partial<AssistantTurnPreferences>,
-  ): Promise<void>;
+  onSetTurnPreferences(preferences: Partial<AssistantTurnPreferences>): Promise<void>;
   preferences: AssistantTurnPreferences;
   provider: string | null;
   resolvedEffort: string | null;
@@ -847,21 +780,16 @@ function ChatComposer({
   const [dictating, setDictating] = useState(false);
   const [dictationError, setDictationError] = useState<string | null>(null);
   const activeDictation = useRef<DictationSession | null>(null);
-  const [settings, setSettings] = useState<"none" | "permission" | "model">(
-    "none",
-  );
+  const [settings, setSettings] = useState<"none" | "permission" | "model">("none");
+  const [actionsOpen, setActionsOpen] = useState(false);
   const aui = useAui();
   const composerText = useAuiState((state) => state.composer.text);
   const selectedAgent =
-    catalog?.agents.find(
-      (agent) => agent.agent.toLowerCase() === provider?.toLowerCase(),
-    ) ??
+    catalog?.agents.find((agent) => agent.agent.toLowerCase() === provider?.toLowerCase()) ??
     catalog?.agents.find((agent) => agent.agent === catalog.defaultAgent) ??
     null;
-  const activeModel =
-    preferences.model ?? resolvedModel ?? selectedAgent?.defaultModel ?? null;
-  const selectedModel =
-    selectedAgent?.models.find((model) => model.model === activeModel) ?? null;
+  const activeModel = preferences.model ?? resolvedModel ?? selectedAgent?.defaultModel ?? null;
+  const selectedModel = selectedAgent?.models.find((model) => model.model === activeModel) ?? null;
   const modelLabel = composerModelLabel(
     selectedModel?.label ?? activeModel,
     preferences.effort ?? resolvedEffort,
@@ -875,9 +803,7 @@ function ChatComposer({
   }, []);
 
   const appendDictation = (transcript: string) => {
-    const nextText = [composerText.trim(), transcript.trim()]
-      .filter(Boolean)
-      .join(" ");
+    const nextText = [composerText.trim(), transcript.trim()].filter(Boolean).join(" ");
     if (nextText) aui.composer().setText(nextText);
   };
 
@@ -893,11 +819,7 @@ function ChatComposer({
       void onDictate!()
         .then(appendDictation)
         .catch((cause) =>
-          setDictationError(
-            cause instanceof Error
-              ? cause.message
-              : "Could not recognize speech",
-          ),
+          setDictationError(cause instanceof Error ? cause.message : "Could not recognize speech"),
         )
         .finally(() => setDictating(false));
       return;
@@ -909,8 +831,7 @@ function ChatComposer({
       })
       .then(appendDictation)
       .catch((cause) => {
-        const message =
-          cause instanceof Error ? cause.message : "Could not recognize speech";
+        const message = cause instanceof Error ? cause.message : "Could not recognize speech";
         if (message !== "Dictation cancelled") setDictationError(message);
       })
       .finally(() => {
@@ -919,8 +840,62 @@ function ChatComposer({
       });
   };
 
+  const runComposerAction = (action: MobileComposerActionId) => {
+    if (action === "plan") {
+      void onSetTurnPreferences({ executionMode: "plan" }).then(() => setActionsOpen(false));
+      return;
+    }
+    setActionsOpen(false);
+    if (action === "goal") onOpenGoal();
+  };
+
   return (
     <View style={styles.composerShell}>
+      <Modal
+        animationType="slide"
+        onRequestClose={() => setActionsOpen(false)}
+        transparent
+        visible={actionsOpen}
+      >
+        <Pressable
+          accessibilityLabel="Close composer actions"
+          onPress={() => setActionsOpen(false)}
+          style={styles.actionSheetBackdrop}
+        >
+          <Pressable
+            onPress={(event) => event.stopPropagation()}
+            style={[
+              styles.actionSheet,
+              {
+                backgroundColor: colors.bgPanel,
+                borderColor: colors.borderStrong,
+              },
+            ]}
+          >
+            <Text style={[styles.actionSheetTitle, { color: colors.textPrimary }]}>
+              Add to session
+            </Text>
+            {MOBILE_COMPOSER_ACTIONS.map((action) => (
+              <Pressable
+                accessibilityRole="button"
+                key={action.id}
+                onPress={() => runComposerAction(action.id)}
+                style={({ pressed }) => [
+                  styles.actionSheetRow,
+                  { backgroundColor: pressed ? colors.bgPressed : "transparent" },
+                ]}
+              >
+                <View style={styles.actionSheetCopy}>
+                  <Text style={{ color: colors.textPrimary, fontWeight: "700" }}>
+                    {action.label}
+                  </Text>
+                  <Text style={{ color: colors.textMuted }}>{action.description}</Text>
+                </View>
+              </Pressable>
+            ))}
+          </Pressable>
+        </Pressable>
+      </Modal>
       {settings !== "none" ? (
         <View style={styles.settingsOverlay}>
           <ComposerSettings
@@ -960,9 +935,9 @@ function ChatComposer({
           />
           <View style={styles.composerActions}>
             <Pressable
-              accessibilityLabel="Set or edit goal"
+              accessibilityLabel="Open composer actions"
               accessibilityRole="button"
-              onPress={onOpenGoal}
+              onPress={() => setActionsOpen(true)}
               style={styles.addContextButton}
             >
               <Plus color={colors.textPrimary} size={28} />
@@ -971,38 +946,23 @@ function ChatComposer({
               accessibilityLabel={`Choose permissions: ${executionModeLabel(preferences.executionMode)}`}
               accessibilityRole="button"
               onPress={() =>
-                setSettings((current) =>
-                  current === "permission" ? "none" : "permission",
-                )
+                setSettings((current) => (current === "permission" ? "none" : "permission"))
               }
               style={styles.permissionButton}
             >
               <ShieldAlert
-                color={
-                  preferences.executionMode === "yolo"
-                    ? colors.statusAmber
-                    : colors.accent
-                }
+                color={preferences.executionMode === "yolo" ? colors.statusAmber : colors.accent}
                 size={24}
               />
             </Pressable>
             <Pressable
               accessibilityLabel="Choose model"
               accessibilityRole="button"
-              onPress={() =>
-                setSettings((current) => (current === "model" ? "none" : "model"))
-              }
+              onPress={() => setSettings((current) => (current === "model" ? "none" : "model"))}
               style={styles.modelChip}
             >
-              <Zap
-                color={colors.textPrimary}
-                fill={colors.textPrimary}
-                size={17}
-              />
-              <Text
-                numberOfLines={1}
-                style={[styles.modelLabel, { color: colors.textPrimary }]}
-              >
+              <Zap color={colors.textPrimary} fill={colors.textPrimary} size={17} />
+              <Text numberOfLines={1} style={[styles.modelLabel, { color: colors.textPrimary }]}>
                 {modelLabel}
               </Text>
               <ChevronDown color={colors.textMuted} size={15} />
@@ -1010,20 +970,13 @@ function ChatComposer({
             <View style={styles.composerSendActions}>
               {onDictate || onStartDictation ? (
                 <Pressable
-                  accessibilityLabel={
-                    dictating ? "Stop dictation" : "Dictate message"
-                  }
+                  accessibilityLabel={dictating ? "Stop dictation" : "Dictate message"}
                   accessibilityRole="button"
                   onPress={beginDictation}
                   style={styles.micButton}
                 >
                   {dictating ? (
-                    <Text
-                      style={[
-                        styles.stopDictationLabel,
-                        { color: colors.statusRed },
-                      ]}
-                    >
+                    <Text style={[styles.stopDictationLabel, { color: colors.statusRed }]}>
                       Stop
                     </Text>
                   ) : (
@@ -1034,10 +987,7 @@ function ChatComposer({
               <ComposerPrimitive.Send
                 accessibilityLabel="Send"
                 accessibilityRole="button"
-                style={[
-                  styles.composerButton,
-                  { backgroundColor: colors.textPrimary },
-                ]}
+                style={[styles.composerButton, { backgroundColor: colors.textPrimary }]}
               >
                 <SendHorizontal color={colors.bgBase} size={20} />
               </ComposerPrimitive.Send>
@@ -1062,9 +1012,7 @@ function ComposerSettings({
   catalogStatus: HostAssistantCatalogStatus;
   mode: "permission" | "model";
   onClose(): void;
-  onSetTurnPreferences(
-    preferences: Partial<AssistantTurnPreferences>,
-  ): Promise<void>;
+  onSetTurnPreferences(preferences: Partial<AssistantTurnPreferences>): Promise<void>;
   preferences: AssistantTurnPreferences;
   provider: string | null;
 }) {
@@ -1072,8 +1020,7 @@ function ComposerSettings({
   const [modelForEffort, setModelForEffort] = useState<
     AssistantCatalog["agents"][number]["models"][number] | null
   >(null);
-  const agent =
-    catalog?.agents.find((candidate) => candidate.agent === provider) ?? null;
+  const agent = catalog?.agents.find((candidate) => candidate.agent === provider) ?? null;
   if (mode === "permission") {
     return (
       <View
@@ -1086,51 +1033,32 @@ function ComposerSettings({
         ]}
       >
         <SettingsHeader label="Permissions for next turn" onClose={onClose} />
-        {(["plan", "build", "yolo"] as AssistantExecutionMode[]).map(
-          (executionMode) => (
-            <Pressable
-              key={executionMode}
-              accessibilityLabel={`Use ${executionModeLabel(executionMode)}`}
-              accessibilityRole="button"
-              onPress={() => {
-                void onSetTurnPreferences({ executionMode }).finally(onClose);
-              }}
-              style={styles.settingsOption}
-            >
-              <ExecutionModeIcon
-                color={colors.textSecondary}
-                mode={executionMode}
-              />
-              <View style={styles.settingsCopy}>
-                <Text style={{ color: colors.textPrimary }}>
-                  {executionModeLabel(executionMode)}
-                </Text>
-                <Text
-                  style={[
-                    styles.settingsDescription,
-                    { color: colors.textMuted },
-                  ]}
-                >
-                  {executionModeDescription(executionMode)}
-                </Text>
-              </View>
-              <StatusDot
-                tone={
-                  preferences.executionMode === executionMode
-                    ? "accent"
-                    : "muted"
-                }
-              />
-            </Pressable>
-          ),
-        )}
+        {(["plan", "build", "yolo"] as AssistantExecutionMode[]).map((executionMode) => (
+          <Pressable
+            key={executionMode}
+            accessibilityLabel={`Use ${executionModeLabel(executionMode)}`}
+            accessibilityRole="button"
+            onPress={() => {
+              void onSetTurnPreferences({ executionMode }).finally(onClose);
+            }}
+            style={styles.settingsOption}
+          >
+            <ExecutionModeIcon color={colors.textSecondary} mode={executionMode} />
+            <View style={styles.settingsCopy}>
+              <Text style={{ color: colors.textPrimary }}>{executionModeLabel(executionMode)}</Text>
+              <Text style={[styles.settingsDescription, { color: colors.textMuted }]}>
+                {executionModeDescription(executionMode)}
+              </Text>
+            </View>
+            <StatusDot tone={preferences.executionMode === executionMode ? "accent" : "muted"} />
+          </Pressable>
+        ))}
       </View>
     );
   }
 
   if (modelForEffort) {
-    const activeEffort =
-      preferences.model === modelForEffort.model ? preferences.effort : null;
+    const activeEffort = preferences.model === modelForEffort.model ? preferences.effort : null;
 
     return (
       <View
@@ -1178,10 +1106,7 @@ function ComposerSettings({
         { backgroundColor: colors.bgRaised, borderColor: colors.borderStrong },
       ]}
     >
-      <SettingsHeader
-        label={agent ? `${agent.agentLabel} model` : "Model"}
-        onClose={onClose}
-      />
+      <SettingsHeader label={agent ? `${agent.agentLabel} model` : "Model"} onClose={onClose} />
       {agent?.models.length ? (
         agent.models.map((model) => (
           <Pressable
@@ -1201,25 +1126,14 @@ function ComposerSettings({
             <Target color={colors.textSecondary} size={16} />
             <View style={styles.settingsCopy}>
               <Text style={{ color: colors.textPrimary }}>{model.label}</Text>
-              <Text
-                style={[
-                  styles.settingsDescription,
-                  { color: colors.textMuted },
-                ]}
-              >
-                {model.efforts.find(
-                  (entry) => entry.effort === preferences.effort,
-                )?.label ??
+              <Text style={[styles.settingsDescription, { color: colors.textMuted }]}>
+                {model.efforts.find((entry) => entry.effort === preferences.effort)?.label ??
                   model.efforts[0]?.label ??
                   "Default effort"}
               </Text>
             </View>
-            <StatusDot
-              tone={preferences.model === model.model ? "accent" : "muted"}
-            />
-            {model.efforts.length > 0 ? (
-              <ChevronRight color={colors.textMuted} size={16} />
-            ) : null}
+            <StatusDot tone={preferences.model === model.model ? "accent" : "muted"} />
+            {model.efforts.length > 0 ? <ChevronRight color={colors.textMuted} size={16} /> : null}
           </Pressable>
         ))
       ) : (
@@ -1258,15 +1172,9 @@ function SettingsHeader({
             <ChevronLeft color={colors.textSecondary} size={20} />
           </Pressable>
         ) : null}
-        <Text style={[styles.settingsTitle, { color: colors.textPrimary }]}>
-          {label}
-        </Text>
+        <Text style={[styles.settingsTitle, { color: colors.textPrimary }]}>{label}</Text>
       </View>
-      <Pressable
-        accessibilityLabel="Close settings"
-        accessibilityRole="button"
-        onPress={onClose}
-      >
+      <Pressable accessibilityLabel="Close settings" accessibilityRole="button" onPress={onClose}>
         <Text style={{ color: colors.accent }}>Done</Text>
       </Pressable>
     </View>
@@ -1295,17 +1203,10 @@ function GoalDock({
   const [draft, setDraft] = useState(goal?.objective ?? "");
   const enabled = goal?.enabled === true;
   const capabilities = goal?.capabilities ?? [];
-  const canEdit =
-    !goal ||
-    capabilities.includes("edit") ||
-    capabilities.includes("set_objective");
+  const canEdit = !goal || capabilities.includes("edit") || capabilities.includes("set_objective");
   const canClear = enabled && capabilities.includes("clear");
   const canPause = enabled && goal?.running && capabilities.includes("pause");
-  const canResume =
-    enabled &&
-    !goal?.running &&
-    goal?.resumable &&
-    capabilities.includes("resume");
+  const canResume = enabled && !goal?.running && goal?.resumable && capabilities.includes("resume");
   useEffect(() => {
     if (editRequest > 0 && canEdit) {
       setDraft(goal?.objective ?? "");
@@ -1315,9 +1216,7 @@ function GoalDock({
   const save = () => {
     const objective = draft.trim();
     if (!objective) return;
-    const action = enabled
-      ? onSetObjective(objective)
-      : onSetGoalMode(true, objective);
+    const action = enabled ? onSetObjective(objective) : onSetGoalMode(true, objective);
     void action.then(() => setEditing(false));
   };
   if (!goal || !goal.available || capabilities.length === 0) return null;
@@ -1330,18 +1229,12 @@ function GoalDock({
     >
       <Target color={colors.accent} size={16} />
       <View style={styles.goalCopy}>
-        <Text
-          numberOfLines={1}
-          style={[styles.goalTitle, { color: colors.textPrimary }]}
-        >
+        <Text numberOfLines={1} style={[styles.goalTitle, { color: colors.textPrimary }]}>
           {enabled ? "Pursuing goal" : "Set a goal"}
         </Text>
         {!editing ? (
           <View style={styles.goalSummary}>
-            <Text
-              numberOfLines={1}
-              style={[styles.goalObjective, { color: colors.textMuted }]}
-            >
+            <Text numberOfLines={1} style={[styles.goalObjective, { color: colors.textMuted }]}>
               {goal?.objective ?? "Keep this session focused across turns"}
             </Text>
             {enabled && goal.timeUsedSeconds !== null ? (
@@ -1413,15 +1306,7 @@ function GoalDock({
   );
 }
 
-function GoalButton({
-  icon,
-  label,
-  onPress,
-}: {
-  icon: ReactNode;
-  label: string;
-  onPress(): void;
-}) {
+function GoalButton({ icon, label, onPress }: { icon: ReactNode; label: string; onPress(): void }) {
   return (
     <Pressable
       accessibilityLabel={label}
@@ -1434,13 +1319,7 @@ function GoalButton({
   );
 }
 
-function ExecutionModeIcon({
-  color,
-  mode,
-}: {
-  color: string;
-  mode: AssistantExecutionMode;
-}) {
+function ExecutionModeIcon({ color, mode }: { color: string; mode: AssistantExecutionMode }) {
   if (mode === "plan") return <Compass color={color} size={16} />;
   if (mode === "build") return <Hammer color={color} size={16} />;
   return <Zap color={color} size={16} />;
@@ -1472,8 +1351,7 @@ function composerModelLabel(model: string | null, effort: string | null): string
 
 function executionModeDescription(mode: AssistantExecutionMode): string {
   if (mode === "plan") return "Explore and plan without editing files.";
-  if (mode === "build")
-    return "Edit the workspace and ask before sensitive actions.";
+  if (mode === "build") return "Edit the workspace and ask before sensitive actions.";
   return "No prompts; access to machine files and network.";
 }
 
@@ -1509,15 +1387,11 @@ function TurnControl({
       disabled={busy}
       onPress={() => {
         setBusy(true);
-        void (canResume ? onResumeTurn() : onStopTurn()).finally(() =>
-          setBusy(false),
-        );
+        void (canResume ? onResumeTurn() : onStopTurn()).finally(() => setBusy(false));
       }}
       style={styles.turnControl}
     >
-      <Text
-        style={{ color: canResume ? colors.statusGreen : colors.statusRed }}
-      >
+      <Text style={{ color: canResume ? colors.statusGreen : colors.statusRed }}>
         {busy ? "…" : canResume ? "Resume" : "Stop"}
       </Text>
     </Pressable>
@@ -1528,10 +1402,7 @@ function ApprovalCard({
   onApproval,
   request,
 }: {
-  onApproval(
-    requestId: string | number,
-    action: "approve" | "cancel",
-  ): Promise<void>;
+  onApproval(requestId: string | number, action: "approve" | "cancel"): Promise<void>;
   request: AssistantApprovalRequest;
 }) {
   const { colors } = useAppTheme();
@@ -1552,16 +1423,12 @@ function ApprovalCard({
         { backgroundColor: colors.bgRaised, borderColor: colors.statusAmber },
       ]}
     >
-      <Text style={[styles.requestTitle, { color: colors.statusAmber }]}>
-        Approval required
-      </Text>
+      <Text style={[styles.requestTitle, { color: colors.statusAmber }]}>Approval required</Text>
       {request.reason ? (
         <Text style={{ color: colors.textSecondary }}>{request.reason}</Text>
       ) : null}
       {request.command ? (
-        <Text style={[styles.command, { color: colors.textPrimary }]}>
-          {request.command}
-        </Text>
+        <Text style={[styles.command, { color: colors.textPrimary }]}>{request.command}</Text>
       ) : null}
       <View style={styles.requestActions}>
         <RequestButton
@@ -1585,28 +1452,18 @@ function UserInputCard({
   onSubmit,
   request,
 }: {
-  onSubmit(
-    requestId: string | number,
-    answers: Record<string, string>,
-  ): Promise<void>;
+  onSubmit(requestId: string | number, answers: Record<string, string>): Promise<void>;
   request: AssistantUserInputRequest;
 }) {
   const { colors } = useAppTheme();
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
-  const complete = request.questions.every((question) =>
-    Boolean(answers[question.id]?.trim()),
-  );
+  const complete = request.questions.every((question) => Boolean(answers[question.id]?.trim()));
   return (
     <View
-      style={[
-        styles.requestCard,
-        { backgroundColor: colors.bgRaised, borderColor: colors.accent },
-      ]}
+      style={[styles.requestCard, { backgroundColor: colors.bgRaised, borderColor: colors.accent }]}
     >
-      <Text style={[styles.requestTitle, { color: colors.accent }]}>
-        Assistant question
-      </Text>
+      <Text style={[styles.requestTitle, { color: colors.accent }]}>Assistant question</Text>
       {request.questions.map((question) => (
         <View key={question.id} style={styles.question}>
           <Text style={{ color: colors.textPrimary }}>{question.question}</Text>
@@ -1648,9 +1505,7 @@ function UserInputCard({
         label="Submit answers"
         onPress={() => {
           setBusy(true);
-          void onSubmit(request.requestId, answers).finally(() =>
-            setBusy(false),
-          );
+          void onSubmit(request.requestId, answers).finally(() => setBusy(false));
         }}
         tone="primary"
       />
@@ -1681,10 +1536,7 @@ function RequestButton({
       style={[
         styles.requestButton,
         {
-          backgroundColor:
-            tone === "primary" || selected
-              ? colors.textPrimary
-              : colors.bgPanel,
+          backgroundColor: tone === "primary" || selected ? colors.textPrimary : colors.bgPanel,
           borderColor: selected ? colors.accent : colors.borderStrong,
           opacity: disabled ? 0.45 : 1,
         },
@@ -1692,8 +1544,7 @@ function RequestButton({
     >
       <Text
         style={{
-          color:
-            tone === "primary" || selected ? colors.bgBase : colors.textPrimary,
+          color: tone === "primary" || selected ? colors.bgBase : colors.textPrimary,
           fontWeight: "700",
         }}
       >
@@ -1741,9 +1592,7 @@ function markdownStyles(colors: ReturnType<typeof useAppTheme>["colors"]) {
   };
 }
 
-function activityMarkdownStyles(
-  colors: ReturnType<typeof useAppTheme>["colors"],
-) {
+function activityMarkdownStyles(colors: ReturnType<typeof useAppTheme>["colors"]) {
   const base = markdownStyles(colors);
   return {
     ...base,
@@ -1757,6 +1606,26 @@ function activityMarkdownStyles(
 }
 
 const styles = StyleSheet.create({
+  actionSheet: {
+    borderTopLeftRadius: radii.lg,
+    borderTopRightRadius: radii.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    gap: spacing.xxs,
+    padding: spacing.md,
+  },
+  actionSheetBackdrop: {
+    backgroundColor: "rgba(0, 0, 0, 0.45)",
+    flex: 1,
+    justifyContent: "flex-end",
+  },
+  actionSheetCopy: { flex: 1, gap: spacing.xxs },
+  actionSheetRow: {
+    borderRadius: radii.md,
+    flexDirection: "row",
+    minHeight: 58,
+    padding: spacing.sm,
+  },
+  actionSheetTitle: { fontSize: 17, fontWeight: "700", padding: spacing.sm },
   safeArea: { flex: 1 },
   thread: { flex: 1 },
   header: {
