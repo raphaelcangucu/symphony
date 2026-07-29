@@ -303,7 +303,7 @@ git commit -m "feat(composer): normalize agent capabilities"
 - Modify: `tracker/src/locales/en/translation.json`
 - Modify: `tracker/src/locales/pt-BR/translation.json`
 
-- [ ] **Step 1: Write failing menu tests**
+- [x] **Step 1: Write failing menu tests**
 
 ```tsx
 render(
@@ -344,7 +344,7 @@ expect(screen.getByRole("menuitem", { name: /goal/i })).toBeVisible();
 expect(screen.getByRole("menuitem", { name: /commands and skills/i })).toBeVisible();
 ```
 
-- [ ] **Step 2: Run tests and verify failure**
+- [x] **Step 2: Run tests and verify failure**
 
 ```bash
 cd tracker && npm test -- \
@@ -354,7 +354,7 @@ cd tracker && npm test -- \
 
 Expected: FAIL because the components do not exist.
 
-- [ ] **Step 3: Implement the action registry and menus**
+- [x] **Step 3: Implement the action registry and menus**
 
 Define stable action IDs:
 
@@ -391,13 +391,13 @@ and disables Goal when `supportsGoal` is false. Handlers call the existing file
 input, context sheet, `GitDiffLauncher`, `KnowledgeBaseModal`, Magic palette,
 goal dialog, and slash/skill palette callbacks.
 
-- [ ] **Step 4: Run menu tests**
+- [x] **Step 4: Run menu tests**
 
 Run the command from Step 2.
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit focused controls**
+- [x] **Step 5: Commit focused controls**
 
 ```bash
 git add tracker/src/components/assistant/ComposerPermissionMenu.tsx \

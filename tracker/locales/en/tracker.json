@@ -2492,7 +2492,18 @@
       "moreTools": "More",
       "moreToolsAria": "More composer tools",
       "modelChipAria": "Agent, model, and reasoning",
-      "compactModelMenu": "Model settings"
+      "compactModelMenu": "Model settings",
+      "add": "Add",
+      "permissionTitle": "How should actions be approved?",
+      "actions": {
+        "files": "Files and folders",
+        "context": "Context",
+        "diff": "Diff",
+        "kb": "Knowledge Base",
+        "magic": "Magic",
+        "goal": "Goal",
+        "commands": "Commands and skills"
+      }
     },
     "goalDock": {
       "ariaLabel": "Goal",

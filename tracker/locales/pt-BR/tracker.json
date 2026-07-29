@@ -2492,7 +2492,18 @@
       "moreTools": "Mais",
       "moreToolsAria": "Mais ferramentas do compositor",
       "modelChipAria": "Agente, modelo e raciocínio",
-      "compactModelMenu": "Configurações do modelo"
+      "compactModelMenu": "Configurações do modelo",
+      "add": "Adicionar",
+      "permissionTitle": "Como as ações devem ser aprovadas?",
+      "actions": {
+        "files": "Arquivos e pastas",
+        "context": "Contexto",
+        "diff": "Diff",
+        "kb": "Knowledge Base",
+        "magic": "Magic",
+        "goal": "Objetivo",
+        "commands": "Comandos e skills"
+      }
     },
     "goalDock": {
       "ariaLabel": "Goal",
