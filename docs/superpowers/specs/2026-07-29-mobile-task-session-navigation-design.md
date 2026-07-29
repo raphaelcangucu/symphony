@@ -115,8 +115,10 @@ actions are:
 1. Plan mode
 2. Magic
 3. Add context
-4. Attach photo
-5. Set or edit goal
+4. Set or edit goal
+
+Attach photo is intentionally omitted until assistant chat has a durable
+attachment contract. The focused menu must not expose a no-op.
 
 Plan mode is a direct, visible choice rather than being hidden under model or
 permission settings. Selecting it changes the composer/session into the

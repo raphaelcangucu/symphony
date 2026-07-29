@@ -8,7 +8,6 @@ describe("mobile composer actions", () => {
       "plan",
       "magic",
       "context",
-      "photo",
       "goal",
     ]);
   });

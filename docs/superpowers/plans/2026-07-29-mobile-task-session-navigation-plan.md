@@ -359,7 +359,6 @@ expect(MOBILE_COMPOSER_ACTIONS.map((action) => action.id)).toEqual([
   "plan",
   "magic",
   "context",
-  "photo",
   "goal",
 ]);
 ```
@@ -381,8 +380,9 @@ Expected: FAIL because `+` opens goal directly.
 - [ ] **Step 3: Implement the bottom sheet**
 
 Use React Native `Modal` with a bottom-aligned panel and the app theme. Route
-photo to the established attachment picker, goal to `GoalDock`, and Plan mode
-to the existing turn-preference callback.
+goal to `GoalDock` and Plan mode to the existing turn-preference callback.
+Photo stays outside this focused menu until assistant chat supports durable
+attachments; no item may be a no-op.
 
 - [ ] **Step 4: Verify pass**
 

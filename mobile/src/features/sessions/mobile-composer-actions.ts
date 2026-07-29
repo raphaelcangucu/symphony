@@ -1,4 +1,4 @@
-export type MobileComposerActionId = "plan" | "magic" | "context" | "photo" | "goal";
+export type MobileComposerActionId = "plan" | "magic" | "context" | "goal";
 
 export const MOBILE_COMPOSER_ACTIONS: ReadonlyArray<{
   id: MobileComposerActionId;
@@ -12,6 +12,5 @@ export const MOBILE_COMPOSER_ACTIONS: ReadonlyArray<{
     label: "Add context",
     description: "Attach issues, files, and pull requests",
   },
-  { id: "photo", label: "Attach photo", description: "Choose a camera or library image" },
   { id: "goal", label: "Set goal", description: "Create or edit the session goal" },
 ];
