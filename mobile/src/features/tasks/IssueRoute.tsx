@@ -71,6 +71,8 @@ function ConnectedIssueRoute({
       evidenceCount={evidence.records.length}
       issue={detail.issue}
       loading={detail.loading}
+      pullRequestError={detail.pullRequestError}
+      pullRequests={detail.pullRequests}
       onAddComment={detail.addComment}
       onBack={() => router.back()}
       onDispatch={detail.dispatch}

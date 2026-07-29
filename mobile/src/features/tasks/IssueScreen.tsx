@@ -9,12 +9,14 @@ import type {
   IssueDispatchInput,
   IssueMutationInput,
   IssueSummary,
+  PullRequest,
 } from "@/api/contracts";
 import { StateView } from "@/components/StateView";
 import { radii, spacing } from "@/theme/tokens";
 import { useAppTheme } from "@/theme/ThemeProvider";
 
 import { ISSUE_TABS, type IssueTabId } from "./issue-tabs";
+import { IssuePullRequestTab } from "./IssuePullRequestTab";
 
 type IssueScreenProps = {
   issue: IssueSummary | null;
@@ -26,6 +28,8 @@ type IssueScreenProps = {
   error: string | null;
   saving: boolean;
   dispatching: boolean;
+  pullRequestError?: string | null;
+  pullRequests?: PullRequest[];
   onBack(): void;
   onAddComment(body: string): void;
   onDispatch(action: IssueDispatchInput["action"]): void;
@@ -53,6 +57,8 @@ export function IssueScreen({
   error,
   saving,
   dispatching,
+  pullRequestError = null,
+  pullRequests = [],
   onBack,
   onAddComment,
   onDispatch,
@@ -171,165 +177,173 @@ export function IssueScreen({
       </ScrollView>
 
       {activeTab === "summary" ? (
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <Text style={styles.srOnly}>Task summary</Text>
-        {error ? <Text style={{ color: colors.statusRed }}>{error}</Text> : null}
-        <TextInput
-          accessibilityLabel="Task title"
-          multiline
-          onChangeText={setTitle}
-          style={[styles.title, { color: colors.textPrimary }]}
-          value={title}
-        />
-        <TextInput
-          accessibilityLabel="Task description"
-          multiline
-          onChangeText={setDescription}
-          placeholder="Add a description"
-          placeholderTextColor={colors.textMuted}
-          style={[
-            styles.description,
-            {
-              backgroundColor: colors.bgPanel,
-              borderColor: colors.borderSubtle,
-              color: colors.textSecondary,
-            },
-          ]}
-          value={description}
-        />
-
-        <View style={styles.metadata}>
-          {issue.assignee ? <Meta label="Assignee" value={issue.assignee} /> : null}
-          {issue.branchName ? <Meta label="Branch" value={issue.branchName} /> : null}
-          {issue.agentKind ? <Meta label="Agent" value={issue.agentKind} /> : null}
-          {issue.model ? <Meta label="Model" value={issue.model} /> : null}
-          {issue.effort ? <Meta label="Effort" value={issue.effort} /> : null}
-        </View>
-
-        <SectionTitle>Agent</SectionTitle>
-        {issue.agentGoal ? (
-          <Text style={[styles.goal, { color: colors.textSecondary }]}>{issue.agentGoal}</Text>
-        ) : null}
-        <View style={styles.actions}>
-          <Action
-            disabled={dispatching}
-            label="Continue agent"
-            onPress={() => onDispatch("continue_work")}
+        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+          <Text style={styles.srOnly}>Task summary</Text>
+          {error ? <Text style={{ color: colors.statusRed }}>{error}</Text> : null}
+          <TextInput
+            accessibilityLabel="Task title"
+            multiline
+            onChangeText={setTitle}
+            style={[styles.title, { color: colors.textPrimary }]}
+            value={title}
           />
-          <Action disabled={dispatching} label="Stop agent" onPress={() => onDispatch("stop")} />
-          <Action label="Pause goal" onPress={() => onGoalAction("pause")} />
-          <Action label="Resume goal" onPress={() => onGoalAction("resume")} />
-          <Action label="Open session" onPress={onOpenSession} />
-        </View>
-
-        <SectionTitle>Workspace</SectionTitle>
-        <View style={styles.tools}>
-          {toolActions.map(([label, action]) => (
-            <Action key={label} label={label} onPress={action} />
-          ))}
-        </View>
-
-        <SectionTitle>Evidence</SectionTitle>
-        <Text style={[styles.goal, { color: colors.textSecondary }]}>
-          {evidenceCount === 1 ? "1 durable run" : `${evidenceCount} durable runs`}
-        </Text>
-        <View style={styles.actions}>
-          <Action label="Open evidence" onPress={onOpenEvidence} />
-        </View>
-
-        {blockers.length > 0 ? (
-          <>
-            <SectionTitle>Blocked by</SectionTitle>
-            {blockers.map((blocker) => (
-              <RelatedTask
-                accessibilityLabel={`Open blocker ${blocker.identifier}`}
-                identifier={blocker.identifier}
-                key={blocker.identifier}
-                onPress={() => onOpenRelatedTask(blocker.identifier)}
-                status={blocker.status}
-                title={blocker.title}
-              />
-            ))}
-          </>
-        ) : null}
-
-        <SectionTitle>Subtasks</SectionTitle>
-        {subtasks.map((subtask) => (
-          <RelatedTask
-            accessibilityLabel={`Open subtask ${subtask.identifier}`}
-            identifier={subtask.identifier}
-            key={subtask.id}
-            onPress={() => onOpenRelatedTask(subtask.identifier)}
-            status={subtask.status}
-            title={subtask.title}
-          />
-        ))}
-        <TextInput
-          accessibilityLabel="New subtask title"
-          onChangeText={setSubtaskTitle}
-          placeholder="Add a subtask"
-          placeholderTextColor={colors.textMuted}
-          style={[
-            styles.input,
-            {
-              backgroundColor: colors.bgPanel,
-              borderColor: colors.borderSubtle,
-              color: colors.textPrimary,
-            },
-          ]}
-          value={subtaskTitle}
-        />
-        <Action
-          disabled={!subtaskTitle.trim()}
-          label="Create subtask"
-          onPress={() => {
-            const title = subtaskTitle.trim();
-            if (!title) return;
-            onCreateSubtask(title);
-            setSubtaskTitle("");
-          }}
-        />
-
-        <SectionTitle>Comments</SectionTitle>
-        {comments.map((item) => (
-          <View
-            key={item.id}
+          <TextInput
+            accessibilityLabel="Task description"
+            multiline
+            onChangeText={setDescription}
+            placeholder="Add a description"
+            placeholderTextColor={colors.textMuted}
             style={[
-              styles.comment,
-              { backgroundColor: colors.bgPanel, borderColor: colors.borderSubtle },
+              styles.description,
+              {
+                backgroundColor: colors.bgPanel,
+                borderColor: colors.borderSubtle,
+                color: colors.textSecondary,
+              },
             ]}
-          >
-            <Text style={{ color: colors.textMuted }}>{item.author ?? "Unknown"}</Text>
-            <Text style={{ color: colors.textPrimary }}>{item.body}</Text>
+            value={description}
+          />
+
+          <View style={styles.metadata}>
+            {issue.assignee ? <Meta label="Assignee" value={issue.assignee} /> : null}
+            {issue.branchName ? <Meta label="Branch" value={issue.branchName} /> : null}
+            {issue.agentKind ? <Meta label="Agent" value={issue.agentKind} /> : null}
+            {issue.model ? <Meta label="Model" value={issue.model} /> : null}
+            {issue.effort ? <Meta label="Effort" value={issue.effort} /> : null}
           </View>
-        ))}
-        <TextInput
-          accessibilityLabel="New comment"
-          multiline
-          onChangeText={setComment}
-          placeholder="Add a comment"
-          placeholderTextColor={colors.textMuted}
-          style={[
-            styles.commentInput,
-            {
-              backgroundColor: colors.bgPanel,
-              borderColor: colors.borderSubtle,
-              color: colors.textPrimary,
-            },
-          ]}
-          value={comment}
+
+          <SectionTitle>Agent</SectionTitle>
+          {issue.agentGoal ? (
+            <Text style={[styles.goal, { color: colors.textSecondary }]}>{issue.agentGoal}</Text>
+          ) : null}
+          <View style={styles.actions}>
+            <Action
+              disabled={dispatching}
+              label="Continue agent"
+              onPress={() => onDispatch("continue_work")}
+            />
+            <Action disabled={dispatching} label="Stop agent" onPress={() => onDispatch("stop")} />
+            <Action label="Pause goal" onPress={() => onGoalAction("pause")} />
+            <Action label="Resume goal" onPress={() => onGoalAction("resume")} />
+            <Action label="Open session" onPress={onOpenSession} />
+          </View>
+
+          <SectionTitle>Workspace</SectionTitle>
+          <View style={styles.tools}>
+            {toolActions.map(([label, action]) => (
+              <Action key={label} label={label} onPress={action} />
+            ))}
+          </View>
+
+          <SectionTitle>Evidence</SectionTitle>
+          <Text style={[styles.goal, { color: colors.textSecondary }]}>
+            {evidenceCount === 1 ? "1 durable run" : `${evidenceCount} durable runs`}
+          </Text>
+          <View style={styles.actions}>
+            <Action label="Open evidence" onPress={onOpenEvidence} />
+          </View>
+
+          {blockers.length > 0 ? (
+            <>
+              <SectionTitle>Blocked by</SectionTitle>
+              {blockers.map((blocker) => (
+                <RelatedTask
+                  accessibilityLabel={`Open blocker ${blocker.identifier}`}
+                  identifier={blocker.identifier}
+                  key={blocker.identifier}
+                  onPress={() => onOpenRelatedTask(blocker.identifier)}
+                  status={blocker.status}
+                  title={blocker.title}
+                />
+              ))}
+            </>
+          ) : null}
+
+          <SectionTitle>Subtasks</SectionTitle>
+          {subtasks.map((subtask) => (
+            <RelatedTask
+              accessibilityLabel={`Open subtask ${subtask.identifier}`}
+              identifier={subtask.identifier}
+              key={subtask.id}
+              onPress={() => onOpenRelatedTask(subtask.identifier)}
+              status={subtask.status}
+              title={subtask.title}
+            />
+          ))}
+          <TextInput
+            accessibilityLabel="New subtask title"
+            onChangeText={setSubtaskTitle}
+            placeholder="Add a subtask"
+            placeholderTextColor={colors.textMuted}
+            style={[
+              styles.input,
+              {
+                backgroundColor: colors.bgPanel,
+                borderColor: colors.borderSubtle,
+                color: colors.textPrimary,
+              },
+            ]}
+            value={subtaskTitle}
+          />
+          <Action
+            disabled={!subtaskTitle.trim()}
+            label="Create subtask"
+            onPress={() => {
+              const title = subtaskTitle.trim();
+              if (!title) return;
+              onCreateSubtask(title);
+              setSubtaskTitle("");
+            }}
+          />
+
+          <SectionTitle>Comments</SectionTitle>
+          {comments.map((item) => (
+            <View
+              key={item.id}
+              style={[
+                styles.comment,
+                { backgroundColor: colors.bgPanel, borderColor: colors.borderSubtle },
+              ]}
+            >
+              <Text style={{ color: colors.textMuted }}>{item.author ?? "Unknown"}</Text>
+              <Text style={{ color: colors.textPrimary }}>{item.body}</Text>
+            </View>
+          ))}
+          <TextInput
+            accessibilityLabel="New comment"
+            multiline
+            onChangeText={setComment}
+            placeholder="Add a comment"
+            placeholderTextColor={colors.textMuted}
+            style={[
+              styles.commentInput,
+              {
+                backgroundColor: colors.bgPanel,
+                borderColor: colors.borderSubtle,
+                color: colors.textPrimary,
+              },
+            ]}
+            value={comment}
+          />
+          <Action
+            disabled={!comment.trim()}
+            label="Add comment"
+            onPress={() => {
+              const body = comment.trim();
+              if (!body) return;
+              onAddComment(body);
+              setComment("");
+            }}
+          />
+        </ScrollView>
+      ) : activeTab === "pr" ? (
+        <IssuePullRequestTab
+          error={pullRequestError}
+          loading={false}
+          onOpen={() => onOpenPullRequest()}
+          onRefresh={() => onRefresh()}
+          pullRequests={pullRequests}
         />
-        <Action
-          disabled={!comment.trim()}
-          label="Add comment"
-          onPress={() => {
-            const body = comment.trim();
-            if (!body) return;
-            onAddComment(body);
-            setComment("");
-          }}
-        />
-      </ScrollView>
       ) : activeTab === "comments" ? (
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           <Text style={styles.srOnly}>Task comments</Text>

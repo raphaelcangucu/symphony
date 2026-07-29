@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react-native";
 
-import type { IssueComment, IssueSummary } from "@/api/contracts";
+import type { IssueComment, IssueSummary, PullRequest } from "@/api/contracts";
 import { ThemeProvider } from "@/theme/ThemeProvider";
 
 import { IssueScreen } from "./IssueScreen";
@@ -38,6 +38,26 @@ const comments: IssueComment[] = [
   },
 ];
 
+const pullRequest: PullRequest = {
+  number: 418,
+  title: "feat(mobile): task navigation",
+  url: null,
+  state: "open",
+  repo: "dev10x/symphony",
+  origin: "auto",
+  isDraft: false,
+  merged: false,
+  headRef: "codex/vin-3",
+  baseRef: "main",
+  author: "Raphael",
+  mergeable: "mergeable",
+  checksState: "success",
+  pipelines: [],
+  statuses: [],
+  conversation: [],
+  baseBehindBy: 0,
+};
+
 function renderScreen(props: Partial<React.ComponentProps<typeof IssueScreen>> = {}) {
   const defaults: React.ComponentProps<typeof IssueScreen> = {
     issue,
@@ -64,6 +84,7 @@ function renderScreen(props: Partial<React.ComponentProps<typeof IssueScreen>> =
     onOpenTerminal: jest.fn(),
     onRefresh: jest.fn(),
     onSave: jest.fn(),
+    pullRequests: [],
   };
   return render(
     <ThemeProvider colorScheme="dark">
@@ -87,6 +108,15 @@ describe("IssueScreen", () => {
     expect(screen.getByText("MOB-7")).toBeTruthy();
     expect(screen.getByText("Task comments")).toBeTruthy();
     expect(screen.queryByText("Task summary")).toBeNull();
+  });
+
+  it("renders live pull request data in the PR tab", () => {
+    renderScreen({ pullRequests: [pullRequest] });
+
+    fireEvent.press(screen.getByRole("tab", { name: "PR" }));
+
+    expect(screen.getByText("PR #418")).toBeTruthy();
+    expect(screen.getByText("feat(mobile): task navigation")).toBeTruthy();
   });
 
   it("renders issue context, comments, and workspace tools", () => {

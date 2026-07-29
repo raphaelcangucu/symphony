@@ -23,12 +23,19 @@ export function useIssueDetail({
   const query = useQuery({
     queryKey,
     queryFn: async ({ signal }) => {
-      const [issue, comments, blockers, subtasks, threads] = await Promise.all([
+      const [issue, comments, blockers, subtasks, threads, pullRequestState] = await Promise.all([
         client.issue(projectSlug, identifier, signal),
         client.comments(projectSlug, identifier, signal),
         client.blockers(projectSlug, identifier, signal),
         client.subtasks(projectSlug, identifier, signal),
         client.threads({ projectSlug, issueIdentifier: identifier, limit: 20 }, signal),
+        client
+          .issuePullRequests(projectSlug, identifier, false, signal)
+          .then((result) => ({ result, error: null }))
+          .catch((cause: unknown) => ({
+            result: { pullRequests: [], supported: true, available: false, children: [] },
+            error: cause instanceof Error ? cause.message : "Could not load pull requests",
+          })),
       ]);
       return {
         issue,
@@ -36,6 +43,8 @@ export function useIssueDetail({
         blockers,
         subtasks,
         threadId: threads[0]?.id ?? null,
+        pullRequests: pullRequestState.result.pullRequests,
+        pullRequestError: pullRequestState.error,
       };
     },
   });
@@ -84,6 +93,8 @@ export function useIssueDetail({
     comments: query.data?.comments ?? [],
     blockers: query.data?.blockers ?? [],
     subtasks: query.data?.subtasks ?? [],
+    pullRequests: query.data?.pullRequests ?? [],
+    pullRequestError: query.data?.pullRequestError ?? null,
     threadId: query.data?.threadId ?? null,
     loading: query.isLoading,
     error:
