@@ -129,6 +129,7 @@ export function IssueScreen({
     ["Diff", onOpenDiff],
     ["Pull request", onOpenPullRequest],
   ] as const;
+  const workpad = [...comments].reverse().find((item) => item.kind === "workpad");
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.bgBase }]}>
       <View style={styles.header}>
@@ -219,12 +220,33 @@ export function IssueScreen({
           />
 
           <View style={styles.metadata}>
+            {issue.priority !== null ? (
+              <Meta label="Priority" value={priorityLabel(issue.priority)} />
+            ) : null}
             {issue.assignee ? <Meta label="Assignee" value={issue.assignee} /> : null}
             {issue.branchName ? <Meta label="Branch" value={issue.branchName} /> : null}
             {issue.agentKind ? <Meta label="Agent" value={issue.agentKind} /> : null}
             {issue.model ? <Meta label="Model" value={issue.model} /> : null}
             {issue.effort ? <Meta label="Effort" value={issue.effort} /> : null}
+            {issue.labels.length > 0 ? (
+              <Meta label="Labels" value={issue.labels.join(" · ")} />
+            ) : null}
+            {issue.updatedAt ? <Meta label="Updated" value={issue.updatedAt} /> : null}
           </View>
+
+          {workpad ? (
+            <>
+              <SectionTitle>Workpad</SectionTitle>
+              <View
+                style={[
+                  styles.comment,
+                  { backgroundColor: colors.bgPanel, borderColor: colors.borderSubtle },
+                ]}
+              >
+                <Text style={{ color: colors.textPrimary }}>{workpad.body}</Text>
+              </View>
+            </>
+          ) : null}
 
           <SectionTitle>Agent</SectionTitle>
           {issue.agentGoal ? (
@@ -307,46 +329,6 @@ export function IssueScreen({
               if (!title) return;
               onCreateSubtask(title);
               setSubtaskTitle("");
-            }}
-          />
-
-          <SectionTitle>Comments</SectionTitle>
-          {comments.map((item) => (
-            <View
-              key={item.id}
-              style={[
-                styles.comment,
-                { backgroundColor: colors.bgPanel, borderColor: colors.borderSubtle },
-              ]}
-            >
-              <Text style={{ color: colors.textMuted }}>{item.author ?? "Unknown"}</Text>
-              <Text style={{ color: colors.textPrimary }}>{item.body}</Text>
-            </View>
-          ))}
-          <TextInput
-            accessibilityLabel="New comment"
-            multiline
-            onChangeText={setComment}
-            placeholder="Add a comment"
-            placeholderTextColor={colors.textMuted}
-            style={[
-              styles.commentInput,
-              {
-                backgroundColor: colors.bgPanel,
-                borderColor: colors.borderSubtle,
-                color: colors.textPrimary,
-              },
-            ]}
-            value={comment}
-          />
-          <Action
-            disabled={!comment.trim()}
-            label="Add comment"
-            onPress={() => {
-              const body = comment.trim();
-              if (!body) return;
-              onAddComment(body);
-              setComment("");
             }}
           />
         </ScrollView>
@@ -454,6 +436,10 @@ function RelatedTask({
       <Text style={{ color: colors.textMuted }}>›</Text>
     </Pressable>
   );
+}
+
+function priorityLabel(priority: NonNullable<IssueSummary["priority"]>): string {
+  return ["No priority", "Urgent", "High", "Medium", "Low"][priority] ?? String(priority);
 }
 
 function SectionTitle({ children }: { children: string }) {

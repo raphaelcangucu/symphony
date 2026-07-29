@@ -24,7 +24,7 @@ const issue: IssueSummary = {
   agentGoal: "Ship mobile parity",
   branchName: "agent/mobile",
   createdAt: "",
-  updatedAt: "",
+  updatedAt: "2026-07-29T12:00:00Z",
 };
 
 const comments: IssueComment[] = [
@@ -35,6 +35,14 @@ const comments: IssueComment[] = [
     kind: "comment",
     createdAt: "",
     updatedAt: "",
+  },
+  {
+    id: "workpad-1",
+    body: "## Codex Workpad\n\nImplementation is in progress.",
+    author: "Codex",
+    kind: "workpad",
+    createdAt: "2026-07-29T11:00:00Z",
+    updatedAt: "2026-07-29T11:30:00Z",
   },
 ];
 
@@ -120,7 +128,7 @@ describe("IssueScreen", () => {
     expect(screen.getByText("feat(mobile): task navigation")).toBeTruthy();
   });
 
-  it("renders issue context, comments, and workspace tools", () => {
+  it("renders focused issue context, Workpad, and workspace tools", () => {
     const onOpenEvidence = jest.fn();
     renderScreen({ evidenceCount: 2, onOpenEvidence });
 
@@ -129,7 +137,10 @@ describe("IssueScreen", () => {
     expect(screen.getByText("Ship mobile parity")).toBeTruthy();
     expect(screen.getByText("gpt-5.6-sol")).toBeTruthy();
     expect(screen.getByText("high")).toBeTruthy();
-    expect(screen.getByText("Continue from the task screen.")).toBeTruthy();
+    expect(screen.getByText("Priority")).toBeTruthy();
+    expect(screen.getByText("mobile · dev10x")).toBeTruthy();
+    expect(screen.getByText(/Implementation is in progress/)).toBeTruthy();
+    expect(screen.queryByText("Continue from the task screen.")).toBeNull();
     for (const tool of ["Terminal", "Preview", "Files", "Diff", "Pull request"]) {
       expect(screen.getByRole("button", { name: tool })).toBeTruthy();
     }
@@ -151,14 +162,15 @@ describe("IssueScreen", () => {
       expect.objectContaining({ title: "Complete Dev10x parity" }),
     );
 
-    fireEvent.changeText(screen.getByLabelText("New comment"), "Ready for review");
-    fireEvent.press(screen.getByRole("button", { name: "Add comment" }));
-    expect(onAddComment).toHaveBeenCalledWith("Ready for review");
-
     fireEvent.press(screen.getByRole("button", { name: "Continue agent" }));
     fireEvent.press(screen.getByRole("button", { name: "Pause goal" }));
     expect(onDispatch).toHaveBeenCalledWith("continue_work");
     expect(onGoalAction).toHaveBeenCalledWith("pause");
+
+    fireEvent.press(screen.getByRole("tab", { name: "Comments" }));
+    fireEvent.changeText(screen.getByLabelText("New comment"), "Ready for review");
+    fireEvent.press(screen.getByRole("button", { name: "Add comment" }));
+    expect(onAddComment).toHaveBeenCalledWith("Ready for review");
   });
 
   it("navigates blockers and subtasks and creates a child task", () => {
