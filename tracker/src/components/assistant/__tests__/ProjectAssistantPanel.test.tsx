@@ -3200,6 +3200,80 @@ describe("ProjectAssistantPanel", () => {
     );
   });
 
+  it("opens Context from the add menu in the canonical mention flow", async () => {
+    const user = userEvent.setup();
+    render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        threadId={7991}
+        view="board"
+        mode="page"
+      />,
+    );
+
+    const textarea = await screen.findByPlaceholderText("Write a message...");
+    await openComposerMoreMenu();
+    await user.click(screen.getByRole("menuitem", { name: "Context" }));
+
+    await waitFor(() => {
+      expect(textarea).toHaveValue("@");
+      expect(textarea).toHaveFocus();
+    });
+  });
+
+  it("consumes a Context action without replaying it after the composer remounts", async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        threadId={7993}
+        view="board"
+        mode="page"
+      />,
+    );
+
+    const textarea = await screen.findByPlaceholderText("Write a message...");
+    await openComposerMoreMenu();
+    await user.click(screen.getByRole("menuitem", { name: "Context" }));
+
+    await waitFor(() => expect(textarea).toHaveValue("@"));
+
+    rerender(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        threadId={7994}
+        view="board"
+        mode="page"
+      />,
+    );
+
+    const remountedTextarea =
+      await screen.findByPlaceholderText("Write a message...");
+    await waitFor(() => expect(remountedTextarea).toHaveValue(""));
+  });
+
+  it("opens Goal from the add menu and preserves the draft as its objective", async () => {
+    const user = userEvent.setup();
+    render(
+      <ProjectAssistantPanel
+        projectSlug="macro-markets"
+        threadId={7992}
+        view="board"
+        mode="page"
+      />,
+    );
+
+    const textarea = await screen.findByPlaceholderText("Write a message...");
+    await user.type(textarea, "Ship the release");
+    await openComposerMoreMenu();
+    await user.click(screen.getByRole("menuitem", { name: "Goal" }));
+
+    await waitFor(() => {
+      expect(textarea).toHaveValue("/goal Ship the release");
+      expect(textarea).toHaveFocus();
+    });
+  });
+
   it("shows Yolo by default on project authoring and still enables issue @-mentions", async () => {
     listIssuesMock.mockResolvedValue([
       {

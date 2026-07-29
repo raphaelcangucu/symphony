@@ -150,6 +150,11 @@ export interface ComposerContextInsertRequest {
   ref: ComposerContextChipRef;
 }
 
+export interface ComposerInputActionRequest {
+  id: number;
+  action: "context" | "goal";
+}
+
 /**
  * `@`-mention wiring. When enabled, the parent supplies `mentionOptions` for
  * the current query (reported via `onMentionQueryChange`) and records
@@ -250,6 +255,10 @@ export interface AssistantComposerProps
   /** Allow submit (and the default send affordance) with an empty input. */
   allowEmptySubmit?: boolean;
   contextInsertRequest?: ComposerContextInsertRequest | null;
+  /** Opens a canonical composer flow after an external action such as the Add menu. */
+  inputActionRequest?: ComposerInputActionRequest | null;
+  /** Acknowledges an external input action so it cannot replay after a remount. */
+  onInputActionConsumed?: (requestId: number) => void;
   onForceQueued?: () => void;
   /** Called when Enter is pressed with an empty input (no attachments). */
   onEmptySubmit?: () => void;
@@ -299,6 +308,8 @@ export function AssistantComposer({
   submitActions,
   footer,
   contextInsertRequest = null,
+  inputActionRequest = null,
+  onInputActionConsumed,
   onForceQueued,
   onEmptySubmit,
   onSubmit,
@@ -314,6 +325,7 @@ export function AssistantComposer({
   const { t } = useTranslation();
   const isLgUp = useIsLgUp();
   const [input, setInput] = useState("");
+  const mentions = useContextMentions(input);
   const [notionImporting, setNotionImporting] = useState(false);
   const [internalMagicOpen, setInternalMagicOpen] = useState(false);
   const magicOpen = magicPaletteOpen ?? internalMagicOpen;
@@ -335,6 +347,7 @@ export function AssistantComposer({
   } = useComposerAttachments({ projectSlug, dropTargetRef });
   const [contextRefs, setContextRefs] = useState<ComposerContextChipRef[]>([]);
   const lastDraftSeedIdRef = useRef(0);
+  const lastInputActionIdRef = useRef(0);
   const [composerState, setComposerState] = useState<AssistantComposerState>(
     () => {
       if (settingsSeed) {
@@ -489,6 +502,33 @@ export function AssistantComposer({
   }, [draftSeed, replaceAttachments]);
 
   useEffect(() => {
+    if (
+      !inputActionRequest ||
+      inputActionRequest.id === lastInputActionIdRef.current ||
+      !Number.isFinite(inputActionRequest.id) ||
+      inputActionRequest.id <= 0
+    ) {
+      return;
+    }
+
+    lastInputActionIdRef.current = inputActionRequest.id;
+    setInput((current) => {
+      if (inputActionRequest.action === "context") {
+        if (!current) return "@";
+        return /\s$/.test(current) ? `${current}@` : `${current} @`;
+      }
+
+      if (/^\s*\/goal(?:\s|$)/.test(current)) return current;
+      const objective = current.trim();
+      return objective ? `/goal ${objective}` : "/goal ";
+    });
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => textareaRef.current?.focus());
+    });
+    onInputActionConsumed?.(inputActionRequest.id);
+  }, [inputActionRequest, onInputActionConsumed]);
+
+  useEffect(() => {
     return () => {
       stopSpeechRecognition();
     };
@@ -543,7 +583,6 @@ export function AssistantComposer({
   const showPalette =
     paletteCommands.length > 0 && input.trim().split(" ").length === 1;
 
-  const mentions = useContextMentions(input);
   const [mentionActiveIndex, setMentionActiveIndex] = useState(0);
   const [paletteActiveIndex, setPaletteActiveIndex] = useState(0);
   const paletteListRef = useRef<HTMLDivElement>(null);
@@ -556,7 +595,7 @@ export function AssistantComposer({
   useEffect(() => {
     if (magicPaletteRequestId <= 0) return;
     setMagicOpen(true);
-  }, [magicPaletteRequestId]);
+  }, [magicPaletteRequestId, setMagicOpen]);
 
   const magicCommands = allSlashCommands(
     t,

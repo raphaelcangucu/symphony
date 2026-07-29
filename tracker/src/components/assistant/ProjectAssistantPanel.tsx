@@ -7,12 +7,9 @@ import {
 import type { Channel } from "phoenix";
 import {
   Bot,
-  BookOpen,
   ChevronDown,
-  GitCompare,
   ListChecks,
   Loader2,
-  Sparkles,
 } from "lucide-react";
 import { i18n } from "@/i18n";
 import {
@@ -30,6 +27,7 @@ import {
   type AssistantComposerSubmit,
   type ComposerContextInsertRequest,
   type ComposerDraftSeed,
+  type ComposerInputActionRequest,
 } from "@/components/assistant/AssistantComposer";
 import { UnifiedComposer } from "@/components/assistant/UnifiedComposer";
 import { TurnNavigationRail } from "@/components/assistant/TurnNavigationRail";
@@ -133,11 +131,6 @@ import {
 } from "@/components/assistant/assistantPanelHelpers";
 import { AssistantKbDocumentLinksProvider } from "@/components/assistant/assistantKbDocumentLinksContext";
 import { KnowledgeBaseModal } from "@/components/kb/KnowledgeBaseModal";
-import { ExecutionModeMenu } from "@/components/issues/issue-detail/ExecutionModeMenu";
-import {
-  SkillProfileMenu,
-  resolvedSkillProfileForUi,
-} from "@/components/assistant/SkillProfileMenu";
 import { GitDiffLauncher } from "@/components/issues/issue-detail/git-diff/GitDiffLauncher";
 import { GoalPill } from "@/components/shared/GoalPill";
 import { Button } from "@/components/ui/button";
@@ -181,7 +174,6 @@ import {
 } from "@/services/assistantThreads";
 import { isCanceledError } from "@/services/http";
 import { getIssueRepoTree, getRepoTree } from "@/services/knowledgeBase";
-import { WorkspaceDiffStatsChip } from "@/components/sessions/WorkspaceDiffStatsChip";
 import {
   provisionThreadWorkspace,
   provisionWorkspace,
@@ -746,6 +738,9 @@ function InteractiveProjectAssistantPanel({
   const contextInsertRequestIdRef = useRef(0);
   const [contextInsertRequest, setContextInsertRequest] =
     useState<ComposerContextInsertRequest | null>(null);
+  const composerInputActionRequestIdRef = useRef(0);
+  const [composerInputActionRequest, setComposerInputActionRequest] =
+    useState<ComposerInputActionRequest | null>(null);
   const [magicPaletteRequestId, setMagicPaletteRequestId] = useState(0);
   const [knowledgeBaseOpen, setKnowledgeBaseOpen] = useState(false);
   const [kbFocusPath, setKbFocusPath] = useState<string | null>(null);
@@ -1610,40 +1605,6 @@ function InteractiveProjectAssistantPanel({
     },
     [channelReady, turnRunning],
   );
-
-  const runAutonomously = useCallback(() => {
-    if (!issueIdentifier) return;
-
-    const channel = channelRef.current;
-    if (!channel) {
-      setConnectionError(t("assistant.panel.channelNotConnected"));
-      return;
-    }
-
-    setConnectionError(null);
-    const agent = composerAgentRef.current;
-    const agentName = agentDisplayName(agent);
-    const pushResult = dispatchCodingAgent(channel, {
-      goalMode: issueGoalMode === true,
-      agent,
-      mode:
-        executionModeRef.current === "plan" ? "yolo" : executionModeRef.current,
-    });
-    pushResult.receive("ok", (response) => {
-      onDispatchSucceeded?.(
-        messageFromResponse(response) ??
-          t("assistant.panel.dispatchedTo", { agent: agentName }),
-      );
-    });
-    pushResult.receive("error", (reason) => {
-      onDispatchError?.(errorMessage(reason));
-    });
-    pushResult.receive("timeout", () => {
-      onDispatchError?.(
-        t("assistant.panel.dispatchTimeout", { agent: agentName }),
-      );
-    });
-  }, [issueGoalMode, issueIdentifier, onDispatchError, onDispatchSucceeded, t]);
 
   const dispatchApprovedPlan = useCallback(
     (messageId: string, mode: PlanApprovalMode) => {
@@ -2720,15 +2681,6 @@ function InteractiveProjectAssistantPanel({
     ],
   );
 
-  const handleSkillProfileChange = useCallback(
-    (profile: SkillProfileId) => {
-      setSkillProfileSelection(profile);
-      skillProfileSelectionRef.current = profile;
-      persistTurnPreferences({ skillProfile: profile });
-    },
-    [persistTurnPreferences],
-  );
-
   const approvalNode = pendingApproval ? (
     <div className="px-4 pb-2">
       <CommandApprovalCard
@@ -2963,11 +2915,23 @@ function InteractiveProjectAssistantPanel({
       }}
       actionHandlers={{
         files: () => undefined,
-        context: () => panelRef.current?.querySelector("textarea")?.focus(),
+        context: () => {
+          composerInputActionRequestIdRef.current += 1;
+          setComposerInputActionRequest({
+            id: composerInputActionRequestIdRef.current,
+            action: "context",
+          });
+        },
         diff: () => setComposerDiffRequestId((current) => current + 1),
         kb: openKnowledgeBaseShortcut,
         magic: () => setMagicPaletteRequestId((current) => current + 1),
-        goal: () => panelRef.current?.querySelector("textarea")?.focus(),
+        goal: () => {
+          composerInputActionRequestIdRef.current += 1;
+          setComposerInputActionRequest({
+            id: composerInputActionRequestIdRef.current,
+            action: "goal",
+          });
+        },
         commands: () => setMagicPaletteRequestId((current) => current + 1),
       }}
       queue={queuedGuidance}
@@ -2987,6 +2951,12 @@ function InteractiveProjectAssistantPanel({
       magicPaletteRequestId={magicPaletteRequestId}
       header={authoringGoalPill}
       contextInsertRequest={contextInsertRequest}
+      inputActionRequest={composerInputActionRequest}
+      onInputActionConsumed={(requestId) =>
+        setComposerInputActionRequest((current) =>
+          current?.id === requestId ? null : current,
+        )
+      }
       onNotionImported={setNotionImport}
       persistLocalComposerState={threadId == null && !issueIdentifier}
       hint={
