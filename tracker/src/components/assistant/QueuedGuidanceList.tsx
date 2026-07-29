@@ -120,9 +120,7 @@ export function QueuedGuidanceList({
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   className="gap-2"
-                  onSelect={() =>
-                    onQueueingEnabledChange(!queueingEnabled)
-                  }
+                  onSelect={() => onQueueingEnabledChange(!queueingEnabled)}
                 >
                   <ListX className="h-4 w-4" />
                   {queueingEnabled

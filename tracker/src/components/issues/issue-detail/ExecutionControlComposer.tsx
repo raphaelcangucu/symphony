@@ -1,5 +1,12 @@
 import { Eraser, Sparkles } from "lucide-react";
-import { type KeyboardEvent as ReactKeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type KeyboardEvent as ReactKeyboardEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
@@ -13,12 +20,18 @@ import { assistantCommandsToSlashDefs } from "@/components/assistant/assistantCo
 import type { AssistantOutgoingAttachment } from "@/components/assistant/assistantAttachments";
 import { useComposerMentions } from "@/hooks/useComposerMentions";
 import { useContextMentionData } from "@/components/assistant/useContextMentionData";
-import { defaultSkillCommands, parseSlashCommand } from "@/components/assistant/slashCommands";
+import {
+  defaultSkillCommands,
+  parseSlashCommand,
+} from "@/components/assistant/slashCommands";
 import { ExecutionCommandPalette } from "@/components/issues/issue-detail/ExecutionCommandPalette";
 import { ExecutionModeMenu } from "@/components/issues/issue-detail/ExecutionModeMenu";
 import { GitDiffLauncher } from "@/components/issues/issue-detail/git-diff/GitDiffLauncher";
 import { GoalPill } from "@/components/shared/GoalPill";
-import { deriveGoalPresentation, normalizeGoalProvider } from "@/components/shared/goalPresentation";
+import {
+  deriveGoalPresentation,
+  normalizeGoalProvider,
+} from "@/components/shared/goalPresentation";
 import { useExecutionShortcuts } from "@/hooks/useExecutionShortcuts";
 import { useAssistantCommands } from "@/hooks/useAssistantCommands";
 import { Button } from "@/components/ui/button";
@@ -32,9 +45,17 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { resolveExecutionComposerRoute } from "@/components/assistant/executionComposerRouting";
-import { agentEnterHintLabel, canResumeExecution, deriveAgentControl } from "@/lib/agentExecutionDisplay";
+import {
+  agentEnterHintLabel,
+  canResumeExecution,
+  deriveAgentControl,
+} from "@/lib/agentExecutionDisplay";
 import { enrichGuidanceWithAttachments } from "@/lib/enrichComposerGuidance";
-import { catalogFor, defaultComposerSettings, type AssistantCatalogBundle } from "@/lib/assistantSettings";
+import {
+  catalogFor,
+  defaultComposerSettings,
+  type AssistantCatalogBundle,
+} from "@/lib/assistantSettings";
 import { resolveExecutionComposerSeed } from "@/lib/executionComposerSeed";
 import { fetchAssistantCatalogBundle } from "@/services/assistant";
 import { updateAssistantThread } from "@/services/assistantThreads";
@@ -42,7 +63,11 @@ import { dispatchIssueAgent } from "@/services/issueDispatch";
 import { updateIssue } from "@/services/issues";
 import type { RunPromptTemplateResult } from "@/services/magicCommands";
 import { controlIssueGoal } from "@/services/goalControl";
-import { availableModesFor, cycleMode, DEFAULT_EXECUTION_MODE } from "@/lib/executionMode";
+import {
+  availableModesFor,
+  cycleMode,
+  DEFAULT_EXECUTION_MODE,
+} from "@/lib/executionMode";
 import {
   composerCapabilitiesFor,
   executionModeForPermission,
@@ -94,23 +119,37 @@ export function ExecutionControlComposer({
   // Memoized submit handlers may close over a stale render; read mode from a ref
   // so dispatch always forwards the operator's current selection.
   const modeRef = useRef<ExecutionMode>(DEFAULT_EXECUTION_MODE);
-  const [dispatchPending, setDispatchPending] = useState<"resume" | "hard_reset" | "stop" | null>(null);
+  const [dispatchPending, setDispatchPending] = useState<
+    "resume" | "hard_reset" | "stop" | null
+  >(null);
   const [dispatchStatus, setDispatchStatus] = useState<string | null>(null);
   const [dispatchError, setDispatchError] = useState<string | null>(null);
   const [hardResetOpen, setHardResetOpen] = useState(false);
-  const [newThreadInstructions, setNewThreadInstructions] = useState<string | null>(null);
+  const [newThreadInstructions, setNewThreadInstructions] = useState<
+    string | null
+  >(null);
   const [magicOpen, setMagicOpen] = useState(false);
   const [diffOpenRequestId, setDiffOpenRequestId] = useState(0);
   const [goalDismissed, setGoalDismissed] = useState(false);
   const [composerResetToken, setComposerResetToken] = useState(0);
   const sectionRef = useRef<HTMLElement>(null);
-  const composerSnapshotRef = useRef<ComposerSnapshot>({ input: "", attachments: [] });
-  const composerSettingsRef = useRef<{ model: string | null; effort: string | null }>({
+  const composerSnapshotRef = useRef<ComposerSnapshot>({
+    input: "",
+    attachments: [],
+  });
+  const composerSettingsRef = useRef<{
+    model: string | null;
+    effort: string | null;
+  }>({
     model: null,
     effort: null,
   });
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
-  const mentionOptions = useContextMentionData(projectSlug, issue.identifier, mentionQuery);
+  const mentionOptions = useContextMentionData(
+    projectSlug,
+    issue.identifier,
+    mentionQuery,
+  );
   const {
     commands: assistantCommands,
     isLoading: assistantCommandsLoading,
@@ -129,7 +168,8 @@ export function ExecutionControlComposer({
   // localized fallback in GoalPill.
   const hasExecutionGoal = execution?.goal != null;
   const trimmedGoalObjective = execution?.goal?.objective?.trim() || "";
-  const goalObjective = trimmedGoalObjective.length > 0 ? trimmedGoalObjective : null;
+  const goalObjective =
+    trimmedGoalObjective.length > 0 ? trimmedGoalObjective : null;
   const showGoalPill = !goalDismissed && hasExecutionGoal;
 
   useEffect(() => {
@@ -149,7 +189,10 @@ export function ExecutionControlComposer({
   const primaryLabel = control.primaryLabel;
 
   const queuedGuidance = useMemo(
-    () => queued.filter((entry) => entry.text.trim().length > 0 || entry.attachments.length > 0),
+    () =>
+      queued.filter(
+        (entry) => entry.text.trim().length > 0 || entry.attachments.length > 0,
+      ),
     [queued],
   );
 
@@ -174,8 +217,19 @@ export function ExecutionControlComposer({
   // durable issue pins. Catalog defaults apply only when neither source pins a
   // model/effort — never seed fallback gpt-5.5/medium ahead of the remote catalog.
   const composerSeed = useMemo(
-    () => resolveExecutionComposerSeed(execution, issue, bundle?.defaultAgent ?? issue.agentKind ?? "codex"),
-    [bundle?.defaultAgent, execution, issue.agentKind, issue.effort, issue.model],
+    () =>
+      resolveExecutionComposerSeed(
+        execution,
+        issue,
+        bundle?.defaultAgent ?? issue.agentKind ?? "codex",
+      ),
+    [
+      bundle?.defaultAgent,
+      execution,
+      issue.agentKind,
+      issue.effort,
+      issue.model,
+    ],
   );
 
   useEffect(() => {
@@ -183,8 +237,11 @@ export function ExecutionControlComposer({
   }, [composerSeed.agent]);
 
   const settingsSeed = useMemo(() => {
-    if (!bundle || (composerSeed.model == null && composerSeed.effort == null)) return null;
-    const defaults = defaultComposerSettings(catalogFor(bundle, composerSeed.agent));
+    if (!bundle || (composerSeed.model == null && composerSeed.effort == null))
+      return null;
+    const defaults = defaultComposerSettings(
+      catalogFor(bundle, composerSeed.agent),
+    );
     return {
       agent: composerSeed.agent,
       model: composerSeed.model ?? defaults.model,
@@ -199,13 +256,15 @@ export function ExecutionControlComposer({
         const threadId = execution?.executionSessionId;
         const threadPatch =
           threadId != null && threadId > 0
-            ? updateAssistantThread(threadId, { agentKind: nextAgent }).catch(() => {
-                toast.error(
-                  t("issue.summary.executionSaveFailed", {
-                    defaultValue: "Failed to save execution settings",
-                  }),
-                );
-              })
+            ? updateAssistantThread(threadId, { agentKind: nextAgent }).catch(
+                () => {
+                  toast.error(
+                    t("issue.summary.executionSaveFailed", {
+                      defaultValue: "Failed to save execution settings",
+                    }),
+                  );
+                },
+              )
             : Promise.resolve();
 
         void Promise.all([
@@ -219,24 +278,39 @@ export function ExecutionControlComposer({
           }),
         ]).catch(() => {
           toast.error(
-            t("issue.summary.executionSaveFailed", { defaultValue: "Failed to save execution settings" }),
+            t("issue.summary.executionSaveFailed", {
+              defaultValue: "Failed to save execution settings",
+            }),
           );
         });
       }, 300);
     },
-    [execution?.executionSessionId, issue.identifier, onIssueUpdated, projectSlug, t],
+    [
+      execution?.executionSessionId,
+      issue.identifier,
+      onIssueUpdated,
+      projectSlug,
+      t,
+    ],
   );
 
   const handleAgentChange = useCallback(
     (next: AgentKind) => {
       setAgent(next);
-      persistExecutionSettings(next, composerSettingsRef.current.model, composerSettingsRef.current.effort);
+      persistExecutionSettings(
+        next,
+        composerSettingsRef.current.model,
+        composerSettingsRef.current.effort,
+      );
     },
     [persistExecutionSettings],
   );
 
   const handleSettingsChange = useCallback(
-    (nextAgent: AgentKind, next: { model: string | null; effort: string | null }) => {
+    (
+      nextAgent: AgentKind,
+      next: { model: string | null; effort: string | null },
+    ) => {
       composerSettingsRef.current = { model: next.model, effort: next.effort };
       persistExecutionSettings(nextAgent, next.model, next.effort);
     },
@@ -252,14 +326,18 @@ export function ExecutionControlComposer({
   // Keep the selected mode valid for the active agent (cursor has no plan mode).
   useEffect(() => {
     const available = availableModesFor(agent);
-    setMode((current) => (available.includes(current) ? current : available[0]));
+    setMode((current) =>
+      available.includes(current) ? current : available[0],
+    );
   }, [agent]);
 
   useEffect(() => {
     modeRef.current = mode;
   }, [mode]);
 
-  const dispatchProgressLabel = useMemo<Record<"resume" | "hard_reset" | "stop", string>>(
+  const dispatchProgressLabel = useMemo<
+    Record<"resume" | "hard_reset" | "stop", string>
+  >(
     () => ({
       resume: t("issue.agent.dispatchResume"),
       hard_reset: t("issue.agent.dispatchHardReset"),
@@ -270,15 +348,28 @@ export function ExecutionControlComposer({
 
   const guidanceFromQueued = useCallback(
     (entry: QueuedGuidanceItem): string =>
-      enrichGuidanceWithAttachments(entry.text, entry.attachments, projectSlug, entry.fileTexts),
+      enrichGuidanceWithAttachments(
+        entry.text,
+        entry.attachments,
+        projectSlug,
+        entry.fileTexts,
+      ),
     [projectSlug],
   );
 
   const guidanceFromSnapshot = useCallback(
     (snapshot: ComposerSnapshot): string => {
       const parsed = parseSlashCommand(snapshot.input, t, "execution");
-      const typed = parsed.kind === "message" ? snapshot.input.trim() : parsed.argument.trim();
-      return enrichGuidanceWithAttachments(expandMentions(typed), snapshot.attachments, projectSlug, {});
+      const typed =
+        parsed.kind === "message"
+          ? snapshot.input.trim()
+          : parsed.argument.trim();
+      return enrichGuidanceWithAttachments(
+        expandMentions(typed),
+        snapshot.attachments,
+        projectSlug,
+        {},
+      );
     },
     [expandMentions, projectSlug, t],
   );
@@ -309,7 +400,9 @@ export function ExecutionControlComposer({
       setDispatchStatus(dispatchProgressLabel[action]);
 
       const guidance =
-        action === "stop" ? "" : (overrides?.instructions?.trim() || combinedGuidance());
+        action === "stop"
+          ? ""
+          : overrides?.instructions?.trim() || combinedGuidance();
       // Normal resume must not re-send a cached objective; only explicit
       // goal actions set the Codex goal (via controlIssueGoal). Resetting the same
       // objective would reset native goal accounting.
@@ -333,7 +426,10 @@ export function ExecutionControlComposer({
           setComposerResetToken((token) => token + 1);
         }
       } catch (cause) {
-        const message = cause instanceof Error ? cause.message : t("issue.agent.dispatchFailed");
+        const message =
+          cause instanceof Error
+            ? cause.message
+            : t("issue.agent.dispatchFailed");
         setDispatchError(message);
         setDispatchStatus(null);
         toast.error(message);
@@ -341,13 +437,22 @@ export function ExecutionControlComposer({
         setDispatchPending(null);
       }
     },
-    [agent, combinedGuidance, dispatchProgressLabel, issue.identifier, onIssueUpdated, projectSlug, t],
+    [
+      agent,
+      combinedGuidance,
+      dispatchProgressLabel,
+      issue.identifier,
+      onIssueUpdated,
+      projectSlug,
+      t,
+    ],
   );
 
   const submitExecutionGoal = useCallback(
     async (objectiveArg: string) => {
       const trimmed = objectiveArg.trim();
-      const objective = trimmed.length > 0 ? trimmed : t("issue.agent.goalDefaultObjective");
+      const objective =
+        trimmed.length > 0 ? trimmed : t("issue.agent.goalDefaultObjective");
       const framedInstructions =
         trimmed.length > 0
           ? t("issue.agent.goalCommandWithObjective", { objective: trimmed })
@@ -360,7 +465,11 @@ export function ExecutionControlComposer({
         });
         setGoalDismissed(false);
       } catch (cause) {
-        toast.error(cause instanceof Error ? cause.message : t("issue.agent.goalControls.failed"));
+        toast.error(
+          cause instanceof Error
+            ? cause.message
+            : t("issue.agent.goalControls.failed"),
+        );
         return;
       }
 
@@ -455,8 +564,16 @@ export function ExecutionControlComposer({
       }
 
       if (route === "resume") {
-        const instructions = enrichGuidanceWithAttachments(expanded, submit.attachments, projectSlug, {});
-        void runDispatch("resume", { instructions, contextRefs: submit.contextRefs });
+        const instructions = enrichGuidanceWithAttachments(
+          expanded,
+          submit.attachments,
+          projectSlug,
+          {},
+        );
+        void runDispatch("resume", {
+          instructions,
+          contextRefs: submit.contextRefs,
+        });
       }
     },
     [
@@ -490,59 +607,86 @@ export function ExecutionControlComposer({
     interrupted: execution?.status === "aborted",
   }).phase;
   const goalTimeUsedSeconds =
-    executionGoal?.timeUsedSeconds ?? (agentRunActive ? execution?.runtimeSeconds : null) ?? null;
+    executionGoal?.timeUsedSeconds ??
+    (agentRunActive ? execution?.runtimeSeconds : null) ??
+    null;
   const controllableGoal =
-    executionGoal?.kind === "goal" && (goalProvider === "codex" || goalProvider === "claude");
-  const canStopGoal = controllableGoal && agentRunActive && goalCapabilities.includes("stop");
-  const canPauseGoal = controllableGoal && agentRunActive && goalCapabilities.includes("pause");
+    executionGoal?.kind === "goal" &&
+    (goalProvider === "codex" || goalProvider === "claude");
+  const canPauseGoal =
+    controllableGoal && agentRunActive && goalCapabilities.includes("pause");
   const canResumeGoal =
-    controllableGoal && !agentRunActive && !dispatchPending && goalCapabilities.includes("resume");
+    controllableGoal &&
+    !agentRunActive &&
+    !dispatchPending &&
+    goalCapabilities.includes("resume");
   const canRemoveGoal = controllableGoal && goalCapabilities.includes("clear");
   const canEditGoal =
     controllableGoal &&
-    (goalCapabilities.includes("edit") || goalCapabilities.includes("set_objective"));
-
-  function handleGoalStop() {
-    if (!canStopGoal) return;
-    void runDispatch("stop");
-  }
+    (goalCapabilities.includes("edit") ||
+      goalCapabilities.includes("set_objective"));
 
   async function handleGoalPause() {
     if (!canPauseGoal) return;
     try {
-      await controlIssueGoal(projectSlug, issue.identifier, { action: "pause" });
+      await controlIssueGoal(projectSlug, issue.identifier, {
+        action: "pause",
+      });
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : t("issue.agent.goalControls.failed"));
+      toast.error(
+        cause instanceof Error
+          ? cause.message
+          : t("issue.agent.goalControls.failed"),
+      );
     }
   }
 
   async function handleGoalResume() {
     if (!canResumeGoal) return;
     try {
-      await controlIssueGoal(projectSlug, issue.identifier, { action: "resume" });
+      await controlIssueGoal(projectSlug, issue.identifier, {
+        action: "resume",
+      });
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : t("issue.agent.goalControls.failed"));
+      toast.error(
+        cause instanceof Error
+          ? cause.message
+          : t("issue.agent.goalControls.failed"),
+      );
     }
   }
 
   async function handleGoalRemove() {
     if (!canRemoveGoal) return;
     try {
-      await controlIssueGoal(projectSlug, issue.identifier, { action: "clear" });
+      await controlIssueGoal(projectSlug, issue.identifier, {
+        action: "clear",
+      });
       setGoalDismissed(true);
       toast.success(t("issue.agent.goalControls.clearDone"));
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : t("issue.agent.goalControls.failed"));
+      toast.error(
+        cause instanceof Error
+          ? cause.message
+          : t("issue.agent.goalControls.failed"),
+      );
     }
   }
 
   async function handleGoalEdit(objective: string) {
     if (!canEditGoal) return;
     try {
-      await controlIssueGoal(projectSlug, issue.identifier, { action: "set_objective", objective });
+      await controlIssueGoal(projectSlug, issue.identifier, {
+        action: "set_objective",
+        objective,
+      });
       setGoalDismissed(false);
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : t("issue.agent.goalControls.failed"));
+      toast.error(
+        cause instanceof Error
+          ? cause.message
+          : t("issue.agent.goalControls.failed"),
+      );
     }
   }
 
@@ -612,11 +756,12 @@ export function ExecutionControlComposer({
       objective={goalObjective}
       running={agentRunActive}
       timeUsedSeconds={goalTimeUsedSeconds}
-      onStop={canStopGoal ? handleGoalStop : undefined}
       onPause={canPauseGoal ? () => void handleGoalPause() : undefined}
       onResume={canResumeGoal ? () => void handleGoalResume() : undefined}
       onRemove={canRemoveGoal ? () => void handleGoalRemove() : undefined}
-      onEditObjective={canEditGoal ? (objective) => void handleGoalEdit(objective) : undefined}
+      onEditObjective={
+        canEditGoal ? (objective) => void handleGoalEdit(objective) : undefined
+      }
     />
   ) : null;
 
@@ -685,95 +830,108 @@ export function ExecutionControlComposer({
       <div>
         {bundle ? (
           <UnifiedComposer
-          key={composerSeed.remountKey}
-          projectSlug={projectSlug}
-          bundle={bundle}
-          runActive={agentRunActive}
-          pending={dispatchPending !== null || steerPending}
-          queueingEnabled={queueingEnabled}
-          canSteer={canSteer}
-          permission={permissionLevelForMode(mode)}
-          permissionOptions={composerCapabilitiesFor(agent).permissions}
-          onPermissionChange={(permission) => {
-            setMode(executionModeForPermission(permission));
-            const threadId = execution?.executionSessionId;
-            if (threadId != null && threadId > 0) {
-              void updateAssistantThread(threadId, {
-                permissionLevel: permission,
-              }).catch(() =>
-                toast.error(t("assistant.composer.permissionSaveFailed")),
-              );
+            key={composerSeed.remountKey}
+            projectSlug={projectSlug}
+            bundle={bundle}
+            runActive={agentRunActive}
+            pending={dispatchPending !== null || steerPending}
+            queueingEnabled={queueingEnabled}
+            canSteer={canSteer}
+            permission={permissionLevelForMode(mode)}
+            permissionOptions={composerCapabilitiesFor(agent).permissions}
+            onPermissionChange={(permission) => {
+              setMode(executionModeForPermission(permission));
+              const threadId = execution?.executionSessionId;
+              if (threadId != null && threadId > 0) {
+                void updateAssistantThread(threadId, {
+                  permissionLevel: permission,
+                }).catch(() =>
+                  toast.error(t("assistant.composer.permissionSaveFailed")),
+                );
+              }
+            }}
+            actionContext={{
+              hasWorkspace: true,
+              supportsGoal: composerCapabilitiesFor(agent).nativeGoal,
+            }}
+            actionHandlers={{
+              files: () => undefined,
+              context: focusComposer,
+              diff: () => setDiffOpenRequestId((current) => current + 1),
+              kb: () => undefined,
+              magic: toggleMagicPalette,
+              goal: focusComposer,
+              commands: toggleMagicPalette,
+            }}
+            floating
+            slashContext="execution"
+            slashCommandExtras={slashCommandExtras}
+            magicPaletteOpen={magicOpen}
+            onMagicPaletteOpenChange={setMagicOpen}
+            magicIssueIdentifier={issue.identifier}
+            onMagicRan={handleMagicRan}
+            placeholder={composerPlaceholder}
+            hint={null}
+            seedMessage={seedMessage}
+            resetToken={composerResetToken}
+            composerDisabled={
+              controlsDisabled ||
+              (canSteer && (!sessionConnected || steerPending))
             }
-          }}
-          actionContext={{
-            hasWorkspace: true,
-            supportsGoal: composerCapabilitiesFor(agent).nativeGoal,
-          }}
-          actionHandlers={{
-            files: () => undefined,
-            context: focusComposer,
-            diff: () => setDiffOpenRequestId((current) => current + 1),
-            kb: () => undefined,
-            magic: toggleMagicPalette,
-            goal: focusComposer,
-            commands: toggleMagicPalette,
-          }}
-          floating
-          slashContext="execution"
-          slashCommandExtras={slashCommandExtras}
-          magicPaletteOpen={magicOpen}
-          onMagicPaletteOpenChange={setMagicOpen}
-          magicIssueIdentifier={issue.identifier}
-          onMagicRan={handleMagicRan}
-          placeholder={composerPlaceholder}
-          hint={null}
-          seedMessage={seedMessage}
-          resetToken={composerResetToken}
-          composerDisabled={controlsDisabled || (canSteer && (!sessionConnected || steerPending))}
-          agentMenuDisabled={controlsDisabled || agentRunActive}
-          allowEmptySubmit={!canSteer && !agentRunActive && canResume}
-          canSubmit={sendDisabled ? false : undefined}
-          mentionsEnabled
-          mentionOptions={mentionOptions}
-          onMentionQueryChange={setMentionQuery}
-          onMentionSelect={rememberMention}
-          header={goalPill}
-          onComposerSnapshot={(snapshot) => {
-            composerSnapshotRef.current = snapshot;
-          }}
-          onEmptySubmit={handleEmptySubmit}
-          onSend={handleComposerSubmit}
-          onQueue={(submit) => {
-            const text = expandMentions(submit.message.trim());
-            setQueued((current) => [
-              ...current,
-              {
-                id: crypto.randomUUID(),
-                text,
-                attachments: submit.attachments,
-                fileTexts: {},
-              },
-            ]);
-          }}
-          onSteer={handleComposerSubmit}
-          onStop={() => void runDispatch("stop")}
-          onAgentChange={handleAgentChange}
-          onSettingsChange={handleSettingsChange}
-          agentSeed={composerSeed.agent}
-          settingsSeed={settingsSeed}
-          persistLocalComposerState={false}
-          footer={
-            <div className="mt-2 space-y-1">
-              {dispatchError ? <p className="text-xs text-destructive">{dispatchError}</p> : null}
-              {dispatchStatus ? <p className="text-xs text-muted-foreground">{dispatchStatus}</p> : null}
-              {steerError ? (
-                <p className="text-xs text-destructive">{formatSteerError(steerError, t)}</p>
-              ) : null}
-              <p className="text-xs text-muted-foreground">
-                {t("assistant.composer.hint", { command: catalogFor(bundle, agent).command })}
-              </p>
-            </div>
-          }
+            agentMenuDisabled={controlsDisabled || agentRunActive}
+            allowEmptySubmit={!canSteer && !agentRunActive && canResume}
+            canSubmit={sendDisabled ? false : undefined}
+            mentionsEnabled
+            mentionOptions={mentionOptions}
+            onMentionQueryChange={setMentionQuery}
+            onMentionSelect={rememberMention}
+            header={goalPill}
+            onComposerSnapshot={(snapshot) => {
+              composerSnapshotRef.current = snapshot;
+            }}
+            onEmptySubmit={handleEmptySubmit}
+            onSend={handleComposerSubmit}
+            onQueue={(submit) => {
+              const text = expandMentions(submit.message.trim());
+              setQueued((current) => [
+                ...current,
+                {
+                  id: crypto.randomUUID(),
+                  text,
+                  attachments: submit.attachments,
+                  fileTexts: {},
+                },
+              ]);
+            }}
+            onSteer={handleComposerSubmit}
+            onStop={() => void runDispatch("stop")}
+            onAgentChange={handleAgentChange}
+            onSettingsChange={handleSettingsChange}
+            agentSeed={composerSeed.agent}
+            settingsSeed={settingsSeed}
+            persistLocalComposerState={false}
+            footer={
+              <div className="mt-2 space-y-1">
+                {dispatchError ? (
+                  <p className="text-xs text-destructive">{dispatchError}</p>
+                ) : null}
+                {dispatchStatus ? (
+                  <p className="text-xs text-muted-foreground">
+                    {dispatchStatus}
+                  </p>
+                ) : null}
+                {steerError ? (
+                  <p className="text-xs text-destructive">
+                    {formatSteerError(steerError, t)}
+                  </p>
+                ) : null}
+                <p className="text-xs text-muted-foreground">
+                  {t("assistant.composer.hint", {
+                    command: catalogFor(bundle, agent).command,
+                  })}
+                </p>
+              </div>
+            }
           />
         ) : (
           <div
@@ -795,7 +953,9 @@ export function ExecutionControlComposer({
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{t("issue.agent.newThreadDialogTitle")}</DialogTitle>
-            <DialogDescription>{t("issue.agent.newThreadDialogDescription")}</DialogDescription>
+            <DialogDescription>
+              {t("issue.agent.newThreadDialogDescription")}
+            </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <DialogClose asChild>
@@ -810,7 +970,9 @@ export function ExecutionControlComposer({
               disabled={dispatchPending !== null}
               onClick={() => {
                 setHardResetOpen(false);
-                void runDispatch("hard_reset", { instructions: newThreadInstructions });
+                void runDispatch("hard_reset", {
+                  instructions: newThreadInstructions,
+                });
                 setNewThreadInstructions(null);
               }}
             >

@@ -2549,37 +2549,39 @@ function InteractiveProjectAssistantPanel({
     <div className="flex min-w-0 items-start gap-1">
       <TurnNavigationRail items={turnNavigationItems} />
       <AssistantSessionErrorBoundary
-      title={t("assistant.panel.renderErrorTitle")}
-      description={t("assistant.panel.renderErrorDescription")}
-      retryLabel={t("assistant.panel.renderErrorRetry")}
-      onReset={() => {
-        const channel = channelRef.current;
-        if (channel) requestHistorySync(channel);
-      }}
+        title={t("assistant.panel.renderErrorTitle")}
+        description={t("assistant.panel.renderErrorDescription")}
+        retryLabel={t("assistant.panel.renderErrorRetry")}
+        onReset={() => {
+          const channel = channelRef.current;
+          if (channel) requestHistorySync(channel);
+        }}
       >
         <div className="min-w-0 flex-1">
           <AssistantMessageList
-        messages={renderedMessages}
-        loadOlder={loadOlderControl}
-        taskSnapshot={taskSnapshot}
-        hidePinnedPanel={showTasksDock}
-        projectSlug={projectSlug}
-        issueIdentifier={issueIdentifier}
-        threadId={threadId}
-        isRunning={turnRunning}
-        runningStartedAt={runningStartedAt}
-        activeToolDetail={activeToolDetail}
-        stale={stale}
-        connectionError={workspaceProvisioningError ? null : connectionError}
-        channelReady={channelReady}
-        planApprovalMessageId={planApprovalMessageId}
-        onOpenDocumentPath={handleOpenDocumentPath}
-        onInsertContext={insertContextRef}
-        onOpenWorkspaceDiff={openWorkspaceDiffAtPath}
-        onApprovePlan={dispatchApprovedPlan}
-        onStop={handleStopTurn}
-        onKillTool={handleKillTool}
-        onFetchToolOutput={handleFetchToolOutput}
+            messages={renderedMessages}
+            loadOlder={loadOlderControl}
+            taskSnapshot={taskSnapshot}
+            hidePinnedPanel={showTasksDock}
+            projectSlug={projectSlug}
+            issueIdentifier={issueIdentifier}
+            threadId={threadId}
+            isRunning={turnRunning}
+            runningStartedAt={runningStartedAt}
+            activeToolDetail={activeToolDetail}
+            stale={stale}
+            connectionError={
+              workspaceProvisioningError ? null : connectionError
+            }
+            channelReady={channelReady}
+            planApprovalMessageId={planApprovalMessageId}
+            onOpenDocumentPath={handleOpenDocumentPath}
+            onInsertContext={insertContextRef}
+            onOpenWorkspaceDiff={openWorkspaceDiffAtPath}
+            onApprovePlan={dispatchApprovedPlan}
+            onStop={handleStopTurn}
+            onKillTool={handleKillTool}
+            onFetchToolOutput={handleFetchToolOutput}
           />
         </div>
       </AssistantSessionErrorBoundary>
@@ -2870,13 +2872,6 @@ function InteractiveProjectAssistantPanel({
       objective={authoringGoal.objective}
       running={authoringGoal.processRunning}
       timeUsedSeconds={authoringGoal.timeUsedSeconds}
-      onStop={
-        authoringGoal.processRunning &&
-        authoringGoalControlsSupported &&
-        authoringGoal.capabilities.includes("stop")
-          ? handleStopTurn
-          : undefined
-      }
       onPause={
         authoringGoalControlsSupported &&
         authoringGoal.capabilities.includes("pause")

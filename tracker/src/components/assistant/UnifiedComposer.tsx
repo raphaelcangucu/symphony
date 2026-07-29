@@ -16,11 +16,10 @@ import { Button } from "@/components/ui/button";
 import type { ComposerPermissionOption } from "@/lib/composerCapabilities";
 import type { ComposerPermissionLevel } from "@/types/assistant-thread";
 
-export interface UnifiedComposerProps
-  extends Omit<
-    AssistantComposerProps,
-    "addMenu" | "onSubmit" | "submitActions" | "toolbarBeforeAgent"
-  > {
+export interface UnifiedComposerProps extends Omit<
+  AssistantComposerProps,
+  "addMenu" | "onSubmit" | "submitActions" | "toolbarBeforeAgent"
+> {
   runActive: boolean;
   pending: boolean;
   queueingEnabled: boolean;

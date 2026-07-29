@@ -83,16 +83,22 @@ describe("QueuedGuidanceList", () => {
     await user.click(
       screen.getByRole("button", { name: /more options for queued guidance/i }),
     );
-    await user.click(screen.getByRole("menuitem", { name: /open in side chat/i }));
+    await user.click(
+      screen.getByRole("menuitem", { name: /open in side chat/i }),
+    );
     expect(callbacks.onOpenSideChat).toHaveBeenCalledWith("queued-1");
 
     await user.click(
       screen.getByRole("button", { name: /more options for queued guidance/i }),
     );
-    await user.click(screen.getByRole("menuitem", { name: /turn off queueing/i }));
+    await user.click(
+      screen.getByRole("menuitem", { name: /turn off queueing/i }),
+    );
     expect(callbacks.onQueueingEnabledChange).toHaveBeenCalledWith(false);
 
-    await user.click(screen.getByRole("button", { name: /remove queued guidance/i }));
+    await user.click(
+      screen.getByRole("button", { name: /remove queued guidance/i }),
+    );
     expect(callbacks.onRemove).toHaveBeenCalledWith("queued-1");
   });
 

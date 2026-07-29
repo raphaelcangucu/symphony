@@ -1,12 +1,21 @@
 import { ChevronDown } from "lucide-react";
 import axios from "axios";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 
 import { SubagentDrawerProvider } from "@/components/agent-activity/SubagentActivityDrawer";
 import { AssistantMessageList } from "@/components/assistant/AssistantMessageList";
 import { AssistantSessionErrorBoundary } from "@/components/assistant/AssistantSessionErrorBoundary";
 import { AssistantSessionShell } from "@/components/assistant/AssistantSessionShell";
+import { TurnNavigationRail } from "@/components/assistant/TurnNavigationRail";
+import { buildTurnNavigationItems } from "@/components/assistant/turnNavigation";
 import { CHAT_READING_COLUMN_CLASS } from "@/components/assistant/chatTypography";
 import { attachChatScrollStickiness } from "@/components/assistant/chatScrollStickiness";
 import { useExecutionSessionMode } from "@/components/assistant/useExecutionSessionMode";
@@ -67,7 +76,11 @@ export function ExecutionSessionPanel({
     setIssue((current) =>
       current?.identifier === issueIdentifier
         ? current
-        : buildExecutionSessionFallbackIssue(projectSlug, issueIdentifier, session.execution),
+        : buildExecutionSessionFallbackIssue(
+            projectSlug,
+            issueIdentifier,
+            session.execution,
+          ),
     );
 
     void getIssue(projectSlug, issueIdentifier)
@@ -79,17 +92,26 @@ export function ExecutionSessionPanel({
         setIssue((current) =>
           current?.identifier === issueIdentifier
             ? current
-            : buildExecutionSessionFallbackIssue(projectSlug, issueIdentifier, session.execution),
+            : buildExecutionSessionFallbackIssue(
+                projectSlug,
+                issueIdentifier,
+                session.execution,
+              ),
         );
         if (axios.isAxiosError(cause)) {
-          const message = (cause.response?.data as { error?: { message?: string } } | undefined)?.error
-            ?.message;
+          const message = (
+            cause.response?.data as { error?: { message?: string } } | undefined
+          )?.error?.message;
           if (message?.trim()) {
             setIssueError(message.trim());
             return;
           }
         }
-        setIssueError(cause instanceof Error ? cause.message : t("issue.agent.dispatchFailed"));
+        setIssueError(
+          cause instanceof Error
+            ? cause.message
+            : t("issue.agent.dispatchFailed"),
+        );
       });
 
     return () => {
@@ -104,14 +126,25 @@ export function ExecutionSessionPanel({
   ]);
 
   const toolItems = useMemo(
-    () => messagesFromSessionLogFeed(session.feedItems).flatMap((message) => message.toolCalls),
+    () =>
+      messagesFromSessionLogFeed(session.feedItems).flatMap(
+        (message) => message.toolCalls,
+      ),
+    [session.feedItems],
+  );
+  const turnNavigationItems = useMemo(
+    () =>
+      buildTurnNavigationItems(messagesFromSessionLogFeed(session.feedItems)),
     [session.feedItems],
   );
   const tasksDockScope = useMemo(
     () => issueWorkspaceScope(projectSlug, issueIdentifier, threadId),
     [issueIdentifier, projectSlug, threadId],
   );
-  usePublishSessionTasksDockFeed(tasksDockScope, { tasks: session.taskSnapshot, toolItems });
+  usePublishSessionTasksDockFeed(tasksDockScope, {
+    tasks: session.taskSnapshot,
+    toolItems,
+  });
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const stickToBottomRef = useRef(true);
@@ -162,13 +195,20 @@ export function ExecutionSessionPanel({
   // popover) instead of rendering a status card above the transcript.
   usePublishSessionExecutionStatus(
     issue
-      ? { projectSlug, issue, execution: session.execution, onIssueUpdated: handleIssueUpdated }
+      ? {
+          projectSlug,
+          issue,
+          execution: session.execution,
+          onIssueUpdated: handleIssueUpdated,
+        }
       : null,
   );
 
   const trackerConfig = parseWorkflowTrackerConfig(null);
   const inWaitState = issue ? isWaitState(issue.status, trackerConfig) : false;
-  const showReturnPanel = Boolean(issue && inWaitState && canResumeExecution(session.execution));
+  const showReturnPanel = Boolean(
+    issue && inWaitState && canResumeExecution(session.execution),
+  );
 
   const feedTop = issue ? (
     <div className="space-y-3">
@@ -187,34 +227,39 @@ export function ExecutionSessionPanel({
   ) : null;
 
   const messageItems = (
-    <AssistantSessionErrorBoundary
-      title={t("assistant.panel.renderErrorTitle")}
-      description={t("assistant.panel.renderErrorDescription")}
-      retryLabel={t("assistant.panel.renderErrorRetry")}
-      onReset={() => {
-        // Session-log channel re-joins on remount; no assistant history sync.
-      }}
-    >
-      <AssistantMessageList
-        feedItems={session.feedItems}
-        taskSnapshot={session.taskSnapshot}
-        projectSlug={projectSlug}
-        issueIdentifier={issueIdentifier}
-        threadId={threadId}
-        isRunning={session.isActive && session.canSteer}
-        runningStartedAt={null}
-        activeToolDetail={null}
-        connectionError={session.error ?? issueError}
-        channelReady={session.connected}
-        planApprovalMessageId={null}
-        onInsertContext={() => {
-          /* Mentions insert into the execution composer via its own handlers. */
+    <div className="flex min-w-0 items-start gap-1">
+      <TurnNavigationRail items={turnNavigationItems} />
+      <AssistantSessionErrorBoundary
+        title={t("assistant.panel.renderErrorTitle")}
+        description={t("assistant.panel.renderErrorDescription")}
+        retryLabel={t("assistant.panel.renderErrorRetry")}
+        onReset={() => {
+          // Session-log channel re-joins on remount; no assistant history sync.
         }}
-        onApprovePlan={() => {
-          /* Plan approval is interactive-only. */
-        }}
-      />
-    </AssistantSessionErrorBoundary>
+      >
+        <div className="min-w-0 flex-1">
+          <AssistantMessageList
+            feedItems={session.feedItems}
+            taskSnapshot={session.taskSnapshot}
+            projectSlug={projectSlug}
+            issueIdentifier={issueIdentifier}
+            threadId={threadId}
+            isRunning={session.isActive && session.canSteer}
+            runningStartedAt={null}
+            activeToolDetail={null}
+            connectionError={session.error ?? issueError}
+            channelReady={session.connected}
+            planApprovalMessageId={null}
+            onInsertContext={() => {
+              /* Mentions insert into the execution composer via its own handlers. */
+            }}
+            onApprovePlan={() => {
+              /* Plan approval is interactive-only. */
+            }}
+          />
+        </div>
+      </AssistantSessionErrorBoundary>
+    </div>
   );
 
   const composer =
@@ -269,14 +314,21 @@ export function ExecutionSessionPanel({
           className="min-w-0 flex-1"
           feedRef={setScrollContainerRef}
           feed={
-            <div className={cn(CHAT_READING_COLUMN_CLASS, "flex w-full flex-col gap-4 py-4")}>
+            <div
+              className={cn(
+                CHAT_READING_COLUMN_CLASS,
+                "flex w-full flex-col gap-4 py-4",
+              )}
+            >
               {feedTop}
               {messageItems}
             </div>
           }
           feedOverlay={scrollToBottomButton}
           composer={
-            <div className={cn("bg-background py-2", CHAT_READING_COLUMN_CLASS)}>
+            <div
+              className={cn("bg-background py-2", CHAT_READING_COLUMN_CLASS)}
+            >
               {showReturnPanel ? (
                 <details className="rounded-xl border border-border/70 bg-card/20 p-3">
                   <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
