@@ -784,9 +784,15 @@ describe("ProjectAssistantPanel", () => {
       />,
     );
 
-    expect(screen.getByRole("status")).toHaveTextContent("Loading assistant models...");
-    expect(screen.queryByPlaceholderText("Write a message...")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Codex" })).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Loading assistant models...",
+    );
+    expect(
+      screen.queryByPlaceholderText("Write a message..."),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Codex" }),
+    ).not.toBeInTheDocument();
     expect(push).not.toHaveBeenCalledWith("send_message", expect.anything());
   });
 
@@ -803,7 +809,7 @@ describe("ProjectAssistantPanel", () => {
     );
 
     await openComposerMoreMenu();
-    const kbButton = await screen.findByRole("button", {
+    const kbButton = await screen.findByRole("menuitem", {
       name: /knowledge base/i,
     });
     await waitFor(() => expect(kbButton).not.toBeDisabled());
@@ -1185,9 +1191,7 @@ describe("ProjectAssistantPanel", () => {
       expect.objectContaining({ message: "send despite hold" }),
     );
 
-    fireEvent.click(
-      await screen.findByRole("button", { name: /steer now/i }),
-    );
+    fireEvent.click(await screen.findByRole("button", { name: /steer now/i }));
 
     await waitFor(() =>
       expect(push).toHaveBeenCalledWith(
@@ -1230,9 +1234,7 @@ describe("ProjectAssistantPanel", () => {
       expect.objectContaining({ message: "prefer the simpler fix" }),
     );
 
-    fireEvent.click(
-      screen.getByRole("button", { name: /steer now/i }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: /steer now/i }));
     await waitFor(() =>
       expect(push).toHaveBeenCalledWith(
         "steer_turn",
@@ -1972,7 +1974,9 @@ describe("ProjectAssistantPanel", () => {
       />,
     );
 
-    expect((await screen.findAllByText("Claude Code")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("Claude Code")).length).toBeGreaterThan(
+      0,
+    );
     fireEvent.click(screen.getByRole("button", { name: "Pause goal" }));
     expect(push).toHaveBeenCalledWith("goal_pause", {});
     expect(
@@ -2359,14 +2363,11 @@ describe("ProjectAssistantPanel", () => {
     ).not.toBeInTheDocument();
   });
 
-  /**
-   * Secondary composer tools (execution mode, KB, Magic, diff) live behind the
-   * ⋯ overflow menu at every width, so tests must open it before reaching them.
-   */
+  /** Secondary composer tools live behind the compact + menu. */
   async function openComposerMoreMenu() {
     const user = userEvent.setup();
     const trigger = await screen.findByRole("button", {
-      name: "More composer tools",
+      name: "Add",
     });
     await waitFor(() => expect(trigger).not.toBeDisabled());
     if (trigger.getAttribute("aria-expanded") !== "true") {
@@ -2705,7 +2706,7 @@ describe("ProjectAssistantPanel", () => {
     );
 
     await openComposerMoreMenu();
-    const kbButton = await screen.findByRole("button", {
+    const kbButton = await screen.findByRole("menuitem", {
       name: "Knowledge Base",
     });
     await waitFor(() => expect(kbButton).not.toBeDisabled());
@@ -3163,7 +3164,7 @@ describe("ProjectAssistantPanel", () => {
       /build/i,
     );
     await openComposerMoreMenu();
-    const magicButton = screen.getByRole("button", { name: /magic/i });
+    const magicButton = screen.getByRole("menuitem", { name: /magic/i });
     await waitFor(() => expect(magicButton).not.toBeDisabled());
 
     // The Magic button opens a centered modal palette — not the inline `/` list.

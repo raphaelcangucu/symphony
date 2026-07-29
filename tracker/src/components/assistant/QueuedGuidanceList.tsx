@@ -23,7 +23,7 @@ export interface QueuedGuidanceListItem {
   error: string | null;
 }
 
-interface QueuedGuidanceListProps {
+export interface QueuedGuidanceListProps {
   items: readonly QueuedGuidanceListItem[];
   canSteer: boolean;
   queueingEnabled: boolean;
@@ -53,7 +53,7 @@ export function QueuedGuidanceList({
   if (items.length === 0) return null;
 
   return (
-    <div className="space-y-1.5 px-2 pb-1">
+    <div className="space-y-1.5">
       {items.map((item) => (
         <div
           key={item.id}

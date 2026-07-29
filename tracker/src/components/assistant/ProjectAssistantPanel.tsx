@@ -54,7 +54,6 @@ import {
   CHAT_READING_COLUMN_WIDE_CLASS,
 } from "@/components/assistant/chatTypography";
 import { CommandApprovalCard } from "@/components/assistant/CommandApprovalCard";
-import { QueuedGuidanceList } from "@/components/assistant/QueuedGuidanceList";
 import {
   queuedMessagesStorageKey,
   readQueuedMessages,
@@ -2614,24 +2613,21 @@ function InteractiveProjectAssistantPanel({
   );
 
   const composerCapabilities = composerCapabilitiesFor(composerAgent);
-  const queuedChips =
-    queued.length > 0 ? (
-      <QueuedGuidanceList
-        items={queued.map((item) => ({
-          id: item.id,
-          message: item.payload.message.trim(),
-          error: null,
-        }))}
-        canSteer={composerCapabilities.steer}
-        queueingEnabled={queueingEnabled}
-        onPromote={forceSendQueued}
-        onResend={forceSendQueued}
-        onEdit={editQueued}
-        onRemove={removeQueued}
-        onOpenSideChat={() => undefined}
-        onQueueingEnabledChange={setQueueingEnabled}
-      />
-    ) : null;
+  const queuedGuidance = {
+    items: queued.map((item) => ({
+      id: item.id,
+      message: item.payload.message.trim(),
+      error: null,
+    })),
+    canSteer: composerCapabilities.steer,
+    queueingEnabled,
+    onPromote: forceSendQueued,
+    onResend: forceSendQueued,
+    onEdit: editQueued,
+    onRemove: removeQueued,
+    onOpenSideChat: () => undefined,
+    onQueueingEnabledChange: setQueueingEnabled,
+  };
 
   const submitQuestions = useCallback(
     (requestId: string | number, answers: Record<string, string>) => {
@@ -2951,6 +2947,7 @@ function InteractiveProjectAssistantPanel({
         goal: () => panelRef.current?.querySelector("textarea")?.focus(),
         commands: () => setMagicPaletteRequestId((current) => current + 1),
       }}
+      queue={queuedGuidance}
       agentMenuDisabled={
         authoringGoal.enabled ||
         turnRunning ||
@@ -3007,104 +3004,6 @@ function InteractiveProjectAssistantPanel({
               })}
             </span>
           </Button>
-        ) : undefined
-      }
-      toolbarMore={
-        projectSlug || issueIdentifier || threadId ? (
-          <>
-            {issueIdentifier || threadId ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-8 gap-1 px-2 text-xs"
-                disabled={catalogLoading}
-                title={t("issue.diff.shortcutHint")}
-                onClick={() =>
-                  setComposerDiffRequestId((current) => current + 1)
-                }
-              >
-                <GitCompare className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">
-                  {t("issue.diff.button")}
-                </span>
-              </Button>
-            ) : null}
-            {hideHeader ? (
-              <WorkspaceDiffStatsChip stats={workspaceDiffStats} />
-            ) : null}
-            {projectSlug ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="relative h-8 gap-1 px-2 text-xs"
-                disabled={catalogLoading}
-                aria-label={t("layout.projectHeader.knowledgeBase")}
-                title={t("assistant.panel.openKnowledgeBaseShortcut")}
-                onClick={() => openKnowledgeBase()}
-              >
-                <BookOpen className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">
-                  {t("assistant.panel.openKnowledgeBase")}
-                </span>
-                {changedDocs.count > 0 ? (
-                  <span
-                    aria-hidden
-                    className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-amber-500"
-                    data-testid="changed-docs-dot"
-                  />
-                ) : null}
-              </Button>
-            ) : null}
-            {hasExecutableContext || isExploreMode ? (
-              <SkillProfileMenu
-                selection={skillProfileSelection}
-                resolvedProfile={resolvedSkillProfileForUi({
-                  selection: skillProfileSelection,
-                  scope: threadScope,
-                  mode: executionMode,
-                })}
-                disabled={catalogLoading}
-                onChange={handleSkillProfileChange}
-              />
-            ) : null}
-            {issueIdentifier ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-8 gap-1 px-2 text-xs"
-                disabled={catalogLoading || !channelReady}
-                title={t("assistant.panel.runAutonomouslyTitle")}
-                onClick={runAutonomously}
-                data-testid="run-autonomously"
-              >
-                <Bot className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">
-                  {t("assistant.panel.runAutonomously")}
-                </span>
-              </Button>
-            ) : null}
-            {hasExecutableContext ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-8 gap-1 px-2 text-xs"
-                disabled={catalogLoading}
-                title={t("commands.magic.open")}
-                onClick={() =>
-                  setMagicPaletteRequestId((current) => current + 1)
-                }
-              >
-                <Sparkles className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">
-                  {t("commands.magic.button")}
-                </span>
-              </Button>
-            ) : null}
-          </>
         ) : undefined
       }
       onForceQueued={forceSendOldestQueued}
@@ -3223,7 +3122,6 @@ function InteractiveProjectAssistantPanel({
                     <div className={chatReadingColumn}>
                       {!isEmbeddedMode ? resumeBanner : null}
                       {workspaceProvisionBanner}
-                      {queuedChips}
                       {questionsNode}
                       {approvalNode}
                       {createPlanNode}
@@ -3338,7 +3236,6 @@ function InteractiveProjectAssistantPanel({
                 </div>
                 {resumeBanner}
                 {workspaceProvisionBanner}
-                {queuedChips}
                 {questionsNode}
                 {approvalNode}
                 {createPlanNode}

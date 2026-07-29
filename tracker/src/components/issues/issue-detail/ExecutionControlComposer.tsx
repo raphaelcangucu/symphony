@@ -14,7 +14,6 @@ import {
   type AssistantComposerSubmit,
   type ComposerSnapshot,
 } from "@/components/assistant/AssistantComposer";
-import { QueuedGuidanceList } from "@/components/assistant/QueuedGuidanceList";
 import { UnifiedComposer } from "@/components/assistant/UnifiedComposer";
 import { assistantCommandsToSlashDefs } from "@/components/assistant/assistantCommandDefs";
 import type { AssistantOutgoingAttachment } from "@/components/assistant/assistantAttachments";
@@ -797,36 +796,6 @@ export function ExecutionControlComposer({
           void runDispatch("resume", { instructions: review })
         }
       />
-      {queuedGuidance.length > 0 ? (
-        <QueuedGuidanceList
-          items={queuedGuidance.map((entry) => ({
-            id: entry.id,
-            message: entry.text,
-            error: null,
-          }))}
-          canSteer={canSteer}
-          queueingEnabled={queueingEnabled}
-          disabled={controlsDisabled}
-          onPromote={(id) => {
-            const entry = queued.find((item) => item.id === id);
-            if (!entry) return;
-            onSteer({ message: entry.text, attachments: entry.attachments });
-            removeQueued(id);
-          }}
-          onResend={(id) => {
-            const entry = queued.find((item) => item.id === id);
-            if (!entry) return;
-            void runDispatch("resume", {
-              instructions: guidanceFromQueued(entry),
-            });
-          }}
-          onEdit={(id) => removeQueued(id)}
-          onRemove={removeQueued}
-          onOpenSideChat={() => undefined}
-          onQueueingEnabledChange={setQueueingEnabled}
-        />
-      ) : null}
-
       <div>
         {bundle ? (
           <UnifiedComposer
@@ -862,6 +831,36 @@ export function ExecutionControlComposer({
               magic: toggleMagicPalette,
               goal: focusComposer,
               commands: toggleMagicPalette,
+            }}
+            queue={{
+              items: queuedGuidance.map((entry) => ({
+                id: entry.id,
+                message: entry.text,
+                error: null,
+              })),
+              canSteer,
+              queueingEnabled,
+              disabled: controlsDisabled,
+              onPromote: (id) => {
+                const entry = queued.find((item) => item.id === id);
+                if (!entry) return;
+                onSteer({
+                  message: entry.text,
+                  attachments: entry.attachments,
+                });
+                removeQueued(id);
+              },
+              onResend: (id) => {
+                const entry = queued.find((item) => item.id === id);
+                if (!entry) return;
+                void runDispatch("resume", {
+                  instructions: guidanceFromQueued(entry),
+                });
+              },
+              onEdit: (id) => removeQueued(id),
+              onRemove: removeQueued,
+              onOpenSideChat: () => undefined,
+              onQueueingEnabledChange: setQueueingEnabled,
             }}
             floating
             slashContext="execution"
