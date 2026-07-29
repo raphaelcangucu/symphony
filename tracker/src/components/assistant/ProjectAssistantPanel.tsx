@@ -2446,17 +2446,15 @@ function InteractiveProjectAssistantPanel({
   useEffect(() => {
     setToolTimings((current) =>
       reconcileToolActivityTimings(current, {
-        activeTool: activeToolDetail
-          ? {
-              id: activeToolDetail.id,
-              startedAt: activeToolDetail.startedAt ?? null,
-            }
-          : null,
+        activeTools: (lastTurn?.activeTools ?? []).map((tool) => ({
+          id: tool.id,
+          startedAt: parseTimestamp(tool.startedAt),
+        })),
         messages,
         nowMs: Date.now(),
       }),
     );
-  }, [activeToolDetail?.id, activeToolDetail?.startedAt, messages]);
+  }, [lastTurn, messages]);
   const nowMs = useNowTick(1000, { enabled: turnRunning });
   const stale =
     turnRunning &&

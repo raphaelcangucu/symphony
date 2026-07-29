@@ -1,7 +1,10 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { AssistantMessageList, type LoadOlderControl } from "@/components/assistant/AssistantMessageList";
+import {
+  AssistantMessageList,
+  type LoadOlderControl,
+} from "@/components/assistant/AssistantMessageList";
 import { initTestI18n } from "@/i18n/testUtils";
 import type { AssistantChatMessage } from "@/services/assistant";
 
@@ -37,7 +40,9 @@ describe("AssistantMessageList load-older control", () => {
     const onLoad = vi.fn();
     renderList({ label: "↑ Load old prompts (3)", disabled: false, onLoad });
 
-    const button = screen.getByRole("button", { name: "↑ Load old prompts (3)" });
+    const button = screen.getByRole("button", {
+      name: "↑ Load old prompts (3)",
+    });
     fireEvent.click(button);
 
     expect(onLoad).toHaveBeenCalledTimes(1);
@@ -47,7 +52,9 @@ describe("AssistantMessageList load-older control", () => {
     const onLoad = vi.fn();
     renderList({ label: "Loading older messages…", disabled: true, onLoad });
 
-    const button = screen.getByRole("button", { name: "Loading older messages…" });
+    const button = screen.getByRole("button", {
+      name: "Loading older messages…",
+    });
     expect(button).toBeDisabled();
 
     fireEvent.click(button);
@@ -97,6 +104,23 @@ describe("AssistantMessageList running activity", () => {
     );
   }
 
+  function renderRunningWithoutSnapshot(messages: AssistantChatMessage[]) {
+    return render(
+      <AssistantMessageList
+        messages={messages}
+        taskSnapshot={null}
+        isRunning
+        runningStartedAt={Date.now()}
+        activeToolDetail={null}
+        connectionError={null}
+        channelReady
+        planApprovalMessageId={null}
+        onInsertContext={vi.fn()}
+        onApprovePlan={vi.fn()}
+      />,
+    );
+  }
+
   it("does not repeat a running tool already represented in the transcript", () => {
     renderRunning([runningMessage]);
 
@@ -110,5 +134,12 @@ describe("AssistantMessageList running activity", () => {
     expect(screen.getByRole("status")).toHaveTextContent(
       /Running shell.*sleep 10/i,
     );
+  });
+
+  it("does not add a fallback when a running call is visible without a snapshot", () => {
+    renderRunningWithoutSnapshot([runningMessage]);
+
+    expect(screen.getByText("Running")).toBeInTheDocument();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 });

@@ -54,6 +54,26 @@ describe("ToolActivityTimeline", () => {
     expect(screen.getByText("· 10s")).toBeInTheDocument();
   });
 
+  it("kills the exact running command from its row", () => {
+    const onKillTool = vi.fn();
+    renderWithI18n(
+      <ToolActivityTimeline
+        toolCalls={[
+          call({
+            id: "command-1",
+            name: "shell",
+            status: "running",
+            arguments: { command: "sleep 10" },
+          }),
+        ]}
+        onKillTool={onKillTool}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Kill" }));
+    expect(onKillTool).toHaveBeenCalledWith("command-1");
+  });
+
   it("groups 3 consecutive reads into one group header", () => {
     renderWithI18n(
       <ToolActivityTimeline

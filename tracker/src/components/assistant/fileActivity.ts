@@ -1,4 +1,7 @@
-import type { AssistantToolCall, AssistantToolStatus } from "@/services/assistant";
+import type {
+  AssistantToolCall,
+  AssistantToolStatus,
+} from "@/services/assistant";
 
 export type FileActivityKind = "read" | "edit" | "command";
 
@@ -6,6 +9,8 @@ export interface FileActivityView {
   kind: FileActivityKind;
   /** Primary label: filename, "N files", or the command. */
   title: string;
+  /** Original command before display-only normalization. */
+  rawCommand?: string | null;
   /** Single-file path for read/edit; null for multi-file or command. */
   path: string | null;
   /** "L1–60" / "L5–" / "L–9" for reads; null otherwise. */
@@ -16,11 +21,31 @@ export interface FileActivityView {
   body: { value: string; language: "diff" | "bash" | "text" } | null;
 }
 
-const READ_TOOLS = new Set(["read_workspace_file", "read_file", "Read", "read"]);
-const EDIT_TOOLS = new Set(["apply_patch", "edit_file", "write_file", "edit", "write", "Write"]);
-const COMMAND_TOOLS = new Set(["shell", "exec_command", "bash", "Bash", "Shell"]);
+const READ_TOOLS = new Set([
+  "read_workspace_file",
+  "read_file",
+  "Read",
+  "read",
+]);
+const EDIT_TOOLS = new Set([
+  "apply_patch",
+  "edit_file",
+  "write_file",
+  "edit",
+  "write",
+  "Write",
+]);
+const COMMAND_TOOLS = new Set([
+  "shell",
+  "exec_command",
+  "bash",
+  "Bash",
+  "Shell",
+]);
 
-export function fileActivityFromToolCall(call: AssistantToolCall): FileActivityView | null {
+export function fileActivityFromToolCall(
+  call: AssistantToolCall,
+): FileActivityView | null {
   const status = mapStatus(call.status);
   if (READ_TOOLS.has(call.name)) return readView(call, status);
   if (EDIT_TOOLS.has(call.name)) return editView(call, status);
@@ -34,7 +59,10 @@ function mapStatus(status: AssistantToolStatus): FileActivityView["status"] {
   return "complete";
 }
 
-function readView(call: AssistantToolCall, status: FileActivityView["status"]): FileActivityView {
+function readView(
+  call: AssistantToolCall,
+  status: FileActivityView["status"],
+): FileActivityView {
   const args = (call.arguments ?? {}) as Record<string, unknown>;
   const path = stringOrNull(args.path);
   const start = numberOrNull(args.start_line);
@@ -51,9 +79,14 @@ function readView(call: AssistantToolCall, status: FileActivityView["status"]): 
   };
 }
 
-function editView(call: AssistantToolCall, status: FileActivityView["status"]): FileActivityView {
+function editView(
+  call: AssistantToolCall,
+  status: FileActivityView["status"],
+): FileActivityView {
   const result = (call.result ?? {}) as Record<string, unknown>;
-  const paths = Array.isArray(result.paths) ? (result.paths.filter((p) => typeof p === "string") as string[]) : [];
+  const paths = Array.isArray(result.paths)
+    ? (result.paths.filter((p) => typeof p === "string") as string[])
+    : [];
   const single = paths.length === 1 ? paths[0] : null;
   const diff = stringOrNull(result.diff);
   return {
@@ -68,13 +101,17 @@ function editView(call: AssistantToolCall, status: FileActivityView["status"]): 
   };
 }
 
-function commandView(call: AssistantToolCall, status: FileActivityView["status"]): FileActivityView {
+function commandView(
+  call: AssistantToolCall,
+  status: FileActivityView["status"],
+): FileActivityView {
   const args = (call.arguments ?? {}) as Record<string, unknown>;
   const description = stringOrNull(args.description);
   const command = stringOrNull(args.command) ?? "";
   return {
     kind: "command",
     title: description ?? (command ? commandDisplayTitle(command) : "command"),
+    rawCommand: command || null,
     path: null,
     lineRange: null,
     additions: null,

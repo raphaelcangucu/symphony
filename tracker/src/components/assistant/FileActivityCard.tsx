@@ -53,6 +53,27 @@ export function FileActivityCard({
         : durationMs != null
           ? formatDurationSeconds(durationMs / 1000)
           : null;
+  const rawCommand =
+    view.kind === "command" && view.rawCommand && view.rawCommand !== view.title
+      ? view.rawCommand
+      : null;
+  const details =
+    rawCommand || view.body ? (
+      <div className="space-y-2">
+        {rawCommand ? (
+          <pre className="overflow-auto whitespace-pre-wrap break-words rounded-md border border-border/70 bg-muted/30 px-3 py-2 font-mono text-[11px] leading-5 text-muted-foreground">
+            {rawCommand}
+          </pre>
+        ) : null}
+        {view.body ? (
+          view.body.language === "diff" ? (
+            <DiffBody value={view.body.value} />
+          ) : (
+            <PlainBody value={view.body.value} />
+          )
+        ) : null}
+      </div>
+    ) : null;
 
   return (
     <ActivityDisclosure
@@ -65,7 +86,14 @@ export function FileActivityCard({
       }
       label={
         <span className="flex min-w-0 items-center gap-2">
-          <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+          <span
+            className={cn(
+              "shrink-0 text-[10px] font-semibold text-muted-foreground",
+              view.kind === "command"
+                ? "normal-case tracking-normal"
+                : "uppercase tracking-wide",
+            )}
+          >
             {verb}
           </span>
           <span
@@ -107,15 +135,7 @@ export function FileActivityCard({
           </Button>
         ) : null
       }
-      details={
-        view.body ? (
-          view.body.language === "diff" ? (
-            <DiffBody value={view.body.value} />
-          ) : (
-            <PlainBody value={view.body.value} />
-          )
-        ) : null
-      }
+      details={details}
       expanded={expanded}
       onExpandedChange={onExpandedChange}
     />

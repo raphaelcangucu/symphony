@@ -30,7 +30,7 @@ describe("reconcileToolActivityTimings", () => {
       reconcileToolActivityTimings(
         {},
         {
-          activeTool: { id: "tool-1", startedAt: 1_000 },
+          activeTools: [{ id: "tool-1", startedAt: 1_000 }],
           messages: [message("tool-1", "running")],
           nowMs: 4_000,
         },
@@ -45,7 +45,44 @@ describe("reconcileToolActivityTimings", () => {
       reconcileToolActivityTimings(
         {},
         {
-          activeTool: { id: "tool-1", startedAt: null },
+          activeTools: [{ id: "tool-1", startedAt: null }],
+          messages: [message("tool-1", "running")],
+          nowMs: 4_000,
+        },
+      ),
+    ).toEqual({
+      "tool-1": { startedAt: 4_000, durationMs: null },
+    });
+  });
+
+  it("captures every concurrently active tool by stable ID", () => {
+    expect(
+      reconcileToolActivityTimings(
+        {},
+        {
+          activeTools: [
+            { id: "tool-1", startedAt: 1_000 },
+            { id: "tool-2", startedAt: 2_000 },
+          ],
+          messages: [
+            message("tool-1", "running"),
+            message("tool-2", "running"),
+          ],
+          nowMs: 4_000,
+        },
+      ),
+    ).toEqual({
+      "tool-1": { startedAt: 1_000, durationMs: null },
+      "tool-2": { startedAt: 2_000, durationMs: null },
+    });
+  });
+
+  it("captures a visible running call before its active snapshot arrives", () => {
+    expect(
+      reconcileToolActivityTimings(
+        {},
+        {
+          activeTools: [],
           messages: [message("tool-1", "running")],
           nowMs: 4_000,
         },
@@ -62,7 +99,7 @@ describe("reconcileToolActivityTimings", () => {
           "tool-1": { startedAt: 1_000, durationMs: null },
         },
         {
-          activeTool: null,
+          activeTools: [],
           messages: [message("tool-1", "complete")],
           nowMs: 11_000,
         },
@@ -79,7 +116,7 @@ describe("reconcileToolActivityTimings", () => {
 
     expect(
       reconcileToolActivityTimings(current, {
-        activeTool: null,
+        activeTools: [],
         messages: [message("tool-1", "complete")],
         nowMs: 20_000,
       }),

@@ -96,8 +96,27 @@ describe("FileActivityCard", () => {
       />,
     );
 
-    expect(screen.getAllByText("Running")).toHaveLength(1);
+    const runningVerb = screen.getByText("Running");
+    expect(runningVerb).not.toHaveClass("uppercase");
     expect(screen.queryByText("Ran")).not.toBeInTheDocument();
+  });
+
+  it("keeps the raw command available in the disclosure", () => {
+    renderWithI18n(
+      <FileActivityCard
+        view={view({
+          kind: "command",
+          title: "sleep 10",
+          rawCommand: "/bin/zsh -lc 'sleep 10'",
+          status: "complete",
+          body: { value: "done", language: "bash" },
+        })}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button"));
+    expect(screen.getByText("/bin/zsh -lc 'sleep 10'")).toBeInTheDocument();
+    expect(screen.getByText("done")).toBeInTheDocument();
   });
 
   it("uses a completed verb for a settled command", () => {
