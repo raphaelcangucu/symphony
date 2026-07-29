@@ -2453,16 +2453,10 @@ function InteractiveProjectAssistantPanel({
             }
           : null,
         messages,
-        turnStartedAt: runningStartedAt,
         nowMs: Date.now(),
       }),
     );
-  }, [
-    activeToolDetail?.id,
-    activeToolDetail?.startedAt,
-    messages,
-    runningStartedAt,
-  ]);
+  }, [activeToolDetail?.id, activeToolDetail?.startedAt, messages]);
   const nowMs = useNowTick(1000, { enabled: turnRunning });
   const stale =
     turnRunning &&
@@ -2610,7 +2604,6 @@ function InteractiveProjectAssistantPanel({
             onInsertContext={insertContextRef}
             onOpenWorkspaceDiff={openWorkspaceDiffAtPath}
             onApprovePlan={dispatchApprovedPlan}
-            onStop={handleStopTurn}
             onKillTool={handleKillTool}
             onFetchToolOutput={handleFetchToolOutput}
           />

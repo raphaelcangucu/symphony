@@ -75,6 +75,7 @@ export function WorkingIndicator({
   }, []);
 
   const detail = activeToolDetail;
+  const hasActions = Boolean(onStop || (onKill && detail?.id));
   const toolName = detail?.name ?? activeTool;
   const summary = detail?.argumentsSummary
     ? truncateSummary(detail.argumentsSummary)
@@ -106,7 +107,11 @@ export function WorkingIndicator({
         {label}…
         {stale ? (
           <span className="ml-1 text-xs opacity-80">
-            {t("assistant.working.staleHint")}
+            {t(
+              hasActions
+                ? "assistant.working.staleHint"
+                : "assistant.working.staleHintPassive",
+            )}
           </span>
         ) : null}
       </span>

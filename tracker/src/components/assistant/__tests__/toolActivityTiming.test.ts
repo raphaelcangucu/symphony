@@ -32,7 +32,6 @@ describe("reconcileToolActivityTimings", () => {
         {
           activeTool: { id: "tool-1", startedAt: 1_000 },
           messages: [message("tool-1", "running")],
-          turnStartedAt: 500,
           nowMs: 4_000,
         },
       ),
@@ -41,19 +40,18 @@ describe("reconcileToolActivityTimings", () => {
     });
   });
 
-  it("uses the turn start when the provider omits tool timing", () => {
+  it("uses first detection when the provider omits tool timing", () => {
     expect(
       reconcileToolActivityTimings(
         {},
         {
           activeTool: { id: "tool-1", startedAt: null },
           messages: [message("tool-1", "running")],
-          turnStartedAt: 500,
           nowMs: 4_000,
         },
       ),
     ).toEqual({
-      "tool-1": { startedAt: 500, durationMs: null },
+      "tool-1": { startedAt: 4_000, durationMs: null },
     });
   });
 
@@ -66,7 +64,6 @@ describe("reconcileToolActivityTimings", () => {
         {
           activeTool: null,
           messages: [message("tool-1", "complete")],
-          turnStartedAt: null,
           nowMs: 11_000,
         },
       ),
@@ -84,7 +81,6 @@ describe("reconcileToolActivityTimings", () => {
       reconcileToolActivityTimings(current, {
         activeTool: null,
         messages: [message("tool-1", "complete")],
-        turnStartedAt: null,
         nowMs: 20_000,
       }),
     ).toBe(current);

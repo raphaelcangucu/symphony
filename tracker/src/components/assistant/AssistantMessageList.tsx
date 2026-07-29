@@ -56,7 +56,6 @@ interface AssistantMessageListProps {
   onInsertContext: (ref: ComposerContextChipRef) => void;
   onOpenWorkspaceDiff?: (request: OpenWorkspaceDiffRequest) => void;
   onApprovePlan: AssistantChatPlanApprovalAction["onApprove"];
-  onStop?: () => void;
   onKillTool?: (toolCallId: string) => void;
   onFetchToolOutput?: (
     messageId: string,
@@ -85,7 +84,6 @@ export function AssistantMessageList({
   onInsertContext,
   onOpenWorkspaceDiff,
   onApprovePlan,
-  onStop,
   onKillTool,
   onFetchToolOutput,
 }: AssistantMessageListProps) {
@@ -185,7 +183,6 @@ export function AssistantMessageList({
           startedAt={runningStartedAt}
           activeToolDetail={activeToolDetail}
           stale={stale}
-          onStop={onStop}
           onKill={onKillTool}
         />
       ) : null}

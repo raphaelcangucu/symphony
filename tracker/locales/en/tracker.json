@@ -2623,6 +2623,7 @@
       "stop": "Stop",
       "kill": "Kill",
       "staleHint": "No updates — Stop or Kill?",
+      "staleHintPassive": "No updates",
       "killFailed": "Could not kill that command. Stop the turn instead?",
       "verbs": {
         "pondering": "Pondering",

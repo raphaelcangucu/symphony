@@ -10,18 +10,12 @@ export type ToolActivityTimings = Readonly<Record<string, ToolActivityTiming>>;
 interface ReconcileToolActivityTimingsInput {
   activeTool: { id: string; startedAt: number | null } | null;
   messages: readonly AssistantChatMessage[];
-  turnStartedAt: number | null;
   nowMs: number;
 }
 
 export function reconcileToolActivityTimings(
   current: ToolActivityTimings,
-  {
-    activeTool,
-    messages,
-    turnStartedAt,
-    nowMs,
-  }: ReconcileToolActivityTimingsInput,
+  { activeTool, messages, nowMs }: ReconcileToolActivityTimingsInput,
 ): ToolActivityTimings {
   let next = current;
   let changed = false;
@@ -36,7 +30,7 @@ export function reconcileToolActivityTimings(
 
   if (activeTool && !current[activeTool.id]) {
     update(activeTool.id, {
-      startedAt: activeTool.startedAt ?? turnStartedAt ?? nowMs,
+      startedAt: activeTool.startedAt ?? nowMs,
       durationMs: null,
     });
   }
