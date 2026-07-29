@@ -11,6 +11,7 @@
 ### Task 1: Command presentation copy
 
 **Files:**
+
 - Modify: `tracker/src/components/assistant/fileActivity.ts`
 - Modify: `tracker/src/components/assistant/FileActivityCard.tsx`
 - Modify: `tracker/locales/en/tracker.json`
@@ -18,7 +19,7 @@
 - Test: `tracker/src/components/assistant/__tests__/fileActivity.test.ts`
 - Test: `tracker/src/components/assistant/__tests__/FileActivityCard.test.tsx`
 
-- [ ] **Step 1: Write failing formatter and state-copy tests**
+- [x] **Step 1: Write failing formatter and state-copy tests**
 
 Add coverage that maps `/bin/zsh -lc 'sleep 10'` to the visible title
 `sleep 10`, preserves unmatched commands, renders `Running` without a second
@@ -48,7 +49,7 @@ it("uses one state-aware command verb", () => {
 });
 ```
 
-- [ ] **Step 2: Run the focused tests and verify RED**
+- [x] **Step 2: Run the focused tests and verify RED**
 
 Run:
 
@@ -60,7 +61,7 @@ npm test -- --run fileActivity.test.ts FileActivityCard.test.tsx
 Expected: failures for the unstripped wrapper and missing progressive command
 verb.
 
-- [ ] **Step 3: Implement the minimal command formatter and copy**
+- [x] **Step 3: Implement the minimal command formatter and copy**
 
 Add a display-only formatter that recognizes only the exact standard wrapper:
 
@@ -88,7 +89,7 @@ and:
 "commandComplete": "Executou"
 ```
 
-- [ ] **Step 4: Run the focused tests and verify GREEN**
+- [x] **Step 4: Run the focused tests and verify GREEN**
 
 Run:
 
@@ -99,7 +100,7 @@ npm test -- --run fileActivity.test.ts FileActivityCard.test.tsx
 
 Expected: both files pass.
 
-- [ ] **Step 5: Commit Task 1**
+- [x] **Step 5: Commit Task 1**
 
 ```bash
 git add tracker/src/components/assistant/fileActivity.ts \
@@ -113,10 +114,11 @@ git commit -m "refactor(assistant): clarify live command copy"
 ### Task 2: Single authoritative running row
 
 **Files:**
+
 - Modify: `tracker/src/components/assistant/AssistantMessageList.tsx`
 - Test: `tracker/src/components/assistant/__tests__/AssistantMessageList.test.tsx`
 
-- [ ] **Step 1: Write failing duplicate/fallback tests**
+- [x] **Step 1: Write failing duplicate/fallback tests**
 
 Render a running message with tool ID `tool-1` and matching
 `activeToolDetail.id`. Assert that there is no global `role="status"` below the
@@ -136,7 +138,7 @@ expect(screen.getByRole("status")).toHaveTextContent(
 );
 ```
 
-- [ ] **Step 2: Run the focused test and verify RED**
+- [x] **Step 2: Run the focused test and verify RED**
 
 Run:
 
@@ -147,7 +149,7 @@ npm test -- --run AssistantMessageList.test.tsx
 
 Expected: the matching tool case finds the duplicate global status.
 
-- [ ] **Step 3: Suppress only a represented active tool**
+- [x] **Step 3: Suppress only a represented active tool**
 
 Derive the rendered messages from the selected body source and match the live
 call by stable ID, falling back to name only for legacy ID-less calls:
@@ -172,7 +174,7 @@ Render `WorkingIndicator` only when the turn is running and
 `containsActiveTool(...)` is false. This preserves the global fallback during
 thinking, transport delay, and ID mismatch.
 
-- [ ] **Step 4: Run the focused test and verify GREEN**
+- [x] **Step 4: Run the focused test and verify GREEN**
 
 Run:
 
@@ -183,7 +185,7 @@ npm test -- --run AssistantMessageList.test.tsx
 
 Expected: duplicate and fallback cases pass.
 
-- [ ] **Step 5: Commit Task 2**
+- [x] **Step 5: Commit Task 2**
 
 ```bash
 git add tracker/src/components/assistant/AssistantMessageList.tsx \
@@ -194,6 +196,7 @@ git commit -m "fix(assistant): avoid duplicate running activity"
 ### Task 3: Live and settled timing
 
 **Files:**
+
 - Modify: `tracker/src/components/assistant/WorkingIndicator.tsx`
 - Modify: `tracker/src/components/assistant/ProjectAssistantPanel.tsx`
 - Modify: `tracker/src/components/assistant/AssistantMessageList.tsx`
@@ -205,7 +208,7 @@ git commit -m "fix(assistant): avoid duplicate running activity"
 - Test: `tracker/src/components/assistant/__tests__/FileActivityCard.test.tsx`
 - Test: `tracker/src/components/assistant/__tests__/ProjectAssistantPanel.test.tsx`
 
-- [ ] **Step 1: Write failing timing tests**
+- [x] **Step 1: Write failing timing tests**
 
 Use fake timers to assert that an active command row advances from `· 0:00` to
 `· 0:03`. Render a completed row with `durationMs={10_000}` and assert `· 10s`.
@@ -222,7 +225,7 @@ renderWithI18n(
 expect(screen.getByText("· 0:00")).toBeInTheDocument();
 ```
 
-- [ ] **Step 2: Run the focused tests and verify RED**
+- [x] **Step 2: Run the focused tests and verify RED**
 
 Run:
 
@@ -234,7 +237,7 @@ npm test -- --run FileActivityCard.test.tsx ProjectAssistantPanel.test.tsx
 Expected: `FileActivityCard` rejects/ignores timing props and no elapsed copy is
 rendered.
 
-- [ ] **Step 3: Introduce the timing contract**
+- [x] **Step 3: Introduce the timing contract**
 
 Extend the active detail and create a shared timing shape:
 
@@ -253,11 +256,12 @@ export interface WorkingActiveToolDetail {
 ```
 
 In `ProjectAssistantPanel`, retain timing by stable ID. Capture the normalized
-server start timestamp while active and finalize duration when the matching
-message tool call settles. Return the previous state object when no entry
-changes to avoid effect loops.
+server start timestamp while active; if it is absent, begin at the first client
+detection of the tool rather than inheriting the older turn start. Finalize
+duration when the matching message tool call settles. Return the previous state
+object when no entry changes to avoid effect loops.
 
-- [ ] **Step 4: Carry timing through the existing timeline boundary**
+- [x] **Step 4: Carry timing through the existing timeline boundary**
 
 Pass `toolTimings` through:
 
@@ -273,7 +277,7 @@ Only the matching stable tool-call ID receives its timing. In
 `FileActivityCard`, use `useNowTick` with `formatClockElapsed` while running and
 `formatDurationSeconds` after completion.
 
-- [ ] **Step 5: Run focused and regression tests**
+- [x] **Step 5: Run focused and regression tests**
 
 Run:
 
@@ -286,7 +290,7 @@ npm test -- --run FileActivityCard.test.tsx AssistantMessageList.test.tsx \
 
 Expected: all selected suites pass.
 
-- [ ] **Step 6: Commit Task 3**
+- [x] **Step 6: Commit Task 3**
 
 ```bash
 git add tracker/src/components/assistant/WorkingIndicator.tsx \
@@ -305,10 +309,14 @@ git commit -m "feat(assistant): show command activity timing"
 ### Task 4: Verification and visual evidence
 
 **Files:**
-- Modify: `docs/superpowers/plans/2026-07-29-single-running-activity-plan.md`
-- Create: `.symphony/evidence/artifacts/screens/single-running-activity.png`
 
-- [ ] **Step 1: Run formatting and the focused suite**
+- Modify: `docs/superpowers/plans/2026-07-29-single-running-activity-plan.md`
+- Create: `.symphony/evidence/artifacts/screens/composer-single-running-activity-desktop.jpg`
+- Create: `.symphony/evidence/artifacts/screens/composer-single-running-activity-mobile.jpg`
+- Create: `.symphony/evidence/artifacts/screens/composer-single-running-activity-disclosure.jpg`
+- Create: `.symphony/evidence/artifacts/videos/composer-single-running-activity-e2e.mp4`
+
+- [x] **Step 1: Run formatting and the focused suite**
 
 ```bash
 cd tracker
@@ -321,18 +329,18 @@ npm test -- --run FileActivityCard.test.tsx AssistantMessageList.test.tsx \
   ProjectAssistantPanel.test.tsx
 ```
 
-Expected: formatter and selected tests exit zero.
+Result: formatter exited zero and 137 focused tests passed across 9 files.
 
-- [ ] **Step 2: Build production assets**
+- [x] **Step 2: Build production assets**
 
 ```bash
 cd tracker
 npm run build
 ```
 
-Expected: Vite production build exits zero.
+Result: TypeScript and Vite production build exited zero.
 
-- [ ] **Step 3: Validate in the real app**
+- [x] **Step 3: Validate in the real app**
 
 Open the existing local tracker, start a command such as `sleep 10`, and verify:
 
@@ -343,10 +351,11 @@ Open the existing local tracker, start a command such as `sleep 10`, and verify:
 5. Stop only in the composer;
 6. completed copy changes to Ran.
 
-Capture the active state as
-`.symphony/evidence/artifacts/screens/single-running-activity.png`.
+Captured the active state at desktop and mobile widths, the raw-command
+disclosure, plus a 17.5-second E2E video covering compose, running, and
+completed states.
 
-- [ ] **Step 4: Update the plan checklist and commit**
+- [x] **Step 4: Update the plan checklist and commit**
 
 Mark completed plan steps and commit the plan plus any final test-only
 adjustment:
