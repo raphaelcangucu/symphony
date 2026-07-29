@@ -80,6 +80,9 @@ describe("native Dev10x brand assets", () => {
     const layout = readFileSync(resolve(mobileRoot, "app/_layout.tsx"), "utf8");
     expect(layout).toContain("preventAutoHideAsync");
     expect(layout).toContain("if (!hydrated)");
+    expect(layout).toContain("AnimatedSplash");
+    expect(layout).toContain("showAnimatedSplash");
+    expect(layout).toContain("onFinished");
     expect(layout).toContain("hideAsync");
   });
 });
