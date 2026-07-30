@@ -9,9 +9,11 @@ defmodule SymphonyElixir.MixProject do
       compilers: [:phoenix_live_view] ++ Mix.compilers(),
       start_permanent: Mix.env() == :prod,
       test_coverage: [
-        summary: [
-          threshold: 100
-        ],
+        # Elixir 1.19's built-in summary crashes with Enum.EmptyError when all
+        # instrumented modules are filtered from a shard. Keep instrumentation
+        # enabled for CI, but disable that broken aggregate summary until the
+        # upstream tool handles an empty result set.
+        summary: false,
         ignore_modules: [
           SymphonyElixir.AgentAvailability,
           SymphonyElixir.Claude.AppServer.StdioMain,
