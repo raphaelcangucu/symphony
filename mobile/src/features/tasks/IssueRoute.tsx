@@ -8,6 +8,7 @@ import { useConnection } from "@/auth/ConnectionProvider";
 import { useTaskEvidence } from "@/features/evidence/useTaskEvidence";
 import { useHostRuntime } from "@/runtime/HostRuntimeProvider";
 import type { HostTransport } from "@/transport/HostTransport";
+import type { EvidenceArtifact, EvidenceRecord } from "@/features/evidence/evidence-contract";
 
 import { IssueScreen } from "./IssueScreen";
 import { useIssueDetail } from "./useIssueDetail";
@@ -37,6 +38,7 @@ export function IssueRoute() {
   return (
     <ConnectedIssueRoute
       client={client}
+      hostId={hostId}
       identifier={identifier}
       profileId={profileId}
       projectSlug={projectSlug}
@@ -48,6 +50,7 @@ export function IssueRoute() {
 
 function ConnectedIssueRoute({
   client,
+  hostId,
   identifier,
   profileId,
   projectSlug,
@@ -55,6 +58,7 @@ function ConnectedIssueRoute({
   transport: routeTransport,
 }: {
   client: NonNullable<ReturnType<typeof useTrackerClient>>;
+  hostId: string | null;
   identifier: string;
   profileId: string;
   projectSlug: string;
@@ -120,6 +124,9 @@ function ConnectedIssueRoute({
           `/codex/issue/${encodeURIComponent(projectSlug)}/${encodeURIComponent(identifier)}/evidence`,
         )
       }
+      onOpenEvidenceArtifact={(artifact, record) =>
+        openEvidenceArtifact(router, hostId, projectSlug, identifier, artifact, record)
+      }
       onOpenFiles={() => threadRoute("/files")}
       onOpenPreview={() => threadRoute("/preview")}
       onOpenPullRequest={() =>
@@ -143,6 +150,28 @@ function ConnectedIssueRoute({
       threads={detail.threads}
     />
   );
+}
+
+function openEvidenceArtifact(
+  router: ReturnType<typeof useRouter>,
+  hostId: string | null,
+  projectSlug: string,
+  identifier: string,
+  artifact: EvidenceArtifact,
+  record: EvidenceRecord,
+) {
+  router.push({
+    pathname: (hostId
+      ? "/h/[hostId]/issue/[projectSlug]/[identifier]/evidence/[runId]"
+      : "/issue/[projectSlug]/[identifier]/evidence/[runId]") as never,
+    params: {
+      ...(hostId ? { hostId } : {}),
+      projectSlug,
+      identifier,
+      runId: record.runId,
+      artifactPath: artifact.path,
+    },
+  });
 }
 
 function routeParam(value: string | string[] | undefined): string | null {

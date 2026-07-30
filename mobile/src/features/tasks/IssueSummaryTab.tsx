@@ -40,6 +40,9 @@ export function IssueSummaryTab({
   const workpad = [...comments].reverse().find((item) => item.kind === "workpad");
   const progress = workpadProgress(workpad?.body ?? "");
   const workpadCopy = workpadSummary(workpad?.body ?? "");
+  const taskBrief = taskBriefFrom(issue.agentGoal ?? issue.description ?? "");
+  const hasEvidence = evidenceCount > 0;
+  const executionLabel = [issue.agentKind, issue.model, issue.effort].filter(Boolean).join(" · ");
 
   return (
     <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
@@ -56,27 +59,81 @@ export function IssueSummaryTab({
           ) : null}
         </View>
         <Text style={[styles.title, { color: colors.textPrimary }]}>{issue.title}</Text>
-        {issue.description ? (
-          <Text style={[styles.description, { color: colors.textSecondary }]}>
-            {issue.description}
-          </Text>
+        {taskBrief ? (
+          <Text style={[styles.description, { color: colors.textSecondary }]}>{taskBrief}</Text>
         ) : null}
+      </View>
+
+      <View
+        style={[
+          styles.executionSnapshot,
+          { backgroundColor: colors.bgPanel, borderColor: colors.borderSubtle },
+        ]}
+      >
+        <View style={styles.cardHeading}>
+          <View style={styles.grow}>
+            <Eyebrow colors={colors}>Execution snapshot</Eyebrow>
+            <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>
+              What is ready to review
+            </Text>
+          </View>
+          <View
+            style={[
+              styles.reviewPill,
+              { backgroundColor: `${hasEvidence ? colors.statusGreen : colors.statusAmber}20` },
+            ]}
+          >
+            <View
+              style={[
+                styles.dot,
+                { backgroundColor: hasEvidence ? colors.statusGreen : colors.statusAmber },
+              ]}
+            />
+            <Text
+              style={{
+                color: hasEvidence ? colors.statusGreen : colors.statusAmber,
+                fontSize: 12,
+                fontWeight: "800",
+              }}
+            >
+              {hasEvidence ? "Review ready" : "Evidence pending"}
+            </Text>
+          </View>
+        </View>
+        <View style={styles.snapshotGrid}>
+          <SnapshotItem colors={colors} label="Provider" value={issue.agentKind ?? "Manual"} />
+          <SnapshotItem colors={colors} label="Model" value={executionLabel || "Not selected"} />
+          <SnapshotItem
+            colors={colors}
+            label="Evidence"
+            value={
+              hasEvidence
+                ? `${evidenceCount} run${evidenceCount === 1 ? "" : "s"} available`
+                : "Not published yet"
+            }
+          />
+        </View>
       </View>
 
       <View style={styles.primaryActions}>
         <PrimaryAction label="Open session" onPress={onOpenSession} />
-        <SecondaryAction label="Open workspace" onPress={onOpenWorkspace} />
+        <SecondaryAction label="Review evidence" onPress={onOpenEvidence} />
       </View>
-
-      {issue.agentGoal ? (
-        <Card colors={colors}>
-          <Eyebrow colors={colors}>Agent objective</Eyebrow>
-          <Text style={[styles.goal, { color: colors.textPrimary }]}>{issue.agentGoal}</Text>
-          <Text style={{ color: colors.textMuted }}>
-            {[issue.agentKind, issue.model, issue.effort].filter(Boolean).join(" · ")}
-          </Text>
-        </Card>
-      ) : null}
+      <Pressable
+        accessibilityLabel="Open workspace"
+        accessibilityRole="button"
+        onPress={onOpenWorkspace}
+        style={({ pressed }) => [
+          styles.workspaceAction,
+          {
+            backgroundColor: pressed ? colors.bgPressed : colors.bgPanel,
+            borderColor: colors.borderSubtle,
+          },
+        ]}
+      >
+        <Text style={{ color: colors.textSecondary, fontWeight: "700" }}>Open workspace</Text>
+        <Text style={{ color: colors.textMuted }}>Browse files, diff and terminal ›</Text>
+      </Pressable>
 
       {workpad ? (
         <Card colors={colors}>
@@ -254,6 +311,33 @@ function Meta({ colors, label, value }: { colors: ThemeColors; label: string; va
   );
 }
 
+function SnapshotItem({
+  colors,
+  label,
+  value,
+}: {
+  colors: ThemeColors;
+  label: string;
+  value: string;
+}) {
+  return (
+    <View
+      style={[
+        styles.snapshotItem,
+        { backgroundColor: colors.bgRaised, borderColor: colors.borderSubtle },
+      ]}
+    >
+      <Eyebrow colors={colors}>{label}</Eyebrow>
+      <Text
+        numberOfLines={2}
+        style={{ color: colors.textPrimary, fontSize: 13, fontWeight: "700", lineHeight: 18 }}
+      >
+        {value}
+      </Text>
+    </View>
+  );
+}
+
 function Eyebrow({ children, colors }: { children: string; colors: ThemeColors }) {
   return <Text style={[styles.eyebrow, { color: colors.textMuted }]}>{children}</Text>;
 }
@@ -348,6 +432,19 @@ function workpadSummary(body: string): string {
     .join(" ");
 }
 
+function taskBriefFrom(body: string): string {
+  const candidate = body.split("\n").find((line) => {
+    const value = line.trim();
+    return value.length > 0 && !/^#{1,6}\s/.test(value) && !/^[-*]\s/.test(value);
+  });
+
+  return (candidate ?? "")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .trim();
+}
+
 function priorityLabel(priority: NonNullable<IssueSummary["priority"]>): string {
   return ["No priority", "Urgent", "High", "Medium", "Low"][priority] ?? String(priority);
 }
@@ -400,9 +497,14 @@ const styles = StyleSheet.create({
     letterSpacing: 0.7,
     textTransform: "uppercase",
   },
-  goal: { fontSize: 16, lineHeight: 23 },
   grow: { flex: 1 },
   hero: { gap: spacing.sm, paddingVertical: spacing.xs },
+  executionSnapshot: {
+    borderRadius: radii.md,
+    borderWidth: 1,
+    gap: spacing.sm,
+    padding: spacing.md,
+  },
   meta: {
     borderRadius: radii.md,
     borderWidth: 1,
@@ -434,6 +536,14 @@ const styles = StyleSheet.create({
   primaryActions: { flexDirection: "row", gap: spacing.xs },
   progressFill: { borderRadius: radii.pill, height: 6 },
   progressTrack: { borderRadius: radii.pill, height: 6, overflow: "hidden" },
+  reviewPill: {
+    alignItems: "center",
+    borderRadius: radii.pill,
+    flexDirection: "row",
+    gap: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
+  },
   relatedTask: {
     alignItems: "center",
     borderRadius: radii.md,
@@ -458,6 +568,16 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
   },
   sectionTitle: { fontSize: 17, fontWeight: "700", marginTop: spacing.xs },
+  snapshotGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs },
+  snapshotItem: {
+    borderRadius: radii.sm,
+    borderWidth: 1,
+    flexBasis: "30%",
+    flexGrow: 1,
+    gap: 4,
+    minHeight: 70,
+    padding: spacing.sm,
+  },
   srOnly: { height: 1, opacity: 0, position: "absolute", width: 1 },
   subtaskInput: {
     borderRadius: radii.sm,
@@ -467,4 +587,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
   },
   title: { fontSize: 26, fontWeight: "800", letterSpacing: -0.5, lineHeight: 32 },
+  workspaceAction: {
+    alignItems: "center",
+    borderRadius: radii.md,
+    borderWidth: 1,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    minHeight: 50,
+    paddingHorizontal: spacing.md,
+  },
 });

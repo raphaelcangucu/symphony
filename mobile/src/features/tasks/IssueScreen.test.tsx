@@ -85,6 +85,7 @@ function renderScreen(props: Partial<React.ComponentProps<typeof IssueScreen>> =
     onCreateSession: jest.fn(),
     onOpenDiff: jest.fn(),
     onOpenEvidence: jest.fn(),
+    onOpenEvidenceArtifact: jest.fn(),
     onOpenFiles: jest.fn(),
     onOpenPreview: jest.fn(),
     onOpenPullRequest: jest.fn(),

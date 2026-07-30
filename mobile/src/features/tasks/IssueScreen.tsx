@@ -13,7 +13,7 @@ import type {
   PullRequest,
 } from "@/api/contracts";
 import { StateView } from "@/components/StateView";
-import type { EvidenceRecord } from "@/features/evidence/evidence-contract";
+import type { EvidenceArtifact, EvidenceRecord } from "@/features/evidence/evidence-contract";
 import { radii, spacing } from "@/theme/tokens";
 import { useAppTheme } from "@/theme/ThemeProvider";
 
@@ -48,6 +48,7 @@ type IssueScreenProps = {
   onCreateSession(): void;
   onOpenDiff(): void;
   onOpenEvidence(): void;
+  onOpenEvidenceArtifact(artifact: EvidenceArtifact, record: EvidenceRecord): void;
   onOpenFiles(): void;
   onOpenPreview(): void;
   onOpenPullRequest(): void;
@@ -81,6 +82,7 @@ export function IssueScreen({
   onCreateSession,
   onOpenDiff,
   onOpenEvidence,
+  onOpenEvidenceArtifact,
   onOpenFiles,
   onOpenPreview,
   onOpenPullRequest,
@@ -217,6 +219,7 @@ export function IssueScreen({
           error={evidenceError}
           loading={evidenceLoading}
           onOpen={onOpenEvidence}
+          onOpenArtifact={onOpenEvidenceArtifact}
           records={evidenceRecords}
         />
       ) : (

@@ -50,9 +50,16 @@ const record: EvidenceRecord = {
 describe("IssueEvidenceTab", () => {
   it("summarizes provenance and artifacts from the latest run", () => {
     const onOpen = jest.fn();
+    const onOpenArtifact = jest.fn();
     render(
       <ThemeProvider colorScheme="dark">
-        <IssueEvidenceTab error={null} loading={false} onOpen={onOpen} records={[record]} />
+        <IssueEvidenceTab
+          error={null}
+          loading={false}
+          onOpen={onOpen}
+          onOpenArtifact={onOpenArtifact}
+          records={[record]}
+        />
       </ThemeProvider>,
     );
 
@@ -60,6 +67,8 @@ describe("IssueEvidenceTab", () => {
     expect(screen.getByText("gpt-5.6-sol · high")).toBeTruthy();
     expect(screen.getByText("Mobile")).toBeTruthy();
     expect(screen.getByText("Flow video")).toBeTruthy();
+    fireEvent.press(screen.getByRole("button", { name: "Open evidence Mobile" }));
+    expect(onOpenArtifact).toHaveBeenCalledWith(record.manifest.runs[0]?.artifacts[0], record);
     fireEvent.press(screen.getByRole("button", { name: "View complete evidence run" }));
     expect(onOpen).toHaveBeenCalledTimes(1);
   });
