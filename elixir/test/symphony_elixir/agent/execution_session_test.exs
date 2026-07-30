@@ -4,6 +4,7 @@ defmodule SymphonyElixir.Agent.ExecutionSessionTest do
   alias Ecto.Adapters.SQL
   alias SymphonyElixir.Agent.ConversationRef
   alias SymphonyElixir.Agent.ExecutionSession
+  alias SymphonyElixir.Agent.ExecutionTranscript
   alias SymphonyElixir.Assistant.History
   alias SymphonyElixir.Issue
   alias SymphonyElixir.Orchestrator
@@ -35,6 +36,136 @@ defmodule SymphonyElixir.Agent.ExecutionSessionTest do
     assert s1.metadata["origin"] == "orchestrator"
     assert s1.requested_model == "gpt-5.6-sol"
     assert s1.requested_effort == "low"
+  end
+
+  test "execution transcript stores the task brief and one readable message per completed turn" do
+    {:ok, session} =
+      ExecutionSession.ensure("advising", "CDE-1190",
+        workspace_path: "/tmp/advising/CDE-1190",
+        agent_kind: "codex",
+        requested_model: "gpt-5.6-terra",
+        requested_effort: "high"
+      )
+
+    entry = %{
+      execution_session_id: session.id,
+      issue: %Issue{
+        identifier: "CDE-1190",
+        title: "Implement transcript",
+        description: "Persist the autonomous execution transcript."
+      },
+      agent_kind: "codex",
+      model: "gpt-5.6-terra",
+      turn_count: 1
+    }
+
+    {entry, true} =
+      ExecutionTranscript.record(entry, %{
+        event: :notification,
+        timestamp: DateTime.utc_now(),
+        payload: %{"method" => "item/agentMessage/delta", "params" => %{"delta" => "Implemented "}}
+      })
+
+    {entry, false} =
+      ExecutionTranscript.record(entry, %{
+        event: :notification,
+        timestamp: DateTime.utc_now(),
+        payload: %{"method" => "item/agentMessage/delta", "params" => %{"delta" => "the transcript."}}
+      })
+
+    {_entry, true} =
+      ExecutionTranscript.record(entry, %{event: :turn_completed, timestamp: DateTime.utc_now()})
+
+    messages = History.list_messages_for_thread(session.id)
+    assert Enum.map(messages, & &1.role) == ["user", "assistant", "assistant"]
+    assert Enum.at(messages, 0).content == "Persist the autonomous execution transcript."
+    assert Enum.at(messages, 1).content =~ "Execution started for CDE-1190"
+    assert Enum.at(messages, 2).content == "Implemented the transcript."
+  end
+
+  test "execution transcript separates provider progress updates while preserving streaming deltas" do
+    {:ok, session} =
+      ExecutionSession.ensure("advising", "CDE-1191",
+        workspace_path: "/tmp/advising/CDE-1191",
+        agent_kind: "codex"
+      )
+
+    entry = %{
+      execution_session_id: session.id,
+      issue: %Issue{identifier: "CDE-1191", title: "Readable timeline"},
+      agent_kind: "codex",
+      turn_count: 1
+    }
+
+    {entry, true} =
+      ExecutionTranscript.record(entry, %{
+        event: :notification,
+        timestamp: DateTime.utc_now(),
+        payload: %{"method" => "item/agentMessage/delta", "params" => %{"delta" => "First "}}
+      })
+
+    {entry, false} =
+      ExecutionTranscript.record(entry, %{
+        event: :notification,
+        timestamp: DateTime.utc_now(),
+        payload: %{"method" => "item/agentMessage/delta", "params" => %{"delta" => "sentence."}}
+      })
+
+    {entry, false} =
+      ExecutionTranscript.record(entry, %{
+        event: :notification,
+        timestamp: DateTime.utc_now(),
+        payload: %{"method" => "item/progress", "params" => %{"agent_message" => "Second update."}}
+      })
+
+    {_entry, true} =
+      ExecutionTranscript.record(entry, %{event: :turn_completed, timestamp: DateTime.utc_now()})
+
+    messages = History.list_messages_for_thread(session.id)
+    assert Enum.at(messages, 2).content == "First sentence.\n\nSecond update."
+  end
+
+  test "execution transcript separates complete prose incorrectly sent as adjacent deltas" do
+    {:ok, session} =
+      ExecutionSession.ensure("advising", "CDE-1192",
+        workspace_path: "/tmp/advising/CDE-1192",
+        agent_kind: "codex"
+      )
+
+    entry = %{
+      execution_session_id: session.id,
+      issue: %Issue{identifier: "CDE-1192", title: "Readable provider updates"},
+      agent_kind: "codex",
+      turn_count: 1
+    }
+
+    {entry, true} =
+      ExecutionTranscript.record(entry, %{
+        event: :notification,
+        timestamp: DateTime.utc_now(),
+        payload: %{
+          "method" => "item/agentMessage/delta",
+          "params" => %{"delta" => "The review completed successfully."}
+        }
+      })
+
+    {entry, false} =
+      ExecutionTranscript.record(entry, %{
+        event: :notification,
+        timestamp: DateTime.utc_now(),
+        payload: %{
+          "method" => "item/agentMessage/delta",
+          "params" => %{"delta" => "Publication remains blocked by authentication."}
+        }
+      })
+
+    {_entry, true} =
+      ExecutionTranscript.record(entry, %{event: :turn_completed, timestamp: DateTime.utc_now()})
+
+    messages = History.list_messages_for_thread(session.id)
+
+    assert Enum.at(messages, 2).content ==
+             "The review completed successfully.\n\nPublication remains blocked by authentication."
   end
 
   test "reactivation clears requested provenance when explicit nil keys are supplied" do

@@ -17,11 +17,7 @@ import { useThreadSourceChanges } from "@/features/source-control/use-thread-sou
 
 import { createSessionTimelineState, sessionTimelineReducer } from "./session-reducer";
 import { AssistantChatScreen } from "./AssistantChatScreen";
-import {
-  assistantThreadDiffRoute,
-  hostChatRoute,
-  hostTerminalRoute,
-} from "./session-navigation";
+import { assistantThreadDiffRoute, hostChatRoute, hostTerminalRoute } from "./session-navigation";
 
 export function SessionRoute() {
   const router = useRouter();
@@ -63,7 +59,10 @@ export function SessionRoute() {
 export function HostSessionRoute() {
   const router = useRouter();
   const params = useLocalSearchParams<{
+    agent?: string | string[];
+    executionSessionId?: string | string[];
     hostId?: string | string[];
+    identifier?: string | string[];
     name?: string | string[];
     threadId?: string | string[];
     seed?: string | string[];
@@ -71,8 +70,15 @@ export function HostSessionRoute() {
   const { hydrated, profiles } = useConnection();
   const hostRuntime = useHostRuntime();
   const hostId = firstParam(params.hostId);
-  const threadId = parseThreadId(firstParam(params.threadId));
-  const title = firstParam(params.name);
+  // `/h/:hostId/run/:executionSessionId` is a durable task execution session,
+  // not a different transcript type. Accept that legacy route here so all
+  // session entry points render the same assistant timeline and composer.
+  const threadId = parseThreadId(
+    firstParam(params.threadId) ?? firstParam(params.executionSessionId),
+  );
+  const title =
+    firstParam(params.name) ??
+    executionSessionTitle(firstParam(params.identifier), firstParam(params.agent));
   const seed = firstParam(params.seed);
   const profile =
     hostId === null
@@ -178,9 +184,7 @@ function ConnectedSessionRoute({
   const projectSlug = timeline.metadata.projectSlug;
   const issueIdentifier = timeline.metadata.issueIdentifier;
   const taskHostId =
-    activeProfile.transport === "rpc"
-      ? hostId ?? activeProfile.hostId ?? activeProfile.id
-      : null;
+    activeProfile.transport === "rpc" ? (hostId ?? activeProfile.hostId ?? activeProfile.id) : null;
   const taskEvidence = useTaskEvidence({
     transport: hostTransport ?? null,
     projectSlug: projectSlug ?? "",
@@ -286,7 +290,7 @@ function ConnectedSessionRoute({
       onSetTurnPreferences={(preferences) => session.setTurnPreferences(preferences)}
       onStopTurn={() => session.stopTurn()}
       onSubmitUserInput={(requestId, answers) => session.submitUserInput(requestId, answers)}
-      title={title ?? `Session ${threadId}`}
+      title={title ?? sessionTitle(timeline.metadata, threadId)}
       threadId={threadId}
       sourceChanges={sourceChanges}
       taskLinks={
@@ -331,7 +335,9 @@ function findEvidenceArtifact(
 
 function normalizeEvidenceHref(value: string): string {
   try {
-    return decodeURIComponent(value).replace(/^file:\/\//, "").replace(/\\/g, "/");
+    return decodeURIComponent(value)
+      .replace(/^file:\/\//, "")
+      .replace(/\\/g, "/");
   } catch {
     return value.replace(/^file:\/\//, "").replace(/\\/g, "/");
   }
@@ -349,6 +355,41 @@ function firstParam(value: string | string[] | undefined): string | null {
 function parseThreadId(value: string | null): number | null {
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+function executionSessionTitle(identifier: string | null, agent: string | null): string | null {
+  if (!identifier?.trim()) return null;
+  const provider =
+    agent === "codex"
+      ? "Codex"
+      : agent === "claude"
+        ? "Claude"
+        : agent === "cursor"
+          ? "Cursor"
+          : agent === "opencode"
+            ? "OpenCode"
+            : null;
+  return provider ? `${identifier.trim()} · ${provider}` : identifier.trim();
+}
+
+function sessionTitle(
+  metadata: { issueIdentifier: string | null; agentKind: string | null },
+  threadId: number,
+): string {
+  const identifier = metadata.issueIdentifier?.trim();
+  if (!identifier) return `Session ${threadId}`;
+
+  const provider =
+    metadata.agentKind === "codex"
+      ? "Codex"
+      : metadata.agentKind === "claude"
+        ? "Claude"
+        : metadata.agentKind === "cursor"
+          ? "Cursor"
+          : metadata.agentKind === "opencode"
+            ? "OpenCode"
+            : null;
+  return provider ? `${identifier} · ${provider}` : identifier;
 }
 
 function resolvedLocale(): string {

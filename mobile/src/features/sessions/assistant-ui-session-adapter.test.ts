@@ -44,8 +44,21 @@ const timeline: SessionTimelineState = {
   pendingApproval: null,
   pendingUserInput: null,
   turnStatus: { status: "running", canResume: false, queuedMessages: [] },
-  turnPreferences: { executionMode: null, skillProfile: null, model: null, effort: null },
-  metadata: { projectSlug: null, issueIdentifier: null, agentKind: null, requestedModel: null, requestedEffort: null, resolvedModel: null, resolvedEffort: null },
+  turnPreferences: {
+    executionMode: null,
+    skillProfile: null,
+    model: null,
+    effort: null,
+  },
+  metadata: {
+    projectSlug: null,
+    issueIdentifier: null,
+    agentKind: null,
+    requestedModel: null,
+    requestedEffort: null,
+    resolvedModel: null,
+    resolvedEffort: null,
+  },
   error: null,
 };
 
@@ -99,7 +112,12 @@ describe("assistant-ui Symphony adapter", () => {
           role: "assistant",
           content: "Finished",
           toolCalls: [
-            { id: "silent-tool", name: "apply_patch", status: "complete", output: null },
+            {
+              id: "silent-tool",
+              name: "apply_patch",
+              status: "complete",
+              output: null,
+            },
           ],
           insertedAt: "2026-07-26T01:00:02Z",
         },
@@ -109,9 +127,208 @@ describe("assistant-ui Symphony adapter", () => {
     expect(messages[0]).toMatchObject({
       content: [
         { type: "text", text: "Finished" },
-        { type: "tool-call", toolCallId: "silent-tool", toolName: "apply_patch", result: "" },
+        {
+          type: "tool-call",
+          toolCallId: "silent-tool",
+          toolName: "apply_patch",
+          result: "",
+        },
       ],
     });
+  });
+
+  it("repairs missing provider paragraph boundaries without touching inline code", () => {
+    const messages = buildAssistantUiMessages({
+      ...timeline,
+      streamingText: "",
+      activeTools: [],
+      messages: [
+        {
+          id: "provider-prose",
+          role: "assistant",
+          content:
+            "Review passed.Publish the branch next. Keep `PR.Publish` unchanged.",
+          toolCalls: [],
+          insertedAt: null,
+        },
+      ],
+    });
+
+    expect(messages[0]).toMatchObject({
+      content: [
+        {
+          type: "text",
+          text: "Review passed.\n\nPublish the branch next. Keep `PR.Publish` unchanged.",
+        },
+      ],
+    });
+  });
+
+  it("keeps protocol-only tool records out of the readable chat timeline", () => {
+    const messages = buildAssistantUiMessages({
+      ...timeline,
+      streamingText: "",
+      activeTools: [],
+      messages: [
+        {
+          id: "assistant-turn",
+          role: "assistant",
+          content: "The implementation is complete.",
+          toolCalls: [
+            { id: "shell-1", name: "shell", status: "complete", output: "ok" },
+          ],
+          insertedAt: null,
+        },
+        {
+          id: "raw-tool",
+          role: "tool",
+          content: 'Custom Tool Call Output\n\n{\\"output\\":\\"ok\\"}',
+          toolCalls: [],
+          insertedAt: null,
+        },
+        {
+          id: "raw-system-tool",
+          role: "system",
+          content: 'Custom Tool Call Output\n\n{\\"output\\":\\"ok\\"}',
+          toolCalls: [],
+          insertedAt: null,
+        },
+      ],
+    });
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0]).toMatchObject({
+      role: "assistant",
+      content: [
+        { type: "text", text: "The implementation is complete." },
+        {
+          type: "tool-call",
+          toolCallId: "shell-1",
+          toolName: "shell",
+          result: "ok",
+        },
+      ],
+    });
+  });
+
+  it("keeps provider envelopes and the initial runtime prompt out of the chat", () => {
+    const messages = buildAssistantUiMessages({
+      ...timeline,
+      streamingText: "",
+      activeTools: [],
+      messages: [
+        {
+          id: "initial-prompt",
+          role: "system",
+          content: "Initial prompt\n\nA long opaque provider instruction",
+          toolCalls: [],
+          insertedAt: null,
+        },
+        {
+          id: "agent-envelope",
+          role: "assistant",
+          content: 'Agent_Message:\n\n{"delta":"internal"}',
+          toolCalls: [],
+          insertedAt: null,
+        },
+        {
+          id: "reply",
+          role: "assistant",
+          content: "The task is ready for review.",
+          toolCalls: [],
+          insertedAt: null,
+        },
+      ],
+    });
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0]).toMatchObject({
+      role: "assistant",
+      content: [{ type: "text", text: "The task is ready for review." }],
+    });
+  });
+
+  it("suppresses one-line provider envelopes and empty transcript placeholders", () => {
+    const messages = buildAssistantUiMessages({
+      ...timeline,
+      streamingText: "",
+      activeTools: [],
+      messages: [
+        {
+          id: "inline-tool-output",
+          role: "system",
+          content: 'Custom Tool Call Output: {"output":"internal"}',
+          toolCalls: [],
+          insertedAt: null,
+        },
+        {
+          id: "stream-event",
+          role: "assistant",
+          content: 'Agent Message Streaming: {"delta":"internal"}',
+          toolCalls: [],
+          insertedAt: null,
+        },
+        {
+          id: "placeholder",
+          role: "assistant",
+          content: "",
+          toolCalls: [],
+          insertedAt: null,
+        },
+        {
+          id: "reply",
+          role: "assistant",
+          content: "The task is ready for review.",
+          toolCalls: [],
+          insertedAt: null,
+        },
+      ],
+    });
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0]).toMatchObject({
+      role: "assistant",
+      content: [{ type: "text", text: "The task is ready for review." }],
+    });
+  });
+
+  it("groups adjacent provider tool records into one compact activity timeline", () => {
+    const messages = buildAssistantUiMessages({
+      ...timeline,
+      streamingText: "",
+      activeTools: [],
+      messages: [
+        {
+          id: "tool-1",
+          role: "assistant",
+          content: "",
+          toolCalls: [
+            { id: "shell-1", name: "shell", status: "complete", output: "pwd" },
+          ],
+          insertedAt: null,
+        },
+        {
+          id: "tool-2",
+          role: "assistant",
+          content: "",
+          toolCalls: [
+            {
+              id: "patch-1",
+              name: "apply_patch",
+              status: "complete",
+              output: "done",
+            },
+          ],
+          insertedAt: null,
+        },
+      ],
+    });
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.content).toEqual([
+      expect.objectContaining({ toolCallId: "shell-1", type: "tool-call" }),
+      expect.objectContaining({ toolCallId: "patch-1", type: "tool-call" }),
+    ]);
   });
 
   it("extracts only text parts and forwards the composer message through Symphony RPC", async () => {
@@ -134,7 +351,10 @@ describe("assistant-ui Symphony adapter", () => {
     const onSend = vi.fn();
 
     await expect(
-      submitAssistantUiMessage({ role: "user", content: [{ type: "text", text: "  " }] }, onSend),
+      submitAssistantUiMessage(
+        { role: "user", content: [{ type: "text", text: "  " }] },
+        onSend,
+      ),
     ).rejects.toThrow("Message is required");
     expect(onSend).not.toHaveBeenCalled();
   });

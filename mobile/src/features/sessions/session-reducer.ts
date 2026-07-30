@@ -114,7 +114,11 @@ export type SessionTimelineAction =
   | { type: "user_input_resolved"; requestId: string | number }
   | { type: "turn_status"; status: AssistantTurnStatus }
   | { type: "turn_preferences_changed"; preferences: AssistantTurnPreferences }
-  | { type: "session_metadata"; metadata: Partial<AssistantSessionMetadata>; preferences?: AssistantTurnPreferences }
+  | {
+      type: "session_metadata";
+      metadata: Partial<AssistantSessionMetadata>;
+      preferences?: AssistantTurnPreferences;
+    }
   | { type: "goal_status"; goal: AssistantGoalStatus }
   | { type: "connection_changed"; state: SessionTimelineState["connectionState"] }
   | { type: "error"; message: string };
@@ -250,15 +254,10 @@ function upsertTool(tools: AssistantToolCall[], toolCall: AssistantToolCall): As
 }
 
 function isTerminalTurnStatus(status: string): boolean {
-  return !["running", "queued", "waiting", "awaiting_approval", "awaiting_input"].includes(
-    status,
-  );
+  return !["running", "queued", "waiting", "awaiting_approval", "awaiting_input"].includes(status);
 }
 
-function settleActiveTools(
-  tools: AssistantToolCall[],
-  turnStatus: string,
-): AssistantToolCall[] {
+function settleActiveTools(tools: AssistantToolCall[], turnStatus: string): AssistantToolCall[] {
   const failed = ["failed", "error", "cancelled", "canceled"].includes(turnStatus);
   return tools.map((tool) =>
     tool.status === "running"

@@ -2315,7 +2315,7 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
     Application.delete_env(:symphony_elixir, :assistant_runner)
   end
 
-  test "issue_execution threads reject interactive send_message with a stable reason", %{socket: socket} do
+  test "issue_execution threads route composer input to the task worker instead of starting a chat turn", %{socket: socket} do
     alias SymphonyElixir.Agent.ExecutionSession
 
     workspace_path =
@@ -2336,10 +2336,15 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
 
     ref = push(socket, "send_message", %{"message" => "hi"})
 
-    assert_reply(ref, :error, %{
-      code: "execution_thread_not_interactive",
-      message: "execution_thread_not_interactive"
-    })
+    # There is no active worker in this focused channel test. The instruction
+    # must become a durable queue entry on this task's execution session instead
+    # of being dropped or starting a separate chat.
+    assert_push("message_created", %{message: %{content: "hi", role: "user"}})
+    assert_push("turn_status", %{status: "queued", queued_count: 1})
+    assert_reply(ref, :ok, %{queued: true})
+
+    assert [%{content: "hi", metadata: %{"delivery" => "queue"}}] =
+             History.list_messages_for_thread(thread.id)
   end
 
   test "issue thread send_message routes to the issue working tree", %{socket: socket} do
@@ -2375,12 +2380,14 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
     end)
 
     {:ok, _payload, socket} = subscribe_and_join(socket, "assistant:thread:#{thread.id}", %{})
+    assert_push("history_loaded", %{messages: []})
 
     ref = push(socket, "send_message", %{"message" => "build X"})
     assert_reply(ref, :ok)
+    assert_push("turn_status", %{status: "running"})
 
     expected_workspace = Workspace.path_for_issue("MAC-1")
-    assert_receive {:workspace, ^expected_workspace}
+    assert_receive {:workspace, ^expected_workspace}, 1_000
   end
 
   test "issue topic send_message routes to the issue working tree", %{socket: socket} do
@@ -2632,6 +2639,38 @@ defmodule SymphonyElixirWeb.AssistantChannelTest do
     assert rejoined.turn_running == true
     assert rejoined.last_turn.status == "running"
     assert rejoined.last_turn.can_resume == false
+
+    send(worker, :finish)
+  end
+
+  test "join does not resurrect a terminal thread from a stale TurnManager worker" do
+    topic = "assistant:issue:macro-markets:DIS-terminal"
+
+    {:ok, join_payload, _socket} =
+      socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
+      |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, topic)
+
+    run = fn ->
+      receive do
+        :finish -> {:ok, %{assistant_message: "done", tool_calls: []}}
+      after
+        5_000 -> {:ok, %{assistant_message: "timeout", tool_calls: []}}
+      end
+    end
+
+    assert {:ok, %{pid: worker}} =
+             TurnManager.start_turn(join_payload.thread_id, "stale", run: run, reply_to: self())
+
+    assert {:ok, thread} = History.get_thread(join_payload.thread_id)
+    assert {:ok, _terminal} = History.update_thread(thread, %{status: "error"})
+    assert TurnManager.running?(join_payload.thread_id)
+
+    {:ok, rejoined, _socket} =
+      socket(SymphonyElixirWeb.UserSocket, nil, %{token: "secret"})
+      |> subscribe_and_join(SymphonyElixirWeb.AssistantChannel, topic)
+
+    assert rejoined.turn_running == false
+    refute match?(%{status: "running"}, rejoined.last_turn)
 
     send(worker, :finish)
   end
