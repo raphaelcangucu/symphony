@@ -189,6 +189,7 @@ export function IssueScreen({
           comments={comments}
           evidenceCount={evidenceCount}
           issue={issue}
+          latestEvidence={evidenceRecords[0] ?? null}
           onCreateSubtask={() => {
             const title = subtaskTitle.trim();
             if (!title) return;

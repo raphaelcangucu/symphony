@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react-native";
 
 import type { IssueComment, IssueSummary, PullRequest } from "@/api/contracts";
+import type { EvidenceRecord } from "@/features/evidence/evidence-contract";
 import { ThemeProvider } from "@/theme/ThemeProvider";
 
 import { IssueScreen } from "./IssueScreen";
@@ -104,6 +105,18 @@ function renderScreen(props: Partial<React.ComponentProps<typeof IssueScreen>> =
 }
 
 describe("IssueScreen", () => {
+  it("uses durable evidence provenance when the task has no execution metadata", () => {
+    const issueWithoutExecution = { ...issue, agentKind: null, model: null, effort: null };
+    renderScreen({
+      evidenceCount: 1,
+      evidenceRecords: [evidenceWithProvenance],
+      issue: issueWithoutExecution,
+    });
+
+    expect(screen.getByText("codex")).toBeTruthy();
+    expect(screen.getByText("gpt-5.6-terra · high")).toBeTruthy();
+  });
+
   it("switches among the five focused task tabs while keeping task identity visible", () => {
     renderScreen();
 
@@ -215,3 +228,23 @@ describe("IssueScreen", () => {
     expect(screen.queryByRole("button", { name: "Open comparison" })).toBeNull();
   });
 });
+
+const evidenceWithProvenance: EvidenceRecord = {
+  id: 1,
+  runId: "run-1",
+  sessionId: "assistant-thread:1",
+  status: "passed",
+  uiChange: true,
+  insertedAt: null,
+  provenance: {
+    executionPath: "session",
+    agentKind: "codex",
+    threadId: 1,
+    executionSessionId: null,
+    requestedModel: "gpt-5.6-terra",
+    requestedEffort: "high",
+    resolvedModel: "gpt-5.6-terra",
+    resolvedEffort: "high",
+  },
+  manifest: { issue: "MOB-7", generatedAt: null, uiChange: true, runs: [] },
+};

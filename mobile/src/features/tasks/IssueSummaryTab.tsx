@@ -2,6 +2,7 @@ import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-
 import type { ReactNode } from "react";
 
 import type { IssueBlocker, IssueComment, IssueSummary, PullRequest } from "@/api/contracts";
+import type { EvidenceRecord } from "@/features/evidence/evidence-contract";
 import { radii, spacing, type ThemeColors } from "@/theme/tokens";
 import { useAppTheme } from "@/theme/ThemeProvider";
 
@@ -10,6 +11,7 @@ type IssueSummaryTabProps = {
   comments: IssueComment[];
   evidenceCount: number;
   issue: IssueSummary;
+  latestEvidence?: EvidenceRecord | null;
   pullRequests: PullRequest[];
   subtasks: IssueSummary[];
   subtaskTitle: string;
@@ -26,6 +28,7 @@ export function IssueSummaryTab({
   comments,
   evidenceCount,
   issue,
+  latestEvidence = null,
   pullRequests,
   subtasks,
   subtaskTitle,
@@ -42,7 +45,11 @@ export function IssueSummaryTab({
   const workpadCopy = workpadSummary(workpad?.body ?? "");
   const taskBrief = taskBriefFrom(issue.agentGoal ?? issue.description ?? "");
   const hasEvidence = evidenceCount > 0;
-  const executionLabel = [issue.agentKind, issue.model, issue.effort].filter(Boolean).join(" · ");
+  const provenance = latestEvidence?.provenance;
+  const provider = issue.agentKind ?? provenance?.agentKind ?? "Manual";
+  const model = issue.model ?? provenance?.resolvedModel ?? provenance?.requestedModel;
+  const effort = issue.effort ?? provenance?.resolvedEffort ?? provenance?.requestedEffort;
+  const executionLabel = [model, effort].filter(Boolean).join(" · ");
 
   return (
     <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
@@ -101,7 +108,7 @@ export function IssueSummaryTab({
           </View>
         </View>
         <View style={styles.snapshotGrid}>
-          <SnapshotItem colors={colors} label="Provider" value={issue.agentKind ?? "Manual"} />
+          <SnapshotItem colors={colors} label="Provider" value={provider} />
           <SnapshotItem colors={colors} label="Model" value={executionLabel || "Not selected"} />
           <SnapshotItem
             colors={colors}
