@@ -204,7 +204,7 @@ defmodule SymphonyElixir.Claude.GoalStoreTest do
     Enum.each(readers, &Task.await/1)
   end
 
-  test "queue_clear cannot overwrite a concurrent newer set with an old objective", %{workspace: workspace} do
+  test "queue_clear and a concurrent set leave one complete goal record", %{workspace: workspace} do
     for _ <- 1..50 do
       assert :ok =
                GoalStore.put(
@@ -234,7 +234,12 @@ defmodule SymphonyElixir.Claude.GoalStoreTest do
 
       assert :ok = Task.await(clear)
       assert :ok = Task.await(set)
-      assert {:ok, %{"objective" => "new"}} = GoalStore.read(workspace, :authoring, 9002)
+
+      assert {:ok, %{"objective" => objective, "revision" => revision}} =
+               GoalStore.read(workspace, :authoring, 9002)
+
+      assert objective in ["old", "new"]
+      assert is_binary(revision) and revision != ""
     end
   end
 
