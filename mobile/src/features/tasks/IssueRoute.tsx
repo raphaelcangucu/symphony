@@ -8,7 +8,15 @@ import { useConnection } from "@/auth/ConnectionProvider";
 import { useTaskEvidence } from "@/features/evidence/useTaskEvidence";
 import { useHostRuntime } from "@/runtime/HostRuntimeProvider";
 import type { HostTransport } from "@/transport/HostTransport";
-import type { EvidenceArtifact, EvidenceRecord } from "@/features/evidence/evidence-contract";
+import type {
+  EvidenceArtifact,
+  EvidenceRecord,
+} from "@/features/evidence/evidence-contract";
+import {
+  assistantThreadDiffRoute,
+  hostChatRoute,
+  hostTerminalRoute,
+} from "@/features/sessions/session-navigation";
 
 import { IssueScreen } from "./IssueScreen";
 import { useIssueDetail } from "./useIssueDetail";
@@ -69,8 +77,25 @@ function ConnectedIssueRoute({
   const selectedTransport = useHostTransport();
   const transport = routeTransport ?? selectedTransport;
   const evidence = useTaskEvidence({ transport, projectSlug, identifier });
+  const activeExecution = detail.threads.find(
+    (thread) =>
+      thread.scope === "issue_execution" && thread.status === "active",
+  );
   const threadRoute = (suffix = "") => {
     if (detail.threadId) {
+      if (hostId && suffix === "/diff") {
+        const route = assistantThreadDiffRoute(detail.threadId, hostId);
+        if (route) router.push(route as never);
+        return;
+      }
+      if (hostId && suffix === "/terminal") {
+        router.push(hostTerminalRoute(hostId, detail.threadId) as never);
+        return;
+      }
+      if (hostId && !suffix) {
+        router.push(hostChatRoute(hostId, detail.threadId) as never);
+        return;
+      }
       router.push(`/codex/session/${detail.threadId}${suffix}`);
       return;
     }
@@ -92,6 +117,7 @@ function ConnectedIssueRoute({
       blockers={detail.blockers}
       comments={detail.comments}
       dispatching={detail.dispatching}
+      activeExecution={activeExecution}
       error={detail.error}
       evidenceCount={evidence.records.length}
       evidenceError={evidence.error}
@@ -124,8 +150,28 @@ function ConnectedIssueRoute({
           `/codex/issue/${encodeURIComponent(projectSlug)}/${encodeURIComponent(identifier)}/evidence`,
         )
       }
+      onOpenExecution={(thread) => {
+        if (hostId) {
+          router.push(
+            hostChatRoute(
+              hostId,
+              thread.id,
+              thread.title || undefined,
+            ) as never,
+          );
+          return;
+        }
+        router.push(`/codex/session/${thread.id}`);
+      }}
       onOpenEvidenceArtifact={(artifact, record) =>
-        openEvidenceArtifact(router, hostId, projectSlug, identifier, artifact, record)
+        openEvidenceArtifact(
+          router,
+          hostId,
+          projectSlug,
+          identifier,
+          artifact,
+          record,
+        )
       }
       onOpenFiles={() => threadRoute("/files")}
       onOpenPreview={() => threadRoute("/preview")}
@@ -139,9 +185,24 @@ function ConnectedIssueRoute({
           `/codex/issue/${encodeURIComponent(projectSlug)}/${encodeURIComponent(relatedIdentifier)}`,
         )
       }
-      onOpenSession={(thread) =>
-        thread ? router.push(`/codex/session/${thread.id}`) : threadRoute()
-      }
+      onOpenSession={(thread) => {
+        if (thread && hostId) {
+          router.push(
+            hostChatRoute(
+              hostId,
+              thread.id,
+              thread.title || undefined,
+            ) as never,
+          );
+          return;
+        }
+        if (thread) {
+          router.push(`/codex/session/${thread.id}`);
+          return;
+        }
+        threadRoute();
+      }}
+      onRunOrchestration={() => detail.dispatch("orchestrate")}
       onOpenTerminal={() => threadRoute("/terminal")}
       onRefresh={() => void detail.refresh()}
       onSave={detail.save}

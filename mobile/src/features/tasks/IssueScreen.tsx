@@ -13,7 +13,10 @@ import type {
   PullRequest,
 } from "@/api/contracts";
 import { StateView } from "@/components/StateView";
-import type { EvidenceArtifact, EvidenceRecord } from "@/features/evidence/evidence-contract";
+import type {
+  EvidenceArtifact,
+  EvidenceRecord,
+} from "@/features/evidence/evidence-contract";
 import { radii, spacing } from "@/theme/tokens";
 import { useAppTheme } from "@/theme/ThemeProvider";
 
@@ -40,6 +43,7 @@ type IssueScreenProps = {
   pullRequestError?: string | null;
   pullRequests?: PullRequest[];
   threads?: AssistantThread[];
+  activeExecution?: AssistantThread | null;
   onBack(): void;
   onAddComment(body: string): void;
   onDispatch(action: IssueDispatchInput["action"]): void;
@@ -48,12 +52,17 @@ type IssueScreenProps = {
   onCreateSession(): void;
   onOpenDiff(): void;
   onOpenEvidence(): void;
-  onOpenEvidenceArtifact(artifact: EvidenceArtifact, record: EvidenceRecord): void;
+  onOpenEvidenceArtifact(
+    artifact: EvidenceArtifact,
+    record: EvidenceRecord,
+  ): void;
+  onOpenExecution(thread: AssistantThread): void;
   onOpenFiles(): void;
   onOpenPreview(): void;
   onOpenPullRequest(): void;
   onOpenRelatedTask(identifier: string): void;
   onOpenSession(thread?: AssistantThread): void;
+  onRunOrchestration(): void;
   onOpenTerminal(): void;
   onRefresh(): void;
   onSave(input: IssueMutationInput): void;
@@ -74,6 +83,7 @@ export function IssueScreen({
   pullRequestError = null,
   pullRequests = [],
   threads = [],
+  activeExecution = null,
   onBack,
   onAddComment,
   onDispatch,
@@ -83,11 +93,13 @@ export function IssueScreen({
   onOpenDiff,
   onOpenEvidence,
   onOpenEvidenceArtifact,
+  onOpenExecution,
   onOpenFiles,
   onOpenPreview,
   onOpenPullRequest,
   onOpenRelatedTask,
   onOpenSession,
+  onRunOrchestration,
   onOpenTerminal,
   onRefresh,
 }: IssueScreenProps) {
@@ -98,14 +110,18 @@ export function IssueScreen({
 
   if (loading && !issue) {
     return (
-      <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.bgBase }]}>
+      <SafeAreaView
+        style={[styles.safeArea, { backgroundColor: colors.bgBase }]}
+      >
         <StateView kind="loading" title="Loading task" />
       </SafeAreaView>
     );
   }
   if (!issue) {
     return (
-      <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.bgBase }]}>
+      <SafeAreaView
+        style={[styles.safeArea, { backgroundColor: colors.bgBase }]}
+      >
         <StateView
           actionLabel="Retry"
           description={error ?? "Task is unavailable"}
@@ -136,8 +152,16 @@ export function IssueScreen({
             {issue.displayIdentifier}
           </Text>
           <View style={styles.statusRow}>
-            <View style={[styles.statusDot, { backgroundColor: colors.statusGreen }]} />
-            <Text numberOfLines={1} style={[styles.status, { color: colors.textSecondary }]}>
+            <View
+              style={[
+                styles.statusDot,
+                { backgroundColor: colors.statusGreen },
+              ]}
+            />
+            <Text
+              numberOfLines={1}
+              style={[styles.status, { color: colors.textSecondary }]}
+            >
               {issue.status}
             </Text>
           </View>
@@ -164,7 +188,10 @@ export function IssueScreen({
               accessibilityState={{ selected }}
               key={tab.id}
               onPress={() => setActiveTab(tab.id)}
-              style={[styles.tab, { borderBottomColor: selected ? colors.accent : "transparent" }]}
+              style={[
+                styles.tab,
+                { borderBottomColor: selected ? colors.accent : "transparent" },
+              ]}
             >
               <Text
                 numberOfLines={1}
@@ -183,12 +210,29 @@ export function IssueScreen({
         })}
       </View>
 
+      {error ? (
+        <View
+          accessibilityRole="alert"
+          style={[
+            styles.operationError,
+            { backgroundColor: colors.bgPanel, borderColor: colors.statusRed },
+          ]}
+        >
+          <Text style={{ color: colors.statusRed, fontWeight: "700" }}>
+            Task action failed
+          </Text>
+          <Text style={{ color: colors.textSecondary }}>{error}</Text>
+        </View>
+      ) : null}
+
       {activeTab === "summary" ? (
         <IssueSummaryTab
           blockers={blockers}
           comments={comments}
+          dispatching={dispatching}
           evidenceCount={evidenceCount}
           issue={issue}
+          activeExecution={activeExecution}
           latestEvidence={evidenceRecords[0] ?? null}
           onCreateSubtask={() => {
             const title = subtaskTitle.trim();
@@ -197,8 +241,10 @@ export function IssueScreen({
             setSubtaskTitle("");
           }}
           onOpenEvidence={onOpenEvidence}
+          onOpenExecution={onOpenExecution}
           onOpenRelatedTask={onOpenRelatedTask}
           onOpenSession={() => onOpenSession()}
+          onRunOrchestration={onRunOrchestration}
           onOpenWorkspace={onOpenFiles}
           onSubtaskTitleChange={setSubtaskTitle}
           pullRequests={pullRequests}
@@ -228,6 +274,7 @@ export function IssueScreen({
           loading={loading}
           onCreate={onCreateSession}
           onOpen={onOpenSession}
+          orchestrator={issue.executionPath === "orchestrator"}
           threads={threads}
         />
       )}
@@ -247,12 +294,21 @@ export function IssueScreen({
           <View
             style={[
               styles.sheet,
-              { backgroundColor: colors.bgRaised, borderColor: colors.borderSubtle },
+              {
+                backgroundColor: colors.bgRaised,
+                borderColor: colors.borderSubtle,
+              },
             ]}
           >
-            <View style={[styles.handle, { backgroundColor: colors.borderStrong }]} />
-            <Text style={[styles.sheetTitle, { color: colors.textPrimary }]}>Task actions</Text>
-            <Text style={{ color: colors.textMuted }}>Agent controls and workspace tools</Text>
+            <View
+              style={[styles.handle, { backgroundColor: colors.borderStrong }]}
+            />
+            <Text style={[styles.sheetTitle, { color: colors.textPrimary }]}>
+              Task actions
+            </Text>
+            <Text style={{ color: colors.textMuted }}>
+              Agent controls and workspace tools
+            </Text>
             <View style={styles.sheetGrid}>
               <SheetAction
                 disabled={dispatching}
@@ -264,10 +320,18 @@ export function IssueScreen({
                 label="Stop agent"
                 onPress={() => onDispatch("stop")}
               />
-              <SheetAction label="Pause goal" onPress={() => onGoalAction("pause")} />
-              <SheetAction label="Resume goal" onPress={() => onGoalAction("resume")} />
+              <SheetAction
+                label="Pause goal"
+                onPress={() => onGoalAction("pause")}
+              />
+              <SheetAction
+                label="Resume goal"
+                onPress={() => onGoalAction("resume")}
+              />
             </View>
-            <View style={[styles.divider, { backgroundColor: colors.borderSubtle }]} />
+            <View
+              style={[styles.divider, { backgroundColor: colors.borderSubtle }]}
+            />
             <View style={styles.sheetGrid}>
               <SheetAction label="Terminal" onPress={onOpenTerminal} />
               <SheetAction label="Preview" onPress={onOpenPreview} />
@@ -280,7 +344,9 @@ export function IssueScreen({
               onPress={() => setActionsOpen(false)}
               style={[styles.done, { backgroundColor: colors.textPrimary }]}
             >
-              <Text style={{ color: colors.bgBase, fontWeight: "700" }}>Done</Text>
+              <Text style={{ color: colors.bgBase, fontWeight: "700" }}>
+                Done
+              </Text>
             </Pressable>
           </View>
         </View>
@@ -355,6 +421,12 @@ const styles = StyleSheet.create({
   identifier: { fontSize: 17, fontWeight: "800" },
   modalRoot: { flex: 1, justifyContent: "flex-end" },
   more: { fontSize: 17, fontWeight: "800", letterSpacing: 1 },
+  operationError: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: 3,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
   safeArea: { flex: 1 },
   sheet: {
     borderTopLeftRadius: radii.lg,
@@ -377,7 +449,12 @@ const styles = StyleSheet.create({
   sheetTitle: { fontSize: 20, fontWeight: "800" },
   status: { fontSize: 12 },
   statusDot: { borderRadius: radii.pill, height: 7, width: 7 },
-  statusRow: { alignItems: "center", flexDirection: "row", gap: 6, maxWidth: "90%" },
+  statusRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 6,
+    maxWidth: "90%",
+  },
   tab: {
     alignItems: "center",
     borderBottomWidth: 2,

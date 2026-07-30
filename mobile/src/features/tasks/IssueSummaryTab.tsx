@@ -1,7 +1,20 @@
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import {
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import type { ReactNode } from "react";
 
-import type { IssueBlocker, IssueComment, IssueSummary, PullRequest } from "@/api/contracts";
+import type {
+  AssistantThread,
+  IssueBlocker,
+  IssueComment,
+  IssueSummary,
+  PullRequest,
+} from "@/api/contracts";
 import type { EvidenceRecord } from "@/features/evidence/evidence-contract";
 import { radii, spacing, type ThemeColors } from "@/theme/tokens";
 import { useAppTheme } from "@/theme/ThemeProvider";
@@ -9,16 +22,20 @@ import { useAppTheme } from "@/theme/ThemeProvider";
 type IssueSummaryTabProps = {
   blockers: IssueBlocker[];
   comments: IssueComment[];
+  dispatching: boolean;
   evidenceCount: number;
   issue: IssueSummary;
+  activeExecution?: AssistantThread | null;
   latestEvidence?: EvidenceRecord | null;
   pullRequests: PullRequest[];
   subtasks: IssueSummary[];
   subtaskTitle: string;
   onCreateSubtask(): void;
   onOpenEvidence(): void;
+  onOpenExecution(thread: AssistantThread): void;
   onOpenRelatedTask(identifier: string): void;
   onOpenSession(): void;
+  onRunOrchestration(): void;
   onOpenWorkspace(): void;
   onSubtaskTitleChange(value: string): void;
 };
@@ -26,38 +43,53 @@ type IssueSummaryTabProps = {
 export function IssueSummaryTab({
   blockers,
   comments,
+  dispatching,
   evidenceCount,
   issue,
+  activeExecution = null,
   latestEvidence = null,
   pullRequests,
   subtasks,
   subtaskTitle,
   onCreateSubtask,
   onOpenEvidence,
+  onOpenExecution,
   onOpenRelatedTask,
   onOpenSession,
+  onRunOrchestration,
   onOpenWorkspace,
   onSubtaskTitleChange,
 }: IssueSummaryTabProps) {
   const { colors } = useAppTheme();
-  const workpad = [...comments].reverse().find((item) => item.kind === "workpad");
+  const workpad = [...comments]
+    .reverse()
+    .find((item) => item.kind === "workpad");
   const progress = workpadProgress(workpad?.body ?? "");
   const workpadCopy = workpadSummary(workpad?.body ?? "");
   const taskBrief = taskBriefFrom(issue.agentGoal ?? issue.description ?? "");
   const hasEvidence = evidenceCount > 0;
   const provenance = latestEvidence?.provenance;
   const provider = issue.agentKind ?? provenance?.agentKind ?? "Manual";
-  const model = issue.model ?? provenance?.resolvedModel ?? provenance?.requestedModel;
-  const effort = issue.effort ?? provenance?.resolvedEffort ?? provenance?.requestedEffort;
+  const model =
+    issue.model ?? provenance?.resolvedModel ?? provenance?.requestedModel;
+  const effort =
+    issue.effort ?? provenance?.resolvedEffort ?? provenance?.requestedEffort;
   const executionLabel = [model, effort].filter(Boolean).join(" · ");
+  const isOrchestrator = issue.executionPath === "orchestrator";
 
   return (
-    <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+    <ScrollView
+      contentContainerStyle={styles.content}
+      keyboardShouldPersistTaps="handled"
+    >
       <Text style={styles.srOnly}>Task summary</Text>
 
       <View style={styles.hero}>
         <View style={styles.pills}>
-          <Pill color={colors.statusGreen} label={issue.status || "No status"} />
+          <Pill
+            color={colors.statusGreen}
+            label={issue.status || "No status"}
+          />
           {issue.priority !== null ? (
             <Pill
               color={priorityColor(colors, issue.priority)}
@@ -65,9 +97,13 @@ export function IssueSummaryTab({
             />
           ) : null}
         </View>
-        <Text style={[styles.title, { color: colors.textPrimary }]}>{issue.title}</Text>
+        <Text style={[styles.title, { color: colors.textPrimary }]}>
+          {issue.title}
+        </Text>
         {taskBrief ? (
-          <Text style={[styles.description, { color: colors.textSecondary }]}>{taskBrief}</Text>
+          <Text style={[styles.description, { color: colors.textSecondary }]}>
+            {taskBrief}
+          </Text>
         ) : null}
       </View>
 
@@ -87,13 +123,19 @@ export function IssueSummaryTab({
           <View
             style={[
               styles.reviewPill,
-              { backgroundColor: `${hasEvidence ? colors.statusGreen : colors.statusAmber}20` },
+              {
+                backgroundColor: `${hasEvidence ? colors.statusGreen : colors.statusAmber}20`,
+              },
             ]}
           >
             <View
               style={[
                 styles.dot,
-                { backgroundColor: hasEvidence ? colors.statusGreen : colors.statusAmber },
+                {
+                  backgroundColor: hasEvidence
+                    ? colors.statusGreen
+                    : colors.statusAmber,
+                },
               ]}
             />
             <Text
@@ -109,7 +151,23 @@ export function IssueSummaryTab({
         </View>
         <View style={styles.snapshotGrid}>
           <SnapshotItem colors={colors} label="Provider" value={provider} />
-          <SnapshotItem colors={colors} label="Model" value={executionLabel || "Not selected"} />
+          <SnapshotItem
+            colors={colors}
+            label="Model"
+            value={executionLabel || "Not selected"}
+          />
+          <SnapshotItem
+            colors={colors}
+            label="Run mode"
+            value={isOrchestrator ? "Task orchestration" : "Direct session"}
+          />
+          {issue.targetRepository ? (
+            <SnapshotItem
+              colors={colors}
+              label="Repository"
+              value={issue.targetRepository}
+            />
+          ) : null}
           <SnapshotItem
             colors={colors}
             label="Evidence"
@@ -123,7 +181,25 @@ export function IssueSummaryTab({
       </View>
 
       <View style={styles.primaryActions}>
-        <PrimaryAction label="Open session" onPress={onOpenSession} />
+        <PrimaryAction
+          disabled={dispatching}
+          label={
+            isOrchestrator && dispatching
+              ? "Starting execution…"
+              : isOrchestrator && activeExecution
+                ? "Open execution"
+                : isOrchestrator
+                  ? "Run orchestration"
+                  : "Open session"
+          }
+          onPress={
+            isOrchestrator
+              ? activeExecution
+                ? () => onOpenExecution(activeExecution)
+                : onRunOrchestration
+              : onOpenSession
+          }
+        />
         <SecondaryAction label="Review evidence" onPress={onOpenEvidence} />
       </View>
       <Pressable
@@ -138,8 +214,12 @@ export function IssueSummaryTab({
           },
         ]}
       >
-        <Text style={{ color: colors.textSecondary, fontWeight: "700" }}>Open workspace</Text>
-        <Text style={{ color: colors.textMuted }}>Browse files, diff and terminal ›</Text>
+        <Text style={{ color: colors.textSecondary, fontWeight: "700" }}>
+          Open workspace
+        </Text>
+        <Text style={{ color: colors.textMuted }}>
+          Browse files, diff and terminal ›
+        </Text>
       </Pressable>
 
       {workpad ? (
@@ -160,7 +240,12 @@ export function IssueSummaryTab({
             ) : null}
           </View>
           {progress.total > 0 ? (
-            <View style={[styles.progressTrack, { backgroundColor: colors.borderSubtle }]}>
+            <View
+              style={[
+                styles.progressTrack,
+                { backgroundColor: colors.borderSubtle },
+              ]}
+            >
               <View
                 style={[
                   styles.progressFill,
@@ -173,7 +258,10 @@ export function IssueSummaryTab({
             </View>
           ) : null}
           {workpadCopy ? (
-            <Text numberOfLines={3} style={{ color: colors.textSecondary, lineHeight: 20 }}>
+            <Text
+              numberOfLines={3}
+              style={{ color: colors.textSecondary, lineHeight: 20 }}
+            >
               {workpadCopy}
             </Text>
           ) : null}
@@ -182,13 +270,25 @@ export function IssueSummaryTab({
 
       <SectionTitle colors={colors}>Task details</SectionTitle>
       <View style={styles.metadataGrid}>
-        {issue.assignee ? <Meta colors={colors} label="Assignee" value={issue.assignee} /> : null}
-        {issue.branchName ? <Meta colors={colors} label="Branch" value={issue.branchName} /> : null}
+        {issue.assignee ? (
+          <Meta colors={colors} label="Assignee" value={issue.assignee} />
+        ) : null}
+        {issue.branchName ? (
+          <Meta colors={colors} label="Branch" value={issue.branchName} />
+        ) : null}
         {issue.labels.length > 0 ? (
-          <Meta colors={colors} label="Labels" value={issue.labels.join(" · ")} />
+          <Meta
+            colors={colors}
+            label="Labels"
+            value={issue.labels.join(" · ")}
+          />
         ) : null}
         {issue.updatedAt ? (
-          <Meta colors={colors} label="Updated" value={formatDate(issue.updatedAt)} />
+          <Meta
+            colors={colors}
+            label="Updated"
+            value={formatDate(issue.updatedAt)}
+          />
         ) : null}
       </View>
 
@@ -198,10 +298,12 @@ export function IssueSummaryTab({
           <Card colors={colors}>
             <Eyebrow colors={colors}>Linked pull request</Eyebrow>
             <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>
-              PR #{pullRequests[0]?.number} · {pullRequests[0]?.title || "Untitled pull request"}
+              PR #{pullRequests[0]?.number} ·{" "}
+              {pullRequests[0]?.title || "Untitled pull request"}
             </Text>
             <Text style={{ color: colors.textMuted }}>
-              {pullRequests[0]?.headRef || "head"} → {pullRequests[0]?.baseRef || "base"}
+              {pullRequests[0]?.headRef || "head"} →{" "}
+              {pullRequests[0]?.baseRef || "base"}
             </Text>
           </Card>
         </>
@@ -215,7 +317,9 @@ export function IssueSummaryTab({
       </View>
       <Card colors={colors}>
         <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>
-          {evidenceCount === 1 ? "1 durable run" : `${evidenceCount} durable runs`}
+          {evidenceCount === 1
+            ? "1 durable run"
+            : `${evidenceCount} durable runs`}
         </Text>
         <Text style={{ color: colors.textMuted }}>
           Screenshots, recordings and validation results linked to this task.
@@ -286,10 +390,19 @@ export function IssueSummaryTab({
   );
 }
 
-function Card({ children, colors }: { children: ReactNode; colors: ThemeColors }) {
+function Card({
+  children,
+  colors,
+}: {
+  children: ReactNode;
+  colors: ThemeColors;
+}) {
   return (
     <View
-      style={[styles.card, { backgroundColor: colors.bgPanel, borderColor: colors.borderSubtle }]}
+      style={[
+        styles.card,
+        { backgroundColor: colors.bgPanel, borderColor: colors.borderSubtle },
+      ]}
     >
       {children}
     </View>
@@ -305,13 +418,27 @@ function Pill({ color, label }: { color: string; label: string }) {
   );
 }
 
-function Meta({ colors, label, value }: { colors: ThemeColors; label: string; value: string }) {
+function Meta({
+  colors,
+  label,
+  value,
+}: {
+  colors: ThemeColors;
+  label: string;
+  value: string;
+}) {
   return (
     <View
-      style={[styles.meta, { backgroundColor: colors.bgPanel, borderColor: colors.borderSubtle }]}
+      style={[
+        styles.meta,
+        { backgroundColor: colors.bgPanel, borderColor: colors.borderSubtle },
+      ]}
     >
       <Eyebrow colors={colors}>{label}</Eyebrow>
-      <Text numberOfLines={2} style={{ color: colors.textPrimary, lineHeight: 19 }}>
+      <Text
+        numberOfLines={2}
+        style={{ color: colors.textPrimary, lineHeight: 19 }}
+      >
         {value}
       </Text>
     </View>
@@ -337,7 +464,12 @@ function SnapshotItem({
       <Eyebrow colors={colors}>{label}</Eyebrow>
       <Text
         numberOfLines={2}
-        style={{ color: colors.textPrimary, fontSize: 13, fontWeight: "700", lineHeight: 18 }}
+        style={{
+          color: colors.textPrimary,
+          fontSize: 13,
+          fontWeight: "700",
+          lineHeight: 18,
+        }}
       >
         {value}
       </Text>
@@ -345,23 +477,55 @@ function SnapshotItem({
   );
 }
 
-function Eyebrow({ children, colors }: { children: string; colors: ThemeColors }) {
-  return <Text style={[styles.eyebrow, { color: colors.textMuted }]}>{children}</Text>;
+function Eyebrow({
+  children,
+  colors,
+}: {
+  children: string;
+  colors: ThemeColors;
+}) {
+  return (
+    <Text style={[styles.eyebrow, { color: colors.textMuted }]}>
+      {children}
+    </Text>
+  );
 }
 
-function SectionTitle({ children, colors }: { children: string; colors: ThemeColors }) {
-  return <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>{children}</Text>;
+function SectionTitle({
+  children,
+  colors,
+}: {
+  children: string;
+  colors: ThemeColors;
+}) {
+  return (
+    <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+      {children}
+    </Text>
+  );
 }
 
-function PrimaryAction({ label, onPress }: { label: string; onPress(): void }) {
+function PrimaryAction({
+  disabled = false,
+  label,
+  onPress,
+}: {
+  disabled?: boolean;
+  label: string;
+  onPress(): void;
+}) {
   const { colors } = useAppTheme();
   return (
     <Pressable
       accessibilityRole="button"
+      disabled={disabled}
       onPress={onPress}
       style={({ pressed }) => [
         styles.primaryAction,
-        { backgroundColor: colors.textPrimary, opacity: pressed ? 0.8 : 1 },
+        {
+          backgroundColor: colors.textPrimary,
+          opacity: disabled ? 0.5 : pressed ? 0.8 : 1,
+        },
       ]}
     >
       <Text style={{ color: colors.bgBase, fontWeight: "700" }}>{label}</Text>
@@ -370,7 +534,13 @@ function PrimaryAction({ label, onPress }: { label: string; onPress(): void }) {
   );
 }
 
-function SecondaryAction({ label, onPress }: { label: string; onPress(): void }) {
+function SecondaryAction({
+  label,
+  onPress,
+}: {
+  label: string;
+  onPress(): void;
+}) {
   const { colors } = useAppTheme();
   return (
     <Pressable
@@ -385,7 +555,9 @@ function SecondaryAction({ label, onPress }: { label: string; onPress(): void })
         },
       ]}
     >
-      <Text style={{ color: colors.textPrimary, fontWeight: "700" }}>{label}</Text>
+      <Text style={{ color: colors.textPrimary, fontWeight: "700" }}>
+        {label}
+      </Text>
     </Pressable>
   );
 }
@@ -413,12 +585,16 @@ function RelatedTask({
       style={[styles.relatedTask, { backgroundColor: colors.bgPanel }]}
     >
       <View style={styles.grow}>
-        <Text style={{ color: colors.textPrimary, fontWeight: "700" }}>{identifier}</Text>
+        <Text style={{ color: colors.textPrimary, fontWeight: "700" }}>
+          {identifier}
+        </Text>
         <Text numberOfLines={1} style={{ color: colors.textSecondary }}>
           {title}
         </Text>
       </View>
-      {status ? <Text style={{ color: colors.textMuted }}>{status}</Text> : null}
+      {status ? (
+        <Text style={{ color: colors.textMuted }}>{status}</Text>
+      ) : null}
       <Text style={{ color: colors.textMuted }}>›</Text>
     </Pressable>
   );
@@ -433,7 +609,10 @@ function workpadProgress(body: string): { complete: number; total: number } {
 function workpadSummary(body: string): string {
   return body
     .split("\n")
-    .filter((line) => !/^#{1,6}\s/.test(line.trim()) && !/^\s*-\s+\[[ xX]\]/.test(line))
+    .filter(
+      (line) =>
+        !/^#{1,6}\s/.test(line.trim()) && !/^\s*-\s+\[[ xX]\]/.test(line),
+    )
     .map((line) => line.trim())
     .filter(Boolean)
     .join(" ");
@@ -442,7 +621,9 @@ function workpadSummary(body: string): string {
 function taskBriefFrom(body: string): string {
   const candidate = body.split("\n").find((line) => {
     const value = line.trim();
-    return value.length > 0 && !/^#{1,6}\s/.test(value) && !/^[-*]\s/.test(value);
+    return (
+      value.length > 0 && !/^#{1,6}\s/.test(value) && !/^[-*]\s/.test(value)
+    );
   });
 
   return (candidate ?? "")
@@ -452,8 +633,13 @@ function taskBriefFrom(body: string): string {
     .trim();
 }
 
-function priorityLabel(priority: NonNullable<IssueSummary["priority"]>): string {
-  return ["No priority", "Urgent", "High", "Medium", "Low"][priority] ?? String(priority);
+function priorityLabel(
+  priority: NonNullable<IssueSummary["priority"]>,
+): string {
+  return (
+    ["No priority", "Urgent", "High", "Medium", "Low"][priority] ??
+    String(priority)
+  );
 }
 
 function priorityColor(colors: ThemeColors, priority: number): string {
@@ -492,8 +678,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
   },
   addSubtask: { flexDirection: "row", gap: spacing.xs },
-  card: { borderRadius: radii.md, borderWidth: 1, gap: spacing.sm, padding: spacing.md },
-  cardHeading: { alignItems: "flex-start", flexDirection: "row", gap: spacing.sm },
+  card: {
+    borderRadius: radii.md,
+    borderWidth: 1,
+    gap: spacing.sm,
+    padding: spacing.md,
+  },
+  cardHeading: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    gap: spacing.sm,
+  },
   cardTitle: { fontSize: 16, fontWeight: "700", lineHeight: 22 },
   content: { gap: spacing.sm, padding: spacing.md, paddingBottom: spacing.xxl },
   description: { fontSize: 15, lineHeight: 22 },
@@ -593,7 +788,12 @@ const styles = StyleSheet.create({
     minHeight: 46,
     paddingHorizontal: spacing.sm,
   },
-  title: { fontSize: 26, fontWeight: "800", letterSpacing: -0.5, lineHeight: 32 },
+  title: {
+    fontSize: 26,
+    fontWeight: "800",
+    letterSpacing: -0.5,
+    lineHeight: 32,
+  },
   workspaceAction: {
     alignItems: "center",
     borderRadius: radii.md,

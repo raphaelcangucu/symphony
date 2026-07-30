@@ -1,5 +1,8 @@
 import { redactSecret } from "@/auth/connection-profile";
-import { diagnosticLog, type DiagnosticLog } from "@/diagnostics/diagnostic-log";
+import {
+  diagnosticLog,
+  type DiagnosticLog,
+} from "@/diagnostics/diagnostic-log";
 
 import type {
   AgentAvailabilityMap,
@@ -83,12 +86,22 @@ export type TrackerRequestOptions = {
   idempotencyKey?: string;
 };
 
-export type TrackerRequest = (path: string, options?: TrackerRequestOptions) => Promise<unknown>;
+export type TrackerRequest = (
+  path: string,
+  options?: TrackerRequestOptions,
+) => Promise<unknown>;
 
 const DEFAULT_TIMEOUT_MS = 30_000;
-const AGENT_KINDS: readonly AgentKind[] = ["codex", "claude", "cursor", "opencode"];
+const AGENT_KINDS: readonly AgentKind[] = [
+  "codex",
+  "claude",
+  "cursor",
+  "opencode",
+];
 
-export function createTrackerClient(options: CreateTrackerClientOptions): TrackerClient {
+export function createTrackerClient(
+  options: CreateTrackerClientOptions,
+): TrackerClient {
   const origin = options.origin.replace(/\/+$/, "");
   const fetchImpl = options.fetchImpl ?? fetch;
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
@@ -105,9 +118,12 @@ export function createTrackerClient(options: CreateTrackerClientOptions): Tracke
       controller.abort();
     }, timeoutMs);
     const onCallerAbort = () => controller.abort();
-    requestOptions.signal?.addEventListener("abort", onCallerAbort, { once: true });
+    requestOptions.signal?.addEventListener("abort", onCallerAbort, {
+      once: true,
+    });
 
-    const basePath = requestOptions.tracker === false ? "/api" : "/api/tracker/v1";
+    const basePath =
+      requestOptions.tracker === false ? "/api" : "/api/tracker/v1";
     const headers: Record<string, string> = {
       Accept: "application/json",
       Authorization: `Bearer ${options.token}`,
@@ -141,7 +157,9 @@ export function createTrackerClient(options: CreateTrackerClientOptions): Tracke
         method,
         headers,
         signal: controller.signal,
-        ...(requestOptions.body === undefined ? {} : { body: JSON.stringify(requestOptions.body) }),
+        ...(requestOptions.body === undefined
+          ? {}
+          : { body: JSON.stringify(requestOptions.body) }),
       });
 
       const contentType = response.headers.get("content-type") ?? "";
@@ -187,7 +205,8 @@ export function createTrackerClient(options: CreateTrackerClientOptions): Tracke
             url,
             method,
             state: timedOut ? "timeout" : "failed",
-            error: cause instanceof Error ? cause.message : "Tracker request failed",
+            error:
+              cause instanceof Error ? cause.message : "Tracker request failed",
           },
         },
         [options.token],
@@ -197,7 +216,8 @@ export function createTrackerClient(options: CreateTrackerClientOptions): Tracke
       if (controller.signal.aborted && requestOptions.signal?.aborted) {
         throw new TrackerRequestError("Tracker request was cancelled");
       }
-      const message = cause instanceof Error ? cause.message : "Tracker request failed";
+      const message =
+        cause instanceof Error ? cause.message : "Tracker request failed";
       throw new TrackerRequestError(redactSecret(message, options.token));
     } finally {
       clearTimeout(timeout);
@@ -208,7 +228,9 @@ export function createTrackerClient(options: CreateTrackerClientOptions): Tracke
   return createTrackerClientFromRequest(request);
 }
 
-export function createTrackerClientFromRequest(request: TrackerRequest): TrackerClient {
+export function createTrackerClientFromRequest(
+  request: TrackerRequest,
+): TrackerClient {
   return {
     async health(signal) {
       return mapHealth(await request("/health", { signal, tracker: false }));
@@ -222,12 +244,15 @@ export function createTrackerClientFromRequest(request: TrackerRequest): Tracker
       );
     },
     async agentUsage(signal) {
-      return mapAgentUsage(unwrapData(await request("/settings/agents/usage", { signal })));
+      return mapAgentUsage(
+        unwrapData(await request("/settings/agents/usage", { signal })),
+      );
     },
     async projects(signal) {
-      return readArray(unwrapData(await request("/projects", { signal })), "projects").map(
-        mapProject,
-      );
+      return readArray(
+        unwrapData(await request("/projects", { signal })),
+        "projects",
+      ).map(mapProject);
     },
     async threads(threadOptions = {}, signal) {
       const query = threadListQuery(threadOptions);
@@ -242,8 +267,10 @@ export function createTrackerClientFromRequest(request: TrackerRequest): Tracker
       if (projectOptions.limit !== undefined) {
         query.set("limit", String(projectOptions.limit));
       }
-      if (projectOptions.cursor?.trim()) query.set("cursor", projectOptions.cursor.trim());
-      if (projectOptions.includeArchived === true) query.set("include_archived", "true");
+      if (projectOptions.cursor?.trim())
+        query.set("cursor", projectOptions.cursor.trim());
+      if (projectOptions.includeArchived === true)
+        query.set("include_archived", "true");
       const suffix = query.size > 0 ? `?${query.toString()}` : "";
       const payload = asRecord(
         await request(
@@ -254,7 +281,9 @@ export function createTrackerClientFromRequest(request: TrackerRequest): Tracker
       );
       const meta = isRecord(payload.meta) ? payload.meta : {};
       return {
-        sessions: readArray(payload.data, "project sessions").map(mapProjectSession),
+        sessions: readArray(payload.data, "project sessions").map(
+          mapProjectSession,
+        ),
         nextCursor: optionalText(meta.next_cursor),
       };
     },
@@ -268,7 +297,9 @@ export function createTrackerClientFromRequest(request: TrackerRequest): Tracker
       return mapAssistantCatalog(payload);
     },
     async assistantCatalogForHost(signal) {
-      const payload = unwrapData(await request("/assistant/config", { signal }));
+      const payload = unwrapData(
+        await request("/assistant/config", { signal }),
+      );
       return mapAssistantCatalog(payload);
     },
     async createThread(input, signal) {
@@ -298,12 +329,18 @@ export function createTrackerClientFromRequest(request: TrackerRequest): Tracker
     },
     async issue(projectSlug, identifier, signal) {
       return mapIssue(
-        unwrapData(await request(`${issuePath(projectSlug)}/${segment(identifier)}`, { signal })),
+        unwrapData(
+          await request(`${issuePath(projectSlug)}/${segment(identifier)}`, {
+            signal,
+          }),
+        ),
       );
     },
     async issueFormOptions(projectSlug, signal) {
       return mapIssueFormOptions(
-        unwrapData(await request(`${issuePath(projectSlug)}/form_options`, { signal })),
+        unwrapData(
+          await request(`${issuePath(projectSlug)}/form_options`, { signal }),
+        ),
       );
     },
     async createIssue(projectSlug, input, signal) {
@@ -331,7 +368,10 @@ export function createTrackerClientFromRequest(request: TrackerRequest): Tracker
     async comments(projectSlug, identifier, signal) {
       return readArray(
         unwrapData(
-          await request(`${issuePath(projectSlug)}/${segment(identifier)}/comments`, { signal }),
+          await request(
+            `${issuePath(projectSlug)}/${segment(identifier)}/comments`,
+            { signal },
+          ),
         ),
         "comments",
       ).map(mapComment);
@@ -339,18 +379,24 @@ export function createTrackerClientFromRequest(request: TrackerRequest): Tracker
     async createComment(projectSlug, identifier, body, signal) {
       return mapComment(
         unwrapData(
-          await request(`${issuePath(projectSlug)}/${segment(identifier)}/comments`, {
-            method: "POST",
-            body: { body: requireText(body, "comment body") },
-            signal,
-          }),
+          await request(
+            `${issuePath(projectSlug)}/${segment(identifier)}/comments`,
+            {
+              method: "POST",
+              body: { body: requireText(body, "comment body") },
+              signal,
+            },
+          ),
         ),
       );
     },
     async blockers(projectSlug, identifier, signal) {
       return readArray(
         unwrapData(
-          await request(`${issuePath(projectSlug)}/${segment(identifier)}/blockers`, { signal }),
+          await request(
+            `${issuePath(projectSlug)}/${segment(identifier)}/blockers`,
+            { signal },
+          ),
         ),
         "blockers",
       ).map(mapBlocker);
@@ -358,7 +404,10 @@ export function createTrackerClientFromRequest(request: TrackerRequest): Tracker
     async subtasks(projectSlug, identifier, signal) {
       return readArray(
         unwrapData(
-          await request(`${issuePath(projectSlug)}/${segment(identifier)}/subtasks`, { signal }),
+          await request(
+            `${issuePath(projectSlug)}/${segment(identifier)}/subtasks`,
+            { signal },
+          ),
         ),
         "subtasks",
       ).map(mapIssue);
@@ -366,33 +415,42 @@ export function createTrackerClientFromRequest(request: TrackerRequest): Tracker
     async createSubtask(projectSlug, identifier, input, signal) {
       return mapIssue(
         unwrapData(
-          await request(`${issuePath(projectSlug)}/${segment(identifier)}/subtasks`, {
-            method: "POST",
-            body: issueMutationPayload(input),
-            signal,
-          }),
+          await request(
+            `${issuePath(projectSlug)}/${segment(identifier)}/subtasks`,
+            {
+              method: "POST",
+              body: issueMutationPayload(input),
+              signal,
+            },
+          ),
         ),
       );
     },
     async dispatchIssue(projectSlug, identifier, input, signal) {
       return mapDispatchResult(
         unwrapData(
-          await request(`${issuePath(projectSlug)}/${segment(identifier)}/dispatch`, {
-            method: "POST",
-            body: dispatchPayload(input),
-            signal,
-          }),
+          await request(
+            `${issuePath(projectSlug)}/${segment(identifier)}/dispatch`,
+            {
+              method: "POST",
+              body: dispatchPayload(input),
+              signal,
+            },
+          ),
         ),
       );
     },
     async goalControl(projectSlug, identifier, input, signal) {
       return asRecord(
         unwrapData(
-          await request(`${issuePath(projectSlug)}/${segment(identifier)}/goal`, {
-            method: "POST",
-            body: goalPayload(input),
-            signal,
-          }),
+          await request(
+            `${issuePath(projectSlug)}/${segment(identifier)}/goal`,
+            {
+              method: "POST",
+              body: goalPayload(input),
+              signal,
+            },
+          ),
         ),
         "goal",
       );
@@ -401,9 +459,10 @@ export function createTrackerClientFromRequest(request: TrackerRequest): Tracker
       const path = projectSlug
         ? `/projects/${segment(projectSlug)}/prompt-templates`
         : "/prompt-templates";
-      return readArray(unwrapData(await request(path, { signal })), "prompt templates").map(
-        mapPromptTemplate,
-      );
+      return readArray(
+        unwrapData(await request(path, { signal })),
+        "prompt templates",
+      ).map(mapPromptTemplate);
     },
     async runPromptTemplate(projectSlug, identifier, input, signal) {
       const body = compactRecord({
@@ -415,11 +474,14 @@ export function createTrackerClientFromRequest(request: TrackerRequest): Tracker
       });
       const payload = asRecord(
         unwrapData(
-          await request(`${issuePath(projectSlug)}/${segment(identifier)}/run-prompt-template`, {
-            method: "POST",
-            body,
-            signal,
-          }),
+          await request(
+            `${issuePath(projectSlug)}/${segment(identifier)}/run-prompt-template`,
+            {
+              method: "POST",
+              body,
+              signal,
+            },
+          ),
         ),
         "prompt template result",
       );
@@ -431,7 +493,9 @@ export function createTrackerClientFromRequest(request: TrackerRequest): Tracker
       };
     },
     async issueFiles(projectSlug, identifier, query, signal) {
-      const search = new URLSearchParams({ q: requireText(query, "file query") });
+      const search = new URLSearchParams({
+        q: requireText(query, "file query"),
+      });
       return readArray(
         unwrapData(
           await request(
@@ -444,13 +508,22 @@ export function createTrackerClientFromRequest(request: TrackerRequest): Tracker
     },
     async threadDocuments(threadId, signal) {
       return mapThreadDocumentList(
-        unwrapData(await request(`${threadPath(threadId)}/documents`, { signal })),
+        unwrapData(
+          await request(`${threadPath(threadId)}/documents`, { signal }),
+        ),
       );
     },
     async threadDocument(threadId, path, signal) {
-      const encodedPath = safeDocumentPath(path).split("/").map(encodeURIComponent).join("/");
+      const encodedPath = safeDocumentPath(path)
+        .split("/")
+        .map(encodeURIComponent)
+        .join("/");
       const payload = asRecord(
-        unwrapData(await request(`${threadPath(threadId)}/documents/${encodedPath}`, { signal })),
+        unwrapData(
+          await request(`${threadPath(threadId)}/documents/${encodedPath}`, {
+            signal,
+          }),
+        ),
         "thread document",
       );
       return {
@@ -469,12 +542,18 @@ export function createTrackerClientFromRequest(request: TrackerRequest): Tracker
         .map(encodeURIComponent)
         .join("/");
       return mapThreadFileContent(
-        unwrapData(await request(`${threadPath(threadId)}/files/${encodedPath}`, { signal })),
+        unwrapData(
+          await request(`${threadPath(threadId)}/files/${encodedPath}`, {
+            signal,
+          }),
+        ),
       );
     },
     async threadDevServers(threadId, signal) {
       return mapDevServerList(
-        unwrapData(await request(`${threadPath(threadId)}/dev_servers`, { signal })),
+        unwrapData(
+          await request(`${threadPath(threadId)}/dev_servers`, { signal }),
+        ),
       );
     },
     async startThreadDevServers(threadId, signal) {
@@ -500,24 +579,35 @@ export function createTrackerClientFromRequest(request: TrackerRequest): Tracker
     async threadDiffStats(threadId, type = "uncommitted", signal) {
       const query = diffTypeQuery(type);
       const payload = asRecord(
-        await request(`${threadPath(threadId)}/diff/stats?${query.toString()}`, { signal }),
+        await request(
+          `${threadPath(threadId)}/diff/stats?${query.toString()}`,
+          { signal },
+        ),
         "thread diff stats",
       );
       return {
-        stats: readArray(payload.data, "thread diff stats").map(mapGitDiffRepoStat),
+        stats: readArray(payload.data, "thread diff stats").map(
+          mapGitDiffRepoStat,
+        ),
         workspace: mapGitDiffWorkspace(payload.workspace),
       };
     },
     async threadDiffFiles(threadId, diffOptions = {}, signal) {
       const query = diffFilesQuery(diffOptions);
       return mapGitDiffFilesPage(
-        await request(`${threadPath(threadId)}/diff/files?${query.toString()}`, { signal }),
+        await request(
+          `${threadPath(threadId)}/diff/files?${query.toString()}`,
+          { signal },
+        ),
       );
     },
     async threadDiffPatch(threadId, diffOptions, signal) {
       const query = diffPatchQuery(diffOptions);
       const payload = asRecord(
-        await request(`${threadPath(threadId)}/diff/patch?${query.toString()}`, { signal }),
+        await request(
+          `${threadPath(threadId)}/diff/patch?${query.toString()}`,
+          { signal },
+        ),
         "thread diff patch",
       );
       return {
@@ -536,7 +626,9 @@ export function createTrackerClientFromRequest(request: TrackerRequest): Tracker
         "thread diff commit",
       );
       return {
-        commits: readArray(payload.data, "thread diff commits").map(mapGitDiffCommit),
+        commits: readArray(payload.data, "thread diff commits").map(
+          mapGitDiffCommit,
+        ),
         workspace: mapGitDiffWorkspace(payload.workspace),
       };
     },
@@ -549,14 +641,19 @@ export function createTrackerClientFromRequest(request: TrackerRequest): Tracker
         "thread diff push",
       );
       return {
-        results: readArray(payload.data, "thread diff push results").map(mapGitDiffPushResult),
+        results: readArray(payload.data, "thread diff push results").map(
+          mapGitDiffPushResult,
+        ),
         workspace: mapGitDiffWorkspace(payload.workspace),
       };
     },
     async issuePullRequests(projectSlug, identifier, refresh = false, signal) {
       const suffix = refresh ? "?refresh=1" : "";
       return mapPullRequestResult(
-        await request(`${issuePullRequestPath(projectSlug, identifier)}${suffix}`, { signal }),
+        await request(
+          `${issuePullRequestPath(projectSlug, identifier)}${suffix}`,
+          { signal },
+        ),
       );
     },
     async linkIssuePullRequest(projectSlug, identifier, url, signal) {
@@ -576,10 +673,13 @@ export function createTrackerClientFromRequest(request: TrackerRequest): Tracker
     async requestPullRequestFix(projectSlug, identifier, signal) {
       return mapPullRequestFix(
         unwrapData(
-          await request(`${issuePullRequestPath(projectSlug, identifier)}/fix`, {
-            method: "POST",
-            signal,
-          }),
+          await request(
+            `${issuePullRequestPath(projectSlug, identifier)}/fix`,
+            {
+              method: "POST",
+              signal,
+            },
+          ),
         ),
       );
     },
@@ -605,9 +705,17 @@ export function createTrackerClientFromRequest(request: TrackerRequest): Tracker
         ),
         "pull request reruns",
       );
-      return readArray(payload.reruns ?? [], "pull request reruns").map(mapPullRequestRerun);
+      return readArray(payload.reruns ?? [], "pull request reruns").map(
+        mapPullRequestRerun,
+      );
     },
-    async mergeIssuePullRequest(projectSlug, identifier, number, input, signal) {
+    async mergeIssuePullRequest(
+      projectSlug,
+      identifier,
+      number,
+      input,
+      signal,
+    ) {
       const method = pullRequestMergeMethod(input.method);
       return mapPullRequestMerge(
         unwrapData(
@@ -672,7 +780,9 @@ export function createTrackerClientFromRequest(request: TrackerRequest): Tracker
 
 function threadPath(threadId: number): string {
   if (!Number.isInteger(threadId) || threadId <= 0) {
-    throw new TrackerProtocolError("Tracker thread id must be a positive integer");
+    throw new TrackerProtocolError(
+      "Tracker thread id must be a positive integer",
+    );
   }
   return `/assistant/threads/${threadId}`;
 }
@@ -685,7 +795,9 @@ function safeDocumentPath(path: string): string {
     !normalized.toLocaleLowerCase().endsWith(".md") ||
     segments.some((item) => item === "" || item === "." || item === "..")
   ) {
-    throw new TrackerProtocolError("Tracker document path must be a safe relative markdown path");
+    throw new TrackerProtocolError(
+      "Tracker document path must be a safe relative markdown path",
+    );
   }
   return normalized;
 }
@@ -719,7 +831,9 @@ function safeRelativePath(path: string, label: string): string {
     normalized.startsWith("/") ||
     segments.some((item) => item === "" || item === "." || item === "..")
   ) {
-    throw new TrackerProtocolError(`Tracker ${label} must be a safe relative path`);
+    throw new TrackerProtocolError(
+      `Tracker ${label} must be a safe relative path`,
+    );
   }
   return normalized;
 }
@@ -738,7 +852,9 @@ function segment(value: string): string {
 
 function positiveInteger(value: number, label: string): number {
   if (!Number.isInteger(value) || value <= 0) {
-    throw new TrackerProtocolError(`Tracker ${label} must be a positive integer`);
+    throw new TrackerProtocolError(
+      `Tracker ${label} must be a positive integer`,
+    );
   }
   return value;
 }
@@ -755,20 +871,34 @@ function issueMutationPayload(
   input: CreateIssueInput | IssueMutationInput,
 ): Record<string, unknown> {
   return {
-    ...("title" in input && input.title !== undefined ? { title: input.title } : {}),
-    ...(input.description !== undefined ? { description: input.description } : {}),
+    ...("title" in input && input.title !== undefined
+      ? { title: input.title }
+      : {}),
+    ...(input.description !== undefined
+      ? { description: input.description }
+      : {}),
     ...(input.status !== undefined ? { status: input.status } : {}),
     ...(input.priority !== undefined ? { priority: input.priority } : {}),
     ...(input.labelIds !== undefined ? { label_ids: input.labelIds } : {}),
-    ...(input.assigneeIds !== undefined ? { assignee_ids: input.assigneeIds } : {}),
+    ...(input.assigneeIds !== undefined
+      ? { assignee_ids: input.assigneeIds }
+      : {}),
     ...(input.agent !== undefined ? { agent: input.agent } : {}),
     ...(input.goal !== undefined ? { goal: input.goal } : {}),
     ...(input.model !== undefined ? { model: input.model } : {}),
     ...(input.effort !== undefined ? { effort: input.effort } : {}),
+    ...(input.executionPath !== undefined
+      ? { execution_path: input.executionPath }
+      : {}),
+    ...(input.targetRepository !== undefined
+      ? { target_repository: input.targetRepository }
+      : {}),
   };
 }
 
-function mobilePushIdentityPayload(input: MobilePushIdentity): Record<string, unknown> {
+function mobilePushIdentityPayload(
+  input: MobilePushIdentity,
+): Record<string, unknown> {
   return {
     profile_id: requireText(input.profileId, "mobile push profile id"),
     device_id: requireText(input.deviceId, "mobile push device id"),
@@ -802,7 +932,9 @@ function goalPayload(input: GoalControlInput): Record<string, unknown> {
   return {
     action: input.action,
     ...(input.objective ? { objective: input.objective } : {}),
-    ...(input.tokenBudget !== undefined ? { token_budget: input.tokenBudget } : {}),
+    ...(input.tokenBudget !== undefined
+      ? { token_budget: input.tokenBudget }
+      : {}),
   };
 }
 
@@ -811,13 +943,16 @@ function threadListQuery(options: ThreadListOptions): URLSearchParams {
   if (options.scope) query.set("scope", options.scope);
   if (options.scopes?.length) query.set("scopes", options.scopes.join(","));
   if (options.projectSlug) query.set("project_slug", options.projectSlug);
-  if (options.issueIdentifier) query.set("issue_identifier", options.issueIdentifier);
+  if (options.issueIdentifier)
+    query.set("issue_identifier", options.issueIdentifier);
   if (options.limit !== undefined) query.set("limit", String(options.limit));
   if (options.includeArchived === true) query.set("include_archived", "true");
   return query;
 }
 
-function createThreadPayload(input: CreateThreadInput): Record<string, unknown> {
+function createThreadPayload(
+  input: CreateThreadInput,
+): Record<string, unknown> {
   const settings = {
     agent_kind: input.agentKind,
     ...(input.model ? { model: input.model } : {}),
@@ -840,7 +975,9 @@ function createThreadPayload(input: CreateThreadInput): Record<string, unknown> 
     issue_identifier: input.issueIdentifier,
     ...(input.workspacePath ? { workspace_path: input.workspacePath } : {}),
     ...(input.isolatedWorkspace === true ? { isolated_workspace: true } : {}),
-    ...(input.useParentWorkspace === true ? { use_parent_workspace: true } : {}),
+    ...(input.useParentWorkspace === true
+      ? { use_parent_workspace: true }
+      : {}),
     ...(input.cloneBranch ? { clone_branch: input.cloneBranch } : {}),
     ...settings,
   };
@@ -870,8 +1007,14 @@ function mapThreadFileList(payload: unknown): ThreadFileList {
       return {
         id: typeof file.id === "string" ? file.id : path,
         path,
-        name: typeof file.name === "string" ? file.name : path.split("/").at(-1) || path,
-        title: typeof file.title === "string" ? file.title : path.split("/").at(-1) || path,
+        name:
+          typeof file.name === "string"
+            ? file.name
+            : path.split("/").at(-1) || path,
+        title:
+          typeof file.title === "string"
+            ? file.title
+            : path.split("/").at(-1) || path,
         kind: threadFileKind(file.kind),
         size: finiteNumber(file.size, 0),
         updatedAt: optionalText(file.updated_at),
@@ -890,13 +1033,17 @@ function mapThreadFileContent(payload: unknown): ThreadFileContent {
     kind,
     mimeType,
     content: typeof record.content === "string" ? record.content : null,
-    dataUri: kind === "image" && encoded ? `data:${mimeType};base64,${encoded}` : null,
+    dataUri:
+      kind === "image" && encoded ? `data:${mimeType};base64,${encoded}` : null,
   };
 }
 
 function threadFileKind(value: unknown): ThreadFileKind {
-  if (value === "markdown" || value === "text" || value === "image") return value;
-  throw new TrackerProtocolError("Tracker returned an unsupported workspace file kind");
+  if (value === "markdown" || value === "text" || value === "image")
+    return value;
+  throw new TrackerProtocolError(
+    "Tracker returned an unsupported workspace file kind",
+  );
 }
 
 function mapAgentAvailability(payload: unknown): AgentAvailabilityMap {
@@ -912,7 +1059,10 @@ function mapAgentAvailability(payload: unknown): AgentAvailabilityMap {
             version: optionalText(value.version),
             command: typeof value.command === "string" ? value.command : agent,
             path: optionalText(value.path),
-            authenticated: typeof value.authenticated === "boolean" ? value.authenticated : null,
+            authenticated:
+              typeof value.authenticated === "boolean"
+                ? value.authenticated
+                : null,
             detail: optionalText(value.detail),
           },
         ],
@@ -979,7 +1129,8 @@ function mapIssue(payload: unknown): IssueSummary {
     id: requireText(record.id, "issue id"),
     identifier: requireText(record.identifier, "issue identifier"),
     displayIdentifier:
-      optionalText(record.display_identifier) ?? requireText(record.identifier, "issue identifier"),
+      optionalText(record.display_identifier) ??
+      requireText(record.identifier, "issue identifier"),
     projectSlug: requireText(record.project_slug, "issue project slug"),
     title: requireText(record.title, "issue title"),
     description: optionalText(record.description),
@@ -992,6 +1143,9 @@ function mapIssue(payload: unknown): IssueSummary {
     agentKind: readAgentKind(record.agent_kind),
     model: optionalText(record.model),
     effort: optionalText(record.effort),
+    executionPath:
+      record.execution_path === "orchestrator" ? "orchestrator" : "session",
+    targetRepository: optionalText(record.target_repository),
     agentGoal: optionalText(record.agent_goal),
     branchName: optionalText(record.branch_name),
     parentIdentifier: optionalText(record.parent_identifier),
@@ -1017,12 +1171,18 @@ function mapPromptTemplate(payload: unknown): PromptTemplate {
 }
 
 function mapDispatchAction(value: unknown): RunPromptTemplateResult["action"] {
-  return value === "hard_reset" || value === "stop" || value === "continue_work" ? value : "resume";
+  return value === "hard_reset" || value === "stop" || value === "continue_work"
+    ? value
+    : "resume";
 }
 
-function compactRecord(record: Record<string, unknown>): Record<string, unknown> {
+function compactRecord(
+  record: Record<string, unknown>,
+): Record<string, unknown> {
   return Object.fromEntries(
-    Object.entries(record).filter(([, value]) => value !== undefined && value !== null),
+    Object.entries(record).filter(
+      ([, value]) => value !== undefined && value !== null,
+    ),
   );
 }
 
@@ -1040,26 +1200,33 @@ function mapComment(payload: unknown): IssueComment {
 
 function mapIssueFormOptions(payload: unknown): IssueFormOptions {
   const record = asRecord(payload, "issue form options");
-  const agents = readArray(record.agents ?? [], "issue agents").flatMap((value) => {
-    const agent = asRecord(value, "issue agent");
-    const kind = readAgentKind(agent.value);
-    return kind
-      ? [
-          {
-            value: kind,
-            label: optionalText(agent.label) ?? kind,
-            default: agent.default === true,
-          },
-        ]
-      : [];
-  });
+  const agents = readArray(record.agents ?? [], "issue agents").flatMap(
+    (value) => {
+      const agent = asRecord(value, "issue agent");
+      const kind = readAgentKind(agent.value);
+      return kind
+        ? [
+            {
+              value: kind,
+              label: optionalText(agent.label) ?? kind,
+              default: agent.default === true,
+            },
+          ]
+        : [];
+    },
+  );
   const effectiveAgent =
-    readAgentKind(record.effective_agent) ?? agents.find((agent) => agent.default)?.value;
+    readAgentKind(record.effective_agent) ??
+    agents.find((agent) => agent.default)?.value;
   if (!effectiveAgent) {
-    throw new TrackerProtocolError("Tracker issue form options have no effective agent");
+    throw new TrackerProtocolError(
+      "Tracker issue form options have no effective agent",
+    );
   }
   return {
-    statuses: readArray(record.statuses ?? [], "issue statuses").map(issueStatus),
+    statuses: readArray(record.statuses ?? [], "issue statuses").map(
+      issueStatus,
+    ),
     labels: readArray(record.labels ?? [], "issue labels").map((value) => {
       const label = asRecord(value, "issue label");
       return {
@@ -1068,16 +1235,29 @@ function mapIssueFormOptions(payload: unknown): IssueFormOptions {
         color: optionalText(label.color),
       };
     }),
-    assignees: readArray(record.assignees ?? [], "issue assignees").map((value) => {
-      const assignee = asRecord(value, "issue assignee");
-      return {
-        id: optionalText(assignee.id),
-        login: optionalText(assignee.login),
-        name: optionalText(assignee.name),
-      };
-    }),
+    assignees: readArray(record.assignees ?? [], "issue assignees").map(
+      (value) => {
+        const assignee = asRecord(value, "issue assignee");
+        return {
+          id: optionalText(assignee.id),
+          login: optionalText(assignee.login),
+          name: optionalText(assignee.name),
+        };
+      },
+    ),
     agents,
     effectiveAgent,
+    repositories: readArray(
+      record.repositories ?? [],
+      "project repositories",
+    ).flatMap((value) => {
+      const repository = asRecord(value, "project repository");
+      const githubFullName = optionalText(repository.github_full_name);
+      const workspacePath = optionalText(repository.workspace_path);
+      return githubFullName && workspacePath
+        ? [{ githubFullName, workspacePath }]
+        : [];
+    }),
   };
 }
 
@@ -1086,17 +1266,19 @@ function mapThreadDocumentList(payload: unknown): ThreadDocumentList {
   return {
     available: record.available === true,
     reason: optionalText(record.reason),
-    documents: readArray(record.documents ?? [], "thread documents").map((value) => {
-      const document = asRecord(value, "thread document");
-      const path = requireText(document.path, "thread document path");
-      return {
-        id: optionalText(document.id) ?? path,
-        kind: "draft",
-        path,
-        title: optionalText(document.title) ?? path,
-        updatedAt: optionalText(document.updated_at),
-      };
-    }),
+    documents: readArray(record.documents ?? [], "thread documents").map(
+      (value) => {
+        const document = asRecord(value, "thread document");
+        const path = requireText(document.path, "thread document path");
+        return {
+          id: optionalText(document.id) ?? path,
+          kind: "draft",
+          path,
+          title: optionalText(document.title) ?? path,
+          updatedAt: optionalText(document.updated_at),
+        };
+      },
+    ),
   };
 }
 
@@ -1152,7 +1334,9 @@ function mapGitDiffRepoStat(payload: unknown): GitDiffRepoStat {
 function mapGitDiffFilesPage(payload: unknown): GitDiffFilesPage {
   const record = asRecord(payload, "thread diff files");
   return {
-    files: readArray(record.files, "thread diff files").map(mapGitDiffFileEntry),
+    files: readArray(record.files, "thread diff files").map(
+      mapGitDiffFileEntry,
+    ),
     total: finiteNumber(record.total, 0),
     limit: finiteNumber(record.limit, 0),
     nextCursor: optionalText(record.next_cursor),
@@ -1179,7 +1363,9 @@ function mapGitDiffFileEntry(payload: unknown): GitDiffFileEntry {
   };
 }
 
-function mapGitDiffPatch(payload: unknown): Omit<GitDiffPatchResult, "workspace"> {
+function mapGitDiffPatch(
+  payload: unknown,
+): Omit<GitDiffPatchResult, "workspace"> {
   const record = asRecord(payload, "diff patch");
   return {
     repo: requireText(record.repo, "diff patch repository"),
@@ -1191,7 +1377,9 @@ function mapGitDiffPatch(payload: unknown): Omit<GitDiffPatchResult, "workspace"
   };
 }
 
-function mapGitDiffCommit(payload: unknown): GitDiffCommitResponse["commits"][number] {
+function mapGitDiffCommit(
+  payload: unknown,
+): GitDiffCommitResponse["commits"][number] {
   const record = asRecord(payload, "diff commit");
   return {
     repo: requireText(record.repo, "diff commit repository"),
@@ -1203,7 +1391,9 @@ function mapGitDiffCommit(payload: unknown): GitDiffCommitResponse["commits"][nu
   };
 }
 
-function mapGitDiffPushResult(payload: unknown): GitDiffPushResponse["results"][number] {
+function mapGitDiffPushResult(
+  payload: unknown,
+): GitDiffPushResponse["results"][number] {
   const record = asRecord(payload, "diff push result");
   const error = optionalText(record.error);
   return {
@@ -1216,7 +1406,9 @@ function mapGitDiffPushResult(payload: unknown): GitDiffPushResponse["results"][
 function mapPullRequestResult(payload: unknown): PullRequestResult {
   const record = asRecord(payload, "pull requests");
   return {
-    pullRequests: readArray(record.data ?? [], "pull requests").map(mapPullRequest),
+    pullRequests: readArray(record.data ?? [], "pull requests").map(
+      mapPullRequest,
+    ),
     supported: record.supported === true,
     available: record.available === true,
     children: readArray(record.children ?? [], "pull request groups")
@@ -1245,16 +1437,21 @@ function mapPullRequest(payload: unknown): PullRequest {
     pipelines: readArray(record.pipelines ?? [], "pull request pipelines").map(
       mapPullRequestPipeline,
     ),
-    statuses: readArray(record.statuses ?? [], "pull request statuses").map((value) => {
-      const status = asRecord(value, "pull request status");
-      return {
-        context: optionalText(status.context),
-        state: optionalText(status.state),
-        url: optionalText(status.url),
-        description: optionalText(status.description),
-      };
-    }),
-    conversation: readArray(record.conversation ?? [], "pull request conversation").map((value) => {
+    statuses: readArray(record.statuses ?? [], "pull request statuses").map(
+      (value) => {
+        const status = asRecord(value, "pull request status");
+        return {
+          context: optionalText(status.context),
+          state: optionalText(status.state),
+          url: optionalText(status.url),
+          description: optionalText(status.description),
+        };
+      },
+    ),
+    conversation: readArray(
+      record.conversation ?? [],
+      "pull request conversation",
+    ).map((value) => {
       const entry = asRecord(value, "pull request conversation entry");
       return {
         author: optionalText(entry.author),
@@ -1293,9 +1490,10 @@ function mapPullRequestGroup(payload: unknown): PullRequestGroup {
   return {
     identifier: optionalText(record.identifier) ?? "",
     title: optionalText(record.title),
-    pullRequests: readArray(record.pull_requests ?? [], "grouped pull requests").map(
-      mapPullRequest,
-    ),
+    pullRequests: readArray(
+      record.pull_requests ?? [],
+      "grouped pull requests",
+    ).map(mapPullRequest),
   };
 }
 
@@ -1319,7 +1517,9 @@ function mapPullRequestRerun(payload: unknown): PullRequestRerunResult {
   const record = asRecord(payload, "pull request rerun");
   const error = optionalText(record.error);
   const status =
-    typeof record.status === "number" && Number.isFinite(record.status) ? record.status : undefined;
+    typeof record.status === "number" && Number.isFinite(record.status)
+      ? record.status
+      : undefined;
   return {
     runId: finiteNumber(record.run_id, 0),
     ok: record.ok === true,
@@ -1341,33 +1541,50 @@ function mapPullRequestMerge(
     bypass: record.bypass === true,
     ...(sha ? { sha } : {}),
     ...(message ? { message } : {}),
-    issue: record.issue === null || record.issue === undefined ? null : mapIssue(record.issue),
+    issue:
+      record.issue === null || record.issue === undefined
+        ? null
+        : mapIssue(record.issue),
   };
 }
 
 function pullRequestState(payload: unknown): PullRequestState {
-  return payload === "open" || payload === "closed" || payload === "merged" || payload === "draft"
+  return payload === "open" ||
+    payload === "closed" ||
+    payload === "merged" ||
+    payload === "draft"
     ? payload
     : "unknown";
 }
 
-function readPullRequestMergeMethod(payload: unknown): PullRequestMergeMethod | null {
-  return payload === "merge" || payload === "squash" || payload === "rebase" ? payload : null;
+function readPullRequestMergeMethod(
+  payload: unknown,
+): PullRequestMergeMethod | null {
+  return payload === "merge" || payload === "squash" || payload === "rebase"
+    ? payload
+    : null;
 }
 
 function pullRequestMergeMethod(payload: unknown): PullRequestMergeMethod {
   const method = readPullRequestMergeMethod(payload);
-  if (!method) throw new TrackerProtocolError("Tracker pull request merge method is invalid");
+  if (!method)
+    throw new TrackerProtocolError(
+      "Tracker pull request merge method is invalid",
+    );
   return method;
 }
 
 function mapBlocker(payload: unknown): IssueBlocker {
   const record = asRecord(payload, "blocker");
   return {
-    identifier: requireText(record.identifier ?? record.target_identifier, "blocker identifier"),
+    identifier: requireText(
+      record.identifier ?? record.target_identifier,
+      "blocker identifier",
+    ),
     title: optionalText(record.title) ?? "",
     status: issueStatusOrNull(record.status),
-    relationType: optionalText(record.relation_type ?? record.type) ?? "blocked_by",
+    relationType:
+      optionalText(record.relation_type ?? record.type) ?? "blocked_by",
   };
 }
 
@@ -1375,6 +1592,7 @@ function mapDispatchResult(payload: unknown): IssueDispatchResult {
   const record = asRecord(payload, "issue dispatch");
   const action = record.action;
   if (
+    action !== "orchestrate" &&
     action !== "resume" &&
     action !== "hard_reset" &&
     action !== "stop" &&
@@ -1386,12 +1604,15 @@ function mapDispatchResult(payload: unknown): IssueDispatchResult {
     action,
     message: optionalText(record.message) ?? "",
     issue: mapIssue(record.issue),
+    alreadyRunning: record.already_running === true,
+    executionSessionId: finiteNumber(record.execution_session_id, 0) || null,
   };
 }
 
 function issueStatus(value: unknown): string {
   const status = issueStatusOrNull(value);
-  if (!status) throw new TrackerProtocolError("Tracker issue status is missing");
+  if (!status)
+    throw new TrackerProtocolError("Tracker issue status is missing");
   return status;
 }
 
@@ -1435,7 +1656,9 @@ function mapThread(payload: unknown): AssistantThread {
   const record = asRecord(payload, "assistant thread");
   const id = Number(record.id);
   if (!Number.isInteger(id) || id <= 0) {
-    throw new TrackerProtocolError("Tracker assistant thread is missing a valid id");
+    throw new TrackerProtocolError(
+      "Tracker assistant thread is missing a valid id",
+    );
   }
   return {
     id,
@@ -1480,7 +1703,9 @@ function mapAssistantCatalog(payload: unknown): AssistantCatalog {
     .map(mapAgentCatalog)
     .filter((agent): agent is AssistantAgentCatalog => agent !== null);
   if (agents.length === 0) {
-    throw new TrackerProtocolError("Tracker assistant catalog has no supported agents");
+    throw new TrackerProtocolError(
+      "Tracker assistant catalog has no supported agents",
+    );
   }
   return {
     defaultAgent: readAgentKind(record.default_agent) ?? agents[0]!.agent,
@@ -1492,10 +1717,13 @@ function mapAgentCatalog(payload: unknown): AssistantAgentCatalog | null {
   const record = asRecord(payload, "assistant agent");
   const agent = readAgentKind(record.agent);
   if (!agent) return null;
-  const models = readArray(record.models ?? [], "assistant models").map(mapModel);
+  const models = readArray(record.models ?? [], "assistant models").map(
+    mapModel,
+  );
   return {
     agent,
-    agentLabel: typeof record.agent_label === "string" ? record.agent_label : agent,
+    agentLabel:
+      typeof record.agent_label === "string" ? record.agent_label : agent,
     defaultModel: optionalText(record.default_model),
     models,
   };
@@ -1509,7 +1737,9 @@ function mapModel(payload: unknown): AssistantModelOption {
       typeof record.label === "string"
         ? record.label
         : requireText(record.model, "assistant model id"),
-    efforts: readArray(record.efforts ?? [], "assistant efforts").map(mapEffort),
+    efforts: readArray(record.efforts ?? [], "assistant efforts").map(
+      mapEffort,
+    ),
   };
 }
 
@@ -1574,7 +1804,8 @@ function requireText(value: unknown, label: string): string {
 }
 
 function requireIdentifier(value: unknown, label: string): string {
-  if (typeof value === "number" && Number.isSafeInteger(value)) return String(value);
+  if (typeof value === "number" && Number.isSafeInteger(value))
+    return String(value);
   return requireText(value, label);
 }
 

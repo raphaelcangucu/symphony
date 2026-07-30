@@ -23,7 +23,8 @@ defmodule SymphonyElixir.Orchestrator do
     Workspace
   }
 
-  alias SymphonyElixir.Agent.ExecutionSession
+  alias SymphonyElixir.Agent.{ExecutionSession, ExecutionTranscript}
+  alias SymphonyElixir.Assistant.{GoalRun, History}
   alias SymphonyElixir.Evidence
   alias SymphonyElixir.GitHub.IssueMarker
   alias SymphonyElixir.LocalTracker.{Context, IssueMapper, Repository}
@@ -125,7 +126,7 @@ defmodule SymphonyElixir.Orchestrator do
 
   def handle_info(:run_poll_cycle, state) do
     state = refresh_runtime_config(state)
-    state = maybe_dispatch(state)
+    state = maybe_automatically_dispatch(state)
     now_ms = System.monotonic_time(:millisecond)
     next_poll_due_at_ms = now_ms + state.poll_interval_ms
     :ok = schedule_tick(state.poll_interval_ms)
@@ -155,9 +156,16 @@ defmodule SymphonyElixir.Orchestrator do
             :normal ->
               Logger.info("Agent task completed for issue_id=#{issue_id} session_id=#{session_id}; checking completion transition")
 
-              finish_execution_session(running_entry, execution_completion_status(running_entry))
-
-              apply_normal_completion(state, running_entry, issue_id)
+              if queued_execution_instruction?(running_entry) do
+                # A provider that cannot be steered receives the operator's
+                # message on a subsequent turn. Keep the task dispatchable
+                # rather than completing it underneath that durable queue.
+                finish_execution_session(running_entry, "active")
+                requeue_execution_instruction(state, running_entry, issue_id)
+              else
+                finish_execution_session(running_entry, execution_completion_status(running_entry))
+                apply_normal_completion(state, running_entry, issue_id)
+              end
 
             _ ->
               Logger.warning("Agent task exited for issue_id=#{issue_id} session_id=#{session_id} reason=#{inspect(reason)}; scheduling retry")
@@ -198,8 +206,10 @@ defmodule SymphonyElixir.Orchestrator do
 
       running_entry ->
         {updated_running_entry, token_delta} = RunUpdate.integrate(running_entry, update)
+        {updated_running_entry, transcript_changed?} = ExecutionTranscript.record(updated_running_entry, update)
         persist_execution_model_provenance(updated_running_entry, update)
         persist_execution_provider_binding(updated_running_entry, update)
+        broadcast_execution_history(updated_running_entry, transcript_changed?)
 
         state =
           state
@@ -296,6 +306,18 @@ defmodule SymphonyElixir.Orchestrator do
 
       false ->
         state
+    end
+  end
+
+  # A manual-only Host still reconciles any in-flight worker, but it never
+  # selects a different task from the candidate pool. This is intentionally an
+  # instance switch rather than a task flag so the selected task can be started
+  # through the normal `request_dispatch/1` contract from the mobile app.
+  defp maybe_automatically_dispatch(%State{} = state) do
+    if Config.orchestrator_auto_dispatch?() do
+      maybe_dispatch(state)
+    else
+      reconcile_running_issues(state)
     end
   end
 
@@ -600,31 +622,26 @@ defmodule SymphonyElixir.Orchestrator do
 
   defp running_entry_workspace(_running_entry), do: nil
 
-  # Best-effort: give every orchestrator run its own persistent execution
-  # session (own id, channel, log path). A failure here must never abort the
-  # dispatch that is already underway, so all errors are swallowed and logged.
-  defp attach_execution_session(running_entry, %Issue{} = issue, bundle_ctx) do
-    case running_entry_workspace(running_entry) do
-      workspace when is_binary(workspace) and workspace != "" ->
-        case ExecutionSession.ensure(issue.project_slug, issue.identifier,
-               workspace_path: workspace,
-               agent_kind: Map.get(running_entry, :agent_kind),
-               requested_model: Map.get(running_entry, :model),
-               requested_effort: Map.get(running_entry, :effort),
-               unit_id: bundle_ctx.unit_id,
-               bundle_role: to_string(bundle_ctx.role)
-             ) do
-          {:ok, session} -> Map.put(running_entry, :execution_session_id, session.id)
-          {:error, _reason} -> running_entry
-        end
-
-      _ ->
-        running_entry
+  defp queued_execution_instruction?(%{execution_session_id: session_id})
+       when is_integer(session_id) do
+    case History.get_thread(session_id) do
+      {:ok, thread} -> History.pending_turns(thread) != []
+      _ -> false
     end
   rescue
-    error ->
-      Logger.warning("ExecutionSession.ensure failed: #{Exception.message(error)}")
-      running_entry
+    _error -> false
+  end
+
+  defp queued_execution_instruction?(_running_entry), do: false
+
+  defp requeue_execution_instruction(state, running_entry, issue_id) do
+    Logger.info("Continuing task for queued operator instruction: issue_id=#{issue_id} session_id=#{running_entry_session_id(running_entry)}")
+
+    schedule_issue_retry(state, issue_id, 1, %{
+      identifier: running_entry.identifier,
+      project_slug: running_entry.issue.project_slug,
+      delay_type: :continuation
+    })
   end
 
   # Best-effort terminal-status update for a run's execution session. No-ops when
@@ -690,6 +707,15 @@ defmodule SymphonyElixir.Orchestrator do
   end
 
   defp persist_execution_provider_binding(_running_entry, _update), do: :ok
+
+  # Execution transcripts are persisted outside an interactive channel. Fan a
+  # history refresh to every channel attached to the task-native session so the
+  # Android screen that is already open receives the new durable entries.
+  defp broadcast_execution_history(%{execution_session_id: id}, true) when is_integer(id) do
+    GoalRun.broadcast_from(self(), id, {:execution_history_updated})
+  end
+
+  defp broadcast_execution_history(_running_entry, _changed?), do: :ok
 
   defp maybe_put_provenance(attrs, _key, value) when not is_binary(value), do: attrs
 
@@ -1127,6 +1153,13 @@ defmodule SymphonyElixir.Orchestrator do
     agent_kind = AgentRunner.issue_agent_kind(issue)
     bundle_ctx = bundle_run_context(issue)
     run_opts = agent_run_opts(issue, agent_kind, bundle_ctx.run_opts, attempt)
+    execution_session = ensure_execution_session(issue, agent_kind, bundle_ctx, run_opts)
+
+    run_opts =
+      case execution_session do
+        %{id: id} when is_integer(id) -> Keyword.put(run_opts, :assistant_thread_id, id)
+        _ -> run_opts
+      end
 
     case Task.Supervisor.start_child(SymphonyElixir.Orchestrator.TaskSupervisor, fn ->
            AgentRunner.run(issue, recipient, run_opts)
@@ -1147,7 +1180,7 @@ defmodule SymphonyElixir.Orchestrator do
 
         running_entry =
           dispatch_running_entry(pid, ref, issue, agent_kind, attempt, bundle_ctx)
-          |> attach_execution_session(issue, bundle_ctx)
+          |> Map.put(:execution_session_id, execution_session_id(execution_session))
 
         running = Map.put(state.running, issue.id, running_entry)
 
@@ -1172,6 +1205,44 @@ defmodule SymphonyElixir.Orchestrator do
         })
     end
   end
+
+  # Create the task-native chat before the worker starts. The runner receives
+  # its id and can consume durable queued instructions on its next turn. This
+  # avoids the previous race where the transcript existed only after a worker
+  # had already emitted raw events.
+  defp ensure_execution_session(%Issue{} = issue, agent_kind, bundle_ctx, run_opts) do
+    workspace = SessionLog.run_log_workspace(issue, bundle_ctx.run_opts)
+    settings = AgentRunner.agent_settings_opts(issue)
+
+    case workspace do
+      path when is_binary(path) and path != "" ->
+        case ExecutionSession.ensure(issue.project_slug, issue.identifier,
+               workspace_path: path,
+               agent_kind: agent_kind,
+               requested_model: Keyword.get(run_opts, :model) || Keyword.get(settings, :model),
+               requested_effort: Keyword.get(run_opts, :effort) || Keyword.get(settings, :effort),
+               unit_id: bundle_ctx.unit_id,
+               bundle_role: to_string(bundle_ctx.role)
+             ) do
+          {:ok, session} ->
+            session
+
+          {:error, reason} ->
+            Logger.warning("ExecutionSession.ensure failed: #{inspect(reason)}")
+            nil
+        end
+
+      _ ->
+        nil
+    end
+  rescue
+    error ->
+      Logger.warning("ExecutionSession.ensure failed: #{Exception.message(error)}")
+      nil
+  end
+
+  defp execution_session_id(%{id: id}) when is_integer(id), do: id
+  defp execution_session_id(_session), do: nil
 
   defp agent_run_opts(%Issue{} = issue, agent_kind, bundle_run_opts, attempt)
        when is_binary(agent_kind) and is_list(bundle_run_opts) do
@@ -2981,11 +3052,25 @@ defmodule SymphonyElixir.Orchestrator do
   def handle_call({:request_dispatch, identifier}, _from, state) do
     normalized = String.trim(identifier)
 
+    # The scheduled poll can start this task just before an explicit mobile
+    # dispatch reaches the GenServer.  That is the same execution, therefore
+    # it must be acknowledged idempotently instead of reported as a failure.
+    case find_running_by_identifier(state, normalized) do
+      running_entry when is_map(running_entry) ->
+        {:reply, {:ok, running_dispatch_result(running_entry)}, state}
+
+      nil ->
+        request_dispatch_for_idle_issue(normalized, state)
+    end
+  end
+
+  defp request_dispatch_for_idle_issue(normalized, state) do
     case fetch_issue_by_identifier(normalized) do
       {:ok, %Issue{} = issue} ->
         cond do
           Map.has_key?(state.running, issue.id) ->
-            {:reply, {:error, :already_running}, state}
+            running_entry = Map.fetch!(state.running, issue.id)
+            {:reply, {:ok, running_dispatch_result(running_entry)}, state}
 
           manual_dispatch_candidate?(issue) ->
             state =
@@ -3012,6 +3097,15 @@ defmodule SymphonyElixir.Orchestrator do
       {:error, reason} ->
         {:reply, {:error, reason}, state}
     end
+  end
+
+  defp running_dispatch_result(running_entry) do
+    %{
+      dispatched: false,
+      already_running: true,
+      issue_identifier: Map.get(running_entry, :identifier),
+      execution_session_id: Map.get(running_entry, :execution_session_id) || Map.get(running_entry, :session_id)
+    }
   end
 
   # credo:disable-for-next-line Credo.Check.Refactor.CyclomaticComplexity

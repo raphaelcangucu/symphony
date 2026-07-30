@@ -15,15 +15,24 @@ jest.mock("expo-router", () => ({
   useLocalSearchParams: jest.fn(),
   useRouter: jest.fn(),
 }));
-jest.mock("@/api/TrackerClientProvider", () => ({ useTrackerClient: jest.fn() }));
-jest.mock("@/api/rpc-tracker-client", () => ({ createRpcTrackerClient: jest.fn() }));
+jest.mock("@/api/TrackerClientProvider", () => ({
+  useTrackerClient: jest.fn(),
+}));
+jest.mock("@/api/rpc-tracker-client", () => ({
+  createRpcTrackerClient: jest.fn(),
+}));
 jest.mock("@/auth/ConnectionProvider", () => ({ useConnection: jest.fn() }));
-jest.mock("@/features/evidence/useTaskEvidence", () => ({ useTaskEvidence: jest.fn() }));
-jest.mock("@/runtime/HostRuntimeProvider", () => ({ useHostRuntime: jest.fn() }));
+jest.mock("@/features/evidence/useTaskEvidence", () => ({
+  useTaskEvidence: jest.fn(),
+}));
+jest.mock("@/runtime/HostRuntimeProvider", () => ({
+  useHostRuntime: jest.fn(),
+}));
 jest.mock("./useIssueDetail", () => ({ useIssueDetail: jest.fn() }));
 
 const push = jest.fn();
 const back = jest.fn();
+let issueDetail: ReturnType<typeof useIssueDetail>;
 
 describe("IssueRoute", () => {
   beforeEach(() => {
@@ -31,7 +40,9 @@ describe("IssueRoute", () => {
     jest
       .mocked(useLocalSearchParams)
       .mockReturnValue({ projectSlug: "symphony", identifier: "MOB-7" });
-    jest.mocked(useTrackerClient).mockReturnValue({} as ReturnType<typeof useTrackerClient>);
+    jest
+      .mocked(useTrackerClient)
+      .mockReturnValue({} as ReturnType<typeof useTrackerClient>);
     jest.mocked(useHostRuntime).mockReturnValue({
       transport: jest.fn().mockReturnValue(null),
     } as unknown as ReturnType<typeof useHostRuntime>);
@@ -48,7 +59,12 @@ describe("IssueRoute", () => {
           uiChange: true,
           insertedAt: null,
           provenance: null,
-          manifest: { issue: "MOB-7", generatedAt: null, uiChange: true, runs: [] },
+          manifest: {
+            issue: "MOB-7",
+            generatedAt: null,
+            uiChange: true,
+            runs: [],
+          },
         },
       ],
       loading: false,
@@ -56,7 +72,7 @@ describe("IssueRoute", () => {
       refresh: jest.fn(),
       cached: false,
     } as ReturnType<typeof useTaskEvidence>);
-    jest.mocked(useIssueDetail).mockReturnValue({
+    issueDetail = {
       issue: {
         id: "1",
         identifier: "MOB-7",
@@ -125,7 +141,8 @@ describe("IssueRoute", () => {
       goalAction: jest.fn(),
       refresh: jest.fn(),
       save: jest.fn(),
-    });
+    } as ReturnType<typeof useIssueDetail>;
+    jest.mocked(useIssueDetail).mockReturnValue(issueDetail);
   });
 
   it("opens the active session and its workspace tools", () => {
@@ -179,6 +196,51 @@ describe("IssueRoute", () => {
     expect(push).toHaveBeenCalledWith("/codex/session/43");
   });
 
+  it("opens the active orchestration instead of dispatching a duplicate agent", () => {
+    const dispatch = jest.fn();
+    jest.mocked(useIssueDetail).mockReturnValue({
+      ...issueDetail,
+      issue: {
+        ...issueDetail.issue!,
+        executionPath: "orchestrator",
+      },
+      threads: [
+        {
+          id: 81,
+          scope: "issue_execution",
+          projectSlug: "symphony",
+          projectName: "Symphony",
+          issueIdentifier: "MOB-7",
+          workspacePath: null,
+          title: "MOB-7 execution",
+          status: "active",
+          preview: null,
+          updatedAt: "2026-07-29T16:35:00Z",
+          agentKind: "codex",
+          needsReview: false,
+        },
+      ],
+      dispatch,
+    });
+
+    render(
+      <ThemeProvider colorScheme="dark">
+        <IssueRoute />
+      </ThemeProvider>,
+    );
+
+    fireEvent.press(screen.getByRole("button", { name: "Open execution" }));
+    expect(dispatch).not.toHaveBeenCalled();
+    expect(push).toHaveBeenCalledWith("/codex/session/81");
+
+    fireEvent.press(screen.getByRole("tab", { name: "Sessions" }));
+    expect(
+      screen.queryByRole("button", { name: "New task session" }),
+    ).toBeNull();
+    fireEvent.press(screen.getByRole("button", { name: "Open session 81" }));
+    expect(push).toHaveBeenLastCalledWith("/codex/session/81");
+  });
+
   it("binds a host-scoped task to the transport named by the route", () => {
     const transport = { hostId: "host-alpha" };
     const hostClient = { issue: jest.fn() };
@@ -206,6 +268,32 @@ describe("IssueRoute", () => {
         projectSlug: "alpha",
         identifier: "ALP-1",
       }),
+    );
+  });
+
+  it("opens host-scoped execution sessions in the unified host chat", () => {
+    const transport = { hostId: "host-alpha" };
+    jest.mocked(useLocalSearchParams).mockReturnValue({
+      hostId: "host-alpha",
+      projectSlug: "alpha",
+      identifier: "ALP-1",
+    });
+    jest.mocked(useHostRuntime).mockReturnValue({
+      transport: jest.fn().mockReturnValue(transport),
+    } as unknown as ReturnType<typeof useHostRuntime>);
+    jest.mocked(createRpcTrackerClient).mockReturnValue({} as never);
+
+    render(
+      <ThemeProvider colorScheme="dark">
+        <IssueRoute />
+      </ThemeProvider>,
+    );
+
+    fireEvent.press(screen.getByRole("tab", { name: "Sessions" }));
+    fireEvent.press(screen.getByRole("button", { name: "Open session 43" }));
+
+    expect(push).toHaveBeenCalledWith(
+      "/h/host-alpha/chat/43?name=Review%20evidence",
     );
   });
 });

@@ -48,6 +48,8 @@ export type ProjectSummary = {
 
 export type IssuePriority = 0 | 1 | 2 | 3 | 4;
 
+export type ExecutionPath = "session" | "orchestrator";
+
 export type IssueSummary = {
   id: string;
   identifier: string;
@@ -64,6 +66,8 @@ export type IssueSummary = {
   agentKind: AgentKind | null;
   model?: string | null;
   effort?: string | null;
+  executionPath?: ExecutionPath;
+  targetRepository?: string | null;
   agentGoal: string | null;
   branchName: string | null;
   parentIdentifier?: string | null;
@@ -88,6 +92,8 @@ export type IssueMutationInput = {
   goal?: string | null;
   model?: string | null;
   effort?: string | null;
+  executionPath?: ExecutionPath;
+  targetRepository?: string | null;
 };
 
 export type CreateIssueInput = IssueMutationInput & {
@@ -114,6 +120,10 @@ export type IssueFormOptions = {
   }>;
   agents: Array<{ value: AgentKind; label: string; default: boolean }>;
   effectiveAgent: AgentKind;
+  repositories: Array<{
+    githubFullName: string;
+    workspacePath: string;
+  }>;
 };
 
 export type IssueBlocker = {
@@ -124,7 +134,7 @@ export type IssueBlocker = {
 };
 
 export type IssueDispatchInput = {
-  action: "resume" | "hard_reset" | "stop" | "continue_work";
+  action: "orchestrate" | "resume" | "hard_reset" | "stop" | "continue_work";
   agent?: AgentKind;
   goal?: string;
   instructions?: string;
@@ -138,6 +148,8 @@ export type IssueDispatchResult = {
   action: IssueDispatchInput["action"];
   message: string;
   issue: IssueSummary;
+  alreadyRunning?: boolean;
+  executionSessionId?: number | null;
 };
 
 export type GoalControlInput = {
@@ -322,7 +334,8 @@ export type GitDiffPushResponse = {
   workspace: GitDiffWorkspace;
 };
 
-export type PullRequestState = "open" | "closed" | "merged" | "draft" | "unknown";
+export type PullRequestState =
+  "open" | "closed" | "merged" | "draft" | "unknown";
 export type PullRequestMergeMethod = "merge" | "squash" | "rebase";
 
 export type PullRequestJob = {
@@ -389,7 +402,11 @@ export type PullRequestResult = {
 export type PullRequestFixResult = {
   movedTo: string;
   commentPosted: boolean;
-  jobs: Array<{ name: string | null; conclusion: string | null; url: string | null }>;
+  jobs: Array<{
+    name: string | null;
+    conclusion: string | null;
+    url: string | null;
+  }>;
 };
 
 export type PullRequestRerunResult = {
@@ -530,7 +547,10 @@ export type TrackerClient = {
   agentAvailability(signal?: AbortSignal): Promise<AgentAvailabilityMap>;
   agentUsage(signal?: AbortSignal): Promise<AgentUsageMap>;
   projects(signal?: AbortSignal): Promise<ProjectSummary[]>;
-  threads(options?: ThreadListOptions, signal?: AbortSignal): Promise<AssistantThread[]>;
+  threads(
+    options?: ThreadListOptions,
+    signal?: AbortSignal,
+  ): Promise<AssistantThread[]>;
   projectSessions(
     projectSlug: string,
     options?: ProjectSessionListOptions,
@@ -541,15 +561,28 @@ export type TrackerClient = {
    * below, this does not depend on a session having joined first.
    */
   assistantCatalogForHost(signal?: AbortSignal): Promise<AssistantCatalog>;
-  assistantCatalog(projectSlug: string, signal?: AbortSignal): Promise<AssistantCatalog>;
-  createThread(input: CreateThreadInput, signal?: AbortSignal): Promise<AssistantThread>;
+  assistantCatalog(
+    projectSlug: string,
+    signal?: AbortSignal,
+  ): Promise<AssistantCatalog>;
+  createThread(
+    input: CreateThreadInput,
+    signal?: AbortSignal,
+  ): Promise<AssistantThread>;
   issues(
     projectSlug: string,
     options?: IssueListOptions,
     signal?: AbortSignal,
   ): Promise<IssueSummary[]>;
-  issue(projectSlug: string, identifier: string, signal?: AbortSignal): Promise<IssueSummary>;
-  issueFormOptions(projectSlug: string, signal?: AbortSignal): Promise<IssueFormOptions>;
+  issue(
+    projectSlug: string,
+    identifier: string,
+    signal?: AbortSignal,
+  ): Promise<IssueSummary>;
+  issueFormOptions(
+    projectSlug: string,
+    signal?: AbortSignal,
+  ): Promise<IssueFormOptions>;
   createIssue(
     projectSlug: string,
     input: CreateIssueInput,
@@ -561,15 +594,27 @@ export type TrackerClient = {
     input: IssueMutationInput,
     signal?: AbortSignal,
   ): Promise<IssueSummary>;
-  comments(projectSlug: string, identifier: string, signal?: AbortSignal): Promise<IssueComment[]>;
+  comments(
+    projectSlug: string,
+    identifier: string,
+    signal?: AbortSignal,
+  ): Promise<IssueComment[]>;
   createComment(
     projectSlug: string,
     identifier: string,
     body: string,
     signal?: AbortSignal,
   ): Promise<IssueComment>;
-  blockers(projectSlug: string, identifier: string, signal?: AbortSignal): Promise<IssueBlocker[]>;
-  subtasks(projectSlug: string, identifier: string, signal?: AbortSignal): Promise<IssueSummary[]>;
+  blockers(
+    projectSlug: string,
+    identifier: string,
+    signal?: AbortSignal,
+  ): Promise<IssueBlocker[]>;
+  subtasks(
+    projectSlug: string,
+    identifier: string,
+    signal?: AbortSignal,
+  ): Promise<IssueSummary[]>;
   createSubtask(
     projectSlug: string,
     identifier: string,
@@ -588,7 +633,10 @@ export type TrackerClient = {
     input: GoalControlInput,
     signal?: AbortSignal,
   ): Promise<Record<string, unknown>>;
-  promptTemplates(projectSlug?: string, signal?: AbortSignal): Promise<PromptTemplate[]>;
+  promptTemplates(
+    projectSlug?: string,
+    signal?: AbortSignal,
+  ): Promise<PromptTemplate[]>;
   runPromptTemplate(
     projectSlug: string,
     identifier: string,
@@ -601,17 +649,33 @@ export type TrackerClient = {
     query: string,
     signal?: AbortSignal,
   ): Promise<string[]>;
-  threadDocuments(threadId: number, signal?: AbortSignal): Promise<ThreadDocumentList>;
+  threadDocuments(
+    threadId: number,
+    signal?: AbortSignal,
+  ): Promise<ThreadDocumentList>;
   threadDocument(
     threadId: number,
     path: string,
     signal?: AbortSignal,
   ): Promise<ThreadDocumentContent>;
   threadFiles(threadId: number, signal?: AbortSignal): Promise<ThreadFileList>;
-  threadFile(threadId: number, path: string, signal?: AbortSignal): Promise<ThreadFileContent>;
-  threadDevServers(threadId: number, signal?: AbortSignal): Promise<DevServerList>;
-  startThreadDevServers(threadId: number, signal?: AbortSignal): Promise<DevServerList>;
-  restartThreadDevServers(threadId: number, signal?: AbortSignal): Promise<DevServerList>;
+  threadFile(
+    threadId: number,
+    path: string,
+    signal?: AbortSignal,
+  ): Promise<ThreadFileContent>;
+  threadDevServers(
+    threadId: number,
+    signal?: AbortSignal,
+  ): Promise<DevServerList>;
+  startThreadDevServers(
+    threadId: number,
+    signal?: AbortSignal,
+  ): Promise<DevServerList>;
+  restartThreadDevServers(
+    threadId: number,
+    signal?: AbortSignal,
+  ): Promise<DevServerList>;
   threadDiffStats(
     threadId: number,
     type?: GitDiffType,
@@ -632,7 +696,10 @@ export type TrackerClient = {
     message: string,
     signal?: AbortSignal,
   ): Promise<GitDiffCommitResponse>;
-  pushThreadDiff(threadId: number, signal?: AbortSignal): Promise<GitDiffPushResponse>;
+  pushThreadDiff(
+    threadId: number,
+    signal?: AbortSignal,
+  ): Promise<GitDiffPushResponse>;
   issuePullRequests(
     projectSlug: string,
     identifier: string,
@@ -683,5 +750,7 @@ export type TrackerClient = {
     input: MobilePushIdentity,
     signal?: AbortSignal,
   ): Promise<{ deleted: boolean }>;
-  sendTestMobilePush(signal?: AbortSignal): Promise<{ sent: boolean; deviceCount: number }>;
+  sendTestMobilePush(
+    signal?: AbortSignal,
+  ): Promise<{ sent: boolean; deviceCount: number }>;
 };
